@@ -205,7 +205,7 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
 
--- ⭐ All 21 table rows: the render's dispatch vs the T2 graph's, row by row.
+-- All 21 table rows: the render's dispatch vs the typed graph's, row by row.
 #guard mnv4Blocks.length == 21 && mnv4Blocks.all fun s =>
   textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in") (·.code) == mnv4RowGraphText 2 s
 
@@ -261,7 +261,7 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
 
 -- Head: 1×1 (320 → 1280) → BN → swish → GAP(7²) → dense(1280 → 10). The chain's classifier dropout
--- sits between the GAP and the dense and is off in the T2 configuration (`cd := false`).
+-- sits between the GAP and the dense and is off in the typed graphs' configuration (`cd := false`).
 #guard textOf (do
     let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false
     let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))

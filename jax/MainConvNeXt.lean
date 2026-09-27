@@ -11,7 +11,7 @@ import Jax
     EMA, drop-path, grad clip) is on, and `cnxInit` is left off so the convs take
     the same fan-out init the verified path uses.
 
-    Written 2026-09-13 as the control for the layer-scale init question: on the
+    The control for the layer-scale init question: on the
     verified path the paper's 1e-6 lands 81.78% where ones landed 85.45% on the
     same render (`runs/2026-09-13-convnext-imagenette-ls1e-6/`). This is the
     reference at 1e-6 (`emitLayerScaleInit`) on the same recipe. -/

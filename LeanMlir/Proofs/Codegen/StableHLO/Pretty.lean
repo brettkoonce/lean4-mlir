@@ -114,7 +114,7 @@ def maxPool3s2FwdText (B c h w : Nat) (r xn ninf p o : String) : String :=
 
     Only the window attributes differ from `maxPoolBack`'s emit — **nothing else** — because
     `select_and_scatter`'s scatter region already reduces with `add`, which is exactly the
-    accumulation overlapping windows need. The emitter was general enough before the op existed.
+    accumulation overlapping windows need.
 
     `%sa`/`%sb`/`%sc`/`%sd` are hardcoded region block arguments and are therefore RESERVED SSA
     names: a top-level value of the same name is a redefinition error that surfaces only at
@@ -144,8 +144,7 @@ def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
     reads it as an operand, every SD render's signature declares it, and
     **`scripts/probes/misplace_drop_sites.py` matches `%dp\d+` textually** to build the placement control.
     A second definition would be the double-writer disease with a committed shell script as the
-    third writer. (It started in `EfficientNetRender.Basic` and moved when ConvNeXt needed it too;
-    both renderers are in this namespace, so no call site changed and no artifact byte moved.) -/
+    third writer. -/
 def dpName (i : Nat) : String := s!"%dp{i}"
 
 /-- **The classifier-dropout mask input name** — the `mName` a `dropoutB` carries, and the
@@ -288,7 +287,7 @@ private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × 
       ("conv", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .convStrided (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStrided", [wN, bN], [N, ic, oc, h, w, kH, kW])
-  -- ⚠ DISTINCT tags, for the `convStridedXla` reason one case down and one more: the emitted
+  -- DISTINCT tags, for the `convStridedXla` reason one case down and one more: the emitted
   -- TEXT differs (converts + a bf16 result type), so sharing a Raw with the f32 tag would make
   -- two different graphs indistinguishable after `skel`.
   | .convBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
@@ -299,7 +298,7 @@ private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × 
       ("convF8", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .convStridedBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
       ("convStridedBf16", [wN, bN], [N, ic, oc, h, w, kH, kW])
-  -- ⚠ A DISTINCT tag, deliberately. Aliasing this onto "convStrided" (the way the bias-grads
+  -- A DISTINCT tag, deliberately. Aliasing this onto "convStrided" (the way the bias-grads
   -- legitimately alias, because their emitted text is stride-independent) would be wrong here:
   -- the emitted `pad` differs, so the two tags must not share a Raw.
   | .convStridedXla (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
@@ -329,25 +328,25 @@ private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × 
   | .relu (n := n) => ("relu", [], [N, n])
   | .relu6 (n := n) => ("relu6", [], [N, n])
   | .maxPool (c := c) (h := h) (w := w) => ("maxPool", [], [N, c, h, w])
-  -- ⚠ A DIFFERENT tag from `.maxPool`, deliberately. The two denote different functions at the
+  -- A DIFFERENT tag from `.maxPool`, deliberately. The two denote different functions at the
   -- same type, so sharing a tag would make the emitted text the only thing separating them — and
   -- the emitted text is what a reader checks last. `denOp`'s `.maxPool3s2` arm is the den-side
   -- half of the same pin.
   | .maxPool3s2 (c := c) (h := h) (w := w) => ("maxPool3s2", [], [N, c, h, w])
   | .softmaxRow (m := m) (n := n) => ("softmaxRow", [], [N, m, n])
   | .denseRowBack (rows := rows) (a := a) (c := c) wN _ => ("denseRowBackP", [wN], [N, rows, a, c])
-  -- ⚠ A DISTINCT tag, for the reason every bf16 tag in this function is distinct: the emitted TEXT
+  -- A DISTINCT tag, for the reason every bf16 tag in this function is distinct: the emitted TEXT
   -- differs (two operand converts and bf16 operand types), so sharing a Raw with the f32 tag would
   -- make two different graphs indistinguishable after `skel`.
   | .denseRowBackBf16 (rows := rows) (a := a) (c := c) _ wN _ =>
       ("denseRowBackPBf16", [wN], [N, rows, a, c])
-  -- ⚠ `epsStr` rides in `names` though it is a LITERAL, not an SSA name — `bnEval` set that
+  -- `epsStr` rides in `names` though it is a LITERAL, not an SSA name — `bnEval` set that
   -- precedent and `emitTok` splices both the same way. The alternative is a second string list.
   | .gelu (n := n) => ("gelu", [], [N, n])
   | .transpose (m := m) (n := n) => ("transposeP", [], [N, m, n])
   | .convStride4 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStride4P", [wN, bN], [N, ic, oc, h, w, kH, kW])
-  -- ⚠ A DISTINCT tag, for the reason every other bf16 conv tag is distinct: the emitted TEXT
+  -- A DISTINCT tag, for the reason every other bf16 conv tag is distinct: the emitted TEXT
   -- differs (two operand converts, a bf16 result type, a convert back), so sharing a Raw with the
   -- f32 tag would make two different graphs indistinguishable after `skel`.
   | .convStride4Bf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ wN bN _ _ =>
@@ -359,7 +358,7 @@ private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × 
   | .lnRow (m := m) (n := n) gN bN es _ _ _ => ("lnRowP", [gN, bN, es], [N, m, n])
   | .rowScale (m := m) (n := n) gN _ => ("rowScaleP", [gN], [N, m, n])
   | .rowBias (m := m) (n := n) bN _ => ("rowBiasP", [bN], [N, m, n])
-  -- ViT increment 1. ⚠ The FIRST entry of `info` is the batch and every following one is the tag's
+  -- The FIRST entry of `info` is the batch and every following one is the tag's
   -- own dims — so `[N, tk, a, c]` reads "batch N, token count tk". The emitter below uses only the
   -- tail (it takes the batch from `pretty`'s `B`), which is why the batched text is its
   -- per-example peer's byte for byte; `tests/TestBatchedEmitTie.lean` is what pins that.
@@ -425,9 +424,9 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .addV a b              => .addV k (skel a) (skel b)
   | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) xN _ e =>
       .batched "maxPoolBackP" [xN] [N, c, h, w] (skel e)
-  -- ⭐ The three 3×3/s2 pool forms all ride the generic `.batched` tag, so they cost NO
-  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` work (§0.2 increment 2's five-site route).
-  -- ⚠ The per-example and batched BACKWARDS share one tag and are distinguished by the nat list's
+  -- The three 3×3/s2 pool forms all ride the generic `.batched` tag, so they cost NO
+  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` work.
+  -- The per-example and batched BACKWARDS share one tag and are distinguished by the nat list's
   -- ARITY (3 vs 4) — `depthwiseWeightGrad`'s convention, and legitimate here for its reason: the
   -- emitter ignores `N` (it reads the batch off `pretty`'s `B`), so the two emit identical text by
   -- construction and the arity carries only the `den`-side difference.
@@ -446,25 +445,25 @@ def skel : {k : Nat} → SHlo k → Raw
   -- Two name slots: the mask INPUT and the baked `1/keep` literal. Same two-string shape
   -- `convStridedWeightSgd` uses for `xN`/`lrS`, so the generic `.batched` tag needs no widening.
   | _, .dropPathB (N := N) (n := n) mN _ e => .batched "dropPathP" [mN] [N, n] (skel e)
-  -- ⚠ A DIFFERENT TAG, not a flag on `dropPathP`. The two emit different text and denote different
+  -- A DIFFERENT TAG, not a flag on `dropPathP`. The two emit different text and denote different
   -- functions, so they must be distinguishable in the skeleton — a shared tag would make the
   -- round-trip parser unable to tell a per-sample render from a per-element one.
   | _, .dropoutB (N := N) (n := n) mN _ e => .batched "dropoutP" [mN] [N, n] (skel e)
   | _, .swishBackB (N := N) (n := n) xN _ e => .batched "swishBackP" [xN] [N, n] (skel e)
-  -- ⚠ Routed through the GENERIC `.batched` tag, like every batched op above — which is why these
-  -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not §4's ten: `Raw`,
+  -- Routed through the GENERIC `.batched` tag, like every batched op above — which is why these
+  -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not ten: `Raw`,
   -- `Tok`, `toToks`, `parseStack` and the `parse_toToks` induction all already handle `.batched`.
   | _, .geluBackB (N := N) (n := n) xN _ e => .batched "geluBackP" [xN] [N, n] (skel e)
-  -- ⚠⚠ THESE FOUR ALIAS THEIR PER-EXAMPLE PEER'S `Raw` — deliberately, and it is the pattern the
+  -- THESE FOUR ALIAS THEIR PER-EXAMPLE PEER'S `Raw` — deliberately, and it is the pattern the
   -- depthwise bias grads already use. Their emitted MLIR ALREADY contracts the batch axis
   -- (`layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`, `rowDenseBiasGrad` `[0, 1]`), because
   -- values flow as `tensor<B, …>` and `B` is `pretty`'s, never the SHlo index. So the batched form
   -- emits the same text BY CONSTRUCTION rather than by a copied body — no new `emitTok` case, and
-  -- no way for the two to drift. It is the `den` that was per-example and is now honest.
+  -- no way for the two to drift. It is the `den` that differs.
   --
-  -- ⚠ Note what is dropped: the batch `N` does NOT ride in `info`. The emitter never used it (it
+  -- Note what is dropped: the batch `N` does NOT ride in `info`. The emitter never used it (it
   -- reads `B`), so passing it would add a number that means nothing at the emit and everything at
-  -- the denotation — the exact conflation this whole thread exists to remove.
+  -- the denotation.
   | _, .convStride4WeightGradB (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "convStride4WeightGrad" [xN] [ic, oc, h, w, kH, kW] (skel e)
   | _, .convStride4WeightGradBBf16 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) _ xN _ _ _ e =>
@@ -475,15 +474,15 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "veclnGammaGrad" [xN, es] [R, D] (skel e)
   | _, .rowDenseBiasGradB (R := R) (c := c) e =>
       .batched "rowDenseBiasGrad" [] [R, c] (skel e)
-  -- ── ViT increment 2: SIX ALIASES AND NOT ONE NEW EMIT CASE. Every one of these emits its
+  -- ── SIX ALIASES AND NOT ONE NEW EMIT CASE. Every one of these emits its
   --    per-example peer's `Raw` verbatim — the batch never appears in the tag, because the emitter
   --    reads `B` from `pretty` and its dims from the tag, and (for the four gradients) already
   --    contracts the batch axis. So these forms cannot drift from their peers by construction
-  --    rather than by a copied body kept honest by a test. Increment 3's finding, generalised.
-  --    ⚠ `matmulFB` rides the BINARY `.matmulF` tag: `.batched2` exists for `addVB`/`subB`, but a
+  --    rather than by a copied body kept honest by a test.
+  --    `matmulFB` rides the BINARY `.matmulF` tag: `.batched2` exists for `addVB`/`subB`, but a
   --    direct alias is better still, because it shares the emit rather than restating it.
   | _, .matmulFB (m := m) (k := k) (n := n) a b => .matmulF m k n (skel a) (skel b)
-  -- ⚠ Its bf16 peer can NOT alias `.matmulF` — the text differs — so it rides the generic BINARY
+  -- Its bf16 peer can NOT alias `.matmulF` — the text differs — so it rides the generic BINARY
   -- skeleton `.batched2` that `addVB`/`subB` already use, and needs no new `Raw`/`Tok` of its own.
   | _, .matmulFBBf16 (m := m) (k := k) (n := n) _ a b =>
       .batched2 "matmulFBf16" [] [m, k, n] (skel a) (skel b)
@@ -554,7 +553,7 @@ def skel : {k : Nat} → SHlo k → Raw
       .convBiasGrad ic oc h w kH kW (skel e)
   | _, .convStridedWeightGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .convStridedWeightGrad xN ic oc h w kH kW (skel e)
-  -- rides the generic `.batched` tag (the four-site route, §4) — no new Raw/Tok/parse case.
+  -- rides the generic `.batched` tag (the four-site route) — no new Raw/Tok/parse case.
   | _, .convStride4WeightGrad (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) xN _ _ _ e =>
       .batched "convStride4WeightGrad" [xN] [ic, oc, h, w, kH, kW] (skel e)
   -- aliases convBiasGrad's Raw: the bias grad is stride-independent, so the text is identical
@@ -678,7 +677,7 @@ def skel : {k : Nat} → SHlo k → Raw
       .batched "convBiasGrad" [] [N, oc, h, w] (skel e)
   | _, .convStridedBiasGradB (N := N) (oc := oc) (h := h) (w := w) _ _ _ e =>
       .batched "convBiasGrad" [] [N, oc, h, w] (skel e)
-  -- ⭐ Aliases "convBiasGrad" DELIBERATELY: `Σ_{batch,spatial} dy` is padding-independent, so the
+  -- Aliases "convBiasGrad" DELIBERATELY: `Σ_{batch,spatial} dy` is padding-independent, so the
   -- emitted text is character-identical and only `den` distinguishes them. Same aliasing
   -- `convStridedBiasGradB` already does for stride.
   | _, .convStridedXlaBiasGradB (N := N) (oc := oc) (h := h) (w := w) _ _ _ e =>
@@ -761,14 +760,14 @@ def skel : {k : Nat} → SHlo k → Raw
   -- batch is `B`. This is the aliasing route, so there is nothing to add in `emitTok`.
   | _, .depthwiseBiasGradB (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
       .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
-  -- ⚠ info is `[c, h, w, kH, kW]` — NO leading `N`, matching the symmetric peer below rather than
+  -- info is `[c, h, w, kH, kW]` — NO leading `N`, matching the symmetric peer below rather than
   -- the `*WeightGrad` convention. It aliases that op's Raw, so the shape must agree exactly.
   | _, .depthwiseStridedXlaBiasGradB (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
       .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
   | _, .depthwiseStridedBiasGradB (c := c) (h := h) (w := w) (kH := kH) (kW := kW) _ _ _ e =>
       .batched "depthwiseBiasGrad" [] [c, h, w, kH, kW] (skel e)
   -- The ConvNeXt five ride the generic `.batched` Raw/Tok tag, so they need no new
-  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` cases — the four-site route (§4).
+  -- `Raw`/`Tok`/`toToks`/`parseStack`/`parse_toToks` cases — the four-site route.
   --
   -- `depthwiseWeightGrad` deliberately **aliases the batched op's tag**: its emitted text is
   -- byte-identical (that emitter ignores its `N` and reads the width off the render batch `B`), so
@@ -953,7 +952,7 @@ def toToks : Raw → List Tok
   | .momParamF θ v mu lr ds e => toToks e ++ [.momParamF θ v mu lr ds]
   | .rmsBufNextF sq buf rho orho mu eps ds e =>
       toToks e ++ [.rmsBufNextF sq buf rho orho mu eps ds]
-  -- ⚠ Both push LEFT then RIGHT, so `parseStack` pops right-then-left (`.addV`'s shape). The
+  -- Both push LEFT then RIGHT, so `parseStack` pops right-then-left (`.addV`'s shape). The
   -- LEFT child is the scalar in both cases — the accumulator, and the summed global total.
   | .gradSumSqAccF ds acc e  => toToks acc ++ toToks e ++ [.gradSumSqAccF ds]
   | .clipScaleF cS eS ds s e => toToks s ++ toToks e ++ [.clipScaleF cS eS ds]
@@ -1003,15 +1002,13 @@ def toToks : Raw → List Tok
     backward) and then correlates the saved input against it VALID-style, so the result is `kH×kW`.
     For an **odd** kernel the upsample carries a trailing zero row (`up = 1`, extent `2s`) and the
     correlation pads symmetrically by `p = (k−1)/2`. That is the committed spelling for the 1×1, 3×3
-    and 7×7 kernels every other net uses, and it is reproduced here **byte-identically** — the odd
-    branch is exactly the old inline formula.
+    and 7×7 kernels every other net uses, and it is reproduced here **byte-identically**.
 
     For an **even** kernel `p = (k−1)/2` floors to `k/2 − 1`, so a symmetric pad emits a result one
-    short of `k`. Measured at `k = 2`, input 8×8 → output 4×4: it declared `2x3x2x2` against a
-    convolution yielding `1x1` — **type-invalid MLIR**, which is why ConvNeXt's 2×2/s2 downsample
-    weight grad was hand-written in `ConvNeXtRender.lean` rather than using this op. The fix is
-    the same asymmetry `convStridedBack` already applies on the input-VJP: drop the trailing zero
-    row (extent `2s−1`) and pad `[p, k−2−p]`.
+    short of `k`: at `k = 2`, input 8×8 → output 4×4, it declares `2x3x2x2` against a
+    convolution yielding `1x1` — **type-invalid MLIR**. The even branch applies the same asymmetry
+    `convStridedBack` applies on the input-VJP: drop the trailing zero row (extent `2s−1`) and pad
+    `[p, k−2−p]`.
 
     Output width is `ext_padded − ext + 1 = (2s + lo + hi) − ext + 1`:
     `k=1 → (1, 2s, 0, 0) ⇒ 1`; `k=3 → (1, 2s, 1, 1) ⇒ 3`; `k=7 → (1, 2s, 3, 3) ⇒ 7`;
@@ -1023,7 +1020,7 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- ════════════════════════════════════════════════════════════════
 -- § Pointwise ops at their 4-D shape — the NHWC↔NCHW relayout fix
 --
--- ⚠⚠ WHY THIS EXISTS, and why it is worth 2.3× on EfficientNet-B0.
+-- WHY THIS EXISTS, and why it is worth 2.3× on EfficientNet-B0.
 --
 -- The proof IR carries activations as flat `[B, c*h*w]` vectors, so every 4-D op brackets
 -- itself with `reshape` glue and every pointwise op is emitted at the flat type. A flatten is
@@ -1031,11 +1028,11 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- tensor cores. So a pointwise op emitted flat pins its tensor to NCHW between two NHWC convs
 -- and XLA materialises a physical relayout going in and coming out.
 --
--- Measured 2026-08-29, one 4060 Ti, node-granularity nsys: B0 bf16 @64 spent **72.61 ms/step,
+-- Measured on one 4060 Ti, node-granularity nsys: B0 bf16 @64 spent **72.61 ms/step,
 -- 54.6% of all GPU time**, in those relayouts (10.486 GB) against its JAX reference's 0.75 ms.
 -- ConvNeXt-T 53.2%. MobileNetV2 and ViT, which end up with no relayouts, are FASTER than their
--- references. ⚠ f32 is immune: XLA keeps f32 convs in NCHW, so the effect cannot appear there
--- and an f32 A/B reads as a clean null — which is exactly how it stayed hidden.
+-- references. f32 is immune: XLA keeps f32 convs in NCHW, so the effect cannot appear there
+-- and an f32 A/B reads as a clean null.
 --
 -- The fix is to emit the pointwise ops at the 4-D shape. `liftPointwise` brackets a block with
 -- an inverse reshape pair, so the value crossing the token boundary keeps its flat type and no
@@ -1080,8 +1077,8 @@ private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × 
       | "bnBatch",                [_, oc, h, w]
       | "bnEval",                 [_, oc, h, w]           => (some (oc, h, w), some (oc, h, w))
       | "layerScaleChP",          [_, c, h, w]            => (some (c, h, w), some (c, h, w))
-      -- ⚠ `gap` CONTRACTS the spatial extent: its result is `[c]`, so it has an input shape and
-      -- no output one. The width table conflated the two and could hand a `[c]` value a `[c,h,w]`.
+      -- `gap` CONTRACTS the spatial extent: its result is `[c]`, so it has an input shape and
+      -- no output one.
       | "gap",                    [_, c, h, w]            => (some (c, h, w), none)
       | "maxPool",                [_, c, h, w]
       | "maxPool3s2",             [_, c, h, w]            => (some (c, 2*h, 2*w), some (c, h, w))
@@ -1089,12 +1086,9 @@ private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × 
       | "convStride4P",           [_, ic, oc, h, w, _, _]
       | "convStride4PBf16",       [_, ic, oc, h, w, _, _] =>
           (some (ic, 2*(2*h), 2*(2*w)), some (oc, h, w))
-      -- ── the BACKWARD half. ⚠⚠ Omitting it is not a smaller version of this table, it is a
+      -- ── the BACKWARD half. Omitting it is not a smaller version of this table, it is a
       --    BROKEN one: a cotangent chain whose head has no shape drops back to flat at the first
-      --    `addV`, and every pointwise op after it in that chain goes with it. The width table
-      --    covered the backward by accident — one entry served the forward activation and the
-      --    cotangent alike, because they have the same width — and losing that is what took the
-      --    first name-keyed cut to 0.999 GB where the scratch pass reached 0.122.
+      --    `addV`, and every pointwise op after it in that chain goes with it.
       | "convBackBatched",        [_, ic, oc, h, w, _, _]
       | "convBackBatchedBf16",    [_, ic, oc, h, w, _, _]
       | "convBackBatchedF8",      [_, ic, oc, h, w, _, _] => (some (oc, h, w), some (ic, h, w))
@@ -1109,7 +1103,7 @@ private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × 
       | "depthwiseStridedXlaBackBatchedBf16", [_, c, h, w, _, _]
       | "maxPoolBackP",           [_, c, h, w]
       | "maxPool3s2BackP",        [_, c, h, w]            => (some (c, h, w), some (c, 2*h, 2*w))
-      -- ⚠ the per-example `maxPool3s2BackP` Raw carries THREE nats, not four (`skel` aliases the
+      -- the per-example `maxPool3s2BackP` Raw carries THREE nats, not four (`skel` aliases the
       -- batched tag but not its `N`), so the batched pattern above cannot match it.
       | "maxPool3s2BackP",        [c, h, w]               => (some (c, h, w), some (c, 2*h, 2*w))
       | "bnBatchBack",            [_, oc, h, w]
@@ -1601,8 +1595,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- `den` is `ℝ → ℝ` — the VALUE stays f32 and only its precision is degraded, which
       -- is what "round to bf16" means as a function on reals.
       --
-      -- ⚠⚠ **MEASURED 2026-08-01 ON ares: XLA DELETES THIS PAIR, SO THIS EMIT IS A NO-OP
-      -- ON HARDWARE.** jax 0.10.2 / CUDA 12.9, `.astype(bf16).astype(f32)` under `jit`:
+      -- **MEASURED: XLA DELETES THIS PAIR, SO THIS EMIT IS A NO-OP ON HARDWARE.** jax 0.10.2 / CUDA
+      -- 12.9, `.astype(bf16).astype(f32)` under `jit`:
       -- eager rounds 1.7640524 → 1.765625, but the jitted result is 1.7640524 unchanged and
       -- the optimized HLO contains no `convert` at all — the algebraic simplifier treats the
       -- round trip as removable. So a graph carrying this node computes in FULL f32: no
@@ -1612,8 +1606,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- refuted is this EMIT STRATEGY, not the op. To make bf16 real the value has to stay
       -- bf16 ACROSS an operation, i.e. a `dot_general` whose operands are bf16-typed with
       -- `preferred_element_type = f32`. That changes the value's type and so cannot be a
-      -- `SHlo n → SHlo n` node; it is the rung-2 emitter change in
-      -- planning/archive/bf16_renderer.md. Keep this node — it is the proof-side round and the
+      -- `SHlo n → SHlo n` node. Keep this node — it is the proof-side round and the
       -- depth > 1 ingredient — but do NOT read a graph containing it as running bf16.
       pure (txt4, res4 :: st)
   | .convertF n, r :: st => do
@@ -1650,7 +1643,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .flatConvF w b ic oc h w' kH kW, r :: st => do
       let (s, o) ← emitFlatConv B none w b ic oc h w' kH kW r
       pure (s, o :: st)
-  -- ⚠ The convolution's RESULT is bf16-typed. An f32-typed result here reads as the same
+  -- The convolution's RESULT is bf16-typed. An f32-typed result here reads as the same
   -- computation and compiles to pure f32 — see the constructor's note. Do not "simplify".
   | .flatConvFBf16 w b ic oc h w' kH kW, r :: st => do
       let (s, o) ← emitFlatConv B (some tyBf16) w b ic oc h w' kH kW r
@@ -1867,7 +1860,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- to h×w, zero-upsample dy (interior+high=1 → 2h×2w, the decimate-backward), then the
       -- SAME transpose-trick stride-1 weight-grad conv as `convWeightSgd` on the 2h×2w grid →
       -- [oc,ic,kH,kW], then θ' = θ − lr·dW. Same op text as `TestResnet34Train.convWGradStrided`.
-      -- `sWGradGeom` is the odd/even split; odd reproduces the old inline formula byte-for-byte.
+      -- `sWGradGeom` is the odd/even split.
       let (upH, extH, loH, hiH) := sWGradGeom kH h
       let (upW, extW, loW, hiW) := sWGradGeom kW w
       let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -2042,8 +2035,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {o} = stablehlo.reduce({dr} init: {z}) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [B,oc,h,w]}, tensor<f32>) -> {ty [oc]}\n",
         o :: st)
   | .convStridedWeightGrad xN ic oc h w kH kW, r :: st => do
-      -- `sWGradGeom` is the odd/even split; at odd kernels it reproduces the old inline
-      -- `pH = (kH-1)/2` formula byte-for-byte.
+      -- `sWGradGeom` is the odd/even split; at odd kernels it is the `pH = (kH-1)/2` formula.
       let (upH, extH, loH, hiH) := sWGradGeom kH h
       let (upW, extW, loW, hiW) := sWGradGeom kW w
       let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -2155,9 +2147,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {wdlr} = stablehlo.multiply {wdb}, {lrb} : {T}\n" ++
         s!"    {wdp} = stablehlo.multiply {wdlr}, {θN} : {T}\n" ++
         s!"    {o} = stablehlo.subtract {sub}, {wdp} : {T}\n", o :: st)
-  -- ══ SGD / NESTEROV (§2i): op-for-op `Proofs.sgdParam` / `momVNext` / `momParam`, matching the
-  --    retired `tests/TestCifar8AdamTrain.emit{Sgd,Momentum}` blocks byte-for-byte modulo SSA
-  --    freshness. `%lr` / `%mu` are runtime `tensor<f32>` args, broadcast to the param shape. ══
+  -- ══ SGD / NESTEROV: op-for-op `Proofs.sgdParam` / `momVNext` / `momParam`. `%lr` / `%mu` are
+  --    runtime `tensor<f32>` args, broadcast to the param shape. ══
   | .sgdParamF θN lrN ds, r :: st => do
       let T := ty ds
       let lrb ← fresh; let stp ← fresh; let o ← fresh
@@ -2175,8 +2166,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .momParamF θN vN muN lrN ds, r :: st => do
       let T := ty ds
       -- v' is recomputed here rather than shared with `momVNextF`: SHlo is single-result, so each
-      -- output is its own node. XLA's CSE folds the duplicate (§2b-bis measured that on R34's
-      -- 108 → 36 rsqrt, at no run-time cost).
+      -- output is its own node. XLA's CSE folds the duplicate (on R34, 108 → 36 rsqrt, at no
+      -- run-time cost).
       let mub ← fresh; let vg ← fresh; let vel ← fresh
       let nv ← fresh; let lk ← fresh; let lrb ← fresh; let stp ← fresh; let o ← fresh
       pure (
@@ -2191,12 +2182,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   -- ══ RMSPROP (TensorFlow flavour): op-for-op `Proofs.rmsBufNext`, matching the JAX reference's
   --    `MOMENTUM * b + g / jnp.sqrt(s + EPS)` where `s = RHO*s + (1-RHO)*g*g`. `%rho`/`%orho`/
   --    `%mu`/`%eps` are runtime `tensor<f32>` args, broadcast to the param shape.
-  --    ⚠ `{ep}` is added to the mean-square BEFORE the `sqrt`, not to the root after it. That one
+  --    `{ep}` is added to the mean-square BEFORE the `sqrt`, not to the root after it. That one
   --    line is the entire difference from textbook RMSProp and it is a different optimizer —
   --    `Proofs.rmsBufNext_eps_placement_at_zero` states the gap (1/√ε against 1/ε).
   --    s' is recomputed here rather than shared with `adamVNextF`: SHlo is single-result, so each
-  --    output is its own node. XLA's CSE folds the duplicate (§2b-bis measured that on R34's
-  --    108 → 36 rsqrt, at no run-time cost). ══
+  --    output is its own node. XLA's CSE folds the duplicate (on R34, 108 → 36 rsqrt, at no
+  --    run-time cost). ══
   | .rmsBufNextF sqN bufN rhoN orhoN muN epsN ds, r :: st => do
       let T := ty ds
       let rhob ← fresh; let orhob ← fresh; let ss ← fresh; let g2 ← fresh; let sg ← fresh
@@ -2226,7 +2217,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- The dims list is `List.range ds.length` rather than a literal, so it is right at rank 1 and
       -- rank 4 alike; ViT and ConvNeXt have no rank-0 parameters, so it is never empty
       -- (`vitParamSig`, ConvNeXt's `allParams` — both checked, minimum rank 1).
-      -- ⚠ Emits at the PARAMETER shape `ty ds`, not `ty [B,n]`: the clip runs on parameter
+      -- Emits at the PARAMETER shape `ty ds`, not `ty [B,n]`: the clip runs on parameter
       -- gradients, after the batch has been contracted.
       let T := ty ds
       let dims := String.intercalate ", " ((List.range ds.length).map toString)
@@ -2238,9 +2229,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {o} = stablehlo.add {acc}, {red} : tensor<f32>\n", o :: st)
   | .clipScaleF clipS epsS ds, g :: sN :: st => do
       -- `g * min(1, CLIP/(sqrt(total) + 1e-6))` — the reference's second line.
-      -- ⚠ ε is added to the ROOT, not under it: the opposite of `rmsBufNextF`'s TF placement, and
+      -- ε is added to the ROOT, not under it: the opposite of `rmsBufNextF`'s TF placement, and
       -- this one follows the reference literally (`CLIP / (gn + 1e-6)`).
-      -- ⚠ The `minimum` against 1.0 is not decoration — without it a SMALL gradient is AMPLIFIED
+      -- The `minimum` against 1.0 is not decoration — without it a SMALL gradient is AMPLIFIED
       -- by `c/gn`, which compiles, trains and descends (`Proofs.clipFactor_le_one`).
       -- The broadcast-then-multiply is `adamWParamF`'s `%lr` shape verbatim; it is the
       -- scale-by-a-RUNTIME-scalar the kit lacked (`scaleF` bakes a `constant dense<…>` instead).
@@ -2284,7 +2275,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {mh} = stablehlo.divide {mn}, {bc1b} : {T}\n" ++
         s!"    {vh} = stablehlo.divide {vn}, {bc2b} : {T}\n" ++
         s!"    {epsb} = stablehlo.broadcast_in_dim {epsN}, dims = [] : (tensor<f32>) -> {T}\n" ++
-        -- ⚠ ε OUTSIDE the root. `sqrt(vh + eps)` is RMSProp-TF's placement and a different
+        -- ε OUTSIDE the root. `sqrt(vh + eps)` is RMSProp-TF's placement and a different
         -- optimizer; the reference is literal — `mc / (jnp.sqrt(vc) + EPS)`.
         s!"    {sq} = stablehlo.sqrt {vh} : {T}\n" ++
         s!"    {dn} = stablehlo.add {sq}, {epsb} : {T}\n" ++
@@ -2294,11 +2285,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {o} = stablehlo.add {rat}, {wdp} : {T}\n", o :: st)
   | .lambScaleF ds, r :: wn2 :: st => do
       -- `trust · r` with `trust = ‖θ‖/‖r‖`, guarded to 1 when either norm vanishes.
-      -- ⚠⚠ `‖r‖²` is reduced HERE, from this op's own tensor child, so the trust ratio is
+      -- `‖r‖²` is reduced HERE, from this op's own tensor child, so the trust ratio is
       -- PER PARAMETER TENSOR. That is the whole difference from `clipScaleF` above, whose factor
       -- is one scalar shared across every parameter — the two blocks look alike and differ in the
       -- quantifier (`Proofs.lambScale_not_shared` states it).
-      -- ⚠ The guard is not a corner case: the driver inits every BN β and dense bias to 0, so
+      -- The guard is not a corner case: the driver inits every BN β and dense bias to 0, so
       -- `wn2 = 0` on those tensors at step 1 and `select` takes the `1.0` branch on a real run.
       let T := ty ds
       let dims := String.intercalate ", " ((List.range ds.length).map toString)
@@ -2461,7 +2452,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w']}) -> {ty [B, c*(2*h)*(2*w')]}\n", o :: st)
   | .depthwiseStridedXlaBack w c h w' kH kW, r :: st => do
       -- The XLA-`SAME` peer of `depthwiseStridedBack`: the transposed-conv pad shifts to
-      -- `[p+1, p-1]`. ⚠⚠ The OPPOSITE direction from the two weight grads (`[p-1, p+1]`),
+      -- `[p+1, p-1]`. The OPPOSITE direction from the two weight grads (`[p-1, p+1]`),
       -- because the kernel is reversed here — see `depthwiseStridedXlaBackBatched`'s note; a
       -- version derived "by symmetry" with its siblings type-checks, descends, and is wrong.
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
@@ -2806,9 +2797,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- self-contained: they recompute forward intermediates from the carried
       -- input/weight names (the mnv2 pattern). `den` never calls `emit`; this text
       -- is iree-validated, not theorem-tied (the per-op lexing trust the whole
-      -- suite carries). Backward tags are filled in the next pass.
+      -- suite carries).
       match tag, names, info with
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
       -- fp8 (E4M3) emit: byte-for-byte `convBf16`'s shape with `tyF8` in place of
       -- `tyBf16`. f8 operands, f8-TYPED conv result, convert back, bias added in f32.
@@ -2827,7 +2818,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
       | "convStrided", [wN, bN], [_N, ic, oc, h, w, kH, kW] | "convStridedBf16", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
           let p := (kH - 1) / 2
@@ -2844,14 +2835,14 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
-      -- ⭐ The asymmetric-pad peer. `pad_low = (k-2)/2 = p-1`, `pad_high = k/2 = p` for odd `k`
+      -- The asymmetric-pad peer. `pad_low = (k-2)/2 = p-1`, `pad_high = k/2 = p` for odd `k`
       -- (k=3 → [[0,1]], k=5 → [[1,2]], k=7 → [[2,3]]) — exactly what XLA computes for `'SAME'` at
       -- an even input, which is the only input shape this token's type admits (`2*h`, `2*w`).
       -- Everything else is byte-identical to "convStrided", which is the point: the ONLY
       -- difference between the two nets is these four numbers.
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "convStridedXla", [wN, bN], [_N, ic, oc, h, w, kH, kW] | "convStridedXlaBf16", [wN, bN], [_N, ic, oc, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let lo := p - 1
@@ -2868,12 +2859,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,oc,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
-      -- ⭐ The asymmetric-pad depthwise. `pad_low = p-1`, `pad_high = p` (k=3 → [[0,1]], k=5 →
+      -- The asymmetric-pad depthwise. `pad_low = p-1`, `pad_high = p` (k=3 → [[0,1]], k=5 →
       -- [[1,2]]) — XLA `'SAME'` at an even input, which is the only shape this token's type admits.
       -- Byte-identical to "depthwiseStrided" apart from those four numbers.
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "depthwise", [wN, bN], [_N, c, h, w, kH, kW] | "depthwiseBf16", [wN, bN], [_N, c, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let xr ← fresh
@@ -2889,9 +2880,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "depthwiseStridedXla", [wN, bN], [_N, c, h, w, kH, kW] | "depthwiseStridedXlaBf16", [wN, bN], [_N, c, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let lo := p - 1
@@ -2908,9 +2899,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w]}\n" ++
             s!"    {ca} = stablehlo.add {cc}, {bb} : {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {ca} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
+      -- bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
       -- shape folds to pure f32, for grouped convolutions exactly as for ordinary ones
-      -- (measured). ⚠ SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
+      -- (measured). SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
       | "depthwiseStrided", [wN, bN], [_N, c, h, w, kH, kW] | "depthwiseStridedBf16", [wN, bN], [_N, c, h, w, kH, kW] => do
           let p := (kH - 1) / 2
           let xr ← fresh
@@ -2982,7 +2973,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           pure (txt4, res4 :: st)
       | "bnEval", [gN, bN, muN, varN, es], [_N, oc, h, w] => do
           -- byte-for-byte `.bnPerChannelEvalF`'s emit, dims from the descriptor rather than off
-          -- the SHlo index (§2b). INFERENCE BN: reshape to [B,oc,h,w], then the affine map
+          -- the SHlo index. INFERENCE BN: reshape to [B,oc,h,w], then the affine map
           -- γ·(x − μ)·rsqrt(var + ε) + β with μ/var/γ/β all rank-1 `[oc]` graph inputs. No reduce
           -- and no normalizer constant — that is the whole difference from `bnBatch`, and why the
           -- descriptor form is denotationally honest at any `N`.
@@ -3025,7 +3016,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
             s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
             s!"    {o} = stablehlo.reshape {pp} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
-      -- ⭐ The 3×3/s2 stem pool, forward — both index conventions, ONE text writer
+      -- The 3×3/s2 stem pool, forward — both index conventions, ONE text writer
       -- (`maxPool3s2FwdText`), so the per-example and batched forms cannot drift.
       | "maxPool3s2", [], [c, h, w] => do
           let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
@@ -3093,13 +3084,13 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           pure (txt4, res4 :: st)
       | "dropPathP", [mN], [_N, n] => do
           let (txt4, res4) ← liftPointwise B n r fun r d => do
-            -- ▶ STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale
-            -- (`planning/archive/stochastic_depth.md`). `mN` is a graph INPUT of type `tensor<Bxf32>` — one
-            -- value per EXAMPLE, computed on the host — and `dims = [0]` is what makes it the
-            -- reference's `(B, 1, …, 1)` mask: every position within an example is scaled
-            -- identically, every example independently. Emitting a `tensor<B×n>` scale instead
-            -- typechecks, compiles and trains, and is per-ELEMENT dropout — a different regulariser.
-            -- ⚠ NO BAKED `1/keep`. The driver folds the inversion into the supplied value
+            -- STOCHASTIC DEPTH: the per-SAMPLE residual-branch scale. `mN` is a graph INPUT of type
+            -- `tensor<Bxf32>` — one value per EXAMPLE, computed on the host — and `dims = [0]` is
+            -- what makes it the reference's `(B, 1, …, 1)` mask: every position within an example
+            -- is scaled identically, every example independently. Emitting a `tensor<B×n>` scale
+            -- instead typechecks, compiles and trains, and is per-ELEMENT dropout — a different
+            -- regulariser.
+            -- NO BAKED `1/keep`. The driver folds the inversion into the supplied value
             -- (`bernoulli(keep_i)/keep_i` at train, `1.0` at eval), which is what makes the ones-scale
             -- forward the EXACT identity and lets this op be emitted in the forward too — keeping the
             -- `forward ⊂ train-step` prefix audit alive. See `Proofs.dropPath`'s note on why a baked
@@ -3111,30 +3102,29 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       | "sigmoidP", [], [_N, n] => do
           let (txt4, res4) ← liftPointwise B n r fun r d => do
             -- σ(z) at the batched shape, for BCE-with-logits' cotangent `(σ(z) − t)/(B·K)`.
-            -- ⚠ ONE op, and `stablehlo.logistic` is the same primitive `sigmoidF` emits — the
+            -- ONE op, and `stablehlo.logistic` is the same primitive `sigmoidF` emits — the
             -- difference is only the shape it is emitted at.
             let o ← fresh
             pure (s!"    {o} = stablehlo.logistic {r} : {ty d}\n", o)
           pure (txt4, res4 :: st)
       | "dropoutP", [mN], [_N, n] => do
-          -- ⚠⚠ NEVER LIFTED to the operand's recorded 4-D shape (`liftPointwise`), unlike the other
+          -- NEVER LIFTED to the operand's recorded 4-D shape (`liftPointwise`), unlike the other
           -- pointwise ops: the mask is a graph INPUT whose type is fixed at `tensor<B×n>`, so a 4-D
           -- emission types `mN` two ways and the artifact does not parse. MobileNetV4's head relu
-          -- carries `[1280,1,1]` from its 1×1 BN and hit exactly that (2026-09-25); EfficientNet's
-          -- GAP output has no recorded shape, so its renders are unchanged.
+          -- carries `[1280,1,1]` from its 1×1 BN, which is exactly that case.
           let (txt4, res4) ← (fun r d => do
-            -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
-            -- immediately before the classifier dense. `mN` is a graph INPUT of type
-            -- `tensor<B×n×f32>` — one value per (example, feature), computed on the host.
+            -- CLASSIFIER DROPOUT: the per-ELEMENT inverted mask, applied immediately before the
+            -- classifier dense. `mN` is a graph INPUT of type `tensor<B×n×f32>` — one value per
+            -- (example, feature), computed on the host.
             --
-            -- ⚠⚠ **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
+            -- **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
             -- has the value's shape, because the reference draws `bernoulli(key, keep, x.shape)`
             -- (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`) rather than the `(B, 1, …, 1)` shape stochastic depth
             -- uses. A `dims = [0]` broadcast off a `tensor<B>` input here typechecks, compiles, runs,
             -- descends — and is stochastic depth on the classifier, a different regulariser. That is
             -- `dropPathP`'s warning read backwards, and `tests/TestBatchedEmitTie.lean` pins both
             -- directions: that one asserts the broadcast is PRESENT, this one that it is ABSENT.
-            -- ⚠ NO BAKED `1/keep`, for `dropPathP`'s reason exactly: the driver folds the inversion
+            -- NO BAKED `1/keep`, for `dropPathP`'s reason exactly: the driver folds the inversion
             -- into the supplied mask, so the ones-mask forward is the exact identity and this op can
             -- be emitted in the forward artifact without rescaling eval.
             let o ← fresh
@@ -3164,8 +3154,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                   s!"    {o} = stablehlo.multiply {r}, {sp} : {ty d}\n", o)
           pure (txt4, res4 :: st)
       | "softmaxRow", [], [_N, m, n] => do
-          -- byte-for-byte `.softmaxRowF`'s emit. `m` is rows PER EXAMPLE (it always
-          -- was); the batch is `_N` on the proof side and `B` in the emit.
+          -- byte-for-byte `.softmaxRowF`'s emit. `m` is rows PER EXAMPLE; the batch is `_N` on the
+          -- proof side and `B` in the emit.
           let xn ← fresh; let z ← fresh; let e ← fresh; let s ← fresh; let sb ← fresh
           let dv ← fresh; let o ← fresh
           pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
@@ -3175,7 +3165,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {sb} = stablehlo.broadcast_in_dim {s}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
             s!"    {dv} = stablehlo.divide {e}, {sb} : {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {dv} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
-      -- ── the five ViT/ConvNeXt row/pointwise descriptors (§0.2 ▶2). Each body is a BYTE-FOR-BYTE
+      -- ── the five ViT/ConvNeXt row/pointwise descriptors. Each body is a BYTE-FOR-BYTE
       --    copy of its descriptor-less peer's, with the width read from the descriptor's `m`/`n`
       --    instead of the SHlo index — which is the entire content of the batched-index move on
       --    the emit side. `tests/TestBatchedEmitTie.lean` ties each pair, so "byte-for-byte" is
@@ -3274,14 +3264,14 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                 s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w']}\n" ++
                 s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
                 s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed result reads
-      -- identically and compiles to pure f32 — measured on THIS shape (4×4/s4) before the op was
-      -- written, so stride 4 buys no exemption from §9.2 any more than grouping did.
-      -- ⚠⚠ The pad is `convStride4P`'s `(k-1)/2 − 1`, NOT `convBf16`'s `(k-1)/2`. At the 4×4 stem
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed result reads
+      -- identically and compiles to pure f32 — measured on THIS shape (4×4/s4), so stride 4 buys no
+      -- exemption any more than grouping does.
+      -- The pad is `convStride4P`'s `(k-1)/2 − 1`, NOT `convBf16`'s `(k-1)/2`. At the 4×4 stem
       -- that is `[[0,0]]`. The two spellings produce the same output SIZE, so nothing structural
       -- separates them — do not "tidy" this to match the other bf16 convs.
       | "convStride4P", [w, b], [_N, ic, oc, h, w', kH, kW] | "convStride4PBf16", [w, b], [_N, ic, oc, h, w', kH, kW] => do
-          -- byte-for-byte `.flatConvStride4F`'s emit, including its ⚠ pad-one-less rule: the
+          -- byte-for-byte `.flatConvStride4F`'s emit, including its pad-one-less rule: the
           -- denotation reads the SAME conv at the offset-1 positions 4i+1, so the emitted pad is
           -- (k-1)/2 − 1 — for the 4×4 stem that is 0, the paper's left-aligned window.
           let pH := (kH - 1) / 2 - 1; let pW := (kW - 1) / 2 - 1
@@ -3361,12 +3351,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [n]}) -> {ty [B,m,n]}\n" ++
             s!"    {ad} = stablehlo.add {xn}, {bb} : {ty [B,m,n]}\n" ++
             s!"    {o} = stablehlo.reshape {ad} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
-      -- ⚠⚠ bf16 operands, **bf16-TYPED result**, convert back — the CONV shape, applied to a dot.
-      -- §9.2 established that `dot_general` reaches the tensor cores with EITHER result type and
-      -- read that as "the result type is inert for dot". It is inert for CORRECTNESS and it is not
-      -- inert for SPEED: an f32 result makes the gemm write twice the bytes and take a worse
-      -- epilogue. Measured on ViT's own MLP chain (§20.1): f32-result 1.18×, bf16-result **1.60×**.
-      -- ▶ So the convert-back is not "a node that buys nothing" — it is most of the win.
+      -- bf16 operands, **bf16-TYPED result**, convert back — the CONV shape, applied to a dot.
+      -- `dot_general` reaches the tensor cores with EITHER result type, so the result type is
+      -- inert for CORRECTNESS; it is not inert for SPEED: an f32 result makes the gemm write twice
+      -- the bytes and take a worse epilogue. Measured on ViT's own MLP chain: f32-result 1.18×,
+      -- bf16-result **1.60×**.
+      -- So the convert-back is not "a node that buys nothing" — it is most of the win.
       | "denseRowBackP", [wN], [_N, rows, a, c] | "denseRowBackPBf16", [wN], [_N, rows, a, c] => do
           -- byte-for-byte `.denseRowBack`'s emit; `rows` is per-example rows.
           let dn ← fresh
@@ -3376,12 +3366,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           pure (s!"    {dn} = stablehlo.reshape {r} : ({ty [B, rows*c]}) -> {ty [B,rows,c]}\n" ++
             cs ++
             s!"    {o} = stablehlo.reshape {dg} : ({ty [B,rows,a]}) -> {ty [B, rows*a]}\n", o :: st)
-      -- ══ ViT increment 1: the six batch-invariant forms. Every one is byte-for-byte its
+      -- ══ The six batch-invariant forms. Every one is byte-for-byte its
       --    per-example peer's emit with the TOKEN count read off the tag (`tk`) instead of off the
-      --    SHlo index — which is the whole content of the move, since `B` was always `pretty`'s.
-      --    ⚠ `_N` (the batch) is deliberately unused in all six: an emit that read it would be
+      --    SHlo index — which is the whole content of the move, since `B` is `pretty`'s.
+      --    `_N` (the batch) is deliberately unused in all six: an emit that read it would be
       --    reintroducing the conflation. `tests/TestBatchedEmitTie.lean` pins each against its peer.
-      -- ⚠⚠ bf16-TYPED result then convert back, per `denseRowBackPBf16`'s note — and this is the op
+      -- bf16-TYPED result then convert back, per `denseRowBackPBf16`'s note — and this is the op
       -- that carries ViT, six sites per block × 12 blocks. The BIAS is added after the convert, in
       -- f32, which is what `den`'s outer `rnd` sits inside of.
       | "denseRowP", [wN, bN], [_N, tk, a, c] | "denseRowPBf16", [wN, bN], [_N, tk, a, c] => do
@@ -3394,12 +3384,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [2] : ({ty [c]}) -> {ty [B,tk,c]}\n" ++
             s!"    {ob} = stablehlo.add {dg}, {bb} : {ty [B,tk,c]}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,tk,c]}) -> {ty [B, tk*c]}\n", o :: st)
-      -- ⚠⚠ **THE CONV SHAPE, NOT THE DOT SHAPE** — bf16 operands, **bf16-TYPED convolution
+      -- **THE CONV SHAPE, NOT THE DOT SHAPE** — bf16 operands, **bf16-TYPED convolution
       -- result**, convert back. ViT's patchify stem is the one op in this net that is a
       -- `convolution`, and giving it an f32-typed result folds the whole thing to pure f32
-      -- (measured standalone at this exact shape before the constructor existed, §17.2). Stride 16
-      -- buys no exemption from §9.2 any more than grouping (§12.2) or stride 4 (§16.1) did.
-      -- ▶ Everything after the convert-back — bias, transpose, CLS concat, position add — is
+      -- (measured standalone at this exact shape). Stride 16 buys no exemption any more than
+      -- grouping or stride 4 does.
+      -- Everything after the convert-back — bias, transpose, CLS concat, position add — is
       -- byte-for-byte "patchEmbedP" and stays f32, which is what `patchEmbedFlatBf16`'s `den` says.
       | "patchEmbedP", [wN, bN, clsN, posN], [_N, ic, H, W, P, tk, D] | "patchEmbedPBf16", [wN, bN, clsN, posN], [_N, ic, H, W, P, tk, D] => do
           let hp := H / P; let wp := W / P
@@ -3448,7 +3438,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {o} = stablehlo.reshape {pd} : ({ty [B,tk,heads*d]}) -> {ty [B, tk*(heads*d)]}\n", o :: st)
       -- ══ The un-fused BATCHED gradients: each is its `*SgdB` peer's emit with the SGD tail
       --    (const lr / multiply / subtract) removed, so the text is a byte-PREFIX of it. ══
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
       | "convWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] | "convWeightGradBf16", [xN], [_N, ic, oc, h, w, kH, kW] | "convWeightGradF8", [xN], [_N, ic, oc, h, w, kH, kW] => do
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
@@ -3466,10 +3456,10 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,oc,h,w]}) -> {ty [oc,B,h,w]}\n" ++
             cs ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
       | "convStridedWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] | "convStridedWeightGradBf16", [xN], [_N, ic, oc, h, w, kH, kW] => do
-          -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
+          -- odd/even split via `sWGradGeom`.
           let (upH, extH, loH, hiH) := sWGradGeom kH h
           let (upW, extW, loW, hiW) := sWGradGeom kW w
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -3488,11 +3478,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
-      -- ⭐ The XLA-`SAME` conv weight grad. Same `sWGradGeom` extents; only the correlation pad
+      -- The XLA-`SAME` conv weight grad. Same `sWGradGeom` extents; only the correlation pad
       -- shifts by one (`loH-1`, `hiH+1`), so the saved input is read at `2·ho + 1 + kh - p`.
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "convStridedXlaWeightGrad", [xN], [_N, ic, oc, h, w, kH, kW] | "convStridedXlaWeightGradBf16", [xN], [_N, ic, oc, h, w, kH, kW] => do
           let (upH, extH, loH, hiH) := sWGradGeom kH h
           let (upW, extW, loW, hiW) := sWGradGeom kW w
@@ -3512,11 +3502,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,oc,extH,extW]}) -> {ty [oc,B,extH,extW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.transpose {raw}, dims = [1, 0, 2, 3] : ({ty [ic,oc,kH,kW]}) -> {ty [oc,ic,kH,kW]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back — measured on this exact
-      -- shape (`[3,B,224,224]` × `[96,B,221,221]` → `[3,96,4,4]`) before the op was written.
-      -- ⚠ Every geometry number is `convStride4WeightGrad`'s verbatim: the `interior = 3`
+      -- bf16 operands, **bf16-typed convolution result**, convert back — measured on this exact
+      -- shape (`[3,B,224,224]` × `[96,B,221,221]` → `[3,96,4,4]`).
+      -- Every geometry number is `convStride4WeightGrad`'s verbatim: the `interior = 3`
       -- upsample, the `4h−3` extent with NO trailing row, and the `lo = p−1` / `hi = kH−3−p`
-      -- window. Only the four dtypes and the two converts move. ⚠ The `stablehlo.pad`'s zero stays
+      -- window. Only the four dtypes and the two converts move. The `stablehlo.pad`'s zero stays
       -- f32 — it pads the cotangent BEFORE the cast, so it is an f32 tensor at that point.
       | "convStride4WeightGrad", [xN], [ic, oc, h, w, kH, kW] | "convStride4WeightGradBf16", [xN], [ic, oc, h, w, kH, kW] => do
           -- ConvNeXt's 4×4/s4 patchify weight grad. `flatConvStride4` decimates TWICE, so the
@@ -3717,7 +3707,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
               s!"    {o} = stablehlo.reshape {dx4} : ({ty [B,oc,h,w]}) -> {ty [B, oc*h*w]}\n", o :: st)
           else
             pure (s!"    // [EfficientNet Item B] batched {tag} {names} {info} — render TODO\n", r :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
       | "convBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] | "convBackBatchedBf16", [wN], [_N, ic, oc, h, w, kH, kW] | "convBackBatchedF8", [wN], [_N, ic, oc, h, w, kH, kW] => do
           -- conv input-VJP: dx = conv(dy, reverse(W,[2,3])ᵀ), reversed+transposed
@@ -3736,19 +3726,15 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,h,w]}) -> {ty [B, ic*h*w]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 (measured) — see `flatConvFBf16`.
-      -- ⚠ ASYMMETRIC pad, exactly as the f32 peer above — the bf16 twin must not "tidy" it.
+      -- ASYMMETRIC pad, exactly as the f32 peer above — the bf16 twin must not "tidy" it.
       | "convStridedBackBatched", [wN], [_N, ic, oc, h, w, kH, kW] | "convStridedBackBatchedBf16", [wN], [_N, ic, oc, h, w, kH, kW] => do
           -- stride-2 conv input-VJP: upsample dy (zero-interleave to 2h×2w) then the
           -- stride-1 conv input-VJP. Produces dx at the 2h×2w input resolution.
-          -- ⚠⚠ ASYMMETRIC pad, matching `.convStridedBack`. The symmetric `[[p,p],[p,p]]` this
-          -- emitted AGREES at every odd kernel (kH=3 ⇒ pH=1 ⇒ kH−1−pH=1) and is WRONG at even
-          -- ones (kH=2 ⇒ [[0,0]] where the VJP needs [[1,0]]). §2f-bis fixed exactly this in the
-          -- per-example emitter and it was never carried here, because no batched net had an
-          -- even strided kernel until ConvNeXt's 2×2/s2 downsample. Found by the whole-net
-          -- backward tie — 3 lines, at the 3 downsamples. Inert on every committed batched
-          -- artifact, all of which are odd (R34 3×3, mnv2/enet 3×3 and 5×5).
+          -- ASYMMETRIC pad, matching `.convStridedBack`. A symmetric `[[p,p],[p,p]]` pad AGREES
+          -- at every odd kernel (kH=3 ⇒ pH=1 ⇒ kH−1−pH=1) and is WRONG at even ones (kH=2 ⇒
+          -- [[0,0]] where the VJP needs [[1,0]]), such as ConvNeXt's 2×2/s2 downsample.
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let dyr ← fresh; let z ← fresh; let up ← fresh; let rev ← fresh; let wt ← fresh
           let (cs, dx) ← emitContract (lowOf tag) up wt [B,oc,2*h,2*w] [ic,oc,kH,kW] [B,ic,2*h,2*w] fun lhs rhs =>
@@ -3765,9 +3751,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {wt} = stablehlo.transpose {rev}, dims = [1, 0, 2, 3] : ({ty [oc,ic,kH,kW]}) -> {ty [ic,oc,kH,kW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,2*h,2*w]}) -> {ty [B, ic*(2*h)*(2*w)]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "depthwiseBackBatched", [wN], [_N, c, h, w, kH, kW] | "depthwiseBackBatchedBf16", [wN], [_N, c, h, w, kH, kW] => do
           -- depthwise input-VJP: dx = depthwise_conv(dy, reverse(W,[2,3])), fgc=c,
           -- same-pad p (no transpose — one input channel per group).
@@ -3784,9 +3770,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [c,1,kH,kW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
+      -- bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
       -- shape folds to pure f32, for grouped convolutions exactly as for ordinary ones
-      -- (measured). ⚠ SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
+      -- (measured). SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
       | "depthwiseStridedBackBatched", [wN], [_N, c, h, w, kH, kW] | "depthwiseStridedBackBatchedBf16", [wN], [_N, c, h, w, kH, kW] => do
           -- stride-2 depthwise input-VJP: upsample dy then the stride-1 depthwise
           -- input-VJP. dx at the 2h×2w input resolution.
@@ -3805,18 +3791,18 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {rev} = stablehlo.reverse {wN}, dims = [2, 3] : {ty [c,1,kH,kW]}\n" ++
             cs ++
             s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
-      -- ⭐ The XLA-`SAME` depthwise input-VJP: conv pad shifts to `[p+1, p-1]`.
-      -- ⚠⚠ **NOTE THE DIRECTION — it is the OPPOSITE of the two weight grads**, which shift to
+      -- The XLA-`SAME` depthwise input-VJP: conv pad shifts to `[p+1, p-1]`.
+      -- **NOTE THE DIRECTION — it is the OPPOSITE of the two weight grads**, which shift to
       -- `[p-1, p+1]`. The kernel is REVERSED here (`stablehlo.reverse`, dims [2,3]), and that
       -- reversal flips the sign of the index shift. Deriving it "by symmetry" with the weight
       -- grads gives `[p-1, p+1]`, which type-checks, has the right shape, descends, and is WRONG
-      -- — `scripts/gates/xla_pad_op_check.py` caught exactly that (2.6e0 against both references) and
-      -- a numeric sweep over (upsample phase, pad_low) pinned the true answer at both k=3 and
-      -- k=5. Do not "fix" this to match its siblings. Total pad is `2p`, so the extent stays `2h`.
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- — 2.6e0 against both references in `scripts/gates/xla_pad_op_check.py`; a numeric sweep
+      -- over (upsample phase, pad_low) pins the true answer at both k=3 and k=5. Do not "fix"
+      -- this to match its siblings. Total pad is `2p`, so the extent stays `2h`.
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
-      -- ⚠⚠ Keeps the `[p+1, p-1]` pad of its f32 peer — the OPPOSITE shift from the weight
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
+      -- Keeps the `[p+1, p-1]` pad of its f32 peer — the OPPOSITE shift from the weight
       -- grads, because the kernel is reversed. Do not "fix" it to match its siblings.
       | "depthwiseStridedXlaBackBatched", [wN], [_N, c, h, w, kH, kW] | "depthwiseStridedXlaBackBatchedBf16", [wN], [_N, c, h, w, kH, kW] => do
           let p := (kH - 1) / 2
@@ -3990,9 +3976,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- Each is its `*Sgd` peer above with the trailing `constant lr / multiply / subtract` cut
       -- off, so the emitted text is a byte PREFIX of the fused one. `tests/TestBatchedEmitTie.lean`
       -- checks exactly that, which is the emit-side twin of the `*Sgd_eq_grad` theorems.
-      -- ⚠ Dot shape. The contraction is over BOTH the batch and the token axis in one op, so the
+      -- Dot shape. The contraction is over BOTH the batch and the token axis in one op, so the
       -- f32-typed result IS the accumulator for the whole reduction — which is what keeps this
-      -- gradient out of §9.3's vacuity argument (a bf16 accumulate at this fan-in would be).
+      -- gradient out of the vacuity argument (a bf16 accumulate at this fan-in would be).
       | "rowDenseWeightGrad", [xN], [N, a, c] | "rowDenseWeightGradBf16", [xN], [N, a, c] => do
           let xn ← fresh; let dn ← fresh
           let (cs, dW) ← emitContract (lowOf tag) xn dn [B,N,a] [B,N,c] [a,c] (lowResult := false) fun lhs rhs =>
@@ -4045,11 +4031,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {xh} = stablehlo.multiply {xc}, {istd} : {ty [B,N,D]}\n" ++
             s!"    {p} = stablehlo.multiply {d3}, {xh} : {ty [B,N,D]}\n" ++
             s!"    {dg} = stablehlo.reduce({p} init: {z}) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,N,D]}, tensor<f32>) -> {ty [D]}\n", dg :: st)
-      -- ⚠⚠ **CONV shape** — the second of ViT's two convolutions, and the second place the result
+      -- **CONV shape** — the second of ViT's two convolutions, and the second place the result
       -- type is load-bearing. The pad/transpose preamble is byte-for-byte "patchEmbedWeightGrad";
       -- the two converts go on the CONVOLUTION's operands only, after the dilating pad, because
       -- that pad is exact data movement and casting before it would round the same values twice.
-      -- ⚠ The convolution contracts the BATCH axis (`[ic,B,H,W] × [D,B,dilH,dilW]`), so the single
+      -- The convolution contracts the BATCH axis (`[ic,B,H,W] × [D,B,dilH,dilW]`), so the single
       -- bf16 store lands on the already-summed gradient — which is exactly where
       -- `patchEmbedWeightGradBBf16`'s `den` puts its outer `rnd`.
       | "patchEmbedWeightGrad", [xN], [ic, H, W, P, N, D] | "patchEmbedWeightGradBf16", [xN], [ic, H, W, P, N, D] => do
@@ -4096,7 +4082,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {o} = stablehlo.subtract {wN}, {sW} : {ty [oc,ic,kH,kW]}\n", o :: st)
       | "convStridedWeightSgd", [xN, wN, lrS], [_N, ic, oc, h, w, kH, kW] => do
           -- stem 3×3 s2 weight: zero-upsample dy to 2h×2w then the transpose-trick wgrad.
-          -- odd/even split via `sWGradGeom`; odd is byte-for-byte the old inline formula.
+          -- odd/even split via `sWGradGeom`.
           let (upH, extH, loH, hiH) := sWGradGeom kH h
           let (upW, extW, loW, hiW) := sWGradGeom kW w
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -4186,7 +4172,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           -- depthwise bias grad: Σ_{batch,spatial} dy, per channel. Note the RESHAPE precedes the
           -- zero constant — that is `depthwiseBiasSgd`'s order, and the emit-prefix test in
           -- `tests/TestBatchedEmitTie.lean` fails if the two are emitted the other way round even
-          -- though the MLIR would be equivalent. (It caught exactly that here.)
+          -- though the MLIR would be equivalent.
           let dr ← fresh; let z ← fresh; let db ← fresh
           pure (
             s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
@@ -4247,9 +4233,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             "      {batch_group_count = " ++ toString c ++ " : i64, feature_group_count = 1 : i64}" ++
             s!" : ({ty [c,B,h,w]}, {ty [c,B,h,w]}) -> {ty [1,c,kH,kW]}\n" ++
             s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
       | "depthwiseWeightGrad", [xN], [_N, c, h, w, kH, kW] | "depthwiseWeightGradBf16", [xN], [_N, c, h, w, kH, kW] => do
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let xr ← fresh; let dr ← fresh; let xt ← fresh; let dt ← fresh
@@ -4266,9 +4252,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {dt} = stablehlo.transpose {dr}, dims = [1, 0, 2, 3] : ({ty [B,c,h,w]}) -> {ty [c,B,h,w]}\n" ++
             cs ++
             s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
+      -- bf16 operands, **bf16-typed convolution result**, convert back. The f32-result
       -- shape folds to pure f32, for grouped convolutions exactly as for ordinary ones
-      -- (measured). ⚠ SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
+      -- (measured). SYMMETRIC pad — this is the torchvision-origin variant, NOT `Xla`.
       | "depthwiseStridedWeightGrad", [xN], [_N, c, h, w, kH, kW] | "depthwiseStridedWeightGradBf16", [xN], [_N, c, h, w, kH, kW] => do
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -4287,11 +4273,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {dt} = stablehlo.transpose {du}, dims = [1, 0, 2, 3] : ({ty [B,c,2*h,2*w]}) -> {ty [c,B,2*h,2*w]}\n" ++
             cs ++
             s!"    {g} = stablehlo.reshape {raw} : ({ty [1,c,kH,kW]}) -> {ty [c,1,kH,kW]}\n", g :: st)
-      -- ⭐ The XLA-`SAME` depthwise weight grad — the same one-position shift.
-      -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
+      -- The XLA-`SAME` depthwise weight grad — the same one-position shift.
+      -- bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed
       -- result reads identically and compiles to pure f32 — measured on a real grouped
-      -- (depthwise) conv too, so `feature_group_count` buys no exemption. See §9.2.
-      -- ⚠ Keeps the `[p-1, p+1]` weight-grad pad — the opposite direction from the dgrad.
+      -- (depthwise) conv too, so `feature_group_count` buys no exemption.
+      -- Keeps the `[p-1, p+1]` weight-grad pad — the opposite direction from the dgrad.
       | "depthwiseStridedXlaWeightGrad", [xN], [_N, c, h, w, kH, kW] | "depthwiseStridedXlaWeightGradBf16", [xN], [_N, c, h, w, kH, kW] => do
           let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
           let xr ← fresh; let dr ← fresh; let z ← fresh; let du ← fresh; let xt ← fresh; let dt ← fresh
@@ -4335,8 +4321,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .batched2 tag names info, b :: a :: st =>
       -- Pointwise binary ops at the batched index. Byte-for-byte the `.addV`/`.sub`
       -- emits; the width is `info`'s per-example `n`, not the SHlo index `N·n`.
-      -- ⚠ `names` used to be discarded here — every `batched2` was nameless. `bnSync` is the
-      -- first that carries any (γ, β, ε), so the match took a third component (2026-09-20).
+      -- `bnSync` carries names (γ, β, ε), so the match takes a third component.
       match tag, names, info with
       | "addV", [], [_N, n] => do
           let (txt4, res4) ← liftPointwise2 B n a b fun a b d => do
@@ -4348,11 +4333,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             let o ← fresh
             pure (s!"    {o} = stablehlo.subtract {a}, {b} : {ty d}\n", o)
           pure (txt4, res4 :: st)
-      -- ⭐⭐ **The only NON-pointwise `batched2`, and the only ACTIVATION × ACTIVATION bf16 op in
+      -- **The only NON-pointwise `batched2`, and the only ACTIVATION × ACTIVATION bf16 op in
       -- the kit** — SDPA's `QKᵀ` and `P·V`, plus the four backward matmuls. It rides this binary
       -- skeleton rather than aliasing `.matmulF` because its text differs; `info` is `[m, k, n]`
       -- (no batch), since `B` is `pretty`'s exactly as it is for every other case here.
-      -- ⚠ Both operand converts are on VALUES, not on a weight — nothing in the emit cares, and
+      -- Both operand converts are on VALUES, not on a weight — nothing in the emit cares, and
       -- neither does `dot_close_mixed`, which rounds both sides.
       | "bnBatchVarAt", [], [_N, oc, h, w] => do
           -- σ²_r + (μ_r − μ)²: the replica's TWO-PASS variance about its own mean, plus its
@@ -4380,7 +4365,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           let o ← fresh
           pure (s!"    {o} = stablehlo.concatenate {a}, {b}, dim = 0 : ({ty [oc]}, {ty [oc]}) -> {ty [oc+oc]}\n", o :: st)
       | "bnSync", [gN, bN, es], [_N, oc, h, w] => do
-          -- ⭐ Sync-BN forward: μ and σ² SLICED out of the packed `[oc+oc]` operand `b` (the
+          -- Sync-BN forward: μ and σ² SLICED out of the packed `[oc+oc]` operand `b` (the
           -- two all-reduced statistics under DP), σ² used as it arrives. The
           -- tail from `istd` on is `bnBatch`'s text verbatim — only where the statistics come
           -- from differs, which is exactly the claim `bnSyncTensor4_at_own_stats` makes.
@@ -4438,7 +4423,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {o} = stablehlo.concatenate {b}, {c2}, dim = 0 : ({ty [oc+oc]}, {ty [oc+oc]}) -> {ty [oc+oc+(oc+oc)]}\n", o :: st)
       | "bnSyncBack", [gN, xN, es], [_N, oc, h, w] => do
           -- dx = istd·(dx̂ − mdy − x̂·mdyx), all four statistics sliced out of the all-reduced
-          -- `[4·oc]` operand. ⚠ The MEAN form: no `·B·h·w` then `÷B·h·w` round trip, because
+          -- `[4·oc]` operand. The MEAN form: no `·B·h·w` then `÷B·h·w` round trip, because
           -- the reductions arrive already divided — see `bnSyncGradInput`.
           let xr ← fresh; let mus ← fresh; let vs ← fresh; let mdys ← fresh; let mdyxs ← fresh
           let mub ← fresh; let vb ← fresh; let mdyb ← fresh; let mdyxb ← fresh
@@ -4506,7 +4491,7 @@ private def serializeToks (B : Nat) : List Tok → (String × List String) → S
   | [], acc           => pure acc
   | t :: ts, (code, st) => do
       let (c, st') ← emitTok B t st
-      -- ⭐ The ONE place the shape table is written. Doing it here rather than in the 94 `emitTok`
+      -- The ONE place the shape table is written. Doing it here rather than in the 94 `emitTok`
       -- arms is what keeps them free of it — and it is why the table can be keyed by NAME at all:
       -- only here are the operand stack before and after the token both in hand.
       noteTokShapes t st st'
@@ -4518,9 +4503,8 @@ private def serializeToks (B : Nat) : List Tok → (String × List String) → S
 
     This exists because leaving it in is **silent twice over**. An empty name renders
     `return %a, , %b` — malformed text, but only the lowerer ever sees it; and the name list keeps
-    its FULL length, so an arity `#guard` on the signature still passes. Measured on the first swap
-    attempt: `mobilenetv2_train_step` at `convBias := false` returned 210 names (52 of them empty)
-    against 160 types. Use this at every site where a `names := [...]` list is built from gated ops. -/
+    its FULL length, so an arity `#guard` on the signature still passes. Use this at every site
+    where a `names := [...]` list is built from gated ops. -/
 def biasSlot (convBias : Bool) (nm : String) : List String :=
   if convBias then [nm] else []
 
@@ -4626,14 +4610,14 @@ def mnv2RmsHyper : RmsHyper := { eps := 1.0, wd := 4.0e-5 }
 /-- **EfficientNet-B0's RMSProp knobs** ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)): ε = **1e-3**. -/
 def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
 
--- ▶ The DRIVER-side half of the same two recipes — peak LR, exponential decay, warmup — is
+-- The DRIVER-side half of the same two recipes — peak LR, exponential decay, warmup — is
 -- `RmsSchedule` in `LeanMlir/Verified/NetsCore.lean`, deliberately NOT here. Two reasons, and the second
 -- is the load-bearing one: the four trainer entry points that read it would otherwise have to
 -- import this whole proof module, and nothing that lives in this file can reach `rmsConstsBlock`
 -- by accident. `%lr` is a runtime `tensor<f32>` argument precisely so one graph serves a whole
 -- schedule; a learning rate must never become a graph constant.
 
--- ⚠ `fmt6` is a SIX-DECIMAL fixed-point formatter, so any hyperparameter below 5e-7 silently
+-- `fmt6` is a SIX-DECIMAL fixed-point formatter, so any hyperparameter below 5e-7 silently
 -- renders as `0.000000` — a graph constant of zero, which for `wd` is "no weight decay" and for
 -- `eps` is a divide-by-zero at a dead coordinate. Neither is a compile error and neither is
 -- visible in a green build. These pin every constant these two nets actually emit; add a line

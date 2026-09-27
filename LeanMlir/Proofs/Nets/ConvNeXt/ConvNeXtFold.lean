@@ -46,7 +46,7 @@ theorem cnx_render_lsgammaCh_certified {c h w : Nat} (x : Vec (c * h * w)) (γ :
   simp only [pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
 
 -- ════════════════════════════════════════════════════════════════
--- § The §1 den-fold — each new core op `den`otes the certified loss-descent step
+-- § The den-fold — each new core op `den`otes the certified loss-descent step
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Per-channel layer-scale γ op denotes the certified step.** The emitted `layerScaleChGammaSgd`

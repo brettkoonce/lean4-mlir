@@ -20,22 +20,21 @@ open Proofs Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
--- ⚠ NOT `private`: `ViTRenderB` shares these rather than restating them. A second copy of an
+-- NOT `private`: `ViTRenderB` shares these rather than restating them. A second copy of an
 -- epsilon or a depth is the double-writer disease with a silently-wrong hyperparameter as its
--- failure mode (§2a-quater), and the SDPA scale in particular is a number no type would catch.
+-- failure mode, and the SDPA scale in particular is a number no type would catch.
 def vEPS : String := "1.0e-5"
 def vSCALE : String := "0.125"
 private def vLR : String := "0.1"
 def vDEPTH : Nat := 12
 
-/-- **The width knobs of a ViT.** Was six `private def` constants pinned at ViT-Tiny; a record
-    so one renderer serves Ti/S/B instead of one size per file.
+/-- **The width knobs of a ViT.** A record so one renderer serves Ti/S/B instead of one size per
+    file.
 
-    `d` and `tok` are DERIVED, not stored, and that is what keeps the bodies unchanged.
-    `d = heads * hd` definitionally, so the places the old code wrote `vbD` and the places it
-    wrote `vbH * vbHd` (the head-slice operand types) are still the same type with no rewriting
-    and no `Nat` lemma. Stored as a field with a `heads * hd = d` proof they would only be
-    PROPOSITIONALLY equal and every one of those sites would need a cast. -/
+    `d` and `tok` are DERIVED, not stored. `d = heads * hd` definitionally, so the places the code
+    writes `vbD` and the places it writes `vbH * vbHd` (the head-slice operand types) are the same
+    type with no rewriting and no `Nat` lemma. Stored as a field with a `heads * hd = d` proof they
+    would only be PROPOSITIONALLY equal and every one of those sites would need a cast. -/
 structure VitDims where
   /-- patch tokens; the token axis is `tk + 1` for CLS. -/
   tk : Nat
@@ -44,7 +43,7 @@ structure VitDims where
   hd : Nat
   /-- MLP hidden width. -/
   m : Nat
-  /-- Needed for the `Fin heads` in the attention loop. Was `by decide` against the literal 3. -/
+  /-- Needed for the `Fin heads` in the attention loop. -/
   heads_pos : 0 < heads
 
 /-- Model dim. Derived so it is DEFEQ to `heads * hd` — see the note on `VitDims`. -/
@@ -52,8 +51,7 @@ def VitDims.d (V : VitDims) : Nat := V.heads * V.hd
 /-- Tokens including CLS. -/
 def VitDims.tok (V : VitDims) : Nat := V.tk + 1
 
-/-- ViT-Tiny: `D = 192 = 3 × 64`, MLP 768. The default everywhere, so every existing call site
-    and every committed artifact is untouched by the parameterisation. -/
+/-- ViT-Tiny: `D = 192 = 3 × 64`, MLP 768. The default everywhere. -/
 def vitTiDims : VitDims := ⟨196, 3, 64, 768, by decide⟩
 /-- ViT-Small: `D = 384 = 6 × 64`, MLP 1536. Same depth and same patch grid as Tiny — S widens
     only, which is why it needs no new proof and no new block chain. -/
@@ -67,8 +65,8 @@ def vitBDims : VitDims := ⟨196, 12, 64, 3072, by decide⟩
 
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.2 ▶3) ───────────────────────
--- ViT is the LAST net to get this, and it is the awkward shape of the three. `transformer_block`
+-- ── STOCHASTIC DEPTH ─────────────────────────────────────────────────────────────────────────────
+-- ViT is the awkward shape of the three. `transformer_block`
 -- in the reference (`jax/Jax/Codegen.lean`) opens with
 --
 --     ka, km = jax.random.split(drop_key) if drop_key is not None else (None, None)
@@ -80,22 +78,22 @@ def vitBDims : VitDims := ⟨196, 12, 64, 3072, by decide⟩
 -- so **each block has TWO sites** — the attention branch and the MLP branch — which drop
 -- INDEPENDENTLY (two split sub-keys) but share ONE keep probability.
 --
--- ⚠⚠ SITES ≠ RAMP INDEX, AND EMITTING ONE MASK PER *BLOCK* IS THE PLAUSIBLE MISTAKE.
--- `stochastic_depth.md` §6.3 names it: one mask per block instead of one per site halves the noise
+-- SITES ≠ RAMP INDEX, AND EMITTING ONE MASK PER *BLOCK* IS THE PLAUSIBLE MISTAKE.
+-- One mask per block instead of one per site halves the noise
 -- (the two branches would drop together instead of independently) and is **invisible in every
 -- structural check** — same site count in the emitted text, same arity if the count is right, same
 -- keeps, same everything but the randomness. So the site index is `2·i + branch` while the RAMP
 -- index stays the block index `i`, and `#guard`s below pin both.
 --
--- ⚠ The ramp denominator is 11 = `totalDrop − 1` where `totalDrop` is the ENCODER's block count
+-- The ramp denominator is 11 = `totalDrop − 1` where `totalDrop` is the ENCODER's block count
 -- (`emitForward` sums every `transformerEncoder`'s `nBlocks`), so `keep_i = 1 − dropPath·i/11`,
 -- block 0 keeping everything and block 11 keeping `1 − dropPath` exactly.
 --
--- ⚠⚠ AND THE RESIDUAL ADD PUTS THE BRANCH SECOND ON THIS NET. `hres = addVB(xin, o)` emits
+-- AND THE RESIDUAL ADD PUTS THE BRANCH SECOND ON THIS NET. `hres = addVB(xin, o)` emits
 -- `add %xin, %o`, where EfficientNet and ConvNeXt both emit `add %branch, %skip`. That is not a
--- cosmetic difference: `scripts/probes/misplace_drop_sites.py` matched only the branch-first shape and
--- silently rewrote ZERO of ViT's sites — a control that quietly does nothing reads exactly like a
--- control that ran. It handles both orders now and REFUSES at zero matches.
+-- cosmetic difference: a control that matches only the branch-first shape silently rewrites ZERO
+-- of ViT's sites, and a control that quietly does nothing reads exactly like a control that ran.
+-- `scripts/probes/misplace_drop_sites.py` handles both orders and REFUSES at zero matches.
 
 /-- Total encoder blocks = the reference's `totalDrop`, i.e. the ramp DENOMINATOR is this minus 1. -/
 def vitDropTotal : Nat := vDEPTH
@@ -115,7 +113,7 @@ def vitRampOf (site : Nat) : Nat := site / 2
 #guard vitDropSites == 24
 -- The 24 (block, branch) pairs map onto `0 … 23` exactly once each.
 #guard ((List.range vDEPTH).flatMap (fun i => [vitSiteIdx i 0, vitSiteIdx i 1])) == List.range 24
--- ⚠ Both branches of a block share ONE ramp index — that is what "sites ≠ ramp index" means, and
+-- Both branches of a block share ONE ramp index — that is what "sites ≠ ramp index" means, and
 -- it is the half a site-ordinal ramp would get wrong (24 evenly-spaced keeps instead of 12 pairs).
 #guard (List.range vDEPTH).all (fun i => vitRampOf (vitSiteIdx i 0) == i && vitRampOf (vitSiteIdx i 1) == i)
 -- …and the two sites of a block are DIFFERENT inputs, which is what stops them dropping together.
@@ -386,9 +384,9 @@ private def blkRetTys : List String :=
 
 /-- The whole-net backward traversal, SHARED by the SGD and AdamW renders. Returns the emitted code
     and, in func-arg order, one SSA per parameter — the **updated param** at `adam := false`, the
-    **un-fused gradient** at `adam := true`. One traversal, two tails: the alternative was a second
-    copy of the depth-12 backward, which is the double-writer disease one level down. -/
--- ⚠ NOT `private`: `ViTRenderB`'s tie compares against this traversal directly. Comparing
+    **un-fused gradient** at `adam := true`. One traversal, two tails: a second copy of the
+    depth-12 backward would be the double-writer disease one level down. -/
+-- NOT `private`: `ViTRenderB`'s tie compares against this traversal directly. Comparing
 -- against the rendered ARTIFACT instead would fold the AdamW tail into the diff and lose the
 -- gradient-LIST check, which is the one a string diff cannot make.
 def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
@@ -401,11 +399,11 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     -- SGD artifact stays byte-identical).
     let (cSm, nSm) ← pretty bs (.softmaxDiv (.expe (.operand sv.logits (0 : Vec nClasses))))
     let (cD0, nD0) ← pretty bs (.sub (.operand nSm (0 : Vec nClasses)) (.operand "%onehot" (0 : Vec nClasses)))
-    -- `none` → plain CE with the batch mean folded into `lrStr` (the SGD recipe, unchanged).
+    -- `none` → plain CE with the batch mean folded into `lrStr` (the SGD recipe).
     -- `some (α, −α/K, B)` → the LABEL-SMOOTHED cotangent with an explicit ÷B, which is what the
     -- AdamW recipe uses: dy = ((softmax − onehot) + α·onehot − α/K) / B. `shiftB`/`divConstB` at
     -- `N := 1` are the per-example forms — their emit reads the width off `n` and ignores `N`, and
-    -- both are POINTWISE (not batch-reducing), so the §2b `N := 1` hazard does not apply.
+    -- both are POINTWISE (not batch-reducing), so the `N := 1` hazard does not apply.
     -- `shiftB` emits `add x, dense<−α/K>` where the hand-written render emits `subtract x, α/K`;
     -- IEEE subtraction *is* addition of the exact negation, so the two are bit-identical.
     let (cSmooth, nDy) ← match smooth with
@@ -493,21 +491,20 @@ def vitParamSig (nClasses : Nat := 10) (V : VitDims := vitTiDims) : List (String
   [("gF", [d]), ("btF", [d]), ("Wc", [d,nClasses]), ("bc", [nClasses])]
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
+-- ── `wdExcludeNormBias` — timm/DeiT `no_weight_decay` ────────────────────────────────────────
 --
 -- The reference (`jax/Jax/Codegen.lean`'s `_wd_mask`) decays only ≥2-D weight matrices: every 1-D
 -- param (biases, LayerNorm γ/β, the CLS token) and the POSITIONAL EMBEDDING (2-D, and the reason
 -- the rule is not just "ndim ≥ 2") are excluded. `vitTinyImagenetConfig` sets it; `vitTinyConfig`
 -- does not, which is why this is a variant rather than a default.
 --
--- ⚠ IT NEEDS NO NEW OP AND NO INTERFACE CHANGE, which is what makes it a one-evening item.
+-- IT NEEDS NO NEW OP AND NO INTERFACE CHANGE.
 -- `adamWParamF` already takes `wd` as a runtime OPERAND NAME (`wdName`) beside the ℝ `den` uses —
 -- the `%lr` shape, for the `%lr` reason. So "exclude" is: bind that operand to a ZERO constant and
--- pass `wd := 0` to `den`. Same arity, same types, same everything; only 126 of 200 operand
--- strings move. That is `e9c2729`'s conv-bias spelling (§2m) one op over, and it is why the
--- DRIVER needs nothing at all — unlike EMA (a 4th region) or dropPath (extra inputs).
--- `adamWParamF_faithful` then denotes `Proofs.adamWStep … (wd := 0) …`, i.e. the no-decay update,
--- so the proof side is untouched too.
+-- pass `wd := 0` to `den`. Same arity, same types, same everything; only 126 of 200 operand strings
+-- move. That is why the DRIVER needs nothing at all — unlike EMA (a 4th region) or dropPath (extra
+-- inputs). `adamWParamF_faithful` then denotes `Proofs.adamWStep … (wd := 0) …`, i.e. the no-decay
+-- update, so the proof side is untouched too.
 
 /-- **Does this parameter get weight decay?** The renderer's half of the timm rule.
 
@@ -528,12 +525,12 @@ def vitWdCounts (nClasses : Nat := 10) : Nat × Nat :=
   let d := ((vitParamSig nClasses).filter (fun (nm, ds) => vitWdDecays nm ds)).length
   (d, (vitParamSig nClasses).length - d)
 
--- ⭐ The reference's OWN `_wd_mask`, run over its OWN `init_params` for
+-- The reference's OWN `_wd_mask`, run over its OWN `init_params` for
 -- `generated_vit_tiny_imagenet.py`, reports **200 tensors: 74 decayed, 126 excluded**, with every
 -- mask leaf uniform (the decision is per-TENSOR, which is what licenses a scalar zero operand).
--- Two independent routes — that pytree walk and this signature list — must agree, and the count
--- is the cheapest thing that can disagree. §2m's `toSpecs == Layout.specs` move, one recipe knob
--- over. ⚠ nClasses does not move it: `Wc` is 2-D and `bc` 1-D at every K.
+-- Two independent routes — that pytree walk and this signature list — must agree, and the count is
+-- the cheapest thing that can disagree. nClasses does not move it: `Wc` is 2-D and `bc` 1-D at
+-- every K.
 #guard vitWdCounts 10 == (74, 126)
 #guard vitWdCounts 1000 == (74, 126)
 -- The four that are NOT 1-D biases, spelled out, so a reader can check the interesting cases by eye.
@@ -575,7 +572,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
   body ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § The certified AdamW train step (handoff §2a-quinquies follow-on, step 2b)
+-- § The certified AdamW train step
 -- ════════════════════════════════════════════════════════════════
 
 /-- The driver's **variant slug** for a (per-device batch, replica count, EMA) triple: the artifact
@@ -584,7 +581,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 
     This is the ViT peer of `cnxAdamVariant` / `r34AdamVariant` / `mnv2AdamVariant`, and unlike
     theirs it is **documentation plus a drift guard rather than the name's producer** —
-    `vitAdamTrainStepFaithful` takes `funcName` explicitly (it predates the slug convention) and the
+    `vitAdamTrainStepFaithful` takes `funcName` explicitly and the
     `#eval` paths must stay string literals for `regen_verified_mlir.sh`'s writer audit to see them.
     So the `#guard`s at the bottom of this file are what tie the literals to this function; the
     contract is checked at `lake build` rather than merely described.
@@ -596,10 +593,10 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 
     **The `ema` marker LEADS.** `trainAdamSched` keys its 4-region `[θ|m|v|ema]` blob off
     `variant.startsWith "ema"`, so a trailing marker would silently select the 3-region layout for a
-    4-region graph — every parameter misaligned. And note what that cost on EfficientNet: its
-    RMSProp+EMA variant is `emarms`, which does **not** start with `"rms"`, so the mean-square would
-    have initialised to 0 through a prefix test. ViT is AdamW-only, so there is no second axis here
-    today; if one is ever added, make both predicates substring tests first. -/
+    4-region graph — every parameter misaligned. On EfficientNet the RMSProp+EMA variant is
+    `emarms`, which does **not** start with `"rms"`, so a prefix test would initialise the
+    mean-square to 0. ViT is AdamW-only, so there is no second axis here; if one is ever added,
+    make both predicates substring tests first. -/
 def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     (wdExclude : Bool := false) (clip : Bool := false)  (sd : Bool := false)
     : String :=
@@ -607,51 +604,46 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     ++ (if replicas ≤ 1 then "" else "dp")
     ++ (if bs == 32 && replicas ≤ 2 then "" else toString bs)
     ++ (if replicas > 2 then s!"x{replicas}" else "")
-    -- ▶ `wx` = timm no_weight_decay. TRAILING, and checked against every CONCATENATION rather than
-    -- against the other markers one at a time — that is §0's `sd`/`rmsdp` finding, where the
-    -- collision was between two OTHER markers meeting. `tests/TestVariantPredicates.lean` runs the
+    -- `wx` = timm no_weight_decay. TRAILING, and checked against every CONCATENATION rather than
+    -- against the other markers one at a time — a collision can come from two OTHER markers
+    -- meeting (`rms` ++ `dp` contains `sd`). `tests/TestVariantPredicates.lean` runs the
     -- `wx` spellings through all three driver predicates.
     --
-    -- ⚠ Unlike `ema`, `rms` and `drop`, this marker needs NO driver predicate at all: excluding a
+    -- Unlike `ema`, `rms` and `drop`, this marker needs NO driver predicate at all: excluding a
     -- param from decay binds a different CONSTANT to `%wd` and changes no arity, no type and no
     -- region. It is a pure render variant. The name exists so the artifact says which recipe it is,
     -- not so anything switches on it.
     --
-    -- ▶ `clip` = global-norm gradient clipping (`planning/archive/grad_clip.md`), TRAILING and AFTER `wx`,
+    -- `clip` = global-norm gradient clipping, TRAILING and AFTER `wx`,
     -- because the ViT/ConvNeXt reference sets BOTH (`gradClipNorm := 1.0` and
     -- `wdExcludeNormBias := true`) — so `wx` ++ `clip` is the shipping spelling, not either alone,
     -- and a feature that is fine alone and wrong composed is the `emarms` failure. Like `wx` it
     -- needs no driver predicate: the clip changes no arity, no type and no region.
     ++ (if wdExclude then "wx" else "")
     ++ (if clip then "clip" else "")
-    -- ▶ `drop` = stochastic depth (`planning/archive/stochastic_depth.md`), the 24 per-branch masks.
+    -- `drop` = stochastic depth, the 24 per-branch masks.
     -- TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"` collides
-    -- (`rms` ++ `dp` spells `rmsdp` ⊇ "sd"), a collision no placement avoids. ⚠ It must not LEAD
+    -- (`rms` ++ `dp` spells `rmsdp` ⊇ "sd"), a collision no placement avoids. It must not LEAD
     -- either — the driver keys its 4-region `[θ|m|v|ema]` blob off `variant.startsWith "ema"`.
-    -- ⚠ Unlike `wx` and `clip`, this flag changes the ARITY (24 extra inputs, 24 pass-through
+    -- Unlike `wx` and `clip`, this flag changes the ARITY (24 extra inputs, 24 pass-through
     -- outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
     ++ (if sd then "drop" else "")
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4).
 
-    **`wdStr` is a parameter because the two ViT configs DISAGREE ON IT BY 500×**, and that was
-    found while gating `wdExcludeNormBias` rather than by reading the configs: `vitTinyConfig`
-    (Imagenette) sets `weightDecay := 1e-4`, which is the literal this file baked for every ViT
-    render — but **`vitTinyImagenetConfig` sets 0.05**, the DeiT value. So an ImageNet render at
-    the baked default trains at 1/500th of its reference's decay. It is the RenderCifar8Sgd02 /
-    EfficientNet-16× shape: a silently wrong hyperparameter in a committed artifact,
-    which compiles, runs and descends. The default is unchanged, so every existing artifact keeps
-    its bytes; only the ImageNet `wx` render passes 0.05.
+    **`wdStr` is a parameter because the two ViT configs DISAGREE ON IT BY 500×**: `vitTinyConfig`
+    (Imagenette) sets `weightDecay := 1e-4`, which is the default here — but
+    **`vitTinyImagenetConfig` sets 0.05**, the DeiT value. So an ImageNet render at the default
+    trains at 1/500th of its reference's decay: a silently wrong hyperparameter in a committed
+    artifact, which compiles, runs and descends. Only the ImageNet `wx` render passes 0.05.
 
-    **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4** and are not touched here —
-    changing them is a separate call with its own blast radius (the DP peer, the residency-gate
-    row). Recorded as owed in `recipe_gaps.md` rather than fixed in passing. -/
+    **`vitin_adam128` and `vitin_adamdp128x4` are at 1e-4**; changing them is a separate call with
+    its own blast radius (the DP peer, the residency-gate row). -/
 private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
   wdzConst wdExclude "126 of 200 params" ++ adamWConsts wdStr
 
 /-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
-    the hand-written `ViTRender.vitTrainStepModuleAdamSched` that `vit-verified-adam` has been
-    emitting at startup.
+    the hand-written `ViTRender.vitTrainStepModuleAdamSched`.
 
     Same backward as `vit_train_step` (`vitBackAll`, one traversal) but taking the **un-fused
     gradients**, each fed to the proven AdamW triple. The cotangent is the LABEL-SMOOTHED one with
@@ -672,47 +664,45 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0")
-    -- ⚠ Which TRAVERSAL to render. `none` = this file's per-example `vitBackAll`, i.e. every
-    -- existing call site unchanged. `ViTRenderB` passes its batched peer here rather than copying
-    -- the AdamW tail, because the tail is PARAMETER-space — `adamMNextF`, `adamWParamF`,
-    -- `gradSumSqAccF`, `clipScaleF` are all indexed by the param's own size and never see the batch
-    -- — so a second copy would be the double-writer disease for no gain at all. ConvNeXt's
-    -- increment 7 measured exactly this and found the tail was FREE.
-    -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument.
+    -- Which TRAVERSAL to render. `none` = this file's per-example `vitBackAll`. `ViTRenderB` passes
+    -- its batched peer here rather than copying the AdamW tail, because the tail is PARAMETER-space
+    -- — `adamMNextF`, `adamWParamF`, `gradSumSqAccF`, `clipScaleF` are all indexed by the param's
+    -- own size and never see the batch — so a second copy would be the double-writer disease for no
+    -- gain at all. TRAILING: a parameter inserted mid-list captures an existing positional
+    -- argument.
     (traversal : Option (StateM Proofs.StableHLO.EmitS (String × List String × String)) := none)
-    -- ⚠ TRAILING + defaulted, so the Tiny call sites and their artifacts are untouched.
+    -- TRAILING + defaulted, so the Tiny call sites and their artifacts are untouched.
     (V : VitDims := vitTiDims)
-    -- ⚠ STOCHASTIC DEPTH is a signature/variant flag here and a site-placement flag in the
+    -- STOCHASTIC DEPTH is a signature/variant flag here and a site-placement flag in the
     -- TRAVERSAL. `ViTRenderB` is the only caller that sets either and it spells `sd` once, passing
     -- it to both. If they ever disagreed the failure is LOUD both ways: sites without inputs emit
     -- an undeclared `%dp<i>` (the lowerer rejects it); inputs without sites leave an unused
-    -- argument (an arity mismatch at the driver). Neither is silent — the §2m property.
+    -- argument (an arity mismatch at the driver). Neither is silent.
     (sd : Bool := false) : String :=
-  -- ⚠ α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
-  -- Passing the cotangent's `−α/K` as a separate string (which is what this took until
-  -- 2026-07-31) is the same two-writers-for-one-fact shape §2a spent a thread removing: the two
-  -- agree until someone changes K, and then the gradient and the loss disagree silently.
+  -- α and K are the ONLY knobs; every emitted smoothing constant is derived from them here.
+  -- Passing the cotangent's `−α/K` as a separate string would be two writers for one fact: the
+  -- two agree until someone changes K, and then the gradient and the loss disagree silently.
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, gradNames, nSm) ←
       traversal.getD (vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
-    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`, `recipe_gaps.md` v1.4b) — the
+    -- GLOBAL-NORM GRADIENT CLIPPING — the
     -- reference's `gn = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))` then
     -- `g * min(1, CLIP/(gn + 1e-6))`, applied to ALL 200 gradients before the optimizer sees them.
     --
-    -- ⚠⚠ THE ORDER IS THE SEMANTICS, TWICE OVER:
+    -- THE ORDER IS THE SEMANTICS, TWICE OVER:
     --   1. the norm is GLOBAL — one scalar folded from every parameter, so the fold must run to
     --      completion before any parameter is scaled. That is why it is hoisted out of the loop.
     --   2. under DP the clip goes AFTER the `all_reduce`. `adamOneEma` normally emits the collective
     --      per parameter, which is downstream of where the clip has to be, so at `clip := true`
     --      the collective is hoisted here too and the loop is told (`preAvg`) not to repeat it.
     --
-    -- ⚠ At `clip := false` NOT ONE `pretty` CALL HAPPENS BELOW, so the fresh-name counter does not
-    -- move and every committed `vit*`/`vitin*` artifact re-renders byte-identically — gate 1's
-    -- strong form, free. That is the `ema := false` route, and taking it is deliberate: splitting
-    -- the loop unconditionally would shift the all_reduce text relative to the adam blocks and
-    -- re-render every `*dp*` artifact differently with the feature OFF.
+    -- At `clip := false` NOT ONE `pretty` CALL HAPPENS BELOW, so the fresh-name counter does not
+    -- move and every committed `vit*`/`vitin*` artifact re-renders byte-identically. That is the
+    -- `ema := false` route, and taking it is deliberate: splitting the loop unconditionally would
+    -- shift the all_reduce text relative to the adam blocks and re-render every `*dp*` artifact
+    -- differently with the feature OFF.
     let zero1 : Vec 1 := fun _ => 0
     let mut avgNames := gradNames
     let mut clipCode := ""
@@ -756,7 +746,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     for i in [0:(vitParamSig nClasses V).length] do
       let (nm, ds) := (vitParamSig nClasses V)[i]!
       -- The wd operand is chosen from the SAME `vitParamSig` entry that names the site, never a
-      -- parallel list — §2e's silent-slot rule: a misaligned mask would decay the wrong 126 params
+      -- parallel list — the silent-slot rule: a misaligned mask would decay the wrong 126 params
       -- and nothing in the arity, the types or the prefix audit would notice.
       let wdN := if wdExclude && !vitWdDecays nm ds then "%wdz" else "%wd"
       let gSSA := if clip then clipped[i]! else gradNames[i]!
@@ -764,8 +754,8 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
-    -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — §2b shipped plain
-    -- CE here against a smoothed-CE cotangent and only the numeric tie caught it. It is therefore
+    -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — plain CE here
+    -- against a smoothed-CE cotangent would be caught only by the numeric tie. It is therefore
     -- built from the SAME smoothed recipe the cotangent implies, and declared as a carve-out.
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
@@ -774,12 +764,11 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [bs, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
-      -- ⚠ These were the literals `0.900000` / `0.010000` — i.e. (1−α) and α/K baked at K = 10.
-      -- That is EXACTLY the bug §2k found in the R34 ImageNet render, where the same hardcode sat
-      -- on the COTANGENT and made the objective 100× wrong at K = 1000, caught only because the
-      -- reported loss was implausible. Here it was confined to the report-only `%loss` (the ViT
-      -- cotangent takes its constant as an argument), so it would have produced a WRONG LOSS
-      -- NUMBER against a correct gradient — the same trap read backwards, and harder to notice.
+      -- These constants are derived, never the literals `0.900000` / `0.010000` — (1−α) and α/K
+      -- baked at K = 10. The same hardcode on a COTANGENT makes the objective 100× wrong at
+      -- K = 1000. Here it would be confined to the report-only `%loss` (the ViT cotangent takes
+      -- its constant as an argument), so it would produce a WRONG LOSS NUMBER against a correct
+      -- gradient — the same trap read backwards, and harder to notice.
       s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha}> : {ty [bs]}\n" ++
       s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [bs]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [bs]}\n" ++
@@ -790,17 +779,17 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)
-    -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
-    -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
+    -- THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
+    -- The driver does `pbuf := out` — each step's output IS the next step's input (the no-copy
     -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
     -- signature takes, would silently re-interpret the blob from step 2 onward rather than fail. It
     -- is also exactly what the resident shim checks (inputs `[res_in, res_in+n)` and outputs
     -- `[res_out, res_out+n)` must agree tensor for tensor), which is why a 4th region needs no C
     -- change at all. `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
-    -- ⚠⚠ THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` do — because
+    -- THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` do — because
     -- the return layout must MIRROR the input layout tensor for tensor (`pbuf := out` is the
-    -- no-copy handover) and the shim's G4 guard counts both sides. EfficientNet's first attempt
-    -- omitted them and G4 refused the call before a single step ran. Loud, and the right way round.
+    -- no-copy handover) and the shim's G4 guard counts both sides. Omitting them makes G4 refuse
+    -- the call before a single step runs. Loud, and the right way round.
     let dpNames := if sd then (List.range vitDropSites).map dpName else []
     let dpTys := if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
@@ -815,9 +804,9 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
         "    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW\n" ++
         "    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is\n" ++
         "    // the replica MEAN of the per-replica gradient nodes (4d piece 2).\n") ++
-      -- The shadow is NOT a carve-out and the banner says which it is, because §2h-quater found a
-      -- committed artifact under-describing its own certification level and that is still a wrong
-      -- statement in the one place a reader trusts.
+      -- The shadow is NOT a carve-out and the banner says which it is, because a committed
+      -- artifact under-describing its own certification level is a wrong statement in the one
+      -- place a reader trusts.
       (if ema then
         "    // ── EMA WEIGHT SHADOW (planning/archive/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
         "    // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)\n" ++
@@ -827,7 +816,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++
     packedTrainSig ((vitParamSig nClasses V).map fun (nm, ds) => (s!"%{nm}", ty ds)) (ema := ema) ++
-    -- ⚠ The drop scales go LAST, after the scalars and before `%onehot`, matching the driver's blob
+    -- The drop scales go LAST, after the scalars and before `%onehot`, matching the driver's blob
     -- layout and `vitFwdRenderB`'s placement. Mid-list they capture an existing positional slot.
     vitDropSig bs sd ++
     s!", %onehot: {ty [bs, nClasses]}"
@@ -850,12 +839,11 @@ end Proofs.StableHLO
 -- rewrites it, and proofs.yml git-diffs it. The bytes `MainViTVerified` trains on ARE this render.
 -- (tests/TestViTTrainPC.lean writes the SAME render + additionally iree-compiles on the rocm box.)
 --
--- ⛔⛔ **THIS IS THE ONLY ARTIFACT LEFT ON THE PER-EXAMPLE TRAVERSAL, AND IT IS DELIBERATE (4c leg 4,
--- 2026-09-07).** Every other committed ViT artifact — `vit_fwd`, `vitin_fwd` and the seventeen
--- AdamW/EMA train steps — now renders from `ViTRenderB.vitBackAllB`, measured byte-identical over
--- all nineteen. This one cannot follow yet: `vitBackAllB` has no fused-SGD arm (it emits the raw
--- gradient only), and ViT's T3 §1a tie — `ViTStepTie.lean`, all 200 parameters — is stated at
--- exactly these bytes. Retiring it before that tie has a batched peer is the ordering mistake
--- `planning/archive/renderer_convergence.md` leg 1 wrote down and leg 2 honoured. See §4b's last item.
+-- **THIS IS THE ONLY ARTIFACT ON THE PER-EXAMPLE TRAVERSAL, AND IT IS DELIBERATE.** Every other
+-- committed ViT artifact — `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train steps —
+-- renders from `ViTRenderB.vitBackAllB`, measured byte-identical over all nineteen. This one
+-- cannot follow: `vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and ViT's
+-- step tie — `ViTStepTie.lean`, all 200 parameters — is stated at exactly these bytes. Moving it
+-- before that tie has a batched peer is an ordering mistake.
 #eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"
   (Proofs.StableHLO.vitTrainStepRenderV "vit_train_step" "0.003125")

@@ -1,7 +1,7 @@
 import Jax
 
-/-! ConvNeXt-Tiny on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
-    First JAX-path port of ConvNeXt (previously IREE-only). Patchify stem, compute ratio (3,3,9,3),
+/-! ConvNeXt-Tiny on full 1000-class ImageNet — Lean → JAX trainer.
+    Patchify stem, compute ratio (3,3,9,3),
     channels (96,192,384,768), depthwise-7×7 + channel-LN + inverted-
     bottleneck + GELU + LayerScale blocks, dedicated 2×2 stride-2 downsamples.
     ~28.6M params at 224×224, 1000 classes.
@@ -16,8 +16,8 @@ import Jax
 
     The verified peer is tied to this file's generated output on shared weights by
     `scripts/parity/convnext_forward_tie.py` (`--net convnextsin` for the S pair), the ConvNeXt sibling
-    of the mnv2/mnv4/enet forward ties: max |Δ| 1.464e-03 over the logits, under its 2e-3 bound
-    (2026-09-24). A divergence here compares two different networks. -/
+    of the mnv2/mnv4/enet forward ties: max |Δ| 1.464e-03 over the logits, under its 2e-3 bound.
+    A divergence here compares two different networks. -/
 
 def convNeXtTinyImagenet : NetSpec where
   name := "ConvNeXt-T (ImageNet, bf16)"
@@ -33,22 +33,21 @@ def convNeXtTinyImagenet : NetSpec where
     .convNextDownsample 384 768,               -- 14→7
     .convNextStage 768 3 .ln .gelu,            -- stage 4: 3 blocks @ 768
     .globalAvgPool,
-    -- ▶ head LayerNorm (2026-08-30, §7.1). The paper is `GAP → LN → Linear`
+    -- head LayerNorm. The paper is `GAP → LN → Linear`
     -- (`self.norm(x.mean([-2,-1]))`, eps 1e-6) and timm's head is
-    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`; BOTH phases
-    -- were missing it and the parameter count was short by exactly 2×768.
+    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`.
     .layerNorm 768,
     .dense 768 1000 .identity                  -- 1000-class head
   ]
 
-/-- ConvNeXt-T 80-epoch recipe — first pass with the full faithful regularizer
-    stack on (EMA + stochastic depth), still at the 80ep tier to validate those
+/-- ConvNeXt-T 80-epoch recipe — the full faithful regularizer
+    stack on (EMA + stochastic depth) at 80 epochs, to validate those
     features train cleanly before the ~80-hour 300ep run (bump EPOCHS to 300 +
     re-emit for the real run). ConvNeXt needs AdamW, not SGD: decoupled weight
     decay 0.05 (excluding norm/bias/LayerScale — timm no_weight_decay), peak LR
     2.5e-4 at batch 256 (= the 4e-3@4096 official LR linearly scaled, 4e-3×256/4096),
-    20-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap insurance —
-    unlocked the ViT run). bf16 + bf16 conv. EMA (decay 0.9999) + stochastic depth
+    20-epoch warmup + cosine, label smoothing 0.1, grad-clip 1.0 (cheap insurance).
+    bf16 + bf16 conv. EMA (decay 0.9999) + stochastic depth
     (dropPath 0.1, the ConvNeXt-T paper value) on. Geometric RandAugment (N=2, M=9,
     the ConvNeXt recipe value) on — the full RandAugment(N,M) sampler over the
     color+geometric op set (shear/rotate via ImageProjectiveTransformV3). Mixup α0.8
@@ -67,20 +66,17 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   weightDecay    := 0.05
   wdExcludeNormBias := true  -- timm no_weight_decay: skip norm γ/β, biases, LayerScale γ (1-D params)
   cnxInit        := true    -- ConvNeXt `_init_weights`: trunc_normal(0.02) on every conv AND the
-                            -- head. The generic Xavier path put the stem at std 0.118 against the
+                            -- head. The generic Xavier path puts the stem at std 0.118 against the
                             -- paper's 0.02 — 5.9× too wide, the same failure `vitInit` fixes for
-                            -- ViT. ⭐ Set on the BASE config, not behind a separate recipe the way
-                            -- `deit-init` is, because there is nothing to protect: ConvNeXt is
-                            -- C1-blocked (`imagenet_rerun_sweep.md` §1a, `mstd 0.5` ⇒ zero-byte
-                            -- shim), so it has no post-fix number and both recipes have to be
-                            -- re-run regardless. LayerScale 1e-6 and the LNs were already right.
+                            -- ViT. Set on the BASE config, not behind a separate recipe the way
+                            -- `deit-init` is.
   cosineDecay    := true
-  warmupEpochs   := 20      -- ConvNeXt paper warmup (was 5)
+  warmupEpochs   := 20      -- ConvNeXt paper warmup
   augment        := true
   useRandAugment       := true   -- ConvNeXt recipe RandAugment...
-  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)
-  randAugmentMstd := 0.5         -- ConvNeXt rand-m9-mstd0.5 (gap D)
+  randAugmentMstd := 0.5         -- ConvNeXt rand-m9-mstd0.5
   randAugmentInc  := true        -- ...-inc1 increasing-severity mappings
   useMixup       := true     -- ConvNeXt paper aug pack: Mixup α0.8...
   mixupAlpha     := 0.8
@@ -88,7 +84,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   randomErasing  := true     -- ...+ Random Erasing p0.25 — completes the DeiT-style pack
   randomErasingProb := 0.25
-  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
+  erasingPixel   := true    -- timm RandomErasing(mode='pixel'), N(0,1) fill
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

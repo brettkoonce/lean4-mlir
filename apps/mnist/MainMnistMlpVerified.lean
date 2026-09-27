@@ -8,7 +8,7 @@ softmax-CE. Trains on `verified_mlir/mlp_train_step.mlir`
 (`Proofs.StableHLO.mlpTrainStepFaithfulV`), whose forward/backward/grad ops are each
 proven faithful to the Mathlib `fderiv` math (`mlpFwdGraph_faithful`,
 `mlpBackGraph_faithful`, `reluF_faithful`, `selectPos_faithful`,
-`wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) — audited 3-axiom-clean.
+`wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) — 3-axiom-clean.
 
 The model is the `mlpVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`) — the same
 readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
@@ -22,8 +22,7 @@ that runs.
 trusted lowerer `$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with
 `=iree` — resolved by dlopen at run time (`ffi/lowerer.h`). There is no `-xla`
 peer and no shared-body file; the backend is a run-time choice about *transport*,
-not a different program, which is what the G2 gate asserts. Rung 1 of the ladder
-(depth + multiple parameter tensors) is now that one binary run twice.
+not a different program, which is what the G2 gate asserts.
 
 Run:
 ```
@@ -31,7 +30,6 @@ lake build mnist-mlp-verified
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mnist-mlp-verified data          # XLA
 LEAN_MLIR_LOWERER=iree IREE_BACKEND=rocm ... mnist-mlp-verified data   # IREE
 ```
-See `planning/archive/xla_pjrt_ladder.md` (rung 1, G2).
 -/
 
 /-- 12 epochs at batch 128. `lr` is display-only — the real rate is baked into

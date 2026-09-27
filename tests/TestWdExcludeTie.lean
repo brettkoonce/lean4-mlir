@@ -3,12 +3,12 @@ import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.ViTRender
 import LeanMlir.Proofs.Codegen.ConvNeXtRender
 
-/-! # `wdExcludeNormBias` — the timm `no_weight_decay` render, numerically certified (v1.4)
+/-! # `wdExcludeNormBias` — the timm `no_weight_decay` render, numerically certified
 
 `verified_mlir/vit_adamwx_train_step.mlir` is `vit_adam` with decoupled weight decay switched OFF
 for the 126 params timm/DeiT exclude — every 1-D param (biases, LayerNorm γ/β, the CLS token) and
 the positional embedding. `vitTinyImagenetConfig.wdExcludeNormBias := true`, so the ImageNet pair
-needs it; it is one of the two gaps `recipe_gaps.md` §2 lists for both ViT and ConvNeXt.
+needs it.
 
 **Why a cross-render KNOWN ANSWER and not a tie.** The two renders compute genuinely different
 functions, so there is nothing to tie — and every structural check passes on both, because the
@@ -27,18 +27,17 @@ so on one shared `(θ, x, onehot)` with `m = v = 0`:
 | ③ | `m'`, `v'` are **bit-exact on all 200** — decay is DECOUPLED, so it touches neither | 400 regions |
 | ④ | `%loss` is bit-exact — it is a forward-only output and cannot see the optimizer | |
 
-**▶ THE PARTITION IS THE CONTROL, and that is the whole design.** The gate does not check that 74
+**THE PARTITION IS THE CONTROL, and that is the whole design.** The gate does not check that 74
 params match and 126 differ — a count is satisfied by *any* 74. It recovers, per parameter, which
 bucket that parameter EMPIRICALLY falls in (θ' bit-exact ⇒ decayed; θ' offset by `lr·wd·θ` ⇒
 excluded) and requires the empirical partition to **equal `vitWdDecays`'s, name for name**. A mask
 that excluded the wrong 126 — the plausible failure, since a misaligned mask is silent in the
-arity, the types and the prefix audit (§2e) — lands params in the wrong bucket and fires.
+arity, the types and the prefix audit — lands params in the wrong bucket and fires.
 
-⚠ **The instrument has to be conditioned, and this is the ViT-EMA lesson (§0, 2026-08-02) in the
-same place it bit before.** ② is a difference of two nearly-equal f32 numbers: `θ'_wx − θ'_adam`
-against `|θ'|`. Its resolution is `wd·|θ| / 1` ≈ 5e-6 at wd = 1e-4 — about 80× f32's own 6e-8, so
-it is readable but not generously so, and it is INDEPENDENT of `lr` (both the difference and
-`|θ'|` scale with it, which is why turning `%lr` up does not help here the way it did for EMA).
+**The instrument has to be conditioned.** ② is a difference of two nearly-equal f32 numbers:
+`θ'_wx − θ'_adam` against `|θ'|`. Its resolution is `wd·|θ| / 1` ≈ 5e-6 at wd = 1e-4 — about 80×
+f32's own 6e-8, so it is readable but not generously so, and it is INDEPENDENT of `lr` (both the
+difference and `|θ'|` scale with it, which is why turning `%lr` up does not help here the way it did for EMA).
 That is why ① and ③ carry the weight: they are bit-exact and need no resolution argument at all.
 
     lake build wdx-tie
@@ -51,7 +50,7 @@ selected net's own signature list and mask predicate — `vitParamSig`/`vitWdDec
 `allParams`/`cnxWdDecays` — i.e. from the SAME sources the renderers choose `%wd`/`%wdz` from, so
 the gate cannot drift from the render it gates.
 
-⚠ **The two nets' rules are NOT the same, and that is the point of running both.** ViT excludes the
+**The two nets' rules are NOT the same, and that is the point of running both.** ViT excludes the
 positional embedding by NAME on top of the rank test; ConvNeXt has no such param (its generated
 reference sets `_WD_POS_SHAPE = None`), so it is the plain rank test. A green ViT run does not
 license ConvNeXt — the `rms-tie` ε-placement lesson, one knob over.
@@ -91,9 +90,8 @@ private def cmpAt (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.
   (d, m, e)
 
 def main (argv : List String) : IO Unit := do
-  -- ⚠ `--cand <path>` drives a CANDIDATE wx render instead of the committed one, and it is what
-  -- makes a green run believable — the `vit-dp-check` lesson (§2j): that harness hardcoded both
-  -- paths, so its bit-exact PASS was unfalsifiable until an argument was added.
+  -- `--cand <path>` drives a CANDIDATE wx render instead of the committed one, and it is what
+  -- makes a green run believable: without it a bit-exact PASS is unfalsifiable.
   -- `scripts/probes/perturb_wd_mask.py` builds the two controls.
   let cand := match argv.dropWhile (· != "--cand") with
     | _ :: p :: _ => some p
@@ -108,11 +106,10 @@ def main (argv : List String) : IO Unit := do
   IO.println s!"  {sig.length} params, {nDec} decayed / {nExc} excluded, bs {bs}, \
 backend {← LowererSession.backendName}"
 
-  -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked. the signature list names the params and drives the
+  -- TWO ROUTES TO THE SAME LAYOUT, checked. the signature list names the params and drives the
   -- render's `%wd`/`%wdz` choice; `net.specs` is the LAYOUT the driver packs a blob from. They are
   -- independent hand-lists, and this gate reads offsets from one while the mask came from the
-  -- other — §2m's whole lesson (mnv2 shipped a 160-param forward past a green tie because only one
-  -- of two arity routes was pinned).
+  -- other.
   if net.specs.size != sig.length then
     throw (IO.userError s!"LAYOUT SKEW: net.specs has {net.specs.size} entries, vitParamSig has \
 {sig.length} — the offsets below would be meaningless")
@@ -157,10 +154,10 @@ the signature list says {ds}")
   let oA ← run "adam"
   let oX ← run "adamwx"
 
-  -- ⚠ REFUSE A NON-FINITE RUN BEFORE READING ANYTHING OUT OF IT. NaN ≠ NaN makes every
+  -- REFUSE A NON-FINITE RUN BEFORE READING ANYTHING OUT OF IT. NaN ≠ NaN makes every
   -- coordinate "differ" and every `>` comparison false, so a blown-up forward reports as
   -- `0/N bit-exact, max abs 0.000000` — which reads like a catastrophic failure of the render
-  -- rather than a broken input. It cost one run here.
+  -- rather than a broken input.
   let P := net.nParams
   let mut nonFin := 0
   for i in [0:3*P + 1] do
@@ -192,14 +189,14 @@ the signature list says {ds}")
     let n := ds.foldl (· * ·) 1
     let (d, m, e) := cmpAt oA oX off n
     -- the predicted offset at an EXCLUDED param: θ'_wx − θ'_adam = lr·wd·θ
-    -- ⚠ THE ERROR IS MEASURED IN ULPs OF θ', NOT AS A RELATIVE BOUND, and that is forced rather
+    -- THE ERROR IS MEASURED IN ULPs OF θ', NOT AS A RELATIVE BOUND, and that is forced rather
     -- than lenient. `θ'_wx − θ'_adam` is a difference of two nearly-equal f32 numbers, so the
     -- best achievable relative accuracy is `ulp(θ') / (lr·wd·|θ|)`. At wd = 1e-4 and |θ| ~ 0.02
     -- that ratio is ~17, i.e. a **~6e-2 relative floor** — and it is INDEPENDENT of lr, because
-    -- both the difference and |θ'| scale with it (turning `%lr` up is what fixed the EMA gate;
-    -- it does nothing here). A first version gated ② at an absolute 1e-3 and FAILED A CORRECT
-    -- RENDER at 1.39e-2, which is inside that floor. §2d.1's rule: calibrate against what the
-    -- instrument can resolve, never against a round number.
+    -- both the difference and |θ'| scale with it (turning `%lr` up is what fixes the EMA gate;
+    -- it does nothing here). An absolute 1e-3 gate on ② FAILS A CORRECT RENDER at 1.39e-2, which
+    -- is inside that floor: calibrate against what the instrument can resolve, never against a
+    -- round number.
     let mut predMax : Float := 0.0
     let mut absErr  : Float := 0.0
     let mut ulpMax  : Float := 0.0
@@ -213,7 +210,7 @@ the signature list says {ds}")
     let relErr := absErr
     let bitExact := e == n
     if bitExact then nExactSeen := nExactSeen + 1 else nOffsetSeen := nOffsetSeen + 1
-    -- ⚠ a param whose predicted offset is ~0 cannot be classified at all — say so rather than
+    -- a param whose predicted offset is ~0 cannot be classified at all — say so rather than
     -- counting it as agreement. (It does not arise at this init, which is why `mkParamB` above
     -- deliberately does not use the driver's zeros for the 1-D params.)
     if predMax < 1e-12 then degenerate := degenerate ++ [nm]

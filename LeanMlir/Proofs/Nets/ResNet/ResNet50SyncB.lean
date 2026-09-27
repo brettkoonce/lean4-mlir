@@ -340,7 +340,7 @@ theorem resnet50FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 
   have s16 := r50IdGraphSync_shard "s4b2" epsStr R hR N q q hN h1 h1 w.s4b2 _ _ s15
   exact r34HeadGraphSync_shard N q q w.Wd w.bd _ _ s16 r
 
--- ⭐ `q = 7` IS the 224-px net and `q = 5` the 160-px one: the capstone at each, the input bound at
+-- `q = 7` IS the 224-px net and `q = 5` the 160-px one: the capstone at each, the input bound at
 -- the literal shape. Instantiation only — the statement is proved once, at the variable `q`.
 example (R N : Nat) (hR : 0 < R) (hN : 0 < N) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224)))

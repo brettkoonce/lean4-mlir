@@ -2,36 +2,30 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import tests.ViTRender
 import LeanMlir.Types
 
-/-! # Item B — structured MobileNetV2 train-step render (TRUE batch-norm, exact-parity)
+/-! # Structured MobileNetV2 train-step render (TRUE batch-norm, exact-parity)
 
 The MobileNetV2 peer of CnnRender.lean's structured train steps. The convs, depthwise, relu6,
-residual `addV`, GAP and dense forward + backward are proof-rendered through `pretty` over Item A's
+residual `addV`, GAP and dense forward + backward are proof-rendered through `pretty` over the
 per-channel tokens — forward (`flatConvStridedF`/`flatConvF`/`depthwiseF`/
 `depthwiseStridedF`/`relu6F`/`addV`/`gapF`/`denseF`) and backward (`dotOut`, `selectMid`, `convBack`,
 `depthwiseBack`/`depthwiseStridedBack`, `addV` residual fan-in).
 
-**BatchNorm is hand-emitted (`bnB`/`bnBackB`), NOT a proof token** — the exact-parity change (matches
-r34/enet, see `planning/archive/mnv2_verified.md`). The reference uses TRUE batch-norm (reduce μ/var over
-`[0,2,3]`), but the SHlo `.bnBatchF` token has no `pretty`/emit case, so giving mnv2 batch-norm trades
-away its proof-rendered-BN property: BN forward+backward become hand-emitted flat↔NCHW fragments
-(reshape is a buffer no-op), like the existing hand-emitted gap-backward and conv/depthwise grads.
+**BatchNorm is hand-emitted (`bnB`/`bnBackB`), NOT a proof token** — for exact parity (matches
+r34/enet). The reference uses TRUE batch-norm (reduce μ/var over `[0,2,3]`), but the SHlo
+`.bnBatchF` token has no `pretty`/emit case, so giving mnv2 batch-norm trades away its
+proof-rendered-BN property: BN forward+backward become hand-emitted flat↔NCHW fragments (reshape is
+a buffer no-op), like the existing hand-emitted gap-backward and conv/depthwise grads.
 `bnB` saves x̂/istd/nf/γb + the `[oc]` batch sums; `bnBackB` reuses them and folds dγ/dβ.
 
-**The AdamW emitter that used to live here is RETIRED (§2f).** `verified_mlir/mobilenetv2_adam_train_step.mlir`
-is now written solely by `Proofs/Codegen/MobileNetV2RenderB.lean` as `pretty(provenGraph)`, licensed
-by a numeric tie against these very bytes (`mobilenetv2-adam-tie`: forward BIT-EXACT on all 52 BN
-layers' batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210 (the pre-§2m layout), over all 6,795,329
-returned floats — and verified to fail on three perturbed renders). What remains here is the SGD
-render plus an `iree-compile` smoke that READS the committed AdamW bytes. Recover the retired
-emitter (`adamParams`, `adamConsts`, `adamCot`, `bnLayers`, `trainStepAdamSched` — the running-stats
-BN passthrough layout included) from `git show 75a9f8e:tests/TestMobilenetV2TrainPC.lean` if ever
-needed; do NOT repoint it at the artifact, since a second emitter that can write is exactly the
-last-writer-wins race §2a found.
+**This file does not write the AdamW artifact.** `verified_mlir/mobilenetv2_adam_train_step.mlir`
+is written solely by `Proofs/Codegen/MobileNetV2RenderB.lean` as `pretty(provenGraph)`. This file
+holds the SGD render plus an `iree-compile` smoke that READS the committed AdamW bytes. Do NOT add
+an AdamW writer here: a second emitter that can write is a last-writer-wins race.
 
-Full-paper MobileNetV2 (17 inverted-residual blocks, 158 param tensors / 2,236,682 scalars — 210/2,253,738 before §2m dropped the 52 conv biases) — the layout
-`mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam driver
-trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is still the reduced 6-block
-net — this PC/adam path is the full one).
+Full-paper MobileNetV2 (17 inverted-residual blocks, 158 param tensors / 2,236,682 scalars) — the
+layout `mobilenetv2Verified.toSpecs` / `MobileNetV2Layout.specs` (#guard-locked) the verified-adam
+driver trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is the reduced
+6-block net — this PC/adam path is the full one).
 
 Run: `lake env lean tests/TestMobilenetV2TrainPC.lean`
 -/
@@ -259,12 +253,11 @@ private def blockSgd (p : String) (ic mid oc : Nat) : String :=
   sgd s!"%{p}pW" s!"%{p}dpW" (ty [oc,mid,1,1]) ++ sgd s!"%{p}pb" s!"%{p}dpb" (ty [oc]) ++
   sgd s!"%{p}pg" s!"%{p}dpndg" (ty [oc]) ++ sgd s!"%{p}pbt" s!"%{p}dpndb" (ty [oc])
 
-/-- The proof-rendered fwd + backward-cotangent-chain + hand param grads. It was SHARED by the SGD
-    (`trainStep`) and AdamW (`trainStepAdamSched`) renders; the AdamW one is retired (§2f), so only
-    `trainStep` uses it now — the `cot` parameter is kept because it is what made the sharing work
-    and re-adding a second caller must not mean re-deriving it. The softmax `sm` `[BS,10]` is captured
-    and handed to `cot`, which emits the loss cotangent (and must define `%dy` in scope — plus
-    `%loss` for the Adam path). Everything downstream (dense param grads, dense-back) reads `%dy`. -/
+/-- The proof-rendered fwd + backward-cotangent-chain + hand param grads. `trainStep` is its caller;
+    the `cot` parameter is kept so that a second caller need not re-derive it. The softmax `sm`
+    `[BS,10]` is captured and handed to `cot`, which emits the loss cotangent (and must define `%dy`
+    in scope — plus `%loss` for the Adam path). Everything downstream (dense param grads,
+    dense-back) reads `%dy`. -/
 private def renderBody (cot : String → String) : String := Id.run do
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered) ═══
@@ -371,16 +364,16 @@ private def trainStep : String := Id.run do
 
 def main : IO Unit := do
   IO.FS.createDirAll "/tmp/mnv2pc"
-  -- The SGD render still writes, but to /tmp — it has never owned a `verified_mlir/` path.
+  -- The SGD render writes to /tmp — it does not own a `verified_mlir/` path.
   let mlir := trainStep
   IO.println s!"rendered structured MobileNetV2 train step: {mlir.length} chars"
   IO.FS.writeFile "/tmp/mnv2pc/train_step.mlir" mlir
   tryCompile "/tmp/mnv2pc/train_step.mlir" "/tmp/mnv2pc/train_step.vmfb" "SGD"
-  -- AdamW: this file's emitter is RETIRED (§2f). `Proofs/Codegen/MobileNetV2RenderB.lean` is now
-  -- the sole writer of `verified_mlir/mobilenetv2_adam_train_step.mlir`, so the smoke reads the
-  -- COMMITTED bytes instead of re-rendering them — that is the part `lake build` genuinely cannot
-  -- do, since it needs `iree-compile` on PATH. It THROWS if the artifact is missing rather than
-  -- quietly recreating it, which is what turned this file back into a double writer before.
+  -- AdamW: `Proofs/Codegen/MobileNetV2RenderB.lean` is the sole writer of
+  -- `verified_mlir/mobilenetv2_adam_train_step.mlir`, so the smoke reads the COMMITTED bytes
+  -- instead of re-rendering them — that is the part `lake build` genuinely cannot do, since it
+  -- needs `iree-compile` on PATH. It THROWS if the artifact is missing rather than quietly
+  -- recreating it, which would make this file a double writer.
   let adamPath := "verified_mlir/mobilenetv2_adam_train_step.mlir"
   if !(← System.FilePath.pathExists adamPath) then
     throw (IO.userError s!"{adamPath} is missing. This file no longer renders it — regenerate with \

@@ -1,9 +1,8 @@
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull
--- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
--- membership — the linarith PSD witnesses OOM the free-tier runners; see
--- planning/archive/certs_heavy_psd_memory.md. Their prints below are commented out
--- with them; re-enable both together. Until then `scripts/certs/check_sdpfull.sh` builds both
--- and audits every theorem in them, locally.)
+-- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib membership — the
+-- linarith PSD witnesses OOM the free-tier runners. Their prints below are commented out
+-- with them; re-enable both together. Until then `scripts/certs/check_sdpfull.sh` builds
+-- both and audits every theorem in them, locally.)
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBP
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrown
@@ -12,25 +11,25 @@ import LeanMlir.Proofs.Certificates.IbpConvScorecard.Basic
 
 /-! # Axiom audit — the HEAVY generated certificate corpus (`CertsHeavy`)
 
-The full-input (784-dim) scorecard instances: L2 Tsuzuku + per-pair LipSDP +
-IBP L∞, ~90k generated lines of weight/image data and per-image theorems.
-Split out of `tests/AuditAxioms.lean` 2026-07-12 together with the
-`Certs`→`CertsHeavy` lakefile split: the long-running data-heavy corpus gets
-its own workflow (.github/workflows/certs-heavy.yml) so it cannot take
-certs.yml/blueprint.yml down. Same gate: every line below must close under
-exactly `[propext, Classical.choice, Quot.sound]`. The hand-written engine
-cores (ListDot.lean, IntervalBound.lean) stay in `Certs` and are audited by
-the MAIN audit. -/
+The full-input (784-dim) scorecard instances: L2 Tsuzuku + per-pair LipSDP + IBP
+L∞, ~90k generated lines of weight/image data and per-image theorems. Split out
+of `tests/AuditAxioms.lean` together with the `Certs`→`CertsHeavy` lakefile
+split: the long-running data-heavy corpus gets its own workflow
+(.github/workflows/certs-heavy.yml) so it cannot take certs.yml/blueprint.yml
+down. Same gate: every line below must close under exactly
+`[propext, Classical.choice, Quot.sound]`. The hand-written engine cores
+(ListDot.lean, IntervalBound.lean) stay in `Certs` and are audited by the MAIN
+audit. -/
 
--- FULL-INPUT scorecard (2026-07 audit gap #3, LipschitzCert/ScorecardFull*.lean): the
--- pooled 49-dim reduction lifted to the genuine 784-dim input (exact k/255 pixels),
--- per-image certificates at pixel-L2 ε = 1/10 AND 3/10 on two 784→16→10 nets —
--- capped σ≤2: 92/100 @0.1 (PGD bracket 93 — within ONE image of the attack bound) +
--- 72/100 @0.3; unconstrained: 76/100 @0.1 → 2/100 @0.3 (the σ-projection is what
--- survives the bigger radius). Engine: ListDot.lean — every 784-term dot is one
--- kernel `dotZ` evaluation (`decide +kernel`, GMP, propext-only; NOT native_decide)
--- transported to the `Fin 784` sums by the once-proved `sum_getD_div` bridge; the
--- pooled recipe's simp sum walk is quadratic in input dim and priced out at 784.
+-- FULL-INPUT scorecard (LipschitzCert/ScorecardFull*.lean): the pooled 49-dim reduction
+-- lifted to the genuine 784-dim input (exact k/255 pixels), per-image certificates at
+-- pixel-L2 ε = 1/10 AND 3/10 on two 784→16→10 nets — capped σ≤2: 92/100 @0.1 (PGD bracket
+-- 93 — within ONE image of the attack bound) + 72/100 @0.3; unconstrained: 76/100 @0.1 →
+-- 2/100 @0.3 (the σ-projection is what survives the bigger radius). Engine: ListDot.lean
+-- — every 784-term dot is one kernel `dotZ` evaluation (`decide +kernel`, GMP,
+-- propext-only; NOT native_decide) transported to the `Fin 784` sums by the once-proved
+-- `sum_getD_div` bridge; the pooled recipe's simp sum walk is quadratic in input dim and
+-- priced out at 784.
 -- Spot-check: the bridge core, both nets' Schatten-8 chains, a Gram entry +
 -- wrapper per net, first/middle/last per-image certs at both radii, and the
 -- mechanized aggregates. (The raw `gz*` kernel dot facts are propext-ONLY —
@@ -69,15 +68,14 @@ the MAIN audit. -/
 
 -- Per-pair LipSDP on the FULL-INPUT nets (LipschitzCertScorecardSDPFull{,Uncon}.lean):
 -- the tighter-constant pass at 784-dim input, both radii. Capped σ≤2:
--- 92→93/100 @ ε=0.1 — EQUAL to the L2-PGD attack bound, the cert ≤ TRUE ≤ PGD
--- sandwich CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1
--- (PGD 94), 2→77 @0.3 (PGD 86). PSD witnesses: exact rational LDLᵀ column
--- squares, one linarith goal per pair (the pooled files' recipe — MEASURED
--- faster than an entrywise norm_num check at both widths; the
--- exact-LDL fractions hurt 512 separate norm_num goals far more than one
--- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8
--- certifying images per radius carry the `CertifiedAt` theorems, and the
--- `scorecard_sdp_full*` aggregates state only those (planning/archive/scorecard_trim.md).
+-- 92→93/100 @ ε=0.1 — EQUAL to the L2-PGD attack bound, the cert ≤ TRUE ≤ PGD sandwich
+-- CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1 (PGD 94), 2→77 @0.3
+-- (PGD 86). PSD witnesses: exact rational LDLᵀ column squares, one linarith goal per pair
+-- (the pooled files' recipe — MEASURED faster than an entrywise norm_num check at both
+-- widths; the exact-LDL fractions hurt 512 separate norm_num goals far more than one
+-- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8 certifying
+-- images per radius carry the `CertifiedAt` theorems, and the `scorecard_sdp_full*`
+-- aggregates state only those.
 -- Spot-check: one pair chain (slack + squared bound), a reverse-order wrapper,
 -- first/middle/last per-image certs at both radii, and the aggregates.
 -- #print axioms Proofs.LipschitzCertDemo.hS01SF  -- CI-disabled with the SDP lib membership

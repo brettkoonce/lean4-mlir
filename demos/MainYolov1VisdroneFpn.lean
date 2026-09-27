@@ -12,11 +12,11 @@ and `r34`. They carry different names, so their checkpoints and compiled graphs
 cannot collide. The other knobs are `FPN_TOWER`, `FPN_TAG`, `FPN_AUG`,
 `FPN_EPOCHS`, `FPN_CKPT_EVERY`, `FPN_LR_MULT` and `FPN_CLIP`.
 
-⚠ `FPN_TAG` selects the checkpoint prefix and must be set on `infer` as well as
+`FPN_TAG` selects the checkpoint prefix and must be set on `infer` as well as
 on training. Forgetting it does not fail — it silently evaluates a different
 arm's weights, and the only tell is an epoch sweep whose rows are identical.
 
-⚠ Only on an IREE box: `IREE_BACKEND=rocm` is required on gfx1100, because the
+Only on an IREE box: `IREE_BACKEND=rocm` is required on gfx1100, because the
 reduction workaround in `ireeCompileArgs` (`LeanMlir/Types.lean`) is gated on it
 and the multi-scale loss's N-D→scalar reductions otherwise abort with
 `'func.func' op failed to distribute`. Irrelevant under XLA/PJRT.
@@ -43,10 +43,10 @@ def fpnDetScales : List (Nat × List (Float × Float)) :=
 def fpnNtot : Nat :=
   (fpnDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
 
-/-- T1b class weights (planning/archive/yolo_fpn.md): sqrt-inverse encoded-target class
-    frequency, normalized so `Σ_c f_c·w_c = 1` — a pure redistribution that leaves
-    the class term's total magnitude (and so its balance against box/objectness)
-    unchanged. Counts from `scripts/probes/fpn_class_freq.py` over data/visdrone_fpn:
+/-- Class weights: sqrt-inverse encoded-target class frequency, normalized so
+    `Σ_c f_c·w_c = 1` — a pure redistribution that leaves the class term's total
+    magnitude (and so its balance against box/objectness) unchanged. Counts from
+    `scripts/probes/fpn_class_freq.py` over data/visdrone_fpn:
     car 44.1% and pedestrian 21.2% of positives, and the unweighted e12 head
     predicted ONLY those two (5/10 classes never emitted). Full inverse frequency
     spans 45× and is needlessly violent; sqrt spans 6.7×. -/
@@ -94,13 +94,12 @@ def clsWeightsFromEnv : IO (List Float) := do
     | _      => return fpnClsWeights
 
 /-- `tower` = number of 3×3 convs in the RetinaNet head tower per pyramid level
-    (T2a). **0 = the minimal 1×1 head**, which is the T2-bias arm currently on the
-    board; 4 is the RetinaNet default. Selected at run time by `FPN_TOWER` so the
+    **0 = the minimal 1×1 head**; 4 is the RetinaNet default. Selected at run time by `FPN_TOWER` so the
     two arms are one binary, and folded into `name` so their checkpoints and vmfbs
     can never collide. -/
 def r34FpnDetT (tower : Nat) : NetSpec where
   -- name is the on-disk checkpoint prefix: keep it DISTINCT from the anchor arm,
-  -- from the unweighted FPN baseline, AND from the T1b (wcls) arm — all of their
+  -- from the unweighted FPN baseline, AND from the wcls arm — all of their
   -- e2..e12 checkpoints are live A/B references and must not be clobbered.
   name := if tower == 0 then "ResNet-34 + FPN detector 448 wcls pb (VisDrone)"
           else s!"ResNet-34 + FPN detector 448 wcls pb tower{tower} (VisDrone)"
@@ -117,8 +116,7 @@ def r34FpnDetT (tower : Nat) : NetSpec where
     .fpnDetect 256 128 256 512 14 3 tower
   ]
 
-/-- The towerless (T2-bias) arm. `tower = 0` emits ZERO tower ops, so this spec is
-    byte-identical to the pre-T2a codegen and the in-flight run stays reproducible. -/
+/-- The towerless arm. `tower = 0` emits ZERO tower ops. -/
 def r34FpnDet : NetSpec := r34FpnDetT 0
 
 /-- ResNet-50 backbone variant. The first six layers are copied VERBATIM from
@@ -146,7 +144,7 @@ def r50FpnDetT (tower : Nat) : NetSpec where
   detStride := 32
   layers := [
     .convBn 3 64 7 2 .same,
-    -- ⚠ DELIBERATELY 2×2, where `resnet50Imagenet` has `.maxPool 3 2`.
+    -- DELIBERATELY 2×2, where `resnet50Imagenet` has `.maxPool 3 2`.
     -- The train-step emitter's max-pool backward is a tile-compare-select that
     -- is correct ONLY for non-overlapping windows (MlirCodegen.lean:7698 says so
     -- outright), and size 3 > stride 2 overlaps: one input can be the max of
@@ -159,7 +157,7 @@ def r50FpnDetT (tower : Nat) : NetSpec where
     -- untouched, and both windows take 224→112, so every downstream shape and
     -- the C3/C4/C5 taps are identical. The cost is a one-layer distribution
     -- shift — the backbone was pretrained under 3×3 pooling — which fine-tuning
-    -- absorbs. The R34 detector arm above has always done exactly this.
+    -- absorbs. The R34 detector arm above does exactly this.
     .maxPool 2 2,
     .bottleneckBlock   64  256 3 1,   -- C2: stride 4,  112×112
     .bottleneckBlock  256  512 4 2,   -- C3: 512ch,      56×56
@@ -182,13 +180,12 @@ def r34FpnDetConfig : TrainConfig where
   augment      := false                 -- yoloAugment is single-box-format only
   focalGamma   := 2.0                   -- objectness focal γ (used by the FPN loss)
   fpnScales    := fpnDetScales          -- routes the loss to emitMultiScaleYoloLoss
-  yoloClsWeights := fpnClsWeights       -- T1b: kept on (free, and better class spread)
-  -- Tier 2, lever 1: the detector head now HAS a bias, initialized to the
-  -- RetinaNet prior. This is the only change vs the T1b arm — a zero-init bias
-  -- reproduces the biasless head exactly, so the T1b run is the control and no
-  -- separate bias-off arm is needed. Targets the measured failure: objectness
-  -- had AUC 0.742 but every logit squeezed into [−2.7, −1.2], because a
-  -- bias-free 1×1 conv must synthesize the background offset from its weights.
+  yoloClsWeights := fpnClsWeights       -- free, and better class spread
+  -- The detector head HAS a bias, initialized to the RetinaNet prior. A zero-init
+  -- bias reproduces the biasless head exactly, so no separate bias-off arm is
+  -- needed. Targets the measured failure: objectness had AUC 0.742 but every
+  -- logit squeezed into [−2.7, −1.2], because a bias-free 1×1 conv must
+  -- synthesize the background offset from its weights.
   detPriorPi   := 0.01
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
 
@@ -199,7 +196,7 @@ def r34FpnDetConfig : TrainConfig where
     classifier (2048·1000 + 1000). The count is the ONLY thing standing between a
     real bootstrap and a silent misload, so it is derived, not guessed.
 
-    ⛔ It does NOT load `r50_a3_params.bin` (the A3 checkpoint) directly, because
+    It does NOT load `r50_a3_params.bin` (the A3 checkpoint) directly, because
     that file's BN slots are not in this emitter's convention. Its conv weights are
     perfect — std 0.17, every segment matching `ckpt_e100.state.npz` — but its
     per-channel BN values run to **5.2e6**, against R34's γ∈[0,0.60] / β∈[−0.68,0.77].
@@ -226,7 +223,7 @@ def r50FpnDetConfig : TrainConfig :=
 
     R50 is the default because it is both the better base — RSB-A3, 77.2% top-1
     against R34's ~74% — and the only one that still has a loadable checkpoint:
-    `jax_r34_imagenet.bin` was deleted and can only be regenerated by a full
+    `jax_r34_imagenet.bin` is absent and can only be regenerated by a full
     ImageNet run, whereas the A3 weights are a plain float32 parameter file.
     `r34` is kept selectable so the 0.1386 arm can be reproduced if that file
     ever comes back. -/
@@ -248,7 +245,7 @@ def noBootstrapFromEnv : IO Bool := do
   | none => return false
   | some v => return (v.trimAscii.toString == "1" || v.trimAscii.toString.toLower == "true")
 
-/-- Read the head-tower depth (T2a) from `FPN_TOWER`; 0 = the minimal 1×1 head. -/
+/-- Read the head-tower depth from `FPN_TOWER`; 0 = the minimal 1×1 head. -/
 def towerDepthFromEnv : IO Nat := do
   match (← IO.getEnv "FPN_TOWER") with
   | none => return 0
@@ -297,8 +294,7 @@ def clipFromEnv (dflt : Float) : IO Float := do
 
 /-- Name suffix (`FPN_TAG`). The name IS the on-disk checkpoint prefix, so a probe
     run without a distinct tag silently overwrites the live arm's e2..e12
-    checkpoints — which are the artifacts every measurement in
-    planning/archive/yolo_assignment.md is computed from. Empty by default. -/
+    checkpoints. Empty by default. -/
 def tagFromEnv : IO String := do
   match (← IO.getEnv "FPN_TAG") with
   | none => return ""
@@ -306,7 +302,7 @@ def tagFromEnv : IO String := do
 
 /-- Augmentation toggle (`FPN_AUG=1`). Turns on the FPN-path augmentation pack —
     YOLO-style HSV jitter (photometric, image-only) + horizontal flip (geometric,
-    re-encoded on the flat [P3|P4|P5] target). OFF by default so the in-flight
+    re-encoded on the flat [P3|P4|P5] target). OFF by default so the
     baseline arm stays byte-reproducible; this is an explicit A/B arm and MUST run
     under its own `FPN_TAG` so its checkpoints don't clobber the no-aug control. -/
 def augFromEnv : IO Bool := do
@@ -327,7 +323,7 @@ def augFromEnv : IO Bool := do
     and AP is precision-sensitive. Focal down-weights EASY examples whatever
     their class, and its weight tracks p_t as p_t moves, so it cannot buy recall
     with a permanent precision tax. FD-verified in
-    `scripts/probes/fpn_loss_probe_check.py` (two new arms, with and without the class
+    `scripts/probes/fpn_loss_probe_check.py` (two arms, with and without the class
     weights, since both fold into the same per-cell scalar). -/
 def clsFocalFromEnv : IO Float := do
   match (← IO.getEnv "FPN_CLSFOCAL") with
@@ -341,7 +337,7 @@ def clsFocalFromEnv : IO Float := do
       `FPN_AFFINE_SCALE`     scale gain, so 25 ⇒ per-image scale in [0.75, 1.25].
       `FPN_AFFINE_TRANSLATE` translate gain as a % of the frame, so 10 ⇒ ±0.1.
 
-    ⚠ The defaults are deliberately GENTLER than Ultralytics' (scale 0.5,
+    The defaults are deliberately GENTLER than Ultralytics' (scale 0.5,
     translate 0.1). Halving an image is standard practice on COCO, where objects
     are large; here the median object is a handful of pixels across, and at
     scale 0.5 a 4 px car becomes 2 px and falls under P3's stride-8 grid. The
@@ -370,8 +366,7 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   -- Announce WHICH ARM is being evaluated. The arm is selected by FPN_TOWER, and
   -- forgetting it silently evaluates a DIFFERENT arm's checkpoint rather than
   -- failing: every prefix/size/vmfb is self-consistent for the wrong spec, so no
-  -- size check can catch it. (Cost one full 12-epoch eval sweep that reproduced
-  -- the previous arm's numbers exactly — six identical rows was the only tell.)
+  -- size check can catch it.
   IO.println s!"  spec   : {spec.name}"
   IO.println s!"  prefix : {spec.buildPrefix}"
   IO.println s!"  params : {paramsPath} ({spec.totalParams} floats expected)"

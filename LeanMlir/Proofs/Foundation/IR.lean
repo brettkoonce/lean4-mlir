@@ -17,7 +17,7 @@ proving each emitted graph denotes the proven `HasVJP.backward`:
   graph is proved against.
 
 This is the IR the small nets' ties are stated in. ResNet onward states its ties about
-`StableHLO`'s `SHlo`, which grew out of this file.
+`StableHLO`'s `SHlo`.
 
 Design notes: the backward is modelled as an expression tree rooted at the cotangent —
 SSA/sharing is a semantics-preserving printer concern, so the correctness proof never
@@ -75,7 +75,7 @@ theorem denote_dotGeneral {inp m n : Nat} (A : Mat m n) (e : Back inp n) (dy : V
     (Back.dotGeneral A e).denote dy = Mat.mulVec A (e.denote dy) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 3 — composition (the IR-level chain rule)
+-- § Composition (the IR-level chain rule)
 --
 -- A backward graph is rooted at the cotangent leaf; composing two layers'
 -- backwards means plugging one graph into the other's cotangent. `subst`
@@ -114,7 +114,7 @@ theorem denote_subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp)
   | add e1 e2 ih1 ih2 => simp only [Back.subst, Back.denote, ih1, ih2]
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 0a — dense
+-- § Dense
 -- ════════════════════════════════════════════════════════════════
 
 /-- The dense input-gradient backward graph: one `dot_general` of the
@@ -128,7 +128,7 @@ theorem dense_back_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (dy 
     (emitDenseBack W).denote dy = (denseHasVJP W b).backward x dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 0b — ReLU at a smooth point
+-- § ReLU at a smooth point
 -- ════════════════════════════════════════════════════════════════
 
 /-- The ReLU backward graph: `compare(x > 0)` then `select` on the
@@ -148,7 +148,7 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
   exact (relu_codegen_matches_canonical n x h_smooth dy i).symm
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 2 — convolution (the real spatial op)
+-- § Convolution (the real spatial op)
 --
 -- The conv input-gradient is the StableHLO `convolution(dy, reverse(Wᵀ))`
 -- — transpose channels, flip the kernel spatially, convolve. Under
@@ -295,7 +295,7 @@ theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
   exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 2 — max-pool (the other kinked op)
+-- § Max-pool (the other kinked op)
 --
 -- The pooling analogue of the ReLU bridge: the codegen emits
 -- tile-compare-select (broadcast `dy` and the pooled output, `compare EQ`
@@ -331,7 +331,7 @@ theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
   exact (maxPool2_codegen_matches_canonical x h_smooth dy ci hi_in wi_in).symm
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 1 — smooth elementwise activations (diagonal Jacobian)
+-- § Smooth elementwise activations (diagonal Jacobian)
 --
 -- GELU, Swish/SiLU and sigmoid all have a diagonal Jacobian, so their
 -- proven `HasVJP.backward` is the closed form `dy ⊙ act'(x)` — a single
@@ -368,12 +368,12 @@ theorem sigmoid_back_bridge (n : Nat) (x dy : Vec n) :
       = (sigmoidHasVJP n).backward x dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 1 — BatchNorm / LayerNorm (the rank-1 "wringer")
+-- § BatchNorm / LayerNorm (the rank-1 "wringer")
 --
 -- BN's normalize backward is the consolidated 3-term rank-1 formula
 --   dxᵢ = invN·s·( N·dx̂ᵢ − Σⱼ dx̂ⱼ − x̂ᵢ·Σⱼ x̂ⱼ·dx̂ⱼ )
 -- which the codegen emits as two `stablehlo.reduce` sums + broadcast +
--- elementwise subtract/scale. The IR now carries `sumBroadcast`
+-- elementwise subtract/scale. The IR carries `sumBroadcast`
 -- (reduce+broadcast), `sub`, and `scaleConst`; the bridge shows that graph
 -- denotes the proven `bnNormalizeHasVJP.backward`. The affine half
 -- (`γ·dy`) is one `scaleConst`. `bnHasVJP = vjpComp normalize affine`,
@@ -421,7 +421,7 @@ theorem layernorm_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : 
   bn_back_bridge ε γ β hε x dy
 
 -- ════════════════════════════════════════════════════════════════
--- § Phase 1 — softmax (rank-1, like BN)
+-- § Softmax (rank-1, like BN)
 --
 -- softmax's backward is the rank-1 `dzᵢ = pᵢ·(dyᵢ − ⟨p, dy⟩)` (one
 -- reduction `⟨p, dy⟩` + a broadcast-subtract + a scale by `p`), the same
@@ -484,7 +484,7 @@ theorem se_back_bridge {n : Nat} (gate : Vec n → Vec n)
 -- (Tensor3) cotangent, with `conv` (transposed-conv backward) and
 -- `maxpool` (route-to-argmax) nodes whose denotations are the already-proven
 -- `convBackDenote`/`maxPoolBackDenote`. `denote_subst3` is the Tensor3
--- chain rule, so conv/maxpool now compose — the Tensor3 half of what
+-- chain rule, so conv/maxpool compose — the Tensor3 half of what
 -- `Back`/`denote_subst` give the Vec layers.
 -- ════════════════════════════════════════════════════════════════
 
@@ -735,11 +735,11 @@ theorem mlp_layer1_weight_grad_bridge {d₁ d₂ d₃ : Nat}
   weight_grad_bridge W₁ b₁ x₁ (mlpCotOut1 W₂ p₁) dy i j
 
 -- ════════════════════════════════════════════════════════════════
--- § Forward IR — the other half of the train step (Phase 2)
+-- § Forward IR — the other half of the train step
 --
 -- `Back` denotes the backward (cotangent → gradients); `Fwd` is its mirror
 -- for the *forward* pass (input → output). With it, the forward StableHLO
--- the train step recomputes is no longer just trusted: it is the rendering
+-- the train step recomputes is not just trusted: it is the rendering
 -- of `emitMlpFwd`, whose denotation is *proven* equal to the proven forward
 -- map `mlpForward` (`mlp_fwd_bridge`). The whole MLP module — forward AND
 -- backward AND parameter gradients — is then the rendering of proof-backed
@@ -797,9 +797,9 @@ theorem mlp_fwd_preact1 {d₀ d₁ d₂ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Ve
       = dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § Loss cotangent — closing the last supplied input (rest of Phase 4)
+-- § Loss cotangent — closing the last supplied input
 --
--- The train step fed the backward a *supplied* cotangent dy = ∂L/∂logits.
+-- Without it the train step feeds the backward a *supplied* cotangent dy = ∂L/∂logits.
 -- For softmax-cross-entropy the repo PROVES that gradient is
 -- `softmax(logits) − onehot(label)` (`softmaxCE_grad`). Emitting that as a
 -- loss-head graph (`exp`+`reduce`+`broadcast`+`divide`, then `subtract` the

@@ -37,31 +37,29 @@ open Proofs Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/- **The per-replica batch — a PARAMETER now, not a private constant** (2026-09-17).
+/- **The per-replica batch is a PARAMETER, not a private constant.**
 
-   It was `private def cBS : Nat := 32`, and that constant is why ConvNeXt's ImageNet job ran at
-   global 128 against its JAX reference's 256: the batch was unreachable from a `#eval`, so the
-   job's `LEAN_MLIR_BATCH` was the only knob that could move and the render could not follow it.
-   The pair was then not a pair — half the batch, twice the updates, an LR off the linear-scaling
-   rule — which forfeits the one thing this net is in the book for: it has NO BatchNorm, so it
-   isolates the LOWERER rather than a statistic group.
+   A batch unreachable from a `#eval` leaves the job's `LEAN_MLIR_BATCH` as the only knob, and the
+   render cannot follow it. The pair is then not a pair — half the batch, twice the updates, an LR
+   off the linear-scaling rule — which forfeits the one thing this net is in the book for: it has
+   NO BatchNorm, so it isolates the LOWERER rather than a statistic group.
 
-   ⚠ The threading is DELIBERATELY TWO-SHAPED, and the shapes are not interchangeable:
+   The threading is DELIBERATELY TWO-SHAPED, and the shapes are not interchangeable:
 
    * **Private helpers take it FIRST, with NO default.** Every call site is in this file, and a
      helper that silently fell back to 32 inside a 64 graph is exactly the mixed-shape render that
      reads correct. No default ⇒ the compiler enumerates the sites instead of a reviewer.
-   * **Public entry points take it LAST, defaulted to 32**, per the §2m rule stated at
+   * **Public entry points take it LAST, defaulted to 32**, per the rule stated at
      `convNextAdamTrainStepFaithful` below: a parameter inserted mid-list captures an existing
      positional argument at every call site. Trailing + defaulted is what keeps every Imagenette
      render, every `tests/` caller and every ConvNeXt-S/B forward BYTE-IDENTICAL — the batch moves
      only where a `#eval` asks it to.
 
-   ⚠⚠ `ConvNeXtRenderB.bB` is the SAME fact in the batched renderer and the two MUST MOVE
+   `ConvNeXtRenderB.bB` is the SAME fact in the batched renderer and the two MUST MOVE
    TOGETHER: this file renders the WRAPPER (`%x: tensor<B×3×224×224>`, the `%bsc` loss divisor,
    the drop-path signature) while that one renders the BODY at `N := bB`. Either alone is a
    wrapper whose declared shape disagrees with its own graph — which the lowerer rejects, loudly,
-   so this is a §2m-shaped coupling rather than a silent one. -/
+   so this is a loud coupling rather than a silent one. -/
 private def cEPS : String := "1.0e-6"
 private def cLR : String := "0.1"
 /-- The SPATIAL table, and it is the one thing that is NOT a size parameter: 224 with a 4×4/s4
@@ -71,17 +69,16 @@ private def cSpats  : Array Nat := #[56, 28, 14, 7]
 
 /-- **The ConvNeXt size — depths and channel dims TOGETHER, in one record.**
 
-    **They are bundled deliberately, and this is the lesson ConvNeXt-B taught that ConvNeXt-S
-    did not.** S is pure depth, so it was served by a bare `Array Nat` of depths — and that shape
+    **They are bundled deliberately.** A bare `Array Nat` of depths beside a bare array of dims
     admits `(depths := S, dims := T)`, which is not a ConvNeXt of any size but type-checks, renders
-    and trains. B moves BOTH, so a second bare array would have made the mismatch reachable in the
+    and trains. B moves BOTH, so two bare arrays would make the mismatch reachable in the
     direction that matters. One record, three instances, and a caller cannot spell a net that does
     not exist. Same reasoning as `VitDims`, arrived at from the opposite direction: ViT bundled to
     keep `d = heads * hd` definitional, this bundles to keep two tables from drifting.
 
     Both tables are `Vector Nat 4`: ConvNeXt has four stages at every size, and the renders read
-    exactly stages 0–3. With a bare `Array` a fifth depth entry rendered the same bytes while
-    `cnxDropTotal` counted it, and a short one read `0` through `!`.
+    exactly stages 0–3. With a bare `Array` a fifth depth entry renders the same bytes while
+    `cnxDropTotal` counts it, and a short one reads `0` through `!`.
 
     `deriving DecidableEq` is what `ConvNeXtRenderB`'s `#guard`s on its restatement use, and
     `cnxModelName` matches on the whole record rather than on the block count — which is what stops
@@ -109,7 +106,7 @@ def cnxBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256, 512,
 
 
 -- ════════════════════════════════════════════════════════════════
--- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.10) ────────────────────────
+-- ── STOCHASTIC DEPTH ─────────────────────────────────────────────────────────────────────────
 -- ConvNeXt-T is the easy shape of this feature and that is why it is the net that gets it: ONE
 -- site per block, on the residual branch, and **every** block carries one — no EfficientNet skip
 -- guard, no ViT branch split. `convnext_block` in the reference (`jax/Jax/Codegen.lean`) ends
@@ -122,24 +119,24 @@ def cnxBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256, 512,
 --
 -- so the site sits between LayerScale and the skip add — `s·branch + x`, never `s·(branch + x)`.
 --
--- ⚠⚠ AND THE RAMP INDEX IS THE GLOBAL BLOCK INDEX ACROSS ALL FOUR STAGES, not the per-stage `j`.
+-- AND THE RAMP INDEX IS THE GLOBAL BLOCK INDEX ACROSS ALL FOUR STAGES, not the per-stage `j`.
 -- `emitForward`'s `dbi` is a single counter advanced once per `convnext_block` over the whole net
 -- (`emitForward`'s drop-path ramp in `jax/Jax/Codegen.lean`), and `totalDrop` sums every `convNextStage`'s block count — so the
 -- denominator is **17** and stage 1's first block is index 3, not 0. Re-indexing per stage gives
 -- four short ramps instead of one long one: it compiles, runs, descends, and trains a different
 -- objective, and no numeric tie can see it (every tie compares the render against a peer built from
--- the same constants). §2k's `α/K` bug, and EfficientNet's site-ordinal trap, in a third place.
+-- the same constants). EfficientNet's site-ordinal trap has the same shape.
 -- `cnxBlockIdx` is the single source and BOTH traversals call it — which matters more here than it
 -- did on EfficientNet, because the backward walks the stages in REVERSE and a hand-carried counter
 -- would have to be run backwards to agree.
 --
--- ⚠ The reference's `keep_prob < 1.0` guard is a run-time shortcut, not a structural difference:
+-- The reference's `keep_prob < 1.0` guard is a run-time shortcut, not a structural difference:
 -- block 0's keep is exactly 1.0, and with `1/keep` folded into the supplied mask (`Proofs.dropPath`)
 -- the driver hands that site an exact 1.0, so the emitted op is the identity in IEEE
 -- (`Proofs.dropPath_ones_id`). Emitting all 18 keeps the sites, the mask inputs and the ramp indices
 -- one uniform list instead of a list with a hole at its head.
 --
--- ⚠ These live in THIS file rather than in `ConvNeXtRenderB.lean`, where the sites are actually
+-- These live in THIS file rather than in `ConvNeXtRenderB.lean`, where the sites are actually
 -- emitted, because the train-step renderer here owns the signature and the variant name and would
 -- otherwise need a second copy — `ConvNeXtRenderB` imports this file, not the other way round.
 
@@ -161,10 +158,10 @@ def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
 #guard cnxDropSites == 18
 -- The 18 `(stage, block)` pairs map onto `0 … 17` exactly once each — i.e. `cnxBlockIdx` really is
 -- a numbering of the blocks and not merely an increasing function of them.
--- ⚠ `fun j => cnxBlockIdx si j`, NOT the point-free `cnxBlockIdx si`. That is the ViT-S trap
--- (`vit_convnext_sb_scaleup.md` §Traps 1) as a rule rather than an anecdote: a bare partial
--- application of a function that gained a trailing defaulted parameter silently takes the DEFAULT,
--- so this guard would keep checking ConvNeXt-T's numbering while the render used S's.
+-- `fun j => cnxBlockIdx si j`, NOT the point-free `cnxBlockIdx si`. That is the ViT-S trap as a
+-- rule: a bare partial application of a function that gained a trailing defaulted parameter
+-- silently takes the DEFAULT, so this guard would keep checking ConvNeXt-T's numbering while the
+-- render used S's.
 #guard ((List.range 4).flatMap (fun si => (List.range cnxTiny.depths[si]!).map (fun j => cnxBlockIdx si j)))
          == List.range 18
 -- Stage boundaries, spelled out because "index 0 at the top of each stage" is the wrong reading
@@ -173,10 +170,10 @@ def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
 #guard cnxBlockIdx 2 0 == 6
 #guard cnxBlockIdx 3 0 == 15
 
--- ▶ The ConvNeXt-**S** peers of all six. The ramp is `0 … 35` over 36 blocks, and stage 3 is where
+-- The ConvNeXt-**S** peers of all six. The ramp is `0 … 35` over 36 blocks, and stage 3 is where
 -- every added block lands — so stage 3 still starts at 6 and stage 4 starts at 33, not 15. A render
 -- that kept T's numbering would put 36 sites on a 17-denominator ramp: it compiles, runs, descends
--- and trains a different objective, which is the §2k shape this table exists to make checkable.
+-- and trains a different objective, which is the shape this table exists to make checkable.
 #guard cnxDropTotal cnxSmall == 36
 #guard ((List.range 4).flatMap
           (fun si => (List.range cnxSmall.depths[si]!).map (fun j => cnxBlockIdx si j cnxSmall)))
@@ -184,7 +181,7 @@ def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
 #guard cnxBlockIdx 1 0 cnxSmall == 3
 #guard cnxBlockIdx 2 0 cnxSmall == 6
 #guard cnxBlockIdx 3 0 cnxSmall == 33
--- ▶ ConvNeXt-**B** shares S's depth table exactly, so its ramp is the SAME 36 sites at the SAME
+-- ConvNeXt-**B** shares S's depth table exactly, so its ramp is the SAME 36 sites at the SAME
 -- indices. Guarded rather than assumed: it is the one place where B being "S with wider stages"
 -- is a fact about the drop sites and not just about the parameter shapes.
 #guard cnxDropTotal cnxBase == 36
@@ -198,9 +195,8 @@ def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
     would be two writers for one fact. So it is read off `D`.
 
     **It matches on the WHOLE RECORD, not on the block count, and that is not fussiness.**
-    This function keyed on `cnxDropTotal` while ConvNeXt-S was the only new size, and B broke it:
-    B is `[3,3,27,3]` too, so 36 blocks names S and B alike and every B artifact would have opened
-    by calling itself a ConvNeXt-S. Caught by the guards below, which is why they enumerate all
+    B is `[3,3,27,3]` like S, so a name keyed on `cnxDropTotal` (36 blocks) names S and B alike and
+    every B artifact would open by calling itself a ConvNeXt-S. The guards below enumerate all
     three rather than spot-checking one. An unrecognised table gets a name that SAYS it is
     unrecognised, rather than falling back to "ConvNeXt-T" the way a `getD` would. -/
 def cnxModelName (V : CnxDims := cnxTiny) : String :=
@@ -212,8 +208,8 @@ def cnxModelName (V : CnxDims := cnxTiny) : String :=
 #guard cnxModelName == "ConvNeXt-T"
 #guard cnxModelName cnxSmall == "ConvNeXt-S"
 #guard cnxModelName cnxBase == "ConvNeXt-B"
--- ⚠ The anti-collision guard: S and B have the SAME depth table, so a name derived from the block
--- count cannot separate them. This is the check that failed when it was `match cnxDropTotal V`.
+-- The anti-collision guard: S and B have the SAME depth table, so a name derived from the block
+-- count cannot separate them.
 #guard cnxModelName cnxSmall != cnxModelName cnxBase
 
 /-- The `%dp<i>: tensor<Bxf32>` inputs an SD render appends to its signature — one per block, in
@@ -222,25 +218,20 @@ def cnxModelName (V : CnxDims := cnxTiny) : String :=
 def cnxDropSig (B : Nat) (sd : Bool) (V : CnxDims := cnxTiny) : String :=
   dropMaskSig B sd (List.range (cnxDropSites V))
 
--- ── The two hand-written weight-grad emitters that used to live here (`rs4`, `patchWGrad`
---    for the 4×4/s4 patchify stem, `downWGrad` for the even-kernel 2×2/s2 downsample) are
---    DELETED, not left dormant — a retired emitter that can still be called is one more
---    thing to drift (§2b-quater). Both are now certified `SHlo` ops:
---      * `psW` → `.convStride4WeightGrad`, `den` = the NEW `flatConvStride4WeightGradHasVJP`;
---      * `d{i}W` → `.convStridedWeightGrad` at 2×2, which needed no new cert at all — only
---        `StableHLO.sWGradGeom`, the emitter's odd/even padding split.
---    Recover from `git show 5920848:LeanMlir/Proofs/Codegen/ConvNeXtRender.lean` if needed.
+-- ── The stem and downsample weight gradients are certified `SHlo` ops:
+--      * `psW` → `.convStride4WeightGrad`, `den` = `flatConvStride4WeightGradHasVJP`;
+--      * `d{i}W` → `.convStridedWeightGrad` at 2×2, via `StableHLO.sWGradGeom`, the emitter's
+--        odd/even padding split.
 
-/-- The SGD update wrap for ConvNeXt's stem weight, taking the gradient's SSA name explicitly.
-    (Its predecessor `sgd` read a hardcoded `%d{nm}`, which only worked for the hand-written
-    emitters that chose that name; the certified `SHlo` ops emit a fresh `%vN`. Deleted with them.) -/
+/-- The SGD update wrap for ConvNeXt's stem weight, taking the gradient's SSA name explicitly:
+    the certified `SHlo` ops emit a fresh `%vN`. -/
 private def sgdOf (gradN nm t : String) : String :=
   s!"    %{nm}l = stablehlo.constant dense<{cLR}> : {t}\n" ++
   s!"    %{nm}s = stablehlo.multiply {gradN}, %{nm}l : {t}\n" ++
   s!"    %{nm}n = stablehlo.subtract %{nm}, %{nm}s : {t}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § CHANNEL LayerNorm (§2m) — the real one, assembled from ViT's proven row-LN family
+-- § CHANNEL LayerNorm — the real one, assembled from ViT's proven row-LN family
 -- ════════════════════════════════════════════════════════════════
 
 /-! **The channel LayerNorm.** ConvNeXt's `channel_layer_norm` takes `h·w` statistics per
@@ -267,10 +258,9 @@ same tree. -/
     the real per-channel affine is `rowScaleF`/`rowBiasF` downstream, exactly as ViT does it.
     Emitted once per module body.
 
-    This is the enet `zeroBiasPrelude` defect one net over: wire the operand and forget the
-    prelude, and the artifact uses an SSA name nothing defines — `iree-compile`/XLA say "use of
-    undeclared SSA value name" and nothing before them says anything. It happened HERE too, on the
-    first flag-on render, and `regen_verified_mlir.sh check`'s prelude audit is what catches it. -/
+    Wire the operand and forget the prelude, and the artifact uses an SSA name nothing defines —
+    `iree-compile`/XLA say "use of undeclared SSA value name" and nothing before them says
+    anything. `regen_verified_mlir.sh check`'s prelude audit is what catches it. -/
 def chLnPrelude : String :=
     "    // §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL\n" ++
     "    // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.\n" ++
@@ -303,7 +293,7 @@ private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     Every operand is annotated `Vec (1 * d)`, never `Vec d`. `1 * d` does NOT reduce for a
     VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d` here is `V.dims[3]!`, which
     moves with the ConvNeXt size. It is the same annotation `convNextBackAll`'s smoothing chain
-    already carries, for the same reason, and it bites the moment the render stops being pinned. -/
+    carries, for the same reason. -/
 private def headLnFwdSite (cBS : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty cBS (.lnRowF (m := 1) (n := d) "%one" "%zero" cEPS 0 1 0
@@ -430,16 +420,15 @@ private def bwdDown (cBS : Nat) (pfx dy xin : String) (ci co h2 : Nat) :
   pure (k1 ++ k2, cot_n, cot_x)
 
 -- ── param tails via the SHlo ops: the updated param at `adam := false` (the op output IS θ'),
---    the un-fused GRADIENT at `adam := true` (§2f) ──
+--    the un-fused GRADIENT at `adam := true` ──
 
 /-! Every leaf below is one of the `*Sgd`/`*Grad` pairs whose `den`s differ by exactly `θ − lr · ·`
 (`*Sgd_eq_grad`, all `rfl`) and whose emits differ by exactly the const-lr/multiply/subtract tail
 ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), byte-PREFIX). So one traversal serves both renders.
 
-ConvNeXt is the cheapest of the five nets to thread, because its param tails were **already
-factored out** of the cotangent traversal — `bwdBlock` computes cotangents and nothing else, and is
-untouched by this. `lrStr` is threaded but unused in `adam` mode: AdamW's learning rate is the
-runtime `%lr` argument, not a baked literal. -/
+ConvNeXt's param tails are **factored out** of the cotangent traversal — `bwdBlock` computes
+cotangents and nothing else. `lrStr` is threaded but unused in `adam` mode: AdamW's learning rate
+is the runtime `%lr` argument, not a baked literal. -/
 
 private def blockParamSgd (cBS : Nat) (adam : Bool) (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
@@ -473,16 +462,13 @@ private def blockParamSgd (cBS : Nat) (adam : Bool) (pfx : String) (b : FNames)
 
 private def downParamSgd (cBS : Nat) (adam : Bool) (pfx downLn downIn cot_n dy : String) (ci co h2 : Nat) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
-  -- dXb (channel-sum) + dXng/dXnbt + dXW: ALL FOUR are now SHlo ops.
+  -- dXb (channel-sum) + dXng/dXnbt + dXW: ALL FOUR are SHlo ops.
   --
-  -- **`dXW` used to be the hand-written `downWGrad` — the "even-kernel gap".** It was never a
-  -- missing certificate: `flatConvStride2WeightGradHasVJP {ic oc h w kH kW}` is kernel-generic
-  -- (no parity assumption — it is `vjpComp (conv2dWeightGradHasVJP) decimateFlat`), and this
-  -- block's forward and input-VJP already used certified ops at 2×2. The blocker was that
-  -- `convStridedWeightGrad`'s EMITTER hardcoded symmetric SAME padding `[[p,p]]` with
-  -- `p = (kH−1)/2`, which floors to 0 at `kH = 2` and emitted a 1×1 convolution against a declared
-  -- 2×2 result — type-invalid MLIR. `StableHLO.sWGradGeom` now splits odd/even (odd byte-for-byte
-  -- unchanged), so this call site is certified like every other.
+  -- `dXW`'s certificate `flatConvStride2WeightGradHasVJP {ic oc h w kH kW}` is kernel-generic
+  -- (no parity assumption — it is `vjpComp (conv2dWeightGradHasVJP) decimateFlat`). The emitter
+  -- side needs `StableHLO.sWGradGeom`'s odd/even split: symmetric SAME padding `[[p,p]]` with
+  -- `p = (kH−1)/2` floors to 0 at `kH = 2` and emits a 1×1 convolution against a declared
+  -- 2×2 result — type-invalid MLIR.
   let (cB, nB) ← if adam then
       pretty cBS (.convStridedBiasGrad (0 : Kernel4 co ci 2 2) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Vec co) (.operand dy 0))
     else pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (0 : Kernel4 co ci 2 2) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Vec co) 0 (.operand dy 0))
@@ -529,14 +515,14 @@ private def allParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     if si < 3 then
       ps := ps ++ [(s!"d{si}ng", [c]), (s!"d{si}nbt", [c]),
                    (s!"d{si}W", [V.dims[si+1]!, c, 2, 2]), (s!"d{si}b", [V.dims[si+1]!])]
-  -- ▶ HEAD LN (2026-08-30) — the paper's `GAP → LN → Linear`. It sits BEFORE `Wd`/`bd` because
+  -- HEAD LN — the paper's `GAP → LN → Linear`. It sits BEFORE `Wd`/`bd` because
   -- that is its order in `VerifiedNetSpec.layers`, and the blob is laid out in that order: get it
   -- backwards and every parameter after the GAP is misaligned, silently.
   ps := ps ++ [("hng", [V.dims[3]!]), ("hnbt", [V.dims[3]!]),
                ("Wd", [V.dims[3]!,nClasses]), ("bd", [nClasses])]
   return ps
 
--- ── ▶ `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ────────────────
+-- ── `wdExcludeNormBias` — timm/DeiT `no_weight_decay` ────────────────────────────────────────
 -- `convnextTinyImagenetConfig` sets it (its own comment: *"skip norm γ/β, biases, LayerScale γ
 -- (1-D params)"*). Same mechanism as ViT's (`ViTRender.vitWdDecays`): `adamWParamF` takes `wd` as
 -- a runtime OPERAND NAME, so excluding a param binds it to a zero constant — no new op, no
@@ -560,16 +546,16 @@ def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
   let d := ((allParams nClasses V).filter (fun (nm, ds) => cnxWdDecays nm ds)).length
   (d, (allParams nClasses V).length - d)
 
--- ⭐ The reference's OWN `_wd_mask` over its OWN `init_params` for
+-- The reference's OWN `_wd_mask` over its OWN `init_params` for
 -- `generated_convnext_tiny_imagenet.py` reports **182 tensors: 59 decayed, 123 excluded**, every
--- mask leaf uniform. Two independent routes, and the count is the cheapest thing that can
--- disagree — §2m's `toSpecs == Layout.specs` move applied to a recipe knob.
--- ⚠ Was 180/59/121 before 2026-08-30. The head LN (§7.1 / B1) adds γ and β, both `[768]`, both
--- 1-D and therefore both EXCLUDED — the decayed count cannot move, which is itself a check: a
--- head LN that landed in the decayed column would be getting weight decay the recipe excludes.
+-- mask leaf uniform. Two independent routes, and the count is the cheapest thing that can disagree
+-- — the `toSpecs == Layout.specs` move applied to a recipe knob. The head LN's γ and β, both
+-- `[768]`, are both 1-D and therefore both EXCLUDED — the decayed count cannot move, which is
+-- itself a check: a head LN that landed in the decayed column would be getting weight decay the
+-- recipe excludes.
 #guard cnxWdCounts 10 == (59, 123)
 #guard cnxWdCounts 1000 == (59, 123)
--- ▶ ConvNeXt-S: 18 more blocks × (3 decayed / 6 excluded) on top of T's split. The RULE is
+-- ConvNeXt-S: 18 more blocks × (3 decayed / 6 excluded) on top of T's split. The RULE is
 -- untouched — it is a plain rank test and depth cannot reach it — so this guard is checking that
 -- the depth parameter reaches `allParams` at all, which is the thing that would silently not.
 #guard cnxWdCounts 1000 cnxSmall == (113, 231)
@@ -600,8 +586,8 @@ structure CFwd where
   downLn  : Array String            -- the 3 downsample LN outputs (the strided conv's input)
   downIn  : Array String            -- the 3 downsample inputs (the LN's input)
   gap     : String                  -- global-average-pool output
-  stemC   : String                  -- stem conv output (= the §2m stem LN's input)
-  hn      : String                  -- dense input: the head LN's output (2026-08-30; was `gap`)
+  stemC   : String                  -- stem conv output (= the stem LN's input)
+  hn      : String                  -- dense input: the head LN's output
   logits  : String                  -- dense output
   deriving Inhabited
 
@@ -617,9 +603,7 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     : StateM Proofs.StableHLO.EmitS CFwd := do
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
     (0 : Kernel4 (V.dims[0]!) 3 4 4) 0 (.operand "%x" (0 : Vec (3*(2*(2*56))*(2*(2*56))))))
-  -- §2m: the reference's `convnext_stem` is patchify conv → channel-LN. The PRE-§2m render had
-  -- NO stem LN, and had a head LN the reference does not — the two nearly cancel in the parameter
-  -- count (+2×768 − 2×96 = +1,344 out of 28.6M), which is why the count alone never caught it.
+  -- The reference's `convnext_stem` is patchify conv → channel-LN.
   let (cSln, stem) ← lnFwdSite cBS "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
@@ -638,11 +622,10 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
       let (code, n, o) ← fwdDown cBS s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur 0))
-  -- ⭐⭐ **THE HEAD LN, RESTORED 2026-08-30.** §2m deleted it to match
-  -- `jax/MainConvNeXtImagenet.lean`, which was itself missing it; the paper and timm both do
-  -- `GAP → LN → Linear` (`facebookresearch/ConvNeXt`: `self.norm(x.mean([-2,-1]))`; timm:
-  -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`). The parameter count
-  -- was the tell all along — 28,587,592 against timm's 28,589,128 is short by exactly 2×768.
+  -- **THE HEAD LN.** The paper and timm both do `GAP → LN → Linear` (`facebookresearch/ConvNeXt`:
+  -- `self.norm(x.mean([-2,-1]))`; timm:
+  -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`). Without it the
+  -- parameter count is 28,587,592 against timm's 28,589,128 — short by exactly 2×768.
   let (cHn, hn) ← headLnFwdSite cBS "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (0 : Mat (V.dims[3]!) nClasses) 0 (.operand hn 0))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
@@ -660,13 +643,13 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     `convnext_train_step.mlir`'s. -/
 def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
     (V : CnxDims := cnxTiny)
-    -- ⚠ TRAILING + DEFAULTED, see the note at the top of this file.
+    -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
   let F : CFwd := (convNextFwdChain cBS nClasses V).run' (0, [])
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,nClasses]} " ++ "{\n" ++
-    -- ⚠ The size comes from `cnxModelName V`, not from a literal: at `V = cnxTiny` this is the
+    -- The size comes from `cnxModelName V`, not from a literal: at `V = cnxTiny` this is the
     -- byte-identical "ConvNeXt-T" every committed artifact carries, and at ConvNeXt-S the banner
     -- cannot go on claiming T. `cnxFwdBanner` restates this line for the batched chain, so
     -- the two must agree — which they do at the default, and the tie is a T-only gate.
@@ -690,16 +673,16 @@ def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat :
     trains on. ConvNeXt already spells the ÷B explicitly (unlike ViT/R34, which fold the mean into
     lr), so here the smoothing is the *only* difference between the two cotangents.
 
-    Gate on the refactor: `convnext_train_step.mlir` must come back byte-identical. It does — the
-    softmax is now `pretty`d on its own line instead of nested inside the `.sub` so that `%loss` can
-    read it, but `.operand` is a leaf that emits nothing, so the fresh-name sequence is unchanged. -/
+    The softmax is `pretty`d on its own line rather than nested inside the `.sub` so that `%loss`
+    can read it; `.operand` is a leaf that emits nothing, so the fresh-name sequence is the same
+    either way. -/
 def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
-    -- ⚠ TRAILING + DEFAULTED, see the note at the top of this file.
+    -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
-    --     train steps cannot drift into computing different functions (§2a) ═══
+    --     train steps cannot drift into computing different functions ═══
     let F : CFwd ← convNextFwdChain cBS nClasses V
     let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (0 : Vec nClasses))))
     let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (0 : Vec nClasses)) (.operand "%onehot" 0))
@@ -715,16 +698,16 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
       | some (aStr, negAK, bStr) => do
           let (c1, n1) ← pretty cBS (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (0 : Vec nClasses)))
           let (c2, n2) ← pretty cBS (.addV (.operand dyr (0 : Vec nClasses)) (.operand n1 (0 : Vec nClasses)))
-          -- ⚠ the operands are annotated at `Vec (1 * nClasses)`, not `Vec nClasses`: `shiftB`/
+          -- the operands are annotated at `Vec (1 * nClasses)`, not `Vec nClasses`: `shiftB`/
           -- `divConstB` are indexed `SHlo (N*n)`, and `1 * n` reduces definitionally only when `n`
-          -- is a literal. It did while this render was pinned at 10; it stops the moment `nClasses`
-          -- is a variable. `ViTRender` carries the same annotation for the same reason.
+          -- is a literal, not when `nClasses` is a variable. `ViTRender` carries the same
+          -- annotation for the same reason.
           let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (0 : Vec (1 * nClasses))))
           let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (0 : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
     let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (0 : Mat (V.dims[3]!) nClasses) (.operand dyName 0))
-    -- ▶ back through the HEAD LN before GAP's own backward sees the cotangent. Its γ/β tails go
+    -- back through the HEAD LN before GAP's own backward sees the cotangent. Its γ/β tails go
     -- into `updMap` below, beside Wd/bd.
     let (cHnB, cot_gap) ← headLnBackSite cBS "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← if adam then
@@ -740,7 +723,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     let cD := V.dims[3]!
     let mut bwd := cDyC ++ cDd ++ cHnB ++
       cWd ++ cBd ++ cHg ++ cHb ++
-      -- ⚠ HAND-WRITTEN TEXT (a declared §5 carve-out), so the width here is threaded by hand and
+      -- HAND-WRITTEN TEXT (a declared carve-out), so the width here is threaded by hand and
       -- nothing type-checks it. `cD` is the head width; the `7`s and the `49.0` are SPATIAL and
       -- correctly stay literals at every size (224 / patchify-4 / three /2 downsamples = 7×7).
       s!"    %dgi = stablehlo.reshape {cot_gap} : ({ty [cBS,cD]}) -> {ty [cBS,cD,1,1]}\n" ++
@@ -763,14 +746,11 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
         let (code, cot_n, cot_x) ← bwdDown cBS s!"d{si-1}" dy (downIn[si-1]!) ci c h2
         let (pcode, pairs) ← downParamSgd cBS adam s!"d{si-1}" (downLn[si-1]!) (downIn[si-1]!) cot_n dy ci c h2
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_x
-    -- stem: psb via convBiasSgd (channel-sum), psW via the certified stride-4 weight grad.
-    -- `psW` WAS the last hand-written weight gradient in this render (`patchWGrad`, "the stride-4
-    -- gap"). It is now `.convStride4WeightGrad`, whose `den` is the proven
-    -- `flatConvStride4WeightGradHasVJP` — the cert that was genuinely missing, unlike the
-    -- downsample's (see `downParamSgd`). In `adam` mode the update is the proven AdamW triple; the
-    -- SGD path still wraps it in the hand-written `sgd` helper, so SGD is certified-gradient +
-    -- hand-written-update there.
-    -- §2m: back through the stem LN before the stem conv's own gradients see the cotangent.
+    -- stem: psb via convBiasSgd (channel-sum), psW via the certified stride-4 weight grad. `psW` is
+    -- `.convStride4WeightGrad`, whose `den` is the proven `flatConvStride4WeightGradHasVJP`. In
+    -- `adam` mode the update is the proven AdamW triple; the SGD path wraps it in the hand-written
+    -- `sgd` helper, so SGD is certified-gradient + hand-written-update there. Back through the stem
+    -- LN before the stem conv's own gradients see the cotangent.
     let (cg, ng) ← lnGammaTail cBS adam "%psng" F.stemC dy V.dims[0]! 56
     let (cb, nb) ← lnBetaTail cBS adam "%psnbt" dy V.dims[0]! 56
     let (cx, dx) ← lnBackSite cBS "%psng" F.stemC dy V.dims[0]! 56
@@ -800,7 +780,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     differently. -/
 def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
-    -- ⚠ TRAILING + DEFAULTED, see the note at the top of this file.
+    -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
   let (body, updMap, _) := (convNextBackAll false none nClasses V (cBS := cBS)).run' (0, [])
   let argSig := String.intercalate ", "
@@ -833,43 +813,42 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     and here it would also be an arity mismatch the driver could not survive. -/
 def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false)
     (clip : Bool := false) (sd : Bool := false)
-    -- ▶ `bf16` LAST — the newest axis, so appending leaves every committed spelling untouched.
-    -- ⚠⚠ THREADING IT INTO THIS SIGNATURE IS HALF THE JOB. EfficientNet's bf16 render added the
-    -- parameter here and then forgot the `++` on the returned string, so the variant still spelled
-    -- `rms64` while the artifact path said `rms64bf16` — the entry-name defect arriving by a NEW
-    -- route (not "the flag never reached the name function" but "the name function ignored it").
+    -- `bf16` LAST, so appending leaves every committed spelling untouched.
+    -- THREADING IT INTO THIS SIGNATURE IS HALF THE JOB: a name function that takes the flag but
+    -- forgets the `++` on the returned string spells the variant without `bf16` while the artifact
+    -- path carries it — the entry-name defect by the route "the name function ignored it".
     (bf16 : Bool := false) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
     -- It needs no driver predicate: excluding a param changes no arity, type or region.
     ++ (if wdExclude then "wx" else "")
-    -- ▶ `clip` = global-norm gradient clipping (`planning/archive/grad_clip.md`), AFTER `wx` because
-    -- `convnextTinyImagenetConfig` sets BOTH — `wx` ++ `clip` is the shipping spelling.
+    -- `clip` = global-norm gradient clipping, AFTER `wx` because `convnextTinyImagenetConfig` sets
+    -- BOTH — `wx` ++ `clip` is the shipping spelling.
     --
-    -- ⚠⚠ THIS FUNCTION IS WHERE ConvNeXt DIFFERS FROM ViT AND WHERE THE `wx` THREAD SHIPPED A
-    -- DEFECT: ConvNeXt DERIVES its entry name from the variant (`{slug}_{cnxAdamVariant …}`) where
-    -- `vitAdamTrainStepFaithful` takes `funcName` explicitly. So a new flag that reaches the
-    -- renderer but not this function produces an artifact whose declared entry disagrees with its
-    -- own path — caught only because the shim refuses the call. The `#guard`s below pin it.
+    -- THIS FUNCTION IS WHERE ConvNeXt DIFFERS FROM ViT: ConvNeXt DERIVES its entry name from the
+    -- variant (`{slug}_{cnxAdamVariant …}`) where `vitAdamTrainStepFaithful` takes `funcName`
+    -- explicitly. So a new flag that reaches the renderer but not this function produces an
+    -- artifact whose declared entry disagrees with its own path, which only the shim's refusal of
+    -- the call would catch. The `#guard`s below pin it.
     ++ (if clip then "clip" else "")
-    -- ▶ `drop` = stochastic depth (`planning/archive/stochastic_depth.md`), the 18 per-block residual-branch
-    -- masks. TRAILING, and it is the marker's NAME that matters rather than its position: `"sd"`
-    -- collides, because `rms` ++ `dp` spells `rmsdp` which CONTAINS "sd" — a collision between two
-    -- OTHER markers meeting, which no placement avoids (`ema.md`'s `emarms` defect one axis on).
-    -- ⚠ It must not LEAD either: the driver keys its 4-region `[θ|m|v|ema]` blob off
+    -- `drop` = stochastic depth, the 18 per-block residual-branch masks. TRAILING, and it is the
+    -- marker's NAME that matters rather than its position: `"sd"` collides, because `rms` ++ `dp`
+    -- spells `rmsdp` which CONTAINS "sd" — a collision between two OTHER markers meeting, which no
+    -- placement avoids (the `emarms` collision one axis on).
+    -- It must not LEAD either: the driver keys its 4-region `[θ|m|v|ema]` blob off
     -- `variant.startsWith "ema"`, and `dropema` does not start with "ema".
-    -- ⚠ Unlike `wx`, this flag is NOT free of the driver: it changes the arity (18 extra inputs and
+    -- Unlike `wx`, this flag is NOT free of the driver: it changes the arity (18 extra inputs and
     -- 18 pass-through outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
     ++ (if sd then "drop" else "")
-    -- ▶ `bf16` LAST, after even the `drop` marker, for the reason each marker before it is where it
+    -- `bf16` LAST, after even the `drop` marker, for the reason each marker before it is where it
     -- is: appending is the only placement that leaves every committed spelling byte-identical.
-    -- ⚠ Marker-collision check, the `emarms`/`rmsdp`-contains-"sd" hazard one axis on. The driver
+    -- Marker-collision check, the `emarms`/`rmsdp`-contains-"sd" hazard one axis on. The driver
     -- reads variant strings as SUBSTRINGS: `emaOn` is `startsWith "ema"`, `cdOn` is
     -- `splitOn "do"`, `accOn` is `splitOn "acc"`. `bf16` trips none of them — it is not a prefix,
     -- and it contains no "do", no "acc" and no "sd". The `#guard`s at the bottom of
     -- `ConvNeXtRenderB.lean` run the CONCATENATIONS, which is where a collision would actually
-    -- appear. ⚠ Note `drop` itself is safe on `cdOn` for a reason easy to misread: "drop" is
+    -- appear. Note `drop` itself is safe on `cdOn` for a reason easy to misread: "drop" is
     -- d-r-o-p, so it does not contain the substring "do".
     ++ (if bf16 then "bf16" else "")
 
@@ -906,48 +885,45 @@ private def convnextAdamConsts (nClasses : Nat) (V : CnxDims) (wdExclude : Bool 
     difference is one `all_reduce(add)/N` per parameter gradient, between the certified gradient
     and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*.
     See `adamOneEma` for the carve-out. -/
--- This render replaced a hand-written AdamW emitter after a numeric tie against it
--- (`convnext-adam-tie`, tests/TestConvNeXtAdamTie.lean), run at the 180-parameter net before the
--- head LN was restored.
+-- Numeric tie: `convnext-adam-tie` (tests/TestConvNeXtAdamTie.lean).
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)
-    -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument
-    -- at every call site, which is how the mnv2 `convBias` threading went wrong.
+    -- TRAILING: a parameter inserted mid-list captures an existing positional argument at every
+    -- call site (the mnv2 `convBias` threading hazard).
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0")
-    -- ⚠ Which TRAVERSAL to render. `none` = this file's per-example `convNextBackAll`, i.e.
+    -- Which TRAVERSAL to render. `none` = this file's per-example `convNextBackAll`, i.e.
     -- every existing call site unchanged. `ConvNeXtRenderB` passes its batched peer here rather
     -- than copying the AdamW tail, because the tail is PARAMETER-space — `adamMNextF`,
     -- `clipScaleF`, `gradSumSqAccF` are all indexed by the param size and never see the batch —
     -- so a second copy would be the double-writer disease for no gain at all.
     (traversal : Option (StateM Proofs.StableHLO.EmitS (String × List (String × String) × String)) := none)
-    -- ⚠ STOCHASTIC DEPTH is a signature/variant flag HERE and a site-placement flag in the
+    -- STOCHASTIC DEPTH is a signature/variant flag HERE and a site-placement flag in the
     -- TRAVERSAL, and the two must agree. They are not independently settable in practice —
     -- `convNextAdamTrainStepFaithfulB` is the only caller that sets either, and it spells `sd` once
     -- and passes it to both. If they ever did disagree the failure is LOUD in both directions: sites
     -- without inputs emit an undeclared `%dp<i>` (the lowerer rejects it), inputs without sites
-    -- leave an unused argument (an arity mismatch at the driver). Neither is silent, which is the
-    -- §2m property.
+    -- leave an unused argument (an arity mismatch at the driver). Neither is silent.
     (sd : Bool := false)
-    -- ⚠ THE STAGE TABLE, and it is TRAILING and DEFAULTED for the same reason every flag above is.
+    -- THE STAGE TABLE, and it is TRAILING and DEFAULTED for the same reason every flag above is.
     -- `[3,3,9,3]` is ConvNeXt-T; `cnxSmall` = `[3,3,27,3]` is ConvNeXt-S. It must reach the
-    -- SIGNATURE (via `allParams`) as well as the traversal — the ViT-S trap 3 — and when a caller
+    -- SIGNATURE (via `allParams`) as well as the traversal — the ViT-S trap — and when a caller
     -- passes `traversal`, `D` here governs the signature while the traversal carries its own copy.
     -- `convNextAdamTrainStepFaithfulB` spells it ONCE and hands the same array to both, exactly as
     -- it does with `sd`; nothing else may set them independently.
     (V : CnxDims := cnxTiny)
-    -- ⚠⚠ **`bf16` HERE IS NAME-ONLY.** This function renders the AdamW TAIL and the wrapper; it
+    -- **`bf16` HERE IS NAME-ONLY.** This function renders the AdamW TAIL and the wrapper; it
     -- does not place a single convolution. The arithmetic is decided entirely by `traversal`, so
     -- this flag exists to keep the entry NAME in step with a traversal the caller already chose.
     -- Setting it without passing a bf16 traversal produces an f32 graph under a `bf16` name, which
-    -- nothing would catch. ⚠ It is therefore governed by the same rule `sd` is: spelled ONCE, by
+    -- nothing would catch. It is therefore governed by the same rule `sd` is: spelled ONCE, by
     -- `convNextAdamTrainStepFaithfulB`, which hands the same Bool to both halves. Do not set it at
     -- a call site that does not also pass a bf16 traversal — and note this file's own per-example
-    -- `convNextBackAll` has NO bf16 threading at all, deliberately (§13.2: the batched render is
+    -- `convNextBackAll` has NO bf16 threading at all, deliberately (the batched render is
     -- the one an ImageNet run loads).
     (bf16 : Bool := false)
-    -- ⚠⚠ **THE PER-REPLICA BATCH**, trailing and defaulted for the reason every flag above is, and
+    -- **THE PER-REPLICA BATCH**, trailing and defaulted for the reason every flag above is, and
     -- it reaches TWO places a caller must never set independently: the WRAPPER here (`%x`'s shape,
     -- the `%bsc` loss divisor, the drop-path signature) and, when `traversal` is `none`, this
     -- file's own `convNextBackAll`. When a caller DOES pass `traversal`, that traversal carries
@@ -957,24 +933,24 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- `N := B₂` and the lowerer rejects the module.
     (cBS : Nat := 32)
     : String := Id.run do
-  -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
+  -- `negAlphaKStr` is DERIVED from `nClasses` when the caller leaves it empty, and only honoured
   -- verbatim otherwise. Passing −α/K as a string independent of K is the two-writers-for-one-fact
-  -- shape §2k removed from ViT on 2026-07-31, and it is not academic: the R34 ImageNet render
-  -- shipped `α/K` hardcoded at the K=10 value, ON THE GRADIENT PATH, and only an implausible loss
-  -- (≈87 against ln(1000)=6.9) caught it. The empty-string default keeps every existing call site
-  -- byte-identical while making the K=1000 spelling impossible to get wrong.
+  -- shape: an `α/K` hardcoded at the K=10 value sits ON THE GRADIENT PATH of a K=1000 render, and
+  -- only an implausible loss (≈87 against ln(1000)=6.9) shows it. The empty-string default keeps
+  -- every existing call site byte-identical while making the K=1000 spelling impossible to get
+  -- wrong.
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
   let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses V (cBS := cBS))
   let (body, gradMap, nSm) := trav.run' (0, [])
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ▶ GLOBAL-NORM GRADIENT CLIPPING (`planning/archive/grad_clip.md`) — ConvNeXt's half. Structurally the
-    -- ViT block, and it has to be a second copy only because the two renderers thread their
-    -- gradients differently (a `gradMap` lookup here, an indexed list there).
+    -- GLOBAL-NORM GRADIENT CLIPPING — ConvNeXt's half. Structurally the ViT block, and it has to be
+    -- a second copy only because the two renderers thread their gradients differently (a `gradMap`
+    -- lookup here, an indexed list there).
     --
-    -- ⚠⚠ THE ORDER IS THE SEMANTICS: the norm is GLOBAL, so the fold runs to completion before any
+    -- THE ORDER IS THE SEMANTICS: the norm is GLOBAL, so the fold runs to completion before any
     -- parameter is scaled; and under DP the clip goes AFTER the `all_reduce`, so the collective is
     -- hoisted here too and the loop is told (`preAvg`) not to repeat it.
-    -- ⚠ At `clip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name counter
+    -- At `clip := false` NOT ONE `pretty` CALL HAPPENS in this block, so the fresh-name counter
     -- does not move and every committed `convnext*`/`convnextin*` artifact re-renders byte-identically.
     let zero1 : Vec 1 := fun _ => 0
     let mut clipCode := ""
@@ -1009,15 +985,15 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     for (nm, ds) in allParams nClasses V do
       let g0 := (gradMap.lookup nm).getD s!"%d{nm}"
       let g := if clip then (clipped.lookup nm).getD g0 else g0
-      -- The wd operand comes from the SAME `allParams` entry that names the site (§2e's slot rule).
+      -- The wd operand comes from the SAME `allParams` entry that names the site (the slot rule).
       let wdN := if wdExclude && !cnxWdDecays nm ds then "%wdz" else "%wd"
       let (c, nT, nM, nV, nE) ← adamOneEma cBS replicas ⟨nm, g, ds⟩ ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path, NOT `pretty` of an
-    -- AST node, and covered by no theorem — which is exactly the configuration in which §2b shipped
-    -- plain CE against a smoothed-CE cotangent and only the numeric tie caught it. Built from the
+    -- AST node, and covered by no theorem — the configuration in which plain CE against a
+    -- smoothed-CE cotangent is visible only to the numeric tie. Built from the
     -- SAME smoothed recipe the cotangent implies, and gated by `convnext-adam-tie`. ConvNeXt has no
     -- BN, so — as with ViT — this is the ONLY output that reads the forward directly.
     let lossCode :=
@@ -1027,14 +1003,13 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [cBS, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
-      -- ⚠ BOTH constants are DERIVED. `%laKc` is α/K and was hardcoded at the K=10 value
-      -- (0.010000) until 2026-08-01, which made the ImageNet render report a loss of ~101 where
-      -- 1000-class CE at init must be ≈ ln(1000) = 6.9 — §2k's bug, in a SECOND place. It hid from
-      -- the check that caught the cotangent because that one greps for the NEGATIVE spelling
-      -- `-0.010000`, and this copy is positive. `%lomac` is (1−α) and is K-independent, but it is
-      -- derived too so that α has one spelling here rather than two.
-      -- At K=10 both render byte-identically to the literals they replace, so the fix is inert on
-      -- every committed Imagenette artifact — gated, not assumed.
+      -- BOTH constants are DERIVED. `%laKc` is α/K; hardcoded at the K=10 value (0.010000) the
+      -- ImageNet render reports a loss of ~101 where 1000-class CE at init must be
+      -- ≈ ln(1000) = 6.9. A check that greps for the NEGATIVE spelling `-0.010000` does not see
+      -- this copy, which is positive. `%lomac` is (1−α) and is K-independent, but it is derived
+      -- too so that α has one spelling here rather than two.
+      -- At K=10 both render byte-identically to the K=10 literals, so every committed Imagenette
+      -- artifact keeps its bytes — gated, not assumed.
       s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [cBS]}\n" ++
       s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [cBS]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [cBS]}\n" ++
@@ -1045,18 +1020,17 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let pTy := (allParams nClasses V).map (fun p => ty p.2)
-    -- ⚠ THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
-    -- The driver does `pbuf := out` — each step's output IS the next step's input (§2d.3's no-copy
+    -- THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
+    -- The driver does `pbuf := out` — each step's output IS the next step's input (the no-copy
     -- handover) — so a return list that dropped the shadow, or carried fewer scalars than the
     -- signature takes, would silently re-interpret the blob from step 2 onward. It is also exactly
     -- what the resident shim checks: inputs `[res_in, res_in+n)` and outputs `[res_out, res_out+n)`
     -- must agree tensor for tensor, which is why a 4th region needs no C change at all.
     -- `%emad`/`%oemad` ride through unread, as `%bc1`/`%bc2` already do.
-    -- ⚠⚠ THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` and
+    -- THE DROP MASKS RIDE THROUGH AS OUTPUTS, unread, exactly as `%bc1`/`%bc2` and
     -- `%emad`/`%oemad` do — because the return layout must MIRROR the input layout tensor for
-    -- tensor (`pbuf := out` is the no-copy handover) and the shim's G4 guard counts both sides.
-    -- EfficientNet's first attempt at this omitted them and G4 refused the call before a single
-    -- step ran ("returns 740 outputs, caller supplied 749 destinations"). Loud, and the right way
+    -- tensor (`pbuf := out` is the no-copy handover) and the shim's G4 guard counts both sides:
+    -- omitting them makes G4 refuse the call before a single step runs. Loud, and the right way
     -- round.
     let dpNames := if sd then (List.range (cnxDropSites V)).map dpName else []
     let dpTys   := if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []
@@ -1065,9 +1039,6 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let retTys := packedTrainRetTys pTy (ema := ema) ++ dpTys
     pure <|
       (if replicas ≤ 1 then
-        -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
-        -- downsample WEIGHT GRADIENTS as hand-written — true when it was written, false since
-        -- `9bb00f5` (§2f-bis) closed both, so the emitted artifact was UNDER-describing itself.
         s!"    // ── {cnxModelName V} AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
         s!"    // All {(allParams nClasses V).length} params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
         "    // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert\n" ++
@@ -1089,32 +1060,30 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   let inner : String := go.run' used
   let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++
     packedTrainSig ((allParams nClasses V).map fun (nm, d) => (s!"%{nm}", ty d)) (ema := ema) ++
-    -- ⚠ The drop scales go LAST, after the scalars and before `%onehot` is appended, matching the
+    -- The drop scales go LAST, after the scalars and before `%onehot` is appended, matching the
     -- driver's blob layout (`[θ|m|v|scalars|drops]`, `%x` and `%onehot` passed separately) and
     -- `convNextFwdRenderB`'s placement. Inserted mid-list they would capture an existing positional
-    -- slot — the mnv2 `convBias` failure (§2m), silent until the driver mis-walks the blob.
+    -- slot — the mnv2 `convBias` hazard, silent until the driver mis-walks the blob.
     cnxDropSig cBS sd V ++
     ", %onehot: " ++ ty [cBS,nClasses]
   let pTy := (allParams nClasses V).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
     (packedTrainRetTys pTy (ema := ema)
        ++ (if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []))
-  -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
+  -- The slug matters exactly as it does on R34 and ViT: a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
   -- the prefix audit and every `convnext-adam-tie` invocation depend on.
-  -- ⚠ `wdExclude` MUST reach the variant here. ConvNeXt DERIVES its entry name from the variant
+  -- `wdExclude` MUST reach the variant here. ConvNeXt DERIVES its entry name from the variant
   -- where ViT takes `funcName` explicitly, so omitting it renders `@convnext_adam_train_step`
   -- into `convnext_adamwx_train_step.mlir` — an artifact whose entry disagrees with its path.
   -- The shim's entry check refuses that outright ("mlp train step failed") rather than running
-  -- the wrong graph, which is §2b-quater's guard earning its keep a second time; the `#guard`s
-  -- below are what stop it recurring silently.
-  -- ⚠ `clip` MUST reach the variant here for the SAME reason `wdExclude` must, and this is the
-  -- second time that exact hazard has been live on this line. `planning/archive/grad_clip.md` §6.
-  -- ⚠ `sd` is the THIRD flag that must reach it, and unlike the other two it also changes the
+  -- the wrong graph; the `#guard`s below are what stop it recurring silently.
+  -- `clip` MUST reach the variant here for the SAME reason `wdExclude` must.
+  -- `sd` is the THIRD flag that must reach it, and unlike the other two it also changes the
   -- ARITY — so a variant name that dropped it would put an 18-input-wider graph behind the plain
   -- `adam` path's artifact name and checkpoint. `#guard`s below pin every spelling.
-  -- ⚠ `bf16` is the FOURTH flag that must reach the variant here, after `wdExclude`, `clip` and
-  -- `sd`. Three of those four have already shipped a defect on this exact line across the repo.
+  -- `bf16` is the FOURTH flag that must reach the variant here, after `wdExclude`, `clip` and
+  -- `sd`.
   let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -1124,19 +1093,19 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
 
 end Proofs.StableHLO
 
--- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6, lr=0.1).
--- ⭐ THE ONLY WRITER LEFT IN THIS FILE (4c leg 3, 2026-09-07). Every other ConvNeXt artifact renders
--- from `ConvNeXtRenderB.lean`; this one stays because the batched traversal emits no fused `*Sgd`
--- op and `ConvNeXtStepTie.lean` ties all 182 parameters at exactly these bytes. `check_fwd_prefix`
--- still pairs `convnext_fwd` (now the batched chain's) with it, and the pairing holds because the
--- two chains' forwards are byte-identical.
+-- Regenerate verified_mlir/convnext_train_step.mlir from the faithful renderer (BS=32, ε=1e-6,
+-- lr=0.1). THE ONLY WRITER IN THIS FILE. Every other ConvNeXt artifact renders from
+-- `ConvNeXtRenderB.lean`; this one stays because the batched traversal emits no fused `*Sgd` op and
+-- `ConvNeXtStepTie.lean` ties all 182 parameters at exactly these bytes. `check_fwd_prefix` pairs
+-- `convnext_fwd` (the batched chain's) with it, and the pairing holds because the two chains'
+-- forwards are byte-identical.
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
   (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
 
--- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the
--- call ("entry mismatch"). These pin the literal paths the AdamW/EMA writers use — which live in
--- `ConvNeXtRenderB.lean` since 4c leg 3 (2026-09-07), beside `cnxAdamVariant`'s other guards —
--- so a rename fails at `lake build` rather than at run time. (The audit greps for the LITERAL string
+-- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call
+-- ("entry mismatch"). These pin the literal paths the AdamW/EMA writers use — which live in
+-- `ConvNeXtRenderB.lean`, beside `cnxAdamVariant`'s other guards — so a rename fails at
+-- `lake build` rather than at run time. (The audit greps for the LITERAL string
 -- `IO.FS.writeFile "verified_mlir/`, so those paths must stay literals — do not interpolate them.)
 #guard Proofs.StableHLO.cnxAdamVariant 1 == "adam"
 #guard Proofs.StableHLO.cnxAdamVariant 2 == "adamdp"
@@ -1146,13 +1115,13 @@ end Proofs.StableHLO
 -- the same `"ema"` prefix, exactly as it keys RMSProp's mean-square init off `"rms"`.
 #guard Proofs.StableHLO.cnxAdamVariant 1 true == "ema"
 #guard Proofs.StableHLO.cnxAdamVariant 2 true == "emadp"
--- ▶ v1.4 `wx` spellings, and they are load-bearing here in a way ViT's are not: this net builds
+-- `wx` spellings, and they matter here in a way ViT's do not: this net builds
 -- its ENTRY NAME from the variant, so a `wx` render whose variant forgot the flag produces an
 -- artifact whose entry disagrees with its own path.
 #guard Proofs.StableHLO.cnxAdamVariant 1 false true == "adamwx"
 #guard Proofs.StableHLO.cnxAdamVariant 4 false true == "adamdpwx"
 #guard Proofs.StableHLO.cnxAdamVariant 1 true true == "emawx"
--- ▶ the `clip` spellings. `adamwxclip` is the shipping one — `convnextTinyImagenetConfig` sets
+-- the `clip` spellings. `adamwxclip` is the shipping one — `convnextTinyImagenetConfig` sets
 -- `wdExcludeNormBias := true` AND `gradClipNorm := 1.0`, so neither marker alone is the recipe.
 #guard Proofs.StableHLO.cnxAdamVariant 1 false false true == "adamclip"
 #guard Proofs.StableHLO.cnxAdamVariant 1 false true true == "adamwxclip"

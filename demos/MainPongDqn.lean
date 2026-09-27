@@ -1,7 +1,7 @@
 import LeanMlir.Train
 import LeanMlir.Pong
 
-/-! DQN on the Lean Pong — rung 3 of `planning/pong_dqn_demo.md`.
+/-! DQN on the Lean Pong.
 
     Mnih et al. 2015's loop on the game in `LeanMlir/Pong.lean`: frame skip 4,
     replay, a target network, ε-greedy, one gradient step per four agent steps.
@@ -15,7 +15,7 @@ import LeanMlir.Pong
 
     - `state`: the six-number state, a 6→64→64→3 MLP; the ceiling row.
     - `pixels`: 84 × 84 u8 frames, `k` stacked (4, or 1 for the ablation),
-      Chapter 3's CNN with pooling standing in for stride (Phase 2).
+      Chapter 3's CNN with pooling standing in for stride.
 
     Evaluation every `evalEvery` agent steps plays `evalGames` games in lockstep
     at ε = 0.05 through one batched forward; the score is mean points per game

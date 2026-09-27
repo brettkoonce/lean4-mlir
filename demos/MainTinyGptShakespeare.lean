@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! Char-level tinyGPT trained on tinyshakespeare.
 
-Two model rungs (planning/archive/tinygpt_demo_v2.md Part I):
+Two model rungs:
 
   nano (212K params): tokenPositionEmbed (V=65, T=64,  D=64)
                       → transformerEncoder (D=64,  h=2, mlp=256, blocks=4, causal)
@@ -16,15 +16,12 @@ the LM head's [B, V, T, 1] output as NCHW segmentation logits with
 T positions × 1 width. Labels are `[B, T, 1]` int32 from the
 random-chunk sampler.
 
-v2 additions over the original demo:
+Also:
   * validation bits/char every `evalEvery` steps (fixed val chunks →
-    train-step forward, update discarded) — the val split was
-    previously never read;
-  * cosine LR decay + linear warmup, computed host-side per step
-    (the TrainConfig fields existed but were never threaded);
+    train-step forward, update discarded);
+  * cosine LR decay + linear warmup, computed host-side per step;
   * sampler right-pads short prompts and reads logits at the last
-    *real* position instead of left-padding with token id 0 (a real
-    character) and always reading position T-1;
+    *real* position;
   * top-k / top-p sampling + an explicit RNG seed;
   * `suite` subcommand: fixed prompts × seeds → a diffable sample
     file for the blueprint.
@@ -47,15 +44,13 @@ structure GptCfg where
   numLayers : Nat
   /-- Feed `[B, T]` f32 token ids and build the one-hot in-graph
       (tokenPositionEmbed idsInput) instead of uploading a host-built
-      `[B, V·T]` one-hot. Mathematically identical; see
-      planning/archive/tinygpt_demo_v2.md Part II Option 1. -/
+      `[B, V·T]` one-hot. Mathematically identical. -/
   ids       : Bool := false
-  /-- Use the true gather/scatter embedding path (Part II Option 2)
+  /-- Use the true gather/scatter embedding path
       instead of the one-hot matmul. Requires `ids`. -/
   gather    : Bool := false
   /-- Emit attention via FlashAttention (tiled online-softmax) instead of
-      dense [B,H,T,T]. Same math; long-context memory. See
-      planning/archive/flash_attention.md. -/
+      dense [B,H,T,T]. Same math; long-context memory. -/
   flashAttn : Bool := false
   /-- Rotary position embedding on Q/K (relative position; generalizes past
       the trained length). See jax/demos/rope_ref.py. -/
@@ -64,13 +59,13 @@ structure GptCfg where
       is seqLen-independent → train-short / eval-long extrapolation. -/
   posEmb    : Bool := true
 
-/-- The original 212K-param demo config (spec name unchanged so old
+/-- The 212K-param demo config (spec name kept so existing
     checkpoints keep their build prefix). -/
 def nanoCfg : GptCfg :=
   { key := "nano", specName := "tinygpt-shakespeare"
     seqLen := 64, dModel := 64, numHeads := 2, mlpDim := 256, numLayers := 4 }
 
-/-- The v2 scale-up rung: D=128, 4 heads, 6 blocks, T=128. -/
+/-- The scale-up rung: D=128, 4 heads, 6 blocks, T=128. -/
 def tinyCfg : GptCfg :=
   { key := "tiny", specName := "tinygpt-shakespeare-tiny"
     seqLen := 128, dModel := 128, numHeads := 4, mlpDim := 512, numLayers := 6 }
@@ -81,7 +76,7 @@ def tinyCfg : GptCfg :=
 def nanoIdsCfg : GptCfg :=
   { nanoCfg with key := "nano-ids", specName := "tinygpt-shakespeare-nanoids", ids := true }
 
-/-- nano with the true gather/scatter embedding path (Part II Option 2).
+/-- nano with the true gather/scatter embedding path.
     Same params + math as nano/nano-ids — forward is a `stablehlo.gather`
     of the [V, D] table, backward a `stablehlo.scatter`-add — so its loss
     curve must track nano-ids to float tolerance. Validates the primitive
@@ -89,14 +84,14 @@ def nanoIdsCfg : GptCfg :=
 def nanoGatherCfg : GptCfg :=
   { nanoCfg with key := "nano-gather", specName := "tinygpt-shakespeare-nanogather", ids := true, gather := true }
 
-/-- nano with FlashAttention on the transformer (Phase 3). Same math as
+/-- nano with FlashAttention on the transformer. Same math as
     nano, so its loss curve must track nano's — validates the integrated
     flash fwd+bwd end-to-end (the standalone emitters are already checked
     in scripts/probes/flash_probe_check.py). -/
 def nanoFlashCfg : GptCfg :=
   { nanoCfg with key := "nano-flash", specName := "tinygpt-shakespeare-nanoflash", flashAttn := true }
 
-/-- nano with RoPE on Q/K (Phase: rope). A different position scheme (not an
+/-- nano with RoPE on Q/K. A different position scheme (not an
     equivalence twin), so it trains to a comparable — not identical — loss;
     a broken backward un-rope would stall learning, so a sane curve validates
     the integrated fwd+bwd rotation. -/
@@ -104,8 +99,7 @@ def nanoRopeCfg : GptCfg :=
   { nanoCfg with key := "nano-rope", specName := "tinygpt-shakespeare-nanorope", rope := true }
 
 /-- RoPE with NO absolute position table — every weight is seqLen-independent,
-    so this checkpoint runs at any context length (train-short / eval-long).
-    The last mile of the 8K story. -/
+    so this checkpoint runs at any context length (train-short / eval-long). -/
 def nanoRopeNoPosCfg : GptCfg :=
   { nanoCfg with key := "nano-rope-nopos", specName := "tinygpt-shakespeare-nanoropenopos", rope := true, posEmb := false }
 
@@ -353,10 +347,7 @@ def packContext (ids : Array Nat) (T V : Nat) (useIds : Bool) : IO ByteArray := 
 
 /-- Autoregressive sampling. The context is right-padded: positions
     `≥ curLen` hold token 0 but the causal mask keeps them from
-    influencing position `curLen - 1`, whose logits we read. (The old
-    version left-padded with token id 0 — a real character — and read
-    position T-1, feeding the model a prefix distribution it never
-    saw in training.) -/
+    influencing position `curLen - 1`, whose logits we read. -/
 def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
     (temperature : Float) (topK : Nat) (topP : Float) (userSeed : Nat)
     (prompt : String) : IO String := do
@@ -453,7 +444,7 @@ def runSuite (g : GptCfg) (paramsPath : String) : IO Unit := do
   IO.eprintln s!"wrote {outPath}"
 
 /-- Peel an optional leading model key off the arg list (defaults to
-    nano so the pre-v2 CLI shapes still work). -/
+    nano so the CLI shapes without a model key still work). -/
 def peelModel (rest : List String) : GptCfg × List String :=
   match rest with
   | key :: tl =>

@@ -5,12 +5,11 @@ open ReferenceNets (unetBrats)
 
 /-! Render predictions from a trained BraTS segmentation checkpoint.
 
-    The BraTS peer of `MainPetsPredict`, and for this demo's audience it is
-    the deliverable rather than a garnish: a medical student evaluates a
-    segmentation by *looking* at it. A collapsed model and a working one
-    produce the same respectable-looking mIoU (0.243 vs the 0.243 of the
-    trivial background-only predictor — planning/archive/brats_demo.md Workstream A);
-    they do not produce the same picture.
+    The BraTS peer of `MainPetsPredict`, and for this demo's audience it is the
+    deliverable rather than a garnish: a medical student evaluates a segmentation by
+    *looking* at it. A collapsed model and a working one produce the same
+    respectable-looking mIoU (0.243 vs the 0.243 of the trivial background-only
+    predictor); they do not produce the same picture.
 
     For each of N chosen val slices, writes a PPM strip:
 
@@ -42,7 +41,7 @@ open ReferenceNets (unetBrats)
     `unet-brats-train` stamps on its artifacts (`NetSpec.buildTag`) — `arm=ce`,
     `arm=wce`, `arm=focal_pb`, and so on. Omit it for an untagged run.
 
-    That is what makes the money figure a two-command job: the arms no longer
+    That is what makes the money figure a two-command job: the arms do not
     overwrite each other's checkpoints, so both survive to be rendered.
 
         lake exe unet-brats-train data/brats 10 ce      # -> ..._ce_params.bin

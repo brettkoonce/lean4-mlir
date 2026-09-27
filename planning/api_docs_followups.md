@@ -10,7 +10,8 @@ needs. `doc_honesty_pass.md` is still the parent plan (its §0 protocol applies 
 
 **Status 2026-09-27:** §1–§3 done on branch `docs-followups` (`0a7eeea7`, then the banner
 pass: 174 artifacts say which lines are hand-written and name the right optimizer). Left in §1:
-the ⭐/⛔/⚠ markers in `--` comments (the D4 sweep). Left in §3: the `179 of 180` ConvNeXt
+nothing (the D4 marker/date/citation sweep of 255 files is done, comments only; §7 lists the
+stale facts it surfaced). Left in §3: the `179 of 180` ConvNeXt
 test note, which is a dated measurement and consistent with itself.
 
 Pick a section. §1–§3 are small and mechanical; §4 is the book pass (the plan's §1, minus what
@@ -121,3 +122,31 @@ Also open: slice I dropped eight unchecked "3-axiom-clean" claims; the audit is 
   strong; the pooled scorecard header's "σ ≤ 2 → 66% test acc" is unchecked prose.
 - `trainAdamPacked` has no callers and runs IREE only; PGD attacks and `smoothCertify` call
   iree-compile directly (PJRT is the engine).
+
+## 7. Stale facts the process-history sweep surfaced (comments; left as written)
+
+The sweep removed history, not content. These comments state facts that look out of date; each
+needs a check against the code before rewording.
+
+- Sync-BN made these "BN normalises per replica" statements look stale: `CnnRender.lean` ~374,
+  `tests/TestCifar8DpCheck.lean`, the `efficientnet-dp-check` docstring in `lakefile.lean`.
+- `tests/TestR34DpShard.lean` docstring says it compares the `m` region; its code compares θ'.
+  Its "R34 is the one net whose DP path has no gate" is also suspect.
+- "Nothing has been trained" / "NOTHING HAS BEEN TRAINED" in `apps/imagenette/MainViTBImagenet`,
+  `MainViTSImagenet`, `MainConvNeXtBImagenet`.
+- `LeanMlir/Verified/NetsCore.lean` ~1453: MNv4 "no verified ImageNet training run" (76.68 exists);
+  the end-of-file `evalD0` / "val drain is still 224" guard notes.
+- `LeanMlir/Verified/Train.lean`: "~90 s val drain" (`PROBE_WARM`), `loadData`'s `evalD0` "drains a
+  val split off a shim", "the ImageNet val drain inside `loadData`" (~1546).
+- `EfficientNetFullB0.lean:29` "262-param net" vs 213 tensors in NetsCore.
+- `apps/imagenette/MainMobilenetV2VerifiedAdam.lean` ~45 "Only `adam` exists today" (an `rms`
+  render exists); `jax/Jax/Codegen.lean` ~3723 "plain ONE-HOT" (mixup exists).
+- `lakefile.lean`: MNv4 "several reference knobs have no PJRT-side implementation yet"; the
+  direct-mode "ch3 and ch5-8 print a bracket"; strided-1x1 "`downFwdB` builds a 3×3 one".
+- `apps/imagenette/MainEfficientNetImagenet.lean` ~50 "the remaining differences are the BN
+  group …"; `MainViTVerifiedAdam.lean` 21–24 has two truncated sentences.
+- `tests/TestShardCheck.lean` "One harness, three nets"; `TestSgdRenderTie.lean:54` the
+  "XLA/MIOpen patch-embed blocker"; `ViTRenderB` ROCm/MIOpen paragraphs.
+- Emitted text (string literals, so untouched): the 56 DP banners still cite "(4d piece 2)" and
+  `planning/global_bn_verified.md`; `jax/Jax/Codegen.lean` emits `# ⚠⚠ … AS OF 2026-08-14`-style
+  comments into the generated Python shims.

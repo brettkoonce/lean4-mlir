@@ -11,7 +11,7 @@ import Jax
     attention score tensor is `heads × N × N` per sample per block: at 12 heads
     and N = 197 tokens that is 12·197·197·4 B ≈ 1.9 MB/sample/block, 22 MB over
     12 blocks, before the MLP hidden (197·3072·4 B ≈ 2.4 MB/sample/block). There
-    is no `jax.checkpoint`/remat in the phase-2 emitter, so every one of those is
+    is no `jax.checkpoint`/remat in the emitter, so every one of those is
     live through the backward pass. On a 16 GB card the `default` recipe at
     batch 512 / 6 devices (≈85 per device) is the thing to measure first; the
     `accum` recipe below is the fallback that keeps the effective batch (and
@@ -49,20 +49,20 @@ def vitBImagenetConfig : TrainConfig where
   useCutmix      := true
   cutmixAlpha    := 1.0
   useRandAugment := true
-  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   randAugmentGeometric := true
   randAugmentM   := 9.0
   randAugmentMstd := 0.5
   randAugmentInc  := true
   randomErasing  := true
   randomErasingProb := 0.25
-  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
+  erasingPixel   := true    -- timm RandomErasing(mode='pixel'), N(0,1) fill
   dropPath       := 0.1             -- DeiT stochastic depth (same for Ti/S/B)
   useEMA         := true
   emaDecay       := 0.99996
   bf16           := true
   repeatedAug    := 3               -- DeiT Repeated Augmentation 3× (Hoffer et al. 2020 /
-                                    -- timm RASampler). Closes the last DeiT faithfulness gap;
+                                    -- timm RASampler).
                                     -- steps_per_epoch is unchanged, so an epoch sees ~1/3 the
                                     -- unique images ×3 views — same aug cost, not 3×.
 

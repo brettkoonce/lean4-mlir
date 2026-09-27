@@ -1,7 +1,6 @@
 import LeanMlir
 
-/-! Neural quantum states on the transverse-field Ising chain —
-    `planning/transformer_wavefunction_demo.md`.
+/-! Neural quantum states on the transverse-field Ising chain.
 
     The network is the wavefunction. H = -J Σ σᶻᵢσᶻᵢ₊₁ - h Σ σˣᵢ on a periodic
     chain of N spins; the ground state has positive amplitudes in the z basis,
@@ -9,14 +8,14 @@ import LeanMlir
     the f32 pipeline. The energy E = ⟨ψ|H|ψ⟩/⟨ψ|ψ⟩ is minimised by Adam through
     the stack with ZERO new codegen:
 
-    ⭐ **Structure first, the network models the rest** (§1). The ansatz is
+    **Structure first, the network models the rest.** The ansatz is
     ψ_θ(σ) = ψ_ref(σ) · exp f_θ(σ), where ψ_ref is the mean-field product state
     at the optimal angle (a closed form: log ψ_ref is LINEAR in σ) and f_θ is the
-    network. f_θ = 0 is the floor row of the table and the network only has to
+    network. f_θ = 0 is the floor and the network only has to
     model what mean field gets wrong. The host adds log ψ_ref; the network never
-    sees it. `noref` drops it (uniform start) — the ablation of Table 2.
+    sees it. `noref` drops it (uniform start) — the structure ablation.
 
-    ⭐ **The gradient is one host weight per configuration** (§4).
+    **The gradient is one host weight per configuration.**
     ∂E/∂θ = 2 Σ_s p_s (E_loc(s) - E) ∂_θ log ψ(s). The train step is the rank-2
     DDPM MSE block, whose gradient on the output is 2(out - y)/(M·nOut); setting
     y = out - M·w/2 makes the block's output cotangent exactly w. The blackjack
@@ -29,7 +28,7 @@ import LeanMlir
            `transformerEncoder (keepSequence)` → mean over tokens → `.dense d 1`
       gpt  the same tokens with a BOS, `causalMask`, `lmHead`: |ψ|² = Π_k p(patch_k | <k),
            log ψ = ½ Σ log p, the reference entering as a fixed bias on the logits
-           so normalisation survives (§1). Sampling is exact and independent —
+           so normalisation survives. Sampling is exact and independent —
            the TinyGPT sampler batched over B chains, no Metropolis anywhere.
 
     Samples: enumeration at N ≤ 14 (energy and gradient exact, no Monte Carlo
@@ -78,7 +77,7 @@ def sci (x : Float) : String :=
 
 structure Cfg where
   arch   : String := "mlp"
-  model  : String := "ising"   -- "ising" (rungs 1–3) | "j1j2" (rung 4, the sign-structure rung)
+  model  : String := "ising"   -- "ising" | "j1j2" (the sign-structure model)
   J2     : Float := 0.0        -- j1j2: the next-nearest coupling, in units of J
   N      : Nat := 12
   h      : Float := 1.0
@@ -97,7 +96,7 @@ structure Cfg where
   burn   : Nat := 20      -- Metropolis burn-in sweeps
   lr     : Float := 0.001
   cosine : Bool := false  -- cosine decay of lr to 5% of peak over the run
-  check  : Bool := false  -- N ≤ 14: draw samples with the arch's sampler, compare to enumeration (§8)
+  check  : Bool := false  -- N ≤ 14: draw samples with the arch's sampler, compare to enumeration
   cseed  : Nat := 0       -- the check's own draw seed (0 = continue from `seed`)
   evalb  : Nat := 8       -- sample batches in the final measurement (N > 14)
   logEvery : Nat := 50
@@ -243,8 +242,8 @@ def logPsiRows (cfg : Cfg) (ref : Ref) (biasBA : ByteArray) (out : ByteArray)
     let lp ← gptLogPsiC out ids biasBA outRows.toUSize cfg.T.toUSize cfg.V.toUSize
     return (Array.range outRows).map fun s => F32.read lp s.toUSize
 
-/-- The MSE block's target that makes its output cotangent exactly `w`
-    (§4): y = out − M·nOut·g/2 with g the cotangent on each output entry. For
+/-- The MSE block's target that makes its output cotangent exactly `w`:
+    y = out − M·nOut·g/2 with g the cotangent on each output entry. For
     mlp/vit g_s = w_s; for the GPT the host chains the softmax Jacobian,
     g_{s,k,v} = w_s · ½ (δ_{v,patch_k} − q_{s,k,v}). -/
 def targets (cfg : Cfg) (bias : Array Float) (out : ByteArray) (cs : Array UInt64)
@@ -258,7 +257,7 @@ def targets (cfg : Cfg) (bias : Array Float) (out : ByteArray) (cs : Array UInt6
     let T := cfg.T
     let V := cfg.V
     let scale := (M * T * V).toFloat / 2.0
-    -- ⚠ the eval graph returns logits in (t, v) order but the TRAIN forward's
+    -- the eval graph returns logits in (t, v) order but the TRAIN forward's
     -- lmHead output is [B, V, T, 1] (the per-pixel-CE layout, vocab first), so
     -- the target is written vocab-major.
     for s in [0:M] do
@@ -302,7 +301,7 @@ def mkSpec (cfg : Cfg) : NetSpec :=
         .lmHead cfg.d cfg.V cfg.T ] }
 
 /-- Size of the head's parameters (W and b of the last layer), zeroed at init so
-    f_θ = 0 exactly and the first step IS the reference (§8's R1 gate). -/
+    f_θ = 0 exactly and the first step IS the reference. -/
 def headParams (cfg : Cfg) : Nat :=
   if cfg.arch == "mlp" then cfg.hidden * cfg.nOut + cfg.nOut
   else if cfg.arch == "vit" then cfg.d * cfg.nOut + cfg.nOut
@@ -438,7 +437,7 @@ def correlations (cfg : Cfg) (cs : Array UInt64) (w : Array Float) : Array Float
 opaque nqsJ1J2Eloc (cfgs : @& ByteArray) (a : @& ByteArray) (phi : @& ByteArray)
     (M N : USize) (J1 J2 : Float) : IO ByteArray
 
-/-- Rung R4 (§3): the J1-J2 Heisenberg chain, H = J1 Σ Sᵢ·Sᵢ₊₁ + J2 Σ Sᵢ·Sᵢ₊₂, in
+/-- The J1-J2 Heisenberg chain, H = J1 Σ Sᵢ·Sᵢ₊₁ + J2 Σ Sᵢ·Sᵢ₊₂, in
     the S_z = 0 sector by enumeration (C(N, N/2) configurations, 12,870 at N = 16).
     Frustration gives the ground state a sign structure, so the head has two slots:
     log ψ = f_θ + i(φ_ref + φ_θ), with φ_ref the Marshall sign (−1)^(up spins on the
@@ -883,7 +882,7 @@ Var(E_loc) = {sci var}  ({t1 - t0} ms)"
       rows := pushF32LE rows eloc[c]!
       rows := pushF32LE rows sx[c]!
     if cfg.check then
-      -- §8: the sampler the N > 14 runs rely on, tested where the answer is known.
+      -- The sampler the N > 14 runs rely on, tested where the answer is known.
       -- E_loc of every drawn configuration is a lookup in the enumerated table.
       IO.FS.writeFile s!"{pfx}_fwd_chk.mlir" (MlirCodegen.generateEval spec cfg.B)
       let chkSess ← LowererSession.create (← NetSpec.graphArtifact pfx "fwd_chk")

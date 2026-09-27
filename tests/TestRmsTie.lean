@@ -4,13 +4,12 @@ import LeanMlir.Verified.Train
 -- constants from, so this gate reads its ρ/ε/wd from the render's own source rather than a copy.
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
-/-! # The RMSProp render, numerically certified — recipe_gaps v1.2's gate
+/-! # The RMSProp render, numerically certified
 
 `verified_mlir/{mobilenetv2,efficientnet}_rms_train_step.mlir` render RMSProp-with-momentum, the
 optimizer both nets' ImageNet references actually use — the **only** gap between MobileNetV2 and
-JAX's 68.33%, and one of two for EfficientNet's 72.31% (`planning/archive/recipe_gaps.md` §2). This is
-their numeric gate, built as §2k built `r34-mom-tie`: a **cross-render known answer**, not a
-tolerance argument.
+JAX's 68.33%, and one of two for EfficientNet's 72.31%. This is their numeric gate, built the
+way `r34-mom-tie` is: a **cross-render known answer**, not a tolerance argument.
 
 **How the gradient is recovered.** Run the committed **AdamW** render on `(θ, x, onehot)` from
 `m = v = 0`. Its stored first moment is `m' = β₁·m + (1−β₁)·g = 0.1·g`, so
@@ -27,15 +26,15 @@ writing `gw = g + wd·θ`:
 | | claim | why it is the interesting one |
 |---|---|---|
 | ① | `s' = (1−ρ)·gw²` | the mean-square — and because it is built from `gw`, this simultaneously tests that the L2 is **COUPLED** and that it enters **BEFORE** the accumulator, which is the reference's ordering |
-| ② | `b' = gw / √(s' + ε)` | ⚠ **ε INSIDE the root** — TensorFlow's RMSProp, not the textbook one |
+| ② | `b' = gw / √(s' + ε)` | **ε INSIDE the root** — TensorFlow's RMSProp, not the textbook one |
 | ③ | `θ' = θ − lr·b'` | the parameter update |
 
-**▶ THE CONTROLS ARE THE POINT.** ② is re-checked against the textbook prediction
+**THE CONTROLS ARE THE POINT.** ② is re-checked against the textbook prediction
 `gw / (√s' + ε)`, and ① against `(1−ρ)·g²` with the decay dropped. A gate that only checked ②
 against the render it came from would pass either ε placement, and that placement is the exact trap
 `timm`'s `RMSpropTF` exists to avoid — the JAX reference calls it out in its own comment.
 
-⚠ **The two nets sit on opposite sides of the ε placement.** At mnv2's ε = 1.0 the difference is
+**The two nets sit on opposite sides of the ε placement.** At mnv2's ε = 1.0 the difference is
 mild; at EfficientNet's ε = 1e-3 it is worth ~31.6× at a collapsed mean-square
 (`Proofs.rmsBufNext_eps_placement_at_zero`). **Neither net's green run licenses the other** — run
 both. The harness prints each control's separation, so the gap between them is measured rather
@@ -55,7 +54,7 @@ from**, so the gate cannot drift from the render it gates.
 def main (argv : List String) : IO Unit := do
   let slug := argv.headD "mobilenetv2"
   -- The hyperparameters come from the SAME records `rmsConstsBlock` emits from, never a second
-  -- hand-copied pair — the K-constant lesson (§2k) applied to the gate rather than the render.
+  -- hand-copied pair.
   let hyper ← match slug with
     | "mobilenetv2" => pure Proofs.StableHLO.mnv2RmsHyper
     | "efficientnet" => pure Proofs.StableHLO.enetRmsHyper

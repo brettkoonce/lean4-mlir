@@ -885,7 +885,7 @@ private theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc 
 def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
-  -- ── the single-device chain at the global batch `R·N` (T3's), driven by `G` ──
+  -- ── the single-device chain at the global batch `R·N` (`mnv2_net_tiedB`'s), driven by `G` ──
   let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 (R * N) w X) G
   let dy16 := mnv2CotInBody (R * N) 7 7 w.b17 (mnv2PreB16 (R * N) w X) dy17
   let dy15 := mnv2ResidCotIn (R * N) 7 7 w.b16 (mnv2PreB15 (R * N) w X) dy16

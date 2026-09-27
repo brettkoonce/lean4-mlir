@@ -23,17 +23,12 @@ param bridges are dim-generic and cover all 18 blocks verbatim; the downsample c
 proven stride-2 bridges.
 -/
 
--- Maintainer note: the scalar-LN twin of this chain (one mean and variance over the whole
--- `c·h·w` map, scalar γ/β) was deleted. `CnxBlockParams`, `cnxBlockW`, `convNextStageK`,
--- `CnxDownParams`, `cnxDownW`, `CnxTWeights`, `convNextForwardT`/`TC` and their graph section
--- were retired, not moved.
-
 namespace Proofs
 
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § The [3,3,9,3] chain at ConvNeXt's REAL channel LayerNorm (§2m)
+-- § The [3,3,9,3] chain at ConvNeXt's REAL channel LayerNorm
 -- ════════════════════════════════════════════════════════════════
 
 /-! ConvNeXt specifies `channel_layer_norm` — `h·w` statistics per example, each over the `c`
@@ -223,11 +218,10 @@ noncomputable def cnxDownChWHasVJP (h w : Nat) {cin cout : Nat} (p : CnxDownPara
     `facebookresearch/ConvNeXt` does `self.norm(x.mean([-2,-1]))` with
     `nn.LayerNorm(dims[-1], eps=1e-6)`, and timm's `convnext_tiny` head is
     `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`. -/
--- History (maintainer note): the head LN was once deleted to match
--- jax/MainConvNeXtImagenet.lean, which was itself missing it. The parameter count caught it:
--- 28,587,592 at K=1000 against timm `convnext_tiny`'s 28,589,128, short by 1,536 = 2×768, the
--- head LN's γ and β. A parameter count that matches a reference is a decomposition test; the
--- reference can be wrong.
+-- Maintainer note: without the head LN the parameter count is 28,587,592 at K=1000 against
+-- timm `convnext_tiny`'s 28,589,128, short by 1,536 = 2×768, the head LN's γ and β. A
+-- parameter count that matches a reference is a decomposition test; the reference can be
+-- wrong.
 structure CnxTWeightsCh (nC : Nat) where
   sW : Kernel4 96 3 4 4
   sb : Vec 96
@@ -325,9 +319,9 @@ noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
   have gap_diff := globalAvgPoolFlat_differentiable 768 7 7
   have e9 := vjpComp _ _ f8 gap_diff e8 (globalAvgPoolFlatHasVJP 768 7 7)
   have f9 := gap_diff.comp f8
-  -- ▶ the HEAD LN, restored 2026-08-30 (the paper's `norm(x.mean([-2,-1]))`). One more
+  -- the HEAD LN (the paper's `norm(x.mean([-2,-1]))`). One more
   -- `vjpComp` link and one more positivity — `layerNormVec` is ViT's final-LN primitive and
-  -- carries its own `_diff`/`HasVJP`, so nothing new had to be proven here.
+  -- carries its own `_diff`/`HasVJP`, so nothing new is proven here.
   have hln_diff := rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε
   have e10 := vjpComp _ _ f9 hln_diff e9 (rowLNVecFlatHasVJP 1 768 w.hε w.hγ w.hβ hhε)
   have f10 := hln_diff.comp f9
@@ -422,7 +416,7 @@ end Proofs
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § §2m — the channel-LN graph + faithfulness (rung E's new apex)
+-- § The channel-LN graph + faithfulness
 -- ════════════════════════════════════════════════════════════════
 
 /-- **One channel-LN forward site**, mirroring `ConvNeXtRender.lnFwdSite` at `chLN := true`

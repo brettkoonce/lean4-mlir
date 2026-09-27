@@ -29,7 +29,7 @@ Conv1D(kernel=4)    │                  ← depthwise short-range token mixing
     │               │
 SiLU                │                  ← swish activation
     │               │
-SSM selective scan  │                  ← ⭐ the one novel primitive ⭐
+SSM selective scan  │                  ← the one novel primitive
     │               │                   (state dim N, input-dependent Δ, B, C)
 u * SiLU(z)         │                  ← elementwise gate
     │               │

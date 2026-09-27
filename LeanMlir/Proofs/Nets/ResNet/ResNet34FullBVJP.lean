@@ -307,7 +307,7 @@ structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r34PreK` form IS the committed forward
---   ⚠ Peeled one layer at a time through `*_apply`. A one-step `rfl` against a sixteen-deep
+--   Peeled one layer at a time through `*_apply`. A one-step `rfl` against a sixteen-deep
 --   nested application does not survive (a kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
 --   identical terms and never unfolds an inner layer.
 -- ════════════════════════════════════════════════════════════════
@@ -393,9 +393,9 @@ theorem resnet34ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nC
 -- ════════════════════════════════════════════════════════════════
 -- § The apex — the whole net as ONE `CertLayer`
 --   Stem, the sixteen basic blocks and the head composed with `CertLayer.comp`, so the VJP, its
---   differentiability and the backward-graph faithfulness are the layer's fields. ⚠ At literal
+--   differentiability and the backward-graph faithfulness are the layer's fields. At literal
 --   widths each stride join meets `64 * 56 * 56` against `64 * (2 * 28) * (2 * 28)`; they unify
---   by `Nat` literal arithmetic, and the peel below never has to (`planning/certlayer_nets.md` §6).
+--   by `Nat` literal arithmetic, and the peel below never has to.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **ResNet-34 as one certified layer**, at every batch size. Its `.faithful` is a whole-net

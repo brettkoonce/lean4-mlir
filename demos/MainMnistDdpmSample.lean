@@ -128,7 +128,7 @@ def main (args : List String) : IO Unit := do
   -- ── Sampling loop ──
   let sess ← LowererSession.create evalVmfb
   IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
-  -- Every reverse state, with the timestep it sits at. ⚠ Keep ALL of them and
+  -- Every reverse state, with the timestep it sits at. Keep ALL of them and
   -- select later by NOISE LEVEL: indexing the strip by sampler step would make
   -- column c mean a different ᾱ in each row, and the two rows are only worth
   -- putting one above the other if they are comparable column by column.
@@ -222,7 +222,7 @@ def main (args : List String) : IO Unit := do
     return
 
   -- ── Render 4×4 grid ──
-  -- ⚠ Invert the trainer's [-1, 1] centring FIRST. `floatToU8` clamps to
+  -- Invert the trainer's [-1, 1] centring FIRST. `floatToU8` clamps to
   -- [0, 1], so without this every negative pixel — half the image — renders
   -- black and the grid looks like sparse scribbles whatever the model learned.
   unless raw do x ← F32.scaleShift x 0.5 0.5

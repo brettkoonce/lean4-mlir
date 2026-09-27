@@ -1,17 +1,17 @@
 import LeanMlir
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
-/-! # MNv4 forward-chain structural smoke (`planning/archive/mnv4_verified.md` phase 3)
+/-! # MNv4 forward-chain structural smoke
 
 Renders `mnv4FwdChainB` and counts the ops it emitted against what the Conv-M block table
 says it should have. This catches a **family dispatch** error — an FFN block that emitted
 depthwises, or a ConvNeXt-like block that emitted two — because those change the counts.
 
-⚠ It does **not** catch a pre/post-DW swap. Same `k`, same channels ⇒ same op counts as well
+It does **not** catch a pre/post-DW swap. Same `k`, same channels ⇒ same op counts as well
 as the same parameter shapes. Only a forward tie against the reference pins the order. Stated
 in every file that touches this, because a green structural gate is exactly when it gets
 forgotten. It does pin WHICH convs are strided (`expectedStridedGroups`), which is how timm places
-the stride on `dw_mid` (`planning/mnv4_timm_parity.md`).
+the stride on `dw_mid`.
 -/
 
 open Proofs.StableHLO
@@ -20,9 +20,9 @@ open Proofs.StableHLO
     the Conv-M table: a pre-DW groups at `ic`, a post-DW at `mid = ic * expand`. This is the strong
     half of the gate — it pins each depthwise to a BLOCK, where a bare total would not.
 
-    ⚠ `dwTot` below sums only the widths NAMED here, so a width missing from this list is invisible
-    to the total rather than a failure. That is how the Conv-S → Conv-M swap first read as
-    "29 of 30": every listed width matched and b17's 512 simply was not being counted. -/
+    `dwTot` below sums only the widths NAMED here, so a width missing from this list is invisible
+    to the total rather than a failure: every listed width can match while an unlisted one is
+    simply not counted. -/
 def expectedDwGroups : List (Nat × Nat) :=
   [ (48, 1),    -- b1 pre  (ic 48)
     (192, 1),   -- b1 post (48*4)
@@ -46,10 +46,9 @@ def main : IO Unit := do
   let logits := fwd.logits
   let lines := code.splitOn "\n"
   let n (pat : String) : Nat := (lines.filter (fun l => l.contains pat)).length
-  -- ⚠ Parse the group count NUMERICALLY. A substring match on "feature_group_count = 1" also
-  -- matches "= 160", "= 192" and "= 1024", which is how the first version of this gate reported
-  -- 42 regular convs instead of 32 — a false FAILURE on a correct render, which is the more
-  -- expensive direction of wrong for a gate.
+  -- Parse the group count NUMERICALLY. A substring match on "feature_group_count = 1" also
+  -- matches "= 160", "= 192" and "= 1024", which over-counts regular convs — a false FAILURE on
+  -- a correct render, which is the more expensive direction of wrong for a gate.
   let fgcOf (l : String) : Option Nat :=
     match l.splitOn "feature_group_count = " with
     | _ :: rest :: _ => (rest.takeWhile Char.isDigit).toNat?
@@ -63,7 +62,7 @@ def main : IO Unit := do
     if got == want then IO.println s!"  ✓ {what}: {got}"; pure true
     else IO.println s!"  ✗ {what}: got {got}, want {want}"; pure false
   if !(← chk "regular convs (fgc = 1)" (grp 1) 47) then bad := bad + 1
-  -- timm's Conv-M is ReLU throughout: no swish anywhere (stage 0 was swish until 2026-09-24).
+  -- timm's Conv-M is ReLU throughout: no swish anywhere.
   if !(← chk "swish (none)" (n "stablehlo.logistic") 0) then bad := bad + 1
   -- relu sites: stem 1 + stage 0 1 + per block (expand 1 + post-DW 1 if present) + head 2
   --   = 1 + 1 + (21 + 13 post-DWs) + 2 = 38. The pre-DW (`dw_start`) is BN only.
@@ -108,12 +107,11 @@ def main : IO Unit := do
   else
     IO.println s!"  ✗ UNBOUND %zb widths: {unbound.eraseDups}"; bad := bad + 1
 
-  -- ⭐ The signature and VLayer.toSpecs are two hand-written readings of one layout. Tie them.
+  -- The signature and VLayer.toSpecs are two hand-written readings of one layout. Tie them.
   let sigShapes := (mnv4ShapeList 10).map (fun (_, ds) => ds)
-  -- ⭐ Read off `mobilenetv4Verified`, NOT a list spelled again here. This test used to carry its
-  -- own copy of the block table; the spec now exists (`LeanMlir/Verified/NetsCore.lean`), so the tie is
-  -- against the object the TRAINER runs rather than against a twin of it — which is the whole
-  -- point of the tie. One fewer transcription of the 14 rows.
+  -- Read off `mobilenetv4Verified` (`LeanMlir/Verified/NetsCore.lean`), NOT a list spelled again
+  -- here, so the tie is against the object the TRAINER runs rather than against a twin of it —
+  -- which is the whole point of the tie.
   let specShapes : List (List Nat) :=
     (mobilenetv4Verified.toSpecs.map (fun (d, _) => d.toList)).toList
   if sigShapes == specShapes then

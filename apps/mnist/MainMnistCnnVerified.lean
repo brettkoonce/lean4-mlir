@@ -26,7 +26,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with
 peer and no shared-body file; the backend is a run-time choice about *transport*,
 not a different program. This is the first CONVOLUTIONAL rung, and the one where
 that distinction is most visible: it is `transportSensitive` in the benchmark
-table (84.6% of wall clock is parameter round-trip, §2d.3), so the two lowerers
+table (84.6% of wall clock is parameter round-trip), so the two lowerers
 differ here far more in how they move bytes than in what they compute.
 
 Run:
@@ -35,7 +35,6 @@ lake build mnist-cnn-verified
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/mnist-cnn-verified data          # XLA
 LEAN_MLIR_LOWERER=iree IREE_BACKEND=rocm ... mnist-cnn-verified data   # IREE
 ```
-See `planning/archive/xla_pjrt_ladder.md` (the conv rung, G2).
 -/
 
 /-- 10 epochs at batch 128. `lr` is display-only — the real rate is baked into

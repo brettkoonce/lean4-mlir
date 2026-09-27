@@ -41,9 +41,7 @@ lean_lib «LeanMlir» where
     CI drift guard re-elaborates. 23 roots, builds in minutes. The
     certificate corpus lives in `Certs` below and is checked by its own
     workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
-    so demo/book/engine pushes stop paying the multi-hour corpus tail.
-    Split per planning/archive/repo_shape_deletion_audit.md §4 (2026-07-06).
-    The note behind each root is planning/archive/lakefile_roots_log.md. -/
+    so demo/book/engine pushes stop paying the multi-hour corpus tail. -/
 @[default_target]
 lean_lib «Proofs» where
   srcDir := "."
@@ -78,7 +76,7 @@ lean_lib «Proofs» where
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
     3-axiom-audited by .github/workflows/certs.yml, NOT by the per-push proofs
-    workflow. The note behind each root is planning/archive/lakefile_roots_log.md. -/
+    workflow. -/
 lean_lib «Certs» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Architectures.Attention,
@@ -270,16 +268,15 @@ lean_lib «Certs» where
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
     instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of
     weight/image data and per-image theorems across 8 files). Split out of
-    `Certs` 2026-07-12: these are data-heavy tails (the linarith PSD goals
-    carry ~230-digit LDLᵀ fractions) that OOM'd the shared 4-core runners and
-    took certs.yml + blueprint.yml down with them — long-running corpus work
+    `Certs`: these are data-heavy tails (the linarith PSD goals carry ~230-digit
+    LDLᵀ fractions) that OOM the shared 4-core runners — long-running corpus work
     gets its OWN workflow (.github/workflows/certs-heavy.yml: weekly cron +
     on-demand + pushes touching these files) so it can never break the core.
     Results (all 3-axiom, audited by tests/AuditAxiomsHeavy.lean): L2 capped
     σ≤2 92/100 @ ε=0.1; IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255
-    (PGD 93/93/92/88). ⚠ The full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`,
-    93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners
-    (planning/archive/certs_heavy_psd_memory.md), so no lib builds them and their audit lines
+    (PGD 93/93/92/88). The full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`,
+    93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners,
+    so no lib builds them and their audit lines
     are commented out. Re-check them locally with `scripts/certs/check_sdpfull.sh` (~3 min and
     ~15 GB each). -/
 lean_lib «CertsHeavy» where
@@ -314,21 +311,21 @@ lean_lib «Reference» where
 
 /-- **`lake build Apps`** — type-check every entry point, without linking any of them.
 
-    ⭐ The gate that did not exist. Nothing in CI built an `apps/` or `demos/` exe, and
-    `lake build` builds `Proofs` alone, so an entry point could keep a stale call for weeks
-    and be found only when someone ran it. Linking is what makes the exes expensive (~149 MB
+    Without it nothing in CI builds an `apps/` or `demos/` exe, and `lake build` builds
+    `Proofs` alone, so an entry point could keep a stale call for weeks and be found only
+    when someone ran it. Linking is what makes the exes expensive (~149 MB
     each, and there are 227 of them); elaborating their modules is not, which is the whole
     reason this is a `lean_lib` over the same sources rather than a `lake build <exe>` loop.
 
-    ⚠ Covers `apps/` and `demos/` — 111 modules — and NOT `tests/`, which holds
+    Covers `apps/` and `demos/` — 111 modules — and NOT `tests/`, which holds
     `tests/comparator/`, a nested Lake package with its own toolchain whose modules a
     `.submodules` glob would try to elaborate here. The test exes CI already names
     (`argmax-check`, `label-check`, `opt-step-fixtures`, `bestiary-*`) keep their own
     explicit builds. The NAME-level companion is `scripts/gates/check_target_names.sh`. -/
 lean_lib «Apps» where
   srcDir := "."
-  -- ⚠ `roots := #[]` is not redundant. Lake defaults `roots` to `#[<lib name>]`, and there is
-  -- no `Apps.lean` — the lib IS its globs. Leaving the default made `docstring-checkrefs` and
+  -- `roots := #[]` is not redundant. Lake defaults `roots` to `#[<lib name>]`, and there is
+  -- no `Apps.lean` — the lib IS its globs. Leaving the default makes `docstring-checkrefs` and
   -- `blueprint-checkdecls` die with `unknown module prefix 'Apps'`: both walk
   -- `ws.root.leanLibs` and import every lib's `roots`.
   roots := #[]
@@ -392,23 +389,23 @@ extern_lib libireeffi pkg := do
 private def lowererLink : Array String := #["-ldl"]
 
 -- ═══════════════════════════════════════════════════════════════════════
--- THE TOUR — the canonical set (planning/tour_realignment.md, 2026-09-08): the four
+-- THE TOUR — the canonical set: the four
 -- `lake run` tiers, the nine demos and the two gates. New readers are pointed here and
 -- nowhere else; every number the README and the book quote comes from one of these.
 -- ═══════════════════════════════════════════════════════════════════════
 
 -- ═══════════════════════════════════════════════════════════════════
--- XLA/PJRT backend (planning/archive/xla_pjrt_ladder.md)
+-- XLA/PJRT backend
 --
--- Same Lean root, same verified_mlir/*.mlir, same §1a ties — the ONLY change is
+-- Same Lean root, same verified_mlir/*.mlir, same ties — the ONLY change is
 -- which trusted lowerer consumes the emitted StableHLO. `libpjrt_ffi.so` exports
 -- the identical C surface as `libiree_ffi.so`, so nothing above the shim moves.
 --
 -- Build the shim (it is not built by lake — it only needs libc + dlopen):
 --   gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
--- ⚠ Still required, but at RUN time, not link time: since `xlaLink` was retired
--- (2026-08-25) nothing names the shim on a link line, so a missing shim is now a
--- dlopen failure when the trainer starts rather than a link error when it builds.
+-- Still required, but at RUN time, not link time: nothing names the shim on a link
+-- line, so a missing shim is a dlopen failure when the trainer starts rather than a
+-- link error when it builds.
 -- `ensurePjrtShim` (below) is what keeps that from biting on a fresh clone.
 -- ═══════════════════════════════════════════════════════════════════
 
@@ -422,10 +419,9 @@ lean_exe «mnist-linear-verified» where
   root := `apps.mnist.MainMnistLinearVerified
   moreLinkArgs := lowererLink
 
--- Rung 0 of the XLA ladder is now a RUN-TIME choice, not a second executable:
--- `mnist-linear-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
--- `-xla` peer and their shared-body file are both gone. G2 is now the SAME
--- binary run twice, which is a stronger comparison than two binaries.
+-- Rung 0 of the XLA ladder is a RUN-TIME choice, not a second executable:
+-- `mnist-linear-verified` serves both lowerers via $LEAN_MLIR_LOWERER. G2 is the
+-- SAME binary run twice, which is a stronger comparison than two binaries.
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
 -- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepFaithfulV).
@@ -434,17 +430,14 @@ lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
   moreLinkArgs := lowererLink
 
--- Rung 1 of the XLA ladder (`planning/archive/xla_pjrt_ladder.md`): depth + multiple
--- param tensors via the packed-params path, and the first rung with He init.
--- Compare against `mnist-mlp-verified` for gate G2.
--- Rung 1 of the XLA ladder (depth + multiple parameter tensors) is now a
--- RUN-TIME choice: `mnist-mlp-verified` serves both lowerers via
--- $LEAN_MLIR_LOWERER, so its `-xla` peer and their shared-body file are gone.
+-- Rung 1 of the XLA ladder: depth + multiple param tensors via the packed-params
+-- path, and the first rung with He init. It is a RUN-TIME choice:
+-- `mnist-mlp-verified` serves both lowerers via $LEAN_MLIR_LOWERER.
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
 -- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepFaithfulV).
-/-- Shared body of the verified CNN trainer — imported by BOTH the IREE and XLA
-    executables so their config and He-init seed cannot drift. -/
+/-- The verified CNN trainer — one executable for both the IREE and XLA lowerers,
+    so their config and He-init seed cannot drift. -/
 
 lean_exe «mnist-cnn-verified» where
   root := `apps.mnist.MainMnistCnnVerified
@@ -452,9 +445,8 @@ lean_exe «mnist-cnn-verified» where
 
 -- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
 -- conv codegen actually bites, unlike the dense-only rungs 0-1.
--- The conv rung of the XLA ladder is now a RUN-TIME choice:
--- `mnist-cnn-verified` serves both lowerers via $LEAN_MLIR_LOWERER, so its
--- `-xla` peer and their shared-body file are gone.
+-- The conv rung of the XLA ladder is a RUN-TIME choice:
+-- `mnist-cnn-verified` serves both lowerers via $LEAN_MLIR_LOWERER.
 
 -- ─── Tier 2 — `lake run cifar`: the wide 8-conv CIFAR net, SGD / momentum / AdamW × no-BN / BN (Chapter 4) ───
 
@@ -470,13 +462,9 @@ lean_exe «cifar8w-bn-ablation» where
 
 -- ─── Tier 3 — `lake run imagenette`: the seven Part-1 nets at 224², book order (Chapters 5–9) ───
 
--- ⛔ `resnet34-verified` was here until 2026-09-06 (4c leg 1). It trained ResNet-34 on the
--- PER-EXAMPLE `resnet34_train_step.mlir`, and both the artifact and its renderer are retired: the
--- suite is one chain per net now, the batched one. That binary could not produce a number anyway —
--- its own header measured `390/3925 = 9.936306%`, byte identical every epoch, i.e. chance, because
--- running-stat threading lives only in `trainAdamSched` — and it said "do not quote its accuracy".
--- ▶ The batched SGD trainer is `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`,
--- which renders from `R34Opt.sgd` and threads running stats. `planning/archive/renderer_convergence.md`.
+-- The suite is one chain per net, the batched one. The batched SGD trainer is
+-- `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`, which renders from `R34Opt.sgd`
+-- and threads running stats (running-stat threading lives only in `trainAdamSched`).
 
 lean_exe «resnet34-verified-adam» where
   root := `apps.imagenette.MainResnet34VerifiedAdam
@@ -486,17 +474,13 @@ lean_exe «resnet50-verified-adam» where
   root := `apps.imagenette.MainResnet50VerifiedAdam
   moreLinkArgs := lowererLink
 
--- ⛔ `mobilenetv2-verified` is RETIRED (4c leg 2, 2026-09-06), with the per-example
--- `verified_mlir/mobilenetv2_train_step.mlir` it trained on. Its own header said its accuracy was
--- chance (387/3925, byte identical every epoch) because running-statistic threading lives only in
--- `trainAdamSched`, and told readers not to quote it. `mobilenetv2-verified-adam` is the trainer
--- that produces a number, and it was already on the batched chain.
+-- `mobilenetv2-verified-adam` is the MobileNetV2 trainer, on the batched chain.
 
 lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam
   moreLinkArgs := lowererLink
 
-/-- Phase 4 of `planning/archive/mnv4_verified.md`: 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
+/-- 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
 lean_exe «mobilenetv4-verified-adam» where
   root := `apps.imagenette.MainMobilenetV4VerifiedAdam
@@ -520,18 +504,18 @@ lean_exe «vit-verified-adam» where
     `nClasses := 1000, B := 256`, heavy-ball + coupled L2 (the `jax/MainResnetImagenet.lean` recipe),
     fed by the generated tfds shim so both paths see identical augmented batches.
 
-    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
-    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
-    how every net came to stream R34's augmentation.
-    ⚠ Does NOT move the verification tier — proofs stop at Imagenette (§2k). -/
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). Not
+    `lake exe resnet34-imagenet default --shim` — that is R34's, and every net fed from it
+    streams R34's augmentation.
+    Does NOT move the verification tier — proofs stop at Imagenette. -/
 lean_exe «resnet34-imagenet-verified» where
   root := `apps.imagenette.MainResnet34Imagenet
   moreLinkArgs := lowererLink
 
 /-- **ResNet-50 on full 1000-class ImageNet** — R50 phase 3. The bottleneck renderer
     (`ResNet50RenderB`) at `nClasses := 1000`, AdamW, 4-replica by default.
-    ⚠ NOT RSB-A3 — no LAMB, no bs2048, no gradient accumulation. ⚠ And no incumbent render to tie
-    against (§3.2), so name the check that licenses any number off it. -/
+    NOT RSB-A3 — no LAMB, no bs2048, no gradient accumulation. And no incumbent render to tie
+    against, so name the check that licenses any number off it. -/
 lean_exe «resnet50-imagenet-verified» where
   root := `apps.imagenette.MainResnet50Imagenet
   moreLinkArgs := lowererLink
@@ -540,23 +524,20 @@ lean_exe «resnet50-imagenet-verified» where
     B := 64`; four replicas is global 256, the reference's batch. Batch-BN, so it has a `_fwd_eval`
     peer and a running-stat region.
 
-    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+    Optimizer does NOT match the reference (RMSProp there, AdamW here). -/
 lean_exe «mobilenetv2-imagenet-verified» where
   root := `apps.imagenette.MainMobileNetV2Imagenet
   moreLinkArgs := lowererLink
 
-/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier trainer (2026-08-12).
+/-- **MobileNetV4-Conv-M on full 1000-class ImageNet** — the sixth scale-tier trainer.
     `nClasses := 1000, B := 64`; four replicas would be global 256. Batch-BN, so it has a
     `_fwd_eval` peer and a running-stat region.
 
-    ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
-    written.** `mnv4ImagenetVerified` (`Verified.NetsCore`) now carries the Conv-M block table and
-    names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
-    target. It is not this network's RESULT: nothing here has been trained to convergence.
+    **Conv-M.** `mnv4ImagenetVerified` (`Verified.NetsCore`) carries the Conv-M block table and
+    names itself "MobileNetV4-Conv-M (ImageNet-1k)".
 
-    ⚠ Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there,
-    AdamW @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet
-    — see `planning/archive/chapter_makeover.md`'s MNv4 phase-4 gap list. -/
+    Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there, AdamW
+    @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet. -/
 lean_exe «mobilenetv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
   moreLinkArgs := lowererLink
@@ -565,10 +546,10 @@ lean_exe «mobilenetv4-imagenet-verified» where
     B := 64`; four replicas is global 256, the reference's batch. The first ImageNet net here with
     BatchNorm, so it has a `_fwd_eval` peer and a running-stat region.
 
-    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
-    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
-    how every net came to stream R34's augmentation.
-    ⚠ Optimizer does NOT match the reference (RMSProp there, AdamW here) — §2p. -/
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). Not
+    `lake exe resnet34-imagenet default --shim` — that is R34's, and every net fed from it
+    streams R34's augmentation.
+    Optimizer does NOT match the reference (RMSProp there, AdamW here). -/
 lean_exe «efficientnet-imagenet-verified» where
   root := `apps.imagenette.MainEfficientNetImagenet
   moreLinkArgs := lowererLink
@@ -577,10 +558,10 @@ lean_exe «efficientnet-imagenet-verified» where
     batch stays 32 per device (`cBS` is still private), so four replicas is global 128 and 10,009
     steps/epoch — more optimizer steps than the reference's 5,004 at batch 256.
 
-    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
-    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
-    how every net came to stream R34's augmentation.
-    ⚠ Does NOT move the verification tier, and is NOT the ConvNeXt paper recipe (§2p). -/
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). Not
+    `lake exe resnet34-imagenet default --shim` — that is R34's, and every net fed from it
+    streams R34's augmentation.
+    Does NOT move the verification tier, and is NOT the ConvNeXt paper recipe. -/
 lean_exe «convnext-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtImagenet
   moreLinkArgs := lowererLink
@@ -588,19 +569,19 @@ lean_exe «convnext-imagenet-verified» where
 /-- **ConvNeXt-Small on ImageNet-1k** — ConvNeXt-T DEEPENED (stage 3 goes 9 → 27 blocks, dims
     UNCHANGED at [96,192,384,768]), 342 param tensors / 50,222,152 scalars, the published 50.22M.
 
-    The second net added by reshaping a renderer rather than writing a chain, and cheaper than
-    ViT-S was: S is pure depth, so one `Array Nat` threaded as a trailing defaulted parameter
-    covers it and every hardcoded dimension literal stays correct. The proof side needed nothing —
-    ConvNeXt's certificates are per-site and generic in `c`/`e`/`h`, so depth was never a
-    hypothesis. Every ConvNeXt-T artifact re-renders byte-identical.
+    Added by reshaping a renderer rather than writing a chain: S is pure depth, so one `Array Nat`
+    threaded as a trailing defaulted parameter covers it and every hardcoded dimension literal stays
+    correct. The proof side needed nothing — ConvNeXt's certificates are per-site and generic in
+    `c`/`e`/`h`, so depth was never a hypothesis. Every ConvNeXt-T artifact re-renders
+    byte-identical.
 
     Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (it reuses ConvNeXt-T's, which
     is correct — the paper does not change the data pipeline between T and S).
-    ⚠ Stochastic depth is **0.4**, the paper's S value, not Tiny's 0.1 — the one recipe knob that
+    Stochastic depth is **0.4**, the paper's S value, not Tiny's 0.1 — the one recipe knob that
     moves with model size. Use `LEAN_MLIR_DROP_RATE_U=200000` on the 80-epoch tier.
-    ⚠ Both `adamwxclipdrop` (single device, the default) and `adamdpwxclipdrop` (4 replicas) are
+    Both `adamwxclipdrop` (single device, the default) and `adamdpwxclipdrop` (4 replicas) are
     rendered, so unlike `vit-s-imagenet-verified` a plain invocation runs.
-    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+    Renders and ties its shapes; NOTHING has been trained on it. -/
 lean_exe «convnext-s-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtSImagenet
   moreLinkArgs := lowererLink
@@ -608,14 +589,12 @@ lean_exe «convnext-s-imagenet-verified» where
 /-- **ConvNeXt-Base on ImageNet-1k** — ConvNeXt-S's depth `[3,3,27,3]` at `[128,256,512,1024]`,
     342 param tensors / 88,589,416 scalars, the published 88.59M.
 
-    ⚠⚠ B is the size that made the DIMS a renderer parameter: it moves the stem (96→128), the head
-    (768→1024) and every stage, i.e. all ~27 dimension literals the two renderers hardcoded. Depths
-    and dims are now one `CnxDims` record so `(S depths, T dims)` cannot be spelled. Byte-identity
-    holds at BOTH ConvNeXt-T and ConvNeXt-S across that refactor, which is what licenses it.
-    ⚠ B shares S's depth table, so anything keyed on block count cannot separate them — the banner
-    function did, and every B artifact would have called itself a ConvNeXt-S.
-    ⚠ Stochastic depth is 0.5 (paper value for B; S is 0.4, T is 0.1).
-    ⚠ Renders and ties its shapes; NOTHING has been trained on it. -/
+    B moves the stem (96→128), the head (768→1024) and every stage (~27 dimension literals), which
+    is why the DIMS are a renderer parameter. Depths and dims are one `CnxDims` record so
+    `(S depths, T dims)` cannot be spelled. B shares S's depth table, so anything keyed on block
+    count cannot separate them — a banner keyed that way would call every B artifact a ConvNeXt-S.
+    Stochastic depth is 0.5 (paper value for B; S is 0.4, T is 0.1).
+    Renders and ties its shapes; NOTHING has been trained on it. -/
 lean_exe «convnext-b-imagenet-verified» where
   root := `apps.imagenette.MainConvNeXtBImagenet
   moreLinkArgs := lowererLink
@@ -624,11 +603,11 @@ lean_exe «convnext-b-imagenet-verified» where
     renderer at `nClasses := 1000, bs := 128`; at four replicas that is global batch 512, the
     reference's (`jax/MainVitImagenet.lean`). Fed by the generated tfds shim.
 
-    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). ⚠ It used to
-    say `lake exe resnet34-imagenet default --shim` — R34's, for every net, which is exactly
-    how every net came to stream R34's augmentation.
-    ⚠ Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step (§2p).
-    ⚠ Does NOT move the verification tier, and is NOT the DeiT recipe (§2p). -/
+    Needs this net's OWN shim emitted first: `scripts/gen_shims.sh` (all five). Not
+    `lake exe resnet34-imagenet default --shim` — that is R34's, and every net fed from it
+    streams R34's augmentation.
+    Set `SHIM_WORKERS=2` — one producer cannot feed a 4×128 ViT step.
+    Does NOT move the verification tier, and is NOT the DeiT recipe. -/
 lean_exe «vit-imagenet-verified» where
   root := `apps.imagenette.MainViTImagenet
   moreLinkArgs := lowererLink
@@ -637,16 +616,16 @@ lean_exe «vit-imagenet-verified» where
     12), 22,050,664 parameters. The first net added by widening rather than by a new chain: the
     proof side needed nothing, since `vitForwardKVHasVJP` is already `∀ heads d_head mlpDim k`
     and global (GELU/softmax/LayerNorm carry no kink).
-    ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
+    FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
     `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
     device that is DeiT's global 512, so the recipe's LR is the rate this batch was set for.
-    ⭐ `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
-    113 → 71 h for 300 epochs. ⚠ Renders, ties and STEPS; NOTHING has been trained on it. -/
+    `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
+    113 → 71 h for 300 epochs. Renders, ties and STEPS; NOTHING has been trained on it. -/
 lean_exe «vit-s-imagenet-verified» where
   root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
 
-/-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. ⚠ Per-device batch 32 (global
+/-- **ViT-Base (DeiT-B) on ImageNet-1k** — 86,567,656 parameters. Per-device batch 32 (global
     128, NOT the DeiT 512) because ViT-B OOMs at 4×128 on 16 GB cards. Renders; unmeasured. -/
 lean_exe «vit-b-imagenet-verified» where
   root := `apps.imagenette.MainViTBImagenet
@@ -675,7 +654,7 @@ lean_exe «yolov1-visdrone-fpn» where
   moreLinkArgs := lowererLink
 
 -- The VisDrone detector, unchanged, on NEU-DET steel defects — the opposite
--- regime (2 large defects per crop vs 70 tiny cars). planning/neu_det_fpn_demo.md.
+-- regime (2 large defects per crop vs 70 tiny cars).
 lean_exe «yolov1-neudet-fpn» where
   root := `demos.MainYolov1NeuDetFpn
   moreLinkArgs := lowererLink
@@ -701,17 +680,16 @@ lean_exe «mnist-ddpm-sample» where
   root := `demos.MainMnistDdpmSample
   moreLinkArgs := lowererLink
 
--- The 2-D diffusion demo, back out of archive/ as the second half of the
+-- The 2-D diffusion demo, the second half of the
 -- diffusion section: the same 18k-param MLP on the rank-2 DDPM MSE block,
 -- trained as a DDPM or (with `flow`) as a flow-matching Boltzmann generator
--- on the Müller-Brown density. planning/boltzmann_generator_demo.md.
+-- on the Müller-Brown density.
 lean_exe «diffusion-2d» where
   root := `demos.MainDiffusion2d
   moreLinkArgs := lowererLink
 
--- The two RL environments of the DQN sidequests (planning/blackjack_dqn_demo.md,
--- planning/pong_dqn_demo.md): pure Lean, no FFI, no GPU. Each runs its own
--- Phase-0 gates — the exact DP instrument and the four arms for blackjack, the
+-- The two RL environments of the DQN sidequests: pure Lean, no FFI, no GPU. Each
+-- runs its own gates — the exact DP instrument and the four arms for blackjack, the
 -- scripted baselines and a rendered frame strip for Pong.
 lean_exe «blackjack-env» where
   root := `demos.MainBlackjackEnv
@@ -719,26 +697,26 @@ lean_exe «blackjack-env» where
 lean_exe «pong-env» where
   root := `demos.MainPongEnv
 
--- Rung 2 of the blackjack plan: the DQN on the XLA path, zero new codegen (the
+-- Blackjack: the DQN on the XLA path, zero new codegen (the
 -- rank-2 DDPM MSE block is the loss). Scores its greedy policy exactly.
 lean_exe «blackjack-dqn» where
   root := `demos.MainBlackjackDqn
   moreLinkArgs := lowererLink
 
--- Rung 3, the Pong plan: the same loop on the Lean Pong, the six-number state
+-- Pong: the same loop on the Lean Pong, the six-number state
 -- (the ceiling row) and 84 × 84 frames through Chapter 3's CNN. Zero new codegen.
 lean_exe «pong-dqn» where
   root := `demos.MainPongDqn
   moreLinkArgs := lowererLink
 
--- The gravitational-wave detection demo (planning/gw_detection_demo.md): a chapter
+-- The gravitational-wave detection demo: a chapter
 -- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
 -- `scripts/demos/gw_metrics.py` against the matched filter's closed form. Zero new codegen.
 lean_exe «gw-detect» where
   root := `demos.MainGwDetect
   moreLinkArgs := lowererLink
 
--- Neural quantum states (planning/transformer_wavefunction_demo.md): the ground
+-- Neural quantum states: the ground
 -- state of the transverse-field Ising chain as an MLP / ViT / GPT wavefunction
 -- times the mean-field reference, energy gradient through the rank-2 DDPM MSE
 -- block, exact at N ≤ 14 by enumeration and bracketed by Jordan-Wigner above.
@@ -746,14 +724,14 @@ lean_exe «nqs-ising» where
   root := `demos.MainNqsIsing
   moreLinkArgs := lowererLink
 
--- The people-watching demo (planning/arasl_people_watching_demo.md): chapter 4's CNN on
+-- The people-watching demo: chapter 4's CNN on
 -- Arabic sign-language letters under a random and a capture-order-blocked split of the
 -- same burst frames, scored by `scripts/demos/arasl_score.py` with a leak audit. Zero new codegen.
 lean_exe «arasl-signs» where
   root := `demos.MainAraslSigns
   moreLinkArgs := lowererLink
 
--- The agriculture demo (planning/plant_lab_to_field_demo.md): chapter 6's ResNet-34 from the
+-- The agriculture demo: chapter 6's ResNet-34 from the
 -- ImageNet prefix on PlantVillage's lab leaves, scored on PlantDoc's field leaves, with the
 -- leaf-mask CAM statistic as the diagnosis and three fixes. Zero new codegen.
 lean_exe «plant-leaf» where
@@ -771,10 +749,9 @@ lean_exe «blueprint-checkdecls» where
 
 /-- `docstring-checkrefs` — the docstring peer of `blueprint-checkdecls`. That gate resolves
     every `\lean{}` the blueprint cites; this one resolves every `` `Ident` `` a DOCSTRING
-    cites, against the same environment. The blueprint came through five rewrites intact and
-    the docstrings did not, and the difference was never style: the blueprint had a gate.
-    ⚠ Resolution is `Environment.find?`, not a regex — see the file header for why the regex
-    version was abandoned at an 8.7% false-positive floor. Since 2026-09-09 it also checks
+    cites, against the same environment.
+    Resolution is `Environment.find?`, not a regex — see the file header for why a regex
+    falls short (an 8.7% false-positive floor). It also checks
     that every `` `dir/File.lean` `` a `LeanMlir/` docstring cites is a markdown link into the
     repo with a live target, because doc-gen4 renders the bare form as a module link that
     404s for anything outside the LeanMlir doc build. -/
@@ -798,13 +775,12 @@ lean_exe «ablation» where
 -- One net (the one Levers 1-2 measure), three optimizers, three precisions, three binaries.
 -- f32 and bf16 come from ONE renderer (`c8wbPacked`) differing only in the emit; fp8 is
 -- host-side E4M3 and rides the f32 graph, which is why it needs no artifact of its own.
--- ⚠ FORWARD-only bf16, and NO speedup by design (§5.3: 0.87× at cifar8's shapes) — the arms
+-- FORWARD-only bf16, and NO speedup by design (§5.3: 0.87× at cifar8's shapes) — the arms
 -- exist to show the optimizer ORDERING is invariant under precision, which is the CIFAR
 -- chapter's claim, not to go faster. Each binary runs its three optimizers in sequence, so
 -- the nine cells of the lever are three invocations: `runs/2026-09-01-cifar8w-6arm-constlr/`.
--- ⚠ The per-arm narrow-head singletons these replaced (`cifar8-{bf16,e4m3}-verified*`,
--- `cifar8b-verified-adam`) were dropped 2026-09-20; their renders stay committed and gated in
--- .github/workflows/proofs.yml, so the §4.1/§5.2 provenance is unaffected.
+-- The per-arm narrow-head renders stay committed and gated in .github/workflows/proofs.yml,
+-- the §4.1/§5.2 provenance.
 lean_exe «cifar8wb-ablation» where
   root := `apps.ablation.MainCifar8WideBatchedAblation
   moreLinkArgs := lowererLink
@@ -825,46 +801,46 @@ lean_exe «resnet34-ablation» where
   moreLinkArgs := lowererLink
 
 /-- Chapter 4 Lever 3 on the NORMALIZED net: the BN net on the batched op family, f32 and bf16,
-    three optimizers each. See planning/archive/bf16_batchnorm.md. -/
+    three optimizers each. -/
 lean_exe «cifar8wb-bn-ablation» where
   root := `apps.ablation.MainCifar8WideBnBf16Ablation
   moreLinkArgs := lowererLink
 
 -- ─── apps/mnist/ — MNIST robustness (PGD / spectral / smoothing), grids and low precision ───
 
--- Phase-3 PGD adversarial attack on the verified linear net (planning/archive/robustness.md):
+-- Phase-3 PGD adversarial attack on the verified linear net:
 -- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
 lean_exe «mnist-linear-pgd» where
   root := `apps.mnist.MainMnistLinearPgd
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified MLP (planning/archive/robustness.md): input gradient =
+-- Phase-3 PGD attack on the verified MLP: input gradient =
 -- the proven mlpInputGrad VJP; certificate = the loose product of layer spectral norms.
 lean_exe «mnist-mlp-pgd» where
   root := `apps.mnist.MainMnistMlpPgd
   moreLinkArgs := lowererLink
 
--- Phase-3 PGD attack on the verified CNN (planning/archive/robustness_ladder.md, the conv rung):
+-- Phase-3 PGD attack on the verified CNN (the conv rung):
 -- input gradient = the proven conv/maxpool input-VJP; certificate = the conv-aware product.
 lean_exe «mnist-cnn-pgd» where
   root := `apps.mnist.MainMnistCnnPgd
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained MLP training (planning/archive/robustness_ladder.md, the gap-shrinking
--- lever): projected SGD onto ‖Wᵢ‖₂ ≤ c shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous
--- product certificate non-vacuous — the empirical face of lipschitz_margin_certified_radius.
+-- Spectral-norm-constrained MLP training (the gap-shrinking lever): projected SGD onto ‖Wᵢ‖₂ ≤ c
+-- shrinks the global L = ∏‖Wᵢ‖₂, turning the vacuous product certificate non-vacuous — the
+-- empirical face of lipschitz_margin_certified_radius.
 lean_exe «mnist-mlp-spectral» where
   root := `apps.mnist.MainMnistMlpSpectral
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained CNN training (planning/archive/robustness_ladder.md): the conv sibling —
+-- Spectral-norm-constrained CNN training: the conv sibling —
 -- caps the dense ‖Wᵢ‖₂ and the conv tap-sum bound; a 5-layer product + loose conv-norm make
 -- certifying the conv net harder than the MLP (tighter c, more clean cost).
 lean_exe «mnist-cnn-spectral» where
   root := `apps.mnist.MainMnistCnnSpectral
   moreLinkArgs := lowererLink
 
--- Randomized-smoothing certificate (planning/archive/robustness_ladder.md §3, Cohen 2019): the
+-- Randomized-smoothing certificate (Cohen 2019): the
 -- DEPTH-INDEPENDENT cert. Forward-only Monte-Carlo over the proof-rendered fwd (no kernel, no
 -- input-VJP) — sample noisy copies, Clopper-Pearson lower-bound p_A, radius = σ·Φ⁻¹(p_A). Base
 -- net trained with matched Gaussian augmentation. Non-vacuous where the spectral product is hopeless.
@@ -878,7 +854,7 @@ lean_exe «mnist-cnn-smooth» where
 
 -- Chapter 2 (low precision): fp8 (E4M3) training on the SAME verified StableHLO —
 -- fp32 master, per-column W / per-tensor x projected to the E4M3 grid, fp32 accumulate.
--- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean (§3b/§3c sit on this).
+-- See MainMnistLinearE4M3Verified.lean + LeanMlir/E4M3Quant.lean.
 lean_exe «mnist-linear-e4m3-verified» where
   root := `apps.mnist.MainMnistLinearE4M3Verified
   moreLinkArgs := lowererLink
@@ -904,21 +880,21 @@ lean_exe «mnist-mlp-e4m3-verified» where
 
 -- ─── apps/cifar/ — the CIFAR trainers behind Chapter 4: robustness, the head-width grid, the BN pair ───
 
--- Phase-3 PGD attack on the verified CIFAR-10 CNN (planning/archive/robustness_ladder.md, the deeper
--- conv rung): input gradient = the proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the
--- 7-layer conv-aware product. Reuses the generic attackPgdConvNet driver.
+-- Phase-3 PGD attack on the verified CIFAR-10 CNN (the deeper conv rung): input gradient = the
+-- proven 4-conv/2-pool input-VJP (genCifarPgdStep); cert = the 7-layer conv-aware product. Reuses
+-- the generic attackPgdConvNet driver.
 lean_exe «cifar-pgd» where
   root := `apps.cifar.MainCifarPgd
   moreLinkArgs := lowererLink
 
--- Spectral-norm-constrained CIFAR-10 CNN training (planning/archive/robustness_ladder.md): the 7-layer
+-- Spectral-norm-constrained CIFAR-10 CNN training: the 7-layer
 -- product compounds the loose conv bound harder still — tightest caps, smallest certified radii.
 lean_exe «cifar-spectral» where
   root := `apps.cifar.MainCifarSpectral
   moreLinkArgs := lowererLink
 
 -- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
--- the conv-aware spectral product was 942K-loose (cert 0%). Same forward-only procedure, any depth.
+-- the conv-aware spectral product is 942K-loose (cert 0%). Same forward-only procedure, any depth.
 lean_exe «cifar-smooth» where
   root := `apps.cifar.MainCifarSmooth
   moreLinkArgs := lowererLink
@@ -938,11 +914,10 @@ lean_exe «cifar-verified» where
 
 -- The 8-conv CIFAR-10 CNN WITH per-channel BN (narrow 64-wide head), on the VERIFIED-rendered
 -- StableHLO — SGD via `.train` and AdamW via `trainAdamSched`. These two are the whole narrow-head
--- family now: the six no-BN / momentum / sgdsched singletons were dropped 2026-09-20 (the wide
--- ablation pair `cifar8w-{,bn-}ablation` runs all three optimizers per binary and is what Chapter 4
--- reports). The book names `cifar8-bn-verified` as the 64-wide-head net the head-width proof is
--- parametric over, and `scripts/gates/residency_gate_all.sh` gates both. Their renders are
--- verified_mlir/cifar8_bn{,_adam}_train_step.mlir.
+-- family (the wide ablation pair `cifar8w-{,bn-}ablation` runs all three optimizers per binary and
+-- is what Chapter 4 reports). The book names `cifar8-bn-verified` as the 64-wide-head net the
+-- head-width proof is parametric over, and `scripts/gates/residency_gate_all.sh` gates both. Their
+-- renders are verified_mlir/cifar8_bn{,_adam}_train_step.mlir.
 lean_exe «cifar8-bn-verified» where
   root := `apps.cifar.MainCifar8BnVerified
   moreLinkArgs := lowererLink
@@ -953,24 +928,24 @@ lean_exe «cifar8-bn-verified-adam» where
 
 -- ─── apps/imagenette/ extras and apps/tools/ — non-tier Imagenette drivers and the checkpoint scorer ───
 
-/-- **Score a finished checkpoint, standalone** — `planning/archive/next_session_verified_trainer_code.md`
-    §2, the verified peer of the JAX side's six `eval_*_full50k.py`.
+/-- **Score a finished checkpoint, standalone** — the verified peer of the JAX side's six
+    `eval_*_full50k.py`.
 
         LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint <net> [dataDir]
 
-    Until this existed a verified accuracy could only be produced in-training, for whichever
-    weights were live at that moment — so a finished run could not be re-scored, and an EMA run
-    reported one of {live, shadow} and discarded the other. `LEAN_MLIR_REGION` picks.
+    Without it a verified accuracy can only be produced in-training, for whichever weights are
+    live at that moment — so a finished run cannot be re-scored, and an EMA run reports one of
+    {live, shadow} and discards the other. `LEAN_MLIR_REGION` picks.
 
-    ⭐ Its gate is an EQUALITY, not a smoke test: the same checkpoint at the same region must score
+    Its gate is an EQUALITY, not a smoke test: the same checkpoint at the same region must score
     exactly what the training run printed for the epoch that wrote it.
-    ⚠ ConvNeXt and ViT only. The BN nets refuse, loudly, because the checkpoint is exactly
-    `[θ|m|v(|ema)]` and the running mean/var are not in it (§2b). -/
+    ConvNeXt and ViT only. The BN nets refuse, loudly, because the checkpoint is exactly
+    `[θ|m|v(|ema)]` and the running mean/var are not in it. -/
 lean_exe «score-checkpoint» where
   root := `apps.tools.MainScoreCheckpoint
   moreLinkArgs := lowererLink
 
--- ch8 E4/E5/E6: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
+-- ch8: EfficientNet-B0 (faithful [t,c,n,s,k] config — 16 MBConv layers,
 -- inverted-residual + squeeze-excite + swish + BATCH norm, 3×3/5×5 depthwise) trained
 -- on VERIFIED-rendered StableHLO (tests/TestEfficientNet{Train,Fwd}.lean); 262 params.
 lean_exe «efficientnet-verified» where
@@ -998,7 +973,7 @@ lean_exe «vit-verified» where
 -- ─── demos/archive/ — an earlier demo generation: the single-grid VisDrone detector ───
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
--- The resolution rung above the 224/7×7 WS-A baseline; planning/archive/yolo_drone.md.
+-- The resolution rung above the 224/7×7 baseline.
 lean_exe «yolov1-visdrone448» where
   root := `demos.archive.MainYolov1VisDrone448
   moreLinkArgs := lowererLink
@@ -1021,53 +996,52 @@ lean_exe «seg-loss-probe» where
   root := `demos.probes.MainSegLossProbe
   moreLinkArgs := lowererLink
 
--- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
+-- DIoU box-loss forward probe (detection infra); FD-checked by
 -- scripts/probes/diou_probe_check.py against scripts/probes/diou_grad_check.py.
 lean_exe «diou-loss-probe» where
   root := `demos.probes.MainDiouLossProbe
   moreLinkArgs := lowererLink
 
--- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
+-- Anchor-YOLO-loss probe (A anchors); FD-checked by
 -- scripts/probes/anchor_loss_probe_check.py.
 lean_exe «anchor-loss-probe» where
   root := `demos.probes.MainAnchorLossProbe
   moreLinkArgs := lowererLink
 
--- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
+-- FPN-neck (top-down multi-scale merge) probe; FD-checked by
 -- scripts/probes/fpn_neck_probe_check.py against scripts/probes/fpn_neck_check.py's oracle.
 lean_exe «fpn-neck-probe» where
   root := `demos.probes.MainFpnNeckProbe
   moreLinkArgs := lowererLink
 
--- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
+-- FPN multi-scale-loss probe; FD-checked by
 -- scripts/probes/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
 lean_exe «fpn-loss-probe» where
   root := `demos.probes.MainFpnLossProbe
   moreLinkArgs := lowererLink
 
--- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
+-- Whole-FPN-detector probe: neck+heads+concat+loss+DAG backward,
 -- γ=0 so every grad is FD-checkable; validated by scripts/probes/fpn_detect_probe_check.py.
 lean_exe «fpn-detect-probe» where
   root := `demos.probes.MainFpnDetectProbe
   moreLinkArgs := lowererLink
 
 -- Emit-only: dump the r34FpnDet train-step MLIR for eyeball / iree-compile
--- --compile-to=input parse check (planning/archive/yolo_fpn.md bite 7 wiring).
+-- --compile-to=input parse check.
 lean_exe «fpn-train-emit» where
   root := `demos.probes.MainFpnTrainEmit
   moreLinkArgs := lowererLink
 
 -- Scores the unconditional MNIST DDPM with Chapter 3's VERIFIED CNN — the
 -- 2-D demo's metric suite (coverage, per-class mass, energy distance) moved onto
--- images, using a classifier whose math VJP is proven. See the driver's header
--- and planning/archive/diffusion_2d_demo.md §7.
+-- images, using a classifier whose math VJP is proven. See the driver's header.
 lean_exe «mnist-ddpm-score» where
   root := `demos.probes.MainMnistDdpmScore
   moreLinkArgs := lowererLink
 
 -- ─── tests/ — ties, checks, smokes and benches: the gates behind the verified renders ───
 
-/-- `uib` layout tie (`planning/archive/mnv4_verified.md` phase 1): `VLayer.toSpecs` vs the baseline
+/-- `uib` layout tie: `VLayer.toSpecs` vs the baseline
     `Layer.nParams`, over all four UIB families. Pins the LAYOUT; the ORDER needs a forward tie. -/
 lean_exe «uib-layout-tie» where
   root := `tests.TestUibLayoutTie
@@ -1076,15 +1050,15 @@ lean_exe «uib-layout-tie» where
 lean_exe «mnv4-fwd-smoke» where
   root := `tests.TestMnv4FwdSmoke
 
-/-- MNv4 AdamW train-step smoke (`planning/archive/mnv4_verified.md` phase 2): arity, entry point, the
+/-- MNv4 AdamW train-step smoke: arity, entry point, the
     eval forward's stat binding, and — the one no other net has — that the train step's forward
-    region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
+    region is `@mnv4_fwd`'s body VERBATIM. The two-worlds split cannot hide behind this.
     Also emits the batch-2 train step `scripts/parity/grad_tie.py --net mnv4` runs. -/
 lean_exe «mnv4-train-smoke» where
   root := `tests.TestMnv4TrainSmoke
 
 /-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/parity/grad_tie.py --net r34` runs, and
-    pins the §3d(b) two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
+    pins the two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
     train step is batch BN, so unlike MNv4 there is no forward-prefix property to assert. Sole
     writer of `.lake/build/resnet34_adam_train_step_b2.mlir`. -/
 lean_exe «r34-train-b2» where
@@ -1092,15 +1066,14 @@ lean_exe «r34-train-b2» where
 
 /-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
     seven variants, which is what `scripts/parity/opt_step_tie.py` diffs against the reference optimizer.
-    `planning/archive/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
-    the GRADIENT, and nothing tied them at the UPDATE until this.
+    `vjp_oracle` ties the two implementations at the GRADIENT; this ties them at the UPDATE.
 
-    ⚠ The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
+    The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
     the shipped emission and not a copy of it. Sole writer of `.lake/build/opt_step_*.mlir`. -/
 lean_exe «opt-step-fixtures» where
   root := `tests.TestOptStepFixtures
 
-/-- Migration guard for the §2a `_fwd` move: feeds two renders of `@<slug>_fwd` (or, with
+/-- Forward tie: feeds two renders of `@<slug>_fwd` (or, with
     `--eval`, `@<slug>_fwd_eval`) the same θ and x and compares logits. The two emitters differ
     textually by construction, so a numeric tie is the only meaningful check. XLA-linked — it
     compiles the module in-process, so this is seconds rather than the multi-minute 224²
@@ -1108,22 +1081,21 @@ lean_exe «opt-step-fixtures» where
 
         .lake/build/bin/fwd-tie <slug> [--eval] [<pathA> [<pathB>]]
 
-    Replaces `resnet34-fwd-tie`, which was this harness with one net hardcoded; `fwd-tie resnet34`
-    is the same check. Unlike it, this one DELETES its `.vmfb` before every compile (§4) — without
+    `fwd-tie resnet34` is the ResNet-34 check. It DELETES its `.vmfb` before every compile — without
     that, a second run with a different candidate silently reuses the first candidate's binary and
     reports a perfect match, which is exactly what running a negative control looks like. -/
 lean_exe «fwd-tie» where
   root := `tests.TestFwdTie
   moreLinkArgs := lowererLink
 
-/-- §0.2 ▶2, the batched-index move: the ConvNeXt forward rendered at `N := B` must emit the
+/-- The batched-index forward: the ConvNeXt forward rendered at `N := B` must emit the
     committed `verified_mlir/convnext_fwd.mlir` BYTE FOR BYTE. No GPU — it is a string compare, so
-    it belongs in every pre-commit sweep rather than behind a device. ⭐ Since 4c leg 3 (2026-09-07)
-    the committed bytes ARE the batched chain's, so the gate renders the PER-EXAMPLE chain and
+    it belongs in every pre-commit sweep rather than behind a device. The committed bytes ARE
+    the batched chain's, so the gate renders the PER-EXAMPLE chain and
     compares it — the same statement from the other side, load-bearing as long as both chains exist
     (the per-example one still writes the SGD-inline `convnext_train_step.mlir`).
 
-    ⚠ Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each of the 31
+    Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each of the 31
     batched forms against its per-example peer individually, so it localises a failure this
     whole-net diff can only report. -/
 lean_exe «convnext-fwd-b-tie» where
@@ -1137,15 +1109,15 @@ lean_exe «convnext-fwd-b-tie» where
     what those predicates make the driver pack — regions, scalar tail, drop-mask count, and the
     arity identity that closes only if every region is a full `nP` wide.
     `vit-ema-drop-render convnextin` runs the same checks on ConvNeXt-T's EMA peer of its shipping
-    recipe, `convnextin_emadpwxclipdropbf16` (2026-09-25).
+    recipe, `convnextin_emadpwxclipdropbf16`.
 
-    ⚠ The failure it exists for is silent: `planning/archive/ema.md` records that a wrongly-packed region
-    **trains and reports a loss**. No crash, no NaN — just a run optimising a misaligned view of
-    its own parameters. No GPU; a parse and three counts. -/
+    The failure it exists for is silent: a wrongly-packed region **trains and reports a loss**. No
+    crash, no NaN — just a run optimising a misaligned view of its own parameters. No GPU; a parse
+    and three counts. -/
 lean_exe «vit-ema-drop-render» where
   root := `tests.TestVitEmaDropRender
 
-/-- **ViT's batched-index forward, byte-tied against the committed artifact** (handoff §0.2 ▶3).
+/-- **ViT's batched-index forward, byte-tied against the committed artifact**.
 
     The peer of `convnext-fwd-b-tie`, and the bar is STRICTER: ConvNeXt's batched chain differs from
     its per-example one on 78 conv-VJP lines (two emitters for one VJP that were never tied to each
@@ -1156,24 +1128,23 @@ lean_exe «vit-ema-drop-render» where
 lean_exe «vit-fwd-b-tie» where
   root := `tests.TestViTFwdBTie
 
-/-- §2m ConvNeXt step 1: can the existing ops spell a **channel** LayerNorm?
+/-- Can the existing ops spell a **channel** LayerNorm?
 
-    ConvNeXt's render normalises with `.bnF` (`bnForward` over the whole `C·H·W` map, scalar γ/β)
-    where the reference is `channel_layer_norm` (`H·W` statistics, each over `C`, per-channel
-    affine) — 21 of its 22 sites are on the wrong axis (§2m). Route A says the fix needs **no new
-    op**: channel-LN is ViT's row-LN under a transpose. This settles that on device before 21 sites
-    are restructured around it, and it carries its own control — the incumbent `.bnF` chain must
-    NOT match, or gate 2 is measuring something both paths satisfy.
+    `.bnF` (`bnForward` over the whole `C·H·W` map, scalar γ/β) is not the reference's
+    `channel_layer_norm` (`H·W` statistics, each over `C`, per-channel affine). Channel-LN needs
+    **no new op**: it is ViT's row-LN under a transpose. This checks that on device, and it
+    carries its own control — the `.bnF` chain must NOT match, or gate 2 is measuring something
+    both paths satisfy.
 
         lake build channel-ln && HIP_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln -/
 lean_exe «channel-ln» where
   root := `tests.TestChannelLN
   moreLinkArgs := lowererLink
 
-/-- §2l step 1: does the emitter spell a **1×1 strided** conv, and does it compute the right one?
+/-- Does the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
     The paper's ResNet-34 option-B shortcut is a 1×1 stride-2 projection where `downFwdB` builds a
-    3×3 one (§2k). This sizes that change before any of it is made: renders the four strided-conv
+    3×3 one. It renders the four strided-conv
     ops at `k = 1` (with the committed `k = 3` alongside as the control), `iree-compile`s both, then
     drives each op on device against the **closed form** `den` implies — `flatConvStride2` is
     `decimateFlat ∘ flatConv` and `decimateIdx` reads the even positions, so at `k = 1` all four
@@ -1185,9 +1156,9 @@ lean_exe «strided-1x1» where
   root := `tests.TestStrided1x1
   moreLinkArgs := lowererLink
 
-/-- §2l step B: are the R34 conv biases inert? §2l argues dropping them is layout-only because
+/-- Are the R34 conv biases inert? Dropping them is layout-only because
     every conv is BN-followed and BN removes the bias — this MEASURES it. One step of the committed
-    AdamW render from `m = v = 0`, where `m' = (1−β₁)·g` recovers the gradient exactly (§2k), then
+    AdamW render from `m = v = 0`, where `m' = (1−β₁)·g` recovers the gradient exactly, then
     reads the 36 conv-bias slots. The DENSE bias is the control: same shape, same zero init, no BN
     after it, so it must move — otherwise the reading is "the harness sees zeros".
 
@@ -1196,21 +1167,21 @@ lean_exe «conv-bias-zero» where
   root := `tests.TestConvBiasZero
   moreLinkArgs := lowererLink
 
-/-- §2k's owed numeric gate: is `resnet34_mom_train_step` really heavy-ball with COUPLED L2?
+/-- Is `resnet34_mom_train_step` really heavy-ball with COUPLED L2?
 
     A cross-render known answer. AdamW's stored `m' = 0.1·g` at `m = v = 0` recovers the gradient
     exactly, so on the same (θ, x, onehot) the momentum render must satisfy `v' = g + wd·θ` and
     `θ' = θ − lr·v'`. The controls are the point: the repo's `momParamF` is NESTEROV, which at
     `v = 0` differs by exactly 1.9×, and the harness requires that prediction to MISS — a gate that
-    cannot separate the two optimizers would pass the one §2k warned about.
+    cannot separate the two optimizers would pass the wrong one.
 
         lake build r34-mom-tie && HIP_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie -/
 lean_exe «r34-mom-tie» where
   root := `tests.TestMomTie
   moreLinkArgs := lowererLink
 
-/-- **recipe_gaps v1.2's gate — the RMSProp render, numerically certified.** The `r34-mom-tie`
-    construction (§2k) pointed at MobileNetV2's RMSProp tail: recover the gradient from the AdamW
+/-- **The RMSProp render, numerically certified.** The `r34-mom-tie`
+    construction pointed at MobileNetV2's RMSProp tail: recover the gradient from the AdamW
     render's `m'` at `m = v = 0`, then require the RMSProp render to satisfy `s' = (1-rho)*gw^2`,
     `b' = gw/sqrt(s'+eps)` and `theta' = theta - lr*b'` where `gw = g + wd*theta`.
 
@@ -1223,8 +1194,8 @@ lean_exe «rms-tie» where
   root := `tests.TestRmsTie
   moreLinkArgs := lowererLink
 
-/-- **Stochastic depth — the two gates that cover the op's INTERIOR** (`stochastic_depth.md` §7).
-    Everything gated when the feature landed pins an ENDPOINT: `dropPath = 0` re-renders every
+/-- **Stochastic depth — the two gates that cover the op's INTERIOR**.
+    The other gates pin an ENDPOINT: `dropPath = 0` re-renders every
     artifact byte-identically, keep = 1 is bit-identical to AdamW, and `TestDropPathRamp` pins the
     keep ramp across the driver/renderer seam. Neither says what a scale strictly between those
     endpoints does, and neither can — every existing tie compares the render against a peer built
@@ -1237,8 +1208,8 @@ lean_exe «rms-tie» where
     structural check distinguishes it from the correct `s ⊙ branch + x`. A zeroed site separates
     them — it must leave the block an IDENTITY, not annihilate the signal.
 
-    ⚠ Run gate B under `scripts/det_shim.sh`: it compares two different HLO programs and the
-    committed compile options autotune on CUDA (§2d.3 Finding 1 is ROCm-specific). The harness
+    Run gate B under `scripts/det_shim.sh`: it compares two different HLO programs and the
+    committed compile options autotune on CUDA. The harness
     measures its own A-vs-A floor first and degrades B1 to a bound if the floor is not bit-exact.
 
         lake build droppath-tie
@@ -1250,12 +1221,11 @@ lean_exe «droppath-tie» where
   root := `tests.TestDropPathTie
   moreLinkArgs := lowererLink
 
-/-- ▶ **Classifier dropout's two gates** (`recipe_gaps.md` gap C) — the ones its endpoint checks
+/-- **Classifier dropout's two gates** — the ones its endpoint checks
     structurally cannot make. Gate A: the mask multiplies PER ELEMENT, against a host-computed
     answer, with the per-EXAMPLE mask (i.e. stochastic depth on the classifier) as the control.
-    Gate W: the classifier WEIGHT GRADIENT reads the dropped activation, not the pooled one — the
-    ConvNeXt LayerScale-γ defect (handoff §0.10) one net over, and invisible to every ones-mask
-    gate because there the two activations are the same buffer.
+    Gate W: the classifier WEIGHT GRADIENT reads the dropped activation, not the pooled one —
+    invisible to every ones-mask gate because there the two activations are the same buffer.
 
         lake build dropout-tie
         CUDA_VISIBLE_DEVICES=0 .lake/build/bin/dropout-tie
@@ -1267,7 +1237,7 @@ lean_exe «dropout-tie» where
   root := `tests.TestDropoutTie
   moreLinkArgs := lowererLink
 
-/-- **recipe_gaps v1.4's gate — `wdExcludeNormBias`, the timm/DeiT `no_weight_decay` render.**
+/-- **`wdExcludeNormBias`, the timm/DeiT `no_weight_decay` render.**
     `vit_adamwx` is `vit_adam` with decoupled decay switched off for the 126 params timm excludes
     (every 1-D param plus the positional embedding). The change moves NO arity, NO type and NO
     region — only which constant feeds `%wd` at 126 of 200 sites — so every structural check
@@ -1276,7 +1246,7 @@ lean_exe «dropout-tie» where
       adam:  θ' = θ − lr·( m̂/(√v̂+ε) + wd·θ )
       wx:    θ' = θ − lr·( m̂/(√v̂+ε) + wd·msk·θ )
 
-    ▶ THE PARTITION IS THE CONTROL. It does not check that 74 params match and 126 differ — a
+    THE PARTITION IS THE CONTROL. It does not check that 74 params match and 126 differ — a
     count is satisfied by any 74. It recovers per parameter which bucket that param EMPIRICALLY
     falls in and requires the partition to equal `vitWdDecays`' name for name, which is what
     catches a mask that excluded the wrong 126 (silent in arity, types and the prefix audit).
@@ -1288,7 +1258,7 @@ lean_exe «wdx-tie» where
   root := `tests.TestWdExcludeTie
   moreLinkArgs := lowererLink
 
-/-- v1.4b: **global-norm gradient clipping**, ONE harness for ViT and ConvNeXt (`clip-tie <net>`).
+/-- **Global-norm gradient clipping**, ONE harness for ViT and ConvNeXt (`clip-tie <net>`).
     The reference's `g * min(1, CLIP/(‖g‖+1e-6))` with ‖g‖ taken across EVERY parameter.
 
     At `m = v = 0` the moment slot recovers the factor exactly — `m' = (1−β₁)·g` — so
@@ -1297,8 +1267,8 @@ lean_exe «wdx-tie» where
     amplifies, and is the identity below the threshold, so it satisfies every other check here.
     `scripts/probes/perturb_clip.py perparam` builds it and it must fire.
 
-    ⚠ Needs the below-threshold render, which is GENERATED rather than committed (an artifact
-    baking a threshold no config sets is a silent hyperparameter — handoff §2a-quater):
+    Needs the below-threshold render, which is GENERATED rather than committed (an artifact
+    baking a threshold no config sets is a silent hyperparameter):
 
         lake build clip-tie
         python3 scripts/probes/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
@@ -1308,11 +1278,11 @@ lean_exe «clip-tie» where
   root := `tests.TestGradClipTie
   moreLinkArgs := lowererLink
 
-/-- `stochastic_depth.md` §5b, the gate that document left open: **the drop mask is SHARDED, not
-    replicated.** The mask is per-EXAMPLE and rides in the PARAMETER blob, where the DP shim's rule
-    ("x and the labels shard, everything between replicates") copied it to every replica.
+/-- **The drop mask is SHARDED, not replicated.** The mask is per-EXAMPLE and rides in the
+    PARAMETER blob, where the DP shim's rule ("x and the labels shard, everything between
+    replicates") would copy it to every replica.
 
-    ⚠ The duplicated-batch `*-dp-check` gates are structurally blind to this — same rows on both
+    The duplicated-batch `*-dp-check` gates are structurally blind to this — same rows on both
     replicas means sharded and replicated agree bit-exact — and `shard-check` needs the gated slot
     linear in the gradient, false for the RMSProp variant this net wants. So: duplicate the DATA,
     make only the MASK asymmetric, and **swap the halves**. A sharded mask is swap-invariant TO THE
@@ -1327,25 +1297,25 @@ lean_exe «drop-shard-check» where
   root := `tests.TestDropShardCheck
   moreLinkArgs := lowererLink
 
-/-- §2i: the cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
+/-- The cifar8 optimizer-render tie for ALL THREE variants — `cifar8-opt-tie <adam|sgd|mom>`.
     Gates the RECOVERED GRADIENT, never θ': a train step returns θ' = θ − lr·g and θ' is dominated
     by θ, the same input on both sides, so at lr 1e-3 a wholly wrong gradient still looks like a
-    match (§2a-quinquies). Each variant's gradient is exactly recoverable from its own outputs —
+    match. Each variant's gradient is exactly recoverable from its own outputs —
     adam from m', sgd from θ', mom from v'. Also gates the m/v PASSTHROUGH slots bit-exactly, since
     a tail that silently dropped a moment would still yield a plausible θ'. Deletes its .vmfb before
-    every compile (§4), unlike `cifar8-adam-tie`. -/
+    every compile, unlike `cifar8-adam-tie`. -/
 lean_exe «cifar8-opt-tie» where
   root := `tests.TestCifar8OptTie
   moreLinkArgs := lowererLink
 
-/-- §2a-ter guard: one AdamW step through two renders of `@cifar8_adam_train_step`, same packed
-    `[θ|m|v|lr|bc1|bc2]`, every returned float compared. ⚠ Compares θ' among other things and does
+/-- One AdamW step through two renders of `@cifar8_adam_train_step`, same packed
+    `[θ|m|v|lr|bc1|bc2]`, every returned float compared. Compares θ' among other things and does
     NOT delete its `.vmfb`; prefer `cifar8-opt-tie`, which recovers the gradient and deletes. -/
 lean_exe «cifar8-adam-tie» where
   root := `tests.TestCifar8AdamTie
   moreLinkArgs := lowererLink
 
-/-- §2b step-5 guard: one AdamW step through two renders of `@resnet34_adam_train_step` — the
+/-- One AdamW step through two renders of `@resnet34_adam_train_step` — the
     hand-written emitter vs the batched `pretty(provenGraph)` — same packed
     `[θ|m|v|lr,bc1,bc2|bn stats]`, every returned float compared. Numeric and not textual on
     purpose: the two are the same function but not the same graph. -/
@@ -1353,7 +1323,7 @@ lean_exe «resnet34-adam-tie» where
   root := `tests.TestResnet34AdamTie
   moreLinkArgs := lowererLink
 
-/-- §2a-quinquies guard: one SGD step through two renders of `@<slug>_train_step` — the `tests/`
+/-- One SGD step through two renders of `@<slug>_train_step` — the `tests/`
     emitter vs `pretty(provenGraph)` — on one shared θ, comparing the recovered GRADIENT
     `(θ − θ')/lr` rather than θ' (θ' is dominated by the shared θ, so it hides a wrong gradient).
     The lr is per side because the two emitters do not always agree on it. Run BEFORE deleting a
@@ -1362,26 +1332,20 @@ lean_exe «sgd-render-tie» where
   root := `tests.TestSgdRenderTie
   moreLinkArgs := lowererLink
 
-/-- ViT AdamW step-3 gate: one AdamW step through two renders of `@vit_adam_train_step` — the
+/-- ViT AdamW gate: one AdamW step through two renders of `@vit_adam_train_step` — the
     hand-written emitter the driver writes at startup vs `pretty(provenGraph)` — same packed
     `[θ|m|v|lr,bc1,bc2]`, every returned float compared. ViT has no BN, so there is no forward-only
     region: the gate is the gradient AND `%loss` (the only direct read of the forward).
 
-    **`lowererLink` since 2026-08-12, and the docstring it replaces was wrong twice over.** That
-    text read "ireeLink, not xlaLink — `vit-verified-adam` is an IREE binary, so the ViT AdamW graph
-    has only ever run under IREE; on XLA/PJRT it dies in the patch-embed weight-grad convolution
-    with `miopenStatusUnknownError`." `vit-verified-adam` moved to `lowererLink` and defaults to
-    XLA, and the MIOpen failure was a **ROCm** fault, not an XLA one: the same graph trains this
-    net end to end on CUDA. ⚠ Note the link arg was never what selected the backend anyway —
-    `ireeLink` only adds `-liree_ffi` to the link line, while `ffi/lowerer.c` **dlopens** whichever
-    shim `$LEAN_MLIR_LOWERER` names, so the ireeLink-built gate was already tying on XLA. ConvNeXt
-    settled that by running it (its own docstring, below). This is the target that originated the
-    stale claim: `efficientnet-adam-tie`'s docstring cited "`vit-adam-tie`'s reason". -/
+    **`lowererLink`.** `vit-verified-adam` is on `lowererLink` and defaults to XLA. A
+    `miopenStatusUnknownError` in the patch-embed weight-grad convolution is a **ROCm** fault, not
+    an XLA one: the same graph trains this net end to end on CUDA. The link arg does not select
+    the backend — `ffi/lowerer.c` **dlopens** whichever shim `$LEAN_MLIR_LOWERER` names. -/
 lean_exe «vit-adam-tie» where
   root := `tests.TestViTAdamTie
   moreLinkArgs := lowererLink
 
-/-- EfficientNet-B0 AdamW step-3 gate: one AdamW step through two renders of
+/-- EfficientNet-B0 AdamW gate: one AdamW step through two renders of
     `@efficientnet_adam_train_step` — the hand-written emitter in `tests/TestEfficientNetTrain.lean`
     vs `pretty(provenGraph)` — same packed `[θ|m|v|lr,bc1,bc2|bn stats]`, every returned float
     compared.
@@ -1391,33 +1355,27 @@ lean_exe «vit-adam-tie» where
     the whole forward chain BIT-EXACTLY and separates a forward disagreement from a backward one in
     one run. `%loss` is still gated, but as a cross-check rather than the only forward evidence.
 
-    **`lowererLink` since 2026-08-12**, closing the last of the three targets that carried the
-    stale "is an IREE binary" premise. It cited `vit-adam-tie`'s reason, and that reason was
-    retired at the same time: `efficientnet-verified-adam` is itself on `lowererLink` and defaults
-    to XLA. The link arg never selected the backend, since `ffi/lowerer.c` dlopens the shim
+    **`lowererLink`.** `efficientnet-verified-adam` is itself on `lowererLink` and defaults to
+    XLA. The link arg never selects the backend, since `ffi/lowerer.c` dlopens the shim
     `$LEAN_MLIR_LOWERER` names. -/
 lean_exe «efficientnet-adam-tie» where
   root := `tests.TestEfficientNetAdamTie
   moreLinkArgs := lowererLink
 
-/-- MobileNetV2 AdamW gate (§2f, the last net on the scorecard): one AdamW step through two renders
+/-- MobileNetV2 AdamW gate: one AdamW step through two renders
     of `@mobilenetv2_adam_train_step` — the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean`
     against `Proofs/Codegen/MobileNetV2RenderB.lean`'s `pretty(provenGraph)` — comparing all
     returned floats per region. 52 BN layers give a `bnstat` region that pins the forward
-    bit-exactly, and the gate covers SPREAD as well as magnitude (§2f-bis). Deletes its `.vmfb`
-    before every compile (§2e's false-PASS trap).
+    bit-exactly, and the gate covers SPREAD as well as magnitude. Deletes its `.vmfb`
+    before every compile (the false-PASS trap).
 
-    **`lowererLink` since 2026-08-25** — the third and last of the stale "is an IREE binary"
-    docstrings, which `convnext-adam-tie` flagged as open. This one read "IREE-linked, because
-    `mobilenetv2-verified-adam` is", and BOTH halves were wrong the same way ConvNeXt's were:
-    `mobilenetv2-verified-adam` has been on `lowererLink` since 2026-08-12 (line ~2225), and the
-    `ireeLink` here never selected a backend anyway — `lowerer.h` macro-redirects the whole
-    `iree_ffi_*` surface onto dlopen'd pointers, so the flag resolved nothing. -/
+    **`lowererLink`**, as `mobilenetv2-verified-adam` is. A link flag selects no backend —
+    `lowerer.h` macro-redirects the whole `iree_ffi_*` surface onto dlopen'd pointers. -/
 lean_exe «mobilenetv2-adam-tie» where
   root := `tests.TestMobilenetV2AdamTie
   moreLinkArgs := lowererLink
 
-/-- ConvNeXt-T AdamW gate (§2f): one AdamW step through two renders of `@convnext_adam_train_step`
+/-- ConvNeXt-T AdamW gate: one AdamW step through two renders of `@convnext_adam_train_step`
     — the hand-written emitter in `tests/TestConvNeXtTrain.lean` vs `pretty(provenGraph)` — same
     packed `[θ|m|v|lr,bc1,bc2]`, every returned float compared.
 
@@ -1425,19 +1383,14 @@ lean_exe «mobilenetv2-adam-tie» where
     forward-only region and `%loss` is the only direct read of the forward — which is why it is
     gated rather than reported.
 
-    ⚠ This said "ireeLink, because `convnext-verified-adam` is an IREE binary" until 2026-08-12,
-    and BOTH halves were wrong. The trainer is on `lowererLink` and defaults to XLA (line ~2120),
-    and the `ireeLink` here was **inert**: `ffi/lowerer.c` dlopens the shim `$LEAN_MLIR_LOWERER`
-    names, so link args stopped selecting the backend. Settled by RUNNING it — the ireeLink build
-    printed `[pjrt_ffi] XLA backend: PJRT 0.112` and tied on XLA. Moved to `lowererLink` so the
-    line says what happens. ▶ CLOSED 2026-08-25: `efficientnet-adam-tie` carried the identical
-    stale docstring (`chapter_makeover.md` §4a-quinquies "Open") and so did `mobilenetv2-adam-tie`;
-    both are on `lowererLink` now, and `ireeLink` itself no longer exists. -/
+    The trainer is on `lowererLink` and defaults to XLA. Link args do not select the backend:
+    `ffi/lowerer.c` dlopens the shim `$LEAN_MLIR_LOWERER` names — an IREE-linked build of this
+    gate prints `[pjrt_ffi] XLA backend: PJRT 0.112` and ties on XLA. -/
 lean_exe «convnext-adam-tie» where
   root := `tests.TestConvNeXtAdamTie
   moreLinkArgs := lowererLink
 
-/-- §2d.1 gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
+/-- Gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/
 lean_exe «resnet34-batch-check» where
@@ -1455,7 +1408,7 @@ lean_exe «vit-dp-check» where
     target gives the mixed gradient and mixup/cutmix need **no new cotangent**. Measures
     `grad(λ·y_a + (1−λ)·y_b) == λ·grad(y_a) + (1−λ)·grad(y_b)` on the committed bytes, gating
     `m` (never θ', which is nonlinear in the gradient under AdamW), against a control that runs
-    every time and a vacuity refusal. Retires §2p's claim that a `softLabelCE` render was needed. -/
+    every time and a vacuity refusal. So no `softLabelCE` render is needed. -/
 lean_exe «soft-target-tie» where
   root := `tests.TestSoftTargetTie
   moreLinkArgs := lowererLink
@@ -1463,8 +1416,8 @@ lean_exe «soft-target-tie» where
 /-- EfficientNet DP gate. Giving both replicas the SAME batch makes `all_reduce(add)/2` the
     identity, so the data-parallel step must reproduce the single-device one exactly. BatchNorm does
     not spoil this: BN normalises per replica, and both replicas' groups are the same 32 examples,
-    so their statistics are identical by construction. (The §10.3b caveat that blocked this gate for
-    R34 is about SPLITTING a batch — 2×32 really is not 1×64 — not duplicating one.)
+    so their statistics are identical by construction. (The R34 caveat is about SPLITTING a batch —
+    2×32 really is not 1×64 — not duplicating one.)
 
     Stronger than `vit-dp-check`: EfficientNet returns 98 BN batch statistics, so it has a
     forward-only region that must come back BIT-EXACT. Needs two GPUs and the XLA backend. -/
@@ -1478,7 +1431,7 @@ lean_exe «efficientnet-dp-check» where
 
     mnv2 returns 104 BN batch statistics (52 layers), so it has a forward-only `bnstat` region that
     must come back BIT-EXACT. Needs two GPUs and the XLA backend — collectives exist only on the
-    PJRT path, which is why `mobilenetv2-verified-adam` (§2h) had to come first. -/
+    PJRT path. -/
 lean_exe «mobilenetv2-dp-check» where
   root := `tests.TestMobilenetV2DpCheck
   moreLinkArgs := lowererLink
@@ -1486,33 +1439,29 @@ lean_exe «mobilenetv2-dp-check» where
 /-- The MNv4 peer, and the gate that makes `mnv4in_adamdp64` quotable. Same EXACT duplicated-batch
     identity: every replica gets the same 64 examples, so the all-reduced BN statistics are the
     single device's, `all_reduce(add)/4 = (4·g)/4 = g`, and the DP step must reproduce the
-    single-device one — `bnstat` bit-exact, gradient within 1e-2 (bf16 5e-2): since 2026-09-21 the
-    DP backward is the sync-BN graph and the single-device one the two-pass graph.
+    single-device one — `bnstat` bit-exact, gradient within 1e-2 (bf16 5e-2): the DP backward is
+    the sync-BN graph and the single-device one the two-pass graph.
 
-    ⛔ It exists because `MobileNetV4RenderB.lean` rendered MNv4's 4-replica pair for COSTING only
-    and said "do not train off these": nothing had tied its collectives, and an untied collective
-    artifact looks exactly as trustworthy as a tied one. This gate plus `imagenet-syncbn-check
-    mnv4` (the split batch; until the sync-BN swap, the `mnv4in` row in `shard-check`) is that tie.
+    An untied collective artifact looks exactly as trustworthy as a tied one. This gate plus
+    `imagenet-syncbn-check mnv4` (the split batch) ties MNv4's collectives.
 
-    ⚠⚠ FOUR GPUs, not two, and that is forced — MNv4 renders `adamdp64` at 4 replicas only, with no
+    FOUR GPUs, not two, and that is forced — MNv4 renders `adamdp64` at 4 replicas only, with no
     2-replica peer, so `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading.
     It is also the 1000-class 224² net: there is no Imagenette-scale MNv4 DP render to gate more
     cheaply.
-    ⭐ `DP_VARIANT`/`DP_VARIANT_DP` re-run it over the bf16 pair, which was exactly as untied as
-    the f32 one. XLA backend only. -/
+    `DP_VARIANT`/`DP_VARIANT_DP` re-run it over the bf16 pair. XLA backend only. -/
 lean_exe «mnv4-dp-check» where
   root := `tests.TestMnv4DpCheck
   moreLinkArgs := lowererLink
 
 /-- **`cnx-init-check` — the known-answer gate for ConvNeXt's verified weight init.**
 
-    ⛔ The 2026-09-17 ConvNeXt/ImageNet pair run was KILLED at epoch 67 because the two arms did
-    not share an init: the JAX reference sets `cnxInit := true` (ConvNeXt `_init_weights`,
-    `trunc_normal(0.02)` on every conv AND the head) and the verified path used `mkParam`'s He
-    default. Two arms with different inits cannot isolate the lowerer, which is the one thing this
-    BatchNorm-free net is in the book for. `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0.
+    The two arms of the ConvNeXt/ImageNet pair must share an init: the JAX reference sets
+    `cnxInit := true` (ConvNeXt `_init_weights`, `trunc_normal(0.02)` on every conv AND the head),
+    where `mkParam`'s default is He. Two arms with different inits cannot isolate the lowerer,
+    which is the one thing this BatchNorm-free net is in the book for.
 
-    ⚠⚠ **Init is the hardest thing in this repo to read off the source and be right.** It is
+    **Init is the hardest thing in this repo to read off the source and be right.** It is
     host-side, it never reaches a committed artifact so no drift guard covers it, and the two
     init paths disagree on the rank-4 rule — `mkParam` is He **fan-OUT** (`2/(oc·kh·kw)`) while
     `SpecHelpers.heInitLayer` is fan-**IN** (`2/(ic·kh·kw)`). Reading the wrong file gives ratios
@@ -1533,8 +1482,7 @@ lean_exe «cnx-init-check» where
     `%loss` is the whole of the forward evidence — this harness gates it as well as the gradient,
     the same split `convnext-adam-tie` uses. It is also the first execution anywhere here of a
     RANK-0 `all_reduce` (the 44 scalar LayerNorm γ/β). Needs two GPUs and the XLA backend —
-    collectives exist only on the PJRT path, which is why `convnext-verified-adam` (§2h) had to
-    come first. -/
+    collectives exist only on the PJRT path. -/
 lean_exe «convnext-dp-check» where
   root := `tests.TestConvNeXtDpCheck
   moreLinkArgs := lowererLink
@@ -1552,34 +1500,34 @@ lean_exe «convnext-shard-check» where
   moreLinkArgs := lowererLink
 
 /-- `shard-check <convnext|vit|convnextin> [<dpPath>]` — the asymmetric-batch SHARDING gate for
-    the LayerNorm nets' DP renders, generalised from `convnext-shard-check` (handoff §5's "still
-    open" item). The `*-dp-check` gates hand both replicas the SAME rows, so they are structurally
-    blind to a shard-offset bug; this one gives them different data and checks
-    `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two GPUs and the XLA backend.
+    the LayerNorm nets' DP renders, generalised from `convnext-shard-check`. The `*-dp-check` gates
+    hand both replicas the SAME rows, so they are structurally blind to a shard-offset bug; this one
+    gives them different data and checks `DP([xA|xB]) == mean(single(xA), single(xB))`. Needs two
+    GPUs and the XLA backend.
 
-    ⛔ Its BatchNorm rows (`efficientnet`, `mobilenetv2`, `…in`, `mnv4in`) were RETIRED 2026-09-21:
-    those DP renders are synchronised BatchNorm, so the identity above is exactly what their
-    `*-syncbn-check` CONTROL requires to FAIL. The sync-BN gates' TEST column replaces them; a
-    retired slug exits 2 and names its replacement.
+    It has no BatchNorm rows (`efficientnet`, `mobilenetv2`, `…in`, `mnv4in`): those DP renders
+    are synchronised BatchNorm, so the identity above is exactly what their `*-syncbn-check`
+    CONTROL requires to FAIL. The sync-BN gates' TEST column covers them; such a slug exits 2 and
+    names its replacement.
 
-    ⚠ A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs, e.g. `convnextin`. -/
+    A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs, e.g. `convnextin`. -/
 lean_exe «shard-check» where
   root := `tests.TestShardCheck
   moreLinkArgs := lowererLink
 
-/-- `resnet34-syncbn-check` — the SYNC-BN gate, the identity no batch-BN net could state before
-    2026-09-21: `DP_sync([xA|xB])` at 2×32 equals `single([xA|xB])` at 1×64 on EVERY output region
+/-- `resnet34-syncbn-check` — the SYNC-BN gate, the identity a per-replica batch-BN net cannot
+    state: `DP_sync([xA|xB])` at 2×32 equals `single([xA|xB])` at 1×64 on EVERY output region
     (θ', m', v', the 72 BN statistics), because the sync render's replicas compute their shards of
-    one global-batch function (`planning/global_bn_verified.md`, `Foundation/DataParallel/Sync.lean`).
-    CONTROL: the old per-replica identity `DP == mean(single_32(xA), single_32(xB))` must now FAIL
-    by a margin, or the statistics are not synchronised. The first numeric check any of the seven
-    sync ops' emitted MLIR has had. Needs two GPUs and the XLA backend. -/
+    one global-batch function (`Foundation/DataParallel/Sync.lean`).
+    CONTROL: the per-replica identity `DP == mean(single_32(xA), single_32(xB))` must FAIL
+    by a margin, or the statistics are not synchronised. A numeric check on the seven sync ops'
+    emitted MLIR. Needs two GPUs and the XLA backend. -/
 lean_exe «resnet34-syncbn-check» where
   root := `tests.TestR34SyncBnCheck
   moreLinkArgs := lowererLink
 
 /-- `mobilenetv2-syncbn-check` / `efficientnet-syncbn-check` — `resnet34-syncbn-check`'s gate on the
-    other two BN nets with a committed pair (`planning/global_bn_verified.md` §3.3), one shared
+    other two BN nets with a committed pair, one shared
     runner (`LeanMlir/SyncBnCheck.lean`): the committed 2×32 sync-BN DP step against the 1×64
     two-pass step and the one-replica sync graphs, both rendered at run time. Two GPUs, XLA. -/
 lean_exe «mobilenetv2-syncbn-check» where
@@ -1603,41 +1551,38 @@ lean_exe «imagenet-syncbn-check» where
     reads its top-1 through. Needs no GPU and no backend: pure host arithmetic on a synthetic
     logit block, so it can run anywhere and costs nothing.
 
-    ⚠ It exists because the predecessor `F32.argmax10` scanned a LITERAL 10 entries and was
-    therefore correct on every net the repo gated (Imagenette/CIFAR/MNIST are all 10-class) and
-    silently wrong on the ungated 1000-class ImageNet tier — where it reported 0.94% for a net
-    that was really at ~4.4%, because it could only ever be right on labels 0..9. The file ships
-    its own CONTROL: a 10-wide window re-run on the same data, required to MISS. -/
+    A scorer that scans a LITERAL 10 entries is correct on every 10-class net
+    (Imagenette/CIFAR/MNIST) and silently wrong on the 1000-class ImageNet tier — it reports
+    0.94% for a net really at ~4.4%, because it can only ever be right on labels 0..9. The file
+    ships its own CONTROL: a 10-wide window re-run on the same data, required to MISS. -/
 lean_exe «argmax-check» where
   root := `tests.TestArgmaxN
 
-/-- `label-check` — the WIDTH gate on eval label decoding, and `argmax-check`'s twin: both were
-    10-class assumptions in code that also runs at 1000 classes, both correct everywhere the repo
-    gates. `ByteArray.get!` yields a `UInt8`, so the old `(evalLbl.get! (4*i)).toNat` read byte 0
-    only — `label % 256` — capping ImageNet top-1 at roughly a quarter of the truth. No GPU. -/
+/-- `label-check` — the WIDTH gate on eval label decoding, and `argmax-check`'s twin: both guard
+    10-class assumptions in code that also runs at 1000 classes. `ByteArray.get!` yields a
+    `UInt8`, so `(evalLbl.get! (4*i)).toNat` reads byte 0 only — `label % 256` — capping
+    ImageNet top-1 at roughly a quarter of the truth. No GPU. -/
 lean_exe «label-check» where
   root := `tests.TestLabelDecode
 
-/-- `r34-dp-shard` — the DP gate R34 never had. `shard-check`'s own docstring says R34 is absent
-    "on purpose … no `adamdp` peer at this batch to pair with", and there is no `resnet34-dp-check`
-    either, so the net carrying the 30-epoch ImageNet run is the one net whose data-parallel path
-    rests entirely on a source comment. This asks the narrower question the full identity would
-    subsume — do replicas 1..3 affect the update at all — using only the committed DP artifact, no
-    single-device bs64 peer. TEST + a CONTROL that must fire. Needs 4 GPUs and the XLA backend. -/
+/-- `r34-dp-shard` — R34's DP gate. `shard-check` has no R34 row ("no `adamdp` peer at this
+    batch to pair with") and there is no `resnet34-dp-check`. This asks the narrower question the
+    full identity would subsume — do replicas 1..3 affect the update at all — using only the
+    committed DP artifact, no single-device bs64 peer. TEST + a CONTROL that must fire. Needs 4 GPUs
+    and the XLA backend. -/
 lean_exe «r34-dp-shard» where
   root := `tests.TestR34DpShard
   moreLinkArgs := lowererLink
 
-/-- `r50-gradcheck` — **the gate R50's backward never had**
-    (`planning/archive/next_session_pipeline_then_r50.md` §3.2). Phases 1–3 shipped a net that renders,
-    trains and descends behind a LAYOUT gate (`TestR50Contract`) with nothing on the gradient, and
-    R50 is the one net with no incumbent hand-written artifact to tie against.
+/-- `r50-gradcheck` — **the gate on R50's backward.** Without it R50 renders, trains and
+    descends behind only a LAYOUT gate (`TestR50Contract`) with nothing on the gradient, and R50
+    is the one net with no incumbent hand-written artifact to tie against.
 
     The train step returns its own loss next to `[θ'|m'|v']`, so a single invoke from `m = v = 0`
-    gives both `L(θ)` and `g = 10·m'` (§2k's construction). The check is then the adjoint identity
+    gives both `L(θ)` and `g = 10·m'`. The check is then the adjoint identity
     `⟨g, δ⟩ = (L(θ+δ) − L(θ−δ))/2` on the COMMITTED bytes, one direction per block, so it localises
-    to the three bottleneck forms individually — including the stride-1 projection that §3.2 flags
-    as covered by nothing.
+    to the three bottleneck forms individually — including the stride-1 projection, which nothing
+    else covers.
 
     Two tiers, because they cover each other's blind spots: the closed-form homogeneity identities
     (`⟨g_W, W⟩ = 0` on 53 BN-followed convs, `⟨g_γ,γ⟩+⟨g_β,β⟩ = 0` on 33 pre-conv BN affines — the
@@ -1646,13 +1591,13 @@ lean_exe «r34-dp-shard» where
     see. Controls: 21 sites where the invariance is FALSE must violate it, and a doubled gradient
     must not fit.
 
-    ⚠ §3.2's proposed `vjp_oracle` cases would have gated `MlirCodegen.emitBottleneckBlock`, a
-    DIFFERENT lowering from the one `resnet50-imagenet-verified` runs.
+    `vjp_oracle` cases would gate `MlirCodegen.emitBottleneckBlock`, a DIFFERENT lowering from the
+    one `resnet50-imagenet-verified` runs.
 
-    ⚠ This gates `adam64`; the driver defaults to `adamdp64`, whose `%loss` is replica-local while
+    This gates `adam64`; the driver defaults to `adamdp64`, whose `%loss` is replica-local while
     its gradient is all-reduced, so tier 2 cannot run there. `python3 tests/r50_dp_render_tie.py`
-    carries the verdict across by text — since the DP renders went sync-BN (2026-09-21), from the
-    ONE-REPLICA SYNC graph `ResNet50RenderB` writes to `.lake/build/r50sync/`, which this gate
+    carries the verdict across by text — the DP renders are sync-BN, so from the ONE-REPLICA
+    SYNC graph `ResNet50RenderB` writes to `.lake/build/r50sync/`, which this gate
     certifies with `R50_GC_PATH=.lake/build/r50sync`. Needs one GPU and the XLA backend.
 
         lake build r50-gradcheck && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck -/
@@ -1660,22 +1605,21 @@ lean_exe «r50-gradcheck» where
   root := `tests.TestR50GradCheck
   moreLinkArgs := lowererLink
 
-/-- `r50-accum-tie` — **gradient accumulation, numerically certified**
-    (`planning/archive/next_session_pipeline_then_r50.md` §4's blocker). The `.adamwAccum` render carries a
-    FOURTH parameter region `G` and two runtime scalars deciding, per micro-batch, whether the
-    invoke accumulates or applies.
+/-- `r50-accum-tie` — **gradient accumulation, numerically certified.** The `.adamwAccum` render
+    carries a FOURTH parameter region `G` and two runtime scalars deciding, per micro-batch,
+    whether the invoke accumulates or applies.
 
     Run it k times on the SAME batch: every micro-gradient is then the same `g`, so the cycle must
     reproduce ONE step of the committed `resnet50in_adam64_train_step.mlir` — a different artifact,
-    rendered before accumulation existed, whose gradient `r50-gradcheck` certifies. Plus a
+    rendered without accumulation, whose gradient `r50-gradcheck` certifies. Plus a
     bit-exactness claim that the accumulate micro-batches leave `[θ|m|v]` untouched.
 
-    ⭐ The check with teeth is `v'`: it is QUADRATIC in the gradient, so `%ob2` must carry
+    The check with teeth is `v'`: it is QUADRATIC in the gradient, so `%ob2` must carry
     `(1−β₂)/k²` where `%ob1` carries `(1−β₁)/k`. A single shared scale gives the mean of the
     per-micro-batch second moments instead of the second moment of the mean — a different optimizer
     that descends and looks entirely normal.
 
-    ⚠ Duplicated batch, so it is blind to the combination of DIFFERENT micro-batches, exactly as
+    Duplicated batch, so it is blind to the combination of DIFFERENT micro-batches, exactly as
     every `*-dp-check` is blind to shard offset. CONTROL: applying one micro-batch early must miss.
     Needs one GPU and the XLA backend.
 
@@ -1688,15 +1632,15 @@ lean_exe «r50-accum-tie» where
     is structurally blind to (it runs k micro-steps on the same batch, so every micro-gradient is
     the same). The same hole every `*-dp-check` has and that `shard-check` closes one level up.
 
-    ⭐ The naive complement — "k micro-batches of b == one step at batch k·b" — is FALSE by design:
+    The naive complement — "k micro-batches of b == one step at batch k·b" — is FALSE by design:
     k micro-batches give k BatchNorm groups where one big batch gives one. That is Ghost-BN. But
     R50's renderer draws a graph that computes exactly that: the DATA-PARALLEL step with PER-REPLICA
     BatchNorm, each replica normalising over its own b rows. So `acc(x₁..x_k) == dp([x₁|..|x_k])`
     EXACTLY, and the two sides reach it through a serial accumulator with a folded 1/k versus an
-    `all_reduce` and a divide — neither a re-derivation of the other. ⚠ Since 2026-09-21 the
+    `all_reduce` and a divide — neither a re-derivation of the other. The
     committed DP renders are sync-BN, so that peer is rendered at run time (`noSync := true`).
 
-    ⚠ It compares θ', m' AND v', unlike `shard-check` (which averages two separately-optimised
+    It compares θ', m' AND v', unlike `shard-check` (which averages two separately-optimised
     steps and so can only compare the linear `m`). CONTROL: the duplicated batch — exactly what
     `r50-accum-tie` runs — must MISS. Needs FOUR GPUs and the XLA backend.
 
@@ -1706,20 +1650,18 @@ lean_exe «r50-accum-shard-tie» where
   root := `tests.TestR50AccumShardTie
   moreLinkArgs := lowererLink
 
-/-- `r50-lamb-tie` — **LAMB, numerically certified.** `planning/archive/rsb_a3_r50_verified.md` §2.3's LAMB
-    row is the ONE line that file flags as an estimate rather than a measurement ("2–3 ops"). Built,
-    and measured at **two** new `SHlo` constructors — `gradSumSqAccF` was already there for the
-    global-norm clip and `sgdParamF` for heavy-ball.
+/-- `r50-lamb-tie` — **LAMB, numerically certified.** **Two** new `SHlo` constructors;
+    `gradSumSqAccF` is the global-norm clip's and `sgdParamF` heavy-ball's.
 
-    §2k's construction for the third time: recover `g = 10·m'` from the committed AdamW render at
+    The known-answer construction: recover `g = 10·m'` from the committed AdamW render at
     `m = v = 0`, then require the LAMB render to satisfy the closed form, per parameter TENSOR.
 
-    ▶▶ THE CONTROLS ARE THE POINT — three wrong LAMBs that every one of them trains and descends:
+    THE CONTROLS ARE THE POINT — three wrong LAMBs that every one of them trains and descends:
     `trust ≡ 1` (plain Adam, i.e. forgetting the layer-wise part that IS the algorithm),
     `√(v̂ + ε)` (RMSProp-TF's ε placement) and the decay applied AFTER the trust ratio (AdamW's).
     Each must miss by ≥10× the tie.
 
-    ⚠ The comparison is on the STEP `θ' − θ`, not `θ'` — the step is ~1e-3 of θ, so a relative error
+    The comparison is on the STEP `θ' − θ`, not `θ'` — the step is ~1e-3 of θ, so a relative error
     on θ' divides by the wrong thing. Needs one GPU and the XLA backend.
 
         lake build r50-lamb-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-lamb-tie -/
@@ -1727,15 +1669,15 @@ lean_exe «r50-lamb-tie» where
   root := `tests.TestR50LambTie
   moreLinkArgs := lowererLink
 
-/-- `r50-bce-tie` — **BCE-with-logits, numerically certified** (§4's loss row). RSB-A2/A3 do not
+/-- `r50-bce-tie` — **BCE-with-logits, numerically certified.** RSB-A2/A3 do not
     train with softmax CE: every class is an independent sigmoid, `reduction='mean'` over B×K.
 
-    ⭐ The trick that makes it EXACT: zero the classifier weight, so `z = Wd·gap + bd` collapses to
+    The trick that makes it EXACT: zero the classifier weight, so `z = Wd·gap + bd` collapses to
     `z = bd` — a vector the harness chose, known to the last bit, with no forward to reproduce. The
     loss and the whole cotangent are then closed forms in `bd` and the targets, and `g_bd` comes out
-    of AdamW's `m' = 0.1·g` (§2k). The degeneracy is the instrument.
+    of AdamW's `m' = 0.1·g`. The degeneracy is the instrument.
 
-    ⚠ The control worth having is the REDUCTION: mean over B alone rather than B×K is `K = 1000×`
+    The control worth having is the REDUCTION: mean over B alone rather than B×K is `K = 1000×`
     on the effective step, changes no shape, no op and no arity, and descends perfectly well at
     1/1000 of the intended learning rate. Needs one GPU and the XLA backend.
 
@@ -1744,22 +1686,22 @@ lean_exe «r50-bce-tie» where
   root := `tests.TestR50BceTie
   moreLinkArgs := lowererLink
 
-/-- §2e-bis step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
+/-- Step-time bench: 1 GPU (bs 32) vs 2 GPUs (global 64) on the same certified net,
     compiled in ONE process and interleaved A,B,A,B so drift hits both equally, min statistic,
-    SYNTHETIC inputs so the data loader is out of it (§3's data-bound trap). Reports ms/image and
+    SYNTHETIC inputs so the data loader is out of it (the data-bound trap). Reports ms/image and
     the Amdahl-implied non-parallelisable share of a step, which is the measured argument for
     device-resident parameters. Needs two GPUs and the XLA backend. -/
 lean_exe «efficientnet-dp-bench» where
   root := `tests.TestEfficientNetDpBench
   moreLinkArgs := lowererLink
 
-/-- §2b-quater gate: the collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
+/-- The collective's SEMANTICS, checked where they can be. cifar8 has no BN, so
     2×128 + all_reduce must equal 1×256 to fp rounding. Needs two GPUs and the XLA backend. -/
 lean_exe «cifar8-dp-check» where
   root := `tests.TestCifar8DpCheck
   moreLinkArgs := lowererLink
 
-/-- §2b tail: step-time bench for the same two renders the tie compares. The batched render is
+/-- Step-time bench for the same two renders the tie compares. The batched render is
     1.68× the emitted ops (10014 vs 5971) because `pretty` has no CSE and the batched backward ops
     are self-contained recomputes; the open question is whether XLA's own CSE collapses that. Both
     are compiled in one process and their steps interleaved, so the comparison is drift-free. -/
@@ -1768,18 +1710,18 @@ lean_exe «resnet34-adam-bench» where
   moreLinkArgs := lowererLink
 
 -- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
--- dataset where label k is derivable from image k. The FFI used to swap a
--- hardcoded 4 bytes of label per record, which silently mispaired every
--- detection and segmentation batch (mAP@0.5 0.0001 vs 0.1167 after the fix).
--- Hermetic — no data files, no GPU. See planning/archive/post_shuffle_fix.md §3.
+-- dataset where label k is derivable from image k. A shuffle that swaps a
+-- hardcoded 4 bytes of label per record silently mispairs every detection and
+-- segmentation batch (mAP@0.5 0.0001 vs 0.1167).
+-- Hermetic — no data files, no GPU.
 lean_exe «test-shuffle-pairing» where
   root := `tests.TestShufflePairing
   moreLinkArgs := lowererLink
 
--- `Ddpm.sampleNoise` seeded its xorshift by XOR alone and read the first
--- uniform from the TOP of the word, so nearby seeds shared a Box-Muller radius:
--- the 2-D demo's 2048 starting points sat on a circle instead of filling a
--- Gaussian. Per-axis mean and variance are correct under the defect, so this
+-- A `Ddpm.sampleNoise` that seeds its xorshift by XOR alone and reads the first
+-- uniform from the TOP of the word gives nearby seeds a shared Box-Muller radius:
+-- the 2-D demo's 2048 starting points sit on a circle instead of filling a
+-- Gaussian. Per-axis mean and variance are correct under that defect, so this
 -- asserts the RADIUS is Rayleigh. Hermetic — no data files, no GPU.
 lean_exe «test-sample-noise-seeding» where
   root := `tests.TestSampleNoiseSeeding
@@ -2026,10 +1968,9 @@ private def detectBackend : IO String := do
 
 /-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented at the head
     of the XLA/PJRT section. Build it when it is missing or older than its source, so
-    `lake run <group>-xla` works from a fresh clone instead of failing at startup (⚠ at STARTUP
-    since `xlaLink` was retired — the shim is dlopen'd, not linked, so its absence is no longer
-    caught at build time), and so an edited shim cannot be silently run stale (the `.vmfb`-cache
-    hazard's cousin — see planning/archive/xla_pjrt_handoff.md §4). -/
+    `lake run <group>-xla` works from a fresh clone instead of failing at startup (the shim is
+    dlopen'd, not linked, so its absence is not caught at build time), and so an edited shim
+    cannot be silently run stale (the `.vmfb`-cache hazard's cousin). -/
 private def ensurePjrtShim : IO Bool := do
   let src : System.FilePath := "ffi/pjrt_ffi.c"
   let so  : System.FilePath := "ffi/libpjrt_ffi.so"
@@ -2077,11 +2018,9 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   -- The IREE trainers shell out to `iree-compile`; put the project venv on PATH so
   -- `lake run` works without pre-activating it (the usual one-click footgun).
   let venvBin := (← IO.currentDir) / ".venv" / "bin"
-  -- Name the lowerer explicitly for BOTH groups. Migrated binaries (those on
-  -- `lowererLink`) pick their backend from this at run time and DEFAULT to XLA,
-  -- so without it `lake run *-iree` would silently run XLA the moment a target
-  -- migrates. Un-migrated binaries ignore it — their backend is still the link
-  -- line — so this is correct during the transition and after it.
+  -- Name the lowerer explicitly for BOTH groups. Binaries on `lowererLink` pick
+  -- their backend from this at run time and DEFAULT to XLA, so without it
+  -- `lake run *-iree` would silently run XLA.
   let lowerer := if xla then "xla" else "iree"
   -- The XLA tiers run resident — parameters stay on the device between steps — because that
   -- is how every chapter transcript ran and what Appendix B's tier times assume (1.3–2× the
@@ -2114,13 +2053,12 @@ script «mnist-iree» do
 /-- `lake run cifar-iree` — the ch.4 six-arm optimizer ablation (SGD/momentum/adam ×
     bn/no-bn) on the IREE lowerer.
 
-    These are the WIDE-head (`d1 = 512`) nets as of 2026-08-26, because those are
-    what Chapter 4 actually runs and quotes: `cifar8w-bn-ablation` is the binary
-    behind §4.1's listing and `runs/2026-08-12-cifar8w-6arm-xla-cuda/`. It used to
-    be the narrow `d1 = 64` pair, so the demo trained a different net from the one
-    the chapter's tables reported. The narrow nets are still built and still
-    proved — `cifarCnn8HasVJPAt` is parametric in the head width, so neither
-    needs its own proof — they are just no longer what `lake run cifar` shows. -/
+    These are the WIDE-head (`d1 = 512`) nets, because those are what Chapter 4
+    actually runs and quotes: `cifar8w-bn-ablation` is the binary behind §4.1's
+    listing and `runs/2026-08-12-cifar8w-6arm-xla-cuda/`. The narrow `d1 = 64`
+    nets are still built and still proved — `cifarCnn8HasVJPAt` is parametric in
+    the head width, so neither needs its own proof — they are just not what
+    `lake run cifar` shows. -/
 script «cifar-iree» do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"]
 
@@ -2130,11 +2068,11 @@ script «cifar-iree» do
     single 7900 XTX — per the ViT-chapter results table) — a real time
     investment, not a quick demo.
 
-    ⚠ **This is FIVE nets, not the seven of `imagenette`.** MobileNetV4 and ResNet-50 are
+    **This is FIVE nets, not the seven of `imagenette`.** MobileNetV4 and ResNet-50 are
     XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
     `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
     an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes
-    (87.36% / 89.86%), both off the XLA path. ▶ **`imagenette` is the official set**; this
+    (87.36% / 89.86%), both off the XLA path. **`imagenette` is the official set**; this
     group is the IREE half of the cross-backend comparison. -/
 script «imagenette-iree» do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
@@ -2142,31 +2080,27 @@ script «imagenette-iree» do
                 "vit-verified-adam"]
 
 -- ═══════════════════════════════════════════════════════════════════════
--- ⭐⭐ THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
+-- THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
 --
--- ⚠ **RENAMED 2026-08-10, and the swap is the confusing kind: these three USED to be
--- `*-xla`, and the unsuffixed names used to mean the IREE group above.** So a `lake run
--- imagenette` in any doc, log or shell history older than that date ran the IREE five, not
--- these. XLA is the default because it is where every quoted number comes from, it is ~4.6×
+-- XLA is the default because it is where every quoted number comes from, it is ~4.6×
 -- IREE on EfficientNet, and it is the only path with MobileNetV4 and ResNet-50 at all.
 --
 -- Same nets, same certified artifacts, same schedules and seeds as the `-iree` group — the
 -- ONLY difference is which trusted lowerer consumes the emitted StableHLO, which is the whole
--- point of the second backend (planning/archive/xla_pjrt_handoff.md §1).
+-- point of the second backend.
 --
 -- Why you'd reach for these: XLA is **4.6× IREE** on EfficientNet — 80 epochs in
--- 1 h 35 m against 7 h 50 m (§2e-quinquies) — and multi-GPU is reachable ONLY
+-- 1 h 35 m against 7 h 50 m — and multi-GPU is reachable ONLY
 -- here, since collectives exist on the PJRT path and the IREE shim refuses a DP
 -- entry point outright. Re-measure per net rather than assuming 4.6×; it is one
 -- net's number, on a depthwise-convolution-heavy net.
 --
--- ⚠ Two coverage gaps, both named rather than papered over — see each docstring.
+-- Two coverage gaps, both named rather than papered over — see each docstring.
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-- `lake run mnist` — the three verified MNIST demos (linear/MLP/CNN) on XLA.
 
-    No longer a set of `-xla` PEERS: since the conv rung migrated, this names the
-    SAME three binaries as `lake run mnist-iree`. The only difference between the
+    This names the SAME three binaries as `lake run mnist-iree`. The only difference between the
     two scripts is the lowerer `runDemoGroup` puts in the environment, which is
     the strongest form the G2 comparison can take — one binary, run twice. -/
 script mnist do
@@ -2176,58 +2110,52 @@ script mnist do
 /-- `lake run cifar` — the six-way Chapter-4 optimizer ablation on XLA
     (SGD / Nesterov-momentum / AdamW × BN / no-BN).
 
-    Still a mirror of `lake run cifar-iree` in the literal sense: the SAME
-    binaries, differing only in the lowerer `runDemoGroup` selects. Both sides
-    moved to the WIDE-head pair on 2026-08-26 so that the demo trains the net
-    Chapter 4 reports on; each ablation binary runs its three optimizers in
-    sequence on one controlled pipeline (shuffle + hflip + cosine-warmup), so the
-    six arms are two binaries rather than six. Wide costs about 1.6x the
-    wall-clock per epoch over the narrow pair it replaced (~6.3s vs ~3.9s on a
-    4060 Ti) and buys no accuracy — §4.3's head-width sweep is exactly that
+    A mirror of `lake run cifar-iree` in the literal sense: the SAME binaries,
+    differing only in the lowerer `runDemoGroup` selects. Both sides run the WIDE-head pair so that
+    the demo trains the net Chapter 4 reports on; each ablation binary runs its three optimizers in
+    sequence on one controlled pipeline (shuffle + hflip + cosine-warmup), so the six arms are two
+    binaries rather than six. Wide costs about 1.6x the wall-clock per epoch over the narrow pair
+    (~6.3s vs ~3.9s on a 4060 Ti) and buys no accuracy — §4.3's head-width sweep is exactly that
     finding — but matching the chapter is worth the minutes. -/
 script cifar do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"] (xla := true)
 
-/-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`, and **all five as of
-    2026-07-30**.
+/-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`.
 
-    ViT was excluded here from 2026-07-28 to 2026-07-30 by measurement, not omission: the graph
-    compiled but died at *execution* in the patch-embed weight-gradient convolution with
-    `miopenStatusUnknownError` (diagnosed in
+    On ROCm the ViT graph can die at *execution* in the patch-embed weight-gradient convolution
+    with `miopenStatusUnknownError` (diagnosed in
     `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`: a fused interior-dilated pad+conv
     selects MIOpen's no-workspace `GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build
     under HIPRTC — it uses the OpenCL builtin `get_global_id`).
 
-    ⚠ **It now runs, with no workaround, and the failure does not reproduce.** Measured
-    2026-07-30: the im2col error fired on the session's first ViT/XLA execution and never again
-    across 11 runs, including the byte-identical invocation that had just failed. So this target
-    is included on the strength of it working repeatedly — but treat a recurrence as possible,
+    **It runs, with no workaround.** The im2col error fired on one session's first ViT/XLA
+    execution and never again across 11 runs, including the byte-identical invocation that had
+    just failed. Treat a recurrence as possible,
     and see `probeAttnRefMsXla` for the escape hatch (`MIOPEN_DEBUG_CONV_GEMM=0`, which is a ~7%
     regression rather than a fix).
 
     It is gated, not merely running: the first three step losses agree with the IREE peer to
     **3e-6** from identical fresh init, it descends (39.7 → 46.7 → **49.6%** over 3 epochs), and
-    `vit-dp-check` now passes **bit-exact on all 16,579,041 floats** against a sum-not-mean control
-    that fires at 0.996 — so ViT is the fifth working data-parallel net.
+    `vit-dp-check` passes **bit-exact on all 16,579,041 floats** against a sum-not-mean control
+    that fires at 0.996.
 
     Per-epoch, all measured on this card: mnv2 58.0 s, ConvNeXt 84.5 s, EfficientNet 71.1 s,
-    ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ⚠ ViT is the one net here **without** an 80-epoch run
+    ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ViT is the one net here **without** an 80-epoch run
     on its certified bytes — the other four have one.
 
-    ⭐⭐ **SEVEN NETS as of 2026-08-10, and this is THE OFFICIAL SET** — `lake run mnist`
+    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist`
     (3) + `lake run cifar` (6) + this (7) is the whole demo surface; nothing else is a
-    headline runner. MobileNetV4 and ResNet-50 joined here and **only** here, because neither has
+    headline runner. MobileNetV4 and ResNet-50 are here and **only** here, because neither has
     an IREE driver (see `lake run imagenette-iree`'s note). Their numbers, both 80-epoch AdamW at 224²
     on the certified bytes: **MNv4-Conv-S 87.36%** (`runs/mnv4_adam_80ep_aug09.log`, ~61 min) and
     **ResNet-50 89.86%** (`runs/r50_imagenette_adam_80ep.log`).
 
-    ⚠ MNv4's 87.36% is **not** a reproduction of the JAX baseline's 84.58%: the architectures are
+    MNv4's 87.36% is **not** a reproduction of the JAX baseline's 84.58%: the architectures are
     tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
     warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
 script imagenette do
   -- Book order (ch.5 -> ch.9, each chapter's side quest right after it), so the
-  -- group narrates in the order a reader met the nets. r50 and mnv4 were appended
-  -- when they joined the tier; 2026-08-26 moved them into place.
+  -- group narrates in the order a reader met the nets.
   runDemoGroup ["resnet34-verified-adam", "resnet50-verified-adam",
                 "mobilenetv2-verified-adam", "mobilenetv4-verified-adam",
                 "efficientnet-verified-adam", "convnext-verified-adam",
@@ -2240,8 +2168,8 @@ script imagenette do
 -- A job is `scripts/jobs/<job>.conf`: the device list, both replica knobs, the variant, the
 -- per-replica batch and the per-net feed setting all live THERE, and `scripts/supervise.sh` is
 -- the engine that runs it with the restart policy a multi-day run on this box needs. These
--- scripts add nothing to that. They make the job's own name the command, so the seven-variable
--- incantation the book used to print is `lake run r34-default-bf16-4gpu`.
+-- scripts add nothing to that. They make the job's own name the command, so a seven-variable
+-- incantation becomes `lake run r34-default-bf16-4gpu`.
 --
 -- Modes, the first argument to a job script:
 --   (none)   supervised run — resumes from the job's checkpoint, restarts on AER / heat / stall
@@ -2257,7 +2185,8 @@ script imagenette do
     `r50-a3-wxclip-bf16-4gpu` (RSB-A3 at 8 × 64: the same effective 2048 at a BatchNorm group of 256),
     `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
     overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
-    ⚠ `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` are the 4× 3060 box's confs, named by the
+    `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` are the 4× 3060
+    box's confs, named by the
     book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is
     the honest answer. -/
 private def imagenetRows : List (String × String × String) :=
@@ -2325,7 +2254,7 @@ script «vitb-default-g512-4gpu» (args) do runJobScript "vitb-default-g512-4gpu
 
 /-- `lake run imagenet` — the fourth tier: the twelve ImageNet rows, in chapter order.
 
-    ⚠ PLAN-ONLY unless the first argument is `start`. Bare, it runs every row's `plan` — the name
+    PLAN-ONLY unless the first argument is `start`. Bare, it runs every row's `plan` — the name
     check, the PRECHECK, the wall-clock on file — and launches nothing, because the tier is weeks
     of four-card time and this box has crashed under it. `lake run imagenet start` runs the rows
     through `scripts/supervise.sh` in order and stops at the first failure; a row whose checkpoint
@@ -2422,17 +2351,15 @@ script download do
 -- either vendor out of the box. A dense factor (MNIST-MLP) and a conv factor
 -- (CIFAR-8-BN) scale the dense- vs conv-dominated chapters independently.
 --
--- ⚠ **EACH LOWERER HAS ITS OWN REFERENCE COLUMN, AND THAT IS NOT OPTIONAL.**
+-- **EACH LOWERER HAS ITS OWN REFERENCE COLUMN, AND THAT IS NOT OPTIONAL.**
 -- The two backends are not within noise of each other on the same card: measured
--- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor, 4.7× on the
--- dense one and **8.6× on the attn one** (and 4.6× on EfficientNet, handoff
--- §2e-quinquies). A single blended factor would be wrong in both directions by
--- nearly 4×, which is why the split is per family AND per lowerer. So dividing an XLA
--- probe by an IREE anchor conflates *your GPU vs a 7900 XTX* with *XLA vs IREE*,
--- and reports a training estimate several times too fast with no warning. That is
--- why `BenchItem` carries `refSecXla` and why there are `probe*RefMsXla` constants:
--- a `BenchRef` bundles one lowerer's anchors so a probe can only ever be divided by
--- a reference measured on the same path. See planning/archive/xla_pjrt_handoff.md §2j.
+-- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor, 4.7× on the dense one and **8.6×
+-- on the attn one** (and 4.6× on EfficientNet). A single blended factor would be wrong in both
+-- directions by nearly 4×, which is why the split is per family AND per lowerer. So dividing an XLA
+-- probe by an IREE anchor conflates *your GPU vs a 7900 XTX* with *XLA vs IREE*, and reports a
+-- training estimate several times too fast with no warning. That is why `BenchItem` carries
+-- `refSecXla` and why there are `probe*RefMsXla` constants: a `BenchRef` bundles one lowerer's
+-- anchors so a probe can only ever be divided by a reference measured on the same path.
 --
 -- REFERENCE NUMBERS below are per-chapter *training* wall-clock on a single AMD
 -- 7900 XTX (gfx1100, ROCm 7.2). The MNIST/CIFAR rows and all three IREE probe
@@ -2446,14 +2373,12 @@ script download do
 -- in-process in seconds. Re-running either benchmark on a 7900 XTX reproduces its
 -- own anchors (every factor reads ~1.0×).
 --
--- ⚠ Two known staleness caveats in the IREE column, both MEASURED 2026-07-30 and
--- left as-is rather than silently changed:
+-- Known staleness caveats in the IREE column, left as-is rather than silently changed:
 --   * ch3 (MNIST CNN) reads 23764 ms/epoch; re-measured on the same card, same
 --     basis (real data + eval, steady state) it is **17659** — the row is ~1.35×
 --     pessimistic. ch1/ch2/ch4 reproduce (535→539, 3200→3032, 8490→8782).
---   * the IREE Imagenette rows predate the 2026-07-28 codegen swaps, so they were
---     measured on RETIRED hand-written renders (handoff §0b). The XLA Imagenette
---     rows are the current certified bytes.
+--   * the IREE Imagenette rows were measured on hand-written renders, not the
+--     certified bytes. The XLA Imagenette rows are the current certified bytes.
 --   * the IREE DENSE anchor (3030) also reads high: measured 2485 / 2815 / 2819 in
 --     one session on the reference card, i.e. 0.82-0.93×. Unlike the XLA anchors,
 --     which are medians of 8-10 samples, the IREE ones are single historical
@@ -2470,33 +2395,32 @@ structure BenchItem where
   /-- XLA/PJRT reference wall-clock (s) on the same card. `none` = this chapter has no
       measured XLA reference, in which case `benchmark-xla` prints the row as `n/a` and
       leaves it out of the totals rather than borrowing the IREE number (which would be
-      the §2j mismatched-baseline trap). **Every chapter is now measured**; the mechanism
-      is kept because it is what makes an unmeasured row honest rather than invented, and
-      ch.9 needed it until the MIOpen workaround landed on 2026-07-30. -/
+      the mismatched-baseline trap). **Every chapter is measured**; the mechanism is kept
+      because it is what makes an unmeasured row honest rather than invented. -/
   refSecXla : Option Nat
   tier    : String          -- "" | "mnist" | "cifar" | "imagenette"
-  /-- ⚠⚠ **This chapter's BOTTLENECK MIX is not the one its probe measures**, so a single
+  /-- **This chapter's BOTTLENECK MIX is not the one its probe measures**, so a single
       hardware factor cannot describe it and the row prints a RANGE instead.
 
       The `family` axis says which *ops* a chapter runs. It does not say what the chapter is
       *limited by*, and on this path most of them are limited by the parameter round trip, not by
-      arithmetic: §2d.3 measured the param share of a step at **33.5%** for the conv probe
+      arithmetic: the param share of a step measures **33.5%** for the conv probe
       (`cifar8-bn`, 32²) against **59.4%** for ResNet-34, **46.7%** for EfficientNet and **84.6%**
       for the MNIST CNN. A card whose transport:compute ratio differs from the reference's — e.g.
       PCIe Gen3 x8 against a 7900 XTX — therefore gets a *different* factor for each, and scaling a
-      transport-bound chapter by a compute-bound probe is the §2j mismatched-baseline trap one axis
+      transport-bound chapter by a compute-bound probe is the mismatched-baseline trap one axis
       over: same lowerer, same card, wrong bottleneck.
 
-      ⭐ **MEASURED, 2026-08-04 on ares (RTX 4060 Ti, PCIe Gen3 x8):** the probes read conv
+      **MEASURED on ares (RTX 4060 Ti, PCIe Gen3 x8):** the probes read conv
       **0.56×** and dense **1.33×** (idle card) — a 2.4× spread that is not noise but two different
-      bottlenecks. The old single number predicted ch5 at **35m**; the real 80-epoch run came in at
+      bottlenecks. A single number predicts ch5 at **35m**; the real 80-epoch run came in at
       **89m** (66.7 s marginal epoch × 80, `runs/r34_pool3s2_80ep_aug04.log`), i.e. **2.5×
       optimistic**. The bracket's transport end predicts **84m** — 1.06× low.
 
-      ⚠⚠ **SO THE BRACKET DOES NOT CONTAIN THE TRUTH, AND MUST NOT BE SOLD AS A BOUND.** R34's real
+      **SO THE BRACKET DOES NOT CONTAIN THE TRUTH, AND MUST NOT BE SOLD AS A BOUND.** R34's real
       like-for-like ratio is **5333/3780 = 1.41×**, above *both* probe factors. The cause is
       structural and known: the probes run `LEAN_MLIR_BENCH_SYNTH=1`, so they exclude the data
-      loader **by design**, and §2e-ter measured per-epoch host overhead at **6.3%** of a 1-GPU
+      loader **by design**, and per-epoch host overhead measures **6.3%** of a 1-GPU
       epoch — the size of the miss. A bracket over two synthetic probes cannot reach a real run's
       loader term. Read it as *"the compute/transport estimate spans this"*, not as an interval the
       answer lies in. It takes ch5 from 2.5× wrong to 1.06× wrong; that is the whole claim.
@@ -2504,15 +2428,13 @@ structure BenchItem where
       On the reference card both factors read ~1.0, the range collapses, and nothing about the
       published column changes.
 
-      ⚠ Do NOT "fix" this by re-pointing these rows at the dense probe. That is one measured
-      chapter, and one sample is not a measurement — the same error this repo has already paid for
-      three times (the retracted conv-probe thermal story, the retracted `MIOPEN_DEBUG_CONV_GEMM`
-      fix, the retracted pinned-d2h mechanism). The honest fix is a 224² conv probe with its own
+      Do NOT "fix" this by re-pointing these rows at the dense probe. That is one measured
+      chapter, and one sample is not a measurement. The honest fix is a 224² conv probe with its own
       anchor measured on the reference card; until someone has that card, a bracket is the most
       the evidence supports. -/
   transportSensitive : Bool := false
-  /-- **The CUDA (RTX 4060 Ti) reference wall-clock**, measured 2026-08-04, not scaled from
-      anything. ch5 is today's real 80-epoch run (`runs/r34_pool3s2_80ep_aug04.log`, 66.7 s
+  /-- **The CUDA (RTX 4060 Ti) reference wall-clock**, measured, not scaled from
+      anything. ch5 is a real 80-epoch run (`runs/r34_pool3s2_80ep_aug04.log`, 66.7 s
       marginal epoch × 80); ch6-9 are eval-inclusive marginal epochs × 80; ch1-4 are 3 steady-state
       epochs × their own epoch counts. `benchmark-xla` picks this column on a CUDA backend, so on a
       4060 Ti every factor reads ~1.00 and the estimate IS the measurement. -/
@@ -2524,32 +2446,31 @@ structure BenchItem where
   probeXla : String := ""
   epochs   : Nat := 0
   /-- Direct mode: steps/epoch, set ONLY for `trainAdamSched` nets (the five Imagenette ones).
-      ⚠ Those trainers print `Epoch N/80: loss=…` with **no ms**, so `lastEpochMs` cannot read them
-      and a 3-epoch probe returns nothing — which is exactly how the first version of direct mode
-      failed, silently, with exit 0 on all five. They report ms/**step** through the
+      Those trainers print `Epoch N/80: loss=…` with **no ms**, so `lastEpochMs` cannot read them
+      and a 3-epoch probe returns nothing. They report ms/**step** through the
       `LEAN_MLIR_MAX_STEPS` PROBE line instead, which is why `runProbe` already carries a
       `stepProbe` parameter for the attn probe. A non-zero value here selects that path.
-      ⭐ It is also strictly better: the step probe warms 8 and times 9..40 (seconds, not epochs),
-      and §2d.3 records that it `return ()`s BEFORE any checkpoint write, so it cannot leave a
-      marker. ⚠ It excludes the EVAL pass, so these rows are TRAIN-ONLY — see the footnote. -/
+      It is also strictly better: the step probe warms 8 and times 9..40 (seconds, not epochs),
+      and it `return ()`s BEFORE any checkpoint write, so it cannot leave a
+      marker. It excludes the EVAL pass, so these rows are TRAIN-ONLY — see the footnote. -/
   stepsPerEpoch : Nat := 0
 
-/-- The XLA MNIST/CIFAR rows were measured 2026-07-30 on the reference 7900 XTX with the
+/-- The XLA MNIST/CIFAR rows were measured on the reference 7900 XTX with the
     SAME construction as the IREE ones — steady-state ms/epoch (real data + eval, last of
     3 epochs) × the trainer's own epoch count, so the two columns are directly comparable.
-    **All five XLA Imagenette rows are now measured 80-epoch single-GPU runs on the current
-    certified bytes** — ch5-8 from handoff §0b (`runs/<net>_xla_80ep_jul29.log`) and ch9 from
+    **All five XLA Imagenette rows are measured 80-epoch single-GPU runs on the current
+    certified bytes** — ch5-8 `runs/<net>_xla_80ep_jul29.log` and ch9
     `runs/vit_xla_80ep_jul30.log` (wall **3491 s**, epoch marker 80).
 
-    ⚠ ch9 is also the **validation of the marginal-epoch method** the other rows lean on: before
-    the run, this row held 3480 s extrapolated from a 43.5 s `(T₃−T₁)/2` measurement × 80. The real
-    wall came in at 3491 s — **0.3% out**. So `scripts/sweeps/marginal_epoch.sh` × epochs is trustworthy at
+    ch9 is also the **validation of the marginal-epoch method** the other rows lean on: a 43.5 s
+    `(T₃−T₁)/2` measurement × 80 extrapolates to 3480 s against the real wall's 3491 s —
+    **0.3% out**. So `scripts/sweeps/marginal_epoch.sh` × epochs is trustworthy at
     this scale, which is worth knowing because it is far cheaper than an 80-epoch run.
     ch4 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
     though the 3 no-BN arms are cheaper.
 
-    ⚠ The XLA MNIST/CIFAR rows are each a SINGLE steady-state sample, so they inherit the
+    The XLA MNIST/CIFAR rows are each a SINGLE steady-state sample, so they inherit the
     ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch3, ch4)
     are the affected pair. Treat them as ±6%, not as exact. -/
 def benchTable : List BenchItem :=
@@ -2558,35 +2479,35 @@ def benchTable : List BenchItem :=
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
       refSecCuda := some 11, probeXla := "mnist-mlp-verified", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
-      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  ⚠ 84.6% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  84.6% param round trip
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
-      refSecCuda := some 1514, probeXla := "cifar8w-bn-ablation", epochs := 240 },   -- ⚠ 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
-    -- ⚠⚠ **WIDE-head as of 2026-08-26**, because that is what `lake run cifar` and ch.4 now are
-    -- (both moved off the narrow d1=64 pair the same day). refSecCuda was 540 = 2.25 s/epoch × 240
-    -- on `cifar8-bn-verified`; it is now 6.31 s/epoch × 240 = 1514 on `cifar8w-bn-ablation`, which
+      refSecCuda := some 1514, probeXla := "cifar8w-bn-ablation", epochs := 240 },   -- 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+    -- **WIDE-head**, because that is what `lake run cifar` and ch.4 are. refSecCuda is
+    -- 6.31 s/epoch × 240 = 1514 on `cifar8w-bn-ablation`, which
     -- keeps this field's stated meaning ("3 steady-state epochs × their own epoch counts") and
     -- matches what direct mode computes from the same probe.
-    -- ⭐ The TRUE 6-arm wall, measured end-to-end on one 4060 Ti the same day, is **1131 s**
+    -- The TRUE 6-arm wall, measured end-to-end on one 4060 Ti, is **1131 s**
     -- (`runs/2026-08-26-cifar8w-6arm-timing/`: 374 s for the 3 no-BN arms at 3.12 s/epoch + 757 s
     -- for the 3 BN arms at 6.31). So the BN-arm×6 approximation OVERSHOOTS by 34% here — the
     -- no-BN arms are half the cost, not "cheaper" by a little. The approximation is kept anyway
     -- because direct mode can only ever read ONE ms/epoch and the IREE/XLA ref columns make the
-    -- same one; a row that mixed a true wall against two extrapolated ones would be the §2j trap.
-    -- ⛔ `refSec` (IREE 2038) and `refSecXla` (888) are STILL the narrow-head 7900 XTX numbers and
-    -- are now mismatched against this row's net. Not scaled here on purpose — inventing a factor is
-    -- exactly what this table exists to avoid. Re-measure on the ROCm box, or read them as narrow.
+    -- same one; a row that mixed a true wall against two extrapolated ones would be the
+    -- mismatched-baseline trap. `refSec` (IREE 2038) and `refSecXla` (888) are the narrow-head 7900
+    -- XTX numbers and are mismatched against this row's net. Not scaled here on purpose — inventing
+    -- a factor is exactly what this table exists to avoid. Re-measure on the ROCm box, or read them
+    -- as narrow.
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m ⚠ was 4260 (1h11m) = the RETIRED 3×3-projection net; §2l re-ran the PAPER net at 1h03m and even wrote "8 minutes faster", but this table never got it. 59.4% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m (the PAPER net). 59.4% param round trip
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m ⚠ measured on the PRE-§2m net (52 conv biases not yet dropped)
+      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m measured on the net with its 52 conv biases
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip (§2d.3)
+      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s ⚠ was 6960 (1h56m) = the retired SCALAR-LN net; §2o Part B re-ran the channel-LN net at 6841s
+      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s (the channel-LN net, 6841s)
     { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette",
       refSecCuda := some 2560, probeXla := "vit-verified-adam", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
 
-/-- **This chapter's reference wall-clock, for the column in play.** Three columns now, not two:
+/-- **This chapter's reference wall-clock, for the column in play.** Three columns, not two:
     IREE, XLA-on-ROCm (7900 XTX) and XLA-on-CUDA (4060 Ti). The vendor split exists because the
     per-chapter cross-vendor ratio spans 2.4× and no single probe factor fits it — see
     `probeDenseRefMsCuda`. -/
@@ -2603,27 +2524,26 @@ def probeDenseRefMs : Nat := 3030   -- mnist-mlp-verified  (784→512→512→10
 def probeConvRefMs  : Nat := 8020   -- cifar8-bn-verified  (8-conv + BN, 512 head)
 /-- ms/STEP on the reference 7900 XTX for the `attn` anchor — synthetic-input probe of
     vit-verified-adam, reported as the median of a 100-step window (robust to the
-    cold-cache / GC-blip outliers that made the old 40-step mean swing ±10%+).
+    cold-cache / GC-blip outliers that make a 40-step mean swing ±10%+).
     Step-based, not per-epoch: a ViT epoch is too slow to probe, and ViT's
     matmul/attention cost scales unlike conv across GPUs — so transformers get their
     own factor. (The 2.3h ViT figure elsewhere is the JAX bf16 path, not this
     verified-IREE trainer, which is ~7.8h here.) -/
 def probeAttnRefMs : Nat := 1173
 
-/-- The XLA/PJRT anchors, measured 2026-07-30 on the same reference 7900 XTX, with the
+/-- The XLA/PJRT anchors, measured on the same reference 7900 XTX, with the
     same synthetic-input probe and the same "last of 3 epochs" steady-state rule as the
     IREE ones above — the only difference is which `.so` the probe binary linked. Against
     the IREE anchors these read 4.66× (dense) and 2.19× (conv), which is the whole reason
-    a shared reference column would be wrong (§2j).
+    a shared reference column would be wrong.
 
-    **The attn anchor exists as of 2026-07-30 — `vit-verified-adam` runs on this box,
-    and it needs no workaround.** That reverses the state recorded from 2026-07-28: the
-    graph used to die at *execution* in the patch-embed weight-gradient convolution
+    **The attn anchor: `vit-verified-adam` runs on this box, and at bs32 it needs no
+    workaround.** The graph can die at *execution* in the patch-embed weight-gradient convolution
     (a fused interior-dilated pad+conv selects MIOpen's no-workspace `GemmFwdRest` solver,
     whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC — it uses the OpenCL builtin
     `get_global_id`; see `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`).
 
-    ⚠ **It is BATCH-DEPENDENT, and this anchor is the bs32 number.** Measured 2026-07-30:
+    **It is BATCH-DEPENDENT, and this anchor is the bs32 number.** Measured:
     * **bs32** — the fault fired on the session's FIRST ViT/XLA execution and then never again
       across 11 runs, *including the byte-identical invocation that had just failed*. So here
       `MIOPEN_DEBUG_CONV_GEMM=0` is **not needed**, and setting it costs ~7% (attn probe 136 vs
@@ -2650,9 +2570,8 @@ def probeAttnRefMs : Nat := 1173
 
     All three are **medians over repeated runs, not single samples**, because the conv probe has
     real run-to-run spread on this card: ten runs of the same binary gave 3449 / 3473 / 3482
-    / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch — a ±6% band with no pattern
-    (an earlier reading of it as context-dependent, benchmark-run vs standalone, was refuted
-    by the 11th sample). So a single sample can read 0.94× against its own anchor and look
+    / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch — a ±6% band with no pattern.
+    So a single sample can read 0.94× against its own anchor and look
     like a regression when nothing changed. The dense probe is stable to ±1.5% (601 / 605 /
     607 / 610 / 610 / 610 / 615 / 619). Read an on-reference factor of 0.94-1.06× as
     agreement, not as signal — and if you re-anchor, use a median of several runs, not the
@@ -2666,14 +2585,14 @@ def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified (XLA) (vs 8020 on I
     is a ~7% regression, not a fix; see the note above.) -/
 def probeAttnRefMsXla : Nat := 128
 
--- ═══ THE CUDA REFERENCE COLUMN — RTX 4060 Ti, measured 2026-08-04 on an idle ares ═══
+-- ═══ THE CUDA REFERENCE COLUMN — RTX 4060 Ti, measured on an idle ares ═══
 --
--- ⚠⚠ WHY A SECOND COLUMN RATHER THAN A BETTER FACTOR. The per-chapter 4060Ti/7900XTX ratio,
+-- WHY A SECOND COLUMN RATHER THAN A BETTER FACTOR. The per-chapter 4060Ti/7900XTX ratio,
 -- measured directly on all five Imagenette nets, spans **0.585 → 1.411 — a 2.4× range**:
 --   ch5 R34 1.411 · ch6 mnv2 0.585 · ch7 enet 0.667 · ch8 ConvNeXt 1.181 · ch9 ViT 0.733
 -- against probe factors of conv 0.56, dense 1.33, attn 0.74. **No single factor fits them**, so
 -- cross-vendor scaling cannot be made accurate at any coefficient — the nets differ in how much of
--- a step is parameter transport (§2d.3: 33.5% for the conv probe against 59.4% for R34), and the
+-- a step is parameter transport (33.5% for the conv probe against 59.4% for R34), and the
 -- two vendors differ in exactly that ratio. Measuring each vendor is the fix; scaling is the
 -- fallback for a box with no datasets, not the answer.
 def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified (XLA), idle, 3 real epochs
@@ -2682,10 +2601,10 @@ def probeAttnRefMsCuda  : Nat := 95     -- vit-verified-adam,   idle, MAX_STEPS=
 
 /-- One lowerer's complete probe configuration: which binaries to probe and which anchors
     to divide by. Bundling them is the point — `yourSecOf` takes a `BenchRef`, so a probe
-    measured on one path cannot be divided by the other path's anchor, which is the §2j
-    trap made unrepresentable rather than merely documented. -/
+    measured on one path cannot be divided by the other path's anchor, which is the
+    mismatched-baseline trap made unrepresentable rather than merely documented. -/
 structure BenchRef where
-  /-- Lowerer name for the table header — the label whose absence was §2j's complaint. -/
+  /-- Lowerer name for the table header. -/
   lowerer    : String
   xla        : Bool
   /-- Which reference column to read: "iree" | "rocm" | "cuda". -/
@@ -2731,16 +2650,15 @@ def xlaRefCuda : BenchRef :=
     on `ref`'s lowerer.
 
     **The conv proxy for a transformer measured ~3.5× LOW**, which is why the attn family
-    exists at all (`7e0e6a1`): on a 4060 Ti the three factors came out dense 4.82× / conv
+    exists at all: on a 4060 Ti the three factors came out dense 4.82× / conv
     3.54× / **attn 11.98×**, so scaling ViT as conv estimated 7.9 h against a measured ~28 h.
     That is the 7900 XTX → 4060 Ti (ROCm → CUDA) divergence specifically, not a constant —
-    on the reference card the proxy is harmless because every factor reads ~1.0, which is
-    exactly why it went unnoticed. An independent instance of the same principle, measured
-    2026-07-30 on one card across lowerers: XLA-vs-IREE is **2.24× for conv but 9.2× for
-    attn**. Attention and convolution do not track each other, whether you change the GPU or
-    the lowerer.
+    on the reference card the proxy is harmless because every factor reads ~1.0. An independent
+    instance of the same principle, measured on one card across lowerers: XLA-vs-IREE is **2.24× for
+    conv but 9.2× for attn**. Attention and convolution do not track each other, whether you change
+    the GPU or the lowerer.
 
-    ⚠ **The 3.5×-low proxy figure is an IREE fact, not a 4060 Ti fact.** Measured 2026-08-01 on
+    **The 3.5×-low proxy figure is an IREE fact, not a 4060 Ti fact.** Measured on
     ares (6× 4060 Ti, CUDA 12.9, jax 0.10.2 CUDA PJRT plugin), the SAME card on the XLA path
     reads dense **1.29×** / conv **0.54×** / attn **0.70×** — i.e. it BEATS the reference 7900
     XTX on both conv and attn, and the conv proxy for attn would have been off by only 1.3×
@@ -2763,15 +2681,12 @@ def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat
     family's (compute-leaning) and the dense probe's (transport-leaning). This returns the LOWER
     of the two; everything else is just `yourSecOf`.
 
-    ⭐ **On the reference card the two factors both read ~1.0, so they coincide and the published
+    **On the reference card the two factors both read ~1.0, so they coincide and the published
     column is unchanged.** They separate only on a card whose transport:compute ratio differs from
-    the reference's. ⚠ The low end is optimistic when they do: measured on ares 2026-08-04, ch5's
+    the reference's. The low end is optimistic when they do: measured on ares, ch5's
     two factors were 40m and 91m, and the real run landed at **89m** — i.e. near the HIGH one.
 
-    ⚠ This returned a `(lo, hi)` BRACKET until 2026-08-28, but nothing ever consumed the `hi`
-    half: `fmtRange` was defined and never called, `yourHiTotal` and `anyBracket` were assigned
-    and never read. The single printed number is deliberate (see the note at the print site), so
-    the bracket machinery was deleted rather than wired up. -/
+    The single printed number is deliberate (see the note at the print site). -/
 def yourSecLo (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
   (yourSecOf ref it dMs cMs aMs).map fun base =>
     if it.transportSensitive then
@@ -2843,17 +2758,17 @@ def gpuBusyPct (backend : String) : IO (Option Nat) := do
     ch9 the attn one) and an extrapolation for every other — which is the whole reason ch3 and ch5-8
     print a bracket. This answers the other question directly: run the chapter's real trainer and
     multiply by its own epoch count. No reference card, no hardware factor, no bottleneck
-    assumption. §2j validated the method at **0.3%** (ch9's wall was extrapolated at 3480 s from a
+    assumption. The method is validated at **0.3%** (ch9's wall extrapolates to 3480 s from a
     marginal-epoch measurement; the real 80-epoch run landed at 3491 s).
 
-    ⚠⚠ **REAL data, not `LEAN_MLIR_BENCH_SYNTH`** — deliberately. The synthetic path exists to take
-    the loader out of a *comparison*; here the loader is part of the answer, and §2e-ter measured it
-    at ~6.3% of a 1-GPU epoch. Excluding it is most of why even the bracket's transport end came in
+    **REAL data, not `LEAN_MLIR_BENCH_SYNTH`** — deliberately. The synthetic path exists to take
+    the loader out of a *comparison*; here the loader is part of the answer, and it measures
+    ~6.3% of a 1-GPU epoch. Excluding it is most of why even the bracket's transport end came in
     6% low against the measured ResNet-34 run.
 
-    ⚠⚠ **AND IT MUST NOT TOUCH A CHECKPOINT**, in either direction. `trainAdamSched` checkpoints per
+    **AND IT MUST NOT TOUCH A CHECKPOINT**, in either direction. `trainAdamSched` checkpoints per
     epoch, so a naive 3-epoch probe would (a) RESUME an existing checkpoint — measuring a warm
-    restart, or nothing at all if the marker is at the epoch budget (§4's silent no-op) — and
+    restart, or nothing at all if the marker is at the epoch budget (a silent no-op) — and
     (b) leave its own marker at 3 for the next real run to resume from. The caller stashes and
     restores; this function only runs. -/
 def runDirectProbe (it : BenchItem) (backend gpu : String)
@@ -2865,7 +2780,7 @@ def runDirectProbe (it : BenchItem) (backend gpu : String)
     return none
   let vis := if backend == "cuda" then "CUDA_VISIBLE_DEVICES" else "HIP_VISIBLE_DEVICES"
   let stepMode := it.stepsPerEpoch > 0
-  -- ⚠ MAX_STEPS warms 8 and times 9..n, so anything ≤ 8 fires NOTHING and caps nothing (§0.12).
+  -- MAX_STEPS warms 8 and times 9..n, so anything ≤ 8 fires NOTHING and caps nothing.
   let capEnv := if stepMode then #[("LEAN_MLIR_MAX_STEPS", some "40")]
                             else #[("LEAN_MLIR_MAX_EPOCHS", some "3")]
   let env := runEnv ++ capEnv ++ #[("IREE_BACKEND", some backend), (vis, some gpu)]
@@ -2915,7 +2830,7 @@ def runProbe (bin family : String) (refMs : Nat) (card backend gpu : String)
 /-- The shared body of `lake run benchmark` and `lake run benchmark-xla`. One printer, two
     `BenchRef`s, so the two commands cannot drift on the probe recipe, the steady-state rule
     or the table layout — and, more to the point, so neither can end up dividing by the other
-    lowerer's anchors (handoff §2j).
+    lowerer's anchors.
 
     Rows with no reference on this lowerer print `n/a` and are excluded from the totals and
     from the tier subtotals; the footer says how many chapters were covered, so a short total
@@ -2939,7 +2854,7 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
         pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}")]
       else pure #[]
   let cmdName := if ref.xla then "benchmark-xla" else "benchmark"
-  -- ▶ DIRECT MODE: measure every chapter's own trainer here instead of scaling a foreign
+  -- DIRECT MODE: measure every chapter's own trainer here instead of scaling a foreign
   --   reference. See `runDirectProbe`. XLA only — the IREE path has no in-process compile, so a
   --   3-epoch probe would pay ~10-15 min of iree-compile per net.
   let direct := ref.xla && ((← IO.getEnv "BENCH_DIRECT").getD "" != "")
@@ -2954,7 +2869,7 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
   -- Synthetic input (LEAN_MLIR_BENCH_SYNTH, set in runProbe): one constant batch reused
   -- at the dataset's real step count, so no MNIST/CIFAR/Imagenette download is required.
   if direct then
-    -- ⚠⚠ A 3-epoch probe on a checkpointing trainer is DESTRUCTIVE IN BOTH DIRECTIONS (§4): it
+    -- A 3-epoch probe on a checkpointing trainer is DESTRUCTIVE IN BOTH DIRECTIONS: it
     --   resumes whatever marker is on disk — measuring a warm restart, or NOTHING if the marker is
     --   at the epoch budget, which exits `done` with rc=0 and no timing — and it leaves its own
     --   marker at 3 for the next real run to resume from. So: refuse if a trainer is live, stash
@@ -3029,7 +2944,7 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
         refTotal := refTotal + refSec
         covered := covered + 1
         let flag := if it.family == "attn" && aMs == 0 then " *proxy" else ""
-        -- ⚠ Single number, deliberately. A bracket wide enough to hold the real cross-vendor
+        -- Single number, deliberately. A bracket wide enough to hold the real cross-vendor
         --   spread (0.585-1.411, measured) would tell a first-time user nothing they could plan
         --   with — and with a per-vendor reference column the on-vendor factors read ~1.00 anyway,
         --   so the honest number is simply the measured one. `yourSecOf` is the estimate.
@@ -3074,33 +2989,30 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
 
 /-- `lake run benchmark` — probe this GPU on the **IREE** path, print a per-chapter
     training-time estimate. The XLA peer is `lake run benchmark-xla`; the two scale from
-    separate reference columns measured on separate lowerers and are not interchangeable
-    (handoff §2j). -/
+    separate reference columns measured on separate lowerers and are not interchangeable. -/
 script benchmark do
   runBenchmark ireeRef
 
 /-- `lake run benchmark-xla` — the XLA/PJRT peer of `lake run benchmark`.
 
     Same probe recipe, same steady-state rule, same printer — the only difference is which
-    lowerer the probe binaries linked and which reference column they scale from. Both of
-    those move together inside `xlaRef`, which is what stops the §2j trap: an XLA probe
-    divided by IREE's anchors would report Part-1 training ~2-5× too fast, silently.
+    lowerer the probe binaries linked and which reference column they scale from. Both of those move
+    together inside `xlaRef`, which is what stops the mismatched-baseline trap: an XLA probe divided
+    by IREE's anchors would report Part-1 training ~2-5× too fast, silently.
 
-    **All 3 probes and all 9 chapters as of 2026-07-30.** It was 2-and-8 until then, because
-    `vit-verified-adam` did not execute on this box; it now does, with no workaround, though
-    the MIOpen failure it used to hit is non-deterministic rather than fixed — see
+    **All 3 probes and all 9 chapters.** `vit-verified-adam` executes on this box with no
+    workaround, though its MIOpen failure is non-deterministic rather than fixed — see
     `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
-    unmeasured row honest, and it is what ch.9 needed for two days.
+    unmeasured row honest.
 
-    All nine XLA references are measured; ch.9's is a real 80-epoch run as of 2026-07-30
-    (3491 s, val 71.31%), which also confirmed the marginal-epoch extrapolation it replaced to
-    within 0.3%. See `benchTable`.
+    All nine XLA references are measured; ch.9's is a real 80-epoch run (3491 s, val 71.31%),
+    which confirms the marginal-epoch extrapolation to within 0.3%. See `benchTable`.
 
     Needs no venv: the XLA binaries compile in-process rather than shelling out to
     `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether
     `$PJRT_PLUGIN` resolves, exactly as `lake run {mnist,cifar,imagenette}-xla` do. -/
 script «benchmark-xla» do
-  -- ▶ ONE PATH PER VENDOR. The reference column is measured on that vendor's card, so on a
+  -- ONE PATH PER VENDOR. The reference column is measured on that vendor's card, so on a
   --   4060 Ti (CUDA) or a 7900 XTX (ROCm) the factors read ~1.00 and the table is the measurement.
   let be ← match ← IO.getEnv "IREE_BACKEND" with | some b => pure b | none => detectBackend
   runBenchmark (if be == "cuda" then xlaRefCuda else xlaRefRocm)

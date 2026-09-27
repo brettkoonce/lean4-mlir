@@ -118,7 +118,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
   | .sgd | .adam => pure ()
   | .rmsprop | .lamb =>
     throw <| IO.userError "optimizer .rmsprop / .lamb is JAX-only — the IREE/MLIR backend emits SGD and Adam; run it via runJax"
-  -- ── Single-match mutex validation (replaces the prior chain of throws) ──
+  -- ── Single-match mutex validation ──
   -- Modifiers (useFocal, labelSmoothing, useMixup/Cutmix/KnnMixup) only
   -- apply to specific kinds. Reject the rest at compile time so misuse
   -- shows up here, not as a wrong-loss-value 100 steps in.
@@ -136,12 +136,9 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError "perPixelCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
     if cfg.useFocal then
       throw <| IO.userError "perPixelCE + focal not yet supported on this path — use lossKind := some (.perPixelFocalCE γ), which is the segmentation focal emitter"
-    -- Label smoothing IS accepted, as of the FD check at ls=0.1
-    -- (`seg_loss_probe_check.py`, grad vs central differences 1.07e-07). The
-    -- emitter has had it since Phase 0 (`emitPerPixelCEBlock`'s
-    -- smoothOn/smoothOff) and this guard was the only thing gating it — but it
-    -- was gating an UNVERIFIED path, because nothing in the probe ran at ls > 0
-    -- until then. Verified, then lifted; not lifted because it looked free.
+    -- Label smoothing IS accepted: the FD check at ls=0.1
+    -- (`seg_loss_probe_check.py`, grad vs central differences 1.07e-07) covers
+    -- the emitter's smoothed path (`emitPerPixelCEBlock`'s smoothOn/smoothOff).
   | .perPixelWeightedCE weights =>
     if useSoftLabels then
       throw <| IO.userError "perPixelWeightedCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
@@ -188,8 +185,8 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     if useSoftLabels then
       throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"
     -- useFocal IS allowed here: for YOLOv1 it selects the sigmoid focal-BCE
-    -- objectness path (T3/T4/T5) instead of raw-MSE — the fg/bg imbalance fix
-    -- (planning/archive/yolo_final.md §3). The class term (T6) stays softmax-CE either way.
+    -- objectness path instead of raw-MSE — the fg/bg imbalance fix. The class
+    -- term stays softmax-CE either way.
     if cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "yolov1Masked is incompatible with labelSmoothing — smoothing applies to one-hot CE, not box-regression MSE"
   | .bce =>
@@ -422,7 +419,7 @@ private def detectionIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
   channels    := 3
-  -- Phase 3b layout: target (5880) + mask (196) + numBoxes (4) +
+  -- Layout: target (5880) + mask (196) + numBoxes (4) +
   -- raw_boxes (56 × 20 = 1120) = 7200 bytes/record.
   labelBytesPerRecord := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20
   loadTrain := fun dir => F32.loadDetBin (dir ++ "/train.bin")
@@ -451,10 +448,10 @@ private def datasetIO : DatasetKind → DatasetIO
   | .brats      => bratsIO
   | .brats224   => brats224IO
   | .imagenet   =>
-    -- Phase 3 doesn't yet support full 1000-class ImageNet — the 1.28M
-    -- training set needs a C-side streaming reader, not the current
-    -- read-everything-into-a-ByteArray pattern. Phase 2 (jax/) wires it
-    -- through tfds. Until phase 3 streams, this kind is JAX-only.
+    -- This path doesn't support full 1000-class ImageNet — the 1.28M
+    -- training set needs a C-side streaming reader, not the
+    -- read-everything-into-a-ByteArray pattern. The JAX path (jax/) wires it
+    -- through tfds, so this kind is JAX-only.
     panic! "DatasetKind.imagenet not supported by phase 3; use phase 2 (jax/) for now"
 
 -- `DatasetKind.pixelLabels` (which `TrainConfig.lossKindFor` reads) names exactly the datasets whose
@@ -483,7 +480,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let fpnNtot : Nat := (cfg.fpnScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
   let dio :=
     if ds == .detection && !cfg.fpnScales.isEmpty then
-      -- FPN mode (brick #3): the loader returns the flat [P3|P4|P5] target
+      -- FPN mode: the loader returns the flat [P3|P4|P5] target
       -- (ntot f32/record); mask derived from obj channels in the loss.
       { dio0 with
         trainPixels := 3 * spec.imageH * spec.imageW
@@ -500,7 +497,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           F32.hsvJitter raw b 3 spec.imageH.toUSize spec.imageW.toUSize
             0.015 0.7 0.4 1 seed.toUSize }
     else if ds == .detection && !cfg.anchors.isEmpty then
-      -- Anchor mode (brick #2): the loader returns TARGET-ONLY labels
+      -- Anchor mode: the loader returns TARGET-ONLY labels
       -- [A·15,gH,gW] (mask derived from target obj channels in the loss).
       let gH := spec.imageH / spec.detStride
       let gW := spec.imageW / spec.detStride
@@ -552,7 +549,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
 
-  -- Phase 4: optional pretrained-backbone bootstrap. Replaces the prefix
+  -- Optional pretrained-backbone bootstrap. Replaces the prefix
   -- of the He-init with bytes read from a saved checkpoint (e.g. R34
   -- Imagenette weights loaded into a YOLOv1 init). Auto-loads BN stats
   -- from the companion file if the path is `*_params.bin`.
@@ -563,7 +560,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         let init ← spec.heInitParams
         let patched ← NetSpec.patchInitWithPretrainedRange init path
                         (dstOff * 4) (srcOff * 4) (count * 4)
-        -- GUARD (planning/archive/r34_brats_retrain.md §5, "backbone actually loaded?").
+        -- GUARD ("backbone actually loaded?").
         -- The whole demo is a lie if the bootstrap silently no-ops, and a
         -- no-op is invisible downstream: a He-init net trains fine and just
         -- scores worse, which reads as "transfer didn't help" rather than
@@ -618,7 +615,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           IO.eprintln s!"  WARN: resume checkpoint {ckpt} size {loaded.size} ≠ expected {params.size}; keeping init"
           pure params
   -- If LEAN_MLIR_INIT_DUMP is set, save the raw init-params buffer to disk.
-  -- Used by phase 2 (jax/) to load bit-identical initial parameters for
+  -- Used by the JAX path (jax/) to load bit-identical initial parameters for
   -- step-level cross-compiler diffing. See historical/traces/TRACE_FORMAT.md.
   match (← IO.getEnv "LEAN_MLIR_INIT_DUMP") with
   | some path => do
@@ -690,7 +687,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let mut p := params
   let mut m := adamM
   let mut v := adamV
-  -- Phase 4: bootstrap BN stats from the companion `_bn_stats.bin` if
+  -- Bootstrap BN stats from the companion `_bn_stats.bin` if
   -- the pretrained backbone has BN layers matching the spec's. Size
   -- must match exactly (any mismatch == architecture drift between R34
   -- backbone and YOLOv1 backbone, which would be a bug).
@@ -756,16 +753,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let mut swaSqParams   : ByteArray := if cfg.useSWAG then params else .empty
   let mut swagDeviations : Array ByteArray := #[]
 
-  -- Best-by-val checkpoint for the segmentation path. The BraTS runs
-  -- *oscillate* — wcesqrt cos pb peaked at WT Dice 0.329 (epoch 3) then drifted
-  -- to 0.226 by epoch 10 — and the plain per-N-epoch checkpoint keeps only the
-  -- last epoch, so the endpoint is not the best model the run ever produced.
+  -- Best-by-val checkpoint for the segmentation path. A segmentation run can
+  -- *oscillate*, and the plain per-N-epoch checkpoint keeps only the last
+  -- epoch, so the endpoint need not be the best model the run produced.
   -- This tracks the best val score seen and saves `{pfx}_best_{params,bn_stats}`
   -- whenever a new best lands. `-1` so the first eval always wins.
   let mut bestSegScore : Float := -1.0
 
   -- LEAN_MLIR_NO_SHUFFLE=1 disables per-epoch shuffling — used for
-  -- phase-2/phase-3 cross-verification where both sides need to see
+  -- JAX-vs-Lean cross-verification where both sides need to see
   -- batches in the same order.
   let skipShuffle := (← IO.getEnv "LEAN_MLIR_NO_SHUFFLE").isSome
 
@@ -777,7 +773,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 
     -- LR is computed PER STEP (see inside the bi loop) so warmup ramps smoothly
     -- from ~0 over warmup*bpE steps rather than jumping to a fraction of peak at
-    -- each epoch boundary. The per-epoch jump made Adam's early steps (small v →
+    -- each epoch boundary. A per-epoch jump makes Adam's early steps (small v →
     -- ~LR-sized param moves) blow up a hot head LR (headLrMult); per-step warmup
     -- keeps those first steps tiny. `lr` here is just the running value (also
     -- used for the epoch-end log line).
@@ -885,7 +881,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       let packed := (p.append m).append v
       let ts0 ← IO.monoMsNow
       let out ← if useFpnRun then do
-                  -- FPN (brick #3): one flat target [B, Ntot] (loader gives it
+                  -- FPN: one flat target [B, Ntot] (loader gives it
                   -- target-only). The FPN codegen sig is x + %y_fpn:[B,Ntot,1,1] +
                   -- lr + t — identical to the single-target DDPM protocol — so
                   -- reuse that FFI verbatim (outC=Ntot, outH=outW=1), no mask.
@@ -896,7 +892,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                   let gHu := (spec.imageH / spec.detStride).toUSize
                   let gWu := (spec.imageW / spec.detStride).toUSize
                   if !cfg.anchors.isEmpty then do
-                    -- Anchor path (brick #2): yArg IS the target [B, A·15, gH, gW]
+                    -- Anchor path: yArg IS the target [B, A·15, gH, gW]
                     -- (target-only loader); the mask is derived from the target's
                     -- obj channels in the loss, so pass a zero dummy mask. No augment
                     -- (yoloAugment is single-box-format only).
@@ -907,7 +903,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                       gHu gWu (A * 15).toUSize
                   else do
                   -- Single-box: yArg per record is target (5880) + mask (196) +
-                  -- numBoxes (4) + raw_boxes (56×20) = 7200 bytes (Phase 3b format).
+                  -- numBoxes (4) + raw_boxes (56×20) = 7200 bytes.
                   --   * cfg.augment := false → split into target+mask.
                   --   * cfg.augment := true  → yoloAugment (bbox-aware hflip+crop).
                   let (xAug, yTgtAug, yMskAug) ← if cfg.augment then
@@ -979,11 +975,10 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         swagDeviations := swagDeviations.push dev
       swaCount := swaCount + 1
 
-    -- Per-N-epoch checkpoint (planning/archive/yolo_final.md Phase 4
-    -- infrastructure). Writes params + BN stats with the epoch number
-    -- in the filename so a killed training run can pick up from the
-    -- last save, OR downstream tasks (e.g. YOLOv1 bootstrap) can borrow
-    -- a mid-training checkpoint without waiting for the full schedule.
+    -- Per-N-epoch checkpoint. Writes params + BN stats with the epoch number in
+    -- the filename so a killed training run can pick up from the last save, OR
+    -- downstream tasks (e.g. YOLOv1 bootstrap) can borrow a mid-training
+    -- checkpoint without waiting for the full schedule.
     if cfg.checkpointEveryNEpochs > 0 && (epoch + 1) % cfg.checkpointEveryNEpochs == 0 then
       IO.FS.writeBinFile s!"{pfx}_params_e{epoch + 1}.bin" p
       IO.FS.writeBinFile s!"{pfx}_bn_stats_e{epoch + 1}.bin" runningBnStats
@@ -996,10 +991,9 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         || epoch + 1 == epochs
     if evalNow then
      if useSeg then
-       -- Per-class IoU + mIoU over the val set (planning/archive/unet_demo_v2.md
-       -- Workstream A). Eval-forward → argmax over the NC channels →
-       -- confusion matrix accumulated in exact Nat across batches →
-       -- IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
+       -- Per-class IoU + mIoU over the val set. Eval-forward → argmax over the
+       -- NC channels → confusion matrix accumulated in exact Nat across batches
+       -- → IoU_c = conf[c][c] / (row_c + col_c − conf[c][c]).
        let evalVmfb ← graphArtifact pfx "fwd_eval"
        if ← System.FilePath.pathExists evalVmfb then
          let evalSess ← LowererSession.create evalVmfb
@@ -1043,7 +1037,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          let miou := (ious.foldl (· + ·) 0.0) / NC.toFloat
          let iouStr := String.intercalate " " (ious.toList.mapIdx fun i v => s!"c{i}={v}")
          IO.eprintln s!"  val mIoU: {miou}  (per-class: {iouStr})"
-         -- Dice on named class-unions (planning/archive/brats_demo.md Workstream F).
+         -- Dice on named class-unions.
          -- Falls straight out of the confusion matrix already accumulated
          -- above — no new kernel, no second pass over val. For a region
          -- R ⊆ classes, reading C[gt][pred]:
@@ -1080,7 +1074,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          -- captures "found the tumour"), else mean of the non-background class
          -- IoUs (a general seg proxy that is ~0 for the trivial predictor).
          -- Saving the whole-tumour region overlap rather than mean-tumour-IoU
-         -- is deliberate: on the oscillating BraTS run the two disagree, and WT
+         -- is deliberate: on an oscillating BraTS run the two can disagree, and WT
          -- Dice is the one the field reports.
          let segScore : Float :=
            if regionDices.isEmpty then
@@ -1130,7 +1124,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           let xbaRaw := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
           -- TTA: average logits over M independently-augmented passes.
           -- M=1 (the !cfg.useTTA path) reduces to a single deterministic
-          -- preprocess + forward, matching the prior behavior exactly.
+          -- preprocess + forward.
           let mut logitsAcc ← F32.const (evalBatch * spec.numClasses).toUSize 0.0
           for k in [:ttaM] do
             let xba ← if cfg.useTTA then
@@ -1207,8 +1201,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 
 /-- Eval-only mode: skip training entirely, load saved params + bn_stats,
     run the eval forward on val data, print accuracy. Used to re-eval
-    existing checkpoints against a fixed eval pipeline (e.g. after the
-    Imagenette `centerCrop` bug was fixed). Requires `compileVmfbs` to
+    existing checkpoints against a fixed eval pipeline. Requires `compileVmfbs` to
     have produced (or cached) the `_fwd_eval.vmfb` already. -/
 def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     (dataDir : String) : IO Unit := do

@@ -1,4 +1,4 @@
--- Jax — Phase 2 backend.
+-- Jax backend.
 -- Lean 4 → idiomatic JAX Python via metaprogramming. The generated script
 -- is written to .lake/build/generated_*.py and run via python3.
 --

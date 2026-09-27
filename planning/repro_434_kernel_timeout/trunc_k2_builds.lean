@@ -1,20 +1,19 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 
-/-! # ⭐⭐ `convnextInputGradB` IS the certified whole-net ConvNeXt-T gradient AT A BATCH
+/-! # `convnextInputGradB` IS the certified whole-net ConvNeXt-T gradient AT A BATCH
 
-`ConvNeXtWholeBackCertifiedTie.lean` closed T6 for ONE image: `convnextInputGrad`, the reverse of
+`ConvNeXtWholeBackCertifiedTie.lean` states, for ONE image: `convnextInputGrad`, the reverse of
 `convNextForwardTCh`, IS the certified gradient at that image. Every shipped ConvNeXt artifact
 runs a batch — `convnext_adam_train_step` and the `convnextin_*` / `convnextsin_*` /
-`convnextbin_*` families — and its batched T3 tie (`ConvNeXtStepTieGB.lean`) states every
+`convnextbin_*` families — and its batched tie (`ConvNeXtStepTieGB.lean`) states every
 activation as `StableHLO.batchMap B` of the per-example prefix and every cotangent as
 `batchMapAux B` of the per-example chain, because LayerNorm is per-example and no ConvNeXt op
-couples examples. This file closes T6 at that index: the twelve-stage batched chain
+couples examples. This file states it at that index: the twelve-stage batched chain
 `convnextInputGradB` (`ConvNeXtBackChains.lean`), every slot the per-example slot lifted at the
 batched saved activation, IS the certified gradient of `batchMap B convNextForwardTCh` at every
-batch `x`, for every `B` and every class count `nC`. ConvNeXt was the last net without a batched
-whole-net tie (`planning/archive/renderer_convergence.md` leg 3: its ImageNet artifacts never had
-a batched fold); with this the `*InputGradB_eq_*_vjp` family covers all seven nets.
+batch `x`, for every `B` and every class count `nC`. With this the `*InputGradB_eq_*_vjp` family
+covers all seven nets.
 
 Nothing here is new mathematics, and it is ViT's batched tie (`ViTWholeBackCertifiedTieB.lean`)
 one architecture over: ConvNeXt is smooth everywhere, so every stage has a GLOBAL `HasVJP` and its
@@ -31,7 +30,7 @@ hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie alre
    rule holds one batch index over).
 3. The batched leaf ties. GAP's is `rfl` (its per-example tie is); the others are `funext` to one
    example, one rewrite of the per-example leaf tie at that example's row, then `rfl` —
-   `batchMapAux`'s slice and the lift's `.backward` row are the same term. ⚠ The channel-LN and
+   `batchMapAux`'s slice and the lift's `.backward` row are the same term. The channel-LN and
    downsample leaves are proven at VARIABLE dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`)
    and instantiated by term: at the literal `96 56 56` the same `rfl` recurses past
    `maxRecDepth 100000` on the numerals, the batched form of the per-example tie's "two spellings
@@ -195,7 +194,7 @@ noncomputable def cnxDenseBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : V
 
 /-- **The batched stem tie.** `batchMap B` of the reversed-kernel conv at the zero-extended 4×4
     kernel IS the lift's backward: `flatConvStride4Back_padOdd_eq_vjp_backward` at one example's
-    row. ⛔ `padOdd` is load-bearing here exactly as in the per-example tie: `w.sW` is 4×4. -/
+    row. `padOdd` is load-bearing here exactly as in the per-example tie: `w.sW` is 4×4. -/
 theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (B * (3 * 224 * 224))) :
     StableHLO.batchMap B (flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW))
@@ -209,7 +208,7 @@ theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
   rfl
 
 /-- **The batched channel-LayerNorm tie**, at any `c h w` — `chanLNTensor3Back_eq_chanLN_vjp` at
-    one example's row. ⚠ Generic on purpose: stated at the literal `96 56 56` the closing `rfl`
+    one example's row. Generic on purpose: stated at the literal `96 56 56` the closing `rfl`
     recurses past `maxRecDepth 100000` on the numerals; at variables it is ViT's `vitLNBackB_eq_vjp`
     and closes at once. The stem instance below is a term. -/
 theorem cnxChanLNBackB_eq_vjp (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -246,7 +245,7 @@ theorem cnxStageBackB_eq_vjp (B : Nat) {c cExp h w kHd kWd : Nat}
 /-- **The batched downsample tie**, at any resolution — `cnxDownChBack_eq_vjp` at one example's
     row. Generic for the same reason as `cnxChanLNBackB_eq_vjp`; the three instances below are
     terms at the chain's dimension spellings (`cnxDn1 … cnxDn3`), which is the per-example tie's
-    `cnxDn1Back_eq_vjp … cnxDn3Back_eq_vjp` one batch index over. ⛔ `padOdd` is load-bearing:
+    `cnxDn1Back_eq_vjp … cnxDn3Back_eq_vjp` one batch index over. `padOdd` is load-bearing:
     `p.W` is 2×2. -/
 theorem cnxDownBackB_eq_vjp (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) (v : Vec (B * (cin * (2 * h) * (2 * w)))) :

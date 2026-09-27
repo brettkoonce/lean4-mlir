@@ -1,6 +1,6 @@
 import tests.ViTRender
 
-/-! Scratch renderer for the Adam render smoke (Phase 3b). Writes:
+/-! Scratch renderer for the Adam render smoke. Writes:
   * `/tmp/adam/adam_step.mlir` — a tiny 2-param `@adam_step` (a [4,4] + a [4]) for
     an exact numeric faithfulness check vs `Proofs.adamWParam` on the GPU.
   * `/tmp/adam/vit_train_step_adam.mlir` — the full depth-12 ViT-Tiny AdamW step.

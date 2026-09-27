@@ -6,9 +6,8 @@ import LeanMlir.Verified.Train
 The ConvNeXt peer of `tests/TestMobilenetV2DpCheck.lean` / `tests/TestEfficientNetDpCheck.lean`, and
 gated by the same **exact** identity rather than a tolerance argument.
 `verified_mlir/convnext_adamdp_train_step.mlir` inserts one `all_reduce(add)/N` per parameter
-between the certified gradient and the certified AdamW triple (handoff §2b-quater's pattern). That
-collective is a **trusted carve-out** — emitted text, outside every faithfulness theorem — so it
-needs its own numeric check.
+between the certified gradient and the certified AdamW triple. That collective is a **trusted
+carve-out** — emitted text, outside every faithfulness theorem — so it needs its own numeric check.
 
 **The exact identity used here.** Give both replicas the **same** 32 examples. Each computes the
 same gradient `g`, so `all_reduce(add)/2` returns `(g + g)/2 = g` — the mean is an identity on a
@@ -16,7 +15,7 @@ duplicated batch. The data-parallel step must therefore reproduce the **single-d
 batch, output for output.
 
 **ConvNeXt needs no BatchNorm caveat at all, and it is the only net here that does not.** The
-§10.3b caveat — that 2×32 is genuinely not 1×64, because the halves get different batch statistics —
+caveat that 2×32 is genuinely not 1×64, because the halves get different batch statistics,
 is a statement about batch BN. ConvNeXt normalises with **LayerNorm**, which reduces within one
 example and never across the batch, so every replica's arithmetic on its own examples is what it
 would have been in a single batch of 64. EfficientNet and mnv2 have to argue that *duplicating* a
@@ -25,59 +24,55 @@ batch keeps the two replicas' BN groups identical; here there is nothing to argu
 **The consequence for what this gate can see.** ConvNeXt returns no BN batch statistics, so unlike
 the mnv2/EfficientNet gates there is no `bnstat` region pinning the forward bit-exactly. The only
 forward-only output is **`%loss`** — report-only, on no gradient path, covered by no theorem, which
-is exactly the configuration in which §2b shipped plain CE against a smoothed-CE cotangent. So this
+is exactly the configuration in which plain CE can sit against a smoothed-CE cotangent. So this
 harness **gates** `%loss` as well as the gradient, the same split `convnext-adam-tie` uses.
 
 **44 of the 180 collectives are RANK-0** — the scalar LayerNorm γ/β at `tensor<f32>`. No other net's
-DP render has an operand below rank 1, so this harness is also the first execution of a scalar
-`stablehlo.all_reduce` anywhere in the repo.
+DP render has an operand below rank 1.
 
-Two failure modes it separates, both of which have actually happened here:
+Two failure modes it separates:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
 * **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1, five
-  orders above the gate. §2b-quater, §2e-bis and §2h-bis each verified exactly that by breaking the
-  divisor; pass the broken render as `argv[1]` to run it here.
+  orders above the gate. Breaking the divisor shows exactly that; pass the broken render as
+  `argv[1]` to run it here.
 
     lake build convnext-dp-check
     unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/convnext-dp-check
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path — the IREE shim
-refuses a DP entry point outright rather than silently running single-device, which is why
-`convnext-verified-adam` had to exist first, §2h).
+refuses a DP entry point outright rather than silently running single-device).
 -/
 
 def main (args : List String) : IO Unit := do
-  -- ▶ Env-selected variant pair / replica count, defaulting to EXACTLY the AdamW 2-replica
+  -- Env-selected variant pair / replica count, defaulting to EXACTLY the AdamW 2-replica
   -- configuration this harness was written for, so the committed result reproduces with no
   -- arguments — the gate on the generalisation itself. Mirrors the mnv2/enet peers.
   --
-  -- ⚠ `ema`/`emadp` carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
+  -- `ema`/`emadp` carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
   -- has to build the blob it is going to feed rather than assuming three regions. Getting that
   -- wrong is not a tolerance question: PJRT refuses the call on the buffer count, which is the
-  -- loud failure mode (§2m's `expected 265 buffers` is the same shape).
+  -- loud failure mode.
   let net := convnextVerified.toNet
   let bs := 32                                   -- the baked per-replica batch
   let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD 2
   let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
-  -- ⚠⚠ **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM (2026-08-27).** They read
-  -- `let emaOn := …; let nRegions := if emaOn then 4 else 3` — this file's private copy of what
-  -- `trainAdamSched` computes, which is precisely the drift `tests/TestVariantPredicates.lean`'s
+  -- **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM.** A private copy of what
+  -- `trainAdamSched` computes is precisely the drift `tests/TestVariantPredicates.lean`'s
   -- header warns about one level up: *a gate on a transcription is not a gate on the thing
-  -- transcribed*. Two things had gone wrong by the time it was noticed:
-  --   ⛔ the copy was a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
-  --      would have made this harness build four regions for a graph the driver feeds three;
-  --   ⛔ the copy is frozen at `4 else 3`, and the region count became **3, 4 or 5** the day EMA and
-  --      gradient accumulation stopped sharing a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
-  -- Neither is reachable from the variants this gate runs today. Both are one variant string away.
+  -- transcribed*. A copy can drift two ways:
+  --   a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
+  --      would make this harness build four regions for a graph the driver feeds three;
+  --   a copy frozen at `4 else 3`, where the region count is **3, 4 or 5** since EMA and
+  --      gradient accumulation do not share a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
   let emaOn := VerifiedVariant.emaOn vSg
   let nRegions := VerifiedVariant.nRegions vSg
   let nScalars := VerifiedVariant.nScalars vSg
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
-  -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
-  -- divisor 2.0 → 1.0, i.e. sum instead of mean — is the one to run.
+  -- convenience: a gate nobody has seen go red is an assertion. The control to run is the `%arn`
+  -- divisor 2.0 → 1.0, i.e. sum instead of mean.
   let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
   IO.println "ConvNeXt-T data-parallel gate — duplicated batch"
   IO.println s!"  single : {sgPath}   (bs {bs})"
@@ -122,7 +117,7 @@ backend {← LowererSession.backendName}"
   IO.println "  running single-device…"; (← IO.getStdout).flush
   -- Delete first on BOTH sides: `compileVmfb` keys on the OUTPUT path and an mtime, never the
   -- source, so a second run with a different candidate silently reuses the first one's binary
-  -- (handoff §4) — which is exactly what running the sum-not-mean control looks like.
+  -- — which is exactly what running the sum-not-mean control looks like.
   for tag in ["cnx_dp_a", "cnx_dp_b"] do
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
@@ -191,8 +186,8 @@ must reproduce exactly."
     IO.Process.exit 1
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
-  -- wrong (§3). Measured five times now — on the mnv2 DP control a 2× gradient error moved θ by
-  -- 8.4e-5, i.e. UNDER a 1e-4 θ gate, while `m` moved 1.037.
+  -- wrong. On the mnv2 DP control a 2× gradient error moves θ by 8.4e-5, i.e. UNDER a 1e-4 θ gate,
+  -- while `m` moves 1.037.
   if gradRel > 1e-4 then
     IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a duplicated batch \
 all_reduce(add)/2 is the identity, so the data-parallel step must reproduce the single-device one."

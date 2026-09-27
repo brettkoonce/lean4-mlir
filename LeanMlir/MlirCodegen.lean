@@ -1789,7 +1789,7 @@ private def emitTokenGatherFwd (pos : Nat) (idsSSA : String) (idsShape : List Na
   s := s ++ "    } : " ++ s!"({tensorTy [v, d]}, {bt1i}) -> {btd}\n"
   return s
 
-/-! ### FPN neck (top-down multi-scale merge) — detection-infra brick #3
+/-! ### FPN neck (top-down multi-scale merge)
 
     Composes 1×1 lateral convs + the already-verified `bilinearUpsample` + adds
     into the RetinaNet top-down pyramid. No new primitives: the merge is a DAG of
@@ -1924,7 +1924,7 @@ private def emitFpnNeckBackward (dP3SSA dP4SSA dP5SSA : String)
     RetinaNet head tower needs. The math is lifted verbatim from the FD-verified
     `.conv2d` forward/backward in the reverse-record walk; this just makes it
     callable from inside a single layer's emitter, the same way
-    `emitConv1x1Fwd`/`BwdDC`/`BwdDW` were factored out for the neck.
+    `emitConv1x1Fwd`/`BwdDC`/`BwdDW` serve the neck.
 
     Returns the code, the post-ReLU output SSA, and the PRE-activation SSA (the
     backward needs it for the ReLU mask). -/
@@ -3163,7 +3163,7 @@ private structure FwdRec where
   --   lmhBtv  = SSA name of the post-dense [B, T, V] tensor (pre-transpose)
   isLmHead        : Bool := false
   lmhPidx         : Nat := 0
-  -- ═════════ FPN multi-scale detector (planning/archive/yolo_fpn.md bite 7) ═════════
+  -- ═════════ FPN multi-scale detector ═════════
   -- One record per `.fpnDetect` layer (pidx := base of its
   -- 9 params — 6 weights + 3 head biases). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
   -- outputs P3/P4/P5 (the pyramid feature SSAs) so the backward can call
@@ -3261,7 +3261,7 @@ private def emitConvBnTrain (pidx pos : Nat) (curSSA : String) (curShape : List 
 private def emitDepthwiseConvBnTrain (pidx pos : Nat) (curSSA : String) (curShape : List Nat)
     (channels kSize stride : Nat) (useSwish : Bool := false)
     (useHSwish : Bool := false) (useRelu : Bool := false)
-    -- `noAct`: BN only, the output IS the pre-activation (MobileNetV4's `dw_start`). ⚠ Not the
+    -- `noAct`: BN only, the output IS the pre-activation (MobileNetV4's `dw_start`). Not the
     -- same as `useRelu := false`, which is the ReLU6 default below.
     (noAct : Bool := false) : String × FwdRec := Id.run do
   match curShape with
@@ -4357,7 +4357,7 @@ private def emitDiouForward (B gH gW : Nat) (predSSA tgtSSA maskSSA : String)
   s := s ++ s!"    %{pfx}_cx = stablehlo.multiply %{pfx}_cjsx, %{pfx}_invW : {c1}\n"
   s := s ++ s!"    %{pfx}_cisy = stablehlo.add %{pfx}_ci, %{pfx}_sy : {c1}\n"
   s := s ++ s!"    %{pfx}_cy = stablehlo.multiply %{pfx}_cisy, %{pfx}_invH : {c1}\n"
-  -- w = anchorW · exp(tw): anchor-relative width prior (brick #2). anchorW=1
+  -- w = anchorW · exp(tw): anchor-relative width prior. anchorW=1
   -- reproduces the anchor-free path exactly. Backward is unchanged — it uses
   -- %{pfx}_w, and dw/dtw = anchorW·exp(tw) = w regardless of the prior.
   -- Cap tw/th at 8 before exp: exp(88)=inf in f32, and an inf `w` makes the
@@ -4553,7 +4553,7 @@ private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") 
   s := s ++ s!"    {gradOut} = stablehlo.concatenate %{pfx}b_mtx, %{pfx}b_mty, %{pfx}b_mtw, %{pfx}b_mth, dim = 1 : ({c1}, {c1}, {c1}, {c1}) -> {p4}\n"
   return s
 
-/-- Anchor YOLOv3-style loss (brick #2, WS-C). A anchors/cell, each slot is
+/-- Anchor YOLOv3-style loss. A anchors/cell, each slot is
     `[tx,ty,tw,th, obj, cls(NC=10)]`; `pred`/`tgt` are `[B, A·15, gH, gW]`, `mask`
     is `[B, A, gH, gW]` (per-anchor objectness assignment). Per anchor a: the
     FD-verified DIoU box loss at `pfx=a{a}` with prior `anchors[a]` (box_a =
@@ -4924,11 +4924,9 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
       code := code ++ s!"    // fpnDetect loss: curShape not [B, N] flat: {curShape}\n"
   else if useYolov1 then
     -- ═══════════════ YOLOv1: 5-term masked MSE ═══════════════
-    -- See planning/archive/yolo_demo_v2.md Phase 1 decisions D1-D11. Predictions
-    -- arrive as flat [B, totalCh]; we reshape to [B, perCell, gH, gW]
-    -- (NCHW), slice per-term, compute masked MSE for each, then concat
-    -- gradient slabs back to [B, perCell, gH, gW] and reshape flat for
-    -- the dense backward to consume.
+    -- Predictions arrive as flat [B, totalCh]; we reshape to [B, perCell, gH, gW] (NCHW), slice
+    -- per-term, compute masked MSE for each, then concat gradient slabs back to [B, perCell, gH,
+    -- gW] and reshape flat for the dense backward to consume.
     --
     -- Channel layout (perCell = numBoxes*5 + numClasses):
     --   [0..2)              box 0 (x, y)
@@ -5025,8 +5023,8 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
           -- Two paths.
           --   Non-focal (default): raw-MSE on raw conf — YOLOv1 as published.
           --   Focal (useFocal):    sigmoid + focal-BCE on the conf *logit*, with a
-          --     DETACHED focal weight (1-p_t)^γ. This is the fix for the fg/bg
-          --     objectness collapse (planning/archive/yolo_final.md): ~1-2 object cells vs
+          --     DETACHED focal weight (1-p_t)^γ. This counters the fg/bg
+          --     objectness collapse: ~1-2 object cells vs
           --     ~47 background cells make "predict 0 everywhere" an MSE minimum, so
           --     the conv head localizes early then decays to a center-prior. Focal
           --     down-weights easy (well-classified) cells so the rare foreground keeps
@@ -5108,9 +5106,8 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
             code := code ++ s!"    %y1_sum_c1neg = stablehlo.reduce(%y1_sq_c1neg init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
             code := code ++ s!"           : ({shapeC1Ty}, tensor<f32>) -> tensor<f32>\n"
             code := code ++ s!"    %y1_t5 = stablehlo.multiply %y1_sum_c1neg, %y1_lnoobj : tensor<f32>\n"
-          -- T6: class — softmax cross-entropy over the numC class channels (dim 1),
-          -- masked to object cells. (Replaces the original SSE class term, which was
-          -- too weak to sharpen the 20-way class logits — see planning/yolo notes.)
+          -- T6: class — softmax cross-entropy over the numC class channels (dim 1), masked to
+          -- object cells. (An SSE class term is too weak to sharpen the 20-way class logits.)
           -- Numerically-stable: shift by per-cell max, then log-softmax.
           code := code ++ s!"    %y1_cls_ninf = stablehlo.constant dense<-3.0e38> : tensor<f32>\n"
           code := code ++ s!"    %y1_cls_max = stablehlo.reduce(%y1_pred_cls init: %y1_cls_ninf) applies stablehlo.maximum across dimensions = [1]\n"
@@ -5128,12 +5125,11 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
           code := code ++ s!"    %y1_cls_ce_sum = stablehlo.reduce(%y1_cls_nll_m init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
           code := code ++ s!"           : ({shapeClassTy}, tensor<f32>) -> tensor<f32>\n"
           code := code ++ s!"    %y1_t6 = stablehlo.negate %y1_cls_ce_sum : tensor<f32>\n"
-          -- DIoU box loss (brick #1, planning/archive/yolo_drone.md WS-D): when enabled,
-          -- replaces the √-MSE coord terms T1+T2 with an IoU-family loss on box0,
-          -- using a positive box parameterization (cx=(j+σ(tx))/gW, w=exp(tw)).
-          -- Emits %dio_loss (Σ mask·(1-DIoU)) and %dio_dpred [B,4,gH,gW]; both
-          -- FD-verified in scripts/probes/diou_probe_check.py. Scaled by λ_coord to keep
-          -- the box-vs-objectness balance. NB: the decoder must apply the same σ/exp.
+          -- DIoU box loss: when enabled, replaces the √-MSE coord terms T1+T2 with an IoU-family
+          -- loss on box0, using a positive box parameterization (cx=(j+σ(tx))/gW, w=exp(tw)). Emits
+          -- %dio_loss (Σ mask·(1-DIoU)) and %dio_dpred [B,4,gH,gW]; both FD-verified in
+          -- scripts/probes/diou_probe_check.py. Scaled by λ_coord to keep the box-vs-objectness
+          -- balance. NB: the decoder must apply the same σ/exp.
           let lambdaBox : Float := 5.0
           if useDiouBox then
             code := code ++ s!"    %y1_box_pred = \"stablehlo.slice\"(%y1_pred) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {B}, 4, {gH}, {gW}>, strides = array<i64: 1, 1, 1, 1>" ++ "} : " ++ s!"({shape4Ty}) -> {tensorTy [B, 4, gH, gW]}\n"
@@ -5263,7 +5259,7 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
       gradSSA := "%d_logits_ddpm"
       gradShape := curShape
     | [b2, n2] =>
-      -- ═══════════ DDPM on a RANK-2 output — `planning/archive/diffusion_2d_demo.md`
+      -- ═══════════ DDPM on a RANK-2 output
       -- Identical math to the 4-D case above; only the shape differs. A dense
       -- denoiser (2-D toy distributions: the model is an MLP, not a UNet) ends
       -- in `.dense`, so its output is [B, N] and the 4-D match fell through to
@@ -5272,7 +5268,7 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
       let outTy := tensorTy curShape
       let nElems := b2 * n2
       code := code ++ "\n    // ================ DDPM MSE (rank-2) ================\n"
-      -- ⚠ `%y_ddpm` arrives RANK-4 as [B, N, 1, 1], not rank-2. That is not an
+      -- `%y_ddpm` arrives RANK-4 as [B, N, 1, 1], not rank-2. That is not an
       -- accident of this branch: `iree_ffi_train_step_adam_ddpm` hardcodes
       -- `ranks[np+1] = 4` and pushes [b, oC, oH, oW] verbatim, so a rank-2
       -- target would be a shape mismatch at the PJRT boundary. The FPN path
@@ -7906,12 +7902,10 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
       else pure ()
 
     | .fpnDetect oc c3 c4 c5 g5 A tower =>
-      -- FPN detector DAG backward (planning/archive/yolo_fpn.md bite 7). gradSSA is the
-      -- loss grad w.r.t. the [B, Ntot] concat (%fpn_grad). emitFpnDetectBackward
-      -- un-concats → head VJP → tower VJP → neck VJP, returning (dc3,dc4,dc5) +
-      -- the 9 + 6·tower param grads. dc5 seeds the backbone backward here;
-      -- dc3/dc4 are injected at the C3/C4 stage markers (already tagged with
-      -- fpnTapGrad at forward emit).
+      -- FPN detector DAG backward. gradSSA is the loss grad w.r.t. the [B, Ntot] concat
+      -- (%fpn_grad). emitFpnDetectBackward un-concats → head VJP → tower VJP → neck VJP, returning
+      -- (dc3,dc4,dc5) + the 9 + 6·tower param grads. dc5 seeds the backbone backward here; dc3/dc4
+      -- are injected at the C3/C4 stage markers (already tagged with fpnTapGrad at forward emit).
       let base := r.pidx.getD 0
       let hb := fpnHeadBase base tower
       let (towerW, _) := fpnTowerParamSSAs "%W" base tower
@@ -8026,8 +8020,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y_ddpm: {yTy},\n"
   else if useYolov1 then
     -- YOLOv1: float target [B, perCell, gridH, gridW] + per-cell float mask
-    -- [B, gridH, gridW]. See planning/archive/yolo_demo_v2.md "Phase 1 decisions" D3
-    -- (separate ByteArray arg for mask). Channel layout within perCell:
+    -- [B, gridH, gridW] (separate ByteArray arg for mask). Channel layout within perCell:
     --   [0..2)   box 0 (x, y)
     --   [2..4)   box 0 (w, h)
     --   [4..5)   box 0 confidence

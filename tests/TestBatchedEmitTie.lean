@@ -2,17 +2,17 @@ import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # The batched pointwise/row forms emit exactly what their per-example peers emit
 
-`planning/archive/xla_pjrt_handoff.md` §2b moved the batched renderers off the `N := 1` batch-unit
-convention onto the honest batched index `N := B`. That required batched peers for every op whose
-emitter reads its width off the SHlo index — the pointwise ops and the two row ops — because at
-index `N·n` those emitted `tensor<B×(N·n)>`, a type that does not match their own operand.
+The batched renderers use the honest batched index `N := B`, not an `N := 1` batch-unit
+convention. That requires batched peers for every op whose emitter reads its width off the SHlo
+index — the pointwise ops and the two row ops — because at index `N·n` those would emit
+`tensor<B×(N·n)>`, a type that does not match their own operand.
 
 Each batched form exists ONLY to move the batch out of the emit width. So the whole design claim is:
 **the batched form renders byte-for-byte what the per-example form renders.** For EfficientNet that
-was witnessed by `verified_mlir/efficientnet_train_step.mlir` coming back byte-identical, but that
+is witnessed by `verified_mlir/efficientnet_train_step.mlir` coming back byte-identical, but that
 is a whole-net check on one net that happens to use eight of the nine forms. This file pins each
 form individually, including `relu`/`selectPos`, which ResNet-34 needs and EfficientNet never
-exercises — so the tie is nailed down BEFORE the batched R34 render depends on it.
+exercises.
 
 What this does NOT check is the `den` side: the render is value-independent (`skel` erases values),
 so a form with the wrong denotation emits identical bytes. That half is
@@ -74,7 +74,7 @@ private def cases : List (String × String × String) :=
   , ("selectPos",
      render (pretty BS (.selectPos "%s" zv (.operand "%x" zv))),
      render (pretty BS (.selectPosB "%s" zvb (.operand "%x" zvb))))
-  -- ── MobileNetV2's activation (§2f). `relu6` is a descriptor (pointwise, carries nothing);
+  -- ── MobileNetV2's activation. `relu6` is a descriptor (pointwise, carries nothing);
   --    `selectMid` is NOT (the two-sided mask reads the saved per-example pre-activation), so it
   --    gets its own `selectMidB` holding the whole-batch `x`. Same split as relu/selectPos. ──
   , ("relu6",
@@ -83,7 +83,7 @@ private def cases : List (String × String × String) :=
   , ("selectMid",
      render (pretty BS (.selectMid "%s" zv (.operand "%x" zv))),
      render (pretty BS (.selectMidB "%s" zvb (.operand "%x" zvb))))
-  -- ── the eval forwards (§2a, the `_fwd_eval` move). INFERENCE BN is a descriptor because its
+  -- ── the eval forwards (`_fwd_eval`). INFERENCE BN is a descriptor because its
   --    γ/β/μ/var are the driver's frozen running stats — graph inputs shared by the whole batch,
   --    i.e. batch-INVARIANT data, the one thing a descriptor may carry. Contrast `bnBatch`, which
   --    needs its own ctor precisely because it reduces ACROSS examples. ──
@@ -109,11 +109,10 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.batchOp (N := BS)
                           (.denseRowBack (rows := rows) (a := a) (c := c) "%W" zW)
                           (.operand "%x" zrb))))
-  -- ── ViT / ConvNeXt, the batched-index move (§0.2 ▶2). Five row/pointwise FORWARD forms, shared
-  --    by both nets — which is why they go first: every one of them is on ConvNeXt's critical path
-  --    AND on ViT's, so the cheaper net pays down roughly half of the dearer one.
+  -- ── ViT / ConvNeXt at the batched index. Five row/pointwise FORWARD forms, shared by both nets:
+  --    every one of them is on ConvNeXt's critical path AND on ViT's.
   --
-  --    ⚠ `rows` here is the token / spatial axis PER EXAMPLE, never the batch. A descriptor's
+  --    `rows` here is the token / spatial axis PER EXAMPLE, never the batch. A descriptor's
   --    whole job is to keep those two numbers apart — `N` for the denotation, `rows*c` for the
   --    emit — and a tie at `rows ≠ BS` is what makes a swapped pair a type error rather than a
   --    silent agreement. (`rows` is 3 against `BS` 32 here, so they cannot be confused.)
@@ -138,7 +137,7 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.rowBiasF (m := rows) (n := c) "%bt" zc (.operand "%x" zr))),
      render (pretty BS (.batchOp (N := BS) (.rowBias (m := rows) (n := c) "%bt" zc)
                           (.operand "%x" zrb))))
-  -- ── the two SAVED-ACTIVATION backwards (increment 2). Not descriptors, and the reason is the
+  -- ── the two SAVED-ACTIVATION backwards. Not descriptors, and the reason is the
   --    descriptor rule itself: `batchMap N (denOp op)` is ONE fixed function, so a descriptor
   --    would hand example 0's saved activation to all N. They take the whole-batch `x` instead —
   --    `geluBackB` pointwise (`swishBackB`'s exact shape), `lnRowBackB` via `batchMapAux`.
@@ -151,10 +150,10 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" zr))),
      render (pretty BS (.lnRowBackB (N := BS) (m := rows) (n := c) "%g" "%s" "1.0e-5" 0 1 zrb
                           (.operand "%x" zrb))))
-  -- ── increment 3: ConvNeXt's stem conv, LayerScale, and the loss-path softmax pair.
-  --    ⚠ `expe` and `softmaxDiv` are here for OPPOSITE halves of the §2b defect: `expe`'s den was
-  --    already honest at the batched index and only its EMIT read the width off the SHlo index;
-  --    `softmaxDiv`'s emit already reduced per example while its DEN would have divided by the
+  -- ── ConvNeXt's stem conv, LayerScale, and the loss-path softmax pair.
+  --    `expe` and `softmaxDiv` are here for OPPOSITE halves of the batched-index hazard: `expe`'s
+  --    den is honest at the batched index and only its EMIT could read the width off the SHlo
+  --    index; `softmaxDiv`'s emit reduces per example while its DEN could divide by the
   --    sum over the whole batch. This file can only see the first kind — the second is
   --    `den_batchOp_softmaxDiv_per_example`'s job — which is the standing argument for gating
   --    both halves.
@@ -169,9 +168,9 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" zq0))),
      render (pretty BS (.batchOp (N := BS) (.layerScaleCh (c := pc) (h := ph) (w := ph) "%g" zc2)
                           (.operand "%x" zq0b))))
-  -- ── ViT increment 1 (handoff §0.2 ▶3): the six forms whose data is batch-INVARIANT.
+  -- ── ViT: the six forms whose data is batch-INVARIANT.
   --
-  --    ⚠⚠ EVERY ONE OF THESE IS DRIVEN AT `tk = 4` AGAINST `BS = 32`, AND THAT IS THE POINT.
+  --    EVERY ONE OF THESE IS DRIVEN AT `tk = 4` AGAINST `BS = 32`, AND THAT IS THE POINT.
   --    ViT's per-example renderer already calls its TOKEN axis `N`, so "the batch" and "the token
   --    count" are the same letter on the two sides of each pair. At `tk ≠ BS` a form that read one
   --    for the other emits a different shape and this file goes red; at `tk = BS` it would agree
@@ -193,7 +192,7 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" (fun _ => 0 : Vec dm)))),
      render (pretty BS (.batchOp (N := BS) (.clsPad (N := tk) (D := dm))
                           (.operand "%x" (fun _ => 0 : Vec (BS*dm))))))
-  -- ⚠ head 1 of 4, NOT head 0, and NOT head 1 of 3: at `h = 0` the pad's `low` is 0 and the slice's offset is 0, so an
+  -- head 1 of 4, NOT head 0, and NOT head 1 of 3: at `h = 0` the pad's `low` is 0 and the slice's offset is 0, so an
   -- emit that dropped the index entirely would still agree. The interior head is the only one that
   -- pins the slice offset. And 1-of-4 rather than 1-of-3 because at 1-of-3 the pad's
   -- `low` and `high` are both `d` — symmetric, so swapping them would be inert too.
@@ -209,18 +208,18 @@ private def cases : List (String × String × String) :=
      render (pretty BS (.batchOp (N := BS) (.headPad (N := rows) (heads := 4) (d := a)
                           ⟨1, by decide⟩)
                           (.operand "%x" (fun _ => 0 : Vec (BS*(rows*a)))))))
-  -- ── ViT increment 2: the six forms that CANNOT be descriptors. Every one of them ALIASES its
+  -- ── ViT: the six forms that CANNOT be descriptors. Every one of them ALIASES its
   --    per-example peer's `Raw`, so these cases check something slightly different from the rest of
   --    this file: not "the copied emit body still agrees" but "the alias really is wired to that
   --    tag". A mis-aliased form falls through to `// MALFORMED` or emits another op's text, and
   --    both show up here immediately.
   --
-  --    ⚠ The four gradients are driven through their `*Sgd` peers in the un-fused block below as
+  --    The four gradients are driven through their `*Sgd` peers in the un-fused block below as
   --    well; here they are pinned against the per-example GRADIENT, which is the comparison that
   --    says the batched ctor did not change the tag's dims.
-  -- ⚠ `scale` was relied on by ConvNeXt's byte tie and by 36 ViT SDPA sites without ever being
-  --    pinned individually. Added when ViT's forward started depending on it: a whole-net byte tie
-  --    localises nothing, which is the standing argument for this file existing at all.
+  -- `scale` is relied on by ConvNeXt's byte tie and by 36 ViT SDPA sites, so it is pinned
+  --    individually: a whole-net byte tie localises nothing, which is the standing argument for
+  --    this file existing at all.
   , ("scale",
      render (pretty BS (.scaleF "0.125" 0 (.operand "%x" zv))),
      render (pretty BS (.scaleB (N := BS) (n := n) "0.125" 0 (.operand "%x" zvb))))
@@ -271,7 +270,7 @@ private def cases : List (String × String × String) :=
                           (.operand "%x" (fun _ => 0 : Vec (BS*(pi*pH*pW)))))))
   ] ++
   -- ── the stem conv and the four batch-contracting PARAMETER gradients ──────────────────────────
-  --    ⚠⚠ The four gradients ALIAS their per-example peer's `Raw` (their emitted MLIR already
+  --    The four gradients ALIAS their per-example peer's `Raw` (their emitted MLIR already
   --    contracts the batch axis — `layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`), so
   --    these four rows are true BY CONSTRUCTION and cannot fail while that holds. They are here
   --    anyway, and the reason is worth stating: if anyone later gives one of them its own tag —
@@ -320,11 +319,11 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.rowDenseBiasGradB (N := BS) (R := rows) (c := c)
                            (.operand "%dy" zrb))))
    -- ── the classifier head: `dotOut` (input-VJP) and the two dense param grads.
-   --    ⚠ `dotOut` is `softmaxDiv`'s situation one op over — its `dot_general` was ALREADY
-   --    per-example (contracting dim 1 of tensor<B,n>), so only the `den` was wrong at the batched
-   --    index. ⚠ `weightGradB`/`biasGradB` exist even though `denseWeightGradB`/`denseBiasGradB`
-   --    denote the same thing: those carry different Raw TAGS, so reusing them would change the
-   --    emitted text. Two ops can denote one function and still be two renders.
+   --    `dotOut` is `softmaxDiv`'s situation one op over — its `dot_general` is ALREADY per-example
+   --    (contracting dim 1 of tensor<B,n>), so only the `den` could be wrong at the batched index.
+   --    `weightGradB`/`biasGradB` exist even though `denseWeightGradB`/`denseBiasGradB` denote the
+   --    same thing: those carry different Raw TAGS, so reusing them would change the emitted text.
+   --    Two ops can denote one function and still be two renders.
    , ("dotOut",
       render (pretty BS (.dotOut (m := a) (n := c) "%W" (zWo : Mat a c) (.operand "%dy" zvc))),
       render (pretty BS (.batchOp (N := BS) (.dotOut (m := a) (n := c) "%W" (zWo : Mat a c))
@@ -337,7 +336,7 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.biasGrad (n := c) (.operand "%dy" zvc))),
       render (pretty BS (.biasGradB (N := BS) (n := c) (.operand "%dy" zvcb))))
    ]) ++
-  -- ── step 3: max-pool + the conv bias param grads ──
+  -- ── max-pool + the conv bias param grads ──
   (let zp   : Vec (pc*(2*ph)*(2*ph)) := fun _ => 0
    let zpb  : Vec (BS*(pc*(2*ph)*(2*ph))) := fun _ => 0
    let zq   : Vec (pc*ph*ph) := fun _ => 0
@@ -358,10 +357,8 @@ private def cases : List (String × String × String) :=
       render (pretty BS (.maxPoolBack (c := pc) (h := ph) (w := ph) "%s" zp (.operand "%x" zq))),
       render (pretty BS (.maxPoolBackB (c := pc) (h := ph) (w := ph) "%s" zpb
                            (.operand "%x" zqb))))
-   -- ⭐ He et al.'s 3×3/s2 stem pool (`planning/archive/rsb_a3_r50_verified.md` §4b). These two rows tie
-   --   the per-example and batched forms; the block at the end of `main` is what says the 3×3 op
-   --   is a DIFFERENT op from the 2×2 one above, which is the check the deviation needed and
-   --   never had.
+   -- He et al.'s 3×3/s2 stem pool. These two rows tie the per-example and batched forms; the block
+   --   at the end of `main` is what says the 3×3 op is a DIFFERENT op from the 2×2 one above.
    , ("maxPool3s2",
       render (pretty BS (.maxPool3s2F (c := pc) (h := ph) (w := ph) (.operand "%x" zp))),
       render (pretty BS (.batchOp (N := BS) (.maxPool3s2 (c := pc) (h := ph) (w := ph))
@@ -428,7 +425,7 @@ private def gradPrefixCases : List (String × String × String) :=
   , ("denseBiasGradB",
      render (pretty BS (.denseBiasGradB (N := BS) (.operand "%x" zdc))),
      render (pretty BS (.denseBiasSgdB "%b" "0.05" (fun _ => 0 : Vec c) 0 (.operand "%x" zdc))))
-  -- ── the TRANSFORMER family (§2a-quinquies follow-on: the ViT AdamW render needs these) ──
+  -- ── the TRANSFORMER family (the ViT AdamW render needs these) ──
   -- Small stand-in shapes: `tk` tokens, `dm` model dim, `pp` patch, on a `pi × pH × pW` image.
   -- The property under test is textual, so the numbers only have to be consistent.
   , ("rowDenseWeightGrad",
@@ -458,7 +455,7 @@ private def gradPrefixCases : List (String × String × String) :=
      render (pretty BS (.posEmbedSgd (N := tk) (D := dm) "%p" "0.05"
                           (fun _ _ => 0 : Mat (tk+1) dm) 0
                           (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))))
-  -- the depthwise weight grads (EfficientNet's last blockers; mnv2/convnext reuse the shape)
+  -- the depthwise weight grads (EfficientNet; mnv2/convnext reuse the shape)
   , ("depthwiseWeightGradB",
      render (pretty BS (.depthwiseWeightGradB (N := BS) (c := oc) (h := ch) (w := ch)
                           (kH := kk) (kW := kk) "%a" zB
@@ -489,7 +486,7 @@ private def gradPrefixCases : List (String × String × String) :=
                           (N := tk) (D := dm) "%W" "%img" "0.05" (fun _ => 0 : Vec (pi*pH*pW))
                           (fun _ _ _ _ => 0 : Kernel4 dm pi pp pp) 0
                           (.operand "%x" (fun _ => 0 : Vec ((tk+1)*dm))))))
-  -- ── the ConvNeXt five (§2f). These ride the generic `.batched` tag, where an unmatched name
+  -- ── the ConvNeXt five. These ride the generic `.batched` tag, where an unmatched name
   --    falls through to `// MALFORMED` SILENTLY — these five cases are what catches that. ──
   , ("depthwiseWeightGrad (per-example)",
      render (pretty BS (.depthwiseWeightGrad (c := oc) (h := ch) (w := ch) (kH := kk) (kW := kk)
@@ -509,7 +506,7 @@ private def gradPrefixCases : List (String × String × String) :=
                           "%b" "0.05" (fun _ _ _ => 0 : DepthwiseKernel oc kk kk)
                           (fun _ _ _ => 0 : Tensor3 oc ch ch) zB 0
                           (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch))))))
-  -- ── the MobileNetV2 two (§2f): the BATCHED depthwise bias grads. There is no fused
+  -- ── the MobileNetV2 two: the BATCHED depthwise bias grads. There is no fused
   --    `depthwise{,Strided}BiasSgdB` peer to check against — `MobileNetV2RenderB` is AdamW-only,
   --    like `ResNet34RenderB` — so both are checked against the PER-EXAMPLE fused op, which is
   --    sound precisely because the bias grad's emit is batch-, stride- and kernel-independent
@@ -555,7 +552,7 @@ private def gradPrefixCases : List (String × String × String) :=
                           (fun _ => 0 : Vec (oc*ch*ch)) (fun _ => 0 : Vec oc) 0
                           (.operand "%x" (fun _ => 0 : Vec (oc*ch*ch)))))) ]
 
-/-- **Stochastic depth's emit guard** (`planning/archive/stochastic_depth.md`). `dropPathB` has **no
+/-- **Stochastic depth's emit guard**. `dropPathB` has **no
     per-example peer** — the mask is per-example by construction, so there is nothing to tie it
     against in either section above. What it needs pinning instead is the one structural property
     that could plausibly be wrong and that no numeric gate can see:
@@ -581,7 +578,7 @@ private def dropPathBackEmit : String :=
   render (pretty BS (.dropPathB (N := BS) (n := n) "%dp0"
                        (fun _ => 0 : Vec BS) (.operand "%x" (fun _ => 0 : Vec (BS*n)))))
 
-/-- **Classifier dropout's emit guard** (`recipe_gaps.md` gap C) — and it is `dropPathB`'s read
+/-- **Classifier dropout's emit guard** — and it is `dropPathB`'s read
     BACKWARDS, which is the point of putting the two side by side.
 
     `dropoutB` has no per-example peer either, and the one structural property that could plausibly
@@ -594,8 +591,7 @@ private def dropPathBackEmit : String :=
     here typechecks, compiles, runs, descends, and is **stochastic depth on the classifier** — a
     different regulariser, exactly as the reverse substitution is on a residual branch.
 
-    ⚠ Until this op existed the hazard was one-directional and every comment in the kit wrote it
-    that way. It is now symmetric, and these two blocks are the pair that says so: `dropPathB`'s
+    The hazard is symmetric, and these two blocks are the pair that says so: `dropPathB`'s
     asserts the broadcast is PRESENT, this one asserts it is ABSENT. Neither alone distinguishes
     the two ops. `Proofs.dropout_of_dropScale` and `Proofs.dropPath_scales_uniformly` are the
     denotation-side peers — this is a claim about bytes, those are claims about functions, and a
@@ -614,7 +610,7 @@ private def dropoutBackEmit : String :=
     and prints it only after the eval returns, so `exit` kills the process with **every diagnostic
     discarded** — you get a bare non-zero status and no idea which form broke. (Verified against a
     deliberately broken `relu` emit case.) `throw` surfaces the message as an elaboration error and
-    still makes `lake env lean` exit non-zero. Several older `tests/*.lean` use the `exit` form and
+    still makes `lake env lean` exit non-zero. Several `tests/*.lean` use the `exit` form and
     have the same blind-failure problem. -/
 private def die (msg : String) : IO α := throw (IO.userError msg)
 
@@ -650,11 +646,11 @@ def main : IO Unit := do
   let e := dropPathEmit
   if e.isEmpty || (e.splitOn "MALFORMED").length != 1 then
     die "DEGENERATE: dropPathB render is empty or fell through to // MALFORMED"
-  -- ⭐ the load-bearing one: a `tensor<32xf32>` mask broadcast over dim 0. Per-ELEMENT dropout
+  -- the load-bearing one: a `tensor<32xf32>` mask broadcast over dim 0. Per-ELEMENT dropout
   --    would read `tensor<32x12xf32>` here and be a different regulariser that still trains.
   if (e.splitOn "stablehlo.broadcast_in_dim %dp0, dims = [0] : (tensor<32xf32>) -> tensor<32x12xf32>").length != 2 then
     die s!"dropPathB's mask is NOT a per-SAMPLE tensor<32xf32> broadcast over dim 0:\n{e}"
-  -- ⚠ There must be NO baked keep constant: the driver folds `1/keep_i` into the supplied scale,
+  -- There must be NO baked keep constant: the driver folds `1/keep_i` into the supplied scale,
   -- which is what makes the ones-scale forward the exact identity (`den_dropPathB_ones`) and lets
   -- the op be emitted in the forward at all. A baked constant here would silently rescale eval.
   if (e.splitOn "stablehlo.constant").length != 1 then
@@ -669,21 +665,21 @@ transpose, so these must be one emitter:\n forward:\n{e} backward:\n{dropPathBac
   let d := dropoutEmit
   if d.isEmpty || (d.splitOn "MALFORMED").length != 1 then
     die "DEGENERATE: dropoutB render is empty or fell through to // MALFORMED"
-  -- ⭐ the load-bearing one, and it is the EXACT MIRROR of dropPathB's above: the mask carries the
+  -- the load-bearing one, and it is the EXACT MIRROR of dropPathB's above: the mask carries the
   --    value's own shape and is multiplied in directly. A `broadcast_in_dim` here would be
   --    stochastic depth on the classifier — it trains, and no numeric gate sees it.
   if (d.splitOn "stablehlo.multiply %do, %x : tensor<32x12xf32>").length != 2 then
     die s!"dropoutB does not multiply a per-ELEMENT tensor<32x12xf32> mask in directly:\n{d}"
   if (d.splitOn "broadcast_in_dim").length != 1 then
     die s!"dropoutB BROADCASTS its mask — that is stochastic depth, not dropout:\n{d}"
-  -- ⚠ Same no-baked-constant requirement as dropPathB, for the same reason: the driver folds
+  -- Same no-baked-constant requirement as dropPathB, for the same reason: the driver folds
   -- `1/keep` into the mask, which is what makes the ones-mask forward the exact identity.
   if (d.splitOn "stablehlo.constant").length != 1 then
     die s!"dropoutB emits a baked constant — eval at a ones mask would not be the identity:\n{d}"
   if d != dropoutBackEmit then
     die s!"dropoutB's backward does not emit its forward's text — a diagonal map is its own \
 transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBackEmit}"
-  -- ⭐⭐ THE PAIR, stated as one check: the two regularisers must not render the same bytes. Each
+  -- THE PAIR, stated as one check: the two regularisers must not render the same bytes. Each
   --    block above passes on its own op; only this says they are DISTINGUISHABLE, which is the
   --    property that makes either emit test worth running.
   if d == e then
@@ -693,11 +689,10 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
   IO.println "  ✓ dropoutB ≠ dropPathB: the two regularisers render distinguishable text"
   -- ── the stem pool: 3×3/s2 symmetric is NOT 2×2/s2, and NOT XLA `'SAME'` ──
   --
-  -- ⚠⚠ This block is the whole reason the op exists, and it is the check that was missing for as
-  -- long as the deviation was. `maxPool3s2` and `maxPool` share a TYPE (112→56 either way), an
-  -- arity, an op count, and the shape of their emitted text — so the tie rows above pass for both
-  -- and every structural audit in the repo is blind to the difference. Only the window attributes
-  -- separate them, and only bytes can say so.
+  -- This block is the whole reason the op exists. `maxPool3s2` and `maxPool` share a TYPE (112→56
+  -- either way), an arity, an op count, and the shape of their emitted text — so the tie rows above
+  -- pass for both and every structural audit in the repo is blind to the difference. Only the
+  -- window attributes separate them, and only bytes can say so.
   IO.println "── the stem pool: maxPool3s2 ──"
   let mp3 := (cases.filter (fun c => c.1 == "maxPool3s2")).head!.2.1
   let mp3b := (cases.filter (fun c => c.1 == "maxPool3s2Back")).head!.2.1
@@ -706,30 +701,29 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
   for (nm, txt) in [("maxPool3s2", mp3), ("maxPool3s2Back", mp3b)] do
     if txt.isEmpty || (txt.splitOn "MALFORMED").length != 1 then
       die s!"DEGENERATE: {nm} render is empty or fell through to // MALFORMED"
-    -- ⭐ the window itself. `1, 1, 3, 3` over the two spatial axes, stride `1, 1, 2, 2`.
+    -- the window itself. `1, 1, 3, 3` over the two spatial axes, stride `1, 1, 2, 2`.
     if (txt.splitOn "window_dimensions = array<i64: 1, 1, 3, 3>").length != 2 then
       die s!"{nm} does not pool a 3×3 window — that is not He et al.'s stem pool:\n{txt}"
     if (txt.splitOn "window_strides = array<i64: 1, 1, 2, 2>").length != 2 then
       die s!"{nm} does not stride 2 — the output shape would not be 112→56:\n{txt}"
-    -- ⭐⭐ SYMMETRIC padding, and this is the half a reader gets wrong. XLA `'SAME'` on a 112→56
+    -- SYMMETRIC padding, and this is the half a reader gets wrong. XLA `'SAME'` on a 112→56
     --    axis pads `(low 0, high 1)` — window `i` = `[2i, 2i+2]` — where He et al./torchvision pad
     --    `[[1,1],[1,1]]`, window `i` = `[2i−1, 2i+1]`. The two grids are offset by ONE input
     --    position and are different functions everywhere; measured on device at n = 12, `SAME`
     --    peaks at [2,4,6,8,10,11] against symmetric's [1,3,5,7,9,11]. Both compile, both train,
-    --    both have the right output shape. `planning/archive/rsb_a3_r50_verified.md` §4b.
+    --    both have the right output shape.
     if (txt.splitOn "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>").length != 2 then
       die s!"{nm}'s padding is not SYMMETRIC 1 — XLA 'SAME' would offset the pooling grid by one \
 input position, which is a different function at the same output shape:\n{txt}"
-  -- ⚠ The 2×2 ops must NOT have moved. They back every mnist/cifar net in the repo, and the whole
-  -- claim that this change is confined to the ResNets rests on their emit being untouched.
+  -- The 2×2 ops must NOT move. They back every mnist/cifar net in the repo, and the whole
+  -- claim that the 3×3 pool is confined to the ResNets rests on their emit being untouched.
   if (mp2.splitOn "window_dimensions = array<i64: 1, 1, 2, 2>").length != 2 then
     die s!"maxPool (2×2) no longer emits a 2×2 window — every mnist/cifar net just moved:\n{mp2}"
   if (mp2.splitOn "padding").length != 1 then
     die s!"maxPool (2×2) now emits a padding attribute — it did not before, so its bytes moved:\n{mp2}"
-  -- ⭐⭐ THE PAIR, the `dropoutB ≠ dropPathB` move one op over: each block above passes on its own
+  -- THE PAIR, the `dropoutB ≠ dropPathB` move one op over: each block above passes on its own
   --    op, and only this says the two pools are DISTINGUISHABLE. Without it a render that reached
-  --    for the wrong pool would tie, audit and train exactly like the right one — which is what
-  --    happened, on every ResNet here, for as long as the renders existed.
+  --    for the wrong pool would tie, audit and train exactly like the right one.
   if mp3 == mp2 then
     die s!"maxPool3s2 and maxPool emit IDENTICAL text — one of them is the wrong pool:\n{mp3}"
   if mp3b == mp2b then

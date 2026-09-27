@@ -8,9 +8,8 @@ def mobilenetV2 : NetSpec where
   name := "MobileNet v2"
   imageH := 224
   imageW := 224
-  -- ⚠ MobileNetV2 is ReLU6 throughout — the paper's stem and 1x1 head included, not just the
-  -- inverted-residual blocks. The verified render always did this; the reference did not, because
-  -- the `.convBn` emitter hardcoded relu (`planning/archive/mnv4_verified.md` §3h).
+  -- MobileNetV2 is ReLU6 throughout — the paper's stem and 1x1 head included, not just the
+  -- inverted-residual blocks. `convBnAct` defaults to `.relu`, so the stem and head need it set.
   convBnAct := .relu6
   layers := [
     .convBn 3 32 3 2 .same,                    -- 224→112

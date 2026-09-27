@@ -186,7 +186,7 @@ noncomputable def flatConvStride2BiasGradHasVJP {ic oc h w kH kW : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-4 patchify convolution = decimate ∘ decimateOdd ∘ (stride-1 SAME conv)
---   (the ConvNeXt 4×4/s4 patchify stem, ch9 scaling pass)
+--   (the ConvNeXt 4×4/s4 patchify stem)
 -- ════════════════════════════════════════════════════════════════
 
 /-- The odd decimation index map: like `decimateIdx` but keeping the **odd**
@@ -265,9 +265,8 @@ noncomputable def flatConvStride4HasVJP {ic oc h w kH kW : Nat}
     cotangent. Two `vjpComp` steps over the proven stride-1 weight-VJP and the two decimation
     VJPs — no new mathematics, only the composition the stride-2 sibling already does once.
 
-    This is the cert that ConvNeXt's 4×4/s4 patchify stem (`psW`) was missing: its forward
-    (`flatConvStride4`) and input-VJP (`flatConvStride4HasVJP`) were already proven, so the stem's
-    weight gradient was the last hand-written emitter in that render. -/
+    This is the weight-gradient cert of ConvNeXt's 4×4/s4 patchify stem (`psW`); its forward
+    (`flatConvStride4`) and input-VJP (`flatConvStride4HasVJP`) are proven above. -/
 noncomputable def flatConvStride4WeightGradHasVJP {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) :
     HasVJP (fun v : Vec (oc * ic * kH * kW) =>
@@ -301,7 +300,7 @@ theorem flatConvStride4WeightGradHasVJP_correct {ic oc h w kH kW : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 conv at XLA `SAME` = decimateODD ∘ (stride-1 SAME conv)
---   (`planning/archive/mnv4_verified.md` §3b/§3d — the TF-origin padding convention)
+--   (the TF-origin padding convention)
 -- ════════════════════════════════════════════════════════════════
 
 /-! **Why a second stride-2 convolution exists, and why it is not a fix to the first.**

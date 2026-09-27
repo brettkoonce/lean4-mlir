@@ -3,23 +3,18 @@ import LeanMlir.Verified.Train
 
 /-! # MobileNetV4 data-parallel gate — the collective's semantics, on a duplicated batch
 
-The MNv4 peer of `tests/TestMobilenetV2DpCheck.lean`, and the reason
-`verified_mlir/mnv4in_adamdp64_train_step.mlir` stops carrying a caveat.
+The MNv4 peer of `tests/TestMobilenetV2DpCheck.lean`, and the tie behind
+`verified_mlir/mnv4in_adamdp64_train_step.mlir`.
 
-⛔ **WHY THIS FILE EXISTS.** `MobileNetV4RenderB.lean`'s `#eval` block rendered the 4-replica pair
-for COSTING only, and said so in three places: *"nothing has tied MNv4's collectives"*, *"do not
-train off these"*, *"what would lift the caveat is a DP tie for MNv4's collectives, the way
-R34/R50/MNv2/ConvNeXt have one"*. An untied collective artifact looks exactly as trustworthy as a
-tied one — it is the same bytes, in the same directory, named the same way — so the render was
-deliberately unquotable rather than deliberately absent. This gate and, since the render went
-sync-BN, `imagenet-syncbn-check mnv4` are that tie (until 2026-09-21 the second half was the
-`mnv4in` row in `tests/TestShardCheck.lean`, retired then).
+**WHY THIS FILE EXISTS.** An untied collective artifact looks exactly as trustworthy as a tied
+one — it is the same bytes, in the same directory, named the same way. This gate and
+`imagenet-syncbn-check mnv4` are the DP tie for MNv4's collectives, the way R34/R50/MNv2/ConvNeXt
+have one.
 
 **The exact identity, and why BatchNorm does not spoil it.** Give every replica the **same** 64
-examples. Since 2026-09-21 the DP render's BatchNorm is synchronised
-(`planning/global_bn_verified.md` §3.4): each BN layer all-reduces its statistics, and the mean of
-four identical per-replica statistics is that statistic, so every replica normalises by exactly
-the single-device batch's statistics; each therefore computes the same gradient `g`, and
+examples. The DP render's BatchNorm is synchronised: each BN layer all-reduces its statistics, and
+the mean of four identical per-replica statistics is that statistic, so every replica normalises by
+exactly the single-device batch's statistics; each therefore computes the same gradient `g`, and
 `all_reduce(add)/4` returns `(4·g)/4 = g`. The mean is an identity on a duplicated batch, at any
 replica count. The data-parallel step must reproduce the **single-device** step, output for output
 — the forward bit-exact; the gradient to the gap between the sync-BN graph's arithmetic and the
@@ -33,15 +28,15 @@ a forward-only `bnstat` region that must come back **bit-exact**. Every replica 
 so any difference there is the DP path corrupting the forward, which no gradient tolerance would
 have caught.
 
-⚠⚠ **FOUR replicas, not two, and that is forced.** MNv4 renders `adamdp64` at 4 replicas only —
+**FOUR replicas, not two, and that is forced.** MNv4 renders `adamdp64` at 4 replicas only —
 there is no 2-replica peer — so this needs four GPUs. `PJRT_REPLICAS=2` does not degrade to a
 2-way run; the shim's replica-count guard refuses the call. Every other `*-dp-check` here defaults
 to 2 because its net had a bs32 Imagenette DP render to pair with, and MNv4 has none.
 
-⚠ **It is the ImageNet net, so this is a 1000-class 224² step.** There is no Imagenette-scale MNv4
+**It is the ImageNet net, so this is a 1000-class 224² step.** There is no Imagenette-scale MNv4
 DP render to gate more cheaply; `mnv4_adam_train_step.mlir` is single-device.
 
-Two failure modes it separates, both of which have actually happened in this repo:
+Two failure modes it separates:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
 * **collective present but wrong** (sum not mean) → every gradient is 4× and `m` moves by ~3,
@@ -53,7 +48,7 @@ Two failure modes it separates, both of which have actually happened in this rep
     DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 \
       PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check                # the bf16 pair
 
-▶ **The recipe render** (planning/archive/mnv4_half_pair.md) — five regions `[θ|m|v|G|E]`, seven scalars
+**The recipe render** — five regions `[θ|m|v|G|E]`, seven scalars
 and a classifier-dropout mask — takes the same gate at its own batch:
 
     DP_BATCH=128 DP_VARIANT=emaacc8x128wxdowd005bf16 DP_VARIANT_DP=emaaccdp8x128wxdowd005bf16 \
@@ -65,8 +60,8 @@ so `G' = G + g` carries the raw gradient and is gated beside `m`; the EMA shadow
 dropout mask is non-uniform and duplicated with the batch, so every replica drops the same
 features.
 
-⭐ **Both precision arms need gating, not just fp32.** `mnv4in_adamdp64bf16` is on disk and is
-exactly as untied as its f32 peer was; the precision axis does not get to quietly inherit a tie it
+**Both precision arms need gating, not just fp32.** `mnv4in_adamdp64bf16` is on disk, and
+the precision axis does not get to quietly inherit a tie it
 was not given. The `DP_VARIANT` knobs are what make that a re-run rather than a second file.
 
 Needs FOUR GPUs and the XLA backend (collectives do not exist on the IREE path — the IREE shim
@@ -76,7 +71,7 @@ refuses a DP entry point outright rather than silently running single-device).
 def main (args : List String) : IO Unit := do
   -- Env-selected the way `TestMobilenetV2DpCheck` and `TestShardCheck` are, defaulting to EXACTLY
   -- the configuration the committed result was measured at — so it reproduces with no arguments.
-  -- ⚠ Unlike those two the defaults are 4 replicas and the ImageNet spec, because MNv4's only DP
+  -- Unlike those two the defaults are 4 replicas and the ImageNet spec, because MNv4's only DP
   -- renders are 4-replica and 1000-class. There is nothing cheaper to fall back to.
   let net := mnv4ImagenetVerified.toNet
   let bs := ((← IO.getEnv "DP_BATCH").bind (·.toNat?)).getD 64       -- the BAKED per-replica batch
@@ -132,7 +127,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let tail ← if emaOn then F32.write3 tail (emaOff - 1).toUSize (if accOn then 1.0 else 0.002) 0.9 0.1
              else pure tail
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
-  -- ⚠ the dropout mask is per EXAMPLE × feature and rides at the tail; `0` or `1/keep`, non-uniform
+  -- the dropout mask is per EXAMPLE × feature and rides at the tail; `0` or `1/keep`, non-uniform
   -- so the mask is not the identity. Duplicated with the batch below.
   let keep := (net.dropoutKeep.map (·.1)).getD 1.0
   let doMask1 ← if cdOn then F32.dropoutMask keep (bs * doW) 777 else pure ByteArray.empty
@@ -158,7 +153,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   IO.println "  running single-device…"; (← IO.getStdout).flush
   -- Delete first on BOTH sides: `compileVmfb` keys on the OUTPUT path and an mtime, never the
   -- source, so a second run with a different candidate silently reuses the first one's binary
-  -- (handoff §4) — which is exactly what running the sum-not-mean control looks like.
+  -- — which is exactly what running the sum-not-mean control looks like.
   for tag in ["mnv4_dp_a", "mnv4_dp_b"] do
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
@@ -168,13 +163,13 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath
-  -- ⚠ `nShardTail = 1` under dropout: the mask is per-example, so the shim splits it by rows the way
+  -- `nShardTail = 1` under dropout: the mask is per-example, so the shim splits it by rows the way
   -- it splits `x` (the driver's own call); every replica then gets the same `bs` rows.
   let o2 ← LowererSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf2 shapes2 y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
              (nShardTail := if cdOn then 1 else 0)
 
-  -- ⚠ The sharded tail comes back WHOLE from the DP call: under dropout its mask passthrough is all
+  -- The sharded tail comes back WHOLE from the DP call: under dropout its mask passthrough is all
   -- `bs·replicas` rows against the single-device call's `bs`. Everything before it is laid out
   -- identically, so the regions below read replica 0's rows of the mask and nothing past them.
   let extraMask := if cdOn then (replicas - 1) * bs * doW * 4 else 0
@@ -237,9 +232,9 @@ by construction; a difference here is the data-parallel path corrupting the forw
     IO.Process.exit 1
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
-  -- wrong (§3).
-  -- ⚠ 1e-2 (f32) / 5e-2 (bf16), not 1e-4, since 2026-09-21: the DP render's BatchNorm is
-  -- SYNCHRONISED (`planning/global_bn_verified.md` §3.4), so its backward is the sync-BN graph
+  -- wrong.
+  -- 1e-2 (f32) / 5e-2 (bf16), not 1e-4: the DP render's BatchNorm is
+  -- SYNCHRONISED, so its backward is the sync-BN graph
   -- while the single-device artifact is the two-pass graph — one function, two arithmetics. On
   -- this duplicated batch `m` differs by 1.65e-3 norm-rel in f32 and 2.2e-2 in bf16 (measured;
   -- `imagenet-syncbn-check`'s FORMULATION column is the same gap at one replica). The forward is

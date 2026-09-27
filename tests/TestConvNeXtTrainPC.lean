@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Types
 
-/-! # ConvNeXt Item B — structured representative train-step render (proof-rendered)
+/-! # ConvNeXt — structured representative train-step render (proof-rendered)
 
-The ConvNeXt peer of `tests/TestMobilenetV2TrainPC.lean` / the retired `TestResnet34TrainPC.lean`, at the
+The ConvNeXt peer of `tests/TestMobilenetV2TrainPC.lean`, at the
 **representative** `convNextForward` config (the proven graph: 1×1 patchify stem → scalar-LN →
 2 residual ConvNeXt blocks → GAP → head-LN → dense), CIFAR-shaped: 3×32² in, c=32, cExp=128,
 dw 7×7, 10 classes. Forward AND the whole backward cotangent chain are proof-rendered through
@@ -17,7 +17,7 @@ are hand-emitted: the GAP backward, conv/depthwise/dense weight+bias grads, laye
 (flat→NCHW) only at those.
 
 Unlike the MNV2/r34 peers there is no committed same-signature renderer (the committed
-`TestConvNeXtTrain.lean` is the full ConvNeXt-T [3,3,9,3]; "come back to scaling later"), so
+`TestConvNeXtTrain.lean` is the full ConvNeXt-T [3,3,9,3]), so
 validation is the `scripts/gates/render_parity.py` ref-only smoke: compile + run on the GPU, all 26
 updated params finite and non-zero:
   `scripts/gates/render_parity.py --fn convnext_rep_train_step --ref .lake/build/cnxpc_train_step.mlir`

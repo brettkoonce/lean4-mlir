@@ -2,28 +2,25 @@ import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
-/-! # The stochastic-depth mask is SHARDED, not replicated — `stochastic_depth.md` §5b
+/-! # The stochastic-depth mask is SHARDED, not replicated
 
-The gate that document left open, in its own words: *"Any stochastic-depth DP render needs an
-**asymmetric-batch** gate, not the duplicated-batch one … this is an open design question and it
-should be settled before the render lands, not after."*
+Any stochastic-depth DP render needs an **asymmetric-batch** gate, not the duplicated-batch one;
+this is that gate.
 
 **The hole.** The drop mask is a **per-example** input (`%dp<i> : tensor<Bxf32>`, one Bernoulli per
 example), so under data parallelism replica `r` must receive mask rows `[r·b, (r+1)·b)` — the same
-split `x` gets. The masks ride in the PARAMETER blob (`Verified.Train`'s `dropShapes`), and the DP
-shim's rule was *"x and the labels shard, everything between them replicates"*, so every replica got
-replica 0's mask and applied it to its own rows. ⚠ **That was true of the shim before any DP drop
-render existed to expose it** — §5b's prediction, found by building the render it predicted about.
+split `x` gets. The masks ride in the PARAMETER blob (`Verified.Train`'s `dropShapes`), and under a
+DP shim rule of *"x and the labels shard, everything between them replicates"* every replica gets
+replica 0's mask and applies it to its own rows.
 
-**Why the existing gates cannot see it.**
+**Why the other gates cannot see it.**
 * `efficientnet-dp-check` hands both replicas the **same rows**, so a sharded mask and a replicated
-  one produce identical results and it passes bit-exact either way. That is §5's duplicated-batch
-  hole one axis over.
+  one produce identical results and it passes bit-exact either way.
 * `shard-check` (`DP([A|B]) = mean(single(A), single(B))`) needs the gated slot **linear in the
   gradient** — true of AdamW's `m` at `m = 0`, **false of RMSProp's buffer**, and EfficientNet is
-  the net that wants stochastic depth *and* RMSProp. §5b called that an open design question.
+  the net that wants stochastic depth *and* RMSProp.
 
-**▶ THE CONSTRUCTION, and it is optimizer-agnostic — which is what §5b said did not exist.**
+**THE CONSTRUCTION, and it is optimizer-agnostic.**
 
 Duplicate the DATA and make only the MASK asymmetric, then **swap the mask halves**:
 
@@ -36,18 +33,18 @@ Duplicate the DATA and make only the MASK asymmetric, then **swap the mask halve
 
 **Bit-identical is the bar, and it is an argument rather than a hope.** At two replicas the
 collective is `(a + b)/2`, and IEEE-754 addition is **commutative** — `a + b` and `b + a` are the
-same float, exactly — so a correctly sharded run is invariant under the swap to the bit. ⚠ It is
+same float, exactly — so a correctly sharded run is invariant under the swap to the bit. It is
 commutativity, **not** associativity: at more than two replicas the reduction is a tree whose order
 a permutation changes, and the known answer degrades to approximate. That is why the render is 2
 replicas and why this harness refuses above 2.
 
 **What it does and does not establish.** It proves the mask inputs are **split rather than copied**.
 It does *not* pin the shard OFFSET (a reversed split is also swap-invariant) — but the splitting
-code is `n_replicas`-generic C shared with `x`, already gated by `shard-check`, so the only new
-question was whether the flag is set at all. Say "the masks are sharded", never "the masks are
-sharded in the right order".
+code is `n_replicas`-generic C shared with `x`, already gated by `shard-check`, so the only
+remaining question is whether the flag is set at all. Say "the masks are sharded", never "the masks
+are sharded in the right order".
 
-⚠ Nothing here needs the optimizer to be linear, so it transfers to `emarmsdrop` unchanged — it
+Nothing here needs the optimizer to be linear, so it transfers to `emarmsdrop` unchanged — it
 compares two runs of the SAME graph rather than a device answer against a host one.
 
     lake build drop-shard-check
@@ -55,7 +52,7 @@ compares two runs of the SAME graph rather than a device answer against a host o
     CUDA_VISIBLE_DEVICES=0,1 PJRT_REPLICAS=2 LD_LIBRARY_PATH=/tmp/detshim \
       .lake/build/bin/drop-shard-check
 
-⚠ **The control is fault injection, not a perturbed render**, because the defect lives in the shim
+**The control is fault injection, not a perturbed render**, because the defect lives in the shim
 rather than in the artifact. `PJRT_DP_NO_MASK_SHARD=1` restores the replicating behaviour and the
 gate must go red:
 
@@ -74,10 +71,10 @@ private def entryOf (path : String) : IO String := do
   | some rest => pure ("m." ++ rest.takeWhile (· != '('))
 
 def main (argv : List String) : IO Unit := do
-  -- ⚠ ONE harness for both nets, per `rms-tie`/`wdx-tie`/`shard-check` — a second copy is the
-  -- double-writer disease one level down, in code. `convnext` selects the LayerNorm net; since the
-  -- BN renders went sync-BN no net has replica-0-local batch statistics, so the switch now changes
-  -- only whether ①b has anything to compare.
+  -- ONE harness for both nets, per `rms-tie`/`wdx-tie`/`shard-check` — a second copy is the
+  -- double-writer disease one level down, in code. `convnext` selects the LayerNorm net; with the
+  -- BN renders sync-BN no net has replica-0-local batch statistics, so the switch changes only
+  -- whether ①b has anything to compare.
   let cnx  := argv.contains "convnext"
   let vit  := argv.contains "vit"
   let spec := if cnx then convnextVerified else if vit then vitVerified else efficientnetVerified
@@ -93,11 +90,10 @@ hold, so swap-invariance stops being a bit-exactness claim.")
   let nDrop := net.dropKeeps.size
   if nDrop == 0 then
     throw (IO.userError "the selected net has no drop sites — nothing to gate")
-  -- ⚠ The path is still argv[0] when it is a path, so every committed invocation is unchanged; the
-  -- `convnext` selector only moves the DEFAULT (and the spec above, which is what actually matters).
-  -- ⚠ Every SELECTOR must be filtered out here, not just the first one. `vit` was left in the list
-  -- when it was added and became argv[0] — i.e. the artifact PATH — so the run died opening a file
-  -- called "vit". Loud, but the shape of it is the §2m positional-argument hazard in argv form.
+  -- The path is argv[0] when it is a path; the `convnext` selector only moves the DEFAULT (and the
+  -- spec above, which is what actually matters).
+  -- Every SELECTOR must be filtered out here, not just the first one: an unfiltered selector
+  -- becomes argv[0] — i.e. the artifact PATH — and the run dies opening a file named after it.
   let dpPath := match argv.filter (fun a => a != "convnext" && a != "vit") with
     | p :: _ => p
     | []     => if cnx then "verified_mlir/convnext_adamdpdrop_train_step.mlir"
@@ -109,21 +105,21 @@ hold, so swap-invariance stops being a bit-exactness claim.")
 backend {← LowererSession.backendName}"
   if (← IO.getEnv "PJRT_DP_NO_MASK_SHARD") == some "1" then
     IO.println "  ⚠ FAULT INJECTED: PJRT_DP_NO_MASK_SHARD=1 — the masks are REPLICATED"
-  -- ⚠⚠ TWO CONTROLS, AND THEY SHOW DIFFERENT THINGS.
+  -- TWO CONTROLS, AND THEY SHOW DIFFERENT THINGS.
   --   `PJRT_DP_NO_MASK_SHARD=1` clears the shard flag while the buffer stays GLOBAL, so each
   --     replica is handed 64 elements for a `tensor<32xf32>` input and the shim REFUSES on arity.
   --     That is a stronger result than a numeric miss: once the buffer is sized globally,
   --     replication is not expressible — it is a type error, not a wrong answer.
-  --   `DROP_FAULT=replicate` reconstructs the PRE-FIX WORLD exactly — buffer at the PER-DEVICE
+  --   `DROP_FAULT=replicate` reconstructs the replicating shim exactly — buffer at the PER-DEVICE
   --     batch, shapes `#[bs]`, shard flag off — which type-checks and silently hands every replica
-  --     the same rows. That is the defect as it actually existed, and it is the one ① must catch
+  --     the same rows. That is the defect that type-checks, and it is the one ① must catch
   --     NUMERICALLY. A control that only ever produces a refusal would not show that.
   let faultRep := (← IO.getEnv "DROP_FAULT") == some "replicate"
   if faultRep then
     IO.println "  ⚠ FAULT INJECTED: DROP_FAULT=replicate — the PRE-FIX world (mask buffer at the per-device batch, shard flag off). ① must fire."
 
   -- ── the shared inputs: θ, and a DUPLICATED batch so the only asymmetry is the mask ──
-  -- ⚠ Duplicating the data is what makes this test the MASK and nothing else. With asymmetric data
+  -- Duplicating the data is what makes this test the MASK and nothing else. With asymmetric data
   -- the two runs would differ for a second reason and a red result would not localise.
   let mut parts : Array ByteArray := #[]
   let mut sd := 909
@@ -154,9 +150,9 @@ backend {← LowererSession.backendName}"
                               ++ Array.replicate nDrop #[if faultRep then bs else gbs])
 
   -- ── the two masks, drawn at DIFFERENT seeds, then assembled both ways round ──
-  -- ⚠ REFUSE IF THEY AGREE. Two identical halves make the swap a no-op and the gate vacuously
-  -- green — the `shard-check` "refuses as VACUOUS" rule, which exists because §2d.1 shipped a
-  -- reversed-batch control that produced no difference at all.
+  -- REFUSE IF THEY AGREE. Two identical halves make the swap a no-op and the gate vacuously
+  -- green — the `shard-check` "refuses as VACUOUS" rule: a control that produces no difference
+  -- at all calibrates nothing.
   let m0 ← F32.dropScales net.dropKeeps bs 11
   let m1 ← F32.dropScales net.dropKeeps bs 977
   let mut same := 0
@@ -175,8 +171,8 @@ this gate cannot distinguish a sharded mask from a replicated one")
       acc := acc.push (F32.slice a (s * bs) bs)
       acc := acc.push (F32.slice b (s * bs) bs)
     pure (F32.concat acc)
-  -- In the reconstructed pre-fix world there is only ONE half to give, so the two runs differ by
-  -- the WHOLE mask — which is exactly what a replicated mask does to a global batch.
+  -- In the reconstructed replicating world there is only ONE half to give, so the two runs differ
+  -- by the WHOLE mask — which is exactly what a replicated mask does to a global batch.
   let mAB ← if faultRep then pure m0 else build m0 m1
   let mBA ← if faultRep then pure m1 else build m1 m0
 
@@ -195,28 +191,27 @@ this gate cannot distinguish a sharded mask from a replicated one")
   let oBA ← run mBA "ba"
 
   -- ── the comparison, and it is TWO checks pulling in OPPOSITE directions ──
-  -- `θ'`/`m'`/`v'` are computed from the ALL-REDUCED gradient, and since 2026-09-21 the batch
-  -- statistics are all-reduced too (sync-BN, see ①b below), so a sharded mask makes all of them
-  -- swap-invariant to the bit. `%loss` is different in kind: it is replica-0-LOCAL, computed on
-  -- replica 0 from REPLICA 0's MASK, which the swap changes. It must MOVE.
+  -- `θ'`/`m'`/`v'` are computed from the ALL-REDUCED gradient, and the batch statistics are
+  -- all-reduced too (sync-BN, see ①b below), so a sharded mask makes all of them swap-invariant to
+  -- the bit. `%loss` is different in kind: it is replica-0-LOCAL, computed on replica 0 from
+  -- REPLICA 0's MASK, which the swap changes. It must MOVE.
   --
   -- Neither check alone is evidence. Invariance alone is satisfied by a mask that reaches nothing
-  -- (all-ones, or a site wired to a dead branch) — the ones-mask blindness of §7b, one level up.
-  -- The movement is what witnesses that replica 0 actually RECEIVED a different mask, and the
-  -- invariance is what witnesses that the collective nevertheless saw both. Together they say the
-  -- masks were split; either alone says much less. (Until the renders went sync-BN, the batch
-  -- statistics were replica-0-local and were the movement witness, tens of thousands strong.)
+  -- (all-ones, or a site wired to a dead branch) — ones-mask blindness, one level up. The movement
+  -- is what witnesses that replica 0 actually RECEIVED a different mask, and the invariance is what
+  -- witnesses that the collective nevertheless saw both. Together they say the masks were split;
+  -- either alone says much less.
   let P := net.nParams
-  -- ⚠ `%loss` is NOT in the all-reduced group, and putting it there cost a run. It is the
-  -- report-only forward scalar (§5's carve-out list: emitted text, on no gradient path, outside
-  -- every faithfulness theorem) — computed on each replica from ITS OWN rows and mask, with only
-  -- replica 0's returned. So it is replica-0-LOCAL, and it must MOVE under the swap. The first version counted it as all-reduced and ① read
-  -- `12061076/12061077` — one output, which is the tell: a wiring defect moves thousands.
-  -- ⚠ The invariant set is NOT a contiguous prefix. The return layout is
+  -- `%loss` is NOT in the all-reduced group. It is the report-only forward scalar (emitted text,
+  -- on no gradient path, outside every faithfulness theorem) — computed on each replica from ITS
+  -- OWN rows and mask, with only replica 0's returned. So it is replica-0-LOCAL, and it must MOVE
+  -- under the swap. Counting it as all-reduced makes ① read one differing output — which is the
+  -- tell: a wiring defect moves thousands.
+  -- The invariant set is NOT a contiguous prefix. The return layout is
   -- `θ' ++ m' ++ v' ++ [%loss, %bc1, %bc2] ++ bnstats`, so `%loss` sits at 3P — INSIDE any range
-  -- that reaches the scalars. Taking `3P + 2` as "the all-reduced part" therefore still swept it
-  -- up, and ① read one differing output at index 3P, which is `%loss` itself. Gate the three
-  -- parameter regions, and check the two passthrough scalars separately.
+  -- that reaches the scalars. Taking `3P + 2` as "the all-reduced part" sweeps it up, and ① then
+  -- reads one differing output at index 3P, which is `%loss` itself. Gate the three parameter
+  -- regions, and check the two passthrough scalars separately.
   let nRed := 3 * P                          -- θ' | m' | v' — all-reduced
   let mut diff := 0
   let mut firstDiff := 0
@@ -263,12 +258,11 @@ compute g(x,m₁) — a different function.\n\
 \n\
 Check that `nShardTail` reaches `pjrt_ffi_invoke_f32_dp2`, and that the mask buffer is sized at the \
 GLOBAL batch (`dropShapes` must be `#[gbs]`, not `#[bs]`).")
-  -- ⭐ SINCE 2026-09-21 THE BATCH STATISTICS ARE ALL-REDUCED TOO. The DP renders' BatchNorm is
-  -- synchronised (`planning/global_bn_verified.md` §3.3): every BN layer all-reduces its mean and
-  -- Chan's variance, and the render hands back those GLOBAL statistics. At two replicas each is
-  -- `(a + b)/2` of per-replica values, so a sharded mask leaves them swap-invariant to the bit,
-  -- exactly as it does the gradients — they joined ①. Until then they were replica-0-LOCAL and
-  -- were ②, the anti-vacuity witness that had to MOVE; that half now rests on `%loss` alone (②a).
+  -- THE BATCH STATISTICS ARE ALL-REDUCED TOO. The DP renders' BatchNorm is synchronised: every BN
+  -- layer all-reduces its mean and Chan's variance, and the render hands back those GLOBAL
+  -- statistics. At two replicas each is `(a + b)/2` of per-replica values, so a sharded mask leaves
+  -- them swap-invariant to the bit, exactly as it does the gradients — they belong to ①. The
+  -- anti-vacuity witness that has to MOVE rests on `%loss` alone (②a).
   if bnDiff != 0 then
     throw (IO.userError s!"①b FAILED — {bnDiff} of {nBnStats} batch statistics move when the two \
 mask halves are swapped (max abs {bnWorst}). Under synchronised BatchNorm they are the GLOBAL \
@@ -282,15 +276,13 @@ the output layout, not in the sharding.")
     throw (IO.userError s!"②a FAILED — VACUOUS. `%loss` did not move when the mask halves were \
 swapped. It is computed on replica 0 from replica 0's rows and replica 0's MASK, so a swap that \
 reaches the device must change it. Identical means replica 0 saw the same mask twice.")
-  -- ⚠⚠ ②a CARRIES THE ANTI-VACUITY LOAD ALONE, on every net — and that is a real weakening, stated
-  -- rather than papered over. Until the BN renders went sync-BN, EfficientNet witnessed "replica 0
-  -- received a different mask" with tens of thousands of replica-0-local batch statistics; now the
-  -- only replica-0-local output any net returns is ONE scalar, `%loss`, as it always was on the
-  -- LayerNorm nets. It is still a genuine witness (report-only, computed on replica 0 from replica
-  -- 0's rows and mask), and it is not the only thing standing between this gate and vacuity: the
-  -- harness already REFUSES above if the two mask halves are equal. But a one-scalar anti-vacuity
-  -- check would not survive a defect that happened to leave `%loss` fixed, and nothing here rules
-  -- that out.
+  -- ②a CARRIES THE ANTI-VACUITY LOAD ALONE, on every net — and that is a real weakness, stated
+  -- rather than papered over. The only replica-0-local output any net returns is ONE scalar,
+  -- `%loss`, as on the LayerNorm nets. It is still a genuine witness (report-only, computed on
+  -- replica 0 from replica 0's rows and mask), and it is not the only thing standing between this
+  -- gate and vacuity: the harness already REFUSES above if the two mask halves are equal. But a
+  -- one-scalar anti-vacuity check would not survive a defect that happened to leave `%loss` fixed,
+  -- and nothing here rules that out.
   let why := if nBnStats == 0 then s!"{spec.name} normalises with LayerNorm"
              else "the batch statistics are all-reduced"
   IO.println s!"  ⚠ `%loss` is the only replica-0-local output ({why}), so ②a is the WHOLE \

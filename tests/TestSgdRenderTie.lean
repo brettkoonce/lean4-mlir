@@ -4,11 +4,11 @@ import LeanMlir.GradcheckHelpers
 
 /-! # SGD `@<slug>_train_step` render tie — the `tests/` emitter vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2a-quinquies. Four artifacts still have two writers, and for
-`convnext_train_step` / `efficientnet_train_step` the two emitters have **positionally identical
-interfaces** (182/180 and 264/262), so the R34 move applies: run both renders on one shared input
-and compare every returned float, *before* deleting either emitter. Once the `tests/` writer is
-gone the comparison cannot be run at all, so it is run first — that is the whole point of this file.
+Four artifacts have two writers, and for `convnext_train_step` / `efficientnet_train_step` the two
+emitters have **positionally identical interfaces** (182/180 and 264/262), so the R34 move applies:
+run both renders on one shared input and compare every returned float, *before* deleting either
+emitter. Once the `tests/` writer is gone the comparison cannot be run at all, so it is run first —
+that is the whole point of this file.
 
 **What is compared is the GRADIENT, not θ'.** An SGD train step returns `θ' = θ − lr·g` and nothing
 else — no loss, no BN statistics, 180 in / 180 out for convnext. Comparing θ' directly would be
@@ -19,14 +19,14 @@ wrong gradient still lands within `lr·|g| / |θ|` of a match. This harness ther
 
 per side and ties **that**. Two consequences, both deliberate:
 
-* the two sides may carry **different `lr`** and still be tied — which is not hypothetical:
+* the two sides may carry **different `lr`** and still be tied:
   `tests/TestEfficientNetTrain.lean` bakes `LR = 0.1` while the committed
   `efficientnet_train_step.mlir` (from `Proofs/Codegen/EfficientNetRender/Basic.lean`) bakes `0.05`. The
   lr is passed per side on the command line rather than assumed, so that divergence is *recorded*
   instead of silently failing the tie for a reason that has nothing to do with the graph;
 * the gate is **per-parameter** norm-relative, `max|gA−gB| / max|gA|` within each parameter. A
   global denominator would let an entire small-gradient layer be wrong and still pass, and a
-  per-*coordinate* ratio is meaningless on a near-zero gradient entry (handoff §3).
+  per-*coordinate* ratio is meaningless on a near-zero gradient entry.
 
 **What this does NOT establish, unlike the R34 AdamW tie.** That harness could gate the forward pass
 bit-exactly, because `@resnet34_adam_train_step` returns the batch μ/var of all 36 BN inputs and
@@ -42,7 +42,7 @@ same forward".
 
 Exits non-zero if the renders disagree or if the comparison is degenerate. `TIE_SKIP_AA=1` skips the
 A-against-itself run, which is the determinism floor: without it "the difference is 1e-6" is an
-assertion rather than a measurement (handoff §4).
+assertion rather than a measurement.
 -/
 
 private def netBySlug (slug : String) : IO VerifiedNetSpec :=
@@ -51,7 +51,7 @@ private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   | "efficientnet" => pure efficientnetVerified
   | "mobilenetv2"  => pure mobilenetv2Verified
   | "resnet34"     => pure resnet34Verified
-  -- ViT is here so the XLA/MIOpen patch-embed blocker (handoff §2a) can be probed on the SGD
+  -- ViT is here so the XLA/MIOpen patch-embed blocker can be probed on the SGD
   -- graph, which carries the SAME two convolutions as the AdamW one. Its train step is the same
   -- (x, θ, onehot) -> θ' shape this harness drives: 202 in / 200 out.
   | "vit"          => pure vitVerified
@@ -107,7 +107,7 @@ backend {← LowererSession.backendName}"
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
 
   -- ── the determinism floor: A against itself, in this same process ──
-  -- XLA is bit-identical for a single step *within* a process (handoff §3), so this run is what
+  -- XLA is bit-identical for a single step *within* a process, so this run is what
   -- turns any A-vs-B difference into something graph-attributable rather than backend noise.
   let skipAA := (← IO.getEnv "TIE_SKIP_AA").isSome
   IO.println "  running A…"; (← IO.getStdout).flush

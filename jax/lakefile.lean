@@ -11,7 +11,7 @@ require «lean4-jax» from ".."
 lean_lib «Jax» where
   roots := #[`Jax]
 
--- Phase 2 JAX codegen runners — one per architecture.
+-- JAX codegen runners — one per architecture.
 lean_exe «mnist-mlp» where
   root := `MainMlp
 
@@ -59,8 +59,8 @@ lean_exe «vit-tiny» where
 lean_exe «resnet34-imagenet» where
   root := `MainResnetImagenet
 
--- ResNet-50 (bottleneck) on 1000-class ImageNet — RSB-A2 build host (phase 1
--- skeleton; see planning/archive/rsb_a2_resnet50.md). runningBN + bottleneck SD threaded.
+-- ResNet-50 (bottleneck) on 1000-class ImageNet — RSB-A2 build host.
+-- runningBN + bottleneck SD threaded.
 lean_exe «resnet50-imagenet» where
   root := `MainResnet50Imagenet
 
@@ -77,12 +77,12 @@ lean_exe «vit-b-imagenet» where
   root := `MainVitBImagenet
 
 -- MobileNetV2 on 1000-class ImageNet, bf16 incl. bf16 conv (the
--- inverted-residual blocks now route through convdt — see Codegen.lean).
+-- inverted-residual blocks route through convdt — see Codegen.lean).
 lean_exe «mobilenet-v2-imagenet» where
   root := `MainMobilenetV2Imagenet
 
 -- MobileNetV4-Conv-M on 1000-class ImageNet. Faithful Conv-M block table
--- (~9.7M params) vs the Conv-S-sized Imagenette demo. See planning/archive/mnv4_imagenet.md.
+-- (~9.7M params) vs the Conv-S-sized Imagenette demo.
 lean_exe «mobilenet-v4-imagenet» where
   root := `MainMobilenetV4Imagenet
 
@@ -92,7 +92,7 @@ lean_exe «efficientnet-b0-imagenet» where
   root := `MainEfficientNetImagenet
 
 -- ConvNeXt-Tiny on Imagenette: Chapter 8's JAX reference on the shared
--- Imagenette recipe (2026-09-13, the layer-scale init control).
+-- Imagenette recipe (the layer-scale init control).
 lean_exe «convnext-tiny» where
   root := `MainConvNeXt
 

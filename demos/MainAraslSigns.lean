@@ -1,7 +1,7 @@
 import LeanMlir
 
 /-! Chapter 4's CNN on Arabic sign-language letters, under two splits of the same
-    images — planning/arasl_people_watching_demo.md.
+    images.
 
     ArASL is 54,049 grey 64 × 64 crops of hands spelling the 32 letters of the Arabic
     alphabet, captured as video bursts. `scripts/datasets/preprocess_arasl.py` writes the same images

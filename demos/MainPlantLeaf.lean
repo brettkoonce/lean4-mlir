@@ -1,7 +1,6 @@
 import LeanMlir
 
-/-! Chapter 6's ResNet-34 from lab leaves to field leaves —
-    planning/plant_lab_to_field_demo.md.
+/-! Chapter 6's ResNet-34 from lab leaves to field leaves.
 
     PlantVillage is 54,305 lab photographs of single picked leaves on a grey background,
     38 classes; PlantDoc is 2,578 field photographs of the same crops whose 28 classes all
@@ -275,7 +274,7 @@ train {trainSel}, init {init}, field {field}{if fieldN > 0 then s!" (n={fieldN})
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
-  -- ⚠ sized from the initialised buffer, not `spec.totalParams` (the SE-net disagreement)
+  -- sized from the initialised buffer, not `spec.totalParams` (the SE-net disagreement)
   let p0 ← spec.heInitParams
   let nP := F32.size p0
   let nT := 3 * nP

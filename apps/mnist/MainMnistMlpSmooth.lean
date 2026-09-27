@@ -3,8 +3,8 @@ import LeanMlir.Verified.Smoothing
 
 /-! # `mnist-mlp-smooth` — randomized-smoothing certificate on the verified MNIST MLP
 
-The MLP rung of the depth-independent certificate (`planning/archive/robustness_ladder.md` §3,
-Cohen–Rosenfeld–Kolter 2019). Same forward-only Monte-Carlo procedure as `mnist-cnn-smooth`,
+The MLP rung of the depth-independent certificate (Cohen–Rosenfeld–Kolter
+2019). Same forward-only Monte-Carlo procedure as `mnist-cnn-smooth`,
 on the 784→512→512→10 MLP: noise-augmented training, then certify radius `σ·Φ⁻¹(p_A)` with
 `p_A` a Clopper–Pearson lower bound on the top class's noise probability.
 

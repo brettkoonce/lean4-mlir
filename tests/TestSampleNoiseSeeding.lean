@@ -4,29 +4,25 @@ import LeanMlir.F32Array
 /-!
 # Seeding regression test for `Ddpm.sampleNoise`
 
-`lean_ddpm_sample_noise` seeded its xorshift64 stream by XOR alone
+`lean_ddpm_sample_noise` must not seed its xorshift64 stream by XOR alone
 (`s = seed ^ K`) and then read the first uniform from the **top** 53 bits
 (`s >> 11`). xorshift64 is linear over GF(2), so two seeds differing only in
 their low bits still differ only in low bits after one round: the top of the
-word never moves. Every call therefore drew the same `u1`, hence the same
+word never moves. Every call would then draw the same `u1`, hence the same
 Box–Muller radius `√(-2 ln u1)`.
 
-Over the 2048 seeds the 2-D diffusion demo uses for `x_T` this produced **two
-distinct radii**, both 1.9130 — so every sample started life on a *circle*
-rather than being drawn from `N(0, I)`, and the reverse process was fed a
+Over the 2048 seeds the 2-D diffusion demo uses for `x_T` that seeding gives **two
+distinct radii**, both 1.9130 — so every sample starts on a *circle*
+rather than being drawn from `N(0, I)`, and the reverse process is fed a
 distribution it was never trained on.
 
-Nothing downstream could see it. The image DDPMs draw one long vector per call
+Nothing downstream can see it. The image DDPMs draw one long vector per call
 (`sampleNoise (B * nPix) 0xc0ffee`), where only the *first* pair of each call is
 correlated across seeds and everything after it comes from a well-mixed stream,
-so their grids looked normal. Per-axis mean and variance are both correct under
+so their grids look normal. Per-axis mean and variance are both correct under
 the defect — the mass is merely on a shell instead of filling the ball — so any
 summary statistic on the coordinates agrees with a healthy Gaussian. The radius
 is what separates them, which is what this file asserts.
-
-▶ Found by the reverse-process strip of `planning/archive/diffusion_2d_demo.md` §5: the
-`t = T` panel is meant to be an isotropic blob and it was a ring. That is the
-figure earning its place — no number in the demo's metric suite moved.
 
 Hermetic: no data files, no GPU.
 -/
@@ -53,7 +49,7 @@ private def stdev (a : Array Float) : Float :=
 /-- For `x ~ N(0, I₂)`, `|x|` is Rayleigh(1): mean `√(π/2) ≈ 1.2533`,
     standard deviation `√(2 - π/2) ≈ 0.6551`, and `E|x|² = 2`. The bounds are
     wide because the point is not to test the quality of the Box–Muller
-    transform — it is to separate a Rayleigh from a constant. The defect scored
+    transform — it is to separate a Rayleigh from a constant. The defect scores
     a standard deviation of about `1e-6` and `E|x|² = 3.66`. -/
 private def check (label : String) (n : Nat) (f : Nat → Nat) : IO Bool := do
   let r ← radii n f
@@ -69,7 +65,7 @@ def main : IO UInt32 := do
   IO.println "Ddpm.sampleNoise seeding — radii must be Rayleigh, not constant"
   -- The two seed patterns `demos/archive/MainDiffusion2d.lean` actually uses: nearly
   -- consecutive seeds for `x_T`, and a strided pattern for the eta > 0 noise.
-  -- The second was biased rather than degenerate (its differences reach higher
+  -- The second is biased rather than degenerate (its differences reach higher
   -- bits), which is why it needs its own row instead of being assumed covered.
   let a ← check "consecutive  (i + 7919)      " 1024 (fun i => i + 7919)
   let b ← check "strided      (i·131071 + 17) " 1024 (fun i => i * 131071 + 17)

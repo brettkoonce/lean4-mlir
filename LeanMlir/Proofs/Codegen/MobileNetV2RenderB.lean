@@ -48,7 +48,7 @@ structure MBFwdB where
   dn : String        -- depthwise BN output   (= depthwise-relu6 pre-activation)
   dr : String        -- depthwise relu6 out   (= project input)
   pc : String        -- project conv output   (= project-BN input)
-  -- ⭐ SYNC-BN (`replicas > 1`): each BN site's all-reduced packed `[μ ‖ σ²]`, read by its backward,
+  -- SYNC-BN (`replicas > 1`): each BN site's all-reduced packed `[μ ‖ σ²]`, read by its backward,
   -- its γ gradient and the handed-back running stats. `""` at one replica.
   stE : String := ""
   stD : String := ""
@@ -446,17 +446,17 @@ def mnv2StatSigList : List (String × String) := List.map (fun (n, ds) => (n, ty
     running the wrong graph. `B = 32` is deliberately unsuffixed so the committed artifact keeps its
     name. The `#guard`s at the bottom pin the literal `#eval` paths against this. -/
 def mnv2AdamVariant (B replicas : Nat) (opt : OptKind := .adamw)
-    -- ▶ `bf16` LAST and defaulted, so every committed spelling is untouched.
-    -- ⚠⚠ It MUST reach this function and not merely the block renderers: the entry NAME is
+    -- `bf16` LAST and defaulted, so every committed spelling is untouched.
+    -- It MUST reach this function and not merely the block renderers: the entry NAME is
     -- derived from the variant, so a flag that reaches the emission but not the name writes
     -- `…bf16_train_step.mlir` declaring `@…_train_step` inside, and the driver refuses at load
-    -- with an entry mismatch. ConvNeXt shipped that twice and R34's bf16 a third time.
+    -- with an entry mismatch.
     (bf16 : Bool := false)
-    -- ▶ `wx` (no decay on the 1-D params), `do` (classifier dropout) and the label-smoothing
+    -- `wx` (no decay on the 1-D params), `do` (classifier dropout) and the label-smoothing
     -- mass, TRAILING and defaulted for `bf16`'s reason: every committed spelling is untouched.
     -- α is spelled `ls<100α>` only when it is not the default 0.1, so `ls0` is α = 0.
     (wx : Bool := false) (cd : Bool := false) (alpha : Float := 0.1)
-    -- ▶ BatchNorm ε, as `bnEpsMarker` spells it: empty at the committed 1e-5.
+    -- BatchNorm ε, as `bnEpsMarker` spells it: empty at the committed 1e-5.
     (epsMarker : String := "") : String :=
   (match opt with
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
@@ -533,7 +533,7 @@ def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu6 (n := 1280*7*7)) (.operand nHn zH7))
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
     (.operand nHr zH7))
-  -- ▶ CLASSIFIER DROPOUT between GAP and the dense, where the reference puts it (`emitForward`'s
+  -- CLASSIFIER DROPOUT between GAP and the dense, where the reference puts it (`emitForward`'s
   -- `.dense` case) and where EfficientNet's render does. At `cd = false` no `pretty` call happens,
   -- so the fresh-name counter does not move and every committed artifact re-renders byte-identical.
   let (cDo, nCin) ← if cd then
@@ -634,35 +634,31 @@ def mobilenetv2FwdFaithfulB (B nClasses : Nat) (epsStr : String)
 def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (convBias : Bool := false) (slug : String := "mobilenetv2")
     (opt : OptKind := .adamw)
-    -- ⭐⭐ **bf16**, TRAILING and defaulted so every existing render is byte-identical (gate 1).
+    -- **bf16**, TRAILING and defaulted so every existing render is byte-identical.
     -- Every conv AND every DEPTHWISE — stem, expand/project 1×1s, the depthwise, both dgrads,
     -- every wgrad — becomes its bf16 twin: bf16 operands, a **bf16-TYPED** result, convert back.
     -- BN, the bias grads, the loss, AdamW and the master weights stay f32.
-    -- ⚠ This is the first net whose bf16 path includes GROUPED convolutions. The f32-result
-    -- shape folds for those exactly as it does for ordinary conv — measured on a real MNv2
-    -- layer before the ops were written — so `feature_group_count` buys no exemption from §9.2.
+    -- This net's bf16 path includes GROUPED convolutions. The f32-result shape folds for those
+    -- exactly as it does for ordinary conv — measured on a real MNv2 layer — so
+    -- `feature_group_count` buys no exemption from the bf16-typed-result rule.
     (bf16 : Bool := false)
-    -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
+    -- `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate `mobilenetv2-syncbn-check`. Never a committed artifact.
     (forceSync : Bool := false)
-    -- ▶ The recipe knobs, TRAILING and defaulted so every committed render is byte-identical:
+    -- The recipe knobs, TRAILING and defaulted so every committed render is byte-identical:
     --   `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `r34WdName`'s rule;
     --   `cd` — classifier dropout at the driver's `%do` mask (EfficientNet's and MNv4's slot);
     --   `alpha` — the label-smoothing mass. At α = 0 the smoothing ops are not emitted at all.
     (wdExclude : Bool := false) (cd : Bool := false) (alpha : Float := 0.1) : String :=
   let sync : Bool := replicas > 1 || forceSync
-  -- ⚠ α and K are spelled ONCE here. Until 2026-08-02 this render carried `0.100000` and
-  -- `-0.010000` as inline literals in the cotangent AND a third copy, `0.010000`, in the
-  -- report-only loss — the K=10 values. mnv2 is the WORST of the four ImageNet ports on this axis
-  -- because one of them is on the GRADIENT path, which is §2k's original bug rather than the
-  -- report-only variant found in ConvNeXt and EfficientNet. At K=10 all three render byte-identical
-  -- to the literals they replace, so the fix is inert on every committed artifact.
+  -- α and K are spelled ONCE here, for the cotangent AND the report-only loss — never as inline
+  -- K=10 literals, because one of them is on the GRADIENT path. At K=10 they render
+  -- byte-identical to the literals `0.100000` / `-0.010000` / `0.010000`.
   let alphaStr    := fmt6 alpha               -- α itself ("0.100000" at the default)
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — the SAME traversal `@mobilenetv2_fwd` renders, so the forward this
-    --     differentiates and the forward the driver scores with are one graph by construction
-    --     (leg 2 of `planning/archive/renderer_convergence.md`) ═══
+    --     differentiates and the forward the driver scores with are one graph by construction ═══
     let F : MNV2FwdRecB ← mnv2FwdChainB B nClasses epsStr convBias bf16 replicas sync cd
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -705,11 +701,11 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ═══ head backward + the 6 head/dense gradients ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    -- ⚠⚠ `F.cin`, NOT `nGap`: the classifier weight gradient reads the DENSE'S INPUT, which with
+    -- `F.cin`, NOT `nGap`: the classifier weight gradient reads the DENSE'S INPUT, which with
     -- classifier dropout on is the dropped activation (EfficientNet's `ENetFwd.cin` note).
     let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) F.cin z1280b (.operand nDy zNCp))
     let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
-    -- ▶ Dropout's backward is the same op at the same mask (`Proofs.dropout_vjp_is_self`), between
+    -- Dropout's backward is the same op at the same mask (`Proofs.dropout_vjp_is_self`), between
     -- the dense's input-VJP and the GAP backward. At `cd = false` nothing is emitted.
     let (cDdo, nDdo) ← if cd then
         pretty B (.dropoutB (N := B) (n := 1280) doName z1280b (.operand nDgi z1280b))
@@ -762,8 +758,8 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     Derived from the SAME forward record that computes them (`f.ec`/`f.dc`/`f.pc`) rather
     --     than from an independent 52-entry table — a misaligned stat slot is SILENT, since the
     --     arities still match and the wrong layer's statistics simply flow into the wrong
-    --     `@mobilenetv2_fwd_eval` slot (§2e). ═══
-    -- ⭐ At `replicas > 1` they are read off the all-reduced packed vector (`bnStatsMeanB` /
+    --     `@mobilenetv2_fwd_eval` slot. ═══
+    -- At `replicas > 1` they are read off the all-reduced packed vector (`bnStatsMeanB` /
     -- `bnStatsVarB`), so the host EMAs the GLOBAL batch statistics rather than replica 0's shard's.
     let bnStat (oc hh : Nat) (xn st : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
@@ -843,11 +839,11 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       q11 ++ q12 ++ q13 ++ q14 ++ q15 ++ q16 ++ q17 ++ [mh, vh]
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the same carve-out
-    -- `resnet34`/`cifar8`'s `%loss` takes (§5). The SMOOTHED cross-entropy, matching the
+    -- `resnet34`/`cifar8`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
     -- cotangent's soft target:
     --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ].
-    -- Getting this wrong is invisible to every proof in the repo, and §2b shipped exactly that bug
-    -- on R34 (plain CE against a smoothed cotangent) — only the numeric tie caught it.
+    -- Getting this wrong (plain CE against a smoothed cotangent) is invisible to every proof in the
+    -- repo — only the numeric tie catches it.
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -934,14 +930,11 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The PER-EXAMPLE forward chain, kept for the EVAL forward only
---   Migrated here 2026-09-06 when `MobileNetV2Render.lean` was retired (leg 2 of
---   `planning/archive/renderer_convergence.md`). `bnPerChannelEvalF` reads frozen per-channel statistics
---   and reduces nothing, so `@mobilenetv2_fwd_eval` is BatchNorm-world-agnostic and correct
---   against either chain — the same call ResNet-34 and ResNet-50 make.
---   It is not re-pointed at `mnv2FwdChainB` because nothing needs it to move. (Until 2026-09-08
---   a whole-net float budget's provenance claim named that artifact's 263 SSA names line for
---   line; that budget is deleted.)
---   ⚠ `paperSig` and `mnv2SigList` are the SAME 210/158 parameters in the SAME order under two
+--   `bnPerChannelEvalF` reads frozen per-channel statistics and reduces nothing, so
+--   `@mobilenetv2_fwd_eval` is BatchNorm-world-agnostic and correct against either chain — the
+--   same call ResNet-34 and ResNet-50 make. It is not re-pointed at `mnv2FwdChainB` because
+--   nothing needs it to move.
+--   `paperSig` and `mnv2SigList` are the SAME 210/158 parameters in the SAME order under two
 --   naming conventions — `%Ws`/`%We2`/`%Wfc` here, `%sW`/`%b2eW`/`%Wd` there. The `#guard`s at
 --   the bottom of this file pin both arities, which is what keeps the two lists one contract.
 -- ════════════════════════════════════════════════════════════════
@@ -980,7 +973,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnEvalSite B mid (2*hh) (2*ww) epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
-  -- ⚠ XLA-`SAME` (`depthwiseStridedXlaF`), the TF-origin convention. The symmetric token has the
+  -- XLA-`SAME` (`depthwiseStridedXlaF`), the TF-origin convention. The symmetric token has the
   -- same type and output shape, so nothing structural would notice the wrong one here — only
   -- `scripts/gates/convention_audit.py` (pad profile) and `scripts/parity/mnv2_forward_tie.py` (values) can.
   let (cDc, nDc) ← pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
@@ -1205,13 +1198,12 @@ private def mnv2FwdSig (B nClasses : Nat) (epsStr : String) (convBias : Bool) : 
 def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "mobilenetv2") : String :=
   let entry := fwdEvalEntry slug epsStr
-  -- ⭐ The eval forward must be the SAME NET as the train step that produces the running
+  -- The eval forward must be the SAME NET as the train step that produces the running
   -- statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
-  -- `MobileNetV2RenderB`, XLA-`SAME` since 2026-08-08 (`planning/archive/mnv4_verified.md` §3h). Since
-  -- 2026-09-05 `mnv2FwdChain` is XLA-`SAME` unconditionally, so this and its per-example sibling
-  -- `@mobilenetv2_fwd` are one net at every stride-2 site (they still differ in BN world: frozen
-  -- stats here, per-example there) and `LEAN_MLIR_EVAL_BATCHSTATS=1` — which scores through
-  -- `@mobilenetv2_fwd` — is back to being transductive-only rather than also cross-net.
+  -- `MobileNetV2RenderB`, XLA-`SAME`. `mnv2FwdChain` is XLA-`SAME` unconditionally, so this and
+  -- its sibling `@mobilenetv2_fwd` are one net at every stride-2 site (they differ in BN world)
+  -- and `LEAN_MLIR_EVAL_BATCHSTATS=1` — which scores through `@mobilenetv2_fwd` — is
+  -- transductive-only rather than also cross-net.
   let F : MNV2Fwd := (mnv2FwdChain B nClasses epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{entry}({mnv2FwdSig B nClasses epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
@@ -1228,11 +1220,7 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/mobilenetv2_adam_train_step.mlir` — the batched (`N := B`) MobileNetV2
 -- AdamW train step as `pretty(provenGraph)`. B=32, nClasses=10, ε=1e-5. **This is the artifact
--- `mobilenetv2-verified-adam` trains on**, and this `#eval` is its ONLY writer.
---
--- It rendered to a separate `…_b.mlir` while the hand-written emitter in
--- `tests/TestMobilenetV2TrainPC.lean` still owned this path — two writers for one artifact is the
--- last-writer-wins race §2a found. The swap happened (§2f) once the gates were in:
+-- `mobilenetv2-verified-adam` trains on**, and this `#eval` is its ONLY writer. Its gates:
 --
 --   * the numeric tie (`mobilenetv2-adam-tie`, IREE) — forward BIT-EXACT on all 52 BN layers'
 --     batch statistics, `%loss` bit-exact, gradient bit-exact, spread 0/210, over all 6,795,329
@@ -1242,59 +1230,49 @@ end Proofs.StableHLO
 --     (`bnstat` exact only 80/34112), and a perturbed `%loss` constant fires the loss gate with
 --     every other region bit-exact.
 --
--- The driver needed no change: it resolves the path from the net slug, so taking over the
--- canonical name IS the swap. `…_b.mlir` is deleted; the bytes now at this path are byte-identical
--- to the `_b.mlir` render that passed the tie (checked before deleting).
--- ⭐⭐ **`@mobilenetv2_fwd`, moved onto THIS chain 2026-09-06** (leg 2 of
--- `planning/archive/renderer_convergence.md`). It came from `MobileNetV2Render.mnv2FwdFaithfulV`, the
--- PER-EXAMPLE render, while every train step below is batch BN — so the artifact the driver scores
--- with and the artifact it trains on were different functions of the same architecture. That was
--- the last `KNOWN_SPLIT` entry in `scripts/regen_verified_mlir.sh`. It is now a byte-identical
--- PREFIX of `mobilenetv2_adam_train_step.mlir`, machine-checked by `check_adam_prefix`.
---
--- ⚠ Two things change in these bytes and both are intended: the BatchNorm world (per-example →
--- batch), and every parameter NAME (`%Ws`/`%We2`/`%Wfc` → `%sW`/`%b2eW`/`%Wd`, from `mnv2SigList`).
--- The driver binds positionally, so the rename reaches nothing.
+-- **`@mobilenetv2_fwd` is rendered from THIS chain**, batch BN like every train step below, so
+-- the artifact the driver scores with and the artifact it trains on are one function. It is a
+-- byte-identical PREFIX of `mobilenetv2_adam_train_step.mlir`, machine-checked by
+-- `check_adam_prefix`. Its parameter NAMES (`%sW`/`%b2eW`/`%Wd`) come from `mnv2SigList`; the
+-- driver binds positionally, so names reach nothing.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd.mlir"
   (Proofs.StableHLO.mobilenetv2FwdFaithfulB 32 10 "1.0e-5")
 
--- The ImageNet forward, 64x1000. ⭐ It was split the same way and no audit could see it:
--- `check_adam_prefix`'s PAIRS list holds only the Imagenette names, which is exactly how
--- `resnet34in_fwd` hid in leg 1.
+-- The ImageNet forward, 64x1000. `check_adam_prefix`'s PAIRS list holds only the Imagenette
+-- names, so its prefix check does not cover this one.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd.mlir"
   (Proofs.StableHLO.mobilenetv2FwdFaithfulB 64 1000 "1.0e-5" "mobilenetv2in")
 
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adam_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5")
 
--- The **DATA-PARALLEL** render (handoff §2h-bis), selected at run time by
+-- The **DATA-PARALLEL** render, selected at run time by
 -- `LEAN_MLIR_VARIANT=adamdp`. Same graph, plus one `all_reduce(add)/N` per parameter gradient
 -- between the certified gradient and the certified AdamW triple: *certified gradient → trusted
 -- collective → certified AdamW*. The collective is a DECLARED carve-out and the render says so in
--- its own output banner at `replicas > 1`, per the §5/§2b `%loss` lesson that an undeclared
--- carve-out is how wrong things ship. Claim ceiling is unchanged (§5): the gradient averaging is a
--- proven identity; the collective implementing it is trusted, exactly like the lowerer.
+-- its own output banner at `replicas > 1`: an undeclared carve-out is how wrong things ship.
+-- Claim ceiling is unchanged: the gradient averaging is a proven identity; the collective
+-- implementing it is trusted, exactly like the lowerer.
 --
--- Like EfficientNet's and unlike ResNet-34's, this variant never had a hand-written emitter to
--- migrate off — this file has been the only writer of both mnv2 AdamW artifacts since the §2f swap.
+-- This file is the only writer of both mnv2 AdamW artifacts.
 --
--- It renders to its OWN path, which is what stops the §2a race where producing a DP render meant
--- editing a knob and clobbering the artifact the trainer runs. `2` is the replica count these are
--- rendered at and it must match `PJRT_REPLICAS` at run time, because the graph bakes
--- `replica_groups`. Re-render here to change it.
+-- It renders to its OWN path, so producing a DP render never means editing a knob and clobbering
+-- the artifact the trainer runs. `2` is the replica count these are rendered at and it must match
+-- `PJRT_REPLICAS` at run time, because the graph bakes `replica_groups`. Re-render here to change
+-- it.
 --
--- It needs the XLA build (`mobilenetv2-verified-adam`, §2h): collectives exist only on the PJRT
+-- It needs the XLA build (`mobilenetv2-verified-adam`): collectives exist only on the PJRT
 -- path, and the IREE shim refuses a DP entry point outright rather than silently running
 -- single-device.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_adamdp_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 32 10 "1.0e-5" 2)
 
 -- ── RMSProp at the IMAGENETTE shape (B=32, K=10) ──────────────────────────────────────────────
--- Rendered deliberately at the shape the existing gates and trainer exercise TODAY, exactly as
--- §2k did for ResNet-34's heavy-ball `mom` variant before the ImageNet one existed. The ImageNet
--- renders below are the same renderer at `B := 64, nClasses := 1000` — both are true renderer
--- parameters — so anything this shape establishes about the OPTIMIZER carries, and this is the one
--- that `mobilenetv2-adam-tie` and the Imagenette trainer can compile and run without the shim.
+-- Rendered deliberately at the shape the existing gates and trainer exercise, as ResNet-34's
+-- heavy-ball `mom` variant is. The ImageNet renders below are the same renderer at
+-- `B := 64, nClasses := 1000` — both are true renderer parameters — so anything this shape
+-- establishes about the OPTIMIZER carries, and this is the one that `mobilenetv2-adam-tie` and the
+-- Imagenette trainer can compile and run without the shim.
 --
 -- It renders to its OWN path, so the artifact `mobilenetv2-verified-adam` runs is untouched.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_rms_train_step.mlir"
@@ -1303,19 +1281,18 @@ end Proofs.StableHLO
 -- ── MobileNetV2 / ImageNet-1k train steps, slug `mobilenetv2in` ──────────────────────────────────────
 -- Batch 64 x 4 replicas = global 256 = `mobilenetV2ImagenetConfig.batchSize`, so the step count
 -- per epoch (5004) matches the reference exactly. All three label-smoothing constants are derived
--- from `nClasses` as of this change; at K=1000 the cotangent shift is -0.000100 and the loss's
--- α/K is 0.000100, where both were the K=10 value before.
+-- from `nClasses`; at K=1000 the cotangent shift is -0.000100 and the loss's α/K is 0.000100.
 --
--- ⚠ `mnv2AdamVariant B replicas` encodes the PER-DEVICE batch, not the replica count, so
+-- `mnv2AdamVariant B replicas` encodes the PER-DEVICE batch, not the replica count, so
 -- `adamdp64` would name both a 2- and a 4-replica render at B=64. Only the 4-replica one exists.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in")
 
--- ⭐ **The SINGLE-DEVICE bf16 peer**, and it exists to answer one question the 4-replica numbers
+-- **The SINGLE-DEVICE bf16 peer**, and it exists to answer one question the 4-replica numbers
 -- cannot: **how much of the bf16 win does the f32 all-reduce eat?** `adamdp64bf16` measured 1.37×
 -- at 4 replicas while MNv4 — which renders no DP variant at all — measured 1.88× at 1. Those two
 -- differ in BOTH architecture and replica count, so neither explains the other. This render holds
--- the architecture fixed and moves only the replica count. ▶ Not a recipe; a control.
+-- the architecture fixed and moves only the replica count. Not a recipe; a control.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.adamw true)
@@ -1323,73 +1300,65 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in")
 
--- ⭐⭐ **The bf16 peer** — `adamdp64bf16`, the same graph with every convolution AND every
+-- **The bf16 peer** — `adamdp64bf16`, the same graph with every convolution AND every
 -- DEPTHWISE replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** result, then a convert
 -- back to f32. Same 4×64 config as the f32 render above, so the two differ by precision alone.
 --
--- ⭐ **This is the first verified net whose bf16 path includes GROUPED convolutions.** Before the
--- eight new ops were written, a hand-built StableHLO module at a real MNv2 depthwise layer
--- (c=144, 56², 3×3, fgc=144) was compiled three ways: f32 → f32 operands; bf16 operands with an
--- **f32-typed result** → **FOLDED back to f32**; bf16 operands with a bf16-typed result and a
--- convert → bf16 reaches the hardware. ▶ Identical to the ordinary-conv finding in §9.2, so
+-- **This net's bf16 path includes GROUPED convolutions.** A hand-built StableHLO module at a real
+-- MNv2 depthwise layer (c=144, 56², 3×3, fgc=144) compiled three ways: f32 → f32 operands; bf16
+-- operands with an **f32-typed result** → **FOLDED back to f32**; bf16 operands with a bf16-typed
+-- result and a convert → bf16 reaches the hardware. Identical to the ordinary-conv finding, so
 -- `feature_group_count` buys no exemption. Check with `scripts/probes/bf16_gate2.py`, never by grepping
 -- the op line, which shows only the result type.
 --
--- ⚠ The depthwise convs are ~13% of MNv2's step and bf16 is a mild LOSS on them in isolation
+-- The depthwise convs are ~13% of MNv2's step and bf16 is a mild LOSS on them in isolation
 -- (0.86× at MNv2's own layers — cuDNN has a better f32 depthwise kernel on Ada). The win comes
 -- from the 1×1 expand/project convs, which is why the reference sets `bf16Conv := true` here.
--- ▶ `planning/archive/bf16_renderer.md` §9.1: the doc's "depthwise nets won't pay" was REFUTED.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.adamw true)
 
--- ⭐ The bf16 marker, and the wiring that actually breaks: `mobilenetv2AdamTrainStepFaithfulB`
+-- The bf16 marker, and the wiring that actually breaks: `mobilenetv2AdamTrainStepFaithfulB`
 -- derives its entry name from `mnv2AdamVariant`, so `bf16` must reach THAT call.
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 Proofs.StableHLO.OptKind.adamw true == "adamdp64bf16"
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 Proofs.StableHLO.OptKind.adamw == "adamdp64"
--- ▶ And the slug must not trip the DRIVER's substring variant predicates, which read the same
+-- And the slug must not trip the DRIVER's substring variant predicates, which read the same
 -- string to size the checkpoint blob. `cdOn` tests for "do" — a false positive would silently add
 -- a dropout region to the layout with no error anywhere.
 #guard !"adamdp64bf16".contains "do"
 #guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
 
--- ── ▶ RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ──────────────────────────
--- `planning/archive/recipe_gaps.md` §2: RMSProp is the ONLY gap between this net and the JAX reference's
--- **68.33%** (everything else — batch 256, 90 epochs, 5-epoch warmup, no label smoothing — already
--- matches). recipe_gaps files this as Tier D, "a new proven `SHlo` op family, ten sites each";
--- measured, it is **one** op: `momVNextF` already spells the coupled L2 and `adamVNextF` at
--- `β₂ := ρ` already IS the running mean-square (`Proofs.rmsPropStep`'s `s'` is `adamVNext ρ`),
--- so only the ε-inside-the-root normalise had to be built.
+-- ── RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ────────────────────────────
+-- RMSProp is the ONLY gap between this net and the JAX reference's **68.33%** (everything else —
+-- batch 256, 90 epochs, 5-epoch warmup, no label smoothing — matches). It is **one** op of its
+-- own: `momVNextF` spells the coupled L2 and `adamVNextF` at `β₂ := ρ` IS the running mean-square
+-- (`Proofs.rmsPropStep`'s `s'` is `adamVNext ρ`), so only the ε-inside-the-root normalise is new.
 --
 -- Same shape/batch/replicas as the `adam64` peer above, so the two are comparable row for row: the
 -- signature is byte-identical apart from the entry name, and `%bc1`/`%bc2` ride through unused.
 --
--- ⚠ THE DRIVER OWES TWO THINGS BEFORE THIS TRAINS CORRECTLY, and neither is a render change:
+-- THE DRIVER MUST DO TWO THINGS FOR THIS TO TRAIN CORRECTLY, and neither is a render change:
 --   1. the mean-square slot (`v`) must be **initialised to 1.0, not 0** — TF's convention, and the
 --      reason this optimizer trains stably at the paper LR. A zero init is not a crash, it is a
 --      different and much larger first step;
---   2. exponential LR decay (0.98/epoch), which is recipe_gaps' Tier C and still open.
--- Until both land this artifact is a correct render of the right optimizer, not a matched pair.
+--   2. exponential LR decay (0.98/epoch).
+-- Without both, this artifact is a correct render of the right optimizer, not a matched pair.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rms64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in" .rmsprop)
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in" .rmsprop)
--- ⭐⭐ **The bf16 twin of the line above, and the arm `mnv2-default-4gpu` should run.** Until now
--- this net's ONLY committed bf16 renders were the AdamW family, so the one job that trains it had
--- no bf16 arm at all and paid f32 for the whole 350-epoch schedule — the gap was in the render
--- matrix rather than in anything measured, which is the kind that survives longest because every
--- gate on the existing artifacts stays green while it does.
--- ⚠ RMSProp is the axis that matters here, not the precision: `.rmsprop` keeps ε INSIDE the root
--- and the mean-square initialised to 1.0 (TF's form), and the bf16 flag is orthogonal to both.
+-- **The bf16 twin of the line above.** RMSProp is the axis that matters here, not the precision:
+-- `.rmsprop` keeps ε INSIDE the root and the mean-square initialised to 1.0 (TF's form), and the
+-- bf16 flag is orthogonal to both.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.rmsprop true)
 -- The entry name is derived from the variant, so this guard is what stops the artifact declaring
--- `@mobilenetv2in_rmsdp64_train_step` inside a file named `…rmsdp64bf16…` — the load-time entry
--- mismatch three other nets have each shipped once.
+-- `@mobilenetv2in_rmsdp64_train_step` inside a file named `…rmsdp64bf16…` — a load-time entry
+-- mismatch.
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 Proofs.StableHLO.OptKind.rmsprop true == "rmsdp64bf16"
--- ⭐ **The JAX reference's `full` recipe as of 0ccd6ad9, row for row** (BN still at ε 1e-5; the arm
+-- **The JAX reference's `full` recipe, row for row, but at BN ε 1e-5** (the arm
 -- `mnv2-default-4gpu` runs is its TF-slim BN peer `rmsdp64wxdols0eps0001bf16`, below).
 -- `rmsdp64bf16` above differs from `mobilenetV2ImagenetConfigFull` in three ways: it decays BN γ/β
 -- and biases, has no classifier dropout, and smooths labels at α = 0.1 where the reference (and
@@ -1413,10 +1382,10 @@ end Proofs.StableHLO
 -- collide even though both are `dp` renders of the same optimizer.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp128_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 128 1000 "1.0e-5" 2 false "mobilenetv2in" .rmsprop)
--- ⭐⭐ **The TF-slim BatchNorm peer, and the arm `mnv2-default-4gpu` runs** (2026-09-25): `rmsdp64wxdols0bf16`
--- at BN ε = 1e-3, TF-slim's value, which the JAX `full` recipe now uses (with decay 0.997, a
+-- **The TF-slim BatchNorm peer, and the arm `mnv2-default-4gpu` runs**: `rmsdp64wxdols0bf16`
+-- at BN ε = 1e-3, TF-slim's value, which the JAX `full` recipe uses (with decay 0.997, a
 -- host-side knob, and the staircase schedule with no warmup, both driver-side). ε is baked, so
--- this is a new artifact, and its eval forward is `mobilenetv2in_fwd_eval_eps0001.mlir`.
+-- this is its own artifact, and its eval forward is `mobilenetv2in_fwd_eval_eps0001.mlir`.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64wxdols0eps0001bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-3" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.rmsprop true (wdExclude := true) (cd := true) (alpha := 0.0))
@@ -1435,30 +1404,27 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.mnv2AdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.mnv2AdamVariant 128 1 == "adam128"
 -- The RMSProp peers. Distinct slugs from the AdamW ones is the whole point: rendering the other
--- optimizer must never be able to overwrite the artifact the AdamW trainer runs (§2a's
--- last-writer-wins race, which is how `resnet34_train_step` ended up with two writers computing
--- genuinely different functions).
+-- optimizer must never be able to overwrite the artifact the AdamW trainer runs (a
+-- last-writer-wins race between two writers computing genuinely different functions).
 #guard Proofs.StableHLO.mnv2AdamVariant 64 1 .rmsprop == "rms64"
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 .rmsprop == "rmsdp64"
 #guard Proofs.StableHLO.mnv2AdamVariant 128 2 .rmsprop == "rmsdp128"
 #guard Proofs.StableHLO.mnv2AdamVariant 64 1 .adamw   == "adam64"
 -- The interface contract, checked at elaboration: 210 parameters and 104 BN stat slots ⇒
 -- 1 + 3×210 + 3 + 104 + 1 = 739 inputs and 3×210 + 3 + 104 = 737 outputs.
-#guard (Proofs.StableHLO.mnv2SigList 10 true).length == 210   -- with conv biases (pre-swap)
+#guard (Proofs.StableHLO.mnv2SigList 10 true).length == 210   -- with conv biases
 -- 210 − 52 conv biases = 158. Both are pinned, so dropping the biases cannot silently
--- change the arity of the render that ships (§2m).
+-- change the arity of the render that ships.
 #guard (Proofs.StableHLO.mnv2SigList 10 false).length == 158
 #guard Proofs.StableHLO.mnv2StatSigList.length == 104
 
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2_fwd_eval.mlir"
   (Proofs.StableHLO.mnv2FwdEvalFaithfulV 32 10 "1.0e-5")
 
--- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mobilenetv2in` — 2026-08-02 ───────────────────────
--- The forward pair for the fifth and last scale-tier trainer (§2p). `B`/`nClasses` were already
--- parameters; the `slug` is new, and it is what stops these overwriting the 10-class pair the
--- 86.73% Imagenette run and the §2g prefix audit depend on. §2g is the reason to be careful here
--- specifically: `mobilenetv2_fwd` is the artifact that was found to be the WRONG BN WORLD, so this
--- net has already been burned once by a forward that did not match its train step.
+-- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mobilenetv2in` ───────────────────────────────────
+-- The forward pair for the ImageNet scale-tier trainer. `B`/`nClasses` are parameters; the `slug`
+-- is what stops these overwriting the 10-class pair the 86.73% Imagenette run and the prefix check
+-- depend on. A forward that does not match its train step's BN world is a different net.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd_eval.mlir"
   (Proofs.StableHLO.mnv2FwdEvalFaithfulV 64 1000 "1.0e-5" false "mobilenetv2in")
 -- The eval partner of `rmsdp64wxdols0eps0001bf16`: the same graph at TF-slim's BN ε = 1e-3. The

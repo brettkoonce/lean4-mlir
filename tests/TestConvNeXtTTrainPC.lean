@@ -7,15 +7,14 @@ import LeanMlir.Types
 The ConvNeXt analogue of `tests/TestViTTrainPC.lean`: the FULL ConvNeXt-T train step
 (BS=32, 3×224² → 10, 180 params), forward AND backward cotangent chain proof-rendered
 through `pretty` over the very tokens of the proven `convNextFwdGraphTCh`
-(`ConvNeXtFullT.lean` — the §2m channel-LN graph), at the committed function's EXACT
+(`ConvNeXtFullT.lean` — the channel-LN graph), at the committed function's EXACT
 signature (param order/shapes, fn `@convnext_train_step`, eps 1.0e-6, lr 0.1,
 tanh-GELU, per-channel layer-scale `tensor<c>`, **per-channel LN `tensor<c>`**).
 
-⚠ **§2m moved three things and this file had to move with all three** — it renders an
-INDEPENDENT second spelling of the committed artifact, so a stale LN here is not a
-harmless doc drift, it is a parity failure. (1) every LN is the real channel LN, on
-`h·w` statistics per example over the `c` channels, with a `[c]` affine; (2) the
-**stem LN is present**; (3) the **head LN is gone**. The reference's 22 sites are
+This file renders an INDEPENDENT second spelling of the committed artifact, so a stale
+LN here is not a harmless doc drift, it is a parity failure. (1) every LN is the real
+channel LN, on `h·w` statistics per example over the `c` channels, with a `[c]` affine;
+(2) the **stem LN is present**; (3) there is **no head LN**. The reference's 22 sites are
 1 stem + 18 block + 3 downsample.
 
 Forward by token: `flatConvStride4F` (pad-0 left-aligned 4×4/s4 patchify) →
@@ -28,19 +27,17 @@ Backward by token: `dotOut`, the channel-LN input-VJP (`transposeF`×2 → `rowS
 cotangent IS the backward), `convBack`, `geluBack`, `depthwiseBack`,
 `convStridedBack` (even-kernel transpose pad [[1,0],[1,0]]), `addV` fan-in.
 
-**The LN γ/β gradients are now PROOF-RENDERED too** — `veclnGammaGrad` and
-`rowDenseBiasGrad` under transposes, where the scalar LN needed 16 lines of
-hand-emitted x̂ recomputation per site. That is 44 params moving from hand-emitted
-to `pretty`, so this capstone got STRICTLY stronger with the flip.
+**The LN γ/β gradients are PROOF-RENDERED too** — `veclnGammaGrad` and
+`rowDenseBiasGrad` under transposes, 44 params rendered by `pretty`.
 Hand-emitted only: the GAP backward, conv/depthwise/dense W+b grads, per-channel
 layer-scale `dγ_c = Σ_{b,h,w} x⊙dy`, the strided W-grads
 (2×2/s2 and 4×4/s4 dilate-dy transpose convs — the committed formulations).
 
-Validation (two-sided GPU parity vs the committed trainer) — **PARITY ✓ 2026-07-31 on the
+Validation (two-sided GPU parity vs the committed trainer) — **PARITY ✓ on the
 channel-LN artifact: 180 of 180 outputs BIT-IDENTICAL, worst rel-diff 0.0.** Verified to fail:
 EPS 1.0e-6 → 1.0e-3 gives 0/180 bit-identical, worst rel 1.46e-2, rc=1 — so the harness
 demonstrably separates, which a 180/180 bit-identical PASS otherwise cannot be distinguished
-from (§4).
+from.
 
   lake env lean tests/TestConvNeXtTTrainPC.lean
   CUDA_VISIBLE_DEVICES=0 scripts/gates/render_parity.py --fn convnext_train_step \
@@ -65,9 +62,9 @@ private def zD {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
 private def zV {n : Nat} : Vec n := fun _ => 0
 private def zM {a b : Nat} : Mat a b := fun _ _ => 0
 
--- ════════════ channel LayerNorm (§2m) — five proof-rendered tokens per site ════════════
+-- ════════════ channel LayerNorm — five proof-rendered tokens per site ════════════
 
-/-! ⚠ `Nat` multiplication is not definitionally associative and the ambient activation index is
+/-! `Nat` multiplication is not definitionally associative and the ambient activation index is
 `c*h*h = (c*h)*h`, while the transpose needs `c*(h*h)`. These transport along `Nat.mul_assoc`;
 they are casts on the INDEX, not on the value, so `pretty` walks the same tree.
 `ConvNeXtChannelLN.den_reassocS` is the proof that this transport is the math's Mat-split
@@ -101,7 +98,7 @@ private def lnBackSite (gN xName cot : String) (c h : Nat) : StateM Proofs.Stabl
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- One channel-LN site's γ/β gradients — `veclnGammaGrad` / `rowDenseBiasGrad` under the same
-    transposes. PROOF-RENDERED, unlike the scalar LN's hand-emitted x̂ recomputation. -/
+    transposes. PROOF-RENDERED. -/
 private def lnParamGradCh (dgr dbe xName cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS String := do
   let (k1, xT) ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand xName (zV : Vec (c*h*h)))))
   let (k2, dT) ← pretty BS (.transposeF (m := c) (n := h*h) (reassoc (.operand cot (zV : Vec (c*h*h)))))
@@ -227,7 +224,7 @@ private def bwdBlock (pfx dy : String) (b : FNames) (c e h : Nat) :
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d)
 
 /-- block param-grad text, given captured fwd names + cotangents. Monadic because the LN γ/β
-    grads are now PROOF-RENDERED (`veclnGammaGrad`/`rowDenseBiasGrad`) rather than hand-emitted. -/
+    grads are PROOF-RENDERED (`veclnGammaGrad`/`rowDenseBiasGrad`) rather than hand-emitted. -/
 private def blockParamGrads (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS String := do
   let ln ← lnParamGradCh s!"%d{pfx}ng" s!"%d{pfx}nbt" b.d cot_n c h
@@ -273,7 +270,7 @@ private def allParams : List (String × String) := Id.run do
     if si < 3 then
       ps := ps ++ [(s!"d{si}ng", ty [c]), (s!"d{si}nbt", ty [c]),
                    (s!"d{si}W", ty [dims[si+1]!, c, 2, 2]), (s!"d{si}b", ty [dims[si+1]!])]
-  -- §2m: NO head LN — the reference's `forward` is patchify → LN → stages → GAP → dense.
+  -- NO head LN — the reference's `forward` is patchify → LN → stages → GAP → dense.
   ps := ps ++ [("Wd", ty [768,10]), ("bd", ty [10])]
   return ps
 
@@ -284,7 +281,7 @@ private def trainStep : String := Id.run do
     -- ═══ forward (proof-rendered; the convNextFwdGraphTCh tokens in graph order) ═══
     let (cS, stem) ← pretty BS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
       (zK : Kernel4 96 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
-    -- §2m: the stem channel-LN, which the scalar-LN render omitted entirely
+    -- the stem channel-LN
     let (cSln, stemN) ← lnFwdSite "%psng" "%psnbt" stem 96 56
     let mut fwd := cS ++ cSln
     let mut cur := stemN
@@ -304,7 +301,7 @@ private def trainStep : String := Id.run do
         downIn := downIn.push cur
         let (code, n, o) ← fwdDown s!"d{si}" cur c dims[si+1]! spats[si+1]!
         fwd := fwd ++ code; downLn := downLn.push n; cur := o
-    -- head: GAP → dense 768→10 (§2m: no head LN)
+    -- head: GAP → dense 768→10 (no head LN)
     let (cG, gap) ← pretty BS (.gapF (c := 768) (h := 7) (w := 7) (.operand cur zV))
     let (cLog, logits) ← pretty BS (denseF "%Wd" "%bd" (zM : Mat 768 10) zV (.operand gap (zV : Vec 768)))
     -- loss cotangent: (softmax(logits) − onehot)/BS
@@ -345,7 +342,7 @@ private def trainStep : String := Id.run do
           downWGrad s!"%dd{si-1}W" (downLn[si-1]!) dy ci c h2 ++
           biasGrad s!"%dd{si-1}b" dy c h2 ++ dln
         dy := cot_x
-    -- §2m stem: channel-LN back, its γ/β grads, then the patchify W+b grads
+    -- stem: channel-LN back, its γ/β grads, then the patchify W+b grads
     -- (first layer — no input grad). `stem` is the LN's saved input, i.e. the patchify output.
     let (cSb, cot_stem) ← lnBackSite "%psng" stem dy 96 56
     let sln ← lnParamGradCh "%dpsng" "%dpsnbt" stem dy 96 56
@@ -360,7 +357,7 @@ private def trainStep : String := Id.run do
   let retVals := String.intercalate ", " (allParams.map (fun (nm, _) => s!"%{nm}n"))
   return "module @m {\n" ++ s!"  func.func @convnext_train_step({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    -- §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL
+    -- the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL
     -- per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
     "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

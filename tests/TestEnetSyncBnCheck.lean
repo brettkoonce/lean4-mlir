@@ -10,7 +10,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 `resnet34-syncbn-check`'s gate on the 49-BN-layer EfficientNet-B0 render (`LeanMlir.SyncBnCheck`):
 the committed `efficientnet_adamdp_train_step` (2×32, sync-BN) against the 1×64 two-pass step and
-the one-replica sync graphs, both rendered at run time. ⚠ B0's loss divisor is a string argument,
+the one-replica sync graphs, both rendered at run time. B0's loss divisor is a string argument,
 so the run-time renders pass `"{B}.0"` — the batch each is rendered at. Two GPUs, XLA backend.
 -/
 

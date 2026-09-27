@@ -7,13 +7,12 @@ import LeanMlir.Verified.Train
     unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/shard-check <convnext|vit> [<dpPath>]
 
-⚠ A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs (plus both `SHARD_VARIANT` knobs when
+A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs (plus both `SHARD_VARIANT` knobs when
 its variants are not the bare `adam`/`adamdp`), e.g. ConvNeXt's ImageNet pair:
 
     PJRT_REPLICAS=4 SHARD_REPLICAS=4 .lake/build/bin/shard-check convnextin
 
-Generalised from `tests/TestConvNeXtShardCheck.lean` on 2026-07-30 (handoff §5's "still open"
-item). It exists because the `*-dp-check` gates have a hole: the duplicated-batch identity hands
+It exists because the `*-dp-check` gates have a hole: the duplicated-batch identity hands
 both replicas the **same** rows, so a shard-offset bug — replica 1 reading `[0,b)` instead of
 `[b,2b)` — leaves the two halves identical and those gates still pass **bit-exact**. They establish
 *"the collective averages correctly"*, **not** *"the replicas saw different data"*.
@@ -30,13 +29,11 @@ blind to.
 `(θ'_A + θ'_B)/2 ≠ θ'(ḡ)` and comparing θ' would be meaningless. `adamMNextF` is
 `m' = β₁·m + (1−β₁)·g`, so feeding **m = 0** makes `m' = 0.1·g` — exactly linear in the gradient,
 hence exactly averagable. `v' = 0.001·g²` is quadratic, so it is not compared. Same conclusion as
-§3's "gate the gradient, never θ", reached from the other direction.
+"gate the gradient, never θ", reached from the other direction.
 
-⛔ **It no longer covers the BATCH-BN nets — retired 2026-09-21.** It used to, because each replica
-normalised over its own `b` rows and so `single(xA)` reproduced replica 0's arithmetic exactly.
-Since `planning/global_bn_verified.md` §3.2–3.4 every BatchNorm net's DP render is SYNCHRONISED:
+**It does not cover the BATCH-BN nets.** Every BatchNorm net's DP render is SYNCHRONISED:
 the replicas all-reduce their BN statistics, so `DP([xA|xB])` is `single_2b([xA|xB])`, and the
-identity above is exactly what `<net>-syncbn-check`'s CONTROL now requires to FAIL (measured on
+identity above is exactly what `<net>-syncbn-check`'s CONTROL requires to FAIL (measured on
 the committed renders: `efficientnet` 0.21, `mobilenetv2` 1.60, against this gate's 1e-4). The
 rows `efficientnet`, `mobilenetv2`, `efficientnetin`, `mobilenetv2in` and `mnv4in` are therefore
 retired, not loosened. Their replacement is the sync-BN gates' TEST column —
@@ -56,22 +53,21 @@ Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path).
 
 /-- The nets with a DP render that this construction applies to. R34 is absent on purpose: its
     `_adam_train_step` is bs32 batch-BN like these, so the *test* would work, but its DP evidence
-    is tracked separately (§2b-quater) and it has no `adamdp` peer at this batch to pair with. -/
+    is tracked separately and it has no `adamdp` peer at this batch to pair with. -/
 private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "convnext"     => some (convnextVerified,     32)
-  -- the 1000-class ImageNet twins (§2p)
+  -- the 1000-class ImageNet twins
   | "convnextin"        => some (convnextImagenetVerified, 32)
-  -- ⛔ `efficientnet`, `mobilenetv2`, `efficientnetin`, `mobilenetv2in` and `mnv4in` were rows
-  -- here until 2026-09-21; see the module docstring and `retired` below.
-  -- ViT, added 2026-08-12. It had `tests/TestViTDpCheck.lean` and nothing else, which is the gate
-  -- that hands both replicas the SAME rows: `all_reduce(add)/N` is an identity on a duplicated
-  -- batch, so that check is structurally blind to a shard-offset bug. This row is what closes it,
-  -- by giving the replicas genuinely different data. ⚠ ViT has no BatchNorm, so the identity holds
-  -- exactly here rather than approximately (the reason R34 is absent, above).
+  -- `efficientnet`, `mobilenetv2`, `efficientnetin`, `mobilenetv2in` and `mnv4in` are handled by
+  -- `retired` below; see the module docstring. ViT. `tests/TestViTDpCheck.lean` is the gate that
+  -- hands both replicas the SAME rows: `all_reduce(add)/N` is an identity on a duplicated batch, so
+  -- that check is structurally blind to a shard-offset bug. This row is what closes it, by giving
+  -- the replicas genuinely different data. ViT has no BatchNorm, so the identity holds exactly here
+  -- rather than approximately (the reason R34 is absent, above).
   | "vit"          => some (vitVerified,          32)
   | _              => none
 
-/-- The batch-BN rows, retired when their DP renders went sync-BN, and the gate that replaced each. -/
+/-- The batch-BN rows, whose DP renders are sync-BN, and the gate that replaces each. -/
 private def retired : String → Option String
   | "efficientnet"   => some "efficientnet-syncbn-check"
   | "mobilenetv2"    => some "mobilenetv2-syncbn-check"
@@ -93,9 +89,8 @@ this gate asserts. Run `{gate}` instead."
   let net := spec.toNet
   -- $SHARD_REPLICAS generalises the construction: `ds.shard`-style, N shards each with genuinely
   -- different data, checked against the mean of N single-device steps. The identity
-  -- `DP([x0|..|xN-1]) == mean(single(x0),..,single(xN-1))` holds for any N — 2 was never special,
-  -- it was just the only DP render that existed when this was written. The ImageNet renders are
-  -- 4-replica, which is what forced the generalisation.
+  -- `DP([x0|..|xN-1]) == mean(single(x0),..,single(xN-1))` holds for any N — 2 is not special. The
+  -- ImageNet renders are 4-replica.
   let replicas := ((← IO.getEnv "SHARD_REPLICAS").bind (·.toNat?)).getD 2
   -- $SHARD_VARIANT names the single-device and DP variants when they are not the bare
   -- `adam`/`adamdp` (EfficientNet's ImageNet pair is `adam64`/`adamdp64`, since `enetAdamVariant`
@@ -116,9 +111,9 @@ backend {← LowererSession.backendName}"
   -- The BATCH-BN nets carry running-stat inputs AND return the batch statistics, so their arity is
   -- 2·(BN layers) wider on both sides than the `[θ|m|v|lr,bc1,bc2]` core. Omitting them is not a
   -- silent wrong answer — the shim's G4 guard refuses the call ("returns 887 outputs, caller
-  -- supplied 789 destinations"), which is how this was caught. ConvNeXt is LayerNorm, so
-  -- `bnChannels` is empty and every line below degrades to a no-op there: its numbers are
-  -- unchanged by this generalisation, which is itself a check on it.
+  -- supplied 789 destinations"). ConvNeXt is LayerNorm, so `bnChannels` is empty and every line
+  -- below degrades to a no-op there: its numbers are unchanged by this generalisation, which is
+  -- itself a check on it.
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let mut θparts : Array ByteArray := #[]
@@ -149,7 +144,7 @@ backend {← LowererSession.backendName}"
   let mut yAB : ByteArray := .empty
   for y in ys do yAB := yAB ++ y
 
-  -- Delete both the bare and the backend-scoped .vmfb first (§4): `compileVmfb` keys its cache on
+  -- Delete both the bare and the backend-scoped .vmfb first: `compileVmfb` keys its cache on
   -- the OUTPUT path plus an mtime, never the source, so a re-run with a different candidate under
   -- the same tag would silently reuse the first one and report a perfect match.
   for tag in [s!"{net.slug}_shard_a", s!"{net.slug}_shard_b"] do
@@ -210,7 +205,7 @@ backend {← LowererSession.backendName}"
     IO.eprintln "DEGENERATE: too few non-zero gradients — the check proves little"
     IO.Process.exit 1
   -- The control must be LARGE, or the two shards were not actually different and the test is
-  -- vacuous — the same trap §2d.1 hit with a reversed-batch control that produced no difference.
+  -- vacuous.
   if nrA < 1e-3 then
     IO.eprintln s!"VACUOUS: shard A and the A/B mean agree to {nrA} — the two shards are not \
 distinguishable, so passing the TEST would prove nothing. Use more different data."

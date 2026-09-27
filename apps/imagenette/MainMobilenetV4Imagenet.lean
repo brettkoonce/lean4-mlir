@@ -8,30 +8,28 @@ The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Bu
 (`mnv4ImagenetVerified`, slug `mnv4in`), rendered by the SAME chain as the 10-class artifacts
 (`Proofs/Codegen/MobileNetV4RenderB.lean`), driven by the generic `VerifiedNet.trainAdamSched`.
 
-⭐ **Conv-M, on the timm `mobilenetv4_conv_medium` layout since 90e4af7e** (stride on the
-post-DW, BN-only pre-DW, ReLU stage 0, symmetric stem, head pooled before `conv_head`), the same
-network as jax/MainMobilenetV4Imagenet.lean; `scripts/parity/mnv4_timm_parity.py` ties both to timm on
-shared weights. 9,715,512 parameters. The 100-epoch pair on the timm net landed 2026-09-27:
+**Conv-M, on the timm `mobilenetv4_conv_medium` layout** (stride on the post-DW, BN-only
+pre-DW, ReLU stage 0, symmetric stem, head pooled before `conv_head`), the same network as
+jax/MainMobilenetV4Imagenet.lean; `scripts/parity/mnv4_timm_parity.py` ties both to timm on
+shared weights. 9,715,512 parameters. The 100-epoch pair on the timm net:
 **76.68 / 93.14** here (`mnv4-default-4gpu`, runs/2026-09-26-mnv4-verified-bf16-100ep) against
 76.57 / 92.98 on the JAX path (`mnv4-default-jax-4gpu`, runs/2026-09-26-mnv4-jax-bf16-100ep), a
-tie inside one Wilson half-width. The pre-timm reference's 75.48 was a different network.
+tie inside one Wilson half-width. The pre-timm reference's 75.48 is a different network.
 
 ✅ **The 4× renders are tied.** `mnv4-dp-check` (duplicated batch) covers the 4-replica renders,
-and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256) covers `adamdp64`. Since
-2026-09-21 their BatchNorm is synchronised, so a 4×B step IS the single-device step at batch 4B
-(planning/global_bn_verified.md §3.4); the old split-batch half, `shard-check mnv4in`, was
-retired with the swap. ⚠ The split-batch gate does not yet cover the shipping
-`emaaccdp8x128wxdowd005bf16` (planning/imagenet_parity.md G2).
+and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256) covers `adamdp64`. Their BatchNorm
+is synchronised, so a 4×B step IS the single-device step at batch 4B. The split-batch gate does
+not yet cover the shipping `emaaccdp8x128wxdowd005bf16`.
 
-▶ The job is `scripts/jobs/mnv4-default-4gpu.conf`: `emaaccdp8x128wxdowd005bf16`, i.e. AdamW 0.004
+The job is `scripts/jobs/mnv4-default-4gpu.conf`: `emaaccdp8x128wxdowd005bf16`, i.e. AdamW 0.004
 (`LEAN_MLIR_BASE_LR_U=4000`) at 8 accumulated micro-batches of 4 × 128 = effective 4096, sync-BN
 over 512, wd 0.05 off norm/bias, classifier dropout 0.1, EMA 0.9999, bf16, 100 epochs, RandAugment
 N2 m9 from the shim: the JAX reference's `default` recipe. The optimizer, schedule and
 regularisers are selected by the variant string; this file only supplies the defaults below.
-Still absent on this path: drop-path in the UIB blocks (planning/imagenet_parity.md M4-4) and the
+Still absent on this path: drop-path in the UIB blocks and the
 paper's RandAugment m15, both of which only the 500-epoch paper tier uses.
 
-⚠ A single-card figure off this driver is not comparable to the book's other ImageNet rows, which
+A single-card figure off this driver is not comparable to the book's other ImageNet rows, which
 were all measured at 4×. Run the job, not the bare binary, for anything printable.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever trusted lowerer
@@ -67,7 +65,7 @@ def mnv4ImagenetConfig : VerifiedConfig where
     drivers — a DP default dies at the first step on a replica-count refusal, which reads as a
     broken build rather than a missing flag.
 
-    ⭐ The `…dp…` variants are 4-REPLICA artifacts and need `PJRT_REPLICAS=4` AND
+    The `…dp…` variants are 4-REPLICA artifacts and need `PJRT_REPLICAS=4` AND
     `LEAN_MLIR_REPLICAS=4`. There is no 2-replica peer, so a 2-GPU attempt hits the shim's
     replica-count guard rather than degrading. `scripts/jobs/mnv4-default-4gpu.conf` sets both. -/
 def runMnv4Imagenet (argv : List String) : IO Unit := do
@@ -76,7 +74,7 @@ def runMnv4Imagenet (argv : List String) : IO Unit := do
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD mnv4ImagenetConfig.epochs
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
-    | none   => 0.001   -- ⚠ NOT the reference's 0.004: that is a batch-4096 rate, this is 256.
+    | none   => 0.001   -- NOT the reference's 0.004: that is a batch-4096 rate, this is 256.
   mnv4ImagenetVerified.toNet.trainAdamSched
     { mnv4ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant

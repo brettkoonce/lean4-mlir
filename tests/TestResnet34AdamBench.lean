@@ -3,9 +3,8 @@ import LeanMlir.Verified.Train
 
 /-! # `@resnet34_adam_train_step` step-time bench — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2b-bis. The batched render (then `…_b.mlir`, now the committed
-`verified_mlir/resnet34_adam_train_step.mlir`) is **1.68× the ops** of the hand-written render it
-replaced (10014 vs 5971): `pretty` has no CSE, the batched
+The batched render (the committed `verified_mlir/resnet34_adam_train_step.mlir`) is **1.68× the
+ops** of the hand-written render (10014 vs 5971): `pretty` has no CSE, the batched
 backward ops are self-contained recomputes (`bnBatchF`, `bnBatchBack`, `bnGammaGradB` each rebuild
 x̂ from the saved BN input, so `rsqrt` is 108 = 36 × 3 where the hand-written render saves `%{p}xh`
 once), and the `[B,c·h·w] ↔ [B,c,h,w]` round-trips add ~621 reshapes.
@@ -20,7 +19,7 @@ which is the robust one for a bench (noise only ever adds time). Inputs are byte
 `tests/TestResnet34AdamTie.lean` so the two harnesses measure the same two executables.
 
 **What the ratio does and does not mean.** Each step round-trips the whole packed `[θ|m|v]` buffer
-(~272 MB each way) over PCIe because parameters are still host-resident (§2c). That cost is
+(~272 MB each way) over PCIe because parameters are host-resident. That cost is
 identical for both renders, so the honest comparison is the **absolute delta** `T_B − T_A`, which is
 the compute difference in ms; the *ratio* of totals is diluted by the shared transfer and will
 understate a real compute regression. Both are reported.
@@ -28,8 +27,8 @@ understate a real compute regression. Both are reported.
     lake build resnet34-adam-bench
     .lake/build/bin/resnet34-adam-bench [refRender.mlir] [newRender.mlir] [rounds]
 
-Since the swap the hand-written render is retired, so the no-argument form benches the committed
-artifact against itself. To reproduce the original comparison, recover the retired render:
+The no-argument form benches the committed artifact against itself. To bench against the
+hand-written render, recover it:
 
     git show b856deb:verified_mlir/resnet34_adam_train_step.mlir > /tmp/retired.mlir
     .lake/build/bin/resnet34-adam-bench /tmp/retired.mlir \
@@ -51,7 +50,7 @@ private def opCount (path : String) : IO Nat := do
 /-- Read the entry-point name and the baked batch off a render: `func.func @NAME(%x: tensor<BxD…`.
 
     Both are properties of the artifact, so reading them beats assuming them — it lets one bench
-    compare renders at *different* `B` (§2d.1), and it removes the chance of invoking the wrong
+    compare renders at *different* `B`, and it removes the chance of invoking the wrong
     entry (the shim refuses an entry mismatch, but failing here is a clearer message). -/
 private def entryAndBatch (path : String) : IO (String × Nat) := do
   let s ← IO.FS.readFile path
@@ -81,7 +80,7 @@ def main (args : List String) : IO Unit := do
   let warmup := 3
   let net := resnet34Verified.toNet
   -- Entry name and batch are read OFF each artifact rather than assumed, so this bench also works
-  -- across renders at different `B` (§2d.1's bs32-vs-bs256 measurement) without a new argument —
+  -- across renders at different `B` (bs32 vs bs256) without a new argument —
   -- and cannot silently invoke the wrong entry point, which the shim would refuse anyway.
   let (fnA, bsA) ← entryAndBatch pathA
   let (fnB, bsB) ← entryAndBatch pathB

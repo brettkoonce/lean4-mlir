@@ -1,13 +1,13 @@
 import Jax
 
-/-! MobileNetV2 on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! MobileNetV2 on full 1000-class ImageNet — Lean → JAX trainer.
     Same inverted-residual body as `MainMobilenetV2.lean` (Imagenette) but
     with a 1000-class head and the `.imagenet` (tfds streaming) dataset.
 
-    bf16 incl. bf16 conv: as of the Codegen change that routes the
-    inverted-residual expand/project 1x1s and the depthwise through
-    `convdt`, `bf16Conv` now actually reaches the 17 inverted-residual
-    blocks (previously only the stem + final 1x1 were cast). The block-level
+    bf16 incl. bf16 conv: the Codegen routes the inverted-residual
+    expand/project 1x1s and the depthwise through `convdt`, so `bf16Conv`
+    reaches the 17 inverted-residual blocks as well as the stem + final 1x1.
+    The block-level
     win is ~2x on the 4060 Ti — the 1x1 expand/project (GEMM-like) love
     bf16; the 3x3 depthwise is a wash but harmless. See
     reference_bf16_depthwise_4060ti. -/
@@ -16,16 +16,15 @@ def mobilenetV2Imagenet : NetSpec where
   name := "MobileNetV2 (ImageNet, bf16)"
   imageH := 224
   imageW := 224
-  -- ⚠⚠ ADDED 2026-08-30, the SAME omission as EfficientNet-B0's (`MainEfficientNetImagenet.lean`),
-  -- found by the same audit. `NetSpec.convBnAct` defaults to `.relu`
+  -- The same override EfficientNet-B0 needs (`MainEfficientNetImagenet.lean`).
+  -- `NetSpec.convBnAct` defaults to `.relu`
   -- (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers below — the stem and
-  -- the 1×1 head — emitted `jax.nn.relu` while every inverted-residual interior emitted ReLU6.
-  -- MobileNetV2 is ReLU6 throughout; the Imagenette twin (`MainMobilenetV2.lean`) has always said so.
-  -- ⚠ The VERIFIED render was always ReLU6 (35 `stablehlo.maximum` paired with 35
-  -- `stablehlo.minimum`, including at the 32×112×112 stem), so this was a phase-2-only defect and
-  -- the port was the faithful side.
-  -- ▶ The published JAX reference (the 350-epoch `full` recipe, 71.90) predates this fix, so it
-  -- trained ReLU stem/head; a rerun is owed before it pairs one-variable with the verified run.
+  -- the 1×1 head — emit `jax.nn.relu` while every inverted-residual interior emits ReLU6.
+  -- MobileNetV2 is ReLU6 throughout, as the Imagenette twin (`MainMobilenetV2.lean`) says.
+  -- The VERIFIED render is ReLU6 (35 `stablehlo.maximum` paired with 35
+  -- `stablehlo.minimum`, including at the 32×112×112 stem).
+  -- The published JAX reference (the 350-epoch `full` recipe, 71.90) trained a ReLU stem/head,
+  -- so it does not pair one-variable with the verified run.
   convBnAct := .relu6
   layers := [
     .convBn 3 32 3 2 .same,                    -- 224→112
@@ -56,27 +55,27 @@ def mobilenetV2Imagenet : NetSpec where
     Aug is crop/flip only (MobileNetV2 used no AutoAugment).
     Label smoothing 0.0 and classifier dropout 0.2, as the paper. -/
 def mobilenetV2ImagenetConfig : TrainConfig where
-  learningRate   := 0.045   -- MobileNetV2-native RMSProp peak (was 0.1 for SGD)
+  learningRate   := 0.045   -- MobileNetV2-native RMSProp peak
   batchSize      := 256
-  epochs         := 90      -- near-paper run (validation tier was 30)
+  epochs         := 90      -- near-paper run
   optimizer      := .rmsprop  -- MobileNetV2's original optimizer
   momentum       := 0.9       -- μ for the RMSprop momentum buffer
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
   rmspropEps     := 1.0       -- MobileNetV2 uses ε=1.0
   weightDecay    := 4e-5
   wdExcludeNormBias := true   -- no decay on BN γ/β or biases (slim's rule for BN; the verified `wx`)
-  cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
+  cosineDecay      := false   -- the paper exp-decay schedule instead
   expLRDecayRate   := 0.98    -- MobileNetV2: ×0.98 per epoch
   expLRDecayEpochs := 1.0
   expLRStaircase   := true    -- the paper's staircase, counted from step 0
-  dropout          := 0.2     -- MobileNetV2 classifier dropout (gap C)
+  dropout          := 0.2     -- MobileNetV2 classifier dropout
   warmupEpochs   := 0         -- the paper has no warmup
   augment        := true    -- random-crop + horizontal flip (MNv2 paper aug)
   useAutoAugment := false   -- MNv2 paper used crop/flip only; AA is beyond the paper
   labelSmoothing := 0.0     -- MNv2 paper (Sandler 2018) used none
   bf16           := true
-  bf16Conv       := true    -- now reaches the inverted-residual blocks
-  runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
+  bf16Conv       := true    -- reaches the inverted-residual blocks
+  runningBN      := true    -- paper-faithful eval: running BN stats, not eval-batch stats
   bnMomentum     := 0.997   -- TF-slim's BN decay (PyTorch momentum 0.003)
   bnEps          := 1e-3    -- TF-slim's BN ε
 

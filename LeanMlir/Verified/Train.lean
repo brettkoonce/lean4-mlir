@@ -144,9 +144,6 @@ structure VerifiedConfig where
       σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`. Init is host-side, so
       the flag changes training with no re-render. Off by default — every other net keeps its seed reproducibility. -/
   vitInit   : Bool := false
-  -- History: a ConvNeXt/ImageNet pair run once diverged because the verified arm used the default
-  -- conv init while the reference set `cnxInit := true`; runs/2026-09-17-cnx-verified-300ep/RESULTS.md
-  -- §7.0 has the measurement.
   /-- **ConvNeXt `_init_weights` — the verified peer of `TrainConfig.cnxInit`.**
       `trunc_normal_(std=0.02)` on every conv and the head; biases 0, LayerNorm γ 1,
       LayerScale γ 1e-6 — which the other three `kind`s already do, so this flag only has to
@@ -202,7 +199,7 @@ def wilson95 (correct nEval : Nat) : String :=
   let d := 1.0 + z * z / n
   let c := (p + z * z / (2.0 * n)) / d
   let h := (z / d) * Float.sqrt (p * (1.0 - p) / n + z * z / (4.0 * n * n))
-  -- ⚠ Formatted from INTEGER hundredths, not `toString` on a Float: Lean prints a Float at six
+  -- Formatted from INTEGER hundredths, not `toString` on a Float: Lean prints a Float at six
   -- decimals, so `s!"{(x*10000.0).round/100.0}"` would emit `83.920000–86.150000` — the very
   -- false precision this function exists to remove, reintroduced by the printer.
   let pct := fun (x : Float) =>
@@ -384,8 +381,8 @@ def mkSession (mlirPath : String) : IO LowererSession := do
     -- Scope the cache by IREE target. `compileVmfb` reuses any existing file that
     -- is newer than the .mlir, so an unscoped path lets an `IREE_BACKEND=rocm`
     -- artifact be picked up by an `IREE_BACKEND=llvm-cpu` run (and vice versa).
-    -- That matters now that llvm-cpu is used as an independent numerical
-    -- reference — see planning/archive/xla_pjrt_ladder.md §8, rung 3.
+    -- That matters because llvm-cpu is used as an independent numerical
+    -- reference.
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     let base := (mlirPath.splitOn "/").getLastD mlirPath
     let stem := if base.endsWith ".mlir" then (base.dropEnd 5).toString else base
@@ -449,7 +446,7 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     | none   => F32.const n.toUSize 0.0
     | some s => F32.heInit seed.toUSize n.toUSize s
   | _ =>
-    -- ⭐ **`vitInit` = timm/DeiT ViT init, the verified peer of `TrainConfig.vitInit`** on the JAX
+    -- **`vitInit` = timm/DeiT ViT init, the verified peer of `TrainConfig.vitInit`** on the JAX
     -- side (`jax/MainVitImagenet.lean`'s `deit-init` recipe). Off by default, so every non-ViT net
     -- is byte-identical and every recorded accuracy still reproduces from its seed.
     --
@@ -460,28 +457,27 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     -- **0.02083** at ViT-Ti, 4% off the Linears rather than equal to them. Emitted exactly, not
     -- rounded to 0.02, because the whole point of the flag is to stop approximating this.
     --
-    -- ⚠ Why it matters: the default branch below is Glorot for rank-2, which scales as 1/√d against
+    -- Why it matters: the default branch below is Glorot for rank-2, which scales as 1/√d against
     -- timm's FIXED 0.02 and is therefore **3.6× too wide at ViT-Ti's d=192** (0.0722 vs 0.02), while
     -- rank-1 (CLS) comes out at 0.102 — 5× wide. Blueprint §9.6 carries the measurement.
     --
-    -- ⚠ DISTRIBUTION, as ever, is matched in variance only: `F32.heInit` sums three uniforms
+    -- DISTRIBUTION, as ever, is matched in variance only: `F32.heInit` sums three uniforms
     -- (Bates-3, ≈normal) where the JAX side draws `random.normal`. Same σ, different shape — the
-    -- same deliberate gap the 2026-08-04 note below records for every other net.
+    -- same deliberate gap every other net carries.
     let variance :=
-      -- ⭐ **ConvNeXt `_init_weights`: σ = 0.02 on EVERY weight, whatever its rank.** Simpler
+      -- **ConvNeXt `_init_weights`: σ = 0.02 on EVERY weight, whatever its rank.** Simpler
       -- than `vitInit` below, which has to special-case the patch embed — ConvNeXt trunc-normals
       -- its convs and its head alike. Measured on this net's 183 specs: 58 rank-4 (stem, 7x7
       -- depthwise, the 1x1s, the 2x2 downsamples) + 1 rank-2 (head) land here; the other 124 are
       -- `kind` 1/2/3 above (LayerNorm γ=1, biases 0, LayerScale γ=1e-6) and already match the
       -- reference, so this branch is the whole of the difference.
-      -- ⚠ FIRST, so it cannot be silently overridden by a rank test below it.
+      -- FIRST, so it cannot be silently overridden by a rank test below it.
       if cnxInit then 0.0004                                                      -- 0.02²
       else if vitInit then
         if dims.size == 4 then 1.0 / (3.0 * (dims[1]! * dims[2]! * dims[3]!).toFloat)  -- Conv2d dflt
         else 0.0004                                                                     -- 0.02²
-      -- ⚠ `heFanIn` is a SEPARABILITY knob for one gate, not an initialisation opinion. It is the
-      -- rule 25 gates had hand-copied before 2026-09-02; they all now use the fan-OUT default and
-      -- their verdicts were unchanged by the move. The single holdout is `tests/TestRmsTie.lean`:
+      -- `heFanIn` is a SEPARABILITY knob for one gate, not an initialisation opinion. Every other
+      -- gate uses the fan-OUT default. The single holdout is `tests/TestRmsTie.lean`:
       -- its coupled-L2 control asks whether `wd·θ` is present, `wd = 4e-5` is baked into the
       -- committed `mobilenetv2_rms_train_step.mlir`, and the fan-OUT default makes mnv2's
       -- gradients 5.8× larger (|g|max 0.85 → 4.94), which drops `wd·θ/g` to ~2e-6 and below f32
@@ -602,12 +598,12 @@ structure ShimProc where
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
 def spawnShim (shimScript : String) (split : String) (batch flat seed : Nat)
     (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0)
-    -- ▶ extra child variables, appended last: `scoreCheckpoint`'s `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP`
+    -- extra child variables, appended last: `scoreCheckpoint`'s `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP`
     -- (timm's test protocol). Empty by default, so every existing spawn is unchanged.
     (extraEnv : Array (String × Option String) := #[]) : IO ShimProc := do
   -- `shimScript` is the NET'S OWN generated shim (`VerifiedNet.shimScript`), not a shared default.
-  -- An empty one refuses here rather than falling back: R34's shim was the fallback for years and
-  -- it silently gave every other net R34's augmentation. See that field's docstring.
+  -- An empty one refuses here rather than falling back: a shared fallback silently gives every
+  -- other net that shim's augmentation. See that field's docstring.
   if shimScript.isEmpty && (← IO.getEnv "SHIM_SCRIPT").isNone then
     throw <| IO.userError "imagenet shim: this net has no `shimScript`. Every .imagenet net must \
 name the shim generated from ITS OWN reference recipe — there is no default, because the default \
@@ -628,9 +624,9 @@ five with `scripts/gen_shims.sh`, or one with `(cd jax && lake exe <net>-imagene
   -- repo-local `.venv` (built off requirements-cuda-lock.txt) over the historical absolute path,
   -- which points into a checkout that no longer exists on any box.
   --
-  -- ⚠ Checked for existence BEFORE spawning, on purpose. `IO.Process.spawn` on a missing cmd does
-  -- not fail here in a way this code can see, so a bad interpreter used to surface downstream as
-  -- `bad preamble magic "ResN"` — an error that blames the shim's wire format for a missing
+  -- Checked for existence BEFORE spawning, on purpose. `IO.Process.spawn` on a missing cmd does
+  -- not fail here in a way this code can see, so without this a bad interpreter surfaces downstream
+  -- as `bad preamble magic "ResN"` — an error that blames the shim's wire format for a missing
   -- Python. Naming the real cause is the whole point of this check.
   let pyCandidates : List System.FilePath := match ← IO.getEnv "SHIM_PYTHON" with
     | some p => [p]
@@ -642,7 +638,7 @@ five with `scripts/gen_shims.sh`, or one with `(cd jax && lake exe <net>-imagene
 $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   -- `shard = some (i, n)` sets SHIM_SHARD=i/n, i.e. this worker emits only elements ≡ i (mod n).
   -- Absent ⇒ the variable is not set at all and the shim takes its unsharded path, which is why
-  -- the single-producer stream is byte-identical to before sharding existed (gated by SHIM_HASH).
+  -- the single-producer stream is byte-identical to the unsharded one (gated by SHIM_HASH).
   let shardEnv : Array (String × Option String) := match shard with
     | some (i, n) => #[("SHIM_SHARD", some s!"{i}/{n}")]
     | none        => #[]
@@ -651,23 +647,21 @@ $SHIM_PYTHON at it — a bare `python3` off PATH will not have tfds."
   -- and the shim emits v1 byte-for-byte, which is why every existing run is untouched.
   let softEnv : Array (String × Option String) :=
     if nclasses > 0 then #[("SHIM_NCLASSES", some (toString nclasses))] else #[]
-  -- ── SHIM_MIX, and this only became load-bearing when the shims went per-net ──────────────────
+  -- ── SHIM_MIX, which matters because the shims are per-net ──────────────────────────────────
   --
   -- A shim BAKES its config's mixing as the `SHIM_MIX` default: `off` for R34/mnv2/EfficientNet,
   -- **`both`** for ViT and ConvNeXt, whose references run mixup+cutmix. And a mixed target is a
   -- distribution, so the shim REFUSES it on wire v1 (`int32[batch]` cannot carry one) — on the
   -- TRAIN split only, since `_MIX_ON` is `and training`.
   --
-  -- ⚠ Before the per-net wiring every net ran R34's shim and this could not arise. With it, a
-  -- plain (wire v1) ViT/ConvNeXt ImageNet run would die at spawn — and the symptom is the useless
-  -- `shim closed the pipe after 0 of 16 bytes`, because the child's stderr is not captured. Found
-  -- by `scripts/shim_wiring_gate.py --stream`, before any trainer ran.
+  -- A plain (wire v1) ViT/ConvNeXt ImageNet run would die at spawn — and the symptom is the useless
+  -- `shim closed the pipe after 0 of 16 bytes`, because the child's stderr is not captured.
   --
   -- So: at v1, pass `SHIM_MIX=off` explicitly and SAY SO when the net's own default was not off.
   -- At v2 pass nothing — the shim's baked default is that net's reference recipe, which is the
-  -- state we want. ⚠ Announced rather than silent: dropping a declared augmentation without
-  -- saying so is the same "matrix reads capability, not state" defect this whole thread fixes.
-  -- ⚠ ONE reader, shared with the trainer's soft-target decision (`shimMixDefault`). They must
+  -- state we want. Announced rather than silent: dropping a declared augmentation without
+  -- saying so is the "matrix reads capability, not state" defect.
+  -- ONE reader, shared with the trainer's soft-target decision (`shimMixDefault`). They must
   -- agree: the trainer decides the WIRE from this value and this call site decides the
   -- ANNOUNCEMENT, so two readings could announce one thing and stream another.
   let mixDefault ← if nclasses > 0 then pure "" else shimMixDefault shimScript
@@ -683,7 +677,7 @@ or SHIM_MIX=off."
     | none =>
       IO.println s!"  ⚠ this net's recipe declares SHIM_MIX={mixDefault}; wire v1 cannot carry a \
 mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND its mixing."
-  -- ⚠ `stderr := .inherit` is the default and is spelled out anyway: `IO.Process.Child` is INDEXED
+  -- `stderr := .inherit` is the default and is spelled out anyway: `IO.Process.Child` is INDEXED
   -- by its stdio config, so the child `spawn` returns only has `ShimProc`'s field type when all
   -- three fields match `ShimCfg` syntactically.
   let child ← IO.Process.spawn {
@@ -700,7 +694,7 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
     (pre.get! off).toNat ||| ((pre.get! (off+1)).toNat <<< 8) |||
     ((pre.get! (off+2)).toNat <<< 16) ||| ((pre.get! (off+3)).toNat <<< 24)
   let ver := rd32 4; let sBatch := rd32 8; let sFlat := rd32 12
-  -- ⚠⚠ v3/v4, not v1/v2: every batch now carries an int32 ROW COUNT before its labels. v1/v2 had
+  -- v3/v4, not v1/v2: every batch carries an int32 ROW COUNT before its labels. v1/v2 had
   -- no way to express a short final batch — see `readShimBatchPartial`. Refusing an old shim here
   -- is the point: a v1 stream read as v3 would take the first four label bytes as a row count.
   let wantVer := if nclasses > 0 then 4 else 3
@@ -721,9 +715,9 @@ slides off by a factor of nClasses on every batch, so this refuses rather than r
   if sBatch != batch || sFlat != flat then
     throw <| IO.userError s!"imagenet shim MISMATCH: shim sends batch={sBatch} flat={sFlat}, \
 the render wants batch={batch} flat={flat} — refusing rather than reading misaligned pixels"
-  -- ⚠ The SCRIPT is printed, not just the shape. Every net used to resolve to R34's shim and the
-  -- banner said nothing about which one — so a run streaming the wrong augmentation looked exactly
-  -- like a run streaming the right one. This line is what makes the wiring readable from a log.
+  -- The SCRIPT is printed, not just the shape: otherwise a run streaming the wrong augmentation
+  -- looks exactly like a run streaming the right one. This line is what makes the wiring readable
+  -- from a log.
   IO.println s!"  imagenet shim: {script} — {split} split, batch {sBatch}, {sFlat} floats/img \
 (seed {seed}){if nclasses > 0 then s!", wire v{ver} soft targets [{batch}x{nclasses}]" else ""}"
   pure { child := child, h := h }
@@ -735,7 +729,7 @@ private def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat 
   -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
   -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
   -- downstream of here changes shape.
-  -- ⚠ The int32 row count precedes every batch (wire v3/v4). This reader wants FULL batches — the
+  -- The int32 row count precedes every batch (wire v3/v4). This reader wants FULL batches — the
   -- train stream repeats forever, so a short one here is a torn write, not a tail. Checked rather
   -- than skipped: reading past a wrong count is the silent reframing v3 exists to prevent.
   let pre ← readExact h 4
@@ -746,7 +740,7 @@ private def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat 
 A short batch on a repeating stream is a torn write; use `readShimBatchPartial` for a split that \
 ends (the val drain)."
   let lbl ← readExact h (if nclasses > 0 then 4 * batch * nclasses else 4 * batch)
-  -- ⭐ The image buffer comes from the CALLER when there is one — the prefetch path allocates it on
+  -- The image buffer comes from the CALLER when there is one — the prefetch path allocates it on
   -- the main thread before spawning the task, see `readInto` for why that is the whole point. It
   -- is taken OUT of the ref (`swap`, not `get`) so this thread holds the only reference; `get`
   -- would leave a second one behind and `readInto` refuses a shared buffer. The labels stay a
@@ -791,14 +785,13 @@ def readUpTo (h : IO.FS.Handle) (n : Nat) : IO ByteArray := do
 def readShimBatchPartial (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
     : IO (ByteArray × ByteArray × Nat) := do
   let lblRec := if nclasses > 0 then 4 * nclasses else 4
-  -- ⚠⚠ THE ROW COUNT IS READ, NOT INFERRED — and that is the whole of the v3 framing.
-  -- This used to do `readUpTo (lblRec * batch)` and divide the byte count by the record size. A
-  -- pipe does not preserve write boundaries, so at a PARTIAL tail that read ran straight through
-  -- the labels and into the images: ImageNet val's 80-row tail is 320 label bytes, the read took
-  -- 320 + 704, inferred rows = 256, and then demanded a full batch that was 704 bytes short of
-  -- arriving. The reported "closed the pipe after 48168256 of 154140672 bytes" was exactly that.
-  -- ▶ A `readUpTo` of 4 bytes is unambiguous in a way one of `lblRec * batch` can never be: at a
-  -- clean end it returns 0, and otherwise the count says how much follows.
+  -- THE ROW COUNT IS READ, NOT INFERRED — and that is the whole of the v3 framing. Inferring it —
+  -- `readUpTo (lblRec * batch)`, the byte count divided by the record size — fails because a pipe
+  -- does not preserve write boundaries: at a PARTIAL tail that read runs straight through the
+  -- labels and into the images (ImageNet val's 80-row tail is 320 label bytes; the read takes 320 +
+  -- 704, infers rows = 256, and then demands a full batch that is 704 bytes short of arriving). A
+  -- `readUpTo` of 4 bytes is unambiguous in a way one of `lblRec * batch` can never be: at a clean
+  -- end it returns 0, and otherwise the count says how much follows.
   let pre ← readUpTo h 4
   if pre.size == 0 then pure (ByteArray.empty, ByteArray.empty, 0)
   else if pre.size != 4 then
@@ -810,7 +803,7 @@ torn, not merely short"
     if rows == 0 || rows > batch then
       throw <| IO.userError s!"shim declared {rows} rows, outside 1…{batch} — refusing rather than \
 reading a misframed batch"
-    -- Both sides EXACT now: the shim has committed to `rows`, so a short read of either block is a
+    -- Both sides EXACT: the shim has committed to `rows`, so a short read of either block is a
     -- torn write and must be loud.
     let lbl ← readExact h (lblRec * rows)
     let img ← readExact h (4 * rows * flat)
@@ -897,8 +890,8 @@ private def pullValRows (st : IO.Ref ValCarry) (hs : Array ShimProc) (shimBatch 
 tail fault) — this pass's denominator is {c.total + c.rows}, not 50,000"
       c := { c with ended := true }
     else
-      -- `++` into a pre-sized buffer never reallocates (loadData's 2026-08 lesson); size the carry
-      -- for the rows one pull can hold before the remainder is carried.
+      -- `++` into a pre-sized buffer never reallocates; size the carry for the rows one pull can
+      -- hold before the remainder is carried.
       let img := if c.img.isEmpty then ByteArray.emptyWithCapacity (4 * (gB + shimBatch) * flat) ++ i
                  else c.img ++ i
       c := { c with img := img, lbl := c.lbl ++ l, rows := c.rows + rows, next := c.next + 1 }
@@ -983,7 +976,7 @@ def evalScore (sess : LowererSession) (fn : String) (params shapes : ByteArray) 
     let mut lblBase := 0
     match rows with
     | .held img lbl =>
-        -- ⚠ `evalD0`, not the train width: the val buffer is at the EVAL width (RSB-A3 trains at
+        -- `evalD0`, not the train width: the val buffer is at the EVAL width (RSB-A3 trains at
         -- 160², evaluates at 224²), and slicing it at the other one strides through it wrongly.
         xb := F32.sliceImagesPad img (bi * gB) gB evalD0 nEval
         lb := lbl; real := min gB (nEval - bi * gB); lblBase := bi * gB
@@ -1006,24 +999,24 @@ def evalScore (sess : LowererSession) (fn : String) (params shapes : ByteArray) 
       -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
       if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
         correct5 := correct5 + 1
-  -- ⚠⚠ `scored` IS NOT AN ACCUMULATOR. It was: `scored := scored + real` as the loop's last
-  -- statement. Measured 2026-09-22 (Lean 4.34): on the R = 1 path that came back holding only the
-  -- LAST invoke's rows (80 of 50,000; 256 with the tail dropped) while `correct`, mutated inside
-  -- the inner loop, summed correctly — and it was right at R = 4, and right again on the same
-  -- binary path the moment an `eprintln` read it after the assignment. That is the shape of a
-  -- code-generation issue, not of this loop (a 20-line copy of the loop's shape sums correctly in
-  -- isolation), so the denominator is read from what the pass delivered instead: the carry's
-  -- `total` for a stream, `nEval` for a held split (the loop scores `min gB (nEval − bi·gB)` rows
-  -- per invoke by construction). The bitmap's length cross-checks it whenever one is kept.
+  -- `scored` IS NOT AN ACCUMULATOR. As `scored := scored + real` in the loop's last statement, on
+  -- Lean 4.34 the R = 1 path comes back holding only the LAST invoke's rows (80 of 50,000; 256
+  -- with the tail dropped) while `correct`, mutated inside the inner loop, sums correctly — right
+  -- at R = 4, and right again on the same path the moment an `eprintln` reads it after the
+  -- assignment. That is the shape of a code-generation issue, not of this loop (a 20-line copy of
+  -- the loop's shape sums correctly in isolation), so the denominator is read from what the pass
+  -- delivered instead: the carry's `total` for a stream, `nEval` for a held split (the loop scores
+  -- `min gB (nEval − bi·gB)` rows per invoke by construction). The bitmap's length cross-checks it
+  -- whenever one is kept.
   let scored ← match rows with
     | .stream .. => do pure (← carry.get).total
     | .held _ _  => pure nEval
   if wantBits && bits.size != scored then
     throw <| IO.userError s!"eval scored {bits.size} rows but its source delivered {scored} — the two \
 counts must agree, and neither is a number to report"
-  -- ⭐ ASSERTED EVERY PASS, because it is the denominator every top-1 divides by and it moved once
-  -- already (49,920 → 50,000, 2026-08-14). A short pass is a refusal, not a plausible number; an
-  -- over-long one is refused too (one more pull must come back empty).
+  -- ASSERTED EVERY PASS, because it is the denominator every top-1 divides by. A short pass is
+  -- a refusal, not a plausible number; an over-long one is refused too (one more pull must come
+  -- back empty).
   match rows with
   | .stream hs sb flat off dt =>
       if scored == nEval then
@@ -1087,14 +1080,13 @@ def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
     -- Train is NOT loaded here — it is streamed per step (`trainAdamSched`). Only `nTrain` matters
     -- from this side, and it is the tfds count, which is what sets steps/epoch.
     --
-    -- ⭐ Val is NOT loaded either, since 2026-09-22. It used to be drained here into RAM once —
-    -- 50,000 × 150,528 × 4 B = 30 GB held for the life of the run, nearly all of the trainer's RSS —
-    -- and now streams per pass from batch-block producers (`spawnValStream` → `evalScore`), so those
-    -- 28 GiB go back to the page cache the train split wants (planning/streaming_val.md §0).
+    -- Val is NOT loaded either: it streams per pass from batch-block producers (`spawnValStream` →
+    -- `evalScore`). Held in RAM it would be 50,000 × 150,528 × 4 B = 30 GB for the life of the run,
+    -- nearly all of the trainer's RSS, taken from the page cache the train split wants.
     -- `nEval` is ImageNet's 50,000: the denominator every top-1 here divides by (timm's), and every
     -- pass asserts the stream delivered exactly that many.
     --
-    -- ⚠⚠ THE VAL WIDTH IS NOT ALWAYS THE TRAIN WIDTH: RSB-A3 trains at 160² and evaluates at 224²,
+    -- THE VAL WIDTH IS NOT ALWAYS THE TRAIN WIDTH: RSB-A3 trains at 160² and evaluates at 224²,
     -- and `evalD0` — read off the eval artifact by the caller — is what the val producers are
     -- spawned at. `trainPix` stays `net.d0`, the width of the images the TRAIN stream carries.
     IO.println s!"  imagenet: val streams per pass (50,000 images at eval width {evalD0}) — nothing is held"
@@ -1111,9 +1103,9 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
   let (nTr, px, crop) := match data with
     | .imagenette => (9469, 3 * 256 * 256, true)   -- 256² pre-crop → 224² each step
     | .cifar      => (50000, d0, false)
-    -- ⚠ ImageNet needs its OWN case, and until 2026-08-05 it fell through to mnist's 60,000 —
-    -- so a synthetic ImageNet epoch was 234 steps where the real one is 5,004. Invisible to the
-    -- `MAX_STEPS` probes (which cap far below either) and wrong for anything reading steps/epoch.
+    -- ImageNet needs its OWN case: falling through to mnist's 60,000 makes a synthetic ImageNet
+    -- epoch 234 steps where the real one is 5,004 — invisible to the `MAX_STEPS` probes (which cap
+    -- far below either) and wrong for anything reading steps/epoch.
     -- The shim already delivers 224² pre-augmented, so there is no host-side crop here.
     | .imagenet   => (1281167, d0, false)
     | _           => (60000, d0, false)             -- mnist
@@ -1175,7 +1167,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- LEAN_MLIR_MAX_STEPS caps batches per epoch. Needed to run gate G2 at small
   -- N: over a full run, ReLU branch flips amplify f32 noise, so a large final
   -- divergence is ambiguous between chaos and a plumbing bug. Diffing at 1 / 10
-  -- / 100 steps separates them — see planning/archive/xla_pjrt_ladder.md §8.
+  -- / 100 steps separates them.
   let nbFull := nTrain / bs
   let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
@@ -1185,20 +1177,15 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
-  -- Device-resident parameters (handoff §2d.3). **Every** param is resident here,
-  -- not a prefix: this loop's step is `params ← trainStep(x, params, y)` and the
-  -- host reads NOTHING out of the result per step — no loss slot, no BN stats, the
-  -- whole blob is handed straight back. So the resident block is the entire tensor
-  -- list, and `@<slug>_train_step` returns exactly those tensors in exactly that
+  -- Device-resident parameters. **Every** param is resident here, not a prefix: this loop's step is
+  -- `params ← trainStep(x, params, y)` and the host reads NOTHING out of the result per step — no
+  -- loss slot, no BN stats, the whole blob is handed straight back. So the resident block is the
+  -- entire tensor list, and `@<slug>_train_step` returns exactly those tensors in exactly that
   -- order (the packed-output walk in the shim already assumes it).
   --
-  -- ⚠ This loop was explicitly OUT of §2d.3's original scope — *"`train`/`trainLinear`
-  -- stay on the copying path, they are the demo loops, not the throughput ones"*.
-  -- That was written before §2d.3's own measurement found the demo nets to be the
-  -- MOST transfer-bound in the set (the dense probe at **75%**, against R34's 55%)
-  -- and before residency measured **3.1×** on cifar8-bn. These loops are what a
-  -- reader sits and watches, so this is an interactivity win rather than a
-  -- throughput one — §2d.3's "the surprise worth carrying".
+  -- The demo nets are the MOST transfer-bound in the set (the dense probe at **75%**, against R34's
+  -- 55%), and residency measured **3.1×** on cifar8-bn. These loops are what a reader sits and
+  -- watches, so this is an interactivity win rather than a throughput one.
   --
   -- A REQUEST, not a mode: honoured only under `$PJRT_FFI_RESIDENT=1`, and the
   -- copying path stays the default and byte-identical.
@@ -1213,9 +1200,9 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
   -- norm r, in units of 1e-9 (no `String.toFloat?` in this toolchain), before any training. Same
-  -- knob and same spelling as `trainAdamSched`; it was implemented ONLY there, which made
-  -- `scripts/gates/residency_gate.sh`'s init CONTROL a silent no-op for every net on this loop —
-  -- the gate caught that itself and refused as VACUOUS rather than reporting a green.
+  -- knob and same spelling as `trainAdamSched`; without it here,
+  -- `scripts/gates/residency_gate.sh`'s init CONTROL is a silent no-op for every net on this loop
+  -- (the gate refuses as VACUOUS).
   let params0 := F32.concat parts
   let mut params ← match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
     | some n => do
@@ -1229,16 +1216,16 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
     | none   => cfg.epochs
-  -- ⭐ THE LOSS SLOT. The train-step render returns a trailing report-only `%loss`
+  -- THE LOSS SLOT. The train-step render returns a trailing report-only `%loss`
   -- scalar (`MlpRender`, and the `%lslot` note there for why it is also an input).
   -- `tsShapes` therefore declares ONE more tensor than `shapes`: a rank-0 scalar,
   -- spelled `#[]`. `shapes` stays parameter-only because the eval forward below
   -- takes it and has no such slot.
-  -- ⚠ The packed blob is `[θ | loss]`, so every parameter tensor still LEADS it and
+  -- The packed blob is `[θ | loss]`, so every parameter tensor still LEADS it and
   -- the resident prefix is unchanged — residency retains the first `nResident`
-  -- tensors and the host now reads exactly one float off the tail.
-  -- ⚠ Gated on `net.lossSlot`: only the renders that actually emit the scalar get the extra
-  -- destination. See the field's docstring for the nine nets this was silently wrong for.
+  -- tensors and the host reads exactly one float off the tail.
+  -- Gated on `net.lossSlot`: only the renders that actually emit the scalar get the extra
+  -- destination. See the field's docstring.
   let tsShapes := packShapes (if net.lossSlot then net.paramShapes ++ #[#[]] else net.paramShapes)
   if net.lossSlot then
     params := F32.concat #[params, ← F32.const 1 0.0]
@@ -1258,7 +1245,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     -- with it, this is the ONE d2h per epoch that remains. It is placed outside
     -- the `if !synth` because the dump below reads `params` whether or not eval ran.
     params ← LowererSession.readParams tsSess params (net.nParams * 4).toUSize
-    -- ⚠ `readParams` returns the PARAMETER prefix only, so the loss slot the step
+    -- `readParams` returns the PARAMETER prefix only, so the loss slot the step
     -- writes is dropped here. Put it back, or the next epoch feeds `tsShapes`
     -- (nParams+1 tensors) a blob holding nParams and the shim walks off the end.
     -- The value is irrelevant going in; the step overwrites it.
@@ -1267,7 +1254,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     if !synth then          -- synth probe: skip eval (no eval split on disk)
       for bi in [0:nbt] do
         let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-        -- Hold the parameters on device across the eval batches (§2d.3). `ep+1` is
+        -- Hold the parameters on device across the eval batches. `ep+1` is
         -- the generation token: `params` changes exactly once per epoch and this
         -- says so, so the held set cannot go stale.
         let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
@@ -1279,20 +1266,19 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
           if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    -- ⚠ Only nets whose render carries the `%loss` scalar have a loss to report. Printing
+    -- Only nets whose render carries the `%loss` scalar have a loss to report. Printing
     -- `loss = 0.000000` for the others would put a fabricated number in a captured log, so
     -- the field is omitted instead. See `VerifiedNet.lossSlot`.
     let lossField := if net.lossSlot then s!"loss = {epochLossSum / nb.toFloat}, " else ""
-    -- ▶ `wilson95` here too, not just in `trainAdamSched` (§2230): chapters 1-4 run through
-    -- `VerifiedNet.train` and were the only tier printing a bare accuracy with no interval, so
-    -- the book's MNIST/CIFAR rows could not be quoted the way its Imagenette rows are.
-    -- ⚠ Placed after the percentage rather than at end-of-line because this print (unlike
+    -- `wilson95` here too, not just in `trainAdamSched`: chapters 1-4 run through
+    -- `VerifiedNet.train`, and without it the book's MNIST/CIFAR rows could not be quoted the way
+    -- its Imagenette rows are.
+    -- Placed after the percentage rather than at end-of-line because this print (unlike
     -- `trainAdamSched`'s) carries a trailing `(Nms)`; the statistic and its interval stay adjacent.
     IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
-  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3): dump the packed params so the IREE
-  -- and XLA builds can be diffed tensor-for-tensor. He init runs in Lean from a
-  -- fixed seed, so both backends start byte-identical without extra work.
+  -- Gate G2: dump the packed params so the IREE and XLA builds can be diffed tensor-for-tensor. He
+  -- init runs in Lean from a fixed seed, so both backends start byte-identical without extra work.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
   | some path =>
       IO.FS.writeBinFile path params
@@ -1356,9 +1342,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
     (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0)
     (emaDecay : Float := 0.9999)
-    -- ▶ `expStaircase`: TF's `exponential_decay(staircase=True)` — the exponent floored and counted
+    -- `expStaircase`: TF's `exponential_decay(staircase=True)` — the exponent floored and counted
     -- on the global step — the reference's `TrainConfig.expLRStaircase`. Off keeps the continuous
-    -- form, counted from the end of warmup, that every run before 2026-09-25 used.
+    -- form, counted from the end of warmup.
     (expStaircase : Bool := false) : IO Unit := do
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
@@ -1371,90 +1357,79 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- signature is byte-identical to the net's AdamW peer apart from the entry name, and `%bc1`/`%bc2`
   -- ride through unread. So the only thing this driver owes it is the INITIAL STATE, below.
   --
-  -- ⚠ The prefix test is the reverse of `{mnv2,enet}AdamVariant`, whose `.rmsprop` branch returns
+  -- The prefix test is the reverse of `{mnv2,enet}AdamVariant`, whose `.rmsprop` branch returns
   -- "rms"/"rmsdp" (+ the per-device batch): "rms", "rms64", "rmsdp64". That direction is pinned by
   -- the `#guard`s beside each renderer's `#eval`, so the two cannot drift apart silently.
-  -- ⚠ SUBSTRING, not prefix, and this is a bug caught before it shipped. Optimizer and EMA are
-  -- INDEPENDENT axes in EfficientNet's variant name, so the RMSProp+EMA spelling is `emarms` —
-  -- which does NOT start with "rms". A prefix test silently classifies it as non-RMSProp, and the
-  -- failure is not loud: the mean-square would initialise to 0 instead of 1.0, i.e. exactly the
-  -- much-larger-first-step defect the RMSProp driver work exists to fix, reintroduced by a naming
-  -- interaction. The variant strings are pinned by `#guard`s beside each renderer's `#eval`s.
+  -- SUBSTRING, not prefix. Optimizer and EMA are INDEPENDENT axes in EfficientNet's variant name,
+  -- so the RMSProp+EMA spelling is `emarms` — which does NOT start with "rms". A prefix test
+  -- silently classifies it as non-RMSProp, and the failure is not loud: the mean-square would
+  -- initialise to 0 instead of 1.0, i.e. exactly the much-larger-first-step defect the 1.0 init
+  -- exists to prevent, reintroduced by a naming interaction. The variant strings are pinned by
+  -- `#guard`s beside each renderer's `#eval`s.
   let rmsprop := VerifiedVariant.rmsOn variant
-  -- "ema"/"emadp" = the EMA-shadow render (`planning/archive/ema.md`), whose blob carries a FOURTH region:
+  -- "ema"/"emadp" = the EMA-shadow render, whose blob carries a FOURTH region:
   -- `[θ|m|v|ema]`, with the scalar tail 3 → 5 (`%emad`, `%oemad`). Everything below that indexes the
   -- blob is written against `nRegions`/`nScalars` rather than a literal 3, because a 4-region graph
   -- fed a 3-region blob is not a subtle numeric error — it is every parameter misaligned.
   --
-  -- ⚠ Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
+  -- Keyed off the variant PREFIX, the same reverse-of-`cnxAdamVariant` reading `rmsprop` uses,
   -- and pinned upstream by the `#guard`s beside that renderer's `#eval`s.
   let emaOn := VerifiedVariant.emaOn variant
-  -- ⭐⭐ GRADIENT ACCUMULATION (`planning/archive/next_session_pipeline_then_r50.md` §4). "acc<k>x<B>" /
-  -- "accdp<k>x<B>" is the `.adamwAccum` render: a FOURTH region `G` holding the running gradient
-  -- sum, and two extra scalars `%aup`/`%akeep` deciding, per micro-batch, whether this invoke
-  -- accumulates or applies. Same blob SHAPE as the EMA render, so `nRegions`/`nScalars` carry it.
+  -- GRADIENT ACCUMULATION. "acc<k>x<B>" / "accdp<k>x<B>" is the `.adamwAccum` render: a FOURTH
+  -- region `G` holding the running gradient sum, and two extra scalars `%aup`/`%akeep` deciding,
+  -- per micro-batch, whether this invoke accumulates or applies. Same blob SHAPE as the EMA render,
+  -- so `nRegions`/`nScalars` carry it.
   --
-  -- ⚠⚠ **`k` IS READ OFF THE VARIANT NAME, and that is the point.** The graph has `1/k` BAKED into
+  -- **`k` IS READ OFF THE VARIANT NAME, and that is the point.** The graph has `1/k` BAKED into
   -- `%ob1`/`%ob2` (`optConstsB`), and the driver decides the apply cadence. If those two disagree
   -- the run does not fail — it trains at a silently wrong effective learning rate. Reading `k` from
   -- the same string that names the artifact file makes them agree by construction;
   -- `ResNet50RenderB` pins the round trip with a `#guard` on the producing side.
-  -- ⚠⚠ SUBSTRING, NOT PREFIX, and `k` parsed from AFTER the marker — changed 2026-08-06, defect #4
-  -- in `tests/TestVariantPredicates.lean`. RSB-A3's composed optimizer is `lambaccdp8x64bce`, where
-  -- `lamb` ++ `acc` puts the marker in the MIDDLE; `startsWith "acc"` is false there, so this
-  -- driver would have packed THREE regions into a FOUR-region graph. ⭐ It also makes the
-  -- `emaOn && accOn` refusal below reachable at all — under the prefix test `accOn "emaacc…"` was
-  -- false, so that throw could never fire and the combination would have silently dropped
-  -- accumulation. Both counterfactuals are pinned in `TestVariantPredicates`.
+  -- SUBSTRING, NOT PREFIX, and `k` parsed from AFTER the marker (defect #4 in
+  -- `tests/TestVariantPredicates.lean`). RSB-A3's composed optimizer is `lambaccdp8x64bce`, where
+  -- `lamb` ++ `acc` puts the marker in the MIDDLE; `startsWith "acc"` is false there, so a prefix
+  -- test would pack THREE regions into a FOUR-region graph. Under a prefix test `accOn "emaacc…"`
+  -- is false too, so an EMA-plus-accumulation variant would silently drop accumulation. Both
+  -- counterfactuals are pinned in `TestVariantPredicates`.
   let accOn := VerifiedVariant.accOn variant
   let accK := VerifiedVariant.accK variant
   if accOn && accK < 1 then
     throw <| IO.userError s!"variant '{variant}' contains 'acc' but no accumulation count could \
 be read from it — the name must spell acc<k>x<B> or accdp<k>x<B> (optionally after an optimizer \
 name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendered for"
-  -- ⭐⭐⭐ **THE REFUSAL IS GONE (2026-08-27), AND IT WAS THE LAST THING LIFTED.**
+  -- **EMA AND ACCUMULATION TOGETHER.** `G` and `E` are two INDEPENDENT regions in the order
+  -- `[θ|m|v|G|E]`, so `nRegions` is 3, 4 or 5 and `nScalars` 3, 5 or 7. That is what makes RSB-A2
+  -- and RSB-A1 renderable: their recipe sets `useEMA := true` AND `gradAccumSteps := 4`, and
+  -- accumulation is not optional at 224² on 16 GB cards. `VerifiedVariant.emaRegion` is where the
+  -- shadow's index comes from — never the literal 3.
   --
-  -- It read: *"variant selects BOTH the EMA shadow and gradient accumulation, and they occupy the
-  -- same fourth region of [θ|m|v|·]. Render one or the other."* True when written, and it is what
-  -- made RSB-A2 and RSB-A1 unrenderable — their recipe sets `useEMA := true` AND
-  -- `gradAccumSteps := 4`, and accumulation is not optional at 224² on 16 GB cards. A3 met neither
-  -- obstacle because A3's own recipe sets `useEMA := false`, which is exactly why the limitation
-  -- was invisible from A3's success (`verified_side_quest_counterparts.md` §4a, §6a).
-  --
-  -- What replaced it: `G` and `E` are two INDEPENDENT regions in the order `[θ|m|v|G|E]`, so
-  -- `nRegions` is 3, 4 or 5 and `nScalars` 3, 5 or 7. `VerifiedVariant.emaRegion` is where the
-  -- shadow's index comes from — never the literal 3, which is what it was under the old layout.
-  --
-  -- ⚠⚠ **THE ORDER THIS WAS LIFTED IN IS LOAD-BEARING, and is recorded because the reverse is
-  -- tempting.** While the throw stood, a wrong render failed LOUDLY at load. The moment it came
-  -- off, an EMA-plus-accumulation graph whose regions are packed wrongly TRAINS and reports a
-  -- number. So the fifth region landed in the renderer, in this driver's pack/unpack, in
-  -- `TestVariantPredicates`' three-way partition and in `opt_step_tie.py`'s `emalambacc8wxclip`
-  -- row — measured at 1.20e-07 against the reference's own `ema_update` — BEFORE this line was
-  -- deleted, not after.
+  -- An EMA-plus-accumulation graph whose regions are packed wrongly TRAINS and reports a number;
+  -- nothing fails loudly at load. What pins the packing is the renderer, this driver's pack/unpack,
+  -- `TestVariantPredicates`' three-way partition and `opt_step_tie.py`'s `emalambacc8wxclip` row
+  -- (1.20e-07 against the reference's own `ema_update`).
   let nRegions := VerifiedVariant.nRegions variant
   let nScalars := VerifiedVariant.nScalars variant
-  -- "…drop" = the STOCHASTIC-DEPTH render (`planning/archive/stochastic_depth.md`): the graph takes one
-  -- extra `tensor<Bxf32>` per drop site, carrying `bernoulli(keep_i)/keep_i` per example.
+  -- "…drop" = the STOCHASTIC-DEPTH render: the graph takes one extra `tensor<Bxf32>` per drop site,
+  -- carrying `bernoulli(keep_i)/keep_i` per example.
   --
-  -- ⚠⚠ THE MARKER IS `"drop"` BECAUSE `"sd"` COLLIDES, and the collision is between two OTHER
+  -- THE MARKER IS `"drop"` BECAUSE `"sd"` COLLIDES, and the collision is between two OTHER
   -- markers meeting: `rms` ++ `dp` spells **`rmsdp`**, which contains "sd". A `"sd"` substring test
   -- therefore fires on `rmsdp64` and `emarmsdp64` — every RMSProp data-parallel variant, including
-  -- the committed and gated `efficientnetin_rmsdp64` — and would have appended 9 drop scales to a graph
-  -- that takes none. Caught by running the predicate table (`tests/TestVariantPredicates.lean`)
-  -- rather than reading names one at a time; with three markers the collisions are between PAIRS.
-  -- This is `planning/archive/ema.md`'s `emarms` defect a second time, one axis further on.
+  -- the committed and gated `efficientnetin_rmsdp64` — and would append 9 drop scales to a graph
+  -- that takes none. The predicate table (`tests/TestVariantPredicates.lean`) checks this pairwise
+  -- rather than name by name; with three markers the collisions are between PAIRS. It is the
+  -- `emarms` defect again, one axis further on.
   let sdOn := VerifiedVariant.sdOn variant && !net.dropKeeps.isEmpty
   let nDrop := if sdOn then net.dropKeeps.size else 0
-  -- ▶ CLASSIFIER DROPOUT. ⚠⚠ The marker is `"do"` and NOT `"dropout"`, and that is forced by the
-  -- line above: `"dropout"` contains `"drop"`, so a dropout-only variant would set `sdOn` and this
-  -- driver would pack nine mask slots into a graph that has none. Collision #3 on this naming, and
-  -- the first caught before it shipped — `tests/TestVariantPredicates.lean` runs the pairwise table
-  -- rather than reasoning about it, and pins the counterfactual (`sdOn "adamdropout" == true`).
+  -- CLASSIFIER DROPOUT. The marker is `"do"` and NOT `"dropout"`, and that is forced by the line
+  -- above: `"dropout"` contains `"drop"`, so a dropout-only variant would set `sdOn` and this
+  -- driver would pack nine mask slots into a graph that has none.
+  -- `tests/TestVariantPredicates.lean` runs the pairwise table and pins the counterfactual
+  -- (`sdOn "adamdropout" == true`).
   let cdOn := VerifiedVariant.cdOn variant && net.dropoutKeep.isSome
   let doKeep := (net.dropoutKeep.map (·.1)).getD 1.0
   let doWidth := if cdOn then (net.dropoutKeep.map (·.2)).getD 0 else 0
-  -- ⚠ The per-example TAIL the DP shim shards is BOTH mask families — nine `tensor<gbs>` scales
+  -- The per-example TAIL the DP shim shards is BOTH mask families — nine `tensor<gbs>` scales
   -- followed by one `tensor<gbs × w>` mask — so the count it takes is their sum, not `nDrop`.
   -- Both are per-example along dim 0 and the shim splits by `elems / replicas`, so a rank-2 tail
   -- entry shards by ROWS exactly as a rank-1 one does. See the `mlpTrainStepVDP` call below.
@@ -1471,63 +1446,59 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
-  -- ⭐ PER-VARIANT forward resolution (`planning/archive/mnv4_verified.md` §3d(b)).
+  -- PER-VARIANT forward resolution.
   --
-  -- The train step above is variant-resolved and this was NOT: every variant of a slug loaded the
-  -- one `<slug>_fwd.mlir`. But a slug's variants do not all live in the same BN world — the SGD
-  -- train step comes from the per-example renderer and everything from `*RenderB` is batch BN — so
-  -- one forward artifact cannot be right for both. On MobileNetV2 and ResNet-34 it is the
-  -- per-example one, i.e. correct for the SGD trainer and a DIFFERENT NET from the Adam graph that
-  -- trains every quoted number.
+  -- A slug's variants do not all live in the same BN world — the SGD train step comes from the
+  -- per-example renderer and everything from `*RenderB` is batch BN — so one forward artifact
+  -- cannot be right for both. On MobileNetV2 and ResNet-34 `<slug>_fwd.mlir` is the per-example
+  -- one, i.e. correct for the SGD trainer and a DIFFERENT NET from the Adam graph that trains every
+  -- quoted number.
   --
   -- `<slug>_<variant>_fwd.mlir` wins when it exists; `<slug>_fwd.mlir` is the fallback, which is
   -- correct for every net whose forward already matches its batched train step (efficientnet,
-  -- convnext, vit, mnv4, resnet50). ⚠ The fallback is only safe because it is CHECKED below —
+  -- convnext, vit, mnv4, resnet50). The fallback is only safe because it is CHECKED below —
   -- a silent fallback to the wrong world is the defect, not the fix.
   let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
   let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
                  else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-  -- ⚠ `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data
-  -- parallelism one step consumes `bs * replicas` images (the shim shards them),
-  -- so a `bs`-sized synthetic buffer is read past its end every step: silent at
-  -- bs32×2, a `free(): invalid next size` abort at bs128×2. Found 2026-07-30
-  -- while measuring the parameter transfer share (handoff §2d.3). This is why
-  -- `replicas` is read here and not with the other knobs below — and, since
-  -- 2026-09-18, ABOVE the eval sessions, which are compiled at it.
+  -- `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data parallelism one step
+  -- consumes `bs * replicas` images (the shim shards them), so a `bs`-sized synthetic buffer is
+  -- read past its end every step: silent at bs32×2, a `free(): invalid next size` abort at bs128×2.
+  -- This is why `replicas` is read here and not with the other knobs below — and ABOVE the eval
+  -- sessions, which are compiled at it.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
-  -- ⭐ THE EVAL IS SHARDED OVER THE SAME DEVICES AS THE TRAIN STEP (2026-09-18). It used to run on
-  -- replica 0 alone. `grep -c all_reduce` is 0 on every `_fwd`/`_fwd_eval`, so the train steps
-  -- were N-replica and the eval never was. Measured on the killed ConvNeXt run: ~100 s/epoch at
-  -- 91% util on GPU 0 while GPUs 1-3 sat at 0%. Same artifacts, nothing re-rendered. The gate is
-  -- `scripts/gates/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N replicas, with
-  -- a control that must fail.
+  -- THE EVAL IS SHARDED OVER THE SAME DEVICES AS THE TRAIN STEP. `grep -c all_reduce` is 0 on every
+  -- `_fwd`/`_fwd_eval`, and the same artifacts serve sharded and single-device eval. On replica 0
+  -- alone a ConvNeXt eval measured ~100 s/epoch at 91% util on GPU 0 while GPUs 1-3 sat at 0%. The
+  -- gate is `scripts/gates/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N
+  -- replicas, with a control that must fail.
   let fwdSess ← mkSessionDp fwdPath replicas
-  -- ⚠ `evalTag`: a variant rendered at a non-default BN ε scores through the eval graph at THAT ε.
+  -- `evalTag`: a variant rendered at a non-default BN ε scores through the eval graph at THAT ε.
   let evalStem := s!"{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
   let fwdEvalSess ← if hasBn then
       mkSessionDp s!"{net.mlirDir}/{evalStem}.mlir" replicas
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
-  -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
+  -- `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
   -- (BN over the EVAL BATCH's own statistics) instead of `@<slug>_fwd_eval` (the accumulated
   -- running buffers). It exists to separate "the weights are bad" from "the running statistics
   -- are bad", which the loss alone cannot do: the two paths read the SAME θ and differ only in
-  -- what they normalise by. ⚠ Batch-stat scoring is transductive — it peeks at the eval batch —
+  -- what they normalise by. Batch-stat scoring is transductive — it peeks at the eval batch —
   -- so it is NOT a reportable accuracy. It is an upper reference for what these weights can do.
   let batchStatEval := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome
   let useRunning := hasBn && !batchStatEval
   if batchStatEval && hasBn then
     IO.println "  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: scoring via @_fwd (EVAL-BATCH stats), not the \
 running buffers — diagnostic only, transductive, not a reportable number."
-  -- ⛔⛔ THE BN-WORLD INVARIANT, asserted exactly when the forward is about to be USED.
+  -- THE BN-WORLD INVARIANT, asserted exactly when the forward is about to be USED.
   --
   -- Batch-stat scoring only means anything if `@<slug>_fwd` normalises the way the train step
   -- does. Where it does not, this mode silently scores a DIFFERENT ARCHITECTURE — not merely
-  -- different statistics — and reports a plausible number. That is the §3d(b) hazard in its live
-  -- form, and until now nothing anywhere checked it: `regen_verified_mlir.sh` paired the forward
-  -- only with the SGD train step, which shares its world by construction.
+  -- different statistics — and reports a plausible number. That is the BN-world hazard in its live
+  -- form. `regen_verified_mlir.sh` pairs the forward only with the SGD train step, which shares its
+  -- world by construction, so it cannot catch this.
   --
-  -- ⚠ Scoped to `!useRunning` ON PURPOSE. A normal run never invokes this forward (eval goes
+  -- Scoped to `!useRunning` ON PURPOSE. A normal run never invokes this forward (eval goes
   -- through `@<slug>_fwd_eval`), so failing there would break working trainers over an artifact
   -- they do not read. The check fires only on the path that actually reads it.
   if !useRunning && hasBn then
@@ -1546,13 +1517,12 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
   -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
   -- agree with `(bs, d0)` — every 224 net — nothing below changes.
-  -- ⚠⚠ COMPUTED HERE, ABOVE `loadData`, and that ordering is load-bearing: the ImageNet val drain
+  -- COMPUTED HERE, ABOVE `loadData`, and that ordering is load-bearing: the ImageNet val drain
   -- inside `loadData` has to allocate and read at the EVAL width, so it needs `evalD0` as an input.
-  -- It used to hardcode `3*224*224`, which was right only while train and eval resolutions agreed.
   let (evalBs, evalD0) := (← fwdRenderedShape
     (if useRunning then s!"{net.mlirDir}/{evalStem}.mlir"
      else fwdPath)).getD (bs, d0)
-  -- ⚠ ANNOUNCED when it differs, because a train/eval resolution SPLIT is not visible anywhere else
+  -- ANNOUNCED when it differs, because a train/eval resolution SPLIT is not visible anywhere else
   -- in the log, and a run that silently evaluated at the wrong resolution would still report a
   -- plausible accuracy. RSB-A3 is the case: train 160², eval 224².
   if evalD0 != d0 then
@@ -1565,14 +1535,13 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
   -- in this driver (the benchmark's `attn` anchor), and it returns before the
-  -- param dump. See planning/archive/xla_pjrt_ladder.md §3.
+  -- param dump.
   -- LEAN_MLIR_REPLICAS: data-parallel device count. The graph is rendered at the
   -- PER-REPLICA batch (cfg.batchSize), so one step consumes `bs * replicas`
-  -- images and the shim splits them. Eval is sharded the same way since 2026-09-18 (`evalScore`):
-  -- `replicas × evalBs` per invoke, logits gathered. See planning/archive/xla_pjrt_ladder.md §10.
-  -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass. It used to be REQUIRED whenever the train
-  -- batch differed from the forward's baked one (bs256, bs128-DP); `evalBs` below removes that,
-  -- so it is now just "don't spend the time".
+  -- images and the shim splits them. Eval is sharded the same way (`evalScore`):
+  -- `replicas × evalBs` per invoke, logits gathered.
+  -- LEAN_MLIR_SKIP_EVAL: skip the per-epoch eval pass ("don't spend the time"); `evalBs` below
+  -- handles a train batch that differs from the forward's baked one.
   let skipEval := (← IO.getEnv "LEAN_MLIR_SKIP_EVAL").isSome
   -- LEAN_MLIR_VAL_EVERY: validate every n epochs (+ the last one this process runs). Opt-in
   -- override of `cfg.valEveryEpochs`; see the field. Unlike SKIP_EVAL this scores SOME epochs.
@@ -1589,13 +1558,13 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- a cosine one are different experiments and the log has to say which it was. Spelled so the
   -- string is UNCHANGED at the default (`expDecayRate = 0`), i.e. every existing log line still reads
   -- "(cosine+warmup Nep, baseLR L)".
-  -- ⭐ `expDecayRate = 1.0` is an exactly CONSTANT rate: the decay branch computes
+  -- `expDecayRate = 1.0` is an exactly CONSTANT rate: the decay branch computes
   -- `baseLR * exp(k * log 1.0) = baseLR * exp 0 = baseLR` at every step, and `warmupEpochs = 0`
   -- makes `warmSteps = 0 < gstep`, so the warmup branch never fires either. No new code path —
   -- but it needs its own NAME in the log, because "exp x1.000000/1.000000ep+warmup 0ep" is a
   -- true and unreadable description of a flat line. Chapter 4's optimizer levers run this way
   -- deliberately: comparing three update rules under a schedule compares four things.
-  -- ⚠ The cosine and exp spellings are byte-identical to what they were, because every
+  -- The cosine and exp spellings must stay byte-identical, because every
   -- Imagenette and ImageNet transcript in the book quotes this line.
   let schedName := if expDecayRate == 1.0 then "constant lr"
     else if expDecayRate > 0.0 then
@@ -1609,8 +1578,8 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
 TF convention — this optimizer is not bias-corrected)"
   if sdOn then
     IO.println s!"  ▸ STOCHASTIC DEPTH: {nDrop} drop sites, keeps {net.dropKeeps.map (fun k => (k * 1000.0).round / 1000.0)} — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward)."
-  -- ⚠ It ANNOUNCES ITSELF, and that is §0.9's finding rather than politeness: a banner that names
-  -- only the architecture makes a run with the wrong regulariser read exactly like a right one.
+  -- It ANNOUNCES ITSELF, and that is not politeness: a banner that names only the architecture
+  -- makes a run with the wrong regulariser read exactly like a right one.
   -- The keep and the mask SHAPE are both printed, because the shape is the whole difference from
   -- the line above — `B × w` is per-element dropout, `B` alone would be stochastic depth.
   if cdOn then
@@ -1618,29 +1587,29 @@ TF convention — this optimizer is not bias-corrected)"
 (PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), \
 host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward)."
   if emaOn then
-    -- ⚠ It names the region INDEX, not "the 4th", because under accumulation it is the 5th — and a
+    -- It names the region INDEX, not "the 4th", because under accumulation it is the 5th — and a
     -- banner that says the wrong slot is worse than none when the failure mode is a mis-sliced blob.
     IO.println s!"  ▸ EMA: region {(VerifiedVariant.emaRegion variant).getD 3} of {nRegions} \
 [θ|m|v{if accOn then "|G" else ""}|ema], shadow starts AT the weights, decay \
 min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.\
 {if accOn then " ⚠ It advances on APPLY micro-batches only — once per optimizer step, as the reference does." else ""}"
   if accOn then
-    -- ⚠⚠ IT ANNOUNCES ITSELF, and here that is not politeness either: a run with the wrong `k`
+    -- IT ANNOUNCES ITSELF, and here that is not politeness either: a run with the wrong `k`
     -- prints an entirely normal loss curve at a silently wrong effective batch and learning rate.
-    -- §6's rule — "a setting with no output and no gate is a setting that can be silently wrong".
+    -- The rule: "a setting with no output and no gate is a setting that can be silently wrong".
     IO.println s!"  ▸ GRADIENT ACCUMULATION: k = {accK}, blob region 3 of {nRegions} \
 [θ|m|v|G{if emaOn then "|ema" else ""}]. Micro-batch \
 {gbs} x {accK} = EFFECTIVE BATCH {gbs * accK}. {nb} micro-batches/epoch = {nb / accK} updates/epoch; \
 the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
 micro-batches."
-    -- ⚠⚠ CONDITIONAL, AND IT WAS NOT. This line fired on EVERY accumulation run, naming two
-    -- absences unconditionally — including for `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB
-    -- renders as `R34Opt.lambAccum 8` with `bce := true`. So on RSB-A3, the one recipe it exists to
-    -- warn about, it asserted the exact opposite of the graph that was loaded. A warning that is
-    -- always printed carries no information; one that is always printed AND sometimes false is
-    -- worse, because the run log then reads as evidence for the wrong recipe.
-    -- ⚠ And only on the ResNet-50 family, whose accumulation recipes are RSB's. MNv4's reference IS
-    -- AdamW over accumulated micro-batches, so there the line named two "absences" its recipe never had.
+    -- CONDITIONAL on the loaded variant: it names only the absences that variant has.
+    -- `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB renders as `R34Opt.lambAccum 8` with
+    -- `bce := true`, has neither, and an unconditional line would assert the exact opposite of the
+    -- graph loaded on RSB-A3. A warning that is always printed carries no information; one that is
+    -- always printed AND sometimes false is worse, because the run log then reads as evidence for
+    -- the wrong recipe.
+    -- And only on the ResNet-50 family, whose accumulation recipes are RSB's. MNv4's reference IS
+    -- AdamW over accumulated micro-batches, so there LAMB and BCE are not absences.
     let missing := (if VerifiedVariant.lambOn variant then [] else ["LAMB"])
                 ++ (if VerifiedVariant.bceOn  variant then [] else ["BCE-with-logits"])
     if !net.slug.startsWith "resnet50" then
@@ -1651,7 +1620,7 @@ and loss at this batch."
     else
       IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — \
 {String.intercalate " and " missing} still absent."
-    -- ⚠⚠ A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
+    -- A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
     -- the graph still divides by `k`, i.e. a short step at a wrong scale — once per epoch, invisible
     -- in the loss curve. Refuse rather than round.
     if nb % accK != 0 then
@@ -1662,10 +1631,9 @@ Cap the steps to a multiple of {accK} (LEAN_MLIR_G2_STEPS) or render a different
     IO.println s!"  eval batch {evalBs} (the batch @{net.slug}_fwd{if hasBn then "_eval" else ""} \
 was RENDERED at) != train batch {bs} — sound because eval is class-batch-independent"
   if hasBn then
-    -- ▶ The decay is announced because it is otherwise INVISIBLE: it is eval-only, so a wrong
-    -- value moves no loss curve and shows up only as a quietly depressed top-1. It was a hidden
-    -- literal 0.99 until 2026-08-30 and disagreed with timm by 10× on R50 the whole time.
-    -- ⚠ Prints the per-micro weight actually passed to `F32.ema` — the same `bnEmaWeight` call
+    -- The decay is announced because it is otherwise INVISIBLE: it is eval-only, so a wrong value
+    -- moves no loss curve and shows up only as a quietly depressed top-1.
+    -- Prints the per-micro weight actually passed to `F32.ema` — the same `bnEmaWeight` call
     -- the loop makes, not a transcription — so an accumulation run says what it is really doing
     -- rather than what it was configured with.
     let bnMomShown := cfg.bnEmaWeight (if accOn then some accK else none)
@@ -1674,33 +1642,30 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
 new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{accK}), compensated for grad-accum" else ""}"
   if replicas > 1 then
     IO.println s!"  DATA-PARALLEL: {replicas} replicas x bs {bs} = global batch {gbs}, {nb} steps/epoch"
-    -- ⚠ Announced with the TAIL, because the tail is where a sharded eval goes wrong.
+    -- Announced with the TAIL, because the tail is where a sharded eval goes wrong.
     let egB := replicas * evalBs
     IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} {evalName} images per invoke, \
 {(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
 {((nEval + egB - 1) / egB) * egB - nEval} pad"
   (← IO.getStdout).flush
-  -- ⚠ The drop scales go LAST, after the BN stats, matching `enetFwdSig`/`inSig`'s placement.
-  -- Anywhere else and they capture an existing positional slot — the mnv2 `convBias` failure
-  -- (§2m), which is silent until the driver mis-walks the blob.
-  -- ⚠⚠ `gbs`, NOT `bs`, AND THAT IS THE OTHER HALF OF §5b'S DEFECT. The mask is per-EXAMPLE, so
-  -- the buffer the shim splits has to hold the GLOBAL batch: replica r takes rows
-  -- [r*bs, (r+1)*bs) of each `tensor<gbs xf32>` mask, exactly as it does of `x`. Sized at `bs` the
-  -- shim would have nothing to split — it would refuse on the outer dim, or (worse, before the
-  -- shard flag existed) hand every replica the same `bs` rows. At `replicas = 1` this IS `bs`, so
-  -- every existing run and every committed artifact is untouched.
+  -- The drop scales go LAST, after the BN stats, matching `enetFwdSig`/`inSig`'s placement.
+  -- Anywhere else and they capture an existing positional slot — the mnv2 `convBias` failure which
+  -- is silent until the driver mis-walks the blob. `gbs`, NOT `bs`. The mask is per-EXAMPLE, so the
+  -- buffer the shim splits has to hold the GLOBAL batch: replica r takes rows [r*bs, (r+1)*bs) of
+  -- each `tensor<gbs xf32>` mask, exactly as it does of `x`. Sized at `bs` the shim would have
+  -- nothing to split — it would refuse on the outer dim. At `replicas = 1` this IS `bs`.
   let dropShapes : Array (Array Nat) := Array.replicate nDrop #[gbs]
-    -- ▶ CLASSIFIER DROPOUT's slot, LAST — after the stochastic-depth scales, matching
-    -- `enetFwdSig`/`inSig`'s order. ⚠ It is the first mask slot that is not `#[gbs]`: rank 2, and
+    -- CLASSIFIER DROPOUT's slot, LAST — after the stochastic-depth scales, matching
+    -- `enetFwdSig`/`inSig`'s order. It is the first mask slot that is not `#[gbs]`: rank 2, and
     -- `gbs` times WIDER. Everything above assumed a per-example mask was one float per example;
     -- this is one per (example, feature). `gbs` and not `bs` for `dropShapes`' reason exactly —
     -- the shim splits the GLOBAL buffer by rows, so a per-device sizing would leave it nothing to
-    -- split (§5b's defect, the half that made replication type-check).
+    -- split.
     ++ (if cdOn then #[#[gbs, doWidth]] else #[])
   let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
                                 -- the FOURTH and FIFTH regions: the gradient accumulator `G` and
                                 -- the EMA shadow `E`, INDEPENDENT and in that order.
-                                -- ⚠ The G4 gated interface counts destinations off THIS list, so
+                                -- The G4 gated interface counts destinations off THIS list, so
                                 -- omitting one does not mis-walk the blob quietly — the shim refuses
                                 -- ("returns 755 outputs, caller supplied 594 destinations").
                                 ++ (if accOn then net.paramShapes else #[])
@@ -1708,20 +1673,18 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
                                 ++ Array.replicate nScalars #[]
                                 ++ (if hasBn then bnStatShapes else #[])
                                 ++ dropShapes)
-  -- Device-resident parameters (handoff §2d.3). The leading `3×P` tensors of
-  -- `adamShapes` are `[θ|m|v]`, and they are exactly the part of the blob this
-  -- loop writes ONCE and thereafter only hands straight back: below, the host
-  -- touches the tail (`write3` the three scalars, `blit` the BN stats) and reads
-  -- the tail (`read` the loss, `extract` the batch stats) — never the prefix,
-  -- which is why `pbuf := out` is already a no-copy handover. So that prefix can
-  -- live on the device across steps, and at R34 that is 260 MB each way per step
-  -- that stops crossing PCIe (55% of a bs32 step, measured).
+  -- Device-resident parameters. The leading `3×P` tensors of `adamShapes` are `[θ|m|v]`, and they
+  -- are exactly the part of the blob this loop writes ONCE and thereafter only hands straight back:
+  -- below, the host touches the tail (`write3` the three scalars, `blit` the BN stats) and reads
+  -- the tail (`read` the loss, `extract` the batch stats) — never the prefix, which is why
+  -- `pbuf := out` is already a no-copy handover. So that prefix can live on the device across
+  -- steps, and at R34 that is 260 MB each way per step that stops crossing PCIe (55% of a bs32
+  -- step, measured).
   --
-  -- ⚠ This is a REQUEST, and nothing here selects a transport. The C boundary
-  -- honours it only under `$PJRT_FFI_RESIDENT=1` on the XLA build, so IREE and
-  -- XLA still run this identical body — the property every §2h cross-backend
-  -- gate rests on. The gate is `scripts/gates/residency_gate.sh`: bit-identical
-  -- parameters, or it did not land.
+  -- This is a REQUEST, and nothing here selects a transport. The C boundary honours it only under
+  -- `$PJRT_FFI_RESIDENT=1` on the XLA build, so IREE and XLA still run this identical body — the
+  -- property every cross-backend gate rests on. The gate is `scripts/gates/residency_gate.sh`:
+  -- bit-identical parameters, or it did not land.
   let nResident := (nRegions * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
@@ -1731,20 +1694,19 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
   if cfg.vitInit then
     IO.println "  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)"
-  -- ⚠ ANNOUNCED, because the run this flag exists for was killed over an init nobody could see
-  -- from the log. The banner line further down says "He init" unconditionally; that is now a lie
-  -- whenever either flag is set, so each says so here.
+  -- ANNOUNCED, because an init is otherwise invisible in the log. The banner line further down
+  -- says "He init" unconditionally, which is false whenever either flag is set, so each says so
+  -- here.
   if cfg.cnxInit then
     IO.println "  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)"
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit))
     seed := seed + 1
-  -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit
-  -- vector of exact L2 norm r, before any training. This is the CONDITIONING
-  -- probe for gate G2 (planning/archive/xla_pjrt_ladder.md §8, rung 3): if an r that is
-  -- f32-epsilon-sized relative to ||theta|| moves the resulting gradient about as
-  -- much as the IREE/XLA disagreement does, then that disagreement is what
-  -- ill-conditioning predicts, not evidence of a wrong backend.
+  -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
+  -- norm r, before any training. This is the CONDITIONING probe for gate G2: if an r that is
+  -- f32-epsilon-sized relative to ||theta|| moves the resulting gradient about as much as the
+  -- IREE/XLA disagreement does, then that disagreement is what ill-conditioning predicts, not
+  -- evidence of a wrong backend.
   let theta0 := F32.concat parts
   -- Value is read in units of 1e-9 (no String.toFloat? in this toolchain), so
   -- LEAN_MLIR_PERTURB_R=15990 means an L2 displacement of 1.599e-5.
@@ -1755,7 +1717,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
         F32.perturbUnit theta0 0 net.nParams.toUSize r 12345
     | none   => pure theta0
   let zeros ← F32.const net.nParams.toUSize 0.0
-  -- ▶ THE MEAN-SQUARE SLOT, and it is a CORRECTNESS item rather than a tuning one.
+  -- THE MEAN-SQUARE SLOT, and it is a CORRECTNESS item rather than a tuning one.
   --
   -- AdamW/momentum start both moment slots at 0 and AdamW then bias-corrects, so its first step is
   -- scale-free. **TensorFlow's RMSProp — the one both these references train with — does neither:
@@ -1769,19 +1731,17 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- value of a graph INPUT, and the graph is a step function that never sees step 0.
   -- `Proofs.rmsBufNext` is correct either way — this is what it gets fed.
   let msInit ← if rmsprop then F32.const net.nParams.toUSize 1.0 else pure zeros
-  -- ⚠ THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, `emitMainImagenet` in `jax/Jax/Codegen.lean`), not
+  -- THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, `emitMainImagenet` in `jax/Jax/Codegen.lean`), not
   -- at zeros. A zero-init shadow is a different filter; and it is the warmup-corrected decay below
   -- that stops even THIS init from poisoning the average early — see the `emaD` note.
-  -- ⚠ The FOURTH region, when there is one, and the two features that use it seed it DIFFERENTLY.
-  -- The EMA shadow starts AT the weights (starting it at the random init is the defect
-  -- `planning/archive/ema.md` records: a shadow evaluated at chance on short runs). The gradient
-  -- ACCUMULATOR starts at ZERO — and it would be harmless at any value, because `%akeep = 0` on
-  -- the first micro-batch of every cycle discards whatever is there. Zero anyway, so a checkpoint
-  -- written mid-cycle resumes from something meaningful rather than from a stale partial sum.
-  -- ⚠⚠ **`if emaOn then … else if accOn then …` UNTIL 2026-08-27, i.e. an EITHER/OR** — which is
-  -- what made RSB-A2/A1 unrenderable, since their recipe wants both. Now two independent regions in
-  -- the order `[θ|m|v|G|E]`, and the order is what keeps every previously-written blob readable:
-  -- at `acc` alone `G` is still region 3, at `ema` alone `E` is still region 3.
+  -- The FOURTH region, when there is one, and the two features that use it seed it DIFFERENTLY.
+  -- The EMA shadow starts AT the weights (starting it at the random init gives a shadow evaluated
+  -- at chance on short runs). The gradient ACCUMULATOR starts at ZERO — and it would be harmless at
+  -- any value, because `%akeep = 0` on the first micro-batch of every cycle discards whatever is
+  -- there. Zero anyway, so a checkpoint written mid-cycle resumes from something meaningful rather
+  -- than from a stale partial sum. The two are INDEPENDENT regions in the order `[θ|m|v|G|E]`, not
+  -- an either/or: RSB-A2/A1's recipe wants both. The order keeps single-axis blobs readable: at
+  -- `acc` alone `G` is region 3, at `ema` alone `E` is region 3.
   let mut thetamv := F32.concat (#[theta, zeros, msInit] ++
     (if accOn then #[zeros] else #[]) ++ (if emaOn then #[theta] else #[]))
   let mvBytes := nRegions * net.nParams * 4
@@ -1791,9 +1751,9 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- would be harmless — their SHADOW below is not, and the two are checkpointed together.
   let mut runningBnStats ← F32.const nBnStats.toUSize 0.0
   -- The EMA shadow of those buffers (`ema_bn`). Starts where they start, as the reference does
-  -- (`ema_bn = bn_state`). ▶ Both are CHECKPOINTED since 2026-09-12, as `<ckpt>.bn` beside the
-  -- blob (see the epoch-end write). ⛔ Before that a resume restarted this shadow at zero under the
-  -- mature decay, and that is NOT "rebuilt within an epoch": at 0.9999 it is a 10,000-step filter.
+  -- (`ema_bn = bn_state`). Both are CHECKPOINTED, as `<ckpt>.bn` beside the blob (see the
+  -- epoch-end write): a resume that restarted this shadow at zero under the mature decay would NOT
+  -- be "rebuilt within an epoch" — at 0.9999 it is a 10,000-step filter.
   let mut emaBnStats ← F32.const nBnStats.toUSize 0.0
   let mut bnFirst := true
   -- Steps on which `ema_bn` COPIES the running stats instead of averaging them. Zero except after
@@ -1804,7 +1764,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- The reusable step buffer: [theta|m|v | lr,bc1,bc2 | bn stats]. Built once here
   -- and thereafter carried forward from each step's output (see the inner loop).
   let mut pbuf : ByteArray := .empty
-  -- ⚠ Both are counted in OPTIMIZER steps. Under accumulation an epoch is `nb` micro-batches but
+  -- Both are counted in OPTIMIZER steps. Under accumulation an epoch is `nb` micro-batches but
   -- only `nb / k` updates, so a schedule left in micro-batches would run the cosine (and the
   -- warmup) `k` times too fast and finish the run at a learning rate the recipe never reaches.
   let totalSteps := (cfg.epochs * nb / accK).toFloat
@@ -1812,18 +1772,18 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- Auto checkpoint/resume: each epoch writes [θ|m|v] + the next-epoch counter;
   -- on startup, resume from the latest checkpoint if present (survives reaps).
   -- Delete `.lake/build/<slug>_<variant>_ckpt*.bin{,.epoch}` to start fresh.
-  -- ▶ The PATH — backend scoping and `$LEAN_MLIR_CKPT_TAG` — is `ckptPathFor`, shared with
+  -- The PATH — backend scoping and `$LEAN_MLIR_CKPT_TAG` — is `ckptPathFor`, shared with
   -- `scoreCheckpoint` so the tool that reads this file cannot spell its name differently.
   let ckptPath ← net.ckptPathFor variant
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
     thetamv ← IO.FS.readBinFile ckptPath
-    -- ⚠ SIZE GUARD. The checkpoint is the raw `[θ|m|v(|ema)]` blob — no header, no fingerprint, no
+    -- SIZE GUARD. The checkpoint is the raw `[θ|m|v(|ema)]` blob — no header, no fingerprint, no
     -- region count — so a 3-region file loaded by the 4-region EMA driver (or the reverse) does not
-    -- fail: it misaligns EVERY parameter and resumes silent garbage. §4 already records that a
-    -- checkpoint outlives the artifact it was trained on; a layout change makes that one turn
-    -- worse, and this is the two lines that make it loud.
+    -- fail: it misaligns EVERY parameter and resumes silent garbage. A checkpoint outlives the
+    -- artifact it was trained on; a layout change makes that worse, and these two lines make it
+    -- loud.
     if thetamv.size != mvBytes then
       throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but this run wants \
 {mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a different blob \
@@ -1831,8 +1791,8 @@ layout — most likely across the EMA boundary, since the `ema*` variants carry 
 it and its .epoch marker aside and start fresh."
     startEpoch := ((← IO.FS.readFile epPath).toNat?).getD 0
     IO.println s!"  ▸ resuming from checkpoint at epoch {startEpoch}"
-    -- ▶ The BN companion (see the epoch-end write). ABSENT is a warning, not a refusal: every
-    -- checkpoint written before 2026-09-12 lacks one, and for those the seed below is the fallback.
+    -- The BN companion (see the epoch-end write). ABSENT is a warning, not a refusal: an older
+    -- checkpoint may lack one, and for those the seed below is the fallback.
     -- A WRONG SIZE is a refusal, for the blob's reason — a companion from another layout would
     -- misalign every statistic and still print a plausible accuracy.
     if hasBn then
@@ -1854,7 +1814,7 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- Reuse ONE shuffle buffer across epochs (mirrors the reference trainer's
   -- curImg/curLbl). Shuffling the SAME mutable in place keeps it exclusive
   -- (rc 1) so F32.shuffle mutates it rather than allocating a fresh full-dataset
-  -- copy each epoch. The old `F32.shuffle trainImg` kept the pristine trainImg
+  -- copy each epoch. Shuffling `trainImg` directly would keep the pristine trainImg
   -- alive (rc≥2), forcing the copy path every epoch and leaking ~one training
   -- set (5.3 GiB) per epoch → OOM after ~30 epochs on a 188 GB box.
   let mut curImg := trainImg
@@ -1863,32 +1823,30 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- `.shuffle(seed=42, reshuffle_each_iteration=True).repeat()`, so it re-shuffles across the epoch
   -- boundary by itself and never ends — the per-epoch `F32.shuffle` below is skipped for it.
   -- $SHIM_WORKERS > 1 shards the stream across that many producer processes (default 1, i.e.
-  -- byte-identical to before this knob existed). Needed once the step rate outruns one producer's
+  -- the single-producer stream). Needed once the step rate outruns one producer's
   -- ~1,530 img/s: a 4-replica ViT step wants ~1,940. See `spawnShimSharded`.
   let shimWorkers := ((← IO.getEnv "SHIM_WORKERS").bind (·.toNat?)).getD 1
   -- $SHIM_SOFT=1 asks the shim for WIRE v2 — `float32[batch*nClasses]` target distributions rather
-  -- than `int32[batch]` labels. Today those are one-hots, i.e. the same information in the shape
+  -- than `int32[batch]` labels. Unmixed, those are one-hots, i.e. the same information in the shape
   -- the graph already consumes, which is exactly what makes the transport gateable on its own:
   -- a one-hot sent as a soft target must train BIT-IDENTICALLY to the hard-label path. What it
   -- unlocks is mixup/cutmix, which need a target the label alphabet cannot express.
   --
   -- No render change is required for any of this: the committed renders are AFFINE in `%onehot`
   -- (measured, `lake build soft-target-tie`), so a mixed target yields the mixed gradient.
-  -- ▶▶ **DEFAULT-ON as of 2026-08-03, for any net whose OWN shim declares mixing.** Until now
-  -- `SHIM_SOFT` had to be set by hand, so a plain ViT/ConvNeXt ImageNet run streamed
-  -- `SHIM_MIX=off` — i.e. trained WITHOUT the mixup/cutmix their references set — and merely
-  -- announced that it had. An opt-in flag for a reference feature is the "matrix reads capability,
-  -- not state" defect in the data path (§0.9 finding 3): the capability was there and no run used
-  -- it. The default now follows the net's config.
+  -- **DEFAULT-ON for any net whose OWN shim declares mixing.** As an opt-in, a plain ViT/ConvNeXt
+  -- ImageNet run would stream `SHIM_MIX=off` — i.e. train WITHOUT the mixup/cutmix their references
+  -- set — and merely announce it. An opt-in flag for a reference feature is the "matrix reads
+  -- capability, not state" defect in the data path. The default follows the net's config.
   --
-  -- ⚠ Derived from the shim's BAKED default, not from a new field: `generateShim` already wrote
+  -- Derived from the shim's BAKED default, not from a new field: `generateShim` already wrote
   -- the config's `useMixup`/`useCutmix` into the script, and a `VerifiedNet.mixes` flag would be a
   -- second definition of that one fact. `shimMixDefault` is the single reader, shared with
   -- `spawnShim` so the wire and the announcement cannot disagree.
   --
-  -- ⚠ `SHIM_SOFT=0` still forces wire v1 OFF — the escape hatch every gate needs, because several
+  -- `SHIM_SOFT=0` still forces wire v1 OFF — the escape hatch every gate needs, because several
   -- of them (`*-dp-check`, the known-answer ties) want hard labels and a deterministic stream.
-  -- ⚠ Nets whose reference does NOT mix are untouched: R34, mnv2 and **EfficientNet** all bake
+  -- Nets whose reference does NOT mix are untouched: R34, mnv2 and **EfficientNet** all bake
   -- `off`, so this is inert for them. Turning it on there would move them AWAY from their
   -- references, not toward them.
   let mixDecl ← shimMixDefault net.shimScript
@@ -1897,25 +1855,22 @@ re-seeded from the running stats over the first 100 steps, not restored"
     | some v => v != "0" && v.toLower != "off" && v != "false"
     | none   => declaresMix
   let shimNC := if softTargets then net.nClasses else 0
-  -- ⚠ ANNOUNCED, never silent — the whole point of the change is that the previous behaviour was
-  -- announced-but-off, and an unannounced on would be worse.
+  -- ANNOUNCED, never silent — an unannounced on would be worse than an announced off.
   if declaresMix then
     IO.println s!"  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX={mixDecl}; {if softTargets then "ON (wire v2, soft float32 targets — the reference recipe)"
   else "OFF (SHIM_SOFT explicitly disabled)"}. ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step."
-  -- ⚠⚠ `!synth`, ADDED 2026-08-05, and its absence made `LEAN_MLIR_BENCH_SYNTH` INERT on the one
-  -- dataset where the data path is the dominant term. The stream was spawned on `net.data ==
-  -- .imagenet` alone and the per-step branch below prefers it whenever it is non-empty, so a
-  -- "synthetic" ImageNet run still did the full 154 MB blocking pipe read every step. On every
-  -- other dataset synth replaces a preloaded host array; ImageNet never had one, so the flag
-  -- replaced nothing and said so nowhere. That is handoff §4's own lesson in a new place — *the
-  -- synthetic path exists to remove a variable from a measurement, which makes it exactly the code
-  -- least likely to be looked at when the measurement comes out clean.*
+  -- `!synth`: without it `LEAN_MLIR_BENCH_SYNTH` is INERT on the one dataset where the data path is
+  -- the dominant term. The per-step branch below prefers the stream whenever it is non-empty, so a
+  -- "synthetic" ImageNet run spawned on `net.data == .imagenet` alone would still do the full 154
+  -- MB blocking pipe read every step. On every other dataset synth replaces a preloaded host array;
+  -- ImageNet has none. *The synthetic path exists to remove a variable from a measurement, which
+  -- makes it exactly the code least likely to be looked at when the measurement comes out clean.*
   --
-  -- ▶ This is what splits `t_read` from `t_rest`: the same binary at the same step count, real vs
+  -- This is what splits `t_read` from `t_rest`: the same binary at the same step count, real vs
   -- synth, differs by exactly the shim read. That difference is the ceiling on what a prefetch can
-  -- hide (planning/archive/next_session_pipeline_then_r50.md §2).
+  -- hide.
   --
-  -- ⚠ It changes what `scripts/gates/residency_gate.sh` feeds an ImageNet net — from a seeded real
+  -- It changes what `scripts/gates/residency_gate.sh` feeds an ImageNet net — from a seeded real
   -- stream to one constant batch. Both are deterministic, which is all that gate's bit-identity
   -- verdict needs, but a constant batch is less numerically varied, so re-confirm the FAULT
   -- control fires before trusting a green from it.
@@ -1924,41 +1879,39 @@ re-seeded from the running stats over the first 100 steps, not restored"
   let shimSeed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
   let mut imgStreams : Array ShimProc ←
     if net.data == .imagenet && !synth then
-      -- ⚠⚠ `net.d0`, NOT `3 * 224 * 224`. This is the width the TRAIN shim is *told* to emit, and
-      -- it is the SECOND of two hardcoded 224s that had to fall for the 160 net — the other was
-      -- `loadData`'s `trainPix` (which sizes the READ). Both had to agree with the render, and a
-      -- literal here agreed with only the 224 ones: measured 2026-08-06 as
-      -- "shim sends batch=64 flat=76800, the render wants batch=64 flat=150528".
-      -- ▶ INERT for every incumbent — `LeanMlir/Verified/NetsCore.lean`'s closing `#guard` block proves
+      -- `net.d0`, NOT `3 * 224 * 224`. This is the width the TRAIN shim is *told* to emit;
+      -- `loadData`'s `trainPix` sizes the READ. Both have to agree with the render, and a literal
+      -- here agrees with only the 224 ones (the 160 net then refuses with "shim sends batch=64
+      -- flat=76800, the render wants batch=64 flat=150528").
+      -- INERT for every incumbent — `LeanMlir/Verified/NetsCore.lean`'s closing `#guard` block proves
       -- `net.d0 == 3*224*224` for all six 224 ImageNet nets, so this substitutes equal for equal
       -- there and changes only `resnet50in160`.
       spawnShimSharded net.shimScript "train" gbs net.d0 shimSeed shimWorkers shimNC
     else pure #[]
-  -- ▶ `LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E` (default 0 = off): every E epochs ONE producer is killed
+  -- `LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E` (default 0 = off): every E epochs ONE producer is killed
   -- and replaced, cycling through the slots, so no loader lives past `E × n` epochs and at most one
   -- is ever cold. It exists because a single tf.data loader degrades after hours of uptime and the
   -- round-robin read then runs the whole job at its pace — 690 → 1,250 s/epoch on the 350-epoch
-  -- EfficientNet run, cleared instantly by a restart (`planning/shim_loader_health_and_resume_tests.md`).
-  -- ⚠ This is the BLOCKING form: the replacement is spawned at the epoch boundary and the trainer
-  -- waits out its startup (~30 s, i.e. ~0.4% at E=10). §3d of that doc has the zero-downtime
-  -- variant — spawn in the background, swap when its preamble lands — which is worth building only
-  -- if this proves too coarse.
-  -- ⚠ ANNOUNCED, like every other knob here: a run whose producers are being replaced under it and
+  -- EfficientNet run, cleared instantly by a restart.
+  -- This is the BLOCKING form: the replacement is spawned at the epoch boundary and the trainer
+  -- waits out its startup (~30 s, i.e. ~0.4% at E=10). A zero-downtime variant — spawn in the
+  -- background, swap when its preamble lands — is worth building only if this proves too coarse.
+  -- ANNOUNCED, like every other knob here: a run whose producers are being replaced under it and
   -- says so nowhere is indistinguishable in the log from one that is not.
   let respawnEvery := ((← IO.getEnv "LEAN_MLIR_SHIM_RESPAWN_EPOCHS").bind (·.toNat?)).getD 0
   if respawnEvery > 0 && !imgStreams.isEmpty then
     IO.println s!"  ▸ SHIM RESPAWN: one producer every {respawnEvery} epoch(s), round-robin over \
 {imgStreams.size} — no loader lives past {respawnEvery * imgStreams.size} epochs."
   if synth && net.data == .imagenet then
-    -- ⚠ ANNOUNCED, because the previous behaviour was silent and that is the whole defect: a
-    -- number measured this way is NOT a step time, and nothing else in the log would say so.
+    -- ANNOUNCED, because silence is the defect: a number measured this way is NOT a step time, and
+    -- nothing else in the log would say so.
     IO.println s!"  [SYNTH] imagenet shim NOT spawned — one constant batch, zero pipe reads. \
 This measures t_rest (compute + params + host blob patching), NOT a full step."
     -- Wire v2 sizes the target buffer at `gbs × nClasses`, not `gbs`, and `mkSynthData` cannot
     -- know that — it runs before the shim's declared mixing is read. Without this a mixing net
     -- (ViT, ConvNeXt) would read `gbs × nClasses` floats out of a `gbs`-float buffer the moment
-    -- synth started supplying the labels, which is the bs128×2 overread of §2d.3 wearing new
-    -- clothes. Uniform `1/nc` rather than zeros: a valid probability vector, and step timing is
+    -- synth started supplying the labels, the same overread as the bs128×2 one above. Uniform
+    -- `1/nc` rather than zeros: a valid probability vector, and step timing is
     -- value-independent either way.
     if shimNC > 0 then
       curLbl ← F32.const (gbs * shimNC).toUSize (1.0 / shimNC.toFloat)
@@ -1966,7 +1919,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- the benchmark's `attn` anchor — ViT is matmul/attention-bound, so its per-step
   -- cost scales very differently from conv across GPUs and can't borrow the conv
   -- factor. A full ViT epoch is too slow to probe, so we time a step window.
-  -- ⚠ ANNOUNCED, for the reason every other silent throughput/recipe flag here is: an ablation
+  -- ANNOUNCED, for the reason every other silent throughput/recipe flag here is: an ablation
   -- arm that trains without augmentation and says nothing is indistinguishable in the log from
   -- the full recipe, and the two differ by 7 points.
   let noAug := (← IO.getEnv "LEAN_MLIR_NO_AUG").isSome
@@ -1975,7 +1928,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
 — the ablation arm. The rendered train step is unchanged."
   let probeSteps := (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?)
   -- LEAN_MLIR_PROBE_WARM: the step the probe clock STARTS at. Default 8 preserves every
-  -- committed number. ⛔ 8 IS TOO EARLY TO BE A PRODUCTION RATE. `SHIM PREFETCH` keeps one
+  -- committed number. 8 IS TOO EARLY TO BE A PRODUCTION RATE. `SHIM PREFETCH` keeps one
   -- read in flight PER HANDLE (depth = SHIM_WORKERS = 8), and the producers fill those while
   -- the graph compiles and while the ~90 s val drain runs — so the first ~8-16 steps are served
   -- from a queue nobody had to wait for. They measure BURST rate, not production rate. A window
@@ -2004,68 +1957,65 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- `thetamv`. The scalar slots are filled per step; the BN region per step too.
   let scalarSlots ← F32.const nScalars.toUSize 0.0
   -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
-  -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (the mistake
-  -- `planning/archive/xla_pjrt_ladder.md` §8 measured at 272 MB/step on R34).
-  -- ⚠ Sized for BOTH families. The `1.0` fill is load-bearing and not a placeholder: a mask slot
+  -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (272 MB/step
+  -- on R34, measured).
+  -- Sized for BOTH families. The `1.0` fill is load-bearing and not a placeholder: a mask slot
   -- that is never refilled must be the exact identity, which `1.0` is and `0.0` emphatically is not
   -- (it would zero the classifier's input and train nothing).
   let dropSlots ← F32.const (nDrop * gbs + (if cdOn then gbs * doWidth else 0)).toUSize 1.0
   pbuf := if hasBn
           then F32.concat #[thetamv, scalarSlots, runningBnStats, dropSlots]
           else F32.concat #[thetamv, scalarSlots, dropSlots]
-  -- ▶▶ DEPTH-1 PREFETCH of the shim read — planning/archive/next_session_pipeline_then_r50.md §2.
+  -- PREFETCH of the shim read.
   --
-  -- The step was two blocking calls back to back: `readShimBatchRR` (154 MB off a pipe) and then
-  -- the invoke, with NOTHING draining the pipe during compute. A batch is 154 MB and a pipe's
-  -- buffer is 64 KB (this box caps `pipe-max-size` at 1 MB, still 0.6% of a batch), so the
-  -- producer filled its buffer, blocked in `write()`, and slept through the entire compute. It
-  -- measured 258% CPU on a 32-core box: not slow, throttled. ⚠ Which is why "one producer does
-  -- ~1,530 img/s and R34 needs ~380" was never the relevant comparison — capacity is irrelevant
-  -- when the consumer pulls one batch and walks away.
+  -- Without it the step is two blocking calls back to back: `readShimBatchRR` (154 MB off a pipe)
+  -- and then the invoke, with NOTHING draining the pipe during compute. A batch is 154 MB and a
+  -- pipe's buffer is 64 KB (this box caps `pipe-max-size` at 1 MB, still 0.6% of a batch), so the
+  -- producer fills its buffer, blocks in `write()`, and sleeps through the entire compute — 258%
+  -- CPU on a 32-core box: not slow, throttled. Which is why "one producer does ~1,530 img/s and
+  -- R34 needs ~380" is not the relevant comparison — capacity is irrelevant when the consumer
+  -- pulls one batch and walks away.
   --
-  -- ⭐ MEASURED, `LEAN_MLIR_BENCH_SYNTH` real-vs-synth at 4×bs64 resident fp32: the step was
-  -- **377 ms = 158 read + 219 rest**, so `max(158, 219)` = **219** and the read hides COMPLETELY
-  -- behind compute. ✅ Delivered: **377 → 224 ms/step, 1.68×** (30 epochs 15.7 h → 9.3 h), 5 ms
-  -- off that ceiling. Bit-identity gated by `tests/prefetch_tie.sh`.
+  -- MEASURED, `LEAN_MLIR_BENCH_SYNTH` real-vs-synth at 4×bs64 resident fp32: unprefetched, the
+  -- step is **377 ms = 158 read + 219 rest**, so `max(158, 219)` = **219** and the read hides
+  -- COMPLETELY behind compute. Prefetched: **224 ms/step, 1.68×** (30 epochs 15.7 h → 9.3 h),
+  -- 5 ms off that ceiling. Bit-identity gated by `tests/prefetch_tie.sh`.
   --
-  -- ⭐⭐ **DEPTH n, ONE READ IN FLIGHT PER HANDLE (2026-08-11).** The correctness condition was never
-  -- "one read outstanding" — it is **one read outstanding PER HANDLE**, because the hazard is two
-  -- concurrent reads interleaving on ONE pipe (a pipe is a stream, not a message queue). Depth 1
-  -- bought that by having one outstanding read globally, which is sufficient and, at
-  -- `SHIM_WORKERS=n`, far stronger than necessary: it drains ONE producer while the other n−1 sit
-  -- blocked in `write()` with 64 KB buffered — 0.08% of a batch — sleeping through the compute the
-  -- prefetch exists to hide.
+  -- **DEPTH n, ONE READ IN FLIGHT PER HANDLE.** The correctness condition is not "one read
+  -- outstanding" — it is **one read outstanding PER HANDLE**, because the hazard is two concurrent
+  -- reads interleaving on ONE pipe (a pipe is a stream, not a message queue). One outstanding read
+  -- globally is sufficient and, at `SHIM_WORKERS=n`, far stronger than necessary: it drains ONE
+  -- producer while the other n−1 sit blocked in `write()` with 64 KB buffered — 0.08% of a batch —
+  -- sleeping through the compute the prefetch exists to hide.
   --
-  -- ⭐ MEASURED 2026-08-11, ViT/ImageNet 4×bs128, `SHIM_WORKERS=8`: the box ran **70% IDLE** (22 of
-  -- 32 cores) at 783 ms/step against a 249 ms synthetic floor, with the eight producers drawing
-  -- ~10 cores between them. Not slow, not contended — **throttled**, exactly the signature this
-  -- comment recorded for R34 before depth 1 existed ("258% CPU on a 32-core box"). A zero-cost
-  -- producer through the SAME pipes at the SAME depth ran 248 ms, so the plumbing and the 308 MB
-  -- of transport were never the problem: 5 ms of the step. Capacity was not the problem either —
-  -- making each producer 5.3× faster (`SHIM_DETERMINISM=0`) moved the step 0%.
+  -- MEASURED at global depth 1, ViT/ImageNet 4×bs128, `SHIM_WORKERS=8`: the box ran **70% IDLE**
+  -- (22 of 32 cores) at 783 ms/step against a 249 ms synthetic floor, with the eight producers
+  -- drawing ~10 cores between them. Not slow, not contended — **throttled**, the same signature
+  -- as R34 without prefetch ("258% CPU on a 32-core box"). A zero-cost producer through the SAME
+  -- pipes at the SAME depth ran 248 ms, so the plumbing and the 308 MB of transport are not the
+  -- problem: 5 ms of the step. Capacity is not the problem either — making each producer 5.3×
+  -- faster (`SHIM_DETERMINISM=0`) moved the step 0%.
   --
-  -- ▶ So the generalisation this comment used to defer is the fix, and it is the ONLY lever the
-  -- evidence points at. Step s reads handle `s % n`; the next step on that handle is `s + n`, so
-  -- the refill is issued into the slot the wait just freed. Per handle the read SEQUENCE is
-  -- unchanged (handle h still serves steps h, h+n, h+2n, … in that order, same bytes for the same
-  -- step) — only *when* each read is issued moves earlier, which is precisely what
-  -- `tests/prefetch_tie.sh` gates. The resident path's `res_gen` (`ffi/pjrt_ffi.c`) still sees
-  -- strict step order because the INVOKES are still strictly ordered; only the reads overlap.
+  -- So depth n is the fix, and it is the ONLY lever the evidence points at. Step s reads handle
+  -- `s % n`; the next step on that handle is `s + n`, so the refill is issued into the slot the
+  -- wait just freed. Per handle the read SEQUENCE is unchanged (handle h still serves steps h, h+n,
+  -- h+2n, … in that order, same bytes for the same step) — only *when* each read is issued moves
+  -- earlier, which is precisely what `tests/prefetch_tie.sh` gates. The resident path's `res_gen`
+  -- (`ffi/pjrt_ffi.c`) still sees strict step order because the INVOKES are still strictly ordered;
+  -- only the reads overlap.
   --
-  -- ⚠ It stays lock-free by CONSTRUCTION, not by guarding: each slot's task exclusively owns one
+  -- It stays lock-free by CONSTRUCTION, not by guarding: each slot's task exclusively owns one
   -- handle, so "two reads on one pipe" is unrepresentable rather than checked for.
-  -- ⚠ `LEAN_MLIR_PREFETCH_DEPTH=1` restores the old global-depth-1 behaviour exactly, as the A/B
+  -- `LEAN_MLIR_PREFETCH_DEPTH=1` gives global depth 1 exactly, as the A/B
   -- control. Absent ⇒ depth n = `SHIM_WORKERS`, i.e. depth 1 for the single-producer default, so
-  -- every non-sharded net is byte- AND schedule-identical to before this change.
+  -- every non-sharded net is byte- AND schedule-identical to depth 1.
   --
-  -- ⚠ Shim path only. Imagenette/CIFAR augment host-side off `augSeed` inside the loop and have
-  -- no pipe to drain.
-  -- ⚠ This introduces the FIRST concurrency primitive in the repo — `IO.asTask` appeared zero
-  -- times before it. The reader thread touches nothing the step touches: it owns the handles and
+  -- Shim path only. Imagenette/CIFAR augment host-side off `augSeed` inside the loop and have no
+  -- pipe to drain. The reader thread touches nothing the step touches: it owns the handles and
   -- returns two fresh `ByteArray`s.
   --
   -- DEFAULT ON, with `LEAN_MLIR_PREFETCH=0` as the escape hatch — the same shape as `SHIM_SOFT=0`,
-  -- and for the same reason: it is the control the gate needs. ⚠ The gate is that the read ORDER
+  -- and for the same reason: it is the control the gate needs. The gate is that the read ORDER
   -- is unchanged (same handle, same sequence, same bytes; only *when* moves), so N steps with and
   -- without must give a BIT-IDENTICAL loss sequence. `tests/prefetch_tie.sh`.
   let prefetch := match ← IO.getEnv "LEAN_MLIR_PREFETCH" with
@@ -2079,10 +2029,10 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
     | some d => max 1 (min d imgStreams.size)
     | none   => max 1 imgStreams.size
   if !imgStreams.isEmpty then
-    -- ⚠ ANNOUNCED. §0.9's finding, and 2026-08-05's: a throughput setting that prints nothing when
-    -- OFF is how `PJRT_FFI_RESIDENT` let a 16 h benchmark and a 26 h production config diverge for
-    -- a week. Both states say so. ⚠ The DEPTH is announced too, and for the same reason: depth 1
-    -- with 8 workers looks identical on screen to depth 8 and runs 3× slower.
+    -- ANNOUNCED: a throughput setting that prints nothing when OFF lets a benchmark and a
+    -- production config diverge unnoticed. Both states say so. The DEPTH is announced too, and for
+    -- the same reason: depth 1 with 8 workers looks identical on screen to depth 8 and runs 3×
+    -- slower.
     IO.println (if prefetch
       then s!"  ▸ SHIM PREFETCH: ON (depth {pfDepth} over {imgStreams.size} producer handle(s) — \
 each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every \
@@ -2112,11 +2062,10 @@ gate's control, not a configuration.")
                            (ep + 42).toUSize
       curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
-      -- ▶▶ MICRO-STEP vs OPTIMIZER STEP. Without accumulation these are the same number and every
-      -- expression below reads exactly as it did. With it, `mstep` counts micro-batches (it seeds
-      -- the augmentation and the drop masks, and it is what the depth-1 prefetch indexes — §4.1's
-      -- "the prefetch index must follow the MICRO-step") while `gstep` counts UPDATES and is what
-      -- the LR schedule and Adam's bias correction read.
+      -- MICRO-STEP vs OPTIMIZER STEP. Without accumulation these are the same number. With it,
+      -- `mstep` counts micro-batches (it seeds the augmentation and the drop masks, and it is what
+      -- the prefetch indexes — the prefetch index must follow the MICRO-step) while `gstep` counts
+      -- UPDATES and is what the LR schedule and Adam's bias correction read.
       let mstep := ep * nb + bi + 1
       -- `%akeep` is 0 on the first micro-batch of a cycle and 1 after: the accumulator RESETS by
       -- dropping the previous total (`Gt = akeep·G + g`), so there is no separate zeroing step that
@@ -2131,7 +2080,7 @@ gate's control, not a configuration.")
       --     _ep = _global_step / steps_per_epoch
       --     lr  = LR * (rate ** ((_ep - warmup) / decayEpochs))
       --
-      -- ⚠ `_global_step` there is 0-BASED at the point the LR is computed — its own warmup branch
+      -- `_global_step` there is 0-BASED at the point the LR is computed — its own warmup branch
       -- reads `(_global_step + 1) / warmup_steps`, which is this driver's `gstep / warmSteps` — so
       -- the epoch is `(gstep − 1) / nb`, NOT `gstep / nb`. One step of offset is invisible in a
       -- 5004-step epoch, which is exactly why it has to come off the reference rather than a guess.
@@ -2151,9 +2100,9 @@ gate's control, not a configuration.")
       -- is [theta|m|v | lr,bc1,bc2 | bn stats] and the train step returns that
       -- exact layout, so the previous output IS the next input once the 3
       -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
-      -- (and slicing [theta|m|v] back out afterwards) cost two 272 MB host
-      -- memcpys per step at R34 scale — see planning/archive/xla_pjrt_ladder.md §8.
-      -- ⚠ `lr = 0` ON AN ACCUMULATE MICRO-BATCH IS WHAT FREEZES θ, and it freezes it COMPLETELY:
+      -- (and slicing [theta|m|v] back out afterwards) would cost two 272 MB host
+      -- memcpys per step at R34 scale.
+      -- `lr = 0` ON AN ACCUMULATE MICRO-BATCH IS WHAT FREEZES θ, and it freezes it COMPLETELY:
       -- AdamW's decay is DECOUPLED (`θ' = θ − lr·m̂/(√v̂+ε) − lr·wd·θ`), so both terms vanish. A
       -- COUPLED-L2 optimizer would keep decaying k times per update and this would be wrong.
       pbuf ← F32.write3 pbuf (nRegions * net.nParams).toUSize
@@ -2162,7 +2111,7 @@ gate's control, not a configuration.")
         let accPair ← F32.const 3 0.0
         let accPair ← F32.write3 accPair 0 (if applyNow then 1.0 else 0.0) keepAcc 0.0
         pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize accPair 0 2
-      -- ⚠ THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
+      -- THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
       -- `d = min(decay, (1+t)/(10+t))` is TF's `ExponentialMovingAverage(decay, num_updates)`, the
       -- form the reference emits (`ema_update` in `jax/Jax/Codegen.lean`). Without it the shadow decays its own
       -- init away only as `decay^t`: the reference MEASURED a shadow still holding 12.8% init at
@@ -2171,33 +2120,33 @@ gate's control, not a configuration.")
       -- `t` is the reference's 0-BASED `_global_step`, i.e. `gstep - 1` here.
       let emaD := min emaDecay ((gstep - 1.0 + 1.0) / (gstep - 1.0 + 10.0))
       if emaOn then
-        -- ⚠⚠ **THE SHADOW MOVES ONCE PER OPTIMIZER STEP, NOT ONCE PER MICRO-BATCH**, and under
+        -- **THE SHADOW MOVES ONCE PER OPTIMIZER STEP, NOT ONCE PER MICRO-BATCH**, and under
         -- accumulation those differ by a factor of `k`. The reference EMAs after the `train_step`
         -- call (`emitMainImagenet` in `jax/Jax/Codegen.lean`) and JAX's accumulation lives INSIDE that call, so one
         -- `ema_update` covers all k micro-batches. This driver invokes the graph per micro-batch,
         -- so on an accumulate micro-batch it must hand the graph the IDENTITY: `%emad = 1`,
         -- `%oemad = 0` gives `e' = 1·e + 0·θ' = e` exactly.
-        -- ▶ Not merely a k× faster filter if got wrong: θ is FROZEN on accumulate micro-batches
+        -- Not merely a k× faster filter if got wrong: θ is FROZEN on accumulate micro-batches
         -- (`%lr = 0`), so k−1 of every k updates would pull the shadow toward a weight that had not
         -- moved — a different, slower filter that still descends and still prints a curve.
-        -- ⭐ Arithmetic, not a branch, and the same trick `%aup` plays on the moments: one graph,
+        -- Arithmetic, not a branch, and the same trick `%aup` plays on the moments: one graph,
         -- one compile, no way for an "accumulate" and an "apply" render to drift.
         let (ed, oed) := if applyNow then (emaD, 1.0 - emaD) else (1.0, 0.0)
         let emaPair ← F32.const 3 0.0
         let emaPair ← F32.write3 emaPair 0 ed oed 0.0
-        -- ⚠ `emaScalarOff`, not the literal 3: behind `%aup`/`%akeep` the pair starts at slot 5.
+        -- `emaScalarOff`, not the literal 3: behind `%aup`/`%akeep` the pair starts at slot 5.
         pbuf ← F32.blit pbuf
                  (nRegions * net.nParams + VerifiedVariant.emaScalarOff variant).toUSize emaPair 0 2
       if hasBn then
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars).toUSize runningBnStats 0 nBnStats.toUSize
-      -- ▶ STOCHASTIC DEPTH: draw this step's per-example keep scales and blit them into the
-      -- trailing slots. ⚠ SEEDED FROM THE GLOBAL STEP, like `augSeed` below — an unseeded or
+      -- STOCHASTIC DEPTH: draw this step's per-example keep scales and blit them into the
+      -- trailing slots. SEEDED FROM THE GLOBAL STEP, like `augSeed` below — an unseeded or
       -- wall-clock-seeded draw makes the run unreproducible and breaks every gate that replays a
-      -- step. ⚠ These are ORDINARY inputs, deliberately NOT on the resident path (`nResident`
+      -- step. These are ORDINARY inputs, deliberately NOT on the resident path (`nResident`
       -- covers only the leading `nRegions * P` tensors): they change every step, so retaining them
       -- would be wrong rather than merely wasteful.
       if sdOn then
-        -- ⚠ drawn at the GLOBAL batch: `dropScales` is site-major (`bs` consecutive values per
+        -- drawn at the GLOBAL batch: `dropScales` is site-major (`bs` consecutive values per
         -- site), so a `gbs`-wide draw gives each mask input a contiguous global row block that the
         -- shim splits per replica. Drawing at `bs` and letting the shim replicate would give
         -- example i on replica 0 and example bs+i on replica 1 the SAME Bernoulli draw — masks
@@ -2206,8 +2155,8 @@ gate's control, not a configuration.")
         let sc ← F32.dropScales net.dropKeeps gbs (ep * nb + bi + 1).toUSize
         pbuf ← F32.blit pbuf (nRegions * net.nParams + nScalars + nBnStats).toUSize sc 0
                  (nDrop * gbs).toUSize
-      -- ▶ CLASSIFIER DROPOUT: this step's per-ELEMENT mask, into the slot after the SD scales.
-      -- ⚠⚠ A SEPARATE SEED STREAM, and that is the reference's own structure rather than caution:
+      -- CLASSIFIER DROPOUT: this step's per-ELEMENT mask, into the slot after the SD scales.
+      -- A SEPARATE SEED STREAM, and that is the reference's own structure rather than caution:
       -- it draws the classifier mask at `fold_in(drop_key, 999983)` while stochastic depth uses
       -- `fold_in(drop_key, block_index)` — a distinct sub-key precisely so the two regularisers do
       -- not share draws. Handing both the same seed here would correlate the classifier mask with
@@ -2223,56 +2172,53 @@ gate's control, not a configuration.")
       -- ImageNet takes the whole batch off the wire, already augmented and normalized by the shim,
       -- so it bypasses BOTH the slice and the augmentation below. That is deliberate: the transform
       -- has exactly one definition (the generated shim, shared with the JAX reference), and a second
-      -- copy here is the double-writer failure this repo keeps paying for.
-      -- ⚠ Statement position, not `let (xb, yb) ← if …`, because the prefetch branch REASSIGNS
+      -- copy here would be a double writer.
+      -- Statement position, not `let (xb, yb) ← if …`, because the prefetch branch REASSIGNS
       -- `inflight`, and do-notation only threads a mutable variable through statements — inside a
       -- nested `do` used as an expression the assignment does not elaborate.
       let mut xb := ByteArray.empty
       let mut yb := ByteArray.empty
       if !imgStreams.isEmpty then
         -- Round-robin across the sharded producers; with SHIM_WORKERS=1 (the default) this is
-        -- `imgStreams[0]` every step, i.e. exactly the single-producer path.
-        -- ⚠⚠ THE READ WIDTH, and the THIRD of three independent hardcoded 224s the 160 net had to
-        -- flush out (the others: the shim SPAWN width above, and `loadData`'s `trainPix`). All
-        -- three describe the same buffer and every one of them had to agree with the render, so
-        -- fixing them one at a time surfaced the same refusal three times over.
-        -- ▶ INERT for the six 224 nets by `Verified.NetsCore`'s closing `#guard` block.
+        -- `imgStreams[0]` every step, i.e. exactly the single-producer path. THE READ WIDTH — one
+        -- of three widths that describe the same buffer (the others: the shim SPAWN width above,
+        -- and `loadData`'s `trainPix`), and every one of them has to agree with the render.
+        -- INERT for the six 224 nets by `Verified.NetsCore`'s closing `#guard` block.
         let flat := net.d0
         if prefetch then
           -- Step `bi`'s batch has been in flight since step `bi-1` issued it. `none` only on the
           -- very first step of the run — one step of no overlap in 150,120, not worth a case.
-          -- ⚠ The index runs `ep * nb + bi` unbroken across the epoch boundary, which is what the
+          -- The index runs `ep * nb + bi` unbroken across the epoch boundary, which is what the
           -- round-robin needs: the train iterator `.repeat()`s inside the shim and never ends, so
           -- there is no per-epoch restart to resynchronise against.
           --
-          -- ⭐ `Task.Priority.default` (the pool), NOT `.dedicated`, and it is worth **12 ms/step**
-          -- — measured 2026-08-05, R34/ImageNet 4×bs64: **236 dedicated vs 224 pooled**. The usual
+          -- `Task.Priority.default` (the pool), NOT `.dedicated`, and it is worth **12 ms/step**
+          -- — measured, R34/ImageNet 4×bs64: **236 dedicated vs 224 pooled**. The usual
           -- advice for a blocking read is `.dedicated`, so that a long `read()` does not occupy a
           -- pool worker and starve other tasks. That reasoning does not apply here and its cost
           -- does: depth 1 means there is **exactly one outstanding task by construction**, so
           -- there is nothing to starve, while `.dedicated` spawns a fresh OS thread **every step**
           -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor.
-          -- ⚠ Both numbers were taken with the leak below in place. `.dedicated` would also have
+          -- Both numbers were taken with the leak below in place. `.dedicated` would also have
           -- hidden it by accident — a thread that exits abandons its heap, which the next free
-          -- reclaims — at the price of refaulting the whole buffer every step (standalone repro,
-          -- 2026-09-11).
-          -- ⚠ The step index runs unbroken across the epoch boundary — `ep * nb + bi + 1` at the
+          -- reclaims — at the price of refaulting the whole buffer every step (standalone repro).
+          -- The step index runs unbroken across the epoch boundary — `ep * nb + bi + 1` at the
           -- end of epoch e is exactly `ep' * nb + 0` for e+1 — which is what keeps the round-robin
           -- continuous. The train iterator `.repeat()`s inside the shim and never ends, so there
           -- is no per-epoch restart to resynchronise against.
           let s := ep * nb + bi
           let nStr := inflight.size
           let slot := s % nStr
-          -- ⭐⭐ THE BATCH BUFFER IS ALLOCATED HERE, on the main thread, and handed to the task
+          -- THE BATCH BUFFER IS ALLOCATED HERE, on the main thread, and handed to the task
           -- through a ref; the task only fills it (`readInto`). Letting the task allocate it —
-          -- which is what `Handle.read` does — made a pool thread the owner of a 308 MB block the
-          -- main thread then freed, and the runtime's allocator (mimalloc) answers a cross-thread
+          -- which is what `Handle.read` does — makes a pool thread the owner of a 308 MB block the
+          -- main thread then frees, and the runtime's allocator (mimalloc) answers a cross-thread
           -- free of a huge block with `madvise(MADV_FREE)`, not a release: the pages stay in RSS
-          -- until the kernel is under pressure. 79–136 MB/step, the box full inside one epoch,
+          -- until the kernel is under pressure — 79–136 MB/step, the box full inside one epoch,
           -- then continuous direct reclaim and a mean step 2.5× the median
           -- (runs/2026-09-11-vit-leak-ab). Allocated and freed by the same thread, the block is
           -- recycled in place: no growth, and no fresh page faults after the first step.
-          -- ⚠ None of the allocator's environment knobs reach this: `MALLOC_*` is glibc, which is
+          -- None of the allocator's environment knobs reach this: `MALLOC_*` is glibc, which is
           -- not the allocator, and `MIMALLOC_PURGE_DELAY=0` only helps while the owning thread
           -- keeps allocating — at a 220 ms step cadence it changes nothing (measured).
           let issueRead (sj : Nat) : BaseIO (Task (Except IO.Error (ByteArray × ByteArray))) := do
@@ -2295,20 +2241,20 @@ gate's control, not a configuration.")
           -- The wait FREES this handle's slot. Marking it before the refill loop is what makes
           -- "the slot I just consumed" the slot step `s + n` goes into, without special-casing it.
           inflight := inflight.set! slot none
-          -- ⚠⚠ HERE, and the position is load-bearing at both ends. BEFORE the invoke below is the
+          -- HERE, and the position is load-bearing at both ends. BEFORE the invoke below is the
           -- entire point — the readers drain the pipes during compute instead of sleeping through
           -- them. AFTER the wait above is the correctness condition: a handle's next read is issued
           -- only once its previous read has been consumed, so there is never more than one read on
           -- one pipe and per-handle issue order is preserved. Moving this above the wait would put
           -- two reads on one pipe and interleave them.
-          -- ⚠ Not past the LAST step of the LAST epoch: such a read would never be consumed, and it
+          -- Not past the LAST step of the LAST epoch: such a read would never be consumed, and it
           -- would leave a pool worker blocked in `read()` on a live producer while `main` returns.
-          -- ⚠ At depth n the loop below issues exactly ONE read on a steady step (into the slot the
+          -- At depth n the loop below issues exactly ONE read on a steady step (into the slot the
           -- wait just freed, for step `s + n`); on the FIRST step every slot is free, so it issues
           -- n and primes all n producers at once. That is the whole priming story — no separate
           -- pre-loop pass, and the resume path (`startEpoch > 0`) primes identically on its first
           -- step rather than needing to know it resumed.
-          -- ⚠ The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with reads outstanding; that
+          -- The `LEAN_MLIR_MAX_STEPS` probe still `return`s mid-loop with reads outstanding; that
           -- path is a measurement, not a training run, and it exits through the same reap.
           let is0 ← IO.monoMsNow
           for j in [1:pfDepth+1] do
@@ -2318,7 +2264,7 @@ gate's control, not a configuration.")
               if (inflight[sl]!).isNone then
                 inflight := inflight.set! sl (some (← issueRead sj))
           lastIssueMs := (← IO.monoMsNow) - is0
-          -- ⚠ Unwrapped AFTER the next reads are issued, so a mid-epoch read error still leaves the
+          -- Unwrapped AFTER the next reads are issued, so a mid-epoch read error still leaves the
           -- pipeline in a consistent state — it throws here with at most n orphaned tasks, which
           -- the process exit reaps. Unwrapping first would throw with nothing in flight and make
           -- the failure depend on where in the step it happened.
@@ -2333,13 +2279,13 @@ gate's control, not a configuration.")
         -- lives in the data pipeline, not the network): Imagenette = random crop
         -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;
         -- MNIST = none.
-        -- ⭐ LEAN_MLIR_NO_AUG: the augmentation ABLATION arm, and the reason it is a flag rather
+        -- LEAN_MLIR_NO_AUG: the augmentation ABLATION arm, and the reason it is a flag rather
         -- than a second net is that augmentation lives in the data pipeline, not the graph —
         -- turning it off must leave the rendered train step byte-identical, or the arm would be
         -- measuring two things. It substitutes the DETERMINISTIC centre crop for the random one
         -- and drops the flip, which is exactly the eval-time pipeline; the images stay 224² so
         -- every downstream shape is unchanged.
-        -- ⚠ Read ONCE per run, not per step: `IO.getEnv` in the batch loop would be a syscall
+        -- Read ONCE per run, not per step: `IO.getEnv` in the batch loop would be a syscall
         -- 295 times an epoch, and the answer cannot change mid-run.
         let x ← match net.data with
           | .imagenette =>
@@ -2355,13 +2301,11 @@ gate's control, not a configuration.")
         xb := x; yb := if synth then curLbl else F32.sliceLabels curLbl (bi * gbs) gbs
       let inv0 ← IO.monoMsNow
       let out ← if replicas > 1
-        -- ⚠ `nDrop` is the SHARDED TAIL. The drop masks are per-EXAMPLE, so under data parallelism
+        -- `nDrop` is the SHARDED TAIL. The drop masks are per-EXAMPLE, so under data parallelism
         -- replica r must get mask rows [r*bs, (r+1)*bs) — the same split `x` gets — not a copy of
-        -- replica 0's. They ride in the parameter blob (`dropShapes` above), which is exactly why
-        -- they were being replicated: the DP shim's rule was "x and the labels shard, everything
-        -- between them replicates". `planning/archive/stochastic_depth.md` §5b predicted this; it was true
-        -- of the shim before any DP drop render existed to expose it. At `nDrop = 0` the argument
-        -- is inert and every non-SD DP run is byte-identical to before.
+        -- replica 0's. They ride in the parameter blob (`dropShapes` above), and the DP shim's rule
+        -- is "x and the labels shard, everything between them replicates" — so without `nDrop` they
+        -- would be replicated. At `nDrop = 0` the argument is inert.
         then LowererSession.mlpTrainStepVDP tsSess tsFn xb pbuf adamShapes yb
                gbs.toUSize d0.toUSize nc.toUSize replicas.toUSize nResident nShardTail.toUSize
         else LowererSession.mlpTrainStepV tsSess tsFn xb pbuf adamShapes yb
@@ -2379,50 +2323,47 @@ gate's control, not a configuration.")
       if hasBn then
         let batchBn := out.extract ((nRegions * net.nParams + nScalars) * 4)
                                    ((nRegions * net.nParams + nScalars + nBnStats) * 4)
-        -- ⚠ 0.01, NOT 0.1 — corrected 2026-08-04. `F32.ema` computes
-        -- `(1−m)·running + m·batch`, so this `m` is the weight on the NEW batch, and the
-        -- reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`, which updates
-        -- `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running stats
-        -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
-        -- so it depressed every reported top-1 without touching a single gradient, and it
-        -- bit hardest early, when the activation statistics are still moving fast.
+        -- 0.01, NOT 0.1. `F32.ema` computes `(1−m)·running + m·batch`, so this `m` is the weight on
+        -- the NEW batch, and the reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`,
+        -- which updates `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running
+        -- stats would average ~10 batches against the reference's ~100 — 10× noisier. It is
+        -- EVAL-ONLY, so it would depress every reported top-1 without touching a single gradient,
+        -- and bite hardest early, when the activation statistics are still moving fast.
         --
-        -- ⚠⚠ **AND COMPENSATED FOR GRADIENT ACCUMULATION, 2026-08-14** — the second half of that
-        -- same 2026-08-04 fix, which was not made at the time (`a3_paper_fidelity.md` §2.3).
-        -- This EMA fires once per MICRO-batch, so at `k` micro-batches per optimizer step the
-        -- stats decay by `0.99^k` per step where the reference's decay by 0.99. At the A3 run's
-        -- k = 8 that is 0.923 against 0.99 — our running estimates were ~8x fresher, and
-        -- correspondingly noisier, PER OPTIMIZER STEP.
+        -- **AND COMPENSATED FOR GRADIENT ACCUMULATION.** This EMA fires once per MICRO-batch, so
+        -- uncompensated, at `k` micro-batches per optimizer step the stats decay by `0.99^k` per
+        -- step where the reference's decay by 0.99. At the A3 run's k = 8 that is 0.923 against
+        -- 0.99 — running estimates ~8x fresher, and correspondingly noisier, PER OPTIMIZER STEP.
         --
         -- The reference compensates explicitly and its generated script says so: *"BN momentum
         -- compensated for gradient accumulation (K=4): per-micro momentum = 0.99**(1/K) -> K
         -- updates compose to ~one 0.99/step update"*. `m` here is the weight on the NEW batch,
         -- i.e. `1 - momentum`, so the compensated form is `1 - 0.99^(1/k)`: at k = 8 that is
-        -- 0.001256, and at k = 1 it is EXACTLY 0.01 — so every non-accumulating run is
-        -- bit-identical across this change, which is why the guard is `accOn` and not a version.
+        -- 0.001256, and at k = 1 it is EXACTLY 0.01 — so every non-accumulating run keeps the
+        -- uncompensated weight bit-for-bit, which is why the guard is `accOn`.
         --
-        -- ⚠ EVAL-ONLY, on no gradient path. That is what makes it safe to change between runs and
-        -- ALSO what let it hide for eight days: nothing about the loss curve moves. ▶ Do NOT apply
+        -- EVAL-ONLY, on no gradient path. That is what makes it safe to change between runs and
+        -- ALSO what lets a wrong value hide: nothing about the loss curve moves. Do NOT apply
         -- it mid-run — the reported eval shifts, so a curve spanning the change develops a
         -- discontinuity that belongs to the metric rather than to the model.
-        -- ▶ Direction: this delta plausibly made our reported top-1 UNDERSTATED, which matters
+        -- Direction: this delta plausibly made our reported top-1 UNDERSTATED, which matters
         -- because the A3 result (77.43%) is quoted as beating its JAX reference.
         --
-        -- ⚠⚠ **AND THE DECAY IS NOW `cfg.bnMomentum`, NOT A LITERAL 0.99** (2026-08-30). 0.99 is
+        -- **AND THE DECAY IS `cfg.bnMomentum`, NOT A LITERAL 0.99.** 0.99 is
         -- TF's EfficientNet value; timm's PyTorch BN default gives R50/R34 a decay of 0.9, a
         -- 10-step averaging window against this 100-step one. Per-net table + the timm audit are
         -- in `TrainConfig.bnMomentum`'s docstring; `VerifiedConfig.bnMomentum` is the peer field,
         -- and `bnEmaWeight` — shared with the startup banner — is where both branches live.
         let bnMom := cfg.bnEmaWeight (if accOn then some accK else none)
         runningBnStats ← F32.ema runningBnStats batchBn (if bnFirst then 1.0 else bnMom)
-        -- ▶ `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
+        -- `ema_bn` — the BN running buffers get their OWN shadow, and on a batch-BN net this is
         -- not optional decoration. The reference's own words: eval pairs EMA weights with
         -- EMA-LAGGED stats, "avoiding the weights/stats mismatch that blows up early eval". EMA
         -- weights are a average of many steps' parameters; the LIVE running stats describe only the
         -- most recent steps' activations, and the two do not describe the same network.
-        -- ⚠ Same `emaD` as the parameter shadow — one definition of the decay per step. `F32.ema`
+        -- Same `emaD` as the parameter shadow — one definition of the decay per step. `F32.ema`
         -- takes the NEW-value weight, so it is `1 − d`.
-        -- ⚠ GATED ON `applyNow` for the parameter shadow's reason, one line up in the reference:
+        -- GATED ON `applyNow` for the parameter shadow's reason, one line up in the reference:
         -- `ema_bn = ema_update(ema_bn, bn_state, _global_step)` sits beside `ema_params`' update and
         -- fires on the same cadence. The running stats themselves DO move per micro-batch — that is
         -- what `bnMom`'s k-th-root compensation above is for — but their shadow does not.
@@ -2447,7 +2388,7 @@ gate's control, not a configuration.")
           if bi == ps then
             -- robust: median per-step time (drops the cold-cache / GC-blip outliers)
             let sorted := probeTimes.qsort Nat.blt
-            -- ⭐ The SPREAD is the diagnostic, not the median. A compute-bound step is tight
+            -- The SPREAD is the diagnostic, not the median. A compute-bound step is tight
             -- (min ≈ median); a SHIM-STARVED one is not — the min is what the step costs when the
             -- batch happened to be ready, so `median - min` is the wait. Print both, plus p90, so
             -- a slow kernel and a slow producer are distinguishable from ONE run instead of
@@ -2458,7 +2399,7 @@ gate's control, not a configuration.")
             let psum := probeTimes.foldl (· + ·) 0
             IO.println s!"  PROBE: {pmed} ms/step (median of {sorted.size} steps {probeWarm+1}..{ps}, {net.name})"
             IO.println s!"  PROBE-SPREAD: min={pmin} med={pmed} p90={p90} mean={psum / sorted.size} ms/step (starvation wait = med-min = {pmed - pmin} ms)"
-            -- ⭐ LEAN_MLIR_PROBE_DUMP=<file>: the per-step series behind those four numbers, one
+            -- LEAN_MLIR_PROBE_DUMP=<file>: the per-step series behind those four numbers, one
             -- `step<TAB>ms<TAB>wait_ms<TAB>issue_ms<TAB>invoke_ms` line each, in step order
             -- (`wait_ms` = blocked on the prefetched batch, `issue_ms` = allocating + spawning the
             -- next reads, `invoke_ms` = the train step itself; the first two are 0 off ImageNet). The summary cannot say WHICH steps are
@@ -2474,19 +2415,19 @@ gate's control, not a configuration.")
       | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     -- One 272 MB copy per EPOCH (for eval + checkpoint), not per step. Under
-    -- device residency (§2d.3) this is also the one d2h of `[θ|m|v]` that still
+    -- device residency this is also the one d2h of `[θ|m|v]` that still
     -- happens at all — `readParams` is `pbuf.extract 0 mvBytes` whenever the
     -- parameters are host-resident, and the read-back otherwise, so the
     -- frequency is unchanged either way and this line reads the same.
     thetamv ← LowererSession.readParams tsSess pbuf mvBytes.toUSize
-    -- ▶ EVAL AND THE CHECKPOINT SCORE THE SHADOW, not the live weights — which is what the
+    -- EVAL AND THE CHECKPOINT SCORE THE SHADOW, not the live weights — which is what the
     -- reference does (`evalArgs`/`params_to_file` read `ema_params`) and the whole point of the
     -- feature: ConvNeXt's 75.93% IS the shadow's number. The shadow is region 4, so it starts at
     -- `3 * pBytes`.
-    -- ⚠ Nothing in the `[θ|m|v]` residency gate can see this slice — eval-only state is
-    -- structurally invisible to it, exactly as hold-mode is (§2d.3). Its gate is the accuracy
+    -- Nothing in the `[θ|m|v]` residency gate can see this slice — eval-only state is
+    -- structurally invisible to it, exactly as hold-mode is. Its gate is the accuracy
     -- trajectory: the shadow must TRACK THEN EXCEED the live weights, never start near chance.
-    -- ⚠⚠ **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the shadow is region FOUR, because
+    -- **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the shadow is region FOUR, because
     -- `G` takes three — and a stale literal here does not fail, it scores the GRADIENT ACCUMULATOR
     -- as if it were weights and prints a plausible-looking percentage off it.
     let emaReg := (VerifiedVariant.emaRegion variant).getD 0
@@ -2494,7 +2435,7 @@ gate's control, not a configuration.")
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if useRunning then fwdEvalSess else fwdSess
     let evalFn := if useRunning then s!"m.{evalStem}" else fwdFn
-    -- ⚠ EMA weights MUST be scored against the EMA-lagged stats, never the live ones — that
+    -- EMA weights MUST be scored against the EMA-lagged stats, never the live ones — that
     -- pairing is the one the reference calls out as blowing up early eval.
     -- $LEAN_MLIR_EMA_BN=0 is a CONTROL, not a feature: it pairs the EMA weights with the LIVE
     -- running statistics, which is the configuration the reference says "blows up early eval". A
@@ -2507,11 +2448,11 @@ gate's control, not a configuration.")
                       else thetaCur
     let evalShapes := if useRunning then fwdEvalShapes else fwdShapes
     let evalResident := (net.paramShapes.size + (if useRunning then 2 * net.bnChannels.size else 0)).toUSize
-    -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` writes one byte per validation image, 1 = top-1 correct,
+    -- `LEAN_MLIR_DUMP_CORRECT=<prefix>` writes one byte per validation image, 1 = top-1 correct,
     -- in eval order, to `<prefix>_e{N}.bin`. Unset ⇒ not accumulated and not written, so the
     -- default path is byte-identical.
     --
-    -- ⭐⭐ **WHY A BITMAP AND NOT JUST THE SCALAR.** Two models scored on the SAME fixed validation
+    -- **WHY A BITMAP AND NOT JUST THE SCALAR.** Two models scored on the SAME fixed validation
     -- set are a PAIRED comparison, and independent confidence intervals throw away almost all of
     -- the information in it. `wilson95` puts ±1.11 pt on a single Imagenette number, which makes
     -- most interesting gaps look like noise; McNemar's test over these bitmaps looks only at the
@@ -2520,10 +2461,10 @@ gate's control, not a configuration.")
     -- comparison, i.e. not significant as stated — but it is 105 net label flips out of 50,000,
     -- which McNemar calls significant as long as the two models agree on ≳94% of images. The
     -- scalar cannot answer that question and the bitmap can, at 50 KB per eval.
-    -- ⚠ It is a measurement about these two TRAINED MODELS, not about the recipe: "does this
+    -- It is a measurement about these two TRAINED MODELS, not about the recipe: "does this
     -- architecture change help" is a statement about the seed distribution and still needs n runs.
     let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
-    -- Hold the eval parameters on device across the eval batches (§2d.3), one set per replica. The
+    -- Hold the eval parameters on device across the eval batches, one set per replica. The
     -- count is the tensor count of `evalShapes`, which for a BN net is the params PLUS the two
     -- running-stat slots per layer — all of them are inputs with no output counterpart, so all of
     -- them can be held. `gen := ep + 1` re-seeds them every epoch.
@@ -2541,66 +2482,65 @@ gate's control, not a configuration.")
         pure r
     let acc := correct.toFloat / nScored.toFloat * 100.0
     let acc5 := correct5.toFloat / nScored.toFloat * 100.0
-    -- ⚠ Under `LEAN_MLIR_SKIP_EVAL` the loop above runs ZERO batches, so `correct` is 0 and this
-    -- line printed `acc = 0/49920 = 0.000000%  top5 = 0/49920` — a number INDISTINGUISHABLE from a
-    -- catastrophically broken net, on a run that scored nothing. Found 2026-08-05 on R50's first
-    -- smoke, where it read as the new net being wrong. Exact zeros on BOTH top-1 and top-5 are the
-    -- tell (chance at 1000 classes is ~50 and ~250), but a reader should not have to notice that.
+    -- Under `LEAN_MLIR_SKIP_EVAL` the loop above runs ZERO batches, so `correct` is 0 and this
+    -- line would print `acc = 0/49920 = 0.000000%  top5 = 0/49920` — a number
+    -- INDISTINGUISHABLE from a catastrophically broken net, on a run that scored nothing. Exact
+    -- zeros on BOTH top-1 and top-5 are the tell (chance at 1000 classes is ~50 and ~250), but a
+    -- reader should not have to notice that.
     if skipEval then
       IO.println s!"  epoch {ep + 1}: eval SKIPPED (LEAN_MLIR_SKIP_EVAL) — no accuracy was measured"
     else if !evalThisEpoch then
       -- Same shape as the SKIP_EVAL line so nobody reads a 0/50000 off a skipped epoch.
       IO.println s!"  epoch {ep + 1}: eval skipped (valEveryEpochs = {valEvery}; next scored epoch {min nEpochs (((ep + 1) / valEvery + 1) * valEvery)})"
     else
-      -- ⚠ The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
+      -- The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
       -- quotes these lines verbatim and every `runs/*/` log is read by eye against that format.
       IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
-      -- ⚠⚠ `{variant}` is in the name, not just `{pfx}_e{N}`. `cifar8w-bn-ablation` and
+      -- `{variant}` is in the name, not just `{pfx}_e{N}`. `cifar8w-bn-ablation` and
       -- `cifar8w-ablation` each run THREE optimizer arms in one process (sgd/mom/adam), so a
       -- variant-less name has arm 2 overwrite arm 1 and arm 3 overwrite arm 2 — two thirds of
       -- the bitmaps silently lost, with the surviving file labelled as if it were the run.
-      -- The checkpoint path has carried `variant` all along (`<slug>_<variant>_ckpt_xla.bin`);
-      -- this brings the bitmap into line. ▶ Single-arm trainers pass "adam", so their files
-      -- move `<pfx>_e80.bin` -> `<pfx>_adam_e80.bin`; `scripts/demos/mcnemar.py` takes explicit
-      -- paths and does not care, but bitmaps written before 2026-08-31 use the old name.
+      -- The checkpoint path carries `variant` too (`<slug>_<variant>_ckpt_xla.bin`). Single-arm
+      -- trainers pass "adam", so their files are `<pfx>_adam_e80.bin`; `scripts/demos/mcnemar.py`
+      -- takes explicit paths, so older `<pfx>_e80.bin` bitmaps still read.
       match dumpCorrect with
       | some pfx =>
           IO.FS.writeBinFile s!"{pfx}_{variant}_e{ep + 1}.bin" correctBits
           IO.println s!"    per-example top-1 bitmap -> {pfx}_{variant}_e{ep + 1}.bin ({correctBits.size} bytes)"
       | none => pure ()
     (← IO.getStdout).flush
-    -- ⛔ WRITE-THEN-RENAME, AND THE BN COMPANION (2026-09-12). This was two in-place writes, so a
-    -- crash or power cut INSIDE the blob write left a truncated file that the size guard at resume
-    -- then refuses on every restart — the supervisor burns all its attempts on a run that is not
-    -- coming back — and a crash between the two writes left the marker one epoch behind the
-    -- weights. `writeBinAtomic` makes each file all-or-nothing, and the order (companion, blob,
-    -- marker) means the marker only advances once the state it names is on disk.
-    -- ▶ `<ckpt>.bn` = [running BN stats | their EMA shadow]. Without it a resume restarted `ema_bn`
+    -- WRITE-THEN-RENAME, AND THE BN COMPANION. With in-place writes, a crash or power cut INSIDE
+    -- the blob write leaves a truncated file that the size guard at resume then refuses on every
+    -- restart — the supervisor burns all its attempts on a run that is not coming back — and a
+    -- crash between two writes leaves the marker one epoch behind the weights. `writeBinAtomic`
+    -- makes each file all-or-nothing, and the order (companion, blob, marker) means the marker only
+    -- advances once the state it names is on disk.
+    -- `<ckpt>.bn` = [running BN stats | their EMA shadow]. Without it a resume restarts `ema_bn`
     -- at ZERO under the MATURE decay — `emaD` is keyed off the global step, so the warmup
     -- correction that rescues a fresh run is long spent — and at 0.9999 over 5,004 steps/epoch,
-    -- 0.9999^5004 ≈ 61% of the eval's BN statistics were still that zero one epoch later, ~10
-    -- epochs to wash out. The weights resumed exactly; the number scored off them did not. The JAX
+    -- 0.9999^5004 ≈ 61% of the eval's BN statistics are still that zero one epoch later, ~10
+    -- epochs to wash out. The weights resume exactly; the number scored off them does not. The JAX
     -- reference's `save_train_state` carries both (`ema_bn`, `bn_state`).
     if hasBn then
       let bn := F32.concat #[runningBnStats, emaBnStats]
       writeBinAtomic (ckptPath ++ ".bn") bn
       IO.println s!"    BN companion -> {ckptPath}.bn ({nBnStats} floats x 2, hash {bn.hash})"
-      -- ⚠ Flushed HERE, not at the next step's print: stdout into supervise.sh's tee is
+      -- Flushed HERE, not at the next step's print: stdout into supervise.sh's tee is
       -- block-buffered, and a process killed right after its checkpoint (a reap, a thermal rest)
       -- would otherwise lose the one line that says what the resume should read back.
       (← IO.getStdout).flush
     writeBinAtomic ckptPath thetamv
     writeBinAtomic epPath (toString (ep + 1)).toUTF8
-    -- ▶ The staggered loader respawn (see `respawnEvery` above). Placed AFTER the checkpoint so a
+    -- The staggered loader respawn (see `respawnEvery` above). Placed AFTER the checkpoint so a
     -- crash during a respawn costs nothing, and at an epoch boundary so the discarded batch below
     -- is the only data cost.
-    -- ⚠ `ep + 1 < nEpochs`: without it the last epoch spawns a replacement and the process exits
-    -- on top of it — a python that starts, builds a tf.data pipeline and is killed seconds later.
-    -- Caught by the smoke test, which respawned generation 3 after its final epoch.
+    -- `ep + 1 < nEpochs`: without it the last epoch spawns a replacement and the process exits
+    -- on top of it — a python that starts, builds a tf.data pipeline and is killed
+    -- seconds later.
     if respawnEvery > 0 && !imgStreams.isEmpty && ep + 1 < nEpochs
         && (ep + 1) % respawnEvery == 0 then
       let slot := shimGen % imgStreams.size
-      -- ⚠⚠ CONSUME THE OUTSTANDING READ FIRST. The prefetch keeps one read in flight per producer,
+      -- CONSUME THE OUTSTANDING READ FIRST. The prefetch keeps one read in flight per producer,
       -- and killing the child closes the pipe under it — the task would surface a torn read at the
       -- next step. Its batch is dropped on the floor; the step it was issued for is re-read from
       -- the replacement, because the refill loop issues into whichever slot is empty. One batch of
@@ -2608,7 +2548,7 @@ gate's control, not a configuration.")
       if let some t := inflight[slot]! then
         let _ ← IO.wait t
       inflight := inflight.set! slot none
-      -- ⚠ `arr[i]!` would want `Inhabited ShimProc`, and a live child process has no sensible
+      -- `arr[i]!` would want `Inhabited ShimProc`, and a live child process has no sensible
       -- default, so the slot is taken with `[i]?` and the replacement happens inside the `some`.
       if let some old := imgStreams[slot]? then
         try old.child.kill catch _ => pure ()
@@ -2621,15 +2561,14 @@ gate's control, not a configuration.")
         IO.println s!"  ▸ shim respawn: producer {slot} of {imgStreams.size} replaced after epoch \
 {ep + 1} (generation {shimGen}, seed {newSeed})"
         (← IO.getStdout).flush
-  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3). Dumps the whole [θ|m|v] blob, so
-  -- the Adam moments are compared too, not just the weights — a moment buffer
-  -- that silently failed to thread would still let θ look plausible.
+  -- Gate G2. Dumps the whole [θ|m|v] blob, so the Adam moments are compared too, not just the
+  -- weights — a moment buffer that silently failed to thread would still let θ look plausible.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
   | some path =>
       IO.FS.writeBinFile path thetamv
       IO.println s!"  wrote final [θ|m|v] ({thetamv.size} bytes) → {path}"
   | none => pure ()
-  -- ⚠ "cosine/warmup" is quoted verbatim by every Imagenette and ImageNet transcript in the
+  -- "cosine/warmup" is quoted verbatim by every Imagenette and ImageNet transcript in the
   -- book; only the constant case gets a new spelling, and it drops the "/warmup" that would
   -- otherwise describe a warmup this configuration does not have.
   let doneSched := if expDecayRate == 1.0 then "constant lr" else s!"{schedName}/warmup"
@@ -2677,7 +2616,7 @@ def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant 
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   net.printBlurb
   IO.println s!"  SCORING A CHECKPOINT — no training. {net.name} {variant}, {ckptPath}"
-  -- ▶ timm's TEST protocol: `LEAN_MLIR_EVAL_SIZE=S` scores through an eval graph rendered at S
+  -- timm's TEST protocol: `LEAN_MLIR_EVAL_SIZE=S` scores through an eval graph rendered at S
   -- (`<slug>_fwd_eval_s<S>.mlir`, or `<slug>_fwd_s<S>.mlir` for the LayerNorm nets) and has the
   -- val stream resize/crop at S / `LEAN_MLIR_EVAL_CROP` (`SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in the
   -- net's own shim). Unset ⇒ the recipe's own protocol, exactly as the in-training eval scores.
@@ -2691,10 +2630,10 @@ test_input_size and test_crop_pct), so the protocol printed is the protocol scor
     | some s => #[("SHIM_EVAL_SIZE", some (toString s))] ++
                 (if evalCrop.isEmpty then #[] else #[("SHIM_EVAL_CROP", some evalCrop)])
     | none   => #[]
-  -- The region to score. ⚠ `"ema"` on a variant with no fourth region is a REFUSAL and not a
+  -- The region to score. `"ema"` on a variant with no fourth region is a REFUSAL and not a
   -- fallback to live: the request and the artifact disagree, and quietly answering the other
   -- question is how a live-weight number gets quoted as a shadow one.
-  -- ⚠⚠ **`emaRegion`, NOT THE LITERAL 3** (2026-08-27). Under accumulation the gradient
+  -- **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the gradient
   -- accumulator takes region 3 and the shadow is region 4, so a hardcoded index here scores `G`
   -- as if it were weights — a plausible-looking percentage off a running gradient sum, which is the
   -- exact failure class this function's BN blocker exists to prevent one line down.
@@ -2710,9 +2649,9 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
       | some i => pure i
     | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
   -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
-  -- exists, `<slug>_fwd.mlir` is the fallback. ⚠ The FUNCTION is `@<slug>_fwd` either way — the
+  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is `@<slug>_fwd` either way — the
   -- variant artifact re-renders the same entry name.
-  -- ⭐ A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
+  -- A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
   -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
   let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
   let pick (suf : String) : IO String := do
@@ -2733,7 +2672,7 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
   if !(← System.FilePath.pathExists fwdPath) then
     throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
 {fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
-  -- ⚠ REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
+  -- REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
   -- because it has a `cfg.batchSize` the user chose; this tool has no such input, so a guess
   -- would be a silent mis-slice of the val buffer (RSB-A3: 224² rows read as 160²).
   let (evalBs, evalD0) ← match ← fwdRenderedShape fwdPath with
@@ -2766,8 +2705,8 @@ adds a 4th region and the EMA shadow a 5th."
   IO.println s!"  region {regIdx} of {nRegions} \
 ({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
 {net.nParams} params"
-  -- The BN operands: `<ckpt>.bn` = [running stats | their EMA shadow], written at every epoch end
-  -- since 2026-09-12. The EMA shadow pairs with the EMA-lagged stats, exactly as the training eval
+  -- The BN operands: `<ckpt>.bn` = [running stats | their EMA shadow], written at every epoch end.
+  -- The EMA shadow pairs with the EMA-lagged stats, exactly as the training eval
   -- pairs them; the live weights with the running ones.
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let evalParams ← if !hasBn then pure theta else do
@@ -2794,13 +2733,13 @@ never written. Scoring the .bin alone would normalise by zeros."
                 else if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
                 else s!"m.{net.slug}_fwd"
   (← IO.getStdout).flush
-  -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
-  -- read exactly as the trainers read it. ⭐ This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
+  -- `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
+  -- read exactly as the trainers read it. This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
   -- one checkpoint at 1 and at N replicas must give the same count AND the same bitmap, because
   -- the loop below is the per-epoch eval's own (`evalScore`), not a copy of it.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   let sess ← mkSessionDp fwdPath replicas
-  -- ⚠ `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
+  -- `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
   -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
   let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
   let nc := net.nClasses
@@ -2809,8 +2748,8 @@ never written. Scoring the .bin alone would normalise by zeros."
     IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} images per invoke, \
 {(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
 {((nEval + egB - 1) / egB) * egB - nEval} pad"
-  -- ▶ `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
-  -- correct), in eval order. ⭐ THIS is the site McNemar wants: score two committed checkpoints,
+  -- `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
+  -- correct), in eval order. THIS is the site McNemar wants: score two committed checkpoints,
   -- then compare their bitmaps. θ never changes here, so the bitmap is a pure function of the
   -- checkpoint and the val set — re-scoring gives the identical file.
   let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
@@ -2825,7 +2764,7 @@ never written. Scoring the .bin alone would normalise by zeros."
   reapValStream rows
   let acc := correct.toFloat / nScored.toFloat * 100.0
   let acc5 := correct5.toFloat / nScored.toFloat * 100.0
-  -- ⭐ Printed in the SAME shape as the in-training line, so the equality gate is a literal
+  -- Printed in the SAME shape as the in-training line, so the equality gate is a literal
   -- comparison of two strings rather than an arithmetic one.
   IO.println s!"  checkpoint: acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
   match dumpCorrect with
@@ -2862,17 +2801,17 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
   let mut b0 ← F32.const d1.toUSize 0.0
-  -- LEAN_MLIR_PERTURB_R, as in `train`/`trainAdamSched`. Without it this loop is
-  -- the third for which `scripts/gates/residency_gate.sh`'s init CONTROL is a silent
-  -- no-op. Weights are ZERO-initialised here rather than He, so the displacement
-  -- is off zero — if anything a cleaner control.
+  -- LEAN_MLIR_PERTURB_R, as in `train`/`trainAdamSched`. Without it
+  -- `scripts/gates/residency_gate.sh`'s init CONTROL is a silent no-op on this loop. Weights are
+  -- ZERO-initialised here rather than He, so the displacement is off zero — if anything a cleaner
+  -- control.
   match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
   | some n => do
       let r := n.toFloat * 1e-9
       IO.println s!"  ▸ PERTURBED init: theta += r*u with ||r*u||_2 = {r}"
       W0 ← F32.perturbUnit W0 0 (d0 * d1).toUSize r 12345
   | none   => pure ()
-  -- Device-resident parameters (§2d.3): `W0` and `b0` — the WHOLE parameter set,
+  -- Device-resident parameters: `W0` and `b0` — the WHOLE parameter set,
   -- since this graph is `(x, W0, b0, onehot) → (W0n, b0n)`.
   let nResident : USize := 2
   let pBytes := (d0 * d1 + d1) * 4
@@ -2917,16 +2856,14 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
         if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
-    -- ▶ `wilson95` here too. ⚠ Chapter 1's linear model is the ONE book trainer that does not
-    -- route through `VerifiedNet.train` — it keeps this bespoke entry point for the 2-argument
-    -- `linearTrainStepV` FFI — so adding the interval there missed it, and ch.1 was the only
-    -- chapter still printing a bare accuracy. Same placement rule as `VerifiedNet.train`: after
-    -- the percentage, because this print carries a trailing `(Nms)`.
+    -- `wilson95` here too. Chapter 1's linear model is the ONE book trainer that does not route
+    -- through `VerifiedNet.train` — it keeps this bespoke entry point for the 2-argument
+    -- `linearTrainStepV` FFI — so the interval there does not reach it. Same placement rule as
+    -- `VerifiedNet.train`: after the percentage, because this print carries a trailing `(Nms)`.
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
-  -- Gate G2 (`planning/archive/xla_pjrt_ladder.md` §3): dump the final parameters so the
-  -- IREE and XLA builds can be diffed tensor-for-tensor. Equal accuracy is a
-  -- summary statistic, not a tie — this is the actual comparison.
+  -- Gate G2: dump the final parameters so the IREE and XLA builds can be diffed tensor-for-tensor.
+  -- Equal accuracy is a summary statistic, not a tie — this is the actual comparison.
   match ← IO.getEnv "LEAN_MLIR_DUMP_PARAMS" with
   | some path =>
       -- `packed` and not `W0 ++ b0`: under residency the two slices are only
@@ -2957,9 +2894,9 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   let d1 := net.nClasses
   net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-column W / per-tensor x → E4M3 grid · fp32 accumulate"
-  -- ⭐ `mkSession` — the fp8 peer of `trainE4M3`/`trainAdamSchedE4M3` above, and IREE-only for
-  -- the same reason until 2026-08-25. ⚠ The other `compileVmfb` call sites left in this file are
-  -- the PGD / spectral / smoothing trainers, which are a separate (non-fp8) port.
+  -- `mkSession` — the fp8 peer of `trainE4M3`/`trainAdamSchedE4M3` above; see `trainE4M3` for
+  -- why. The other `compileVmfb` call sites are the PGD / spectral / smoothing trainers, which are
+  -- a separate (non-fp8) port.
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) ←
@@ -3027,12 +2964,10 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   net.printBlurb
   IO.println "  [fp8 E4M3] fp32 master · per-slot weight quant (dense per-col / conv per-channel) + per-tensor input · fp32 accumulate"
   IO.println "  note: depth>1 ⇒ intermediate activations & cotangents stay fp32 (inside the kernel); weights + input are E4M3"
-  -- ⭐ `mkSession`, not `compileVmfb` + `LowererSession.create`. The fp8 arms were the last
-  -- trainers still hardcoding a `.vmfb`, which made them IREE-ONLY: on XLA they printed the
-  -- "XLA/PJRT" banner and then died in `iree-compile`. Nothing about that was fp8-specific —
-  -- it is the same hardcoded-artifact bug class `planning/archive/demo_xla_port.md` §3 catalogues for
-  -- the demos. `mkSession` hands the `.mlir` straight to PJRT and keeps the IREE compile path
-  -- byte-identical, so both backends now serve the fp8 numerics.
+  -- `mkSession`, not `compileVmfb` + `LowererSession.create`: a hardcoded `.vmfb` makes a trainer
+  -- IREE-ONLY — on XLA it prints the "XLA/PJRT" banner and then dies in `iree-compile`. `mkSession`
+  -- hands the `.mlir` straight to PJRT and keeps the IREE compile path byte-identical, so both
+  -- backends serve the fp8 numerics.
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
@@ -3043,15 +2978,14 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
-  -- ⭐ The TRAIN STEP declares one more tensor than the forward when the graph emits a loss:
+  -- The TRAIN STEP declares one more tensor than the forward when the graph emits a loss:
   -- a rank-0 scalar after the params. Same construction as the fp32 `train` (see the `tsShapes`
-  -- line in that function) — this path passed plain `shapes` to both, so on the two nets with
-  -- `lossSlot := true` (`mlpVerified`, `cnnVerified`) it supplied N destinations for a graph
-  -- returning N+1 and the PJRT shim's G4 arity gate refused to run:
+  -- line in that function). Passing plain `shapes` to both supplies, on the two nets with
+  -- `lossSlot := true` (`mlpVerified`, `cnnVerified`), N destinations for a graph returning N+1,
+  -- and the PJRT shim's G4 arity gate refuses to run:
   --     G4 VIOLATION: @mlp_train_step returns 7 outputs, caller supplied 6
   --     G4 VIOLATION: @cnn_train_step returns 11 outputs, caller supplied 10
-  -- cifar8 leaves `lossSlot` false, which is the only reason the CIFAR fp8 arms ever ran.
-  -- ⚠ `shapes` (no loss slot) stays correct for `forwardF32` below — the eval graph returns
+  -- `shapes` (no loss slot) stays correct for `forwardF32` below — the eval graph returns
   -- logits only. The two must NOT be unified.
   -- The extra trailing float is never read back: `F32E4M3.addDelta` iterates `F32.size master`.
   let tsShapes := packShapes (if net.lossSlot then net.paramShapes ++ #[#[]] else net.paramShapes)
@@ -3111,8 +3045,8 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let hasBn := !net.bnChannels.isEmpty
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  -- ⭐ `mkSession` — see `trainE4M3` above for why these were IREE-only until 2026-08-25.
-  -- ⚠ Deliberately NOT adopting `trainAdamSched`'s per-variant forward resolution
+  -- `mkSession` — see `trainE4M3` above for why.
+  -- Deliberately NOT adopting `trainAdamSched`'s per-variant forward resolution
   -- (`<slug>_<variant>_fwd.mlir` with a `<slug>_fwd.mlir` fallback): that would change WHICH
   -- graph the fp8 arms evaluate against, which is a numerics change, not a backend port.
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
@@ -3153,13 +3087,12 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let mut bnFirst := true
   let totalSteps := (cfg.epochs * nb).toFloat
   let warmSteps := (warmupEpochs * nb).toFloat
-  -- ⚠⚠ Route through `ckptPathFor`, do NOT hand-build this. It read
+  -- Route through `ckptPathFor`, do NOT hand-build this. A hand-built
   --     s!".lake/build/{net.slug}_{variant}_e4m3_ckpt.bin"
-  -- which is distinct from the fp32 runs (the point) but ALSO ignores `$LEAN_MLIR_CKPT_TAG`
-  -- and the backend scoping that `ckptPathFor` applies. That silently broke an n=5 sweep on
-  -- 2026-08-25: every seed of the fp8 arm resolved to ONE file, so seeds 2-5 printed
-  -- "▸ resuming from fp8 checkpoint at epoch 40" and re-reported seed 1's result. The
-  -- `_e4m3` suffix moves into the variant, which keeps fp32 and fp8 apart AND gains the tag.
+  -- is distinct from the fp32 runs (the point) but ALSO ignores `$LEAN_MLIR_CKPT_TAG` and the
+  -- backend scoping that `ckptPathFor` applies: every seed of an n=5 fp8 sweep resolves to ONE
+  -- file, so seeds 2-5 resume from seed 1's checkpoint and re-report its result. The `_e4m3` suffix
+  -- goes into the variant, which keeps fp32 and fp8 apart AND gains the tag.
   let ckptPath ← net.ckptPathFor s!"{variant}_e4m3"
   let epPath := ckptPath ++ ".epoch"
   let mut startEpoch := 0
@@ -3182,7 +3115,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
       let gstep := (ep * nb + bi + 1).toFloat
       -- `expDecayRate = 1.0` ⇒ exactly constant, as in `trainAdamSched`: chapter 4's levers
       -- compare optimizers and precisions under ONE flat rate, because a schedule is a fourth
-      -- variable and this driver's peer had been supplying one silently.
+      -- variable.
       let lrt := if expDecayRate == 1.0 then baseLR
                  else if gstep ≤ warmSteps then baseLR * gstep / warmSteps
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
@@ -3218,19 +3151,18 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
       thetamv := F32.concat #[thetaMasterNew, mvPrime]
       if hasBn then
         let batchBn := out.extract ((3 * net.nParams + 3) * 4) ((3 * net.nParams + 3 + nBnStats) * 4)
-        -- ⚠ 0.01, NOT 0.1 — corrected 2026-08-04. `F32.ema` computes
-        -- `(1−m)·running + m·batch`, so this `m` is the weight on the NEW batch, and the
-        -- reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`, which updates
-        -- `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running stats
-        -- averaged ~10 batches against the reference's ~100 — 10× noisier. It is EVAL-ONLY,
-        -- so it depressed every reported top-1 without touching a single gradient, and it
-        -- bit hardest early, when the activation statistics are still moving fast.
-        -- ⚠ NO accumulation compensation here, and that is correct rather than an omission:
+        -- 0.01, NOT 0.1. `F32.ema` computes `(1−m)·running + m·batch`, so this `m` is the weight on
+        -- the NEW batch, and the reference's `momentum=0.99` (`_bn` in `jax/Jax/Codegen.lean`,
+        -- which updates `momentum*rm + (1−momentum)*bm`) is `m = 0.01` here. At 0.1 the running
+        -- stats would average ~10 batches against the reference's ~100 — 10× noisier. It is
+        -- EVAL-ONLY, so it would depress every reported top-1 without touching a single gradient,
+        -- and bite hardest early, when the activation statistics are still moving fast.
+        -- NO accumulation compensation here, and that is correct rather than an omission:
         -- this fp8 trainer has no `accK` — it does not implement gradient accumulation at all —
         -- so k = 1 and the compensated form `1 − d^(1/k)` is exactly `1 − d`. If an
         -- accumulation path is ever added here, copy `bnMom` from `trainAdamSched`.
-        -- ⚠ The decay is `cfg.bnMomentum` (2026-08-30), not a literal 0.99, and `none` is what
-        -- "no accumulation here" is spelled as — `bnEmaWeight`'s `none` arm keeps the historic
+        -- The decay is `cfg.bnMomentum`, not a literal 0.99, and `none` is what
+        -- "no accumulation here" is spelled as — `bnEmaWeight`'s `none` arm keeps the
         -- `0.01` double exactly.
         runningBnStats ← F32.ema runningBnStats batchBn
                            (if bnFirst then 1.0 else cfg.bnEmaWeight none)

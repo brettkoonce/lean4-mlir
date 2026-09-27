@@ -9,7 +9,7 @@ namespace JaxCodegen
     that turning a hard-coded literal into a `TrainConfig` knob leaves the emitted text
     byte-identical at the old default, which is what makes "this net did not change" a
     checkable claim about the generated file rather than an argument about semantics.
-    ⚠ Deliberately NOT applied to the other float emits (weight decay, label smoothing,
+    Deliberately NOT applied to the other float emits (weight decay, label smoothing,
     …) — those already ship as `0.020000` and rewriting them would churn every net. -/
 private def pyFloat (x : Float) : String :=
   let s := toString x
@@ -216,7 +216,7 @@ def _autoaugment(img):
     out = tf.switch_case(idx, branches)
     return tf.cast(out, tf.float32)"
 
-/-- C6's PIL-bicubic geometry (`TrainConfig.augBicubic`): emitted AFTER `autoAugmentPy`, so its
+/-- PIL-bicubic geometry (`TrainConfig.augBicubic`): emitted AFTER `autoAugmentPy`, so its
     `_aa_transform` / shear / translate ops replace the bilinear ones by name, and the op table's
     four shear/translate entries are re-pointed (the table captured the originals). Checked against PIL 12.2 on timm's
     own affine calls: worst mean |Δ| 0.094 / 255, max 1, over shear, translate and rotate at three
@@ -395,7 +395,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    images = ((images - mean) / std).reshape(count, -1)\n" ++
     "    return images, labels\n\n"
   | .detection =>
-    -- YOLOv1/detection is phase-3-only (see planning/archive/yolo_final.md).
+    -- YOLOv1/detection is phase-3-only.
     -- JAX codegen has no detection emit; stub for exhaustivity.
     "# detection is phase-3-only; phase 2 emits nothing for .detection.\n\n"
   | .imagenet =>
@@ -417,11 +417,10 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "import tensorflow_datasets as tfds\n\n" ++
     "_IMG_SIZE = 224\n" ++
     "_CROP_PADDING = 32\n" ++
-    -- ⭐ **ONE name for the eval crop ratio**, so nothing downstream has to know which of the two
-    -- ways it was configured. It used to be spelled inline in `_imagenet_decode_center_crop` as
-    -- either the literal `testCropRatio` or `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)`, and a consumer
-    -- that knew only the second branch read 0.875 off a trainer evaluating at 0.95 —
-    -- `jax/scripts/eval_preproc_ab.py`, on RSB-A3, the one net it mattered for.
+    -- **ONE name for the eval crop ratio**, so nothing downstream has to know which of the two
+    -- ways it was configured (the literal `testCropRatio` or
+    -- `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)`): a consumer that knows only the second branch reads
+    -- 0.875 off a trainer evaluating at 0.95.
     "_CROP_PCT = " ++
       (if cfg.testCropRatio > 0.0 then toString cfg.testCropRatio ++
          "   # explicit test crop ratio (timm resnet50.a1/a2/a3_in1k = 0.95)\n"
@@ -431,9 +430,9 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "_MEAN_RGB = tf.constant([0.485 * 255, 0.456 * 255, 0.406 * 255], dtype=tf.float32)\n" ++
     "_STD_RGB  = tf.constant([0.229 * 255, 0.224 * 255, 0.225 * 255], dtype=tf.float32)\n" ++
     -- $AUG_SEED: op-level seed for the random crop/flip. Unset -> None -> the stateful global RNG,
-    -- i.e. EXACTLY the behaviour every run before this existed, so the reference trainers are
-    -- untouched by default. Set (with tf.config.experimental.enable_op_determinism) it makes the
-    -- stream reproducible, which the batch shim needs and TF refuses to provide otherwise:
+    -- the reference trainers' default. Set (with tf.config.experimental.enable_op_determinism)
+    -- it makes the stream reproducible, which the batch shim needs and TF refuses to provide
+    -- otherwise:
     -- "sample_distorted_bounding_box requires a non-zero seed when determinism is enabled".
     -- Measured, not assumed: without this, two same-seed shim runs hash DIFFERENTLY.
     "_AUG_SEED = os.environ.get('AUG_SEED')\n" ++
@@ -459,11 +458,11 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    th, tw, _ = tf.unstack(bbox_size)\n" ++
     "    window = tf.stack([oy, ox, th, tw])\n" ++
     "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
-    -- ⚠⚠ `antialias=True` HERE TOO, and the training side is the half that costs a re-run.
-    -- timm's RandomResizedCrop resamples through PIL, which antialiases; ours did not. Matching
+    -- `antialias=True` HERE TOO, and the training side is the half that costs a re-run.
+    -- timm's RandomResizedCrop resamples through PIL, which antialiases. Matching
     -- eval alone would be worse than matching neither — the network partly fits the aliasing of
     -- the resampler it trained under, so the two sides have to move together.
-    -- ▶ Note this only bites on crops that DOWNSCALE to the train resolution. `antialias` is a
+    -- Note this only bites on crops that DOWNSCALE to the train resolution. `antialias` is a
     -- no-op when upsampling (measured: 0.3106 vs 0.3107 at 0.70×), and RandomResizedCrop's area
     -- range reaches down to 0.08, so a fair share of draws are upsamples where nothing changes.
     "    img = tf.image.resize([img], " ++
@@ -486,18 +485,18 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "    img = tf.clip_by_value(img, 0.0, 255.0)\n"
      else "") ++
     "    return img\n\n" ++
-    -- ⭐⭐ **timm's VALIDATION PROTOCOL, not the Google/TPU "Inception" one.** timm resizes the WHOLE
-    -- image so its shorter side is `img_size / crop_pct`, then centre-crops `img_size`; the older
-    -- form here cropped a centred square straight out of the JPEG and resized that. The field of
+    -- **timm's VALIDATION PROTOCOL, not the Google/TPU "Inception" one.** timm resizes the WHOLE
+    -- image so its shorter side is `img_size / crop_pct`, then centre-crops `img_size`; the
+    -- Inception form crops a centred square straight out of the JPEG and resizes that. The field of
     -- view is identical either way, so the ordering is worth 0.02–0.04 pt — but `antialias=True`
     -- is not: PIL antialiases when downscaling and TF's default does not, and on RSB-A3 that gap
     -- measured **0.90 pt** (77.15 → 76.25 on the same weights).
-    -- ⚠ `antialias=True` is what makes this PIL rather than merely PIL-shaped, and it is measured
+    -- `antialias=True` is what makes this PIL rather than merely PIL-shaped, and it is measured
     -- rather than asserted: TF bicubic with antialias tracks PIL bicubic at mean |Δ| ≈ 0.30/255,
     -- FLAT from 0.7× to 11.7× downscale. Without it the error grows with the ratio — 0.31 at 1.0×,
-    -- 2.54 at 3.9×, 13.73 at 11.7× — i.e. it was concentrated on the biggest images in the set.
-    -- ⚠ It costs a full `decode_jpeg` where the old form could `decode_and_crop_jpeg`, because the
-    -- resize now precedes the crop. Eval only, and eval is a small share of a run.
+    -- 2.54 at 3.9×, 13.73 at 11.7× — i.e. it concentrates on the biggest images in the set.
+    -- It costs a full `decode_jpeg` where the Inception form could `decode_and_crop_jpeg`, because
+    -- the resize precedes the crop. Eval only, and eval is a small share of a run.
     "def _imagenet_decode_center_crop(image_bytes):\n" ++
     "    img = tf.io.decode_jpeg(image_bytes, channels=3)\n" ++
     "    shape = tf.shape(img)\n" ++
@@ -512,7 +511,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    ox = (nw - _IMG_SIZE) // 2\n" ++
     "    return tf.image.crop_to_bounding_box(img, oy, ox, _IMG_SIZE, _IMG_SIZE)\n\n" ++
     (if cfg.randomErasing && cfg.erasingPixel then
-      -- C6: timm `RandomErasing(probability=p, mode='pixel', max_count=1)`, which runs on the
+      -- timm `RandomErasing(probability=p, mode='pixel', max_count=1)`, which runs on the
       -- normalised tensor as this does. timm draws up to 10 (area, aspect) pairs and erases the
       -- first box that fits strictly inside; here the 10 draws are made at once and the first
       -- fitting one taken, which is the same distribution. The box comes off THIS image's shape.
@@ -560,9 +559,9 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "                   data_dir=os.environ.get('TFDS_DATA_DIR'))\n" ++
     -- `shard` is (index, count), and it is INERT unless passed — the reference trainers never
     -- pass it, so their pipeline is unchanged. It exists for the batch shim, whose single process
-    -- tops out at ~1,530 img/s while a 4-replica ViT step wants ~1,940 (handoff §2k).
+    -- tops out at ~1,530 img/s while a 4-replica ViT step wants ~1,940.
     --
-    -- ⚠ It shards the RAW dataset, before `_pp`: the cost being parallelised is JPEG decode +
+    -- It shards the RAW dataset, before `_pp`: the cost being parallelised is JPEG decode +
     -- RandomResizedCrop, so a shard taken after the map would decode everything and discard
     -- (N-1)/N of it. `.shard` is also placed before `.shuffle`, so each worker shuffles only its
     -- own slice — the stream differs from the unsharded one by construction, which is why the
@@ -571,7 +570,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- It changes WHICH examples a worker emits, never HOW an image becomes a tensor: `_pp` below
     -- is the same code the reference consumes. That is the whole reason this is a parameter here
     -- instead of a second loader — a hand-written one would be a second definition of the
-    -- augmentation, i.e. §2a's double-writer disease applied to the data path.
+    -- augmentation, i.e. the double-writer disease applied to the data path.
     "    if shard is not None:\n" ++
     "        ds = ds.shard(num_shards=shard[1], index=shard[0])\n" ++
     "    def _pp(ex):\n" ++
@@ -607,15 +606,15 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
       "        ds = ds.shuffle(8192, seed=43, reshuffle_each_iteration=True)\n"
      else "") ++
     "    ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)\n" ++
-    -- ⚠⚠ `drop_remainder` is TRUE ON TRAIN AND FALSE ON VALIDATION, and the asymmetry is the
-    -- point (2026-08-14). On TRAIN it must stay: the train batch is baked into the graph
+    -- `drop_remainder` is TRUE ON TRAIN AND FALSE ON VALIDATION, and the asymmetry is the
+    -- point. On TRAIN it must stay: the train batch is baked into the graph
     -- (`%x: tensor<64x150528xf32>`), so a short final batch is a shape error, and the stream is
-    -- `.repeat()`ed anyway so nothing is lost. On VALIDATION it was silently discarding the tail —
-    -- 50,000 batched at 256 gives 195 full batches and **80 images thrown away**, so every top-1
-    -- this repo has quoted is over 49,920 rather than ImageNet's 50,000. timm's `validate.py`
-    -- scores all 50,000, and a number over a different denominator is not comparable to one that
-    -- does, however small the difference.
-    -- ⭐ It costs no MLIR: the driver zero-pads a short tail up to the eval graph's baked width
+    -- `.repeat()`ed anyway so nothing is lost. On VALIDATION it would silently discard the tail —
+    -- 50,000 batched at 256 gives 195 full batches and **80 images thrown away**, a top-1 over
+    -- 49,920 rather than ImageNet's 50,000. timm's `validate.py` scores all 50,000, and a number
+    -- over a different denominator is not comparable to one that does, however small the
+    -- difference.
+    -- It costs no MLIR: the driver zero-pads a short tail up to the eval graph's baked width
     -- (`F32.sliceImagesPad`) and scores only the real rows, so the forward still sees a full
     -- batch. See `VerifiedTrain.readShimBatchPartial`.
     "    ds = ds.batch(batch_size, drop_remainder=training)\n" ++
@@ -724,16 +723,16 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           b0 ++ (List.range (n-1)).flatMap (fun _ => [mid, mid, oc])
         | _ => [])).map toString
       -- BN running-stat momentum, from `TrainConfig.bnMomentum` (TF sense: the weight on
-      -- the OLD estimate). ⚠ It used to be a hard-coded 0.99 here, which is TF's
-      -- EfficientNet value and 10× the averaging window timm's PyTorch BN default gives
-      -- R50/R34 — see the field's docstring for the per-net table.
+      -- the OLD estimate). 0.99 is TF's EfficientNet value and 10× the averaging window
+      -- timm's PyTorch BN default gives R50/R34 — see the field's docstring for the per-net
+      -- table.
       -- With gradient accumulation, `_bn` runs K× per optimizer step (once per micro-batch
       -- inside the accum scan), so a naive per-micro `d` would decay the running stats ~K×
       -- too fast (≈d^K/step) and bias the eval-time stats. Compensate: per-micro momentum =
       -- d^(1/K) so the K chained updates compose to ≈ one d/step update (matching a true
       -- single-forward bsN). Normalization batch stats stay per-micro (Ghost-BN).
-      -- K≤1 at the 0.99 default keeps the exact "0.99" literal → byte-identical to prior
-      -- codegen (`pyFloat` trims `toString`'s "0.990000" back to "0.99").
+      -- K≤1 at the 0.99 default keeps the exact "0.99" literal (`pyFloat` trims `toString`'s
+      -- "0.990000" back to "0.99").
       let bnDecayStr := pyFloat cfg.bnMomentum
       let bnMomStr := if cfg.gradAccumSteps > 1
                       then pyFloat (Float.exp ((1.0 / cfg.gradAccumSteps.toFloat) * Float.log cfg.bnMomentum))
@@ -785,32 +784,25 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    return x * gamma.reshape(1, -1, 1, 1) + beta.reshape(1, -1, 1, 1)\n\n"
-  -- ⭐⭐ **`_drop_branch` — ONE DEFINITION OF STOCHASTIC DEPTH FOR THE WHOLE FILE** (2026-08-27).
-  -- It used to live inside the `hasTransformer` block, and every CONVOLUTIONAL block emitter
-  -- inlined its own copy — a copy that drew a **SCALAR** bernoulli shared by the entire batch:
+  -- **`_drop_branch` — ONE DEFINITION OF STOCHASTIC DEPTH FOR THE WHOLE FILE.** The transformer
+  -- and CONVOLUTIONAL block emitters all call it. A per-emitter copy that draws a **SCALAR**
+  -- bernoulli shared by the entire batch:
   --
-  --     keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)   # ⛔ no shape argument
+  --     keep = jax.random.bernoulli(drop_key, keep_prob).astype(out.dtype)   # no shape argument
   --
-  -- ⚠⚠ **THAT IS NOT WHAT STOCHASTIC DEPTH IS, and timm is where the answer comes from.**
+  -- **IS NOT WHAT STOCHASTIC DEPTH IS, and timm is where the answer comes from.**
   -- `timm.layers.drop_path` (1.0.28, the pinned spec) is explicit in its own docstring — *"Drop
   -- paths (Stochastic Depth) **per sample**"* — and takes the mask at
   -- `shape = (x.shape[0],) + (1,) * (x.ndim - 1)`. A scalar draw drops the branch for the whole
   -- batch or for none of it: same expectation, a far coarser and lower-variance regulariser, and
   -- not the function the recipe names.
   --
-  -- ⚠ It went unnoticed because it is invisible to everything except a run: the graph type-checks,
-  -- the expectation is right, eval is identity either way, and no gate compares two Bernoulli
-  -- streams. `planning/archive/stochastic_depth.md` quotes the per-example form as *the* reference and
-  -- builds `dropPathB` / `F32.dropScales` / the per-example shard rule around it, so **every
-  -- verified `*drop*` render in the tree was already right and it was this side that was wrong** —
-  -- 26 committed `convnext*`/`efficientnet*` artifacts with no correct oracle
-  -- (`planning/archive/verified_side_quest_counterparts.md` §6b).
+  -- A scalar draw is invisible to everything except a run: the graph type-checks, the expectation
+  -- is right, eval is identity either way, and no gate compares two Bernoulli streams. The
+  -- verified side's `dropPathB` / `F32.dropScales` / per-example shard rule are built around the
+  -- per-example form, so this is the oracle for every verified `*drop*` render.
   --
-  -- ⭐ Nothing MEASURED changes: `dropPath > 0` appears in ImageNet-tier configs only, every
-  -- Imagenette config sets none, R50's A3 reference sets 0.0, and MNv4-Conv-M's 75.51% ran
-  -- `default`. The defect was entirely latent.
-  --
-  -- ▶ Emitted unconditionally rather than under a `dropPath > 0` guard, because `transformer_block`
+  -- Emitted unconditionally rather than under a `dropPath > 0` guard, because `transformer_block`
   -- calls it on every path and relies on its `keep_prob >= 1.0` early return to be the identity.
   code := code ++
     "def _drop_branch(branch, drop_key, keep_prob):\n" ++
@@ -972,7 +964,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    if use_skip:\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n"
-  -- ⚠ `convBnAct` also needs these helpers, and it can be set on a net with no MBConv layer at
+  -- `convBnAct` also needs these helpers, and it can be set on a net with no MBConv layer at
   -- all — without this the emitted module calls `swish` / `hard_swish` that were never defined.
   if spec.hasMbConv || spec.convBnAct == .swish || spec.convBnAct == .hSwish
      || spec.layers.any fun | .mbConvV3 .. => true | _ => false then
@@ -1276,11 +1268,11 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     code := code ++
       "def global_avg_pool(x):\n" ++
       "    return jnp.mean(x, axis=(2, 3))\n\n"
-  -- ▶ The BARE `[B, D]` LayerNorm (2026-08-30, §7.1) — ConvNeXt's `GAP → LN → Linear` head.
-  -- ⚠⚠ eps is **1e-6, not 1e-5**, and the two are different nets. 1e-6 is `channel_layer_norm`'s
+  -- The BARE `[B, D]` LayerNorm — ConvNeXt's `GAP → LN → Linear` head.
+  -- eps is **1e-6, not 1e-5**, and the two are different nets. 1e-6 is `channel_layer_norm`'s
   -- value above, `ConvNeXtRender.cEPS`, and the paper's (`nn.LayerNorm(dims[-1], eps=1e-6)`);
   -- 1e-5 is what `layer_norm` below uses for the transformer nets. Reusing `layer_norm` here
-  -- would have compiled, trained and descended at the wrong epsilon on one of the two paths —
+  -- would compile, train and descend at the wrong epsilon on one of the two paths —
   -- and only on one, since the render is pinned at 1e-6.
   if spec.layers.any (fun | .layerNorm _ => true | _ => false) then
     code := code ++
@@ -1306,8 +1298,8 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    attn = jax.nn.softmax(mm(q, k.transpose(0, 1, 3, 2)) / scale, axis=-1)\n" ++
       "    out = mm(attn, v).transpose(0, 2, 1, 3).reshape(B, N, D)\n" ++
       "    return mm(out, wo.T) + bo\n\n" ++
-      -- ▶ `_drop_branch` is no longer emitted here: it is ONE definition for the whole file now,
-      -- hoisted above `basic_block` so the convolutional emitters can call it too. See its note.
+      -- `_drop_branch` is ONE definition for the whole file, emitted above `basic_block` so the
+      -- convolutional emitters can call it too. See its note.
       "def transformer_block(params, x, idx, n_heads, drop_key=None, keep_prob=1.0):\n" ++
       "    # DeiT stochastic depth: each of the two residual branches (attention,\n" ++
       "    # MLP) drops independently, so split one sub-key per branch.\n" ++
@@ -1484,7 +1476,7 @@ private def emitDenseInit (comment : String) (fanIn fanOut : Nat) : String :=
 -- ConvNeXt's own `_init_weights`: every Conv2d gets trunc_normal_(std=.02),
 -- bias zeroed — same form as `emitDenseInitTimm`, and for the same reason the
 -- truncation is a no-op at this std (the ±2 bounds are absolute, i.e. ±100σ).
--- ⚠ Selected by `cfg.cnxInit` ONLY. The ResNet/MobileNet/EfficientNet convs go
+-- Selected by `cfg.cnxInit` ONLY. The ResNet/MobileNet/EfficientNet convs go
 -- through `emitConvBnInit`, which is already at timm's `sqrt(2/fan_out)` scale;
 -- routing them here would be a regression. See `TrainConfig.cnxInit`.
 private def emitConvBiasInitTimm (comment : String) (oc ic kh kw : Nat) : String :=
@@ -1531,15 +1523,15 @@ private def emitLayerScaleToBuf (comment : String) : String :=
 
 private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
   -- The ConvNeXt conv-with-bias sites, routed once here rather than at each of
-  -- the five call sites below — a per-site `if` is how the three ConvNeXt param
-  -- groups (init / load / save) drifted apart before.
+  -- the five call sites below — a per-site `if` lets the three ConvNeXt param
+  -- groups (init / load / save) drift apart.
   let convBiasInit := if cfg.cnxInit then emitConvBiasInitTimm else emitConvBiasInit
   let mut code :=
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
     "#  Model (from Lean spec)\n" ++
     "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
     "def init_params(key):\n" ++
-    -- ⚠ The `vitInit` branch deliberately keeps the generic docstring: changing it would
+    -- The `vitInit` branch deliberately keeps the generic docstring: changing it would
     -- alter the emitted bytes of `generated_vit_tiny_imagenet.py`, the trainer behind the
     -- book's ViT-Ti reference, and byte-identity on regeneration is the cheap check that it
     -- is reproducible.
@@ -1578,13 +1570,13 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
       -- Under cfg.vitInit the classifier head is an nn.Linear like any other,
       -- so timm gives it trunc_normal(0.02) too; ConvNeXt's `_init_weights`
       -- says the same for its head, hence cfg.cnxInit here as well.
-      -- ⚠ The OTHER convnet heads keep the Xavier form, and that is a KNOWN GAP
+      -- The OTHER convnet heads keep the Xavier form, and that is a KNOWN GAP
       -- rather than a decision: torchvision's `nn.Linear` default is
       -- U(±1/sqrt(fan_in)), so R50's 2048→1000 head is emitted at 0.0444
       -- against 0.0221 — 2× too wide, on every ResNet/MobileNet/EfficientNet.
       -- Fixing it moves the training distribution for nets that have LANDED
       -- numbers (R50 78.26/77.91/77.07, R34 74.16), so it needs its own A/B
-      -- and its own re-run, not a silent ride-along with this change.
+      -- and its own re-run, not a silent ride-along.
       if cfg.vitInit || cfg.cnxInit then
         code := code ++ emitDenseInitTimm s!"Dense {fi}→{fo} (head)" fi fo
       else
@@ -1680,7 +1672,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
         if useSE then
           -- Canonical EfficientNet SE: squeeze relative to the block INPUT
           -- channels (blockIc//4), not the 6×-larger expanded mid. mid/4
-          -- inflated B0 to 8.4M params; blockIc/4 gives the faithful ~5.3M.
+          -- would inflate B0 to 8.4M params; blockIc/4 gives the faithful ~5.3M.
           let seMid := Nat.max 1 (blockIc / 4)
           code := code ++
             "    # SE down " ++ toString mid ++ "→" ++ toString seMid ++ "\n" ++
@@ -2030,7 +2022,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
 -- `params` list, and writes the constituent tensors as float32 bytes. The
 -- on-disk byte order matches LeanMlir.SpecHelpers.paramShapes exactly, so a
 -- file written here drops into the phase-3 Lean trainer's `bootstrapBackbone`
--- prefix-loader without conversion. See planning/archive/yolo_final.md Phase 4.
+-- prefix-loader without conversion.
 private def emitParamsToFile (spec : NetSpec) : String := Id.run do
   let mut code := "def params_to_file(params, path):\n"
   code := code ++ "    \"\"\"Mirror of init_params_from_file. Walks the JAX `params`\n"
@@ -2111,10 +2103,9 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
         if bi == 0 && needsProj then
           code := code ++ emitConvBnToBuf s!"bneck[{bi}] proj {ic}→{oc}"
     -- The three MobileNet-V3/V4 block families below mirror their loader cases
-    -- exactly (same order, same tuples). They were missing until 2026-07-30,
-    -- which made `params_to_file` raise for every MNv3/EfficientNetV2/MNv4 net —
-    -- i.e. those trainers could train but could not write a single .bin
-    -- checkpoint, crashing at the first save.
+    -- exactly (same order, same tuples). Without them `params_to_file` raises for
+    -- every MNv3/EfficientNetV2/MNv4 net — those trainers would train but crash at
+    -- the first checkpoint save.
     | .mbConvV3 ic oc expandCh kSize _stride useSE _useHSwish =>
       let mid := expandCh
       if expandCh != ic then
@@ -2234,8 +2225,8 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       | _ => pure ()
     match l with
     | .conv2d _ _ _ pad act =>
-      -- ⚠ `.same` under `.symmetric` emits NO padding argument, so `conv2d`'s own
-      -- torchvision `(k-1)//2` default applies. Passing `'SAME'` here is what overrode that
+      -- `.same` under `.symmetric` emits NO padding argument, so `conv2d`'s own
+      -- torchvision `(k-1)//2` default applies. Passing `'SAME'` here would override that
       -- default at the ResNet stem. See `NetSpec.convPadStyle`.
       let padArg := match pad, spec.convPadStyle with
         | .same,  .symmetric => ""
@@ -2247,10 +2238,10 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       if act == .relu6 then code := code ++ "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
       pidx := pidx + 1
     | .convBn _ _ _ s pad =>
-      -- ⚠ `.same` under `.symmetric` emits NO `padding=` argument, so `conv_bn`'s own
+      -- `.same` under `.symmetric` emits NO `padding=` argument, so `conv_bn`'s own
       -- torchvision `(k-1)//2` default applies — one statement of the convention, not two.
-      -- The explicit `padding='SAME'` this replaces is what silently made the ResNet
-      -- references XLA-padded at their 7×7/s2 stem. See `NetSpec.convPadStyle`.
+      -- An explicit `padding='SAME'` here would silently make the ResNet references
+      -- XLA-padded at their 7×7/s2 stem. See `NetSpec.convPadStyle`.
       let padArg := match pad, spec.convPadStyle with
         | .same,  .symmetric => ""
         | .same,  .xlaSame   => ", padding='SAME'"
@@ -2268,8 +2259,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         code := code ++ "    x = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
           toString pidx ++ "][1], params[" ++ toString pidx ++ "][2]" ++
           strideStr ++ padArg ++ ")\n"
-      -- ⚠ Was an unconditional `jax.nn.relu(x)`, which made this emitter the reason MobileNetV2's
-      -- reference was ReLU where the net is ReLU6, and EfficientNet's was ReLU where the net is
+      -- Not an unconditional `jax.nn.relu(x)`: MobileNetV2's net is ReLU6 and EfficientNet's is
       -- swish. See `NetSpec.convBnAct`.
       code := code ++ (match spec.convBnAct with
         | .relu     => "    x = jax.nn.relu(x)\n"
@@ -2723,19 +2713,20 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      else "        r = mi / (jnp.sqrt(vi) + EPS)\n") ++
     "        wn = jnp.sqrt(jnp.sum(p * p)); rn = jnp.sqrt(jnp.sum(r * r))\n" ++
     "        trust = jnp.where(wn > 0, jnp.where(rn > 0, wn / rn, 1.0), 1.0)\n" ++
-    -- ⭐⭐ **timm GUARDS LAYER ADAPTATION BY THE WEIGHT-DECAY GROUP** — `Lamb.step` reads
+    -- **timm GUARDS LAYER ADAPTATION BY THE WEIGHT-DECAY GROUP** — `Lamb.step` reads
     -- `if weight_decay != 0 or group['always_adapt']:` and otherwise leaves `trust = 1`. So the
     -- `no_weight_decay` group (BN γ/β, biases) takes a PLAIN ADAM step in the reference, and
     -- applying the ratio to it is a one-sided error: those tensors are zero-initialised, so ‖p‖
     -- starts tiny while ‖r‖ ≈ √C, and trust collapses to ~0.01–0.1 against timm's 1.0. **BN β and
     -- the biases are under-trained by one to two orders of magnitude early in training.**
-    -- ⚠ The zero-norm guard above does NOT cover this. It fires only at ‖p‖ = 0 exactly, i.e. step
+    -- The zero-norm guard above does NOT cover this. It fires only at ‖p‖ = 0 exactly, i.e. step
     -- one; from step two on the parameter is small-but-nonzero and the ratio bites. That is why a
-    -- `lambTrust 0 rn2 = 1` theorem can hold on both sides while this stays wrong on both.
-    -- ⚠ `WD_MASK` is the same partition timm's group is (1 where decayed, 0 where excluded), so
+    -- `lambTrust 0 rn2 = 1` theorem can hold on both sides while an unguarded ratio is wrong on
+    -- both.
+    -- `WD_MASK` is the same partition timm's group is (1 where decayed, 0 where excluded), so
     -- reusing it reproduces the reference's semantics exactly rather than approximating them.
-    -- ▶ Scoped to `wdExclude`: with no skip-list every parameter IS decayed, so timm adapts all of
-    -- them and the unguarded ratio is already correct. `recipe_fidelity_diffs.md` D2.
+    -- Scoped to `wdExclude`: with no skip-list every parameter IS decayed, so timm adapts all of
+    -- them and the unguarded ratio is already correct.
     (if wdExclude then
       "        trust = jnp.where(msk > 0, trust, 1.0)   # timm: no_weight_decay group is NOT adapted\n"
      else "") ++
@@ -2815,23 +2806,22 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    d = jnp.minimum(EMA_DECAY, (1.0 + step) / (10.0 + step))\n" ++
     "    return jax.tree.map(lambda e, p: d * e + (1.0 - d) * p, ema, params)\n\n"
    else "") ++
-  -- ⭐⭐ LABEL SMOOTHING BELONGS ON THE ONE-HOT, and it lives here in ONE place because both
+  -- LABEL SMOOTHING BELONGS ON THE ONE-HOT, and it lives here in ONE place because both
   --    `_mixup` and `_cutmix` need it and a second copy is how they drift apart.
   --
-  -- ⛔ It used to be missing entirely, and the shape of the defect is worth keeping. timm's
-  --    `Mixup(label_smoothing=s)` builds its one-hot with `on = 1−s+s/K, off = s/K` and mixes
-  --    the SMOOTHED rows; we built a raw one-hot, mixed that, and then `loss_fn` smoothed only
-  --    its `y.ndim == 1` branch — the mixed target is rank-2 and fell to `tgt = y`, a
-  --    pass-through. Mixup or CutMix fires EVERY step for ViT-Ti/S/B and ConvNeXt-T/S/B, so all
-  --    six trained at an effective **ls = 0.0** while config, banner and ledger said 0.1.
+  -- timm's `Mixup(label_smoothing=s)` builds its one-hot with `on = 1−s+s/K, off = s/K` and
+  --    mixes the SMOOTHED rows. `loss_fn` smooths only its `y.ndim == 1` branch — a mixed
+  --    target is rank-2 and falls to `tgt = y`, a pass-through — so mixing a raw one-hot here
+  --    would train at an effective **ls = 0.0**. Mixup or CutMix fires EVERY step for
+  --    ViT-Ti/S/B and ConvNeXt-T/S/B.
   --
-  -- ⚠ THE FIX IS HERE AND NOT IN `loss_fn`. The soft-target branch must stay a pass-through:
+  -- THE SMOOTHING IS HERE AND NOT IN `loss_fn`. The soft-target branch must stay a pass-through:
   --    the verified path's shim hands the graph a rank-2 target too, and smoothing both here
   --    and there would double-smooth. Smoothing and mixing COMMUTE — both are convex
   --    combinations of rows summing to 1 — so `(λ·oh₁+(1−λ)·oh₂)(1−s)+s/K` either way; this is
   --    simply where timm puts it.
   --
-  -- ⚠ At `labelSmoothing = 0` this is the bare `one_hot` character for character, so RSB-A2/A1
+  -- At `labelSmoothing = 0` this is the bare `one_hot` character for character, so RSB-A2/A1
   --    (BCE over soft labels, `labelSmoothing := 0.0` by recipe) regenerate byte-identically.
   --    The spelling deliberately mirrors `loss_fn`'s hard-label branch above.
   let softOneHot :=
@@ -2901,28 +2891,25 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    return correct1, correct5, loss\n\n" ++
   "def evaluate(params, images, labels, batch_size=512):\n" ++
   "    batch_size = (batch_size // n_devices) * n_devices or n_devices\n" ++
-  -- ⚠⚠ TWO EVAL DEFECTS, both invisible in the reported number and both fixed here.
+  -- TWO EVAL HAZARDS, both invisible in the reported number and both handled here.
   --
   -- (1) THE VAL SET IS SORTED BY CLASS. With BATCH-norm eval (`runningBN := false`) each 512-image
   --     batch then sees only 2-3 classes, so BN normalises with near-single-class statistics and
   --     the discriminative signal is destroyed. Measured on Imagenette: mnv2 epoch-10 val goes
-  --     29.91% sorted -> 70.15% shuffled, same weights and recipe. It is why mnv2 and enet BOTH
-  --     plateaued at ~36% — two different architectures reporting the same number, because the
-  --     number was an eval artifact rather than a property of either net.
+  --     29.91% sorted -> 70.15% shuffled, same weights and recipe.
   --     The permutation is SEEDED, so eval stays deterministic and run-to-run comparable.
   --
-  -- (2) THE REMAINDER WAS DROPPED (`len(images) - batch_size + 1`). Not a rounding detail on a
-  --     sorted set: Imagenette val is 3925, so 341 images were skipped and ALL 341 are class 9 —
-  --     390 exist, 49 were ever evaluated. Every published Imagenette number was computed against
-  --     a val set missing 87% of one class. The last batch is now evaluated ragged, and
-  --     `evaluated` counts what was actually seen.
+  -- (2) THE REMAINDER MUST NOT BE DROPPED (`len(images) - batch_size + 1`). Not a rounding detail
+  --     on a sorted set: Imagenette val is 3925, so dropping it skips 341 images, ALL of class 9 —
+  --     only 49 of its 390 would be evaluated. The last batch is evaluated, and `evaluated` counts
+  --     what was actually seen.
   "    _p = np.random.default_rng(12345).permutation(len(labels))\n" ++
   "    images, labels = images[_p], labels[_p]\n" ++
   "    correct1 = 0\n" ++
   "    correct5 = 0\n" ++
   "    total_loss = 0.0\n" ++
   "    n_batches = 0\n" ++
-  -- ⚠ The tail batch is PADDED up to `batch_size` (by repeating earlier rows) rather than run
+  -- The tail batch is PADDED up to `batch_size` (by repeating earlier rows) rather than run
   -- ragged: `eval_batch` is `@jit` + sharded, so a short batch both retraces and can fail the
   -- `n_devices` divisibility the sharding needs. Only the first `take` rows of its result are
   -- counted, so the padding cannot contribute to the score.
@@ -3548,10 +3535,9 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
     RandomResizedCrop (area 8-100%, aspect 3/4-4/3, bicubic), horizontal flip, and ImageNet mean/std
     normalization. If the verified path got its own copy of that, there would be two definitions of
     "how an ImageNet image becomes a tensor" — agreeing today, drifting the first time one is tuned.
-    That is exactly the double-writer disease §2a spent a thread eradicating for MLIR artifacts
-    (`resnet34_train_step` flipped md5 between two writers computing genuinely different functions).
-    So this reuses `emitDataLoading .imagenet cfg` **verbatim**, from the same `TrainConfig` the
-    reference trainer is generated from: one writer, and it cannot drift by construction.
+    That is exactly the double-writer disease. So this reuses `emitDataLoading .imagenet cfg`
+    **verbatim**, from the same `TrainConfig` the reference trainer is generated from: one writer,
+    and it cannot drift by construction.
 
     Consequence worth stating: turning on RandAugment / AutoAugment / random-erasing in the config
     moves BOTH paths at once, for free. The verified side owns no augmentation code at all.
@@ -3596,7 +3582,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
   "import os, sys, hashlib\n" ++
   "import numpy as np\n\n" ++
-  -- ⚠ ORDER MATTERS: the preprocessing block below reads `_AUG_SEED` from the environment at
+  -- ORDER MATTERS: the preprocessing block below reads `_AUG_SEED` from the environment at
   -- MODULE level, so the default has to be installed before it is imported, not inside `_main`.
   "_SHIM_SEED = int(os.environ.get('SHIM_SEED', '0'))\n" ++
   "os.environ.setdefault('AUG_SEED', str(_SHIM_SEED + 1))  # non-zero: TF rejects 0 under determinism\n\n" ++
@@ -3653,19 +3639,18 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        tf.config.experimental.enable_op_determinism()\n" ++
   "    tf.random.set_seed(seed)\n" ++
   -- SHIM_SHARD='i/N' streams only shard i of N. The transform is untouched; only which examples
-  -- this process emits changes. Measured 2026-08-01 (bs128, marginal): 1 process 1,527 img/s,
+  -- this process emits changes. Measured (bs128, marginal): 1 process 1,527 img/s,
   -- 2 processes 1.71x, 4 processes 2.36x on a 32-core box — so two clear the ~1,940 img/s a
   -- 4-replica ViT step wants, and no C loader is needed.
   --
-  -- ⚠⚠ **DO NOT SIZE `SHIM_WORKERS` OFF THIS ROW — OR OFF ANY ISOLATED PRODUCER NUMBER.** Re-measured
-  -- 2026-08-11, same box, same units (bs128, marginal, SHIM_HASH): the generated ViT shim produced
+  -- **DO NOT SIZE `SHIM_WORKERS` OFF THIS ROW — OR OFF ANY ISOLATED PRODUCER NUMBER.** Measured on
+  -- the same box, same units (bs128, marginal, SHIM_HASH): the generated ViT shim produces
   -- **120 img/s**, 13x under this row, because `enable_op_determinism` above serializes the map;
-  -- with it off, **639 img/s**. Neither number predicts the step time. The ViT job sat at 567
-  -- ms/step against a 249 ms floor at BOTH producer speeds, because the consumer drained one handle
-  -- at a time and the rest slept in `write()`. What fixed it was depth-n prefetch in
-  -- `LeanMlir/Verified/Train.lean` (567 -> 287 ms/step, 1.98x) — a consumer change, with the
-  -- producers untouched.
-  -- ▶ This row measures CAPACITY. The step is set by whether the consumer lets that capacity run.
+  -- with it off, **639 img/s**. Neither number predicts the step time. A consumer that drains one
+  -- handle at a time holds the ViT job at 567 ms/step against a 249 ms floor at BOTH producer
+  -- speeds, the rest sleeping in `write()`; depth-n prefetch in `LeanMlir/Verified/Train.lean`
+  -- takes it to 287 ms/step (1.98x) — a consumer change, with the producers untouched.
+  -- This row measures CAPACITY. The step is set by whether the consumer lets that capacity run.
   "    shard = None\n" ++
   "    _sh = os.environ.get('SHIM_SHARD')\n" ++
   "    if _sh:\n" ++
@@ -3673,7 +3658,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        shard = (int(_i), int(_n))\n" ++
   "        if not (0 <= shard[0] < shard[1]):\n" ++
   "            raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)\n" ++
-  -- ⭐ VAL-ONLY BATCH-BLOCK SHARDING (2026-09-22, planning/streaming_val.md §3.1). `ds.shard` above
+  -- VAL-ONLY BATCH-BLOCK SHARDING. `ds.shard` above
   -- is ELEMENT-level — producer i emits elements i, i+N, i+2N, … — which is fine for train (shuffled
   -- anyway) and wrong for val: the trainer reads its producers round-robin BY BATCH, and every
   -- per-image bitmap (`LEAN_MLIR_DUMP_CORRECT`, McNemar, the eval gates) is in the one-producer
@@ -3683,8 +3668,8 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- lands on producer 195 % N). Every producer reads all 6.3 GiB of raw records (cheap from cache)
   -- and decodes only its 1/N, since the filter sits before `_pp`.
   --
-  -- ⚠⚠ NOT absolute-index slices (`validation[0:256]+validation[512:768]+…`). That was the first
-  -- cut, and `scripts/gates/streamed_val_gate.sh` refused it: same 50,000 images, same count, same top-5,
+  -- NOT absolute-index slices (`validation[0:256]+validation[512:768]+…`):
+  -- `scripts/gates/streamed_val_gate.sh` refuses them — same 50,000 images, same count, same top-5,
   -- 2,018 bitmap positions moved. tfds reads a split as an INTERLEAVE of its shard files (cycle
   -- length 16), so the order it yields — the order every bitmap is in — is not index order, and
   -- an index slice reproduces the set but not the sequence. Only walking the same stream does.
@@ -3701,22 +3686,22 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "                      .map(lambda _, ex: ex))\n" ++
   "        tfds.load = _load_val_blocks\n" ++
   "        shard = None\n" ++
-  -- ▶ timm's TEST protocol (`VerifiedNet.scoreCheckpoint` under `LEAN_MLIR_EVAL_SIZE`): the val split at a
-  --   size / crop other than the recipe's — MNv4-Conv-M r224 is scored at 256 / 1.0, ConvNeXt-T at
-  --   288 / 1.0 (jax/timm_eval_protocols.json). The centre crop and `flat` below read `_IMG_SIZE` /
+  -- timm's TEST protocol (`VerifiedNet.scoreCheckpoint` under `LEAN_MLIR_EVAL_SIZE`): the val
+  --   split at a size / crop other than the recipe's — MNv4-Conv-M r224 is scored at 256 / 1.0,
+  --   ConvNeXt-T at 288 / 1.0 (jax/timm_eval_protocols.json). The centre crop and `flat` below read `_IMG_SIZE` /
   --   `_CROP_PCT` as module globals, so rebinding them re-targets the SAME preprocessing. Inert
   --   unless `SHIM_EVAL_SIZE` is set, and never on the train split.
   "    if not training and os.environ.get('SHIM_EVAL_SIZE'):\n" ++
   "        globals()['_IMG_SIZE'] = int(os.environ['SHIM_EVAL_SIZE'])\n" ++
   "        globals()['_CROP_PCT'] = float(os.environ.get('SHIM_EVAL_CROP', globals().get('_CROP_PCT', 0.875)))\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
-  -- ⚠⚠ `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
+  -- `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
   -- splits. The dataset above already resizes train to `_TRAIN_SIZE` and eval to `_IMG_SIZE`
-  -- (RSB-A3's 160/224 split), but this line hardcoded `_IMG_SIZE` and so framed a 160 batch as
-  -- though it were 224: measured 2026-08-06 as `cannot reshape array of size 4915200 into shape
-  -- (64,3,224,224)` — 4,915,200 = 64 × 3 × 160², i.e. REAL 160 data described with the wrong
-  -- width — and then a short read, "pipe closed after 19660800 of 38535168 bytes".
-  -- ▶ The non-`trainRes` branch is left BYTE-IDENTICAL on purpose: every other net's shim, and the
+  -- (RSB-A3's 160/224 split), so hardcoding `_IMG_SIZE` here frames a 160 batch as though it
+  -- were 224: `cannot reshape array of size 4915200 into shape (64,3,224,224)` — 4,915,200 =
+  -- 64 × 3 × 160², i.e. REAL 160 data described with the wrong width — and then a short read,
+  -- "pipe closed after 19660800 of 38535168 bytes".
+  -- The non-`trainRes` branch is left BYTE-IDENTICAL on purpose: every other net's shim, and the
   -- committed SHIM_HASH digests, must not move for a change that cannot affect them.
   (if cfg.trainRes > 0 then
     "    _RES = _TRAIN_SIZE if training else _IMG_SIZE\n" ++
@@ -3731,7 +3716,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   --    Unset (the default) emits wire v1 byte-for-byte, which is what keeps every existing run
   --    and the committed SHIM_HASH digest valid.
   --
-  --    ⚠ What v2 carries today is a plain ONE-HOT — the same information as v1, in the shape the
+  --    What v2 carries today is a plain ONE-HOT — the same information as v1, in the shape the
   --    graph already consumes (`%onehot : [batch, nClasses]`). That is deliberate: it makes the
   --    transport gateable on its own, because a one-hot sent as a soft target must train
   --    BIT-IDENTICALLY to the hard-label path. Mixup/CutMix are what put something interesting in
@@ -3745,17 +3730,17 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        ok = (yi >= 0) & (yi < nclasses)\n" ++
   "        t[np.arange(yi.shape[0])[ok], yi[ok]] = 1.0\n" ++
   "        return np.ascontiguousarray(t, dtype=np.float32)\n" ++
-  -- ── MIXUP / CUTMIX — the PRODUCER half of wire v2 (`recipe_gaps.md` v1.3).
+  -- ── MIXUP / CUTMIX — the PRODUCER half of wire v2.
   --
-  -- ⚠⚠ THIS IS THE ONE PLACE A SECOND DEFINITION IS UNAVOIDABLE, and the doc says so rather than
+  -- THIS IS THE ONE PLACE A SECOND DEFINITION IS UNAVOIDABLE, and the doc says so rather than
   --    pretending otherwise. Everything else the shim does is `emitDataLoading` reused VERBATIM,
-  --    so it cannot drift from the reference by construction (§2k). Mixing cannot be: the
+  --    so it cannot drift from the reference by construction. Mixing cannot be: the
   --    reference applies `_mixup`/`_cutmix` inside the jitted TRAIN STEP with `jax.random`, not in
   --    `tf.data`, so there is nothing to reuse and this is a genuinely new copy of the rule.
   --    The alternative — no mixup on the verified path — is worse. What follows is a
   --    line-for-line transcription of `_mixup`/`_cutmix` above; keep them side by side.
   --
-  -- ⚠ AND THE λ STREAM IS NOT THE REFERENCE'S, WHICH IS A FACT ABOUT WHAT A PAIRED RUN MEANS.
+  -- AND THE λ STREAM IS NOT THE REFERENCE'S, WHICH IS A FACT ABOUT WHAT A PAIRED RUN MEANS.
   --    The reference draws from `jax.random.beta(fold_in(PRNGKey(seed), step), α, α)`; this draws
   --    from numpy's Generator. Both are Beta(α,α); they are not the same NUMBERS and no seeding
   --    makes them so. So a verified-vs-JAX pair under mixup agrees in DISTRIBUTION, not per step —
@@ -3770,15 +3755,15 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    _CUT_A = float(os.environ.get('SHIM_CUTMIX_ALPHA', '" ++ toString cfg.cutmixAlpha ++ "'))\n" ++
   "    if _MIX_MODE not in ('off', 'mixup', 'cutmix', 'both'):\n" ++
   "        raise SystemExit('SHIM_MIX=%s: expected off|mixup|cutmix|both' % _MIX_MODE)\n" ++
-  -- ⚠⚠ MIXING IS GATED ON THE SPLIT, NOT JUST ON THE VARIABLE — and this is not a nicety, it is
+  -- MIXING IS GATED ON THE SPLIT, NOT JUST ON THE VARIABLE — and this is not a nicety, it is
   --    the difference between running and not. `SHIM_MIX` is an ORDINARY environment variable, so
   --    every shim the driver spawns inherits it, and the driver spawns TWO: the train stream at
   --    `nclasses = K` and the VALIDATION drain at `nclasses = 0` (v1, hard labels, since eval
-  --    scores against a label not a distribution). Gating on the variable alone made the refusal
-  --    below fire on the val shim, which killed it before the preamble — the trainer then died
+  --    scores against a label not a distribution). Gating on the variable alone makes the refusal
+  --    below fire on the val shim, which kills it before the preamble — the trainer then dies
   --    with `imagenet shim closed the pipe after 0 of 16 bytes`.
   --
-  --    Silencing the refusal would have been the wrong fix. Mixup/CutMix are TRAIN-time
+  --    Silencing the refusal would be the wrong fix. Mixup/CutMix are TRAIN-time
   --    augmentations: the reference applies them inside the train loop only, and a mixed
   --    validation target would score the net against a convex combination of two labels, which is
   --    not the metric. So the correct statement is "mix the train split, never the eval one", and
@@ -3786,7 +3771,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    _MIX_ON = (_MIX_MODE != 'off') and training\n" ++
   -- A mixed label is a DISTRIBUTION; int32 cannot carry one. Refusing here is the difference
   -- between a loud startup failure and a run that silently trains on hard labels while its log
-  -- says mixup is on — the §2k class of defect (it compiles, it runs, it descends).
+  -- says mixup is on — the class of defect that compiles, runs and descends.
   "    if _MIX_ON and nclasses <= 0:\n" ++
   "        raise SystemExit('SHIM_MIX=%s needs SHIM_NCLASSES>0: a mixed target is a distribution '\n" ++
   "                         'and wire v1 carries int32 hard labels' % _MIX_MODE)\n" ++
@@ -3808,7 +3793,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "            tm = lam * t + (np.float32(1.0) - lam) * np.flip(t, 0)\n" ++
   "            return (np.ascontiguousarray(xm, dtype=np.float32),\n" ++
   "                    np.ascontiguousarray(tm, dtype=np.float32))\n" ++
-  -- ⚠ Same hardcode, same fix: CutMix pastes a box into `x.reshape(B, 3, H, W)`, and `_mix` only
+  -- Same hardcode, same fix: CutMix pastes a box into `x.reshape(B, 3, H, W)`, and `_mix` only
   -- ever runs on the TRAIN split (`_MIX_ON` is `and training`). At `trainRes` the train images are
   -- `_TRAIN_SIZE`, so `_IMG_SIZE` here would reshape a 160 batch as 224 and throw. `_mix` is nested
   -- inside the function that binds `_RES` above, so it closes over it.
@@ -3844,15 +3829,15 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        return\n" ++
   "    out = sys.stdout.buffer\n" ++
   "    out.write(b'LMSH')\n" ++
-  -- ⚠⚠ WIRE v3/v4: every batch is PREFIXED with its int32 row count. v1/v2 were not, and could
-  -- not express a SHORT FINAL BATCH -- the reader inferred `rows` from how many label bytes a
-  -- `readUpTo` returned, and a pipe does not preserve write boundaries, so at a partial tail that
-  -- read ran straight past the labels into the images. Measured on ImageNet val: the tail is 80
-  -- labels (320 B) + 80 images, `readUpTo(4*256)` swallowed 320 + 704 B, inferred rows = 256, then
-  -- demanded a full batch and found 48,168,256 of 154,140,672 bytes left. Exactly the observed
-  -- failure. `drop_remainder=training` (2026-08-14, to score all 50,000) is what put a partial
-  -- batch on the wire; this is the framing that can carry one.
-  -- ⭐ The count is authoritative: the reader no longer INFERS the row count from a read length,
+  -- WIRE v3/v4: every batch is PREFIXED with its int32 row count. v1/v2 are not, and cannot
+  -- express a SHORT FINAL BATCH -- a reader inferring `rows` from how many label bytes a
+  -- `readUpTo` returned fails because a pipe does not preserve write boundaries, so at a partial
+  -- tail that read runs straight past the labels into the images. On ImageNet val: the tail is 80
+  -- labels (320 B) + 80 images, `readUpTo(4*256)` swallows 320 + 704 B, infers rows = 256, then
+  -- demands a full batch and finds 48,168,256 of 154,140,672 bytes left.
+  -- `drop_remainder=training` (to score all 50,000) puts a partial batch on the wire; this is the
+  -- framing that can carry one.
+  -- The count is authoritative: the reader does not INFER the row count from a read length,
   -- so a torn stream is a mismatch rather than a silent reframing.
   "    if nclasses > 0:\n" ++
   "        out.write(np.array([4, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++

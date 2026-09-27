@@ -3,13 +3,12 @@ import LeanMlir.Verified.Train
 
 /-! # `@<slug>_fwd` render tie — do two renders compute the same function?
 
-Migration guard for `planning/archive/xla_pjrt_handoff.md` §2a, the **forward** half. The five forward
-artifacts `mobilenetv2_fwd{,_eval}`, `efficientnet_fwd{,_eval}` and `convnext_fwd` used to be
-written by hand-written string emitters in `tests/Test*Fwd.lean`, independent of the proven graph;
-they are now `pretty(provenGraph)` out of `LeanMlir/Proofs/Codegen/*Render.lean`, sharing their
-forward chain with the train step. The two emitters produce *textually* different MLIR by
-construction, so the only meaningful check is numeric: feed both the same parameters and the same
-input, and compare logits.
+Migration guard, the **forward** half. The five forward artifacts `mobilenetv2_fwd{,_eval}`,
+`efficientnet_fwd{,_eval}` and `convnext_fwd` are `pretty(provenGraph)` out of
+`LeanMlir/Proofs/Codegen/*Render.lean`, sharing their forward chain with the train step; a
+hand-written string emitter in `tests/Test*Fwd.lean` is independent of the proven graph. The two
+emitters produce *textually* different MLIR by construction, so the only meaningful check is
+numeric: feed both the same parameters and the same input, and compare logits.
 
     lake build fwd-tie
     .lake/build/bin/fwd-tie <slug> [--eval] [<refRender.mlir> [<newRender.mlir>]]
@@ -23,20 +22,18 @@ Defaults to comparing the artifact against itself (a self-tie smoke test). Exits
 renders disagree, or if the comparison is **degenerate** — all-zero or non-finite logits agree
 trivially and prove nothing.
 
-**This replaces `tests/TestResnet34FwdTie.lean`** (`lake build resnet34-fwd-tie`), which was this
-file with `resnet34Verified` hardcoded; `fwd-tie resnet34 [--eval]` is the same check. Recover it
-from `git show 17413f0:tests/TestResnet34FwdTie.lean` if ever needed. Two near-identical tie
-harnesses would be the double-writer disease one level down, in code.
+`fwd-tie resnet34 [--eval]` is the R34 check. Two near-identical tie harnesses would be the
+double-writer disease one level down, in code.
 
-Two things it does that the R34-specific version did not:
+Two things it does:
 
-* **it deletes its `.vmfb` before every compile** (§4). `compileVmfb` reuses any existing output
+* **it deletes its `.vmfb` before every compile**. `compileVmfb` reuses any existing output
   newer than the `.mlir` — the cache key is the output path and an mtime, never the source — so
   running a tie twice with different candidates under one tag silently reuses the FIRST candidate's
   binary and reports the second as a perfect match. Running a negative control looks exactly like
   that;
 * **it counts bit-exact coordinates**, because `Float.toString` gives six decimals and a genuine
-  3e-8 prints as `0.000000`, which reads as bit-exact when it is not (§2e-bis).
+  3e-8 prints as `0.000000`, which reads as bit-exact when it is not.
 -/
 
 private def netBySlug (slug : String) : IO VerifiedNetSpec :=
@@ -45,7 +42,7 @@ private def netBySlug (slug : String) : IO VerifiedNetSpec :=
   | "efficientnet" => pure efficientnetVerified
   | "mobilenetv2"  => pure mobilenetv2Verified
   | "resnet34"     => pure resnet34Verified
-  -- §2i: the cifar8 family. `cifar8w` is `cifar8` at d1=512 (the Chapter-5 wide-head "bridge" net),
+  -- The cifar8 family. `cifar8w` is `cifar8` at d1=512 (the Chapter-5 wide-head "bridge" net),
   -- so all four ride the same two certified forward renderers at two widths.
   | "cifar8"       => pure cifar8Verified
   | "cifar8_bn"    => pure cifar8BnVerified

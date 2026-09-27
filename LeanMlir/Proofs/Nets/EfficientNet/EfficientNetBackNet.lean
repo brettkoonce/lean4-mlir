@@ -17,7 +17,7 @@ relu kinks force `_at`.
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ CLOSING §8e's HOLES AGAINST THE *NAMED* FORWARDS
+-- § BACKWARD GRAPHS OF THE *NAMED* FORWARDS
 -- ════════════════════════════════════════════════════════════════
 
 /-! Where each EfficientNet stage forward's backward graph lives:

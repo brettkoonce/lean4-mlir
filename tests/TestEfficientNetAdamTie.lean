@@ -3,7 +3,6 @@ import LeanMlir.Verified.Train
 
 /-! # `@efficientnet_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md`, the EfficientNet AdamW thread, step 3.
 `Proofs/Codegen/EfficientNetRender/Basic.lean`'s `efficientnetAdamTrainStepFaithful` renders the same
 train step the hand-written emitter in `tests/TestEfficientNetTrain.lean` does — the one
 `efficientnet-verified-adam` trains on. This harness is what licenses swapping them; run it BEFORE
@@ -15,29 +14,28 @@ FFI never sees), so both take the same `[θ|m|v | lr,bc1,bc2 | bn stats]` blob `
 builds.
 
 **Why a numeric tie and not a text diff.** Same function, different graph: SSA naming differs, and
-the certified render emits 17,545 ops against 10,421 because `pretty` has no CSE (§2b-bis measured
-the identical 1.68× on R34 and found it costs nothing after XLA optimisation). The cotangents are
-also composed differently — the hand-written render fuses label smoothing into one `[B,10]` block
-while the kit composes `softmaxRow → subB → scaleB → addVB → shiftB → divConstB`. Only running both
-and comparing every returned float settles it.
+the certified render emits 17,545 ops against 10,421 because `pretty` has no CSE (the identical
+1.68× on R34 costs nothing after XLA optimisation). The cotangents are also composed differently —
+the hand-written render fuses label smoothing into one `[B,10]` block while the kit composes
+`softmaxRow → subB → scaleB → addVB → shiftB → divConstB`. Only running both and comparing every
+returned float settles it.
 
 **This tie is STRONGER than `vit-adam-tie`, and the reason is BatchNorm.** EfficientNet returns 98
 batch statistics — μ and σ² of all 49 BN inputs — which depend on the **forward alone**. That
 `bnstat` region pins the whole forward chain (stem, all 16 MBConv blocks including every expand,
 depthwise and project BN, and the head) to the last bit, so a forward disagreement and a backward
-one are separable in a single run. ViT had no such region and had to lean on `%loss`.
+one are separable in a single run. ViT has no such region and leans on `%loss`.
 
 `%loss` is still gated rather than merely reported. It is report-only, on no gradient path, and
-covered by no theorem — which is exactly the configuration in which §2b shipped plain CE against a
-smoothed-CE cotangent, caught only by the numeric tie. Here it is a *cross-check* on `bnstat`
+covered by no theorem — which is exactly the configuration in which plain CE against a smoothed-CE
+cotangent is caught only by a numeric tie. Here it is a *cross-check* on `bnstat`
 rather than the sole forward evidence.
 
     lake build efficientnet-adam-tie
     .lake/build/bin/efficientnet-adam-tie [refRender.mlir] [candRender.mlir]
 
 Linked against **IREE**, not XLA/PJRT, for the same reason `vit-adam-tie` is: `efficientnet-verified-adam`
-is an IREE binary, and a tie should run on the backend the trainer actually uses. (This box is also
-MIOpen-conv-weak, and EfficientNet is all depthwise convolutions — see the ROCm note.)
+is an IREE binary, and a tie should run on the backend the trainer actually uses.
 
 Exits non-zero if the renders disagree or the comparison is degenerate.
 -/
@@ -45,8 +43,8 @@ Exits non-zero if the renders disagree or the comparison is degenerate.
 def main (args : List String) : IO Unit := do
   let handWritten := "verified_mlir/efficientnet_adam_train_step.mlir"
   let certified   := "verified_mlir/efficientnet_adam_train_step_b.mlir"
-  -- Pre-swap the certified render lives at its own path, so the no-argument form IS the migration
-  -- check. Post-swap that path is gone and the default degrades to an A-vs-A determinism run —
+  -- While the certified render lives at its own path, the no-argument form IS the migration
+  -- check. Without that path the default degrades to an A-vs-A determinism run —
   -- still worth having (it re-establishes the floor the gate depends on), but say so out loud.
   let certExists ← System.FilePath.pathExists certified
   let (pathA, pathB) := match args with
@@ -93,9 +91,8 @@ check. Pass the retired render as the first argument for that."
 
   -- A tie must NEVER reuse a cached binary. `compileVmfb` keys on **mtime**, not on the source
   -- path, so running this harness twice with different candidates under the same tag silently
-  -- reuses the FIRST candidate's `.vmfb` and reports the second as a perfect match. That is not
-  -- hypothetical — it happened while building the negative controls below, and it produced a
-  -- bit-exact "pass" for a render that had never been compiled. Delete before compiling.
+  -- reuses the FIRST candidate's `.vmfb` and reports the second as a perfect match. Delete before
+  -- compiling.
   let runOne (path tag : String) : IO ByteArray := do
     let vmfb := s!".lake/build/enet_adam_tie_{tag}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
@@ -131,7 +128,7 @@ check. Pass the retired render as the first argument for that."
   -- ── per REGION ────────────────────────────────────────────────────────────────────────────
   -- `bnstat` depends ONLY on the forward (batch μ/var of all 49 BN inputs), so it separates a
   -- forward disagreement from a backward one in a single run. `m' = β₁·m + (1−β₁)·g` off a shared
-  -- `m`, so the `m` region IS the gradient. θ' is scale-free under Adam (§3: a near-zero-gradient
+  -- `m`, so the `m` region IS the gradient. θ' is scale-free under Adam (a near-zero-gradient
   -- coordinate flips sign on a 1-ULP difference and moves a full ±lr), so θ' is reported, never
   -- gated. Errors are norm-relative (max|a−b| / max|a|) because a per-coordinate ratio on a
   -- near-zero gradient entry is meaningless.
@@ -200,8 +197,8 @@ bit-exact {exact}/{hi-lo}"
   --    the entire forward chain. Any real mis-wiring lands here as a hard failure rather than a
   --    tolerance argument — and it also catches a BN running-stat slot wired to the wrong layer,
   --    which the arity check cannot see.
-  -- 2. `%loss` must agree. Report-only, no theorem, no gradient path — §2b's standing reminder.
-  -- 3. the backward must agree NORM-relative, never per-coordinate (handoff §3).
+  -- 2. `%loss` must agree. Report-only, no theorem, no gradient path.
+  -- 3. the backward must agree NORM-relative, never per-coordinate.
   if !fwdExact then
     IO.eprintln s!"TIE FAILED: the forward differs — `bnstat` (batch μ/var of all \
 {net.bnChannels.size} BN inputs) is not bit-exact (norm-rel {fwdRel}), so the two renders do not \

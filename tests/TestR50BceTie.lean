@@ -3,11 +3,10 @@ import LeanMlir.Verified.Train
 
 /-! # BCE-with-logits, numerically certified — at a point where it has a CLOSED FORM
 
-`planning/archive/next_session_pipeline_then_r50.md` §4's BCE row, built and gated. RSB-A2/A3 do not train
-with softmax cross-entropy: every class is an independent sigmoid, and the loss is
-`BinaryCrossEntropy` with **`reduction='mean'` over B×K**.
+RSB-A2/A3 do not train with softmax cross-entropy: every class is an independent sigmoid, and the
+loss is `BinaryCrossEntropy` with **`reduction='mean'` over B×K**.
 
-## ⭐ The trick that makes this exact rather than a tolerance argument
+## The trick that makes this exact rather than a tolerance argument
 
 The logits are `z = Wd·gap + bd`. **Set `Wd = 0` and `z = bd` for every example** — a vector this
 harness chose, known to the last bit, with no forward pass to reproduce. The whole loss and its
@@ -18,23 +17,23 @@ whole cotangent then collapse to closed forms in `bd` and the targets:
     g_bd[k] = Σ_b (σ(z_k) − t_{b,k}) / (B·K)
 
 and `g_bd` is recovered from the committed **AdamW** render's stored first moment at `m = v = 0`,
-where `m' = (1−β₁)·g = 0.1·g` — §2k's construction, reused by `r34-mom-tie`, `rms-tie`,
-`conv-bias-zero`, `r50-lamb-tie` and now this.
+where `m' = (1−β₁)·g = 0.1·g` — the construction `r34-mom-tie`, `rms-tie`, `conv-bias-zero`
+and `r50-lamb-tie` also use.
 
-⚠ Zeroing `Wd` degenerates the CLASSIFIER, not the net: the 50 layers below still run, `%loss` is
+Zeroing `Wd` degenerates the CLASSIFIER, not the net: the 50 layers below still run, `%loss` is
 still computed from their output through the real head, and both quantities checked here are
 functions of `bd` alone **by construction of the graph**, not by approximation. The degeneracy is
 the instrument.
 
-## ▶▶ The controls — three wrong BCEs, and the middle one is the expensive mistake
+## The controls — three wrong BCEs, and the middle one is the expensive mistake
 
 | ⟂ | the wrong neighbour | what it costs |
 |---|---|---|
 | ① | **softmax-CE** — the loss this replaces | the whole swap |
-| ② | **`reduction='mean'` over B only**, i.e. the mean of the per-example SUM over classes | ⚠ `K = 1000×` on the effective step. The reference's own comment: *"that would be NC× larger and need an NC× smaller lr — RSB-A2's lr 5e-3 is tuned to this form"* |
+| ② | **`reduction='mean'` over B only**, i.e. the mean of the per-example SUM over classes | `K = 1000×` on the effective step. The reference's own comment: *"that would be NC× larger and need an NC× smaller lr — RSB-A2's lr 5e-3 is tuned to this form"* |
 | ③ | **label smoothing α = 0.1 folded into `t`** | A3's arg string is `…-ls0.0-`: the soft targets come from mixup through `%onehot`, NOT from a constant in the loss |
 
-⭐ ② is the one worth having a gate for. It changes no shape, no op and no arity — only a divisor —
+② is the one worth having a gate for. It changes no shape, no op and no arity — only a divisor —
 and a run with it descends perfectly well at 1/1000 of the intended learning rate.
 
     lake build r50-bce-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-bce-tie
@@ -125,10 +124,10 @@ mean over B·K = {bs * nc}, backend {← LowererSession.backendName}"
       if lbl[b]! == k then sumT := sumT + 1.0
     -- the loss, summed over b and k
     lossWant := lossWant + bs.toFloat * softplus zk - sumT * zk
-    -- ⚠⚠ SMOOTHED CE, not plain CE, and this line is the reason the cross-check exists. The peer
-    -- render emits `−mean_b[(1−α)·Σ_k t·log sm + (α/K)·Σ_k log sm]` with α = 0.1; a first draft
-    -- here wrote plain CE and the ⟂① guard below CAUGHT IT (7.815 against 7.800). A control that
-    -- can catch the harness is worth more than one that can only catch the render.
+    -- SMOOTHED CE, not plain CE. The peer render emits
+    -- `−mean_b[(1−α)·Σ_k t·log sm + (α/K)·Σ_k log sm]` with α = 0.1; plain CE here fails the ⟂①
+    -- guard below (7.815 against 7.800). A control that can catch the harness is worth more than
+    -- one that can only catch the render.
     lossCE := lossCE - (0.9 * sumT + 0.1 / nc.toFloat * bs.toFloat) * Float.log (max sm 1e-30)
     -- the gradient of `bd`
     let g := 10.0 * F32.read oB (nP + bdOff + k).toUSize

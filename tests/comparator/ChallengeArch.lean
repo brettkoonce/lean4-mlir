@@ -260,7 +260,7 @@ theorem chk_layerNormHasVJP_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
     ∑ j : Fin n, pdiv (layerNormForward n ε γ β) x i j * dy j := by sorry
 
 /-- **`mhsaHasVJPMat` contract**: multi-head SDPA backward equals
-`pdivMat`-contracted Jacobian (Phase 3 column-stacking proof closes
+`pdivMat`-contracted Jacobian (the column-stacking proof closes
 this with no project axiom). -/
 theorem chk_mhsaHasVJPMat_correct (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))

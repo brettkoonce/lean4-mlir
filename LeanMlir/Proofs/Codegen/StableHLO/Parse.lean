@@ -125,11 +125,11 @@ def parseStack : List Tok → List Raw → Option (List Raw)
   | .momParamF θ v mu lr ds :: ts, e :: st => parseStack ts (.momParamF θ v mu lr ds e :: st)
   | .rmsBufNextF sq buf rho orho mu eps ds :: ts, e :: st =>
       parseStack ts (.rmsBufNextF sq buf rho orho mu eps ds e :: st)
-  -- Global-norm grad clip. ⚠ The two BINARY ones pop right-then-left (`.addV`'s shape), and for
+  -- Global-norm grad clip. The two BINARY ones pop right-then-left (`.addV`'s shape), and for
   -- `clipScaleF` the deeper element is the FACTOR — `toToks` emits factor-then-gradient.
   | .gradSumSqAccF ds :: ts, g :: acc :: st => parseStack ts (.gradSumSqAccF ds acc g :: st)
   | .clipScaleF cS eS ds :: ts, g :: sN :: st => parseStack ts (.clipScaleF cS eS ds sN g :: st)
-  -- LAMB. ⚠ `lambDirF` is UNARY (θ/m/v ride as NAMES, like `adamWParamF`); `lambScaleF` is binary
+  -- LAMB. `lambDirF` is UNARY (θ/m/v ride as NAMES, like `adamWParamF`); `lambScaleF` is binary
   -- with the deeper element the ‖θ‖² SCALAR — `toToks` emits scalar-then-direction, the
   -- `clipScaleF` order exactly.
   | .lambDirF θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd ds :: ts, e :: st =>

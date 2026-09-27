@@ -126,7 +126,7 @@ noncomputable def sealW (nCls : Nat) : R34BWeights nCls where
 -- ════════════════════════════════════════════════════════════════
 -- § 2. What the structural blocks are
 -- ════════════════════════════════════════════════════════════════
--- ⚠⚠ **Every collapse lemma below is stated at VARIABLE `N, h, w, c` and instantiated at the
+-- **Every collapse lemma below is stated at VARIABLE `N, h, w, c` and instantiated at the
 -- witness's numerals afterwards, never proved at them.** `relu_id_of_pos` applied directly to, say,
 -- `cbReluStridedB 2 (h := 2*56) …` leaves the KERNEL a defeq between two numeral-shaped
 -- compositions and it dies ("deep recursion" at `oc = 64, h = 112`, and a timeout already at
@@ -341,7 +341,7 @@ private theorem seal_pool_smooth (t : ℝ) :
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The running activations: nonnegative, and collapsed
---   ⚠ Each `nn`/`pc` below INSTANTIATES a §3/§4 lemma proved at variable shapes. Proving any of
+--   Each `nn`/`pc` below INSTANTIATES a §3/§4 lemma proved at variable shapes. Proving any of
 --   them at these numerals directly is what kills the kernel (see §2's banner).
 -- ════════════════════════════════════════════════════════════════
 

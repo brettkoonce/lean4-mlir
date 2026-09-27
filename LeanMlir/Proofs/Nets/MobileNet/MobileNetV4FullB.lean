@@ -112,7 +112,7 @@ abbrev mnv4Row19 : UibSpec := ⟨"19", 256, 256, 4, 0, 0,  7, false⟩  -- FFN
 abbrev mnv4Row20 : UibSpec := ⟨"20", 256, 256, 4, 0, 0,  7, false⟩  -- FFN
 abbrev mnv4Row21 : UibSpec := ⟨"21", 256, 256, 2, 5, 0,  7, false⟩  -- ConvNeXt-like
 
--- ⭐⭐ The 21 constants ARE `mnv4Blocks`, in order. Nothing below can be about a different net.
+-- The 21 constants ARE `mnv4Blocks`, in order. Nothing below can be about a different net.
 #guard mnv4Blocks = [
   mnv4Row1, mnv4Row2, mnv4Row3, mnv4Row4, mnv4Row5, mnv4Row6, mnv4Row7, mnv4Row8, mnv4Row9,
   mnv4Row10, mnv4Row11, mnv4Row12, mnv4Row13, mnv4Row14, mnv4Row15, mnv4Row16, mnv4Row17,
@@ -383,7 +383,7 @@ noncomputable def mobilenetv4ForwardBFull (N : Nat) {nCls : Nat} (w : Mnv4BWeigh
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
   (mnv4HeadStack N w).fwd (mnv4Pre6 N w x)
 
--- ⭐ The stem's own arithmetic, checked rather than asserted: its input is the 224-px image and
+-- The stem's own arithmetic, checked rather than asserted: its input is the 224-px image and
 -- its output is what the fused stage reads. A wrong nest depth is well-typed at a variable.
 #guard 2 * 112 == 224
 #guard 2 * 56 == 112
@@ -391,21 +391,21 @@ noncomputable def mobilenetv4ForwardBFull (N : Nat) {nCls : Nat} (w : Mnv4BWeigh
 #guard 2 * 14 == 28
 #guard 2 * 7 == 14
 
--- ⭐ `mobilenetv4ForwardBFull` really does bind at the literal 224-px image type.
+-- `mobilenetv4ForwardBFull` really does bind at the literal 224-px image type.
 example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
     mobilenetv4ForwardBFull N w x = mobilenetv4ForwardBFull N w x := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § T2 — the typed forward graph, at `mnv4FwdChainB`'s own tokens
+-- § The typed forward graph, at `mnv4FwdChainB`'s own tokens
 --   `.batchOp` of `.convStrided` (stem, fused) / `.conv` / `.depthwise` / `.depthwiseStrided` /
 --   `.relu` / `.gap` / `.dense`, `.bnBatchF` for the batch-coupled norm, `.addVB` for the
 --   residual add, and `castIdx` for the head's two `1×1` relabellings (no text).
 --
---   ⚠ Every SSA name is read off the ROW (`s.p`), never taken as an argument. That is what pins
+--   Every SSA name is read off the ROW (`s.p`), never taken as an argument. That is what pins
 --   identity between shape-identical rows: rows 4, 5 and 10 have the same `UibParams` type, so
 --   only `%u4qW` vs `%u5qW` vs `%u10qW` tells them apart, and here those come from the table.
 --
---   ⚠ Bias operands are `%zb{c}`, the shared zero constant every bias folds into its BatchNorm
+--   Bias operands are `%zb{c}`, the shared zero constant every bias folds into its BatchNorm
 --   and binds to. `MobileNetV4RenderB` has no `convBias` flag at all, so this is the only name
 --   this net emits.
 -- ════════════════════════════════════════════════════════════════
@@ -636,7 +636,7 @@ private theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid o
     den_castIdx, reindexCLM_apply, den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
--- § The whole graph + faithfulness (T2)
+-- § The whole graph + faithfulness
 -- ════════════════════════════════════════════════════════════════
 
 /-- Trunk group **Res28**'s graph — rows 1–2: the 56→28 reduction and the block that follows it. -/
@@ -759,8 +759,8 @@ private theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat
     This corollary exists so the whole-net proof never has to unfold `mnv4FusedStack`. It looks
     redundant and is not: at MNv4's literal resolutions, letting anything unfold far enough for
     `den` to start recursing turns the kernel's check into an evaluation of the whole graph, which
-    is the failure the group split above already had to work around once. Seven rewrites all of
-    the shape `den <subgraph> = <subLayer>.fwd (den ·)` keep every stage opaque. -/
+    is the failure the group split above works around. Seven rewrites all of the shape
+    `den <subgraph> = <subLayer>.fwd (den ·)` keep every stage opaque. -/
 theorem mnv4FusedStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (32 * 112 * 112))) :
     den (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
@@ -816,7 +816,7 @@ def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights
 theorem mnv4FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
     den (mnv4FwdGraphBFull N epsStr w e) = mobilenetv4ForwardBFull N w (den e) := by
-  -- ⚠⚠ `rw`, NOT `simp only`, and the difference is not cosmetic: the `simp only` spelling of
+  -- `rw`, NOT `simp only`, and the difference is not cosmetic: the `simp only` spelling of
   -- this same chain elaborates for ~9 minutes and then dies in the KERNEL with a deterministic
   -- timeout. `simp only` traverses and rebuilds the whole term at each step, and at MNv4's literal
   -- resolutions that is enough for `den` to start unfolding into the graph itself. Outside-in

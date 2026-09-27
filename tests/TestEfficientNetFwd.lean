@@ -1,16 +1,15 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Types
 
-/-! # E6 — EfficientNet-B0 forward: the `iree-compile` smoke over the COMMITTED bytes
+/-! # EfficientNet-B0 forward: the `iree-compile` smoke over the COMMITTED bytes
 
-**The hand-written emitter that used to live here is RETIRED (2026-07-28).**
-`verified_mlir/efficientnet_fwd.mlir` and `verified_mlir/efficientnet_fwd_eval.mlir` are now
+`verified_mlir/efficientnet_fwd.mlir` and `verified_mlir/efficientnet_fwd_eval.mlir` are
 written by `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean`'s `efficientnetFwd{,Eval}FaithfulV` —
 `pretty(provenGraph)`, both off the single `enetFwdChain` the train steps differentiate — and those
 `#eval`s are their only writers. This file keeps only the part `lake build` genuinely cannot do:
 running `iree-compile`, which needs the compiler on PATH.
 
-The net, unchanged (EfficientNet-B0, Tan & Le 2019, Imagenette 224², 10 classes):
+The net (EfficientNet-B0, Tan & Le 2019, Imagenette 224², 10 classes):
 
   stem : 3×3 stride-2 conv (3→32) + BN + swish   (224→112)
   B0 stages [expand t, channels c, repeats n, stride s, kernel k]:
@@ -24,15 +23,14 @@ The net, unchanged (EfficientNet-B0, Tan & Le 2019, Imagenette 224², 10 classes
   head : 1×1 conv (320→1280) + BN + swish  →  GAP → dense(1280→10)
   16 MBConv layers total; SE (ratio 0.25 of block-input ch) in every block.
 
-**The two artifacts differ in ONE thing and it is now structural**: `@efficientnet_fwd` renders the
+**The two artifacts differ in ONE thing and it is structural**: `@efficientnet_fwd` renders the
 chain at `BnMode.train` (batch statistics reduced out of the activation, `bnBatchF`) and
-`@efficientnet_fwd_eval` at `.eval` (frozen per-channel running stats as graph inputs, the new
-`bnEval` descriptor). Previously they were two independently hand-written spellings of that
-distinction — precisely the shape of the ResNet-34 §2a bug, a net trained with one normalisation
-and scored with the other.
+`@efficientnet_fwd_eval` at `.eval` (frozen per-channel running stats as graph inputs, the
+`bnEval` descriptor). Two independently hand-written spellings of that distinction are precisely
+the shape of a net trained with one normalisation and scored with the other.
 
-**Why the emitter is gone rather than dormant** (§2b-quater): a second emitter that can write is one
-more thing to drift. The swap was licensed by `lake build fwd-tie`:
+**Why there is no emitter here**: a second emitter that can write is one more thing to drift.
+`lake build fwd-tie` ties the render to the hand-written artifacts:
 
     git show 17413f0:verified_mlir/efficientnet_fwd.mlir      > /tmp/r_fwd.mlir
     git show 17413f0:verified_mlir/efficientnet_fwd_eval.mlir > /tmp/r_eval.mlir
@@ -45,15 +43,15 @@ down to the argument NAMES (263 in / 361 in). Shown capable of failing, two ways
 * perturbing the 49 BN ε constants (1e-5 → 1e-3) fires the forward tie at rel 4.4e-1, 0/320
   bit-exact;
 * **swapping which stat slot two BN sites READ** (`b13en` ↔ `b14en`, same 1152 channels so the
-  types still match, signature order untouched) fires the eval tie at rel 5.6e-1. That is §2e's
-  "a misaligned stat slot is silent" hazard, now covered by an executable check rather than by
+  types still match, signature order untouched) fires the eval tie at rel 5.6e-1. That is the
+  "a misaligned stat slot is silent" hazard, covered by an executable check rather than by
   care — the arities still match, and nothing but the numbers can tell.
 
-  The first attempt at that control was a no-op worth remembering: renaming the parameter in the
-  signature AND at the use site is an alpha-rename, and came back bit-identical. The func-arg
-  POSITION is what binds a statistic to a slot.
+  Renaming the parameter in the signature AND at the use site is NOT such a control: it is an
+  alpha-rename and comes back bit-identical. The func-arg POSITION is what binds a statistic to a
+  slot.
 
-Recover the retired emitter from `git show 17413f0:tests/TestEfficientNetFwd.lean`.
+The hand-written emitter is at `git show 17413f0:tests/TestEfficientNetFwd.lean`.
 
 Run (needs iree-compile on PATH):
   lake env lean tests/TestEfficientNetFwd.lean
@@ -63,7 +61,7 @@ open Proofs Proofs.StableHLO
 
 
 /-- Compile a COMMITTED artifact. Throws if it is missing: this file is not its writer, and
-    recreating it here is exactly the double-writer race that shipped two different functions. -/
+    recreating it here is exactly the double-writer race that ships two different functions. -/
 private def smoke (path dst label : String) : IO Unit := do
   if !(← System.FilePath.pathExists path) then
     throw (IO.userError s!"{path} missing — it is written by \

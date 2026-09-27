@@ -248,7 +248,7 @@ theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE TIE — stem and head concrete, the seventeen bottlenecks opaque
+-- § THE TIE — stem and head concrete, the seventeen bottlenecks opaque
 -- ════════════════════════════════════════════════════════════════
 
 /-- **`mnv2InputGradB` is the backward of the whole-net VJP at opaque blocks.** The committed

@@ -1,20 +1,19 @@
 import LeanMlir
 
-/-! # Known-answer guard for the XLA-`SAME` strided ops (`planning/archive/mnv4_verified.md` §3e)
+/-! # Known-answer guard for the XLA-`SAME` strided ops
 
 `convStridedXla` and `depthwiseStridedXla` are the asymmetric-pad peers of `convStrided` and
 `depthwiseStrided`. **They have identical types, identical output shapes, identical op counts and
 identical feature-group widths** — the entire difference is four numbers in the emitted `pad`. So
 nothing structural can distinguish a correct render from one that picked the wrong token, and
-`#guard`s on shapes or arity are worthless here by construction (`planning/archive/mnv4_verified.md` §3,
-the same invisibility class as R50's stride-on-the-3×3).
+`#guard`s on shapes or arity are worthless here by construction (the same invisibility class as R50's stride-on-the-3×3).
 
 What this emits is therefore deliberately *small*: two one-op modules, at the two kernel sizes the
 affected nets actually use, so `scripts/gates/xla_pad_op_check.py` can run them through IREE and compare
 against `jax.lax.conv_general_dilated(…, padding='SAME')` directly. A whole-net tie can only say
 "something is off somewhere"; this says which op.
 
-⚠ Both are rendered at EVEN spatial inputs, which is the only case the tokens' types admit
+Both are rendered at EVEN spatial inputs, which is the only case the tokens' types admit
 (`c*(2*h)*(2*w)`) and the only case where XLA `SAME` is asymmetric. At an odd input `SAME` is
 symmetric and the *existing* `convStrided`/`depthwiseStrided` are already correct — that boundary
 is the one thing a reader of these ops most needs to know, so it is asserted in the checker rather
@@ -25,14 +24,14 @@ Run: `lake env lean tests/TestXlaPadOps.lean` (writes the modules), then
 
 open Proofs Proofs.StableHLO
 
--- ⚠ File-level, not `set_option … in` per def: `renderModule`'s index argument forces the
+-- File-level, not `set_option … in` per def: `renderModule`'s index argument forces the
 -- `B*(c*(2*h)*(2*w))` arithmetic through `whnf`, which blows the 200k default even at these toy
--- sizes. Same kernel-blowup shape the batched EfficientNet render hit.
+-- sizes. The same kernel-blowup shape as the batched EfficientNet render.
 set_option maxHeartbeats 2000000
 
 namespace Proofs.XlaPadProbe
 
-/-- Wrap one batched op as a module. ⚠ NOT `renderModule`: that takes `g : SHlo retLen` and returns
+/-- Wrap one batched op as a module. NOT `renderModule`: that takes `g : SHlo retLen` and returns
     `tensor<B × retLen>`, which is the per-example convention — a `batchOp` graph's index is already
     `B * n`, so `renderModule` would both fail to unify and declare the wrong return type. Same
     `N` (batch) vs `n` (per-example width) distinction the `BatchableOp` docs call out. -/
@@ -141,13 +140,9 @@ def dwXlaWGradModule : String :=
     input-VJP MobileNetV4's UIB blocks use (their `uib_block` passes an explicit `(p,p)` tuple, so
     they are genuinely symmetric — only the STEM is XLA `SAME`).
 
-    ⚠⚠ **This op ships in EfficientNet's train step and has never had a known-answer check.**
-    `xla_pad_op_check.py` grew probes for the `…Xla…` peers when those were built (§3g) and stopped
-    there, so the older symmetric backward was covered by nothing but the assumption that it was
-    already right. `planning/archive/mnv4_verified.md`'s MNv4 gradient tie localised a ~2% cotangent error
-    to exactly the block whose dx this op produces, which is what these two probes are here to
-    convict or clear. **k=3 AND k=5**, because the tie's evidence points at k=5 specifically: the
-    k=3 strided block in the middle of the net added no visible jump. -/
+    **This op ships in EfficientNet's train step**, and these two probes are its known-answer
+    check: the `…Xla…` peers' probes in `xla_pad_op_check.py` do not cover the symmetric backward.
+    **k=3 AND k=5** are both probed. -/
 def dwSymBackModule (k : Nat) (zK : DepthwiseKernel 6 k k) : String :=
   let B := 2
   let zdy : Vec (B*(6*8*8)) := fun _ => 0
@@ -162,8 +157,8 @@ def dwSymBackK3Module : String := dwSymBackModule 3 (fun _ _ _ => 0)
 def dwSymBackK5Module : String := dwSymBackModule 5 (fun _ _ _ => 0)
 
 /-- `@dw_sym_wgrad_k5` — the symmetric `depthwiseStridedWeightGradB` at k=5, the weight-side peer.
-    Split out from the input-VJP because §3g's bug was precisely that the two shift in OPPOSITE
-    directions: one being right is no evidence about the other. -/
+    Split out from the input-VJP because the two shift in OPPOSITE directions: one being right is
+    no evidence about the other. -/
 def dwSymWGradK5Module : String :=
   let B := 2
   let zdy : Vec (B*(6*8*8)) := fun _ => 0
@@ -177,7 +172,7 @@ def dwSymWGradK5Module : String :=
   body ++ s!"    return {res} : {ty [6,1,5,5]}\n" ++ "  }\n}\n"
 
 -- ══════════════════════════════════════════════════════════════════════════
--- § PER-EXAMPLE backward probes — MobileNetV2's SGD train step (2026-09-05)
+-- § PER-EXAMPLE backward probes — MobileNetV2's SGD train step
 -- ══════════════════════════════════════════════════════════════════════════
 -- The batched `…B` / `…Batched` ops above are what the Adam renders emit. `MobileNetV2Render.lean`'s
 -- per-example SGD train step (`mobilenetv2_train_step`) goes through SEPARATE emit arms —
@@ -243,7 +238,7 @@ end Proofs.XlaPadProbe
 
 -- The backward emits all shift to `[p-1, p+1]`; at k=3 (p=1) that is `[0, 2]`. Pin it — an
 -- accidental `[1, 1]` here is the silent wrong-gradient this whole exercise exists to prevent.
--- ⚠ `[[2, 0]]` — the input-VJP shifts the OTHER way from the weight grads below, because its
+-- `[[2, 0]]` — the input-VJP shifts the OTHER way from the weight grads below, because its
 -- kernel is reversed. This asymmetry is the single easiest thing to get wrong here.
 #guard (Proofs.XlaPadProbe.dwXlaBackModule.splitOn "pad = [[2, 0], [2, 0]]").length == 2
 #guard (Proofs.XlaPadProbe.convXlaWGradModule.splitOn "pad = [[0, 2], [0, 2]]").length == 2

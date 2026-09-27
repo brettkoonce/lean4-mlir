@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.Blackjack
 
-/-! DQN on blackjack — rung 2 of `planning/blackjack_dqn_demo.md` (§4).
+/-! DQN on blackjack.
 
     The Q-function is a three-layer dense net on a 29-float one-hot of the
     observation, trained through the stack on the rank-2 DDPM MSE block with no

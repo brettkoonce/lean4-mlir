@@ -3,15 +3,13 @@ import LeanMlir.Verified.Train
 
 /-! # ResNet-50's GRADIENT, gated — on the committed artifact, in two tiers
 
-`planning/archive/next_session_pipeline_then_r50.md` §3.2's debt, paid. R50 phases 1–3 shipped a net that
-renders, compiles, trains and descends behind a **layout** gate (`tests/TestR50Contract.lean`) and
-nothing at all on the backward. §3.2's own words: *"The gradient is ungated. Say which one licensed
-the swap. Neither has been run."*
+R50 renders, compiles, trains and descends behind a **layout** gate (`tests/TestR50Contract.lean`);
+this file gates the backward.
 
-## Why not the two checks §3.2 named
+## Why not `vjp_oracle` cases
 
-§3.2 proposed two `vjp_oracle` cases and a matched-init loss tie against
-`jax/MainResnet50Imagenet.lean`. ⚠⚠ **The oracle cases would gate the wrong emitter.**
+The obvious alternatives are two `vjp_oracle` cases and a matched-init loss tie against
+`jax/MainResnet50Imagenet.lean`. **The oracle cases would gate the wrong emitter.**
 `tests/vjp_oracle/run.sh` drives `NetSpec.train`, i.e. `LeanMlir/MlirCodegen.lean`'s
 `emitBottleneckBlock` — a different lowering from `Proofs/Codegen/ResNet50RenderB.lean`, which is
 what `verified_mlir/resnet50in_*_train_step.mlir` is rendered from and what
@@ -23,11 +21,11 @@ its own loss beside its own first moment:
 
     out = [θ' | m' | v' | loss, bc₁, bc₂ | 106 BN stats]
 
-so ONE invoke from `m = v = 0` yields both `L(θ)` and `m' = (1−β₁)·g = 0.1·g` — §2k's construction,
-reused by `r34-mom-tie`, `rms-tie` and `conv-bias-zero`. AdamW's decay is DECOUPLED, so `m` sees the
+so ONE invoke from `m = v = 0` yields both `L(θ)` and `m' = (1−β₁)·g = 0.1·g` — the construction
+`r34-mom-tie`, `rms-tie` and `conv-bias-zero` also use. AdamW's decay is DECOUPLED, so `m` sees the
 raw gradient.
 
-## ⭐ TIER 1 — two closed-form identities, no finite differences anywhere
+## TIER 1 — two closed-form identities, no finite differences anywhere
 
 Every conv in R50 is BN-followed and bias-free (`convBnNB`). Two consequences, both exact:
 
@@ -36,19 +34,19 @@ Every conv in R50 is BN-followed and bias-free (`convBnNB`). Two consequences, b
 | **A** | `⟨g_W, W⟩ = 0` | 53 conv kernels | `L` is 0-homogeneous in each kernel — BN divides the scale straight back out |
 | **B** | `⟨g_γ, γ⟩ + ⟨g_β, β⟩ = 0` | 33 pre-conv BN affines | the same for the BN affine, whose scale the NEXT conv's BN removes |
 
-⚠ **A and B are not the same check, and B is the one with teeth.** A factors as `⟨c, J_W W⟩` with
+**A and B are not the same check, and B is the one with teeth.** A factors as `⟨c, J_W W⟩` with
 `J_W W = 0`, so it holds for ANY cotangent `c` arriving at the BN output: it certifies the local
 conv+BN VJP and is structurally BLIND to whatever fed it. B expands to `⟨c, γx̂ + β⟩`, a statement
 about the arriving cotangent itself, so it fails if anything between this BN and the next one
-differentiates wrongly. ⭐ **In particular the stem's B crosses `maxPool3s2`** — R50's one stem-path
+differentiates wrongly. **In particular the stem's B crosses `maxPool3s2`** — R50's one stem-path
 op, and the only route by which the stem's parameters get a gradient at all.
 
-⚠ 33 affines, not 53: `bn3` and `bnp` feed the RESIDUAL ADD, which is not homogeneous, so the
+33 affines, not 53: `bn3` and `bnp` feed the RESIDUAL ADD, which is not homogeneous, so the
 invariance genuinely fails there. **That is the control** — see below.
 
-⚠ Neither identity is exactly 0 in the render: BN's `ε = 1e-5` does not scale with the variance, so
+Neither identity is exactly 0 in the render: BN's `ε = 1e-5` does not scale with the variance, so
 the true cosines are `O(ε/var)`. Measured worst **6.1e-5**, which is that order and not a
-coincidence. ⭐ The tolerance is **3e-4**, and it is not a round number picked for comfort — it sits
+coincidence. The tolerance is **3e-4**, and it is not a round number picked for comfort — it sits
 between the two measured populations: every homogeneous site is ≤ 6.1e-5 and every non-homogeneous
 CONTROL site is ≥ 7.3e-4 (median 2.4e-2, max 0.12). The gate refuses to run with a tolerance loose
 enough to admit the weakest real violation.
@@ -66,7 +64,7 @@ forward's own fp32 noise. Taking `δ = α·m'` makes `⟨g, δ⟩ = 10α‖m'‖
 positive, never degenerate. It is a fair test despite coming from `g`: a wrong backward gives
 `⟨g_true, g_wrong⟩` against a prediction of `‖g_wrong‖²`, and those agree only by coincidence.
 
-⚠⚠ **THE RESOLUTION OF THIS TIER IS DEPTH-DEPENDENT, AND THAT IS MEASURED, NOT ASSUMED.**
+**THE RESOLUTION OF THIS TIER IS DEPTH-DEPENDENT, AND THAT IS MEASURED, NOT ASSUMED.**
 `R50_GC_SCAN=1` prints the step-size curve. Perturbing the head leaves 49 layers bit-identical, so
 their rounding CANCELS in `L₊ − L₋`; perturbing the stem changes every layer downstream and drags
 the forward across millions of ReLU and max-pool kinks, whose central-difference error decays far
@@ -74,36 +72,35 @@ slower than `h²`. Measured at `h = 6e-5`, one run, the residual falls monotonic
 
     stem 0.17 · s1b0 0.12 · s1b1 0.089 · s2b0 0.041 · s3b0 0.019 · s4b0 0.0027 · head 0.00097
 
-▶ So the honest sentence is: **tier 2 pins the gradient's magnitude to ~0.1% at the head and stage
+So the honest sentence is: **tier 2 pins the gradient's magnitude to ~0.1% at the head and stage
 4, loosening to ~17% at the stem**, and tier 1 pins its structure to ~6e-5 everywhere including the
 stem. The two cover each other's blind spots — that is the design, not an apology for the tolerance.
 
-⚠ A whole-net RANDOM-SIGN direction was tried and DROPPED rather than quietly kept: at `n = 25.5M`
-its `⟨g,δ⟩` came out at 2e-4 against per-group signals of 3e-2, i.e. degenerate by construction, and
-it reported rel 0.12–0.52 on a gradient the rest of this file certifies. The blind spot it was meant
-to cover — error strictly orthogonal to `g` — is instead covered by tier 1, whose identities are
-statements about `g`'s component along `θ` and are not along `g` at all.
+A whole-net RANDOM-SIGN direction is not used: at `n = 25.5M` its `⟨g,δ⟩` is 2e-4 against
+per-group signals of 3e-2, i.e. degenerate by construction, and it reports rel 0.12–0.52 on a
+gradient the rest of this file certifies. The blind spot it would cover — error strictly
+orthogonal to `g` — is instead covered by tier 1, whose identities are statements about `g`'s
+component along `θ` and are not along `g` at all.
 
-## The controls, because a green with no control is not a reading (§6)
+## The controls, because a green with no control is not a reading
 
-* ⭐⭐ **Tier 1's control is arithmetic, and it is free.** `bn3` and `bnp` feed the residual add and
+* **Tier 1's control is arithmetic, and it is free.** `bn3` and `bnp` feed the residual add and
   the dense `Wd` has no BN after it, so those 21 sites must **VIOLATE** the identity. If they came
   out at 6e-5 too, the cosine would be ~0 for trivial reasons and tier 1 would be vacuous. What the
   harness requires is a POPULATION SEPARATION, not an order statistic on one site: every control
   above every passing site (≥5×), the MEDIAN control ≥100× the worst passing site, and the
-  tolerance strictly between the two. ⚠ The weakest single control, `s1b0.proj.bnp`, lands at 7.3e-4
+  tolerance strictly between the two. The weakest single control, `s1b0.proj.bnp`, lands at 7.3e-4
   against peers at 1e-2 — its cotangent happens to sit nearly orthogonal to its own BN output at
-  this base point — so a "weakest violation ≥ 100×" rule would have failed a working harness.
-* ⭐ **The four projection shortcuts are their own groups.** `sXb0.proj` carries only `Wp/gp/btp`, so
-  its adjoint probe measures the shortcut branch's gradient and nothing else — the branch §3.2 says
-  is covered by neither existing check. (A first design predicted `sXb0` with the shortcut's terms
-  DROPPED and required the fit to break; it did not, because the shortcut is only ~4% of `‖m'‖²` at
-  s1b0. Recorded because "the control was too weak to fire" is the failure mode §6 is about.)
+  this base point — so a "weakest violation ≥ 100×" rule would fail a working harness.
+* **The four projection shortcuts are their own groups.** `sXb0.proj` carries only `Wp/gp/btp`, so
+  its adjoint probe measures the shortcut branch's gradient and nothing else. (Predicting `sXb0`
+  with the shortcut's terms DROPPED and requiring the fit to break is a control too weak to fire:
+  the shortcut is only ~4% of `‖m'‖²` at s1b0.)
 * **Scale control.** Each group's finite difference is re-checked against `2·⟨g,δ⟩`. A harness that
   cannot tell a gradient from twice a gradient is measuring nothing; required to miss by ≥3× the
   tie, which at the stem is 6.9× and at stage 4 is ~700×.
 
-## ⚠ This gates `adam64`; the driver defaults to `adamdp64`
+## This gates `adam64`; the driver defaults to `adamdp64`
 
 Tier 2 cannot run on the DP render: it all-reduces the GRADIENT but not the loss, so `%loss` is
 replica 0's own shard and the adjoint identity would compare a 256-sample gradient against a
@@ -120,11 +117,11 @@ Knobs (micro-units, so one `Nat` reaches 1e-6): `R50_GC_EPS_U` (step, default 60
 default 300 = 3e-4), `R50_GC_VARIANT` (default `adam64`, the single-device render), `R50_GC_PATH`
 (the artifact's directory, default `verified_mlir`).
 
-⭐⭐ **Since 2026-09-21 the DP renders are SYNC-BN** (`planning/global_bn_verified.md` §3.4), so the
-text tie's 1-replica side is the same renderer's one-replica SYNC graph, which
-`ResNet50RenderB.lean` writes to `.lake/build/r50sync/`, not the committed two-pass render. Its
-BatchNorm sites are different ops (`bnSyncF`, `bnSyncBack`, `bnSyncGammaGradB`, fed by
-`bnBatchMeanB`/`bnBatchVarAtB`/`bnPackB`), so this gate certifies that graph directly:
+**The DP renders are SYNC-BN**, so the text tie's 1-replica side is the same renderer's
+one-replica SYNC graph, which `ResNet50RenderB.lean` writes to `.lake/build/r50sync/`, not the
+committed two-pass render. Its BatchNorm sites are different ops (`bnSyncF`, `bnSyncBack`,
+`bnSyncGammaGradB`, fed by `bnBatchMeanB`/`bnBatchVarAtB`/`bnPackB`), so this gate certifies that
+graph directly:
 
     R50_GC_PATH=.lake/build/r50sync CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-gradcheck
 -/
@@ -133,7 +130,7 @@ BatchNorm sites are different ops (`bnSyncF`, `bnSyncBack`, `bnSyncGammaGradB`, 
     Glorot for dense, γ = 1. Using the real init matters — a constant splat makes BN see zero
     variance, and the gradient this recovers would be of a degenerate forward.
 
-    ⚠ **ONE deliberate departure: β (kind 2) is small noise, not 0.** The driver zeroes it, and
+    **ONE deliberate departure: β (kind 2) is small noise, not 0.** The driver zeroes it, and
     `β = 0` is a DEGENERATE point for identity B — `⟨g_β, β⟩` is then 0 whatever the render
     computes, so half of that check would be satisfied by construction rather than by being right.
     A non-degenerate base point is worth more to a gradcheck than a faithful one. -/
@@ -177,7 +174,7 @@ private def r50Groups : Array Grp := Id.run do
   return gs.push ⟨"head", "dense 2048→1000", t, 2⟩
 
 def main : IO Unit := do
-  -- ▶ Resolution selects the NET (slug + `d0`). Parameter layout is identical by construction, so
+  -- Resolution selects the NET (slug + `d0`). Parameter layout is identical by construction, so
   -- every offset, group and tolerance below is unchanged — only `x`'s width moves.
   let net ← match (← IO.getEnv "R50_GC_RES").getD "224" with
     | "224" => pure resnet50ImagenetVerified.toNet
@@ -188,13 +185,13 @@ def main : IO Unit := do
   let nT   := net.specs.size
   let variant := (← IO.getEnv "R50_GC_VARIANT").getD "adam64"
   let artifact := s!"{(← IO.getEnv "R50_GC_PATH").getD "verified_mlir"}/{net.slug}_{variant}_train_step.mlir"
-  -- ⭐⭐ ACCUMULATION-AWARE. A `*acc<k>x*` render has FOUR parameter regions and FIVE scalars, so
+  -- ACCUMULATION-AWARE. A `*acc<k>x*` render has FOUR parameter regions and FIVE scalars, so
   -- the blob, the loss offset and the gradient recovery all shift. Driving it with `%aup = 1`
   -- (apply) and `%akeep = 0` (discard the incoming accumulator) makes ONE invoke a complete cycle:
   -- `Gt = 0·G + g = g`, so the artifact behaves as its non-accumulating peer except that `%ob1`
   -- carries `(1−β₁)/k` rather than `(1−β₁)`.
-  -- ▶ Hence `m' = ((1−β₁)/k)·g = (0.1/k)·g` and the gradient is recovered at **10k·m'**, not 10·m'.
-  -- ⚠ Getting that factor wrong is invisible to tier 1 — both homogeneity identities are SCALE
+  -- Hence `m' = ((1−β₁)/k)·g = (0.1/k)·g` and the gradient is recovered at **10k·m'**, not 10·m'.
+  -- Getting that factor wrong is invisible to tier 1 — both homogeneity identities are SCALE
   -- INVARIANT in `g`, so a wrong `k` would sail through them and only tier 2's absolute fit would
   -- notice. That is why it is derived from the name rather than assumed.
   let accOn := variant.contains "acc"
@@ -205,10 +202,10 @@ def main : IO Unit := do
     else 1
   if accOn && accK < 2 then
     throw <| IO.userError s!"could not read k from accumulating variant '{variant}'"
-  -- ⚠ The driver's own, not a copy: the region count became 3, 4 or 5 when EMA and accumulation
-  -- stopped sharing the fourth slot (`VerifiedVariant.nRegions`, RSB-A2/A1, 2026-08-27), and a
-  -- frozen `if accOn then 4 else 3` here would size the blob one region short for an `ema…acc…`
-  -- variant — every parameter after θ misaligned, and nothing throws.
+  -- The driver's own, not a copy: the region count is 3, 4 or 5 because EMA and accumulation do not
+  -- share the fourth slot (`VerifiedVariant.nRegions`), and a frozen `if accOn then 4 else 3` here
+  -- would size the blob one region short for an `ema…acc…` variant — every parameter after θ
+  -- misaligned, and nothing throws.
   let nRegions := VerifiedVariant.nRegions variant
   let gScale := 10.0 * accK.toFloat        -- g = gScale · m'
   let lossOff := nRegions * nP
@@ -295,14 +292,14 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
       pn2 := pn2 +         F32.dotSlice θ    fo.toUSize        θ    fo.toUSize        fl.toUSize
     return s.abs / max (Float.sqrt gn2 * Float.sqrt pn2) 1e-30
 
-  -- ⚠⚠ **THE CONDITIONING OF THE IDENTITY, and it is what `a3_paper_fidelity.md` §3.1 is about.**
+  -- **THE CONDITIONING OF THE IDENTITY.**
   --
   -- `cosine` reports `|Σ_t ⟨g_t,θ_t⟩| / (‖g‖‖θ‖)`, and for identity **B** that numerator is a
   -- CANCELLATION: `⟨g_γ,γ⟩` and `⟨g_β,β⟩` are each large and must sum to zero. `kappa` measures how
   -- much — `(|⟨g_γ,γ⟩| + |⟨g_β,β⟩|) / (‖g‖‖θ‖)`, in `[0,1]` — so the cosine cannot resolve anything
   -- below roughly `eps_f32 · κ · √n` no matter how right the render is.
   --
-  -- ▶ Identity **A** has no such term: it is a SINGLE inner product `⟨g_W,W⟩`, so κ ≈ |cos| and its
+  -- Identity **A** has no such term: it is a SINGLE inner product `⟨g_W,W⟩`, so κ ≈ |cos| and its
   -- floor is the plain fp32 one. That asymmetry is the whole reason B degrades under BCE while A
   -- does not — measured, not assumed: at BCE, A's worst is 2.2e-05 and B's is 7.65e-04.
   let kappa (ts : Array Nat) : Float := Id.run do
@@ -354,30 +351,29 @@ tensors, the net has {nT} — the [3,4,6,3] derivation is out of step with the s
 BNs + the head)"
   let ctlSorted := (ctl.map (fun (ts, _nm) => cosine ts)).qsort (fun a b => a < b)
   let ctlMed := ctlSorted[ctlSorted.size / 2]!
-  -- ⭐⭐ **THE 10th-PERCENTILE VIOLATION, and it is what the verdict below now rests on.**
+  -- **THE 10th-PERCENTILE VIOLATION, and it is what the verdict below rests on.**
   --
-  -- ⚠⚠ The check used to be `bC` — the MINIMUM over the 21 control sites — which is exactly the
-  -- order statistic the comment at the verdict says not to use. `scripts/probes/r50_gradcheck_stability.py`
-  -- measured the cost of that contradiction (`a3_paper_fidelity.md` §3.1b): over three runs on the
-  -- SAME seeded base point, `bC` spreads **2.75× under CE and 10.5× under BCE**, so under BCE the
-  -- gate's answer depended on which run you happened to do — 2 of 3 reps cleared the separation and
-  -- 1 did not. The base point is fixed; the GPU execution is not, and
+  -- Not `bC` — the MINIMUM over the 21 control sites, the order statistic the comment at the
+  -- verdict says not to use. `scripts/probes/r50_gradcheck_stability.py` measures it: over three
+  -- runs on the SAME seeded base point, `bC` spreads **2.75× under CE and 10.5× under BCE**, so
+  -- under BCE a verdict on it depends on which run you happen to do (2 of 3 reps clear the
+  -- separation and 1 does not). The base point is fixed; the GPU execution is not, and
   -- `--xla_gpu_deterministic_ops=true` does not fix it.
   --
-  -- ▶ This quantile is the same statement made robustly: at `size/10` (index 2 of 21) it spreads
+  -- This quantile is the same statement made robustly: at `size/10` (index 2 of 21) it spreads
   -- **1.1×** across the same three runs, because it takes one site's collapse to move the minimum
-  -- and three simultaneous collapses to move this. ⚠ It is deliberately NOT the median — the median
+  -- and three simultaneous collapses to move this. It is deliberately NOT the median — the median
   -- already has its own, much stronger check below, and a separation claim wants the WEAK end of
   -- the violating population, just not its single weakest member.
   let ctlQ10 := ctlSorted[ctlSorted.size / 10]!
   IO.println s!"             weakest violation {bC} at {atC};  10th pct {ctlQ10};  median \
 {ctlMed};  strongest {ctlSorted.back!}"
-  -- ⚠ Reported, never thrown on: `bC` is the noisiest number in this report, so "the populations
+  -- Reported, never thrown on: `bC` is the noisiest number in this report, so "the populations
   -- strictly separate" is stated as an observation and the VERDICT uses the quantile. A run where
   -- this line reads `no` is not evidence of a wrong render — check the quantile and the median.
   IO.println s!"             populations strictly separate (min ⟂ > worst passing)? \
 {if bC > max wA wB then "yes" else "NO — see §3.1b, this is the unstable extremum"}"
-  -- ▶ The per-site conditioning dump, behind `R50_GC_DIAG=1`. Read it before touching `tolExact`:
+  -- The per-site conditioning dump, behind `R50_GC_DIAG=1`. Read it before touching `tolExact`:
   -- a site whose |cos| is high AND whose κ is high is unresolved, not wrong.
   if (← IO.getEnv "R50_GC_DIAG").isSome then
     IO.println "  ── conditioning (R50_GC_DIAG) ──   site            |cos∠|         κ      cos/κ"
@@ -393,7 +389,7 @@ BNs + the head)"
   -- ════════════════════════════════════════════════════════════════
 
   -- `δ = α·m'` on the float slice `[fo, fo+fl)`, α set so `‖δ‖ = hh·‖θ_slice‖`. Returns the finite
-  -- difference and the predicted `⟨g, δ⟩`. ⚠ `F32.concat #[θ]` is a deliberate COPY: `axpySlice`
+  -- difference and the predicted `⟨g, δ⟩`. `F32.concat #[θ]` is a deliberate COPY: `axpySlice`
   -- mutates its destination when unshared, and θ is the base point every probe starts from.
   let probe (fo fl : Nat) (hh : Float) : IO (Float × Float) := do
     let tn2 := F32.dotSlice θ fo.toUSize θ fo.toUSize fl.toUSize
@@ -406,7 +402,7 @@ BNs + the head)"
     let om ← runAt θm
     return ((F32.read op lossOff.toUSize - F32.read om lossOff.toUSize) / 2.0, gScale * α * mn2)
 
-  -- ⭐ THE NOISE FLOOR, and R50 hands it to us for free. Scaling one BN-followed conv kernel is an
+  -- THE NOISE FLOOR, and R50 hands it to us for free. Scaling one BN-followed conv kernel is an
   -- exact invariance of the loss (tier 1 A is its derivative), so the finite difference measured
   -- along that direction is pure fp32 noise at that depth — which is what says the residuals below
   -- are the probe's TRUNCATION rather than its arithmetic. `sNorm` is passed so the floor is read
@@ -486,19 +482,14 @@ the conv+BN VJP does not respect the scale invariance it is built on"
     throw <| IO.userError s!"TIER 1 B FAILED: ⟨g_γ,γ⟩+⟨g_β,β⟩ ≠ 0 at {atB} (|cos∠| {wB} > \
 {tolExact}) — the cotangent ARRIVING at that BN is wrong, i.e. something between it and the next \
 convolution differentiates wrongly"
-  -- ⚠ The control is a SEPARATION statement, not an order statistic on one site. Requiring the
+  -- The control is a SEPARATION statement, not an order statistic on one site. Requiring the
   -- weakest of 21 violations to clear a fixed multiple is brittle: `s1b0.proj.bnp`'s cotangent
   -- happens to sit nearly orthogonal to its own BN output at this base point and lands at 7e-4,
   -- an order below its peers. What has to hold is that the two POPULATIONS do not overlap —
   -- every non-homogeneous site above every homogeneous one, with the tolerance between them —
   -- and that the typical violation is large enough that the separation is not one lucky site.
-  --
-  -- ⚠⚠ **THIS COMMENT AND THE CODE BELOW IT DISAGREED UNTIL 2026-08-14** — the check read
-  -- `bC <= 5.0 * …`, i.e. the very order statistic ruled out two lines up, and had done since the
-  -- gate was written. `a3_paper_fidelity.md` §3.1b has the measurement: `bC` spreads 2.75× (CE) and
-  -- 10.5× (BCE) over three runs on the same seeded base point, so the BCE verdict flipped 2-of-3.
-  -- The quantile spreads 1.1×. ▶ A comment that states the right rule is not a gate; this is the
-  -- code catching up to it.
+  -- The check below therefore reads the 10th-percentile control, not `bC`: `bC` spreads 2.75× (CE)
+  -- and 10.5× (BCE) over three runs on the same seeded base point, the quantile 1.1×.
   if ctlQ10 <= 5.0 * max wA wB then
     throw <| IO.userError s!"CONTROL DEAD: the two populations overlap — the 10th-percentile \
 non-homogeneous site sits at {ctlQ10} against a homogeneous worst of {max wA wB}, so the cosine is \

@@ -1,24 +1,23 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
 
-/-! # §2l step B — are the conv biases really inert?
+/-! # Are the conv biases really inert?
 
-`planning/archive/xla_pjrt_handoff.md` §2l wants the conv biases dropped so the verified R34's parameter
-layout lines up with the JAX `.convBn` reference (−8,512 params). Its argument that this is
-**layout-only, not functional** is:
+Dropping the conv biases lines the verified R34's parameter layout up with the JAX `.convBn`
+reference (−8,512 params). The argument that this is **layout-only, not functional** is:
 
 > every conv here is immediately followed by BN, and BN subtracts the batch mean, so
 > `(x + b) − mean(x + b) = x − mean(x)`; the bias gradient is exactly zero, and since biases are
 > zero-initialised it stays 0 forever.
 
-§2l flags that as *"an argument, not a measurement"* and asks for the measurement before anything
-relies on it. This is it — and it is sharper than the ten-second version suggested there.
+That is *an argument, not a measurement*. This harness is the measurement — and it is sharper
+than the argument.
 
-**The construction (§2k's, reused).** Run the committed `resnet34_adam_train_step.mlir` for ONE
+**The construction.** Run the committed `resnet34_adam_train_step.mlir` for ONE
 step from **`m = v = 0`**. AdamW's first moment is `m' = (1−β₁)·g`, so `m'` recovers the gradient
 exactly: `g = 10·m'` at β₁ = 0.9. Reading `m'` is therefore reading the gradient, with no tolerance
 argument and no dependence on how θ moved. Checking θ instead would be much weaker — Adam's update
-is scale-free, so a zero-gradient parameter still moves ±lr (§3).
+is scale-free, so a zero-gradient parameter still moves ±lr.
 
 **What is checked, and why the controls are the point.** A harness that reported "zero" for every
 rank-1 slot would pass the headline claim while proving nothing, so the same run must show the
@@ -29,11 +28,11 @@ same-shaped params that are NOT BN-followed moving:
 | the 36 **conv biases** (`[c]`, kind 2, index ≡ 1 mod 4) | **exactly 0** | swallowed by the following BN |
 | the 36 **conv weights** (rank-4) | non-zero | else the whole step is degenerate |
 | BN **γ** (kind 1) and **β** (kind 2) | non-zero | β is the parameter that actually plays the bias role |
-| the **dense bias** (`[10]`, kind 2, last slot) | **non-zero** | ⚠ THE CONTROL: same shape and same
+| the **dense bias** (`[10]`, kind 2, last slot) | **non-zero** | THE CONTROL: same shape and same
   init kind as a conv bias, but it feeds the loss directly with no BN after it. If this were zero
   too, the reading would be "the harness sees zeros", not "BN kills conv-bias gradients" |
 
-⚠ Scope: this measures the **gradient at step 1**, plus zero-init (`ResNet34Layout.specs` kind 2),
+Scope: this measures the **gradient at step 1**, plus zero-init (`ResNet34Layout.specs` kind 2),
 which together give the induction — a parameter whose gradient is identically zero and starts at 0
 stays at 0, with `m`/`v` at 0 too. It does not measure a trained checkpoint; if you want that
 belt-and-braces, dump `[θ|m|v]` from a real run and read the same slots.
@@ -52,10 +51,10 @@ private def Slot.idx : Slot → Nat
   | .convW => 0 | .convB => 1 | .bnG => 2 | .bnB => 3 | .denseW => 4 | .denseB => 5
 
 /-- Classify each param from the LAYOUT ITSELF rather than from a fixed stride: a rank-4 entry is
-    a conv weight, and the rank-1 entries following it are that conv's `[b, γ, β]` (pre-§2l-B) or
-    `[γ, β]` (post). The last two entries are always the dense head. Deriving it this way is what
-    lets one harness read both the biased and the bias-free layout — the earlier version hardcoded
-    groups of four and silently reported BN slots as conv biases once the biases were gone. -/
+    a conv weight, and the rank-1 entries following it are that conv's `[b, γ, β]` (biased
+    layout) or `[γ, β]` (bias-free). The last two entries are always the dense head. Deriving it
+    this way is what lets one harness read both the biased and the bias-free layout — hardcoded
+    groups of four would silently report BN slots as conv biases in the bias-free layout. -/
 private def classifyAll (specs : Array (Array Nat × Nat)) : Array Slot := Id.run do
   let n := specs.size
   let mut out : Array Slot := #[]
@@ -118,10 +117,10 @@ private def ckptMode (net : VerifiedNet) (path : String) : IO Unit := do
 {maxBySlot[Slot.bnB.idx]!}. They drifted despite a gradient ~1e-6 of every other parameter's, \
 because AdamW's update is SCALE-FREE (§3): m̂/(√v̂+ε) is O(1) however small the gradient is."
 
-/-- `--ablate <ckpt>`: THE GATE THAT DECIDES STEP B. Take the TRAINED θ, run `@resnet34_fwd`, then
-    zero the 36 conv-bias slots and run it again. If dropping the biases is layout-only, the two
-    logit sets must agree — and that is a claim about the *function*, which is what §2l actually
-    needs, rather than about the gradient or the parameter values.
+/-- `--ablate <ckpt>`: THE GATE THAT DECIDES THE BIAS DROP. Take the TRAINED θ, run
+    `@resnet34_fwd`, then zero the 36 conv-bias slots and run it again. If dropping the biases is
+    layout-only, the two logit sets must agree — and that is a claim about the *function*, which
+    is what dropping them actually needs, rather than about the gradient or the parameter values.
 
     The control is built in: the same ablation applied to BN β (which BN does NOT remove) must
     move the logits a lot. Without it, "logits unchanged" could just mean the harness re-ran the
@@ -222,11 +221,10 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   let nPA := net.nParams
   let nPB := (shB.map (fun d => d.foldl (· * ·) 1)).foldl (· + ·) 0
   IO.println s!"  A: {nS} params / {nPA} floats     B: {shB.size} params / {nPB} floats"
-  -- ⚠ m and v must be the SAME NUMBERS on both sides, which means generating them ONCE at A's
+  -- m and v must be the SAME NUMBERS on both sides, which means generating them ONCE at A's
   -- size and slicing B's out of it. Generating each side at its own size looks equivalent and is
   -- not: the buffers are position-indexed, so dropping 36 slots shifts every later value and the
-  -- two runs see different moments. That is a harness bug that reads exactly like a render bug —
-  -- it produced 36448/68015201 bit-exact before this was fixed.
+  -- two runs see different moments. That is a harness bug that reads exactly like a render bug.
   let mA ← F32.heInit 4242 nPA.toUSize 0.02
   let vA ← F32.scaleShift (← F32.heInit 8484 nPA.toUSize 0.01) 1.0 0.05
   let dropBias (buf : ByteArray) : ByteArray := Id.run do
@@ -257,7 +255,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
     LowererSession.mlpTrainStepV sess s!"m.{net.slug}_adam_train_step" x buf shp y
       bs.toUSize net.d0.toUSize net.nClasses.toUSize
   let oA ← run ref "a" bufA shpA
-  let oA2 ← run ref "a2" bufA shpA        -- the A-vs-A determinism floor (§4)
+  let oA2 ← run ref "a2" bufA shpA        -- the A-vs-A determinism floor
   let oB ← run candidate "b" bufB shpB
 
   -- walk both in func-arg order, skipping A's conv-bias slots
@@ -287,7 +285,7 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
       if (a-b).abs > maxD then maxD := (a-b).abs; worst := s!"loss/bnstat {j}"
       if max a.abs b.abs > maxM then maxM := max a.abs b.abs
     (maxD, maxM, exact, total, worst)
-  -- Per REGION (§4): `bnstat` and `%loss` are FORWARD-only outputs, so if they are bit-exact the
+  -- Per REGION: `bnstat` and `%loss` are FORWARD-only outputs, so if they are bit-exact the
   -- forward is identical and any difference is confined to the backward — which is what a
   -- reduction-reorder from dropping 36 gradient chains looks like, as opposed to a real change.
   let regionMax (oR : ByteArray) (nPR : Nat) (lo hi : Nat) : Float × Nat × Nat := Id.run do
@@ -310,26 +308,25 @@ private def tieMode (net : VerifiedNet) (candidate : String) : IO Unit := do
   IO.println s!"    forward-only regions:  %loss/bc {eL}/{nL} bit-exact (max {dL * sc}e-9), \
 BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
   if maxM < 1e-6 then throw (IO.userError "DEGENERATE: A's outputs are ~0")
-  -- The two graphs are NOT identical text — B has 36 fewer parameters and 36 fewer gradient
-  -- chains — so XLA fuses and schedules them differently and the reduction orders diverge. Gate
-  -- on the same relative bound §2b used for R34, and report the floor beside it so the reader can
-  -- see how much of the difference is the backend rather than the change.
+  -- The two graphs are NOT identical text — B has 36 fewer parameters and 36 fewer gradient chains
+  -- — so XLA fuses and schedules them differently and the reduction orders diverge. Gate on a
+  -- relative bound, and report the floor beside it so the reader can see how much of the difference
+  -- is the backend rather than the change.
   if maxD / maxM > 1e-5 then
     IO.println s!"  ⛔ tie FAILED: rel {maxD / maxM} > 1e-5 — the renders compute different functions"
     throw (IO.userError "tie failed")
   IO.println s!"  ✅ the candidate ties the committed render at rel {maxD / maxM} over \
 {total} shared floats ({exact} of them bit-exact), with {nS - shB.size} fewer parameters."
 
-/-- `--fwd <candidate> [--eval]`: **THE GATE THE FIRST SWAP ATTEMPT DID NOT HAVE.**
+/-- `--fwd <candidate> [--eval]`: **THE FORWARD-ARTIFACT GATE.**
 
     `--tie` above gates the AdamW *train step*, and that is the only thing it gates. The `_fwd` and
-    `_fwd_eval` artifacts came out of a DIFFERENT renderer then (`MobileNetV2Render.lean`, since retired), and
-    on 2026-07-31 that renderer dropped **50** of the 52 conv biases where the train step and the
-    layout dropped 52 — the stem and head were hardcoded outside the gate. The train-step tie came
-    back bit-exact, the audit was green, and the trainer then died at `f32 forward failed` because
-    the driver fed a 158-param layout to a 160-param eval graph. This mode closes that hole: it
-    feeds the candidate forward the SAME bias-free parameter blob the driver will build, so an
-    arity or ordering skew is a hard failure here rather than a run-time one later.
+    `_fwd_eval` artifacts can come out of a DIFFERENT renderer, which can drop a different number of
+    conv biases than the train step and the layout (say, with the stem and head hardcoded outside
+    the gate). The train-step tie is then bit-exact and the trainer dies at `f32 forward failed`,
+    because the driver feeds its layout to an eval graph of a different arity. This mode closes
+    that hole: it feeds the candidate forward the SAME bias-free parameter blob the driver will
+    build, so an arity or ordering skew is a hard failure here rather than a run-time one later.
 
     **The claim is BIT-EXACT, and the scope is deliberate.** `mkParam` gives every conv bias its
     real init — kind 2, i.e. **zeros** — so A and B differ only in whether those zeros arrive as
@@ -339,7 +336,7 @@ BN running stats {eS}/{nS'} bit-exact (max {dS * sc}e-9)"
     zero (see `--ckpt`); that claim is `--ablate`'s, and for the train step it is the bit-exact
     forward-only regions of `--tie`.
 
-    ⚠ **Do not "strengthen" this by feeding non-zero biases in `--eval` mode.** The frozen running
+    **Do not "strengthen" this by feeding non-zero biases in `--eval` mode.** The frozen running
     stats a real eval consumes were ESTIMATED on whatever net produced them, so `(x + b) − μ` with
     a `μ` from a biased net is not `x − μ`. The bias-free render is consistent because the swap
     retrains from scratch and re-estimates `μ` without biases; a non-zero-`b` comparison here would
@@ -466,7 +463,7 @@ backend {← LowererSession.backendName}"
   for i in [0:bs] do
     y := y.push (UInt8.ofNat (i % net.nClasses)); y := y.push 0; y := y.push 0; y := y.push 0
 
-  -- §4: delete the .vmfb first, or a re-run with a different candidate reuses the old binary.
+  -- delete the .vmfb first, or a re-run with a different candidate reuses the old binary.
   let vmfb := ".lake/build/conv_bias_zero.vmfb"
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/conv_bias_zero_{target}.vmfb"] do
@@ -502,7 +499,7 @@ backend {← LowererSession.backendName}"
     cntBySlot := cntBySlot.set! k (cntBySlot[k]! + sz)
     off := off + sz
 
-  -- ⚠ Float.toString truncates at 6 decimals, which prints a 1e-9 residue as "0.000000" — the
+  -- Float.toString truncates at 6 decimals, which prints a 1e-9 residue as "0.000000" — the
   -- exact reading this check must not get wrong. Report ×1e9 and the ratio to the conv WEIGHT
   -- gradient, so a tiny-but-non-zero value cannot be mistaken for an exact zero.
   let scale := 1000000000.0
@@ -527,7 +524,7 @@ NOT \"BN swallows the conv bias\"."
     ok := false
   if !ok then throw (IO.userError "measurement is degenerate — do not rely on it")
 
-  -- ▶ MEASURED 2026-07-30, and §2l's stated reason is WRONG. The gradient is NOT exactly zero:
+  -- MEASURED: the argument quoted in the header is WRONG. The gradient is NOT exactly zero:
   -- `(x+b) − mean(x+b) = x − mean(x)` is exact in ℝ, but the BN mean is a ROUNDED f32 sum, so the
   -- cancellation leaves a residue on ~93% of coordinates. Two runs disagree on which coordinates,
   -- which is what identifies it as rounding noise rather than signal. So the gate is a RATIO, not

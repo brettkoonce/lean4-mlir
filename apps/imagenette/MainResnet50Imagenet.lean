@@ -3,14 +3,12 @@ import LeanMlir.Verified.Train
 
 /-! # `resnet50-imagenet-verified` — ResNet-50 on full ImageNet-1k, verified renderer → XLA/PJRT
 
-R50 phase 3. Nothing new was needed in the renderer to reach ImageNet scale — `nClasses`, `B`,
-`replicas`, `opt` and `slug` are all parameters of `resnet50TrainStepFaithfulB`, so the four
-artifacts are four `#eval`s. What was needed was the three bottleneck block VJPs (phase 1) and the
-renderer itself (phase 2).
+The renderer needs nothing ImageNet-specific — `nClasses`, `B`, `replicas`, `opt` and `slug` are
+all parameters of `resnet50TrainStepFaithfulB`, so the four artifacts are four `#eval`s.
 
-⚠ Read the two warnings above before quoting anything from this: it is NOT
-RSB-A3 (no LAMB, no bs2048, no gradient accumulation), and R50 has no incumbent render to tie
-against, so the swap license every other net had does not exist here.
+Before quoting anything from this: it is NOT RSB-A3 (no LAMB, no bs2048, no gradient
+accumulation), and R50 has no incumbent render to tie against, so the swap license every other net
+has does not exist here.
 
 ```bash
 scripts/gen_shims.sh
@@ -24,16 +22,14 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
-`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The `-xla` suffix is
-gone from the target name because it no longer distinguishes anything: the
-backend is a run-time choice about transport, not a different program.
+`=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`). The target name has no
+`-xla` suffix: the backend is a run-time choice about transport, not a different program.
 -/
 
-/-- 100 epochs — RSB-A3's own reference schedule at effective batch 2048. Raised from 30 on
-    2026-08-06 to run the composed A3 artifact (`lambaccdp8x64bce`) at the length the recipe is
-    specified for; the 4-GPU@160 probe measured 240 ms/step, so 100 epochs is ~33 h.
+/-- 100 epochs — RSB-A3's own reference schedule at effective batch 2048, the length the
+    composed A3 artifact (`lambaccdp8x64bce`) is specified for; the 4-GPU@160 probe measured 240 ms/step, so 100 epochs is ~33 h.
 
-    ⚠⚠ **THIS FIELD IS THE LR SCHEDULE, NOT JUST A LOOP BOUND.**
+    **THIS FIELD IS THE LR SCHEDULE, NOT JUST A LOOP BOUND.**
     `totalSteps := cfg.epochs * nb / accK` (`Verified.Train` 1166) — the cosine anneals over
     exactly this many epochs. `LEAN_MLIR_MAX_EPOCHS` caps the LOOP (`min n cfg.epochs`) and does
     NOT touch the schedule, which is precisely what makes a capped run a resumable PREFIX of the
@@ -42,28 +38,25 @@ backend is a run-time choice about transport, not a different program.
       LEAN_MLIR_MAX_EPOCHS=30   → epochs 0..29 of the 100-epoch cosine, checkpointed at 30.
       (then, unset)             → resumes at 30 and runs 30..99 on the SAME schedule.
 
-    ▶ That is the intended way to take a look before committing the full ~33 h. It is NOT the same
-    as the old `epochs := 30`, which annealed fully by epoch 30 and was a complete experiment.
+    That is the intended way to take a look before committing the full ~33 h. It is NOT the same
+    as `epochs := 30`, which anneals fully by epoch 30 and is a complete experiment.
 
-    ⚠ This is the config for EVERY variant of this driver, not just A3 — `adamdp64` and friends now
-    also schedule over 100 epochs. To recover the old R34-comparable, fully-annealed 30-epoch tier
-    you must set this field back to 30, not pass `LEAN_MLIR_MAX_EPOCHS=30`. The run announces which
+    This is the config for EVERY variant of this driver, not just A3 — `adamdp64` and friends
+    also schedule over 100 epochs. For the R34-comparable, fully-annealed 30-epoch tier
+    you must set this field to 30, not pass `LEAN_MLIR_MAX_EPOCHS=30`. The run announces which
     it is every epoch (`Epoch {ep+1}/{cfg.epochs}`), so a log always says which schedule it ran. -/
 def resnet50ImagenetConfig : VerifiedConfig where
   epochs    := 100
   batchSize := 64
-  -- ⚠⚠ **0.9, NOT the driver's 0.99 default — 2026-08-30, and it MATCHES the phase-2 side.**
-  -- `trainAdamSched`'s host-side BN EMA hard-coded a decay of 0.99 to track the JAX reference's
-  -- `_bn`, which hard-coded the same. Both were TF's EfficientNet value; R50's reference is timm,
-  -- whose `BatchNorm2d` default `momentum = 0.1` is a decay of **0.9** (PyTorch's momentum weights
-  -- the NEW batch). Read off `timm.create_model('resnet50')`, timm 1.0.28, 2026-08-30 —
-  -- `momentum = 0.1, eps = 1e-5` on all 53 BN layers. `jax/MainResnet50Imagenet.lean` sets the
-  -- same value, and the two must move together or the phase-2 ↔ phase-4 comparison acquires a
-  -- variable that no loss curve can show.
-  -- ⚠ At A3's `acc` k = 8 the driver compensates to `1 − 0.9^(1/8)` = 0.013084 per micro-batch,
-  -- against the old `1 − 0.99^(1/8)` = 0.001256 — a 10× shorter window, as intended.
-  -- ⚠ EVAL-ONLY. The completed 77.43% A3 result stands as history; it is simply no longer what
-  -- this config would train, and the direction of the change is not known in advance.
+  -- **0.9, NOT the driver's 0.99 default, and it MATCHES the JAX side.** `trainAdamSched`'s
+  -- host-side BN EMA defaults to a decay of 0.99, as the JAX reference's `_bn` does: TF's
+  -- EfficientNet value. R50's reference is timm, whose `BatchNorm2d` default `momentum = 0.1` is a
+  -- decay of **0.9** (PyTorch's momentum weights the NEW batch). Read off
+  -- `timm.create_model('resnet50')`, timm 1.0.28 — `momentum = 0.1, eps = 1e-5` on all 53 BN
+  -- layers. `jax/MainResnet50Imagenet.lean` sets the same value, and the two must move together or
+  -- the JAX ↔ verified comparison acquires a variable that no loss curve can show. At A3's `acc` k
+  -- = 8 the driver compensates to `1 − 0.9^(1/8)` = 0.013084 per micro-batch, against `1 −
+  -- 0.99^(1/8)` = 0.001256 at 0.99 — a 10× shorter window, as intended. EVAL-ONLY.
   bnMomentum := 0.9
 
 /-- Entry point. Defaults to the 4-replica `adamdp64` artifact, since ImageNet-scale R50 on this
@@ -76,24 +69,22 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.001
-  -- ⚠ `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
+  -- `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it
   -- (`min n cfg.epochs`, and this file's own docstring above spells out why that distinction
   -- bites). `totalSteps := cfg.epochs * nb / accK` is what the cosine anneals over, so this is
   -- the knob that reaches the 90-epoch 2018 tier from a 100-epoch A3 default.
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD resnet50ImagenetConfig.epochs
-  -- ▶ `LEAN_MLIR_RES` picks the TRAIN resolution, which is not a knob but a choice of NET SPEC:
-  -- it selects the slug (`resnet50in` vs `resnet50in160`), hence the artifact family, `d0`, and
-  -- the shim. `planning/archive/next_session_rsb_a3.md` §2. ⚠ REFUSES on any other value rather than
-  -- falling back to 224 — a silent fallback here is a run that looks correct and trains the wrong
-  -- resolution, which is the §0.9 shim-fallback failure one layer up.
-  -- ▶ `LEAN_MLIR_RECIPE` picks the AUGMENTATION. Like `LEAN_MLIR_RES` it is not a knob but a
+  -- `LEAN_MLIR_RES` picks the TRAIN resolution, which is not a knob but a choice of NET SPEC: it
+  -- selects the slug (`resnet50in` vs `resnet50in160`), hence the artifact family, `d0`, and the
+  -- shim. REFUSES on any other value rather than falling back to 224 — a silent fallback here is a
+  -- run that looks correct and trains the wrong resolution.
+  -- `LEAN_MLIR_RECIPE` picks the AUGMENTATION. Like `LEAN_MLIR_RES` it is not a knob but a
   -- choice of NET SPEC: it selects `shimScript`, hence what the producer actually streams.
-  -- ⛔ WHY IT EXISTS. `shimScript` is a field on the NET, so before this the only 224² spec
-  -- carried the `default` (RSB-A2) shim, which calls `_randaugment(img, 2, 7.0, 0.5)`
-  -- unconditionally. A verified 2018 run trained 2018's optimizer on A2's augmentation — neither
-  -- recipe, and not comparable to the JAX 2018 number it exists to sit beside. Caught 2026-08-24
-  -- as a mean −4.90 top-1 gap against the JAX per-epoch curve; that run was killed at epoch 13.
-  -- ⚠ REFUSES on any other value, for the same reason the resolution dispatch does: a silent
+  -- WHY IT EXISTS. `shimScript` is a field on the NET, and the `default` (RSB-A2) shim calls
+  -- `_randaugment(img, 2, 7.0, 0.5)` unconditionally, so a 2018 run on the `default` spec trains
+  -- 2018's optimizer on A2's augmentation — neither recipe, and not comparable to the JAX 2018
+  -- number it exists to sit beside.
+  -- REFUSES on any other value, for the same reason the resolution dispatch does: a silent
   -- fallback here is a run that looks correct and trains the wrong augmentation.
   let recipe := ((← IO.getEnv "LEAN_MLIR_RECIPE").getD "default").trimAscii.toString
   let net ← match (← IO.getEnv "LEAN_MLIR_RES") with
@@ -101,10 +92,10 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
         match recipe with
         | "default" => pure resnet50ImagenetVerified
         | "2018"    => pure resnet50Imagenet2018Verified
-        -- ⭐ A1 (2026-08-27). ⚠ `default` IS RSB-A2's augmentation and A1's differs from it in
+        -- A1. `default` IS RSB-A2's augmentation and A1's differs from it in
         -- exactly one emitted constant — Mixup α 0.2 against 0.1 — so this arm exists to make that
         -- one constant selectable by NAME rather than by an env override nothing records.
-        -- ⚠⚠ A1 also needs its own TRAIN STEP, which this dispatch does not select:
+        -- A1 also needs its own TRAIN STEP, which this dispatch does not select:
         -- `LEAN_MLIR_VARIANT=lambaccdp8x64wxclipbcewd001` bakes wd 0.01 where A2's bakes 0.02.
         -- Picking recipe `a1` with A2's variant trains A1's data on A2's decay and reports a
         -- number, so the two must be set together. There is deliberately no `a2` arm: A2's shim is
@@ -122,16 +113,15 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
     | some r     => throw <| IO.userError s!"LEAN_MLIR_RES={r}: only 160 and 224 are rendered. \
         160 is RSB-A3's train resolution (slug resnet50in160, d0 76800); 224 is the default \
         (slug resnet50in, d0 150528). Rendering another needs a new VerifiedNetSpec + artifacts."
-  -- ⚠ ANNOUNCED, both states. Which resolution a run trained at is not recoverable from the loss
-  -- curve, and this repo has now twice paid for a throughput/shape setting that printed nothing.
-  -- ⚠ ANNOUNCED, and the shim is now part of it. Which AUGMENTATION a run trained on is no more
-  -- recoverable from a loss curve than which resolution was, and this repo has now paid for both.
+  -- ANNOUNCED, both states. Which resolution a run trained at is not recoverable from the loss
+  -- curve.
+  -- ANNOUNCED, shim included. Which AUGMENTATION a run trained on is no more recoverable from a
+  -- loss curve than which resolution was.
   IO.println s!"  ▸ TRAIN RES: {net.imageH}×{net.imageW} (slug {net.slug}, d0 {net.d0}, shim {net.shimScript})"
   IO.println s!"  ▸ RECIPE: {recipe} — augmentation comes from {net.shimScript}"
-  -- ✅ The 160 net is EVALUABLE as of 2026-08-06. Its shim emits A3's split — 76,800 floats/img on
-  -- train, 150,528 on val — and the driver now reads the eval width off `@<slug>_fwd_eval` rather
-  -- than reusing `net.d0` (`fwdRenderedShape`/`evalD0` in `Verified.Train`). The refusal that
-  -- stood here until then is gone; the run announces "EVAL RES SPLIT" instead.
+  -- The 160 net is EVALUABLE. Its shim emits A3's split — 76,800 floats/img on train, 150,528 on
+  -- val — and the driver reads the eval width off `@<slug>_fwd_eval` rather than reusing `net.d0`
+  -- (`fwdRenderedShape`/`evalD0` in `Verified.Train`); the run announces "EVAL RES SPLIT".
   net.toNet.trainAdamSched
     { resnet50ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant

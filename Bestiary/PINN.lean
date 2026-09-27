@@ -25,7 +25,7 @@ Boltzmann generator beside it is the physics demo this book can train —
 its physics enters through the target density and the reweighting, not
 through derivatives of the network.
 
-⚠ The paper's activation is tanh, chosen because the residual needs smooth
+The paper's activation is tanh, chosen because the residual needs smooth
 second derivatives — a ReLU net's u_xx is zero almost everywhere and the
 PDE term would vanish. Our `Activation` enum has no tanh; the smooth `.gelu`
 stands in and contributes zero parameters either way.

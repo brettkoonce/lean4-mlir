@@ -85,7 +85,7 @@ theorem sum_abs_kernel_slab_le {oc ic kH kW : Nat}
     |e (k4Idx o c kh kw)|) (fun _ _ => by positivity) (Finset.mem_univ o)
 
 -- ════════════════════════════════════════════════════════════════
--- § Conv forward rounding budget (planning §1b-A): conv = dense at the
+-- § Conv forward rounding budget: conv = dense at the
 --   conv fan-in, so the float conv close IS `dense_close` on the
 --   per-output-coordinate flattened window.
 -- ════════════════════════════════════════════════════════════════
@@ -156,11 +156,10 @@ noncomputable def FloatModel.convF {ic oc h w kH kW : Nat} (M : FloatModel)
     Tensor3 oc h w :=
   fun o hi wi => M.dense (convKernelMat W) b (convWindow kH kW x hi wi) o
 
-/-- **Conv forward rounding budget (Item A).** The rounded conv at a float input
+/-- **Conv forward rounding budget.** The rounded conv at a float input
     within `e` of the real activation is within the conv-fan-in `denseErr` of the
     real conv — `dense_close` at the flattened window. The compounded Higham
-    factor rides the fan-in `ic·kH·kW` (the dense column length here), exactly as
-    the planning doc calls for. -/
+    factor rides the fan-in `ic·kH·kW` (the dense column length here). -/
 theorem FloatModel.convF_close {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (xt xa : Tensor3 ic h w) {e : ℝ}
     (he : 0 ≤ e) (hx : ∀ c i j, |xt c i j - xa c i j| ≤ e)

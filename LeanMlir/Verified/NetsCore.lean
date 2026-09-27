@@ -98,13 +98,12 @@ def mlpVerified : VerifiedNetSpec where
 def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   name     := s!"MNIST-MLP-{d₁}x{d₂}"
   slug     := s!"mlp_{d₁}x{d₂}"
-  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
   -- artifact at run time and immediately trains on it, so the file is regenerated every
-  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
-  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
-  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
-  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
-  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  -- invocation. The writer audit greps for a LITERAL path while these writers interpolate the
+  -- slug, so it cannot see them. `verified_mlir/` is pinned to exactly the certified corpus
+  -- (`regen_verified_mlir.sh check`), which it could not be if transients landed there. See
+  -- `VerifiedNet.mlirDir`.
   mlirDir  := ".lake/build"
   inC      := 1
   imageH   := 28
@@ -112,11 +111,9 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   data     := .mnist
   layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
   blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → %LOWERER% → GPU"
-  -- ⚠ Same carve-out as `mlpVerified`: this renders through `mlpTrainStepFaithfulV`, which
-  -- emits a trailing report-only `%loss`. Missing here from ff1ef3d (2026-08-12) until
-  -- 2026-09-01, so every `mnist-mlp-grid` invocation died on `G4 VIOLATION: returns 7
-  -- outputs, caller supplied 6` — the width sweep behind §2.5 has not been runnable since
-  -- the day after its data was taken. The gate refused loudly; nothing else noticed.
+  -- Same carve-out as `mlpVerified`: this renders through `mlpTrainStepFaithfulV`, which
+  -- emits a trailing report-only `%loss`. Without it every `mnist-mlp-grid` invocation dies on
+  -- `G4 VIOLATION: returns 7 outputs, caller supplied 6`.
   lossSlot := true
 
 -- `mlpG 512 512` is exactly the canonical `mlpVerified` architecture.
@@ -156,13 +153,12 @@ def cnnVerified : VerifiedNetSpec where
 def cnnG (d : Nat) : VerifiedNetSpec where
   name     := s!"MNIST-CNN-fc{d}"
   slug     := s!"cnn_{d}"
-  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
   -- artifact at run time and immediately trains on it, so the file is regenerated every
-  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
-  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
-  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
-  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
-  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  -- invocation. The writer audit greps for a LITERAL path while these writers interpolate the
+  -- slug, so it cannot see them. `verified_mlir/` is pinned to exactly the certified corpus
+  -- (`regen_verified_mlir.sh check`), which it could not be if transients landed there. See
+  -- `VerifiedNet.mlirDir`.
   mlirDir  := ".lake/build"
   inC      := 1
   imageH   := 28
@@ -171,9 +167,8 @@ def cnnG (d : Nat) : VerifiedNetSpec where
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 d, .relu, .dense d d, .relu, .dense d 10]
   blurb    := s!"MNIST-CNN-fc{d} via the VERIFIED renderer (conv32→conv32→pool→{d}→{d}→10) → %LOWERER% → GPU"
-  -- ⚠ As `mlpG` above and `cnnVerified`: this render carries a trailing report-only `%loss`.
-  -- Missing since ff1ef3d, so `mnist-cnn-grid` died on `G4 VIOLATION: returns 11 outputs,
-  -- caller supplied 10`. Both grid drivers broke in the same commit and neither was run again.
+  -- As `mlpG` above and `cnnVerified`: this render carries a trailing report-only `%loss`.
+  -- Without it `mnist-cnn-grid` dies on `G4 VIOLATION: returns 11 outputs, caller supplied 10`.
   lossSlot := true
 
 -- `cnnG 512` is exactly the canonical `cnnVerified` architecture.
@@ -219,12 +214,10 @@ def cifar8Verified : VerifiedNetSpec where
                .dense 128 64, .relu, .dense 64 64, .relu, .dense 64 10]
   blurb    := "Deeper CIFAR-10 CNN (8 convs, [16,16,32,32], 4 pools 32→2 → 128→64→64→10) via the VERIFIED renderer → %LOWERER% → GPU"
 
--- ⚠ `cifar8Bf16Verified` (slug `cifar8_bf16`) and `cifar8bVerified` (slug `cifar8b`) lived here
--- until 2026-09-20 and were removed with the six narrow-head trainer binaries that were their only
--- consumers. The artifacts they pointed at — `verified_mlir/cifar8_bf16{,_mom,_adam}_train_step.mlir`
--- and `cifar8b{,_bf16,_fp8}_adam_train_step.mlir` — are NOT removed: they are pure-Lean `#eval`
+-- The narrow-head artifacts `verified_mlir/cifar8_bf16{,_mom,_adam}_train_step.mlir` and
+-- `cifar8b{,_bf16,_fp8}_adam_train_step.mlir` have no spec here: they are pure-Lean `#eval`
 -- renders from `Proofs/Codegen/CnnRender.lean`, gated by .github/workflows/proofs.yml, and they
--- carry the §4.1 batched-op-family and §5.2 precision provenance. The wide-head peers
+-- carry the batched-op-family and precision provenance. The wide-head peers
 -- (`cifar8wVerified`, `cifar8wbVerified`, `cifar8w{,b}BnVerified`, below) are what Chapter 4 trains.
 
 #guard cifar8Verified.toSpecs ==
@@ -275,13 +268,12 @@ def cifar8BnVerified : VerifiedNetSpec where
 def cifar8BnG (d : Nat) : VerifiedNetSpec where
   name     := s!"CIFAR-CNN8-BN-fc{d}"
   slug     := s!"cifar8_bn_{d}"
-  -- ⚠⚠ A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
+  -- A BUILD PRODUCT, NOT A COMMITTED RENDER. This spec is instantiated from argv, renders its
   -- artifact at run time and immediately trains on it, so the file is regenerated every
-  -- invocation. It wrote into `verified_mlir/` until 2026-08-03 and 74 such files had been checked
-  -- in across the three sweep specs — never loaded by anything, and invisible to the writer audit,
-  -- which greps for a LITERAL path while these writers interpolate the slug. `verified_mlir/` is
-  -- now pinned to exactly the certified corpus (`regen_verified_mlir.sh check`), which it could not
-  -- be while transients landed there. See `VerifiedNet.mlirDir`.
+  -- invocation. The writer audit greps for a LITERAL path while these writers interpolate the
+  -- slug, so it cannot see them. `verified_mlir/` is pinned to exactly the certified corpus
+  -- (`regen_verified_mlir.sh check`), which it could not be if transients landed there. See
+  -- `VerifiedNet.mlirDir`.
   mlirDir  := ".lake/build"
   inC      := 3
   imageH   := 32
@@ -404,8 +396,7 @@ def resnet34Verified : VerifiedNetSpec where
   runningBN  := true
 
 -- Derived layout (110 params) == the audited hand-list ResNet34Layout.specs. This `#guard` is
--- the one §2k said would have caught the spec/render drift; it fired on the §2l step-B change and
--- is what forced `VLayer` to grow a bias-free conv rather than the layout being edited by hand.
+-- what catches spec/render drift.
 #guard resnet34Verified.toSpecs == ResNet34Layout.specs
 
 /-- **ResNet-34 on full 1000-class ImageNet.**
@@ -429,7 +420,6 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   imageW   := 224
   data     := .imagenet
   -- `resnet34ImagenetConfig` sets only `augment := true` ⇒ RandomResizedCrop + hflip, nothing else.
-  -- This is the shim every OTHER net was streaming too, until `shimScript` existed.
   shimScript := "generated_resnet34_imagenet_shim.py"
   layers   := [
     .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
@@ -510,18 +500,18 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
     .dense 2048 1000 ]
   blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU"
   runningBN  := true
-  -- ▶▶ **STOCHASTIC DEPTH, RSB-A2/A1's `dropPath := 0.05`** (2026-08-27). Sixteen sites, one per
+  -- **STOCHASTIC DEPTH, RSB-A2/A1's `dropPath := 0.05`**. Sixteen sites, one per
   -- bottleneck block, on the residual branch — `bottleneck_block` drops `out` and leaves the
   -- shortcut alone.
   --
-  -- ⭐ **The index IS the block index here, and unlike EfficientNet that is not a trap** —
+  -- **The index IS the block index here, and unlike EfficientNet that is not a trap** —
   -- `efficientnetVerified.dropKeeps` carries `#[2,4,6,7,9,10,12,13,14]` because its reference
   -- advances `dbi` on every MBConv while the drop fires only inside a skip guard, so its keeps are
   -- UNEVENLY spaced over a denominator of 15. R50 has no such guard: every bottleneck block drops,
   -- `dbi` advances every block, and the ramp is dense. Stated because the two look identical and
   -- one of them is a `#[…]` literal for a reason.
   --
-  -- ⚠ The denominator is `totalDrop − 1 = 15`, not 16 — `jax/Jax/Codegen.lean`'s
+  -- The denominator is `totalDrop − 1 = 15`, not 16 — `jax/Jax/Codegen.lean`'s
   -- `denom := Nat.max 1 (totalDrop - 1)`. So block 0 keeps 1.0 exactly and block 15 keeps 0.95;
   -- an off-by-one gives sixteen slightly-wrong keeps that train and descend. Checked against the
   -- regenerated reference's own call sites: `dpkeys[1], 0.996667` and `dpkeys[3], 0.990000`.
@@ -529,11 +519,10 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
   dropDenom := 15
   dropRate  := 0.05
 
--- ▶ §2k's precondition, and it is FREE here: the derived layout must total the reference's own
--- reported parameter count. `jax/.lake/build/generated_resnet50_imagenet.py` reports 25,557,032,
--- which is also torchvision's — the two conventions already agree because neither carries conv
--- biases (§2m). A mismatch here means the spec drifted from the net it is paired against, and it
--- is exactly the check whose ABSENCE let two different "ResNet-34"s ship (§2k/§2l).
+-- The derived layout must total the reference's own reported parameter count.
+-- `jax/.lake/build/generated_resnet50_imagenet.py` reports 25,557,032, which is also
+-- torchvision's — the two conventions already agree because neither carries conv biases. A
+-- mismatch here means the spec drifted from the net it is paired against.
 #guard (resnet50ImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 25557032
 #guard (resnet50Verified.toSpecs.foldl
@@ -573,23 +562,22 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
   imageH   := 160
   imageW   := 160
   data     := .imagenet
-  -- ⚠ The `short`/A3 recipe's shim (`--shim` writes `<out minus .py>_shim.py`), NOT `default`'s.
+  -- The `short`/A3 recipe's shim (`--shim` writes `<out minus .py>_shim.py`), NOT `default`'s.
   shimScript := "generated_resnet50_imagenet_short_shim.py"
-  -- ⭐ SHARED, not re-typed. A copied layer list is the double-writer failure this repo keeps
-  -- paying for, and it is exactly what would let a "160 ResNet-50" drift into a different net —
-  -- §2k/§2l's two-different-ResNet-34s, one resolution over.
+  -- SHARED, not re-typed. A copied layer list is exactly what would let a "160 ResNet-50" drift
+  -- into a different net.
   layers   := resnet50ImagenetVerified.layers
   blurb := "ResNet-50 on full 1000-class ImageNet at RSB-A3's 160² train resolution, via the VERIFIED renderer."
   runningBN  := true
 
--- ▶ §2.1's check, and it is the whole point: the 160 spec must be the SAME NET. Params, tensor
+-- The 160 spec must be the SAME NET. Params, tensor
 -- count and elementwise layout are resolution-independent (conv weights do not see spatial size,
 -- and the dense head sits after GAP), so all three must match the 224 spec exactly.
 #guard resnet50Imagenet160Verified.toSpecs == resnet50ImagenetVerified.toSpecs
 #guard (resnet50Imagenet160Verified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 25557032
 #guard resnet50Imagenet160Verified.toSpecs.size == 161
--- ⭐ AND THE ONE THING THAT MUST DIFFER. Without this the guards above are all satisfied by simply
+-- AND THE ONE THING THAT MUST DIFFER. Without this the guards above are all satisfied by simply
 -- aliasing the 224 spec, which would render the whole definition a no-op. 3·160·160 = 76,800, and
 -- it is the exact width `verified_mlir/resnet50in160_fwd.mlir` declares (`tensor<64x76800xf32>`).
 #guard resnet50Imagenet160Verified.d0 == 76800
@@ -618,11 +606,11 @@ def resnet50Imagenet2018Verified : VerifiedNetSpec :=
       blurb      := "ResNet-50 on full 1000-class ImageNet with the 2018 recipe's augmentation \
                      (random-resized-crop + hflip, no RandAugment), via the VERIFIED renderer." }
 
--- ▶ It must be the SAME NET as the 224 spec in every way a render or an artifact can see.
+-- It must be the SAME NET as the 224 spec in every way a render or an artifact can see.
 #guard resnet50Imagenet2018Verified.toSpecs == resnet50ImagenetVerified.toSpecs
 #guard resnet50Imagenet2018Verified.d0 == 150528
 #guard resnet50Imagenet2018Verified.slug == resnet50ImagenetVerified.slug
--- ⭐ AND THE ONE THING THAT MUST DIFFER — the bug this spec exists to make unrepresentable.
+-- AND THE ONE THING THAT MUST DIFFER — the bug this spec exists to make unrepresentable.
 #guard resnet50Imagenet2018Verified.shimScript != resnet50ImagenetVerified.shimScript
 #guard resnet50Imagenet2018Verified.shimScript == "generated_resnet50_imagenet_2018_shim.py"
 
@@ -650,22 +638,22 @@ def resnet50ImagenetA1Verified : VerifiedNetSpec :=
       blurb      := "ResNet-50 on full 1000-class ImageNet with RSB-A1's augmentation \
                      (A2's pack at Mixup α 0.2), via the VERIFIED renderer." }
 
--- ▶ Same net as the 224 spec in every way a render or an artifact can see — A1 changes the DATA
+-- Same net as the 224 spec in every way a render or an artifact can see — A1 changes the DATA
 -- and the baked decay, never the architecture.
 #guard resnet50ImagenetA1Verified.toSpecs == resnet50ImagenetVerified.toSpecs
 #guard resnet50ImagenetA1Verified.d0 == 150528
 #guard resnet50ImagenetA1Verified.slug == resnet50ImagenetVerified.slug
--- ⭐ AND THE THINGS THAT MUST DIFFER. All three 224 recipes must name three DISTINCT shims, or one
--- of them is streaming another's augmentation — the §0.9 failure, one level in.
+-- AND THE THINGS THAT MUST DIFFER. All three 224 recipes must name three DISTINCT shims, or one
+-- of them is streaming another's augmentation.
 #guard resnet50ImagenetA1Verified.shimScript == "generated_resnet50_imagenet_a1_shim.py"
 #guard resnet50ImagenetA1Verified.shimScript != resnet50ImagenetVerified.shimScript
 #guard resnet50ImagenetA1Verified.shimScript != resnet50Imagenet2018Verified.shimScript
--- ⚠ Stated as a 3-element distinctness rather than two inequalities, so a FOURTH recipe cannot be
+-- Stated as a 3-element distinctness rather than two inequalities, so a FOURTH recipe cannot be
 -- added by copying one of these and forgetting to change the shim.
 #guard ([resnet50ImagenetVerified.shimScript, resnet50Imagenet2018Verified.shimScript,
          resnet50ImagenetA1Verified.shimScript].eraseDups).length == 3
 
--- ▶ The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
+-- The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
 -- END of this file (search "trainPix := net.d0").
 
 /-- Chapter 6 **MobileNetV2** on Imagenette 224²: 3×3-s2 stem → BN → relu6 → 17 inverted-residual
@@ -685,7 +673,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
   imageW   := 224
   data     := .imagenette
   layers   := [
-    .convBnNB 3 32 3 2,             -- stem (no conv bias — §2m)
+    .convBnNB 3 32 3 2,             -- stem (no conv bias)
     .invertedResidualNB 32  32  16 1,
     .invertedResidualNB 16  96  24 2, .invertedResidualNB 24 144  24 1,
     .invertedResidualNB 24 144  32 2, .invertedResidualNB 32 192  32 1, .invertedResidualNB 32 192  32 1,
@@ -693,7 +681,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .invertedResidualNB 64 384  96 1, .invertedResidualNB 96 576  96 1, .invertedResidualNB 96 576  96 1,
     .invertedResidualNB 96 576 160 2, .invertedResidualNB 160 960 160 1, .invertedResidualNB 160 960 160 1,
     .invertedResidualNB 160 960 320 1,
-    .convBnNB 320 1280 1 1,         -- head (no conv bias — §2m)
+    .convBnNB 320 1280 1 1,         -- head (no conv bias)
     .globalAvgPool,
     .dense 1280 10 ]
   blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
@@ -732,14 +720,13 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   imageH   := 224
   imageW   := 224
   data     := .imagenet
-  -- ⚠ `mobilenetV2ImagenetConfig` sets `useAutoAugment := false` explicitly ("MNv2 paper used
+  -- `mobilenetV2ImagenetConfig` sets `useAutoAugment := false` explicitly ("MNv2 paper used
   -- crop/flip only"), so this shim is R34's pipeline — MEASURED: the two generated files differ in
-  -- exactly one line, the banner naming the reference. mnv2 is therefore the one net whose data
-  -- stream this whole thread does not change, which is what makes it the inert control.
+  -- exactly one line, the banner naming the reference.
   shimScript := "generated_mobilenet_v2_imagenet_shim.py"
   -- Classifier dropout 0.2 (`mobilenetV2ImagenetConfig.dropout`), per ELEMENT on the 1280-wide GAP
-  -- output. Read only by a variant carrying `do` (`rmsdp64wxdols0bf16`); the older renders have no
-  -- mask slot and train exactly as before.
+  -- output. Read only by a variant carrying `do` (`rmsdp64wxdols0bf16`); renders without `do` have
+  -- no mask slot.
   dropoutKeep := some (0.8, 1280)
   layers   := [
     .convBnNB 3 32 3 2,
@@ -806,35 +793,34 @@ def efficientnetVerified : VerifiedNetSpec where
   -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
   -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.
   runningBN  := true
-  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*sd` variants.
+  -- STOCHASTIC DEPTH, used only by the `*sd` variants.
   -- `keep_i = 1 − 0.2·i/(16−1)` at the NINE block indices that carry a skip: 2,4,6,7,9,10,12,13,14.
   --
-  -- ⚠⚠ THE INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL. The reference advances its ramp counter
+  -- THE INDEX IS THE BLOCK INDEX, NOT THE SITE ORDINAL. The reference advances its ramp counter
   -- on EVERY MBConv block (`dbi := dbi + 1`, unconditional) while the drop fires only inside the
   -- skip guard — so the denominator is 15, not 8, and the nine keeps are UNEVENLY spaced. Deriving
   -- them from the site ordinal instead gives nine evenly-spaced keeps: it compiles, runs, descends
-  -- and trains a different objective. §2k's α/K bug in a new place, and no numeric tie can see it,
-  -- because every tie compares the render against a peer built from the same constants.
+  -- and trains a different objective. No numeric tie can see it, because every tie compares the
+  -- render against a peer built from the same constants.
   dropSites := #[2, 4, 6, 7, 9, 10, 12, 13, 14]
   dropDenom := 15
   dropRate  := 0.2
-  -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C). `efficientNetB0ImagenetConfig` sets
+  -- CLASSIFIER DROPOUT. `efficientNetB0ImagenetConfig` sets
   -- `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean`), so keep = 0.8, and the width is the
   -- head's 1280 — the GAP output the classifier consumes, NOT `nClasses`.
   --
-  -- ⚠⚠ IT IS PER-ELEMENT AND `dropKeeps` ABOVE IS PER-EXAMPLE, which is why this is a separate
+  -- IT IS PER-ELEMENT AND `dropKeeps` ABOVE IS PER-EXAMPLE, which is why this is a separate
   -- field and not another entry in that array. The reference draws `bernoulli(key, keep, x.shape)`
   -- here against `(B, 1, …, 1)` there. Folding this into `dropKeeps` would type-check on the Lean
   -- side and produce a `tensor<Bxf32>` mask for a `tensor<Bx1280xf32>` input — an arity/type
   -- refusal, which is the good outcome; the BAD one is the reverse, drawing B values and repeating
   -- them, which is stochastic depth on the classifier and is silent. See `F32.dropoutMask`.
   --
-  -- ⚠ It is on the IMAGENETTE net too, and the ramp comment above says why the SD ramp does not
+  -- It is on the IMAGENETTE net too, and the ramp comment above says why the SD ramp does not
   -- move between scales; this is the same argument. `efficientNetB0Config` (Imagenette) does not
   -- itself set dropout — this carries the ImageNet reference's value so the `adamdo` render has a
-  -- gate vehicle at the cheap scale, exactly as `dropKeeps` carries ImageNet's ramp. ⚠ So do NOT
-  -- quote an Imagenette `adamdo` run as a reference comparison; it is a gate vehicle
-  -- (`planning/archive/ema.md`'s finding 3, same shape).
+  -- gate vehicle at the cheap scale, exactly as `dropKeeps` carries ImageNet's ramp. So do NOT
+  -- quote an Imagenette `adamdo` run as a reference comparison; it is a gate vehicle.
   dropoutKeep := some (0.8, 1280)
 
 /-- **EfficientNet-B0 on full 1000-class ImageNet** — the EfficientNet peer of the R34, ViT and
@@ -846,7 +832,7 @@ def efficientnetVerified : VerifiedNetSpec where
     and its data-parallel check needs the running-stat region, 2×49 extra tensors on both sides
     (omitting it is refused by the shim's G4 guard).
 
-    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette; provenance carries. The recipe follows
+    **Claim ceiling**: proofs stop at Imagenette; provenance carries. The recipe follows
     the variant: the `emarmsdp64dropdo*` renders (the shipping one is `emarmsdp64dropdobf16`) carry
     the reference's RMSProp with ×0.97-every-2.4-epoch decay, EMA, drop-connect and classifier
     dropout, as `efficientNetB0ImagenetConfig` trains; the `adam*` renders are AdamW + cosine. -/
@@ -883,12 +869,12 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     .dense 1280 1000 ]
   blurb := "EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   runningBN  := true
-  -- ▶ v1.2c: the ImageNet peer of `efficientnetVerified.dropKeeps`. The SITES are identical —
-  -- `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips) — but since
-  -- 2026-09-25 the ramp is TF's `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where
-  -- the Imagenette peer keeps timm's `i/15`. Checked against the regenerated reference's call
+  -- The ImageNet peer of `efficientnetVerified.dropKeeps`. The SITES are identical —
+  -- `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips) — but the
+  -- ramp is TF's `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where the
+  -- Imagenette peer keeps timm's `i/15`. Checked against the regenerated reference's call
   -- sites: `dpkeys[2], 0.975000` and `dpkeys[14], 0.825000`.
-  -- ⚠ Host-fed, so it reaches every `…drop…` variant this driver runs, the older renders included.
+  -- Host-fed, so it reaches every `…drop…` variant this driver runs.
   dropSites := #[2, 4, 6, 7, 9, 10, 12, 13, 14]
   dropDenom := 16
   dropRate  := 0.2
@@ -905,8 +891,8 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
 #guard efficientnetImagenetVerified.bnChannels == efficientnetVerified.bnChannels
 
 -- Derived layout (213 param TENSORS, 4,020,358 scalars) == the audited hand-list
--- EfficientNetLayout.specs. ⚠ The count read 262 here for a long time and no gate saw it, because
--- the `#guard` below compares the two ARRAYS, not either one against a number.
+-- EfficientNetLayout.specs. No gate checks the count stated here: the `#guard` below compares the
+-- two ARRAYS, not either one against a number.
 #guard efficientnetVerified.toSpecs == EfficientNetLayout.specs
 
 /-- Chapter 8 **ConvNeXt-T** on Imagenette 224²: 4×4-s4 patchify → [3,3,9,3] ConvNeXt blocks @
@@ -941,12 +927,12 @@ def convnextVerified : VerifiedNetSpec where
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,  -- stage 4 (3) @7
     .globalAvgPool, .layerNorm 768, .dense 768 10 ]                    -- head: GAP → LN → dense
   blurb := "ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000"
-  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*drop` variants.
+  -- STOCHASTIC DEPTH, used only by the `*drop` variants.
   -- `keep_i = 1 − 0.1·i/(18−1)` at EVERY block — ConvNeXt has one site per block and every block
   -- carries a residual, so unlike EfficientNet there is no skip guard and the site list is
   -- `0 … 17` entire.
   --
-  -- ⚠⚠ THE DENOMINATOR IS 17, i.e. `totalDrop − 1` OVER THE WHOLE NET, and the index is the GLOBAL
+  -- THE DENOMINATOR IS 17, i.e. `totalDrop − 1` OVER THE WHOLE NET, and the index is the GLOBAL
   -- block index. The reference's `dbi` is one counter advanced once per `convnext_block` across all
   -- four stages (`emitForward`'s drop-path ramp in `jax/Jax/Codegen.lean`); re-indexing per stage would give four short ramps
   -- instead of one long one — it compiles, runs, descends and trains a different objective, and no
@@ -954,7 +940,7 @@ def convnextVerified : VerifiedNetSpec where
   -- constants. `tests/TestDropPathRamp.lean` is what pins this against the renderer's
   -- `cnxBlockIdx`, from a THIRD reading of the reference.
   --
-  -- ⚠ Block 0's keep is exactly 1.0, so `F32.dropScales` hands that site an exact 1.0 and the op is
+  -- Block 0's keep is exactly 1.0, so `F32.dropScales` hands that site an exact 1.0 and the op is
   -- the identity in IEEE — which is the reference's `keep_prob < 1.0` guard, obtained as data rather
   -- than as a missing site.
   dropSites := Array.range 18
@@ -1009,7 +995,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
   blurb := "ConvNeXt-T on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- The ImageNet peer of `convnextVerified.dropKeeps`. IDENTICAL, and that is the content: the ramp
   -- is a property of the ARCHITECTURE (18 blocks, one site each) and of `dropPath := 0.1`, neither
-  -- of which moves with the class count or the batch. ⚠ Unlike the Imagenette render, this one is a
+  -- of which moves with the class count or the batch. Unlike the Imagenette render, this one is a
   -- REFERENCE recipe item — `convNeXtTinyImagenetConfig.dropPath := 0.1`, the ConvNeXt-T paper
   -- value — so `convnextin_adamdpwxclipdrop` is the first ConvNeXt artifact carrying every
   -- optimizer-and-regulariser knob its reference sets.
@@ -1043,7 +1029,7 @@ def convnextSImagenetVerified : VerifiedNetSpec where
   imageH   := 224
   imageW   := 224
   data     := .imagenet
-  -- ⚠ ConvNeXt-T's shim, and that is correct rather than lazy: the shim is the DATA pipeline
+  -- ConvNeXt-T's shim, and that is correct rather than lazy: the shim is the DATA pipeline
   -- (RandAugment m9/mstd0.5/inc1 + random erasing p0.25), which the paper does not change between
   -- T and S. Only the model and the drop rate move.
   shimScript := "generated_convnext_tiny_imagenet_shim.py"
@@ -1061,10 +1047,10 @@ def convnextSImagenetVerified : VerifiedNetSpec where
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
     .globalAvgPool, .layerNorm 768, .dense 768 1000 ]
   blurb := "ConvNeXt-Small on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-T deepened: stage 3 goes 9 → 27 blocks, dims unchanged at [96,192,384,768], 50.2M params)"
-  -- ▶ 36 sites, denominator 35, and **rate 0.4** — the ConvNeXt paper's S value at 300 epochs,
-  -- against T's 0.1. ⚠ This is the first `dropKeeps` in the repo that is not its Tiny peer's: the
+  -- 36 sites, denominator 35, and **rate 0.4** — the ConvNeXt paper's S value at 300 epochs,
+  -- against T's 0.1. This is the first `dropKeeps` in the repo that is not its Tiny peer's: the
   -- ramp SHAPE is architectural (one site per block, global index) but the RATE is per-size recipe.
-  -- Copying T's 0.1 here would have been the silent-hyperparameter shape (§2a-quater) — it renders,
+  -- Copying T's 0.1 here would be the silent-hyperparameter shape — it renders,
   -- trains and descends, at a regularisation strength the reference does not use for this size.
   dropSites := Array.range 36
   dropDenom := 35
@@ -1078,12 +1064,12 @@ def convnextSImagenetVerified : VerifiedNetSpec where
 #guard convnextSImagenetVerified.toSpecs.size == convnextImagenetVerified.toSpecs.size + 18 * 9
 #guard (convnextSImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 50223688
--- ⚠ The guards that tie this spec to the RENDERER's own depth table — that `cnxAllParams` at
+-- The guards that tie this spec to the RENDERER's own depth table — that `cnxAllParams` at
 -- `cnxSmall` is these same 342 tensors, and that `dropKeeps` has one entry per rendered site —
 -- live in `tests/TestDropPathRamp.lean`, beside ConvNeXt-T's. They cannot live here: this module
 -- is BELOW `Proofs/Codegen` in the import graph, which is the same reason `convnextVerified`'s ramp
 -- is checked against `cnxBlockIdx` over there rather than next to its own definition.
--- ⚠ The ramp must NOT be Tiny's: 0.4 against 0.1 is a real recipe difference, so the last keep
+-- The ramp must NOT be Tiny's: 0.4 against 0.1 is a real recipe difference, so the last keep
 -- is 0.6 here and 0.9 there. A guard on the SIZE alone would pass on a copied Tiny ramp.
 #guard (convnextSImagenetVerified.dropKeeps[35]! - 0.6).abs < 1e-9
 #guard (convnextImagenetVerified.dropKeeps[17]! - 0.9).abs < 1e-9
@@ -1126,7 +1112,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
     .convNextBlockCh 1024, .convNextBlockCh 1024, .convNextBlockCh 1024,
     .globalAvgPool, .layerNorm 1024, .dense 1024 1000 ]
   blurb := "ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)"
-  -- 36 sites, denominator 35, rate **0.5** — the paper's B value. ⚠ Same ramp SHAPE as S, different
+  -- 36 sites, denominator 35, rate **0.5** — the paper's B value. Same ramp SHAPE as S, different
   -- rate: the shape is architectural, the rate is per-size recipe. Three sizes, three rates.
   dropSites := Array.range 36
   dropDenom := 35
@@ -1138,7 +1124,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
 #guard convnextBImagenetVerified.toSpecs.size == 344
 #guard (convnextBImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 88591464
--- ⚠ And every shape must actually MOVE. S and B have identical tensor counts and identical drop
+-- And every shape must actually MOVE. S and B have identical tensor counts and identical drop
 -- ramps in shape, so a spec that accidentally copied S's widths would pass both guards above.
 #guard convnextBImagenetVerified.toSpecs != convnextSImagenetVerified.toSpecs
 #guard convnextBImagenetVerified.dropKeeps.size == convnextSImagenetVerified.dropKeeps.size
@@ -1151,7 +1137,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
 #guard convnextImagenetVerified.toSpecs.pop.pop == convnextVerified.toSpecs.pop.pop
 #guard convnextImagenetVerified.toSpecs.back! == (#[1000], 2)
 
--- Derived layout (182 params, head LN included since 2026-08-30) == the audited hand-list.
+-- Derived layout (182 params, head LN included) == the audited hand-list.
 #guard convnextVerified.toSpecs == ConvNeXtLayout.specs
 
 /-- Chapter 9 **ViT-Tiny** on Imagenette 224² (patch-16): 16×16-s16 conv patch embed (3→192,
@@ -1188,15 +1174,15 @@ def vitVerified : VerifiedNetSpec where
     .layerNorm 192,               -- final LayerNorm (per-channel [192])
     .dense 192 10 ]               -- CLS-head 192→10
   blurb := "ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → %LOWERER% → GPU"
-  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*drop` variants.
-  -- ⚠⚠ **24 ENTRIES FOR 12 KEEPS, AND THE PAIRING IS THE CONTENT.** ViT drops each block's TWO
+  -- STOCHASTIC DEPTH, used only by the `*drop` variants.
+  -- **24 ENTRIES FOR 12 KEEPS, AND THE PAIRING IS THE CONTENT.** ViT drops each block's TWO
   -- residual branches INDEPENDENTLY (`ka, km = jax.random.split(drop_key)`) but at the SAME keep
   -- probability, so site `2i` and site `2i+1` share `keep_i = 1 - 0.1*i/11`. The driver needs one
   -- entry per SITE because it draws one Bernoulli stream per mask INPUT; deriving 24 evenly-spaced
   -- keeps from the site ordinal instead would be a different objective, and emitting ONE mask per
-  -- block would halve the noise. Neither is visible in any structural check
-  -- (`stochastic_depth.md` §6.3); `tests/TestDropPathRamp.lean` is what pins it.
-  -- ⚠ The denominator is 11 = 12 blocks - 1, and block 11 keeps exactly `1 - dropPath` — unlike
+  -- block would halve the noise. Neither is visible in any structural check;
+  -- `tests/TestDropPathRamp.lean` is what pins it.
+  -- The denominator is 11 = 12 blocks - 1, and block 11 keeps exactly `1 - dropPath` — unlike
   -- EfficientNet, whose deepest SITE is one ramp step short because its last block has no skip.
   dropSites := (Array.range 24).map (· / 2)
   dropDenom := 11
@@ -1223,8 +1209,7 @@ def vitVerified : VerifiedNetSpec where
     the producer's `SHIM_MIX` (this shim bakes `both`) as soft targets on the wire; the render's
     cotangent smooths that mixed target (α = 0.1). The pipeline-level augmentations (RandAugment,
     random erasing, repeated aug ×3) come from this net's own shim (`shimScript`). The remaining
-    differences from DeiT-Ti (clip, EMA-scored eval, LN eps, tanh GELU) are listed in
-    planning/imagenet_parity.md. -/
+    differences from DeiT-Ti are clip, EMA-scored eval, LN eps and tanh GELU. -/
 def vitImagenetVerified : VerifiedNetSpec where
   name     := "ViT-Tiny (ImageNet-1k)"
   slug     := "vitin"
@@ -1258,7 +1243,7 @@ def vitImagenetVerified : VerifiedNetSpec where
   blurb := "ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- The ImageNet peer of `vitVerified.dropKeeps`. IDENTICAL — the ramp is a property of the
   -- ARCHITECTURE (12 blocks, 2 sites each) and of `dropPath := 0.1`, neither of which moves with the
-  -- class count. ⚠ Here it IS a reference recipe item (`vitTinyImagenetConfig.dropPath`, the DeiT
+  -- class count. Here it IS a reference recipe item (`vitTinyImagenetConfig.dropPath`, the DeiT
   -- value), where on Imagenette it is a gate vehicle.
   dropSites := (Array.range 24).map (· / 2)
   dropDenom := 11
@@ -1362,15 +1347,14 @@ def vitBImagenetVerified : VerifiedNetSpec where
 
 -- 86,567,656 parameters, DeiT-B's published 86.57M, in the SAME 200 tensors as Ti and S. Three
 -- widths, one renderer, one theorem. `jax/MainVitBImagenet.lean` emits the same count from an
--- independent implementation (`planning/archive/vit_convnext_sb_scaleup.md`).
+-- independent implementation.
 #guard vitBImagenetVerified.toSpecs.size == vitImagenetVerified.toSpecs.size
 #guard (vitBImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 86567656
 
 -- The two ViT specs must differ in EXACTLY one parameter shape — the head. Anything else moving
 -- means the ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin
--- of. This is the guard §2l wished it had had on R34: `resnet34Verified.toSpecs == specs` FIRED on
--- the conv-bias change and forced the hand-list to be fixed properly instead of edited to match.
+-- of.
 #guard vitImagenetVerified.toSpecs.size == vitVerified.toSpecs.size
 #guard vitImagenetVerified.toSpecs.pop.pop == vitVerified.toSpecs.pop.pop
 #guard vitImagenetVerified.toSpecs.back! == (#[1000], 2)
@@ -1445,13 +1429,13 @@ def mobilenetv4Verified : VerifiedNetSpec where
   runningBN  := true
 
 -- 233 parameter tensors — the same count `mnv4-fwd-smoke` ties to `mnv4ShapeList` shape-for-shape,
--- and 8,447,322 parameters. ⭐ `jax/MainMobilenetV4.lean`'s `totalParams` reads 8447322 too, from
+-- and 8,447,322 parameters. `jax/MainMobilenetV4.lean`'s `totalParams` reads 8447322 too, from
 -- a wholly independent implementation, which is the cross-check that the Conv-M transcription is
 -- the same net on both sides.
 #guard mobilenetv4Verified.toSpecs.size == 233
 #guard (mobilenetv4Verified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 8447322
--- ⭐ Every conv in this net is BN-followed, so the BN channel list must be, in forward order, the
+-- Every conv in this net is BN-followed, so the BN channel list must be, in forward order, the
 -- OUTPUT channel count of every conv weight — which is the kernel's first dimension for a regular
 -- conv `[oc,ic,kH,kW]` and for a depthwise `[c,1,k,k]` alike. `bnChannels` is read off the BN γ
 -- entries (`VLayer.bnWidths`); this reads the same list off the conv kernels, a second route to
@@ -1487,7 +1471,7 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
   imageH   := 224
   imageW   := 224
   data     := .imagenet
-  -- ⚠ Generated from the Conv-M reference recipe (`gen_shims.sh`'s `mobilenet-v4-imagenet:default`).
+  -- Generated from the Conv-M reference recipe (`gen_shims.sh`'s `mobilenet-v4-imagenet:default`).
   -- That is correct and deliberate: a shim supplies AUGMENTED BATCHES, not weights, so what it
   -- carries across is the MNv4-family data pipeline (RandAugment, the 224² crop), which is shared
   -- by both sizes. Nothing about Conv-M's block table reaches this net through it.
@@ -1522,7 +1506,7 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
     .dense 1280 1000 ]
   blurb := "MobileNetV4-Conv-M on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
   runningBN  := true
-  -- ▶ classifier dropout at the reference's 0.1 (keep 0.9) on the 1280-wide head, read only by
+  -- classifier dropout at the reference's 0.1 (keep 0.9) on the 1280-wide head, read only by
   -- `do` variants (`VerifiedVariant.cdOn`); `adamdp64*` carry no mask and are untouched.
   dropoutKeep := some (0.9, 1280)
 
@@ -1543,19 +1527,15 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
   (mnv4ImagenetVerified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
--- ⭐⭐ THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`Verified.Train`,
+-- THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`Verified.Train`,
 -- the `.imagenet` branch). Placed here because it needs EVERY `.imagenet` spec in scope.
 --
--- That function drains VAL at a hardcoded `3·224·224` and, until 2026-08-06, returned the very same
--- literal as the TRAIN stream width — so the 160 net asked its shim for 150,528 floats/img while
--- the shim correctly sent 76,800, and the wire guard refused. Switching it to `net.d0` is a
--- behaviour change ONLY for a net whose `d0` differs from the val width, i.e. only the 160 net.
--- ▶ These guards ARE the proof that all six incumbents are untouched, and they are why that switch
--- needed no per-net re-validation.
+-- `trainPix := net.d0` differs from the 224² val width ONLY for a net whose `d0` is not 224², i.e.
+-- only the 160 net. These guards pin every other `.imagenet` net at 224².
 --
--- ⚠⚠ IF YOU ADD AN `.imagenet` NET AT A NON-224 TRAIN RESOLUTION, ONE OF THESE FIRES — and that is
+-- IF YOU ADD AN `.imagenet` NET AT A NON-224 TRAIN RESOLUTION, ONE OF THESE FIRES — and that is
 -- the point, not an obstacle. It means the val drain is still 224 while your train stream is not,
--- so `evalD0` (`planning/archive/next_session_rsb_a3.md` §2.3) must land before the eval loop can be
+-- so `evalD0` must land before the eval loop can be
 -- trusted. Do NOT relax the guard to make it pass; add the net to the exempt list below it only
 -- once the eval path reads its own width.
 #guard resnet34ImagenetVerified.d0     == 3*224*224

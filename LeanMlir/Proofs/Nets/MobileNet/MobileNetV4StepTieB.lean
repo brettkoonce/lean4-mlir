@@ -21,9 +21,9 @@ none after the project's BatchNorm. So the block-output cotangent `dyOut` reache
 mask, and where its skip branch carries the masked cotangent. Here the skip fan-in is
 `addVB (body dx) dyOut`, unmasked.
 
-⭐⭐ **And every block's `*CotIn_eq_vjp` is its block layer's `.faithful`, not a new derivation.** The
+**And every block's `*CotIn_eq_vjp` is its block layer's `.faithful`, not a new derivation.** The
 UIB bodies are `CertLayer`s, so `den (graph x e) = vjp.backward (den e)` is already a theorem one
-tier down — the very fact 4.2a/4.2c/§3.5c re-derive per block for r34, mnv2 and R50. This file
+tier down — the very fact the r34, mnv2 and R50 ties re-derive per block. This file
 composes certified VJPs; it does not re-prove them.
 
 ## No new fp32 op-kind lemmas — MNv4's nine kinds are ResNet-34's and EfficientNet-B0's
@@ -521,7 +521,7 @@ theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : S
     unmasked — the fused stage ends in a BatchNorm with no activation. Feeds `%f0pW`. -/
 noncomputable def mnv4FusedCotPc (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    -- ⭐ `βp` is taken and NOT read: the BatchNorm input-gradient does not depend on the shift,
+    -- `βp` is taken and NOT read: the BatchNorm input-gradient does not depend on the shift,
     -- which `bnInB` records by not taking one. Kept in the signature so every cotangent in this
     -- chain has the same argument list as the tie bundle that consumes it.
     (γp _βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
@@ -615,7 +615,7 @@ noncomputable def mnv4HeadFeat (N h w : Nat) {c mid oc : Nat}
 noncomputable def mnv4HeadCotHn (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    -- ⭐ `bd` is taken and NOT read: the dense input-VJP does not see the bias. Kept so every
+    -- `bd` is taken and NOT read: the dense input-VJP does not see the bias. Kept so every
     -- cotangent in the head chain has the tie bundle's argument list.
     (Wd : Mat oc nCls) (_bd : Vec nCls)
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * 1 * 1)) :=

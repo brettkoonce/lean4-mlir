@@ -1,18 +1,15 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Verified.Train
 
-/-! # §2m ConvNeXt — can the existing ops spell a **channel** LayerNorm, and do they?
+/-! # ConvNeXt — can the existing ops spell a **channel** LayerNorm, and do they?
 
-The check `planning/archive/xla_pjrt_handoff.md` §2m puts before any of the ConvNeXt LN work, in the shape
-§2l's `strided-1x1` used: settle the primitive on device before re-instantiating 21 sites around it.
-
-**The defect being fixed.** ConvNeXt's render normalises with `.bnF` ⇒ `bnForward n ε γ β x`, one
+**The defect.** A render that normalises with `.bnF` ⇒ `bnForward n ε γ β x` takes one
 mean and one variance over the WHOLE `C·H·W` feature map per example, with a **scalar** γ/β. The
 reference is `channel_layer_norm`: `jnp.mean(x, axis=1)` over NCHW ⇒ `H·W` statistics per example,
-each over the `C` channels at one spatial position, with a **per-channel** `[C]` affine. §2m first
-recorded the axis as *"correct"* by matching the literal `across dimensions = [1]` against
-`axis=1` — but the artifact's tensor is rank-2 `[B, C·H·W]` and the reference's is rank-4 NCHW.
-Same literal, different function (§4's one-tensor-layout rule, hit a second time).
+each over the `C` channels at one spatial position, with a **per-channel** `[C]` affine. Matching
+the literal `across dimensions = [1]` against `axis=1` does not show the axis is correct — the
+artifact's tensor is rank-2 `[B, C·H·W]` and the reference's is rank-4 NCHW. Same literal,
+different function.
 
 **Route A, which this probe is here to settle.** ConvNeXt's channel-LN *is* ViT's row-LN under a
 transpose: view one example as `[C, S]` with `S = H·W`, transpose to `[S, C]`, and each row is one
@@ -28,9 +25,9 @@ Three gates, and the second is the one that matters:
 2. **it computes channel-LN** — every output coordinate against the closed form
    `y[c,s] = γ[c]·(x[c,s] − μ[s]) / √(σ²[s] + ε) + β[c]`, recomputed here from the inputs, not
    from the render;
-3. ⚠ **THE CONTROL: the incumbent `.bnF` chain must NOT match it.** A green gate 2 with a green
+3. **THE CONTROL: the incumbent `.bnF` chain must NOT match it.** A green gate 2 with a green
    `.bnF` would mean the probe is measuring something both paths satisfy — and would say the
-   deviation §2m found does not exist. This gate is what makes the other two mean anything.
+   deviation does not exist. This gate is what makes the other two mean anything.
 
     lake build channel-ln && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln
 -/
@@ -228,7 +225,7 @@ private def stats (xs : Array Float) : Float × Float :=
   let s := xs.qsort (· < ·)
   (s[0]!, s[s.size / 2]!)
 
-/-- ⚠ **What this measures and what it does not.** It is the FORWARD LN cost of the whole net at
+/-- **What this measures and what it does not.** It is the FORWARD LN cost of the whole net at
     the real shapes and the real site counts, so no extrapolation is involved — but the sites are
     chained back-to-back here, where in the real graph each sits between a depthwise conv and a
     1×1 conv. XLA fuses across op boundaries, so the isolated number is an **upper bound** on the
@@ -264,9 +261,9 @@ private def benchMode : IO Unit := do
       let sess ← mkSession path
       let params := if routeA then F32.concat #[g, bt] else F32.concat #[g0, bt0]
       let shapes := if routeA then packShapes #[#[C'], #[C']] else packShapes #[#[], #[]]
-      -- ⚠ `IO.monoMsNow` is INTEGER milliseconds, and one invoke of the small stages lands at
-      -- 1-3 ms — a resolution comparable to the quantity being measured, which is the §2j lesson
-      -- in a new place. Time `inner` invokes per sample and divide, so the tick is 1/inner ms.
+      -- `IO.monoMsNow` is INTEGER milliseconds, and one invoke of the small stages lands at
+      -- 1-3 ms — a resolution comparable to the quantity being measured. Time `inner` invokes per
+      -- sample and divide, so the tick is 1/inner ms.
       let inner := 20
       let one : IO Float := do
         let t0 ← IO.monoMsNow
@@ -279,7 +276,7 @@ private def benchMode : IO Unit := do
       for _ in [0:warm] do let _ ← one
       let mut xs : Array Float := #[]
       for _ in [0:rounds] do xs := xs.push (← one)
-      pure (stats xs).2      -- median; §2j: one sample is not an anchor
+      pure (stats xs).2      -- median; one sample is not an anchor
     let a ← time true
     let b ← time false
     totA := totA + a; totB := totB + b

@@ -1,17 +1,15 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import tests.ViTRender
 
-/-! # The AdamW `SHlo` ops emit exactly what the trusted string emitter emitted
+/-! # The AdamW `SHlo` ops emit exactly what the trusted string emitter emits
 
 `ViTRender.emitAdamV` is a hand-written String emitter whose docstring *claims* to be op-for-op
-`Proofs.adamWParam`. Nothing checked that claim — it is why `planning/archive/xla_pjrt_handoff.md` §2a
-found the repo split along Adam: every `_adam_train_step.mlir` was rendered from `tests/`, outside
-the proven kit.
+`Proofs.adamWParam`.
 
-`SHlo.adamWParamF` / `.adamMNextF` / `.adamVNextF` now denote the proven `Proofs.adamWParam` /
+`SHlo.adamWParamF` / `.adamMNextF` / `.adamVNextF` denote the proven `Proofs.adamWParam` /
 `adamMNext` / `adamVNext` (`adamW_triple_faithful` bundles them into `Proofs.adamWStep`, by `rfl`).
 This file closes the other half: that the *emitted text* is the same graph the trusted emitter
-produced. SSA names differ (the ops use the `fresh` counter, `emitAdamV` uses a tag), so the
+produces. SSA names differ (the ops use the `fresh` counter, `emitAdamV` uses a tag), so the
 comparison is on the **op sequence** — every `stablehlo.<verb>`, in order, with its operand
 positions.
 

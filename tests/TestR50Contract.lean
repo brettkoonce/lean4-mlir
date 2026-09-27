@@ -10,10 +10,9 @@ import LeanMlir.Verified.NetsCore
 carry a list of R50's parameter tensors. The driver packs `[θ|m|v]` off ITS list and hands the blob
 to a graph laid out by the OTHER one. If the two disagree in count, in order, or in any single
 shape, every parameter after the first divergence is fed to the wrong slot — and the run does not
-crash, it trains a scrambled net and reports a loss curve. `resnet34in`'s conv-bias slot (§2m) is
-the standing precedent: one tensor in the wrong place, silent until the driver mis-walked the blob.
+crash, it trains a scrambled net and reports a loss curve.
 
-⚠ These are two independent definitions of one fact and they cannot be merged: the spec's exists to
+These are two independent definitions of one fact and they cannot be merged: the spec's exists to
 drive initialisation and checkpointing, the render's to emit MLIR text. So the honest move is to
 diff them, which is what this does.
 
@@ -21,11 +20,11 @@ diff them, which is what this does.
 
 1. count — 161 tensors
 2. total parameters — **25,557,032**, which is torchvision's ResNet-50 and the reference's own
-   reported count. ⚠ This one is a *published* number rather than an internal one, so it also
+   reported count. This one is a *published* number rather than an internal one, so it also
    catches both lists being wrong in the same way.
-3. ⭐ elementwise shape equality, in order — the only one that actually pins the packing.
+3. elementwise shape equality, in order — the only one that actually pins the packing.
 
-⚠ Check 3 subsumes 1 and 2; they are kept because when 3 fails, which of them ALSO fails says
+Check 3 subsumes 1 and 2; they are kept because when 3 fails, which of them ALSO fails says
 immediately whether the fault is a missing tensor, a mis-sized one, or a permutation.
 -/
 
@@ -44,12 +43,11 @@ private def total (ls : List (List Nat)) : Nat := ls.foldl (fun a d => a + d.fol
 #guard renderShapes.length == 161
 #guard specShapes.length == 161
 
--- 2. ⭐ The published parameter count. `planning/archive/rsb_a3_r50_verified.md` §1 measured this exact on
---    the first try from the layout spec alone; this pins the RENDER to it too.
+-- 2. The published parameter count, on the RENDER as well as the spec.
 #guard total renderShapes == 25557032
 #guard total specShapes == 25557032
 
--- 3. ⭐⭐ The real gate: same shapes, same order, tensor for tensor.
+-- 3. The real gate: same shapes, same order, tensor for tensor.
 #guard renderShapes == specShapes
 
 -- The BN running-stat contract, the same argument one level over: the driver packs

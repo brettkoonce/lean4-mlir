@@ -1,17 +1,15 @@
 import Jax
 
-/-! ResNet-50 (bottleneck) on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! ResNet-50 (bottleneck) on full 1000-class ImageNet — Lean → JAX trainer.
 
     Architecture is `MainResnet50.lean`'s bottleneck backbone (3/4/6/3) with the
     head swapped to `dense 2048→1000` and the dataset kind set to `.imagenet`
     (tfds streaming), matching `MainResnetImagenet.lean` (the R34 ImageNet trainer).
 
-    PHASE 5 (RSB-A2 plan): the recipe below is now the LITERAL RSB-A2 — timm's
-    "ResNet Strikes Back" A2 300-epoch config (Wightman et al. 2021), the
-    canonical modern ResNet-50 baseline → 79.8% top-1. All four ingredients
-    (LAMB, BCE, repeated-aug, the DeiT-style aug stack) landed across phases 1-4
-    and are wired together here. The phase-1 SGD skeleton lives in git history.
-    See `planning/archive/rsb_a2_resnet50.md`. -/
+    The recipe below is the LITERAL RSB-A2 — timm's "ResNet Strikes Back" A2
+    300-epoch config (Wightman et al. 2021), the canonical modern ResNet-50
+    baseline → 79.8% top-1. All four ingredients (LAMB, BCE, repeated-aug, the
+    DeiT-style aug stack) are wired together here. -/
 
 def resnet50Imagenet : NetSpec where
   name := "ResNet-50 (ImageNet)"
@@ -68,56 +66,49 @@ def resnet50ImagenetConfig : TrainConfig where
   randAugmentM   := 7.0      -- RSB rand-m7-...
   randAugmentMstd := 0.5     -- ...-mstd0.5-...
   randAugmentInc := true     -- ...-inc1 increasing-severity mappings
-  repeatedAug    := 3        -- RSB Repeated Augmentation 3× (phase 2)
+  repeatedAug    := 3        -- RSB Repeated Augmentation 3×
   dropPath       := 0.05     -- stochastic depth, RSB-A2 value
   useEMA         := true     -- model EMA; eval + checkpoints use the shadow
   emaDecay       := 0.9999
   bf16           := true
   bf16Conv       := true     -- CUDA/cuDNN: bf16 conv ~1.6× faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
-  runningBN      := true     -- paper-faithful eval (gap A) + bottleneck running-BN
-  -- ⚠⚠ **0.9, NOT the emitter's 0.99 default — added 2026-08-30, and it is a WHOLE-FAMILY fix.**
-  -- `Jax/Codegen.lean`'s `_bn` hard-coded 0.99 for every net. That is TF's EfficientNet value; the
+  runningBN      := true     -- paper-faithful eval + bottleneck running-BN
+  -- **0.9, NOT the emitter's 0.99 default, and it applies to the WHOLE FAMILY.**
+  -- `Jax/Codegen.lean`'s `_bn` defaults to 0.99 for every net. That is TF's EfficientNet value; the
   -- reference this net is scored against is timm, whose BN is `torch.nn.BatchNorm2d` at its default
   -- `momentum = 0.1`, and PyTorch's momentum weights the NEW batch — so the decay is **0.9**.
-  -- ⚠ READ off timm rather than assumed: `timm.create_model('resnet50').modules()` reports
-  -- `momentum = 0.1, eps = 1e-5` on all 53 `BatchNorm2d` (timm 1.0.28, `.venv-timm`, 2026-08-30).
+  -- READ off timm rather than assumed: `timm.create_model('resnet50').modules()` reports
+  -- `momentum = 0.1, eps = 1e-5` on all 53 `BatchNorm2d` (timm 1.0.28, `.venv-timm`).
   -- Every RSB tier and the 2018 torchvision recipe share that default, so INHERITING this is right
-  -- and no derived recipe below overrides it.
-  -- ⚠ We averaged ~1000 steps where the reference averages ~100. It is EVAL-ONLY — no gradient path
-  -- — so nothing about a loss curve moves and the completed A3 run's 77.43% is not invalidated; what
+  -- and no derived recipe below overrides it. 0.99 averages ~1000 steps where the reference
+  -- averages ~100. It is EVAL-ONLY — no gradient path — so nothing about a loss curve moves; what
   -- it changes is how stale the stats the eval normalises with are, worst early in a run.
-  -- ▶ Direction unknown. A longer window is not automatically worse: it is lower-variance and
-  -- higher-bias against a distribution that is still moving.
-  -- ▶ This closes `next_session_execution_and_parity.md` §7.3 (B3). ⚠ It also supersedes the
-  -- PREMISE of `a3_paper_fidelity.md` §2.3: that section compensated our per-micro EMA so k
-  -- updates compose to one 0.99/step update, treating 0.99 as the reference value throughout.
-  -- The compensation was right and stands — it now composes to one 0.9/step update instead.
+  -- Direction unknown. A longer window is not automatically worse: it is lower-variance and
+  -- higher-bias against a distribution that is still moving. The per-micro EMA under accumulation
+  -- is compensated so k updates compose to one 0.9/step update.
   bnMomentum     := 0.9
-  -- ⚠⚠ **0.95, NOT the emitter's 0.875 default — added 2026-08-14, and it is an A2/A1 RECIPE FIX.**
-  -- Unset, `Jax/Codegen.lean` falls back to `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)` = 0.875, so every
-  -- recipe built on this config — the bs512 A2 `default`, `a2-true-2048`, `a2-accum` and (through
-  -- it) `a1` — evaluated on an 8% narrower field of view than its reference. READ off timm rather
-  -- than assumed: `timm.get_pretrained_cfg('resnet50.a{1,2,3}_in1k').crop_pct` is **0.95** for all
-  -- three tiers (only `tv_in1k`, the 2018 torchvision weights, is 0.875 — which is why the 2018
-  -- recipe below correctly sets that value explicitly).
-  -- ⭐ `rsb-faithful`/`short` (A3) already set 0.95 themselves, so this is INERT for them and for
+  -- **0.95, NOT the emitter's 0.875 default.** Unset, `Jax/Codegen.lean` falls back to
+  -- `_IMG_SIZE/(_IMG_SIZE+_CROP_PADDING)` = 0.875, so every recipe built on this config — the bs512
+  -- A2 `default`, `a2-true-2048`, `a2-accum` and (through it) `a1` — would evaluate on an 8%
+  -- narrower field of view than its reference. READ off timm rather than assumed:
+  -- `timm.get_pretrained_cfg('resnet50.a{1,2,3}_in1k').crop_pct` is **0.95** for all three tiers
+  -- (only `tv_in1k`, the 2018 torchvision weights, is 0.875 — which is why the 2018 recipe below
+  -- correctly sets that value explicitly).
+  -- `rsb-faithful`/`short` (A3) set 0.95 themselves, so this is INERT for them and for
   -- the 2018 recipe; it changes only the A2/A1 family, none of which has been run. On a FixRes
   -- recipe the eval crop is not a detail — object scale at test time is the thing the train/test
   -- resolution split is exploiting.
   testCropRatio  := 0.95
-  -- ⚠⚠ **timm's `Lamb.__init__` DEFAULTS `max_grad_norm = 1.0` and clips the global gradient norm
-  -- INSIDE the optimizer, every step.** We had no clipping at all (`grep -c "gn = jnp.sqrt"` = 0),
-  -- so every LAMB recipe here ran unclipped against a reference that clips. `recipe_fidelity_diffs.md`
-  -- D1.
-  -- ⭐ The placement already matches: the emitter puts `clipLine` after `grads = _gsum / _K` on the
-  -- accumulation path, i.e. ONCE PER OPTIMIZER STEP on the averaged gradient — which is where timm
-  -- applies it. A clip per micro-batch would be a different operator.
-  -- ⚠ Expected effect is modest and the reason is worth keeping: LAMB's update is approximately
-  -- invariant to a uniform gradient rescale (Adam divides by √v, then the trust ratio renormalises
-  -- again), so the clip largely cancels. The residual is second-order — the factor varies per step,
-  -- so `m` and `v` accumulate differently-scaled gradients. Do not expect this to carry the gap to
-  -- 78.1 on its own; `wdExcludeNormBias` and the D2 trust guard are the one-sided ones.
-  -- ⚠ INHERITED BY EVERY DERIVED RECIPE, so the 2018 recipe below — SGD+momentum, whose torchvision
+  -- **timm's `Lamb.__init__` DEFAULTS `max_grad_norm = 1.0` and clips the global gradient norm
+  -- INSIDE the optimizer, every step.** The placement matches: the emitter puts `clipLine` after
+  -- `grads = _gsum / _K` on the accumulation path, i.e. ONCE PER OPTIMIZER STEP on the averaged
+  -- gradient — which is where timm applies it. A clip per micro-batch would be a different
+  -- operator. The expected effect is modest: LAMB's update is approximately invariant to a uniform
+  -- gradient rescale (Adam divides by √v, then the trust ratio renormalises again), so the clip
+  -- largely cancels. The residual is second-order — the factor varies per step, so `m` and `v`
+  -- accumulate differently-scaled gradients. Do not expect this to carry the gap to 78.1 on its
+  -- own; `wdExcludeNormBias` and the trust guard are the one-sided ones.
+  -- INHERITED BY EVERY DERIVED RECIPE, so the 2018 recipe below — SGD+momentum, whose torchvision
   -- reference clips nothing — sets it back to 0 explicitly.
   gradClipNorm   := 1.0
 
@@ -147,18 +138,18 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       testCropRatio := 0.95 }   -- A3: eval @224, center-crop ratio 0.95
 
 /-- **The 2018 recipe** — the ResNet-50 side of the blueprint's A3-vs-2018 recipe diff
-    (`sec:r50_a3_vs_2018`), and the phase-2 peer of the verified `momdp64` run. It is the
+    (`sec:r50_a3_vs_2018`), and the JAX peer of the verified `momdp64` run. It is the
     original paper's SGD-with-momentum plus the "bag of tricks" polish: cosine decay, 5-epoch
     warmup, label smoothing, random-resized-crop.
 
-    ⚠ **Every field here is set to the blueprint table's 2018 column**, not inherited by
+    **Every field here is set to the blueprint table's 2018 column**, not inherited by
     accident. `resnet50ImagenetConfig` is RSB-A2, so the deltas are large and each one is a
     row of that table: SGD+momentum 0.9 (not LAMB), bs 256 (not 2048-effective), lr 0.1 (not
     0.008@2048), 90 epochs (not 300), softmax CE (not BCE), label smoothing 0.1 (not 0.0),
     wd 1e-4 on ALL params (not 0.02 skipping norm/bias), no Mixup, no CutMix, no RandAugment,
     no repeated aug, no stochastic depth, no EMA, and train/eval both at 224 (not 160/224).
 
-    ⚠⚠ **The 224 train resolution is the wall-clock story.** A3 trains at 160, so it is
+    **The 224 train resolution is the wall-clock story.** A3 trains at 160, so it is
     ~2x cheaper per step (FixRes); this recipe pays that back. Do not read a 2018-vs-A3
     per-epoch difference as an optimizer result. -/
 def resnet50ImagenetConfig2018 : TrainConfig :=
@@ -169,7 +160,7 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
       batchSize      := 256
       epochs         := 90
       weightDecay    := 0.0001   -- 1e-4 on ALL params (no skip-list)
-      -- ⚠ BACK TO 0, because the base above turned it on for timm's **Lamb** default and this
+      -- BACK TO 0, because the base above turned it on for timm's **Lamb** default and this
       -- recipe is SGD+momentum. torchvision's 2018 reference clips nothing, so inheriting the clip
       -- would make the A3-vs-2018 comparison a two-variable one.
       gradClipNorm   := 0.0
@@ -195,15 +186,13 @@ def resnet50ImagenetConfigAdamProbe : TrainConfig :=
       wdExcludeNormBias := true }  -- skip BN γ/β + biases from weight decay
 
 /-- **RSB-faithful A3** — reproduces timm's LAMB @ **bs2048** on this 4×16 GB box via
-    gradient accumulation (512 micro × 4 = effective 2048), so LAMB finally gets the
-    large batch it was designed for. This is the fix for the bs512-starved 40.8%
-    result (memory `project_r50_a3_lowval_diagnostic`): LAMB is a large-batch
-    optimizer that was run at 1/4 its intended batch. BN stats are per-micro-batch
+    gradient accumulation (512 micro × 4 = effective 2048), so LAMB gets the
+    large batch it was designed for. At bs512 LAMB, a large-batch optimizer, runs
+    at 1/4 its intended batch (40.8% on A3). BN stats are per-micro-batch
     (**Ghost-BN**, Hoffer et al. 2017 — benign at micro=512). LR is restored to the
     paper's **8e-3 @ bs2048** (NOT the 512-scaled 2e-3), and the timm no_weight_decay
     skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
-    Grad-accum mechanics are GPU-validated (see `planning/archive/grad_accum.md` §Status);
-    this config is the accuracy run. The `rsb-faithful` recipe arg; writes a
+    Grad-accum mechanics are GPU-validated; this config is the accuracy run. The `rsb-faithful` recipe arg; writes a
     separate `_rsbfaithful.py`. -/
 def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
   { resnet50ImagenetConfigShort with
@@ -213,8 +202,7 @@ def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
 
 /-- **True bs2048** — the `rsb-faithful` recipe with the gradient-accumulation
     crutch removed: one single-forward batch of 2048 (`gradAccumSteps := 1`), which
-    needs a big-memory card (**~80 GB**; a 48 GB card is borderline/OOM — see
-    `project_r50_a3_lowval_diagnostic`). This eliminates the Ghost-BN approximation
+    needs a big-memory card (**~80 GB**; a 48 GB card is borderline/OOM). This eliminates the Ghost-BN approximation
     of the accum path (each accum micro-step normalized over its own 512 rather than
     the full 2048), so LAMB and BN both see a genuine 2048-sample batch — the cleanest
     reproduction of timm's bs2048.
@@ -255,7 +243,7 @@ def resnet50ImagenetConfigA2True2048 : TrainConfig :=
     A2 above is bs512 with a linearly-scaled LR, which is precisely the regime that
     gave A3 **40.8%** instead of 78.1%: LAMB is a large-batch optimizer and bs512
     starves it. Giving A3 its design batch through accumulation recovered
-    **76.66%** (see `planning/archive/rsb_a2_resnet50.md`), so A2 should be run the same way.
+    **76.66%**, so A2 should be run the same way.
 
     Deltas vs `default`: 512 micro × 4 = effective 2048, LR restored to the paper's
     **5e-3 @ bs2048** (not the 512-scaled 1.25e-3), and the timm no_weight_decay
@@ -291,8 +279,8 @@ def resnet50ImagenetConfigA1 : TrainConfig :=
 
 /-- A named training recipe: a `TrainConfig`, its generated-file name, and a
     one-line description. Recipe selection is a positional CLI arg
-    (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help` — replacing the
-    old undiscoverable `LEAN_MLIR_*` env flags (still honored as a fallback). -/
+    (`resnet50-imagenet <recipe> [data_dir]`), listed by `--help`; the `LEAN_MLIR_*` env
+    flags are honored as a fallback. -/
 def resnet50ImagenetRecipes : List Recipe := [
   { name := "default",      cfg := resnet50ImagenetConfig,
     out := "generated_resnet50_imagenet.py",

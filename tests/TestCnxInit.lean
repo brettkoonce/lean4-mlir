@@ -3,13 +3,12 @@ import LeanMlir.Verified.Train
 
 /-! # `cnx-init-check` — the known-answer gate for ConvNeXt's verified weight init
 
-⛔ **THE DEFECT THIS EXISTS FOR.** The 2026-09-17 ConvNeXt/ImageNet pair run was killed at epoch 67
-because the two arms did not share a weight init: the JAX reference sets `cnxInit := true`
-(ConvNeXt `_init_weights`, `trunc_normal(0.02)` on every conv AND the head) while the verified path
-used `mkParam`'s He default. Two arms with different inits cannot isolate the lowerer, which is the
-one thing this BatchNorm-free net is in the book for.
+**THE DEFECT THIS EXISTS FOR.** The two arms of a ConvNeXt/ImageNet pair must share a weight init:
+the JAX reference sets `cnxInit := true` (ConvNeXt `_init_weights`, `trunc_normal(0.02)` on every
+conv AND the head), where `mkParam`'s default is He. Two arms with different inits cannot isolate
+the lowerer, which is the one thing this BatchNorm-free net is in the book for.
 
-⚠⚠ **AND THE INIT IS EXACTLY THE KIND OF THING NOBODY CAN READ OFF THE SOURCE RELIABLY** — it is
+**AND THE INIT IS EXACTLY THE KIND OF THING NOBODY CAN READ OFF THE SOURCE RELIABLY** — it is
 host-side, it never enters a committed artifact, and `mkParam`'s rank-4 default is He **fan-OUT**
 (`2/(oc·kh·kw)`) while `SpecHelpers.heInitLayer` uses fan-**IN** (`2/(ic·kh·kw)`). Reading the wrong
 one off the wrong file gives ratios that are wrong by an order of magnitude and in the wrong
@@ -19,8 +18,8 @@ What it asserts, on `convnextImagenetVerified`'s real 183-spec layout:
 
 * with `cnxInit := true`, every WEIGHT spec (kind 0) lands at **σ = 0.02**;
 * the other three kinds are untouched — LayerNorm γ exactly 1.0, biases exactly 0.0,
-  LayerScale γ exactly 1e-6 — because ConvNeXt's `_init_weights` sets those and they already matched;
-* ⚠ **CONTROL**: with `cnxInit := false` the weights must land somewhere ELSE, or the gate is
+  LayerScale γ exactly 1e-6 — because ConvNeXt's `_init_weights` sets those and they already match;
+* **CONTROL**: with `cnxInit := false` the weights must land somewhere ELSE, or the gate is
   reading a flag that does nothing. Reported per distinct shape so the real ratios are on the record.
 
 Run:  lake exe cnx-init-check
@@ -89,7 +88,7 @@ def main : IO Unit := do
     seed := seed + 1
   IO.println s!"  cnxInit=true : {nW} weight specs, worst relative σ error {fmt worstW} (tol 0.05)"
 
-  -- ═══ 2. ⚠ THE CONTROL — cnxInit := false must give something ELSE ═══
+  -- ═══ 2. THE CONTROL — cnxInit := false must give something ELSE ═══
   IO.println "── CONTROL: cnxInit=false, the default the killed run trained under ──"
   IO.println "  (per distinct weight shape: what the default emits, and its ratio to 0.02)"
   seed := 1

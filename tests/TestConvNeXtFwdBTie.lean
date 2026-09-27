@@ -7,38 +7,36 @@ import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
 `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` renders ConvNeXt-T's forward at the batched index
 `N := B` — every node a `batchOp`/`*B` form whose `den` is `batchMap N (…)`, rather than a
 per-example node that `pretty B` lifts. The move exists so a per-EXAMPLE stochastic-depth mask is
-expressible at all (handoff §0.2 ▶2); the claim this file gates is that it changed **nothing else**:
+expressible at all; the claim this file gates is that it changed **nothing else**:
 
 > the batched chain emits `verified_mlir/convnext_fwd.mlir` byte for byte.
 
-⭐ **Since 4c leg 3 (2026-09-07) the committed artifacts ARE the batched chain's**, so the roles
-here are flipped: this file renders the PER-EXAMPLE chain (`ConvNeXtRender.lean`, which still writes
-the SGD-inline `convnext_train_step.mlir`) and checks it against the committed batched bytes. Same
-statement — the two chains agree on the forward byte for byte and on the backward up to the
-conv-VJP `transpose`/`reverse` pair — read from the other side, and it stays load-bearing exactly as
-long as both chains exist.
+**The committed artifacts ARE the batched chain's**, so the roles here are flipped: this file
+renders the PER-EXAMPLE chain (`ConvNeXtRender.lean`, which still writes the SGD-inline
+`convnext_train_step.mlir`) and checks it against the committed batched bytes. Same statement — the
+two chains agree on the forward byte for byte and on the backward up to the conv-VJP
+`transpose`/`reverse` pair — read from the other side, and it stays meaningful exactly as long as
+both chains exist.
 
-⚠⚠ **Why a BYTE tie is available here, where §2b's R34 move needed a numeric one.** Every batched
+**Why a BYTE tie is available here, where R34's batched move needed a numeric one.** Every batched
 form was built to emit its per-example peer's text byte-for-byte, and
 `tests/TestBatchedEmitTie.lean` pins all 31 of them individually. So the whole-net statement is the
 per-form statement composed — and when it fails, that file localises which form did it in one run,
-which a numeric tie cannot do. §2b had no such per-form corpus at the time and paid for it with a
-1e-6 tolerance argument.
+which a numeric tie cannot do.
 
-⚠ **What this does NOT establish.** The `den` side. `skel` erases values, so a batched form with the
-wrong denotation emits identical bytes and passes this file — which is precisely the trap the whole
-thread is about (`softmaxDiv`'s batched `den` would have divided by the whole batch's sum while
-emitting the same MLIR). That half is `den_batchOp` / `denOp` in `StableHLO.Basic`, and neither half
-implies the other.
+**What this does NOT establish.** The `den` side. `skel` erases values, so a batched form with the
+wrong denotation emits identical bytes and passes this file (`softmaxDiv`'s batched `den` could
+divide by the whole batch's sum while emitting the same MLIR). That half is `den_batchOp` / `denOp`
+in `StableHLO.Basic`, and neither half implies the other.
 
-⚠ The banner comment is passed in rather than compared modulo: a tie with a one-line hole is a tie
+The banner comment is passed in rather than compared modulo: a tie with a one-line hole is a tie
 with a hole, and the hole would sit exactly where a renderer describes what it did.
 -/
 
 open Proofs.StableHLO
 
 /-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
-    `exit` discards every diagnostic (§4). -/
+    `exit` discards every diagnostic. -/
 def main : IO Unit := do
   let want ← IO.FS.readFile "verified_mlir/convnext_fwd.mlir"
   let got := convNextFwdFaithfulV "convnext_fwd"
@@ -65,7 +63,7 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The BACKWARD: the whole-net traversal, against its per-example peer.
   --
-  --  ⚠⚠ TWO checks, and the second is the one a string diff cannot make. `convNextBackAll`
+  --  TWO checks, and the second is the one a string diff cannot make. `convNextBackAll`
   --  returns `(code, gradMap, softmax)` where `gradMap` maps each of the 180 parameter names to
   --  the SSA holding its gradient. Identical CODE with a permuted MAP is a render that computes
   --  every gradient correctly and hands them to the wrong parameters — it would pass a byte diff,
@@ -85,13 +83,13 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
     if gl.size != wl.size then
       IO.println s!"  ✗ line counts differ: {gl.size} vs {wl.size}"
       bad := bad + 1
-    -- ⚠⚠ THE ONE ALLOWED DIFFERENCE, and it is a PRE-EXISTING divergence between two emitters that
-    -- were never tied to each other. The conv input-VJP prepares its kernel with a `transpose`
-    -- (dims [1,0,2,3]) and a `reverse` (dims [2,3]); `.convBack` emits transpose-then-reverse and
-    -- `.convBackBatched` emits reverse-then-transpose. The two act on DISJOINT axes, so they
-    -- commute and both renders compute the same kernel — but the text differs, and nothing noticed
-    -- because no net used both emitters until this port. EfficientNet/mnv2/R34 use only the
-    -- batched one; ConvNeXt/ViT only the per-example one.
+    -- THE ONE ALLOWED DIFFERENCE, and it is a divergence between two independent
+    -- emitters. The conv input-VJP prepares its kernel with a `transpose`
+    -- (dims [1,0,2,3]) and a `reverse` (dims [2,3]); `.convBack` emits transpose-then-reverse
+    -- and `.convBackBatched` emits reverse-then-transpose. The two act on DISJOINT axes, so
+    -- they commute and both renders compute the same kernel — but the text differs.
+    -- EfficientNet/mnv2/R34 use only the batched one; ConvNeXt/ViT only the per-example
+    -- one.
     --
     -- The allowance is narrow ON PURPOSE: every differing line must be one of those two ops, the
     -- line counts must match, and the SSA numbering must not move. Anything else — a shape, a
@@ -144,7 +142,7 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.
   --
-  --  ⚠ Same allowance, same reason, and it must stay THIS narrow (since leg 3 it is the
+  --  Same allowance, same reason, and it must stay THIS narrow (it is the
   --  per-example render that carries the "other" order, and the committed bytes the batched one —
   --  the allowance is symmetric): the AdamW tail is
   --  parameter-space (adamMNextF / clipScaleF / gradSumSqAccF are indexed by the param's own size

@@ -3,12 +3,12 @@ import LeanMlir.Verified.Train
 
 /-! # bs256 re-render gate — the duplicated-batch exact check
 
-`planning/archive/xla_pjrt_handoff.md` §2d.1. `verified_mlir/resnet34_adam256_train_step.mlir` is the same
-`pretty(provenGraph)` as the bs32 artifact with `B := 256`; the two are structurally identical
-(10014 ops, 9838 lines, same op profile) and differ only in tensor dimensions and one constant. That
-is *exactly* the kind of change that looks obviously right and can still be silently wrong — the
-§2b lesson was that a re-instantiation at a new batch index inflated 597 pointwise trailing dims
-without changing the graph structure at all. So it gets a numeric gate rather than an argument.
+`verified_mlir/resnet34_adam256_train_step.mlir` is the same `pretty(provenGraph)` as the bs32
+artifact with `B := 256`; the two are structurally identical (10014 ops, 9838 lines, same op
+profile) and differ only in tensor dimensions and one constant. That is *exactly* the kind of change
+that looks obviously right and can still be silently wrong — a re-instantiation at a new batch index
+can inflate pointwise trailing dims without changing the graph structure at all. So it gets a
+numeric gate rather than an argument.
 
 **The gate, and why it is exact rather than a tolerance.** Feed the bs256 render **8 identical
 copies** of the same 32 examples. Then, term by term:
@@ -25,7 +25,7 @@ Therefore **every one of the 68,040,737 returned floats must agree** — θ', m'
 reduction order (256-element trees vs 32-element ones), which is why the gate is norm-relative 1e-4
 rather than bit-equality, and why it reports the A-vs-A determinism floor first.
 
-This is the same shape of argument as the cifar8 data-parallel gate (§2b-quater): find the input on
+This is the same shape of argument as the cifar8 data-parallel gate: find the input on
 which two graphs that are *not* generally equal become provably equal, and check there.
 
 **What it does not cover.** It says the bs256 render computes the bs32 function on a degenerate
@@ -40,7 +40,7 @@ identical) is what covers the rest, and it is cheap to re-run.
 
 `TIE_SKIP_AA=1` skips the determinism-floor run.
 
-⚠⚠ **Both extra knobs are REQUIRED, and each fails in its own misleading way.**
+**Both extra knobs are REQUIRED, and each fails in its own misleading way.**
 
 * `LEAN_MLIR_MEM_FRACTION=0.97` — the bs256 step wants one 11.50 GiB allocation and the plugin's
   default BFC pool is 11.68 GiB, already part-consumed by the two bs32 runs, so the gate dies with
@@ -51,8 +51,8 @@ identical) is what covers the rest, and it is cheap to re-run.
   picks different kernels for each. Without the shim the run reports
   `BATCH CHECK FAILED: the FORWARD differs at norm-rel 0.000233 > 1e-4` and blames "a defect in the
   bs256 render". It is not: under the shim the bs32-vs-bs32 floor goes **bit-exact
-  63886433/63886433** and the forward ties at **0.000001**. Both measured 2026-09-02, on two
-  different parameter initialisations.
+  63886433/63886433** and the forward ties at **0.000001**. Both measured on two different
+  parameter initialisations.
 -/
 
 private def nPOf (net : VerifiedNet) : Nat := net.nParams
@@ -217,7 +217,7 @@ bit-exact {exact}/{hi-lo}"
   --     batch; it amplifies nothing, and on a duplicated batch it is *exactly* the bs32 value. A
   --     real mis-wiring of the bs256 graph lands here. Gate: 1e-4.
   --
-  --  2. the GRADIENT, COMPARATIVELY — never in absolute terms. Handoff §3: R34's gradient does not
+  --  2. the GRADIENT, COMPARATIVELY — never in absolute terms. R34's gradient does not
   --     reproduce to better than ~6e-3 against the same backend under a sub-ULP forward nudge, so a
   --     1e-4 absolute gradient gate fails a correct render by 60×. The control measures what this
   --     net's gradient does under a change that is *provably* semantics-preserving — reordering the

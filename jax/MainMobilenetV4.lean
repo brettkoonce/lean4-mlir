@@ -4,13 +4,10 @@ import Jax
     Universal Inverted Bottleneck blocks with varied DW configurations.
     Conv-only variant (no attention).
 
-    ⚠ Until 2026-08-14 this file's table was Conv-S-SIZED (14 UIB blocks, one 1×1 head conv,
-    ~4.1M) while its `name` said "Medium" — the misnomer `VerifiedNets.lean` called out. It is
-    now the real Conv-M table, transcribed from `MainMobilenetV4Imagenet.lean` (which was always
-    faithful Conv-M) with the 10-class head kept. `RESULTS.md`'s 84.58% belongs to the OLD Conv-S
-    table and is tagged there as such; this spec has no Imagenette accuracy run of its own yet.
+    The table is the real Conv-M table, transcribed from `MainMobilenetV4Imagenet.lean` with the
+    10-class head kept. This spec has no Imagenette accuracy run of its own.
 
-    The verified peer `mobilenetv4Verified` moved in the same commit, and it has to: the ties
+    The verified peer `mobilenetv4Verified` has to move with this table: the ties
     (`scripts/parity/mnv4_forward_tie.py`, `scripts/parity/grad_tie.py --net mnv4`) read this file's generated
     output, so a divergence here silently compares two different networks. -/
 

@@ -8,25 +8,24 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
     unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/resnet34-syncbn-check
 
-The identity every `*-dp-check` and `shard-check` could NOT state for a batch-BN net. Until
-2026-09-21 a data-parallel R34 render normalised each replica over its own `b` rows, so
-`DP([xA|xB])` was `mean(single_b(xA), single_b(xB))` — a step on the mean of two per-replica
+The identity every `*-dp-check` and `shard-check` can NOT state for a batch-BN net. A
+data-parallel R34 render that normalises each replica over its own `b` rows computes
+`DP([xA|xB])` = `mean(single_b(xA), single_b(xB))` — a step on the mean of two per-replica
 losses, and provably not the single-device step at `2b` (`dpMeanGrad_ne_globalBatchGrad`;
 `lakefile.lean`'s own words: "R34 is about SPLITTING a batch — 2×32 really is not 1×64").
 
-With the sync-BN render (`planning/global_bn_verified.md` §2b: every BN layer all-reduces its
-μ, then its Chan-corrected σ² (`σ²_r + (μ_r − μ)²`), before normalising; its backward all-reduces
-the two dy-reductions; and the γ gradient reads the same global `x̂`) the replicas compute their
-shards of ONE global-batch function, and the identity becomes exact up to float reduction order:
+With the sync-BN render (every BN layer all-reduces its μ, then its Chan-corrected σ²
+(`σ²_r + (μ_r − μ)²`), before normalising; its backward all-reduces the two dy-reductions; and the γ
+gradient reads the same global `x̂`) the replicas compute their shards of ONE global-batch function,
+and the identity becomes exact up to float reduction order:
 
     TEST     DP_sync( [xA | xB] )  ==  single_2b( [xA | xB] )
     CONTROL  DP_sync( [xA | xB] )  !=  mean( single_b(xA), single_b(xB) )
 
-The CONTROL is the old identity, and it must now FAIL by a margin: if it still held, the
+The CONTROL is the per-replica identity, and it must FAIL by a margin: if it still held, the
 statistics would not be synchronised and the TEST would be passing for the wrong reason (both
 sides per-replica). `dpSyncGrad_eq_globalBatchGrad` / `den_bnSyncF_allReduce` … are the
-ℝ-level statements this gates the emitted bytes against — the first numeric check any of the
-seven sync ops' MLIR has had.
+ℝ-level statements this gates the emitted bytes against.
 
 **What is compared, and why all of it.** With `m = 0` fed in, `m' = 0.1·g` is linear in the
 gradient (the `shard-check` trick). Here the gradient itself is equal, not just averagable — the
@@ -44,11 +43,10 @@ the exchange). And a SENSITIVITY probe — the two-pass graph on the same batch 
 point it moves the two-pass graph's OWN `m'` by ~0.2, so the gradient can only ever be compared to
 ~1e-3 of that, while the statistics are compared tightly.
 
-⛔ **History (2026-09-21).** The first render exchanged `[μ ‖ E[x²]]` in one round and every
-consumer formed `σ² = E[x²] − μ²`. This gate measured it 2e-4 off in the statistics after 36
-layers and 15 % off in `m'`, with the sensitivity probe at 0.22 — i.e. the ops were right and the
-f32 arithmetic was not (`ε·E[x²]/σ²` per layer, compounding). Chan's two-round exchange replaced
-it; the numbers below are its.
+A one-round exchange of `[μ ‖ E[x²]]`, with every consumer forming `σ² = E[x²] − μ²`, measures
+2e-4 off in the statistics after 36 layers and 15 % off in `m'` on this gate, with the sensitivity
+probe at 0.22 — i.e. the ops are right and the f32 arithmetic is not (`ε·E[x²]/σ²` per layer,
+compounding). Hence Chan's two-round exchange.
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path). The runner is
 `LeanMlir.SyncBnCheck`, shared with the MobileNetV2, EfficientNet-B0 and ImageNet gates; the

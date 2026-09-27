@@ -6,16 +6,15 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # Stochastic depth — the two gates that cover the op's INTERIOR
 
-`planning/archive/stochastic_depth.md` §7 lists eight gates. Six were run when the feature landed
-(2026-08-02) and they all pin **endpoints**: `dropPath = 0` re-renders every artifact
+The other stochastic-depth gates pin **endpoints**: `dropPath = 0` re-renders every artifact
 byte-identically, the keep = 1 train step is bit-identical to AdamW (0 of 4,020,358 against a 0
 floor, real recipe firing at 1.89), and `tests/TestDropPathRamp.lean` pins the keep ramp across the
-driver/renderer seam. **Nothing yet checks what happens strictly between those endpoints**, and
+driver/renderer seam. **None of them checks what happens strictly between those endpoints**, and
 that is what this file is for:
 
 | gate | what it establishes | why nothing else can |
 |---|---|---|
-| **A — the known answer** | a supplied scale multiplies the branch by EXACTLY that, per example | every existing tie compares the render against itself or against a peer built from the SAME constants (§6.5 of that doc). Only a host-computed answer sees a wrong multiply |
+| **A — the known answer** | a supplied scale multiplies the branch by EXACTLY that, per example | every existing tie compares the render against itself or against a peer built from the SAME constants. Only a host-computed answer sees a wrong multiply |
 | **B — the all-zero-mask control** | the site is on the RESIDUAL BRANCH, not on the block output | `out = s·(branch + x)` compiles, trains and descends. It is a different net, and no structural check distinguishes it from `out = s·branch + x` |
 
     lake build droppath-tie
@@ -27,9 +26,9 @@ that is what this file is for:
     .lake/build/bin/droppath-tie --op --break        # gate A is falsifiable: a 1% wrong scale
     .lake/build/bin/droppath-tie --net --cand <misplaced.mlir>   # gate B goes red; expect rc=1
 
-⚠ **Run it under `scripts/det_shim.sh`.** Gate B compares two DIFFERENT HLO programs
+**Run it under `scripts/det_shim.sh`.** Gate B compares two DIFFERENT HLO programs
 (`efficientnet_drop_fwd` against the drop-free `efficientnet_fwd`), and on CUDA the committed
-compile options autotune — §2d.3's Finding 1 ("the floor IS bit-exact across processes") is
+compile options autotune — "the floor IS bit-exact across processes" is
 ROCm-specific. The harness measures its own A-vs-A floor first and says so; without the det shim
 that floor is noise and the bit-exact claim in B1 has no resolution.
 
@@ -39,7 +38,7 @@ the op multiplies correctly, not that the real net wires it anywhere in particul
 whole-net but its logits are a NONLINEAR function of the site (BN, swish, SE downstream), so it
 cannot read `branch · scale` off the output; what it can do is falsify the placements, which is a
 different and weaker claim. The two halves are independent and both are needed — the same split
-§2b records for the artifact-vs-theorem pair.
+as the artifact-vs-theorem pair.
 -/
 
 open Proofs Proofs.StableHLO
@@ -52,14 +51,13 @@ private def mkVec (vals : Array Float) : IO ByteArray := do
 
 /-- `(max |a−b|, max(|a|,|b|), bit-exact count)` over `n` coordinates. The exact count is not
     decoration: `Float.toString` gives six decimals, so a genuine 3e-8 prints as `0.000000` and
-    reads as bit-exact when it is not (§2e-bis).
+    reads as bit-exact when it is not.
 
-    ⚠ **The magnitude is over BOTH buffers, and a first version of this took it over `a` alone.**
-    That is not a nicety — the misplaced-render control (`--cand`, below) drove `a` to identically
-    zero, so the denominator went to zero, `rel` returned `0.0`, and a TOTAL COLLAPSE of the logits
-    was reported as *"the logits did not move"*. The gate then fired on the wrong check with a
-    message naming the wrong cause. `fwd-tie` already normalises over both; this is that, learned
-    again. A control does not only prove the gate can go red — it proves the gate goes red for the
+    **The magnitude is over BOTH buffers.** That is not a nicety — the misplaced-render control
+    (`--cand`, below) drives `a` to identically zero, so over `a` alone the denominator goes to
+    zero, `rel` returns `0.0`, and a TOTAL COLLAPSE of the logits reads as *"the logits did not
+    move"*: the gate fires on the wrong check with a message naming the wrong cause. `fwd-tie`
+    normalises over both too. A control does not only prove the gate can go red — it proves the gate goes red for the
     reason it claims. -/
 private def cmpBufs (a b : ByteArray) (n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0
@@ -81,7 +79,7 @@ private def nonFinite (a : ByteArray) (n : Nat) : Nat := Id.run do
     if !(F32.read a i.toUSize).isFinite then c := c + 1
   return c
 
-/-- Compile `src` fresh. Deletes both the bare and the `_$IREE_BACKEND`-scoped `.vmfb` first (§4):
+/-- Compile `src` fresh. Deletes both the bare and the `_$IREE_BACKEND`-scoped `.vmfb` first:
     `compileVmfb` reuses any output newer than the `.mlir`, keyed on the output path and an mtime
     rather than on the source, so a second run under one tag silently reuses the first binary. -/
 private def freshSession (path tag : String) : IO LowererSession := do
@@ -96,7 +94,7 @@ private def freshSession (path tag : String) : IO LowererSession := do
 -- ════════════════════════════════════════════════════════════════
 
 private def OB : Nat := 8      -- examples. The mask is per-EXAMPLE, so this is the axis under test
-private def ON : Nat := 5      -- per-example width. ⚠ ON ≠ OB deliberately — see `opModule`
+private def ON : Nat := 5      -- per-example width. ON ≠ OB deliberately — see `opModule`
 
 private def zOX : Vec (OB * ON) := fun _ => 0
 
@@ -104,7 +102,7 @@ private def zOX : Vec (OB * ON) := fun _ => 0
     `dropPathB` over `%x` with the mask as a graph input, which is exactly the subtree
     `eFwd` splices onto the residual branch.
 
-    ⚠ `ON ≠ OB` on purpose. With `n = B` a mask broadcast along the wrong axis still typechecks,
+    `ON ≠ OB` on purpose. With `n = B` a mask broadcast along the wrong axis still typechecks,
     and the whole point of this probe is that the scale is indexed by EXAMPLE. At `8 × 5` a
     `dims = [1]` broadcast of a `tensor<8xf32>` onto `tensor<8x5xf32>` is a hard type error rather
     than a silent different function — so the failure this gate is left to catch is the subtler
@@ -126,7 +124,7 @@ private def opModule : String :=
     float32, so their exact product needs at most 48 mantissa bits and is therefore EXACT in the
     float64 Lean computes it in; rounding that exact product to float32 is by definition what
     float32 multiplication returns. No double rounding, so any difference at all is the render
-    computing something else. ⚠ The mask is read back out of the buffer the device receives, never
+    computing something else. The mask is read back out of the buffer the device receives, never
     from the literal, so both sides see the identical float32 value. -/
 private def dropRef (x s : ByteArray) : IO ByteArray := do
   let mut cells : Array ByteArray := #[]
@@ -137,7 +135,7 @@ private def dropRef (x s : ByteArray) : IO ByteArray := do
   pure (F32.concat cells)
 
 /-- **Control C1** — the descriptor bug: every example scaled by example 0's mask. A
-    `BatchableOp` descriptor may carry only batch-INVARIANT data (§4), and this is what one would
+    `BatchableOp` descriptor may carry only batch-INVARIANT data, and this is what one would
     denote here. It must NOT match, which is why the mask below is non-uniform. -/
 private def dropRefBroadcast0 (x s : ByteArray) : IO ByteArray := do
   let s0 := F32.read s 0
@@ -155,7 +153,7 @@ private def dropRefBroadcast0 (x s : ByteArray) : IO ByteArray := do
 * **interior values `0.5 / 0.25 / 0.75`** — exactly representable in binary, so the known answer
   is not testing the harness's own rounding.
 
-⚠ Non-uniform, and index 0 is deliberately NOT the zero: control C1 compares against "everything
+Non-uniform, and index 0 is deliberately NOT the zero: control C1 compares against "everything
 scaled by `s[0]`", which a zero at `s[0]` would turn into the trivially-different all-zero vector. -/
 private def opMask (keeps : Array Float) : Array Float :=
   let inv := fun (i : Nat) => if h : i < keeps.size then 1.0 / keeps[i] else 1.0
@@ -272,23 +270,22 @@ private structure NetRun where
 
 private def uniform (bs : Nat) (v : Float) : Array Float := Array.replicate bs v
 
-/-- **Which net gate B is driving.** ⚠ ONE harness for both, per `rms-tie`/`wdx-tie`/`shard-check` —
+/-- **Which net gate B is driving.** ONE harness for both, per `rms-tie`/`wdx-tie`/`shard-check` —
     a second copy is the double-writer disease one level down, in code. What differs between the two
     nets is exactly four facts (the spec, the artifact slug, the site list, and whether there is an
     `_eval` peer), and every one of them is read from the renderer or the spec rather than restated.
 
-    ⚠ **A green EfficientNet run does not license ConvNeXt.** The two place their sites in different
+    **A green EfficientNet run does not license ConvNeXt.** The two place their sites in different
     renderers (`EfficientNetRender.Basic.eFwd` at the per-example index, `ConvNeXtRenderB.fwdBlockB` at the
     batched one) and around different residual algebra — enet's branch is a project-BN, ConvNeXt's is
-    a LayerScale. That is the `rms-tie` ε-placement lesson one knob over: the same edit on two
-    renderers has already behaved differently once (§0.4 finding 5). -/
+    a LayerScale. The same edit on two renderers can behave differently. -/
 private structure DropNet where
   slug   : String                 -- artifact prefix: `<slug>_drop_fwd.mlir`
   refFn  : String                 -- the DROP-FREE forward this must equal at a ones mask
   spec   : VerifiedNetSpec
   sites  : List Nat               -- the ramp index of each site, in signature order
   hasEval : Bool                  -- a frozen-stats `_fwd_eval` peer (BN nets only)
-  -- ⚠⚠ **B4 IS ARCHITECTURE-DEPENDENT AND ON ViT IT IS INVALID ON THE *CORRECT* RENDER.** B4 says
+  -- **B4 IS ARCHITECTURE-DEPENDENT AND ON ViT IT IS INVALID ON THE *CORRECT* RENDER.** B4 says
   -- "with every site zeroed the net still depends on `x`", and on a CNN that holds: zeroing every
   -- residual branch leaves a stack of identities with the stem and the head still reading the
   -- image. On ViT it does NOT, and for a reason that has nothing to do with placement — **the
@@ -299,22 +296,22 @@ private structure DropNet where
   --
   -- So B4 is SKIPPED here rather than weakened, and the load on ViT falls on **B2's collapse check
   -- and B3** — both of which do discriminate (measured: B2 |logits|max 3.52 correct vs 0.000000
-  -- misplaced; B3 rel 0.265 correct). ⚠ That is a genuinely weaker gate set than the CNNs get, and
+  -- misplaced; B3 rel 0.265 correct). That is a genuinely weaker gate set than the CNNs get, and
   -- saying so is the point: a gate ported between architectures inherits the SOURCE's structure,
-  -- not the target's — §0.4 finding 1 one axis over, on the architecture rather than the numerics.
+  -- not the target's.
   b4Valid : Bool := true
 
 private def enetDropNet : DropNet :=
   { slug := "efficientnet", refFn := "efficientnet_fwd", spec := efficientnetVerified,
     sites := enetDropIdxs, hasEval := true }
 
-/-- ConvNeXt-T. ⚠ No `_fwd_eval` peer and it must not grow one: LayerNorm reduces within one
+/-- ConvNeXt-T. No `_fwd_eval` peer and it must not grow one: LayerNorm reduces within one
     example, never over the batch, so train == eval. -/
 private def cnxDropNet : DropNet :=
   { slug := "convnext", refFn := "convnext_fwd", spec := convnextVerified,
     sites := List.range cnxDropSites, hasEval := false }
 
-/-- ViT-Tiny. ⚠ **TWO sites per block**, so `sites` is 24 long where the net has 12 blocks — and
+/-- ViT-Tiny. **TWO sites per block**, so `sites` is 24 long where the net has 12 blocks — and
     that is exactly what B3 is sharpest on here: zeroing the attention branch of block 0 must NOT
     absorb the MLP branch of block 11, and under the misplacement it would. No `_fwd_eval` peer
     (LayerNorm ⇒ train == eval). -/
@@ -325,10 +322,9 @@ private def vitDropNet : DropNet :=
 private def gateNet (dn : DropNet) (isEval : Bool) (cand : Option String) : IO Unit := do
   let fn   := if isEval then s!"{dn.slug}_drop_fwd_eval" else s!"{dn.slug}_drop_fwd"
   let refFn := if isEval then s!"{dn.refFn}_eval" else dn.refFn
-  -- ⚠ `--cand` is what makes a green run BELIEVABLE, and it is the `vit-dp-check` lesson (§2j):
-  -- that harness hardcoded both paths and took no argv, so its bit-exact PASS was UNFALSIFIABLE
-  -- until an argument was added and the sum-not-mean control built. Point this at a render with
-  -- the drop moved onto the block output and B3/B4 must go red.
+  -- `--cand` is what makes a green run BELIEVABLE: a harness that hardcodes both paths and takes no
+  -- argv has an UNFALSIFIABLE bit-exact PASS. Point this at a render with the drop moved onto the
+  -- block output and B3/B4 must go red.
   let dropPath := cand.getD s!"verified_mlir/{fn}.mlir"
   IO.println s!"── GATE B — the all-zero-mask control, at @{fn}"
   if cand.isSome then IO.println s!"  ⚠ CANDIDATE render: {dropPath}"
@@ -379,7 +375,7 @@ backend {← LowererSession.backendName}"
   let rA ← mkRun "netA"
   let rB ← mkRun "netB"       -- a SECOND compile of the same artifact — the A-vs-A floor
 
-  -- ── B0: the floor, measured BEFORE any cross-graph number is read (finding 3, 2026-08-02) ──
+  -- ── B0: the floor, measured BEFORE any cross-graph number is read ──
   let yOnesA ← runAt rA x ones
   let yOnesB ← runAt rB x ones
   let (dF, mF, eF) := cmpBufs yOnesA yOnesB n
@@ -414,7 +410,7 @@ the floor above IS bit-exact, so this is graph-attributable.")
   let magZk := (cmpBufs yZk yZk n).2.1        -- max |logits| of the zeroed run, on its own
   IO.println s!"  B2  zero at site {k} (block {sites[k]!}) vs ones : rel {rel d2 m2}   \
 |logits|max {magZk}"
-  -- ⚠ The COLLAPSE check goes first, or its symptom is misread as the one below. Site 0 is block 2,
+  -- The COLLAPSE check goes first, or its symptom is misread as the one below. Site 0 is block 2,
   -- near the stem: a drop on the BLOCK OUTPUT zeroes the activation there and every later layer is
   -- a function of zero, so the logits go to ~0 rather than merely moving. Reporting that as "the
   -- mask is not reaching the site" would name the wrong cause with the right verdict.
@@ -480,8 +476,8 @@ B1 as a bound."
   let cand := match args.dropWhile (· != "--cand") with
     | _ :: p :: _ => some p
     | _ => none
-  -- ⚠ Which net gate B drives. Default EfficientNet, so every committed invocation above is
-  -- unchanged; `convnext` selects the batched-chain SD render (handoff §0.10).
+  -- Which net gate B drives. Default EfficientNet, so every committed invocation above is
+  -- unchanged; `convnext` selects the batched-chain SD render.
   let dn := if args.contains "convnext" then cnxDropNet
             else if args.contains "vit" then vitDropNet else enetDropNet
   if doOp  then gateOp (args.contains "--break")

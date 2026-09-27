@@ -5,16 +5,15 @@ import LeanMlir.Verified.Train
 
 The EfficientNet peer of `tests/TestViTDpCheck.lean` and `tests/TestCifar8DpCheck.lean`.
 `verified_mlir/efficientnet_adamdp_train_step.mlir` inserts one `all_reduce(add)/N` per parameter
-between the certified gradient and the certified AdamW triple (handoff §2b-quater's pattern). That
+between the certified gradient and the certified AdamW triple. That
 collective is a **trusted carve-out** — emitted text, outside every faithfulness theorem — so it
 needs its own numeric check.
 
 **The exact identity used here, and why BatchNorm does not spoil it.** Give both replicas the
-**same** 32 examples. Since 2026-09-21 the DP render's BatchNorm is synchronised
-(`planning/global_bn_verified.md` §3.3): each BN layer all-reduces its statistics, and the mean of
-two identical per-replica statistics is that statistic, so both replicas normalise by exactly the
-single-device batch's statistics; each therefore computes the same gradient `g`, and
-`all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
+**same** 32 examples. The DP render's BatchNorm is synchronised: each BN layer all-reduces its
+statistics, and the mean of two identical per-replica statistics is that statistic, so both
+replicas normalise by exactly the single-device batch's statistics; each therefore computes the
+same gradient `g`, and `all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
 The data-parallel step must reproduce the **single-device** step on that batch, output for output
 — the forward bit-exact; the gradient to the gap between the sync-BN graph's f32 arithmetic and the
 two-pass graph's (see the gradient bound below).
@@ -27,11 +26,11 @@ region. On a duplicated batch that region must come back **bit-exact** — every
 data, so any difference there is the DP path corrupting the forward, which no gradient tolerance
 would have caught.
 
-Two failure modes it separates, both of which have actually happened in this repo:
+Two failure modes it separates:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
 * **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1, five
-  orders above the gate. §2b-quater verified exactly that by breaking the divisor.
+  orders above the gate.
 
     lake build efficientnet-dp-check
     unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check
@@ -40,11 +39,12 @@ Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path).
 -/
 
 def main (args : List String) : IO Unit := do
-  -- ▶ Env-selected (net, batch, replicas, variant pair), defaulting to EXACTLY the Imagenette /
+  -- Env-selected (net, batch, replicas, variant pair), defaulting to EXACTLY the Imagenette /
   -- AdamW / 2-replica configuration this harness was written for, so the committed result
-  -- reproduces with no arguments — which is the gate on the generalisation itself. Added for the
-  -- RMSProp DP render, which exists only at the ImageNet shape (`efficientnetin`, B=64 × 4 replicas).
-  -- ⚠ `shard-check` cannot substitute: its `DP([A|B]) = mean(single(A), single(B))` needs the gated
+  -- reproduces with no arguments — which is the gate on the generalisation itself. The env
+  -- selection serves the RMSProp DP render, which exists only at the ImageNet shape
+  -- (`efficientnetin`, B=64 × 4 replicas).
+  -- `shard-check` cannot substitute: its `DP([A|B]) = mean(single(A), single(B))` needs the gated
   -- slot LINEAR in the gradient, which RMSProp's buffer is not. The duplicated-batch identity here
   -- is optimizer-agnostic — both sides see the identical gradient. Mirrors `TestMobilenetV2DpCheck`.
   let netSel := (← IO.getEnv "DP_NET").getD "imagenette"
@@ -55,29 +55,29 @@ def main (args : List String) : IO Unit := do
   let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD repDefault
   let vSg := (← IO.getEnv "DP_VARIANT").getD "adam"
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
-  -- ⚠ `ema*` variants carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail. The harness has
+  -- `ema*` variants carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail. The harness has
   -- to BUILD the blob it feeds rather than assume three regions — getting it wrong is not a
-  -- tolerance question, PJRT refuses on the buffer count (§2m's `expected 265 buffers`).
-  -- ⚠ `emarms` is this net's real recipe and it is why `rmsOn` is a SUBSTRING test — but `emaOn`
-  -- is and always was the PREFIX one, which is what `emarms` satisfies. The two lessons are not
+  -- tolerance question, PJRT refuses on the buffer count (`expected 265 buffers`).
+  -- `emarms` is this net's real recipe and it is why `rmsOn` is a SUBSTRING test — but `emaOn`
+  -- is the PREFIX one, which is what `emarms` satisfies. The two lessons are not
   -- the same lesson.
-  -- ⚠⚠ **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM (2026-08-27).** They read
-  -- `let emaOn := …; let nRegions := if emaOn then 4 else 3` — this file's private copy of what
-  -- `trainAdamSched` computes, which is precisely the drift `tests/TestVariantPredicates.lean`'s
-  -- header warns about one level up: *a gate on a transcription is not a gate on the thing
-  -- transcribed*. Two things had gone wrong by the time it was noticed:
-  --   ⛔ the copy was a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
-  --      would have made this harness build four regions for a graph the driver feeds three;
-  --   ⛔ the copy is frozen at `4 else 3`, and the region count became **3, 4 or 5** the day EMA and
-  --      gradient accumulation stopped sharing a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
-  -- Neither is reachable from the variants this gate runs today. Both are one variant string away.
+  -- **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM.** A private copy of what
+  -- `trainAdamSched` computes (`let emaOn := …; let nRegions := if emaOn then 4 else 3`) is
+  -- precisely the drift `tests/TestVariantPredicates.lean`'s header warns about one level up:
+  -- *a gate on a transcription is not a gate on the thing transcribed*. Such a copy goes wrong
+  -- two ways:
+  --   a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one makes `adamema…` build four
+  --      regions for a graph the driver feeds three;
+  --   a copy frozen at `4 else 3` misses that the region count is **3, 4 or 5**, since EMA and
+  --      gradient accumulation do not share a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
+  -- Neither is reachable from the variants this gate runs. Both are one variant string away.
   let emaOn := VerifiedVariant.emaOn vSg
   let nRegions := VerifiedVariant.nRegions vSg
   let nScalars := VerifiedVariant.nScalars vSg
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
-  -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
-  -- divisor 2.0 → 1.0, i.e. sum instead of mean — is the one to run.
+  -- convenience: a gate nobody has seen go red is an assertion. The control to run is the `%arn`
+  -- divisor 2.0 → 1.0, i.e. sum instead of mean.
   let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
@@ -105,7 +105,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
       let dPair ← F32.write3 dPair 0 0.9 0.1 0.0
       F32.blit tail 3 dPair 0 2
     else pure tail
-  -- ⚠ The shadow starts from an arbitrary NON-θ state, deliberately: seeded at θ,
+  -- The shadow starts from an arbitrary NON-θ state, deliberately: seeded at θ,
   -- `ema' = d·θ + (1−d)·θ'` would agree with a harness that had wired the region to the wrong slot.
   let e ← F32.scaleShift (← F32.heInit 9999 net.nParams.toUSize 0.03) 1.0 0.02
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
@@ -115,7 +115,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
                             ++ Array.replicate nScalars #[] ++ bnStatShapes)
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   -- The SAME batch on EVERY replica — `replicas` copies, not two: `all_reduce(add)/N` over N
-  -- identical gradients is the identity at any N, so only this concatenation was 2-specific.
+  -- identical gradients is the identity at any N.
   let x2 := F32.concat (Array.replicate replicas x1)
   let mut y1 : ByteArray := .empty
   for i in [0:bs] do
@@ -129,7 +129,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   -- Delete first: `compileVmfb` keys on the OUTPUT path and an mtime, never the source, so a
-  -- second run with a different candidate silently reuses the first one's binary (handoff §4).
+  -- second run with a different candidate silently reuses the first one's binary.
   for p in [".lake/build/enet_dp_b.vmfb",
             s!".lake/build/enet_dp_b_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
     if ← System.FilePath.pathExists p then IO.FS.removeFile p
@@ -141,8 +141,8 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
-  -- ⚠ The EMA shadow is REPORTED, never GATED. `planning/archive/ema.md`: the shadow is θ's low-pass
-  -- filter, so gating it is §3's "gate the gradient, never θ" one step WORSE — measured, a
+  -- The EMA shadow is REPORTED, never GATED: the shadow is θ's low-pass
+  -- filter, so gating it is "gate the gradient, never θ" one step WORSE — measured, a
   -- sum-not-mean control moved `m` by 0.94, θ by 1.95e-4 and the shadow by 1.00e-4, i.e. exactly
   -- ON a 1e-4 gate. It is here so a mis-threaded 4th region is visible, not so it decides anything.
   let regions : List (String × Nat × Nat) :=
@@ -195,15 +195,13 @@ by construction; a difference here is the data-parallel path corrupting the forw
     IO.Process.exit 1
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
-  -- wrong (§3). §2b-quater measured this directly — a 2× gradient error moved θ by 2.7e-4 and `m`
-  -- by 0.96.
-  -- ⚠ 1e-2, not 1e-4, since 2026-09-21: the DP render's BatchNorm is SYNCHRONISED
-  -- (`planning/global_bn_verified.md` §3.3), so its backward is the sync-BN graph while the
+  -- wrong. Measured directly, a 2× gradient error moves θ by 2.7e-4 and `m` by 0.96. 1e-2, not
+  -- 1e-4: the DP render's BatchNorm is SYNCHRONISED, so its backward is the sync-BN graph while the
   -- single-device artifact is the two-pass graph — one function, two f32 arithmetics, and at this
   -- random-init operating point their `m` differs by ~1.1e-3 norm-rel even on a duplicated batch
   -- (measured, and `*-syncbn-check`'s FORMULATION column is the same gap at one replica). The
-  -- forward is still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves
-  -- `m` by ~1 — two orders above this bound. The split-batch identity is `*-syncbn-check`'s.
+  -- forward is still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves `m`
+  -- by ~1 — two orders above this bound. The split-batch identity is `*-syncbn-check`'s.
   if gradRel > 1e-2 then
     IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-2. On a duplicated batch \
 all_reduce(add)/2 is the identity, so the data-parallel step must reproduce the single-device one."

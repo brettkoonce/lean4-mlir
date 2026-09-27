@@ -81,7 +81,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
             cW1g ++ cb1g ++ cW2g ++ cb2g ++ cW3 ++ cb3 ++ cW4 ++ cb4 ++ cW5 ++ cb5,
           nW1g, nb1g, nW2g, nb2g, nW3, nb3, nW4, nb4, nW5, nb5, nLog)
   let (body, n1W, n1b, n2W, n2b, n3W, n3b, n4W, n4b, n5W, n5b, nLog) := act.run' (0, [])
-  -- ⚠⚠ `%loss` IS REPORT-ONLY — a DECLARED CARVE-OUT, exactly as in `MlpRender` and as
+  -- `%loss` IS REPORT-ONLY — a DECLARED CARVE-OUT, exactly as in `MlpRender` and as
   -- ConvNeXt/EfficientNet/R50 already do. Hand-written text, not `pretty` of a `den`
   -- node. APPENDED, never woven in: it reads only the logits and `%onehot` and adds
   -- only `%l*` names, so the ten proven parameter outputs are byte-identical and
@@ -368,9 +368,9 @@ private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds :
     (gradSSA : String) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let z : Vec n := fun _ => 0
   -- At `replicas > 1`, average the gradient across devices first — `pretty` of the
-  -- `allReduceMeanF` node since 4d piece 2 (2026-09-07), the same node ResNet34RenderB uses; until
-  -- then a trusted carve-out (handoff §2b-quater, §5). cifar8 is where the collective gets its EXACT
-  -- gate: no BatchNorm, so the loss is a plain mean over examples and the batch decomposition
+  -- `allReduceMeanF` node, the same node ResNet34RenderB uses. cifar8 is where the collective
+  -- gets its EXACT gate: no BatchNorm, so the loss is a plain mean over examples and the batch
+  -- decomposition
   --   (1/2)[(1/B)Σ_A + (1/B)Σ_B] = (1/2B)Σ_{A∪B}
   -- holds identically — 2×B with the collective must equal 1×2B to fp rounding. R34 cannot be
   -- checked this way: BN normalises per replica, so there N×b ≠ 1×(N·b) BY DESIGN.
@@ -592,7 +592,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
       s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
       -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
-      -- threading — the §0 gate-1 self-check that the generalisation is inert.
+      -- threading — the self-check that the generalisation is inert.
       (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
@@ -692,7 +692,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let bPc4  : Vec (B*(c4*h*w)) := fun _ => 0
   let bD1   : Vec (B*d1) := fun _ => 0
   let bNC   : Vec (B*nClasses) := fun _ => 0
-  -- ⚠ `1 * n` is NOT defeq to `n` in Lean, so the `rows := 1` head ops (`softmaxRow`,
+  -- `1 * n` is NOT defeq to `n` in Lean, so the `rows := 1` head ops (`softmaxRow`,
   -- `denseRowBack`) need operands declared at exactly their type. Confined to the head:
   -- each `pretty` node is an independent tree, linked to the next only by the SSA name.
   let b1NC  : Vec (B*(1*nClasses)) := fun _ => 0
@@ -850,7 +850,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
       s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
       -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
-      -- threading — the §0 gate-1 self-check that the generalisation is inert.
+      -- threading — the self-check that the generalisation is inert.
       (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
@@ -909,7 +909,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
     -- Trailing + defaulted so the existing positional `#eval` is unchanged and `none` keeps
     -- rendering the committed fused artifact. The packed constants are only read at `some _`;
     -- they are parameters rather than literals so the `#eval` states the hyperparameters it is
-    -- committing to (§2a-quinquies: a render that bakes its own is how a 16× lr slip shipped).
+    -- committing to (a render that bakes its own can ship a 16× lr slip unseen).
     (opt : Option CifarOpt := none)
     (invBStr : String := "0.0078125") (b1Str : String := "0.9") (ob1Str : String := "0.1")
     (b2Str : String := "0.999") (ob2Str : String := "0.001") (aEpsStr : String := "1.0e-8")
@@ -1003,9 +1003,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
     -- (0.00078125 = 0.1/128). PACKED: `lr` is a RUNTIME arg, so the mean cannot hide inside it —
     -- the softmax is split out (so the report-only `%loss` can read it back by name) and the mean
     -- becomes an explicit `scaleF invB`, which IS proven text, not hand-written. Identical to what
-    -- `cifar8AdamTrainStepFaithfulV` does; the retired emitter spelled the same value as
-    -- `divide by 128.0` where `scaleF` multiplies by 0.0078125 — exact in binary32 either way,
-    -- which is why the tie is numeric rather than byte-for-byte (§2i).
+    -- `cifar8AdamTrainStepFaithfulV` does.
     let (cCot, nDy, lossCode) ← match opt with
       | none => do
         let (c, n) ← pretty B
@@ -1016,8 +1014,8 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
         let (cD0, nD0) ← pretty B (.sub (.operand nSm zNC) (.operand "%onehot" zNC))
         let (cSc, nSc) ← pretty B (.scaleF invBStr 0 (.operand nD0 zNC))
         -- report-only scalar loss — OUTSIDE the proven surface (the kit has no rank-0 loss op),
-        -- feeds no parameter. Rendered from the SAME softmax the cotangent uses: §2b shipped plain
-        -- CE against a smoothed-CE cotangent here and only a numeric tie caught it, because no
+        -- feeds no parameter. Rendered from the SAME softmax the cotangent uses: plain
+        -- CE against a smoothed-CE cotangent is caught only by a numeric tie, because no
         -- theorem covers a value on no gradient path.
         pure (cSm ++ cD0 ++ cSc, nSc,
           "    // ── report-only scalar loss (NOT pretty(AST): no rank-0 loss op; feeds no\n" ++
@@ -1065,11 +1063,11 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
     let (cDhc1, nDhc1) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g1" nHc1 epsStr 0 zVc1 zS1c1 (.operand nDbn1 zS1c1))
     -- ═══ param tails — the third and last thing `opt` branches ═══
     -- FUSED: the 38 `*Sgd` ops, each fusing the gradient with `θ − lr·g` at a baked literal `lr`.
-    -- PACKED: those same 38 gradients as their un-fused `*Grad` peers — all six already exist from
-    -- §2a, and `den (xSgd …) = θ − lr · den (xGrad …)` is `rfl` — each feeding `optTail`, which
+    -- PACKED: those same 38 gradients as their un-fused `*Grad` peers — all six already exist,
+    -- and `den (xSgd …) = θ − lr · den (xGrad …)` is `rfl` — each feeding `optTail`, which
     -- spends it on the selected optimizer. The param NAME, `n` and `ds` all come from the same
     -- `bnSig` entry the signature is built from, so a shape or a slot cannot drift between the two
-    -- (§2e: a misaligned slot is silent, and the m/v slots a tail reads are derived from that name).
+    -- (a misaligned slot is silent, and the m/v slots a tail reads are derived from that name).
     let (cTails, ths, mns, vns) ← match opt with
       | none => do
         let (cW1g, nW1g) ← pretty B (SHlo.convWeightSgd "%x" "%W1" lrStr b₁ zTW1 W₁ 0 (.operand nDhc1 zS1c1))
@@ -1209,7 +1207,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
       cDac4 ++ cDbn4 ++ cDhc4 ++ cDac3 ++ cDbn3 ++ cDhc3 ++ cDpl1 ++
       cDac2 ++ cDbn2 ++ cDhc2 ++ cDac1 ++ cDbn1 ++ cDhc1 ++ cTails
     -- The return list and its types, from the one `bnSig`-derived source. At `none` the m/v blocks
-    -- are empty, which is what keeps this byte-identical to the incumbent.
+    -- are empty, which is what keeps this byte-identical to the committed fused artifact.
     let retVals := match opt with
       | none   => ths
       | some _ => ths ++ mns ++ vns ++ ["%loss", "%bc1", "%bc2"]
@@ -1218,7 +1216,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
       | some _ => pTys ++ pTys ++ pTys ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
     -- The packed constants block. `%lzero` because `%sc`/`%sa`/`%sb`/`%sd` are RESERVED — the
     -- `select_and_scatter` emitter hardcodes them as region block arguments and a top-level
-    -- constant of the same name is a redefinition error at XLA parse time, not in Lean (§4).
+    -- constant of the same name is a redefinition error at XLA parse time, not in Lean.
     -- `%mu` is emitted ONLY for Nesterov, so the other two renders carry no dead constant.
     let constBlk := match opt with
       | none => ""
@@ -1359,7 +1357,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let bPc4  : Vec (B*(c4*h*w)) := fun _ => 0
   let bD1   : Vec (B*d1) := fun _ => 0
   let bNC   : Vec (B*nClasses) := fun _ => 0
-  -- ⚠ `1 * n` is NOT defeq to `n` in Lean, so the `rows := 1` head ops (`softmaxRow`,
+  -- `1 * n` is NOT defeq to `n` in Lean, so the `rows := 1` head ops (`softmaxRow`,
   -- `denseRowBack`) need operands declared at exactly their type. Confined to the head.
   let b1NC  : Vec (B*(1*nClasses)) := fun _ => 0
   let b1D1  : Vec (B*(1*d1)) := fun _ => 0
@@ -1438,7 +1436,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (cDbn1, nDbn1) ← pretty B (.selectPosB nBn1 bS1c1 (.operand nDac1 bS1c1))
     let (cDhc1, nDhc1) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g1" nHc1 bnEpsStr 0 zVc1 zS1c1 (.operand nDbn1 zS1c1))
     -- ═══ per param: un-fused gradient, then the optimizer outputs. Order is `bnSig`'s. ═══
-    -- ⚠ The conv/dense gradients are BATCHED ops (so the bf16 twins apply); the BN γ/β gradients
+    -- The conv/dense gradients are BATCHED ops (so the bf16 twins apply); the BN γ/β gradients
     -- are the per-example ones, whose emit already reduces over `[0,2,3]` to a `Vec oc`.
     let (gW1, sW1) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
     let (aW1, tW1, mW1, vW1) ← optTail opt B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1

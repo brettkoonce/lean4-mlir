@@ -1,7 +1,6 @@
 import LeanMlir
 
-/-! Emit the standalone FPN multi-scale-loss module for numeric validation
-    (detection-infra brick #3, planning/archive/yolo_fpn.md bites 4+6). Writes
+/-! Emit the standalone FPN multi-scale-loss module for numeric validation. Writes
     `fpn_loss_gen.mlir` for concrete (B, A, 3 grids); `scripts/probes/fpn_loss_probe_check.py`
     compiles it with IREE (CPU) and checks the emitted forward+backward against an
     independent numpy multi-scale reference (Σ of per-scale anchor losses) and its
@@ -16,11 +15,11 @@ def main (args : List String) : IO Unit := do
   let B := n 0 2; let A := n 1 3
   let g3 := n 2 8; let g4 := n 3 4; let g5 := n 4 2
   let outPath := (args.filter (·.endsWith ".mlir")).head?.getD "fpn_loss_gen.mlir"
-  -- `--clsw` emits the T1b class-weighted class term with a deterministic weight
+  -- `--clsw` emits the class-weighted class term with a deterministic weight
   -- vector; scripts/probes/fpn_loss_probe_check.py mirrors it in CLSW.
   let clsw : List Float :=
     if args.contains "--clsw" then (List.range 10).map (fun c => 0.5 + 0.25 * c.toFloat) else []
-  -- `--clsfocal` turns on the T1c class focal at the RetinaNet γ=2.0.
+  -- `--clsfocal` turns on the class focal at the RetinaNet γ=2.0.
   let clsGamma : Float := if args.contains "--clsfocal" then 2.0 else 0.0
   let mlir := MlirCodegen.fpnLossProbeModule B [g3, g4, g5] A clsw clsGamma
   IO.FS.writeFile outPath mlir

@@ -257,13 +257,13 @@ noncomputable def resnet50ForwardBFull (N q : Nat) {nCls : Nat} (w : R50BWeights
 #guard 2 * (2 * 7) == 28
 #guard 2 * (2 * 5) == 20
 
--- ⭐ `q = 7` IS the 224-px net: the input binds at the literal `Vec (N*(3*224*224))`. The whole
+-- `q = 7` IS the 224-px net: the input binds at the literal `Vec (N*(3*224*224))`. The whole
 -- point of the `q` binder is that both shipped resolutions are instances, so it is CHECKED here
 -- rather than asserted in the header.
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
     resnet50ForwardBFull N 7 w x = resnet50ForwardBFull N 7 w x := rfl
 
--- ⭐ And `q = 5` IS the 160-px net -- `resnet50in160_*`, where the quoted 76.66% comes from.
+-- And `q = 5` IS the 160-px net -- `resnet50in160_*`, where the quoted 76.66% comes from.
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 160 * 160))) :
     resnet50ForwardBFull N 5 w x = resnet50ForwardBFull N 5 w x := rfl
 
@@ -271,16 +271,16 @@ example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 160 * 1
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § Per-block typed graphs + faithfulness (T2)
+-- § Per-block typed graphs + faithfulness
 --   Tokens are the ones `ResNet50RenderB.lean` emits: `.batchOp .conv` / `.convStrided` /
 --   `.relu` / `.maxPool3s2` / `.gap` / `.dense`, `.bnBatchF` for the batch-coupled norm, and
 --   `.addVB` for the residual add.
 --
---   ⚠ **`.addVB`, not `.addV`.** `ResNet50RenderB` emits the batched add; `den` is identical
+--   **`.addVB`, not `.addV`.** `ResNet50RenderB` emits the batched add; `den` is identical
 --   (both are `fun j => den a j + den b j`, both by `rfl`) but `skel` is not, so the emitted shape
 --   annotation differs.
 --
---   ⚠ **The bias operands are `biasName false "" c`, the render's own function.** `ResNet50RenderB`
+--   **The bias operands are `biasName false "" c`, the render's own function.** `ResNet50RenderB`
 --   has no `convBias` flag at all — its `zb` bakes `false` — so `%zb{c}`, the shared zero constant
 --   each conv bias is folded into its BatchNorm and bound to, is the ONLY name this net emits.
 --   Calling the shared function rather than writing the literal is what keeps the two from

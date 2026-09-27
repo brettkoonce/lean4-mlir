@@ -339,7 +339,7 @@ theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
   show reindexCLM (maxPool3s2LocalReindex x)
         (basisVec (finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)))
         (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) = _
-  -- ⭐ `rw` closes this by `rfl`: `basisVec j i` IS `if i = j then 1 else 0`, and the reindex
+  -- `rw` closes this by `rfl`: `basisVec j i` IS `if i = j then 1 else 0`, and the reindex
   -- equation is exactly the condition. `maxPool2`'s peer needs a further `h_sigma` decoding step
   -- to reach its `winRow`/`winCol` form; leaving the condition as the reindex equation (§ above)
   -- means there is nothing left to decode.

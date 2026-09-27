@@ -268,7 +268,7 @@ theorem mnv2ResidCotIn_eq_vjp (N h w : Nat) {c mid : Nat} (p : IVW c mid c) (hq 
     hs.he hs.hd
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  -- ⚠ `rw [← h]` cannot close this one: `mnv2ResidBHasVJPAt` unfolds to `residualHasVJPAt`
+  -- `rw [← h]` cannot close this one: `mnv2ResidBHasVJPAt` unfolds to `residualHasVJPAt`
   -- at `mnv2ExpOnlyB`, while the graph lemma states it at that abbreviation's own unfolding. The
   -- two are definitionally equal but not syntactically, so the step goes through `Eq.trans`.
   refine Eq.trans ?_ h

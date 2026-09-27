@@ -3,7 +3,7 @@ import LeanMlir.ReferenceNets
 
 /-! GradCAM (Zhou-2016 closed form) on a trained checkpoint.
 
-For Phase 1 we cover any spec ending in `... → globalAvgPool → dense`.
+It covers any spec ending in `... → globalAvgPool → dense`.
 Two pre-wired models for the demo:
 
   * `convnext` — ConvNeXt-T-GELU on Imagenette (the convnext_tiny_gelu

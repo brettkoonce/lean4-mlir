@@ -3,10 +3,10 @@ import LeanMlir.Verified.Attack
 
 /-! # `mnist-mlp-spectral` — spectral-norm-constrained training (the gap-shrinking lever)
 
-The research lever of the robustness ladder (`planning/archive/robustness_ladder.md`). Trains the
-verified 784→512→512→10 MLP with **projected SGD onto the spectral ball** — after every few
-proof-rendered steps each weight `Wᵢ` is rescaled to `‖Wᵢ‖₂ ≤ c` — then runs the
-`cert ≤ TRUE ≤ PGD` sandwich at a sweep of caps `c` (plus an unconstrained baseline).
+The research lever of the robustness ladder. Trains the verified 784→512→512→10 MLP with **projected
+SGD onto the spectral ball** — after every few proof-rendered steps each weight `Wᵢ` is rescaled to
+`‖Wᵢ‖₂ ≤ c` — then runs the `cert ≤ TRUE ≤ PGD` sandwich at a sweep of caps `c` (plus an
+unconstrained baseline).
 
 Shrinking `c` pulls the global Lipschitz `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the
 **vacuous** product certificate **non-vacuous** — the empirical face of

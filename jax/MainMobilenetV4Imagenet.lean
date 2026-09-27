@@ -1,17 +1,17 @@
 import Jax
 
-/-! MobileNetV4-Conv-M on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! MobileNetV4-Conv-M on full 1000-class ImageNet — (Lean → JAX) trainer.
 
-    The pre-existing `MainMobilenetV4.lean` is a 10-class Imagenette DEMO whose
+    `MainMobilenetV4.lean` is a 10-class Imagenette DEMO whose
     block table is Conv-S-sized (~4.1M params). This spec is the *faithful*
     MobileNetV4-Conv-Medium (~9.7M params, paper 79.9% top-1 non-distilled),
     transcribed 1:1 from timm `mobilenetv4_conv_medium` (`_gen_mobilenet_v4`,
-    `timm/models/mobilenetv3.py`). See planning/archive/mnv4_imagenet.md for the decode
-    of timm's `uir_rN_aA_kK_sS_eE_cC` encoding into `.uib ic oc expand stride
-    preDWk postDWk` (a=pre/start-DW kernel, k=post/mid-DW kernel).
+    `timm/models/mobilenetv3.py`). timm's `uir_rN_aA_kK_sS_eE_cC` encoding decodes
+    into `.uib ic oc expand stride preDWk postDWk` (a=pre/start-DW kernel,
+    k=post/mid-DW kernel).
 
     Eval uses running BN statistics (`runningBN := true`): the UIB and fused-MBConv
-    blocks were wired into the codegen's running-BN threading on 2026-07-19.
+    blocks are wired into the codegen's running-BN threading.
 
     Resolution 224: the tfds pipeline hardcodes `_IMG_SIZE=224`, and timm ships
     an official `mobilenetv4_conv_medium.e500_r224_in1k` variant, so 224 is a
@@ -67,8 +67,7 @@ def mobilenetV4ConvMImagenet : NetSpec where
     The paper recipe (500ep, dropPath 0.075, RandAug m15 p0.7, wd 0.1,
     dropout 0.2) is tuned for the long schedule and UNDERFITS short. This tier
     dials regularization down for a real go/no-go signal in ~1–1.5 days.
-    Expect low-to-mid 70s (paper 79.9 needs the full 500ep). See
-    planning/archive/mnv4_imagenet.md "Recipe tiers". -/
+    Expect low-to-mid 70s (paper 79.9 needs the full 500ep). -/
 def mobilenetV4ConvMImagenetConfig : TrainConfig where
   learningRate         := 0.004    -- paper peak @ bs4096; here targets the effective batch
   batchSize            := 512
@@ -83,7 +82,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   dropout              := 0.1      -- reduced from paper 0.2
   augment              := true
   useRandAugment       := true
-  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   randAugmentGeometric := true     -- full color+geometric sampler
   randAugmentN         := 2
   randAugmentM         := 9.0      -- reduced from paper 15 for the short schedule
@@ -92,7 +91,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   valEveryEpochs       := 5        -- eval every 5 ep (per-epoch 50k-img val wastes ~1.75h over 100ep)
   bf16                 := true
   bf16Conv             := true
-  runningBN            := true     -- paper-faithful eval: running BN stats (UIB + fusedMbConv wired 2026-07-19)
+  runningBN            := true     -- paper-faithful eval: running BN stats (UIB + fusedMbConv wired)
 
 #eval mobilenetV4ConvMImagenet.validate!
 

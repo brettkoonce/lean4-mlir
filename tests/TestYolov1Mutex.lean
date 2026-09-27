@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! T7 from planning/archive/yolo_demo_v2.md Phase 1 — `.yolov1Masked` mutex checks.
+/-! `.yolov1Masked` mutex checks.
 
     Verifies that compileVmfbs throws `IO.userError` for every forbidden
     combination of the YOLOv1 loss with other loss-path flags, that the loss compiles on its
@@ -59,9 +59,9 @@ def main : IO Unit := do
   | some f => failures := failures.push f
   | none => IO.println "OK [C3]: yolov1Masked + useKnnMixup → throws"
 
-  -- C4: yolov1Masked + useFocal → COMPILES. Focal now selects the sigmoid
-  -- focal-BCE objectness path (planning/archive/yolo_final.md), so this combo is
-  -- valid and the train step should compile cleanly (was: forbidden → throw).
+  -- C4: yolov1Masked + useFocal → COMPILES. Focal selects the sigmoid
+  -- focal-BCE objectness path, so this combo is
+  -- valid and the train step should compile cleanly.
   let c4 := { baseConfig with useFocal := true, focalGamma := 2.0 }
   let c4_ok ← try
     let _ ← tinyYoloSpec.compileVmfbs c4
@@ -80,11 +80,8 @@ def main : IO Unit := do
   | some f => failures := failures.push f
   | none => IO.println "OK [C5]: yolov1Masked + labelSmoothing → throws"
 
-  -- C6: yolov1Masked alone (no other forbidden combo) — after R1
-  -- (the YOLOv1 integration pass), compileVmfbs DOES integrate YOLOv1 and
-  -- should return a vmfb path without throwing. Pre-R1 this was a
-  -- catch-all throw (the "smoke-test-only" sentinel); post-R1 the
-  -- catch-all is gone and the train step compiles cleanly.
+  -- C6: yolov1Masked alone (no other forbidden combo) — compileVmfbs
+  -- integrates YOLOv1 and should return a vmfb path without throwing.
   let c6_ok ← try
     let _ ← tinyYoloSpec.compileVmfbs baseConfig
     pure true

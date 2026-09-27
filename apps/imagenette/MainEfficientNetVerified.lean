@@ -20,8 +20,8 @@ the whole-net VJP `efficientnetHasVJP` is a representative witness (full B/C def
 
 Run (GPU): `.lake/build/bin/efficientnet-verified data`
 
-⚠⚠ **THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET.** Measured
-2026-08-12 on XLA/CUDA: `387/3925 = 9.859873%` on every epoch, byte identical, which is
+**THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET.** Measured
+on XLA/CUDA: `387/3925 = 9.859873%` on every epoch, byte identical, which is
 chance on Imagenette's ten classes. It is a constant predictor, not a slow
 curve.
 
@@ -30,7 +30,7 @@ curve.
 parameters but never accumulates BN running stats, then evaluates through
 `@efficientnet_fwd` (which needs them) rather than `@efficientnet_fwd_eval`.
 
-▶ For a real number use `efficientnet-verified-adam`. ▶ This binary is still a useful
+For a real number use `efficientnet-verified-adam`. This binary is still a useful
 structural smoke test (compile, train-step arity, packed-parameter round trip).
 Do not quote its accuracy. The same defect affects `resnet34-verified` and is
 recorded there too; fixing it means teaching `.train` the BN threading

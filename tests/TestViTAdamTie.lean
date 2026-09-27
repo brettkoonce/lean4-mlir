@@ -3,12 +3,9 @@ import LeanMlir.Verified.Train
 
 /-! # `@vit_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md`, the ViT AdamW thread, step 3. `Proofs/Codegen/ViTRender.lean`'s
+`Proofs/Codegen/ViTRender.lean`'s
 `vitAdamTrainStepFaithful` renders the same train step the hand-written
-`ViTRender.vitTrainStepModuleAdamSched` (tests/ViTRender.lean) does — the one
-`apps/imagenette/MainViTVerifiedAdam.lean` writes at startup and trains on. This harness is what
-licenses swapping them; run it BEFORE deleting the driver's writer, because afterwards the
-comparison no longer exists.
+`ViTRender.vitTrainStepModuleAdamSched` (tests/ViTRender.lean) does; this harness ties the two.
 
 The interface is positionally identical (605 in / 603 out, arg and return types equal in order —
 only the parameter NAMES differ, `%Wq_0` vs `%b0_Wq`, which the packed-buffer FFI never sees), so
@@ -22,11 +19,11 @@ and comparing every returned float settles it.
 there is no `bnstat` region — nothing in the output depends on the forward alone, so a forward
 disagreement and a backward one both land in `m` and cannot be separated. Two consequences:
 
-* `%loss` earns its keep here. It is report-only and on no gradient path, so no theorem covers it —
-  and §2b shipped exactly this wrong once (plain CE against a smoothed-CE cotangent). With no
+* `%loss` earns its keep here. It is report-only and on no gradient path, so no theorem covers it.
+  With no
   `bnstat` to pin the forward, `%loss` is the *only* output that reads the forward directly, so a
   loss mismatch against matching gradients is the signature of a forward/cotangent bug.
-* the gradient gate is norm-relative, not per-coordinate (handoff §3).
+* the gradient gate is norm-relative, not per-coordinate.
 
     lake build vit-adam-tie
     .lake/build/bin/vit-adam-tie <refRender.mlir> <candRender.mlir>
@@ -99,7 +96,7 @@ backend {← LowererSession.backendName}"
 
   -- ── per region ────────────────────────────────────────────────────────────────────────────
   -- `m' = β₁·m + (1−β₁)·g` off a shared `m`, so the `m` region IS the gradient. θ' is scale-free
-  -- under Adam (§3: a near-zero-gradient coordinate flips sign on a 1-ULP difference and moves a
+  -- under Adam (a near-zero-gradient coordinate flips sign on a 1-ULP difference and moves a
   -- full ±lr), so θ' is reported but NOT the gate.
   let regions : List (String × Nat × Nat) :=
     [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP), ("loss/bc", 3*nP, n)]
@@ -157,8 +154,7 @@ bit-exact {exact}/{hi-lo}"
     IO.Process.exit 1
   -- ── the gate ──────────────────────────────────────────────────────────────────────────────
   -- No `bnstat` region exists (ViT has no BN), so the forward cannot be pinned bit-exactly the way
-  -- resnet34-adam-tie pins it. `%loss` is the only output reading the forward directly, and it is
-  -- exactly what §2b got wrong (plain CE vs the smoothed CE its own cotangent implied) — so it is
+  -- resnet34-adam-tie pins it. `%loss` is the only output reading the forward directly, so it is
   -- gated, not merely reported.
   if lossRel > 1e-4 then
     IO.eprintln s!"TIE FAILED: the loss/bc region differs at norm-rel {lossRel} > 1e-4. With no BN \

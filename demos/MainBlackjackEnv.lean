@@ -1,9 +1,8 @@
 import LeanMlir.Blackjack
 
-/-! Blackjack under Gymnasium Blackjack-v1 `sab=True` rules — Phase 0 and 1 of
-    `planning/blackjack_dqn_demo.md`: the environment, the exact DP instrument,
-    tabular Q, and the four comparison arms. No stack, no GPU:
-    `lake exe blackjack-env [mcHands=1000000] [qHands=1000000]`. Rung 2's DQN
+/-! Blackjack under Gymnasium Blackjack-v1 `sab=True` rules: the environment,
+    the exact DP instrument, tabular Q, and the four comparison arms. No stack,
+    no GPU: `lake exe blackjack-env [mcHands=1000000] [qHands=1000000]`. The DQN
     trainer wraps `BJ.step` and scores its greedy policy with `BJ.gameValue`.
     `lake exe blackjack-env play <seed> [hs...]` replays one hand from a seed
     with the DP's exact Q-values shown at every decision;

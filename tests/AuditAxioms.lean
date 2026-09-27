@@ -181,8 +181,7 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 open Proofs
 
 -- One `#print axioms` per certified theorem; CI (certs.yml) fails on any axiom beyond
--- propext / Classical.choice / Quot.sound. The narrative each section carried — what the tier
--- found, when, and why — is planning/archive/audit_axioms_log.md, under the same headers.
+-- propext / Classical.choice / Quot.sound.
 
 -- Foundation
 #print axioms pdiv_id
@@ -209,15 +208,14 @@ open Proofs
 #print axioms denseBiasGrad_correct
 #print axioms reluHasVJP_correct
 #print axioms mlpHasVJP_correct
--- ⚠ The POINTWISE (HasVJPAt) variants, added 2026-09-20. They were in the comparator suite
--- (tests/comparator/config-arch.json) from the start but not here, so their axiom closure was
--- only ever checked by the slow path-filtered workflow and not by the per-push sweep — and
--- they are the three the book singles out as the ones whose `.correct` field is a real proof
--- rather than `rfl`, i.e. exactly where the kink escape is closed.
+-- The POINTWISE (HasVJPAt) variants. They are also in the comparator suite
+-- (tests/comparator/config-arch.json), and they are the three the book singles out as the ones
+-- whose `.correct` field is a real proof rather than `rfl`, i.e. exactly where the kink escape is
+-- closed.
 #print axioms reluHasVJPAt_correct
 #print axioms mlpHasVJPAt_correct
 
--- Nonzero-Jacobian seal (JacobianSeal.lean, planning/archive/whole_network_backward.md Item B)
+-- Nonzero-Jacobian seal (JacobianSeal.lean)
 #print axioms sum_smul_basisVec
 #print axioms fderiv_eq_zero_of_pdiv_all_zero
 #print axioms exists_pdiv_ne_of_fderiv_ne
@@ -278,7 +276,7 @@ open Proofs
 #print axioms pdiv3_maxPool2_smooth
 #print axioms maxPool2_codegen_matches_canonical
 
--- HasVJPAt pointwise framework (E.5)
+-- HasVJPAt pointwise framework
 #print axioms reluHasVJPAt
 #print axioms mlpHasVJPAt
 #print axioms mnistLinearHasVJP_correct
@@ -316,17 +314,17 @@ open Proofs
 -- ResNet-style CNN *with* BN
 #print axioms CnnConcrete.cnnConcreteHasVJP_correct
 
--- Denoted StableHLO-subset IR (Phase 0a/0b spike, planning/archive/typed_ir.md)
+-- Denoted StableHLO-subset IR
 #print axioms IR.dense_back_bridge
 #print axioms IR.relu_back_bridge
--- Phase 2: the emitted transposed-convolution graph denotes the proven conv input-VJP
+-- The emitted transposed-convolution graph denotes the proven conv input-VJP
 #print axioms IR.conv_back_bridge_1to2
 #print axioms IR.conv_back_bridge_2to2
 -- The GENERAL conv-adjoint reindex (all dims, odd kernels)
 #print axioms IR.convBackDenote_eq_input_grad_formula
--- Phase 2: the emitted tile-compare-select graph denotes the canonical maxpool backward
+-- The emitted tile-compare-select graph denotes the canonical maxpool backward
 #print axioms IR.maxpool_back_bridge
--- Phase 1 smooth activations
+-- Smooth activations
 #print axioms IR.gelu_back_bridge
 #print axioms IR.swish_back_bridge
 #print axioms IR.sigmoid_back_bridge
@@ -334,7 +332,7 @@ open Proofs
 #print axioms IR.bn_back_bridge
 #print axioms IR.layernorm_back_bridge
 #print axioms IR.softmax_back_bridge
--- Phase 3: IR-level chain rule + an end-to-end composite bridge.
+-- IR-level chain rule + an end-to-end composite bridge.
 #print axioms IR.denote_subst
 #print axioms IR.se_back_bridge
 -- Tensor3 IR: conv/maxpool lifted into a composable backward graph + chain rule.
@@ -354,14 +352,14 @@ open Proofs
 #print axioms IR.weight_grad_bridge
 #print axioms IR.bias_grad_bridge
 #print axioms IR.mlp_layer1_weight_grad_bridge
--- Forward IR (Phase 2)
+-- Forward IR
 #print axioms IR.mlp_fwd_bridge
 #print axioms IR.mlp_fwd_preact0
 #print axioms IR.mlp_fwd_preact1
--- Loss cotangent (rest of Phase 4)
+-- Loss cotangent
 #print axioms IR.lossCot_bridge
 
--- R4 printer-faithfulness, Stage A (Chapter 2)
+-- Printer-faithfulness (Chapter 2)
 #print axioms StableHLO.fwdGraph_faithful
 #print axioms StableHLO.backGraph_faithful
 #print axioms StableHLO.softmaxDiv_expe_faithful
@@ -372,16 +370,16 @@ open Proofs
 -- SGD update proven (not trusted) for plain SGD on the linear net.
 #print axioms StableHLO.sgdW_isCertifiedGradStep
 #print axioms StableHLO.sgdB_isCertifiedGradStep
--- M1: the linear SGD step bundled to the certified closed-form softmax-CE gradient
+-- The linear SGD step bundled to the certified closed-form softmax-CE gradient
 #print axioms StableHLO.lossCot_eq_softmax_sub_onehot
 #print axioms StableHLO.sgdW_descends_softmaxCE_grad
 #print axioms StableHLO.sgdB_descends_softmaxCE_grad
--- M1 chain-rule fold: the SGD step is literally θ − lr·∂Loss/∂θ.
+-- Chain-rule fold: the SGD step is literally θ − lr·∂Loss/∂θ.
 #print axioms Proofs.crossEntropy_differentiable
 #print axioms StableHLO.denseWeightMap_differentiable
 #print axioms StableHLO.lossWeightGrad_eq_sum
 #print axioms StableHLO.sgdW_descends_loss_gradient
--- M1 rendering half
+-- Rendering half
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
 -- PoC capstones (LinearFold.lean)
@@ -418,7 +416,7 @@ open Proofs
 #print axioms SgdNode.convW_den
 #print axioms SgdNode.convB_den
 #print axioms CifarPoC.dW7_den
--- ch5-CIFAR §1a TIE
+-- ch5-CIFAR TIE
 #print axioms CifarPoC.cifarLossCot_den
 #print axioms CifarPoC.cifar_W7_tied_totalloss
 #print axioms CifarPoC.cifar_conv_tied_certified
@@ -428,20 +426,20 @@ open Proofs
 -- deeper 8-conv cifar8 fully folded
 #print axioms SgdNode.denseW_den
 #print axioms SgdNode.denseB_den
--- ch5-cifar8 §1a TIE
+-- ch5-cifar8 TIE
 #print axioms Cifar8PoC.cifar8LossCot_den
 #print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
 #print axioms Cifar8PoC.cifar8_convs_tied_certified
--- ch5-cifar8-bn §1a TIE
+-- ch5-cifar8-bn TIE
 #print axioms Cifar8BnPoC.cifar8BnLossCot_den
 #print axioms Cifar8BnPoC.cifar8Bn_convbn_tied_certified
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params)
 #print axioms SgdNode.convStridedW_den
 #print axioms SgdNode.convStridedB_den
--- ch7-MobileNetV2 §1 fold (depthwise half)
+-- ch7-MobileNetV2 fold (depthwise half)
 #print axioms SgdNode.depthwiseW_den
 #print axioms SgdNode.depthwiseB_den
--- ch8-EfficientNet-B0 §1 fold (den)
+-- ch8-EfficientNet-B0 fold (den)
 #print axioms EnetPoC.convWB_den
 #print axioms EnetPoC.convStridedWB_den
 #print axioms EnetPoC.denseWB_den
@@ -450,19 +448,19 @@ open Proofs
 #print axioms EnetPoC.bnBetaB_den
 #print axioms EnetPoC.depthwiseWB_den
 #print axioms EnetPoC.depthwiseStridedWB_den
--- ch8-EfficientNet-B0 §1a TIE
+-- ch8-EfficientNet-B0 TIE
 #print axioms EnetTiePoC.enet_exp_tied
 #print axioms EnetTiePoC.enet_strided_tied
 #print axioms EnetTiePoC.enet_noexp_tied
 #print axioms EnetTiePoC.enet_stem_tied
 #print axioms EnetTiePoC.enet_head_tied
 #print axioms EnetTiePoC.efficientnet_net_tied
--- M2: the MLP per-layer parameter-gradient assembly (Crux A)
+-- The MLP per-layer parameter-gradient assembly
 #print axioms IR.mlp_layer0_weight_grad_bridge
 #print axioms IR.mlp_layer0_bias_grad_bridge
 #print axioms IR.mlp_layer1_bias_grad_bridge
 #print axioms IR.mlp_layer2_weight_grad_bridge
--- M3: the CNN convolution parameter-gradient bridges (kernel grad = correlation).
+-- The CNN convolution parameter-gradient bridges (kernel grad = correlation).
 #print axioms conv_weight_grad_bridge
 #print axioms conv_bias_grad_bridge
 -- CNN render close: the rendered conv weight/bias SGD outputs denote θ − lr·certified.
@@ -476,7 +474,7 @@ open Proofs
 #print axioms IR.mlp_input_total_loss_grad
 -- Whole-net capstone: every weight layer's total-loss gradient at once (one statement).
 #print axioms IR.mlp_whole_net_weight_grads
--- R4 Stage A, Chapter 3 (MLP)
+-- Printer-faithfulness, Chapter 3 (MLP)
 #print axioms StableHLO.reluF_faithful
 #print axioms StableHLO.selectPos_faithful
 -- The saved-activation backwards, which CANNOT be descriptors
@@ -491,7 +489,7 @@ open Proofs
 #print axioms StableHLO.den_softmaxRowBackB_per_example
 -- The batch sum that is invisible at N = 1
 #print axioms StableHLO.den_posEmbedGradB_at_one
--- CLASSIFIER DROPOUT (`recipe_gaps.md` gap C)
+-- CLASSIFIER DROPOUT
 #print axioms StableHLO.dropoutB_faithful
 #print axioms StableHLO.dropoutB_back_faithful
 #print axioms StableHLO.den_dropoutB_of_dropScale
@@ -501,13 +499,13 @@ open Proofs
 #print axioms Proofs.dropout_vjp_is_self
 #print axioms StableHLO.mlpFwdGraph_faithful
 #print axioms StableHLO.mlpBackGraph_faithful
--- R4 Stage A, Chapter 4 (CNN)
+-- Printer-faithfulness, Chapter 4 (CNN)
 #print axioms StableHLO.flatConvF_faithful
 #print axioms StableHLO.maxPoolF_faithful
 #print axioms StableHLO.cnnFwdGraph_faithful
 #print axioms StableHLO.convBack_faithful
 #print axioms StableHLO.maxPoolBack_faithful
--- He et al.'s 3×3/s2 STEM POOL (`planning/archive/rsb_a3_r50_verified.md` §4b)
+-- He et al.'s 3×3/s2 STEM POOL
 #print axioms win3RowInv_first_dup
 #print axioms win3ColInv_first_dup
 #print axioms win3Row_mem_le_two
@@ -527,7 +525,7 @@ open Proofs
 -- and the codegen that denotes it
 #print axioms StableHLO.maxPool3s2F_faithful
 #print axioms StableHLO.maxPool3s2Back_faithful
--- A2c: the whole-chain CNN backward graph denotes the proven conditional whole-network VJP
+-- The whole-chain CNN backward graph denotes the proven conditional whole-network VJP
 #print axioms StableHLO.cnnBackGraph_faithful
 
 -- Chapter-5 CIFAR-10 2D CNN (no BN)
@@ -550,15 +548,13 @@ open Proofs
 #print axioms flatConvStride2HasVJP_correct
 -- ...and its weight-VJP (the kernel grad for training a strided block)
 #print axioms flatConvStride2WeightGradHasVJP_correct
--- ResNet-34's non-degeneracy, ON THE NET THE ARTIFACTS RUN (ResNet34FullBSeal.lean): the
--- 2-channel per-example proxies that carried levels 2 and 3 until 2026-09-20 are retired, and
--- both levels are now stated on `resnet34ForwardBFull` itself — full width, batch BN, 224x224.
+-- ResNet-34's non-degeneracy, ON THE NET THE ARTIFACTS RUN (ResNet34FullBSeal.lean): both
+-- levels are stated on `resnet34ForwardBFull` itself — full width, batch BN, 224x224.
 #print axioms R34FullBSeal.sealX_nonconstant
 #print axioms R34FullBSeal.sealX_jacobian_nonzero
 #print axioms R34FullBSeal.sealX_backward_nontrivial
 -- ResNet-50's, likewise on `resnet50ForwardBFull` — 48 relu clauses, and `q` a binder, so ONE
--- statement seals both shipped resolutions (224 px at q = 7, 160 px at q = 5). It had no witness
--- of any kind before 2026-09-20.
+-- statement seals both shipped resolutions (224 px at q = 7, 160 px at q = 5).
 #print axioms R50FullBSeal.sealX_nonconstant
 #print axioms R50FullBSeal.sealX_jacobian_nonzero
 #print axioms R50FullBSeal.sealX_backward_nontrivial
@@ -577,21 +573,21 @@ open Proofs
 #print axioms Mnv4FullBSeal.sealX_nonconstant
 #print axioms Mnv4FullBSeal.sealX_jacobian_nonzero
 #print axioms Mnv4FullBSeal.sealX_backward_nontrivial
--- B8: per-channel BatchNorm
+-- Per-channel BatchNorm
 #print axioms bnPerChannelFlatHasVJP_correct
--- B8a': the RENDERABLE per-channel BN backward
+-- The RENDERABLE per-channel BN backward
 #print axioms bnPerChannelGradInput_correct
--- B9 entry: per-channel BN on the network's Tensor3 (oc*h)
+-- Per-channel BN on the network's Tensor3 (oc*h)
 #print axioms bnPerChannelTensor3HasVJP_correct
--- B9 entry (cont.)
+-- Per-channel BN on the network's Tensor3 (cont.)
 #print axioms bnPerChannelTensor3GradInput_correct
--- ch8 E5 (EfficientNet BATCH-norm)
+-- ch8 EfficientNet BATCH-norm
 #print axioms bnBatchTensor4GradInput_correct
--- sync-BN kit (planning/global_bn_verified.md §2b/§2c)
+-- sync-BN kit
 -- the identity that lets replicas exchange the SECOND MOMENT and each recover the variance
 #print axioms bnVar_eq_bnMeanSq_sub_sq
 -- a statistic of the whole = the mean of the shards' statistics, which is what makes a plain
--- `allReduceMeanF` the right collective. ⛔ the variance has no such lemma, and cannot.
+-- `allReduceMeanF` the right collective. The variance has no such lemma, and cannot.
 #print axioms bnMean_shard
 #print axioms bnMeanSq_shard
 -- the R = 1 anchors: handed the batch's OWN statistics, the sync forward/backward ARE the
@@ -601,15 +597,15 @@ open Proofs
 #print axioms bnSyncGradInput_at_own_stats
 #print axioms bnSyncTensor4GradInput_at_own_stats
 #print axioms bnSyncXhat_at_own_stats
--- ⭐⭐ Chan's parallel variance — what the exchange carries instead of E[x²], so that no consumer
--- forms E[x²] − μ² (measured 2026-09-21: that formulation drifts 2e-4 over R34's 36 layers in f32)
+-- Chan's parallel variance — what the exchange carries instead of E[x²], so that no consumer
+-- forms E[x²] − μ² (that formulation drifts 2e-4 over R34's 36 layers in f32)
 #print axioms bnVar_shard_chan
 #print axioms bnVar_row_shard_chan
--- ⭐⭐ THE DROP-IN, on actual graph nodes: at R = 1 the sync-BN subgraphs (bnSyncF / bnSyncBack
--- fed by the two-round statistics subgraph / bnSyncDyStatsB) denote exactly what today's
+-- THE DROP-IN, on actual graph nodes: at R = 1 the sync-BN subgraphs (bnSyncF / bnSyncBack
+-- fed by the two-round statistics subgraph / bnSyncDyStatsB) denote exactly what the
 -- bnBatchF / bnBatchBack renders denote — so the R = 1 artifacts need not move.
 #print axioms StableHLO.den_syncStats_R1
--- ⭐⭐⭐ P1 / P2 — sync-BN on replica r IS the shard-r block of the GLOBAL-BATCH forward and
+-- Sync-BN on replica r IS the shard-r block of the GLOBAL-BATCH forward and
 -- input-VJP, handed the all-reduced statistics. The spec does not move: both right-hand sides
 -- are the EXISTING bnBatchTensor4 / bnBatchTensor4GradInput at N := R·N.
 #print axioms bnSyncTensor4_shard_eq_global
@@ -635,11 +631,11 @@ open Proofs
 -- bnBatchMeanB / bnBatchVarB
 #print axioms StableHLO.den_bnStatsMeanB_allReduce_R1
 #print axioms StableHLO.den_bnStatsVarB_allReduce_R1
--- B8b: the per-channel BN SHlo op pair backward-faithfulness
+-- The per-channel BN SHlo op pair backward-faithfulness
 #print axioms StableHLO.bnPerChannelBack_faithful
--- R4 syntactic core
+-- Syntactic core
 #print axioms StableHLO.roundtrip
--- R4 syntactic LEXER numeric keystone
+-- Syntactic LEXER numeric keystone
 #print axioms StableHLO.parseNat_toString
 -- CIFAR-BN render CLOSE
 #print axioms bnPerChannelGradGamma_correct
@@ -651,18 +647,18 @@ open Proofs
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
--- MobileNetV2 CLOSE (planning/archive/mobilenetv2_close.md Item C)
+-- MobileNetV2 CLOSE
 #print axioms depthwise_bias_grad_bridge
 #print axioms depthwise_bias_sgd_certified
 #print axioms convStride2_weight_sgd_certified
 #print axioms convStride2_bias_sgd_certified
--- ResNet-34 cotangent-chain CLOSE (Item D)
+-- ResNet-34 cotangent-chain CLOSE
 #print axioms StableHLO.stemGraphB_faithful
 #print axioms StableHLO.mbNoExpGraphB_faithful
 #print axioms StableHLO.mbStridedGraphB_faithful
 #print axioms StableHLO.mbResidGraphB_faithful
 #print axioms StableHLO.headGraphB_faithful
--- EfficientNet-B0 cotangent-chain CLOSE (Item D)
+-- EfficientNet-B0 cotangent-chain CLOSE
 #print axioms batchMapHasVJP
 #print axioms batchMap_differentiable
 #print axioms reindexHasVJP
@@ -680,10 +676,10 @@ open Proofs
 -- The nested↔∘-chain bridge + correctness on the nested forward itself
 #print axioms efficientnetForwardBFull_eq_chain
 #print axioms efficientnetForwardBFullHasVJP_correct
--- ConvNeXt §1 fold START
+-- ConvNeXt fold
 #print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
 #print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
--- ConvNeXt §1 fold
+-- ConvNeXt fold (cont.)
 #print axioms Proofs.CnxPoC.layerScaleChGammaSgd_den
 -- The CHANNEL-LN γ/β param certs (ConvNeXtChannelLN)
 #print axioms Proofs.chanRowsIdxInv_chanRowsIdx
@@ -695,14 +691,14 @@ open Proofs
 #print axioms Proofs.cnx_render_chlnbeta_certified
 #print axioms Proofs.CnxPoC.chanLnGammaSgd_den
 #print axioms Proofs.CnxPoC.chanLnBetaSgd_den
--- ch9-ConvNeXt-T FULL [3,3,9,3] §1a TIE
+-- ch9-ConvNeXt-T FULL [3,3,9,3] TIE
 #print axioms Proofs.CnxTiePoC.cnx_block_ch_tied
 #print axioms Proofs.CnxTiePoC.cnx_down_ch_tied
 #print axioms Proofs.CnxTiePoC.cnx_stem_ch_tied
 #print axioms Proofs.CnxTiePoC.cnx_head_ch_tied
 #print axioms Proofs.CnxTiePoC.cnxLossCot_den
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
--- ViT CLOSE (planning/archive/vit_close.md Item C)
+-- ViT CLOSE
 #print axioms pdiv_rowDense_W
 #print axioms rowDense_weight_grad_bridge
 #print axioms rowDense_bias_grad_bridge
@@ -718,7 +714,7 @@ open Proofs
 #print axioms pdiv_patchEmbed_b
 #print axioms patchEmbed_bias_grad_bridge
 #print axioms patchEmbed_bias_sgd_certified
--- ViT cotangent-chain CLOSE (planning/archive/vit_close.md Item D)
+-- ViT cotangent-chain CLOSE
 #print axioms vitCotDP_eq_sdpaDWeights
 #print axioms vitCotDS_eq_sdpaDScaled
 #print axioms vitCotDQ_eq_sdpaBackQ
@@ -760,28 +756,28 @@ open Proofs
 #print axioms convNextForwardTCh_eq_chain
 #print axioms convNextForwardTCh_differentiable
 #print axioms convNextForwardTChHasVJP_correct
--- The channel-LN GRAPH + faithfulness (rung E's apex)
+-- The channel-LN GRAPH + faithfulness (the apex)
 #print axioms StableHLO.chanLNGraph_faithful
 #print axioms StableHLO.cnxBlockChGraphW_faithful
 #print axioms StableHLO.cnxStageChGraphK_den
 #print axioms StableHLO.cnxDownChGraphW_faithful
 #print axioms StableHLO.convNextFwdGraphTCh_faithful
--- §2n: the SCALAR-LN twin of this chain
+-- The SCALAR-LN twin of this chain
 
--- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean, MlpFloatBridge.lean)
+-- ℝ→Float32 bridge (FloatBridge.lean, MlpFloatBridge.lean)
 #print axioms FloatModel.dot_close
--- P2 (TreeReduceBridge.lean, planning/archive/adjoint_chain.md)
+-- TreeReduceBridge.lean
 #print axioms FloatModel.dotMixed
 #print axioms FloatModel.dot_close_mixed
 #print axioms FloatModel.dot_close_mixed_uniform
 #print axioms FloatModel.dotMixed_exact_leaf
--- §1c threaded through the dense layer
+-- Threaded through the dense layer
 #print axioms FloatModel.denseMixed
 #print axioms FloatModel.dense_close_mixed
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
--- Subnormal-floor closure (FloatSubnormalBridge.lean, planning §2)
+-- Subnormal-floor closure (FloatSubnormalBridge.lean)
 #print axioms Proofs.FaithfulFloatModel.toFloatModel
 #print axioms Proofs.FaithfulFloatModel.err_of_normal
 #print axioms Proofs.FaithfulFloatModel.exactFaithful
@@ -790,16 +786,16 @@ open Proofs
 #print axioms Proofs.bnSqrt_normal
 #print axioms Proofs.istd_ge_minNormal
 #print axioms Proofs.subFloor_total_negligible
--- MaxPool exact-in-float (CNN.lean, planning §1b-A)
+-- MaxPool exact-in-float (CNN.lean)
 #print axioms max_close
 #print axioms maxPool2_close
 #print axioms maxPoolFlat_close
--- Conv forward rounding budget (SgdDescent/Cnn.lean, planning §1b-A)
+-- Conv forward rounding budget (SgdDescent/Cnn.lean)
 #print axioms conv2d_eq_dense
 #print axioms convPad_close
 #print axioms FloatModel.convF
 #print axioms FloatModel.convF_close
--- Whole-net capstone (SgdDescent/Cnn.lean, planning §1b-A)
+-- Whole-net capstone (SgdDescent/Cnn.lean)
 #print axioms FloatModel.flatConvF
 #print axioms FloatModel.flatConvF_close
 #print axioms FloatModel.mnistCnnNoBnForwardF
@@ -836,20 +832,20 @@ open Proofs
 #print axioms floatClose_id
 #print axioms floatClose_iterate
 #print axioms floatClose_r34_stages
--- planning/archive/floatbridge_enet_vit.md §1a–§1d (EfficientNet float bridge finished)
+-- EfficientNet float bridge
 #print axioms floatClose_addResidual
--- §1b: the remaining FloatClose instances, all wraps of existing closeness
+-- The remaining FloatClose instances, all wraps of existing closeness
 #print axioms FloatModel.bnStep_close
 #print axioms floatClose_bn
 #print axioms floatClose_dense
 #print axioms globalAvgPoolFlat_eq_bnMean
 #print axioms floatClose_gap
--- §1c: depthwise conv
+-- Depthwise conv
 #print axioms depthwiseConv2d_eq_dense
 #print axioms FloatModel.depthwiseConv2dF_close
 #print axioms FloatModel.depthwiseFlatF_close
 #print axioms floatClose_depthwise
--- §1d: the additive skip's closeness (FloatComposeBridge.lean)
+-- The additive skip's closeness (FloatComposeBridge.lean)
 #print axioms floatClose_residual
 -- Strided-conv backward (r34 down-blocks + stem)
 #print axioms Proofs.decimateBack_eq_vjp
@@ -877,18 +873,18 @@ open Proofs
 #print axioms Proofs.StableHLO.mbExpGraphEvalW_faithful
 #print axioms Proofs.efficientnetForwardBFullEval
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful
--- §B integrity tie (the r34 identity block)
+-- Integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
--- §B integrity tie (the r34 DOWNSAMPLE block)
+-- Integrity tie (the r34 DOWNSAMPLE block)
 #print axioms Proofs.flatConvStride2Back_eq_vjp_backward
 -- Its XLA-SAME peer (the TF-origin B0 / MobileNetV2 stems): the same conv leaf + decimateOddBack rfl.
 #print axioms Proofs.flatConvStride2XlaBack_eq_vjp_backward
--- §B DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet)
+-- DEPTHWISE adjoint gate (shared prereq for convnext/mnv2/enet)
 #print axioms Proofs.depthwiseConv2d_dwReverse_eq_input_grad_formula
 #print axioms Proofs.depthwiseFlatBack_eq_vjp_backward
 -- Its XLA-SAME peer (MobileNetV2's four strided depthwises, B0's downsample depthwise).
 #print axioms Proofs.depthwiseStride2FlatXlaBack_eq_vjp_backward
--- §2n §B at ConvNeXt's REAL channel LayerNorm
+-- At ConvNeXt's REAL channel LayerNorm
 #print axioms Proofs.HasVJP.backward_unique
 #print axioms Proofs.bnGradInput_eq_vjp_backward
 #print axioms Proofs.transposeFlatHasVJP_backward_eq
@@ -896,13 +892,13 @@ open Proofs
 #print axioms Proofs.chanLNTensor3Back_eq_chanLN_vjp
 #print axioms Proofs.cnxBodyWithChanLNBack_eq_vjp
 #print axioms Proofs.cnxBlockChBack_eq_vjp
--- §B integrity tie (vit MHSA — the sdpa adjoint)
+-- Integrity tie (vit MHSA — the sdpa adjoint)
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
 #print axioms Proofs.mhsaBackFlat_eq_mhsa_vjp
--- §B the MLP-sublayer per-token leaf
+-- The MLP-sublayer per-token leaf
 #print axioms Proofs.transformerMlp_back_flat_eq_perRowFlatPR
--- §B endpoint leaf ties
+-- Endpoint leaf ties
 #print axioms Proofs.dense_transpose_eq_vjp_backward
 #print axioms Proofs.gapBack_eq_vjp_backward
 -- He et al.'s 3×3/s2 stem pool's BACKWARD
@@ -911,7 +907,7 @@ open Proofs
 -- the two spellings of that scatter are one map: the render's `.maxPool3s2BackB` node = the chain's
 #print axioms Proofs.maxPool3s2BackFlat_eq_flatBack
 #print axioms Proofs.den_maxPool3s2BackB_eq_flatBackB
--- the generic 21-stage apex the batched MobileNetV2 tie instantiates (MobileNetV2WholeBackCertifiedTieB.lean; its per-example tie was retired 2026-09-20)
+-- the generic 21-stage apex the batched MobileNetV2 tie instantiates (MobileNetV2WholeBackCertifiedTieB.lean)
 #print axioms Proofs.mobilenetv2PaperPCHasVJPAt
 -- AND FOR THE WHOLE EFFICIENTNET-B0 (EfficientNetWholeBackCertifiedTie.lean)
 #print axioms Proofs.stemBBack_eq_vjp_backward
@@ -946,7 +942,7 @@ open Proofs
 #print axioms Proofs.convFlatBack_padOdd_eq_vjp_backward
 #print axioms Proofs.flatConvStride2Back_padOdd_eq_vjp_backward
 #print axioms Proofs.flatConvStride4Back_padOdd_eq_vjp_backward
--- ConvNeXt-T's whole-net backward tie, the two pieces that landed
+-- ConvNeXt-T's whole-net backward tie, two pieces
 #print axioms Proofs.cnxDownChBack_eq_vjp
 #print axioms Proofs.cnxBlockChBackAt
 #print axioms Proofs.cnxStageChKBack
@@ -955,7 +951,7 @@ open Proofs
 #print axioms Proofs.cnxSavedA10
 #print axioms Proofs.convNextForwardTChVjpChain
 #print axioms Proofs.convnextInputGrad_eq_convNextForwardTCh_vjp
--- ConvNeXt WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index and the ImageNet head (ConvNeXtWholeBackCertifiedTieB.lean, 2026-09-08)
+-- ConvNeXt WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index and the ImageNet head (ConvNeXtWholeBackCertifiedTieB.lean)
 #print axioms Proofs.convnextInputGradB
 #print axioms Proofs.cnxSavedB10
 #print axioms Proofs.cnxChanLNBAt
@@ -992,7 +988,7 @@ open Proofs
 #print axioms Proofs.vitInputGradK_eq_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
--- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean, 2026-09-08)
+-- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean)
 #print axioms Proofs.vitTowerBackB_eq_vjp
 #print axioms Proofs.vitLNBackB_eq_vjp
 #print axioms Proofs.vitHeadBackB_eq_vjp
@@ -1003,16 +999,16 @@ open Proofs
 #print axioms Proofs.vitInputGradKB_eq_batchMap_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradKB_correct
 #print axioms Proofs.vitTinyInputGradB_eq_vitTiny_vjp
--- ViT TRANSFORMER-BLOCK FOLD (planning/archive/floatbridge_enet_vit.md §2)
+-- ViT TRANSFORMER-BLOCK FOLD
 #print axioms FloatModel.dotSgd_step_close
 #print axioms FloatModel.sumSgd_step_close
 #print axioms convWeightGrad_eq_dot
 #print axioms convBiasGrad_eq_sum
 #print axioms FloatModel.cnn_convW_step_float_close
 #print axioms FloatModel.cnn_convb_step_float_close
--- Item C — the numeric conv-weight-step capstone (SgdDescent/Cnn.lean)
+-- The numeric conv-weight-step capstone (SgdDescent/Cnn.lean)
 #print axioms FloatModel.mnist_cnn_convW_step_float_budget
--- Item C, bias peer (SgdDescent/Cnn.lean)
+-- Bias peer (SgdDescent/Cnn.lean)
 #print axioms FloatModel.mnist_cnn_convb_step_float_budget
 -- CIFAR-8 last-conv SGD descent (SgdDescent/Cifar.lean)
 #print axioms Proofs.cifarCnn8Forward_factor
@@ -1037,13 +1033,13 @@ open Proofs
 #print axioms FloatModel.mlp_w0_step_float_close
 #print axioms FloatModel.mlp_b0_step_float_close
 #print axioms FloatModel.mnist_w2_step_float_budget
--- The loss head — the LAST Tier-1 float hypothesis discharged
+-- The loss head — the LAST float hypothesis discharged
 #print axioms FloatModel.sum_close
 #print axioms FloatModel.softmax_perturb
 #print axioms FloatModel.softmaxF_close
 #print axioms FloatModel.softmax_ce_cot_close
 #print axioms FloatModel.mnist_cot_budget
--- §3c (planning/archive/floatbridge_quantization.md)
+-- floatbridge quantization
 #print axioms FloatModel.argmax_preserved
 #print axioms FloatModel.denseMixedBudget
 #print axioms FloatModel.dense_close_mixed_uniform_budget
@@ -1051,7 +1047,7 @@ open Proofs
 #print axioms uE4M3
 #print axioms FloatModel.linear_e4m3_logit_budget
 #print axioms FloatModel.linear_e4m3_argmax_preserved
--- §3b (planning/archive/floatbridge_quantization.md)
+-- floatbridge quantization (cont.)
 #print axioms QuantPoC.dequant_factors
 #print axioms QuantPoC.e4m3_render_faithful
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
@@ -1065,7 +1061,7 @@ open Proofs
 #print axioms dense_unflatten_drift
 #print axioms linear_loss_grad_lipschitz
 #print axioms linear_sgd_descends
--- Item D / G1 — the η-composition, the "two halves finally meet"
+-- The η-composition, the "two halves finally meet"
 #print axioms FloatModel.linearFloatGrad
 #print axioms linearFloatGrad_apply
 #print axioms linear_grad_close
@@ -1087,12 +1083,12 @@ open Proofs
 #print axioms mlp_hidden_logit_drift
 #print axioms mlp_hidden_loss_grad_lipschitz
 #print axioms mlp_hidden_sgd_descends
--- Output-layer η-composition (planning §1a/§4, G1 for the MLP)
+-- Output-layer η-composition (for the MLP)
 #print axioms mlp_output_float_sgd_descends
--- Hidden-layer float-backward grad-close (planning §1a/§4, the joint-step engine)
+-- Hidden-layer float-backward grad-close (the joint-step engine)
 #print axioms FloatModel.cotErr_nonneg
 #print axioms mlp_w1_grad_close
--- Hidden-layer η-composition (planning §3 descent, Step 1)
+-- Hidden-layer η-composition (descent)
 #print axioms FloatModel.mlpHiddenFloatGrad
 #print axioms mlpHiddenFloatGrad_apply
 #print axioms mlp_hidden_loss_gradAt_reluMask
@@ -1101,7 +1097,7 @@ open Proofs
 #print axioms mlp_input_loss_gradAt
 #print axioms mlp_input_loss_grad_lipschitz
 #print axioms mlp_input_sgd_descends
--- Input-layer η-composition (planning §3 descent, Step 2)
+-- Input-layer η-composition (descent)
 #print axioms reluMask_dense_transpose_eq
 #print axioms FloatModel.mlpInputFloatGrad
 #print axioms mlpInputFloatGrad_apply
@@ -1121,7 +1117,7 @@ open Proofs
 #print axioms MaxPool2MarginQ.smooth_of_close
 #print axioms MaxPool2MarginQ.smooth
 #print axioms MaxPool2MarginQ.isArgmax_iff
--- Float-bridge §3 (CNN descent, Increment 1 keystone): the pool selector is an indicator pass-through in float
+-- Float-bridge CNN descent keystone: the pool selector is an indicator pass-through in float
 #print axioms MaxPool2MarginQ.poolBack_close
 #print axioms conv2d_eq_convPad
 #print axioms abs_convPad_le
@@ -1137,11 +1133,11 @@ open Proofs
 #print axioms conv2d_weight_pdiv
 #print axioms cnn_conv2_loss_differentiableAt
 #print axioms cnn_conv2_loss_gradAt
--- Float-bridge §3 (CNN descent, Increment 1 keystone): the certified conv-2 gradient in dense/reluMask form
+-- Float-bridge CNN descent keystone: the certified conv-2 gradient in dense/reluMask form
 #print axioms dense_transpose_eq
 #print axioms head3_cot_reluMask
 #print axioms cnn_conv2_loss_gradAt_reluMask
--- Float-bridge §3 (CNN descent, Increment 2)
+-- Float-bridge CNN descent
 #print axioms t3Idx_surj
 #print axioms mask_scalar_close
 #print axioms FloatModel.dot_perturbed_close
@@ -1155,7 +1151,7 @@ open Proofs
 #print axioms head3_sum_drift
 #print axioms cnn_conv2_loss_grad_lipschitz
 #print axioms cnn_conv2_sgd_descends
--- Float-bridge §3 (CNN descent, Increment 3)
+-- Float-bridge CNN descent (cont.)
 #print axioms flatten_k4Idx
 #print axioms k4Idx_surj
 #print axioms cnn_conv2_float_sgd_descends
@@ -1173,11 +1169,11 @@ open Proofs
 #print axioms cnn1_pool_head_input_grad
 #print axioms cnn_conv1_loss_differentiableAt
 #print axioms cnn_conv1_loss_gradAt
--- Float-bridge §3 (CNN descent, Increment 4 keystone)
+-- Float-bridge CNN descent keystone
 #print axioms cnn_conv1_loss_gradAt_reluMask
 #print axioms cnn_conv1_loss_grad_lipschitz
 #print axioms cnn_conv1_sgd_descends
--- Float-bridge §3 (CNN descent, Increment 4)
+-- Float-bridge CNN descent (cont.)
 #print axioms convTap_abs_le
 #print axioms FloatModel.cnnConv2CotBudget
 #print axioms FloatModel.cnnConv2CotMag
@@ -1211,7 +1207,7 @@ open Proofs
 #print axioms cnn_conv1_bias_loss_gradAt
 #print axioms cnn_conv1_bias_loss_grad_lipschitz
 #print axioms cnn_conv1_bias_sgd_descends
--- Float-bridge §3 (CNN descent, Increment 5)
+-- Float-bridge CNN descent (cont.)
 #print axioms FloatModel.sum_perturbed_close
 #print axioms FloatModel.cnnConv2BiasFloatGrad
 #print axioms cnn_conv2_bias_loss_gradAt_reluMask
@@ -1223,7 +1219,7 @@ open Proofs
 #print axioms FloatModel.cnnConv1BiasGradBudget
 #print axioms cnn_conv1_bias_grad_close
 #print axioms cnn_conv1_bias_float_sgd_descends
--- Adam/AdamW optimizer step over ℝ (Phase 3a, vit_train_to_vit_verified.md)
+-- Adam/AdamW optimizer step over ℝ
 #print axioms adamVNext_nonneg
 #print axioms adam_denom_pos
 
@@ -1238,7 +1234,7 @@ open Proofs
 #print axioms StableHLO.seGateBackGraphE_faithful
 #print axioms StableHLO.seBlockFullBackGraphE_faithful
 #print axioms StableHLO.mbconvBodyBackGraph_faithful
--- §2o Part A (2026-07-31)
+-- The channel-LN backward graphs
 #print axioms Proofs.rowLNBack_affine_eq
 #print axioms StableHLO.chanLNBackGraph_faithful
 #print axioms StableHLO.chanLNBackGraph_eq_vjp
@@ -1309,7 +1305,7 @@ open Proofs
 #print axioms StableHLO.patchEmbedBackGraph_faithful
 #print axioms StableHLO.vitNetBackGraph_faithful
 
--- ViT folded onto the net-agnostic `CertLayer` machinery (ViTBackNet.lean, 2026-08-10)
+-- ViT folded onto the net-agnostic `CertLayer` machinery (ViTBackNet.lean)
 #print axioms StableHLO.vitTrunkV_fwd
 #print axioms StableHLO.vitTrunkV_graph
 
@@ -1351,7 +1347,7 @@ open Proofs
 #print axioms StableHLO.mnv4FfnBodyGraphB_faithful
 #print axioms StableHLO.mnv4StridedGraphB_faithful
 
--- MNv4's T3 §1a tie
+-- MNv4's T3 tie
 #print axioms Mnv4TieB.mnv4_extradw_tiedB
 #print axioms Mnv4TieB.mnv4_convnext_tiedB
 #print axioms Mnv4TieB.mnv4_ffn_tiedB
@@ -1372,10 +1368,10 @@ open Proofs
 #print axioms Proofs.mnv4InputGradB_correct
 #print axioms Proofs.mobilenetv4ForwardBFull_eq_slots
 
--- EfficientNet — §8e's VJP-without-backward-graph holes, closed
+-- EfficientNet — the VJP-without-backward-graph holes, closed
 #print axioms StableHLO.mbNoExpBackBatchedGraph_faithful
 #print axioms StableHLO.headBackBatchedGraph_faithful
--- ViT-Tiny §1 FOLD (ViTFold)
+-- ViT-Tiny FOLD (ViTFold)
 #print axioms Proofs.SgdNode.veclnGammaSgd_den
 #print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
 #print axioms Proofs.ViTPoC.rowDenseBiasSgd_den
@@ -1383,21 +1379,21 @@ open Proofs
 #print axioms Proofs.ViTPoC.patchEmbedWeightSgd_den
 #print axioms Proofs.ViTPoC.patchEmbedBiasSgd_den
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
--- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
+-- ViT-Tiny TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq
 #print axioms Proofs.vitCotDVmh_eq
 -- The multi-head per-block tie (vit_block_tiedMHV)
 #print axioms Proofs.ViTTiePoC.vit_block_tiedMHV
 #print axioms Proofs.ViTTiePoC.vit_block_tiedAtMHV
--- ViT-Tiny §1a TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified)
+-- ViT-Tiny TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified)
 #print axioms Proofs.ViTTiePoC.vit_cls_den
 #print axioms Proofs.ViTTiePoC.vit_finalLN_tied
 #print axioms Proofs.ViTTiePoC.vit_head_tied
 #print axioms Proofs.ViTTiePoC.vit_embed_tied
 #print axioms Proofs.ViTTiePoC.vit_net_tied_certified
 
--- Robustness certificate (planning/archive/robustness_ladder.md, the cert side of cert ≤ TRUE ≤ PGD)
+-- Robustness certificate (the cert side of cert ≤ TRUE ≤ PGD)
 #print axioms Proofs.lipschitz_margin_certified_radius
 #print axioms Proofs.logit_gap_stable
 #print axioms Proofs.coord_pair_bound
@@ -1409,7 +1405,7 @@ open Proofs
 -- Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019)
 #print axioms Proofs.smoothed_margin_certified_radius
 
--- The smoothing radius at the REAL Gaussian quantile (Smoothing/Gaussian.lean, G1)
+-- The smoothing radius at the REAL Gaussian quantile (Smoothing/Gaussian.lean)
 #print axioms Proofs.smoothing_certified_radius_probit
 #print axioms Proofs.stdNormalCDF_strictMono
 #print axioms Proofs.stdNormalCDF_neg
@@ -1417,16 +1413,16 @@ open Proofs
 #print axioms Proofs.stdNormalQuantile_anti
 #print axioms Proofs.smoothing_certified_radius_gaussian
 
--- G2, the 1-D Neyman–Pearson core (smoothing_gaussian_lemma.md)
+-- The 1-D Neyman–Pearson core
 #print axioms Proofs.stdNormalCDF_quantile
 
--- G3, dimension reduction (smoothing_gaussian_lemma.md)
+-- Dimension reduction
 #print axioms Proofs.integral_gaussianReal_shift_eq
 #print axioms Proofs.pi_gaussian_shift_eq
 #print axioms Proofs.pi_gaussian_np_shift
 #print axioms Proofs.stdGaussian_np_shift
 
--- G4, assembly — the Cohen radius with NOTHING left on the smoothing side
+-- Assembly — the Cohen radius with NOTHING left on the smoothing side
 #print axioms Proofs.stdNormalQuantile_cdf
 #print axioms Proofs.stdNormalCDF_mem_Ioo
 #print axioms Proofs.smoothing_probit_lipschitz
@@ -1437,14 +1433,14 @@ open Proofs
 #print axioms Proofs.stdNormalQuantile_of_nonpos
 #print axioms Proofs.smoothing_mc_certified
 
--- ...and the EXACT Clopper-Pearson tie (Smoothing/CP.lean, 2026-07-12)
+-- ...and the EXACT Clopper-Pearson tie (Smoothing/CP.lean)
 #print axioms Proofs.pi_hitCount_eq_binomial
 #print axioms Proofs.pi_hitCount_tail_real
 #print axioms Proofs.binomTail_le_of_lt_cpLower
 #print axioms Proofs.cp_coverage
 #print axioms Proofs.smoothing_cp_certified
 
--- ...and the SOLVED form (the per-image scorecard shape, 2026-07-12)
+-- ...and the SOLVED form (the per-image scorecard shape)
 #print axioms Proofs.binomTail_monotoneOn
 #print axioms Proofs.le_cpLower_of_tail_le
 #print axioms Proofs.smoothing_cp_certified_solved
@@ -1484,7 +1480,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.smoothing_cp_certified_mlpT
 #print axioms Proofs.LipschitzCertDemo.smooth_cp_mlpT_demo
 
--- ...and the two-sided quantile packaging (Smoothing/Gaussian.lean, 2026-07-12)
+-- ...and the two-sided quantile packaging (Smoothing/Gaussian.lean)
 #print axioms Proofs.stdNormalQuantile_strictMonoOn
 #print axioms Proofs.stdNormalQuantile_surjOn
 #print axioms Proofs.stdNormalQuantile_continuousAt
@@ -1536,7 +1532,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.trained_radius_gram2_pos
 #print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram2
 
--- CERTIFIED-ACCURACY SCORECARD (LipschitzCert/Scorecard.lean, post_audit_roadmap §1)
+-- CERTIFIED-ACCURACY SCORECARD (LipschitzCert/Scorecard.lean)
 #print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps
 #print axioms Proofs.LipschitzCertDemo.G1s_eq
@@ -1581,7 +1577,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.scorecard_sdp
 #print axioms Proofs.LipschitzCertDemo.scorecard_sdp_uncon
 
--- The certificate × float bridge (LipschitzCert/Float.lean, 2026-07 audit gap #1)
+-- The certificate × float bridge (LipschitzCert/Float.lean)
 #print axioms Proofs.FloatModel.mlp2_float_close_uniform
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps_close
 #print axioms Proofs.LipschitzCertDemo.capped_B_le
@@ -1638,13 +1634,13 @@ open Proofs
 #print axioms Proofs.IBP.ibp3_certified_of_boxSound
 #print axioms Proofs.IBP.CertifiedAtLinf3.mono
 
--- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2)
+-- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean)
 #print axioms Proofs.rndP_err
 #print axioms Proofs.binary32_e4m3_argmax_preserved
 #print axioms Proofs.binary32_e4m3_argmax_small
 #print axioms Proofs.binary32_linear_sgd_descends_concrete
 
--- DESCENT AT TRAINED WEIGHTS (Trained/LinearDescent.lean, post_audit_roadmap §3)
+-- DESCENT AT TRAINED WEIGHTS (Trained/LinearDescent.lean)
 #print axioms Proofs.TrainedLinearDescent.hz_lbl_le
 #print axioms Proofs.TrainedLinearDescent.sm_lbl_le_half
 #print axioms Proofs.TrainedLinearDescent.gradL1_le
@@ -1663,7 +1659,7 @@ open Proofs
 #print axioms Proofs.TrainedMlp.trainedMlp_jacobian_nonzero
 #print axioms Proofs.TrainedMlp.trainedMlp_not_constant
 
--- TRAINED-WEIGHT whole-net VJP witness, CNN rung (Trained/CnnWitness.lean, post_audit gap #3)
+-- TRAINED-WEIGHT whole-net VJP witness, CNN rung (Trained/CnnWitness.lean)
 #print axioms Proofs.TrainedCnn.conv1_eq
 #print axioms Proofs.TrainedCnn.conv2_eq
 #print axioms Proofs.TrainedCnn.r2_smooth
@@ -1681,7 +1677,7 @@ open Proofs
 #print axioms Proofs.TrainedCnn.trainedCnn_jacobian_nonzero
 #print axioms Proofs.TrainedCnn.trainedCnn_not_constant
 
--- Muon geometry (planning/archive/muon_geometry.md)
+-- Muon geometry
 #print axioms Proofs.MuonGeometry.steepest_l2_bound
 #print axioms Proofs.MuonGeometry.steepest_l2_attained
 #print axioms Proofs.MuonGeometry.steepest_linf_bound
@@ -1699,26 +1695,26 @@ open Proofs
 -- L6 manifold view
 #print axioms Proofs.MuonGeometry.muon_polar_orthogonal
 #print axioms Proofs.MuonGeometry.muon_polar_nearest_orthogonal
--- Newton–Schulz P1 (planning/archive/muon_ns_convergence.md)
+-- Newton–Schulz
 #print axioms Proofs.MuonNewtonSchulz.nsStep_spectral
 #print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_spectral
--- Newton–Schulz P2 (the scalar engine)
+-- Newton–Schulz (the scalar engine)
 #print axioms Proofs.MuonNewtonSchulz.scalar_iterate_tendsto_one
 #print axioms Proofs.MuonNewtonSchulz.gCubic_eq_nsScalar
 #print axioms Proofs.MuonNewtonSchulz.gCubic_iterate_tendsto_one
 #print axioms Proofs.MuonNewtonSchulz.q5Scalar_eq_nsScalar
 #print axioms Proofs.MuonNewtonSchulz.q5Scalar_iterate_tendsto_one
--- Newton–Schulz P3 (CLOSES THE LOOP)
+-- Newton–Schulz (CLOSES THE LOOP)
 #print axioms Proofs.MuonNewtonSchulz.nsStep_iterate_tendsto_polar
 #print axioms Proofs.MuonNewtonSchulz.nsStep_cubic_iterate_tendsto_polar
 #print axioms Proofs.MuonNewtonSchulz.nsStep_q5_iterate_tendsto_polar
--- Newton–Schulz P4 (the HONEST tier)
+-- Newton–Schulz (the HONEST tier)
 #print axioms Proofs.MuonNewtonSchulz.qScalar_one_lt_one
 #print axioms Proofs.MuonNewtonSchulz.qScalar_half_gt_one
 #print axioms Proofs.MuonNewtonSchulz.qScalar_not_le_one
 #print axioms Proofs.MuonNewtonSchulz.qScalar_iterate_band_half
 
--- Spec→math ties (SpecVJP.lean, rungs B/C/E)
+-- Spec→math ties (SpecVJP.lean)
 #print axioms linearVerified_denote_eq
 #print axioms linearVerified_fwd_faithful
 #print axioms linearVerified_lossCot_isCEgrad
@@ -1729,10 +1725,10 @@ open Proofs
 #print axioms cnnVerified_fwd_faithful
 #print axioms cifarVerified_denote_eq
 #print axioms cifarVerified_fwd_faithful
--- mnv2 committed-spec tie, at batch BN — the net every shipped MobileNetV2 artifact runs (2026-09-19)
+-- mnv2 committed-spec tie, at batch BN — the net every shipped MobileNetV2 artifact runs
 #print axioms mobilenetv2VerifiedB_denote_eq
 #print axioms mobilenetv2VerifiedB_fwd_faithful
--- FULL committed-spec ties (unified weight bundles, 2026-07-07); r34's at batch BN, the net every shipped artifact runs (2026-09-19)
+-- FULL committed-spec ties (unified weight bundles); r34's at batch BN, the net every shipped artifact runs
 #print axioms resnet34VerifiedB_denote_eq
 #print axioms resnet34VerifiedB_fwd_faithful
 #print axioms efficientnetVerified_denote_eq
@@ -1743,7 +1739,7 @@ open Proofs
 #print axioms vitVerifiedHasVJP
 #print axioms vitVerified_fwd_faithful
 
--- The CANONICAL MNIST MLP surface (MlpCanonical.lean, 2026-07-07)
+-- The CANONICAL MNIST MLP surface (MlpCanonical.lean)
 #print axioms Proofs.MlpCanonical.hasVJPAt
 #print axioms Proofs.MlpCanonical.hasVJP_correct
 #print axioms Proofs.MlpCanonical.output_float_sgd_descends
@@ -1753,7 +1749,7 @@ open Proofs
 #print axioms Proofs.MlpCanonical.w0_grad_close
 #print axioms Proofs.MlpCanonical.train_step_tied_certified
 
--- The bf16-MIXED conv, composed (ConvMixedComposeBridge.lean, 2026-08-24)
+-- The bf16-MIXED conv, composed (ConvMixedComposeBridge.lean)
 #print axioms Proofs.convFanS_le
 #print axioms Proofs.conv2d_sub_abs_le
 #print axioms Proofs.FloatModel.convMixed_close_prop
@@ -1762,11 +1758,11 @@ open Proofs
 #print axioms Proofs.convMixedBudget_affine
 #print axioms Proofs.layerBudget_affine
 
--- The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean, 2026-08-24)
+-- The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean)
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
 #print axioms Proofs.FloatModel.depthwise_close_mixed
 
--- RESNET-34 AT TRUE BATCH BN — T1-forward and T2 (ResNet34FullB.lean, 2026-09-06)
+-- RESNET-34 AT TRUE BATCH BN — T1-forward and T2 (ResNet34FullB.lean)
 #print axioms Proofs.resnet34ForwardBFull
 #print axioms Proofs.StableHLO.r34IdGraphB_faithful
 #print axioms Proofs.StableHLO.r34DownGraphB_faithful
@@ -1774,7 +1770,7 @@ open Proofs
 #print axioms Proofs.StableHLO.r34HeadGraphB_faithful
 #print axioms Proofs.StableHLO.resnet34FwdGraphBFull_faithful
 
--- `batchMap` AT A POINT (BatchMapVJPAt.lean, 2026-09-06)
+-- `batchMap` AT A POINT (BatchMapVJPAt.lean)
 #print axioms Proofs.pdivMat_rowIndep_at
 #print axioms Proofs.batchMap_differentiableAt
 #print axioms Proofs.pdiv_batchMap_at
@@ -1784,7 +1780,7 @@ open Proofs
 #print axioms Proofs.batchMap_comp
 #print axioms Proofs.HasVJPAt.backward_unique_of_eq
 
--- RESNET-34 AT TRUE BATCH BN — T1's VJP half (ResNet34FullBVJP.lean, 2026-09-06)
+-- RESNET-34 AT TRUE BATCH BN — T1's VJP half (ResNet34FullBVJP.lean)
 #print axioms Proofs.r34IdBHasVJPAt
 #print axioms Proofs.r34DownBHasVJPAt
 #print axioms Proofs.r34StemBHasVJPAt
@@ -1800,7 +1796,7 @@ open Proofs
 #print axioms Proofs.resnet34ForwardBFullHasVJPAt_correct
 #print axioms Proofs.resnet34ForwardBFull_differentiableAt
 
--- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (Foundation/GradNodesB.lean)
+-- RESNET-34 AT TRUE BATCH BN — T3's fold, UN-FUSED (Foundation/GradNodesB.lean)
 #print axioms Proofs.GradNodeB.convWGradB_den
 #print axioms Proofs.GradNodeB.convBGradB_den
 #print axioms Proofs.GradNodeB.convStridedWGradB_den
@@ -1810,22 +1806,22 @@ open Proofs
 #print axioms Proofs.GradNodeB.denseWGradB_den
 #print axioms Proofs.GradNodeB.denseBGradB_den
 
--- 4b.1 EfficientNet-B0
+-- EfficientNet-B0
 #print axioms Proofs.GradNodeB.denseBGradB_den
 #print axioms Proofs.GradNodeB.convStridedXlaWGradB_den
 #print axioms Proofs.GradNodeB.depthwiseWGradB_den
 #print axioms Proofs.GradNodeB.depthwiseStridedWGradB_den
 
--- 4b.2 ConvNeXt-T
+-- ConvNeXt-T
 #print axioms Proofs.CnxPoCG.layerScaleChGammaGrad_den
 #print axioms Proofs.CnxPoCG.chanLnGammaGrad_den
 #print axioms Proofs.CnxPoCG.chanLnBetaGrad_den
 
--- 4b.3 ViT-Tiny — vit_adam_train_step and vitin_adamdp128x4wxclipdrop
+-- ViT-Tiny — vit_adam_train_step and vitin_adamdp128x4wxclipdrop
 #print axioms Proofs.ViTPoCG.posEmbedGrad_den
 #print axioms Proofs.ViTPoCG.clsGrad_den
 
--- 4c leg 4 ViT-Tiny
+-- ViT-Tiny
 #print axioms Proofs.GradNodeB.veclnGammaGradB_den
 #print axioms Proofs.GradNodeB.rowDenseBiasGradB_den_lnbeta
 #print axioms Proofs.ViTPoCGB.rowDenseWeightGradB_den
@@ -1837,7 +1833,7 @@ open Proofs
 #print axioms Proofs.GradNodeB.headWGradB_den
 #print axioms Proofs.GradNodeB.headBGradB_den
 
--- 4c leg 3 ConvNeXt-T
+-- ConvNeXt-T
 #print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
 #print axioms Proofs.GradNodeB.psWGradB_den
 #print axioms Proofs.CnxPoCGB.chanLnGammaGradB_den
@@ -1853,13 +1849,13 @@ open Proofs
 #print axioms Proofs.Bf16PoC.rowDenseWGradBBf16_den
 #print axioms Proofs.Bf16PoC.patchEmbedWGradBBf16_den
 
--- 4b.4 MobileNetV2 at 17 blocks
+-- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den
 #print axioms Proofs.GradNodeB.depthwiseBGradB_den
 #print axioms Proofs.GradNodeB.depthwiseStridedXlaWGradB_den
 #print axioms Proofs.GradNodeB.depthwiseStridedXlaBGradB_den
 
--- 4.2a: THE LABEL-SMOOTHED LOSS COTANGENT, AT A GENERAL TARGET (SmoothedLossCot.lean, 2026-09-06)
+-- THE LABEL-SMOOTHED LOSS COTANGENT, AT A GENERAL TARGET (SmoothedLossCot.lean)
 #print axioms Proofs.softCE_oneHot
 #print axioms Proofs.softCE_grad
 #print axioms Proofs.smoothTarget_sum
@@ -1867,7 +1863,7 @@ open Proofs
 #print axioms Proofs.smoothedLossCotGraph_den
 #print axioms Proofs.smoothedLossCotGraph_row
 
--- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34StepTieB.lean, 2026-09-06)
+-- RESNET-34'S T3 TIE AT BATCH BN, UN-FUSED (ResNet34StepTieB.lean)
 #print axioms Proofs.BackLinks.bnInB_eq_bnBackB
 #print axioms Proofs.BackLinks.bnInB_eq_den_bnBatchBack
 #print axioms Proofs.ResNet34TieB.r34IdCotIn_eq_vjp
@@ -1879,7 +1875,7 @@ open Proofs
 #print axioms Proofs.ResNet34TieB.r34_net_tiedB
 #print axioms Proofs.ResNet34TieB.r34_lossCot_is_smoothedCE_grad
 
--- 4.2 leg 1: MOBILENETV2 AT TRUE BATCH BN — T1-forward and T2 (MobileNetV2FullB.lean, 2026-09-06)
+-- MOBILENETV2 AT TRUE BATCH BN — T1-forward and T2 (MobileNetV2FullB.lean)
 #print axioms Proofs.mobilenetv2ForwardBFull
 #print axioms Proofs.StableHLO.mnv2StemGraphB_faithful
 #print axioms Proofs.StableHLO.mnv2NoExpGraphB_faithful
@@ -1889,7 +1885,7 @@ open Proofs
 #print axioms Proofs.StableHLO.mnv2HeadGraphB_faithful
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphBFull_faithful
 
--- 4.2 leg 1: MOBILENETV2 AT TRUE BATCH BN — T1's VJP half (MobileNetV2FullBVJP.lean, 2026-09-06)
+-- MOBILENETV2 AT TRUE BATCH BN — T1's VJP half (MobileNetV2FullBVJP.lean)
 #print axioms Proofs.mnv2StemBHasVJPAt
 #print axioms Proofs.mnv2NoExpBHasVJPAt
 #print axioms Proofs.mnv2ExpOnlyBHasVJPAt
@@ -1900,7 +1896,7 @@ open Proofs
 #print axioms Proofs.mobilenetv2ForwardBFullHasVJPAt_correct
 #print axioms Proofs.mobilenetv2ForwardBFull_differentiableAt
 
--- 4.2c: MOBILENETV2'S T3 §1a TIE AT BATCH BN, UN-FUSED (MobileNetV2StepTieB.lean, 2026-09-06)
+-- MOBILENETV2'S T3 TIE AT BATCH BN, UN-FUSED (MobileNetV2StepTieB.lean)
 #print axioms Proofs.MobileNetV2TieB.mnv2NoExpBackGraph_faithful
 #print axioms Proofs.MobileNetV2TieB.mnv2NoExpCotIn_eq_vjp
 #print axioms Proofs.MobileNetV2TieB.mnv2ExpOnlyCotIn_eq_vjp
@@ -1914,7 +1910,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_net_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad
 
--- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean, 2026-09-06)
+-- CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean)
 #print axioms Proofs.EnetTiePoCG.convBBetaTiedB_holds
 #print axioms Proofs.GradNodeB.convWTiedB_holds
 #print axioms Proofs.GradNodeB.convBTiedB_holds
@@ -1952,7 +1948,7 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_head_tiedG
 #print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
 
--- 4b's CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtStepTieGB.lean, 2026-09-07)
+-- CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtStepTieGB.lean)
 #print axioms Proofs.smoothedLossCotGraphDiv_den
 #print axioms Proofs.smoothedLossCotGraphDiv_row
 #print axioms Proofs.CnxTiePoCGB.cnx_block_ch_tiedGB
@@ -1961,14 +1957,14 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
--- 4b's CAPSTONE RE-POINTING, ViT-TINY (ViTStepTieGB.lean, 2026-09-07) — FIVE OF FIVE
+-- CAPSTONE RE-POINTING, ViT-TINY (ViTStepTieGB.lean)
 #print axioms Proofs.ViTTiePoCGB.vit_block_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_finalLN_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_head_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_embed_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_net_tiedGB
 
--- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel/Basic.lean, 2026-09-06)
+-- DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel/Basic.lean)
 #print axioms Proofs.pdiv_const_smul
 #print axioms Proofs.meanLoss_differentiableAt
 #print axioms Proofs.lossGrad_meanLoss
@@ -1985,7 +1981,7 @@ open Proofs
 #print axioms Proofs.dpSingleStep_eq_meanLoss_step
 #print axioms Proofs.dpIterate_eq_meanLossTrain
 
--- 4d PIECE 2: THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallel/Node.lean, 2026-09-07)
+-- THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallel/Node.lean)
 #print axioms Proofs.StableHLO.den_allReduceMeanF
 #print axioms Proofs.den_allReduceMeanF_eq_dpMean
 #print axioms Proofs.skel_allReduceMeanF_of_spmd
@@ -1993,17 +1989,17 @@ open Proofs
 #print axioms Proofs.den_allReduceMeanF_convWeightGradB
 #print axioms Proofs.adamW_at_allReduceMeanF
 
--- 4d PIECE 3: SYNCHRONISED BATCHNORM -- THE DP STEP IS THE GLOBAL-BATCH STEP
--- (DataParallel/Basic.lean §sync + DataParallel/Sync.lean, planning/global_bn_verified.md §3.1b, 2026-09-21)
--- P4 at the ℝ level: the positive twin of dpMeanGrad_ne_globalBatchGrad
+-- SYNCHRONISED BATCHNORM -- THE DP STEP IS THE GLOBAL-BATCH STEP
+-- (DataParallel/Basic.lean §sync + DataParallel/Sync.lean)
+-- At the ℝ level: the positive twin of dpMeanGrad_ne_globalBatchGrad
 #print axioms Proofs.dpMean_shardSum
 #print axioms Proofs.dpSyncGrad_eq_globalBatchGrad
 #print axioms Proofs.dpSyncGrad_eq_globalBatchGrad_contiguous
--- P3: sharding commutes with every per-example lift (definitional)
+-- Sharding commutes with every per-example lift (definitional)
 #print axioms Proofs.batchSlice_batchShard
 #print axioms Proofs.batchShard_batchMap
 #print axioms Proofs.batchShard_batchMapAux
--- the statistics subgraph denotes the global [μ ‖ σ²]; P1 / P2 / P2γ on the graph at ANY R --
+-- the statistics subgraph denotes the global [μ ‖ σ²]; shard identities on the graph at ANY R --
 -- the BN case of the per-net chain induction
 #print axioms Proofs.den_syncStats_left
 #print axioms Proofs.den_syncStats_right
@@ -2014,14 +2010,14 @@ open Proofs
 -- the handed-back statistics under DP are the GLOBAL batch's own (bnBatchMeanB/VarB at N := R·N)
 #print axioms Proofs.den_bnStatsMeanB_allReduce
 #print axioms Proofs.den_bnStatsVarB_allReduce
--- P4 at the node: the parameter collective is 1/R of the batch-R·N gradient node
+-- At the node: the parameter collective is 1/R of the batch-R·N gradient node
 #print axioms Proofs.den_allReduceMeanF_convWeightGradB_shard
 #print axioms Proofs.den_allReduceMeanF_bnBetaGradB_shard
 -- the divisor step (divConstB N on a replica vs divConstB (R·N) on one device)
 #print axioms Proofs.HasVJP.backward_smul
 
--- 4d PIECE 3 AT bf16: EVERY NODE SHARDS EXACTLY BUT THE CONV WEIGHT GRADIENT
--- (DataParallel/SyncBf16.lean, planning/global_bn_verified.md §3.6, 2026-09-21)
+-- SYNC-BN AT bf16: EVERY NODE SHARDS EXACTLY BUT THE CONV WEIGHT GRADIENT
+-- (DataParallel/SyncBf16.lean)
 -- forward convs and input-VJPs: replica r's node is shard r of the same node at batch R·N
 #print axioms Proofs.den_batchOp_shard_node
 #print axioms Proofs.den_convBf16_shard
@@ -2048,8 +2044,8 @@ open Proofs
 #print axioms Proofs.convWeightGradBBf16_smul
 #print axioms Proofs.convStridedWeightGradBBf16_smul
 
--- 4d PIECE 3 AT RESNET-34: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
--- (ResNet34SyncB.lean + ResNet34SyncStepTieB.lean, planning/global_bn_verified.md §3.2, 2026-09-21)
+-- SYNC-BN AT RESNET-34: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (ResNet34SyncB.lean + ResNet34SyncStepTieB.lean)
 -- T2 twin: replica r's sync-BN forward graph denotes shard r of resnet34ForwardBFull (R*N)
 #print axioms Proofs.StableHLO.den_castIdx
 #print axioms Proofs.StableHLO.batchShard_castIdx
@@ -2079,8 +2075,8 @@ open Proofs
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB_smoothedCE
 
--- 4d PIECE 3, THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
--- (MBConvSyncTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+-- SYNC-BN: THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
+-- (MBConvSyncTieB.lean)
 #print axioms Proofs.HasVJP3.backward_smul
 #print axioms Proofs.SyncKit.depthwiseWeightGradB_smul
 #print axioms Proofs.SyncKit.depthwiseStridedWeightGradB_smul
@@ -2094,8 +2090,8 @@ open Proofs
 #print axioms Proofs.SyncKit.depthwiseStridedWSync_of_scaled
 #print axioms Proofs.SyncKit.convStridedXlaWSync_of_scaled
 
--- 4d PIECE 3 AT MOBILENETV2: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
--- (MobileNetV2SyncB.lean + MobileNetV2SyncStepTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+-- SYNC-BN AT MOBILENETV2: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (MobileNetV2SyncB.lean + MobileNetV2SyncStepTieB.lean)
 #print axioms Proofs.StableHLO.den_relu6_shard
 #print axioms Proofs.StableHLO.mnv2StemGraphSync_shard
 #print axioms Proofs.StableHLO.mnv2NoExpGraphSync_shard
@@ -2120,8 +2116,8 @@ open Proofs
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB_smoothedCE
 
--- 4d PIECE 3 AT EFFICIENTNET-B0: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
--- (EfficientNetSyncB.lean + EfficientNetSyncStepTieG.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
+-- SYNC-BN AT EFFICIENTNET-B0: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (EfficientNetSyncB.lean + EfficientNetSyncStepTieG.lean)
 -- T2 twin: replica r's sync-BN forward graph denotes shard r of efficientnetForwardBFull (R*N)
 #print axioms Proofs.StableHLO.den_swishF_shard
 #print axioms Proofs.StableHLO.den_addV_shard
@@ -2161,8 +2157,8 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 #print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG_smoothedCE
 
--- 4d PIECE 3 AT RESNET-50: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
--- (ResNet50SyncB.lean + ResNet50SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)
+-- SYNC-BN AT RESNET-50: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (ResNet50SyncB.lean + ResNet50SyncStepTieB.lean)
 -- T2 twin: replica r's sync-BN forward graph denotes shard r of resnet50ForwardBFull (R*N) q
 #print axioms Proofs.StableHLO.den_addVB_shard_comm
 #print axioms Proofs.StableHLO.r50IdGraphSync_shard
@@ -2189,8 +2185,8 @@ open Proofs
 #print axioms Proofs.ResNet50SyncTieB.r50_net_syncTiedB_smoothedCE
 #print axioms Proofs.ResNet50SyncTieB.r50_net_syncTiedB_bce
 
--- 4d PIECE 3 AT MOBILENETV4: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
--- (MobileNetV4SyncB.lean + MobileNetV4SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)
+-- SYNC-BN AT MOBILENETV4: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
+-- (MobileNetV4SyncB.lean + MobileNetV4SyncStepTieB.lean)
 -- T2 twin: replica r's sync-BN forward graph denotes shard r of mobilenetv4ForwardBFull (R*N)
 #print axioms Proofs.StableHLO.den_castIdx_shard
 #print axioms Proofs.StableHLO.mnv4StemGraphSync_shard
@@ -2230,7 +2226,7 @@ open Proofs
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB_smoothedCE
 
--- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT (2026-09-06)
+-- RESNET-50's TWO PREREQUISITES: THE LAMB TRIPLE AND BCE'S COTANGENT
 #print axioms Proofs.lambStep
 #print axioms Proofs.lambScale_zero_weight
 #print axioms Proofs.StableHLO.lamb_triple_faithful
@@ -2247,7 +2243,7 @@ open Proofs
 #print axioms Proofs.bceLossCotGraph_row
 #print axioms Proofs.bceLossCotGraph_row_committed
 
--- §3.5(a)+(b): RESNET-50's T1 AND T2 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean, 2026-09-06)
+-- RESNET-50's T1 AND T2 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean)
 #print axioms Proofs.resnet50ForwardBFull
 #print axioms Proofs.r50IdBHasVJPAt
 #print axioms Proofs.r50ProjBHasVJPAt
@@ -2266,7 +2262,7 @@ open Proofs
 #print axioms Proofs.StableHLO.r50StemGraphB_faithful
 #print axioms Proofs.StableHLO.resnet50FwdGraphBFull_faithful
 
--- §3.5(c): RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50{Faithful,Tie}PoCB.lean, 2026-09-06)
+-- RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50{Faithful,Tie}PoCB.lean)
 #print axioms Proofs.ResNet50TieB.r50IdCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50DownCotIn_eq_vjp

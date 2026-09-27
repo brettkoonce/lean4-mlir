@@ -347,7 +347,7 @@ def linearTrainStepModule (B d₀ d₁ : Nat) (lr : String) : String :=
   "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § CNN — conv forward + proof-backed conv backward (Phase 3, start)
+-- § CNN — conv forward + proof-backed conv backward
 --
 -- The repo's `conv2d` is SAME-padding, stride-1 cross-correlation, which is
 -- exactly `stablehlo.convolution` (XLA conv is cross-correlation, no flip).
@@ -532,7 +532,7 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
   s!"    return %dx : {tt [1,ic,H,W]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § CNN train step — the CNN peer of mlpTrainStepModule (Phase 3, rest)
+-- § CNN train step — the CNN peer of mlpTrainStepModule
 --
 -- A full SGD step for the conv-net, every mathematical op proof-backed:
 --   forward  conv → relu → maxpool → flatten → dense (logits)
@@ -625,7 +625,7 @@ def cnnTrainStepModule (ic oc H W kH kW nClass : Nat) (lr : String) : String :=
   "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § BatchNorm / LayerNorm — the reduce/broadcast chapter (Phase 3 sweep)
+-- § BatchNorm / LayerNorm — the reduce/broadcast chapter
 --
 -- The repo's `bnForward` (Vec n → Vec n) normalizes over the feature axis:
 --   μ = Σx/N, σ² = Σ(x−μ)²/N, x̂ = (x−μ)·istd, istd = 1/√(σ²+ε), y = γx̂+β.
@@ -696,7 +696,7 @@ def bnBackModule (B n : Nat) (eps : String) : String :=
   s!"    return %dx : {tt [B,n]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § Softmax — the rank-1 chapter (Phase 3 sweep; the attention building block)
+-- § Softmax — the rank-1 chapter (the attention building block)
 --
 -- `softmax c z = exp(z)/Σexp(z)` (over the feature axis). Proven backward
 -- (`softmax_back_bridge`, rank-1): `dz = p ⊙ (dy − ⟨p, dy⟩)`, one reduction
@@ -734,7 +734,7 @@ def softmaxBackModule (B c : Nat) : String :=
   s!"    return %dz : {tt [B,c]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § Scaled dot-product attention — the apex (Phase 3 sweep, ViT core)
+-- § Scaled dot-product attention — the apex (ViT core)
 --
 -- `sdpa Q K V = softmax(QKᵀ/√d)·V`. Proven backward (sdpaBackQ/K/V_correct),
 -- step by step:  dV = wᵀ·dOut,  dWeights = dOut·Vᵀ,  dScaled =
@@ -786,7 +786,7 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
   s!"    return %dQ, %dK, %dV : {tt [n,d]}, {tt [n,d]}, {tt [n,d]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § Pointwise activations (Phase 3 sweep) — gelu, swish, sigmoid, relu6
+-- § Pointwise activations — gelu, swish, sigmoid, relu6
 --
 -- Each has a diagonal Jacobian, so its proven backward is `dy ⊙ act'(x)`
 -- (gelu/swish/sigmoid_back_bridge — a single multiply). Forward renders the
@@ -881,7 +881,7 @@ def geluBackM (m : Nat) : String :=
      s!"    %dx = stablehlo.multiply %dy, %gp : {tt [m]}\n    return %dx : {tt [m]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § Residual + Squeeze-Excite (Phase 3 sweep) — the fan-in chapters
+-- § Residual + Squeeze-Excite — the fan-in chapters
 --
 -- Residual `out = x + f(x)`: backward `dx = dy + f_back(dy)` — an `add`
 -- fan-in (here f = dense n→n, so dx = dy + dy·Wᵀ). SE `out = x ⊙ gate(x)`:
@@ -921,7 +921,7 @@ def seBackM (m : Nat) : String :=
      s!"    %dx = stablehlo.add %t1, %t2 : {tt [m]}\n    return %dx : {tt [m]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § ViT transformer block — the apex assembly (Phase 3, whole-net)
+-- § ViT transformer block — the apex assembly (whole-net)
 --
 -- `transformerBlock = MlpSublayer ∘ AttnSublayer`, each a residual:
 --   AttnSublayer x = x + Wo·SDPA(LN₁(x)·{Wq,Wk,Wv})   (+biases)
@@ -1137,7 +1137,7 @@ def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
      s!"    %dx = stablehlo.add %dx1, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § ResNet — the whole-network test case (Phase 3, deep assembly)
+-- § ResNet — the whole-network test case (deep assembly)
 --
 -- The repo's proven ResNet-style net (\texttt{cnnHasVJPAt}) is
 --   dense ∘ globalAvgPool ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem),
@@ -1279,7 +1279,7 @@ def resTowerBackModule (k C H W kH kW : Nat) (eps : String) : String :=
     (resTowerConsts C H W eps ++ fwd ++ bwd ++ s!"    return {dx} : {tt [1,C,H,W]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § ResNet train step — the full verified ResNet (Phase 3, capstone)
+-- § ResNet train step — the full verified ResNet (capstone)
 --
 -- stem(cbr) → k residual blocks → global-avg-pool → FC → softmax-CE, with the
 -- full backward computing dx AND every parameter gradient (conv weight grads
@@ -1414,7 +1414,7 @@ def resnetTrainStepModule (C H W kH kW nCls : Nat) (eps lr : String) : String :=
      s!"{ty4}, {ty4}, {f32}, {f32}, {f32}, {f32}, {tt [C,nCls]}, {tt [nCls]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § EfficientNet MBConv — the squeeze-excite inverted residual (Phase 3 sweep)
+-- § EfficientNet MBConv — the squeeze-excite inverted residual
 --
 -- The headline EfficientNet block, rendered end-to-end:
 --   expand(1×1 conv)→BN→swish → depthwise(k×k)→BN→swish
@@ -1610,7 +1610,7 @@ def mbconvBackModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
      s!"    return %dx : {tt [1,c,H,W]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § MobileNetV2 inverted residual — the linear-bottleneck block (Phase 3 sweep)
+-- § MobileNetV2 inverted residual — the linear-bottleneck block
 --
 --   expand(1×1 conv)→BN→relu6 → depthwise(k×k)→BN→relu6 → project(1×1 conv)→BN
 --     + x        (stride-1, cin=cout: identity skip; linear bottleneck — no
@@ -1711,7 +1711,7 @@ def invresBackModule (c cmid H W kHd kWd : Nat) (eps : String) : String :=
      s!"    return %dx : {tt [1,c,H,W]}\n")
 
 -- ════════════════════════════════════════════════════════════════
--- § ConvNeXt block — depthwise + LN + inverted MLP + layer scale (Phase 3 sweep)
+-- § ConvNeXt block — depthwise + LN + inverted MLP + layer scale
 --
 --   depthwise(7×7)→LN → expand(1×1, c→cExp)+b→gelu → project(1×1, cExp→c)+b
 --     → layerScale(γ ⊙) → + x      (identity skip; no post-add activation)
@@ -1824,7 +1824,7 @@ def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
 #eval IO.FS.writeFile "/tmp/mlp_fwd.mlir" (mlpFwdModule 2 4 3 3 2)
 #eval IO.FS.writeFile "/tmp/loss_cot.mlir" (lossCotModule 2 2)
 #eval IO.FS.writeFile "/tmp/mlp_train_step.mlir" (mlpTrainStepModule 2 4 3 3 2 "0.1")
--- CNN (Phase 3): conv forward + proof-backed conv backward, 1→2 ch, 4×4, 3×3.
+-- CNN: conv forward + proof-backed conv backward, 1→2 ch, 4×4, 3×3.
 #eval IO.FS.writeFile "/tmp/conv_fwd.mlir" (convFwdModule 1 1 2 4 4 3 3)
 #eval IO.FS.writeFile "/tmp/conv_back.mlir" (convBackModule 1 1 2 4 4 3 3)
 -- 2×2 max pool forward + proof-backed backward, 2 ch, 4×4 → 2×2.

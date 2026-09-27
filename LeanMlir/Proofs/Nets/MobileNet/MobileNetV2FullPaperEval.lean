@@ -185,7 +185,7 @@ namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-block-kind typed `SHlo` inference graphs + faithfulness
---   ⭐ `k` is the block INDEX, so the emitted names are `irSig`'s: `%We{k}`/`%ge{k}`/… and
+--   `k` is the block INDEX, so the emitted names are `irSig`'s: `%We{k}`/`%ge{k}`/… and
 --   `bnEvalSite`'s statistics `%b{k}enmu`/`%b{k}envar`/… — the committed artifact's, not the
 --   six-block eval graph's `%mue1`/`%vare1`.
 -- ════════════════════════════════════════════════════════════════

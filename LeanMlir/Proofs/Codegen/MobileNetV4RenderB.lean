@@ -184,7 +184,7 @@ structure UibFwdB where
   dn : String
   dr : String
   pc : String        -- project conv out (= project-BN input)
-  -- ⭐ SYNC-BN: each BN site's all-reduced packed `[μ ‖ σ²]` (`""` at one replica or when the
+  -- SYNC-BN: each BN site's all-reduced packed `[μ ‖ σ²]` (`""` at one replica or when the
   -- site is absent), read by its backward, its γ gradient and the handed-back running stats.
   qst : String := ""
   est : String := ""
@@ -371,7 +371,7 @@ structure Mnv4FwdRec where
   -- classifier WEIGHT gradient reads this (with dropout on the two differ; see the train step).
   cin : String
   last : String         -- the last block's output (= head conv input)
-  -- ⭐ SYNC-BN: the stem's and the two head BNs' all-reduced packed stats (`""` at one replica).
+  -- SYNC-BN: the stem's and the two head BNs' all-reduced packed stats (`""` at one replica).
   sst : String := ""
   h1st : String := ""
   hst : String := ""
@@ -384,7 +384,7 @@ deriving Inhabited
     `scripts/parity/mnv4_forward_tie.py`). -/
 def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
     (replicas : Nat := 1) (sync : Bool := false)
-    -- ▶ `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.
+    -- `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.
     (f : Nat := 7) : StateM Proofs.StableHLO.EmitS StemFwdB := do
   let zx    : Vec (B*(3*(2*(16*f))*(2*(16*f)))) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -419,11 +419,11 @@ structure Mnv4HeadFwdB where
     same parameter count: batch BN and relu do not commute with pooling. -/
 def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .train)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
-    -- ▶ CLASSIFIER DROPOUT (`%do`, the driver's inverted per-element mask) between the head relu
+    -- CLASSIFIER DROPOUT (`%do`, the driver's inverted per-element mask) between the head relu
     -- and the dense, where timm's `drop_rate` and the JAX reference put it. At `false` no `pretty`
     -- call happens, so every existing render is byte-identical.
     (cd : Bool := false)
-    -- ▶ `f`, the final feature side the head runs at before the pool (7 at a 224 input).
+    -- `f`, the final feature side the head runs at before the pool (7 at a 224 input).
     (f : Nat := 7) :
     StateM Proofs.StableHLO.EmitS Mnv4HeadFwdB := do
   let z7     : Vec (B*(256*f*f)) := fun _ => 0
@@ -481,13 +481,13 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
     activation the backward reads, and the alternative — a second copy of the chain inside the
     train step — is the two-readings defect this file exists to avoid. -/
 def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
-    -- ▶ TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
+    -- TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
     (bf16 : Bool := false)
-    -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4), trailing and defaulted off likewise.
+    -- SYNC-BN, trailing and defaulted off likewise.
     (replicas : Nat := 1) (sync : Bool := false)
-    -- ▶ classifier dropout, train step only (`mnv4HeadFwdB`); defaulted off likewise.
+    -- classifier dropout, train step only (`mnv4HeadFwdB`); defaulted off likewise.
     (cd : Bool := false)
-    -- ▶ `f`, the FINAL feature side: 7 at the 224 input every committed artifact is rendered at,
+    -- `f`, the FINAL feature side: 7 at the 224 input every committed artifact is rendered at,
     -- 8 at 256 (timm's test size for Conv-M r224). Every other side is a multiple of it — input
     -- 32f, stem 16f, fused 8f, the block rows' `h` scaled by f/7 — so the default is byte-identical.
     -- Eval renders only: the proofs and every train step stay at 224.
@@ -560,7 +560,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
 def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
     (slug : String := "mnv4") (vSuffix : String := "")
-    -- ▶ the input side (224, or timm's test size); must be a multiple of 32 (the final side is s/32)
+    -- the input side (224, or timm's test size); must be a multiple of 32 (the final side is s/32)
     (s : Nat := 224) : String :=
   let sigList := mnv4SigList nClasses ++ mnv4StatSigList
   let inSig := s!"%x: {ty [B, 3*s*s]}, " ++
@@ -813,7 +813,7 @@ private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     shim checks the entry name and refuses a mismatch outright rather than running the wrong graph.
     `B = 32` is deliberately unsuffixed so the Imagenette artifact keeps a stable name. -/
 def mnv4AdamVariant (B replicas : Nat)
-    -- ⚠⚠ `bf16` MUST reach here and not merely the block renderers: the entry NAME derives from
+    -- `bf16` MUST reach here and not merely the block renderers: the entry NAME derives from
     -- this, so a flag that reaches the emission but not the name writes `…bf16_train_step.mlir`
     -- declaring `@…_train_step` inside and the driver refuses at load ("entry mismatch").
     (bf16 : Bool := false) : String :=
@@ -867,19 +867,19 @@ def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (em
     same carve-out `resnet34`/`mobilenetv2` take. -/
 def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (slug : String := "mnv4")
-    -- ⭐⭐ **bf16**, TRAILING and defaulted so every existing render is byte-identical (gate 1).
+    -- **bf16**, TRAILING and defaulted so every existing render is byte-identical.
     -- MNv4's UIB blocks carry BOTH depthwise families: the stride-1 `depthwise` and the
     -- SYMMETRIC-pad `depthwiseStrided` — the latter is new here (MNv2 used the XLA-`SAME` one),
     -- and its three bf16 twins are the only ops this net needed that MobileNetV2 did not build.
     (bf16 : Bool := false)
-    -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
+    -- `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate only (`imagenet-syncbn-check`'s FORMULATION column). Never a committed artifact.
     (forceSync : Bool := false)
-    -- ▶▶ **THE RECIPE AXES** (planning/archive/mnv4_half_pair.md), all trailing and defaulted so every
-    -- committed artifact re-renders byte-identically. `opt = none` is the committed AdamW tail
-    -- (`adamOne` + `adamWConsts`); `some o` hands the 233 gradients to `optAllParams`, the optimizer
-    -- stage ResNet-34/50 share (accumulation, EMA shadow, timm `no_weight_decay`), imported rather
-    -- than copied. `cd` is classifier dropout at the driver's `%do` mask.
+    -- **THE RECIPE AXES**, all trailing and defaulted so every committed artifact re-renders
+    -- byte-identically. `opt = none` is the committed AdamW tail (`adamOne` + `adamWConsts`);
+    -- `some o` hands the 233 gradients to `optAllParams`, the optimizer stage ResNet-34/50 share
+    -- (accumulation, EMA shadow, timm `no_weight_decay`), imported rather than copied. `cd` is
+    -- classifier dropout at the driver's `%do` mask.
     (opt : Option R34Opt := none) (ema : Bool := false) (wdExclude : Bool := false)
     (wdStr : String := "") (cd : Bool := false) : String :=
   let sync : Bool := replicas > 1 || forceSync
@@ -888,10 +888,10 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward: THE SHARED CHAIN, not a second copy ═══
-    -- ⭐⭐ `@mnv4_fwd`, `@mnv4_fwd_eval` and this train step are all `mnv4FwdChainB`. The peers
+    -- `@mnv4_fwd`, `@mnv4_fwd_eval` and this train step are all `mnv4FwdChainB`. The peers
     -- inline a second transcription of the block table into their train step and rely on eyes to
-    -- keep the two in step; here there is only one, so the train/score divergence §3d(b) measured
-    -- in MobileNetV2 — and that `regen_verified_mlir.sh check` reported green — cannot arise.
+    -- keep the two in step; here there is only one, so a train/score divergence — which
+    -- `regen_verified_mlir.sh check` reports green — cannot arise.
     let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync cd
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
@@ -929,7 +929,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     timm's order: dense → conv_head (960→1280 at 1×1) → GAP back → cn_960 (256→960 at 7×7). ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    -- ⚠⚠ `fwd.cin`: the classifier weight gradient reads the DENSE'S INPUT, which under classifier
+    -- `fwd.cin`: the classifier weight gradient reads the DENSE'S INPUT, which under classifier
     -- dropout is the dropped activation (`Mnv4FwdRec` carries no pre-dropout head name).
     let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) fwd.cin z1280b (.operand nDy zNCp))
     let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
@@ -984,7 +984,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     rather than from an independent 52-entry table — a misaligned stat slot is SILENT, since
     --     the arities still match and the wrong layer's statistics flow into the wrong
     --     `@mnv4_fwd_eval` slot.
-    --     ⭐ Under sync-BN they are read off the all-reduced packed vector (`bnStatsMeanB` /
+    --     Under sync-BN they are read off the all-reduced packed vector (`bnStatsMeanB` /
     --     `bnStatsVarB`), so the host EMAs the GLOBAL batch statistics rather than replica 0's. ═══
     let bnStat (oc hh : Nat) (xn st : String) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let zb : Vec (B*(oc*(hh*hh))) := fun _ => 0
@@ -997,7 +997,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         let (cM, nM) ← pretty B (.bnStatsMeanB (oc := oc) (.operand st zst))
         let (cV, nV) ← pretty B (.bnStatsVarB (oc := oc) (.operand st zst))
         pure (cM ++ cV, [nM, nV])
-    -- One UIB block's stats in `uibStatSig` order. ⚠ `eh` is the spatial size of the pre-DW and
+    -- One UIB block's stats in `uibStatSig` order. `eh` is the spatial size of the pre-DW and
     -- expand BNs: `2h` in a strided block (both run before the post-DW's downsample), `h` otherwise.
     let uibStats (b : UibSpec) (f : UibFwdB) : StateM Proofs.StableHLO.EmitS (String × List String) := do
       let mid := b.ic * b.expand
@@ -1053,8 +1053,8 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the same carve-out
     -- `resnet34`/`mobilenetv2`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
-    -- cotangent's soft target; §2b shipped plain CE against a smoothed cotangent on R34 and only
-    -- the numeric tie caught it.
+    -- cotangent's soft target; plain CE against a smoothed cotangent passes every structural check
+    -- and only the numeric tie catches it.
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -1117,7 +1117,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv4SigList nClasses
   let statSig := String.intercalate ", " (mnv4StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  -- ⚠ EMA's region suffix is `ema`, `optOne`'s spelling (the ResNet family's; see its note).
+  -- EMA's region suffix is `ema`, `optOne`'s spelling (the ResNet family's; see its note).
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList accOn ema (emaSuf := "ema") ++
     ", " ++ statSig ++ (if cd then s!", {doName}: {ty [B, 1280]}" else "") ++
     s!", %onehot: {ty [B, nClasses]}"
@@ -1146,13 +1146,13 @@ end Proofs.StableHLO
 -- Every strided row has a post-DW to carry the stride (`uibFwdStridedB`, timm's `dw_mid` rule).
 #guard Proofs.StableHLO.mnv4Blocks.all (fun b => !b.stride2 || b.postDWk > 0)
 
--- ⭐⭐ **THE STAT-ALIGNMENT GATE, and it is the strong one.** Every conv in this net is
+-- **THE STAT-ALIGNMENT GATE, and it is the strong one.** Every conv in this net is
 -- BN-followed, so the BN stat slots must be, in order, two per conv weight at that conv's OUTPUT
 -- channel count — which is the kernel's first dimension for a regular conv `[oc,ic,kH,kW]` AND for
 -- a depthwise `[c,1,k,k]` alike. This pins the stat list's LENGTH, WIDTHS and ORDER against the
 -- parameter list, so the two `k = 0` dispatches (`uibSig`'s and `uibStatSig`'s) cannot diverge.
 --
--- ⚠ It is worth having as a `#guard` rather than a comment because a misaligned stat slot is
+-- It is worth having as a `#guard` rather than a comment because a misaligned stat slot is
 -- SILENT at run time: the arities still match, and the wrong layer's statistics simply flow into
 -- the wrong `@mnv4_fwd_eval` slot. Nothing downstream would fail — the net would just score
 -- slightly wrong, forever.
@@ -1168,10 +1168,10 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 == "adam64"
 
 -- ── The three Imagenette artifacts. B=32, nClasses=10, ε=1e-5 — the tier's shape. ──────────────
--- ⭐ All three come from ONE chain (`mnv4FwdChainB`, switched by `BnMode`) and one block table, so
--- the train/score split that §3d(b) found in MobileNetV2 — a per-example forward paired with a
--- batch-BN Adam train step, green under `regen_verified_mlir.sh check` because that script only
--- ever pairs a forward with the SGD step — has nowhere to live here.
+-- All three come from ONE chain (`mnv4FwdChainB`, switched by `BnMode`) and one block table, so a
+-- train/score split — a per-example forward paired with a batch-BN Adam train step, green under
+-- `regen_verified_mlir.sh check` because that script only ever pairs a forward with the SGD step —
+-- has nowhere to live here.
 
 #eval IO.FS.writeFile "verified_mlir/mnv4_fwd.mlir"
   (Proofs.StableHLO.mnv4FwdFaithfulV 32 10 "1.0e-5")
@@ -1180,37 +1180,33 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 32 10 "1.0e-5")
 
 -- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
--- Target: `historical/RESULTS.md`'s 84.58%, the baseline path's number for this block table
--- (`planning/archive/mnv4_verified.md` phase 4). ⚠ Unlike MobileNetV2's, that number belongs to the JAX
--- baseline and does NOT move when this render changes — the stem's `convStridedXla` was chosen so
--- the two are the same net (§3e), and the forward tie measured 1.423e-06 against it unpatched.
+-- Target: `historical/RESULTS.md`'s 84.58%, the baseline path's number for this block table.
+-- Unlike MobileNetV2's, that number belongs to the JAX baseline and does NOT move when this
+-- render changes.
 #eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 32 10 "1.0e-5")
 
 -- ── The 1000-class ImageNet artifacts, for `mnv4ImagenetVerified` (slug `mnv4in`). ─────────────
 -- Same renderer, same block table, same chain as the three above — the ONLY deltas are
 -- `nClasses` 10 → 1000, B 32 → 64 and the slug, which is why this is three `#eval`s and not a new
--- proof chain. Exactly how `resnet50in` was added on top of `resnet50`.
+-- proof chain. Exactly how `resnet50in` sits on top of `resnet50`.
 --
--- ⭐ B = 64 PER DEVICE, so `mnv4AdamVariant 64 1` is `"adam64"` and the artifact, the
+-- B = 64 PER DEVICE, so `mnv4AdamVariant 64 1` is `"adam64"` and the artifact, the
 -- `@mnv4in_adam64_train_step` entry point and the driver's default `LEAN_MLIR_VARIANT` are one
 -- string. Four replicas of 64 give the global 256 the other ImageNet drivers use.
 --
--- ⚠ The forwards are rendered at B = 64 too, because the driver scores eval through them at the
+-- The forwards are rendered at B = 64 too, because the driver scores eval through them at the
 -- train batch. Any other batch needs re-rendered forwards or `LEAN_MLIR_SKIP_EVAL=1`, and would
 -- otherwise be a shape error at the first invoke.
 --
--- ✅ **THE DP PAIR IS RENDERED AND TIED**, as of 2026-08-27 — see the block below. This comment
--- used to say no DP variant was rendered, on the grounds that nothing had tied MNv4's collectives
--- and an untied artifact looks as trustworthy as the rest. Both halves of that tie now exist:
--- `tests/TestMnv4DpCheck.lean` (duplicated batch) and `imagenet-syncbn-check mnv4` (split batch;
--- until the sync-BN swap of 2026-09-21, the `mnv4in` row in `tests/TestShardCheck.lean`).
+-- ✅ **THE DP PAIR IS RENDERED AND TIED** — see the block below. Both halves of that tie exist:
+-- `tests/TestMnv4DpCheck.lean` (duplicated batch) and `imagenet-syncbn-check mnv4` (split batch).
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd.mlir"
   (Proofs.StableHLO.mnv4FwdFaithfulV 64 1000 "1.0e-5" "mnv4in")
 
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval.mlir"
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in")
--- ▶ timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
+-- timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
 -- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8, entry
 -- `@mnv4in_fwd_eval_s256` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
 -- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256`. Training and
@@ -1223,27 +1219,23 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in")
 
--- ⭐⭐ **The bf16 peer** — `adam64bf16`, the same graph with every convolution AND every depthwise
+-- **The bf16 peer** — `adam64bf16`, the same graph with every convolution AND every depthwise
 -- replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** result, then a convert back to f32.
 -- BN, the loss, AdamW and the master weights stay f32.
 --
--- ⚠ SINGLE-DEVICE. Its 4-replica peer is `adamdp64bf16` in the block below, and it is tied —
--- ⭐ the precision axis did NOT inherit the replica axis's tie, it was given its own:
+-- SINGLE-DEVICE. Its 4-replica peer is `adamdp64bf16` in the block below, and it is tied —
+-- the precision axis does NOT inherit the replica axis's tie, it has its own:
 -- `DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 mnv4-dp-check` is a separate run, and it
--- comes back bit-exact on all 9,715,512 floats. ▶ A probe off THIS artifact is still a 1-GPU
+-- comes back bit-exact on all 9,715,512 floats. A probe off THIS artifact is still a 1-GPU
 -- number and must not be compared to R34/R50/MNv2's 4×bs64 figures without saying so.
 --
--- ⭐ MNv4 is the first net to use the SYMMETRIC-pad `depthwiseStrided` family in bf16 (MNv2 used
+-- MNv4 is the first net to use the SYMMETRIC-pad `depthwiseStrided` family in bf16 (MNv2 used
 -- the XLA-`SAME` one). Its three twins are the only ops this net needed that MobileNetV2 did not
 -- already build — 47 call sites, 3 new ops.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in" true)
 
--- ✅ **THE 4-REPLICA PAIR, TIED 2026-08-27 — the caveat that stood here is lifted.**
--- It read: "nothing has tied MNv4's collectives … these exist for ONE purpose, to COST this net at
--- the 4×bs64 geometry … ⛔ do not train off these … what would lift the caveat is a DP tie for
--- MNv4's collectives, the way R34/R50/MNv2/ConvNeXt have one." That tie was then built, exactly as
--- specified, and both halves of it are green:
+-- ✅ **THE 4-REPLICA PAIR, TIED.** Both halves of MNv4's DP tie are green:
 --
 --   `mnv4-dp-check`         (duplicated batch, `all_reduce(add)/4 = g`)
 --        fp32 — bnstat BIT-EXACT 67,904/67,904, gradient norm-rel 8.45e-7
@@ -1251,20 +1243,20 @@ end Proofs.StableHLO
 --   `shard-check mnv4in`    (asymmetric batch, `DP([x0..x3]) = mean of 4 single steps`)
 --        TEST 1.10e-6 against a CONTROL of 2.00 — 1.8e6× apart
 --
--- ⭐ And both went RED against a sum-not-mean render (every divisor 4.0 → 1.0): the shard TEST
+-- And both went RED against a sum-not-mean render (every divisor 4.0 → 1.0): the shard TEST
 -- lands on **3.000000**, which is `|4g − g| / |g|` exactly, so the gate reproduces the arithmetic
 -- its failure mode implies rather than merely returning a big number.
--- ▶ `runs/2026-08-27-mnv4-dp-shard-gates/` holds the logs, the controls and a `run.sh`.
--- ⚠ Four GPUs, forced: these are the only DP renders MNv4 has, and there is no 2-replica peer, so
+-- `runs/2026-08-27-mnv4-dp-shard-gates/` holds the logs, the controls and a `run.sh`.
+-- Four GPUs, forced: these are the only DP renders MNv4 has, and there is no 2-replica peer, so
 -- `PJRT_REPLICAS=2` hits the shim's replica-count guard rather than degrading to a 2-way run.
 --
--- ⭐⭐ **SYNC-BN SINCE 2026-09-21** (`planning/global_bn_verified.md` §3.4): every BN layer
--- all-reduces its statistics — 77 × 3 = 231 collectives beside the 233 gradient ones — so a DP step
--- IS the single-device step at batch 256 (`MobileNetV4SyncTieB.mnv4_net_syncTiedB`, the forward
--- `StableHLO.mnv4FwdGraphSyncFull_shard`). That falsifies the asymmetric-batch identity above by
--- design, so `shard-check mnv4in` is retired; `imagenet-syncbn-check mnv4` is the split-batch gate
--- (4×64 against 1×256, both precisions), and `mnv4-dp-check`'s gradient bound is 1e-2 / 5e-2
--- (sync-BN backward against the two-pass one). `runs/2026-09-21-syncbn-r50-mnv4/` has the logs.
+-- **SYNC-BN**: every BN layer all-reduces its statistics — 77 × 3 = 231 collectives beside the 233
+-- gradient ones — so a DP step IS the single-device step at batch 256
+-- (`MobileNetV4SyncTieB.mnv4_net_syncTiedB`, the forward `StableHLO.mnv4FwdGraphSyncFull_shard`).
+-- That falsifies the asymmetric-batch identity above by design, so `imagenet-syncbn-check mnv4` is
+-- the split-batch gate (4×64 against 1×256, both precisions), and `mnv4-dp-check`'s gradient bound
+-- is 1e-2 / 5e-2 (sync-BN backward against the two-pass one). `runs/2026-09-21-syncbn-r50-mnv4/`
+-- has the logs.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in")
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64bf16_train_step.mlir"
@@ -1275,20 +1267,20 @@ end Proofs.StableHLO
 #guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
 
--- ⭐⭐ **THE JAX REFERENCE'S RECIPE, on the verified path** (planning/archive/mnv4_half_pair.md): AdamW with
--- 8 accumulated micro-batches of 4 × 128 (effective 4096, the reference's `512 × accum 8`, and a
--- sync-BN group of 512 = its micro-batch), wd 0.05 off BN γ/β and biases (timm `no_weight_decay`),
--- an EMA shadow (warmup-corrected by the driver), classifier dropout at the driver's mask, bf16.
+-- **THE JAX REFERENCE'S RECIPE, on the verified path**: AdamW with 8 accumulated micro-batches of
+-- 4 × 128 (effective 4096, the reference's `512 × accum 8`, and a sync-BN group of 512 = its
+-- micro-batch), wd 0.05 off BN γ/β and biases (timm `no_weight_decay`), an EMA shadow
+-- (warmup-corrected by the driver), classifier dropout at the driver's mask, bf16.
 -- The LR (0.004), the 5-epoch warmup, the cosine length and the eval cadence are the driver's.
--- ▶ Eval stays on `mnv4in_fwd_eval.mlir` at 64: the driver reads the eval batch off that artifact.
--- ⚠ The ties (`MobileNetV4SyncTieB`) are gradient-node ties with the loss cotangent a binder, so
+-- Eval stays on `mnv4in_fwd_eval.mlir` at 64: the driver reads the eval batch off that artifact.
+-- The ties (`MobileNetV4SyncTieB`) are gradient-node ties with the loss cotangent a binder, so
 -- they are optimizer-agnostic; the accumulator, the EMA line and the `%wdz` operand are existing ops
 -- (`momVNextF`, `adamMNextF`). The classifier dropout is NOT in their statement (stated at the
 -- dropout-free net), as for EfficientNet's `do` renders.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 4 "mnv4in" true
     (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
--- ▶ its single-device peer, `mnv4-dp-check`'s reference (duplicated batch, 4 × 128 against 1 × 128)
+-- its single-device peer, `mnv4-dp-check`'s reference (duplicated batch, 4 × 128 against 1 × 128)
 #eval IO.FS.writeFile "verified_mlir/mnv4in_emaacc8x128wxdowd005bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 1 "mnv4in" true
     (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
@@ -1296,11 +1288,11 @@ end Proofs.StableHLO
   "emaaccdp8x128wxdowd005bf16"
 #guard Proofs.StableHLO.mnv4RecipeVariant 64 4 true none false false "" false == "adamdp64bf16"
 
--- ⭐ The bf16 marker, and the wiring that actually breaks: the entry name derives from
+-- The bf16 marker, and the wiring that actually breaks: the entry name derives from
 -- `mnv4AdamVariant`, so `bf16` must reach THAT call and not merely the block renderers.
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 true == "adam64bf16"
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 == "adam64"
--- ▶ And the slug must not trip the DRIVER's substring variant predicates. `cdOn` tests for "do".
+-- And the slug must not trip the DRIVER's substring variant predicates. `cdOn` tests for "do".
 #guard !"adam64bf16".contains "do"
 #guard !"adam64bf16".contains "acc"
 #guard !"adam64bf16".startsWith "ema"

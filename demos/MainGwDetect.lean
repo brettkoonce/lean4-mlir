@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! A CNN against the matched filter on LIGO strain — planning/gw_detection_demo.md §4.
+/-! A CNN against the matched filter on LIGO strain.
 
     Two-channel (H1, L1) 64 × 128 constant-Q spectrograms of 2-s windows, half of
     them carrying an injected binary-black-hole chirp, from `scripts/datasets/preprocess_gw.py`. The
@@ -268,7 +268,7 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
-  -- ⚠ sized from the initialised buffer, not `spec.totalParams`: the two disagree on SE
+  -- sized from the initialised buffer, not `spec.totalParams`: the two disagree on SE
   -- nets (totalParams counts squeeze-excite off the block input, `paramShapes` — which
   -- `heInitParams`, `shapesBA` and the emitted graph all follow — off the expanded width;
   -- 4.0M vs 7.1M for B0), and a wrong nP reads the loss from inside a weight tensor.

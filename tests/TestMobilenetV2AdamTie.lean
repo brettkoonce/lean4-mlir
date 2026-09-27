@@ -3,7 +3,6 @@ import LeanMlir.Verified.Train
 
 /-! # `@mobilenetv2_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2f, step 4 — the last net on the AdamW scorecard.
 `Proofs/Codegen/MobileNetV2RenderB.lean`'s `mobilenetv2AdamTrainStepFaithfulB` renders the same
 train step the hand-written emitter in `tests/TestMobilenetV2TrainPC.lean` does — the one
 `mobilenetv2-verified-adam` trains on. This harness is what licenses swapping them; run it BEFORE
@@ -16,7 +15,7 @@ and here the arg NAMES agree too), so both take the same `[θ|m|v | lr,bc1,bc2 |
 **Why a numeric tie and not a text diff.** Same function, different graph. The certified render
 emits 13,701 ops against 8,844 because `pretty` has no CSE — `bnBatchF`, `bnBatchBack` and
 `bnGammaGradB` each rebuild x̂, which is why `rsqrt` is 156 = 52×3 against the hand-written 52.
-(§2b-bis measured XLA collapsing exactly this on R34, 108 → 36, at no run-time cost.) The cotangents
+(XLA collapses exactly this on R34, 108 → 36, at no run-time cost.) The cotangents
 are composed differently too: the hand-written render fuses label smoothing into one `[B,10]` block
 while the kit composes `softmaxRow → subB → scaleB → addVB → shiftB → divConstB`. Only running both
 and comparing every returned float settles it.
@@ -25,16 +24,16 @@ and comparing every returned float settles it.
 σ² of all **52** BN inputs — which depend on the **forward alone**. That `bnstat` region pins the
 whole forward chain (stem, b1's two BN layers, all 16 three-BN inverted-residual blocks, and the
 head) to the last bit, so a forward disagreement and a backward one are separable in one run. ViT
-had no such region and had to lean on `%loss`.
+has no such region and leans on `%loss`.
 
-**It also gates SPREAD, not just magnitude** (§2f-bis). ConvNeXt's tie showed that a magnitude gate
+**It also gates SPREAD, not just magnitude.** A magnitude gate
 alone waves through a real cotangent bug: floating-point conditioning is LOCAL to the
 ill-conditioned op, while a different function is GLOBAL. So the number of parameters whose gradient
 moves is gated too — on a correct render against a bit-exact forward it must be **0 of 210**.
 
 `%loss` is gated rather than merely reported. It is report-only, on no gradient path, and covered by
-no theorem — exactly the configuration in which §2b shipped plain CE against a smoothed-CE
-cotangent, caught only by the numeric tie.
+no theorem — exactly the configuration in which plain CE against a smoothed-CE cotangent is
+caught only by a numeric tie.
 
     lake build mobilenetv2-adam-tie
     .lake/build/bin/mobilenetv2-adam-tie [refRender.mlir] [candRender.mlir]
@@ -48,8 +47,8 @@ Exits non-zero if the renders disagree or the comparison is degenerate.
 def main (args : List String) : IO Unit := do
   let handWritten := "verified_mlir/mobilenetv2_adam_train_step.mlir"
   let certified   := "verified_mlir/mobilenetv2_adam_train_step_b.mlir"
-  -- Pre-swap the certified render lives at its own path, so the no-argument form IS the migration
-  -- check. Post-swap that path is gone and the default degrades to an A-vs-A determinism run —
+  -- While the certified render lives at its own path, the no-argument form IS the migration
+  -- check. When that path is absent the default degrades to an A-vs-A determinism run —
   -- still worth having (it re-establishes the floor the gate depends on), but say so out loud.
   let certExists ← System.FilePath.pathExists certified
   let (pathA, pathB) := match args with
@@ -96,9 +95,8 @@ check. Pass the retired render as the first argument for that."
 
   -- A tie must NEVER reuse a cached binary. `compileVmfb` keys on **mtime**, not on the source
   -- path, so running this harness twice with different candidates under the same tag silently
-  -- reuses the FIRST candidate's `.vmfb` and reports the second as a perfect match — observed while
-  -- building §2e's negative controls, where it produced a bit-exact "pass" for a render that had
-  -- never been compiled. Delete before compiling.
+  -- reuses the FIRST candidate's `.vmfb` and reports the second as a perfect match — a bit-exact
+  -- "pass" for a render that was never compiled. Delete before compiling.
   let runOne (path tag : String) : IO ByteArray := do
     let vmfb := s!".lake/build/mnv2_adam_tie_{tag}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
@@ -134,7 +132,7 @@ check. Pass the retired render as the first argument for that."
   -- ── per REGION ────────────────────────────────────────────────────────────────────────────
   -- `bnstat` depends ONLY on the forward (batch μ/var of all 52 BN inputs), so it separates a
   -- forward disagreement from a backward one in a single run. `m' = β₁·m + (1−β₁)·g` off a shared
-  -- `m`, so the `m` region IS the gradient. θ' is scale-free under Adam (§3: a near-zero-gradient
+  -- `m`, so the `m` region IS the gradient. θ' is scale-free under Adam (a near-zero-gradient
   -- coordinate flips sign on a 1-ULP difference and moves a full ±lr), so θ' is reported, never
   -- gated. Errors are norm-relative (max|a−b| / max|a|) because a per-coordinate ratio on a
   -- near-zero gradient entry is meaningless.
@@ -172,7 +170,7 @@ check. Pass the retired render as the first argument for that."
     IO.println s!"    {nm}: max|a-b| = {ra}, max|a| = {rm}, norm-rel = {nr}, \
 bit-exact {exact}/{hi-lo}"
 
-  -- ── per-PARAMETER localisation over `m` — this is the SPREAD measurement (§2f-bis) ──
+  -- ── per-PARAMETER localisation over `m` — this is the SPREAD measurement ──
   -- Naming the layer beats one global max, and the COUNT is the load-bearing number: a
   -- conditioning artefact is local to one ill-conditioned parameter, a wrong function moves
   -- almost all of them (ConvNeXt: real tie 1/180, reorder control 6/180, perturbed cotangent
@@ -208,10 +206,10 @@ bit-exact {exact}/{hi-lo}"
   -- 1. the FORWARD must be BIT-EXACT. `bnstat` is the batch μ/var of all 52 BN inputs, so it pins
   --    the entire forward chain. Any real mis-wiring lands here as a hard failure rather than a
   --    tolerance argument — and it also catches a BN running-stat slot wired to the wrong layer,
-  --    which the arity check cannot see (§2e: a misaligned slot is otherwise SILENT).
-  -- 2. `%loss` must agree. Report-only, no theorem, no gradient path — §2b's standing reminder.
-  -- 3. the backward must agree NORM-relative, never per-coordinate (handoff §3).
-  -- 4. the SPREAD must be zero (§2f-bis) — magnitude alone passes a real cotangent bug.
+  --    which the arity check cannot see (a misaligned slot is otherwise SILENT).
+  -- 2. `%loss` must agree. Report-only, no theorem, no gradient path.
+  -- 3. the backward must agree NORM-relative, never per-coordinate.
+  -- 4. the SPREAD must be zero — magnitude alone passes a real cotangent bug.
   if !fwdExact then
     IO.eprintln s!"TIE FAILED: the forward differs — `bnstat` (batch μ/var of all \
 {net.bnChannels.size} BN inputs) is not bit-exact ({fwdBad} of {nBnStats} statistics differ, \

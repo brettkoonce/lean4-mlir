@@ -3,15 +3,15 @@ import LeanMlir.Verified.Train
 
 /-! # cifar8 data-parallel EXACT check — 2×128 + all_reduce vs 1×256
 
-`planning/archive/xla_pjrt_handoff.md` §2b-quater. This is the gate that pins the **semantics** of the
-collective carve-out, and it is the only one that can: cifar8 has **no BatchNorm**, so the loss is a
-plain mean over examples and the batch decomposition is an identity,
+This is the gate that pins the **semantics** of the collective carve-out, and it is the only one
+that can: cifar8 has **no BatchNorm**, so the loss is a plain mean over examples and the batch
+decomposition is an identity,
 
     (1/2)·[ (1/128)·Σ_A + (1/128)·Σ_B ]  =  (1/256)·Σ_{A∪B}
 
 so a correct data-parallel step must reproduce the single-device step at the global batch to fp
 rounding. **ResNet-34 cannot be checked this way** — BN normalises per replica, so there
-N×b ≠ 1×(N·b) *by design* (§10.3b) and no exact tie exists. Hence the ladder: pin the collective
+N×b ≠ 1×(N·b) *by design* and no exact tie exists. Hence the ladder: pin the collective
 here, then use it at R34 scale where only structural checks are available.
 
 Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
@@ -23,20 +23,19 @@ Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
     scripts/det_shim.sh /tmp/detshim
     LD_LIBRARY_PATH=/tmp/detshim PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check
 
-⚠⚠ **`det_shim.sh` is REQUIRED here, and the gate cannot tell you so.** This compares two
+**`det_shim.sh` is REQUIRED here, and the gate cannot tell you so.** This compares two
 DIFFERENT HLO programs (1×256 against 2×128), so XLA autotuning is free to pick different
 reduction kernels for each, and it does: without the shim the gated `m` region lands anywhere in
 0.0007–0.0034 across identical invocations — 7× to 34× over the 1e-4 threshold, and *red every
 time*, for a reason that has nothing to do with the collective. Under
 `--xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true` it is a reproducible **0.000003**.
 The same requirement is documented on `tests/TestDropPathTie.lean`, whose gate B compares two
-different programs for the same reason; it was simply never written down here. Measured
-2026-09-02.
+different programs for the same reason.
 
 Needs **two** GPUs and the XLA/PJRT backend (`mlpTrainStepVDP` is XLA-only; the IREE build raises
 rather than silently running single-device).
 
-**Gate on `m`, not `θ`** (§3): Adam's update is scale-free, so a near-zero-gradient coordinate flips
+**Gate on `m`, not `θ`**: Adam's update is scale-free, so a near-zero-gradient coordinate flips
 sign on a 1-ULP difference and moves a full ±lr. `m' = β₁·m + (1−β₁)·g` off a shared `m`, so a
 disagreement there IS a gradient disagreement, scaled by (1−β₁).
 
@@ -130,7 +129,7 @@ bit-exact {exact}/{hi-lo}{note}"
     IO.Process.exit 1
 
   -- The decomposition is EXACT in exact arithmetic, so the only budget is fp reassociation:
-  -- summing 256 contributions on one device vs 128+128 then averaging. §2c measured 1.015e-06 for
+  -- summing 256 contributions on one device vs 128+128 then averaging. 1.015e-06 was measured for
   -- this comparison with the hand-written emitter; 1e-4 leaves two orders of headroom while still
   -- failing hard on a wrong collective (no collective at all would show ~0.5, a sum-not-mean ~1.0).
   if worstGated > 1e-4 then

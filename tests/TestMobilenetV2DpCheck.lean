@@ -5,18 +5,17 @@ import LeanMlir.Verified.Train
 
 The mnv2 peer of `tests/TestEfficientNetDpCheck.lean`, and gated by the same **exact** identity
 rather than a tolerance argument. `verified_mlir/mobilenetv2_adamdp_train_step.mlir` inserts one
-`all_reduce(add)/N` per parameter between the certified gradient and the certified AdamW triple
-(handoff §2b-quater's pattern). That collective is a **trusted carve-out** — emitted text, outside
+`all_reduce(add)/N` per parameter between the certified gradient and the certified AdamW triple.
+That collective is a **trusted carve-out** — emitted text, outside
 every faithfulness theorem — so it needs its own numeric check.
 
 **The exact identity used here, and why BatchNorm does not spoil it.** Give both replicas the
-**same** 32 examples. Since 2026-09-21 the DP render's BatchNorm is synchronised
-(`planning/global_bn_verified.md` §3.3): each BN layer all-reduces its statistics, and the mean of
-two identical per-replica statistics is that statistic, so both replicas normalise by exactly the
-single-device batch's statistics; each therefore computes the same gradient `g`, and
-`all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
-The data-parallel step must reproduce the **single-device** step on that batch, output for output
-— the forward bit-exact; the gradient to the gap between the sync-BN graph's f32 arithmetic and the
+**same** 32 examples. The DP render's BatchNorm is synchronised: each BN layer all-reduces its
+statistics, and the mean of two identical per-replica statistics is that statistic, so both replicas
+normalise by exactly the single-device batch's statistics; each therefore computes the same gradient
+`g`, and `all_reduce(add)/2` returns `(g + g)/2 = g`. The mean is an identity on a duplicated batch.
+The data-parallel step must reproduce the **single-device** step on that batch, output for output —
+the forward bit-exact; the gradient to the gap between the sync-BN graph's f32 arithmetic and the
 two-pass graph's (see the gradient bound below).
 
 The SPLIT batch — 2×32 against 1×64, the identity sync-BN exists for — is `*-syncbn-check`'s gate.
@@ -26,30 +25,28 @@ statistics (52 layers), so it has a forward-only `bnstat` region. On a duplicate
 must come back **bit-exact** — every replica saw the same data, so any difference there is the DP
 path corrupting the forward, which no gradient tolerance would have caught.
 
-Two failure modes it separates, both of which have actually happened in this repo:
+Two failure modes it separates:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
-* **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1, five
-  orders above the gate. §2b-quater and §2e-bis each verified exactly that by breaking the divisor;
-  pass the broken render as `argv[1]` to run it here.
+* **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1.
+  Pass a render with a broken divisor as `argv[1]` to run it here.
 
     lake build mobilenetv2-dp-check
     unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/mobilenetv2-dp-check
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path — the IREE shim
-refuses a DP entry point outright rather than silently running single-device, which is why
-`mobilenetv2-verified-adam` had to exist first, §2h).
+refuses a DP entry point outright rather than silently running single-device).
 -/
 
 def main (args : List String) : IO Unit := do
-  -- ▶ Which (net, batch, replica count, variant pair) this drives is env-selected, defaulting to
+  -- Which (net, batch, replica count, variant pair) this drives is env-selected, defaulting to
   -- EXACTLY the Imagenette/AdamW/2-replica configuration this harness was written for — so the
   -- committed result reproduces with no arguments, which is the gate on the generalisation itself
-  -- (`TestShardCheck.lean` took the same route when it went N-replica).
+  -- (`TestShardCheck.lean` takes the same route).
   --
-  -- It exists because the RMSProp DP render (`recipe_gaps.md` v1.2) is rendered ONLY at the
-  -- ImageNet shape, `mobilenetv2in` B=64 × 4 replicas, and there is no bs32 `rmsdp` peer to pair with.
-  -- ⚠ `shard-check` cannot stand in for this one: its known answer is
+  -- It exists because the RMSProp DP render is rendered ONLY at the ImageNet shape, `mobilenetv2in`
+  -- B=64 × 4 replicas, and there is no bs32 `rmsdp` peer to pair with.
+  -- `shard-check` cannot stand in for this one: its known answer is
   -- `DP([A|B]) = mean(single(A), single(B))`, which needs the gated slot to be LINEAR in the
   -- gradient — true of AdamW's `m` at `m = 0` (`m' = (1−β₁)·g`) and **false of RMSProp's buffer**
   -- (`b' = μ·b + gw/√(ρ·s + (1−ρ)·gw² + ε)`). The duplicated-batch identity used here is
@@ -65,8 +62,8 @@ def main (args : List String) : IO Unit := do
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp"
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
-  -- convenience: a gate nobody has seen go red is an assertion. §2b-quater's control — the `%arn`
-  -- divisor 2.0 → 1.0, i.e. sum instead of mean — is the one to run.
+  -- convenience: a gate nobody has seen go red is an assertion. The control to run is the `%arn`
+  -- divisor 2.0 → 1.0, i.e. sum instead of mean.
   let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
@@ -94,7 +91,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   -- The SAME batch on EVERY replica — `replicas` copies, not two. `all_reduce(add)/N` over N
   -- identical gradients is `(N·g)/N = g`, the identity at any N, so the construction does not
-  -- depend on the replica count; only this concatenation did.
+  -- depend on the replica count; only this concatenation does.
   let x2 := F32.concat (Array.replicate replicas x1)
   let mut y1 : ByteArray := .empty
   for i in [0:bs] do
@@ -104,8 +101,8 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
 
   IO.println "  running single-device…"; (← IO.getStdout).flush
   -- Delete first on BOTH sides: `compileVmfb` keys on the OUTPUT path and an mtime, never the
-  -- source, so a second run with a different candidate silently reuses the first one's binary
-  -- (handoff §4) — which is exactly what running the sum-not-mean control looks like.
+  -- source, so a second run with a different candidate silently reuses the first one's binary —
+  -- which is exactly what running the sum-not-mean control looks like.
   for tag in ["mnv2_dp_a", "mnv2_dp_b"] do
     for p in [s!".lake/build/{tag}.vmfb",
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
@@ -171,15 +168,14 @@ by construction; a difference here is the data-parallel path corrupting the forw
     IO.Process.exit 1
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
-  -- wrong (§3). Measured on mnv2 itself in §2f: a perturbed cotangent moved θ by 1e-6 while `m`
-  -- moved 1.17e-2.
-  -- ⚠ 1e-2, not 1e-4, since 2026-09-21: the DP render's BatchNorm is SYNCHRONISED
-  -- (`planning/global_bn_verified.md` §3.3), so its backward is the sync-BN graph while the
-  -- single-device artifact is the two-pass graph — one function, two f32 arithmetics, and at this
-  -- random-init operating point their `m` differs by ~1.1e-3 norm-rel even on a duplicated batch
-  -- (measured, and `*-syncbn-check`'s FORMULATION column is the same gap at one replica). The
-  -- forward is still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves
-  -- `m` by ~1 — two orders above this bound. The split-batch identity is `*-syncbn-check`'s.
+  -- wrong. Measured on mnv2 itself: a perturbed cotangent moved θ by 1e-6 while `m` moved 1.17e-2.
+  --
+  -- 1e-2, not 1e-4: the DP render's BatchNorm is SYNCHRONISED, so its backward is the sync-BN graph
+  -- while the single-device artifact is the two-pass graph — one function, two f32 arithmetics, and
+  -- at this random-init operating point their `m` differs by ~1.1e-3 norm-rel even on a duplicated
+  -- batch (measured, and `*-syncbn-check`'s FORMULATION column is the same gap at one replica). The
+  -- forward is still pinned BIT-EXACT above, and a wrong collective (sum, not mean) still moves `m`
+  -- by ~1 — two orders above this bound. The split-batch identity is `*-syncbn-check`'s.
   if gradRel > 1e-2 then
     IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-2. On a duplicated batch \
 all_reduce(add)/2 is the identity, so the data-parallel step must reproduce the single-device one."

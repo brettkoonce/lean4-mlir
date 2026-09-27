@@ -10,21 +10,16 @@ import LeanMlir.Verified.Train
 **Why this file exists.** `tests/TestShardCheck.lean` says in its own docstring that *"R34 is
 absent on purpose … it has no `adamdp` peer at this batch to pair with"*, and there is no
 `resnet34-dp-check` either. So R34 — the net carrying the 30-epoch ImageNet run — is the ONE net
-whose data-parallel path has no gate at all. Everything asserted about its sharding has been read
-off a source comment.
+whose data-parallel path has no gate at all.
 
-That became load-bearing on 2026-08-04: the verified run sat at **10.57% top-1 at epoch 5** where
-the reference curve reads **42.79%**, a ~4× deficit that held almost constant (6.0/4.9/4.6/4.3/4.05)
-across the five warmup epochs — where both runs are recipe-identical by construction. A constant
-factor is the signature of a systematic cause, and "each replica sees a quarter of the data it
-should" is exactly such a cause.
+A constant-factor accuracy deficit against a recipe-identical reference is the signature of a
+systematic cause, and "each replica sees a quarter of the data it should" is exactly such a cause.
 
 **The construction, and why it is not `shard-check`'s.** The standard identity
 `DP([x0|..|x3]) == mean(single(x0),..,single(x3))` needs a single-device render at the SAME
-per-replica batch, and `resnet34in` has only `mom256` (bs 256), not a bs-64 peer — the
-"single-GPU bs64 render, which does not exist" of `xla_pjrt_handoff.md`. Rendering one is a new
-artifact; this asks the narrower question directly and needs only the DP artifact that is already
-committed and already training:
+per-replica batch, and `resnet34in` has only `mom256` (bs 256), not a bs-64 peer. Rendering one is
+a new artifact; this asks the narrower question directly and needs only the DP artifact that is
+already committed:
 
   * **A** = `[s0 | s1 | s2 | s3]`
   * **B** = `[s0 | s1' | s2' | s3']` — replicas 1..3 get DIFFERENT pixels and labels, replica 0 is
@@ -38,7 +33,7 @@ committed and already training:
 
 `A == B` while `A ≠ C` is the *positive identification* of replication: the collective would be
 averaging four copies of replica 0's gradient, every step, and three quarters of every batch would
-be discarded. ⚠ This does NOT verify the shard OFFSETS (a permutation of the four shards passes),
+be discarded. This does NOT verify the shard OFFSETS (a permutation of the four shards passes),
 which is what the full `shard-check` identity would add. It answers only the question the accuracy
 deficit poses.
 
@@ -115,10 +110,9 @@ backend {← LowererSession.backendName}"
 
   -- Compare the momentum region: every difference there is a gradient difference.
   let nP := net.nParams
-  -- ⚠ Compare θ' — [0, nP) — NOT the `m` region. This is HEAVY-BALL, not Adam: the single
-  -- velocity buffer lands in the THIRD region and region 2 is an untouched passthrough, so a
-  -- comparison over [nP, 2nP) is identically zero for every input and silently proves nothing.
-  -- The first draft of this file did exactly that and its own CONTROL caught it.
+  -- Compare θ' — [0, nP) — NOT the `m` region. This is HEAVY-BALL, not Adam: the single velocity
+  -- buffer lands in the THIRD region and region 2 is an untouched passthrough, so a comparison over
+  -- [nP, 2nP) is identically zero for every input and silently proves nothing.
   let cmp (o1 o2 : ByteArray) : Nat × Float := Id.run do
     let mut diff := 0
     let mut rel : Float := 0.0
@@ -132,7 +126,7 @@ backend {← LowererSession.backendName}"
   let (dAB, rAB) := cmp oA oB
   let (dAC, rAC) := cmp oA oC
 
-  -- ▶ DIAGNOSTIC: is `x` reaching the graph at all, and is the m-region index right?
+  -- DIAGNOSTIC: is `x` reaching the graph at all, and is the m-region index right?
   IO.println ""
   IO.println s!"  [diag] out size {oA.size} bytes = {oA.size / 4} floats; nP = {nP}; \
 d0 = {net.d0}; expect >= {3 * nP + 3 + nBnStats}"

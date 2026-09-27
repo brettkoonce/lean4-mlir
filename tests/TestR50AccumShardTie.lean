@@ -9,14 +9,14 @@ same `g`. That gates the accumulate/apply machinery and the `1/k`, and it is str
 whether different micro-batches are combined correctly — the same hole every `*-dp-check` has and
 that `shard-check` exists to close one level up. Its own header says so. This is the other half.
 
-## ⭐ The identity, and why it is EXACT rather than approximate
+## The identity, and why it is EXACT rather than approximate
 
 The obvious complement — "k micro-batches of b == one step at batch k·b" — is **false here, by
 design**: R50 normalises over whatever batch the forward sees, so k micro-batches give k separate
 BatchNorm groups where one big batch gives one. That is Ghost-BN, it is what the JAX reference
 takes, and asserting the naive identity would be wrong rather than strict.
 
-⭐⭐ **But R50's renderer draws a graph that computes exactly the same thing: the DATA-PARALLEL
+**But R50's renderer draws a graph that computes exactly the same thing: the DATA-PARALLEL
 step with PER-REPLICA BatchNorm.** Its collectives average k replicas' gradients, and each replica
 normalises over its own b rows. So:
 
@@ -25,14 +25,12 @@ normalises over its own b rows. So:
 | `acc4x64` × 4 micro-batches | 4 BN groups of 64 | `Σgᵢ`, then `1/k` folded into `%ob1`/`%ob2` |
 | `adamdp64` at `noSync` × 1 step | 4 BN groups of 64 | `all_reduce(add)` then `/4` |
 
-⚠ **That DP graph is no longer the committed one, and is rendered at run time.** Until 2026-09-21
-the committed `adamdp64` / `lambdp64bce` WERE per-replica BN. Since `planning/global_bn_verified.md`
-§3.4 they are synchronised — one BN group of `k·b` per step — so against them this identity is
-false by design, exactly as the naive one above is. The peer is therefore
+**That DP graph is not the committed one, and is rendered at run time.** The committed
+`adamdp64` / `lambdp64bce` are synchronised — one BN group of `k·b` per step — so against them
+this identity is false by design, exactly as the naive one above is. The peer is therefore
 `resnet50TrainStepFaithfulB … (noSync := true)`, the same renderer with the BN collectives left
-out, written to `.lake/build/` and never committed. What this gate certifies is unchanged: the
-accumulator combines different micro-batches the way a gradient collective does. That the
-committed DP step differs from the per-replica one only in its BatchNorm is
+out, written to `.lake/build/` and never committed. What this gate certifies: the accumulator
+combines different micro-batches the way a gradient collective does. That the committed DP step differs from the per-replica one only in its BatchNorm is
 `tests/r50_dp_render_tie.py`'s and `imagenet-syncbn-check resnet50`'s to show.
 
 **Same function.** Ghost-BN over k micro-batches on one device and per-replica BN over k replicas
@@ -44,7 +42,7 @@ to fp rounding — and the two sides reach it through completely different machi
 accumulator against a collective, a folded `1/k` against a divide, a fourth blob region against
 none. Neither is a re-derivation of the other.
 
-⚠ **This compares θ', m' AND v'.** `shard-check` can only compare `m` (it averages two *separately
+**This compares θ', m' AND v'.** `shard-check` can only compare `m` (it averages two *separately
 optimised* single-device steps, and AdamW is nonlinear in the gradient, so `θ'` would be
 meaningless). Here nothing is averaged after the fact: both sides form the same `ĝ` and then run
 the same AdamW on it, so every region is comparable and `v'` — the quadratic one, where a shared
@@ -61,7 +59,7 @@ Needs FOUR GPUs and the XLA backend (collectives do not exist on the IREE path).
     lake build r50-accum-shard-tie
     CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 .lake/build/bin/r50-accum-shard-tie
 
-⚠ `PJRT_REPLICAS` is required and is NOT redundant with `CUDA_VISIBLE_DEVICES`: it is what makes
+`PJRT_REPLICAS` is required and is NOT redundant with `CUDA_VISIBLE_DEVICES`: it is what makes
 the shim compile a module for more than one device. It is safe to set here even though half this
 harness is single-device, because the shim decides PER SESSION — `reps = (g_replicas > 1 &&
 strstr(mlir, "all_reduce")) ? g_replicas : 1` — and the accumulation render contains no collective.
@@ -83,7 +81,7 @@ private def cmpRegion (a b : ByteArray) (off n : Nat) : Float × Float × Nat :=
   return (d, m, ex)
 
 def main : IO Unit := do
-  -- ▶ Resolution selects the NET (slug + `d0`); the 160 artifacts are their own family. Parameter
+  -- Resolution selects the NET (slug + `d0`); the 160 artifacts are their own family. Parameter
   -- layout is identical by construction (`Verified.NetsCore` `#guard`s `toSpecs` equal), so only
   -- the input width moves.
   let net ← match (← IO.getEnv "R50_ACC_RES").getD "224" with
@@ -93,7 +91,7 @@ def main : IO Unit := do
   let bs   := 64
   let nP   := net.nParams
   let variant := (← IO.getEnv "R50_ACC_VARIANT").getD "acc4x64"
-  -- ⚠⚠ The DP peer must match `variant` on optimizer, loss and resolution — see the header. For the
+  -- The DP peer must match `variant` on optimizer, loss and resolution — see the header. For the
   -- composed RSB-A3 render that is `lambdp64bce`, NOT `adamdp64`.
   let peer := (← IO.getEnv "R50_ACC_PEER").getD "adamdp64"
   if peer == variant then
@@ -101,7 +99,7 @@ def main : IO Unit := do
 artifact to itself and pass unconditionally"
   let tol  := (((← IO.getEnv "R50_ACC_TOL_U").bind (·.toNat?)).map (fun u => u.toFloat * 1e-6)
                 |>.getD 2.0e-4)
-  -- ⚠ SUBSTRING parse — `lambacc4x64bce` does not lead with the marker (defect #4).
+  -- SUBSTRING parse — `lambacc4x64bce` does not lead with the marker.
   let k :=
     let after := (variant.splitOn "acc").getD 1 ""
     let after := if after.startsWith "dp" then after.drop 2 else after
@@ -115,7 +113,7 @@ artifact to itself and pass unconditionally"
 
   IO.println s!"§4's accumulation over DIFFERENT micro-batches — the identity r50-accum-tie is blind to"
   IO.println s!"  acc(x1..x{k})  ==  DP([x1|..|x{k}])   ({k} micro-batches of {bs} vs {k} replicas x {bs})"
-  -- ⚠ The per-replica-BN DP peer, rendered at run time (see the header): the committed `peer` is
+  -- The per-replica-BN DP peer, rendered at run time (see the header): the committed `peer` is
   -- sync-BN. Only the two peers the header names are rendered; anything else is refused rather than
   -- guessed at, because a peer at the wrong optimizer or loss fails for reasons this gate is not
   -- about.
@@ -150,7 +148,7 @@ want adamdp64 (224) or lambdp64bce (160)"
   let bc2 := 1.0 - 0.999
 
   -- ── k genuinely different micro-batches, and their concatenation in shard order ──
-  -- ⚠ The DP shim splits `x` by ROWS: replica r takes `[r*bs, (r+1)*bs)`. So the concatenation
+  -- The DP shim splits `x` by ROWS: replica r takes `[r*bs, (r+1)*bs)`. So the concatenation
   -- order below IS the replica assignment, and it must match the order the accumulation visits.
   let mut xs : Array ByteArray := #[]
   let mut ys : Array ByteArray := #[]
@@ -164,7 +162,7 @@ want adamdp64 (224) or lambdp64bce (160)"
   let mut yAll : ByteArray := .empty
   for y in ys do yAll := yAll ++ y
 
-  -- Delete both the bare and the backend-scoped .vmfb first (§4): `compileVmfb` keys its cache on
+  -- Delete both the bare and the backend-scoped .vmfb first: `compileVmfb` keys its cache on
   -- the OUTPUT path and an mtime, never the source, so a re-run under the same tag with a
   -- different candidate silently reuses the first.
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"

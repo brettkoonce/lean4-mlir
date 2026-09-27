@@ -4,7 +4,7 @@ import LeanMlir.Types
 
 /-! # ch10 V6b — ViT-Tiny train step: iree-compile smoke on the COMMITTED render
 
-**This file no longer writes `verified_mlir/vit_train_step.mlir`.** Its only writer is the `#eval`
+**This file does not write `verified_mlir/vit_train_step.mlir`.** Its only writer is the `#eval`
 in `LeanMlir/Proofs/Codegen/ViTRender.lean`:
 `vitTrainStepRenderV "vit_train_step" "0.003125"` — the render
 `Proofs.ViTTiePoC.vit_net_tied_certified` is about (every param-SGD op `den`otes the certified
@@ -12,11 +12,9 @@ loss-descent step; whole module = `pretty(provenGraph)`). 1D CLS `tensor<192>` m
 `cls : Vec 192` + `ViTLayout`; lr 0.003125 = 0.1/32 (mean folded into lr, r34 convention).
 200 params, BS=32. The bytes `MainViTVerified` trains on ARE that render.
 
-Until 2026-07-28 this file re-rendered it with *identical* arguments — a second writer producing the
-same bytes. Verified byte-identical (md5 `f57aff00…` unchanged across a run of both writers) and
-then retired: a redundant writer costs nothing until someone edits one of the two, at which point it
-is a silent last-writer-wins race (§2a, §2b-ter). Being *currently* identical is not a property that
-maintains itself.
+A second writer producing the same bytes costs nothing until someone edits one of the two, at
+which point it is a silent last-writer-wins race. Being *currently* identical is not a property
+that maintains itself.
 
 What remains is the part the `Proofs/` `#eval` cannot do: iree-compile the committed bytes,
 which needs the compiler on PATH and so must stay out of `lake build`.

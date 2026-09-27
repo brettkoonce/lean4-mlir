@@ -52,7 +52,7 @@ end Proofs
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § §2o Part A — the channel-LN BACKWARD graph, and the capstones over it
+-- § The channel-LN BACKWARD graph, and the capstones over it
 -- ════════════════════════════════════════════════════════════════
 
 /-- **One channel-LN backward site**, mirroring `ConvNeXtRender.lnBackSite` at `chLN := true`

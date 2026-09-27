@@ -15,12 +15,10 @@ file that defines `convNextForwardTChHasVJP`.
 This is that gate, and it is deliberately the SAME shape as the blueprint one: same
 workspace load, same root filtering, resolve-or-fail against `Environment`.
 
-⚠⚠ **RESOLUTION IS AGAINST THE ENVIRONMENT, NOT A REGEX, AND THAT IS THE WHOLE DESIGN.**
-A first pass of this check written as a Python regex reported 26% of refs unresolved;
-tightening the filters by hand got it to 8.7%, and the residue was still mostly false
-positives (Mathlib names the regex could not see, structure projections like
-`fooHasVJP.backward`, tactic names). `Environment.find?` answers all three exactly,
-because it knows about Mathlib, about projections, and about namespaces. A heuristic that
+**RESOLUTION IS AGAINST THE ENVIRONMENT, NOT A REGEX, AND THAT IS THE WHOLE DESIGN.**
+A regex cannot see Mathlib names, structure projections like `fooHasVJP.backward`, or
+tactic names, so its misses are mostly false positives. `Environment.find?` answers all three
+exactly, because it knows about Mathlib, about projections, and about namespaces. A heuristic that
 needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
 
 **What counts as resolved**, in order:
@@ -38,27 +36,23 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
    not a declaration, and the prefix is the thing a rename would break;
 7. it is baselined in `scripts/gates/docstring_ref_baseline.txt`.
 
-Rules 3–5 are exact lookups, not heuristics: each of the four forms is a correct citation that
-the first version of this gate could never resolve (a 2026-09-19 survey counted 131 `private`,
-59 `File.decl`, 115 module and 23 namespace citations), which is what kept the marker list
-narrow.
+Rules 3–5 are exact lookups, not heuristics: each of the four forms is a correct citation.
 
 **What is skipped before resolution is attempted** (never Lean names, and cheap to rule
 out): anything with a file extension, anything ALL-CAPS (environment variables), and
 anything that is a single lowercase word with no `_` or `.` (prose in backticks).
 
-⚠ The baseline is the escape hatch for real non-Lean vocabulary a docstring legitimately
+The baseline is the escape hatch for real non-Lean vocabulary a docstring legitimately
 quotes in backticks — MLIR ops (`stablehlo.dot_general`), tactic names (`norm_num`),
 CLI fragments. It carries the `render_guard_baseline.txt` contract: **it may SHRINK, never
 grow.** A new entry means a docstring citation can rot with CI green, which is the exact
 hole this file exists to close.
 
-**Second check — file citations (2026-09-09).** doc-gen4 rewrites any backticked code span
+**Second check — file citations.** doc-gen4 rewrites any backticked code span
 that ends in `.lean` and contains a `/` into a link to `docs/<path>.html`, with no check that
 such a module was built (`nameToLink?` in its `DocString.lean`). Only the `LeanMlir` lib is
-documented, so `` `tests/AuditAxioms.lean` `` rendered as a 404 — 35 of the 38 such links on the
-live site were dead when the user clicked one. So inside `LeanMlir/`, the tree doc-gen4
-renders, a cited file must be a markdown link into this repo,
+documented, so `` `tests/AuditAxioms.lean` `` would render as a 404. So inside `LeanMlir/`, the
+tree doc-gen4 renders, a cited file must be a markdown link into this repo,
 ``[`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)``,
 and the target must exist on disk (a `blob/` file or a `tree/` directory). doc-gen4 leaves a
 code span alone when it already sits inside a link, so the monospace survives. Upstream modules
@@ -75,18 +69,16 @@ lake exe docstring-checkrefs --update-baseline  # re-record (deliberate + budget
 
 open Lake Lean
 
-/-- ⚠⚠ **IMPORT THE SAME SET `BlueprintCheckDecls` DOES, AND THE FIRST VERSION OF THIS FILE
-    DID NOT.** It imported `LeanMlir` alone, reasoning that an allow-list cannot be broken by
-    a fourth `apps`/`demos`-style tree. That is true and it was still wrong: the proof corpus
-    is spread across several libs, so `Proofs/Float/*` was outside the environment and the
-    gate reported `bnIstd_close` and `reduction_close` — both of which exist — as dangling.
-    A gate that invents misses is worse than no gate, because the first triage session
-    teaches everyone to disbelieve it.
+/-- **IMPORT THE SAME SET `BlueprintCheckDecls` DOES.** Importing `LeanMlir` alone is not
+    enough: the proof corpus is spread across several libs, so `Proofs/Float/*` would be
+    outside the environment and the gate would report `bnIstd_close` and `reduction_close` —
+    both of which exist — as dangling. A gate that invents misses is worse than no gate,
+    because the first triage session teaches everyone to disbelieve it.
 
     So: every lib root except `CertsHeavy` (OOMs the shared runners, which is why the
-    2026-07-12 split exists) and except the `apps`/`demos` trainer trees the proof job does
-    not build. ▶ If a fourth tree appears this will fail with `unknown module prefix`, the
-    same way the blueprint gate did twice; that is a known cost, taken deliberately here in
+    split exists) and except the `apps`/`demos` trainer trees the proof job does
+    not build. If a fourth tree appears this will fail with `unknown module prefix`, the
+    same way the blueprint gate does; that is a known cost, taken deliberately here in
     exchange for resolving against the corpus the docstrings actually live in. -/
 def unbuiltTrees : List Name := [`apps, `demos]
 
@@ -144,29 +136,27 @@ def backtickRefs (body : String) : Array String := Id.run do
       k := k + 2
   return out
 
-/-- ⚠⚠ **THE GATE CHECKS THIS PROJECT'S OWN THEOREM NAMES AND NOTHING ELSE, AND THAT IS A
-    DESIGN CHOICE, NOT A SHORTCUT.** Checking every backtick citation reported 2,447 hits
-    across 1,062 names on the first run: MLIR op names (`all_reduce`), artifact basenames
-    (`resnet34_fwd`), timm flags (`no_weight_decay`), Lean core cited relative to an `open`
-    (`Environment.find?`). Absorbing that into a baseline would mean an 800-line allow-list,
-    and a gate whose allow-list is larger than its signal is a gate that gets turned off.
+/-- **THE GATE CHECKS THIS PROJECT'S OWN THEOREM NAMES AND NOTHING ELSE, AND THAT IS A DESIGN
+    CHOICE, NOT A SHORTCUT.** Checking every backtick citation hits MLIR op names (`all_reduce`),
+    artifact basenames (`resnet34_fwd`), timm flags (`no_weight_decay`), Lean core cited relative to
+    an `open` (`Environment.find?`). Absorbing that into a baseline would mean an 800-line
+    allow-list, and a gate whose allow-list is larger than its signal is a gate that gets turned
+    off.
 
     So the gate targets the class that actually rots: a THEOREM this project renamed, still
     cited under its old spelling. Those citations are the ones a reader follows and the ones
     doc-gen4 renders as prose about a symbol that is not there. Recall is deliberately traded
     for a signal that stays worth reading.
 
-    ▶ Widening this list is the way to grow the gate, and each addition should come with a
+    Widening this list is the way to grow the gate, and each addition should come with a
     look at what it admits. -/
 def projectMarkers : List String :=
   ["HasVJP", "_correct", "_bridge", "_close", "_tied", "_faithful", "_denote_eq",
    "_descends", "_adjointClose", "_argmaxSafe", "_fwd_faithful", "_eq_chain", "_rowIndep",
-   -- the float tier's names (2026-09-08): nine `floatBridges_*` citations of theorems deleted
-   -- in the float second pass sat under a green gate because none carried a marker above.
+   -- the float tier's names: a `floatBridges_*` citation carries none of the markers above.
    "floatBridges_", "floatClose_", "FloatBridges", "FloatClose",
-   -- 2026-09-19, once the resolver learned private, `File.decl`, module and namespace citations:
-   -- renderer and witness names (`ResNet34RenderB.adamOne`, `ResNet34Live.liveDown` were stale
-   -- under a green gate), then backward/forward graph names. Case-sensitive on purpose:
+   -- renderer and witness names (`ResNet34RenderB.adamOne`, `ResNet34Live.liveDown`), then
+   -- backward/forward graph names. Case-sensitive on purpose:
    -- `Back` does not admit `backward` prose.
    "Render", "Live", "Tied", "Back", "Fwd"]
 
@@ -193,7 +183,7 @@ def lastComponent : Name → String
 /-- Does `full` end with the dotted components of `ref`? A docstring under `open Proofs`
     writes `` `vjpComp` `` for `Proofs.vjpComp`, and under `open Lean` writes
     `` `Environment.find?` `` for `Lean.Environment.find?`. Resolving absolutely would call
-    both dangling, which is how the first run produced 2,447 false positives. -/
+    both dangling. -/
 def endsWithComponents (full0 : Name) (parts : List String) : Bool :=
   let full := (privateToUserName? full0).getD full0
   let fc := full.components.map lastComponent
@@ -241,13 +231,12 @@ def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
 
 /-- Every `.lean` file under `dir`, recursively, skipping build trees.
 
-    ⚠ The `.lake` skip is not cosmetic. `scanRoots` includes `tests`, and
+    The `.lake` skip is not cosmetic. `scanRoots` includes `tests`, and
     `tests/comparator` is a NESTED Lake package: the moment anyone follows its README and
     runs `./run.sh`, `tests/comparator/.lake/packages/mathlib` exists and this walk scans
-    all of Mathlib, reporting Mathlib's own docstrings as unresolved citations. Found
-    2026-09-20 the first time the comparator was run on a dev box; it never fired in CI
-    because the workflow that materializes that tree (comparator.yml) is not the one that
-    runs this gate (blueprint.yml). `certs.yml`'s LoC count already excludes the same
+    all of Mathlib, reporting Mathlib's own docstrings as unresolved citations. It never
+    fires in CI because the workflow that materializes that tree (comparator.yml) is not the one
+    that runs this gate (blueprint.yml). `certs.yml`'s LoC count already excludes the same
     tree for the same reason. Any dot-directory is skipped, which also covers `.git`. -/
 def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
   let all ← dir.walkDir (fun p => pure !((p.fileName.getD "").startsWith "."))
@@ -306,9 +295,8 @@ def pathCiteProblem (env : Environment) (s : String) (url? : Option String) :
       return some s!"link must point into the repo ({repoBlob}…), got {url}"
 
 /-- Directories scanned. `LeanMlir` is the proof + codegen corpus; `lakefile.lean` is
-    included because it carries 200+ target docstrings and is where two of the stale
-    citations that motivated this gate were found. The root `LeanMlir.lean` is scanned too
-    (2026-09-23): its module docstring is the API docs' landing page — blueprint.yml copies
+    included because it carries 200+ target docstrings. The root `LeanMlir.lean` is scanned
+    too: its module docstring is the API docs' landing page — blueprint.yml copies
     its rendered page over doc-gen4's `index.html` — so it is the one docstring every
     visitor reads, and it is rendered, so its file citations obey the link rule below. -/
 def scanRoots : List System.FilePath := ["LeanMlir", "tests", "apps", "demos"]
@@ -317,17 +305,15 @@ unsafe def main (args : List String) : IO UInt32 := do
   let listOnly := args.contains "--list"
   let update   := args.contains "--update-baseline"
   let baselinePath : System.FilePath := "scripts/gates/docstring_ref_baseline.txt"
-  -- ⚠ `--update-baseline` must recompute against an EMPTY baseline. Reading the existing
-  -- one first made every recorded entry resolve, so the regenerated file came back with
-  -- zero lines and silently discarded the whole ratchet. Caught by running it twice.
+  -- `--update-baseline` must recompute against an EMPTY baseline. Reading the existing
+  -- one first would make every recorded entry resolve, so the regenerated file would come
+  -- back with zero lines and silently discard the whole ratchet.
   let baseline ← if update then pure #[]
     else if ← baselinePath.pathExists then do
       let lines ← IO.FS.lines baselinePath
-      -- A line is `name` or `name  # why it is here`. The trailing comment is the point:
-      -- the first version of this file was a bare list, which made a PROPOSED name
-      -- ("you'd need to add `globalAvgPoolHasVJP`") indistinguishable from a stale
-      -- citation, and the header then had to describe all of them as one thing and was
-      -- wrong about most.
+      -- A line is `name` or `name  # why it is here`.
+      -- The trailing comment is the point: a bare list makes a PROPOSED name ("you'd need to add
+      -- `globalAvgPoolHasVJP`") indistinguishable from a stale citation.
       pure <| lines.filterMap fun l =>
         let body := (l.splitOn "#").headD ""
         let t := body.trimAscii.toString
@@ -363,7 +349,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   let mut files : Array System.FilePath := #["lakefile.lean", "LeanMlir.lean"]
   for r in scanRoots do
     if ← r.pathExists then files := files ++ (← leanFiles r)
-  -- ⚠ This file is excluded from its own scan, and the reason is not vanity: its header
+  -- This file is excluded from its own scan, and the reason is not vanity: its header
   -- documents the gate by QUOTING the dead citations that motivated it
   -- (`convNextForwardTHasVJP`, `Proofs.convNextForwardTCHasVJP_correct`) plus a
   -- `fooHasVJP` placeholder. Those are deliberately dangling — a gate whose own

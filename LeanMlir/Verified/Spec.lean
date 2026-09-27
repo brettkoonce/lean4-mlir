@@ -182,7 +182,7 @@ private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
     shortcut (He et al. §3.3). -/
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
-    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- §2l step A: option-B 1×1 projection
+    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- option-B 1×1 projection
 private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
     if stride != 1 || ic != oc then downBlk ic oc else idBlk oc
@@ -231,7 +231,7 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[mid,1,3,3],0),(#[mid],2),(#[mid],1),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
-  | invertedResidualNB ic mid oc _ =>               -- as above, minus the three conv biases (§2m)
+  | invertedResidualNB ic mid oc _ =>               -- as above, minus the three conv biases
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[mid,1,3,3],0),(#[mid],1),(#[mid],2),
       (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]

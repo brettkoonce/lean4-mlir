@@ -35,7 +35,7 @@ namespace Proofs.StableHLO
 -- single source for the arg order of every r34 artifact). Every BN site is `RenderKit.bnEvalSite`
 -- (frozen running statistics); `ResNet50RenderB`'s eval chain uses the same site.
 --
--- ⚠ The eval forward does NOT move onto the batched chain, and could not meaningfully: frozen
+-- The eval forward does NOT move onto the batched chain, and could not meaningfully: frozen
 -- per-channel statistics reduce nothing, so `bnPerChannelEvalF` is BatchNorm-world-agnostic and
 -- `resnet34_fwd_eval` is correct against either. Same call R50 makes (`r50FwdChainB`'s docstring).
 -- ════════════════════════════════════════════════════════════════
@@ -74,8 +74,8 @@ private def downFwd (B cin c hh : Nat) (epsStr p xName : String)
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
-  -- §2l step A: He et al.'s option-B shortcut is 1×1. A SEPARATE kernel from `zk1` — sharing that
-  -- binding is how the 3×3 deviation stayed invisible until §2k measured the param counts.
+  -- He et al.'s option-B shortcut is 1×1. A SEPARATE kernel from `zk1` — sharing that binding
+  -- hides a 3×3 shortcut from everything but a param-count check.
   let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
   let zinS : Vec (cin*(2*hh)*(2*ww)) := fun _ => 0
   let zout : Vec (c*hh*ww) := fun _ => 0
@@ -167,11 +167,11 @@ private def r34FwdChain (B nClasses : Nat) (epsStr : String)
   let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := 112) (w := 112) "%sW" (biasName convBias "%sbi" 64) zSk z64 (.operand "%x" zx))
   let (cStn, nStn) ← bnEvalSite B 64 112 112 epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
-  -- ⭐ He et al.'s 3×3/s2 stem pool — see the note on `ResNet34RenderB`'s peer. ⚠ This renderer
+  -- He et al.'s 3×3/s2 stem pool — see the note on `ResNet34RenderB`'s peer. This renderer
   -- writes `resnet34_fwd{,_eval}` as well as the SGD train step, and the ADAMW trainer evals
-  -- through `resnet34_fwd_eval`. So it had to move with `ResNet34RenderB`, not after it: leaving
-  -- it at 2×2 would have trained a 3×3-pool net and scored it with a 2×2-pool forward — §2g's
-  -- `mobilenetv2_fwd` defect (logits rel 1.86) on the very net where it was first found.
+  -- through `resnet34_fwd_eval`. So it must match `ResNet34RenderB`: a 2×2 pool here would
+  -- train a 3×3-pool net and score it with a 2×2-pool forward (the `mobilenetv2_fwd` defect
+  -- class, logits rel 1.86).
   let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := 56) (w := 56) (.operand nStr z112))
   -- ═══ 16 blocks ═══
   let f1  ← idFwd   B 64 56 epsStr "s1b0" nStp convBias
@@ -236,7 +236,7 @@ structure BFwdB where
   r1 : String        -- relu1 output (= conv2 input)
   c2 : String        -- conv2 output (= BN2 input)
   cp : String        -- projection conv output (downsample only; "" for identity)
-  -- ⭐ SYNC-BN (`replicas > 1`): the all-reduced packed `[μ ‖ σ²]` of each BN site, which
+  -- SYNC-BN (`replicas > 1`): the all-reduced packed `[μ ‖ σ²]` of each BN site, which
   -- the backward, the γ gradient and the handed-back running stats all read. `""` at one replica.
   st1 : String
   st2 : String
@@ -272,9 +272,9 @@ def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
-  -- §2l step A: the projection shortcut is He et al.'s option-B **1×1**, not the 3×3 this repo
-  -- rendered until 2026-07-30. It is a SEPARATE kernel from the block's `zk1` — sharing that
-  -- binding is exactly how the deviation stayed invisible (§2k).
+  -- The projection shortcut is He et al.'s option-B **1×1**, not a 3×3. It is a SEPARATE kernel
+  -- from the block's `zk1` — sharing that binding hides a 3×3 shortcut from everything but a
+  -- param-count check.
   let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
@@ -338,7 +338,7 @@ private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dy
   let zc   : Vec c := fun _ => 0
   let zk1  : Kernel4 c cin 3 3 := fun _ _ _ _ => 0
   let zk2  : Kernel4 c c 3 3 := fun _ _ _ _ => 0
-  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0      -- §2l step A: the 1×1 option-B shortcut
+  let zkp  : Kernel4 c cin 1 1 := fun _ _ _ _ => 0      -- the 1×1 option-B shortcut
   let zinS : Vec (B*(cin*(2*hh)*(2*ww))) := fun _ => 0
   let zout : Vec (B*(c*hh*ww)) := fun _ => 0
   let zbn  : Vec (B*(c*(hh*ww))) := fun _ => 0
@@ -472,7 +472,7 @@ def accumScalarConsts (k : Nat) : String :=
 /-- **Is this parameter in timm's `no_weight_decay` group?**, recovered from the ONE name
     `r34WdName` produces rather than passed alongside it.
 
-    Derived and not a second argument, on purpose. The skip-list now controls TWO things —
+    Derived and not a second argument, on purpose. The skip-list controls TWO things —
     whether the decay term enters `r` (`%wdz`) and whether the trust ratio applies at all
     — and a caller threading a `Bool` beside the name is exactly the
     two-writers shape that lets them disagree: a parameter decayed but not adapted, or the reverse.
@@ -498,29 +498,28 @@ def wdNameExcludes (wdName : String) : Bool := wdName != "%wd"
 
     At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
     render stays byte-identical — which is the cheap self-check that this insertion is inert. -/
--- ⚠ PUBLIC (was `private` until 2026-08-05): `ResNet50RenderB.lean` folds the SAME optimizer
--- tail over its own parameter list. Duplicating it there would put AdamW/heavy-ball semantics
--- in two places, which is the double-writer failure this repo keeps paying for. Visibility does
--- not change emitted bytes, so every committed R34 artifact is untouched.
+-- PUBLIC: `ResNet50RenderB.lean` folds the SAME optimizer tail over its own parameter list.
+-- Duplicating it there would put AdamW/heavy-ball semantics in two places — the double-writer
+-- failure.
 def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
-    -- ⚠ TRAILING and DEFAULTED to `"%wd"`, so every existing call site is unchanged and every
+    -- TRAILING and DEFAULTED to `"%wd"`, so every existing call site is unchanged and every
     -- committed R34/R50 artifact re-renders byte-identically. The caller decides per PARAMETER
-    -- whether this is `"%wd"` or the zero constant `"%wdz"` — timm's `no_weight_decay` skip-list
-    -- (`a3_paper_fidelity.md` §2.1), which ConvNeXt and ViT already implement this exact way.
-    -- ⭐ It needs NO new op: `adamWParamF`/`lambDirF`/`momVNextF` all take the decay as an OPERAND
-    -- NAME, so excluding a parameter is binding that name to a zero rather than changing a graph.
+    -- whether this is `"%wd"` or the zero constant `"%wdz"` — timm's `no_weight_decay` skip-list —
+    -- which ConvNeXt and ViT implement this exact way. It needs NO new op:
+    -- `adamWParamF`/`lambDirF`/`momVNextF` all take the decay as an OPERAND NAME, so excluding a
+    -- parameter is binding that name to a zero rather than changing a graph.
     (wdName : String := "%wd")
-    -- ⚠ **`preAvg` — the caller has already all-reduced (and clipped) this gradient**, so the
+    -- **`preAvg` — the caller has already all-reduced (and clipped) this gradient**, so the
     -- collective must not be emitted a second time. The global-norm clip needs EVERY gradient at
     -- once while this function is per parameter, and under DP the clip must come AFTER the
     -- `all_reduce` (the reference clips the combined gradient; clipping per replica clips 161
     -- PARTIAL gradients — a different function that still trains and still descends). So at
     -- `gradClip := true` the caller hoists both and sets this. `RenderKit.adamOneEma`
-    -- carries the identical flag for the identical reason; `planning/archive/grad_clip.md` §4.
-    -- ⭐ It needs no interface change beyond the flag: `emitGradAllReduce` at `replicas ≤ 1` emits
+    -- carries the identical flag for the identical reason.
+    -- It needs no interface change beyond the flag: `emitGradAllReduce` at `replicas ≤ 1` emits
     -- NOTHING and threads its input name straight through, so forcing 1 here is exactly "skip it".
     (preAvg : Bool := false)
-    -- ⚠⚠ **`accIn` — the caller has already emitted the ACCUMULATOR too, and this is its RAW
+    -- **`accIn` — the caller has already emitted the ACCUMULATOR too, and this is its RAW
     -- output name.** Only the accumulating optimizers read it, and only under the clip.
     --
     -- The reference clips the MEAN ACCUMULATED gradient, not the micro-batch one
@@ -529,31 +528,31 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- `momVNextF` as well, folds the norm across all 161 of them, clips, and passes the clipped
     -- total back in `g.grad` while naming the UNCLIPPED one here.
     --
-    -- ⚠⚠ **The two must stay distinct, and that is the whole subtlety.** `%<p>a` rides out as the
+    -- **The two must stay distinct, and that is the whole subtlety.** `%<p>a` rides out as the
     -- fourth region and is the carry the NEXT micro-batch accumulates onto; the reference's carry
     -- (`_gsum`) is raw, clipped only on the way into the optimizer. Returning the clipped total
     -- here would compound the clip across the k micro-batches of every cycle — a contraction that
     -- trains and descends and is not the recipe.
     (accIn : Option String := none)
-    -- ▶▶ **`ema` — the MODEL-EMA shadow, a region of its own** (`planning/archive/ema.md`, lifted onto the
-    -- residual family 2026-08-27 for RSB-A2/A1). One extra op per parameter, emitted AFTER the
+    -- **`ema` — the MODEL-EMA shadow, a region of its own** (the residual family's RSB-A2/A1
+    -- recipes use it). One extra op per parameter, emitted AFTER the
     -- optimizer's own tail because the shadow tracks the UPDATED weight: `e' = %emad·e + %oemad·θ'`.
     --
-    -- ⭐ It needs NO new `SHlo` constructor. `Proofs.adamMNext b ob m g = b·m + ob·g` instantiated
+    -- It needs NO new `SHlo` constructor. `Proofs.adamMNext b ob m g = b·m + ob·g` instantiated
     -- at `(b := %emad, ob := %oemad, m := e, g := θ')` denotes exactly the exponential moving
     -- average, which is the same reading `.adamwAccum`'s accumulator takes of `momVNextF`. So the
     -- faithfulness theorems carry over untouched and this costs none of the ten-site surgery an
-    -- added op does. `RenderKit.adamOneEma` has emitted the identical line since `ema.md`.
+    -- added op does. `RenderKit.adamOneEma` emits the identical line.
     --
-    -- ⚠⚠ **IT READS `nT`, THE UPDATED PARAMETER — NOT `%<p>`.** The reference EMAs the weights
+    -- **IT READS `nT`, THE UPDATED PARAMETER — NOT `%<p>`.** The reference EMAs the weights
     -- AFTER the optimizer moves them (`ema_params = ema_update(ema_params, params, step)` follows
     -- the `train_step` call, `emitMainImagenet` in `jax/Jax/Codegen.lean`). Reading the incoming θ instead gives a
     -- shadow lagging by one step — a number that trains, descends and is quietly not the
     -- reference's.
     --
-    -- ⚠ **The DECAY is a runtime scalar, not a constant**, because it is warmup-corrected:
+    -- **The DECAY is a runtime scalar, not a constant**, because it is warmup-corrected:
     -- `d = min(decay, (1+t)/(10+t))` moves every step and the driver computes it. Baking 0.9999
-    -- here is the EMA-warmup defect this repo has already paid for once.
+    -- here is the EMA-warmup defect.
     (ema : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × Option String × Option String) := do
   let n := g.ds.foldl (· * ·) 1
@@ -561,19 +560,18 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
   let replicas := if preAvg then 1 else replicas
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
   let gr : SHlo n := .operand gAvg z
-  -- ⚠ Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
+  -- Emitted by every arm below rather than once here, because it consumes each arm's OWN `nT`.
   -- Hoisting it would need the updated-parameter name before the arm that produces it has run.
   let emaTail : String → StateM Proofs.StableHLO.EmitS (String × Option String) := fun nT =>
     if ema then do
-      -- ⚠⚠ **`ema`, NOT `e`, AND THAT IS A COLLISION ALREADY PAID FOR.** The shadow's SSA name is
-      -- `{parameter}{suffix}`, and at suffix `e` the stem BN gamma `%sg` produced **`%sge`** — which
-      -- is the hardcoded block-local name inside `select_and_scatter`'s comparator, the maxpool
-      -- backward. MLIR's textual name scope is flat across nested regions, so the artifact was
-      -- rejected at parse with *"redefinition of SSA value '%sge'"*. It rendered, it passed
-      -- byte-identity, it passed render coverage, and its arity checked — because NOTHING IN THIS
-      -- REPO PARSED A COMMITTED ARTIFACT until `scripts/gates/parse_verified_mlir.py`.
-      -- ⚠ ViTRender's per-example EMA keeps `%{nm}e` and is fine: ViT has no maxpool, so no
-      -- `select_and_scatter` and no `%s*` block-locals. Same reason this family cannot.
+      -- **`ema`, NOT `e`.** The shadow's SSA name is `{parameter}{suffix}`, and at suffix `e` the
+      -- stem BN gamma `%sg` produces **`%sge`** — which is the hardcoded block-local name inside
+      -- `select_and_scatter`'s comparator, the maxpool backward. MLIR's textual name scope is flat
+      -- across nested regions, so the artifact is rejected at parse with *"redefinition of SSA value
+      -- '%sge'"*. It renders, passes byte-identity and render coverage, and its arity checks — only
+      -- a parse catches it (`scripts/gates/parse_verified_mlir.py`). ViTRender's per-example EMA
+      -- keeps `%{nm}e` and is fine: ViT has no maxpool, so no `select_and_scatter` and no `%s*`
+      -- block-locals. Same reason this family cannot.
       let (c, nE) ← pretty B (.adamMNextF s!"%{g.nm}ema" "%emad" "%oemad" g.ds 0 z (.operand nT z))
       pure (c, some nE)
     else pure ("", none)
@@ -583,30 +581,29 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cE, nE) ← emaTail nT
     pure (arS ++ cA ++ cE, nT, nM, nV, none, nE)
   | .lamb =>
-    -- ⭐⭐ LAMB, in four ops per parameter, TWO of which are new (`planning/archive/rsb_a3_r50_verified.md`
-    -- §2.3 estimated "2–3"; measured at 2, because `gradSumSqAccF` was already here for the clip
-    -- and `sgdParamF` for heavy-ball). `Proofs.Lamb` carries the ℝ reference and the clauses.
+    -- LAMB, in four ops per parameter, TWO of which are LAMB's own (`gradSumSqAccF` serves the
+    -- clip too, and `sgdParamF` heavy-ball). `Proofs.Lamb` carries the ℝ reference and the clauses.
     let z1 : Vec 1 := fun _ => 0
     -- ① the DIRECTION, `r = m̂/(√v̂+ε) + wd·θ`, from the incoming moments and this step's gradient.
-    -- ⚠ ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both
+    -- ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both
     -- have a plausible wrong neighbour (RMSProp-TF's `√(v̂+ε)`, AdamW's decay after the ratio).
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gr)
-    -- ② `‖θ‖²`, THIS parameter's own. ⚠ Seeded at `%lzero` and never folded across parameters —
+    -- ② `‖θ‖²`, THIS parameter's own. Seeded at `%lzero` and never folded across parameters —
     -- that single-leaf fold is the entire difference from the global-norm clip, whose whole
     -- semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
     -- `Proofs.lambScale_not_shared`). The two features emit nearly the same lines.
-    -- ⭐⭐ **D2: the no_weight_decay group is NOT layer-adapted, and the fix is to SKIP this op.**
+    -- **The no_weight_decay group is NOT layer-adapted, so this op is SKIPPED for it.**
     -- timm reads `if weight_decay != 0 or group['always_adapt']:` before computing the ratio, so an
     -- excluded parameter takes a plain Adam step at `trust = 1`. Feeding `%lzero` here — the same
     -- zero this op would otherwise seed from — makes `wn2 = 0`, and `Proofs.lambTrust_zero_weight`
-    -- (`lambTrust 0 rn2 = 1`, already `@[simp]`) says that IS 1. ▶ No new op, no new constructor,
-    -- no new theorem; the excluded params emit one op FEWER than before.
-    -- ⚠ The existing zero-norm guard does not already cover this. It fires at `‖θ‖ = 0` exactly,
+    -- (`lambTrust 0 rn2 = 1`, already `@[simp]`) says that IS 1. No new op, no new constructor,
+    -- no new theorem; the excluded params emit one op FEWER.
+    -- The existing zero-norm guard does not already cover this. It fires at `‖θ‖ = 0` exactly,
     -- i.e. step one, where every BN β and bias starts; from step two the parameter is
-    -- small-but-nonzero and `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0. That is why
-    -- `lambTrust_zero_weight` could hold on both sides while both were wrong.
-    -- ⚠ INERT unless the skip-list is on: with `wdExclude := false` every `wdName` is `"%wd"`, so
+    -- small-but-nonzero and `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0. So
+    -- `lambTrust_zero_weight` can hold on both sides while both are wrong.
+    -- INERT unless the skip-list is on: with `wdExclude := false` every `wdName` is `"%wd"`, so
     -- this takes the `else` and every committed non-`wx` artifact re-renders byte-identically.
     let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
                    else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
@@ -622,17 +619,17 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cE, nE) ← emaTail nT
     pure (arS ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, none, nE)
   | .adamwAccum _ =>
-    -- ⭐ **The whole feature, and it adds exactly ONE op per parameter.**
+    -- **The whole feature, and it adds exactly ONE op per parameter.**
     --
     -- ① the accumulator, `Gt = akeep·G + g`. That is `momVNextF` read the way `.heavyBall` reads it
     -- for coupled L2 — `Proofs.momVNext μ v g = μ·v + g`, so instantiating `(μ := %akeep, v := G)`
     -- denotes exactly the accumulation. **No new `SHlo` constructor**, so none of the ten-site
     -- surgery an added op costs, and the faithfulness theorem carries over untouched.
     --
-    -- ⚠ `%akeep` is 0 on the FIRST micro-batch of a cycle and 1 after, so the cycle RESETS by
+    -- `%akeep` is 0 on the FIRST micro-batch of a cycle and 1 after, so the cycle RESETS by
     -- dropping the previous total rather than by a separate zeroing pass — which is why one scalar
     -- and one op suffice, and why there is no "clear the accumulator" step that could be skipped.
-    -- ⚠ Under `accIn` the caller emitted this op itself (it needed `Gt` to fold the global norm),
+    -- Under `accIn` the caller emitted this op itself (it needed `Gt` to fold the global norm),
     -- and `gr` is already the CLIPPED total — so the tail reads `gr` while the fourth region still
     -- reports the raw `Gt`. See `accIn`'s note: those two must not collapse into one name.
     let (cG, nG, gt) ← match accIn with
@@ -653,17 +650,17 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     let (cE, nE) ← emaTail nT
     pure (arS ++ cG ++ cA ++ cE, nT, nM, nV, some nG, nE)
   | .lambAccum _ =>
-    -- ⭐⭐ **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
+    -- **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
     -- reading `Gt` where it read `g`. Nothing else changes, and nothing new is introduced — no new
     -- `SHlo` constructor, so no ten-site surgery and every faithfulness theorem carries over.
     let z1 : Vec 1 := fun _ => 0
     -- ① the accumulator, `Gt = akeep·G + g` — the SAME `momVNextF` instantiation `.adamwAccum`
     -- uses, for the same reason (`Proofs.momVNext μ v g = μ·v + g` at `(μ := %akeep, v := G)`).
-    -- ⚠ It is upstream of the optimizer and does not know which one follows: that independence is
+    -- It is upstream of the optimizer and does not know which one follows: that independence is
     -- the whole reason this composition is a constructor and not a redesign.
-    -- ⚠ Same `accIn` carve-out as `.adamwAccum`'s, and this is the arm RSB-A3 actually renders:
-    -- timm's `Lamb` is the optimizer whose `max_grad_norm = 1.0` default makes the clip mandatory
-    -- (D1), so `.lambAccum` + clip is the composition that has to be right.
+    -- Same `accIn` carve-out as `.adamwAccum`'s, and this is the arm RSB-A3 actually renders:
+    -- timm's `Lamb` is the optimizer whose `max_grad_norm = 1.0` default makes the clip
+    -- mandatory, so `.lambAccum` + clip is the composition that has to be right.
     let (cG, nG, gt) ← match accIn with
       | some a => pure ("", a, gr)
       | none   => do
@@ -673,14 +670,14 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- `g`** — the same substitution `.adamwAccum` makes to AdamW's three.
     let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
                       "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gt)
-    -- ⚠ `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
-    -- character-for-character `.lamb`'s, INCLUDING its D2 skip: an excluded parameter feeds
+    -- `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
+    -- character-for-character `.lamb`'s, INCLUDING its no_weight_decay skip: an excluded parameter feeds
     -- `%lzero` so `lambTrust 0 _ = 1`. See the `.lamb` branch above for why.
     let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
                    else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
                                    (.operand s!"%{g.nm}" z))
     let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
-    -- ④ `θ' = θ − lr·(trust·r)`. ⭐ THIS is where the accumulate phase is frozen: `%lr = 0` makes it
+    -- ④ `θ' = θ − lr·(trust·r)`. THIS is where the accumulate phase is frozen: `%lr = 0` makes it
     -- `θ − 0·(…) = θ` exactly. LAMB's decay is inside `r`, which the zero multiplies away, so there
     -- is no decay term left running k times per optimizer step.
     let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nS z))
@@ -704,7 +701,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- ② velocity, `v' = μ·v + g`.
     let (cV, nV) ← pretty B (.momVNextF s!"%{g.nm}v" "%mu" g.ds 0 z gwd)
     -- ③ HEAVY-BALL parameter step, `θ' = θ − lr·v'` — `sgdParamF` applied to the velocity rather
-    -- than to the gradient. ⚠ This is deliberately NOT `momParamF`: that op is **Nesterov**
+    -- than to the gradient. This is deliberately NOT `momParamF`: that op is **Nesterov**
     -- (`θ − lr·(g + μ·v')`, see `Proofs.momParam_heavyBall_diff`), and the JAX reference this
     -- render exists to match steps by `v'` alone. Using the momentum-named op here would have been
     -- the obvious move and would have silently produced a different optimizer.
@@ -713,17 +710,17 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- the driver is byte-identical across variants (the `CnnRender.optTail` `.sgd` convention).
     let (cE, nE) ← emaTail nT
     pure (arS ++ cD ++ cV ++ cT ++ cE, nT, s!"%{g.nm}m", nV, none, nE)
-  -- ⭐ PLAIN SGD: `.heavyBall` with step ② deleted. Two ops, both already here.
+  -- PLAIN SGD: `.heavyBall` with step ② deleted. Two ops, both already here.
   | .sgd =>
     -- ① COUPLED L2 decay, `g ← g + wd·θ` — identical to `.heavyBall`'s ①, `momVNextF` read at
     -- `(μ := wd, v := θ)`. Kept, so the ONLY difference between the two arms is the velocity.
     let (cD, nD) ← pretty B (.momVNextF s!"%{g.nm}" wdName g.ds 0 z gr)
     -- ② the step, `θ' = θ − lr·g`, applied to the DECAYED GRADIENT rather than to a velocity.
-    -- ⚠ Same `sgdParamF` the heavy-ball arm ends with; only its operand differs. That is the
+    -- Same `sgdParamF` the heavy-ball arm ends with; only its operand differs. That is the
     -- whole of "no momentum", and it is worth seeing that it is one operand and not one flag.
     let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nD z))
     let (cE, nE) ← emaTail nT
-    -- ⚠ BOTH `m` and `v` ride through untouched — `.heavyBall` passes `m` and writes `v`; this
+    -- BOTH `m` and `v` ride through untouched — `.heavyBall` passes `m` and writes `v`; this
     -- passes both. The packed `[θ|m|v]` arity is unchanged, so the driver needs no predicate.
     pure (arS ++ cD ++ cT ++ cE, nT, s!"%{g.nm}m", s!"%{g.nm}v", none, nE)
 
@@ -829,9 +826,9 @@ def wdVariantMark (opt : R34Opt) (wdStr : String := "") : String :=
     artifact path. Empty at the default 0.1, so every committed spelling is unchanged.
     `ls0`, not `ls0000000`: `fmt6 0.0` is `"0.000000"` and stripping its point leaves seven
     zeros, so OFF gets the short spelling it deserves and any other α keeps the general one. The
-    `#guard`s below caught exactly that on the first render.
+    `#guard`s below pin that.
     It must reach `r34AdamVariant` and not merely the renderer — the rule `wx`, `clip` and `bf16`
-    each state above, which ConvNeXt shipped wrong twice and this net shipped wrong once: an
+    each state above: an
     artifact whose declared entry disagrees with its own path is refused by the shim outright. -/
 def lsVariantMark (alpha : Float := 0.1) : String :=
   if alpha == 0.1 then "" else if alpha == 0.0 then "ls0"
@@ -868,11 +865,11 @@ def lsVariantMark (alpha : Float := 0.1) : String :=
     counter does not move and every committed artifact re-renders byte-identically. -/
 def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0)
-    -- ▶▶ **`ema` — the model-EMA shadow region**, threaded straight to `optOne` (2026-08-27).
+    -- **`ema` — the model-EMA shadow region**, threaded straight to `optOne`.
     -- TRAILING and defaulted, so every committed R50 artifact re-renders byte-identically and the
     -- one-step gate's existing call is unchanged.
-    -- ⚠ It is INDEPENDENT of the accumulator: `G` and `E` are two regions, not one slot two
-    -- features share, which is the whole point of the change (`VerifiedVariant.nRegions`).
+    -- It is INDEPENDENT of the accumulator: `G` and `E` are two regions, not one slot two
+    -- features share (`VerifiedVariant.nRegions`).
     (ema : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List String × List String × List String × List String × List String) := do
   let accOn := match opt with | .adamwAccum _ => true | .lambAccum _ => true | _ => false
@@ -892,7 +889,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- ② accumulate, when the optimizer accumulates. `Gt = akeep·G + g`, the SAME `momVNextF`
     -- instantiation `optOne` would have emitted — moved, not duplicated, and handed back to it by
     -- name so the fourth region still reports the RAW total.
-    -- ⚠ On an ACCUMULATE micro-batch the clip is computed on a PARTIAL `Gt` and then discarded:
+    -- On an ACCUMULATE micro-batch the clip is computed on a PARTIAL `Gt` and then discarded:
     -- `%lr = 0` freezes θ and `%b1 = %b2 = 1` / `%ob1 = %ob2 = 0` make both moments exact
     -- passthroughs, so only the APPLY micro-batch's factor — the one taken on the full sum — can
     -- reach a weight. That is what makes ② expressible without a second buffer.
@@ -935,10 +932,10 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
   let mut aNames : List String := []
   let mut eNames : List String := []
   for g in ps do
-    -- ⚠ The decay operand comes from the SAME `PGrad` that names the site, so the parameter whose
-    -- shape decides exclusion is the parameter being updated — §2e's slot rule. Reading the shape
+    -- The decay operand comes from the SAME `PGrad` that names the site, so the parameter whose
+    -- shape decides exclusion is the parameter being updated. Reading the shape
     -- off a parallel list is how this class of bug ships.
-    -- ⚠ Under the clip the gradient `optOne` consumes is the CLIPPED one, while `accIn` names the
+    -- Under the clip the gradient `optOne` consumes is the CLIPPED one, while `accIn` names the
     -- unclipped accumulator it must still return: see `optOne`'s note for why those two names
     -- cannot collapse into one.
     let gIn : PGrad :=
@@ -949,13 +946,13 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     thetaN := thetaN ++ [nT]
     mNames := mNames ++ [nM]
     vNames := vNames ++ [nV]
-    -- ⭐ The accumulator's output name, present only under the accumulating constructors. It becomes
+    -- The accumulator's output name, present only under the accumulating constructors. It becomes
     -- the FOURTH region of the packed blob — the same shape the EMA renders use, so the driver's
     -- `nRegions = 4` path is reused rather than a second one being written.
     match nA with | some a => aNames := aNames ++ [a] | none => pure ()
-    -- ⭐ The shadow's output name, present only under `ema`. It becomes the FIFTH region — AFTER
+    -- The shadow's output name, present only under `ema`. It becomes the FIFTH region — AFTER
     -- the accumulator, never instead of it. Region order `[θ|m|v|G|E]` is what keeps every blob
-    -- written before the fifth region existed readable at the index it was written at.
+    -- written without a fifth region readable at the index it was written at.
     match nE with | some e => eNames := eNames ++ [e] | none => pure ()
   pure (code, thetaN, mNames, vNames, aNames, eNames)
 
@@ -965,7 +962,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     `%wd` is baked rather than a runtime arg because weight decay is not scheduled — unlike `%lr`,
     which stays a `tensor<f32>` argument so one graph serves the whole cosine schedule. -/
 def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
-  -- ⚠ ONE binding, used by every arm below, so the two families cannot drift apart in how they
+  -- ONE binding, used by every arm below, so the two families cannot drift apart in how they
   -- honour the override — `optWdStr` owns "the caller's value or this optimizer's default".
   let wd := optWdStr opt wdStr
   match opt with
@@ -973,16 +970,16 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
   | .heavyBall =>
     "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
-  -- ⚠ NO `%mu`. Emitting one would be harmless MLIR (an unused constant) and exactly the kind of
+  -- NO `%mu`. Emitting one would be harmless MLIR (an unused constant) and exactly the kind of
   -- decoration that makes a reader think the velocity is in there somewhere.
   | .sgd =>
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n"
   | .lamb =>
-    -- ⚠ **`%eps` is 1e-6, NOT AdamW's 1e-8**, and `%wd` is 0.02, NOT 1e-4. Both come off timm's a3
+    -- **`%eps` is 1e-6, NOT AdamW's 1e-8**, and `%wd` is 0.02, NOT 1e-4. Both come off timm's a3
     -- arg string (`lamb-cosine-lr0.008-wd0.02-…`), which `jax/MainResnet50Imagenet.lean` decodes in
     -- its own comment. Reusing AdamW's numbers here would render a LAMB that is structurally right
     -- and 200x off on the decay.
-    -- ⚠ `%lzero` seeds each parameter's OWN norm fold, one leaf deep. The clip's `%zero` seeds a
+    -- `%lzero` seeds each parameter's OWN norm fold, one leaf deep. The clip's `%zero` seeds a
     -- fold across ALL parameters. Same op, and the seed placement is the whole difference.
     "    %b1 = stablehlo.constant dense<0.9> : tensor<f32>\n" ++
     "    %ob1 = stablehlo.constant dense<0.1> : tensor<f32>\n" ++
@@ -992,8 +989,8 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
     "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n"
   | .adamwAccum k =>
-    -- ⚠ **A TRUSTED CARVE-OUT, and deliberately the smallest one that does the job**: eight lines of
-    -- SCALAR arithmetic emitted ONCE, next to the constants that were already emitted text. The 161
+    -- **A TRUSTED CARVE-OUT, and deliberately the smallest one that does the job**: eight lines of
+    -- SCALAR arithmetic emitted ONCE, next to the constants that are already emitted text. The 161
     -- per-parameter tails stay `pretty(verified AST node)` and are byte-identical to `.adamw`'s.
     --
     -- `%aup ∈ {0, 1}` is the APPLY flag, supplied per micro-batch by the driver. It selects between
@@ -1003,24 +1000,24 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
     --     accumulate (%aup = 0):  β₁ = 1, (1−β₁) = 0  ⇒  m' = m,  v' = v   exactly
     --     apply      (%aup = 1):  β₁ = 0.9, (1−β₁)/k  ⇒  m' = 0.9·m + (1−β₁)·(Gt/k)
     --
-    -- ⭐ `1/k` is folded in HERE, and asymmetrically: `%ob1` carries `1/k` while `%ob2` carries
+    -- `1/k` is folded in HERE, and asymmetrically: `%ob1` carries `1/k` while `%ob2` carries
     -- `1/k²`, because `v` consumes the gradient SQUARED. `v' = β₂v + ((1−β₂)/k²)·Gt² =
     -- β₂v + (1−β₂)·(Gt/k)²` — the identity that makes accumulation equal a real large-batch step
     -- rather than the "mean of per-micro-batch second moments" a naive implementation produces.
     --
-    -- ⚠ `fmt12`, not `fmt6` — see `accumScalarConsts`, which now owns those eight lines so that
+    -- `fmt12`, not `fmt6` — see `accumScalarConsts`, which owns those eight lines so that
     -- `.lambAccum` emits the SAME mechanism rather than a second copy of it.
     "    %eps = stablehlo.constant dense<1.0e-8> : tensor<f32>\n" ++
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
     accumScalarConsts k
   | .lambAccum k =>
-    -- ⭐⭐ **THE COMPOSITION, AND IT IS EXACTLY "LAMB's CONSTANTS + THE SHARED ACCUMULATOR".**
-    -- ⚠ `%eps` 1e-6 and `%wd` 0.02 are LAMB's, off timm's a3 arg string — NOT AdamW's 1e-8/1e-4.
+    -- **THE COMPOSITION, AND IT IS EXACTLY "LAMB's CONSTANTS + THE SHARED ACCUMULATOR".**
+    -- `%eps` 1e-6 and `%wd` 0.02 are LAMB's, off timm's a3 arg string — NOT AdamW's 1e-8/1e-4.
     -- Reusing AdamW's numbers here would render a LAMB that is structurally right and 200× off on
     -- the decay, which is the exact trap `.lamb`'s own comment records.
-    -- ⚠ `%lzero` seeds each parameter's OWN norm fold, one leaf deep — carried over from `.lamb`
+    -- `%lzero` seeds each parameter's OWN norm fold, one leaf deep — carried over from `.lamb`
     -- unchanged, because accumulation does not touch the trust ratio.
-    -- ▶ `%b1`/`%ob1`/`%b2`/`%ob2` are COMPUTED from `%aup`, not baked, which is the only difference
+    -- `%b1`/`%ob1`/`%b2`/`%ob2` are COMPUTED from `%aup`, not baked, which is the only difference
     -- from `.lamb`'s constant block and is precisely what `accumScalarConsts` supplies.
     "    %eps = stablehlo.constant dense<1.0e-6> : tensor<f32>\n" ++
     s!"    %wd = stablehlo.constant dense<{wd}> : tensor<f32>\n" ++
@@ -1043,67 +1040,60 @@ def optConstsB (opt : R34Opt) (wdStr : String := "") : String :=
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes. -/
 def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
-    -- ▶ `wx` = timm `no_weight_decay`. TRAILING and defaulted, so every existing spelling is
-    -- unchanged. ⚠ It must reach this function: R50 DERIVES its entry name from the variant, so a
+    -- `wx` = timm `no_weight_decay`. TRAILING and defaulted, so every existing spelling is
+    -- unchanged. It must reach this function: R50 DERIVES its entry name from the variant, so a
     -- flag that reached the renderer but not here produces an artifact whose declared entry
-    -- disagrees with its own path — the shim then refuses the call outright. ConvNeXt shipped
-    -- exactly that defect twice (`wx`, then `clip`); the `#guard`s below pin every spelling.
-    -- ⚠ It needs NO driver predicate: excluding a parameter changes no arity, type or region.
+    -- disagrees with its own path — the shim then refuses the call outright. The `#guard`s below
+    -- pin every spelling.
+    -- It needs NO driver predicate: excluding a parameter changes no arity, type or region.
     (wdExclude : Bool := false)
-    -- ▶ `clip` = timm `Lamb.max_grad_norm` (D1), the GLOBAL-norm gradient clip. TRAILING and
+    -- `clip` = timm `Lamb.max_grad_norm`, the GLOBAL-norm gradient clip. TRAILING and
     -- defaulted, exactly as `wx` is, so every existing spelling is unchanged.
-    -- ⚠ It must reach THIS function and not merely the renderer — the same rule `wx` states above,
+    -- It must reach THIS function and not merely the renderer — the same rule `wx` states above,
     -- and `cnxAdamVariant`'s docstring records ConvNeXt shipping that defect twice (once for `wx`,
     -- once for `clip`). R50 derives its entry name from this string, so a flag that stopped at the
     -- emission would produce an artifact whose declared entry disagrees with its own path and the
     -- shim would refuse the call outright.
-    -- ⚠ Like `wx` it needs NO driver predicate: the clip adds ops, not arity, types or regions.
+    -- Like `wx` it needs NO driver predicate: the clip adds ops, not arity, types or regions.
     (gradClip : Bool := false)
-    -- ▶▶ `bce` = BCE-with-logits instead of smoothed CE — RSB-A2/A3's loss, and the reason the
-    -- recipe's lr is what it is. ⚠⚠ **IT IS A PARAMETER HERE BECAUSE IT USED NOT TO BE**
-    -- (`a3_paper_fidelity.md` §3.3, closed 2026-08-14): `resnet50TrainStepFaithfulB` carried a
-    -- `bce : Bool` that swapped the loss AND a separate `vSuffix : String` that the caller had to
-    -- spell `"bce"` by hand, so the FLAG and the NAME were two writers for one fact and could
-    -- disagree with nothing noticing — on the artifact the 77.43% run depends on. Measured before
-    -- removing it: 12 call sites passed `bce := true`, 12 passed `vSuffix := "bce"`, and no call
-    -- site ever passed a `vSuffix` that was not `"bce"`. So the string was a restatement of the
-    -- Bool, and deriving it here makes the disagreement unspellable rather than merely unobserved.
-    -- ⭐ Pure refactor: `{variant}{vSuffix}` and `{variant-with-bce}` are the same characters, so
-    -- every committed artifact keeps its name and its bytes.
-    -- ⚠ It TRAILS `wx` and `clip`, which is the order the hand-passed suffix already produced —
-    -- `lambaccdp8x64wxclipbce`. Preserved deliberately; the `#guard`s below pin it.
+    -- `bce` = BCE-with-logits instead of smoothed CE — RSB-A2/A3's loss, and the reason the
+    -- recipe's lr is what it is. **IT IS A PARAMETER HERE, NOT A CALLER-SPELLED SUFFIX**: a
+    -- `bce : Bool` that swaps the loss beside a separate name string the caller spells `"bce"` by
+    -- hand is two writers for one fact, able to disagree with nothing noticing. Deriving the
+    -- marker from the flag makes the disagreement unspellable rather than merely unobserved.
+    -- It TRAILS `wx` and `clip` — `lambaccdp8x64wxclipbce`; the `#guard`s below pin it.
     (bce : Bool := false)
-    -- ▶▶ A NON-DEFAULT weight decay, and it must reach the name for the reason `wdVariantMark`
-    -- gives: `%wd` is BAKED, so two renders differing only in it would otherwise collide on one
-    -- artifact path. Empty = the optimizer's own default = no marker = every committed name
-    -- unchanged. ⚠ It goes LAST because it is the newest axis and §2m's rule is unconditional.
+    -- A NON-DEFAULT weight decay, and it must reach the name for the reason `wdVariantMark` gives:
+    -- `%wd` is BAKED, so two renders differing only in it would otherwise collide on one artifact
+    -- path. Empty = the optimizer's own default = no marker = every committed name unchanged. It
+    -- goes LAST because it is the newest axis and newest-axis-appends is unconditional.
     (wdStr : String := "")
-    -- ▶ `bf16` LAST, after even the decay marker, for that marker's own reason: it is the newest
-    -- axis and appending is the only placement that leaves every existing spelling untouched.
-    -- ⚠ It MUST reach this function and not merely the renderer — the `wx`/`clip` rule three
-    -- parameters up, which ConvNeXt shipped wrong twice. And it must not collide with the driver's
-    -- variant predicates: `momdp64bf16` contains no "acc", no "ema", and no "do", so `accOn`/
-    -- `emaOn`/`cdOn` all stay false and the region/scalar counts are unchanged (checked).
+    -- `bf16` LAST, after even the decay marker, for that marker's own reason: it is the newest axis
+    -- and appending is the only placement that leaves every existing spelling untouched. It MUST
+    -- reach this function and not merely the renderer — the `wx`/`clip` rule three parameters up.
+    -- And it must not collide with the driver's variant predicates: `momdp64bf16` contains no
+    -- "acc", no "ema", and no "do", so `accOn`/ `emaOn`/`cdOn` all stay false and the region/scalar
+    -- counts are unchanged (checked).
     (bf16 : Bool := false)
-    -- ▶▶ **`ema` — the model-EMA shadow, and it is the ONLY marker that LEADS** (2026-08-27).
-    -- ⚠⚠ **PREFIX, NOT SUFFIX, AND THAT IS FORCED BY THE DRIVER**: `VerifiedVariant.emaOn` is
+    -- **`ema` — the model-EMA shadow, and it is the ONLY marker that LEADS**.
+    -- **PREFIX, NOT SUFFIX, AND THAT IS FORCED BY THE DRIVER**: `VerifiedVariant.emaOn` is
     -- `startsWith "ema"` while `accOn` is a substring test, so `lambaccdp8x64wxclipbceema` would
     -- read as accumulation-only — four regions packed into a five-region graph, i.e. every
     -- parameter misaligned, with no error anywhere. `tests/TestVariantPredicates.lean` pins both
     -- directions.
-    -- ⚠ It is LAST in this signature and FIRST in the string, which is the one place in this
-    -- function where those two orders disagree. Parameter position is "newest axis appends" (§2m);
+    -- It is LAST in this signature and FIRST in the string, which is the one place in this
+    -- function where those two orders disagree. Parameter position is "newest axis appends";
     -- string position is the driver's predicate. Defaulted, so every committed spelling is
     -- unchanged — `ema` prepends nothing at `false`.
     (ema : Bool := false)
-    -- ▶▶ **`drop` — STOCHASTIC DEPTH.** ⚠ It goes BETWEEN `clip` and `bce`, which is `N3`'s grammar
+    -- **`drop` — STOCHASTIC DEPTH.** It goes BETWEEN `clip` and `bce`, which is the variant grammar
     -- (`…[wx][clip][drop][do][bce][wd<d>][bf16]`) and `cnxAdamVariant`'s `wxclipdrop` order, rather
     -- than appended like the newer axes — one rule for both nets, so a reader need not know which
-    -- net a slug came from. ⚠ The marker is `"drop"` and not `"sd"`: `rms` ++ `dp` spells `rmsdp`,
-    -- which CONTAINS "sd" (`planning/archive/stochastic_depth.md`'s defect).
-    -- ⚠ Parameter position is trailing (§2m, so no call site moves); STRING position is N3's.
+    -- net a slug came from. The marker is `"drop"` and not `"sd"`: `rms` ++ `dp` spells `rmsdp`,
+    -- which CONTAINS "sd".
+    -- Parameter position is trailing (so no call site moves); STRING position is the grammar's.
     (sd : Bool := false)
-    -- ▶▶ **`ls<α>` — LABEL SMOOTHING**, §5.6's ablation axis. Same rule as `wd<d>` one marker over:
+    -- **`ls<α>` — LABEL SMOOTHING**, §5.6's ablation axis. Same rule as `wd<d>` one marker over:
     -- α is baked, so it must reach the NAME or two renders collide on one path. Defaulted to the
     -- recipe's 0.1, so every committed spelling is unchanged.
     (alpha : Float := 0.1) : String :=
@@ -1112,41 +1102,41 @@ def r34AdamVariant (B replicas : Nat) (opt : R34Opt := .adamw)
    | .adamw     => if replicas ≤ 1 then "adam" else "adamdp"
    | .heavyBall => if replicas ≤ 1 then "mom"  else "momdp"
    | .sgd       => if replicas ≤ 1 then "sgd"  else "sgddp"
-   -- ⭐ `k` is IN THE NAME — `acc4x64`, `accdp4x64` — because the driver has to know it (to decide
+   -- `k` is IN THE NAME — `acc4x64`, `accdp4x64` — because the driver has to know it (to decide
    -- which micro-batch applies) and the graph has it baked (in `%ob1`/`%ob2`). Two places, and a
    -- disagreement between them is silent: the run would apply on a cadence the `1/k` does not
    -- match, i.e. a wrong effective learning rate with no error anywhere. Carrying `k` in the
    -- artifact NAME makes the driver read it off the same string that selects the file.
    | .lamb      => if replicas ≤ 1 then "lamb" else "lambdp"
    | .adamwAccum k => (if replicas ≤ 1 then "acc" else "accdp") ++ toString k ++ "x"
-   -- ⚠⚠ `lamb` ++ `acc` — the marker is NO LONGER LEADING, and that is what broke the driver's
+   -- `lamb` ++ `acc` — the marker is NO LONGER LEADING, and that is what broke the driver's
    -- `startsWith "acc"` predicate (defect #4 in `tests/TestVariantPredicates.lean`). The name is
    -- spelled this way rather than as `accdp8x64lamb` because the OPTIMIZER is the primary axis and
    -- every other variant leads with it; the fix belongs in the predicate, not in the spelling.
-   -- ⚠ `dp` goes INSIDE, right after `acc`, matching `.adamwAccum`'s placement exactly — so the
+   -- `dp` goes INSIDE, right after `acc`, matching `.adamwAccum`'s placement exactly — so the
    -- `k` parse is one rule for both, not two.
    | .lambAccum k => (if replicas ≤ 1 then "lambacc" else "lambaccdp") ++ toString k ++ "x") ++
   (if B == 32 then "" else toString B) ++
-  -- ▶ `wx` TRAILS THE BATCH, so it composes with every optimizer spelling and with the `clip` and
+  -- `wx` TRAILS THE BATCH, so it composes with every optimizer spelling and with the `clip` and
   -- `bce` markers appended after it — `lambaccdp8x64bcewx` would be wrong; the order below gives
-  -- `lambaccdp8x64wxclipbce`. ⚠ The order is a choice and
-  -- the `#guard`s below are what make it a fixed one, because `cnxAdamVariant` learned the hard way
-  -- that a marker's POSITION is as load-bearing as its presence.
+  -- `lambaccdp8x64wxclipbce`. The order is a choice and
+  -- the `#guard`s below are what make it a fixed one, because a marker's POSITION is as
+  -- load-bearing as its presence.
   (if wdExclude then "wx" else "") ++
-  -- ▶ `clip` TRAILS `wx`, which is `cnxAdamVariant`'s order (`wx` ++ `clip`) followed deliberately
+  -- `clip` TRAILS `wx`, which is `cnxAdamVariant`'s order (`wx` ++ `clip`) followed deliberately
   -- rather than re-chosen — the two nets spell the same two flags, and one rule for both is what
   -- keeps a reader from having to know which net a slug came from. With R50's `bce` appended after,
-  -- the RSB-A3 composition reads `lambaccdp8x64wxclipbce`. ⚠ The order is a CHOICE; the `#guard`s
+  -- the RSB-A3 composition reads `lambaccdp8x64wxclipbce`. The order is a CHOICE; the `#guard`s
   -- below are what make it a fixed one.
   (if gradClip then "clip" else "") ++
-  -- ▶ `drop` TRAILS `clip`, matching `cnxAdamVariant`'s `wxclipdrop` and N3's grammar. ⚠ Check the
+  -- `drop` TRAILS `clip`, matching `cnxAdamVariant`'s `wxclipdrop` and the variant grammar. Check the
   -- CONCATENATIONS rather than the marker: `clip` ++ `drop` spells `clipdrop` and `drop` ++ `bce`
   -- spells `dropbce`, and neither contains `"do"` (`dr`, not `do`) — the collision class that has
   -- already fired three times in this naming. Pinned in `tests/TestVariantPredicates.lean`.
   (if sd then "drop" else "") ++
-  -- ▶ `bce` after that, which is where the hand-passed `vSuffix` put it. See this parameter's note.
+  -- `bce` after that, which is where the hand-passed `vSuffix` put it. See this parameter's note.
   (if bce then "bce" else "") ++
-  -- ▶ …and the decay marker after even that, because it is the newest axis and appending is the
+  -- …and the decay marker after even that, because it is the newest axis and appending is the
   -- only placement that leaves all four existing spellings untouched. Empty at the default.
   lsVariantMark alpha ++
   wdVariantMark opt wdStr ++
@@ -1279,16 +1269,16 @@ def resnet34FwdFaithfulB (B nClasses : Nat) (epsStr : String)
 def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet34")
     (convBias : Bool := false)
-    -- ▶ TRAILING and defaulted, so every existing render is byte-identical (gate 1).
+    -- TRAILING and defaulted, so every existing render is byte-identical.
     (bf16 : Bool := false)
-    -- ▶ The two ABLATION knobs (§5.6). Both are baked constants, which is why each needs its own
+    -- The two ABLATION knobs (§5.6). Both are baked constants, which is why each needs its own
     -- render rather than a runtime flag: `wdStr := "0.0"` is the no-weight-decay arm and
     -- `alpha := 0.0` the no-label-smoothing one. Defaulted, so the committed renders do not move.
-    -- ⚠ `alpha := 0.0` does NOT change the graph's SHAPE -- the smoothing ops stay, at 1.0/0.0 --
+    -- `alpha := 0.0` does NOT change the graph's SHAPE -- the smoothing ops stay, at 1.0/0.0 --
     -- so the arm differs from the full recipe in constants only, which is what makes it an
     -- ablation of the recipe rather than of the network.
     (wdStr : String := "") (alpha : Float := 0.1)
-    -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
+    -- `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate only — it separates "the seven sync ops' text is right" from "the collective composes
     -- them right". Never a committed artifact; `resnet34-syncbn-check` renders it to `.lake/build/`.
     (forceSync : Bool := false) : String :=
@@ -1297,7 +1287,7 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     | .adamw     => "AdamW"
     | .heavyBall => "heavy-ball momentum + coupled L2"
     | .sgd       => "plain SGD + coupled L2 (no momentum)"
-    -- ⚠ R34 renders no accumulation artifact — `resnet34TrainStepFaithfulB` has no fourth region in
+    -- R34 renders no accumulation artifact — `resnet34TrainStepFaithfulB` has no fourth region in
     -- its signature, so passing `.adamwAccum` here would emit an optimizer that reads `%<p>a` inputs
     -- the function does not declare. The renderer REFUSES rather than emitting invalid MLIR that
     -- `iree-compile` would report as an undefined-value error a hundred lines from the cause.
@@ -1305,17 +1295,16 @@ def resnet34AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     | .adamwAccum k => panic! s!"resnet34TrainStepFaithfulB: .adamwAccum {k} needs a fourth \
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"
-    -- ⚠ Same refusal, same reason: the fourth region is a property of the SIGNATURE, not of which
+    -- Same refusal, same reason: the fourth region is a property of the SIGNATURE, not of which
     -- optimizer consumes the accumulator, so `.lambAccum` is no more renderable here than
-    -- `.adamwAccum`. ▶ This arm exists because the match is exhaustive — adding the constructor
-    -- without it is a build error, which is how the type caught this site rather than a run doing so.
+    -- `.adamwAccum`. This arm exists because the match is exhaustive — adding the constructor
+    -- without it is a build error, so the type catches this site rather than a run.
     | .lambAccum k => panic! s!"resnet34TrainStepFaithfulB: .lambAccum {k} needs a fourth \
 parameter region and R34's signature has three — render it from ResNet50RenderB, or add the region \
 here first"
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — the SAME traversal `@resnet34_fwd` renders, so the forward this differentiates
-    --     and the forward the driver scores with are one graph by construction (leg 1 of
-    --     `planning/archive/renderer_convergence.md`) ═══
+    --     and the forward the driver scores with are one graph by construction ═══
     let F : R34FwdRecB ← r34FwdChainB B nClasses epsStr convBias bf16 replicas sync
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
@@ -1375,7 +1364,7 @@ here first"
     let (csg, nsg) ← bnGammaSite B 64 112 112 sync epsStr nStc nDsr F.sst
     let (cst, nst) ← pretty B (.bnBetaGradB (N := B) (oc := 64) (h := 112) (w := 112) (.operand nDsr z112b))
     -- ═══ BN running statistics: batch μ/var per BN layer, from that layer's BN INPUT ═══
-    -- ⭐ At `replicas > 1` these are read off the all-reduced packed vector (`bnStatsMeanB` /
+    -- At `replicas > 1` these are read off the all-reduced packed vector (`bnStatsMeanB` /
     -- `bnStatsVarB`), so the host EMAs the GLOBAL batch statistics — what the reference's `_bn`
     -- buffers hold — rather than replica 0's shard's.
     let bnStat (oc hh : Nat) (xn st : String) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
@@ -1429,7 +1418,7 @@ here first"
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      -- ⚠ R34 renders no accumulation variant and no EMA one, so the fifth and sixth components
+      -- R34 renders no accumulation variant and no EMA one, so the fifth and sixth components
       -- (the accumulator's and the shadow's output names) are always `none` here. Dropping them
       -- rather than threading them is what keeps every committed R34 artifact byte-identical.
       let (c, nT, nM, nV, _, _) ← optOne opt B replicas g
@@ -1444,14 +1433,14 @@ here first"
       st9 ++ st10 ++ st11 ++ st12 ++ st13 ++ st14 ++ st15 ++ st16)
     -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
     -- `pretty` of an AST node and says so in the emitted text — the same carve-out
-    -- `cifar8_adam_train_step`'s `%loss` takes (§5 of the handoff).
+    -- `cifar8_adam_train_step`'s `%loss` takes.
     -- The SMOOTHED cross-entropy, matching the cotangent's soft target:
     --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ].
     -- Getting this wrong is invisible to every proof in the repo — `%loss` is report-only and on
     -- no gradient path — but the driver logs it and the epoch curve is how a run is judged against
-    -- the reference. A first cut here computed PLAIN CE (dropping the (1−α) factor and the α/K
-    -- term); the numeric tie caught it as a 0.28% loss disagreement against an otherwise
-    -- bit-identical forward. Hand-written emit is not verified emit (§5).
+    -- the reference. PLAIN CE here (dropping the (1−α) factor and the α/K term) shows up only in
+    -- the numeric tie, as a 0.28% loss disagreement against an otherwise bit-identical forward.
+    -- Hand-written emit is not verified emit.
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -1479,7 +1468,7 @@ here first"
     let retTys  := pTypes ++ pTypes ++ pTypes ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
     pure <|
       -- With `optLabel = "AdamW"` these are the committed byte sequences character for character;
-      -- interpolating a constant changes the source, not the output (gate 1 checks exactly that).
+      -- interpolating a constant changes the source, not the output (the inertness gate checks exactly that).
       (if replicas ≤ 1 then
         s!"    // ── ResNet-34 batch-BN {optLabel} train step: {trainStepHandNote} ──\n"
        else
@@ -1513,16 +1502,13 @@ here first"
     (packedTrainRetTys pTy ++ (r34StatSigList.map (·.2)))
   let inner : String := go.run' (0, [])
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
-  -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was
-  -- rendered. `r34AdamVariant` is the single source for the name, the artifact path, and
-  -- `LEAN_MLIR_VARIANT`.
-  -- ⚠⚠ `bf16` MUST be passed here, not merely to the block renderers. This function's own
+  -- refuses the call ("entry mismatch"). `r34AdamVariant` is the single source for the name, the
+  -- artifact path, and `LEAN_MLIR_VARIANT`.
+  -- `bf16` MUST be passed here, not merely to the block renderers. This function's own
   -- docstring three hundred lines up says why, for `wx` and `clip`: the entry NAME is derived
   -- from the variant, so a flag that reaches the emission but not the name produces an artifact
   -- whose declared entry disagrees with its own path, and the driver refuses the call outright
   -- ("entry mismatch: session holds @…_momdp64_train_step, caller asked …_momdp64bf16_…").
-  -- ConvNeXt shipped that defect twice; bf16 reproduced it a third time on its first run, which
-  -- is what this comment exists to stop happening a fourth.
   let fname := s!"{slug}_{r34AdamVariant B replicas opt (bf16 := bf16) (wdStr := wdStr) (alpha := alpha)}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
@@ -1533,29 +1519,25 @@ end Proofs.StableHLO
 
 -- Regenerate `verified_mlir/resnet34_adam_train_step.mlir` — the BATCHED (`N := B`) AdamW train
 -- step as `pretty(provenGraph)`. B=32, nClasses=10, ε=1e-5. **This is the artifact
--- `resnet34-verified-adam{,-xla}` trains on**, and this `#eval` is its ONLY writer.
---
--- It rendered to a separate `…_b.mlir` while the hand-written emitter in
--- `TestResnet34Train.lean` (since retired) still owned this path — two writers for one artifact is the
--- last-writer-wins race §2a found. The swap happened once both gates were in:
+-- `resnet34-verified-adam{,-xla}` trains on**, and this `#eval` is its ONLY writer: two writers for
+-- one artifact is a last-writer-wins race, so any other render of this step goes to its own path.
+-- The gates on this render:
 --
 --   * the numeric tie (`resnet34-adam-tie`) — forward bit-exact, backward norm-rel ≤ 2e-6;
 --   * the step bench (`resnet34-adam-bench`) — no cost, despite 1.68× the emitted ops, because
---     XLA's CSE collapses the recomputes (handoff §2b-bis).
+--     XLA's CSE collapses the recomputes.
 --
--- The hand-written emitter now renders only the DATA-PARALLEL variant, to its own
--- `…_dp.mlir` path. To re-run the tie against the retired render, recover it with
--- `git show <rev>:verified_mlir/resnet34_adam_train_step.mlir` and pass it as the first argument.
+-- To run the tie against another render of this step, pass that render as the first argument.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05")
 
--- ⭐⭐ The two Imagenette forwards, moved here from the retired `ResNet34Render.lean` (4c leg 1,
--- `planning/archive/renderer_convergence.md`). `resnet34_fwd` now comes from `r34FwdChainB` — the SAME
--- traversal every train step above differentiates — so the net that scores and the net that trains
--- are one graph by construction, and `check_adam_prefix`'s `KNOWN_SPLIT` entry for this net is
--- gone. ⚠ `resnet34_train_step.mlir` is NOT re-created: the per-example SGD-inline artifact is
--- retired with its renderer, and the batched SGD step (`resnet34_sgd_train_step.mlir`, rendered
--- above at `R34Opt.sgd`) is what chapter 5's optimizer ladder runs.
+-- The two Imagenette forwards. `resnet34_fwd` comes from `r34FwdChainB` — the SAME traversal every
+-- train step above differentiates — so the net that scores and the net that trains are one graph by
+-- construction, and `check_adam_prefix` needs no `KNOWN_SPLIT` entry for this net.
+--
+-- There is no per-example SGD-inline `resnet34_train_step.mlir`: the batched SGD step
+-- (`resnet34_sgd_train_step.mlir`, rendered above at `R34Opt.sgd`) is what chapter 5's optimizer
+-- ladder runs.
 #eval IO.FS.writeFile "verified_mlir/resnet34_fwd.mlir"
   (Proofs.StableHLO.resnet34FwdFaithfulB 32 10 "1.0e-05")
 
@@ -1566,11 +1548,11 @@ end Proofs.StableHLO
 -- Weight decay and label smoothing are BAKED constants (`optConstsB`'s `%wd`, and the α/K pair in
 -- the smoothed-CE cotangent), so unlike warmup, the schedule and augmentation they cannot be
 -- ablated by a runtime flag. Each arm is its own artifact, named for what it removes.
--- ⚠ They differ from `resnet34_adam_train_step.mlir` in CONSTANTS ONLY -- same ops, same shapes,
+-- They differ from `resnet34_adam_train_step.mlir` in CONSTANTS ONLY -- same ops, same shapes,
 -- same arity -- which is the property that makes the ablation measure the recipe and not the net.
--- ⚠ The PATHS are `r34AdamVariant`'s output, not hand-spelled: `wd00` and `ls0000` are what the
+-- The PATHS are `r34AdamVariant`'s output, not hand-spelled: `wd00` and `ls0000` are what the
 -- markers produce, and the entry name inside each file is built from the same call. Spelling the
--- path by hand is precisely the defect this net shipped once and ConvNeXt twice.
+-- path by hand is how a path and the entry declared inside it come to disagree.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adamwd00_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (wdStr := "0.0"))
 
@@ -1578,11 +1560,11 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (alpha := 0.0))
 
 -- ── The bf16 half of §5.6, so every arm has a precision peer. ──────────────────────────────────
--- ⭐ The point is NOT that bf16 is faster here — at batch 32 on Imagenette it is barely that. It is
+-- The point is NOT that bf16 is faster here — at batch 32 on Imagenette it is barely that. It is
 -- that the recipe deltas should be the SAME SIZE in both precisions: an ablation that only holds in
 -- fp32 is measuring the arithmetic, not the recipe. Chapter 4's Lever 3 makes the same argument on
 -- the normalized CIFAR net, and this is its ResNet-scale peer.
--- ⚠ `bf16` is LAST in the spelling, after even the decay and smoothing marks, which is what keeps
+-- `bf16` is LAST in the spelling, after even the decay and smoothing marks, which is what keeps
 -- every fp32 name above unchanged.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adambf16_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (bf16 := true))
@@ -1598,7 +1580,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" (alpha := 0.0) (bf16 := true))
 
 -- ── §5.6's optimizer ladder needs a bottom rung. ──────────────────────────────────────────────
--- ⚠ `.heavyBall` is NOT "AdamW removed" — momentum is most of what an adaptive optimizer buys at
+-- `.heavyBall` is NOT "AdamW removed" — momentum is most of what an adaptive optimizer buys at
 -- this depth, so an arm that swaps one for the other measures the gap between two good optimizers
 -- and calls it the optimizer's contribution. `.sgd` is the honest bottom: coupled decay and a step,
 -- no velocity, no moments.
@@ -1611,7 +1593,7 @@ end Proofs.StableHLO
     (opt := Proofs.StableHLO.R34Opt.sgd) (bf16 := true))
 
 -- ── The momentum-BASE ablation (§5.6). ────────────────────────────────────────────────────────
--- ⭐ Same two baked knobs as the AdamW arms, on the heavy-ball render. The point of re-running the
+-- Same two baked knobs as the AdamW arms, on the heavy-ball render. The point of re-running the
 -- recipe under a NON-adaptive base is that AdamW's per-parameter normalisation absorbs exactly the
 -- tuning the other ingredients supply, so an ablation rooted at AdamW may understate every one of
 -- them. Rooted at momentum there is nothing absorbing it.
@@ -1633,72 +1615,60 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (wdStr := "0.0") == "adamwd00"
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (alpha := 0.0) == "adamls0"
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw == "adam"
--- ⚠ bf16 COMPOSES with the two ablation marks and trails both. Pinned, because the composition is
+-- bf16 COMPOSES with the two ablation marks and trails both. Pinned, because the composition is
 -- exactly what a hand-spelled path would get wrong.
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (bf16 := true) == "adambf16"
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .heavyBall (bf16 := true) == "mombf16"
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (wdStr := "0.0") (bf16 := true) == "adamwd00bf16"
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw (alpha := 0.0) (bf16 := true) == "adamls0bf16"
 
--- The DATA-PARALLEL render (handoff §2b-quater), selected at run time by `LEAN_MLIR_VARIANT=adamdp`.
--- Same graph, plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. This
--- replaces the hand-written `TestResnet34Train.lean` DP emitter (since retired), so the certified renderer is
--- now the ONLY writer of both R34 AdamW artifacts.
+-- The DATA-PARALLEL render, selected at run time by `LEAN_MLIR_VARIANT=adamdp`. Same graph, plus
+-- one `all_reduce(add)/N` per parameter gradient before its AdamW triple. The certified renderer is
+-- the ONLY writer of both R34 AdamW artifacts.
 --
--- ⭐⭐ SYNC-BN since 2026-09-21 (`planning/global_bn_verified.md` §3.2): every BatchNorm layer
--- all-reduces its μ, then its Chan-corrected σ² (`σ²_r + (μ_r − μ)²`), before normalising, and the
--- two dy-reductions before its backward, and the γ gradient reads the same global `x̂` — three more
--- collectives per BN layer per step, each a vector of ≤ 4·oc floats. So `adamdp` (2×32) now
--- computes the SAME function as `adam64` (1×64), a known-answer identity `resnet34-syncbn-check`
--- runs; before, it computed the mean of two per-replica batch-32 losses
--- (`dpMeanGrad_ne_globalBatchGrad`).
---
--- `2` is the replica count these are rendered at, and it must match `PJRT_REPLICAS` at run time —
--- the graph bakes `replica_groups`. Re-render here to change it.
+-- SYNC-BN: every BatchNorm layer all-reduces its μ, then its Chan-corrected σ²
+-- (`σ²_r + (μ_r − μ)²`), before normalising, and the two dy-reductions before its backward, and the
+-- γ gradient reads the same global `x̂` — three more collectives per BN layer per step, each a
+-- vector of ≤ 4·oc floats. So `adamdp` (2×32) computes the SAME function as `adam64` (1×64), a
+-- known-answer identity `resnet34-syncbn-check` runs; with per-replica BN it would compute the mean
+-- of two per-replica batch-32 losses (`dpMeanGrad_ne_globalBatchGrad`).
 #eval IO.FS.writeFile "verified_mlir/resnet34_adamdp_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 2)
 
--- The **bs256** render (handoff §2d.1), selected at run time by `LEAN_MLIR_VARIANT=adam256` with
+-- The **bs256** render, selected at run time by `LEAN_MLIR_VARIANT=adam256` with
 -- `cfg.batchSize := 256`. Batch is worth ~1.8× img/s on this net and bs256 fits on a 7900 XTX;
 -- it is also the batch ImageNet wants. `B` is a true parameter of the renderer, so this is the
 -- whole change — the graph structure is identical and only the tensor dimensions move.
 --
--- It renders to its OWN path rather than re-pointing `resnet34_adam_train_step.mlir`, so the
--- artifact the trainer runs today is untouched and the §2b tie/bench baselines stay valid. Note
--- the eval forwards are still bs32: train at 256 with `LEAN_MLIR_SKIP_EVAL=1`, or re-render them.
+-- It renders to its OWN path rather than re-pointing `resnet34_adam_train_step.mlir`, so the bs32
+-- artifact and its tie/bench baselines are untouched. Note the eval forwards are still bs32: train
+-- at 256 with `LEAN_MLIR_SKIP_EVAL=1`, or re-render them.
 --
--- Gated by `resnet34-batch-check` (§2d.1): feeding 8 identical copies of one bs32 batch makes the
+-- Gated by `resnet34-batch-check`: feeding 8 identical copies of one bs32 batch makes the
 -- batch-BN statistics and the mean-CE cotangent identical to the bs32 render's, so the two must
 -- produce the SAME step — an exact known-answer check on the re-render, not a tolerance argument.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam256_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 256 10 "1.0e-05")
 
 -- **bs128 × 2 replicas** — the data-parallel render at a real batch (global 256), the EfficientNet
--- `adamdp128` shape (§2e-quater) brought to R34. `B` and `replicas` are both true parameters, so
+-- `adamdp128` shape brought to R34. `B` and `replicas` are both true parameters, so
 -- this composes the two `#eval`s above with no new renderer code.
 --
--- Why this batch: §2d.1 measured bs256 at **1.78× img/s** over bs32 single-device, most of it
+-- Why this batch: bs256 measures **1.78× img/s** over bs32 single-device, most of it
 -- amortising the ~272 MB `[θ|m|v]` host↔device round trip over 8× the images — and that transfer is
--- exactly what the DP path pays per replica per step (§2c). So 2×128 is where the batch win and the
+-- exactly what the DP path pays per replica per step. So 2×128 is where the batch win and the
 -- replica win stack rather than fight.
 --
--- ⚠ **The eval forwards are still bs32**, so this variant needs `LEAN_MLIR_SKIP_EVAL=1` — it yields
+-- **The eval forwards are still bs32**, so this variant needs `LEAN_MLIR_SKIP_EVAL=1` — it yields
 -- descent and throughput, NOT a validation accuracy. Same caveat `adam256` carries.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adamdp128_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 10 "1.0e-05" 2)
 
--- **bs64, SINGLE device** — the controlled peer of `adamdp` (bs32 x 2 = global 64). Same global
--- batch, same 147 steps/epoch, same schedule; the ONLY difference is where the BatchNorm statistics
--- come from — 64 examples here, 32-per-replica there.
---
--- That is the §10.3b caveat as an experiment rather than an argument. The handoff asserts
--- everywhere that `2 x 32 != 1 x 64` under batch BN and uses it to explain why R34's collective
--- cannot be gated by splitting a batch (hence the cifar8 proxy). Nothing had ever measured how much
--- it is worth in accuracy. Run both and subtract; with step count and global batch held fixed, the
--- residual IS the BN-splitting effect.
--- ⚠ Since 2026-09-21 that experiment is MOOT for the current `adamdp`: the DP render is sync-BN, so
--- `2 x 32` IS `1 x 64` to float reduction order (`resnet34-syncbn-check`), and this bs64 render is
--- the single-device side of that identity rather than a controlled peer.
+-- **bs64, SINGLE device** — the single-device peer of `adamdp` (bs32 x 2 = global 64): same
+-- global batch, same 147 steps/epoch, same schedule. The DP render is sync-BN, so `2 x 32` IS
+-- `1 x 64` to float reduction order (`resnet34-syncbn-check`), and this render is the single-device
+-- side of that identity. Under per-replica batch BN the pair would instead measure the
+-- BN-splitting effect: with step count and global batch held fixed, the residual IS that effect.
 #eval IO.FS.writeFile "verified_mlir/resnet34_adam64_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 64 10 "1.0e-05")
 
@@ -1719,33 +1689,31 @@ end Proofs.StableHLO
 --     velocity = MOMENTUM * v + g    -- μ = 0.9
 --     params   = p - lr * velocity   -- heavy-ball
 --
--- ⚠ **This is NOT `momParamF`, and that trap is the reason to read `optOne` before editing here.**
+-- **This is NOT `momParamF`, and that trap is the reason to read `optOne` before editing here.**
 -- The `SgdMomentumStep` family is **Nesterov** (`θ − lr·(g + μ·v')`); the reference steps by `v'`
 -- alone. `Proofs.momParam_heavyBall_diff` states the exact difference. Reaching for the
--- momentum-named op would have compiled, rendered, trained, and produced a *different optimizer*
--- than the thing this artifact exists to be 1:1 with — silently.
+-- momentum-named op compiles, renders, trains, and produces a *different optimizer* than the thing
+-- this artifact exists to be 1:1 with — silently.
 --
 -- Rendered at **bs32 / 10 classes**, i.e. the direct peer of `adam`, ON PURPOSE: that is the shape
--- the existing gates and the Imagenette trainer can exercise today. The ImageNet shape is
--- `B := 256, nClasses := 1000` and is one more `#eval` whenever the streaming loader lands — `B`
--- and `nClasses` are both true renderer parameters, so no renderer change is involved.
+-- the existing gates and the Imagenette trainer can exercise. The ImageNet shape is
+-- `B := 256, nClasses := 1000` and is its own `#eval` below — `B` and `nClasses` are both true
+-- renderer parameters, so no renderer change is involved.
 --
--- ⚠ **Not yet numerically gated.** Gate 1 held (all six `adam*` artifacts re-render byte-identical
--- through the `opt` threading) and the interface matches positionally, but the exact known-answer
--- check is still owed: from `m = v = 0`, the `adam` render's `m' = (1−β₁)·g` recovers the gradient
--- exactly (`g = 10·m'`), so `v'` here must equal `g + wd·θ` and `θ'` must equal `θ − lr·v'` on
--- shared inputs. That is a cross-render known answer, not a tolerance argument — the `shard-check`
--- construction, reused. Until it is run, say "rendered", not "certified".
+-- **Gated by `r34-mom-tie`** (`tests/TestMomTie.lean`): from `m = v = 0` the `adam` render's
+-- `m' = (1−β₁)·g` recovers the gradient exactly (`g = 10·m'`), so `v'` here must equal
+-- `g + wd·θ` and `θ'` must equal `θ − lr·v'` on shared inputs — a cross-render known answer, not a
+-- tolerance argument. Its control requires the Nesterov prediction to miss.
 #eval IO.FS.writeFile "verified_mlir/resnet34_mom_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 1 .heavyBall)
 
--- ══ ImageNet-1k: the three artifacts the reference-pairing run needs (handoff §2k) ══
+-- ══ ImageNet-1k: the three artifacts the reference-pairing run needs ══
 --
 -- `B := 256, nClasses := 1000`, heavy-ball — i.e. the `jax/MainResnetImagenet.lean` recipe, on the
--- certified renderer. **No renderer change was needed for any of this**: `B`, `nClasses`, `opt` and
+-- certified renderer. **No renderer change is needed for any of this**: `B`, `nClasses`, `opt` and
 -- `slug` are all parameters, which is the whole reason this is three `#eval`s and not a project.
 --
--- ⚠ **The slug is `resnet34in`, NOT `resnet34`, and that is load-bearing.** The forward artifacts
+-- **The slug is `resnet34in`, NOT `resnet34`, and that is load-bearing.** The forward artifacts
 -- carry no variant in their path (`<slug>_fwd.mlir`), so rendering a 1000-class forward under the
 -- `resnet34` slug would OVERWRITE the 10-class Imagenette one that five committed runs and the
 -- prefix audit depend on — silently, and with a graph of a different arity. A distinct slug is what
@@ -1766,20 +1734,20 @@ end Proofs.StableHLO
 -- comparable to either peer without an LR rescale. Matching the reference is what makes the
 -- resulting wall-clock a like-for-like number rather than a new experiment.
 --
--- Nothing in the renderer changed for this: `optOne` already takes `replicas` and already calls
--- `emitGradAllReduce`, exactly as §2h-bis found for mnv2. This is one `#eval`.
+-- Nothing in the renderer changes for this: `optOne` takes `replicas` and calls
+-- `emitGradAllReduce`, exactly as for mnv2. This is one `#eval`.
 #eval IO.FS.writeFile "verified_mlir/resnet34in_momdp64_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 64 1000 "1.0e-05" 4
     Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
 
--- ⭐⭐ **The bf16 peer of the render above** — `momdp64bf16`, byte-for-byte the same graph except
+-- **The bf16 peer of the render above** — `momdp64bf16`, byte-for-byte the same graph except
 -- that every conv (stem, both block convs, the 1×1 projection, both dgrads, every wgrad) is its
 -- bf16 twin: bf16 operands, a **bf16-TYPED** convolution result, then a convert back to f32.
 -- Everything else — BN, the residual adds, the loss, the heavy-ball tail, the master weights —
 -- stays f32, which is what `jax/MainResnetImagenet.lean` does and why its bf16 arm converges to
 -- the same place as its f32 arm.
 --
--- ⚠ The bf16-typed RESULT is the load-bearing part and is not cosmetic. A conv with bf16 operands
+-- The bf16-typed RESULT is the load-bearing part and is not cosmetic. A conv with bf16 operands
 -- and an f32 result has its converts deleted by XLA under excess precision — cuDNN then gets f32
 -- parameters and the graph runs entirely in fp32 while still *reading* as mixed precision. This
 -- is measured, not feared; `BatchableOp.convBf16` carries the note. Verify with the operand dtypes
@@ -1792,21 +1760,20 @@ end Proofs.StableHLO
 -- the same global batch, the same 5004 steps/epoch and the same recipe as `mom256` and `momdp64`
 -- above. That is the whole point: the phase-4 table in §5.7 compares wall-clock across boxes, so a
 -- 2-card row is only readable if the recipe underneath it is the one the 4-card row ran. Rendering
--- 64 per replica would have been the smaller change and the wrong number — global batch 128, 10,008
+-- 64 per replica would be the smaller change and the wrong number — global batch 128, 10,008
 -- steps/epoch, and a run that needs an LR rescale before it means anything.
 --
 -- `B` and `replicas` are both true parameters, so this composes the two `#eval`s above and adds no
--- renderer code — the same "one `#eval`" the 4-GPU peer was. bs128/card fits a 24 GB 7900 XTX with
--- room: the single-device `mom256` render above is bs256 and §2d.1 measured it fitting on one.
+-- renderer code — the same "one `#eval`" as the 4-GPU peer. bs128/card fits a 24 GB 7900 XTX with
+-- room: the single-device `mom256` render above is bs256 and fits on one.
 #eval IO.FS.writeFile "verified_mlir/resnet34in_momdp128_train_step.mlir"
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 128 1000 "1.0e-05" 2
     Proofs.StableHLO.R34Opt.heavyBall "resnet34in")
 
--- ⭐ Both ImageNet forwards, on the batched chain since 2026-09-06 (4c leg 1). `resnet34in_fwd`
--- used to come from `ResNet34Render.resnet34FwdFaithfulV`, i.e. PER-EXAMPLE BatchNorm, while every
--- `resnet34in_*` train step above is batch BN — the same split `check_adam_prefix` carried for the
--- 10-class pair, at a scale that audit never looked at (its PAIRS list has only the Imagenette
--- names). The eval forward is world-agnostic and stays as it was.
+-- Both ImageNet forwards. `resnet34in_fwd` comes from the batched chain, so it is batch BN like
+-- every `resnet34in_*` train step above; a per-example-BN forward here would be the split
+-- `check_adam_prefix` guards for the 10-class pair, at a scale that audit does not look at (its
+-- PAIRS list has only the Imagenette names). The eval forward is world-agnostic.
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd.mlir"
   (Proofs.StableHLO.resnet34FwdFaithfulB 256 1000 "1.0e-05" "resnet34in")
 
@@ -1821,16 +1788,15 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 128 2 == "adamdp128"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 128 1 == "adam128"
--- ⭐ The bf16 marker, pinned the way every other marker here is. ⚠ These `#guard`s pin the SPELLING
--- but not the wiring, and the wiring is what actually broke: `resnet34AdamTrainStepFaithfulB`
--- derives its entry name from this function, and on bf16's first run it called it WITHOUT the flag
--- — so the artifact was written to `…momdp64bf16_train_step.mlir` while declaring
--- `@resnet34in_momdp64_train_step` inside, and the driver refused at load with an entry mismatch.
--- The third time this repo has shipped that exact defect (ConvNeXt's `wx`, then its `clip`).
+-- The bf16 marker, pinned the way every other marker here is. These `#guard`s pin the SPELLING but
+-- not the wiring: `resnet34AdamTrainStepFaithfulB` derives its entry name from this function, and a
+-- call WITHOUT the flag writes the artifact to `…momdp64bf16_train_step.mlir` while declaring
+-- `@resnet34in_momdp64_train_step` inside, and the driver refuses at load with an entry mismatch.
+-- The flag must reach both.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.heavyBall
          false false false "" true == "momdp64bf16"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.heavyBall == "momdp64"
--- ▶ And the marker must not collide with the DRIVER's variant predicates, which read the same
+-- And the marker must not collide with the DRIVER's variant predicates, which read the same
 -- string to decide the blob layout. `cdOn` is the dangerous one: it is a substring test for "do",
 -- and a slug that tripped it would silently add a dropout region to the checkpoint.
 -- These are `cdOn`/`accOn`/`emaOn` (`Verified.Train`) evaluated on the bf16 slug: each is a
@@ -1851,31 +1817,31 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 64 4 .heavyBall == "momdp64"
 -- The 2-GPU ImageNet render. Same rule, and worth pinning separately: `momdp64` and `momdp128`
 -- differ only in the per-replica batch, so a slug that dropped `B` would collide two artifacts
--- rendered at different replica counts onto one path — the last-writer-wins race §2a found.
+-- rendered at different replica counts onto one path — a last-writer-wins race.
 #guard Proofs.StableHLO.r34AdamVariant 128 2 .heavyBall == "momdp128"
--- ⚠ **THE TWO TRAILING FLAG AXES ARE INERT ON EVERY NAME ABOVE**, and that is what the defaults
+-- **THE TWO TRAILING FLAG AXES ARE INERT ON EVERY NAME ABOVE**, and that is what the defaults
 -- buy: R34 renders no `wx` and no `clip` artifact, so passing them explicitly as `false` must
 -- reproduce the legacy spellings character for character. `ResNet50RenderB.lean`'s guards pin the
 -- ON spellings, since R50 is the net that renders them.
 #guard Proofs.StableHLO.r34AdamVariant 32 1 .adamw false false == "adam"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 .heavyBall false false == "momdp64"
--- ⚠ And the ORDER, pinned here beside the function that decides it rather than only at the call
+-- And the ORDER, pinned here beside the function that decides it rather than only at the call
 -- site: `wx` then `clip`, both after the batch. Getting this backwards renders an artifact whose
 -- declared entry disagrees with its path, which the shim reports only as "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 64 1 .adamw true true == "adam64wxclip"
 
--- ⭐⭐ **D1's TWO BAKED CONSTANTS, pinned against the theorem that licenses them.**
+-- **THE CLIP'S TWO BAKED CONSTANTS, pinned against the theorem that licenses them.**
 -- `Proofs.clipFactor_accum` says `min(1, kc/(√(k²s) + kε)) = min(1, c/(√s + ε))`, i.e. that folding
 -- the norm on the accumulated SUM and scaling BOTH constants by `k` reproduces the reference's clip
 -- of the MEAN exactly. These are that identity's `k = 8` instance as the render actually emits it,
 -- and they are the line a reader checks when `dense<8.000000000000>` looks like a wrong threshold.
 #guard Proofs.StableHLO.clipNormStr 1.0 8 == "8.000000000000"
 #guard Proofs.StableHLO.clipEpsStr 8 == "0.000008000000"
--- ⚠ `k = 1` — no accumulation — must leave both at the reference's own values, which is what makes
+-- `k = 1` — no accumulation — must leave both at the reference's own values, which is what makes
 -- the scaling inert on a non-accumulating clip render.
 #guard Proofs.StableHLO.clipNormStr 1.0 1 == "1.000000000000"
 #guard Proofs.StableHLO.clipEpsStr 1 == "0.000001000000"
--- ⚠ and `optAccumK` is the SINGLE source of the `k` those two read, so pin that it agrees with the
+-- and `optAccumK` is the SINGLE source of the `k` those two read, so pin that it agrees with the
 -- constructor rather than being a second parse of the variant string.
 #guard Proofs.StableHLO.optAccumK (Proofs.StableHLO.R34Opt.lambAccum 8) == 8
 #guard Proofs.StableHLO.optAccumK (Proofs.StableHLO.R34Opt.adamwAccum 4) == 4

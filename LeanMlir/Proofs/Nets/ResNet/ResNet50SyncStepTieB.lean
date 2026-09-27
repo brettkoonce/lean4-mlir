@@ -773,9 +773,9 @@ theorem r50_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The whole-net capstone
---   ⭐ The stem and head ties are ResNet-34's, reused verbatim, as T3 reuses its single-device
---   ones: `r34StemSyncTiedB` is generic in `{ic oc}` and tags `sW` / `sg` / `sbt`, the names
---   R50's stem shares; `r34HeadSyncTiedB` is generic in `{c nCls}` and tags `Wd` / `bd`.
+--   The stem and head ties are ResNet-34's, reused verbatim, as `r50_net_tiedB` reuses its
+--   single-device ones: `r34StemSyncTiedB` is generic in `{ic oc}` and tags `sW` / `sg` / `sbt`,
+--   the names R50's stem shares; `r34HeadSyncTiedB` is generic in `{c nCls}` and tags `Wd` / `bd`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Every all-reduced parameter gradient of the sync-BN data-parallel ResNet-50 step, tied** —

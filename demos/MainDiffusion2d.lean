@@ -1,7 +1,6 @@
 import LeanMlir
 
-/-! Diffusion and flow matching on a 2-D target — `planning/archive/diffusion_2d_demo.md`
-    and `planning/boltzmann_generator_demo.md`.
+/-! Diffusion and flow matching on a 2-D target.
 
     The diffusion demo you can be *wrong* about. Every image DDPM here
     succeeds or fails by "does that look like a digit to you"; on a 2-D
@@ -9,19 +8,19 @@ import LeanMlir
     number (cell recall and energy distance) instead of a judgement, and it
     trains in seconds on 18,178 params rather than 7 h on 3M.
 
-    ⭐ No new codegen primitives. The denoiser is `.dense`/`.relu`, which
+    No new codegen primitives. The denoiser is `.dense`/`.relu`, which
     Chapters 1-2 already prove, and the time conditioning reuses
     `Ddpm.prependSinCosT` with `H = W = 1` — the image path's own encoding,
     applied to a 2-vector instead of a plane.
 
-    ⭐ FIVE targets. Four point clouds (8-gaussians mode collapse, spiral
+    FIVE targets. Four point clouds (8-gaussians mode collapse, spiral
     corner-cutting, two-moons over-smoothing, checkerboard leakage) and one
     DENSITY: `muller_brown`, exp(-U/kT) on the Müller-Brown surface, whose
     training set is a Langevin chain and whose every score is exact by
     quadrature. The target name is an argument and it flows into `spec.name`,
     so each one owns its MLIR, checkpoint and samples without a flag anywhere.
 
-    ⭐ `flow` trains the SAME net on the SAME rank-2 MSE block as a
+    `flow` trains the SAME net on the SAME rank-2 MSE block as a
     flow-matching model: the interpolant is `x_t = (1-t)x0 + t·ε` with target
     `v = ε - x0` instead of the cosine-schedule `x_t` with target `ε`
     (`Ddpm.flowStepInputs`), and the sampler is Euler on `dx/dt = v` from
@@ -31,14 +30,14 @@ import LeanMlir
     (minibatch OT), `reflow` retrains on the trained flow's own (noise,
     sample) pairs; both are straightening moves and both are the same exe.
 
-    ⭐ `logp` integrates the divergence of `v` beside the state, so every
+    `logp` integrates the divergence of `v` beside the state, so every
     sample comes with its exact log-density by the continuity equation
     (four extra forwards per step, central differences); `nll` runs the
     same integration the other way on the exact reference draw. That is the
     KL column, and the importance weights that make a Boltzmann generator.
 
-    ⭐ The eval graph is compiled at batch `nGen`, one forward per solver
-    step for the whole cloud. The archived version ran one point at a time.
+    The eval graph is compiled at batch `nGen`, one forward per solver
+    step for the whole cloud.
 
     Usage:
       python3 scripts/datasets/preprocess_toy2d.py 8192 data/toy2d
@@ -61,7 +60,7 @@ def condDim : Nat := 2 + 2 * nFreq
 
 /-- The targets: arg name, the display name that goes into `spec.name`, and
     the data file. `buildPrefix` is derived from that name, so naming the
-    target here is the whole of what keeps five sets of artifacts apart. ⚠ The
+    target here is the whole of what keeps five sets of artifacts apart. The
     8-gaussians display name must stay `8-gaussians` — it is what the existing
     checkpoint and MLIR on disk are keyed by. -/
 def toy2dTargets : List (String × String × String) :=
@@ -104,7 +103,7 @@ def nStripFrames : Nat := 8
 def nPathPoints : Nat := 128
 
 /-- The integer the time channel takes for a continuous flow time `t ∈ [0, 1]`.
-    ⚠ Train and sample must agree on this map; `Ddpm.flowStepInputs` spells the
+    Train and sample must agree on this map; `Ddpm.flowStepInputs` spells the
     same `round(t · Tmax)`. -/
 def flowIdx (t : Float) : Nat :=
   let r := Float.round (t * Tmax.toFloat)
@@ -205,7 +204,7 @@ def main (args : List String) : IO Unit := do
   -- is, so it composes with the positional numeric arguments.
   let target := (args.find? fun a => toy2dTargets.any (·.1 == a)).getD "eight_gaussians"
   let (label, dataPath) := (toy2dTargets.lookup target).getD ("8-gaussians", "data/toy2d/eight_gaussians.bin")
-  -- ⭐ `flow` is the flow-matching arm; `ot` and `reflow` are its two coupling
+  -- `flow` is the flow-matching arm; `ot` and `reflow` are its two coupling
   -- variants (both imply `flow`). Each arm owns its artifacts through the
   -- build tag, so the DDPM baseline and the three flow arms of one target
   -- never share a checkpoint.
@@ -215,7 +214,7 @@ def main (args : List String) : IO Unit := do
   if ot && reflow then
     throw <| IO.userError "ot and reflow are two different couplings — pick one"
   let arm := if reflow then "flow-reflow" else if ot then "flow-ot" else if flow then "flow" else ""
-  -- ⭐ `ddim` is the shipped sampler and the DDPM arm's default; `fm-euler` is
+  -- `ddim` is the shipped sampler and the DDPM arm's default; `fm-euler` is
   -- the flow arm's. The other DDPM samplers are the Score-SDE family on the
   -- SAME weights: `euler` integrates the probability-flow ODE naively, `heun`
   -- does it to second order, `sde` integrates the reverse SDE with
@@ -230,18 +229,18 @@ net predicts a velocity, not ε — use fm-euler or fm-heun"
   if !flow && isFm then
     throw <| IO.userError s!"sampler '{sampler}' integrates dx/dt = v, and this arm's net predicts \
 ε — add `flow`, or use ddim / euler / heun / sde"
-  -- ⚠ `logsnr` spaces the continuous solvers' grid uniformly in log σ instead of
+  -- `logsnr` spaces the continuous solvers' grid uniformly in log σ instead of
   -- uniformly in t. It exists to SETTLE A CONFOUND, not as a tuning knob: the
   -- first sweep held spacing uniform so the comparison was between solvers, but
   -- uniform-in-t is the worst grid for a stiff VP schedule, so part of what DDIM
   -- appeared to win was its parameterisation rather than its integrator. Giving
   -- the explicit solvers the better grid is what separates the two.
   let logsnr := args.any (· == "logsnr")
-  -- ⭐ `logabar` is the STABILITY-OPTIMAL grid for an explicit solver, and it is
+  -- `logabar` is the STABILITY-OPTIMAL grid for an explicit solver, and it is
   -- the control that actually settles the confound. β = -d/dt log ᾱ, so a grid
   -- uniform in log ᾱ holds `h·β` constant — and `h·β` is exactly the
   -- amplification factor in the Euler update `x ← x(1 - hβ/2) + ε̂(hβ/2σ)`.
-  -- ⚠ `logsnr` turned out to be the WRONG control: it concentrates steps at
+  -- `logsnr` is the WRONG control: it concentrates steps at
   -- small σ and takes one enormous step across the region where β diverges,
   -- which made Euler 20× worse rather than better (25.1 against 1.25 at NFE 10,
   -- 100 % off-support). Kept because that measurement is the evidence.
@@ -251,7 +250,7 @@ net predicts a velocity, not ε — use fm-euler or fm-heun"
 schedule to space by, its solvers use a uniform grid in t"
   -- `logp`: the exact log-density of every sample by the continuity equation.
   -- `nll`: the same integration forward on the exact reference draw.
-  -- `field`: dump v_θ on a (lattice × t) grid for the field error of §6.2.
+  -- `field`: dump v_θ on a (lattice × t) grid for the field error.
   let logp  := args.any (· == "logp")
   let nll   := args.any (· == "nll")
   let field := args.any (· == "field")
@@ -270,7 +269,7 @@ of the velocity field)"
         s!"unrecognised argument '{a}' — targets: {names}; flags: {fl}"
   let nums   := args.filterMap String.toNat?
   let steps  := (nums[0]?).getD 3000
-  -- Sampler step count is an ARGUMENT, not a constant: the plan's open
+  -- Sampler step count is an ARGUMENT, not a constant: the open
   -- question is how many reverse steps a 2-D manifold actually needs, and
   -- the image demos' 50 is a convention nobody measured. Here it is a sweep.
   let nStepsArg := (nums[1]?).getD 50
@@ -296,7 +295,7 @@ of the velocity field)"
 
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
-  -- ⚠ RANK-4 [B, 2, 1, 1], not [B, 2]. `iree_ffi_train_step_adam_ddpm`
+  -- RANK-4 [B, 2, 1, 1], not [B, 2]. `iree_ffi_train_step_adam_ddpm`
   -- hardcodes a rank-4 target upload; the loss branch reshapes. Same
   -- convention the FPN detector uses to ride this FFI unchanged.
   let outShape : List Nat := [B, 2, 1, 1]
@@ -309,7 +308,7 @@ of the velocity field)"
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"
 
-  -- ⭐ The eval graph at batch nGen: one forward per solver step for the whole
+  -- The eval graph at batch nGen: one forward per solver step for the whole
   -- cloud. The divergence integration multiplies the evaluations by five and
   -- the field dump by a lattice, and this is what keeps everything under a minute.
   let evalMlir := MlirCodegen.generateEval spec nGen
@@ -434,7 +433,7 @@ pairs; run `lake exe diffusion-2d {target} flow` first"
   let vAt := vAtWith evalSess evalParams
   let nSteps : Nat := nStepsArg
   let stride := Tmax / nSteps
-  -- ⚠ `nSteps` is the NFE BUDGET, not the step count. Heun spends two
+  -- `nSteps` is the NFE BUDGET, not the step count. Heun spends two
   -- evaluations per step, so it takes half as many — that is what makes the
   -- arms comparable at all.
   let nfe := (allSamplers.lookup sampler).getD 1
@@ -473,12 +472,12 @@ wrong times"
       frames := frames.push (0, 0.0, F32.slice x 0 (2 * nPathPoints))
   else
     -- Frame schedule of the DDIM strip.
-    -- ⭐ Strip frames are spaced uniformly in log σ, where σ_t = √(1-ᾱ_t) is the
+    -- Strip frames are spaced uniformly in log σ, where σ_t = √(1-ᾱ_t) is the
     -- NOISE scale of the marginal `p(x_t) = data ⊛ N(0, σ_t²)`. That is the axis
     -- the picture actually moves along, and it is the axis the diffusion
     -- literature plots against (uniform log σ is uniform log-SNR once ᾱ ≈ 1).
-    -- ⚠ Both obvious alternatives are worse, and by measurement rather than
-    -- taste. Uniform in t (the `tframes` branch below, run 2026-08-28) lands at
+    -- Both obvious alternatives are worse, and by measurement rather than
+    -- taste. Uniform in t (the `tframes` branch below) lands at
     -- σ = 1.00, 0.98, 0.92, 0.83, 0.71, 0.56, 0.39, 0.20 — FIVE of nine panels
     -- above σ = 0.7, i.e. barely-touched noise, with the resolution crammed into
     -- the last. Uniform in ᾱ is worse still (computed from the schedule, never
@@ -510,7 +509,7 @@ wrong times"
     -- Uniform-in-t grid for the continuous solvers, deliberately matching
     -- DDIM's uniform index stride so the comparison is between SOLVERS and
     -- not between spacings.
-    -- ⚠ It stops at t = 1/Tmax rather than 0: σ(0) = 0 exactly and the drift
+    -- It stops at t = 1/Tmax rather than 0: σ(0) = 0 exactly and the drift
     -- carries a 1/σ. The DDIM path fudges the same singularity with ᾱ_prev = 0.9999.
     let tHi := (Tmax - 1).toFloat / Tmax.toFloat
     let tLo := 1.0 / Tmax.toFloat
@@ -532,7 +531,7 @@ wrong times"
         Ddpm.tOfAbar (1.0 - sg * sg)
       else
         tHi + (tLo - tHi) * k.toFloat / solverSteps.toFloat
-    -- One network evaluation at continuous time. ⚠ QUANTIZED: the encoder takes an
+    -- One network evaluation at continuous time. QUANTIZED: the encoder takes an
     -- integer index because the model was trained at t ∈ {0 … Tmax-1}, so a
     -- continuous solver queries the nearest one. Harmless at NFE ≥ 10 over 1000
     -- indices; below that the quantization, not the solver, is the limit.
@@ -566,7 +565,7 @@ wrong times"
         --   σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·√(1 - ᾱ_t/ᾱ_prev)
         --   b'  = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t)
         -- η = 0 collapses to the deterministic form (σ = 0, b' = b) and η = 1 is
-        -- ancestral DDPM sampling. ⭐ No new primitive: `ddimStep` computes
+        -- ancestral DDPM sampling. No new primitive: `ddimStep` computes
         -- `a·x + b·e`, so the noise term is a second call with (1.0, σ_t, z).
         let sigma := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
                          * Float.sqrt (1.0 - abT / abP)

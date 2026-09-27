@@ -2,7 +2,7 @@ import LeanMlir.Verified.Train
 
 /-! # ConvNeXt-T artifact smoke (iree-compile over the COMMITTED bytes)
 
-**This file no longer renders anything.** Both ConvNeXt train-step artifacts are written by the
+**This file renders nothing.** Both ConvNeXt train-step artifacts are written by the
 `#eval`s in `LeanMlir/Proofs/Codegen/ConvNeXtRender.lean` as `pretty(provenGraph)`, and those are
 their only writers:
 
@@ -13,18 +13,14 @@ their only writers:
 
 What remains is the part `lake build` cannot do: **iree-compile the committed bytes**, which needs
 the compiler on PATH. It reads them and throws if they are missing rather than quietly recreating
-them — recreating them is what made this a double writer in the first place.
+them — recreating them would make this a double writer.
 
-## Why both emitters that used to live here are gone
+## The AdamW tie's one differing gradient
 
-**The SGD one (retired §2a-quinquies).** Its tie came back **gradient BIT-EXACT** over 27,811,542
-coordinates against a structurally different emitter (4483 vs 3590 lines), so that deletion was
-provably lossless.
+`lake build convnext-adam-tie`, one AdamW step, all 83,434,629 returned floats: `%loss`
+**BIT-EXACT**, and 179 of 180 parameter gradients bit-exact.
 
-**The AdamW one (retired 2026-07-28, §2f).** `lake build convnext-adam-tie`, one AdamW step, all
-83,434,629 returned floats: `%loss` **BIT-EXACT**, and 179 of 180 parameter gradients bit-exact.
-
-The one that differs is worth recording, because it is a *conditioning* result and not a defect.
+The one that differs is a *conditioning* result and not a defect.
 `s3b2lg` — the last block's per-channel layer-scale γ — disagrees at norm-rel 6.9e-3. Its gradient is
 `reduce[0,2,3](project-out ⊙ block-cotangent)`, a **cancelling** sum (|Σ|/Σ|·| ≈ 0.09 across
 channels, far worse within one), and it is the only parameter in the block whose gradient reads a
@@ -38,15 +34,12 @@ the **spread** as well as the magnitude. The spread gate is not decoration: pert
 (α 0.1 → 0.11) clears the 4×-magnitude gate at 9.1e-3 while disturbing **178/180** parameters.
 Conditioning noise is local to the ill-conditioned op; a different function is global.
 
-Recover the retired emitter from `git show b94e8e9:tests/TestConvNeXtTrain.lean`; the retired
-*artifact* is `git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir`.
-
 Run (needs iree-compile on PATH): lake env lean tests/TestConvNeXtTrain.lean
 -/
 
 
 /-- Compile a COMMITTED artifact. Throws if it is missing: this file is not its writer, and
-    recreating it here is exactly the double-writer race that shipped two different functions. -/
+    recreating it here is the double-writer race that can ship two different functions. -/
 private def smoke (path dst label : String) : IO Unit := do
   if !(← System.FilePath.pathExists path) then
     throw (IO.userError s!"{path} missing — it is written by \

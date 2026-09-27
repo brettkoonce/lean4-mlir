@@ -1,6 +1,6 @@
 import LeanMlir.Pong
 
-/-! Pong in Lean — Phase 0 of `planning/pong_dqn_demo.md`: the sanity baselines
+/-! Pong in Lean — the sanity baselines
     (random, tracker, self-play) and a rendered frame strip over the game in
     `LeanMlir/Pong.lean`. No stack, no GPU: `lake exe pong-env [games=100]`. -/
 

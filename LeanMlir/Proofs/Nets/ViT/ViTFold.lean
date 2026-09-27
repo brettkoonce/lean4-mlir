@@ -91,7 +91,7 @@ theorem posEmbedSgd_den {ic H W P N D : Nat} (pN lrStr cotN : String)
 
 -- The **CLS token** reuses the batched `denseBiasSgdB` (the render takes `clsSliceF`'s row-0 slice of
 -- the embed cotangent, then the `{N=1}` batch reduce); its patch-embed cls-Jacobian connection
--- (`clsToken_sgd_certified`) is threaded at the §1a tie (where the cls cotangent IS the cls slice),
+-- (`clsToken_sgd_certified`) is threaded at the tie (where the cls cotangent IS the cls slice),
 -- exactly as the reused conv/dense/BN ops are in the mnv2/r34/convnext ties — no NEW fold lemma here.
 
 -- ════════════════════════════════════════════════════════════════

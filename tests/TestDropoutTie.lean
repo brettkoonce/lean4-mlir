@@ -4,25 +4,23 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 /-! # Classifier dropout — the two gates its own identity checks cannot make
 
-`recipe_gaps.md` gap C. EfficientNet-B0's reference sets `dropout := 0.2`
-(`jax/MainEfficientNetImagenet.lean:68`) and no verified render had it until 2026-08-03.
+EfficientNet-B0's reference sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`).
 
 The feature ships with the usual endpoint gates — `verified_mlir/` re-renders byte-identically with
 dropout off, the forward is a byte-prefix of the train step, `Proofs.dropout_ones_id` says a ones
-mask is the exact identity — and **every one of them is an identity check at the neutral value.**
-`xla_pjrt_handoff.md` §0.4 finding 1 is about exactly that class: *a gate whose input makes the
-intervention inert cannot test the intervention.* So this file is the two things those cannot say:
+mask is the exact identity — and **every one of them is an identity check at the neutral value.** *A
+gate whose input makes the intervention inert cannot test the intervention.* So this file is the two
+things those cannot say:
 
 | gate | what it establishes | why no endpoint gate can |
 |---|---|---|
 | **A — the known answer** | the mask multiplies **per ELEMENT**, so this is dropout and not stochastic depth applied to the classifier | at a ones mask the two regularisers are the SAME FUNCTION. Only a non-uniform mask against a host-computed answer separates them |
 | **W — the weight-gradient operand** | `∂L/∂W_d` reads the **dropped** activation, not the pooled one | at a ones mask the two activations are the same buffer, so the keep = 1 tie, the prefix audit and the ones-identity endpoint ALL pass on a render that has this wrong |
 
-⚠⚠ **Gate W is the one that matters, and it exists because the same defect shipped once already.**
-ConvNeXt's LayerScale γ gradient read the cotangent at the drop site and was fed the undropped one:
-18 of 180 gradients wrong by a per-example factor, on the very parameter stochastic depth acts
-through, found by tracing operands **by hand** because nothing in that feature's gate set could see
-it (handoff §0.10). Dropout has the identical shape one net over — `dnW`'s `xName` argument — and
+**Gate W is the one that matters.** ConvNeXt's LayerScale γ gradient reads the cotangent at the
+drop site, and feeding it the undropped one leaves 18 of 180 gradients wrong by a per-example
+factor, on the very parameter stochastic depth acts through, with nothing in that feature's gate
+set able to see it. Dropout has the identical shape one net over — `dnW`'s `xName` argument — and
 `scripts/probes/fault_dropout_wgrad.py` is that defect, mechanised, so the gate has a control it is
 verified to fail against.
 
@@ -36,10 +34,9 @@ verified to fail against.
 
 **Why gate W is STRUCTURAL and not numeric, deliberately.** The defect is an operand choice, and a
 byte check on the operand localises it exactly — where a numeric tie would report "some parameter
-moved" and leave the reader to find which. §0.2 increment 4 makes the same call for the same reason:
-*a byte tie says which form did it in one run, where a tolerance argument cannot.* It also means
-gate W needs no GPU, no det shim and no determinism floor, so it runs in milliseconds on any box —
-which matters, because §0.1 says this one cannot do long runs.
+moved" and leave the reader to find which. *A byte tie says which form did it in one run, where a
+tolerance argument cannot.* It also means gate W needs no GPU, no det shim and no determinism floor,
+so it runs in milliseconds on any box — which matters, because this box cannot do long runs.
 
 **What this does NOT establish.** Gate A is SITE-LOCAL: it drives the op through the same `pretty`
 emitter the render uses, at small dims, against a closed form. It says the op multiplies per
@@ -58,7 +55,7 @@ private def mkVec (vals : Array Float) : IO ByteArray := do
 
 /-- `(max |a−b|, max(|a|,|b|), bit-exact count)`. The magnitude is over BOTH buffers — a control
     that drives one side to identically zero would otherwise give a zero denominator and report a
-    total collapse as agreement (`TestDropPathTie`'s `cmpBufs`, learned there). -/
+    total collapse as agreement (`TestDropPathTie`'s `cmpBufs`). -/
 private def cmpBufs (a b : ByteArray) (n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut e := 0
   for i in [0:n] do
@@ -79,7 +76,7 @@ private def nonFinite (a : ByteArray) (n : Nat) : Nat := Id.run do
 
 private def die (msg : String) : IO α := throw (IO.userError msg)
 
-/-- Compile fresh — delete both the bare and the backend-scoped `.vmfb` first (§4): `compileVmfb`
+/-- Compile fresh — delete both the bare and the backend-scoped `.vmfb` first: `compileVmfb`
     keys its cache on the output path and an mtime, never on the source, so a second run under one
     tag silently reuses the first binary. That bites exactly when running a control. -/
 private def freshSession (path tag : String) : IO LowererSession := do
@@ -94,15 +91,15 @@ private def freshSession (path tag : String) : IO LowererSession := do
 -- ════════════════════════════════════════════════════════════════
 
 private def OB : Nat := 8      -- examples
-private def ON : Nat := 5      -- per-example width. ⚠ ON ≠ OB — see `opModule`
+private def ON : Nat := 5      -- per-example width. ON ≠ OB — see `opModule`
 
 private def zOX : Vec (OB * ON) := fun _ => 0
 
 /-- **The op, through the SAME `pretty` emitter the render uses** — one `dropoutB` over `%x` with
     the mask as a graph input, which is exactly the subtree `enetFwdChain` splices before the dense.
 
-    ⚠ `ON ≠ OB` on purpose, and here it does MORE work than in `TestDropPathTie`. There the point
-    was that a wrong-axis broadcast becomes a type error; here there is no broadcast at all, so the
+    `ON ≠ OB` on purpose, and here it does MORE work than in `TestDropPathTie`. There the point
+    is that a wrong-axis broadcast becomes a type error; here there is no broadcast at all, so the
     asymmetry instead means the mask buffer (40 floats) cannot be confused with a per-example one
     (8 floats) by any accident of shape. What remains to catch is the substantive error — a mask
     that is CONSTANT WITHIN each example, i.e. stochastic depth wearing dropout's types — and that
@@ -122,7 +119,7 @@ private def opModule : String :=
     **Bit-exact is the right bar by argument.** Both operands are float32, so their exact product
     needs at most 48 mantissa bits and is therefore exact in the float64 Lean computes it in;
     rounding that to float32 is by definition what float32 multiplication returns. Any difference at
-    all is the render computing something else. ⚠ The mask is read back out of the buffer the device
+    all is the render computing something else. The mask is read back out of the buffer the device
     receives, never from the literal, so both sides see identical float32 values. -/
 private def dropoutRef (x m : ByteArray) : IO ByteArray := do
   let mut cells : Array ByteArray := #[]
@@ -130,7 +127,7 @@ private def dropoutRef (x m : ByteArray) : IO ByteArray := do
     cells := cells.push (← F32.const 1 (F32.read m k.toUSize * F32.read x k.toUSize))
   pure (F32.concat cells)
 
-/-- ⭐⭐ **Control C1 — THE WRONG REGULARISER.** Every element of example `j` scaled by that
+/-- **Control C1 — THE WRONG REGULARISER.** Every element of example `j` scaled by that
     example's FIRST mask value, i.e. what stochastic depth computes: a `(B, 1, …, 1)` mask
     broadcast over the feature axis.
 
@@ -157,7 +154,7 @@ private def dropoutRefPerExample (x m : ByteArray) : IO ByteArray := do
 * **interior `0.5 / 0.25 / 0.75`** — exactly representable in binary, so the known answer is not
   testing the harness's own rounding.
 
-⚠⚠ **It VARIES WITHIN each example, and that is the load-bearing property.** A mask that happened
+**It VARIES WITHIN each example, and that is the property that matters.** A mask that happened
 to be constant per example would make control C1 agree with the gate, and the gate would then be
 passing on a render that computes stochastic depth. The first value of each example is deliberately
 never `0.0`, for `TestDropPathTie`'s reason: C1 compares against "everything scaled by `m[j·n]`",
@@ -214,7 +211,7 @@ computing a different function."
   if onesOk != onesIdx || zeroOk != zeroIdx then
     die "GATE A FAILED: an endpoint theorem does not hold on device"
 
-  -- ── ⭐ C1: the wrong regulariser must NOT match ──
+  -- ── C1: the wrong regulariser must NOT match ──
   let refPE ← dropoutRefPerExample x m
   let (dP, _, eP) := cmpBufs y refPE n
   IO.println s!"  ⚠ CONTROL C1 (per-EXAMPLE mask — i.e. stochastic depth on the classifier): \
@@ -249,20 +246,20 @@ private def dotOperands (line : String) : List String :=
   ((line.splitOn "stablehlo.dot_general").getD 1 "").splitOn ","
     |>.map (·.trimAscii.toString) |>.filter (·.startsWith "%") |>.map (fun s => (s.splitOn " ").getD 0 s)
 
-/-- ⭐⭐ **GATE W.** In a classifier-dropout render, three things must hold about ONE value — the
+/-- **GATE W.** In a classifier-dropout render, three things must hold about ONE value — the
     dropout site's output — and each is a different way for the render to be wrong:
 
     1. the dropout site exists at all, as `multiply` against `%do` with no broadcast;
     2. the classifier dense reads the DROPPED value (contracting the feature axis, `[1] x [0]`);
-    3. ⭐ the classifier WEIGHT GRADIENT reads the DROPPED value too (contracting the BATCH axis,
+    3. the classifier WEIGHT GRADIENT reads the DROPPED value too (contracting the BATCH axis,
        `[0] x [0]`) — `∂L/∂W_d = Σ_b (dense input)_b ⊗ dy_b`.
 
     (3) is the whole point. (1) and (2) are what any reading of the render would check; (3) is the
     consumer of the displaced value that is easy to miss, because it lives in the BACKWARD while the
-    op was spliced into the FORWARD. Handoff §0.10's carry-forward, verbatim: *when an op is
-    spliced into a chain, list every consumer of the value it displaced.*
+    op was spliced into the FORWARD. *When an op is spliced into a chain, list every consumer of the
+    value it displaced.*
 
-    ⚠ And note what is NOT checked here: the bias gradient, which reads only the cotangent and must
+    And note what is NOT checked here: the bias gradient, which reads only the cotangent and must
     be UNAFFECTED. It is asserted below for the same reason the others are — a render that scaled it
     too would be wrong in the opposite direction, and nothing else would notice. -/
 private def gateNet (path : String) : IO Unit := do
@@ -295,7 +292,7 @@ than reporting a pass on a render it cannot read."
   let fwdDot := dots.filter (fun i =>
     lines[i]!.contains "contracting_dims = [1] x [0]" &&
     (dotOperands lines[i]!).getD 0 "" == lhs)
-  -- ⚠ Batch contraction ALONE is not enough to identify it — EfficientNet has 33
+  -- Batch contraction ALONE is not enough to identify it — EfficientNet has 33
   -- `contracting_dims = [0] x [0]` sites, because every squeeze-excite dense's weight gradient
   -- contracts the batch too. What singles out the CLASSIFIER's is that its first operand is one of
   -- the two candidate values: the dropped activation (correct) or the pooled one (the defect). So

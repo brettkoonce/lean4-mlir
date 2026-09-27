@@ -64,7 +64,7 @@ theorem vitFinalLNBack_eq_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : V
   exact (rowLNVecFlatHasVJP_backward_eq ε hε γF βF X dy).symm
 
 -- ════════════════════════════════════════════════════════════════
--- § 2. ⭐ The depth-`k` tower fold — the one real proof
+-- § 2. The depth-`k` tower fold — the one real proof
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The tower-fold tie.** The hand-composed depth-`k` encoder-tower backward is

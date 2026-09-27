@@ -54,19 +54,18 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
             cW2 ++ cb2 ++ cW1 ++ cb1 ++ cW0 ++ cb0,
           nW0, nb0, nW1, nb1, nW2, nb2, nlog)
   let (body, nW0, nb0, nW1, nb1, nW2, nb2, nlog) := act.run' (0, [])
-  -- ⚠⚠ `%loss` IS REPORT-ONLY, AND IT IS A DECLARED CARVE-OUT. Every other line of
+  -- `%loss` IS REPORT-ONLY, AND IT IS A DECLARED CARVE-OUT. Every other line of
   -- this module is `pretty` of a `den`-certified AST node; the block below is
-  -- hand-written text, exactly as ConvNeXt/EfficientNet/R50 already emit theirs.
-  -- It exists because the demo loops had **no loss slot at all**, which is why
-  -- chapters 2 and 3 had to borrow their loss curves from the old *unverified*
-  -- ablation runner — theorems about one program, plot from another.
+  -- hand-written text, exactly as ConvNeXt/EfficientNet/R50 emit theirs.
+  -- It gives the demo loops a loss slot, so chapters 2 and 3 plot their loss curves
+  -- from the same program the theorems are about.
   --
-  -- ⭐ It is APPENDED, never woven in. It reads only the logits and `%onehot` and
+  -- It is APPENDED, never woven in. It reads only the logits and `%onehot` and
   -- introduces only `%l*` names, so the six proven parameter outputs are
-  -- byte-identical to what this renderer emitted before it existed and
-  -- `MlpFold` is untouched. Verified by diffing the render.
-  -- ⚠ It must stay the LAST output: the driver keeps the leading parameter tensors
-  -- device-resident and reads only the tail (`Verified.Train`, handoff §2d.3).
+  -- byte-identical with or without it and `MlpFold` is untouched. Verified by
+  -- diffing the render.
+  -- It must stay the LAST output: the driver keeps the leading parameter tensors
+  -- device-resident and reads only the tail (`Verified.Train`).
   let lossCode :=
     "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
     s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
@@ -82,7 +81,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
     s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
   "module @m {\n" ++
-  -- ⚠ `%lslot` is an UNUSED INPUT, and it is load-bearing for the ABI rather than the
+  -- `%lslot` is an UNUSED INPUT, and it is load-bearing for the ABI rather than the
   -- math. The shared C entry (`lean_iree_mlp_train_step_v`) reads ONE shape list and
   -- uses it for both the input slice walk and the output destinations, so the two
   -- lists must have equal length. `trainAdamSched` already lives with this: `%lr`

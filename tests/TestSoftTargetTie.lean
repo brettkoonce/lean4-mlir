@@ -3,10 +3,9 @@ import LeanMlir.Verified.Train
 
 /-! # Soft-target gate — the committed renders are AFFINE in the target, so mixup needs no new render
 
-**The claim this settles.** `planning/archive/xla_pjrt_handoff.md` §2p asserted that mixup/cutmix need a
-new `softLabelCE` cotangent on the verified path. That is **wrong**, and this harness is what
-proves it. Every render already takes the target as a `[batch, nClasses]` FLOAT tensor `%onehot`,
-and the emitted cotangent is
+**The claim this settles.** Mixup/cutmix need **no** new `softLabelCE` cotangent on the verified
+path, and this harness is what proves it. Every render already takes the target as a
+`[batch, nClasses]` FLOAT tensor `%onehot`, and the emitted cotangent is
 
 ```
 dy = ((softmax − onehot) + α·onehot − α/K) / B      -- ViTRender.lean:312, and the peer renders
@@ -19,18 +18,17 @@ which is **affine in `onehot`**. The forward does not read it at all, and the ba
 > `grad(λ·y_a + (1−λ)·y_b)  =  λ·grad(y_a) + (1−λ)·grad(y_b)`
 
 — the affine constant survives because `λ + (1−λ) = 1`. That identity is exactly what mixup asks
-for, and it holds by construction rather than by approximation. What actually blocked soft targets
-was **not** the graph but the C layer, which expanded int32 labels into a one-hot in three separate
-copies; `lean_fill_targets` now takes either.
+for, and it holds by construction rather than by approximation. On the C side, `lean_fill_targets`
+takes either int32 labels or a float target.
 
 **Why gate it instead of asserting it.** The reasoning above is about the render's *intended*
-denotation, and this repo's standing rule (§5) is that a faithfulness argument does not witness the
-emitter — the `Tok → text` lexer is audited-but-trusted, and §2b shipped a `%loss` that disagreed
-with its own cotangent for exactly that reason. So: measure the identity on the committed bytes.
+denotation, and this repo's standing rule is that a faithfulness argument does not witness the
+emitter — the `Tok → text` lexer is audited-but-trusted. So: measure the identity on the committed
+bytes.
 
 **It gates `m`, not `θ'`, and that is forced.** AdamW's update is nonlinear in the gradient
 (`m̂/(√v̂+ε)`), so θ' is not affine in the target even though the gradient is. Feeding `m = 0`
-makes `adamMNextF` give `m' = (1−β₁)·g = 0.1·g`, exactly linear in the gradient — the §5
+makes `adamMNextF` give `m' = (1−β₁)·g = 0.1·g`, exactly linear in the gradient — the
 shard-check construction, reused. `v' = 0.001·g²` is quadratic and is reported but NOT gated.
 
 **The CONTROL is what makes a pass meaningful.** `|mix − a|` is what this returns if the harness
@@ -69,12 +67,11 @@ private def mkSoft (bs off nc : Nat) (lam : Float) : IO ByteArray := do
 
     A batch-BN net carries running-stat **inputs** and returns the batch statistics, so its arity is
     2·(BN layers) wider on both sides — EfficientNet is 740 outputs against the 642 this harness
-    supplies, and the shim's G4 guard refuses the call outright rather than answering it wrongly
-    (§5 records the same lesson for `shard-check`). Adding the BN region here is mechanical and
-    `TestShardCheck.lean` has the worked version, but it buys nothing for this question: the
-    property under test is a property of the **loss cotangent**, which is the same expression in
-    every one of these renders. Two nets that disagree about almost everything else agreeing on it
-    is the evidence; a third and fourth would be repetition. -/
+    supplies, and the shim's G4 guard refuses the call outright rather than answering it wrongly.
+    Adding the BN region here is mechanical and `TestShardCheck.lean` has the worked version, but it
+    buys nothing for this question: the property under test is a property of the **loss cotangent**,
+    which is the same expression in every one of these renders. Two nets that disagree about almost
+    everything else agreeing on it is the evidence; a third and fourth would be repetition. -/
 private def netOf : String → Option (VerifiedNetSpec × Nat)
   | "vit"          => some (vitVerified,      32)
   | "convnext"     => some (convnextVerified, 32)
@@ -109,9 +106,9 @@ def main (args : List String) : IO Unit := do
                             ++ #[#[], #[], #[]])
   let x ← F32.heInit 555 (bs * net.d0).toUSize 1.0
 
-  let yA := mkLabels bs 0 nc                 -- int32 hard labels  (the OLD path)
-  let yB := mkLabels bs off nc               -- int32 hard labels  (the OLD path)
-  let yM ← mkSoft bs off nc lam              -- float32 soft target (the NEW path)
+  let yA := mkLabels bs 0 nc                 -- int32 hard labels  (the hard path)
+  let yB := mkLabels bs off nc               -- int32 hard labels  (the hard path)
+  let yM ← mkSoft bs off nc lam              -- float32 soft target (the soft path)
   IO.println s!"  target buffers: hard {yA.size} bytes, soft {yM.size} bytes \
 (expect {bs*4} and {bs*nc*4})"
 
@@ -132,12 +129,12 @@ def main (args : List String) : IO Unit := do
   let ySoftA ← mkSoft bs 0 nc 1.0     -- λ=1 ⇒ a pure one-hot of the `yA` classes
   let oSA ← run "a-as-soft" ySoftA
   -- The FLOOR for that comparison: the identical hard target, run again through the identical
-  -- construction. Each `run` builds a fresh session and recompiles, and §3's "bit-identical within
-  -- a process" turns out NOT to survive that on every net — ConvNeXt disagrees with itself on
+  -- construction. Each `run` builds a fresh session and recompiles, and "bit-identical within
+  -- a process" does NOT survive that on every net — ConvNeXt disagrees with itself on
   -- ~0.15% of coordinates by sub-print-precision amounts, which is its documented ill-conditioned
-  -- layer-scale reduce (§2f-bis: "does not reproduce to 1e-4 against ANY reordering"). Without
+  -- layer-scale reduce ("does not reproduce to 1e-4 against ANY reordering"). Without
   -- this run the PATH check would read that as a broken soft path. Measure the floor; never assume
-  -- it (§4).
+  -- it.
   let oA2 ← run "a-again" yA
 
   -- Compare the `m` region only: [θ' | m' | v' | …], so m' starts at nParams.
@@ -195,13 +192,13 @@ itself. `lean_fill_targets` is building a different target from the same informa
     IO.eprintln s!"VACUOUS: the two label sets produce gradients only {ctlRel} apart — \
 the affine identity is untested. Pick a larger `off`."
     IO.Process.exit 1
-  -- ③ The affine identity is gated RELATIVE TO THE CONTROL, never absolutely. §2d.1 spells out
-  --    why: an absolute 1e-4 on a gradient "failed at 2.9e-3 and looked like a defect. It is
-  --    not." The residual here is not the render disagreeing — it is that `λ·grad_a + (1−λ)·grad_b`
-  --    is a HOST-side combination of two separately-rounded gradients, so it carries cancellation
-  --    the fused run does not, and how much depends on the net's conditioning (ViT is far worse
-  --    than ConvNeXt on exactly this axis, §3). A margin against the control is the honest bar,
-  --    and it is the same shape every tie in this repo uses.
+  -- ③ The affine identity is gated RELATIVE TO THE CONTROL, never absolutely.
+  --    The residual here is not the render disagreeing — it is that
+  --    `λ·grad_a + (1−λ)·grad_b` is a HOST-side combination of two separately-rounded
+  --    gradients, so it carries cancellation the fused run does not, and how much depends
+  --    on the net's conditioning (ViT is far worse than ConvNeXt on exactly this axis).
+  --    A margin against the control is the honest bar, and it is the same shape every tie
+  --    in this repo uses.
   let sep := ctlRel / (max rel 1e-12)
   if sep < 50.0 then
     IO.eprintln s!"SOFT-TARGET GATE FAILED: the affine residual {rel} is only {sep}× below the \

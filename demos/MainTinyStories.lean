@@ -1,7 +1,6 @@
 import LeanMlir
 
-/-! BPE-tokenized GPT trained on TinyStories (planning/archive/tinygpt_demo_v2.md
-    Part II).
+/-! BPE-tokenized GPT trained on TinyStories.
 
     ~8.5M-param decoder-only transformer, vocab 4096, T=256:
       tokenPositionEmbed (V=4096, T=256, D=256, idsInput=true)
@@ -10,7 +9,7 @@ import LeanMlir
 
     Key difference from the char-level demo: the model input is [B, T]
     f32 token ids. The embedding is the true gather/scatter path
-    (`tokenPositionEmbed gather`, Part II Option 2) — forward is a
+    (`tokenPositionEmbed gather`) — forward is a
     `stablehlo.gather` of the [V, D] table, backward a `stablehlo.scatter`-
     add — so neither the host upload NOR the in-graph [B, T, V] one-hot is
     ever built (O(T·D) not O(T·V) memory). Validated bit-identical to the

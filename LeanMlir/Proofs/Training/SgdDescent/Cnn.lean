@@ -73,7 +73,7 @@ namespace Proofs
 open StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § Whole-net MNIST-CNN forward rounding budget (Item A capstone)
+-- § Whole-net MNIST-CNN forward rounding budget
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The float MNIST-CNN (no BN) forward** — the float peer of
@@ -559,7 +559,7 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
   simp [ite_and, @eq_comm _ o co]
 
 -- ════════════════════════════════════════════════════════════════
--- § Conv gradient-step rounding (planning §1b-B): the conv weight grad is
+-- § Conv gradient-step rounding: the conv weight grad is
 --   a spatial correlation (a dot), the bias grad a spatial sum — so both
 --   rounded SGD steps reduce to the generic dot/sum step closes.
 -- ════════════════════════════════════════════════════════════════
@@ -682,7 +682,7 @@ theorem FloatModel.mnist_cnn_convW_step_float_budget (M : FloatModel)
     (Finset.sum_le_card_nsmul _ _ _ fun s _ => hterm s).trans_eq (by norm_num)
   have hG : |∑ s, convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤ 784 * (a * g) :=
     (Finset.abs_sum_le_sum_abs _ _).trans hsum
-  -- the conv weight step budget (Item B), with G := 784·a·g
+  -- the conv weight step budget, with G := 784·a·g
   have hstep := M.cnn_convW_step_float_close W act cot o cc kh kw hG
     (by norm_num : (0:ℝ) ≤ 1/10)
   refine hstep.trans ?_
@@ -735,7 +735,7 @@ theorem FloatModel.mnist_cnn_convb_step_float_budget (M : FloatModel)
     (Finset.sum_le_card_nsmul _ _ _ fun s _ => hterm s).trans_eq (by norm_num)
   have hG : |∑ s, cotWin cot o s| ≤ 784 * g :=
     (Finset.abs_sum_le_sum_abs _ _).trans hsum
-  -- the conv bias step budget (Item B), with G := 784·g
+  -- the conv bias step budget, with G := 784·g
   have hstep := M.cnn_convb_step_float_close b cot o hG (by norm_num : (0:ℝ) ≤ 1/10)
   refine hstep.trans ?_
   -- eg ≤ (47/10⁶)·784·g  (γ₇₈₅ × the summed gradient mass)
@@ -973,7 +973,7 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     Finset.mem_univ, ite_true]
 
 -- ════════════════════════════════════════════════════════════════
--- § Increment 2 — the conv2 float-backward grad-close (two generic cores)
+-- § The conv2 float-backward grad-close (two generic cores)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Scalar ReLU-mask freeze** — the `(if z>0 then 1 else 0)·x` peer of
@@ -5494,13 +5494,13 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
   exact hmain
 
 -- ════════════════════════════════════════════════════════════════
--- § Increment 5 — the conv BIASES (the last descent rung)
+-- § The conv BIASES (the last descent rung)
 --
 -- The bias gradient is the spatial SUM of the conv-output cotangent
--- (`convBiasGrad_eq_sum`), the Kronecker channel-indicator Jacobian
--- collapsing the `∑ ci` to `ci = o`. The cotangent chains are reused
--- wholesale from the conv-WEIGHT rungs (Increments 1–4): the one new
--- core is `sum_perturbed_close`, the `M.sum` peer of `dot_perturbed_close`.
+-- (`convBiasGrad_eq_sum`), the Kronecker channel-indicator Jacobian collapsing the
+-- `∑ ci` to `ci = o`. The cotangent chains are reused wholesale from the
+-- conv-WEIGHT rungs: the one new core is `sum_perturbed_close`, the `M.sum` peer
+-- of `dot_perturbed_close`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Float sum against a perturbed summand** — the conv-BIAS grad-close's

@@ -54,7 +54,7 @@ open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
 -- § The batched smoothness bundles
---   ⭐ `IVPos` / `IVNoExpPos` are reused from `MobileNetV2FullPaper.lean` — a BN epsilon's
+--   `IVPos` / `IVNoExpPos` are reused from `MobileNetV2FullPaper.lean` — a BN epsilon's
 --   positivity does not know which axis the norm reduces. Only these do.
 -- ════════════════════════════════════════════════════════════════
 
@@ -425,7 +425,7 @@ noncomputable def mobilenetv2ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `mnv2PreBK` form IS the committed forward
---   ⚠ Peeled one layer at a time through `*_apply`. A one-step `rfl` against a seventeen-deep
+--   Peeled one layer at a time through `*_apply`. A one-step `rfl` against a seventeen-deep
 --   nested application does not survive (a kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
 --   identical terms and never unfolds an inner layer.
 -- ════════════════════════════════════════════════════════════════

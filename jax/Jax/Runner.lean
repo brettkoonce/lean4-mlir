@@ -85,12 +85,12 @@ def runRecipeMain (exe : String) (spec : NetSpec) (ds : DatasetKind)
       IO.FS.writeFile (".lake/build/" ++ out) code
       IO.println s!"[{exe}]   -> .lake/build/{out}  (SHIM, {code.length} chars; emits data only)"
       return
-    -- `--emit`: write the trainer and STOP, the exact counterpart of `--shim` above. ⚠ It exists
-    -- because `runJax` writes the script and then immediately spawns python on it, so the only way
-    -- to refresh a `generated_*.py` after a spec change was to start a real ImageNet run and race a
-    -- timeout against it. That is a bad way to regenerate a file, and it is how a regeneration
-    -- would end up writing a checkpoint nobody asked for. Same `spec`, same `r.cfg`, byte-identical
-    -- output to what `runJax` would have written — it is the same `JaxCodegen.generate` call.
+    -- `--emit`: write the trainer and STOP, the exact counterpart of `--shim` above. It exists
+    -- because `runJax` writes the script and then immediately spawns python on it, so without it
+    -- the only way to refresh a `generated_*.py` after a spec change is to start a real ImageNet
+    -- run and race a timeout against it — which can write a checkpoint nobody asked for. Same
+    -- `spec`, same `r.cfg`, byte-identical output to what `runJax` would have written — it is the
+    -- same `JaxCodegen.generate` call.
     if args.any (fun a => a == "--emit") then
       let code := JaxCodegen.generate spec r.cfg ds dataDir
       IO.FS.createDirAll ".lake/build"

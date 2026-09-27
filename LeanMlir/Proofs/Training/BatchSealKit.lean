@@ -351,8 +351,7 @@ private theorem flatConv_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c�
   simp only [flatConv, Tensor3.unflatten_flatten]
   exact conv2d_ctK c₀ hc₀ hkH hkW s b _ o hi wi
 
-/-- Decimation reads position `(2i, 2j)`, channel for channel (the generic peer of the retired
-    2-channel `decimate_unflatten`). -/
+/-- Decimation reads position `(2i, 2j)`, channel for channel. -/
 private theorem decimate_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
     (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (decimateFlat oc h w z) c hi wi
@@ -412,7 +411,7 @@ theorem batchMap_flatConvStride2_zero {N ic oc h w kH kW : Nat} (W : Kernel4 oc 
 
 -- ═════════════════════════════════════════════════════════════
 -- § 3b. The XLA-`SAME` peers — odd decimation
---   ⚠ At an even input a stride-2 XLA-`SAME` conv pads asymmetrically and so keeps the **odd**
+--   At an even input a stride-2 XLA-`SAME` conv pads asymmetrically and so keeps the **odd**
 --   positions, where the symmetric `flatConvStride2` keeps the even ones. MobileNetV2's stem and
 --   all four of its strided depthwises are this family; ResNet's are not. A centre tap does not
 --   care which phase survives, so these are §3's proofs with one index changed.
@@ -455,7 +454,7 @@ private theorem bcell_convS2Xla_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (h
 
 -- ═════════════════════════════════════════════════════════════
 -- § 3c. The centre-tap DEPTHWISE kernel
---   ⭐ A depthwise conv cannot broadcast — it reads only its own channel — so its centre tap is
+--   A depthwise conv cannot broadcast — it reads only its own channel — so its centre tap is
 --   the identity on every channel at once, and the carrier's per-channel `δ` survives unchanged
 --   rather than collapsing to `fun _ => s · δ 0`. `depthwiseConv2d`'s padding guard is `conv2d`'s,
 --   so the value proof is `conv2d_ctK`'s with the channel sum deleted.
@@ -848,7 +847,7 @@ theorem head_diff_ct {c h w nCls : Nat} (hh : 0 < h) (hw : 0 < w) (c₀ : Fin c)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. The SYMMETRIC strided depthwise — `eDiff_dwS2Xla`'s peer
---   ⚠ MobileNetV2's strided depthwises are XLA-`SAME` (odd decimation); MobileNetV4's are
+--   MobileNetV2's strided depthwises are XLA-`SAME` (odd decimation); MobileNetV4's are
 --   symmetric (even). One lemma per padding token, as at the strided convs.
 -- ════════════════════════════════════════════════════════════════
 private theorem depthwiseStride2Flat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)

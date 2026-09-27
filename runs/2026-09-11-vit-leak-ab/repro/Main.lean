@@ -1,9 +1,9 @@
-/-! Standalone repro for the ImageNet prefetch retention (2026-09-11). No GPU, no data, no shim.
+/-! Standalone repro for the ImageNet prefetch retention. No GPU, no data, no shim.
 
     `lake build && .lake/build/bin/leakrepro <mode> [sizeMB] [iters] [append] [conc] [sleepMs] [zero|pipe]`
 
     * `direct`    — read on the main thread. Flat.
-    * `task`      — the trainer's old path: `Handle.read` allocates on a pool thread, main drops
+    * `task`      — `Handle.read` allocates on a pool thread, main drops
                     it. RssAnon climbs and `LazyFree` climbs with it: mimalloc answers a
                     cross-thread free of a huge block with `madvise(MADV_FREE)`, not a release.
     * `dedicated` — same on a fresh OS thread per read: flat RSS but the whole buffer refaults

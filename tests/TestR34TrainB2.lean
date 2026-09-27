@@ -7,11 +7,11 @@ The committed `resnet34_adam_train_step.mlir` is B=32, which is more than a CPU 
 wants to carry. This is the same renderer at `B := 2`, written to `.lake/build/` because it is a
 test input rather than part of the certified corpus.
 
-⚠ **Sole writer of this path**, deliberately. Two `#eval`s writing one artifact is the
-last-writer-wins race the repo has been bitten by (§2a), and a *test* artifact is no less exposed
-to it than a committed one — arguably more, since nothing diffs it.
+**Sole writer of this path**, deliberately. Two `#eval`s writing one artifact is a
+last-writer-wins race, and a *test* artifact is no less exposed to it than a committed one —
+arguably more, since nothing diffs it.
 
-## ⚠⚠ Why there is no forward-prefix check here, unlike `mnv4-train-smoke`
+## Why there is no forward-prefix check here, unlike `mnv4-train-smoke`
 
 MNv4 asserts that its train step contains `@mnv4_fwd`'s body verbatim. **ResNet-34 cannot make that
 claim and this test must not pretend otherwise.** Measured on the committed artifacts:
@@ -21,12 +21,12 @@ resnet34_fwd              reduce[0,2,3] = 0     reduce[2,3] = 73    <- PER-EXAMP
 resnet34_adam_train_step  reduce[0,2,3] = 468   reduce[2,3] = 1     <- BATCH BN
 ```
 
-They are different functions. That is the §3d(b) two-worlds split (`planning/archive/mnv4_verified.md`),
-live on R34, and `scripts/regen_verified_mlir.sh check` goes green anyway because it only ever
-pairs a forward with the **SGD** train step — which shares the per-example world. So the artifact
-that trains every quoted R34 number has never been audited against the forward that scores it.
+They are different functions: the two-worlds split, live on R34, and
+`scripts/regen_verified_mlir.sh check` goes green anyway because it only ever pairs a forward with
+the **SGD** train step — which shares the per-example world. So no gate checks the artifact that
+trains every quoted R34 number against the forward that scores it.
 
-▶ This test PINS that split as a measured fact rather than leaving it implicit. If it ever stops
+This test PINS that split as a measured fact rather than leaving it implicit. If it ever stops
 holding, someone has changed a BN world and needs to know which.
 -/
 
@@ -54,7 +54,7 @@ def main : IO Unit := do
   else
     IO.println s!"  ✗ entry point missing (expected {entry.dropEnd 1})"; bad := bad + 1
 
-  -- ── ⚠ THE TWO-WORLDS SPLIT, pinned. See the module docstring. ──
+  -- ── THE TWO-WORLDS SPLIT, pinned. See the module docstring. ──
   -- This render is BATCH BN; `verified_mlir/resnet34_fwd.mlir` is per-example. Recording it here
   -- means a change to either world fails a test instead of silently re-pairing the nets.
   let nBatch := ((m.splitOn "dimensions = [0, 2, 3]").length - 1)

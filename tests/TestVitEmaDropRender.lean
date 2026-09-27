@@ -7,39 +7,38 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 `lake build vit-ema-drop-render && .lake/build/bin/vit-ema-drop-render`
 
-`verified_mlir/vitin_emadp128x4wxclipdropbf16_train_step.mlir` is the first render anywhere in this
-repo that carries **EMA and stochastic depth at the same time**, and it exists because the ImageNet
-ViT pair needs both: the phase-2 reference (blueprint §9.6) trains with `useEMA := true` *and*
-`dropPath := 0.1`, and until 2026-08-29 the only committed EMA render for this net,
-`vitin_emadp128x4`, was emitted with `(ema := true)` alone — no `wx`, no `clip`, no `sd`. Choosing
-it to obtain EMA therefore silently gave up gradient clipping, which §9.6 measures as load-bearing
-for ViT-Ti: without it the model collapses to chance the moment warmup ramps past ~1.6e-4.
+`verified_mlir/vitin_emadp128x4wxclipdropbf16_train_step.mlir` carries **EMA and stochastic depth
+at the same time**, and it exists because the ImageNet ViT pair needs both: the reference
+(blueprint §9.6) trains with `useEMA := true` *and* `dropPath := 0.1`. An EMA render emitted with
+`(ema := true)` alone — no `wx`, no `clip`, no `sd` — silently gives up gradient clipping, which
+§9.6 measures as load-bearing for ViT-Ti: without it the model collapses to chance the moment
+warmup ramps past ~1.6e-4.
 
 **What this file gates, and why a string test cannot.** `tests/TestVariantPredicates.lean` already
 pins the five axis predicates against the variant *name*. That is necessary and not sufficient. The
 predicates decide how many regions the driver packs into the blob and how long the scalar tail is;
 whether the **artifact** agrees is a different proposition, and it is the one that fails silently.
-`planning/archive/ema.md` records the failure mode directly: a wrongly-packed region **trains and reports a
-loss**. There is no crash and no NaN to notice — the run simply optimises a misaligned view of its
-own parameters and produces a number that looks like an answer.
+The failure mode: a wrongly-packed region **trains and reports a loss**. There is no crash and no
+NaN to notice — the run simply optimises a misaligned view of its own parameters and produces a
+number that looks like an answer.
 
 So this reads the committed artifact and checks its measured arity against
 `VerifiedVariant.nRegions` / `nScalars` / `emaRegion` computed from the same string the driver will
 see, plus the stochastic-depth mask count the net's own `dropKeeps` implies. Two independent
 derivations of one number, which is the only shape of check that catches a packing error.
 
-⚠ **The two axes are checked as a PAIR, deliberately.** Each is exercised alone by existing
-artifacts (`vitin_emadp128x4` for EMA, `vitin_adamdp128x4wxclipdrop` for SD), and both passed for
-months while their composition did not exist. This repo's naming has collided three times and every
-one was two markers *meeting* rather than a new marker misbehaving — `TestVariantPredicates`'
-docstring is that history. The same reasoning applies a level down: EMA adds a region, SD adds
-operands, and nothing had ever forced the emitter to lay both out at once.
+**The two axes are checked as a PAIR, deliberately.** Each is exercised alone by existing
+artifacts (`vitin_emadp128x4` for EMA, `vitin_adamdp128x4wxclipdrop` for SD), and passing alone
+says nothing about their composition. Naming collisions in this repo are two markers *meeting*
+rather than a new marker misbehaving (`TestVariantPredicates`' docstring). The same reasoning
+applies a level down: EMA adds a region, SD adds operands, and only a render with both forces the
+emitter to lay both out at once.
 
-⚠ **What this does NOT establish.** That the EMA update is numerically right — `opt_step_tie.py`'s
+**What this does NOT establish.** That the EMA update is numerically right — `opt_step_tie.py`'s
 `ema*` rows are that, against the reference's own `ema_update`. This file is about *layout*: the
 right number of things in the right order. A shadow that decays at the wrong rate has correct
-arity and passes here (and would have: `trainAdamSched`'s `emaDecay` defaults to 0.9999 against
-the reference's 0.99996, which is why `MainViTImagenet.lean` now passes it by name).
+arity and passes here (`trainAdamSched`'s `emaDecay` defaults to 0.9999 against the reference's
+0.99996, which is why `MainViTImagenet.lean` passes it by name).
 
 No GPU — it is a parse and three counts, so it belongs in a pre-commit sweep rather than behind a
 device.
@@ -50,7 +49,7 @@ open Proofs.StableHLO
 /-- The variant the ImageNet ViT pair runs, spelled once. -/
 def variantUnderTest : String := "emadp128x4wxclipdropbf16"
 
-/-- ConvNeXt-T's EMA peer of its shipping recipe (2026-09-25) — the same two axes in one render, so
+/-- ConvNeXt-T's EMA peer of its shipping recipe — the same two axes in one render, so
     the same gate: `vit-ema-drop-render convnextin`. -/
 def cnxVariantUnderTest : String := "emadpwxclipdropbf16"
 
@@ -72,7 +71,7 @@ def operandNames (src : String) : List String :=
 /-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
     `exit` discards every diagnostic. -/
 def main (args : List String) : IO Unit := do
-  -- `vitin` (the default, and what this gate was written for) or `convnextin`
+  -- `vitin` (the default) or `convnextin`
   let which := args.headD "vitin"
   let (slug, variantUnderTest, net, label) ← match which with
     | "vitin"      => pure ("vitin", variantUnderTest, vitImagenetVerified.toNet, "ViT")
@@ -125,9 +124,9 @@ def main (args : List String) : IO Unit := do
   -- 4. The EMA region is a FULL param-sized region, not a truncated one. The whole signature is
   --    `%x` + `%onehot` + θ|m|v|ema + scalars + masks, so the arithmetic closes only if every
   --    region is `nP` wide — which is exactly what a mispacked shadow gets wrong.
-  --    ⚠ The two non-param operands are BOTH data: `%x` the images and `%onehot` the targets. The
+  --    The two non-param operands are BOTH data: `%x` the images and `%onehot` the targets. The
   --    latter is a `tensor<B×1000xf32>` DISTRIBUTION rather than int labels, which is what lets
-  --    Mixup/CutMix ride the shim; forgetting it is an off-by-one this file caught on its first run.
+  --    Mixup/CutMix ride the shim; forgetting it is an off-by-one.
   let dataOperands := 2
   for nm in ["x", "onehot"] do
     unless names.contains nm do
@@ -136,8 +135,7 @@ def main (args : List String) : IO Unit := do
   unless names.length == expected do
     bad := bad ++ [s!"operand count {names.length} ≠ 2 + {wantRegions}×{nP} + {wantScalars} + {wantMasks} = {expected}"]
 
-  -- 5. bf16 actually reached the body. The name says bf16 and a name is a label, not evidence —
-  --    the same lesson as §0.5's "list what the artifact BAKES".
+  -- 5. bf16 actually reached the body. The name says bf16 and a name is a label, not evidence.
   let bf16Ops := (src.splitOn "bf16").length - 1
   unless bf16Ops > 100 do
     bad := bad ++ [s!"only {bf16Ops} bf16 mentions — the render is not actually bf16"]

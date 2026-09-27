@@ -3,9 +3,7 @@ import LeanMlir.Verified.Train
 
 /-! # `score-checkpoint` — score a finished checkpoint, standalone
 
-`planning/archive/next_session_verified_trainer_code.md` §2. The JAX side has six `eval_*_full50k.py`;
-the verified side had none, so a verified number could only be produced *in training*, and only
-for the weights that happened to be live at that moment. This is the peer:
+The verified-side peer of the JAX side's six `eval_*_full50k.py`:
 
     .lake/build/bin/score-checkpoint <net> [dataDir]
 
@@ -15,7 +13,7 @@ region to score. The default path is `VerifiedNet.ckptPathFor`, i.e. **the file 
 just wrote** — so the zero-argument case is "re-score what that run scored", which is the equality
 gate below.
 
-## ⭐ The gate, and it is an equality rather than a smoke test
+## The gate, and it is an equality rather than a smoke test
 
 For one checkpoint at one region, the number this prints must EQUAL the number the training run
 printed for the epoch that wrote it. Same denominator, same batching, same graph, same metric.
@@ -24,9 +22,9 @@ Anything else means the eval half and its factoring disagree, and the factoring 
     LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint convnext data
     # → compare against that run's last `epoch N: test_acc = …` line
 
-▶ Every net scores. The LayerNorm nets (ConvNeXt, ViT) carry their whole eval state in the blob;
+Every net scores. The LayerNorm nets (ConvNeXt, ViT) carry their whole eval state in the blob;
 the BN nets read their running statistics from the `<ckpt>.bn` companion written beside every
-checkpoint since 2026-09-12, and a checkpoint older than that is refused (see `scoreCheckpoint`).
+checkpoint, and a checkpoint without it is refused (see `scoreCheckpoint`).
 
 ## timm's test protocol
 
@@ -37,18 +35,18 @@ scores through the eval graph rendered at that size (`<slug>_fwd_eval_s256.mlir`
 stream resized and cropped to match. `scripts/parity/score_timm.sh` reads the size and crop per net from
 `jax/timm_eval_protocols.json`, the same table the JAX scorer uses.
 
-## ⚠ Why a hand-written registry
+## Why a hand-written registry
 
 There is no Lean-side enumeration of `VerifiedNetSpec`s — every trainer is its own `main` naming
 its own net — so a tool that takes a net BY NAME has to pair the two somewhere. Kept here, next to
-the only consumer, and deliberately covering every net rather than only the two that work: a net
+the only consumer, and deliberately covering every net: a net
 that is missing from the table reads as "this tool does not support it", where a net that is
 present and refuses reads as "the checkpoint format does not carry what scoring needs", which is
 the true statement.
 -/
 
-/-- Every `VerifiedNetSpec` this tool can score, by the name you type. ⚠ The Imagenette peers are
-    here too: they are the cheap way to exercise the tool at all (no 30 GB val drain, no shim), and
+/-- Every `VerifiedNetSpec` this tool can score, by the name you type. The Imagenette peers are
+    here too: they are the cheap way to exercise the tool at all (no shim), and
     `convnext`/`vit` among them have no BN either. -/
 def scorableNets : List (String × VerifiedNetSpec) :=
   [ -- LayerNorm nets — no running statistics
@@ -88,7 +86,7 @@ def main (argv : List String) : IO Unit := do
   let some spec := (scorableNets.find? (·.1 == netName)).map (·.2)
     | throw (IO.userError s!"unknown net '{netName}'\n{usage}")
   let net := spec.toNet
-  -- ⚠ REQUIRED, with no default. The variant decides the blob's REGION COUNT, so a wrong guess is
+  -- REQUIRED, with no default. The variant decides the blob's REGION COUNT, so a wrong guess is
   -- not a wrong graph — it is a size-guard refusal at best and a misaligned parameter walk at
   -- worst. The trainers can default it because they also render at it; this tool only reads.
   let some variant := ← IO.getEnv "LEAN_MLIR_VARIANT"

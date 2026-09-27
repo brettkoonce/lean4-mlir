@@ -772,7 +772,7 @@ theorem sum_close : ∀ {n : ℕ} (x : Vec n),
       (M.err _)
 
 -- ════════════════════════════════════════════════════════════════
--- § Gradient-is-a-reduction SGD step (the conv-grad reuse, planning §1b-B)
+-- § Gradient-is-a-reduction SGD step (the conv-grad reuse)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **SGD step whose gradient is a rounded dot product.** When the gradient is
@@ -1102,7 +1102,7 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
   exact M.rnd_close (e := smErr M.u eexp δ n) (by rwa [sub_sub_sub_cancel_right]) hsFy
 
 -- ════════════════════════════════════════════════════════════════
--- § §3c: E4M3 argmax-preservation (the honest depth-1 fp8 statement)
+-- § E4M3 argmax-preservation (the honest depth-1 fp8 statement)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Argmax preservation under a bounded logit perturbation.**

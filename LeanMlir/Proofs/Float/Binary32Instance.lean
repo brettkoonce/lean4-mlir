@@ -33,13 +33,13 @@ namespace Proofs
 open Proofs
 
 -- ════════════════════════════════════════════════════════════════
--- § Gap 1 — the IEEE standard-model rounding operator, constructed
+-- § The IEEE standard-model rounding operator, constructed
 -- ════════════════════════════════════════════════════════════════
 
 /-! `rndP` and its standard model `rndP_err` live in `RndP.lean`. -/
 
 /-- The `FloatModel` of the constructed `p`-bit grid, at any unit roundoff
-    `u ≥ 2⁻¹⁻ᵖ` (formerly `ieeeModel`, whose `rnd` was the axiom). -/
+    `u ≥ 2⁻¹⁻ᵖ`. -/
 noncomputable def gridModel (p : ℕ) (u : ℝ) (hu : ((2 : ℝ) ^ (p + 1))⁻¹ ≤ u) :
     FloatModel where
   rnd := rndP p
@@ -63,7 +63,7 @@ noncomputable def fp8E4M3 : FloatModel := gridModel 3 uE4M3 (by norm_num [uE4M3]
 theorem u32_le_uE4M3 : u32 ≤ uE4M3 := by norm_num [u32, uE4M3]
 
 -- ════════════════════════════════════════════════════════════════
--- § Gap 2 — fp8 argmax preservation, now unconditional on the models
+-- § fp8 argmax preservation, unconditional on the models
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The fp8 guarantee for the named hardware models.** For the certified
@@ -115,7 +115,7 @@ theorem binary32_e4m3_argmax_small {n : ℕ}
   exact this i hik
 
 -- ════════════════════════════════════════════════════════════════
--- § Gap 3 — one concrete binary32 SGD step, smallness conditions discharged
+-- § One concrete binary32 SGD step, smallness conditions discharged
 -- ════════════════════════════════════════════════════════════════
 
 /-- The rounding of `0` is `0` (forced by the relative-error model at `x = 0`). -/

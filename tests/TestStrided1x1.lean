@@ -2,17 +2,15 @@ import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Verified.Train
 import LeanMlir.Types
 
-/-! # §2l step 1 — can the emitter spell a **1×1 strided** conv, and does it compute the right one?
+/-! # Can the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
-The check `planning/archive/xla_pjrt_handoff.md` §2l puts before everything else. The paper's ResNet-34
-option-B shortcut is a **1×1** stride-2 projection; this repo's `downFwdB` builds it from
-`Kernel4 c cin 3 3`, the same kernel as the block's first conv (§2k). Before re-instantiating the
-render at `kHp = kWp = 1`, settle what the four strided-conv ops do there.
+The paper's ResNet-34 option-B shortcut is a **1×1** stride-2 projection; this repo's `downFwdB`
+builds it from `Kernel4 c cin 3 3`, the same kernel as the block's first conv. Before
+re-instantiating the render at `kHp = kWp = 1`, settle what the four strided-conv ops do there.
 
-The worry is precedent, not speculation: §2f-bis found the symmetric-SAME formula `p = (k−1)/2`
-**could not** spell an even kernel (k = 2 ⇒ p = 0 ⇒ a result one short of k, type-invalid MLIR), and
-ConvNeXt's 2×2/s2 weight grad had to be hand-written. 1 is odd, so `p = 0` should fall out — but
-"should" is the word that made that check necessary.
+The worry is precedent, not speculation: the symmetric-SAME formula `p = (k−1)/2` **cannot** spell
+an even kernel (k = 2 ⇒ p = 0 ⇒ a result one short of k, type-invalid MLIR). 1 is odd, so `p = 0`
+should fall out — but "should" is the word that makes this check necessary.
 
 Two gates, and the second is the one that matters:
 
@@ -32,16 +30,16 @@ Two gates, and the second is the one that matters:
 
    This is the un-proven half by construction: `convStrided_faithful` et al are `rfl` and generic in
    `kH kW`, so the *denotation* at `k = 1` is already proven — what no proof covers is that
-   `emitTok`'s text matches it (§5's audited lexical boundary). The odd-position zeros in the
-   input-VJP are the load-bearing part: they are what distinguishes `decimate ∘ conv` from a conv
-   that read the wrong pixel, and a stride/alignment slip would leave them non-zero.
+   `emitTok`'s text matches it. The odd-position zeros in the input-VJP are the load-bearing part:
+   they are what distinguishes `decimate ∘ conv` from a conv that read the wrong pixel, and a
+   stride/alignment slip would leave them non-zero.
 
-⚠ The known answer is computed from the SAME buffers the device saw, read back through `F32.read`,
+The known answer is computed from the SAME buffers the device saw, read back through `F32.read`,
 so it cannot drift from the inputs. It is a reference implementation, not a second render.
 
 Run (render-only, no GPU):
   `lake build LeanMlir.Proofs.Codegen.StableHLO.Basic && lake env lean tests/TestStrided1x1.lean`
-  (the `lake build` first is §4's `lake env lean` trap — it links committed `.olean`s.)
+  (the `lake build` first is the `lake env lean` trap — it links committed `.olean`s.)
 Run (the numeric gate):
   `lake build strided-1x1 && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1`
 -/
@@ -127,8 +125,8 @@ private def oneOpModule (which : String) : String :=
     * `transpose` — mix channels with `W[c,o]` instead of `W[o,c]`. Same shape at `OC ≠ IC`? no —
       but at `1×1` the kernel is `[OC,IC]` and the transposed read is in-bounds, so nothing
       structural catches it.
-    * `mean` — divide the batch-reducing gradients by `B`, the sum-vs-mean confusion §2a-quinquies
-      found live in an emitter. -/
+    * `mean` — divide the batch-reducing gradients by `B`, the sum-vs-mean confusion an emitter
+      can make. -/
 private def ctlAlign (ctl : String) : Bool := ctl == "align"
 private def ctlTrans (ctl : String) : Bool := ctl == "transpose"
 private def ctlMean  (ctl : String) : Bool := ctl == "mean"
@@ -186,7 +184,7 @@ private def refDb (ctl : String) (dy : ByteArray) : Array Float := Id.run do
 -- § Drivers
 -- ════════════════════════════════════════════════════════════════
 
-/-- Print every `stablehlo.convolution` window line — the padding §2l asks to read. -/
+/-- Print every `stablehlo.convolution` window line — the padding to read. -/
 private def windowLines (mlir : String) : List String :=
   (mlir.splitOn "\n").filter (fun l => l.contains "window = {")
 
@@ -240,7 +238,7 @@ private def runOne (which : String) (params shapes xIn xSh : ByteArray) (nOut : 
     IO ByteArray := do
   let path := s!".lake/build/k1_{which}.mlir"
   IO.FS.writeFile path (oneOpModule which)
-  -- §4: delete the .vmfb first, or a re-run silently reuses the previous op's binary.
+  -- Delete the .vmfb first, or a re-run silently reuses the previous op's binary.
   let vmfb := s!".lake/build/k1_{which}.vmfb"
   let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
   for p in [vmfb, s!".lake/build/k1_{which}_{target}.vmfb"] do

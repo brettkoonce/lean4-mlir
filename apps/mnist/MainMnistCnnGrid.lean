@@ -24,7 +24,7 @@ open Proofs.StableHLO in
     14×14, 3×3 kernels, B=128, lr 0.1/128). Values are erased by `pretty`, so the zero
     placeholders print the exact text the `den` theorems certify. -/
 def renderCnnGrid (d : Nat) : IO Unit := do
-  -- ⚠ The SAME directory the net reads from (`VerifiedNet.mlirDir`) — build products, not
+  -- The SAME directory the net reads from (`VerifiedNet.mlirDir`) — build products, not
   -- committed renders, so they must not land in the pinned `verified_mlir/`.
   let dir := (cnnG d).mlirDir
   IO.FS.createDirAll dir

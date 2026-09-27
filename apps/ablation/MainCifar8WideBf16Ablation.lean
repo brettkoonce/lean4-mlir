@@ -3,12 +3,12 @@ import LeanMlir.Verified.Train
 
 /-! # `cifar8wb-bf16-ablation` — wide head, BATCHED render, bf16
 
-One arm of the §4.3 "Lever 3: precision" sweep (`planning/archive/cifar_lowprec_stability.md` §5.2).
+One arm of the §4.3 "Lever 3: precision" sweep.
 Runs SGD / Nesterov / AdamW in sequence on the wide-head (d1=512) net that Levers 1–2 already
 measure, so the new lever is read against the existing table rather than a different network.
 
 Same hyperparameters as `cifar8w-ablation` (SGD lr 0.1, momentum μ0.9 lr 0.02, AdamW lr 1e-3,
-3-epoch warmup + cosine, 40 epochs, bs 128). bf16 reaches the FORWARD, the input-VJP and the weight gradients — 23/23 convolutions — because the batched family is the one the 27 bf16 ops were built for. ⚠ Expect no speedup (§5.3: 0.87× at these shapes); this is a numerics result.
+3-epoch warmup + cosine, 40 epochs, bs 128). bf16 reaches the FORWARD, the input-VJP and the weight gradients — 23/23 convolutions — because the batched family is the one the 27 bf16 ops were built for. Expect no speedup (0.87× at these shapes); this is a numerics result.
 
 Run: `LEAN_MLIR_LOWERER=xla .lake/build/bin/cifar8wb-bf16-ablation data`
 -/

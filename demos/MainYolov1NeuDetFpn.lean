@@ -13,7 +13,7 @@ python3 scripts/demos/yolo_map_visdrone.py runs/neudet_fpn/logits.bin data/neu_d
 The R34+FPN detector of `demos/MainYolov1VisdroneFpn.lean` — backbone, neck,
 heads, loss, bootstrap, scorer — on NEU-DET: 1,800 grayscale 200×200 crops of
 hot-rolled steel, six defect classes, one or two large defects per crop where
-VisDrone has seventy 20-px cars per frame (planning/neu_det_fpn_demo.md).
+VisDrone has seventy 20-px cars per frame.
 
 **What changes** — data-derived constants only, nothing in the codegen:
 1. the anchor priors: k-means over NEU boxes per level (`scripts/probes/neu_anchors.py`).
@@ -34,7 +34,7 @@ the backbone defaults to `r34` (not `r50`), the class weights to `none`. Every
 knob keeps its name and can still be overridden — `FPN_AUG=0` and
 `FPN_AFFINE=0` are the ablation arms.
 
-⚠ `FPN_TAG` selects the checkpoint prefix and must be set on `infer` as well as
+`FPN_TAG` selects the checkpoint prefix and must be set on `infer` as well as
 on training. Forgetting it does not fail — it silently evaluates a different
 arm's weights, and the only tell is an epoch sweep whose rows are identical.
 `FPN_EVAL_SPLIT=test` points `infer` at `test.bin` for the table's row once the
@@ -63,8 +63,7 @@ def neuAnchorsP4 : List (Float × Float) :=
 -- would give 0.94). That is the prior's FIT, not a ceiling — the head regresses
 -- exp(t) off the anchor and the k=3 log-residuals top out at 2.0 against a cap
 -- of 8 — and the encoding ceiling that matters, unique (level, cell, anchor)
--- slots per GT box, is 99.9% on NEU against VisDrone's 88%. Recorded here
--- because Gate 0 in the plan asked for ≥ 0.9 on a VisDrone-shaped intuition.
+-- slots per GT box, is 99.9% on NEU against VisDrone's 88%.
 def neuAnchorsP5 : List (Float × Float) :=
   [(0.168713, 0.429203), (0.621498, 0.276457), (0.510919, 0.787666)]
 

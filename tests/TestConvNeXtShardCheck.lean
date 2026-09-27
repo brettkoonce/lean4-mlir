@@ -3,8 +3,8 @@ import LeanMlir.Verified.Train
 
 /-! # ConvNeXt-T **sharding** gate — the asymmetric-batch known answer
 
-The companion to `tests/TestConvNeXtDpCheck.lean`, and it exists because that gate has a hole
-(handoff §2h-quater): the duplicated-batch identity hands both replicas the **same** rows, so a
+The companion to `tests/TestConvNeXtDpCheck.lean`, and it exists because that gate has a hole:
+the duplicated-batch identity hands both replicas the **same** rows, so a
 shard-offset bug — replica 1 reading `[0,b)` instead of `[b,2b)` — leaves the two halves identical
 and the gate still passes bit-exact. It establishes *"the collective averages correctly"*, **not**
 *"the replicas saw different data"*.
@@ -22,8 +22,8 @@ blind to.
 (`m̂/(√v̂+ε)`), so `(θ'_A + θ'_B)/2 ≠ θ'(ḡ)` and comparing θ' would be meaningless. But
 `adamMNextF` is `m' = β₁·m + (1−β₁)·g`, so feeding **m = 0** makes `m' = 0.1·g` — exactly linear
 in the gradient, hence exactly averagable. `v' = 0.001·g²` is quadratic and is therefore reported
-but NOT gated. This is the same reasoning §3 gives for gating the gradient rather than θ, arrived
-at from the other direction.
+but NOT gated. This is the same reasoning as for gating the gradient rather than θ, arrived at
+from the other direction.
 
 **Why ConvNeXt can do this at all.** LayerNorm reduces within one example, so a replica's arithmetic
 on its own rows is what it would have been anywhere — `single(xA)` reproduces replica 0's work
@@ -122,7 +122,7 @@ def main (args : List String) : IO Unit := do
     IO.eprintln "DEGENERATE: too few non-zero gradients — the check proves little"
     IO.Process.exit 1
   -- The control must be LARGE, or the two shards were not actually different and the test is
-  -- vacuous — the same trap §2d.1 hit with a reversed-batch control that produced no difference.
+  -- vacuous.
   if nrA < 1e-3 then
     IO.eprintln s!"VACUOUS: shard A and the A/B mean agree to {nrA} — the two shards are not \
 distinguishable, so passing the TEST would prove nothing. Use more different data."

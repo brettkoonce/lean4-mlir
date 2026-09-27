@@ -20,8 +20,8 @@ makes for AdamW: `den` says what the graph *means*, this says what the text *is*
 
     lake env lean tests/TestRmsPropOpTie.lean
 
-⚠ Fails via `throw`, never `IO.Process.exit` — under `#eval`/`lake env lean` the elaborator buffers
-output and `exit` discards every diagnostic, so you get a bare status and no idea what broke (§4).
+Fails via `throw`, never `IO.Process.exit` — under `#eval`/`lake env lean` the elaborator buffers
+output and `exit` discards every diagnostic, so you get a bare status and no idea what broke.
 -/
 
 open Proofs Proofs.StableHLO
@@ -64,7 +64,7 @@ private def verbs (s : String) : List String := (lines s).map (fun t => t.2.1)
 private def defOf (s : String) (ssa : String) : Option (String × String × List String) :=
   (lines s).find? fun t => t.1 == ssa
 
-/-- ▶ **THE FIDELITY CHECK.** Walk back from the `sqrt` and insist its operand is an `add` whose
+/-- **THE FIDELITY CHECK.** Walk back from the `sqrt` and insist its operand is an `add` whose
     right-hand side is the broadcast of `%eps`.
 
     That is exactly "ε went in BEFORE the root". The textbook spelling roots the mean-square first
@@ -102,7 +102,7 @@ private def rmsBuf : String :=
 private def sqSlot : String :=
   render (.adamVNextF "%sq" "%rho" "%orho" DS 0 z gradOperand)
 
-/-- ⚠ **THE NEGATIVE CONTROL — hand-built, because no vanilla op exists to render.** Textbook
+/-- **THE NEGATIVE CONTROL — hand-built, because no vanilla op exists to render.** Textbook
     RMSProp: root the mean-square, THEN add ε. Byte-plausible MLIR with the same verb multiset as
     the real block; only the order of `sqrt` and the ε `add` differs. If `epsIsInsideSqrt` does not
     reject this, it is not checking anything. -/
@@ -138,7 +138,7 @@ def main : IO Unit := do
   else
     fails := fails.push s!"verb sequence\n      expected: {expectedVerbs}\n      got:      {vs}"
 
-  -- ── 2. ▶ ε is INSIDE the sqrt (the whole fidelity claim) ──
+  -- ── 2. ε is INSIDE the sqrt (the whole fidelity claim) ──
   match epsIsInsideSqrt rmsBuf with
   | .ok _ => IO.println "  ✓ ε enters BEFORE the sqrt — TensorFlow's placement"
   | .error e => fails := fails.push s!"ε placement in the rendered op: {e}"

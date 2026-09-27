@@ -1,7 +1,7 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
 
-/-! # cifar8 optimizer-render tie — six variants, one harness (handoff §2i)
+/-! # cifar8 optimizer-render tie — six variants, one harness
 
     lake build cifar8-opt-tie
     .lake/build/bin/cifar8-opt-tie [w_][bn_]<adam|sgd|mom> \
@@ -13,7 +13,7 @@ packed `[θ|m|v|lr|bc1|bc2]` signature — **71 in / 69 out** with no BN, **119 
 which is why one harness covers all **twelve** variants:
 
 * an optional `w_` picks the **wide 2×512 dense head** — `cifar8w` is `cifar8` at `d1 = 512`, not a
-  second net (§2i: the specs agree layer-for-layer up to the head width, and the committed wide BN
+  second net (the specs agree layer-for-layer up to the head width, and the committed wide BN
   AdamW artifact is byte-identical to the width sweep's `cifar8_bn_512` one);
 * an optional `bn_` picks per-channel BatchNorm;
 * the remainder picks the **gradient-recovery formula** below, which depends only on the optimizer.
@@ -24,9 +24,9 @@ artifact path, `@cifar8[w][_bn]_<opt>_train_step`.
 
 ## It gates the RECOVERED GRADIENT, never θ′ — and for SGD that is the whole ballgame
 
-§2a-quinquies found this the hard way on the SGD renders: a train step returns `θ' = θ − lr·g`, and
-θ' is dominated by `θ`, **the same input on both sides**. At the lr used here (1e-3) a *wholly wrong*
-gradient still lands within `lr·|g|/|θ|` of a match, so a θ'-based tie is close to meaningless.
+A train step returns `θ' = θ − lr·g`, and θ' is dominated by `θ`, **the same input on both sides**.
+At the lr used here (1e-3) a *wholly wrong* gradient still lands within `lr·|g|/|θ|` of a match, so
+a θ'-based tie is close to meaningless.
 Every variant's gradient is exactly recoverable from its own outputs, so that is what is compared:
 
 | slug | recovery | from |
@@ -45,7 +45,7 @@ relies on too.)
 the packed signature is shared with AdamW precisely so the driver never changes, and a tail that
 silently zeroed or dropped a moment slot would still produce a plausible θ'. Gated, not reported.
 
-Deletes its `.vmfb` before every compile (§4's false-PASS hazard: `compileVmfb` keys on the OUTPUT
+Deletes its `.vmfb` before every compile (the false-PASS hazard: `compileVmfb` keys on the OUTPUT
 path plus an mtime, never the source, so running one binary twice with different candidates silently
 reuses the first one's binary — which is exactly what comparing a staged render against an incumbent
 looks like). `cifar8-adam-tie` still has that hazard; prefer this harness.
@@ -56,7 +56,7 @@ def main (args : List String) : IO Unit := do
     | s :: r => (s, r)
     | []     => ("adam", [])
   -- The slug decomposes into THREE independent choices, which is why one harness covers all twelve:
-  -- an optional `w_` (the wide 2×512 head — `cifar8w` is `cifar8` at d1=512, §2i), an optional `bn_`,
+  -- an optional `w_` (the wide 2×512 head — `cifar8w` is `cifar8` at d1=512), an optional `bn_`,
   -- and the optimizer. Net, artifact path and entry point all follow.
   -- `String.drop` returns a `String.Slice` on this toolchain (Lean 4.32), hence the `.toString`.
   let wide := slug.startsWith "w_"
@@ -104,7 +104,7 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
   -- The batch, reversed. Every parameter gradient here is a SUM over the batch and `%loss` is a
   -- mean over it, so as real arithmetic a row permutation cannot change either — but it changes the
   -- ORDER the 128-wide reductions accumulate in. Running the reference render against itself on this
-  -- is the §2f-bis reorder control: the same CLASS of floating-point difference the two emitters
+  -- is the reorder control: the same CLASS of floating-point difference the two emitters
   -- have, measured where correctness is not in question.
   let xR := F32.concat ((Array.range bs).map (fun r => F32.sliceImages x (bs - 1 - r) 1 net.d0))
   let mut yR : ByteArray := .empty
@@ -177,8 +177,8 @@ adam | sgd | mom (e.g. adam, bn_mom, w_sgd, w_bn_adam)"
   let mut gAbs : Float := 0.0; let mut gMag : Float := 0.0
   let mut nonFinite : Nat := 0; let mut movedG : Nat := 0
   -- Count EXACT coordinates. `Float.toString` gives six decimals, so a genuine 3e-8 prints as
-  -- "0.000000" and reads as bit-exact when it is not — §2e-bis hit exactly that, and the count is
-  -- what distinguishes "bit-exact" from "prints as zero".
+  -- "0.000000" and reads as bit-exact when it is not, and the count is what distinguishes
+  -- "bit-exact" from "prints as zero".
   let mut exactG : Nat := 0
   for i in [0:nP] do
     let ga := gradOf oa i; let gb := gradOf ob i
@@ -236,8 +236,8 @@ moment slot still produces a plausible θ', which is why this is gated."
     IO.Process.exit 1
   if (la - lb).abs > 1e-4 then
     IO.eprintln s!"TIE FAILED: %loss differs by {(la-lb).abs} > 1e-4"; IO.Process.exit 1
-  -- Magnitude: the ABSOLUTE 1e-4 floor, or 4× the reorder control where the control is the larger
-  -- — §2d.1's rule. A control that shows no difference calibrates nothing, hence the floor rather
+  -- Magnitude: the ABSOLUTE 1e-4 floor, or 4× the reorder control where the control is the larger.
+  -- A control that shows no difference calibrates nothing, hence the floor rather
   -- than a bare multiple: on the no-BN nets the control comes back bit-exact and 4×0 would demand
   -- bit-exactness of a merely-correct render.
   let magGate := max 1e-4 (4.0 * ctlRel)
@@ -245,12 +245,12 @@ moment slot still produces a plausible θ', which is why this is gated."
     IO.eprintln s!"TIE FAILED: recovered-gradient norm-rel {gRel} > {magGate} (max of the 1e-4 \
 floor and 4× the reorder control's {ctlRel})"
     IO.Process.exit 1
-  -- Spread: at most as many params as the reorder control disturbs. §2f-bis measured that a
-  -- control-relative MAGNITUDE gate alone passes a deliberately perturbed cotangent, because
-  -- floating-point conditioning is LOCAL to the ill-conditioned op while a different function is
-  -- GLOBAL. This is the check that separates them, and it is why the gate is control-relative and
-  -- not the absolute 1e-4 per-param bound a first draft of this harness used — that bound fails the
-  -- REAL tie on the BN nets, whose BN γ/β gradients are cancelling reduces over 128×S terms.
+  -- Spread: at most as many params as the reorder control disturbs. A control-relative MAGNITUDE
+  -- gate alone passes a deliberately perturbed cotangent (measured), because floating-point
+  -- conditioning is LOCAL to the ill-conditioned op while a different function is GLOBAL. This is
+  -- the check that separates them, and it is why the gate is control-relative and not an absolute
+  -- 1e-4 per-param bound — that bound fails the REAL tie on the BN nets, whose BN γ/β gradients are
+  -- cancelling reduces over 128×S terms.
   if spread > ctlSpread then
     IO.eprintln s!"TIE FAILED: {spread}/{net.specs.size} parameters disagree above 1e-4 against \
 their own scale, where the reorder control disturbs only {ctlSpread}. Conditioning is LOCAL to the \

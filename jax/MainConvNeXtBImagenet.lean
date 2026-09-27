@@ -1,13 +1,10 @@
 import Jax
 
-/-! ConvNeXt-Base on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! ConvNeXt-Base on full 1000-class ImageNet — (Lean → JAX) trainer.
 
     Relative to `MainConvNeXtSImagenet.lean`: same (3,3,27,3) compute ratio,
     channels widened 96→128 throughout (128,256,512,1024). ~88.6M params.
     Relative to ConvNeXt-T it is both deeper (18→36 blocks) and wider.
-
-    Same known deviation as ConvNeXt-T/S: no final LayerNorm between the global
-    average pool and the head.
 
     This is the heaviest net in the sweep by a wide margin — deeper AND wider —
     so on a 16 GB card expect to need the `accum` recipe. The stage-1 inverted
@@ -27,10 +24,10 @@ def convNeXtBImagenet : NetSpec where
     .convNextDownsample 512 1024,              -- 14→7
     .convNextStage 1024 3 .ln .gelu,           -- stage 4: 3 blocks @ 1024
     .globalAvgPool,
-    -- ▶ head LayerNorm (2026-08-30, §7.1). The paper is `GAP → LN → Linear`
+    -- head LayerNorm. The paper is `GAP → LN → Linear`
     -- (`self.norm(x.mean([-2,-1]))`, eps 1e-6) and timm's head is
-    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(1024) → flatten → fc)`; BOTH phases
-    -- were missing it and the parameter count was short by exactly 2×1024.
+    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(1024) → flatten → fc)`; without it
+    -- the parameter count is short by exactly 2×1024.
     .layerNorm 1024,
     .dense 1024 1000 .identity                 -- 1000-class head
   ]
@@ -48,7 +45,7 @@ def convNeXtBImagenetConfig : TrainConfig where
   warmupEpochs   := 20
   augment        := true
   useRandAugment       := true
-  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   randAugmentGeometric := true
   randAugmentMstd := 0.5
   randAugmentInc  := true
@@ -58,7 +55,7 @@ def convNeXtBImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   randomErasing  := true
   randomErasingProb := 0.25
-  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
+  erasingPixel   := true    -- timm RandomErasing(mode='pixel'), N(0,1) fill
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

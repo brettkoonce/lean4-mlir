@@ -299,7 +299,7 @@ theorem crown2_certified_at_eps {n h k : ℕ}
             - ε * (∑ i, |crownRow (a j) W1 i|) + ∑ t, cc j t) :
     CertifiedAtLinf (denseE W2 ∘ reluE ∘ denseE W1) ε x y := by
   refine certified_of_marginPos fun j hj x' hbox => ?_
-  -- the IBP pre-activation box, from the phase-0 per-layer bracket
+  -- the IBP pre-activation box, from the per-layer bracket
   have hz : ∀ t, denseLo W1 (fun i => x i - ε) (fun i => x i + ε) t ≤ denseE W1 x' t ∧
       denseE W1 x' t ≤ denseHi W1 (fun i => x i - ε) (fun i => x i + ε) t :=
     denseE_boxSound W1 _ _ _ hbox
@@ -318,7 +318,7 @@ theorem crown2_certified_at_eps {n h k : ℕ}
 /-! `‖A‖₁ = Σᵢ |Σₜ aₜ·W1ₜᵢ|` does NOT decompose over `t` — the absolute value is
 taken after the combination, which is exactly the point of CROWN. So it needs a
 fact of its own, and the naive route (emit `A`'s 784 numerators per
-`(image, class)`) makes the exhibit enormous (gotcha 2).
+`(image, class)`) makes the exhibit enormous.
 
 Instead the kernel *forms* `A` from the weight rows the corpus already commits:
 a generator emits the 16 coefficient numerators, and `absSumZ (combZ …)` folds

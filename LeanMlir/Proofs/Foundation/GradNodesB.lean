@@ -78,7 +78,7 @@ theorem convBGradB_den {N ic oc h w kH kW : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Strided conv weight / bias (7x7/s2 stem, downsample W1, 1x1/s2 projection)
---   ⚠ SYMMETRIC padding — `flatConvStride2`, not the XLA-`SAME` `flatConvStride2Xla` B0 uses.
+--   SYMMETRIC padding — `flatConvStride2`, not the XLA-`SAME` `flatConvStride2Xla` B0 uses.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched strided conv weight GRADIENT denotes the certified `Σ_n` weight gradient.** Generic
@@ -323,8 +323,8 @@ theorem denseBGradB_den {N a c : Nat}
   exact denseBiasGrad_correct W b x (batchSlice N c cot n) j
 
 -- ════════════════════════════════════════════════════════════════
--- § New: the XLA-`SAME` strided stem
---   ⚠ `flatConvStride2Xla`, NOT r34's symmetric `flatConvStride2`. Identical types.
+-- § The XLA-`SAME` strided stem
+--   `flatConvStride2Xla`, NOT r34's symmetric `flatConvStride2`. Identical types.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched XLA-`SAME` strided conv weight GRADIENT denotes the certified `Σ_n` weight
@@ -348,8 +348,8 @@ theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
 -- ════════════════════════════════════════════════════════════════
--- § New: the MBConv depthwise kernels (3×3 and 5×5), stride 1 and stride 2
---   ⚠ SYMMETRIC padding at the strided sites — the render's forward is `.depthwiseStrided` too.
+-- § The MBConv depthwise kernels (3×3 and 5×5), stride 1 and stride 2
+--   SYMMETRIC padding at the strided sites — the render's forward is `.depthwiseStrided` too.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched stride-1 depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.**
@@ -396,7 +396,7 @@ open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
 -- § The four new op kinds
---   ⚠ XLA-`SAME` at every strided site.
+--   XLA-`SAME` at every strided site.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched XLA-`SAME` strided conv bias GRADIENT denotes the certified `Σ_n` bias gradient.**

@@ -64,7 +64,7 @@ open Proofs BatchSeal Proofs.BatchSeal
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights
---   ⭐ One `γ = 1/64` and one `ε = 1` at all 52 BatchNorms. `β = 3` at every site a relu6
+--   One `γ = 1/64` and one `ε = 1` at all 52 BatchNorms. `β = 3` at every site a relu6
 --   follows and `β = 0` at the seventeen projections, which none follows — so a zeroed residual
 --   body is the constant `0` and its block is the exact identity.
 -- ════════════════════════════════════════════════════════════════
@@ -148,7 +148,7 @@ noncomputable def sealW (nCls : Nat) : MNV2BWeights nCls where
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. The relu6 window — weight-only, at every input
---   `Mg N h w` is this net's margin check. ⭐⭐ `bnBatchLA_window` bounds a BatchNorm output
+--   `Mg N h w` is this net's margin check. `bnBatchLA_window` bounds a BatchNorm output
 --   inside `(0, 6)` at EVERY input once it holds, which is why all 35 clauses below are
 --   discharged without ever reading the activation.
 -- ════════════════════════════════════════════════════════════════
@@ -168,10 +168,9 @@ private theorem win6 (N oc h w : Nat) (hm : Mg N h w) (v : Vec (N * (oc * h * w)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3. Stage collapses, at VARIABLE shapes
---   ⚠⚠ Every collapse here and in §4–§5 is proved at variable `N, h, w, ic, mid, oc` and
+--   Every collapse here and in §4–§5 is proved at variable `N, h, w, ic, mid, oc` and
 --   instantiated at the witness's numerals afterwards, never proved at them: instantiating a
---   proved lemma is substitution, while a numeral-shaped defeq kills the kernel
---   (`planning/full_width_seals.md` §3.5).
+--   proved lemma is substitution, while a numeral-shaped defeq kills the kernel.
 -- ════════════════════════════════════════════════════════════════
 private theorem cbrB_eq {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (hm : Mg N h w) (x : Vec (N * (ic * h * w))) :
@@ -288,7 +287,7 @@ theorem eDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (s
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The scalar BatchNorm factor
---   ⭐ `rf` is the whole contribution of one carrier BatchNorm: `γ · istd` at `γ = 1/64`.
+--   `rf` is the whole contribution of one carrier BatchNorm: `γ · istd` at `γ = 1/64`.
 --   `Rr` (§13) is a 22-fold product of these and nothing else.
 -- ════════════════════════════════════════════════════════════════
 noncomputable def rf (n : Nat) (z : Vec n) : ℝ := 1 / 64 * bnIstd n z 1
@@ -336,7 +335,7 @@ private theorem seal_head_smooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic
   win6 N oc h w hm _
 -- ════════════════════════════════════════════════════════════════
 -- § 10. The 19 bundles at the witness, and the whole-net VJP
---   ⭐⭐ Every one of these is weight-only: not one reads `sealX t`, and none of them mentions
+--   Every one of these is weight-only: not one reads `sealX t`, and none of them mentions
 --   `t` at all beyond carrying it through the activation's type.
 -- ════════════════════════════════════════════════════════════════
 theorem sc_stem (nCls : Nat) (t : ℝ) :
@@ -441,7 +440,7 @@ noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. The 22 pre-BatchNorm activations on the carrier's path
---   ⚠ Spatial sizes are written in the net's own `2 * h` nest, never as the collapsed numeral —
+--   Spatial sizes are written in the net's own `2 * h` nest, never as the collapsed numeral —
 --   `ResNet50FullB.lean`'s header records why.
 -- ════════════════════════════════════════════════════════════════
 noncomputable def Zs (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
@@ -665,7 +664,7 @@ private theorem pc17 (nCls : Nat) (t : ℝ) :
 
 -- ════════════════════════════════════════════════════════════════
 -- § 13. The carrier: 22 `EDiff` steps from the ray to the head
---   ⭐ `eDiff_dw` is the shape ResNet never needed: a depthwise cannot broadcast, so it scales
+--   `eDiff_dw` is the shape ResNet never needed: a depthwise cannot broadcast, so it scales
 --   the carrier channel by channel where a centre-tap conv collapses it to `fun _ => s · δ 0`.
 -- ════════════════════════════════════════════════════════════════
 
@@ -925,7 +924,7 @@ noncomputable def Rr (nCls : Nat) (t : ℝ) : ℝ :=
 
 theorem Rr_pos (nCls : Nat) (t : ℝ) : 0 < Rr nCls t := by
   unfold Rr
-  -- ⚠ not `repeat' apply mul_pos`: `rf` is itself a product, so `mul_pos` splits inside it and
+  -- not `repeat' apply mul_pos`: `rf` is itself a product, so `mul_pos` splits inside it and
   -- leaves `0 < 1/64` goals `rf_pos` cannot close. One factor per carrier BatchNorm, explicitly.
   exact mul_pos (rf_pos _ _)
     (mul_pos (rf_pos _ _)

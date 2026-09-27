@@ -1,16 +1,12 @@
 import Jax
 
-/-! ConvNeXt-Small on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! ConvNeXt-Small on full 1000-class ImageNet — Lean → JAX trainer.
 
     The only change from `MainConvNeXtImagenet.lean` (ConvNeXt-T) is the stage-3
     depth: compute ratio (3,3,9,3) → (3,3,27,3) at the same channel widths
     (96,192,384,768). ~49.5M params vs T's 28.6M. Everything else — patchify
     stem, depthwise-7×7 + channel-LN + inverted-bottleneck + GELU + LayerScale,
     dedicated 2×2 stride-2 downsamples — is identical.
-
-    Same known deviation as ConvNeXt-T: no final LayerNorm between the global
-    average pool and the head (the paper has one). Carried over deliberately so
-    the S/B numbers stay comparable with the T run already in `runs/`.
 
     Depth 36 vs T's 18 means twice the sequential blocks and roughly twice the
     live activation per sample, so this is the first variant where per-device
@@ -30,10 +26,10 @@ def convNeXtSImagenet : NetSpec where
     .convNextDownsample 384 768,               -- 14→7
     .convNextStage 768 3 .ln .gelu,            -- stage 4: 3 blocks @ 768
     .globalAvgPool,
-    -- ▶ head LayerNorm (2026-08-30, §7.1). The paper is `GAP → LN → Linear`
+    -- head LayerNorm. The paper is `GAP → LN → Linear`
     -- (`self.norm(x.mean([-2,-1]))`, eps 1e-6) and timm's head is
-    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`; BOTH phases
-    -- were missing it and the parameter count was short by exactly 2×768.
+    -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`; without it
+    -- the parameter count is short by exactly 2×768.
     .layerNorm 768,
     .dense 768 1000 .identity                  -- 1000-class head
   ]
@@ -52,7 +48,7 @@ def convNeXtSImagenetConfig : TrainConfig where
   warmupEpochs   := 20
   augment        := true
   useRandAugment       := true
-  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   randAugmentGeometric := true
   randAugmentMstd := 0.5
   randAugmentInc  := true
@@ -62,7 +58,7 @@ def convNeXtSImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   randomErasing  := true
   randomErasingProb := 0.25
-  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
+  erasingPixel   := true    -- timm RandomErasing(mode='pixel'), N(0,1) fill
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

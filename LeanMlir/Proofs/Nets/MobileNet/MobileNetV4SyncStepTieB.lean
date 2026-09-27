@@ -696,7 +696,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls : Nat}
     cotangent, relabelled to `[N, oc, 1, 1]`. Feeds `hg`/`hbt`. -/
 private noncomputable def mnv4HeadSyncCotHn (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
   -- `bd` is read by no head cotangent (the dense input-VJP does not see the bias); named here so
-  -- the section keeps it in every head chain's argument list, T3's.
+  -- the section keeps it in every head chain's argument list, as `mnv4_net_tiedB`'s.
   let _bias := bd
   reluMaskB (N * (oc * 1 * 1))
     (batchShard R N (oc * 1 * 1) (bnBatchLA (R * N) oc 1 1 ε2 γ2 β2
@@ -1186,7 +1186,7 @@ theorem mnv4_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls 
 def mnv4NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : Mnv4BWeights nCls) (X : Vec ((R * N) * (3 * 224 * 224))) (G : Vec ((R * N) * nCls))
     (gs : Fin R → Vec (N * nCls)) : Prop :=
-  -- ── the single-device chain at the global batch `R·N` (T3's) ──
+  -- ── the single-device chain at the global batch `R·N` (`mnv4_net_tiedB`'s) ──
   let dy21 := mnv4HeadCotIn (R * N) 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
                w.Wd w.bd (mnv4Blk21 (R * N) w X) G
   let dy20 := mnv4SkipCotIn (mnv4BodyCotIn (R * N) mnv4Row21 w.b21 (mnv4Blk20 (R * N) w X) dy21) dy21

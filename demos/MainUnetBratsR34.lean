@@ -21,7 +21,7 @@ import LeanMlir
     that comparison confounds the initialization with a different architecture,
     and could not tell you which one moved the number.
 
-    The from-scratch `unetBrats` result (mIoU ~0.69 post-shuffle-fix) is a
+    The from-scratch `unetBrats` result (mIoU ~0.69) is a
     separate reference point — "is this architecture competitive at all" — not
     the transfer measurement.
 
@@ -45,13 +45,11 @@ import LeanMlir
       intensities exact and the mask exactly {0,1,2,3}. It is also lossless
       here — across 4,000 sampled slices the 8-pixel border it removes holds
       **zero** tumour voxels and **zero** brain voxels, because MSD's volumes
-      are skull-stripped and centered. Verified before the re-prep was run,
-      not assumed.
+      are skull-stripped and centered.
 
-      An earlier revision of this demo instead dropped the encoder's maxPool
-      to make the stride /16 (240/16 = 15, also exact). That worked and needed
-      no new data, but ran every encoder stage at 2× resolution — 4× the
-      FLOPs, measured at ~67 min/epoch against ~15 here.
+      Dropping the encoder's maxPool to make the stride /16 (240/16 = 15, also
+      exact) needs no new data, but runs every encoder stage at 2× resolution —
+      4× the FLOPs, measured at ~67 min/epoch against ~15 here.
 
     * **The stem is fresh, and that is correct.** BraTS is 4 co-registered MRI
       modalities (FLAIR / T1w / T1gd / T2w); ImageNet is 3-channel RGB. So the
@@ -91,18 +89,18 @@ private def r34BackboneFloats : Nat := 21284672
     skip connections.
 
     **`skips := true` (default).** The decoder concatenates four encoder taps on
-    the way back up. This required no new backward math: the encoder→decoder
-    gradient join already existed as `fpnTapGrad`, built for `.fpnDetect`, which
+    the way back up. This needs no new backward math: the encoder→decoder
+    gradient join is `fpnTapGrad`, built for `.fpnDetect`, which
     adds an externally-supplied gradient to a residual stage's output before its
-    skip-add/ReLU backward. `unetUp`'s concat-split backward already saved the
-    skip-half gradient as `%unet_skip_g{e}`. The two had simply never been
-    introduced. The stem's skip needs even less: our `.maxPool 2 2` sits exactly
-    where a `unetDown`'s internal maxpool sits, so it reuses that path verbatim.
+    skip-add/ReLU backward. `unetUp`'s concat-split backward saves the
+    skip-half gradient as `%unet_skip_g{e}`. The stem's skip needs even less: our
+    `.maxPool 2 2` sits exactly where a `unetDown`'s internal maxpool sits, so it reuses that
+    path verbatim.
 
     Taps are matched by **exact shape**, not stack order — which is why stage 4
     is correctly ignored (nothing upsamples into 7²) without special-casing.
 
-    **`skips := false`.** The original v0, kept reproducible. Its decoder has to
+    **`skips := false`.** The skipless decoder, kept reproducible. Its decoder has to
     rebuild every boundary from the 7×7 bottleneck alone, and its masks are
     visibly blobbier for it (~0.64 mIoU, against the from-scratch skip-equipped
     `unetBrats`'s ~0.69).
@@ -143,7 +141,7 @@ def r34UnetBratsOf (skips : Bool) : NetSpec where
         .conv2d 32 4 1 .same .identity
       ]
      else
-      -- The no-skip v0, kept EXACTLY as run so its published numbers stay
+      -- The no-skip decoder, kept EXACTLY as run so its published numbers stay
       -- reproducible. The decoder must rebuild every boundary from the 7×7
       -- bottleneck alone, which is why its masks come out visibly blobbier.
       [ .bilinearUpsample 2, .convBn 512 256 3 1 .same,
@@ -163,17 +161,17 @@ def r34UnetBrats : NetSpec := r34UnetBratsOf true
     parameter shapes in the same order, same skip — but they reach the decoder's
     concat by different code paths:
 
-      `equiv false` → `unetDown` … `unetUp`   (the long-trusted path)
-      `equiv true`  → `convBn, convBn, maxPool` … `unetUp`  (the new tap path)
+      `equiv false` → `unetDown` … `unetUp`   (the `unetDown` path)
+      `equiv true`  → `convBn, convBn, maxPool` … `unetUp`  (the tap path)
 
     Run one training step of each from the same He-init and the losses and
     updated parameters must agree bit-for-bit. That is a known-answer test for
-    the new wiring which does NOT depend on the absolute accuracy of the
-    gradient — which matters here, because the FD probe showed this
-    architecture family carries a pre-existing ~15% analytic-vs-finite-
-    difference gap that swamps any skip-specific error.
+    the tap wiring which does NOT depend on the absolute accuracy of the
+    gradient — which matters here, because this architecture family carries
+    a ~15% analytic-vs-finite-difference gap (measured by the FD probe) that
+    swamps any skip-specific error.
 
-    It exercises the maxPool→`addSkipGrad` half of the new path directly. The
+    It exercises the maxPool→`addSkipGrad` half of the tap path directly. The
     residual-stage half differs only in which field carries the gradient
     (`fpnTapGrad`), the consumption and tagging logic being shared. -/
 def r34EquivProbe (viaTap : Bool) : NetSpec where
@@ -200,9 +198,8 @@ def r34UnetBratsConfig : TrainConfig where
                                  -- full-LR step before the fresh stem and
                                  -- decoder have any signal at all
   augment      := false
-  lossKind     := some .perPixelCE    -- plain CE. The weighted-CE/focal chapter was
-                                 -- closed by the shuffle-bug fix — post-fix,
-                                 -- plain CE segments. Do not reopen it here.
+  lossKind     := some .perPixelCE    -- plain CE, which segments. Do not reopen
+                                 -- weighted-CE/focal here.
   evalEveryNEpochs := 1          -- epochs-to-target IS the transfer claim
   checkpointEveryNEpochs := 2
 
@@ -212,9 +209,9 @@ def main (args : List String) : IO Unit := do
   -- Default is the control on purpose: an unlabelled run should be the boring
   -- one, so a forgotten flag understates the result rather than inventing it.
   let useR34 := args.any (· == "r34")
-  -- `noskip` selects the original skipless decoder. Skips are the default
-  -- because they are strictly the better segmenter; the flag exists so the
-  -- earlier published no-skip numbers stay reproducible from this exe.
+  -- `noskip` selects the skipless decoder. Skips are the default because they are
+  -- strictly the better segmenter; the flag exists so the published no-skip
+  -- numbers stay reproducible from this exe.
   let skips := !(args.any (· == "noskip"))
   -- `equivdown` / `equivtap` select the two halves of the equivalence probe.
   let spec :=
@@ -243,7 +240,7 @@ def main (args : List String) : IO Unit := do
   -- Tag artifacts by arm. Both arms share a NetSpec (that is the point), so
   -- without this they would share `_params.bin` and `_train_step.vmfb` too —
   -- a sequential A/B would overwrite itself and a parallel one would race
-  -- mid-compile. Same failure the BraTS loss ablation hit.
+  -- mid-compile.
   let fullTag := (if useR34 then "r34" else "scratch")
                  ++ (if skips then "" else "_noskip") ++ lrTag ++ extraTag
 

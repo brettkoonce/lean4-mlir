@@ -251,7 +251,7 @@ noncomputable def depthwiseFlatHasVJP {c h w kH kW : Nat}
   HasVJP3.toHasVJP (depthwiseHasVJP3 W b)
 
 -- ════════════════════════════════════════════════════════════════
--- § Strided (stride-2) depthwise conv — `decimate ∘ depthwise` (ch7 C3)
+-- § Strided (stride-2) depthwise conv — `decimate ∘ depthwise`
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Stride-2 SAME depthwise conv**, flattened: `Vec (c·2h·2w) → Vec (c·h·w)`.
@@ -624,7 +624,7 @@ noncomputable def depthwiseStride2BiasGradHasVJP {c h w kH kW : Nat}
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 depthwise at XLA `SAME` = decimateODD ∘ (stride-1 depthwise)
---   (`planning/archive/mnv4_verified.md` §3e — the TF-origin padding convention)
+--   (the TF-origin padding convention)
 -- ════════════════════════════════════════════════════════════════
 
 /-! **The depthwise peer of `flatConvStride2Xla`** ([`Architectures/StridedConv.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Architectures/StridedConv.lean)), and it exists
@@ -641,8 +641,8 @@ a new obligation.
 Even inputs only — which the type enforces (`c*(2*h)*(2*w)`) and which is every strided
 depthwise in mnv2/mnv4/enet (112, 56, 28, 14). At an odd input XLA `SAME` is symmetric and
 `depthwiseStride2Flat` is already correct. -/
--- Measured (planning/archive/mnv4_verified.md §3d): at MNv2's five sites the symmetric/`SAME`
--- difference was 2.9e-1 of a ~1.05 logit range in its trainer's BN world.
+-- Measured: at MNv2's five sites the symmetric/`SAME` difference was 2.9e-1 of a ~1.05 logit range
+-- in its trainer's BN world.
 
 /-- **Stride-2 XLA-`SAME` depthwise conv**, flattened: `Vec (c·2h·2w) → Vec (c·h·w)`.
     `decimateOddFlat ∘ depthwiseFlat` — the asymmetric-pad peer of `depthwiseStride2Flat`. -/

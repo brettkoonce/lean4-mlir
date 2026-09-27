@@ -140,7 +140,7 @@ private theorem two_sq_pos (a : Nat) (ha : 0 < a) : 0 < 2 * (a * a) :=
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3. What the structural blocks are
---   ⚠⚠ As in ResNet-34: every lemma at VARIABLE shapes, instantiated afterwards. See
+--   As in ResNet-34: every lemma at VARIABLE shapes, instantiated afterwards. See
 --   `ResNet34FullBSeal.lean`'s §2 banner for what happens otherwise.
 -- ════════════════════════════════════════════════════════════════
 
@@ -947,8 +947,7 @@ theorem sealX_jacobian_nonzero (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Na
 
 /-- **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
     [3,4,6,3]-bottleneck** ResNet-50 — `resnet50ForwardBFull`, at BOTH shipped resolutions —
-    is **not the zero map** at the witness. ResNet-50's clause bundle (48 relu clauses, the stem
-    and the pool) had no exhibited point at all before this. -/
+    is **not the zero map** at the witness. -/
 theorem sealX_backward_nontrivial (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat)
     (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * (2 * (2 * (2 * (2 * q))))) *

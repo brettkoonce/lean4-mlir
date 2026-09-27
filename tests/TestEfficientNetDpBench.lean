@@ -3,17 +3,11 @@ import LeanMlir.Verified.Train
 
 /-! # EfficientNet-B0 data-parallel step-time bench — 1 GPU vs 2 GPUs on XLA/PJRT
 
-`planning/archive/xla_pjrt_handoff.md` §2e-bis. The first DP number for this net came from two short
-end-to-end training runs (wall clock minus the shim's reported compile time) and was quoted as
-"~1.2×, one run each" — good enough to state a direction, not good enough to quote. This is the
-§2b-bis methodology applied to the data-parallel path.
-
 **Method.** Both executables are compiled in ONE process and their steps are **interleaved**
 (A,B,A,B,…) so clock and thermal drift hit both equally; the reported statistic is the **min**,
 which is the robust one for a bench (noise only ever adds time). Inputs are synthetic and built
-once in memory, so the data loader is out of the measurement entirely — §3's standing warning is
-that a data-bound regime makes any throughput ratio meaningless, and the R34 "within 1.04× of JAX"
-figure was measured in exactly that trap.
+once in memory, so the data loader is out of the measurement entirely — a data-bound regime makes
+any throughput ratio meaningless.
 
 * **A** = `efficientnet_adam_train_step.mlir`, 1 replica, bs 32.
 * **B** = `efficientnet_adamdp_train_step.mlir`, 2 replicas, global 64 (32 per replica).
@@ -21,21 +15,20 @@ figure was measured in exactly that trap.
 The batches differ by construction, so **ms/IMAGE is the figure** and ms/step is not comparable.
 Perfect scaling would be an unchanged ms/step at twice the images, i.e. 2.00× on ms/image.
 
-**What limits it, and why the ratio is the wrong thing to blame.** Parameters are host-resident
-(§2c), so *every* step pushes the whole packed `[θ|m|v]` — 213 params, 4,020,358 floats, ~48.2 MB (262 / 4,041,366 before §2m) —
-to *every* replica. Compute halves across two devices while that transfer doubles. This bench
+**What limits it, and why the ratio is the wrong thing to blame.** Parameters are host-resident,
+so *every* step pushes the whole packed `[θ|m|v]` — 213 params, 4,020,358 floats, ~48.2 MB — to
+*every* replica. Compute halves across two devices while that transfer doubles. This bench
 therefore also reports the implied per-step transfer share, because the interesting question is not
 "is it 2×" (it cannot be) but "how much of the step is already transfer", which is the number that
-says whether device-resident parameters (§2d.3) is worth doing.
+says whether device-resident parameters is worth doing.
 
     gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
     lake build efficientnet-dp-bench
     unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench [rounds]
 
 Needs TWO GPUs and the XLA backend — collectives do not exist on the IREE path. One process holding
-both a 1-replica and a 2-replica executable is fine: the replica count is per-GRAPH, not per-process
-(§2c), which `efficientnet-dp-check` already relies on.
--/
+both a 1-replica and a 2-replica executable is fine: the replica count is per-GRAPH, not
+per-process, which `efficientnet-dp-check` already relies on. -/
 
 private def opCount (path : String) : IO Nat := do
   let s ← IO.FS.readFile path
@@ -43,7 +36,7 @@ private def opCount (path : String) : IO Nat := do
 
 /-- Read the entry-point name and the baked batch off a render: `func.func @NAME(%x: tensor<BxD…`.
     Both are properties of the artifact, so reading them beats assuming them — it lets one bench
-    compare renders at different `B` (the bs128 pair, §2e-quater) with no new argument, and it
+    compare renders at different `B` (the bs128 pair) with no new argument, and it
     cannot silently invoke the wrong entry. -/
 private def entryAndBatch (path : String) : IO (String × Nat) := do
   let s ← IO.FS.readFile path
@@ -73,7 +66,7 @@ def main (args : List String) : IO Unit := do
   let net := efficientnetVerified.toNet
   let replicas := 2
   -- Entry name and per-replica batch are read OFF each artifact rather than assumed, so this bench
-  -- also compares renders at different `B` (§2e-quater's bs128 pair) with no new argument.
+  -- also compares renders at different `B` (the bs128 pair) with no new argument.
   let (fnA, bsA) ← entryAndBatch pathA
   let (fnB, bsB) ← entryAndBatch pathB
   -- Side B is data-parallel only if it actually contains collectives; otherwise this is a plain
@@ -191,7 +184,7 @@ backend {← LowererSession.backendName}"
     let ovhMs := minB - minA
     -- What has to cross the bus that a single-device step does not: the all-reduce exchanges the
     -- whole gradient (one float per parameter) between replicas, and the host pushes [θ|m|v] to
-    -- the SECOND replica too, because parameters are host-resident (§2c).
+    -- the SECOND replica too, because parameters are host-resident.
     let gradMiB := net.nParams.toFloat * 4.0 / 1048576.0
     let paramMiB := net.nParams.toFloat * 3.0 * 4.0 / 1048576.0
     IO.println s!"    DP overhead = {ovhMs} ms/step = {(100.0 * ovhMs / minA)}% of the 1-GPU step"

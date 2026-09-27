@@ -2,14 +2,13 @@ import LeanMlir
 
 /-! YOLOv1 single-scale detector on VisDrone at 448 input / 14×14 grid.
 
-    The validation-ladder rung above the 224/7×7 baseline (planning/archive/yolo_drone.md
-    WS-A, which collapsed to mAP 0.0000): change ONE thing — input resolution —
-    and see whether it alone lifts detection off zero, before committing to the
-    multi-scale build. Same ResNet-34 backbone + deep conv head as the 224
-    baseline; at 448 the stride-32 backbone yields a 14×14 grid (196 cells vs 49),
-    and a median VisDrone object grows from ~2×5 px to ~5×10 px — small, but
-    visible to the backbone. Its own build prefix so it never collides with the
-    224 checkpoints.
+    The validation-ladder rung above the 224/7×7 baseline (which collapsed to mAP
+    0.0000): change ONE thing — input resolution — and see whether it alone lifts
+    detection off zero, before committing to the multi-scale build. Same ResNet-34
+    backbone + deep conv head as the 224 baseline; at 448 the stride-32 backbone yields a
+    14×14 grid (196 cells vs 49), and a median VisDrone object grows from ~2×5 px to
+    ~5×10 px — small, but visible to the backbone. Its own build prefix so it never
+    collides with the 224 checkpoints.
 
     Usage:
       lake build yolov1-visdrone448
@@ -40,9 +39,9 @@ def r34Yolov1_448 : NetSpec where
   ]
 
 def r34Yolov1_448Config : TrainConfig where
-  -- Same recipe as the 224 baseline (planning/archive/yolo_final.md), shorter run: this
-  -- rung only needs to answer "does resolution move mAP off zero", read from
-  -- early checkpoints. Same LR/clip/focal so the ONLY change vs WS-A is the input.
+  -- Same recipe as the 224 baseline, shorter run: this rung only needs to answer "does resolution
+  -- move mAP off zero", read from early checkpoints. Same LR/clip/focal so the ONLY change vs the
+  -- 224 baseline is the input.
   learningRate := 7.0e-4
   batchSize    := 16
   epochs       := 12

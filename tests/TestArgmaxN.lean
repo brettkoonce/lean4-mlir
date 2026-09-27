@@ -2,23 +2,16 @@ import LeanMlir.F32Array
 
 /-! # `argmax-check` — the CLASS-COUNT gate on `F32.argmaxN`
 
-The gate that would have caught the defect it exists for. `F32.argmaxN`'s predecessor,
-`F32.argmax10`, had no `n` at all: its C loop was `for (i = 1; i < 10; i++)`, a literal.
+An argmax with a literal class count (a C loop `for (i = 1; i < 10; i++)`) is correct on every
+10-class net — Imagenette, CIFAR-10 and MNIST — so it agrees with the net everywhere those tests
+look. It is wrong on exactly the tier with no accuracy gate — the 1000-class ImageNet trainers —
+where it confines every prediction to labels 0..9 and therefore scores a net that can only ever
+be right on the ~1/100 of validation images whose label falls in that window. Training stays
+healthy; only the readout is wrong. A readout with nowhere to put the class count cannot be
+checked against the net.
 
-⚠ **It was correct on every net this repo had ever gated.** Imagenette, CIFAR-10 and MNIST are
-all 10-class, so the constant agreed with the net everywhere a test looked. It was wrong on
-exactly the tier with no accuracy gate — the 1000-class ImageNet trainers — where it confined
-every prediction to labels 0..9 and therefore scored a net that could only ever be right on the
-~1/100 of validation images whose label fell in that window.
-
-Measured on the R34/ImageNet 4-GPU run, 2026-08-04, before the fix: epoch 2 reported
-**471/49920 = 0.94%**, which is 471 of the ~499 *reachable* images — i.e. **94% on the 10-way
-sub-problem it was actually being asked**, while the true 1000-way number was ~4.4%. Training
-was healthy the whole time; only the readout was wrong. The signature is the whole lesson: the
-old one had nowhere to put the class count, so nothing could check it against the net.
-
-Gate A pins the fix. Gate B is the CONTROL — it re-runs the old window on the same data and
-requires it to MISS, so a regression cannot pass this file quietly.
+Gate A pins `F32.argmaxN` at the net's class count. Gate B is the CONTROL — it re-runs a 10-wide
+window on the same data and requires it to MISS, so a regression cannot pass this file quietly.
 -/
 
 /-- A `rows × K` logit block, all zeros except one peak per row at the given index. -/
@@ -32,7 +25,7 @@ def mkLogits (rows K : Nat) (peakAt : Nat → Nat) : IO ByteArray := do
   return ba
 
 def main : IO Unit := do
-  let K := 1000                     -- ImageNet-1k, the tier the old constant was wrong on
+  let K := 1000                     -- ImageNet-1k, the tier a 10-class constant is wrong on
   let peak : Nat → Nat := fun r => if r == 0 then 700 else 3
   let ba ← mkLogits 2 K peak
   let mut bad := 0
@@ -44,7 +37,7 @@ def main : IO Unit := do
     IO.println s!"  ✅ A1 argmaxN over {K}: found the peak at 700"
   else
     IO.println s!"  ❌ A1 argmaxN over {K}: got {a0}, want 700"; bad := bad + 1
-  -- The second row also pins the OFFSET: a row whose peak is inside the old 10-window still has
+  -- The second row also pins the OFFSET: a row whose peak is inside a 10-wide window still has
   -- to be read at its own base, not row 0's.
   if a1 == 3 then
     IO.println s!"  ✅ A2 argmaxN at row offset {K}: found the peak at 3"
@@ -60,9 +53,8 @@ def main : IO Unit := do
     IO.println s!"  ❌ B  control did NOT fire: a 10-wide window returned 700, so this file proves nothing"
     bad := bad + 1
 
-  -- ══ Gates C/D: `rankOf`, the top-5 metric — added 2026-08-05 ══
-  -- The verified side had NO top-5 at all, while the reference's headline is quoted as
-  -- "72.02% top-1 / 90.62% top-5". `rankOf` counts strictly-greater logits, so the label is in
+  -- ══ Gates C/D: `rankOf`, the top-5 metric ══
+  -- The reference's headline is quoted as "72.02% top-1 / 90.62% top-5". `rankOf` counts strictly-greater logits, so the label is in
   -- the top-k iff rank < k — the same construction the reference uses (it avoids `top_k`, whose
   -- indices it records as broken on ROCm/gfx1100). Matching the formulation makes the two sides'
   -- top-5 comparable by construction, ties and all.
@@ -81,7 +73,7 @@ def main : IO Unit := do
   else
     IO.println s!"  ❌ C  rankOf wrong (label, want, got): {rankBad}"; bad := bad + 1
 
-  -- ⭐ THE BOUNDARY, which is the whole gate: rank 4 is in the top-5 and rank 5 is NOT.
+  -- THE BOUNDARY, which is the whole gate: rank 4 is in the top-5 and rank 5 is NOT.
   -- An off-by-one here (`<=` for `<`) would silently inflate every top-5 number ever reported.
   let in5 (lbl : Nat) : Bool := (F32.rankOf ranked 0 K.toUSize lbl.toUSize).toNat < 5
   if in5 500 && !(in5 600) then

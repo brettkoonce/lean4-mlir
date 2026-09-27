@@ -13,11 +13,11 @@ import LeanMlir.Proofs.Training.Optim.Lamb
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Training.Optim.RmsPropStep
 -- DropPath imports only Architectures.LayerNorm (for `layerScale`, which this file already has in
--- scope), so it adds no cycle either. `planning/archive/stochastic_depth.md`.
+-- scope), so it adds no cycle either.
 import LeanMlir.Proofs.Training.DropPath
 -- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can
 -- denote it. MaxPool3s2 imports only Architectures.CNN, which this file already has in scope
--- transitively, so it adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.
+-- transitively, so it adds no cycle.
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # StableHLO — the emitted-graph AST and its ℝ semantics
@@ -56,14 +56,12 @@ open Finset BigOperators
 namespace Proofs
 namespace StableHLO
 
--- ⛔ Never name `den` in a `simp` set; name `denStep`/`denStepApp` (defined after `den`). `den`
--- there makes Lean build `den.eq_def`, a 233 s proof for the 215-arm match (measured 2026-09-23 with
--- `trace.profiler`), and every proof in this file waited on it. That cost, not the proofs, is what
--- the 1M → 4M file-wide heartbeat floor this header used to carry was paying for. With the
--- dsimprocs every proof here checks at the default budget and the module takes ~40 s (measured
--- 2026-09-24, after the printer moved to `StableHLO.Pretty`) instead of ~345 s.
+-- Never name `den` in a `simp` set; name `denStep`/`denStepApp` (defined after `den`). `den`
+-- there makes Lean build `den.eq_def`, a 233 s proof for the 215-arm match (measured with
+-- `trace.profiler`), and every proof in this file waits on it. With the dsimprocs every proof
+-- here checks at the default budget and the module takes ~40 s instead of ~345 s.
 --
--- The arm-count rule from §0.8 still holds for `rfl` through `den`: *parametric arms are
+-- The arm-count rule holds for `rfl` through `den`: *parametric arms are
 -- affordable; fixed-index arms (no `{n : Nat}` binder) are not.*
 
 /-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
@@ -85,55 +83,53 @@ inductive BatchableOp : Nat → Nat → Type where
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
   | convStrided {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
-  -- ⭐ The **bf16** peers of `conv`/`convStrided` — the batched forward convs every ResNet
+  -- The **bf16** peers of `conv`/`convStrided` — the batched forward convs every ResNet
   -- render actually uses (`.batchOp (.conv …)`), as distinct from the per-example
   -- `flatConvFBf16`. Same emit discipline: bf16 operands, **bf16-typed result**, convert back,
   -- then the bias in f32. See `flatConvFBf16` for why the result type is load-bearing.
   | convBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
-  -- ⭐ **fp8 (E4M3) peer of `convBf16`** — identical shape, identical denotation, one different
-  -- type string. Measured 2026-08-25 (`planning/archive/fp8_in_graph.md` §1) to lower at cifar8's own
-  -- conv shapes: every layer reaches `__cudnn$convForwardGraph` with f8 values surviving into
-  -- the optimized HLO. ⚠ f8 operands, **f8-TYPED result**, convert back — an f32 result is
-  -- 1.17× where the f8 result is 3.43× (§2.3), the same result-type rule as bf16 at a third
-  -- precision. ⚠⚠ UNSCALED: E4M3's max is 448, so this is only sound where the operands are
-  -- known to fit. See §4 — scales are the next rung, and `e4m3_render_faithful` already covers
-  -- the scaled form for any `q`/`sx`/`sW`.
+  -- **fp8 (E4M3) peer of `convBf16`** — identical shape, identical denotation, one different
+  -- type string. Measured to lower at cifar8's own conv shapes: every layer reaches
+  -- `__cudnn$convForwardGraph` with f8 values surviving into the optimized HLO. f8 operands,
+  -- **f8-TYPED result**, convert back — an f32 result is 1.17× where the f8 result is 3.43×, the
+  -- same result-type rule as bf16 at a third precision. UNSCALED: E4M3's max is 448, so this is
+  -- only sound where the operands are known to fit. `e4m3_render_faithful` covers the scaled form
+  -- for any `q`/`sx`/`sW`.
   | convF8 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*h*w) (oc*h*w)
   | convStridedBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
-  -- ⭐ The **XLA `'SAME'`** stride-2 conv — same shape as `convStrided`, different padding, and
+  -- The **XLA `'SAME'`** stride-2 conv — same shape as `convStrided`, different padding, and
   -- the two are NOT interchangeable. `convStrided` pads symmetrically `((k-1)/2` each side), which
   -- is He et al./torchvision and is what R34/R50/ConvNeXt's references do. This one pads
   -- `((k-2)/2, k/2)` — `(0,1)` at k=3 — which is what XLA `'SAME'` does at an EVEN input and what
   -- the TF-origin ports (MobileNetV2/V4, EfficientNet) mean by `padding='SAME'`.
   --
-  -- ⚠⚠ **Both produce the same output size, so nothing structural can tell them apart.** Shapes,
-  -- arity, op counts and every `#guard` in the repo pass either way; only a forward tie against
-  -- the reference on shared weights separates them (`planning/archive/mnv4_verified.md` §3b/§3d measured
-  -- 6.16e-2 on mnv4's stem and 2.9e-1 across mnv2's five sites). Pick by which reference the net
-  -- has: TF-origin → this one; torchvision-origin → `convStrided`.
+  -- **Both produce the same output size, so nothing structural can tell them apart.** Shapes,
+  -- arity, op counts and every `#guard` in the repo pass either way; only a forward tie against the
+  -- reference on shared weights separates them (measured 6.16e-2 on mnv4's stem and 2.9e-1 across
+  -- mnv2's five sites). Pick by which reference the net has: TF-origin → this one;
+  -- torchvision-origin → `convStrided`.
   --
   -- `den` is `flatConvStride2Xla` = `decimateOddFlat ∘ flatConv` — the SAME stride-1 conv, read at
   -- the odd phase. So this adds no proof obligation: the forward, input-VJP, weight-VJP and
   -- bias-VJP are all `vjpComp`s of results already proven (`Architectures/StridedConv.lean`).
   | convStridedXla {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
-  -- ⭐ bf16 peer of `convStridedXla` — MobileNetV2's stem. Same asymmetric `((k-2)/2, k/2)` pad;
+  -- bf16 peer of `convStridedXla` — MobileNetV2's stem. Same asymmetric `((k-2)/2, k/2)` pad;
   -- the bf16 twin must NOT be "tidied" to the symmetric one, which is a different net.
   | convStridedXlaBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   | depthwise {c h w kH kW : Nat} (wName bName : String)
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*h*w) (c*h*w)
-  -- ⭐⭐ The **bf16 depthwise** — the first GROUPED bf16 conv in the kit. Same emit discipline as
+  -- The **bf16 depthwise** — the first GROUPED bf16 conv in the kit. Same emit discipline as
   -- `convBf16`: bf16 operands, **bf16-TYPED result**, convert back, `feature_group_count = c`
-  -- untouched. ⚠ The f32-result shape folds here exactly as it does for an ordinary conv —
-  -- measured on a real MNv2 layer (c=144, 56², 3×3) before these ops were written, so grouping
-  -- buys no exemption from §9.2.
+  -- untouched. The f32-result shape folds here exactly as it does for an ordinary conv —
+  -- measured on a real MNv2 layer (c=144, 56², 3×3), so grouping buys no exemption.
   | depthwiseBf16 {c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*h*w) (c*h*w)
-  -- ⭐ The XLA-`SAME` depthwise peer of `convStridedXla`, and the token MobileNetV2 and
+  -- The XLA-`SAME` depthwise peer of `convStridedXla`, and the token MobileNetV2 and
   -- EfficientNet need: their `depthwise_conv` defaults to `padding='SAME'`
   -- (`depthwise_conv` in `jax/Jax/Codegen.lean`), so every strided depthwise in those references pads
   -- `((k-2)/2, k/2)`, not symmetrically. Same invisibility caveat as `convStridedXla` — identical
@@ -141,12 +137,12 @@ inductive BatchableOp : Nat → Nat → Type where
   -- `den` is `depthwiseStride2FlatXla` = `decimateOddFlat ∘ depthwiseFlat`.
   | depthwiseStridedXla {c h w kH kW : Nat} (wName bName : String)
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
-  -- ⭐ bf16 peer of the XLA-`SAME` strided depthwise. Keeps the asymmetric pad verbatim.
+  -- bf16 peer of the XLA-`SAME` strided depthwise. Keeps the asymmetric pad verbatim.
   | depthwiseStridedXlaBf16 {c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
   | depthwiseStrided {c h w kH kW : Nat} (wName bName : String)
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
-  -- ⭐ bf16 peer — MobileNetV4's strided depthwise. ⚠ SYMMETRIC pad `[[p,p],[p,p]]`, unlike
+  -- bf16 peer — MobileNetV4's strided depthwise. SYMMETRIC pad `[[p,p],[p,p]]`, unlike
   -- `depthwiseStridedXlaBf16`'s `[[p-1,p],…]`: MNv4's torchvision-origin blocks pad symmetrically
   -- where MNv2/EfficientNet's TF-origin ones do not. Identical shapes and counts either way, so
   -- only a forward tie separates them — do not "unify" the two.
@@ -166,7 +162,7 @@ inductive BatchableOp : Nat → Nat → Type where
   -- independently — which is the formal content of "eval is class-batch-independent".
   --
   -- That it can be a descriptor at all is the whole difference from training BN: `bnBatchF` needs
-  -- its own constructor because it REDUCES over the batch (§2b's second kind), and `batchMap N`
+  -- its own constructor because it REDUCES over the batch, and `batchMap N`
   -- cannot express a reduction across examples. Here there is no reduction.
   | bnEval {oc h w : Nat} (gName bName muName varName epsStr : String) (ε : ℝ)
       (γ β μ var : Vec oc)                                 : BatchableOp (oc*h*w) (oc*h*w)
@@ -178,7 +174,7 @@ inductive BatchableOp : Nat → Nat → Type where
   -- ReLU forward, the ResNet-34 peer of `swish`. Same story: pointwise, carries no
   -- data, so `batchMap N` of it is itself and `N` is denotationally free.
   | relu {n : Nat}                                         : BatchableOp n n
-  -- ReLU6 forward, MobileNetV2's activation (§2f). Same story a third time: a pointwise clamp
+  -- ReLU6 forward, MobileNetV2's activation. Same story a third time: a pointwise clamp
   -- to [0,6] carrying no data, so `batchMap N` of it is itself and `N` is denotationally free.
   -- Its BACKWARD is `selectMidB`, deliberately NOT a descriptor — see the note below.
   | relu6 {n : Nat}                                        : BatchableOp n n
@@ -187,13 +183,12 @@ inductive BatchableOp : Nat → Nat → Type where
   -- Its BACKWARD is `maxPoolBackB`, not a descriptor — it routes `dy` to the saved input's
   -- window argmax, which is per-example data.
   | maxPool {c h w : Nat}                                  : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
-  -- ⭐ **3×3/s2 max-pool FORWARD** — He et al.'s ResNet stem pool (`planning/archive/rsb_a3_r50_verified.md`
-  -- §4b). Same TYPE as `.maxPool` above (112→56 either way, since symmetric `(3−1)/2 = 1` padding
-  -- makes the output width `h`), and a **different function**: the windows OVERLAP. That the two
-  -- share a type is exactly why the deviation survived undocumented on every ResNet here — nothing
-  -- ever failed to compile. A descriptor for `.maxPool`'s reason: the forward carries no saved
+  -- **3×3/s2 max-pool FORWARD** — He et al.'s ResNet stem pool. Same TYPE as `.maxPool` above
+  -- (112→56 either way, since symmetric `(3−1)/2 = 1` padding makes the output width `h`), and a
+  -- **different function**: the windows OVERLAP. Because the two share a type, swapping one for
+  -- the other never fails to compile. A descriptor for `.maxPool`'s reason: the forward carries no saved
   -- value, so `batchMap N maxPool3s2Flat` is per-example pooling across the batch.
-  -- ⚠ Its BACKWARD is `maxPool3s2BackB`, and it ACCUMULATES: an input can be the argmax of up to
+  -- Its BACKWARD is `maxPool3s2BackB`, and it ACCUMULATES: an input can be the argmax of up to
   -- four windows, where `maxPool2`'s backward is a single lookup. See `MaxPool3s2.lean`.
   | maxPool3s2 {c h w : Nat}                               : BatchableOp (c*(2*h)*(2*w)) (c*h*w)
   -- NOTE: the pointwise activation VJPs (`swishBack`/`sigmoidBack`/`selectPos`) are
@@ -205,38 +200,37 @@ inductive BatchableOp : Nat → Nat → Type where
   -- `SHlo` constructors (`swishBackB`/`sigmoidBackB`/`selectPosB`) carrying the
   -- WHOLE-BATCH `x`.
   -- Row ops: `m`/`rows` is the per-example ROW count (ViT tokens; 1 logit row for a
-  -- classifier head), NOT the batch — it was always emitted as a real inner
+  -- classifier head), NOT the batch — it is emitted as a real inner
   -- dimension. The descriptor form exists so the batch can move to `N`.
   | softmaxRow {m n : Nat}                                 : BatchableOp (m*n) (m*n)
   | denseRowBack {rows a c : Nat} (wName : String) (W : Mat a c) : BatchableOp (rows*c) (rows*a)
-  -- ⭐ bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2.
-  -- ⚠⚠ **bf16 operands, bf16-TYPED RESULT, convert back — the CONV shape, and this is a CHANGE.**
-  -- `planning/archive/bf16_renderer.md` §9.2 measured that `dot_general` reaches the tensor cores with
-  -- EITHER result type and concluded the result type was "inert" for dot. That is true of
-  -- CORRECTNESS and **false of SPEED**, which nobody had measured: on ViT's own MLP chain the
-  -- f32-result shape is 1.18× over f32 and the bf16-result shape is **1.60×** (§20.1). The f32
-  -- result makes the gemm write twice the bytes and takes a worse epilogue.
-  -- ▶ Consequence for `den`: a bf16-typed result means the hardware DOES round the output, so
+  -- bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2.
+  -- **bf16 operands, bf16-TYPED RESULT, convert back — the CONV shape.**
+  -- `dot_general` reaches the tensor cores with EITHER result type, so the result type is inert
+  -- for CORRECTNESS but **not for SPEED**: on ViT's own MLP chain the f32-result shape is 1.18×
+  -- over f32 and the bf16-result shape is **1.60×**. The f32 result makes the gemm write twice the
+  -- bytes and takes a worse epilogue.
+  -- Consequence for `den`: a bf16-typed result means the hardware DOES round the output, so
   -- there is an outer `rnd` here exactly as in `convBf16`. Omitting it would claim precision the
   -- hardware does not deliver — the unsound direction.
   | denseRowBackBf16 {rows a c : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat a c)
       : BatchableOp (rows*c) (rows*a)
-  -- ── ViT / ConvNeXt: the row-indexed and pointwise forward forms (§0.2 ▶2, the batched-index
-  --    move). All five carry only batch-INVARIANT data — a scalar ε/γ/β, a shared per-feature
+  -- ── ViT / ConvNeXt: the row-indexed and pointwise forward forms at the batched index.
+  --    All five carry only batch-INVARIANT data — a scalar ε/γ/β, a shared per-feature
   --    vector, or nothing — which is exactly the descriptor precondition (`den` is
   --    `batchMap N (denOp op)`, ONE fixed function across the batch). The saved-activation
   --    backwards of the same layers (`lnRowBack`, `geluBack`, `softmaxRowBack`) can NOT be
   --    descriptors and take the `batchMapAux` shape as their own constructors.
   --
-  --    ⚠ `m` is rows PER EXAMPLE — the token axis on ViT, the spatial axis on ConvNeXt's
+  --    `m` is rows PER EXAMPLE — the token axis on ViT, the spatial axis on ConvNeXt's
   --    channel-LN — never the batch. That separation is the whole point of a descriptor: `N` is
   --    the denotation's batch, `m*n` the emit width. Reading `m` as the batch is the mistake the
   --    per-example renderers make structurally.
   | gelu {n : Nat}                                          : BatchableOp n n
   | transpose {m n : Nat}                                   : BatchableOp (m*n) (n*m)
-  -- ── increment 3: ConvNeXt's stem conv, its LayerScale, and the loss-path softmax pair.
-  --    ⚠ `expe` and `softmaxDiv` are descriptors for OPPOSITE halves of the §2b defect, and the
-  --    contrast is worth keeping. `expe`'s `den` is already honest at the batched index
+  -- ── ConvNeXt's stem conv, its LayerScale, and the loss-path softmax pair.
+  --    `expe` and `softmaxDiv` are descriptors for OPPOSITE halves of the per-example-width
+  --    defect, and the contrast is worth keeping. `expe`'s `den` is already honest at the batched index
   --    (`Real.exp` pointwise IS its own batch-lift) and only its EMIT is wrong there — it reads
   --    the width off the SHlo index and would emit `tensor<B×(N·n)>`. `softmaxDiv` is the reverse:
   --    its emit already reduces over `dimensions = [1]`, i.e. per example, while its `den`
@@ -245,17 +239,17 @@ inductive BatchableOp : Nat → Nat → Type where
   | convStride4 {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)
       : BatchableOp (ic*(2*(2*h))*(2*(2*w))) (oc*h*w)
-  -- ⭐ **The bf16 stem** — ConvNeXt's 4×4/s4 patchify, and the only STRIDE-4 conv in the kit. Same
+  -- **The bf16 stem** — ConvNeXt's 4×4/s4 patchify, and the only STRIDE-4 conv in the kit. Same
   -- emit discipline as every other conv here: bf16 operands, **bf16-TYPED result**, convert back,
   -- bias in f32.
   --
-  -- ⚠ `convStride4`'s **pad-one-less** rule is preserved verbatim: the denotation reads the stride-1
+  -- `convStride4`'s **pad-one-less** rule is preserved verbatim: the denotation reads the stride-1
   -- SAME conv at the offset positions `4i+1`, so the emitted pad is `(k-1)/2 − 1`, which at the 4×4
   -- stem is `[[0,0]]` — the paper's left-aligned window, and NOT the symmetric `(k-1)/2` every other
   -- forward conv emits. Copying `convBf16`'s pad here renders a different net at identical shapes.
   --
-  -- ⚠ Measured on this exact shape (B=32, 3→96, 224²→56², 4×4/s4) BEFORE this op was written: the
-  -- §9.2 fold fires at stride 4 exactly as at stride 1, stride 2 and grouped — a bf16-operand
+  -- Measured on this exact shape (B=32, 3→96, 224²→56², 4×4/s4): the f32-result
+  -- fold fires at stride 4 exactly as at stride 1, stride 2 and grouped — a bf16-operand
   -- convolution with an f32-TYPED result compiles to pure f32. Stride buys no exemption either.
   | convStride4Bf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)
@@ -267,47 +261,47 @@ inductive BatchableOp : Nat → Nat → Type where
   | lnRow {m n : Nat} (gName bName epsStr : String) (ε γ β : ℝ) : BatchableOp (m*n) (m*n)
   | rowScale {m n : Nat} (gName : String) (γ : Vec n)       : BatchableOp (m*n) (m*n)
   | rowBias {m n : Nat} (bName : String) (β : Vec n)        : BatchableOp (m*n) (m*n)
-  -- ── ViT increment 1 (handoff §0.2 ▶3): the six forms whose data is batch-INVARIANT.
+  -- ── ViT: the six forms whose data is batch-INVARIANT.
   --
-  --    ⚠⚠ `N` HERE IS ViT's TOKEN COUNT, NOT THE BATCH — and on this net the two are far easier
+  --    `N` HERE IS ViT's TOKEN COUNT, NOT THE BATCH — and on this net the two are far easier
   --    to conflate than on ConvNeXt, because the per-example renderer already spells the token
   --    axis `N`. A `BatchableOp a b` never sees the batch at all: `SHlo.batchOp`'s own `{N}` is
   --    the batch and these `N`s ride INSIDE `a` and `b`. Reading either as the other is the exact
-  --    defect this whole thread removes, and it type-checks in both directions.
+  --    defect the batched index exists to remove, and it type-checks in both directions.
   --
-  --    All six qualify as descriptors by §4's rule — the data each carries is a weight, a bias, a
+  --    All six qualify as descriptors — the data each carries is a weight, a bias, a
   --    head INDEX or nothing, i.e. the same for every example. ViT's saved-activation backwards
   --    (`softmaxRowBack`) and its batch-contracting parameter gradients cannot be descriptors and
   --    take their own constructors, exactly as ConvNeXt's did.
   | denseRow {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c)
       : BatchableOp (N*a) (N*c)
-  -- ⭐ bf16 peer of `denseRow` — the six per-block matmuls (Q/K/V/O/fc1/fc2) that are 90 % of a
-  -- ViT step (§17.3). bf16 operands, **bf16-typed result**, convert back, then the bias in f32.
-  -- ⚠ The outer `rnd` in `den` is the bf16 STORE and the bias is added AFTER it, at the accumulate
+  -- bf16 peer of `denseRow` — the six per-block matmuls (Q/K/V/O/fc1/fc2) that are 90 % of a
+  -- ViT step. bf16 operands, **bf16-typed result**, convert back, then the bias in f32.
+  -- The outer `rnd` in `den` is the bf16 STORE and the bias is added AFTER it, at the accumulate
   -- precision, exactly as emitted — `convBf16`'s shape. See `denseRowBackBf16` for why the result
-  -- type changed from f32 and what it was worth.
+  -- type is bf16 rather than f32 and what it is worth.
   | denseRowBf16 {N a c : Nat} (rnd : ℝ → ℝ) (wName bName : String) (W : Mat a c) (b : Vec c)
       : BatchableOp (N*a) (N*c)
   | patchEmbed {ic H W P N D : Nat} (wName bName clsName posName : String)
       (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D)
       : BatchableOp (ic*H*W) ((N+1)*D)
-  -- ⭐⭐ bf16 peer of `patchEmbed` — the 16×16/s16 patchify stem, and the ONE ViT op that is a
-  -- `convolution` rather than a `dot_general`. ⚠⚠ So it takes the CONV shape: bf16 operands,
-  -- **bf16-TYPED result**, convert back. Measured standalone at ViT's own stem shape before this
-  -- constructor was written (§17.2): the f32-result spelling FOLDS to pure f32 exactly as it does
-  -- for stride 1/2/4 and for grouped convs. Stride 16 buys no exemption from §9.2 either.
-  -- ▶ Hence the outer `rnd` in `den` (the bf16 store), which `denseRowBf16` does NOT have. The
+  -- bf16 peer of `patchEmbed` — the 16×16/s16 patchify stem, and the ONE ViT op that is a
+  -- `convolution` rather than a `dot_general`. So it takes the CONV shape: bf16 operands,
+  -- **bf16-TYPED result**, convert back. Measured standalone at ViT's own stem shape: the
+  -- f32-result spelling FOLDS to pure f32 exactly as it does for stride 1/2/4 and for grouped
+  -- convs. Stride 16 buys no exemption either.
+  -- Hence the outer `rnd` in `den` (the bf16 store), which `denseRowBf16` does NOT have. The
   -- bias, the CLS token and the position embedding are all added AFTER, in f32, exactly as
   -- emitted — they are f32 parameters that never cross a tensor core.
   | patchEmbedBf16 {ic H W P N D : Nat} (rnd : ℝ → ℝ) (wName bName clsName posName : String)
       (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D)
       : BatchableOp (ic*H*W) ((N+1)*D)
-  -- ⚠ `clsSlice`/`clsPad` and `headSlice`/`headPad` are VJP pairs, and each pair is
+  -- `clsSlice`/`clsPad` and `headSlice`/`headPad` are VJP pairs, and each pair is
   -- shape-asymmetric — the slice contracts, the pad scatters back. That asymmetry is what makes
   -- them safe as descriptors despite looking like data movement: neither reads a value.
   | clsSlice {N D : Nat}                                    : BatchableOp ((N+1)*D) D
   | clsPad {N D : Nat}                                      : BatchableOp D ((N+1)*D)
-  -- ⚠ `h : Fin heads` is an INDEX, not per-example data — head `h` is the same head for every
+  -- `h : Fin heads` is an INDEX, not per-example data — head `h` is the same head for every
   -- example. A per-example head choice would be a different architecture.
   | headSlice {N heads d : Nat} (h : Fin heads)             : BatchableOp (N*(heads*d)) (N*d)
   | headPad {N heads d : Nat} (h : Fin heads)               : BatchableOp (N*d) (N*(heads*d))
@@ -322,22 +316,20 @@ inductive BatchableOp : Nat → Nat → Type where
 inductive SHlo : Nat → Type where
   | operand    {n : Nat} (name : String) (v : Vec n)            : SHlo n
   | dotIn      {m n : Nat} (wName : String) (W : Mat m n)       : SHlo m → SHlo n
-  -- Mixed-precision matmul (planning/archive/bf16_renderer.md): BOTH operands rounded by `rnd`,
-  -- accumulate exact. This is `dotIn` with the leaf casts pulled INSIDE the op, and it
-  -- exists because the casts cannot live outside it: a separate round node emits a
-  -- convert PAIR, which XLA deletes (`xla_allow_excess_precision`, measured — see the
-  -- `convertF` comment). Bundling is also what lets the emit be a single bf16-operand /
-  -- f32-result `dot_general`, i.e. the only form that reaches tensor cores.
+  -- Mixed-precision matmul: BOTH operands rounded by `rnd`, accumulate exact. This is `dotIn` with
+  -- the leaf casts pulled INSIDE the op, and it exists because the casts cannot live outside it: a
+  -- separate round node emits a convert PAIR, which XLA deletes (`xla_allow_excess_precision`,
+  -- measured — see the `convertF` comment). Bundling is also what lets the emit be a single
+  -- bf16-operand / f32-result `dot_general`, i.e. the only form that reaches tensor cores.
   --
   -- Why it is a new constructor rather than a dtype index on `SHlo`: `SHlo n` is indexed
   -- by WIDTH only and has no element type, so "the value is bf16 here" is unsayable. The
   -- op keeps its result f32 (the accumulate), so the index stays honest — the same
   -- bundling `flatConvF` already uses for conv+bias.
-  -- ⚠⚠ **ITS f32-TYPED RESULT IS A PoC ARTEFACT, NOT A RECOMMENDATION.** `dotInBf16` is the
-  -- depth-1 dense proof-of-concept and is rendered by NO net. §9.2 measured that `dot_general`
-  -- reaches the tensor cores with either result type and read that as "the result type is inert
-  -- for dot"; that is true of CORRECTNESS and false of SPEED (§20.1 — an f32 result makes the gemm
-  -- write twice the bytes, worth ~1.2× on a real chain). ▶ ViT's dot ops take the **bf16-typed
+  -- **ITS f32-TYPED RESULT IS A PoC ARTEFACT, NOT A RECOMMENDATION.** `dotInBf16` is the
+  -- depth-1 dense proof-of-concept and is rendered by NO net. `dot_general` reaches the tensor
+  -- cores with either result type, so the result type is inert for CORRECTNESS but not for SPEED
+  -- (an f32 result makes the gemm write twice the bytes, worth ~1.2× on a real chain). ViT's dot ops take the **bf16-typed
   -- result** shape for that reason. Do not copy this constructor's shape into a new op.
   | dotInBf16  {m n : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat m n) : SHlo m → SHlo n
   | dotOut     {m n : Nat} (wName : String) (W : Mat m n)       : SHlo n → SHlo m
@@ -362,48 +354,44 @@ inductive SHlo : Nat → Type where
   -- `x≠0 ∧ x≠6`). `selectMid`'s `xName`/`x` is the saved pre-activation.
   | relu6F     {n : Nat}                                        : SHlo n → SHlo n
   | selectMid  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
-  -- Mixed precision (planning/archive/bf16_renderer.md): the in-graph ROUND node. `den` is
-  -- literally `rnd ∘ den e`, so it is `den`-faithful for ANY rounding — bf16
-  -- round-to-nearest being the instance we emit. This is the op
-  -- `Proofs/Float/Bf16Fold.lean` names as the depth > 1 ingredient
-  -- (`den (convertF rnd e) = rnd ∘ den e`), and it is ALSO what depth 1 needs on the
-  -- emitter side: the PoC folds the leaf cast into the operand *value*, which is
-  -- right for the proof but would leave the emitted graph pure `f32` and therefore
-  -- exactly as fast as fp32. One op serves both.
+  -- Mixed precision: the in-graph ROUND node. `den` is literally `rnd ∘ den e`, so it is
+  -- `den`-faithful for ANY rounding — bf16 round-to-nearest being the instance we emit. This is the
+  -- op `Proofs/Float/Bf16Fold.lean` names as the depth > 1 ingredient
+  -- (`den (convertF rnd e) = rnd ∘ den e`), and it is ALSO what depth 1 needs on the emitter side:
+  -- the PoC folds the leaf cast into the operand *value*, which is right for the proof but would
+  -- leave the emitted graph pure `f32` and therefore exactly as fast as fp32. One op serves both.
   --
-  -- It emits a convert ROUND TRIP (`f32 → bf16 → f32`), which is the honest reading
-  -- of a `ℝ → ℝ` rounding: the value stays an f32 tensor and only its precision is
-  -- degraded. Feeding a bf16-typed `dot_general` directly is a separate, later change
-  -- (rung 2+), because that one changes the TYPE of the value and so cannot be a
-  -- `SHlo n → SHlo n` node.
+  -- It emits a convert ROUND TRIP (`f32 → bf16 → f32`), which is the honest reading of a `ℝ → ℝ`
+  -- rounding: the value stays an f32 tensor and only its precision is degraded. Feeding a
+  -- bf16-typed `dot_general` directly is a separate op, because that one changes the TYPE of the
+  -- value and so cannot be a `SHlo n → SHlo n` node.
   | convertF   {n : Nat} (rnd : ℝ → ℝ)                          : SHlo n → SHlo n
   -- Chapter 3 (CNN): flattened conv forward (`stablehlo.convolution`) and
   -- 2×2 max-pool forward (`reduce_window`). Vec-indexed via the proofs'
   -- flattened forms `flatConv`/`maxPoolFlat`.
   | flatConvF  {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
-  -- ⭐ The **bf16** peer of `flatConvF`: bf16 conv operands, f32 bias add.
+  -- The **bf16** peer of `flatConvF`: bf16 conv operands, f32 bias add.
   --
-  -- ⚠⚠ Its emit is NOT `dotInBf16`'s shape and must not be "made consistent" with it.
-  -- Measured on ares 2026-08-24 (jax 0.11.0 and 0.10.2 alike, and NOT rescued by
+  -- Its emit is NOT `dotInBf16`'s shape and must not be "made consistent" with it.
+  -- Measured on ares (jax 0.11.0 and 0.10.2 alike, and NOT rescued by
   -- `xla_allow_excess_precision=false`): a `convolution` with bf16 operands and an
   -- **f32-typed result** has its converts DELETED — cuDNN receives f32 parameters and the
   -- optimized HLO contains no convert at all. That is `convertF`'s round-trip fold, one op
   -- over. `dot_general` is genuinely unaffected, which is why `dotInBf16` may keep an f32
   -- result and this may not. The shape that survives is a **bf16-TYPED result** followed by
-  -- a separate convert back — what `jax/Jax/Codegen.lean`'s `conv2d` already emits, and why
-  -- the JAX lowerer gets bf16 on ImageNet and the verified path does not.
+  -- a separate convert back — what `jax/Jax/Codegen.lean`'s `conv2d` emits.
   --
-  -- ▶ So the value is rounded TWICE and `den` says so: once per operand (bf16 in) and once
+  -- So the value is rounded TWICE and `den` says so: once per operand (bf16 in) and once
   -- on the accumulated sum (bf16 store; the MAC itself accumulates in f32). `dotInBf16`'s
   -- `den` carries no outer rounding because its result really does stay f32 — copying it
   -- here would claim MORE precision than the hardware delivers, which is the unsound
   -- direction for an accuracy bound.
-  -- ▶ The bias is added after the convert back, in f32, exactly as the emit orders it.
+  -- The bias is added after the convert back, in f32, exactly as the emit orders it.
   | flatConvFBf16 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)                    : SHlo (ic*h*w) → SHlo (oc*h*w)
   | maxPoolF   {c h w : Nat}                                    : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
-  -- ⭐ The **3×3/s2** peer of `maxPoolF` — He et al.'s ResNet stem pool, at the PER-EXAMPLE index
+  -- The **3×3/s2** peer of `maxPoolF` — He et al.'s ResNet stem pool, at the PER-EXAMPLE index
   -- (`ResNet34Render`'s world; the batched peer is the `BatchableOp.maxPool3s2` descriptor). Same
   -- type, overlapping windows, different function — see the note on that descriptor.
   | maxPool3s2F {c h w : Nat}                                   : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
@@ -414,10 +402,10 @@ inductive SHlo : Nat → Type where
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
   -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
-  -- ⭐ The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
-  -- padding — ⚠ and **nothing else changes**, because `select_and_scatter` already scatters with an
-  -- **add** reduction, which is exactly the accumulation overlapping windows need. The emitter was
-  -- always general enough; only the window attributes move.
+  -- The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
+  -- padding — and **nothing else changes**, because `select_and_scatter` scatters with an
+  -- **add** reduction, which is exactly the accumulation overlapping windows need. Only the window
+  -- attributes move.
   | maxPool3s2Back {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 3 (CNN) param-SGD tail (the conv train step, folded into the AST):
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
@@ -459,7 +447,7 @@ inductive SHlo : Nat → Type where
   -- The BATCHED peers of `addV`/`sub`: same pointwise `den`, but the per-example
   -- emit width `n` is separated from the batch `N` so the node can sit in a graph
   -- indexed at `N·n` (where the batch-coupled `den`s are honest). The unbatched
-  -- ctors above stay exactly as they were for the per-example renderers.
+  -- ctors above serve the per-example renderers.
   | addVB      {N n : Nat}                                      : SHlo (N*n) → SHlo (N*n) → SHlo (N*n)
   | subB       {N n : Nat}                                      : SHlo (N*n) → SHlo (N*n) → SHlo (N*n)
   | gapF       {c h w : Nat}                                    : SHlo (c*h*w) → SHlo c
@@ -467,19 +455,18 @@ inductive SHlo : Nat → Type where
   | gapBack    {c h w : Nat}                                    : SHlo c → SHlo (c*h*w)
   -- Broadcast backward (VJP = sum-over-spatial): the adjoint of `broadcastFlat`.
   | broadcastBack {c h w : Nat}                                 : SHlo (c*h*w) → SHlo c
-  -- Chapter 5 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
+  -- Chapter 5 (ResNet-34 downsampling): stride-2 SAME conv forward
   -- (`stablehlo.convolution` with `window_strides=[2,2]`) and its input-VJP
   -- (zero-upsample the cotangent — `lhs_dilation` — then the reversed-kernel
   -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2HasVJP`.
   | flatConvStridedF {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
-  -- The XLA-`SAME` peer, for the TF-origin nets' per-example chains (`planning/archive/mnv4_verified.md`
-  -- §3h). Same type, `pad` differs by one — see `BatchableOp.convStridedXla` for the full note.
+  -- The XLA-`SAME` peer, for the TF-origin nets' per-example chains. Same type, `pad` differs by one — see `BatchableOp.convStridedXla` for the full note.
   | flatConvStridedXlaF {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   | convStridedBack  {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) : SHlo (oc*h*w) → SHlo (ic*(2*h)*(2*w))
-  -- Chapter 5 Milestone B (ResNet-34 downsampling) param-SGD tail: the strided conv
+  -- Chapter 5 (ResNet-34 downsampling) param-SGD tail: the strided conv
   -- kernel/bias update ops — the stride-2 analogues of `convWeightSgd`/`convBiasSgd`.
   -- `convStridedWeightSgd`: `W − lr·(flatConvStride2_weight_grad(b,x)·dy)` — zero-upsample
   -- the cotangent (the decimate-backward) then the SAME transpose-trick stride-1 weight-grad
@@ -496,11 +483,11 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo oc
   -- The XLA-`SAME` per-example peers, for MobileNetV2's per-example SGD train step
-  -- (`MobileNetV2Render.lean`, one MobileNetV2 program since 2026-09-05). `den` is the
-  -- `flatConvStride2Xla` weight / bias VJP. The weight op emits `convStridedWeightSgd`'s text with
-  -- the correlation pad shifted one position (`[p-1, p+1]`, exactly `convStridedXlaWeightSgdB`);
-  -- the bias grad is stride- and phase-independent, so `convStridedXlaBiasSgd` emits the same
-  -- `reduce` as `convBiasSgd` (its `skel` aliases that Raw) and only its `den` differs.
+  -- (`MobileNetV2Render.lean`). `den` is the `flatConvStride2Xla` weight / bias VJP. The weight op
+  -- emits `convStridedWeightSgd`'s text with the correlation pad shifted one position
+  -- (`[p-1, p+1]`, exactly `convStridedXlaWeightSgdB`); the bias grad is stride- and
+  -- phase-independent, so `convStridedXlaBiasSgd` emits the same `reduce` as `convBiasSgd` (its
+  -- `skel` aliases that Raw) and only its `den` differs.
   | convStridedXlaWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
                                                            : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
@@ -580,12 +567,12 @@ inductive SHlo : Nat → Type where
   -- flat `denseBiasSgd` would mismatch the `%pos: tensor<197x192xf32>` arg. `den` = `posEmbed_sgd_certified`.
   | posEmbedSgd {N D : Nat} (pName lrStr : String) (pos : Mat (N+1) D) (lr : ℝ)
                                                            : SHlo ((N+1)*D) → SHlo ((N+1)*D)
-  -- Chapter 8 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
-  -- 4×4/s4 patchify stem (`stablehlo.convolution` with `window_strides=[4,4]`).
+  -- Chapter 8 (full ConvNeXt-T): stride-4 SAME conv forward — the 4×4/s4 patchify stem
+  -- (`stablehlo.convolution` with `window_strides=[4,4]`).
   -- `den` via the proven `flatConvStride4` (= decimate ∘ decimate ∘ stride-1 conv).
   | flatConvStride4F {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) : SHlo (ic*(2*(2*h))*(2*(2*w))) → SHlo (oc*h*w)
-  -- Chapter 5 Milestone B8 (real-ResNet PER-CHANNEL BatchNorm): normalize each
+  -- Chapter 5 (real-ResNet PER-CHANNEL BatchNorm): normalize each
   -- channel-slice over its h·w spatial cells with its OWN `(γ_c, β_c)`, γ/β : `Vec oc`
   -- (rank-1, `broadcast dims=[1]` — vs `bnF`'s rank-0 scalars). `den` via the proven
   -- `bnPerChannelTensor3` (the Mat-split block-diagonal BN bridged into the `(oc*h)*w`
@@ -610,7 +597,7 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*h*w) → SHlo (c*h*w)
   | depthwiseBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*h*w)) : SHlo (c*h*w) → SHlo (c*h*w)
-  -- Chapter 6 C3: STRIDE-2 depthwise conv forward (`window_strides=[2,2]`,
+  -- Chapter 6: STRIDE-2 depthwise conv forward (`window_strides=[2,2]`,
   -- `feature_group_count = c`, `[c,1,kH,kW]` kernel — halves spatial, the MNv2
   -- downsampling op) and its input-VJP (zero-upsample the cotangent via
   -- `stablehlo.pad` interior=1 then the reversed-kernel stride-1 depthwise — the
@@ -622,7 +609,7 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   | depthwiseStridedBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
-  -- The XLA-`SAME` per-example input-VJP (MobileNetV2's SGD train step). ⚠ Its transposed-conv
+  -- The XLA-`SAME` per-example input-VJP (MobileNetV2's SGD train step). Its transposed-conv
   -- pad is `[p+1, p-1]` — the OPPOSITE shift from the two weight grads, because the kernel is
   -- reversed here; the batched `depthwiseStridedXlaBackBatched` carries the full note and
   -- `scripts/gates/xla_pad_op_check.py` checks both. `den` is `depthwiseStride2FlatXlaHasVJP`.
@@ -658,12 +645,11 @@ inductive SHlo : Nat → Type where
   -- hand every example one example's input). Conditional (no window ties), like the unbatched op.
   | maxPoolBackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
-  -- ⭐ Batched **3×3/s2** max-pool backward — `maxPoolBackB`'s peer at the paper's stem pool.
+  -- Batched **3×3/s2** max-pool backward — `maxPoolBackB`'s peer at the paper's stem pool.
   -- Same `batchMapAux` story (example `n` gets its OWN slice of `x`), same reason it is not a
   -- descriptor. What differs from the 2×2 peer is only inside `maxPool3s2BackFlat`: the windows
   -- overlap, so the backward SUMS over every output that selected this input rather than looking
-  -- one up. The emitted `select_and_scatter` needed no change for that — it already reduces with
-  -- `add`. `planning/archive/rsb_a3_r50_verified.md` §4b.
+  -- one up. The emitted `select_and_scatter` handles that as is — it reduces with `add`.
   | maxPool3s2BackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched conv BIAS param-SGD, the peers of `conv{,Strided}WeightSgdB`: `b − lr·Σ_n dβ_n`,
@@ -677,69 +663,69 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2*h) * (2*w)))) (b : Vec oc) (lr : ℝ)
                                                           : SHlo (N * (oc * h * w)) → SHlo oc
   | selectPosB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- MobileNetV2's ReLU6 backward mask (§2f), the batched peer of `selectMid` and the exact
+  -- MobileNetV2's ReLU6 backward mask, the batched peer of `selectMid` and the exact
   -- `selectPosB` shape one kink up: `if 0 < x i ∧ x i < 6 then dy i else 0` reads the saved
   -- pre-activation, which is PER-EXAMPLE data — so this is an own constructor holding the
   -- WHOLE-BATCH `x`, not a `BatchableOp` descriptor beside `relu6`. A descriptor here would
   -- denote "every example shares example 0's mask", which is not what the emit computes.
   | selectMidB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`): `branch * keep / keep_prob`, the
-  -- per-SAMPLE branch scale. `mName` is a graph INPUT of type `tensor<Nxf32>` — the mask is drawn
-  -- on the HOST, never by `stablehlo.rng`, because every numeric gate in this repo is a
-  -- bit-exactness or known-answer argument over a deterministic graph (§2, that doc).
+  -- STOCHASTIC DEPTH: `branch * keep / keep_prob`, the per-SAMPLE branch scale. `mName` is a graph
+  -- INPUT of type `tensor<Nxf32>` — the mask is drawn on the HOST, never by `stablehlo.rng`,
+  -- because every numeric gate in this repo is a bit-exactness or known-answer argument over a
+  -- deterministic graph.
   --
-  -- ⚠ It is an own constructor for `selectMidB`'s reason, one axis over: a `BatchableOp` descriptor
-  -- may carry only batch-INVARIANT data (§4), and this mask is per-EXAMPLE. A descriptor would
+  -- It is an own constructor for `selectMidB`'s reason, one axis over: a `BatchableOp` descriptor
+  -- may carry only batch-INVARIANT data, and this mask is per-EXAMPLE. A descriptor would
   -- denote "every example shares example 0's mask" — which is exactly what stochastic depth is not.
-  -- ⚠ `invKeep` is 1/keep_prob, the reference's INVERTED form, so eval at a ones mask is the exact
+  -- `invKeep` is 1/keep_prob, the reference's INVERTED form, so eval at a ones mask is the exact
   -- identity (`Proofs.dropPath_ones_id`) and the forward render can emit the sites too — which is
-  -- what keeps the `forward ⊂ train-step` prefix audit alive (§3, that doc).
-  -- ⚠ THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropPath_vjp_is_self`): a diagonal
+  -- what keeps the `forward ⊂ train-step` prefix audit alive.
+  -- THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropPath_vjp_is_self`): a diagonal
   -- linear map is its own transpose, so there is no `*Grad` peer to build or to keep in step.
   | dropPathB    {N n : Nat} (mName : String) (s : Vec N)        : SHlo (N*n) → SHlo (N*n)
-  -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask the reference
-  -- applies immediately before the classifier dense (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`). `mName` is a
+  -- CLASSIFIER DROPOUT: the per-ELEMENT inverted mask the reference applies immediately before the
+  -- classifier dense (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`). `mName` is a
   -- graph INPUT of type `tensor<N×n×f32>`, drawn on the HOST for `dropPathB`'s reasons exactly.
   --
-  -- ⚠⚠ IT IS `dropPathB` AT A MASK OF THE VALUE'S OWN TYPE, AND THAT IS THE ONLY DIFFERENCE.
+  -- IT IS `dropPathB` AT A MASK OF THE VALUE'S OWN TYPE, AND THAT IS THE ONLY DIFFERENCE.
   -- `Proofs.dropout_of_dropScale` proves the containment (`dropPath` is this op at a lifted mask);
   -- `Proofs.dropPath_scales_uniformly` proves the gap. In the emitted text the whole distinction is
   -- one line: `dropPathP` broadcasts `tensor<B>` over `dims = [0]`, this multiplies directly. Each
-  -- of the two is what the OTHER's comments have been warning about — "emitting a `tensor<B×n>`
-  -- scale is per-element dropout, a different regulariser" is now a live op, so the confusion runs
+  -- of the two is what the OTHER's comments warn about — "emitting a `tensor<B×n>`
+  -- scale is per-element dropout, a different regulariser" is a live op, so the confusion runs
   -- both ways and both directions are pinned in `tests/TestBatchedEmitTie.lean`.
   --
-  -- ⚠ Own constructor for `dropPathB`'s reason inverted: a `BatchableOp` descriptor's `den` is
+  -- Own constructor for `dropPathB`'s reason inverted: a `BatchableOp` descriptor's `den` is
   -- `batchMap N (denOp op)`, ONE fixed function, so it could not carry a mask that differs across
   -- examples any more than it could carry a saved per-example activation.
-  -- ⚠ NO BAKED `1/keep` — the driver folds the inversion into the supplied mask, which is what
+  -- NO BAKED `1/keep` — the driver folds the inversion into the supplied mask, which is what
   -- makes the ones-mask forward the exact identity (`Proofs.dropout_ones_id`) and lets the op be
   -- emitted in the forward at all, keeping the `forward ⊂ train-step` prefix audit alive.
-  -- ⚠ THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropout_vjp_is_self`) — but see that
+  -- THE BACKWARD IS THIS SAME OP at the same mask (`Proofs.dropout_vjp_is_self`) — but see that
   -- theorem's note: the classifier WEIGHT gradient reads the dense's input, which is the DROPPED
   -- activation, and no ones-mask gate can see that being wrong.
   | dropoutB     {N n : Nat} (mName : String) (mask : Vec (N*n)) : SHlo (N*n) → SHlo (N*n)
   | swishBackB   {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- ── ViT / ConvNeXt's two saved-activation BACKWARDS (§0.2 ▶2, increment 2). These cannot be
+  -- ── ViT / ConvNeXt's two saved-activation BACKWARDS. These cannot be
   --    `BatchableOp` descriptors and the reason is the descriptor rule itself: a descriptor's
   --    `den` is `batchMap N (denOp op)`, ONE fixed function, which would hand example 0's saved
   --    activation to all `N`. They take the whole-batch `x` instead — `geluBackB` pointwise (so
   --    the VJP at width `N*n` already IS the batch-lift, `swishBackB`'s exact shape), `lnRowBackB`
   --    via `batchMapAux` (so example `n` gets `batchSlice n x`).
   | geluBackB    {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- ── increment 3: the batch-contracting PARAMETER gradients (`Σ_n` over the batch, the shape
+  -- ── The batch-contracting PARAMETER gradients (`Σ_n` over the batch, the shape
   --    every `*GradB` takes). Two of them contract TWO levels — the batch AND the row axis —
   --    which no existing `*GradB` does, because `denseBiasGradB` sits on a net where each example
-  --    is one row. ⚠ That is why the row count `R` is an explicit index here: reading `rowDense`'s
+  --    is one row. That is why the row count `R` is an explicit index here: reading `rowDense`'s
   --    own `N` as the batch is precisely the confusion the batched index exists to prevent.
   | convStride4WeightGradB {N ic oc h w kH kW : Nat} (xName : String)
       (b : Vec oc) (x : Vec (N * (ic*(2*(2*h))*(2*(2*w))))) (W : Kernel4 oc ic kH kW)
       : SHlo (N * (oc*h*w)) → SHlo (oc*ic*kH*kW)
-  -- ⭐ Its **bf16** peer, and ConvNeXt's second and last new op. As with `convWeightGradBBf16`, the
+  -- Its **bf16** peer, and ConvNeXt's second and last new op. As with `convWeightGradBBf16`, the
   -- wgrad is the transpose-trick convolution (the batch IS the contraction dim), so the whole `Σ_n`
   -- is ONE emitted convolution and therefore ONE bf16 store — which is why the outer `rnd` sits
   -- outside the sum, not inside it.
-  -- ⭐ **There is no `convStride4BackBatchedBf16` and there must not be one.** `convStride4` is the
+  -- **There is no `convStride4BackBatchedBf16` and there must not be one.** `convStride4` is the
   -- patchify STEM, so its input is `%x` and there is no input gradient to compute. Two new ops for
   -- this net, not three.
   | convStride4WeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
@@ -750,7 +736,7 @@ inductive SHlo : Nat → Type where
   | veclnGammaGradB {N R D : Nat} (xName epsStr : String) (ε : ℝ) (x : Vec (N*(R*D)))
       : SHlo (N*(R*D)) → SHlo D
   | rowDenseBiasGradB {N R c : Nat}                             : SHlo (N*(R*c)) → SHlo c
-  -- ⚠ The HEAD's dense grads. `denseWeightGradB`/`denseBiasGradB` already exist and denote the
+  -- The HEAD's dense grads. `denseWeightGradB`/`denseBiasGradB` already exist and denote the
   -- same thing — but they carry their OWN `Raw` tags ("denseWeightGrad"/"denseBiasGrad"), where
   -- ConvNeXt's and ViT's head emits `weightGrad`/`biasGrad`. Reusing them would change the
   -- emitted text, so these two alias the per-example Raw instead. A reminder that two ops
@@ -759,83 +745,81 @@ inductive SHlo : Nat → Type where
   | biasGradB   {N n : Nat}                                     : SHlo (N*n) → SHlo (N*n)
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
-  -- ⭐ The BATCHED forward sigmoid, for **BCE-with-logits** (RSB-A2/A3's loss). `sigmoidF` already
+  -- The BATCHED forward sigmoid, for **BCE-with-logits** (RSB-A2/A3's loss). `sigmoidF` already
   --    denotes `Proofs.sigmoid` and already carries a global hypothesis-free `sigmoidHasVJP`, but
   --    it is indexed PER EXAMPLE and emits at `ty [B, n]`; the loss cotangent lives at `SHlo (N*n)`
   --    with the `*B` family (`subB`, `divConstB`). So this is the same function at the batched
-  --    index — one constructor, and `planning/archive/next_session_pipeline_then_r50.md` §4 estimated
-  --    "~1 descriptor" for exactly this.
-  -- ⚠ It needs NO new `Raw`/`Tok`/parse constructor: `skel` maps it onto the generic
+  --    index — one constructor.
+  -- It needs NO new `Raw`/`Tok`/parse constructor: `skel` maps it onto the generic
   --    `.batched "sigmoidP"` node the whole batched-pointwise family shares.
   | sigmoidB     {N n : Nat}                                    : SHlo (N*n) → SHlo (N*n)
   | sigmoidBackB {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
-  -- ── ViT increment 2 (handoff §0.2 ▶3): the six forms that CANNOT be descriptors, because each
+  -- ── ViT: the six forms that CANNOT be descriptors, because each
   --    either reads a per-example saved activation or contracts the batch away.
   --
-  --    ⚠⚠ `matmulFB` WAS BILLED AS THE SCHEDULE RISK AND IT IS NOT ONE. §0.2's cost note says
-  --    attention needs "a `batchMap2`-shaped combinator, its own VJP and a `dot_general` carrying a
-  --    batching dimension", because both its operands are per-example where every batched binary in
-  --    the kit is pointwise-same-shape. Measured instead of estimated, all three evaporate:
+  --    `matmulFB` needs no new combinator, VJP or `dot_general` shape, even though both its
+  --    operands are per-example where every other batched binary in the kit is
+  --    pointwise-same-shape:
   --      · **`batchMapAux` IS `batchMap2`.** Its body is `f (batchSlice aux k) (batchSlice x k)` —
   --        fully symmetric in the two arguments. Nothing in the definition requires the first to be
-  --        a saved activation rather than a second graph operand; only the docstring did.
-  --      · **the `dot_general` already carries `batching_dims = [0] x [0]`.** `matmulF`'s emit was
-  --        written per-example from the start, so it needs no change — the `expe`/`softmaxDiv`
-  --        situation (§0.2 increment 3) with only the `den` half wrong.
+  --        a saved activation rather than a second graph operand.
+  --      · **the `dot_general` already carries `batching_dims = [0] x [0]`.** `matmulF`'s emit is
+  --        per-example, so it needs no change — the `expe`/`softmaxDiv` situation with only the
+  --        `den` half wrong.
   --      · **`.batched2` already exists** (`addVB`/`subB` use it), and `matmulF`'s own `Raw` tag is
   --        binary, so this aliases it and needs no new skeleton shape.
-  --    What is left is a constructor, a `den`, a `rfl` and one `skel` line. **Four sites.**
+  --    So the op is a constructor, a `den`, a `rfl` and one `skel` line.
   | matmulFB {N m k n : Nat} : SHlo (N*(m*k)) → SHlo (N*(k*n)) → SHlo (N*(m*n))
-  -- ⭐⭐ bf16 peer of `matmulFB` — **the first ACTIVATION × ACTIVATION bf16 op in the kit.** Every
+  -- bf16 peer of `matmulFB` — **the first ACTIVATION × ACTIVATION bf16 op in the kit.** Every
   -- other bf16 op here rounds a constant weight against a running value; SDPA's `QKᵀ` and `P·V`
-  -- round two activations. §10.3 called this the genuinely new KIND and it was right.
-  -- ▶ The accuracy side comes free anyway: `dot_close_mixed` rounds BOTH operands and never asks
+  -- round two activations.
+  -- The accuracy side comes free anyway: `dot_close_mixed` rounds BOTH operands and never asks
   -- which one is a weight, so this needs no theorem the dense case did not already have.
-  -- ⚠ bf16 operands, **bf16-typed result**, convert back — see `denseRowBackBf16` for why that is
-  -- not `dotInBf16`'s shape any more. Re-checked at ViT's own batched `[32,197,64] × [32,64,197]`
-  -- in §17.2: batching dims buy no exemption in either direction.
+  -- bf16 operands, **bf16-typed result**, convert back — see `denseRowBackBf16` for why that is
+  -- not `dotInBf16`'s shape. Checked at ViT's own batched `[32,197,64] × [32,64,197]`:
+  -- batching dims buy no exemption in either direction.
   | matmulFBBf16 {N m k n : Nat} (rnd : ℝ → ℝ)
       : SHlo (N*(m*k)) → SHlo (N*(k*n)) → SHlo (N*(m*n))
-  -- ⚠ A saved-activation backward, so it takes the WHOLE-batch `preAct` and hands example `k` its
+  -- A saved-activation backward, so it takes the WHOLE-batch `preAct` and hands example `k` its
   -- own slice via `batchMapAux`. A descriptor would give every example example 0's scores — same
   -- types, same emitted bytes, different function. `lnRowBackB`'s situation exactly.
   | softmaxRowBackB {N m n : Nat} (xName : String) (preAct : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
-  -- ── the four batch-contracting parameter gradients. ⚠ Every one of their per-example emits
+  -- ── the four batch-contracting parameter gradients. Every one of their per-example emits
   --    ALREADY reduces over the batch axis (`dimensions = [0, 1]`, `[0]`,
   --    `contracting_dims = [0, 1] x [0, 1]`) — values flow as `tensor<B, …>` and `B` is `pretty`'s,
   --    never the SHlo index — so all four alias their per-example `Raw` and emit the same text BY
-  --    CONSTRUCTION rather than by a copied body. It was only ever the `den` that was per-example.
-  --    ⚠⚠ And the two-level contraction is INVISIBLE AT `N = 1`: a render that dropped the batch
+  --    CONSTRUCTION rather than by a copied body. Only the per-example `den` differs.
+  --    And the two-level contraction is INVISIBLE AT `N = 1`: a render that dropped the batch
   --    sum type-checks, emits the same bytes and agrees on a one-example batch. Any gate must run
   --    at `N > 1` (`den_rowDenseBiasGradB_at_one` states the same thing one op over).
   | rowDenseWeightGradB {N tk a c : Nat} (xName : String) (x : Vec (N*(tk*a)))
       : SHlo (N*(tk*c)) → SHlo (a*c)
-  -- ⭐ bf16 peer — the weight gradient of the six per-block denses. `dot_general` contracting BOTH
+  -- bf16 peer — the weight gradient of the six per-block denses. `dot_general` contracting BOTH
   -- the batch and the token axis (`[0,1] x [0,1]`), so the batch sum happens inside one dot.
-  -- ⚠⚠ **THE ONE ViT DOT THAT KEEPS ITS f32 RESULT, deliberately.** §20.1's win comes from a
+  -- **THE ONE ViT DOT THAT KEEPS ITS f32 RESULT, deliberately.** The bf16-result win comes from a
   -- gemm writing half the bytes, and this gemm's result is the WEIGHT `[a,c]` — 147K elements
   -- against the activations' 4.8M — so there is no bandwidth to save. What a bf16 store would buy
-  -- is nothing and what it would cost is precision on the optimizer's input. ▶ Hence no outer
+  -- is nothing and what it would cost is precision on the optimizer's input. Hence no outer
   -- rounding in `den`: operands rounded, f32 accumulate, f32 store.
-  -- ⚠ The BIAS gradient beside it (`rowDenseBiasGradB`) stays f32 in every net, for the reason it
+  -- The BIAS gradient beside it (`rowDenseBiasGradB`) stays f32 in every net, for the reason it
   -- does in all six: `Σ dy` is a reduction, not a contraction, and there is no tensor core in it.
   | rowDenseWeightGradBBf16 {N tk a c : Nat} (rnd : ℝ → ℝ) (xName : String) (x : Vec (N*(tk*a)))
       : SHlo (N*(tk*c)) → SHlo (a*c)
   | posEmbedGradB {N tk D : Nat}                : SHlo (N*((tk+1)*D)) → SHlo ((tk+1)*D)
   | patchEmbedWeightGradB {N ic H W P tk D : Nat} (xName : String) (x : Vec (N*(ic*H*W)))
       : SHlo (N*((tk+1)*D)) → SHlo (D*ic*P*P)
-  -- ⭐ bf16 peer of the stem's weight grad — the second half of ViT's `convolution` pair, and it
+  -- bf16 peer of the stem's weight grad — the second half of ViT's `convolution` pair, and it
   -- takes the CONV shape (bf16 operands, **bf16-typed result**, convert back) for the same
-  -- measured reason `patchEmbedBf16` does. ⚠⚠ Its convolution contracts the BATCH axis, so the
+  -- measured reason `patchEmbedBf16` does. Its convolution contracts the BATCH axis, so the
   -- `Σ_b` sits INSIDE the bf16 store — which is why `den`'s outer `rnd` wraps the whole batch sum
   -- and not each summand. Writing it per-summand would claim a rounding the hardware never does.
-  -- ⭐ There is no `patchEmbedBackBf16` and there is no `patchEmbedBack` in ViT's traversal at all:
+  -- There is no `patchEmbedBackBf16` and there is no `patchEmbedBack` in ViT's traversal at all:
   -- the stem's input is `%x`, so it has no input gradient — ConvNeXt's `convStride4` exactly
-  -- (§16.5), and the reason this net needs six ops rather than seven.
+  -- and the reason this net needs six ops rather than seven.
   | patchEmbedWeightGradBBf16 {N ic H W P tk D : Nat} (rnd : ℝ → ℝ) (xName : String)
       (x : Vec (N*(ic*H*W))) : SHlo (N*((tk+1)*D)) → SHlo (D*ic*P*P)
-  -- ⚠ Sums tokens 1…tk and SKIPS the CLS row, which is what `p.succ` says. A batched peer that
+  -- Sums tokens 1…tk and SKIPS the CLS row, which is what `p.succ` says. A batched peer that
   -- summed all `tk+1` rows would fold the CLS token's cotangent into the patch bias — it compiles,
   -- trains and descends, and the emitted `slice [.., 1:tk+1, ..]` is the only place it shows.
   | patchEmbedBiasGradB {N tk c : Nat}          : SHlo (N*((tk+1)*c)) → SHlo c
@@ -976,11 +960,11 @@ inductive SHlo : Nat → Type where
   | convStridedBackBatched {N ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
-  -- ⭐ The **bf16** input-VJP peers. These are where the money is: the backward is ~60% of the
-  -- conv step (measured on R34's own layer shapes, `planning/archive/bf16_renderer.md`), and unlike JAX
-  -- — which autodiffs the backward FROM the cast forward and so inherits bf16 for free — every
-  -- hand-written VJP here needs its own bf16 twin. dgrad is itself a convolution, so it takes
-  -- the same emit shape and the same `den` discipline as the forward.
+  -- The **bf16** input-VJP peers. These are where the money is: the backward is ~60% of the conv
+  -- step (measured on R34's own layer shapes), and unlike JAX — which autodiffs the backward FROM
+  -- the cast forward and so inherits bf16 for free — every hand-written VJP here needs its own bf16
+  -- twin. dgrad is itself a convolution, so it takes the same emit shape and the same `den`
+  -- discipline as the forward.
   | convBackBatchedBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
@@ -996,7 +980,7 @@ inductive SHlo : Nat → Type where
   | depthwiseBackBatched {N c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
-  -- ⭐ bf16 depthwise input-VJP. dgrad is itself a (grouped) convolution, so it takes the same
+  -- bf16 depthwise input-VJP. dgrad is itself a (grouped) convolution, so it takes the same
   -- emit shape and the same outer `rnd` (the bf16 store) as the forward.
   | depthwiseBackBatchedBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
@@ -1010,20 +994,20 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedBackBatched {N c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
-  -- ⭐ Its bf16 peer. ⚠ SYMMETRIC pad, unlike the `Xla` twin's `[p+1, p-1]`.
+  -- Its bf16 peer. SYMMETRIC pad, unlike the `Xla` twin's `[p+1, p-1]`.
   | depthwiseStridedBackBatchedBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
-  -- The XLA-`SAME` peer (`planning/archive/mnv4_verified.md` §3e/§3g). ⚠ The backward must place the SAME
-  -- asymmetry the forward did — its `den` scatters onto the ODD positions, so the emitted
-  -- transposed-conv padding shifts by one. Pairing an `Xla` forward with the SYMMETRIC backward
-  -- above type-checks, trains and descends, and computes a gradient for a different net.
+  -- The XLA-`SAME` peer. The backward must place the SAME asymmetry the forward did — its `den`
+  -- scatters onto the ODD positions, so the emitted transposed-conv padding shifts by one. Pairing
+  -- an `Xla` forward with the SYMMETRIC backward above type-checks, trains and descends, and
+  -- computes a gradient for a different net.
   | depthwiseStridedXlaBackBatched {N c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
-  -- ⭐ Its bf16 peer. ⚠⚠ Keeps the `[p+1, p-1]` pad — the OPPOSITE shift from the weight grads,
-  -- because the kernel is reversed here. `scripts/gates/xla_pad_op_check.py` caught that once already;
-  -- the bf16 twin inherits the answer rather than re-deriving it.
+  -- Its bf16 peer. Keeps the `[p+1, p-1]` pad — the OPPOSITE shift from the weight grads,
+  -- because the kernel is reversed here (`scripts/gates/xla_pad_op_check.py` checks it); the
+  -- bf16 twin inherits the answer rather than re-deriving it.
   | depthwiseStridedXlaBackBatchedBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
@@ -1059,7 +1043,7 @@ inductive SHlo : Nat → Type where
   -- γ/β updates over the network layout `N·(oc·(h·w))`. `den` is the per-channel BN
   -- grad at the merged batch+spatial axis `m = N·(h·w)` (via `bnchwFwd`, the
   -- network→oc-major reindex), so it is *exactly* `enet_render_bn{gamma,beta}_certified`'s
-  -- LHS — the §1 fold is a one-line delegation. Emit recomputes x̂ from the saved BN
+  -- LHS — the fold is a one-line delegation. Emit recomputes x̂ from the saved BN
   -- input `vName` then `reduce[0,2,3]` (the dγ/dβ in `bnBatchBack`). Output is `Vec oc`.
   | bnGammaSgdB {N oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
       (v : Vec (N * (oc * (h * w)))) (lr : ℝ)             : SHlo (N * (oc * (h * w))) → SHlo oc
@@ -1072,7 +1056,7 @@ inductive SHlo : Nat → Type where
                                                           : SHlo (N * c) → SHlo (a * c)
   | denseBiasSgdB   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
                                                           : SHlo (N * c) → SHlo c
-  -- ══ The `*SgdB` family with the SGD tail cut off — the BATCHED peers of §2a's eight
+  -- ══ The `*SgdB` family with the SGD tail cut off — the BATCHED peers of the eight
   --    per-example `*Grad` ops. Same reason: every `*SgdB` computes a gradient and immediately
   --    spends it on `θ − lr·g`, and AdamW needs the gradient itself three times over (θ', m',
   --    v'). `den (xSgdB …) = θ − lr · den (xGradB …)` is `rfl` — the `*SgdB_eq_grad` theorems.
@@ -1084,7 +1068,7 @@ inductive SHlo : Nat → Type where
   | convStridedWeightGradB {N ic oc h w kH kW : Nat} (xName : String)
       (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
-  -- ⭐ The **bf16** weight-grad peers. wgrad is the transpose-trick convolution (batch as the
+  -- The **bf16** weight-grad peers. wgrad is the transpose-trick convolution (batch as the
   -- contraction dim), so the whole `Σ_n` is ONE emitted convolution and therefore ONE bf16
   -- store — which is why the outer `rnd` sits outside the sum, not inside it.
   | convWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
@@ -1105,7 +1089,7 @@ inductive SHlo : Nat → Type where
   | convStridedBiasGradB {N ic oc h w kH kW : Nat}
       (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2*h) * (2*w)))) (b : Vec oc)
                                                           : SHlo (N * (oc * h * w)) → SHlo oc
-  -- The XLA-`SAME` weight/bias peers. ⭐ The BIAS one needs no emitter and no new Raw: `∂y/∂b = 1`
+  -- The XLA-`SAME` weight/bias peers. The BIAS one needs no emitter and no new Raw: `∂y/∂b = 1`
   -- at every output position regardless of which input taps fed it, so the bias gradient is
   -- `Σ_{batch,spatial} dy` — padding-independent for exactly the reason it is already
   -- stride-independent. Only `den` changes. The WEIGHT one does need its own emit: the weight
@@ -1113,7 +1097,7 @@ inductive SHlo : Nat → Type where
   | convStridedXlaWeightGradB {N ic oc h w kH kW : Nat} (xName : String)
       (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
-  -- ⭐ bf16 peer — MobileNetV2's stem weight-grad.
+  -- bf16 peer — MobileNetV2's stem weight-grad.
   | convStridedXlaWeightGradBBf16 {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
@@ -1137,24 +1121,24 @@ inductive SHlo : Nat → Type where
   --    statistics the forward used, not a separately-derived approximation of them. ══
   | bnBatchMeanB {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
   | bnBatchVarB  {N oc h w : Nat}                         : SHlo (N * (oc * (h * w))) → SHlo oc
-  -- ══ ⭐⭐ The SYNC-BN statistics, exchanged in TWO rounds — Chan's parallel variance.
+  -- ══ The SYNC-BN statistics, exchanged in TWO rounds — Chan's parallel variance.
   --    Round 1: `bnBatchMeanB` (the replica's μ_r) → `allReduceMeanF` → the global μ.
   --    Round 2: `bnBatchVarAtB x μ` = `σ²_r + (μ_r − μ)²` — the replica's TWO-PASS variance about
   --    its own mean, plus its mean's squared offset from the global one → `allReduceMeanF` →
   --    the global σ² EXACTLY (`bnVar_shard_chan`: Σ_{n∈r}(x−μ)² = Σ(x−μ_r)² + N(μ_r−μ)²).
   --    `bnPackB μ σ²` then packs the two `[oc]` values as one `[oc+oc]`, because `SHlo`'s
   --    skeleton language stops at `.batched2` and every consumer below has one operand slot
-  --    left — see `planning/global_bn_verified.md` §2b.
-  --    ⛔ The first cut (2026-09-21, morning) exchanged `[μ ‖ E[x²]]` in ONE round and formed
-  --    `σ² = E[x²] − μ²` on every consumer. In f32 that costs `ε·E[x²]/σ²` per layer — up to
+  --    left.
+  --    Do NOT exchange `[μ ‖ E[x²]]` in ONE round and form `σ² = E[x²] − μ²` on every
+  --    consumer. In f32 that costs `ε·E[x²]/σ²` per layer — up to
   --    ~30× rounding at R34's activation scales — compounding to 2e-4 over 36 layers, and the
   --    gradient at random init amplifies forward drift ~1000× (`resnet34-syncbn-check`'s
   --    sensitivity probe). One extra `[oc]` collective per BN layer buys a two-pass-quality σ².
-  --    ⚠ Indexed `oc+oc`, NOT `2*oc`, so the packing is Mathlib's `Fin.append` and the two
+  --    Indexed `oc+oc`, NOT `2*oc`, so the packing is Mathlib's `Fin.append` and the two
   --    projections are `Fin.append_left`/`Fin.append_right` rather than hand-rolled. ══
   | bnBatchVarAtB {N oc h w : Nat}                        : SHlo (N * (oc * (h * w))) → SHlo oc → SHlo oc
   | bnPackB {oc : Nat}                                    : SHlo oc → SHlo oc → SHlo (oc + oc)
-  -- ══ ⭐⭐ SYNCHRONISED BN FORWARD — normalise with the statistics HANDED IN.
+  -- ══ SYNCHRONISED BN FORWARD — normalise with the statistics HANDED IN.
   --    `bnBatchF` reduces its own input for μ/σ²; this one reads them off its second operand,
   --    the packed `[μ ‖ σ²]` above. That is how a replica normalises over a global batch it
   --    cannot see, and it is the whole of the sync-BN forward — no replica-family BN node, just
@@ -1165,15 +1149,15 @@ inductive SHlo : Nat → Type where
   --    denotes the function the existing tiers are already tied to. ══
   | bnSyncF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc) → SHlo (N * (oc * (h * w)))
-  -- ══ ⭐⭐ The sync BACKWARD's statistic pair, and the backward itself.
+  -- ══ The sync BACKWARD's statistic pair, and the backward itself.
   --    `bnSyncDyStatsB` returns `[μ ‖ σ² ‖ mdy ‖ mdyx]`: it PASSES ITS OPERAND THROUGH into the
   --    low half and appends the two dy-reductions. Re-averaging μ/σ² over replicas is the
   --    identity (they are already global), so that pass-through is free — and it buys the
   --    second collective: ONE `allReduceMeanF` then carries everything `bnSyncBack` needs.
-  --    ⚠ Both reductions are MEANS, not sums. `bnGradInput` is
+  --    Both reductions are MEANS, not sums. `bnGradInput` is
   --    `istd·(dx̂ − mean(dx̂) − x̂·mean(x̂·dx̂))`, and a mean over equal shards is the mean of the
   --    shards' means (`bnMean_shard`) — which is exactly why a plain mean-collective suffices.
-  --    ⚠ `x` rides as a host literal (`xName` + `Vec`), as in `bnBatchBack`: it is the saved
+  --    `x` rides as a host literal (`xName` + `Vec`), as in `bnBatchBack`: it is the saved
   --    forward activation, not a graph value, so it costs no operand. ══
   | bnSyncDyStatsB {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (N * (oc * (h * w)))) :
@@ -1181,12 +1165,12 @@ inductive SHlo : Nat → Type where
   | bnSyncBack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
       (x : Vec (N * (oc * (h * w)))) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc + (oc + oc)) → SHlo (N * (oc * (h * w)))
-  -- ══ ⭐⭐ The sync γ GRADIENT — `bnGammaGradB` with `x̂` at the HANDED-IN statistics.
+  -- ══ The sync γ GRADIENT — `bnGammaGradB` with `x̂` at the HANDED-IN statistics.
   --    `bnGammaGradB` recomputes μ/σ² from its own operand (`reduce … [0,2,3]` over `B·h·w`),
   --    so under sync-BN it would build `x̂` from the SHARD's statistics while the forward used
   --    the global ones — a different function, and the wrong gradient. This one slices μ/σ² out
   --    of the same packed `[oc+oc]` operand the forward read, so its `x̂` is the forward's.
-  --    ⚠ β's gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays as it is.
+  --    β's gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays as it is.
   --    `den` is `bnSyncPerChannelGradGamma`; its `R = 1` anchor
   --    (`bnSyncPerChannelGradGamma_at_own_stats`) is `bnPerChannelGradGamma`. ══
   | bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
@@ -1204,24 +1188,21 @@ inductive SHlo : Nat → Type where
   --    and `divConstB` had no per-example peer at all.
   --    `divConstB` emits a real `divide` rather than `scaleB (1/c)` ON PURPOSE: the caller
   --    divides by the batch, and `1/B` is only exact in binary32 when `B` is a power of two.
-  --    At the bs192/bs256 renders §2d wants, `x * (1/192) ≠ x / 192`. ══
+  --    At bs192/bs256, `x * (1/192) ≠ x / 192`. ══
   | scaleB    {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
   | shiftB    {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
   | divConstB {N n : Nat} (sStr : String) (s : ℝ)         : SHlo (N*n) → SHlo (N*n)
-  -- ⭐⭐ **4d piece 2 — the cross-replica gradient MEAN as an AST node.** `R` graphs of ONE
+  -- **The cross-replica gradient MEAN as an AST node.** `R` graphs of ONE
   --    skeleton — the same program on `R` replicas, each with its own values, which is what SPMD
   --    data parallelism IS — reduced by `all_reduce(add)` and divided by `R`. `den` is
   --    `(1/R) Σ_r den (g r)` (`DataParallel.dpMean` of the per-replica denotations); `skel` and
   --    therefore `pretty` read replica 0, which is honest because `skel` erases the values the ops
-  --    carry (`DataParallel.skel_allReduceMeanF_of_spmd`). Until 2026-09-07 this was
-  --    `ViTRender.emitGradAllReduce`, emitted TEXT outside the AST and a declared carve-out in
-  --    every train-step tie; the token's emit is that function's text verbatim, and the
-  --    `%arsum{t}` / `%armean{t}` names come from `t` rather than `fresh`, so every committed
-  --    `*dp*` artifact re-renders byte-identically off the node. `ds` is the parameter's shape,
+  --    carry (`DataParallel.skel_allReduceMeanF_of_spmd`). The `%arsum{t}` / `%armean{t}` names
+  --    come from `t` rather than `fresh`. `ds` is the parameter's shape,
   --    which is what the text types the tensor as (the optimizer-tail ops carry `ds` the same way,
-  --    unlinked to the index). ⚠ `hR`: `skel` needs replica 0 to exist, and a mean over zero
+  --    unlinked to the index). `hR`: `skel` needs replica 0 to exist, and a mean over zero
   --    replicas is not a thing. At `R = 1` the emit is empty and the operand's name is threaded
-  --    through, exactly as the text function did.
+  --    through.
   | allReduceMeanF {n : Nat} (R : Nat) (hR : 0 < R) (t : String) (ds : List Nat)
       (g : Fin R → SHlo n) : SHlo n
   -- ViT per-token (rowwise) dense W/b SGD — the `denseRowF` partners. SAME `den` as
@@ -1275,7 +1256,7 @@ inductive SHlo : Nat → Type where
                                                      : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
   -- The STRIDE-4 weight gradient — ConvNeXt's 4×4/s4 patchify stem (`psW`), the last
   -- hand-written weight grad in that render. `flatConvStride4` (forward) and
-  -- `flatConvStride4HasVJP` (input) were already proven; this op's `den` is the matching
+  -- `flatConvStride4HasVJP` (input) are proven; this op's `den` is the matching
   -- `flatConvStride4WeightGradHasVJP`, which is two `vjpComp` steps over the stride-1
   -- weight-VJP and the two decimations. Exercised only at 4×4 (nothing else in the kit is
   -- stride-4) and gated numerically by `convnext-adam-tie`, not by an emit-prefix case — there is
@@ -1289,9 +1270,8 @@ inductive SHlo : Nat → Type where
   | bnGammaGrad {oc h w : Nat} (vName epsStr : String) (ε : ℝ) (v : Vec (oc*h*w))
                                                      : SHlo (oc*h*w) → SHlo oc
   | bnBetaGrad  {oc h w : Nat}                       : SHlo (oc*h*w) → SHlo oc
-  -- The TRANSFORMER family, un-fused the same way. §2a did the CNN ops above, which is why the
-  -- AdamW scorecard stalled at cifar8 + resnet34: ViT's backward spends every gradient inside a
-  -- `*Sgd` op, so there was nothing to hand `adamWParamF`. Each of these is its `*Sgd` peer with
+  -- The TRANSFORMER family, un-fused the same way as the CNN ops above: a `*Sgd` op spends its
+  -- gradient internally, leaving nothing to hand `adamWParamF`. Each of these is its `*Sgd` peer with
   -- the const-lr / multiply / subtract tail cut off, so the emitted text is a byte PREFIX of the
   -- fused op's (checked in `tests/TestBatchedEmitTie.lean`) and `den` differs by exactly
   -- `θ − lr · ·` (`rfl`, the `*Sgd_eq_grad` theorems).
@@ -1311,7 +1291,7 @@ inductive SHlo : Nat → Type where
   | depthwiseWeightGradB {N c h w kH kW : Nat} (xName : String)
       (b : Vec c) (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
-  -- ⭐ bf16 depthwise weight-grad. As with `convWeightGradBBf16`, the batch is the emitted
+  -- bf16 depthwise weight-grad. As with `convWeightGradBBf16`, the batch is the emitted
   -- convolution's contraction dim, so the whole `Σ_n` is ONE convolution and therefore ONE bf16
   -- store — the outer `rnd` sits OUTSIDE the sum, not inside it.
   | depthwiseWeightGradBBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
@@ -1320,11 +1300,11 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedWeightGradB {N c h w kH kW : Nat} (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
-  -- ⭐ Its bf16 peer. ⚠ SYMMETRIC pad, unlike the `Xla` twin's `[p-1, p+1]`.
+  -- Its bf16 peer. SYMMETRIC pad, unlike the `Xla` twin's `[p-1, p+1]`.
   | depthwiseStridedWeightGradBBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
-  -- The depthwise BIAS gradients (§2f) — MobileNetV2's, not EfficientNet's: enet's depthwise convs
+  -- The depthwise BIAS gradients — MobileNetV2's, not EfficientNet's: enet's depthwise convs
   -- are followed by BN so the bias is folded, mnv2's are not. Like every bias grad in the kit the
   -- emitted text is `Σ_{batch,spatial} dy` and therefore STRIDE-INDEPENDENT, so both `skel` to the
   -- SAME Raw as ConvNeXt's per-example `depthwiseBiasGrad` — character-identical to `convBiasGrad`
@@ -1341,7 +1321,7 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedXlaWeightGradB {N c h w kH kW : Nat} (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
                                                      : SHlo (N * (c * h * w)) → SHlo (c * kH * kW)
-  -- ⭐ Its bf16 peer. ⚠ Keeps the `[p-1, p+1]` weight-grad pad — the opposite direction from the
+  -- Its bf16 peer. Keeps the `[p-1, p+1]` weight-grad pad — the opposite direction from the
   -- dgrad above, and that asymmetry is the whole content of the `Xla` variant.
   | depthwiseStridedXlaWeightGradBBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xName : String)
       (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
@@ -1349,8 +1329,8 @@ inductive SHlo : Nat → Type where
   | depthwiseStridedXlaBiasGradB {N c h w kH kW : Nat}
       (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * (2 * h) * (2 * w)))) (b : Vec c)
                                                      : SHlo (N * (c * h * w)) → SHlo c
-  -- ══ The CONVNEXT family, un-fused the same way — the last five between ConvNeXt-T and a
-  --    certified AdamW render (§2f). Three of them are plain reductions; the two depthwise ones
+  -- ══ The CONVNEXT family, un-fused the same way — five ops for ConvNeXt-T's certified AdamW
+  --    render. Three of them are plain reductions; the two depthwise ones
   --    are the PER-EXAMPLE peers of the `*GradB` pair above (ConvNeXt renders at the per-example
   --    index, not `N := B`). `layerScaleChGammaGrad` is the per-channel layer-scale γ, which no
   --    other net in the kit has. ══
@@ -1378,10 +1358,10 @@ inductive SHlo : Nat → Type where
       (θName mName vName b1Name ob1Name b2Name ob2Name bc1Name bc2Name
         lrName epsName wdName : String) (ds : List Nat)
       (β₁ β₂ ε lr wd bc₁ bc₂ : ℝ) (θ m v : Vec n)               : SHlo n → SHlo n
-  -- ── The SGD / Nesterov peers (§2i). Same shape as the AdamW triple: each carries the emitted
+  -- ── The SGD / Nesterov peers. Same shape as the AdamW triple: each carries the emitted
   --    NAME of every runtime `tensor<f32>` argument alongside the ℝ value `den` uses, which is how
-  --    a SCHEDULED optimizer works at all — the fused `*Sgd` family bakes `lr` as a literal, and
-  --    that fusion (not the optimizer) was the blocker, exactly as §2a found for Adam.
+  --    a SCHEDULED optimizer works at all — the fused `*Sgd` family bakes `lr` as a literal, which
+  --    a schedule cannot use.
   | sgdParamF {n : Nat} (θName lrName : String) (ds : List Nat)
       (lr : ℝ) (θ : Vec n)                                      : SHlo n → SHlo n
   | momVNextF {n : Nat} (vName muName : String) (ds : List Nat)
@@ -1392,37 +1372,36 @@ inductive SHlo : Nat → Type where
   --    EfficientNet ImageNet references use. Only ONE op is new: the mean-square slot is
   --    `adamVNextF` at `β₂ := ρ` (RMSProp's `s'` IS `adamVNext ρ`), the coupled-L2 gradient is
   --    `momVNextF` at `(μ := wd, v := θ)` (`momVNext_as_coupled_l2`), and the parameter update is
-  --    `sgdParamF` applied to this op's output. ⚠ TENSORFLOW's placement — ε goes INSIDE the
+  --    `sgdParamF` applied to this op's output. TENSORFLOW's placement — ε goes INSIDE the
   --    square root; the textbook `g/(√s' + ε)` is a DIFFERENT optimizer (see the ε-placement
   --    theorem). `sqName`/`bufName` ride as name+value like every other optimizer op here.
   | rmsBufNextF {n : Nat} (sqName bufName rhoName orhoName muName epsName : String)
       (ds : List Nat) (ρ μ ε : ℝ) (sq buf : Vec n)              : SHlo n → SHlo n
-  -- ── ▶ GLOBAL-NORM GRADIENT CLIPPING (`GradClip.lean`, `planning/archive/grad_clip.md`), the ViT /
+  -- ── GLOBAL-NORM GRADIENT CLIPPING (`GradClip.lean`), the ViT /
   --    ConvNeXt recipe's `gradClipNorm`. FOUR ops, all in this `ds : List Nat` parameter-shape
   --    family rather than the `n : Nat` batched-activation one — the distinction matters, because
   --    `addV` at `n = 1` emits `tensor<Bx1xf32>` and cannot fold a rank-0 scalar.
   --
-  --    ⚠⚠ THE NORM IS GLOBAL: one scalar folded from every parameter's gradient and consumed by
+  --    THE NORM IS GLOBAL: one scalar folded from every parameter's gradient and consumed by
   --    every site. That reads like a shared DAG node where `SHlo` is a tree, and it is not one:
   --    `SHlo` is single-OUTPUT, not single-INPUT (`sub`/`addV`/`matmulF` are already binary), and
   --    every gradient the fold consumes is ALREADY an `.operand` leaf, so the 200-way fold is an
   --    ordinary tree with 200 leaves and nothing is recomputed. No carve-out is needed.
   --
-  --    ⚠ `clipScaleF` takes the factor as a CHILD, not as a `facName`+ℝ field pair (the `%lr`
+  --    `clipScaleF` takes the factor as a CHILD, not as a `facName`+ℝ field pair (the `%lr`
   --    shape). As a child its `den` is exactly `factor · g` with no ℝ of its own to disagree with
   --    the norm. It costs nothing in the emit because the renderer hands it an `.operand` leaf at
-  --    the norm tree's SSA name — `pretty` prints nothing for a leaf. ⚠ Handing it the norm
-  --    SUBTREE instead would emit ~80,000 lines: `pretty` has no CSE (§4 of the handoff), so the
+  --    the norm tree's SSA name — `pretty` prints nothing for a leaf. Handing it the norm
+  --    SUBTREE instead would emit ~80,000 lines: `pretty` has no CSE, so the
   --    tree would be duplicated at all 200 sites. Emit once, thread the name.
   --
-  --    ⚠⚠ TWO ops, and the earlier four-op split (a separate `addScalarF : SHlo 1 → SHlo 1 →
-  --    SHlo 1` and `gradClipFacF : SHlo 1 → SHlo 1`) was RETRACTED for a reason worth knowing
-  --    before adding any op here: **a constructor with NO `{n : Nat}` binder is a shape this AST
-  --    does not otherwise have**, and adding two of them made NINE unrelated `simp only [… den …]`
-  --    proofs elsewhere in this file die with a `whnf` timeout — `den` is a ~200-case dependent
-  --    match, and fully-index-fixed arms make unfolding it markedly more expensive. **4× the
-  --    heartbeat budget did not fix it.** Both ops below are parametric in `n`, like every other
-  --    constructor here. See `planning/archive/grad_clip.md` §3.
+  --    TWO ops, and no scalar-only split (a separate `addScalarF : SHlo 1 → SHlo 1 → SHlo 1` and
+  --    `gradClipFacF : SHlo 1 → SHlo 1`), for a reason worth knowing before adding any op here:
+  --    **a constructor with NO `{n : Nat}` binder is a shape this AST does not otherwise have**,
+  --    and adding two of them makes unrelated `simp only [… den …]` proofs elsewhere in this file
+  --    die with a `whnf` timeout — `den` is a ~200-case dependent match, and fully-index-fixed
+  --    arms make unfolding it markedly more expensive. **4× the heartbeat budget does not fix
+  --    it.** Both ops below are parametric in `n`, like every other constructor here.
   | gradSumSqAccF {n : Nat} (ds : List Nat)                     : SHlo 1 → SHlo n → SHlo 1
   | clipScaleF   {n : Nat} (clipStr epsStr : String) (c ε : ℝ)
       (ds : List Nat)                                           : SHlo 1 → SHlo n → SHlo n
@@ -1430,13 +1409,13 @@ inductive SHlo : Nat → Type where
   --    it needs — already here for the clip, and deliberately reused: the per-leaf squared norm is
   --    one quantity and writing a second one is the double-writer failure.
   --
-  --    ⚠ BOTH mirror a shape this AST already has. `lambDirF` is `adamWParamF`'s signature minus
+  --    BOTH mirror a shape this AST already has. `lambDirF` is `adamWParamF`'s signature minus
   --    `%lr` (same fields, same single tensor child); `lambScaleF` is `clipScaleF`'s exactly
-  --    (`SHlo 1 → SHlo n → SHlo n`). That is not tidiness — the retraction note above records that
-  --    introducing an unfamiliar constructor SHAPE killed nine unrelated `simp only [… den …]`
-  --    proofs with a `whnf` timeout that 4× the heartbeat budget did not fix.
+  --    (`SHlo 1 → SHlo n → SHlo n`). That is not tidiness — per the note above, an unfamiliar
+  --    constructor SHAPE makes unrelated `simp only [… den …]` proofs die with a `whnf` timeout
+  --    that 4× the heartbeat budget does not fix.
   --
-  --    ⚠⚠ `lambScaleF` takes only `‖θ‖²` as its scalar child and recomputes `‖r‖²` from its own
+  --    `lambScaleF` takes only `‖θ‖²` as its scalar child and recomputes `‖r‖²` from its own
   --    tensor child. Taking both norms as children would make it the kit's first TERNARY
   --    constructor; `r` is already there, so the recomputation is free and the shape stays known.
   | lambDirF   {n : Nat}
@@ -1463,8 +1442,8 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     **This is a SUM where the 2×2 peer is a lookup, and that is the whole difference between the
     two pools.** `maxPool2`'s windows tile, so each input is the argmax of at most one output and
     the backward can name it directly. 3×3/s2 windows OVERLAP, so an input can be the argmax of up
-    to four outputs (`win3Row_mem_le_two` squared) and the cotangent must ACCUMULATE. Nothing in
-    `HasVJPAt3.correct` had to change for that — it already states the backward as a sum over all
+    to four outputs (`win3Row_mem_le_two` squared) and the cotangent must ACCUMULATE.
+    `HasVJPAt3.correct` covers that as is — it states the backward as a sum over all
     outputs, and `maxPool2`'s peer merely *collapses* it using disjointness. -/
 noncomputable def maxPool3s2BackFlat (c h w : Nat)
     (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
@@ -1649,7 +1628,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .convBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (flatConv (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun o _ _ => bias o) i
-  -- ⭐ Byte-identical to `convBf16`'s denotation above, and that is the point: the meaning of a
+  -- Byte-identical to `convBf16`'s denotation above, and that is the point: the meaning of a
   -- low-precision op is "round the operands, round the result", which is already parametric in
   -- `rnd`. Passing E4M3 rounding instead of bf16 rounding is the whole semantic difference, so
   -- the accuracy bounds INSTANTIATE rather than needing restatement (`fp8E4M3 : FloatModel` at
@@ -1660,7 +1639,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .convStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (flatConvStride2 (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun o _ _ => bias o) i
-  -- ⚠ The XLA-`SAME` stride-2 conv is `flatConvStride2Xla`, NOT `flatConvStride2`: the two tokens
+  -- The XLA-`SAME` stride-2 conv is `flatConvStride2Xla`, NOT `flatConvStride2`: the two tokens
   -- have identical types and emitted shapes, so this arm is the only place they differ. Getting it
   -- wrong would make the render provably compute one net while emitting the other.
   | _, _, .convStridedXla _ _ W bias => flatConvStride2Xla W bias
@@ -1668,7 +1647,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
       fun x i => rnd (flatConvStride2Xla (fun o c a d => rnd (W o c a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun o _ _ => bias o) i
   | _, _, .depthwise _ _ W bias => depthwiseFlat W bias
-  -- ⚠ The outer `rnd` is the bf16 STORE (the bf16-typed conv result); the inner two are the
+  -- The outer `rnd` is the bf16 STORE (the bf16-typed conv result); the inner two are the
   -- operand casts. The bias is added AFTER, at the accumulate precision, exactly as emitted.
   | _, _, .depthwiseBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (depthwiseFlat (fun cc a d => rnd (W cc a d)) 0 (fun j => rnd (x j)) i)
@@ -1677,7 +1656,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .depthwiseStridedBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (depthwiseStride2Flat (fun cc a d => rnd (W cc a d)) 0 (fun j => rnd (x j)) i)
                  + Tensor3.flatten (fun cc _ _ => bias cc) i
-  -- ⚠ `depthwiseStride2FlatXla`, NOT `depthwiseStride2Flat`: same caveat as `.convStridedXla`.
+  -- `depthwiseStride2FlatXla`, NOT `depthwiseStride2Flat`: same caveat as `.convStridedXla`.
   | _, _, .depthwiseStridedXla _ _ W bias => depthwiseStride2FlatXla W bias
   | _, _, .depthwiseStridedXlaBf16 (h := h) (w := w) rnd _ _ W bias =>
       fun x i => rnd (depthwiseStride2FlatXla (fun cc a d => rnd (W cc a d)) 0 (fun j => rnd (x j)) i)
@@ -1694,15 +1673,15 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .relu (n := n) => relu n
   | _, _, .relu6 (n := n) => relu6 n
   | _, _, .maxPool (c := c) (h := h) (w := w) => maxPoolFlat c h w
-  -- ⚠ Same type as `.maxPool`, different function (He et al.'s 3×3/s2 window). The pair share an
-  -- arity, op counts, the prefix audit and the emitted shape, which is how the deviation went
-  -- undocumented on every ResNet here; this arm and the emitted text are what separate them.
+  -- Same type as `.maxPool`, different function (He et al.'s 3×3/s2 window). The pair share an
+  -- arity, op counts, the prefix audit and the emitted shape, so nothing structural separates
+  -- them; this arm and the emitted text are what separate them.
   | _, _, .maxPool3s2 (c := c) (h := h) (w := w) => maxPool3s2Flat c h w
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
-  -- ⚠ THREE roundings: the two operand casts and the **bf16 STORE**. The emit gives this
-  -- `dot_general` a bf16-TYPED result (§20.1 — it is worth 1.18× → 1.60× and §9.2 had only ever
-  -- checked that shape for correctness), so the hardware rounds the output too.
+  -- THREE roundings: the two operand casts and the **bf16 STORE**. The emit gives this
+  -- `dot_general` a bf16-TYPED result (worth 1.18× → 1.60×), so the hardware rounds the output
+  -- too.
   | _, _, .denseRowBackBf16 (rows := rows) (a := a) (c := c) rnd _ W =>
       fun dy i => rnd (rowDenseBackFlat rows a c (fun p q => rnd (W p q)) (fun j => rnd (dy j)) i)
   -- The five ViT/ConvNeXt row/pointwise forms — each denotes the SAME per-example function its
@@ -1711,7 +1690,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .gelu (n := n) => gelu n
   | _, _, .transpose (m := m) (n := n) => transposeFlat m n
   | _, _, .convStride4 _ _ W bias => flatConvStride4 W bias
-  -- ⚠ `convBf16`'s exact shape at the stride-4 forward: the outer `rnd` is the bf16 STORE (the
+  -- `convBf16`'s exact shape at the stride-4 forward: the outer `rnd` is the bf16 STORE (the
   -- bf16-typed conv result), the inner two are the operand casts, and the bias is added AFTER at
   -- the accumulate precision — exactly as emitted.
   | _, _, .convStride4Bf16 (h := h) (w := w) rnd _ _ W bias =>
@@ -1727,11 +1706,11 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
   | _, _, .rowScale (m := m) (n := n) _ γ => rowScaleFlat m n γ
   | _, _, .rowBias (m := m) (n := n) _ β => rowBiasFlat m n β
-  -- ViT increment 1. Each denotes the SAME per-example function its descriptor-less peer does
+  -- ViT. Each denotes the SAME per-example function its descriptor-less peer does
   -- (`.denseRowF`, `.patchEmbedF`, `.clsSliceF`, `.clsPadF`, `.headSliceF`, `.headPadF`), which is
   -- what makes the batched node a `batchMap` of a proven map rather than a new function.
   | _, _, .denseRow (N := N) (a := a) (c := c) _ _ W b => rowDenseFlat N a c W b
-  -- ⚠ `convBf16`'s exact shape, one op class over: the outer `rnd` is the bf16 STORE of the
+  -- `convBf16`'s exact shape, one op class over: the outer `rnd` is the bf16 STORE of the
   -- `dot_general`'s bf16-typed result, the inner two are the operand casts, and the BIAS is added
   -- AFTER — outside the rounding, at the accumulate precision — because the emit adds it after the
   -- convert-back. Rounding the bias here, or folding it inside via `rowDenseFlat`'s own `b`
@@ -1742,7 +1721,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
                         (fun j => rnd (x j)) i))
   | _, _, .patchEmbed (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos =>
       patchEmbedFlat ic H W P N D Wc bc cls pos
-  -- ⚠⚠ The rounding placement lives in `patchEmbedFlatBf16`, next to `patchEmbedFlat`, because it
+  -- The rounding placement lives in `patchEmbedFlatBf16`, next to `patchEmbedFlat`, because it
   -- is the one ViT op whose `den` differs from its f32 peer by more than a wrapper — read the
   -- docstring there before trusting this line.
   | _, _, .patchEmbedBf16 (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D)
@@ -1820,7 +1799,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- ∑g² to the running rank-0 total `acc` (`SHlo 1`, the `lnBetaGrad` reading); `clipScaleF s g`
   -- forms `min(1, c/(√s+ε))` from the total `s`, which it takes as its FIRST CHILD, and scales `g`
   -- by it — so there is no ℝ field here whose agreement with the norm has to be assumed.
-  -- ⚠ `scalarOf` rather than `den acc 0`: `den` must never APPLY a recursive call to an index —
+  -- `scalarOf` rather than `den acc 0`: `den` must never APPLY a recursive call to an index —
   -- every other arm of this match passes `den e` along whole. See `Proofs.scalarOf`.
   | _, .gradSumSqAccF _ acc e      => fun _ => scalarOf (den acc) + gradSumSq (den e)
   | _, .clipScaleF _ _ c ε _ s e   => clipScale (clipFactor c ε (scalarOf (den s))) (den e)
@@ -1897,7 +1876,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun o => ∑ n : Fin N,
         (flatConvStride2BiasGradHasVJP W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (oc*h*w) (den e) n) o
-  -- The XLA-`SAME` peers. ⚠ Only the CERT changes (`…Xla…`); the shape of the batch sum is
+  -- The XLA-`SAME` peers. Only the CERT changes (`…Xla…`); the shape of the batch sum is
   -- identical, which is precisely why this is easy to get wrong by copy-paste.
   | _, .convStridedXlaWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
@@ -2001,7 +1980,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => ∑ n : Fin N,
         Tensor3.flatten ((depthwiseWeightGradHasVJP3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
           W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
-  -- ⚠ `rnd` OUTSIDE the `Σ_n`: the emit makes the batch the convolution's contraction dim, so the
+  -- `rnd` OUTSIDE the `Σ_n`: the emit makes the batch the convolution's contraction dim, so the
   -- whole sum is ONE convolution and therefore ONE bf16 store. Inside would model N stores.
   | _, .depthwiseWeightGradBBf16 (N := N) (c := c) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
@@ -2138,7 +2117,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (flatConvStride4WeightGradHasVJP b
             (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
-  -- The bf16 peer. ⚠ `rnd` OUTSIDE the `Σ_n`: the emit contracts the batch inside one convolution
+  -- The bf16 peer. `rnd` OUTSIDE the `Σ_n`: the emit contracts the batch inside one convolution
   -- and stores its bf16 result once, so a rounding per summand would claim a coarser computation
   -- than the hardware performs — the same reason `convWeightGradBBf16` is written this way.
   | _, .convStride4WeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
@@ -2150,7 +2129,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun cc => ∑ n : Fin N, ∑ k : Fin (c*h*w),
         (if chanIdx c h w k = cc
          then batchSlice N (c*h*w) x n k * batchSlice N (c*h*w) (den e) n k else 0)
-  -- ⚠ TWO-LEVEL: the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example. The
+  -- TWO-LEVEL: the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example. The
   -- per-example peer has only the inner one, so a naive copy would silently drop the batch sum —
   -- and the shapes would still check, because both spellings land in `Vec D`.
   | _, .veclnGammaGradB (N := N) (R := R) (D := D) _ _ ε x e =>
@@ -2159,13 +2138,13 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
           * layerNormForward D ε 1 0 (Mat.unflatten (batchSlice N (R*D) x n) r) k
   | _, .rowDenseBiasGradB (N := N) (R := R) (c := c) e =>
       fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j
-  -- ── ViT increment 2. The first two are `batchMapAux` (per-example, no contraction); the last
+  -- ── ViT. The first two are `batchMapAux` (per-example, no contraction); the last
   --    four are `Σ_b` over the batch of the per-example gradient — the `*GradB` shape.
-  --    ⚠ `batchMapAux` used SYMMETRICALLY here for the first time: `matmulFB`'s "aux" is the left
+  --    `batchMapAux` used SYMMETRICALLY here: `matmulFB`'s "aux" is the left
   --    operand of a binary op, not a saved activation. Its body never cared.
   | _, .matmulFB (N := N) (m := m) (k := k) (n := n) a b =>
       batchMapAux N (matMulFlat m k n) (den a) (den b)
-  -- ⚠ BOTH operands rounded AND an outer bf16 store — the bf16-typed-result shape (§20.1). This is
+  -- BOTH operands rounded AND an outer bf16 store — the bf16-typed-result shape. This is
   -- the activation × activation case, so all three roundings land on running values rather than on
   -- a weight; `batchMapAux` is unchanged because it never cared which operand was which.
   | _, .matmulFBBf16 (N := N) (m := m) (k := k) (n := n) rnd a b =>
@@ -2178,9 +2157,9 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         Mat.flatten (fun i j => ∑ t : Fin tk,
           batchSlice tk a (batchSlice N (tk*a) x b) t i
             * batchSlice tk c (batchSlice N (tk*c) (den e) b) t j) idx
-  -- ⚠ The emitted `dot_general` contracts `[0,1] x [0,1]` — batch AND token in one op — and keeps
+  -- The emitted `dot_general` contracts `[0,1] x [0,1]` — batch AND token in one op — and keeps
   -- its f32-typed result deliberately (see the constructor), so both `∑`s ride the f32 accumulate,
-  -- only the two leaf reads round, and there is NO outer store rounding. ⭐ It is now the only bf16
+  -- only the two leaf reads round, and there is NO outer store rounding. It is the only bf16
   -- dot in the kit shaped this way, which is exactly why the constructor says why.
   | _, .rowDenseWeightGradBBf16 (N := N) (tk := tk) (a := a) (c := c) rnd _ x e =>
       fun idx => ∑ b : Fin N,
@@ -2194,7 +2173,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun idx => ∑ b : Fin N,
         patchEmbedWeightGradFlat ic H W P tk D
           (batchSlice N (ic*H*W) x b) (batchSlice N ((tk+1)*D) (den e) b) idx
-  -- ⚠⚠ **The outer `rnd` wraps the WHOLE batch sum**, and that placement is the measurement, not a
+  -- **The outer `rnd` wraps the WHOLE batch sum**, and that placement is the measurement, not a
   -- style choice: the emit contracts the batch axis INSIDE a single `convolution` whose result is
   -- bf16-typed, so the hardware rounds once, after `Σ_b`. Rounding each summand instead would
   -- describe `N` stores where the graph performs one — and it is the direction that UNDERSTATES
@@ -2205,7 +2184,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         patchEmbedWeightGradFlat ic H W P tk D
           (fun j => rnd (batchSlice N (ic*H*W) x b j))
           (fun j => rnd (batchSlice N ((tk+1)*D) (den e) b j)) idx)
-  -- ⚠ `p.succ` skips the CLS row, exactly as the per-example peer does; the batch sum is the outer
+  -- `p.succ` skips the CLS row, exactly as the per-example peer does; the batch sum is the outer
   -- one. Two levels, and the inner one is the one the emitted `slice [.., 1:tk+1, ..]` encodes.
   | _, .patchEmbedBiasGradB (N := N) (tk := tk) (c := c) e =>
       fun i => ∑ b : Fin N, ∑ p : Fin tk,
@@ -2214,7 +2193,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .weightGradB (N := N) (m := m) (n := n) _ x e =>
       fun idx => ∑ k : Fin N,
         (Mat.flatten (fun i j => batchSlice N m x k i * batchSlice N n (den e) k j)) idx
-  -- ⚠ `biasGrad` is the IDENTITY on its operand (the per-example peer returns `SHlo n`, not
+  -- `biasGrad` is the IDENTITY on its operand (the per-example peer returns `SHlo n`, not
   -- `SHlo` of the bias width) — the channel sum happens in the emitted reduce, outside the AST.
   -- Carried over verbatim so the batched form is the same carve-out, not a new one.
   | _, .biasGradB e => den e
@@ -2374,7 +2353,7 @@ theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) 
     den (.selectPos s x e) = fun i => if x i > 0 then den e i else 0 := rfl
 /-- **The round node is `den`-faithful for any rounding.** This is the equation
     [`Proofs/Float/Bf16Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/Bf16Fold.lean) asks for by name to lift its depth-1 tie to
-    depth > 1: rounding an *intermediate* activation is now an in-graph op whose
+    depth > 1: rounding an *intermediate* activation is an in-graph op whose
     denotation is exactly post-composition with `rnd`. No bf16 specifics appear here —
     bf16 round-to-nearest is one instance, and the accuracy half is supplied separately
     by `dense_close_mixed` at `u_leaf = 2⁻⁸`. -/
@@ -2398,8 +2377,8 @@ theorem convertF_faithful {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
 
 attribute [simp] denOp
 
-/-- The descriptor form of swish denotes exactly what the descriptor-less `swishF` denoted at the
-    same index — the batched graph computes the same function, only the emit width now travels
+/-- The descriptor form of swish denotes exactly what the descriptor-less `swishF` denotes at the
+    same index — the batched graph computes the same function, only the emit width travels
     separately from the batch. -/
 theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.swish (n := n)) e) = den (.swishF e) :=
@@ -2408,8 +2387,8 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
 /-- **The softmax denominator is PER EXAMPLE — the property this descriptor exists for.** Example
     `k`'s output divides by example `k`'s own sum, not by the sum over the whole batch.
 
-    This is the half the emit tie structurally cannot see. `.softmaxDiv`'s emitted MLIR was
-    *already* per-example (it reduces over `dimensions = [1]` of `tensor<B,n>`), so the batched and
+    This is the half the emit tie structurally cannot see. `.softmaxDiv`'s emitted MLIR is
+    per-example (it reduces over `dimensions = [1]` of `tensor<B,n>`), so the batched and
     per-example forms render byte-for-byte identically and always would — while the descriptor-less
     `den` at index `N·n` reads `v j / ∑ k, v k` over ALL `N·n` coordinates, i.e. it divides by the
     batch's total. Same bytes, different function, and only this statement separates them. -/
@@ -2622,11 +2601,11 @@ theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : 
 @[simp] theorem den_maxPool3s2BackB {N c h w : Nat} (xN : String) (x : Vec (N*(c*(2*h)*(2*w))))
     (e : SHlo (N*(c*h*w))) :
     den (.maxPool3s2BackB xN x e) = batchMapAux N (maxPool3s2BackFlat c h w) x (den e) := rfl
--- ⚠ **What separates the two pools is NOT stated here, deliberately.** A `≠` between the two
+-- **What separates the two pools is NOT stated here, deliberately.** A `≠` between the two
 -- constructors would be content-free — Lean makes distinct constructors distinct — and the pair
 -- share a type, an arity, an op count and a `pretty` shape, so nothing structural tells them
 -- apart. The claim worth pinning is that they **emit different text**, and that lives in
--- `tests/TestBatchedEmitTie.lean` beside the `dropoutB ≠ dropPathB` assertions (§0.12) for the
+-- `tests/TestBatchedEmitTie.lean` beside the `dropoutB ≠ dropPathB` assertions for the
 -- same reason: two poolings differing only in a window are exactly the pair a reader ticks off as
 -- "present" without checking *which*, and only the bytes settle it.
 @[simp] theorem den_selectPosB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -2677,13 +2656,13 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
 @[simp] theorem sigmoidB_faithful {N n : Nat} (e : SHlo (N*n)) :
     den (.sigmoidB (N := N) (n := n) e) = sigmoid (N*n) (den e) := rfl
 
-/-! ### ViT increment 2 — the six forms that cannot be descriptors -/
+/-! ### ViT — the six forms that cannot be descriptors -/
 
 @[simp] theorem den_matmulFB {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo (N*(k*n))) :
     den (.matmulFB a b) = batchMapAux N (matMulFlat m k n) (den a) (den b) := rfl
 
-/-- **ATTENTION'S MATMUL IS PER-EXAMPLE IN *BOTH* OPERANDS**, which is the property the whole
-    `matmulF` scoping worry was about. Example `k`'s output is `Qₖ·Kₖᵀ` — its own `Q` against its
+/-- **ATTENTION'S MATMUL IS PER-EXAMPLE IN *BOTH* OPERANDS**, which is the property
+    `matmulF`'s scoping turns on. Example `k`'s output is `Qₖ·Kₖᵀ` — its own `Q` against its
     own `K` — never `Q₀` against `Kₖ`, and never the whole batch flattened into one big matrix.
 
     **All three of those type-check.** At the batched index `N*(m*k)`, a `den` that read the
@@ -2873,7 +2852,7 @@ theorem selectPos_faithful {k : Nat} (s : String) (x : Vec k) (hx : ∀ i, x i �
     den (.selectPos s x e) = (reluHasVJPAt k x hx).backward (den e) := rfl
 
 /-- The `relu` descriptor denotes exactly what the descriptor-less `reluF` denoted at the same
-    index: the batched graph computes the same function, only the emit width now travels
+    index: the batched graph computes the same function, only the emit width travels
     separately from the batch. The ResNet-34 peer of `den_batchOp_swish_eq_swishF`. -/
 theorem den_batchOp_relu_eq_reluF {N n : Nat} (e : SHlo (N * n)) :
     den (.batchOp (N := N) (.relu (n := n)) e) = den (.reluF e) := by
@@ -2881,7 +2860,7 @@ theorem den_batchOp_relu_eq_reluF {N n : Nat} (e : SHlo (N * n)) :
   exact batchMap_pointwise (fun y => if y > 0 then y else 0) (den e)
 
 /-- **Batched ReLU backward faithfulness.** `selectPosB` denotes the same proven
-    `reluHasVJPAt` backward as `selectPos`, now over the whole batch — which is what the
+    `reluHasVJPAt` backward as `selectPos`, over the whole batch — which is what the
     emitted `xName` holds. This is the statement that would be FALSE had `selectPos` been made
     a `BatchableOp` descriptor (that `den` would apply one example's mask to all `N`). -/
 theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i, x i ≠ 0)
@@ -2910,7 +2889,7 @@ theorem den_batchOp_relu6_eq_relu6F {N n : Nat} (e : SHlo (N * n)) :
   exact batchMap_pointwise (fun y => min (max y 0) 6) (den e)
 
 /-- **Batched ReLU6 backward faithfulness.** `selectMidB` denotes the same proven
-    `relu6HasVJPAt` backward as `selectMid`, now over the whole batch — which is what the
+    `relu6HasVJPAt` backward as `selectMid`, over the whole batch — which is what the
     emitted `xName` holds. FALSE had `selectMid` been made a `BatchableOp` descriptor beside
     `relu6` (that `den` would apply one example's two-sided mask to all `N`). Note the smoothness
     hypothesis is TWO-sided (`x ≠ 0 ∧ x ≠ 6`), unlike `selectPosB_faithful`'s `x ≠ 0`. -/
@@ -3148,8 +3127,8 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
     den (.convBiasGrad W x b e) = (conv2dBiasGradHasVJP W x).backward b (den e) := rfl
 
 /-! **The gradient ops agree with the SGD ops they were split out of.** Each says
-`den (θSgd …) = θ − lr · den (θGrad …)` coordinatewise — so un-fusing the update did not
-quietly change the gradient, and anything already proven about a `*Sgd` output transfers to
+`den (θSgd …) = θ − lr · den (θGrad …)` coordinatewise — so un-fusing the update does not
+change the gradient, and anything already proven about a `*Sgd` output transfers to
 `θ − lr·(*Grad)`. All `rfl`: the `*Grad` `den` is literally the subterm. -/
 
 @[simp] theorem weightSgd_eq_grad {m n : Nat} (xN wN lrS : String) (x : Vec m) (W : Mat m n)
@@ -3223,11 +3202,11 @@ shared-parameter batch sum of the proven per-example depthwise bias VJP, which i
           (depthwiseStride2BiasGradHasVJP W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
             (batchSlice N (c*h*w) (den e) n) o := rfl
 
-/-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing
+/-! ## The ConvNeXt five — same statement
 
 `den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`. Together with the emit-side byte-PREFIX checks
 in [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) this is what lets `convnext_adam_train_step` hand its gradients
-to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, never Adam. -/
+to `adamWParamF` instead of to the SGD tail. -/
 
 @[simp] theorem depthwiseWeightSgd_eq_grad {c h w kH kW : Nat} (xN wN lrS : String)
     (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ)
@@ -3460,7 +3439,7 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
   exact rmsBufNext_mu_zero ρ ε sq buf (den e)
 
 -- ════════════════════════════════════════════════════════════════
--- § Global-norm gradient clipping — faithfulness (`GradClip.lean`, `planning/archive/grad_clip.md`)
+-- § Global-norm gradient clipping — faithfulness (`GradClip.lean`)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The scalar fold is `Proofs.gradSumSq` accumulated** — `acc + ∑ᵢ gᵢ²` for one parameter,

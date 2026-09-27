@@ -109,7 +109,7 @@ theorem conv2d_padOdd_eq {ic oc h w kH kW : Nat}
           (kW - 1) / 2 + 1 ≤ kw.val + 1 + wi.val ∧
           kw.val + 1 + wi.val - ((kW - 1) / 2 + 1) < w),
        dite_eq_left hg]
-    -- ⚠ NOT `congr 1 <;> Fin.ext (by omega)`: after `congr` the goal is
+    -- NOT `congr 1 <;> Fin.ext (by omega)`: after `congr` the goal is
     -- `(⟨_, _⟩ : Fin h).val = (⟨_, _⟩).val` and `omega` treats `Fin.val ⟨·,·⟩` as opaque.
     -- Rewriting the Nat index expressions makes both sides syntactically identical instead.
     have e1 : kh.val + 1 + hi.val - ((kH - 1) / 2 + 1) = kh.val + hi.val - (kH - 1) / 2 := by

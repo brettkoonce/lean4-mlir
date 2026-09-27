@@ -1,12 +1,10 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
 
-/-! # §2k's owed gate — the heavy-ball momentum render, numerically certified
+/-! # The heavy-ball momentum render, numerically certified
 
-`verified_mlir/resnet34_mom_train_step.mlir` was **rendered** on 2026-07-30 and never numerically
-gated; §2k says so in as many words — *"Until it is run, say 'rendered', not 'certified'."* This is
-that run, built exactly as §2k prescribes: a **cross-render known answer**, not a tolerance
-argument, reusing the `shard-check` construction.
+The numeric gate for `verified_mlir/resnet34_mom_train_step.mlir`: a **cross-render known
+answer**, not a tolerance argument, reusing the `shard-check` construction.
 
 **How the gradient is recovered.** Run the committed **AdamW** render on `(θ, x, onehot)` from
 `m = v = 0`. Its stored first moment is `m' = β₁·m + (1−β₁)·g = 0.1·g`, so
@@ -25,7 +23,7 @@ zeroed (`optOne .heavyBall`, `optConstsB`: μ = 0.9, wd = 1e-4):
 | ② | `θ' = θ − lr·v'` | **HEAVY-BALL** |
 | ③ | `m' = m` | the passthrough the shared `[θ\|m\|v]` signature depends on |
 
-**▶ THE CONTROL IS THE POINT, and it is the trap §2k dodged.** The repo's `momParamF` is
+**THE CONTROL IS THE POINT.** The repo's `momParamF` is
 **Nesterov** — `θ − lr·(g + μ·v')` — and reaching for it is what "add the momentum variant"
 obviously means. At `v = 0` that is `θ − lr·(1+μ)·v'`, i.e. **1.9×** the heavy-ball step. So this
 harness computes BOTH predictions and requires that heavy-ball matches while Nesterov does *not*.
@@ -33,10 +31,9 @@ A gate that only checked ② against the render it was derived from would pass e
 
 Second control: ① is re-checked against `v' = g` with the decay dropped. `wd·θ` is ~7e-5 of `g`
 here — small, but three orders above the f32 floor, so a missing coupled-L2 term is detectable and
-is shown to be. ⚠ It was ~3e-4 (and four orders) until 2026-09-02, when the gate moved off its
-hand-copied He fan-IN init onto the driver's `mkParam`; that makes R34's gradients 4.6× larger
-against a fixed `wd`, so this control's margin fell from ~480× the tie to ~87×. Still decisive,
-but it is now the tightest margin in the harness — see `LeanMlir/Verified/Train.lean`'s `heFanIn`.
+is shown to be. The gate uses the driver's `mkParam` init, under which this control's margin is
+~87× the tie: decisive, but the tightest margin in the harness — see
+`LeanMlir/Verified/Train.lean`'s `heFanIn`.
 
     lake build r34-mom-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie
 -/
@@ -118,8 +115,7 @@ backend {← LowererSession.backendName}"
   let relT := dT / mT
   IO.println ""
   IO.println s!"  oracle |g|max = {gMax}   (from AdamW's m' at m = v = 0)"
-  -- ×1e9, because Float.toString truncates at 6 decimals and would print a 1e-8 tie as "0.000000"
-  -- — the same formatting trap that nearly mis-read the conv-bias residue (§2l step B).
+  -- ×1e9, because Float.toString truncates at 6 decimals and would print a 1e-8 tie as "0.000000".
   let sc := 1000000000.0
   IO.println s!"  ① v' = g + wd·θ      max abs Δ {dV * sc}e-9   rel {relV * sc}e-9"
   IO.println s!"  ② θ' = θ − lr·v'     max abs Δ {dT * sc}e-9   rel {relT * sc}e-9"

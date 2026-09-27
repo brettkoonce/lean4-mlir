@@ -42,7 +42,7 @@ already has, so the existing odd-kernel leaf tie applies.
 -/
 
 -- Proof-shape notes. One rule: never hand the unifier two spellings of the same thing in an
--- applied position. Every expensive step in this file was an instance, and each is free once the
+-- applied position. Every expensive step in this file is an instance, and each is free once the
 -- spelling is normalised at a definition:
 -- * `cnxDownChW h w p` is declared over `Vec (cin * (2 * h) * (2 * w))` where the chain spells
 --   `Vec (96 * 56 * 56)`. Both are closed terms and equal, and the unifier still descends into
@@ -96,7 +96,7 @@ theorem cnxDownChBack_eq_vjp {cin cout h w : Nat} (p : CnxDownParamsCh cin cout)
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐ The depth-`k` STAGE FOLD — the one real proof
+-- § The depth-`k` STAGE FOLD — the one real proof
 -- ════════════════════════════════════════════════════════════════
 
 /-- One channel-LN ConvNeXt block's backward at a saved input `v` — exactly the left-hand side of
@@ -160,7 +160,7 @@ theorem rowLNVecFlatHasVJP_backward_eq_fun {s c : Nat} (ε : ℝ) (hε : 0 < ε)
 
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE VJP CHAIN, at normalised dimension spellings
+-- § THE VJP CHAIN, at normalised dimension spellings
 -- ════════════════════════════════════════════════════════════════
 
 /-! Every stage whose declared type carries a computed dimension (`cnxDownChW`'s
@@ -467,7 +467,7 @@ theorem cnxLNhBack_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε) (
   rowLNVecFlatHasVJP_backward_eq_fun (β := w.hβ) w.hε hhε w.hγ v
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE APEX
+-- § THE APEX
 -- ════════════════════════════════════════════════════════════════
 
 /-- **`convNextForwardTChHasVJP` as a TERM-mode `vjpComp` chain.** -/

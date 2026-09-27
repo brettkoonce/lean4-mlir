@@ -1,6 +1,6 @@
 import Jax
 
-/-! ResNet-34 on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
+/-! ResNet-34 on full 1000-class ImageNet — the Lean → JAX trainer.
     Identical body to `MainResnet.lean`'s Imagenette ResNet-34 but the head
     is dense 512→1000 and the dataset kind is `.imagenet` (tfds streaming).
     Mirrors the snippet in blueprint Ch 6 §"What 90-epoch ImageNet would
@@ -44,13 +44,12 @@ def resnet34ImagenetConfig : TrainConfig where
   labelSmoothing := 0.1
   -- bf16 mixed precision (incl. bf16 conv): a CUDA/cuDNN recipe — 1.60x faster
   -- than fp32 on the 4060 Ti box, reaching 74.16% top-1 / 91.92% top-5 over the
-  -- full 50k val (2026-08-22 re-run; the 72.0% in
-  -- jax/runs/r34_imagenet_bf16_90ep/RESULTS.md is the SAME recipe measured before
-  -- timm's val protocol + the symmetric-padding fix, and is superseded). On AMD/MIOpen
+  -- full 50k val (the 72.0% in jax/runs/r34_imagenet_bf16_90ep/RESULTS.md is the
+  -- SAME recipe without timm's val protocol + the symmetric-padding fix). On AMD/MIOpen
   -- set bf16Conv := false (bf16 conv is slower there); see reference_ares_pcie_aer.
   bf16           := true
   bf16Conv       := true
-  runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
+  runningBN      := true    -- paper-faithful eval: running BN stats, not eval-batch stats
 
 #eval resnet34Imagenet.validate!
 

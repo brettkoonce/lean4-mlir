@@ -1,6 +1,6 @@
 import LeanMlir
 
-/-! Tiny DDPM trainer on MNIST — DDPM demo Phase 1 smoke test.
+/-! Tiny DDPM trainer on MNIST — DDPM demo smoke test.
 
     Architecture: tiny UNet (1-channel 28×28, 2 encoder/decoder pairs,
     base 16 channels, ~250K params). The model is trained to predict
@@ -8,11 +8,6 @@ import LeanMlir
 
         x_t = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε
         loss = || ε_θ(x_t) - ε ||²  (per-pixel MSE, mean over B·C·H·W)
-
-    No time conditioning yet — the model has no idea which `t` the
-    input came from. Generated samples will be coarser than the
-    canonical DDPM but the pipeline correctness can still be verified
-    from training loss decreasing.
 
     Usage:
       lake exe mnist-ddpm-train [data/mnist]
@@ -51,13 +46,13 @@ def main (args : List String) : IO Unit := do
   let epochsOverride : Option Nat := match args with
     | _ :: e :: _ => e.toNat?
     | _ => none
-  -- ⚠ `raw` trains on UNCENTRED [0,1] data, which is what this driver did before
-  -- 2026-08-28. It exists as an ABLATION ARM, not a fallback: the centring claim
-  -- in `runs/2026-08-28-mnist-ddpm-verified-score/` was established at 3 epochs,
-  -- and `demos/figures/ddpm_mnist.png` — a 50-epoch UNCENTRED run from July —
-  -- shows legible digits, so whether centring still matters at 50 epochs needs
-  -- measuring rather than assuming. The two arms carry different spec names and
-  -- therefore different checkpoint paths, so neither can be read as the other.
+  -- `raw` trains on UNCENTRED [0,1] data. It exists as an ABLATION ARM, not a
+  -- fallback: the centring claim in `runs/2026-08-28-mnist-ddpm-verified-score/`
+  -- was established at 3 epochs, and `demos/figures/ddpm_mnist.png` — a 50-epoch
+  -- UNCENTRED run — shows legible digits, so whether centring still matters at
+  -- 50 epochs needs measuring rather than assuming. The two arms carry different
+  -- spec names and therefore different checkpoint paths, so neither can be read
+  -- as the other.
   let raw := args.any (· == "raw")
   let spec := tinyDdpmUnet (centred := !raw)
   let cfg := { tinyDdpmConfig with
@@ -98,16 +93,15 @@ def main (args : List String) : IO Unit := do
   -- ── Load MNIST (60K × 28×28 f32 in [0, 1]) ──
   IO.eprintln "Loading MNIST..."
   let (trainImgRaw, nTrain) ← F32.loadIdxImages s!"{dataDir}/train-images-idx3-ubyte"
-  -- ⭐ CENTRE TO [-1, 1], as all three CIFAR DDPM trainers already do. The
-  -- reverse process drives toward `N(0, I)`; fitting it against data with mean
-  -- 0.13 on [0, 1] is a distribution mismatch the sampler cannot undo, and it
-  -- is why the uncentred checkpoint emitted pixels over [-4.9, 11.9] and scored
-  -- 119x the real-vs-real floor. Evidence:
-  -- `runs/2026-08-28-mnist-ddpm-verified-score/`.
-  -- ⚠ Every consumer must invert this (`scaleShift x 0.5 0.5`) before rendering
+  -- CENTRE TO [-1, 1], as all three CIFAR DDPM trainers do. The reverse process
+  -- drives toward `N(0, I)`; fitting it against data with mean 0.13 on [0, 1] is
+  -- a distribution mismatch the sampler cannot undo: the uncentred checkpoint
+  -- emits pixels over [-4.9, 11.9] and scores 119x the real-vs-real floor
+  -- (`runs/2026-08-28-mnist-ddpm-verified-score/`).
+  -- Every consumer must invert this (`scaleShift x 0.5 0.5`) before rendering
   -- or classifying. The spec NAME carries `centered` so `buildPrefix` differs
   -- and an uncentred checkpoint cannot be picked up by mistake — the two are
-  -- shape-identical, so nothing else would have caught it.
+  -- shape-identical, so nothing else would catch it.
   let trainImg ← if raw then pure trainImgRaw else F32.scaleShift trainImgRaw 2.0 (-1.0)
   IO.eprintln s!"  train: {nTrain} images, {if raw then "RAW [0, 1]" else "centred to [-1, 1]"}"
 

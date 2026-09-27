@@ -3,8 +3,7 @@ import LeanMlir.Verified.Smoothing
 
 /-! # `mnist-cnn-smooth` — randomized-smoothing certificate on the verified MNIST CNN
 
-The **depth-independent** certificate (`planning/archive/robustness_ladder.md` §3, Cohen–Rosenfeld–Kolter
-2019) — the answer where the Lipschitz product is hopeless. The smoothed classifier
+The **depth-independent** certificate (Cohen–Rosenfeld–Kolter 2019) — the answer where the Lipschitz product is hopeless. The smoothed classifier
 `ĝ(x) = argmax_c P[f(x+η)=c]`, `η ~ N(0,σ²I)`, is certified robust at L2 radius `σ·Φ⁻¹(p_A)`. It's
 **forward-only**: no new kernel, no input-VJP — sample `n` noisy copies, run the proof-rendered
 `cnn_fwd`, count argmax votes, Clopper–Pearson lower-bound `p_A`. The base CNN is trained with

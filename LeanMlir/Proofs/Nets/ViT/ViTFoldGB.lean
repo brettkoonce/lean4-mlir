@@ -201,7 +201,7 @@ theorem clsGrad_denB {N : Nat} (cotN : String)
     funext k
     simp [batchSlice, batchMap, clsSliceFlat, Equiv.symm_apply_apply]
   rw [hslice]
-  -- ⚠ The per-example lemma's LHS is the `N = 1` node, whose `den` is a one-term sum; unfolding it
+  -- The per-example lemma's LHS is the `N = 1` node, whose `den` is a one-term sum; unfolding it
   -- is what leaves the bare `clsSliceFlat` this goal is stated at.
   have h := Proofs.ViTPoCG.clsGrad_den cotN Wc bc cls pos
     (batchSlice N (3 * 224 * 224) img n) (batchSlice N (197 * 192) dyEmbed n) i

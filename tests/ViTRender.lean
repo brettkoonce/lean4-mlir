@@ -477,7 +477,7 @@ def vitTinyConfig (b : Nat) : ViTConfig :=
     nc := 10, eps := "1.0e-5" }
 
 -- ════════════════════════════════════════════════════════════════
--- § AdamW optimizer render (Phase 3b of vit_train_to_vit_verified.md)
+-- § AdamW optimizer render
 -- The proven-fragment-side analogue of `MlirCodegen.emitAdamUpdate`; its ℝ
 -- spec is `Proofs.adamWParam` (LeanMlir/Proofs/Training/Optim/AdamStep.lean). Scalar
 -- hyperparameters arrive as `tensor<f32>` function args.
@@ -608,8 +608,8 @@ def vitTrainStepModuleAdam (cfg : ViTConfig) (blocks : List BlockParams) : Strin
     buffers thread as a single `[θ|m|v]` blob: arg order `(x, θ×k, m×k, v×k, onehot)`
     and return `(θ'×k, m'×k, v'×k)`. This matches the generic packed train step's
     `(x, params, y) → params'` contract with `n_params = 3k` (the moments ride in
-    the params blob — no `.so` change). Bias correction is omitted (`bc₁=bc₂=1`); a
-    later rung host-passes the per-step `1−βᵗ`. Optimizer = `Proofs.adamWParam`. -/
+    the params blob — no `.so` change). Bias correction is omitted (`bc₁=bc₂=1`); the
+    scheduled step below host-passes the per-step `1−βᵗ`. Optimizer = `Proofs.adamWParam`. -/
 def vitTrainStepModuleAdamPacked (cfg : ViTConfig) (blocks : List BlockParams)
     (lr β1 ob1 β2 ob2 eps wd : String) : String :=
   let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w

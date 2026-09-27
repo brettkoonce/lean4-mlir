@@ -11,11 +11,9 @@ by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (213 params) packed as o
 `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction) through the unchanged FFI
 (`n_params = 3k`).
 
-**The artifact is `pretty(provenGraph)` since 2026-07-28** (handoff §2e). It used to come from a
-hand-written string emitter in `tests/TestEfficientNetTrain.lean`; the swap was licensed by
-`efficientnet-adam-tie`, which found the two bit-exact on all 12,166,117 returned floats — forward
-(the 98 BN batch statistics), `%loss`, and the gradient. The driver itself needed no change: it
-resolves the path from the net slug.
+**The artifact is `pretty(provenGraph)`**; `efficientnet-adam-tie` ties it bit-exactly against a
+hand-written string emitter on all 12,166,117 returned floats — forward (the 98 BN batch
+statistics), `%loss`, and the gradient. The driver resolves the path from the net slug.
 
 Recipe: AdamW lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment,
 80 epochs, bs 32.
@@ -47,14 +45,13 @@ def efficientnetAdamConfig : VerifiedConfig where
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/efficientnet_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb
     and checkpoint). Two exist, and **both are `pretty(provenGraph)` out of
-    `Proofs/Codegen/EfficientNetRender/Basic.lean`** — unlike ResNet-34, this net never had a
-    hand-written DP emitter to migrate off:
+    `Proofs/Codegen/EfficientNetRender/Basic.lean`**:
 
-    * **`adam`** (default) — the certified single-device render, tied bit-exactly against the
-      retired hand-written emitter (handoff §2e).
+    * **`adam`** (default) — the certified single-device render, tied bit-exactly against a
+      hand-written emitter.
     * **`adamdp`** — the DATA-PARALLEL render: the same graph plus one `all_reduce(add)/N` per
       parameter gradient between the certified gradient and the certified AdamW triple. That
-      collective is a **declared trusted carve-out** (handoff §5) and the render says so in its own
+      collective is a **declared trusted carve-out** and the render says so in its own
       output banner. Pair it with `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES`
       unset; it needs the XLA build, because collectives only exist on the PJRT path and the IREE
       shim refuses the DP entry point outright rather than silently running single-device.
@@ -62,36 +59,36 @@ def efficientnetAdamConfig : VerifiedConfig where
     `LEAN_MLIR_BATCH` overrides the batch, and **must match the batch the selected variant was
     rendered at** — the batch is baked into the graph, not a runtime dimension, so a mismatch is a
     shape error at the first invoke rather than something that silently limps. The pairs that exist:
-    `adam`/`adamdp` at 32, `adam128`/`adamdp128` at 128 (§2e-quater). **The eval forwards are still
+    `adam`/`adamdp` at 32, `adam128`/`adamdp128` at 128. **The eval forwards are still
     rendered at bs32**, so anything other than 32 needs `LEAN_MLIR_SKIP_EVAL=1` or re-rendered
-    forwards — the same caveat §2d.1 carries for R34's bs256. -/
+    forwards — the same caveat as R34's bs256. -/
 def runEfficientNetAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD efficientnetAdamConfig.batchSize
-  -- ▶ `rms` = the RMSProp render, at this shape for the same reason mnv2's is: a descent check that
-  -- needs neither ImageNet nor the shim. ⚠ **Not the reference's recipe** — that is ImageNet at
+  -- `rms` = the RMSProp render, at this shape for the same reason mnv2's is: a descent check that
+  -- needs neither ImageNet nor the shim. **Not the reference's recipe** — that is ImageNet at
   -- global 256 — so the peak is `enetRmsSchedule.lr` linearly scaled by batch, and only the
   -- optimizer and the schedule SHAPE (warmup → ×0.97 every 2.4 epochs, mean-square init 1.0) carry
   -- over. `LEAN_MLIR_BASE_LR_U` overrides in micro-units (`2000` = 0.002).
   let sched := enetRmsSchedule
-  -- ⚠ SUBSTRING, not prefix: `emarms` (RMSProp + EMA) does not START with "rms", so a prefix test
+  -- SUBSTRING, not prefix: `emarms` (RMSProp + EMA) does not START with "rms", so a prefix test
   -- would quietly hand this net the AdamW LR and a cosine schedule. Same trap as the driver's.
   let rms := variant.contains "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
-  -- ▶ `ema*` variants carry the 4th `[θ|m|v|ema]` blob region. `emarms` is RMSProp + EMA, which is
+  -- `ema*` variants carry the 4th `[θ|m|v|ema]` blob region. `emarms` is RMSProp + EMA, which is
   -- this net's REFERENCE recipe (`efficientNetB0ImagenetConfig`) — and its 72.31% is the shadow's
-  -- number, not the live weights'. ⚠ On this net EMA also shadows the BN running buffers
+  -- number, not the live weights'. On this net EMA also shadows the BN running buffers
   -- (driver-side, `ema_bn`), because eval must pair EMA weights with EMA-lagged statistics.
-  -- `LEAN_MLIR_EMA_DECAY_U` is micro-units (`999900` = 0.9999, the reference's value); ⚠ `0` is
+  -- `LEAN_MLIR_EMA_DECAY_U` is micro-units (`999900` = 0.9999, the reference's value); `0` is
   -- meaningful and is the gate — at decay 0 the shadow must be BIT-IDENTICAL to the live weights.
   let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.9999
-  -- ▶ `LEAN_MLIR_DROP_RATE_U` — stochastic-depth rate in MICRO-units (`200000` = 0.2, the
+  -- `LEAN_MLIR_DROP_RATE_U` — stochastic-depth rate in MICRO-units (`200000` = 0.2, the
   -- reference's `efficientNetB0ImagenetConfig.dropPath`). Unset ⇒ the spec's ramp.
-  -- ⚠ **`0` is meaningful and it is THE GATE**: every keep becomes 1.0, so every supplied scale is
+  -- **`0` is meaningful and it is THE GATE**: every keep becomes 1.0, so every supplied scale is
   -- exactly 1.0 and the drop op is the identity in IEEE (`Proofs.dropPath_ones_id`). The `adamsd`
   -- render must then train the same parameters as the plain `adam` render — a free exact endpoint,
   -- the peer of EMA's `decay = 0`, and it is what pins the WIRING: a drop site on the wrong side of

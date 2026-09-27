@@ -273,7 +273,7 @@ structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec 
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r50PreK` form IS the committed forward
---   ⚠ Peeled one layer at a time through `*_apply`, as ResNet-34's is: a one-step `rfl` against a
+--   Peeled one layer at a time through `*_apply`, as ResNet-34's is: a one-step `rfl` against a
 --   sixteen-deep nested application takes a kernel deterministic timeout.
 -- ════════════════════════════════════════════════════════════════
 
@@ -343,7 +343,7 @@ theorem resnet50ForwardBFull_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights 
 --   Stem, the sixteen bottlenecks and the head composed with `CertLayer.comp`, so the VJP, its
 --   differentiability and the backward-graph faithfulness are the layer's fields. At the binder
 --   `q` every width is the same syntactic `2 * (…)` nest on both sides of each `comp`, which is
---   what keeps the peel below cheap (`planning/certlayer_nets.md` §6).
+--   what keeps the peel below cheap.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **ResNet-50 as one certified layer**, at every batch size and resolution. Its `.faithful`

@@ -4,8 +4,8 @@ import LeanMlir.Verified.Train
 /-! # ViT data-parallel gate — the collective's semantics, on a duplicated batch
 
 The ViT peer of `tests/TestCifar8DpCheck.lean`. `verified_mlir/vit_adamdp_train_step.mlir` inserts
-one `all_reduce(add)/N` per parameter between the certified gradient and the certified AdamW triple
-(handoff §2b-quater's pattern). That collective is a **trusted carve-out** — emitted text, outside
+one `all_reduce(add)/N` per parameter between the certified gradient and the certified AdamW triple.
+That collective is a **trusted carve-out** — emitted text, outside
 every faithfulness theorem — so it needs its own numeric check.
 
 **The exact identity used here.** Give every replica the **same** 32 examples. Each computes the
@@ -13,11 +13,11 @@ same gradient `g`, so `all_reduce(add)/N` returns `N·g/N = g` — the mean is a
 duplicated batch. The data-parallel step must therefore reproduce the **single-device** step on that
 batch, output for output, and ViT has **no BatchNorm**, so nothing else couples the replicas and
 this holds exactly rather than approximately. (R34 could not do this: batch BN makes N×b ≠ 1×(N·b)
-by design, §10.3b, which is why its collective is gated on cifar8 instead.)
+by design, which is why its collective is gated on cifar8 instead.)
 
 **`VIT_DP_REPLICAS` selects N** (default 2) and must match both `PJRT_REPLICAS` and the count the
 chosen render baked into `replica_groups` — the shim refuses a mismatch rather than answering it.
-The identity above is N-generic, which is the whole reason the 4-replica gate needed no new harness:
+The identity above is N-generic, so the same harness gates 4 replicas:
 
 ```
 lake build vit-dp-check && unset CUDA_VISIBLE_DEVICES
@@ -27,11 +27,11 @@ sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)4\.0(>)/\11.0\2/'
   verified_mlir/vit_adamdp32x4_train_step.mlir > /tmp/vit_dp4_sum.mlir   # the control
 ```
 
-Two failure modes it separates, both of which have actually happened in this repo:
+Two failure modes it separates:
 
 * **collective missing** → the shim's replica-count guard refuses the call before any numbers.
 * **collective present but wrong** (sum not mean) → every gradient is 2× and `m` moves by ~1, five
-  orders above the gate. §2b-quater verified exactly that by breaking the divisor.
+  orders above the gate.
 
 ```
 lake build vit-dp-check
@@ -39,18 +39,17 @@ unset CUDA_VISIBLE_DEVICES
 MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check
 ```
 
-⚠ **`MIOPEN_DEBUG_CONV_GEMM=0` — needed at bs64, NOT needed at bs32.** A fused interior-dilated
+**`MIOPEN_DEBUG_CONV_GEMM=0` — needed at bs64, NOT needed at bs32.** A fused interior-dilated
 pad+conv (the patch-embed weight gradient) is requested by XLA with a zero-byte workspace, which
 confines MIOpen to no-workspace solvers; it lands on `GemmFwdRest`, whose `MIOpenIm2d2Col.cpp`
 fails to build under HIPRTC because it uses the OpenCL builtin `get_global_id`. The im2col
 workspace it wants is **linear in batch** (6,422,528 bytes at bs32, exactly 2× at bs64), so at bs64
 the fault is RELIABLE and the variable is required; at bs32 it fired once in 12 runs and the
 variable costs ~7%. Diagnosis and a 20-line JAX reproducer:
-`historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`. The bs32 flake is why this gate
-sat written but unrun from 2026-07-28 to 2026-07-30.
+`historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`.
 
-⚠ **This gate reports BIT-EXACT, so it MUST be run against a control** — a tie that is bit-exact
-everywhere is indistinguishable from a harness comparing a buffer with itself (§4). Pass a broken
+**This gate reports BIT-EXACT, so it MUST be run against a control** — a tie that is bit-exact
+everywhere is indistinguishable from a harness comparing a buffer with itself. Pass a broken
 render as `argv[1]`; the sum-not-mean control is built by flipping every collective's divisor:
 
 ```
@@ -58,9 +57,6 @@ sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)2\.0(>)/\11.0\2/'
   verified_mlir/vit_adamdp_train_step.mlir > /tmp/vit_dp_sum.mlir     # 200 divisors 2.0 -> 1.0
 MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check /tmp/vit_dp_sum.mlir
 ```
-
-*The `argv[1]` path did not exist until 2026-07-30 — the gate hardcoded both artifacts, so its
-first green run could not be falsified. It was added for exactly that reason.*
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path). No `.vmfb` cache
 hazard here despite `mkSession` taking a path: on the XLA branch it compiles in-process and never
@@ -71,11 +67,10 @@ writes one.
     than hardcoded so the harness can gate any (single, DP) pair — the bs32 one and the bs64 one —
     without a second copy of itself.
 
-    ⚠ Read from the CONTENTS, not the filename. Deriving it from the path (the first version of
-    this) means a control file has to be *named* after the entry it contains, and
-    `/tmp/vit_dp64_sum.mlir` then asks for `m.vit_dp64_sum` while the graph holds
-    `@vit_adamdp64_train_step`. The shim refuses that loudly — so it cost a run, not a wrong
-    answer — but a gate whose control is awkward to build is a gate that stops being run. -/
+    Read from the CONTENTS, not the filename. Deriving it from the path would mean a control file
+    has to be *named* after the entry it contains: `/tmp/vit_dp64_sum.mlir` would ask for
+    `m.vit_dp64_sum` while the graph holds `@vit_adamdp64_train_step`. The shim refuses that
+    loudly, but a gate whose control is awkward to build is a gate that stops being run. -/
 private def entryOf (path : String) : IO String := do
   let txt ← IO.FS.readFile path
   match (txt.splitOn "func.func @")[1]? with
@@ -89,7 +84,7 @@ def main (args : List String) : IO Unit := do
   -- would build a θ 191,070 floats short and the shim would refuse the call on arity.
   -- ConvNeXt is admissible here for the same reason ViT is: no BatchNorm, so nothing couples the
   -- replicas and `all_reduce(add)/N` on a duplicated batch is EXACTLY the identity rather than
-  -- approximately (§5). A batch-BN net would need the running-stat region this harness omits.
+  -- approximately. A batch-BN net would need the running-stat region this harness omits.
   let netName := (← IO.getEnv "VIT_DP_NET").getD "vit"
   let net ← match netName with
     | "vit"      => pure vitVerified.toNet
@@ -106,8 +101,8 @@ def main (args : List String) : IO Unit := do
   if replicas < 2 then
     IO.eprintln s!"VIT_DP_REPLICAS={replicas}: this gate needs at least 2 replicas"
     IO.Process.exit 1
-  -- ⚠⚠ **THE SUM-NOT-MEAN CONTROL IS STRUCTURALLY BLIND ON A CLIPPED RENDER.** Measured
-  -- 2026-08-02 on `vitin_adamdp128x4wxclip`: the 200 divisors 4.0 → 1.0 and the gate stays
+  -- **THE SUM-NOT-MEAN CONTROL IS STRUCTURALLY BLIND ON A CLIPPED RENDER.** Measured
+  -- on `vitin_adamdp128x4wxclip`: the 200 divisors 4.0 → 1.0 and the gate stays
   -- **BIT-EXACT, rc=0**. It is not a harness fault — global-norm clipping is SCALE-INVARIANT where
   -- it saturates: `g · min(1, c/‖g‖) = c·g/‖g‖` whenever `‖g‖ ≥ c`, which is invariant under
   -- `g → λg`, so a collective off by any scalar is EXACTLY normalised away.
@@ -122,33 +117,30 @@ def main (args : List String) : IO Unit := do
   --     python3 scripts/probes/perturb_clip.py verified_mlir/vitin_adam128wxclip_train_step.mlir /tmp/sg_hi.mlir hi
   --     … vit-dp-check /tmp/hi_sum.mlir /tmp/sg_hi.mlir 128        # rc=1
   --
-  -- ⚠ **THIS IS THE RIGHT CONTROL, NOT A WORKAROUND**, and the reason is worth keeping: where the
+  -- **THIS IS THE RIGHT CONTROL, NOT A WORKAROUND**, and the reason is worth keeping: where the
   -- clip saturates, a scale error in the collective is BOTH invisible to the gate AND harmless to
   -- training — the update is `c·g/‖g‖` either way. Where it does not saturate (late training,
   -- ‖g‖ < c) the clip is the identity, and the error is fully live AND fully visible. So raising
   -- the threshold does not weaken the control; it moves it to the only regime in which the defect
   -- it hunts has consequences. Generalised: *a gate whose downstream NORMALISES the perturbation
-  -- away cannot test for it* — §0.4's "an identity gate at the neutral value cannot see WHERE the
-  -- value is applied", one level over.
+  -- away cannot test for it*.
   -- argv[1] overrides the DP render, so a deliberately broken one (sum-not-mean) can be run
-  -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable (§4).
+  -- through the identical harness. Without this the bit-exact PASS above is unfalsifiable.
   -- argv[2] overrides the single-device side and argv[3] the batch, which is what lets the SAME
   -- harness gate the bs64 pair (`adam64`/`adamdp64`). The batch must match what both renders were
   -- rendered at — it is baked into the graph, so a mismatch is a shape error, not a wrong answer.
-  -- ⚠ `ema*` renders carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
+  -- `ema*` renders carry a FOURTH `[θ|m|v|ema]` region and a 5-slot scalar tail, so the harness
   -- must BUILD the blob it feeds rather than assume three regions. Wrong is not a tolerance
-  -- question: PJRT refuses on the buffer count (§2m's `expected 265 buffers`). Selected from the
+  -- question: PJRT refuses on the buffer count (`expected 265 buffers`). Selected from the
   -- SINGLE-device path, which is the one whose bytes name the layout both sides share.
-  -- ⚠⚠ **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM (2026-08-27).** They read
-  -- `let emaOn := …; let nRegions := if emaOn then 4 else 3` — this file's private copy of what
-  -- `trainAdamSched` computes, which is precisely the drift `tests/TestVariantPredicates.lean`'s
-  -- header warns about one level up: *a gate on a transcription is not a gate on the thing
-  -- transcribed*. Two things had gone wrong by the time it was noticed:
-  --   ⛔ the copy was a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one, so `adamema…`
-  --      would have made this harness build four regions for a graph the driver feeds three;
-  --   ⛔ the copy is frozen at `4 else 3`, and the region count became **3, 4 or 5** the day EMA and
-  --      gradient accumulation stopped sharing a slot (`VerifiedVariant.nRegions`, RSB-A2/A1).
-  -- Neither is reachable from the variants this gate runs today. Both are one variant string away.
+  -- **THESE THREE ARE THE DRIVER'S OWN, NOT A TRANSCRIPTION OF THEM.** A private copy of what
+  -- `trainAdamSched` computes is precisely the drift `tests/TestVariantPredicates.lean`'s header
+  -- warns about one level up: *a gate on a transcription is not a gate on the thing transcribed*.
+  -- A copy goes wrong in two ways, each one variant string away:
+  --   a SUBSTRING test where `VerifiedVariant.emaOn` is a PREFIX one makes `adamema…` build four
+  --      regions for a graph the driver feeds three;
+  --   a copy frozen at `if emaOn then 4 else 3` misses that the region count is **3, 4 or 5**, EMA
+  --      and gradient accumulation having separate slots (`VerifiedVariant.nRegions`, RSB-A2/A1).
   let emaOn := VerifiedVariant.emaOn (args[1]?.getD "")
   let nRegions := VerifiedVariant.nRegions (args[1]?.getD "")
   let nScalars := VerifiedVariant.nScalars (args[1]?.getD "")
@@ -179,7 +171,7 @@ backend {← LowererSession.backendName}"
       let dPair ← F32.write3 dPair 0 0.9 0.1 0.0
       F32.blit tail 3 dPair 0 2
     else pure tail
-  -- ⚠ The shadow starts from an arbitrary NON-θ state: seeded at θ, `ema' = d·θ + (1−d)·θ'` would
+  -- The shadow starts from an arbitrary NON-θ state: seeded at θ, `ema' = d·θ + (1−d)·θ'` would
   -- agree with a harness that had wired the region to the wrong slot.
   let e ← F32.scaleShift (← F32.heInit 9999 net.nParams.toUSize 0.03) 1.0 0.02
   let pbuf := F32.concat (#[θ, m, v] ++ (if emaOn then #[e] else #[]) ++ #[tail])
@@ -209,10 +201,10 @@ backend {← LowererSession.backendName}"
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
-  -- ⚠ The EMA shadow is REPORTED, never GATED — `planning/archive/ema.md`: it is θ's low-pass filter, so
-  -- gating it is §3's "gate the gradient, never θ" one step WORSE. Measured on EfficientNet's peer
-  -- the same day: a sum-not-mean control moved `m` by 2.39 and the shadow by 5.4e-4, a 4,400×
-  -- difference in sensitivity. It is here so a mis-threaded 4th region is VISIBLE, not so it decides.
+  -- The EMA shadow is REPORTED, never GATED: it is θ's low-pass filter, so gating it is "gate the
+  -- gradient, never θ" one step WORSE. Measured on EfficientNet's peer: a sum-not-mean control
+  -- moved `m` by 2.39 and the shadow by 5.4e-4, a 4,400× difference in sensitivity. It
+  -- is here so a mis-threaded 4th region is VISIBLE, not so it decides.
   let regions : List (String × Nat × Nat) :=
     [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP)]
     ++ (if emaOn then [("ema", 3*nP, 4*nP)] else [])
@@ -245,8 +237,7 @@ bit-exact {exact}/{hi-lo}"
     IO.eprintln "DEGENERATE: too few non-zero outputs — the check proves little"; IO.Process.exit 1
   -- Gate the GRADIENT (`m`), never θ: Adam's update is scale-free, so a near-zero-gradient
   -- parameter flips sign on a 1-ULP difference and θ lands at ~1e-4 whether or not anything is
-  -- wrong (§3). §2b-quater measured this directly — a 2× gradient error moved θ by 2.7e-4 and `m`
-  -- by 0.96.
+  -- wrong. Measured: a 2× gradient error moves θ by 2.7e-4 and `m` by 0.96.
   if gradRel > 1e-4 then
     IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > 1e-4. On a {replicas}-way \
 duplicated batch all_reduce(add)/{replicas} is the identity, so the data-parallel step must \

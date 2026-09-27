@@ -174,20 +174,18 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
     256 and width 1280, `n = 327,680` per step, and a Lean-side loop at that size costs a large
     share of the step. The guards and the seeding argument stay here. -/
 def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
-  -- Host cost history: this loop used to push `n` boxed Floats and tile them out through
-  -- `write3`, costed at B = 32 × 1280 as negligible. At EfficientNet-B0's ImageNet job shape
+  -- Host cost: a Lean loop pushing `n` boxed Floats and tiling them out through `write3`
+  -- is negligible at B = 32 × 1280, but at EfficientNet-B0's ImageNet job shape
   -- (256 × 1280) it measured 150.07 ms of a 281 ms step (32×1280: 18.74 ms; `dropScales` at
   -- 9 sites × 256: 1.83 ms; `F32.const` on the same 327,680 floats: 0.073 ms). A host-side
   -- cost is a function of the batch, so cost it at the batch the job runs.
   if keep ≥ 1.0 || n == 0 then
     return ← const n.toUSize 1.0
-  -- ⚠ REFUSE below 3 rather than return the all-ones buffer. ▶ The MECHANICAL reason is gone —
-  -- `write3` no longer writes this and `dropoutFill` tiles any `n` — but the reason that made the
-  -- guard worth having does not: a too-small mask is a MIS-SIZED CALLER, and the old failure mode
-  -- was the bad kind (an all-ones buffer is the exact IDENTITY, i.e. dropout switched off, with
-  -- the render, the arity and every shape still correct). Real call sites are `B * width`
-  -- (≥ 1280 here), so this only fires when something upstream is wrong, which is when it should.
-  -- Kept at 3 rather than relaxed to 1, so the extern change moves speed and nothing else.
+  -- REFUSE below 3 rather than return the all-ones buffer. `dropoutFill` tiles any `n`, but a
+  -- too-small mask is a MIS-SIZED CALLER, and the all-ones failure mode is the bad kind (an
+  -- all-ones buffer is the exact IDENTITY, i.e. dropout switched off, with the render, the arity
+  -- and every shape still correct). Real call sites are `B * width` (≥ 1280 here), so this only
+  -- fires when something upstream is wrong, which is when it should.
   if n < 3 then
     throw (IO.userError s!"dropoutMask: n = {n} < 3 is below the smallest real call site; a silent \
 all-ones return would be the identity, i.e. dropout switched off")

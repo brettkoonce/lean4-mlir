@@ -223,7 +223,7 @@ noncomputable def mnv4DWReluLayer (N : Nat) {c h w kH kW : Nat}
 -- kink, which is why a UIB block has three smoothness families and not four.
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE FAMILY COLLAPSE — one body, four families, `id'` in the empty slots
+-- § THE FAMILY COLLAPSE — one body, four families, `id'` in the empty slots
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The UIB body, for all four families at once.**
@@ -242,7 +242,7 @@ noncomputable def mnv4UibBody (N : Nat) {ic mid oc h w : Nat}
     CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
   preDW.comp (expand.comp (postDW.comp project))
 
--- ⭐ The prose above is CHECKED, but not here: `UibSpec.family` is defined further down (it needs
+-- The prose above is CHECKED, but not here: `UibSpec.family` is defined further down (it needs
 -- the `UibFamily` inductive), so the guard sits with the other table guards in the dispatch
 -- section (the family order of the `h = 14` stride-1 rows).
 
@@ -353,7 +353,7 @@ noncomputable def mnv4Head (N : Nat) {c mid oc nC h w : Nat}
     (convHead.comp ((castLayer (mnv4_pool11 N oc).symm).comp cls))))
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
+-- § THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
 -- ════════════════════════════════════════════════════════════════
 
 /-! **What this section fixes.** Above, `mnv4UibBody` takes its depthwise slots as *arguments*,
@@ -412,34 +412,29 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
   | _, 0 => .convNeXtLike
   | _, _ => .extraDW
 
--- ⭐⭐ THE TABLE GUARDS. `mnv4Blocks`'s docstring (`MobileNetV4Spec`) states the family sequence and the
--- dispatch counts in PROSE; these turn that prose into checks. A wrong `preDWk` is exactly §3's
--- silent defect — same ops, same channel counts, same types, different net — and it now fails at
+-- THE TABLE GUARDS. `mnv4Blocks`'s docstring (`MobileNetV4Spec`) states the family sequence and the
+-- dispatch counts in PROSE; these turn that prose into checks. A wrong `preDWk` is exactly the
+-- silent defect above — same ops, same channel counts, same types, different net — and it fails at
 -- `lake env lean`.
--- ⚠⚠ **REWRITTEN FOR CONV-M (2026-08-14).** `ed5a797` swapped the verified net from Conv-S to
--- Conv-M and left every number below asserting Conv-S's 14 rows, so the corpus build went red on
--- the first push that carried it.
 --
--- ▶ **The replacements were NOT re-read off `mnv4Blocks`** — that would make them restate their own
+-- **These values are NOT read off `mnv4Blocks`** — that would make them restate their own
 -- input and gate nothing at all. Every one was extracted from **timm 1.0.28**, the pinned spec, by
 -- instantiating `mobilenetv4_conv_medium` and walking `model.blocks[1:4]`, reading `dw_start` /
 -- `pw_exp` / `dw_mid` / `pw_proj` off each `UniversalInvertedResidual`. All 21 rows agree with timm
--- exactly on `(ic, oc, expand, preDWk, postDWk, h, stride2)`, so the TABLE was right and only these
--- guards were stale. ⚠ Note the naming: our `postDWk` is timm's `dw_mid`, not a third convolution.
+-- exactly on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. Note the naming: our `postDWk` is timm's `dw_mid`, not a third convolution.
 #guard mnv4Blocks.map (·.family) =
   [.extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn,
    .convNeXtLike, .extraDW, .extraDW, .extraDW, .extraDW, .ffn, .convNeXtLike, .extraDW,
    .extraDW, .ffn, .ffn, .convNeXtLike]
--- ⭐⭐ **CONV-M USES NO `ib` BLOCK AT ALL**, where Conv-S used three. Stated on its own because it
--- is the one family fact a reader carrying the old table over would be confidently wrong about.
+-- **CONV-M USES NO `ib` BLOCK AT ALL**, where Conv-S uses three. Stated on its own because it
+-- is the one family fact a reader carrying a Conv-S table over would be confidently wrong about.
 #guard mnv4Blocks.all (fun s => s.family != .ib)
 #guard (mnv4Blocks.filter (fun s => s.family == .extraDW)).length = 13
 #guard (mnv4Blocks.filter (fun s => s.family == .convNeXtLike)).length = 4
 #guard (mnv4Blocks.filter (fun s => s.family == .ffn)).length = 4
 
--- ⭐ The family order of the seven `h = 14` stride-1 rows (blocks 4–10), pinned. A docstring once
--- named Conv-S's families here (an `ib` block, of which Conv-M has none) for four weeks while the
--- guards above already said Conv-M; this makes the prose a check.
+-- The family order of the seven `h = 14` stride-1 rows (blocks 4–10), pinned, so the prose that
+-- names them is a check.
 #guard (mnv4Blocks.filter (fun s => s.h == 14 && !s.stride2)).map (·.family) =
   [.extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn, .convNeXtLike]
 
@@ -464,7 +459,7 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 #guard mnv4Blocks.all (fun s => s.stride2 || s.ic == s.oc)
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ WEIGHT WIRING — the parameters are TYPED BY THEIR TABLE ROW
+-- § WEIGHT WIRING — the parameters are TYPED BY THEIR TABLE ROW
 -- ════════════════════════════════════════════════════════════════
 
 /-! **The gap this closes.** A block builder that reads the *dispatch* from the table but takes

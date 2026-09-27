@@ -394,7 +394,7 @@ private theorem mnv4BFullHasVJPAt_backward
                                                         (hhead.fst.backward dy))))))))))))))))))))))))) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE TIE — stem and head concrete, the fused stage and 21 blocks opaque
+-- § THE TIE — stem and head concrete, the fused stage and 21 blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
 /-- **`mnv4InputGradB` is the backward of the whole-net VJP at opaque blocks.** The committed
@@ -638,7 +638,7 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
 -- The projection lemmas this file's shape check rewrites with — `CertLayer.comp_fwd_apply`, the
 -- three layer `_fwd_apply`s, `r34HeadB_apply` and the per-group `mnv4Res*Layer_fwd_apply` — live
 -- beside the things they project (`CertifiedChain.lean`, `MobileNetV4BackB0.lean`,
--- `ResNet34FullB.lean`, `MobileNetV4FullB.lean`). ⚠⚠ They exist because peeling one
+-- `ResNet34FullB.lean`, `MobileNetV4FullB.lean`). They exist because peeling one
 -- `CertLayer.comp` to reach `.fwd` at MNv4's LITERAL resolutions is a kernel deterministic timeout
 -- in every spelling that does the peel here (`rfl`, `simp only [.., Function.comp_apply]`,
 -- Mathlib's `Function.comp_assoc`), and 2 s through a lemma proved between variables and APPLIED.
@@ -705,7 +705,7 @@ private theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s
       = head (hc2 (hc1 (b21 (b20 (b19 (b18 (b17 (b16 (b15 (b14 (b13 (b12 (b11 (b10 (b9 (b8 (b7 (b6 (b5 (b4 (b3 (b2 (b1 (fused (stem (x)))))))))))))))))))))))))) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE SHAPE CHECK — the twenty-six slots ARE the committed forward
+-- § THE SHAPE CHECK — the twenty-six slots ARE the committed forward
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The twenty-six slots the tie is about are `mobilenetv4ForwardBFull`.** The committed

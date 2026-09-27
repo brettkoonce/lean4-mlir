@@ -690,7 +690,7 @@ noncomputable def sdpaHasVJPMat3 (n d : Nat) :
   correct_3 := sdpaBackV_correct n d
 
 -- ════════════════════════════════════════════════════════════════
--- § 3. Multi-Head wrapping (Phase 3 — proved via column-stacking)
+-- § 3. Multi-Head wrapping (proved via column-stacking)
 -- ════════════════════════════════════════════════════════════════
 
 /-! ## Multi-head: parallelism over a partition
@@ -1038,7 +1038,7 @@ theorem colSlabApply_flat_differentiable {n heads d_in d_out : Nat}
   simpa [Mat.flatten, colSlabApply] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
 
 -- ════════════════════════════════════════════════════════════════
--- § 3.5 Multi-head composition: replace the two axioms with theorems.
+-- § 3.5 Multi-head composition, as theorems.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Combined Q/K/V weight matrix: stack `Wq | Wk | Wv` with the per-head
@@ -1150,7 +1150,7 @@ theorem mhsaLayer_eq_compose (N heads d_head : Nat)
 -- makes the constant's value an `Eq.mpr` cast around the structure. Any kernel defeq that
 -- whnf's `(mhsaHasVJPMat …).backward` then replays the whole `mhsaLayer` rewrite, ~200 s of
 -- kernel type-checking per downstream declaration that forces it (no cross-declaration whnf
--- cache); that was most of `ViTBackB0`'s and `ViTMhsaBackCertifiedTie`'s build time. With
+-- cache), which would dominate `ViTBackB0`'s and `ViTMhsaBackCertifiedTie`'s build time. With
 -- `backward` a direct field, the projection whnfs in one hop.
 noncomputable def mhsaComposedHasVJPMat (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -1235,7 +1235,7 @@ theorem mhsaLayer_flat_differentiable (N heads d_head : Nat)
           (mhsaQkvB heads d_head bq bk bv)))
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. Transformer Block (Phase 8 — composition, no hand-waving)
+-- § 4. Transformer Block (composition, no hand-waving)
 -- ════════════════════════════════════════════════════════════════
 
 /-! ## Per-token liftings (theorems)

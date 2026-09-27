@@ -3,7 +3,7 @@ import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.ViTRender
 import LeanMlir.Proofs.Codegen.ConvNeXtRender
 
-/-! # Global-norm gradient clipping, numerically certified (`recipe_gaps.md` v1.4b)
+/-! # Global-norm gradient clipping, numerically certified
 
 `verified_mlir/<net>_adamclip_train_step.mlir` is `<net>_adam` with the reference's two extra lines
 in front of the optimizer (`jax/Jax/Codegen.lean:2262`):
@@ -24,7 +24,7 @@ separates them is one scalar, and at `m = v = 0` the moment slot recovers it exa
 
 for **every coordinate of every parameter** — one number, 5.5M times.
 
-**▶ THE CONSTANCY OF THAT RATIO IS THE GATE, and that is the whole design.** The norm being GLOBAL
+**THE CONSTANCY OF THAT RATIO IS THE GATE, and that is the whole design.** The norm being GLOBAL
 is the entire semantic content of the feature, and it is the only thing a per-parameter clip gets
 wrong: a per-parameter clip scales, never amplifies, and is the identity below the threshold —
 `Proofs.clipFactor_le_one`, `clipFactor_eq_one_below` and every other property in `GradClip.lean`
@@ -39,27 +39,26 @@ that asks *"did the gradients get smaller"* passes it. `scripts/probes/perturb_c
 | ③ | `%loss` is bit-exact — a forward-only output cannot see a change to the gradient path |
 | ④ | at a threshold ABOVE the norm the render is **BYTE-IDENTICAL** to the unclipped one |
 
-⚠ **② is the weakest of the five and says so in its own output.** `gn` on device is an f32 fold of
+**② is the weakest of the five and says so in its own output.** `gn` on device is an f32 fold of
 ~5.5M positive squares; the host recomputes it in f64 from gradients themselves recovered through
-one f32 rounding. Those cannot agree to the bit and nothing is wrong when they do not — it is the
-mixup-λ finding (*recover a constant by READING it, not by fitting it*) hitting a quantity that
-genuinely has no exact host reading. **① reads the factor off the device and needs no host norm at
-all**, which is why it, not ②, is the one with a tight bound.
+one f32 rounding. Those cannot agree to the bit and nothing is wrong when they do not — *recover a
+constant by READING it, not by fitting it*, and this quantity genuinely has no exact host reading.
+**① reads the factor off the device and needs no host norm at all**, which is why it, not ②, is the one with a tight bound.
 
-⚠ **④ is BIT-EXACT BY ARGUMENT, not by luck**: above the threshold `min(1, c/(gn+ε))` is exactly
+**④ is BIT-EXACT BY ARGUMENT, not by luck**: above the threshold `min(1, c/(gn+ε))` is exactly
 `1.0` and `x * 1.0` is exact in IEEE-754 binary32 (`Proofs.StableHLO.clipScaleF_id_below`). But it is also
 **blind on its own** — at factor 1 a global clip and a per-parameter clip are the SAME FUNCTION, so
-④ passes on `perparam`. That is the stochastic-depth ones-mask finding one feature over: an identity
-gate cannot see where, or from what, the intervention was computed. ① and ④ are evidence together.
+④ passes on `perparam`. An identity gate cannot see where, or from what, the intervention was
+computed. ① and ④ are evidence together.
 
-⚠⚠ **RUN IT UNDER `scripts/det_shim.sh`. THIS IS NOT OPTIONAL AND IT IS NOT A STYLE POINT.**
+**RUN IT UNDER `scripts/det_shim.sh`. THIS IS NOT OPTIONAL AND IT IS NOT A STYLE POINT.**
 Without it, ConvNeXt reads gate ④ as 137,229 of 83,478,847 outputs differing at a 24,149-ULP floor
 — carried by ONE parameter of 180, `d0W`'s even-kernel 2×2/s2 downsample weight gradient — and the
 number MOVES between runs. With it: **83,478,847/83,478,847 bit-identical, gate ① at 1.15 ULPs.**
 Nothing about the render changes; XLA autotuning picks a different convolution algorithm per
 process. ViT happens to be clean either way, which is exactly how this trap stays hidden: a gate
-developed on ViT and ported to ConvNeXt inherits ViT's conditioning (handoff §0.4, finding 1, now
-in a fourth place). Gate ④ refuses with the recipe rather than reporting a phantom defect.
+developed on ViT and ported to ConvNeXt inherits ViT's conditioning. Gate ④ refuses with the recipe
+rather than reporting a phantom defect.
 
     lake build clip-tie
     scripts/det_shim.sh /tmp/detshim
@@ -69,9 +68,9 @@ in a fourth place). Gate ④ refuses with the recipe rather than reporting a pha
     CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie convnext  # 180
 
 **ONE harness, both nets**, per `wdx-tie` / `rms-tie` / `shard-check`: a second copy is the
-double-writer disease one level down, in code. ⚠ And running both is not ceremony — the same edit
-behaved differently on the two renderers twice now (ConvNeXt derives its entry name from the
-variant, ViT takes it explicitly), and this thread found a third instance of it.
+double-writer disease one level down, in code. And running both is not ceremony — the same edit
+can behave differently on the two renderers (ConvNeXt derives its entry name from the variant, ViT
+takes it explicitly).
 
 The controls, each of which must be verified to FIRE:
 
@@ -80,7 +79,7 @@ The controls, each of which must be verified to FIRE:
     python3 scripts/probes/perturb_clip.py <committed> /tmp/c.mlir epsout     # ② fires
     LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie vit --cand /tmp/c.mlir
 
-Measured 2026-08-02, under the det shim, all six red and rc=1:
+Measured under the det shim, all six red and rc=1:
 
 | control | ViT | ConvNeXt | fires |
 |---|---|---|---|
@@ -89,7 +88,7 @@ Measured 2026-08-02, under the det shim, all six red and rc=1:
 | `epsout`   (`c/gn + ε`) | **26.28 ppm** (predicted ε/fac = 26.1) | **45.46 ppm** (45.5) | ② |
 
 against true-render readings of ① **1.12 / 1.15 ULPs** and ② **0.105 / 0.0070 ppm**.
-⚠ `perparam` passes ⓪, ③ and ④ — it is a working clip, just not a GLOBAL one — and `nosqrt`
+`perparam` passes ⓪, ③ and ④ — it is a working clip, just not a GLOBAL one — and `nosqrt`
 passes ①, because ‖g‖² is still one shared scalar. The gates are independent on purpose.
 -/
 
@@ -131,7 +130,7 @@ def main (argv : List String) : IO Unit := do
   IO.println s!"grad clip — {cn.slug}, global-norm clipping at CLIP = {clipC} (v1.4b)"
   IO.println s!"  {sig.length} params / {P} coords, bs {bs}, backend {← LowererSession.backendName}"
 
-  -- ⚠ TWO ROUTES TO THE SAME LAYOUT, checked — `wdx-tie`'s check, kept for §2m's reason: the
+  -- TWO ROUTES TO THE SAME LAYOUT, checked — `wdx-tie`'s check: the
   -- signature list drives the render's per-param loop while `net.specs` drives the driver's blob,
   -- and this gate reads offsets from one having taken the parameter count from the other.
   if net.specs.size != sig.length then
@@ -163,16 +162,16 @@ the signature list says {ds}")
                               ++ #[#[], #[], #[]])
   let buf := F32.concat #[θ, z, z, tl]
 
-  -- ⚠ `variant` names the ENTRY as well as the path, and the two must agree — the shim refuses a
-  -- mismatch outright rather than running the wrong graph. That check earned its keep on this very
-  -- feature: a second clip render at a different threshold spelled the same Bool-derived ConvNeXt
-  -- variant and came out declaring another artifact's entry (`planning/archive/grad_clip.md` §6).
+  -- `variant` names the ENTRY as well as the path, and the two must agree — the shim refuses a
+  -- mismatch outright rather than running the wrong graph. A second clip render at a different
+  -- threshold can spell the same Bool-derived ConvNeXt variant and declare another artifact's
+  -- entry.
   let run (variant : String) (path : Option String := none) : IO ByteArray := do
     let vmfb := s!".lake/build/clip_tie_{cn.slug}_{variant}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
     -- delete first: `compileVmfb`'s cache key is the OUTPUT path plus an mtime, never the source,
     -- so a re-run with a different candidate under the same tag silently reuses the first binary
-    -- and reports the second as a perfect match (§4's `.vmfb` false-PASS hazard).
+    -- and reports the second as a perfect match (the `.vmfb` false-PASS hazard).
     for p in [vmfb, s!".lake/build/clip_tie_{cn.slug}_{variant}_{target}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
     let src := path.getD s!"verified_mlir/{cn.slug}_{variant}_train_step.mlir"
@@ -190,8 +189,7 @@ the signature list says {ds}")
   -- the gradient?** If `hi` is bit-identical to `adam`, `g` is the same number in both graphs and
   -- any spread ① sees is the render; if it is not, XLA scheduled the backward differently and ①
   -- must be read against that, not against an absolute ULP count. Measuring the floor before
-  -- reading a cross-graph number is §2d.3's rule, and it has twice been the difference between a
-  -- green feature and a phantom defect.
+  -- reading a cross-graph number is the difference between a green feature and a phantom defect.
   if !(← System.FilePath.pathExists hiPath) then
     throw (IO.userError s!"④ CANNOT RUN: {hiPath} does not exist. It is GENERATED, not committed — \
 an artifact baking a threshold no config sets is a silent-hyperparameter artifact. Build it with:\n\
@@ -211,7 +209,7 @@ Refusing to report a pass without it: it is both gate ④ and the floor ① is r
         if r > floorUlp then floorUlp := r
   IO.println s!"  ④ threshold ABOVE the norm: {3*P + 1 - diff}/{3*P + 1} outputs BIT-IDENTICAL \
 to the unclipped render{if diff == 0 then "" else s!"  ⚠ FLOOR {floorUlp} ULPs on {diff} outputs"}"
-  -- ⚠ WHICH parameters carry the floor, in the m' region. A floor concentrated in a handful of
+  -- WHICH parameters carry the floor, in the m' region. A floor concentrated in a handful of
   -- known ill-conditioned reduces is a scheduling story; one spread over every parameter would be
   -- a wiring story, and they need different responses.
   if diff != 0 then
@@ -327,14 +325,14 @@ and the clip is on the gradient path. That localises the difference to the wrong
   -- in ppm, because at 6 decimals a correct render prints "0.000000" and an ε-placement error
   -- prints "0.000026" — two numbers whose RATIO is the whole question, rendered as one digit.
   IO.println s!"  ② |recovered − predicted| / predicted = {rel * 1.0e6} ppm"
-  -- ⚠ THE 5 ppm BAR IS CALIBRATED FROM BOTH NETS, NOT PICKED ROUND (§2d.1's rule).
+  -- THE 5 ppm BAR IS CALIBRATED FROM BOTH NETS, NOT PICKED ROUND.
   --   floor    — the true renders measure **0.105 ppm (ViT) / 0.0070 ppm (ConvNeXt)**. That is the
   --              device's f32 fold of 5.5M / 27.8M positive squares against this f64 host sum, plus
   --              one f32 rounding in the recovered `g`.
   --   control  — `epsout` (ε outside the root) lands at **26.3 / 45.5 ppm**, and those are a KNOWN
   --              ANSWER rather than an observation: the error is exactly `ε/fac`, i.e.
   --              1e-6/0.0383 = 26.1 and 1e-6/0.0220 = 45.5. Measured 26.28 / 45.46.
-  -- 5 ppm sits ~48×/718× above the floor and 5.3×/9.1× below the control. ⚠ It is the ONE bound in
+  -- 5 ppm sits ~48×/718× above the floor and 5.3×/9.1× below the control. It is the ONE bound in
   -- this harness that is a tolerance rather than a bit-exactness or ULP statement, which is why the
   -- other three carry the weight.
   if rel > 5.0e-6 then

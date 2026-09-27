@@ -21,7 +21,7 @@ def main (_args : List String) : IO Unit :=
       render := fun B fs => Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB B 10 "1.0e-5"
         (forceSync := fs)
       entry := fun B r => s!"m.mobilenetv2_{Proofs.StableHLO.mnv2AdamVariant B r}_train_step"
-      -- ⚠ 3e-3, not R34's 1e-3. Measured 2026-09-21: the whole-net split error on the statistics
+      -- 3e-3, not R34's 1e-3. Measured: the whole-net split error on the statistics
       -- is 0.97e-3 / 1.05e-3 on two runs of the same seeds (XLA's GPU reductions are not
       -- bit-deterministic), and `SYNCBN_VERBOSE=1` shows why it is rounding: the first six BN
       -- layers are split-EXACT (0.000000 on mean and var), and the variance error then grows

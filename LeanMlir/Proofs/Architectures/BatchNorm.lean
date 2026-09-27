@@ -87,7 +87,7 @@ noncomputable def bnMeanSq (n : Nat) (x : Vec n) : ℝ :=
 theorem bnMean_shard {R m M : Nat} (_hR : R ≠ 0) (_hm : m ≠ 0)
     (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
     bnMean M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) := by
-  -- ⭐ `M = R * m` is not a hypothesis — the equiv forces it, so this applies at ANY association
+  -- `M = R * m` is not a hypothesis — the equiv forces it, so this applies at ANY association
   -- of the target index (`(R*N)*(h*w)` as readily as `R*(N*(h*w))`). An average over `Fin M` is an
   -- average over `Fin R × Fin m` (`expect_equiv`), which is an average of averages.
   simp only [bnMean_eq_expect]
@@ -382,7 +382,7 @@ theorem bnSyncGradInput_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x d
   have hv : bnMeanSq n x - bnMean n x * bnMean n x = bnVar n x :=
     (bnVar_eq_bnMeanSq_sub_sq n hn x).symm
   funext i
-  -- ⚠ `hv` must fire BEFORE `bnMean` unfolds, or the `m2 − μ²` pattern is gone and the two
+  -- `hv` must fire BEFORE `bnMean` unfolds, or the `m2 − μ²` pattern is gone and the two
   -- sides end up with different arguments under the square root.
   simp only [bnSyncGradInput, bnSyncXhat]
   rw [hv]
@@ -454,7 +454,7 @@ theorem pdiv_bnAffine (n : Nat) (γ β : ℝ)
   · intro a v; funext k; simp only [Pi.smul_apply, smul_eq_mul, mul_left_comm γ a]
 
 -- ════════════════════════════════════════════════════════════════
--- § The hard Jacobian: `pdiv_bnNormalize` — now derived
+-- § The hard Jacobian: `pdiv_bnNormalize` — derived
 -- ════════════════════════════════════════════════════════════════
 
 /-! The consolidated three-term formula is a theorem: we factor `bnXhat` as the elementwise product of
@@ -609,7 +609,7 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
   simp only [smul_apply, smul_eq_mul, bnVarDeriv_basisVec, bnIstd]
   field_simp
 
-/-- **The BN normalize Jacobian — derived, no longer axiomatized.**
+/-- **The BN normalize Jacobian — derived, not axiomatized.**
 
     `pdiv (bnNormalize n ε) x i j = (istd / n) · (n · δᵢⱼ − 1 − x̂ᵢ · x̂ⱼ)`
 

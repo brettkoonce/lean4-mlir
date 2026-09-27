@@ -3,17 +3,16 @@ import LeanMlir.Verified.Train
 
 /-! # LAMB, numerically certified — the closed form, against three plausible wrong neighbours
 
-`planning/archive/rsb_a3_r50_verified.md` §2.3's LAMB row was the ONE line that file flags as an estimate
-rather than a measurement ("2–3 ops"). It is now built — measured at **two** new `SHlo`
-constructors, because `gradSumSqAccF` was already present for the global-norm clip and `sgdParamF`
-for heavy-ball — and this is the run that says the render computes LAMB.
+The LAMB render takes **two** `SHlo` constructors of its own, because `gradSumSqAccF` is shared
+with the global-norm clip and `sgdParamF` with heavy-ball — and this is the run that says the render
+computes LAMB.
 
-## The construction — `r34-mom-tie`'s, reused for the third time
+## The construction — `r34-mom-tie`'s
 
 **How the gradient is recovered.** Run the committed **AdamW** render on `(θ, x, onehot)` from
 `m = v = 0`. Its stored first moment is `m' = β₁·m + (1−β₁)·g = 0.1·g`, so `g = 10·m'_adam`
 exactly — no tolerance, no dependence on the bias correction. AdamW's decay is DECOUPLED, so `m`
-sees the raw gradient; that is what makes it usable as an oracle. §2k's construction, reused by
+sees the raw gradient; that is what makes it usable as an oracle. The same construction is used by
 `r34-mom-tie`, `rms-tie` and `conv-bias-zero`.
 
 **What the LAMB render must then satisfy**, on the same `(θ, x, onehot)` with DISTINCTIVE non-zero
@@ -21,15 +20,15 @@ sees the raw gradient; that is what makes it usable as an oracle. §2k's constru
 
     m' = β₁·m + (1−β₁)·g                          β₁ = 0.9   — Adam's, unchanged
     v' = β₂·v + (1−β₂)·g²                         β₂ = 0.999 — Adam's, unchanged
-    r  = (m'/bc₁) / (√(v'/bc₂) + ε) + wd·θ        ε = 1e-6, wd = 0.02   ⚠ NOT AdamW's 1e-8 / 1e-4
+    r  = (m'/bc₁) / (√(v'/bc₂) + ε) + wd·θ        ε = 1e-6, wd = 0.02   NOT AdamW's 1e-8 / 1e-4
     trust = ‖θ‖/‖r‖   PER PARAMETER TENSOR, = 1 when either norm is 0
     θ' = θ − lr·trust·r
 
-⚠ `bc₁`/`bc₂` are supplied at **t = 10**, not t = 1. At t = 1 the correction is `1/(1−β₁) = 10×`,
+`bc₁`/`bc₂` are supplied at **t = 10**, not t = 1. At t = 1 the correction is `1/(1−β₁) = 10×`,
 which with non-zero incoming moments is an inconsistent state to test at; t = 10's `0.651`/`0.00995`
 is what a real step sees.
 
-## ▶▶ THE CONTROLS ARE THE POINT — three wrong LAMBs that all train and descend
+## THE CONTROLS ARE THE POINT — three wrong LAMBs that all train and descend
 
 Every one of these is a real implementation people ship, and none of them is distinguishable from
 the real thing by a loss curve:
@@ -43,11 +42,10 @@ the real thing by a loss curve:
 Each is computed on the same numbers and required to MISS by far more than the tie. A harness that
 cannot separate them is not measuring LAMB, it is measuring "something scaled something".
 
-⚠ The comparison is on the **STEP** `θ' − θ`, not on `θ'`. The step is ~1e-3 of `θ`, so a relative
-error on `θ'` divides by the wrong thing and would report a passing 1e-3 as 1e-6. Same reading
-trap as §2e-bis's `Float.toString`.
+The comparison is on the **STEP** `θ' − θ`, not on `θ'`. The step is ~1e-3 of `θ`, so a relative
+error on `θ'` divides by the wrong thing and would report a passing 1e-3 as 1e-6.
 
-⚠ Expect ~1e-4, not bit-exact: the graph reduces `‖·‖²` over up to 4.7M f32 elements while this
+Expect ~1e-4, not bit-exact: the graph reduces `‖·‖²` over up to 4.7M f32 elements while this
 harness sums in f64, so the two norms differ in their last few bits and the trust ratio inherits it.
 
     lake build r50-lamb-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r50-lamb-tie
@@ -59,8 +57,8 @@ def main : IO Unit := do
   let nP   := net.nParams
   let β₁   := 0.9
   let β₂   := 0.999
-  let ε    := 1.0e-6          -- ⚠ LAMB's, not AdamW's 1e-8
-  let wd   := 0.02            -- ⚠ timm a3's `wd0.02`, not AdamW's 1e-4
+  let ε    := 1.0e-6          -- LAMB's, not AdamW's 1e-8
+  let wd   := 0.02            -- timm a3's `wd0.02`, not AdamW's 1e-4
   let lr   := 0.008           -- RSB-A3's LR at bs2048
   let bc1  := 1.0 - Float.exp (10.0 * Float.log β₁)      -- t = 10
   let bc2  := 1.0 - Float.exp (10.0 * Float.log β₂)
@@ -84,13 +82,13 @@ bc1 {bc1} bc2 {bc2} (t = 10), backend {← LowererSession.backendName}"
   -- DISTINCTIVE and non-zero: a zero fill would let a render that dropped the β₁·m or β₂·v
   -- passthrough match by luck, which is the same argument `r34-mom-tie` makes for its `m`.
   let mIn ← F32.scaleShift (← F32.heInit 4242 nP.toUSize 0.02) 1.0 0.05
-  -- ⚠⚠ TWO SECOND-MOMENT REGIMES, and the reason is a MEASUREMENT this harness made rather than a
+  -- TWO SECOND-MOMENT REGIMES, and the reason is a MEASUREMENT this harness made rather than a
   -- precaution. At `v̂ ≈ 1` the two ε placements — `√v̂ + ε` and `√(v̂ + ε)` — differ by `ε/(2√v̂)`
   -- against `ε`, i.e. by **5e-7 at ε = 1e-6**, which is BELOW this harness's own 3e-6 floor. So at a
   -- typical `v` the placement is not gated at all, and a run that reported ⟂② as "passing" there
   -- would be reporting that its control is dead.
   --
-  -- ⭐ The placement bites where `v̂ ≪ ε²`, which is early training and small gradients — exactly
+  -- The placement bites where `v̂ ≪ ε²`, which is early training and small gradients — exactly
   -- the regime `RmsPropStep` was written for. `vSmall` puts `v̂ ≈ 1e-7`, where `√v̂ = 3.2e-4` and
   -- `√(v̂+ε) = 1.0e-3`: a 3× separation. The tie is exact in BOTH regimes; only the control's
   -- sensitivity moves, so both are run and only the second is allowed to carry ⟂②.
@@ -218,7 +216,7 @@ bc1 {bc1} bc2 {bc2} (t = 10), backend {← LowererSession.backendName}"
   if k3 <= 10.0 * rS then
     throw (IO.userError s!"CONTROL DEAD: 'decay after the trust ratio' fits as well as LAMB in \
 regime A ({k3} vs {rS}) — the decay's placement inside the norm is not being tested")
-  -- ⚠⚠ ⟂② IS REQUIRED TO BE DEAD IN A AND LIVE IN B. Both directions are asserted: if it ever fires
+  -- ⟂② IS REQUIRED TO BE DEAD IN A AND LIVE IN B. Both directions are asserted: if it ever fires
   -- in A, ε's effective size has changed and this file's own reasoning about the floor is stale; if
   -- it stops firing in B, the ε placement has ceased to be gated anywhere.
   if k2 > 10.0 * rS then

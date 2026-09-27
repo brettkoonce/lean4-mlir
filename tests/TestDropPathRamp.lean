@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # The stochastic-depth ramp, pinned across the driver/renderer seam
 
-`planning/archive/stochastic_depth.md`'s keep ramp is described **twice**, and it has to be:
+The stochastic-depth keep ramp is described **twice**, and it has to be:
 
 * the RENDERER (`Proofs/Codegen/EfficientNetRender/Basic.lean`) owns `enetDropIdxs` / `enetDropTotal` —
   which blocks carry a drop site, and the ramp denominator;
@@ -21,7 +21,7 @@ parameter layout, and this file is its peer for the ramp.
 **What it catches.** A ramp re-indexed by SITE ORDINAL instead of BLOCK INDEX — nine evenly-spaced
 keeps instead of the reference's nine uneven ones. That compiles, runs, descends, and trains a
 different objective, and **no numeric tie can see it**: every tie compares the render against a peer
-built from the same constants. §2k's `α/K` bug in a new place.
+built from the same constants.
 
     lake env lean tests/TestDropPathRamp.lean
 -/
@@ -33,7 +33,7 @@ open Proofs.StableHLO
 private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
   1.0 - dropRate * i.toFloat / (Nat.max 1 (totalDrop - 1)).toFloat
 
--- ⭐ The driver's keep values ARE the reference's ramp at the renderer's site indices.
+-- The driver's keep values ARE the reference's ramp at the renderer's site indices.
 #guard efficientnetVerified.dropKeeps.size == enetDropIdxs.length
 
 #guard (enetDropIdxs.toArray.zip efficientnetVerified.dropKeeps).all
@@ -43,7 +43,7 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 -- gets the wrong number of `tensor<Bxf32>` inputs — a loud arity failure, but only at run time.
 #guard enetDropSites == efficientnetVerified.dropKeeps.size
 
--- ⚠ Block 0 keeps everything, and the LAST block would keep `1 − dropRate`; but EfficientNet's
+-- Block 0 keeps everything, and the LAST block would keep `1 − dropRate`; but EfficientNet's
 -- last block (15) has NO SKIP, so the deepest site actually rendered is block 14 at keep 0.8133…,
 -- NOT 0.8. Stated because "the last site keeps 1 − dropRate" is the natural wrong assumption, and
 -- here it is off by exactly one ramp step.
@@ -51,7 +51,7 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard (efficientnetVerified.dropKeeps[8]! - refKeep 0.2 14 16).abs < 1e-9
 #guard (efficientnetVerified.dropKeeps[8]! - 0.8).abs > 1e-3
 
--- ▶ The ImageNet peer rides TF's ramp since 2026-09-25 — `0.2 · i/16`, the reference's
+-- The ImageNet peer rides TF's ramp — `0.2 · i/16`, the reference's
 -- `dropPathOverN` (`efficientNetB0ImagenetConfig`), where the Imagenette spec keeps timm's `i/15`.
 -- Same sites, different denominator; the second guard is the control that the two ramps differ.
 private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
@@ -62,7 +62,7 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard (efficientnetImagenetVerified.dropKeeps[8]! - efficientnetVerified.dropKeeps[8]!).abs > 1e-3
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
---  ▶ ConvNeXt-T — the same seam, and the trap is a DIFFERENT one
+--  ConvNeXt-T — the same seam, and the trap is a DIFFERENT one
 --
 --  EfficientNet's hazard is the SITE ORDINAL (9 sites, 16 blocks, so ordinal ≠ block index).
 --  ConvNeXt has one site per block, so that particular confusion is impossible — and the hazard
@@ -72,13 +72,13 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 --  count, same arity, same emitted op count, different objective.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
--- ⭐ The driver's keeps ARE the reference's ramp at the renderer's ramp indices, all 18.
+-- The driver's keeps ARE the reference's ramp at the renderer's ramp indices, all 18.
 #guard convnextVerified.dropKeeps.size == cnxDropSites
 
 #guard ((Array.range cnxDropSites).zip convnextVerified.dropKeeps).all
          (fun (i, k) => ((k - refKeep 0.1 i cnxDropTotal).abs) < 1e-9)
 
--- ⚠ THE STAGE BOUNDARIES, which is where the ConvNeXt-specific defect would show. Read through
+-- THE STAGE BOUNDARIES, which is where the ConvNeXt-specific defect would show. Read through
 -- `cnxBlockIdx` — the renderer's own numbering — rather than restated, so a change there fails here.
 #guard (convnextVerified.dropKeeps[cnxBlockIdx 1 0]! - refKeep 0.1 3 18).abs < 1e-9
 #guard (convnextVerified.dropKeeps[cnxBlockIdx 2 0]! - refKeep 0.1 6 18).abs < 1e-9
@@ -86,21 +86,21 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 -- …and the per-stage misreading must NOT agree with it, or the guards above are vacuous.
 #guard (convnextVerified.dropKeeps[cnxBlockIdx 3 0]! - refKeep 0.1 0 18).abs > 1e-3
 
--- ⚠ Block 0 keeps EXACTLY 1.0 (the reference's `keep_prob < 1.0` guard, obtained as data), and the
+-- Block 0 keeps EXACTLY 1.0 (the reference's `keep_prob < 1.0` guard, obtained as data), and the
 -- last block keeps exactly `1 − dropRate` — unlike EfficientNet, whose deepest SITE is one ramp
 -- step short of that because its last block carries no skip.
 #guard convnextVerified.dropKeeps[0]! == 1.0
 #guard (convnextVerified.dropKeeps[17]! - 0.9).abs < 1e-9
 
 -- Both scales carry the same ramp: it is a property of the architecture and of `dropPath := 0.1`,
--- not of the class count. §0.4 finding 5 — a feature is not done when its Imagenette artifact
--- renders — with the check that says so rather than the comment.
+-- not of the class count. A feature is not done when its Imagenette artifact renders; this is
+-- the check that says so rather than a comment.
 #guard convnextImagenetVerified.dropKeeps == convnextVerified.dropKeeps
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
---  ▶ ConvNeXt-**S** — the same seam again, and now the SIZE is what moves
+--  ConvNeXt-**S** — the same seam again, and now the SIZE is what moves
 --
---  ⚠⚠ Two things change together here and only one of them is architectural. The site COUNT goes
+--  Two things change together here and only one of them is architectural. The site COUNT goes
 --  18 → 36 because stage 3 deepens (that follows from `cnxSmall`, and the renderer derives it).
 --  The RATE goes 0.1 → 0.4 because the ConvNeXt paper sets stochastic depth per model size, and
 --  NOTHING derives that — it is a recipe number this spec asserts. So the two guards below are of
@@ -113,13 +113,13 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard convnextSImagenetVerified.dropKeeps.size == 36
 
 -- The renderer's parameter list and the spec's layer list must be the same 342 tensors — the
--- `toSpecs == Layout.specs` move (§2m) carried across the depth parameter. This is what fires if
+-- `toSpecs == Layout.specs` move carried across the depth parameter. This is what fires if
 -- `cnxSmall` and the spec's layer list ever disagree about WHICH stage deepens: both would still
 -- have 36 blocks and 342 tensors, but the shapes would differ.
 #guard (cnxAllParams 1000 cnxSmall).map (fun (_, ds) => ds.toArray) ==
          (convnextSImagenetVerified.toSpecs.map (fun (d, _) => d)).toList
 
--- The ramp itself, at rate 0.4 over 36 sites, through `cnxBlockIdx` at the S table. ⚠ Stage 3
+-- The ramp itself, at rate 0.4 over 36 sites, through `cnxBlockIdx` at the S table. Stage 3
 -- starts at 33 here and at 15 for Tiny — passing `cnxSmall` is the whole content of these lines,
 -- and omitting it silently takes the T default (the ViT-S trap, mechanised).
 #guard ((Array.range (cnxDropSites cnxSmall)).zip convnextSImagenetVerified.dropKeeps).all
@@ -129,7 +129,7 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 -- …and Tiny's stage-3 start must NOT agree with it, or the line above is vacuous.
 #guard (convnextSImagenetVerified.dropKeeps[cnxBlockIdx 3 0]! - refKeep 0.4 33 36).abs > 1e-3
 
--- ⭐ THE RATE IS NOT INHERITED. Block 0 still keeps exactly 1.0, but the deepest block keeps 0.6
+-- THE RATE IS NOT INHERITED. Block 0 still keeps exactly 1.0, but the deepest block keeps 0.6
 -- where Tiny's keeps 0.9 — the ConvNeXt paper's per-size stochastic depth (S 0.4, T 0.1). A guard
 -- on the ramp's SIZE alone passes on a copied Tiny ramp; this one does not.
 #guard convnextSImagenetVerified.dropKeeps[0]! == 1.0
@@ -137,9 +137,9 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard (convnextSImagenetVerified.dropKeeps[35]! - convnextVerified.dropKeeps[17]!).abs > 1e-3
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
---  ▶ ConvNeXt-**B** — and here the seam is that NOTHING about the ramp moves
+--  ConvNeXt-**B** — and here the seam is that NOTHING about the ramp moves
 --
---  ⚠⚠ B shares S's depth table exactly, so the site COUNT, the indices and the ramp SHAPE are
+--  B shares S's depth table exactly, so the site COUNT, the indices and the ramp SHAPE are
 --  identical. The only thing that differs is the RATE (0.5 vs 0.4), which no gate can derive. So
 --  the two guards below are: "B's sites really are S's sites" (checked through the renderer's own
 --  `cnxBlockIdx` at B's record) and "B's rate really is not S's" — and it is the second that a
@@ -153,14 +153,14 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard convnextBImagenetVerified.dropKeeps[0]! == 1.0
 #guard (convnextBImagenetVerified.dropKeeps[35]! - 0.5).abs < 1e-9
 
--- The renderer's parameter list == the spec's layer list, at B's widths. ⚠ This is the guard that
+-- The renderer's parameter list == the spec's layer list, at B's widths. This is the guard that
 -- would fire if the spec's hand-written layer list and `cnxBase.dims` disagreed — and unlike S's
 -- peer it is load-bearing, because B is where those widths are written out by hand in two places.
 #guard (cnxAllParams 1000 cnxBase).map (fun (_, ds) => ds.toArray) ==
          (convnextBImagenetVerified.toSpecs.map (fun (d, _) => d)).toList
 
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
---  ▶ ViT-Tiny — a THIRD shape of the same seam, and the trap moves again
+--  ViT-Tiny — a THIRD shape of the same seam, and the trap moves again
 --
 --  EfficientNet's hazard is the SITE ORDINAL (9 sites over 16 blocks). ConvNeXt's is the STAGE
 --  (one counter across four of them). ViT's is that **sites ≠ ramp index in the other direction**:
@@ -172,19 +172,19 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard vitVerified.dropKeeps.size == vitDropSites
 #guard vitDropSites == 2 * vitDropTotal
 
--- ⭐ Every site's keep is the reference's ramp AT ITS BLOCK INDEX, read through the renderer's own
+-- Every site's keep is the reference's ramp AT ITS BLOCK INDEX, read through the renderer's own
 -- `vitRampOf` rather than restated.
 #guard ((Array.range vitDropSites).zip vitVerified.dropKeeps).all
          (fun (sIdx, k) => ((k - refKeep 0.1 (vitRampOf sIdx) vitDropTotal).abs) < 1e-9)
 
--- ⚠ THE PAIRING, which is where the ViT-specific defect would show: the two branches of a block
+-- THE PAIRING, which is where the ViT-specific defect would show: the two branches of a block
 -- share one keep…
 #guard (List.range vitDropTotal).all (fun i =>
          vitVerified.dropKeeps[vitSiteIdx i 0]! == vitVerified.dropKeeps[vitSiteIdx i 1]!)
 -- …and consecutive BLOCKS do not, or the check above is vacuous.
 #guard (List.range (vitDropTotal - 1)).all (fun i =>
          vitVerified.dropKeeps[vitSiteIdx i 0]! != vitVerified.dropKeeps[vitSiteIdx (i+1) 0]!)
--- ⚠ And the site-ordinal misreading must NOT agree with it: at site 2 the correct keep is block 1's,
+-- And the site-ordinal misreading must NOT agree with it: at site 2 the correct keep is block 1's,
 -- not site 2's.
 #guard (vitVerified.dropKeeps[2]! - refKeep 0.1 2 vitDropTotal).abs > 1e-3
 

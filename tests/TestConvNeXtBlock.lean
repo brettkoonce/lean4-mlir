@@ -1,16 +1,16 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Types
 
-/-! # ch9 N2+N4 — one ConvNeXt block (fwd + backward) render + iree-compile
+/-! # One ConvNeXt block (fwd + backward) render + iree-compile
 
-Validates the new ConvNeXt-specific StableHLO fragments on a tiny single block before
-the full ConvNeXt-T renderer. One block (stride-1, identity skip):
+Validates the ConvNeXt-specific StableHLO fragments on a tiny single block. One block (stride-1,
+identity skip):
 
   x → depthwise 7×7 (dim c) → LN(global scalar γ/β) → 1×1 expand c→e → GELU
     → 1×1 project e→c → layerScale (per-channel γ:[c]) → + x
 
 Every fragment is the StableHLO a VERIFIED per-op emitter produces:
-- GELU (`geluF`/`geluBack`, N1, tanh-approx + closed-form derivative),
+- GELU (`geluF`/`geluBack`, tanh-approx + closed-form derivative),
 - LN = per-example GLOBAL scalar-γ/β batch-norm (`bnF`/`bnBack` flat, = `layerNormForward`),
 - layerScale (per-channel diagonal multiply, an instance of the proven `layerScale`),
 - depthwise k×k (`depthwiseF`/`depthwiseBack`, kernel-general), 1×1 conv, residual `addV`.

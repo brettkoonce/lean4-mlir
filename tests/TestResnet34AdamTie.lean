@@ -3,17 +3,14 @@ import LeanMlir.Verified.Train
 
 /-! # `@resnet34_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2b step 5. The committed
-`verified_mlir/resnet34_adam_train_step.mlir` **now** renders from
+The committed `verified_mlir/resnet34_adam_train_step.mlir` renders from
 `LeanMlir/Proofs/Codegen/ResNet34RenderB.lean` as `pretty(provenGraph)` at the batched index
-`N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops. It used to come from
-the hand-written string emitter in `TestResnet34Train.lean` (retired 2026-09-19); this harness is what licensed
-that swap, and the hand-written AdamW render is now retired (that emitter renders only the
-data-parallel variant, to `…_dp.mlir`).
+`N := B`, with the un-fused `*GradB` gradients feeding the proven AdamW ops. This harness ties it
+against the hand-written string emitter's render of the same step.
 
-**Post-swap, the no-argument form compares the artifact against itself** — an A-vs-A run, which is
+**The no-argument form compares the artifact against itself** — an A-vs-A run, which is
 still worth having (it re-establishes the determinism floor the gate depends on) but is not a
-migration check. To re-run the real tie, recover the retired render and pass it explicitly:
+migration check. To re-run the real tie, recover the hand-written render and pass it explicitly:
 
     git show b856deb:verified_mlir/resnet34_adam_train_step.mlir > /tmp/retired.mlir
     .lake/build/bin/resnet34-adam-tie /tmp/retired.mlir
@@ -93,7 +90,7 @@ migration check. Pass the retired render as the first argument for that."
     IO.eprintln s!"SIZE MISMATCH: {oa.size} vs {ob.size} bytes"; IO.Process.exit 1
   let n := oa.size / 4
   let nP := net.nParams
-  -- Report per REGION, not just globally: θ' is scale-free under Adam (§3 — a near-zero-gradient
+  -- Report per REGION, not just globally: θ' is scale-free under Adam (a near-zero-gradient
   -- coordinate flips sign on a 1-ULP difference and moves a full ±lr), so a θ' mismatch and an
   -- m' mismatch mean very different things and must not be averaged into one number.
   let region (i : Nat) : String :=
@@ -124,7 +121,7 @@ migration check. Pass the retired render as the first argument for that."
   -- `bnstat` depends ONLY on the forward pass (batch μ/var of each BN input), so it separates a
   -- forward disagreement from a backward one in a single run. `m` is `(1−β₁)·g` off a shared `m`,
   -- so it is the gradient. Reported as max|a−b| and as max|a−b| / max|a| — the NORM-relative
-  -- error, because a per-coordinate ratio on a near-zero gradient entry is meaningless (§3).
+  -- error, because a per-coordinate ratio on a near-zero gradient entry is meaningless.
   let regions : List (String × Nat × Nat) :=
     [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP),
      ("loss/bc", 3*nP, 3*nP+3), ("bnstat", 3*nP+3, n)]
@@ -184,7 +181,7 @@ per-coord max rel = {rr}, bit-exact {exact}/{hi-lo}"
     IO.eprintln s!"DEGENERATE: only {moved}/{n} outputs are non-zero — the tie proves little"
     IO.Process.exit 1
   -- ── the GATE ──────────────────────────────────────────────────────────────────────────────
-  -- NOT a per-coordinate relative gate. §3 of the handoff establishes that R34's gradient does not
+  -- NOT a per-coordinate relative gate. R34's gradient does not
   -- reproduce to better than ~6e-3 per-coordinate even XLA-vs-XLA under a sub-ULP nudge, so a 1e-4
   -- per-coordinate gate fails a correct render by 60× — it is dominated by near-zero gradient
   -- entries where a sub-ULP absolute difference is a huge ratio. Two gates that do mean something:

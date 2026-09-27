@@ -10,7 +10,7 @@ swapped for the proven AdamW triple (`Proofs.StableHLO.adamW_triple_faithful`) a
 `VerifiedNet.trainAdamSched`:
 `[θ|m|v]` (38 params: 22 conv/dense + 16 BN γ/β) packed + runtime `lr`/`bc₁`/`bc₂`. Trains
 on `verified_mlir/cifar8_bn_adam_train_step.mlir`, rendered as `pretty(provenGraph)` by
-`LeanMlir/Proofs/Codegen/CnnRender.lean` (§2i — it was `tests/`-written until 2026-07-30).
+`LeanMlir/Proofs/Codegen/CnnRender.lean`.
 
 Per-channel BN is per-example ⇒ train=eval (no running stats), so `bnChannels` stays empty
 and the γ/β are Adam-updated like any other param; eval is plain `@cifar8_bn_fwd`. AdamW

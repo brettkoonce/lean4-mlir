@@ -24,7 +24,7 @@ The AFNO mixer is the one primitive here our `NetSpec` lacks (the same
 spectral convolution FNO's entry counts in prose). The spec below shows the
 backbone with the `.transformerEncoder` primitive standing in for the AFNO
 block — same patch embedding, dimension, depth and MLP, with attention where
-the Fourier mixer goes. ⚠ That stand-in OVERCOUNTS: an attention block at
+the Fourier mixer goes. That stand-in OVERCOUNTS: an attention block at
 768 spends 4 × 768² ≈ 2.36 M parameters on Q, K, V and the output projection,
 where AFNO's block-diagonal weights (8 blocks of 96 × 96, two layers, complex)
 are ≈ 0.30 M. The MLPs, which are ¾ of a block either way, are the same.

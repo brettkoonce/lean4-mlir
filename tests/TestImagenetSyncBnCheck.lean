@@ -18,7 +18,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check mnv4            # adamdp64bf16
     LEAN_MLIR_MEM_FRACTION=0.97 PJRT_REPLICAS=4 … <net> f32               # the f32 peer
 
-⚠ The raised arena is for f32 only: in bf16 it crowded out the host-transfer staging on
+The raised arena is for f32 only: in bf16 it crowds out the host-transfer staging on
 `resnet50bce` (`CUDA_ERROR_OUT_OF_MEMORY` on a d2h, not a compile) where the default runs clean.
 
 **ResNet-50 is gated at 4×32 against 1×128**, not at its committed 4×64: XLA's peak for the 1×256
@@ -42,11 +42,11 @@ drop-path / dropout masks; `rmsdp64bf16` is the same net, optimizer and precisio
 the scope B0's DP twin is stated at.
 
 **The shards are shifted** (`shardShift := 0.5`): at 224² the statistics of 64 iid images sit
-within ~1e-3 of the global ones, so unshifted shards gave R34 a CONTROL of 2.7e-3 against a TEST
-of 1.0e-3, and Chan's `(μ_r − μ)²` term was too small to see. Shifted, CONTROL is 0.72 / 0.074 /
+within ~1e-3 of the global ones, so unshifted shards give R34 a CONTROL of 2.7e-3 against a TEST
+of 1.0e-3, and Chan's `(μ_r − μ)²` term is too small to see. Shifted, CONTROL is 0.72 / 0.074 /
 0.40 and the first BN layer is split-exact in both precisions.
 
-**bf16 bounds, measured 2026-09-21.** The sharp criteria are precision-independent and hold at
+**bf16 bounds, measured.** The sharp criteria are precision-independent and hold at
 1e-5 in bf16: the first BN layer's split error and the DUPLICATED statistics are 0 on all three
 nets. What bf16 moves is every comparison between two compiled programs. FORMULATION shows the
 floor with no collective in either graph: one function, one shape, gradient columns 1.3e-2 /
@@ -63,7 +63,7 @@ convert, which the random-init backward then amplifies. Per net, bf16 vs f32:
     R50bce 1.08–1.22e-2 / 2.2e-3    0 / 0               1.69–1.72e-2 / 1.0e-3
     MNv4   6.9e-3–1.16e-2 / 1.2–1.3e-3  0 / 0           1.83–1.85e-2 / 1.2e-3
 
-**The bounds, and why the split one is per net (approved 2026-09-21).** Two kinds:
+**The bounds, and why the split one is per net.** Two kinds:
 
 * The SHARP criteria are the same for every net in every precision: the first BN layer's split
   error ≤ 1e-5, the DUPLICATED statistics ≤ 1e-5, the FORMULATION statistics ≤ 1e-5 (B0 bf16

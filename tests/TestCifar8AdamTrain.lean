@@ -29,10 +29,10 @@ Run (renders every step at both widths, then smoke-compiles the committed artifa
 open Proofs Proofs.StableHLO
 
 -- ── concrete cifar8 dims (match CnnRender.lean's faithful render: [16,16,32,32], 32→2) ──
--- Data-parallel replica count for the Adam renders. 1 = single device and the
--- emitted text is byte-identical to before; N > 1 inserts a cross-replica
+-- Data-parallel replica count for the Adam renders. 1 = single device, with no
+-- collective emitted; N > 1 inserts a cross-replica
 -- all_reduce(add)/N on every parameter gradient before the AdamW update
--- (ViTRender.emitAdamVDP, planning/archive/xla_pjrt_ladder.md §10-11).
+-- (ViTRender.emitAdamVDP).
 private def REPLICAS : Nat := 1
 
 private def B : Nat := 128
@@ -526,12 +526,12 @@ private def cifar8BnSgdTrainStep (d1 : Nat := D1) (fname := "cifar8_bn_sgd_train
 def main : IO Unit := do
   IO.FS.createDirAll "verified_mlir"
   IO.FS.createDirAll ".lake/build"
-  -- ✅ RETIRED 2026-07-29/30 (§2i): none of these renders is WRITTEN. Each committed artifact's
+  -- None of these renders is WRITTEN. Each committed artifact's
   -- only writer is `Proofs/Codegen/CnnRender.lean` as pretty(provenGraph) (the `cifar8w` fwds:
-  -- `StableHLO.cifar8{,Bn}FwdModuleV` at `d1 := 512`); a second writer here would re-open the §2a
-  -- last-writer-wins race (planning/archive/xla_pjrt_handoff.md §2a-ter). The renders stay as the
+  -- `StableHLO.cifar8{,Bn}FwdModuleV` at `d1 := 512`); a second writer here would open a
+  -- last-writer-wins race. The renders stay as the
   -- references the ties were measured against — `cifar8-adam-tie` / `cifar8-opt-tie` / `fwd-tie`:
-  --   cifar8  adam        all 158577 returned floats bit-exact (the proven optimizer is now
+  --   cifar8  adam        all 158577 returned floats bit-exact (the proven optimizer is
   --                       `adamWParamF`/`adamMNextF`/`adamVNextF`, not `ViTRender.emitAdamV`)
   --           mom, sgd    recovered gradient bit-exact on all 52,858 coordinates
   --           bn_adam,    norm-rel 1.0e-6, spread 8/38 params against a reorder control that
@@ -544,7 +544,7 @@ def main : IO Unit := do
   --           bn_mom
   --           bn_sgd      3.4e-5 vs the control's 3.3e-5, spread 12/38 ⊂ 14
   --           fwd, bn_fwd logits bit-exact 1280/1280
-  -- ⚠ bn_sgd's larger number is not a looser agreement: its gradient is recovered as `(θ − θ')/lr`
+  -- bn_sgd's larger number is not a looser agreement: its gradient is recovered as `(θ − θ')/lr`
   -- at lr 1e-3, which amplifies the output-level difference 1000×. The raw θ' slots differ by max
   -- 3.0e-8 on θ' ≈ 1.0 — ~4 ULPs of binary32, the same disagreement adam sees through a 10× lens.
   let steps := ["adam", "bn_adam", "mom", "bn_mom", "sgd", "bn_sgd"]
@@ -567,14 +567,13 @@ def main : IO Unit := do
   -- `cifar8-bn-grid` driver trains each via `trainAdamSched "adam"` (eval through @<slug>_fwd,
   -- per-channel BN ⇒ train=eval).
   --
-  -- ⚠⚠ **Written to `.lake/build/`, NOT `verified_mlir/`, since 2026-08-03.** These are BUILD
+  -- **Written to `.lake/build/`, NOT `verified_mlir/`.** These are BUILD
   -- PRODUCTS: `cifar8BnG d` renders from argv and trains on the result, so every one is
-  -- regenerated on the next invocation. 20 of them had been checked in — never loaded by anything,
-  -- and invisible to the writer audit, which greps for a LITERAL path while this loop interpolates
-  -- the slug. `verified_mlir/` is now pinned to exactly the certified corpus, which it could not be
-  -- while transients landed there.
+  -- regenerated on the next invocation. The writer audit greps for a LITERAL path while this loop
+  -- interpolates the slug, so it cannot see them. `verified_mlir/` is pinned to exactly the
+  -- certified corpus, which it could not be if transients landed there.
   --
-  -- ⚠ **This IS a second spelling of `cifar8BnG.mlirDir`, and it is deliberate.** This file imports
+  -- **This IS a second spelling of `cifar8BnG.mlirDir`, and it is deliberate.** This file imports
   -- only the renderers (`StableHLO`, `ViTRender`, `Types`); pulling in `LeanMlir.Verified.NetsCore` —
   -- and with it `Verified.Spec` — to read one string would be a
   -- heavy dependency for a render test. The two spellings are pinned not by an import but by

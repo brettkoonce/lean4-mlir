@@ -32,18 +32,18 @@ namespace ResNet34Layout
     `@resnet34_<variant>_train_step` and `@resnet34_fwd` signatures, rendered by
     Proofs/Codegen/ResNet34RenderB.lean. `initKind`: 0 = random weight (`mkParam`: conv He
     fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias). -/
--- §2l step B (2026-07-30): the conv BIASES are gone — `{W, γ, β}` per conv, not `{W, b, γ, β}`.
--- Every conv here is BN-followed and BN removes the bias, so it was 8,512 parameters that could
--- not affect the output; He et al.'s `.convBn` has none, and carrying them put this layout
--- 8,512 params away from the ImageNet reference it is supposed to be paired with (§2k).
--- MEASURED before the change, not argued: zeroing all 8,512 in the TRAINED net moves the logits
--- by rel 1e-6 (the same ablation on BN β moves them by 0.79), and the bias-free render ties the
--- biased one with every forward-only output BIT-EXACT. `tests/TestConvBiasZero.lean`.
+-- No conv BIASES — `{W, γ, β}` per conv, not `{W, b, γ, β}`. Every conv here is BN-followed and BN
+-- removes the bias, so they would be 8,512 parameters that cannot affect the output; He et al.'s
+-- `.convBn` has none, and carrying them would put this layout 8,512 params away from the ImageNet
+-- reference it is paired with. MEASURED, not argued: zeroing all 8,512 in a TRAINED biased net
+-- moves the logits by rel 1e-6 (the same ablation on BN β moves them by 0.79), and the bias-free
+-- render ties the biased one with every forward-only output BIT-EXACT.
+-- `tests/TestConvBiasZero.lean`.
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
-    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- §2l step A: option-B 1×1 projection
+    (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- option-B 1×1 projection
 /-- `(dims, initKind)` for every param, in func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) := #[(#[64,3,7,7],0),(#[64],1),(#[64],2)]  -- 7×7-s2 stem
@@ -146,7 +146,7 @@ namespace ConvNeXtLayout
 private def depths : Array Nat := #[3, 3, 9, 3]
 private def dims   : Array Nat := #[96, 192, 384, 768]
 private def blockSpec (c e : Nat) : Array (Array Nat × Nat) :=
-  #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),   -- depthwise W,b ; LN γ,β (PER-CHANNEL, §2m)
+  #[(#[c,1,7,7],0),(#[c],2),(#[c],1),(#[c],2),   -- depthwise W,b ; LN γ,β (PER-CHANNEL)
     (#[e,c,1,1],0),(#[e],2),                      -- expand W,b
     (#[c,e,1,1],0),(#[c],2),                      -- project W,b
     (#[c],3)]                                     -- layerScale γ (per-channel), kind 3 = 1e-6
@@ -167,7 +167,7 @@ def specs : Array (Array Nat × Nat) := Id.run do
     let e := 4 * c
     for _ in [0:depths[si]!] do a := a ++ blockSpec c e
     if si < 3 then a := a ++ downSpec c dims[si+1]!
-  -- head: LN γ,β then dense W,b. ⚠ The LN comes FIRST — that is its order in the layer list and
+  -- head: LN γ,β then dense W,b. The LN comes FIRST — that is its order in the layer list and
   -- in `@convnext_train_step`'s signature, and the blob is read positionally.
   a := a ++ #[(#[768],1),(#[768],2),(#[768,10],0),(#[10],2)]
   return a

@@ -51,7 +51,7 @@ open scoped BigOperators
 open Finset Filter Topology
 open Proofs BatchSeal StableHLO Proofs.BatchSeal
 
--- ⭐ **The clause count, read off `mnv4Blocks` rather than asserted.** One relu per expand conv
+-- **The clause count, read off `mnv4Blocks` rather than asserted.** One relu per expand conv
 -- and per present post-DW in each of the 21 UIB rows, plus the stem's, the fused stage's and the
 -- head's two; the pre-DW (timm's `dw_start`) and the project convs are BN only.
 -- `sealUib_ok` / `sealUibStrided_ok` discharge all of them in two lemmas.
@@ -60,9 +60,9 @@ open Proofs BatchSeal StableHLO Proofs.BatchSeal
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights
---   ⭐ One `γ = 1`, one `ε = 1`, and `β = 160` at every BatchNorm except the projections'
+--   One `γ = 1`, one `ε = 1`, and `β = 160` at every BatchNorm except the projections'
 --   (`β = 0`, no relu follows them), so a zeroed body is the constant `0` and its block is the
---   exact identity. ⭐⭐ ONE record, `sealP`, with the four kernels as arguments: the carrier's
+--   exact identity. ONE record, `sealP`, with the four kernels as arguments: the carrier's
 --   rows pass centre taps, the eighteen skipped rows pass zeros, and every lemma below is proved
 --   once over `sealP`.
 -- ════════════════════════════════════════════════════════════════
@@ -172,7 +172,7 @@ noncomputable def sealW (nCls : Nat) : Mnv4BWeights nCls where
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. The margin — weight-only, at every input
---   ⭐⭐ `bnBatchLA_pos` puts a BatchNorm output above `β − |γ|√(N·h·w) > 0` at EVERY input, so
+--   `bnBatchLA_pos` puts a BatchNorm output above `β − |γ|√(N·h·w) > 0` at EVERY input, so
 --   every relu in this net is off its kink without the activation ever being read.
 -- ════════════════════════════════════════════════════════════════
 abbrev Mg (N h w : Nat) : Prop := ((N * (h * w) : ℕ) : ℝ) < 25600
@@ -276,7 +276,7 @@ private theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0) (
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § 5. The clause bundle — ⭐⭐ weight-only, and proved GENERICALLY IN THE ROW
+-- § 5. The clause bundle — weight-only, and proved GENERICALLY IN THE ROW
 -- ════════════════════════════════════════════════════════════════
 /-- **Every clause of a stride-1 UIB body, at every input.** The pre-DW slot contributes `True`
     either way (`id'` or the BN-only depthwise); the expand's and the post-DW's relus sit on
@@ -484,7 +484,7 @@ private theorem cls_diff {c nCls : Nat} (c₀ : Fin c) (hc₀ : c₀.val = 0) (j
 
 -- ════════════════════════════════════════════════════════════════
 -- § 9. The seventeen activations on the carrier's path
---   ⚠ Each is written in terms of the PREVIOUS one, never in terms of `mnv4Pre_k`: the continuity
+--   Each is written in terms of the PREVIOUS one, never in terms of `mnv4Pre_k`: the continuity
 --   proof then unfolds straight back to `sealX`, and `pc0`–`pc6` say which prefix each one IS.
 -- ════════════════════════════════════════════════════════════════
 
@@ -601,7 +601,7 @@ noncomputable def Ah2 (t : ℝ) : Vec (2 * (1280 * 1 * 1)) :=
 
 -- ════════════════════════════════════════════════════════════════
 -- § 10. The carrier, stage by stage
---   ⭐ A centre-tap conv collapses `δ` to `s · δ 0` at every output channel; a centre-tap
+--   A centre-tap conv collapses `δ` to `s · δ 0` at every output channel; a centre-tap
 --   DEPTHWISE cannot broadcast, so it scales `δ` channel by channel. Only `δ 0` is ever read.
 -- ════════════════════════════════════════════════════════════════
 /-- one carrier BatchNorm's whole contribution: `γ · istd` at `γ = 1`. -/
@@ -737,7 +737,7 @@ private theorem edh2 (t : ℝ) : EDiff (dh2 t) (Ah2 t) :=
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. `Rr` — the seventeen carrier BatchNorm factors
---   ⚠ No BatchNorm VARIANCE derivative is ever taken: `Rr` enters only as a continuous factor.
+--   No BatchNorm VARIANCE derivative is ever taken: `Rr` enters only as a continuous factor.
 -- ════════════════════════════════════════════════════════════════
 noncomputable def Rr (t : ℝ) : ℝ :=
   rf (2 * (112 * 112)) (bnRowLA 2 32 112 112 (Zs t) 0) *
@@ -760,7 +760,7 @@ noncomputable def Rr (t : ℝ) : ℝ :=
 
 theorem Rr_pos (t : ℝ) : 0 < Rr t := by
   unfold Rr
-  -- ⚠ one explicit factor per carrier BatchNorm, not `repeat' apply mul_pos`: `rf` would be
+  -- one explicit factor per carrier BatchNorm, not `repeat' apply mul_pos`: `rf` would be
   -- split inside and leave goals `rf_pos` cannot close.
   exact (mul_pos (rf_pos _ _)
     (mul_pos (rf_pos _ _)
@@ -796,9 +796,9 @@ theorem Rr_continuous : Continuous Rr := by
 
 -- ════════════════════════════════════════════════════════════════
 -- § 12. The collapsed trunk — which activation each prefix IS
---   ⭐ The eighteen skipped rows are the EXACT identity (`sealZBody_eq` + `resid_id`): with the
+--   The eighteen skipped rows are the EXACT identity (`sealZBody_eq` + `resid_id`): with the
 --   project BatchNorm's `β = 0` a zeroed body is the constant `0`.
---   ⚠ Each step is restated at `(sealW nCls).b_k` before rewriting — `rw` does not see through a
+--   Each step is restated at `(sealW nCls).b_k` before rewriting — `rw` does not see through a
 --   structure projection, and `sealZ mnv4Row_k` is only DEFEQ to it.
 -- ════════════════════════════════════════════════════════════════
 /-- the stem's relu is the identity here, so `mnv4Pre0` IS the stem BatchNorm. -/

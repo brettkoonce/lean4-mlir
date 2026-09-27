@@ -3,11 +3,10 @@ import LeanMlir.Verified.Train
 
 /-! # `@convnext_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2f, step 3. `Proofs/Codegen/ConvNeXtRender.lean`'s
-`convNextAdamTrainStepFaithful` renders the same train step the hand-written emitter in
-`tests/TestConvNeXtTrain.lean` does — the one `convnext-verified-adam` trains on. This harness is
-what licenses swapping them; run it BEFORE retiring the hand-written emitter, because afterwards the
-comparison no longer exists.
+`Proofs/Codegen/ConvNeXtRender.lean`'s `convNextAdamTrainStepFaithful` renders the same train step
+the hand-written emitter in `tests/TestConvNeXtTrain.lean` does — the one `convnext-verified-adam`
+trains on. This harness is what licenses swapping them; run it BEFORE retiring the hand-written
+emitter, because afterwards the comparison no longer exists.
 
 The interface is positionally identical (**545 in / 543 out**, and here even the parameter *names*
 agree), so both take the same `[θ|m|v | lr,bc1,bc2]` blob `trainAdamSched` builds.
@@ -22,10 +21,10 @@ depends on the forward alone except `%loss`. A forward disagreement and a backwa
 both land in `m` and cannot be separated, exactly as in `vit-adam-tie`. Consequences:
 
 * **`%loss` is load-bearing, not a footnote.** It is report-only, on no gradient path, and covered
-  by no theorem — the precise configuration in which §2b shipped plain CE against a smoothed-CE
-  cotangent. With no BN statistics to pin the forward, it is the only direct read of it, so the
-  harness **gates** it.
-* the gradient gate is norm-relative, never per-coordinate (handoff §3).
+  by no theorem — the precise configuration in which a plain-CE loss can sit unnoticed against a
+  smoothed-CE cotangent. With no BN statistics to pin the forward, it is the only direct read of it,
+  so the harness **gates** it.
+* the gradient gate is norm-relative, never per-coordinate.
 
     lake build convnext-adam-tie
     .lake/build/bin/convnext-adam-tie [refRender.mlir] [candRender.mlir]
@@ -84,8 +83,8 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
   -- here sums over the batch, so that is semantics-preserving as real arithmetic — the multiset of
   -- terms is identical — but it changes the ACCUMULATION ORDER. Running A against A-reversed is
   -- therefore a control that produces the same CLASS of floating-point difference this tie sees,
-  -- measured where correctness is not in question (the §2d.1 method: a control that shows no
-  -- difference calibrates nothing, and an absolute bound with no control is an assertion).
+  -- measured where correctness is not in question (a control that shows no difference calibrates
+  -- nothing, and an absolute bound with no control is an assertion).
   let mut xrParts : Array ByteArray := #[]
   let mut yrParts : Array ByteArray := #[]
   for i in [0:bs] do
@@ -97,8 +96,7 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
 
   -- A tie must NEVER reuse a cached binary. `compileVmfb` keys on **mtime**, not on the source, so
   -- re-running with a different candidate under the same tag silently reuses the FIRST candidate's
-  -- `.vmfb` and reports a perfect match. That is not hypothetical — it happened while building the
-  -- EfficientNet controls (handoff §4). Delete before compiling.
+  -- `.vmfb` and reports a perfect match. Delete before compiling.
   let runOne (path tag : String) (x y : ByteArray) : IO ByteArray := do
     let vmfb := s!".lake/build/convnext_adam_tie_{tag}.vmfb"
     let target := (← IO.getEnv "IREE_BACKEND").getD "cuda"
@@ -125,7 +123,7 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
   -- answer — but it changes the accumulation order, which is the same class of floating-point
   -- difference an independently-structured emitter produces. Without it an absolute gradient bound
   -- is an assertion: ConvNeXt's layer-scale γ gradient is a heavily cancelling reduce and does NOT
-  -- reproduce to 1e-4 even against itself. §2d.1 learned this the expensive way on R34's bs256.
+  -- reproduce to 1e-4 even against itself.
   IO.println "  running A on the REVERSED batch (conditioning control)…"; (← IO.getStdout).flush
   let oc ← runOne pathA "c" xR yR
   IO.println "  running B…"; (← IO.getStdout).flush
@@ -171,7 +169,7 @@ xseed {xseed}{if reverseB then ", B batch REVERSED (control)" else ""}, backend 
 {ctlBad}/{net.paramShapes.size} params disturbed"
 
   -- `m' = β₁·m + (1−β₁)·g` off a shared `m`, so the `m` region IS the gradient. θ' is scale-free
-  -- under Adam (§3), so it is reported but never gated.
+  -- under Adam, so it is reported but never gated.
   let regions : List (String × Nat × Nat) :=
     [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP), ("loss/bc", 3*nP, n)]
   let mut nonFinite : Nat := 0
@@ -223,13 +221,12 @@ norm-rel = {nr} ({nr * 1e9} e-9), bit-exact {exact}/{hi-lo}"
   IO.println s!"  params whose gradient disagrees (>1e-4 norm-rel): {bad}/{net.paramShapes.size}\
    (worst {worst} at {worstR})"
 
-  -- Conditioning probe on the worst parameter. A reduce whose SUM is small against the MAGNITUDE
-  -- of its terms is catastrophically cancelling, and two graphs that tile it differently will then
-  -- disagree at a large RELATIVE error while both being correct — §3's standing lesson, and the
-  -- reason the bs256 gate (§2d.1) needed a control rather than an absolute bound. `Σ|g|` vs
-  -- `|Σ g|` is not available here, but the ratio of the two sides' magnitudes and the sign pattern
-  -- separate "ill-conditioned sum" from "wrong formula": a wrong formula moves the magnitude, a
-  -- reordering does not.
+  -- Conditioning probe on the worst parameter. A reduce whose SUM is small against the MAGNITUDE of
+  -- its terms is catastrophically cancelling, and two graphs that tile it differently will then
+  -- disagree at a large RELATIVE error while both being correct — which is why the gradient gate
+  -- needs a control rather than an absolute bound. `Σ|g|` vs `|Σ g|` is not available here, but the
+  -- ratio of the two sides' magnitudes and the sign pattern separate "ill-conditioned sum" from
+  -- "wrong formula": a wrong formula moves the magnitude, a reordering does not.
   if worstIdxOpt.isSome then
     let (lo, cnt) := worstIdxOpt.get!
     let mut sa : Float := 0.0
@@ -255,15 +252,15 @@ RELATIVE error; the magnitudes Σ|a| agreeing is what says the formula is the sa
     IO.eprintln s!"DEGENERATE: only {moved}/{n} outputs are non-zero — the tie proves little"
     IO.Process.exit 1
   -- ── the gate. No `bnstat` region exists (no BN), so `%loss` is the only direct read of the
-  --    forward, and it is exactly what §2b got wrong once. Gated, not merely reported.
+  --    forward. Gated, not merely reported.
   if lossRel > 1e-4 then
     IO.eprintln s!"TIE FAILED: the loss/bc region differs at norm-rel {lossRel} > 1e-4. With no BN \
 statistics in the output, %loss is the only direct read of the forward — a mismatch here against \
 matching gradients is the signature of a forward or cotangent bug (§2b shipped exactly that)."
     IO.Process.exit 1
-  -- The gradient gate is CONTROL-RELATIVE, never absolute — §2d.1's rule. `4×` is that section's
-  -- factor, and the `1e-4` floor keeps the gate tight on a well-conditioned net where the control
-  -- comes back near zero (there, this is exactly the old absolute bound).
+  -- The gradient gate is CONTROL-RELATIVE, never absolute. `4×` is the control factor, and the
+  -- `1e-4` floor keeps the gate tight on a well-conditioned net where the control comes back near
+  -- zero.
   let gate := max 1e-4 (4.0 * ctlRel)
   if gradNormRel > gate then
     IO.eprintln s!"TIE FAILED: gradient (m) norm-relative diff {gradNormRel} > {gate} \

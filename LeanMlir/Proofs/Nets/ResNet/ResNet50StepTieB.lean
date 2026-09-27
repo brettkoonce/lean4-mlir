@@ -234,7 +234,7 @@ theorem r50ProjCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
 
 -- ════════════════════════════════════════════════════════════════
 -- § The strided projection bottleneck — stages 2/3/4 block 0
---   ⚠⚠ v1.5: conv₁/bn₁/relu₁ run at `2h × 2w`; only conv₂ and the skip are strided.
+--   v1.5: conv₁/bn₁/relu₁ run at `2h × 2w`; only conv₂ and the skip are strided.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Cotangent at the pre-relu sum. -/
@@ -471,10 +471,10 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net capstone
---   ⭐ The stem and head bundles are ResNet-34's, reused verbatim: `r34StemTiedB` is generic in
+--   The stem and head bundles are ResNet-34's, reused verbatim: `r34StemTiedB` is generic in
 --   `{ic oc}` and `r34HeadTiedB` in `{c nCls}`, and ResNet-50's stem and head ARE those functions
 --   at different widths (`ResNet50FullB.lean` builds the net from `r34StemB` and `r34HeadB`).
---   ⚠ `r34StemTiedB` carries a conv-BIAS conjunct that ResNet-50 never emits; it costs one
+--   `r34StemTiedB` carries a conv-BIAS conjunct that ResNet-50 never emits; it costs one
 --   delegation and is true at `bias = 0`, so the stem contributes 3 exercised slots of 4.
 -- ════════════════════════════════════════════════════════════════
 

@@ -8,7 +8,7 @@ with two edits: the name (so its checkpoints never collide with the VisDrone
 arm's) and an epoch override. It scored mAP 0.0000 on VisDrone: seventy 20-px
 objects per frame cannot share 196 cells. NEU-DET has 2.3 defects per crop, most
 of them larger than a cell, so the same head is expected to be a wash here, and
-that pair of numbers is what the section is about (planning/neu_det_fpn_demo.md).
+that pair of numbers is what the section is about.
 
 ```
 lake build yolov1-neudet448

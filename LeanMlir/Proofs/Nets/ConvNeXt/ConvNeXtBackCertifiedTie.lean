@@ -27,7 +27,7 @@ namespace Proofs
 
 
 -- ════════════════════════════════════════════════════════════════
--- § §B at ConvNeXt's REAL channel LayerNorm (§2n) — the LN op itself
+-- § The tie at ConvNeXt's REAL channel LayerNorm — the LN op itself
 -- ════════════════════════════════════════════════════════════════
 
 /-! `chanLNTensor3Back` (`ChannelLNBack.lean`) is not an abstract slot — it is a concrete

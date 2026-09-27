@@ -144,7 +144,7 @@ private theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) 
   | k + 1, ps, _v => ⟨trivial, vitTrunkV_ok ε hε k (fun i => ps i.succ) _⟩
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE STEM AND THE HEAD — so the fold runs IMAGE → LOGITS
+-- § THE STEM AND THE HEAD — so the fold runs IMAGE → LOGITS
 -- ════════════════════════════════════════════════════════════════
 
 /-! ViT's stem is an affine patchify conv and its head is GAP-free (a CLS slice + dense), so both
@@ -264,7 +264,7 @@ theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
             (Mat.flatten (Mat.unflatten
               (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps PE)))
             (classifierBackGraph N ((hm1+1) * d) nClasses Wcls e)))
-  -- ⚠ Both sides carry a `flatten ∘ unflatten` on the body output — the LHS's arrived from the
+  -- Both sides carry a `flatten ∘ unflatten` on the body output — the LHS's arrived from the
   -- `conv_lhs` round-trip above, the RHS's from `vitNetBackGraph`'s own `Mat.flatten bodyOut`.
   -- A bare `rw` cancels only the first and leaves the goal looking mismatched; cancel both.
   simp only [Mat.flatten_unflatten]

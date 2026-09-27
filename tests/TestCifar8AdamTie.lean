@@ -3,10 +3,10 @@ import LeanMlir.Verified.Train
 
 /-! # `@cifar8_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`planning/archive/xla_pjrt_handoff.md` §2a-ter. The artifact used to come from the hand-written emitter in
-`tests/TestCifar8AdamTrain.lean` (whose optimizer was `ViTRender.emitAdamV`); it now renders from
-`LeanMlir/Proofs/Codegen/CnnRender.lean` as `pretty(provenGraph)`, with the fused SGD tail replaced
-by un-fused param gradients feeding the proven AdamW ops.
+The hand-written emitter is `tests/TestCifar8AdamTrain.lean` (whose optimizer is
+`ViTRender.emitAdamV`); the artifact renders from `LeanMlir/Proofs/Codegen/CnnRender.lean` as
+`pretty(provenGraph)`, with the fused SGD tail replaced by un-fused param gradients feeding the
+proven AdamW ops.
 
 The signature is identical (71 inputs / 69 outputs, same names and types in order), so both take the
 same packed `[θ|m|v|lr|bc1|bc2]` buffer. One step, then compare every returned float.

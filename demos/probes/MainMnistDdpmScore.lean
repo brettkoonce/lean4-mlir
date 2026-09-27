@@ -2,15 +2,15 @@ import LeanMlir
 
 /-! # `mnist-ddpm-score` — the image DDPM's first real number
 
-    ⭐ **The 2-D demo's argument, moved onto images.** On a spiral the ground
-    truth is a second point cloud, so `planning/archive/diffusion_2d_demo.md` §4 can
+    **The 2-D demo's argument, moved onto images.** On a spiral the ground
+    truth is a second point cloud, so the 2-D demo can
     report cell recall and an energy distance instead of "does that look right
     to you". On MNIST the ground truth is a **classifier that already knows what
     a digit looks like** — and this repo has one whose math VJP is proven:
     Chapter 3's `cnnVerified` (`LeanMlir/Verified/NetsCore.lean`), 98.75 % at ten
     epochs, running from the committed `verified_mlir/cnn_fwd.mlir`.
 
-    Push the generated samples through it and every metric of §4 comes back:
+    Push the generated samples through it and every metric of the 2-D demo comes back:
 
     * **class coverage** — how many of the ten digits hold ≥ 1 % of the mass.
       The direct analogue of the 8-gaussians' 8/8 mode recall, and the single
@@ -19,16 +19,15 @@ import LeanMlir
       residual turned out to live once recall saturated.
     * **confidence** — mean max-softmax, with real MNIST as the control.
     * **energy distance in the classifier's 10-d output**, generated against
-      real, with a real-vs-real floor. Literally §4's statistic, computed in the
+      real, with a real-vs-real floor. Literally the 2-D demo's statistic, computed in the
       space the classifier maps images into.
 
-    ⚠ **No conditioning, and therefore no accuracy number.** This is the
+    **No conditioning, and therefore no accuracy number.** This is the
     unconditional half: it says whether the samples are digits and whether all
     ten show up, not whether a requested digit came back. That needs a class
     embedding in the denoiser and is a separate piece of work.
 
-    ⚠⚠ **Coverage and confidence are not enough on their own**, for exactly the
-    reason `planning/archive/diffusion_2d_demo.md` §5.7 records: a classifier scores
+    **Coverage and confidence are not enough on their own**: a classifier scores
     confidently on things that are not from the data distribution, so a model
     emitting one canonical seven would post perfect confidence. That is the
     checkerboard mistake — 8/8 recall and a passing energy distance while a
@@ -48,7 +47,7 @@ import LeanMlir
     ```
 -/
 
-/-- ⚠ The THIRD copy of this spec (`MainMnistDdpmTrain`, `MainMnistDdpmSample`
+/-- The THIRD copy of this spec (`MainMnistDdpmTrain`, `MainMnistDdpmSample`
     hold the other two). It is not shared because both of those are executables
     with their own `main`. The guard against drift is downstream and loud: the
     checkpoint is keyed by `spec.buildPrefix`, which is derived from `name`, and
@@ -72,15 +71,15 @@ def main (args : List String) : IO Unit := do
   let nums   := args.filterMap String.toNat?
   let nGen   := (nums[0]?).getD 1024
   let nSteps := (nums[1]?).getD 50
-  -- ⭐ The Score-SDE samplers, on the same weights, ported from the 2-D driver
+  -- The Score-SDE samplers, on the same weights, ported from the 2-D driver
   -- through the shared `Ddpm` schedule so the two cannot drift. The toy found
   -- the reverse SDE beating DDIM at every budget and saturating by NFE 50; this
   -- is where that either survives at image scale or does not.
-  -- ⚠ `nSteps` is the NFE BUDGET. Heun spends two evaluations per step.
+  -- `nSteps` is the NFE BUDGET. Heun spends two evaluations per step.
   let sampler := (args.find? fun a => Ddpm.samplerNfe.any (·.1 == a)).getD "ddim"
   let nfe := (Ddpm.samplerNfe.lookup sampler).getD 1
   let solverSteps := max 1 (nSteps / nfe)
-  -- ⭐ η as a PERCENT (the arg parser has only `toNat?`). η = 0 is deterministic
+  -- η as a PERCENT (the arg parser has only `toNat?`). η = 0 is deterministic
   -- DDIM; η = 1 is ANCESTRAL sampling, which is the stable discrete form of the
   -- reverse SDE. The `sde` arm above integrates that SDE with Euler-Maruyama and
   -- diverges below NFE 200; this is the arm that says whether that is a fact
@@ -120,14 +119,14 @@ def main (args : List String) : IO Unit := do
   let stride := T / nSteps
   let nBatch := (nGen + B - 1) / B
   IO.eprintln s!"sampling {nBatch * B} images, {nSteps} DDIM steps, batch {B}..."
-  -- ⚠ Uniform-in-t, which the toy measured as the SDE's best grid (log-ᾱ made it
+  -- Uniform-in-t, which the toy measured as the SDE's best grid (log-ᾱ made it
   -- 25× worse). The explicit ODE solvers want the opposite grid; that this
   -- driver offers only one is a limitation, and the reason `euler`/`heun` here
   -- are not a fair test of those methods.
   let tHi := (T - 1).toFloat / T.toFloat
   let tLo := 1.0 / T.toFloat
   let nAll := (B * nPix).toUSize
-  -- ⚠ QUANTIZED to the 1000 training indices, exactly as in the 2-D driver: the
+  -- QUANTIZED to the 1000 training indices, exactly as in the 2-D driver: the
   -- t-channel encoder takes an integer because the model was trained on one.
   let epsAt := fun (xv : ByteArray) (t : Float) => do
     let r := Float.round (t * T.toFloat)
@@ -141,11 +140,10 @@ def main (args : List String) : IO Unit := do
 => {solverSteps} solver steps"
   let mut acc : Array ByteArray := #[]
   for bi in [:nBatch] do
-    -- ⚠ One seed per BATCH, and they are consecutive. That is safe only because
-    -- `Ddpm.sampleNoise` was fixed on 2026-08-28 — seeded the old way, nearby
-    -- seeds shared a Box–Muller radius and every batch would have started from
-    -- the same shell. `tests/TestSampleNoiseSeeding.lean` is the gate; this is
-    -- the first caller written to depend on it.
+    -- One seed per BATCH, and they are consecutive. That is safe only because
+    -- `Ddpm.sampleNoise` does not let nearby seeds share a Box–Muller radius
+    -- (else every batch would start from the same shell).
+    -- `tests/TestSampleNoiseSeeding.lean` is the gate.
     let mut x ← Ddpm.sampleNoise (B * nPix).toUSize (0xc0ffee + bi).toUSize
     if sampler != "ddim" then
      for k in [:solverSteps] do
@@ -185,7 +183,7 @@ def main (args : List String) : IO Unit := do
       -- Generalized DDIM (Song et al. eq. 12): σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·
       -- √(1 - ᾱ_t/ᾱ_prev), b' = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t). η = 0
       -- collapses to the deterministic form; η = 1 is ancestral DDPM sampling.
-      -- ⚠ The outer root is clamped because η → 1 can drive 1 − ᾱ_prev − σ²
+      -- The outer root is clamped because η → 1 can drive 1 − ᾱ_prev − σ²
       -- marginally negative at the ends of the schedule.
       let sg := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
                     * Float.sqrt (1.0 - abT / abP)
@@ -198,7 +196,7 @@ def main (args : List String) : IO Unit := do
     acc := acc.push x
     if bi % 8 == 0 || bi + 1 == nBatch then
       IO.eprintln s!"  batch {bi+1}/{nBatch}"
-  -- ⚠ Invert the trainer's [-1, 1] centring. `cnnVerified` was trained on the
+  -- Invert the trainer's [-1, 1] centring. `cnnVerified` was trained on the
   -- loader's [0, 1] images, so classifying without this measures the model
   -- against a scale it never saw — and the pixel-moment row would be comparing
   -- two different units.
@@ -213,7 +211,7 @@ def main (args : List String) : IO Unit := do
     throw <| IO.userError s!"missing {cnnPath} — run: LEAN_MLIR_DUMP_PARAMS={cnnPath} \
 lake exe mnist-cnn-verified data"
   let raw ← IO.FS.readBinFile cnnPath
-  -- ⚠ `VerifiedNet.train`'s dump carries a trailing report-only loss float
+  -- `VerifiedNet.train`'s dump carries a trailing report-only loss float
   -- (`cnnVerified.lossSlot`), so take the parameter PREFIX rather than the file.
   unless F32.size raw ≥ net.nParams do
     throw <| IO.userError s!"{cnnPath} holds {F32.size raw} floats, need ≥ {net.nParams}"
@@ -239,7 +237,7 @@ lake exe mnist-cnn-verified data"
   IO.eprintln s!"classifying {nSamp} generated samples..."
   let logitsGen ← classify gen nSamp
 
-  -- ⭐ NEGATIVE CONTROL: unstructured pixels carrying MNIST's own first two
+  -- NEGATIVE CONTROL: unstructured pixels carrying MNIST's own first two
   -- moments (mean 0.1325, sd 0.3105). Without it, "169x the floor" says the
   -- samples are far from real without saying how far a model that learned
   -- NOTHING would be, and every reader has to guess the scale. The 2-D demo
