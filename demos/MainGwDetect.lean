@@ -4,15 +4,14 @@ import LeanMlir
 
     Two-channel (H1, L1) 64 × 128 constant-Q spectrograms of 2-s windows, half of
     them carrying an injected binary-black-hole chirp, from `scripts/datasets/preprocess_gw.py`. The
-    net is EfficientNet-B0 with a 2-channel stem (or the CIFAR-style CNN as the small
-    arm), a two-class head and the ordinary cross-entropy train step with int32
-    labels — the blackjack/2-D pattern of a host loop around the standard step, no
-    `DatasetKind`, no new codegen. The score is not the accuracy printed here but the
+    net is chapter 4's CIFAR-CNN8-wide-BN (`cifar8w`) with a 2-channel stem and a two-class head,
+    and the ordinary cross-entropy train step with int32 labels — the blackjack/2-D pattern of a
+    host loop around the standard step, no `DatasetKind`, no new codegen. The score is not the accuracy printed here but the
     logits this writes for both val sets, which `scripts/demos/gw_metrics.py` thresholds at a
     false-alarm rate and bins by injected SNR beside the matched filter's closed form.
 
     XLA backend only.
-    `lake exe gw-detect [arm=gauss|real] [epochs=20] [net=b0|cnn|cifarbn|cifarbn3|cifarbn4|cifar8w] [batch=64] [lr=0.001] [ls=0.0]
+    `lake exe gw-detect [arm=gauss|real] [epochs=20] [net=cifar8w|cnn|cifarbn|cifarbn3|cifarbn4] [batch=64] [lr=0.001] [ls=0.0]
                         [seed=1] [tag=<name>] [out=<dir>] [eval]`
     `arm` picks the TRAINING noise set; both val sets are always scored. `eval`
     reloads `<out>/<prefix>_params.bin` + `_bn_stats.bin` and only writes the logits.
@@ -25,27 +24,6 @@ def H : Nat := 64
 def W : Nat := 128
 def C : Nat := 2
 def nPix : Nat := C * H * W
-
-/-- EfficientNet-B0 as the ImageNet spec, with a `C`-channel stem, on a 64 × 128
-    input: the stem halves it to 32 × 64 and the four stride-2 stages end at 2 × 4. -/
-def b0 : NetSpec where
-  name := "gw efficientnet-b0"
-  imageH := H
-  imageW := W
-  convBnAct := .swish
-  layers := [
-    .convBn C 32 3 2 .same,
-    .mbConv  32  16 1 3 1 1 true,
-    .mbConv  16  24 6 3 2 2 true,
-    .mbConv  24  40 6 5 2 2 true,
-    .mbConv  40  80 6 3 2 3 true,
-    .mbConv  80 112 6 5 1 3 true,
-    .mbConv 112 192 6 5 2 4 true,
-    .mbConv 192 320 6 3 1 1 true,
-    .convBn 320 1280 1 1 .same,
-    .globalAvgPool,
-    .dense 1280 2 .identity
-  ]
 
 /-- The small arm: the CIFAR CNN's body with a global-average-pool head, so no
     fan-in is tied to the input size. -/
@@ -227,7 +205,7 @@ open GwDetect in
 def main (args : List String) : IO Unit := do
   let arm := parseArg args "arm" "gauss"
   let epochs := (parseArg args "epochs" "20").toNat!
-  let netName := parseArg args "net" "b0"
+  let netName := parseArg args "net" "cifar8w"
   let B := (parseArg args "batch" "64").toNat!
   let lr : Float := (parseArg args "lr" "0.001").toNat?.map (·.toFloat) |>.getD
     (match (parseArg args "lr" "0.001").splitOn "." with
@@ -244,13 +222,14 @@ def main (args : List String) : IO Unit := do
   let dataDir := "data/gw"
   unless arm == "gauss" || arm == "real" do
     throw <| IO.userError s!"arm={arm}: expected gauss or real"
-  let spec := match netName with
-    | "cnn" => cnn
-    | "cifarbn" => cifarbn
-    | "cifarbn3" => cifarbn3
-    | "cifarbn4" => cifarbn4
-    | "cifar8w" => cifar8w
-    | _ => b0
+  let spec : NetSpec ← match netName with
+    | "cnn" => pure cnn
+    | "cifarbn" => pure cifarbn
+    | "cifarbn3" => pure cifarbn3
+    | "cifarbn4" => pure cifarbn4
+    | "cifar8w" => pure cifar8w
+    | other =>
+      throw (IO.userError s!"net={other}: expected cifar8w, cnn, cifarbn, cifarbn3 or cifarbn4")
   unless (← LowererSession.backendName) == "xla" do
     throw <| IO.userError "gw-detect runs on the XLA backend only"
   IO.FS.createDirAll outDir
@@ -268,10 +247,8 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
-  -- sized from the initialised buffer, not `spec.totalParams`: the two disagree on SE
-  -- nets (totalParams counts squeeze-excite off the block input, `paramShapes` — which
-  -- `heInitParams`, `shapesBA` and the emitted graph all follow — off the expanded width;
-  -- 4.0M vs 7.1M for B0), and a wrong nP reads the loss from inside a weight tensor.
+  -- sized from the initialised buffer, which the emitted graph follows; a wrong nP reads the
+  -- loss from inside a weight tensor.
   let p0 ← spec.heInitParams
   let nP := F32.size p0
   let nT := 3 * nP
