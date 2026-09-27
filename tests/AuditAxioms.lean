@@ -34,6 +34,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
@@ -875,6 +876,16 @@ open Proofs
 #print axioms Proofs.StableHLO.mbExpGraphEvalW_faithful
 #print axioms Proofs.efficientnetForwardBFullEval
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful
+-- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
+#print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
+#print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful
+#print axioms Proofs.StableHLO.mobilenetv4ForwardBFullEval
+#print axioms Proofs.StableHLO.mnv4FwdGraphBFullEval_faithful
+-- Classifier dropout (the `%do` form) on MobileNetV2 and MobileNetV4
+#print axioms Proofs.mobilenetv2ForwardBFullDo_ones
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphBFullDo_faithful
+#print axioms Proofs.StableHLO.mobilenetv4ForwardBFullDo_ones
+#print axioms Proofs.StableHLO.mnv4FwdGraphBFullDo_faithful
 -- Integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
 -- Integrity tie (the r34 DOWNSAMPLE block)

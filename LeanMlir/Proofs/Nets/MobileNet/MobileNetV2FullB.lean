@@ -39,7 +39,7 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPA
 | stride-2 padding | XLA-`SAME` at all five sites |
 | stem | 3x3/s2 conv-bn-relu6, 3 to 32, 224 to 112 (NO pool) |
 | head | 1x1 conv-bn-relu6 320 to 1280, then GAP and dense, generic in the class count |
-| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand) |
+| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand; bf16, and their f32 form is `mobilenetv2FwdGraphBFullDo` below) |
 
 The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `mobilenetv2in` ones.
@@ -177,6 +177,61 @@ noncomputable def mobilenetv2ForwardBFull (N : Nat) {nCls : Nat} (w : MNV2BWeigh
                                   (mnv2StridedB N 56 56 w.b2
                                     (mnv2NoExpB N 112 112 w.b1
                                       (mnv2StemB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x))))))))))))))))))
+
+-- ════════════════════════════════════════════════════════════════
+-- § Classifier dropout — the `%do` form of the forward
+--   `mnv2HeadFwdB … (cd := true)` puts `dropoutB` on the driver's per-element mask `%do` between
+--   the GAP and the dense. Same net otherwise; at the all-ones mask it IS
+--   `mobilenetv2ForwardBFull`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Batched head with classifier dropout at the mask `m`: `mnv2HeadB` with `dropout m` on the
+    dense's input. -/
+noncomputable def mnv2HeadBDo (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) :
+    Vec (N * (ic * h * w)) → Vec (N * nCls) :=
+  StableHLO.batchMap N (dense Wd bd) ∘ dropout m ∘
+    StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘ StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh
+
+theorem mnv2HeadBDo_ones (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) :
+    mnv2HeadBDo N h w Wh bh εh γh βh Wd bd (fun _ => 1) = mnv2HeadB N h w Wh bh εh γh βh Wd bd := by
+  funext v
+  simp only [mnv2HeadBDo, mnv2HeadB, Function.comp_apply, dropout_ones_id]
+
+/-- **The MobileNetV2 forward with classifier dropout** at the per-element mask `m` (the
+    driver's inverted mask, `%do`). -/
+noncomputable def mobilenetv2ForwardBFullDo (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (m : Vec (N * 1280)) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Vec (N * nCls) :=
+  mnv2HeadBDo N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb m
+    (mnv2ExpOnlyB N 7 7 w.b17
+      (mnv2ResidB N 7 7 w.b16
+        (mnv2ResidB N 7 7 w.b15
+          (mnv2StridedB N 7 7 w.b14
+            (mnv2ResidB N 14 14 w.b13
+              (mnv2ResidB N 14 14 w.b12
+                (mnv2ExpOnlyB N 14 14 w.b11
+                  (mnv2ResidB N 14 14 w.b10
+                    (mnv2ResidB N 14 14 w.b9
+                      (mnv2ResidB N 14 14 w.b8
+                        (mnv2StridedB N 14 14 w.b7
+                          (mnv2ResidB N 28 28 w.b6
+                            (mnv2ResidB N 28 28 w.b5
+                              (mnv2StridedB N 28 28 w.b4
+                                (mnv2ResidB N 56 56 w.b3
+                                  (mnv2StridedB N 56 56 w.b2
+                                    (mnv2NoExpB N 112 112 w.b1
+                                      (mnv2StemB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x))))))))))))))))))
+
+/-- At the all-ones mask the dropout forward is the certified forward. -/
+theorem mobilenetv2ForwardBFullDo_ones (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
+    mobilenetv2ForwardBFullDo N w (fun _ => 1) x = mobilenetv2ForwardBFull N w x := by
+  unfold mobilenetv2ForwardBFullDo mobilenetv2ForwardBFull
+  rw [mnv2HeadBDo_ones]
+
 
 namespace StableHLO
 
@@ -335,6 +390,72 @@ theorem mobilenetv2FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Na
     den (mobilenetv2FwdGraphBFull N epsStr w e) = mobilenetv2ForwardBFull N w (den e) := by
   unfold mobilenetv2FwdGraphBFull mobilenetv2ForwardBFull
   rw [mnv2HeadGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
+      mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2ResidGraphB_faithful,
+      mnv2ResidGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
+      mnv2ResidGraphB_faithful, mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful,
+      mnv2ResidGraphB_faithful, mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful,
+      mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2NoExpGraphB_faithful,
+      mnv2StemGraphB_faithful]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Classifier dropout — the `%do` graph
+-- ════════════════════════════════════════════════════════════════
+
+/-- Head graph with classifier dropout: `mnv2HeadGraphB` with a `dropoutB` on the dense's input,
+    its mask the input `mName` (the render's is `doName`). -/
+def mnv2HeadGraphBDo (epsStr mName : String) (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
+    SHlo (N * nCls) :=
+  .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
+    (.dropoutB mName m
+      (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
+        (.batchOp (N := N) (.relu6 (n := oc * h * w))
+          (.bnBatchF "%hg" "%hbt" epsStr εh γh βh
+            (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e)))))
+
+theorem mnv2HeadGraphBDo_faithful (epsStr mName : String) (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
+    den (mnv2HeadGraphBDo epsStr mName N h w Wh bh εh γh βh Wd bd m e)
+      = mnv2HeadBDo N h w Wh bh εh γh βh Wd bd m (den e) := by
+  unfold mnv2HeadGraphBDo mnv2HeadBDo cbrB
+  simp only [den_batchOp, denOp, den_dropoutB, ↓den_batchOp_relu6_eq_relu6F, relu6F_faithful,
+    den_bnBatchF, Function.comp_apply]
+
+/-- **The `%do` forward graph**: `mobilenetv2FwdGraphBFull` with the dropout head. -/
+def mobilenetv2FwdGraphBFullDo (N : Nat) (epsStr mName : String) {nCls : Nat}
+    (w : MNV2BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
+    SHlo (N * nCls) :=
+  mnv2HeadGraphBDo epsStr mName N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb m
+    (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17
+      (mnv2ResidGraphB "16" epsStr N 7 7 w.b16
+        (mnv2ResidGraphB "15" epsStr N 7 7 w.b15
+          (mnv2StridedGraphB "14" epsStr N 7 7 w.b14
+            (mnv2ResidGraphB "13" epsStr N 14 14 w.b13
+              (mnv2ResidGraphB "12" epsStr N 14 14 w.b12
+                (mnv2ExpOnlyGraphB "11" epsStr N 14 14 w.b11
+                  (mnv2ResidGraphB "10" epsStr N 14 14 w.b10
+                    (mnv2ResidGraphB "9" epsStr N 14 14 w.b9
+                      (mnv2ResidGraphB "8" epsStr N 14 14 w.b8
+                        (mnv2StridedGraphB "7" epsStr N 14 14 w.b7
+                          (mnv2ResidGraphB "6" epsStr N 28 28 w.b6
+                            (mnv2ResidGraphB "5" epsStr N 28 28 w.b5
+                              (mnv2StridedGraphB "4" epsStr N 28 28 w.b4
+                                (mnv2ResidGraphB "3" epsStr N 56 56 w.b3
+                                  (mnv2StridedGraphB "2" epsStr N 56 56 w.b2
+                                    (mnv2NoExpGraphB "1" epsStr N 112 112 w.b1
+                                      (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ
+                                        e))))))))))))))))))
+
+/-- **The `%do` forward graph denotes the dropout forward**, at every mask — the trunk by the same
+    per-block rewrites as `mobilenetv2FwdGraphBFull_faithful`. -/
+theorem mobilenetv2FwdGraphBFullDo_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
+    (w : MNV2BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
+    den (mobilenetv2FwdGraphBFullDo N epsStr mName w m e)
+      = mobilenetv2ForwardBFullDo N w m (den e) := by
+  unfold mobilenetv2FwdGraphBFullDo mobilenetv2ForwardBFullDo
+  rw [mnv2HeadGraphBDo_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful,

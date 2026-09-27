@@ -490,7 +490,8 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- `f`, the FINAL feature side: 7 at the 224 input every committed artifact is rendered at,
     -- 8 at 256 (timm's test size for Conv-M r224). Every other side is a multiple of it — input
     -- 32f, stem 16f, fused 8f, the block rows' `h` scaled by f/7 — so the default is byte-identical.
-    -- Eval renders only: the proofs and every train step stay at 224.
+    -- Eval renders only: every train step and the training-mode proofs stay at 224; the eval
+    -- graph `mnv4FwdGraphBFullEval` is stated at any `f`.
     (f : Nat := 7) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu (symmetric pad; see `mnv4StemFwdB`) ═══
   let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync f
@@ -557,7 +558,8 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     is what the driver scores through.
 
     It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
-    its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
+    its BN order matches `mnv4StatSigList` by construction rather than by a second reading. Its
+    typed graph is `mnv4FwdGraphBFullEval` at `f = s / 32` (`MobileNetV4FullBEval`). -/
 def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
     (slug : String := "mnv4") (vSuffix : String := "")
     -- the input side (224, or timm's test size); must be a multiple of 32 (the final side is s/32)
@@ -1209,8 +1211,8 @@ end Proofs.StableHLO
 -- timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
 -- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8, entry
 -- `@mnv4in_fwd_eval_s256` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
--- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256`. Training and
--- every proof stay at 224.
+-- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256`. Training
+-- stays at 224; the eval statement (`MobileNetV4FullBEval`) covers this size too.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval_s256.mlir"
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" "_s256" (s := 256))
 #guard (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 224)) ==

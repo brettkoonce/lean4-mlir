@@ -53,7 +53,7 @@ its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with
 | stride | the three stride-2 rows (1, 3, 11) stride their POST-DW (timm's `dw_mid`); the pre-DW and the expand run at the input resolution |
 | head | 1×1 256 → 960 conv-bn-relu at 7×7, GAP, then `conv_head` 960 → 1280 conv-bn-relu on the pooled `[N, 960, 1, 1]` (its BN over the batch alone), then dense |
 | census | **233** parameter slots at `nCls = 10` (8,447,322 scalars; 9,715,512 at 1000), bias-free by construction |
-| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals (`mnv4{,in}_fwd_eval`), the 256×256 eval `mnv4in_fwd_eval_s256`, and the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand) |
+| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals `mnv4{,in}_fwd_eval` and the 256×256 `mnv4in_fwd_eval_s256` (stated in `MobileNetV4FullBEval`, at any input size), and the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand; bf16, and their f32 form is `mnv4FwdGraphBFullDo` below) |
 
 `N` stays a binder throughout, as at r34/R50. On the data-parallel artifacts the render's `N` is
 the per-replica batch and BatchNorm is synchronised across replicas; `MobileNetV4SyncB.lean` is
@@ -888,6 +888,119 @@ theorem mnv4Res7bLayer_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
           ((CertLayer.residual (mnv4BodyOfRow N mnv4Row16 w.b16)).fwd
           (v)))))) := by
   simp only [mnv4Res7bLayer, CertLayer.comp_fwd_apply]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Classifier dropout — the `%do` form of the forward
+--   `mnv4HeadFwdB … (cd := true)` puts `dropoutB` on the driver's per-element mask `%do` between
+--   `conv_head`'s relu and the dense. Same net otherwise; at the all-ones mask it IS
+--   `mobilenetv4ForwardBFull`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The head up to the classifier's input: 1×1 conv-BN-relu, GAP, `conv_head` conv-BN-relu on the
+    pooled features, relabelled to `[N, oc]`. Generic in the widths, as `mnv4HeadGraphB`. -/
+noncomputable def mnv4HeadFeatB (N h w : Nat) {c mid oc : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc) :
+    Vec (N * (c * h * w)) → Vec (N * oc) :=
+  reindexCLM (Fin.cast (mnv4_pool11 N oc)) ∘ cbReluB N (h := 1) (w := 1) W2 b2 ε2 γ2 β2 ∘
+    reindexCLM (Fin.cast (mnv4_pool11 N mid).symm) ∘ batchMap N (globalAvgPoolFlat mid h w) ∘
+    cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1
+
+/-- The certified head is the dense on `mnv4HeadFeatB` — proved at binders, applied at 7×7. -/
+private theorem mnv4Head_fwd_eq_feat (N h w : Nat) {c mid oc nCls : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (c * h * w))) :
+    (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+        (gapLayer N (c := mid) (h := h) (w := w))
+        (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2)
+        (denseLayer N Wd bd)).fwd v
+      = batchMap N (dense Wd bd) (mnv4HeadFeatB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 v) := by
+  simp only [mnv4Head, mnv4HeadFeatB, cbReluLayer, gapLayer, castLayer, denseLayer,
+    CertLayer.comp_fwd, Function.comp_apply]
+
+/-- **The MobileNetV4-Conv-M forward with classifier dropout** at the per-element mask `m` (the
+    driver's inverted mask, `%do`): `mobilenetv4ForwardBFull` with `dropout m` on the classifier's
+    input. -/
+noncomputable def mobilenetv4ForwardBFullDo (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (m : Vec (N * 1280)) (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
+  batchMap N (dense w.Wd w.bd) (dropout m
+    (mnv4HeadFeatB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
+      (mnv4Pre6 N w x)))
+
+/-- At the all-ones mask the dropout forward is the certified forward. -/
+theorem mobilenetv4ForwardBFullDo_ones (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (x : Vec (N * (3 * 224 * 224))) :
+    mobilenetv4ForwardBFullDo N w (fun _ => 1) x = mobilenetv4ForwardBFull N w x := by
+  unfold mobilenetv4ForwardBFullDo mobilenetv4ForwardBFull mnv4HeadStack
+  rw [dropout_ones_id, mnv4Head_fwd_eq_feat]
+
+/-- Head graph with classifier dropout: `mnv4HeadGraphB` with a `dropoutB` on the dense's input,
+    its mask the input `mName` (the render's is `doName`). -/
+def mnv4HeadGraphBDo (epsStr mName : String) (N h w : Nat) {c mid oc nCls : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc))
+    (e : SHlo (N * (c * h * w))) : SHlo (N * nCls) :=
+  .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
+    (.dropoutB mName m
+      (castIdx (mnv4_pool11 N oc).symm
+        (.batchOp (N := N) (.relu (n := oc * 1 * 1))
+          (.bnBatchF "%hg" "%hbt" epsStr ε2 γ2 β2
+            (.batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
+              (castIdx (mnv4_pool11 N mid)
+                (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
+                  (.batchOp (N := N) (.relu (n := mid * h * w))
+                    (.bnBatchF "%h1g" "%h1bt" epsStr ε1 γ1 β1
+                      (.batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
+                        e))))))))))
+
+private theorem mnv4HeadGraphBDo_faithful (epsStr mName : String) (N h w : Nat) {c mid oc nCls : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (c * h * w))) :
+    den (mnv4HeadGraphBDo epsStr mName N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd m e)
+      = batchMap N (dense Wd bd)
+          (dropout m (mnv4HeadFeatB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 (den e))) := by
+  simp only [mnv4HeadGraphBDo, mnv4HeadFeatB, cbReluB, den_dropoutB,
+    ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_castIdx, reindexCLM_apply, den_batchOp, denOp,
+    den_bnBatchF, Function.comp_apply]
+
+/-- **The `%do` forward graph**: `mnv4FwdGraphBFull` with the dropout head. -/
+def mnv4FwdGraphBFullDo (N : Nat) (epsStr mName : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+    (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
+  mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m
+    (mnv4Res7bGraphB N epsStr w
+      (mnv4Res7aGraphB N epsStr w
+        (mnv4Res14bGraphB N epsStr w
+          (mnv4Res14aGraphB N epsStr w
+            (mnv4Res28GraphB N epsStr w
+              (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
+                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
+                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
+
+/-- The dropout head's faithfulness at the net's widths — the barrier `mnv4HeadStack_graph_faithful`
+    is for the plain head. -/
+private theorem mnv4HeadDo_graph_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
+    (w : Mnv4BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (256 * 7 * 7))) :
+    den (mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
+          w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m e)
+      = batchMap N (dense w.Wd w.bd) (dropout m
+          (mnv4HeadFeatB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt (den e))) :=
+  mnv4HeadGraphBDo_faithful epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m e
+
+/-- **The `%do` forward graph denotes the dropout forward**, at every mask — the trunk by the
+    same group rewrites as `mnv4FwdGraphBFull_faithful`. -/
+theorem mnv4FwdGraphBFullDo_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
+    (w : Mnv4BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) :
+    den (mnv4FwdGraphBFullDo N epsStr mName w m e) = mobilenetv4ForwardBFullDo N w m (den e) := by
+  unfold mnv4FwdGraphBFullDo mobilenetv4ForwardBFullDo
+    mnv4Pre6 mnv4Pre5 mnv4Pre4 mnv4Pre3 mnv4Pre2 mnv4Pre1 mnv4Pre0
+  rw [mnv4HeadDo_graph_faithful, mnv4Res7bGraphB_faithful, mnv4Res7aGraphB_faithful,
+      mnv4Res14bGraphB_faithful, mnv4Res14aGraphB_faithful, mnv4Res28GraphB_faithful,
+      mnv4FusedStack_graph_faithful, mnv4StemB_graph_faithful]
 
 end StableHLO
 

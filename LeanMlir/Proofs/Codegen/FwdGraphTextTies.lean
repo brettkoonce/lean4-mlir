@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
@@ -28,7 +28,9 @@ graphs describe. The bf16 renders swap in `…Bf16` constructors (`Bf16Fold`, `B
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
-21-row table). Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
+21-row table), the MobileNetV2 and MobileNetV4 heads with classifier dropout (`cd := true`), and
+MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
+sizes its evals are rendered at. Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
 own constructors.
 
 A `#guard` failing here means the emitted text and the proven graph drifted: the graph's operand
@@ -161,6 +163,12 @@ def mnv2NoExpW0 (ic oc : Nat) : IVWNoExp ic oc :=
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (leaf "%in" _))
 
+-- Head with classifier dropout (`cd := true`, the `%do` train steps): `dropoutB` between GAP and dense.
+#guard textOf (mnv2HeadFwdB 2 10 "1.0e-03" "%in" false (cd := true)) (·.code) ==
+  prettyText 2 (mnv2HeadGraphBDo "1.0e-03" doName 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ => 0) (leaf "%in" _))
+
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV4-Conv-M — `mnv4FwdChainB` vs `mnv4FwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
@@ -214,6 +222,69 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
   prettyText 2 (mnv4HeadGraphB "1.0e-03" 2 7 7 (c := 256) (mid := 960) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- Head with classifier dropout (`cd := true`, the `%do` train steps): the same head with `dropoutB`
+-- on the dense's input.
+#guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in" (cd := true)) (·.code) ==
+  prettyText 2 (mnv4HeadGraphBDo "1.0e-03" doName 2 7 7 (c := 256) (mid := 960) (oc := 1280)
+    (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § MobileNetV4-Conv-M at inference — `mnv4FwdChainB … .eval` vs `mnv4FwdGraphBFullEval`
+--   at both committed input sizes: `f = 7` (224, `mnv4{,in}_fwd_eval`) and `f = 8` (256,
+--   `mnv4in_fwd_eval_s256`), each row at the side `mnv4FwdChainB` scales it to.
+-- ════════════════════════════════════════════════════════════════
+
+/-- A zero depthwise slot at inference, at any extent. -/
+def mnv4DWEval0 {c : Nat} : (k : Nat) → Mnv4DWEvalSlot c k
+  | 0 => PUnit.unit
+  | _ + 1 => ⟨fun _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+/-- Zero inference weights for one table row. -/
+def mnv4UibEvalW0 (s : UibSpec) : UibEvalParams s :=
+  ⟨mnv4DWEval0 _, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0,
+   mnv4DWEval0 _, fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+/-- `pretty` of one row's inference graph at side `h`: the strided block, or the body plus the
+    identity skip. -/
+def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
+  if s.stride2 then
+    prettyText B (mnv4StridedGraphBEval "1.0e-03" B h 0 s (mnv4UibEvalW0 s) (leaf "%in" _))
+  else
+    prettyText B (.addVB (mnv4BodyGraphBEval "1.0e-03" B h 0 s (mnv4UibEvalW0 s) (leaf "%in" _))
+      (leaf "%in" _))
+
+-- Stem: 3×3/s2 symmetric, 32f → 16f.
+#guard [7, 8].all fun f => textOf (mnv4StemFwdB 2 "1.0e-03" .eval (f := f)) (·.code) ==
+  prettyText 2 (mnv4StemGraphBEval "1.0e-03" 2 (16 * f) 0 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+
+-- Fused stage 0: 16f → 8f.
+#guard [7, 8].all fun f =>
+  textOf (fusedMbConvFwdStridedB 2 32 48 4 3 (8 * f) .eval "1.0e-03" "0" "%in") (·.code) ==
+  prettyText 2 (mnv4FusedGraphBEval "1.0e-03" 2 (8 * f) 0 (ic := 32) (mid := 128) (oc := 48)
+    (kH := 3) (kW := 3)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- All 21 rows, at the side the chain scales each to.
+#guard mnv4Blocks.length == 21 && [7, 8].all fun f => mnv4Blocks.all fun s =>
+  let s' := if f == 7 then s else { s with h := s.h * f / 7 }
+  textOf (uibFwdDispatch 2 s' .eval "1.0e-03" "%in") (·.code) == mnv4RowGraphTextEval 2 s s'.h
+
+-- The graph's ladder is the chain's: rows at 4f / 2f / f, i.e. the table's 28 / 14 / 7 scaled.
+#guard [7, 8].all fun f => mnv4Blocks.all fun s =>
+  (if f == 7 then s.h else s.h * f / 7) == s.h / 7 * f
+
+-- Head: 1×1 (256 → 960) → BN → relu at f², GAP, 1×1 (→ 1280) → BN → relu, dense (→ 10).
+#guard [7, 8].all fun f => textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in" .eval (f := f)) (·.code) ==
+  prettyText 2 (mnv4HeadGraphBEval "1.0e-03" 2 f 0 (c := 256) (mid := 960) (oc := 1280) (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════

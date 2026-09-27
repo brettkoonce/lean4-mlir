@@ -171,6 +171,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB,
