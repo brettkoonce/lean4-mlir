@@ -411,7 +411,7 @@ open Proofs
 #print axioms CnnPoC.cnnLossCot_den
 #print axioms CnnPoC.cnn_W5_tied_totalloss
 -- mnist-cnn CONV fold
-#print axioms CnnPoC.cnn_conv_tied_certified
+#print axioms CnnPoC.cnn_train_step_tied_certified
 -- ch5-CIFAR fully folded (no-BN, 2-scale)
 #print axioms SgdNode.convW_den
 #print axioms SgdNode.convB_den
@@ -419,7 +419,7 @@ open Proofs
 -- ch5-CIFAR TIE
 #print axioms CifarPoC.cifarLossCot_den
 #print axioms CifarPoC.cifar_W7_tied_totalloss
-#print axioms CifarPoC.cifar_conv_tied_certified
+#print axioms CifarPoC.cifar_train_step_tied_certified
 -- ch5-CIFAR-BN fully folded
 #print axioms SgdNode.bnGamma_den
 #print axioms SgdNode.bnBeta_den
@@ -429,10 +429,10 @@ open Proofs
 -- ch5-cifar8 TIE
 #print axioms Cifar8PoC.cifar8LossCot_den
 #print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
-#print axioms Cifar8PoC.cifar8_convs_tied_certified
+#print axioms Cifar8PoC.cifar8_train_step_tied_certified
 -- ch5-cifar8-bn TIE
 #print axioms Cifar8BnPoC.cifar8BnLossCot_den
-#print axioms Cifar8BnPoC.cifar8Bn_convbn_tied_certified
+#print axioms Cifar8BnPoC.cifar8Bn_train_step_tied_certified
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params)
 #print axioms SgdNode.convStridedW_den
 #print axioms SgdNode.convStridedB_den
@@ -1940,6 +1940,8 @@ open Proofs
 #print axioms Proofs.CnxPoC.chanLNBetaSgdTied_holds
 #print axioms Proofs.convWSgdTied_holds
 #print axioms Proofs.convBSgdTied_holds
+#print axioms Proofs.denseWSgdTied_holds
+#print axioms Proofs.denseBSgdTied_holds
 #print axioms Proofs.EnetTiePoC.convBBetaSgdTied_holds
 #print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_strided_tiedG

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.Small.CifarCNN
+import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Foundation.SgdNodes
-import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
 
@@ -10,8 +10,8 @@ The Chapter-4 peer of `CnnFold` — a deeper, two-spatial-scale conv net
 4 conv kernels/biases + 3 dense layers). `MainCifarVerified` trains on
 `verified_mlir/cifar_train_step.mlir`; this file states what its parameter updates denote: each
 emitted SGD op denotes `θ − lr·(certified per-layer Jacobian · the cotangent the rendered chain
-feeds it)`; only the output weight `W₇` is tied to the whole-loss gradient
-(`cifar_W7_tied_totalloss`).
+feeds it)` (`cifar_train_step_tied_certified`, all fourteen); only the output weight `W₇` is
+tied to the whole-loss gradient (`cifar_W7_tied_totalloss`).
 
 **Zero new core ops.** The conv layers reuse the `convWeightSgd`/`convBiasSgd` ops
 added for cnn (CnnFold); the dense head reuses `weightSgd`/`biasSgd`. The
@@ -26,11 +26,12 @@ only new content is the per-net `den = certified` capstones below.
 * **Dense head (W₅/W₆/W₇):** the classifier head is a 3-layer MLP over the flattened
   pool output, so its cotangents are the IR `mlpCotOut0/1` and its `den`s close via
   `weight_grad_bridge`/`bias_grad_bridge` — verbatim `CnnFold` (`dW7_den`, the op the
-  tie reads).
+  whole-loss fold rewrites with).
 
 ## Scope (same boundary as cnn/mlp/linear)
-* The conv cotangents are the rendered chain (`cnnChainCotW1`, `cnnChainCotW2`,
-  `cifarChainCotW2`); that they equal the loss gradient at each conv output is not stated.
+* Below the output layer the cotangents are the rendered chain (`mlpCotOut1`/`mlpCotOut0` in the
+  head; `cnnChainCotW1`, `cnnChainCotW2`, `cifarChainCotW2` below it); that they equal the loss
+  gradient at each layer's output is not stated.
 * Per-op `pretty` lexing + ℝ → Float32.
 -/
 
@@ -43,8 +44,9 @@ open Proofs.SgdNode
 
 The head `pool2 → W₅→relu→W₆→relu→W₇` is a 3-layer MLP; per-layer cotangents are the
 IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). Every head op's
-`den` = certified is `SgdNode.denseW_den` / `SgdNode.denseB_den` at that layer; only
-the output-layer weight op is stated here, as the tie reads it. -/
+`den` = certified is `SgdNode.denseW_den` / `SgdNode.denseB_den` at that layer, and
+`cifar_train_step_tied_certified` states all six at the real forward; the output-layer weight op
+is stated here on its own because the whole-loss fold `cifar_W7_tied_totalloss` rewrites with it. -/
 
 /-- Output-layer weight op `W₇` = certified step (cotangent = the loss cotangent `dy`). -/
 theorem dW7_den {c2 h w d1 nClasses : Nat}
@@ -64,7 +66,7 @@ theorem dW7_den {c2 h w d1 nClasses : Nat}
 The conv/dense `*_den` theorems above hold for a FREE cotangent (`convW_den`/`convB_den` are `∀ c`;
 the dense head's `mlpCotOut0/1` are `∀ dy`). The capstones below pin those cotangents to the ones the
 **real cifar forward + softmax-CE loss** actually drives — the cifar peer of `CnnFold`'s last
-three theorems (`cnnLossCot_den` / `cnn_W5_tied_totalloss` / `cnn_conv_tied_certified`).
+three theorems (`cnnLossCot_den` / `cnn_W5_tied_totalloss` / `cnn_train_step_tied_certified`).
 
 cifar is the cnn shape with **two** conv→conv→pool stages instead of one, so its conv backward chain
 crosses an extra pool boundary. Three of the four conv-layer cotangents reuse the cnn chain cots
@@ -164,20 +166,19 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
   -- are `dense W₇ b₇ (relu … pool₂)` — unfold both to match.
   simp only [cifarCnnForward, mnistLinear, Function.comp_apply]
 
-/-- **Whole cifar conv tail, tied.** All four conv kernel/bias ops, at the real cifar forward and the
+/-- **Whole cifar train step, tied.** All fourteen parameter ops — the dense head
+    `W₇,b₇,W₆,b₆,W₅,b₅` and the four conv kernels/biases — at the real cifar forward and the
     rendered backward-chain cotangents driven by the composed softmax-CE cotangent
     `g = softmax(cifarCnnForward … xv) − onehot` (`cifarLossCot_den`), denote
-    `θ − lr·(certified ∂convₖ/∂θ · c)`. That each `c` equals the loss gradient at its conv output is
-    not stated. Each clause is the generic `convW_den`/`convB_den` instantiated at the cotangent the
-    backward chain delivers: `cnnChainCotW2` for conv₄ (relu mask on
-    pool₂-back of the dense head), `cnnChainCotW1` for conv₃/conv₁ (relu mask on the next conv's
-    input-VJP), and `cifarChainCotW2` for conv₂ (relu mask on pool₁-back of conv₃'s input-VJP). Together
-    with the dense head (`cifar_W7_tied_totalloss` + `SgdNode.denseW_den`/`denseB_den` at `g`) the WHOLE
-    cifar train step is den-composed forward→loss→backward — no free activations, no symbolic cotangent.
-    (Residual: the conv backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
-    correspondence is the per-op trust the whole suite carries — the cnn `cnn_conv_tied_certified`
-    residual verbatim.) -/
-theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
+    `θ − lr·(certified ∂layer/∂θ · c)`. That each `c` equals the loss gradient at a layer below the
+    output is not stated; at the output layer `cifar_W7_tied_totalloss` folds `W₇` to `∂CE/∂W₇`.
+    The dense clauses are `SgdNode.denseW_den`/`denseB_den` at `g`, `mlpCotOut1` and `mlpCotOut0`;
+    the conv clauses are `convW_den`/`convB_den` at the cotangent the backward chain delivers:
+    `cnnChainCotW2` for conv₄ (relu mask on pool₂-back of the dense head), `cnnChainCotW1` for
+    conv₃/conv₁ (relu mask on the next conv's input-VJP), and `cifarChainCotW2` for conv₂ (relu mask
+    on pool₁-back of conv₃'s input-VJP). The conv backward is rendered hand-written, so the
+    cotangent SSA ↔ chain-cot correspondence is the per-op trust the whole suite carries. -/
+theorem cifar_train_step_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -212,8 +213,17 @@ theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
     let cotW3 : Vec (c2*(2*h)*(2*w)) := cnnChainCotW1 W₄ hc3 cotW4
     let cotW2 : Vec (c1*(2*(2*h))*(2*(2*w))) := cifarChainCotW2 W₃ ac2 hc2 cotW3
     let cotW1 : Vec (c1*(2*(2*h))*(2*(2*w))) := cnnChainCotW1 W₂ hc1 cotW2
-    -- conv₄ (last conv before pool₂)
-    ConvWSgdTied xN wN lrStr cotN b₄ ac3 W₄ cotW4 lr
+    let cotH6 : Vec d1 := (mlpCotOut1 W₇ h6).denote g
+    let cotH5 : Vec d1 := (mlpCotOut0 W₆ W₇ h5 h6).denote g
+    -- dense head (output layer first)
+    DenseWSgdTied xN wN lrStr cotN (relu d1 h6) W₇ b₇ g lr
+  ∧ DenseBSgdTied bN lrStr cotN W₇ (relu d1 h6) b₇ g lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 h5) W₆ b₆ cotH6 lr
+  ∧ DenseBSgdTied bN lrStr cotN W₆ (relu d1 h5) b₆ cotH6 lr
+  ∧ DenseWSgdTied xN wN lrStr cotN zp2 W₅ b₅ cotH5 lr
+  ∧ DenseBSgdTied bN lrStr cotN W₅ zp2 b₅ cotH5 lr
+  -- conv₄ (last conv before pool₂)
+  ∧ ConvWSgdTied xN wN lrStr cotN b₄ ac3 W₄ cotW4 lr
   ∧ ConvBSgdTied bN lrStr cotN W₄ ac3 b₄ cotW4 lr
   -- conv₃
   ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotW3 lr
@@ -223,16 +233,10 @@ theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
   ∧ ConvBSgdTied bN lrStr cotN W₂ ac1 b₂ cotW2 lr
   -- conv₁ (input layer)
   ∧ ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotW1 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotW1 lr := by
-  intro xv hc1 ac1v ac1 hc2 ac2v ac2 zp1 zp1t hc3 ac3v ac3 hc4 ac4v ac4 zp2 h5 h6 g cotW4 cotW3 cotW2 cotW1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact convW_den xN wN lrStr cotN b₄ ac3 W₄ cotW4 lr idx
-  · intro o;   exact convB_den bN lrStr cotN W₄ ac3 b₄ cotW4 lr o
-  · intro idx; exact convW_den xN wN lrStr cotN b₃ zp1t W₃ cotW3 lr idx
-  · intro o;   exact convB_den bN lrStr cotN W₃ zp1t b₃ cotW3 lr o
-  · intro idx; exact convW_den xN wN lrStr cotN b₂ ac1 W₂ cotW2 lr idx
-  · intro o;   exact convB_den bN lrStr cotN W₂ ac1 b₂ cotW2 lr o
-  · intro idx; exact convW_den xN wN lrStr cotN b₁ x W₁ cotW1 lr idx
-  · intro o;   exact convB_den bN lrStr cotN W₁ x b₁ cotW1 lr o
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotW1 lr :=
+  ⟨denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds⟩
 
 end Proofs.CifarPoC

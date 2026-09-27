@@ -2,19 +2,20 @@ import LeanMlir.Proofs.Nets.Small.CifarFold
 
 /-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
 
-cifar8's tie (`Cifar8PoC.cifar8_convs_tied_certified`) + a BN-back at every conv. The backward
+cifar8's tie (`Cifar8PoC.cifar8_train_step_tied_certified`) + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
 cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
 
 **Zero new ops/bridges/constructors.** Conv ties reuse `SgdNode.convW_den`/`convB_den`; BN ties reuse
-`SgdNode.bnGamma_den`/`bnBeta_den`; the dense head reuses `SgdNode.denseW_den`/`denseB_den`, the loss cotangent cifar8's. All 38 params
-(8 conv W/b + 8 BN γ/β + 3 dense) fold with the generics — the cifar8-bn lesson applied to the tie.
+`SgdNode.bnGamma_den`/`bnBeta_den`; the dense head reuses `SgdNode.denseW_den`/`denseB_den`, the
+loss cotangent cifar8's. All 38 parameter tensors (8 conv W/b, 8 BN γ/β, 3 dense W/b) are stated in
+`cifar8Bn_train_step_tied_certified`, each with the generics.
 
 ## Scope (same as the rest of the suite)
-* The conv and BN cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
-  `cifar8Bn_convbn_tied_certified`); that they equal the loss gradient at each layer output is not
-  stated.
+* Below the output layer the cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
+  `cifar8Bn_train_step_tied_certified`, and `mlpCotOut1`/`mlpCotOut0` in the head); that they equal
+  the loss gradient at each layer output is not stated.
 * Conv/BN backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
@@ -47,14 +48,15 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
                     W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
   StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
-/-- **Whole cifar8-bn conv+BN tail, tied.** All 32 conv/BN params (8 conv `W`+`b`, 8 BN `γ`+`β`; 24
-    conjuncts, one `BnSgdPairTied` per γ/β pair), at the real cifar8-bn forward, denote
-    `θ − lr·(certified per-layer Jacobian · c)` with `c` the rendered backward-chain cotangent driven by
-    the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back cotangents `cotC1–8`; the
-    BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered cifar8-bn backward chain
-    (cifar8's chain + a BN-back at every conv). That they equal the loss gradient at each layer output
-    is not stated. The dense head reuses `SgdNode.denseW_den`/`denseB_den`, the loss cotangent cifar8's. -/
-theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+/-- **Whole cifar8-bn train step, tied.** All 38 parameter tensors (8 conv `W`+`b`, 8 BN `γ`+`β`,
+    3 dense `W`+`b`; 30 conjuncts, one `BnSgdPairTied` per γ/β pair), at the real cifar8-bn forward,
+    denote `θ − lr·(certified per-layer Jacobian · c)` with `c` the rendered backward-chain
+    cotangent driven by the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back
+    cotangents `cotC1–8`; the BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered
+    cifar8-bn backward chain (cifar8's chain + a BN-back at every conv). The dense head is fed
+    `mlpCotOut0`, `mlpCotOut1` and `g`. That `c` equals the loss gradient at a layer below the
+    output is not stated. -/
+theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
     (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
@@ -177,12 +179,21 @@ theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : N
   -- conv₈ + bn₈
   ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
   ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr := by
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr
+  -- dense head
+  ∧ DenseWSgdTied xN wN lrStr cotN zp4 W₉ b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
+  ∧ DenseBSgdTied bN lrStr cotN W₉ zp4 b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 h9) Wa ba ((mlpCotOut1 Wb ha).denote g) lr
+  ∧ DenseBSgdTied bN lrStr cotN Wa (relu d1 h9) ba ((mlpCotOut1 Wb ha).denote g) lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 ha) Wb bb g lr
+  ∧ DenseBSgdTied bN lrStr cotN Wb (relu d1 ha) bb g lr := by
   exact ⟨convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
     convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,
     convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
     convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
-    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds⟩
+    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds⟩
 
 end Proofs.Cifar8BnPoC

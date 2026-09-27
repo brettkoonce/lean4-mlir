@@ -15,6 +15,7 @@ its layers. The batched, un-fused peers are in `GradNodesB`.
 | conv weight / bias (`convWeightSgd`, `convBiasSgd`) | `convW_den`, `convB_den` | `SgdNode` |
 | per-channel BN γ / β (`bnGammaSgd`, `bnBetaSgd`), and the pair as one clause | `bnGamma_den`, `bnBeta_den`, `BnSgdPairTied` | `SgdNode` |
 | conv weight / bias as tie clauses | `ConvWSgdTied`, `ConvBSgdTied`, `convWSgdTied_holds`, `convBSgdTied_holds` | `Proofs` |
+| dense weight / bias as tie clauses | `DenseWSgdTied`, `DenseBSgdTied`, `denseWSgdTied_holds`, `denseBSgdTied_holds` | `Proofs` |
 | stride-1 depthwise weight / bias (`depthwiseWeightSgd`, `depthwiseBiasSgd`) | `depthwiseW_den`, `depthwiseB_den` | `SgdNode` |
 | stride-2 conv weight / bias (`convStridedWeightSgd`, `convStridedBiasSgd`) | `convStridedW_den`, `convStridedB_den` | `SgdNode` |
 | vector-LN γ / β (`veclnGammaSgd`, `rowDenseBiasSgd` at the LN forward), and their clauses | `veclnGammaSgd_den`, `rowDenseBiasSgd_den_lnbeta`, `VecLN{Gamma,Beta}SgdTied`, `vecLN{Gamma,Beta}SgdTied_holds` | `SgdNode` |
@@ -130,10 +131,10 @@ end Proofs.SgdNode
 
 namespace Proofs
 
-/-! Clause Props for the per-example conv ties: each is a conv `_den` lemma's statement
-(`SgdNode.convW_den` / `convB_den`) under `∀`, so a tie theorem states one line per parameter
-tensor and `intro` unfolds it back; each `…_holds` proves it with every argument implicit (read off
-the goal by a step tie's constructor). The batched peers are `GradNodeB.ConvWTiedB` and
+/-! Clause Props for the per-example conv and dense ties: each is a `_den` lemma's statement
+(`SgdNode.convW_den` / `convB_den` / `denseW_den` / `denseB_den`) under `∀`, so a tie theorem
+states one line per parameter tensor and `intro` unfolds it back; each `…_holds` proves it with
+every argument implicit (read off the goal by a step tie's constructor). The batched peers are `GradNodeB.ConvWTiedB` and
 `EnetPoC.ConvWSgdTiedB`. -/
 
 /-- The emitted `convWeightSgd` op, fed the cotangent `c` at the conv output, is the certified SGD
@@ -162,6 +163,32 @@ theorem convWSgdTied_holds {ic oc h w kH kW : Nat} {xN wN lrStr cotN : String}
 theorem convBSgdTied_holds {ic oc h w kH kW : Nat} {bN lrStr cotN : String}
     {W : Kernel4 oc ic kH kW} {x : Tensor3 ic h w} {b : Vec oc} {c : Vec (oc*h*w)} {lr : ℝ} :
     ConvBSgdTied bN lrStr cotN W x b c lr := fun o => SgdNode.convB_den bN lrStr cotN W x b c lr o
+
+/-- The emitted `weightSgd` op, fed the activation `a` and the cotangent `c` at the dense output, is
+    the certified SGD step on the weight `W` (`SgdNode.denseW_den` under `∀`). -/
+def DenseWSgdTied {m n : Nat} (aN wN lrStr cotN : String) (a : Vec m) (W : Mat m n) (b : Vec n)
+    (c : Vec n) (lr : ℝ) : Prop :=
+  ∀ (i : Fin m) (j : Fin n),
+    den (SHlo.weightSgd aN wN lrStr a W lr (.operand cotN c)) (finProdFinEquiv (i, j))
+      = W i j - lr * ∑ k : Fin n,
+          pdiv (fun v : Vec (m*n) => dense (Mat.unflatten v) b a) (Mat.flatten W)
+               (finProdFinEquiv (i, j)) k * c k
+
+/-- The emitted `biasSgd` op, fed the cotangent `c` at the dense output, is the certified SGD step
+    on the bias `b` (`SgdNode.denseB_den` under `∀`). -/
+def DenseBSgdTied {m n : Nat} (bN lrStr cotN : String) (W : Mat m n) (a : Vec m) (b : Vec n)
+    (c : Vec n) (lr : ℝ) : Prop :=
+  ∀ i : Fin n,
+    den (SHlo.biasSgd bN lrStr b lr (.operand cotN c)) i
+      = b i - lr * ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * c j
+
+theorem denseWSgdTied_holds {m n : Nat} {aN wN lrStr cotN : String} {a : Vec m} {W : Mat m n}
+    {b : Vec n} {c : Vec n} {lr : ℝ} : DenseWSgdTied aN wN lrStr cotN a W b c lr :=
+  fun i j => SgdNode.denseW_den aN wN lrStr cotN a W b c lr i j
+
+theorem denseBSgdTied_holds {m n : Nat} {bN lrStr cotN : String} {W : Mat m n} {a : Vec m}
+    {b : Vec n} {c : Vec n} {lr : ℝ} : DenseBSgdTied bN lrStr cotN W a b c lr :=
+  fun i => SgdNode.denseB_den bN lrStr cotN W a b c lr i
 
 end Proofs
 

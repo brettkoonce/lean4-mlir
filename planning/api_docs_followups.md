@@ -65,9 +65,8 @@ All of `doc_honesty_pass.md` §1 except the landing-page items (a)(b)(c)(j), whi
 reuse the landing page's wording (LeanMlir.lean) so the book and the API home page agree. Plus
 what this pass found:
 
-- Dense-head overclaim: thm:cnn_fold (~3285), thm:cifar8_step_tie (~4290–4295),
-  thm:cifar8bn_step_tie (~4299–4309; "twenty-four update pairs" is 24 conjuncts over 32
-  tensors). Waits on the §5 dense-head row, or rewords to the current statement.
+- ~~Dense-head overclaim~~ fixed with the §5 dense-head row: the four blueprint statements now
+  match the capstones (all parameters).
 - The ViT artifact the book quotes, `vitin_emadp128x4wxclipdropbf16`, is bf16 and drop-path:
   neither `vit_net_tiedGB` nor the batched input-gradient tie covers it. Same for the quoted
   ConvNeXt drop artifact.
@@ -85,7 +84,7 @@ Each row's landing rewrites these sites to the new statement.
 
 | D1 row | Sites left verbatim |
 |---|---|
-| small-CNN dense heads | CnnFold conv-fold banner, CifarFold `cifar_conv_tied_certified`, Cifar8StepTie `cifar8_convs_tied_certified` ("WHOLE … train step"); Cifar8BnStepTie:12 "All 38 params"; CnnRender `cnn/cifar/cifar8TrainStepFaithfulV` "each output's den"; SgdDescentCnn "weights and biases via the MLP rungs" also needs bias descent (MLP rungs omit bias columns) |
+| small-CNN dense heads | **landed** (Lean + the four fold files + CnnRender + blueprint thm:cnn_fold / cifar_fold / cifar8_step_tie / cifar8bn_step_tie). Still open: SgdDescentCnn "weights and biases via the MLP rungs" needs bias descent (MLP rungs omit bias columns) |
 | nCls for B0 | EfficientNetStepTieG (module + head), EfficientNetFullWholeBackCertifiedTie title, B0 Sync files, VerifiedNetsCore:909 claim ceiling, LeanMlir.lean "the ImageNet head its artifacts run" |
 | nCls for ViT (+ `ty [10]`) | `vitTinyInputGradB_eq_vitTiny_vjp`, ViTRender.lean:~579 `ty [10]`; SpecVJP's `Vec 10` pins |
 | MaxPool live-cell predicate | CNN.lean:887 `MaxPool2Smooth` "natural domain", :1314 `h_mp`; SgdDescentCnn:20 and :2312 pool margin; TrainedCnnWitness `h_mp` bullet (generated); StableHLO.lean:~419 `maxPoolBack` comment |

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.Small.MnistCNN
+import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Foundation.SgdNodes
-import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
 
@@ -38,14 +38,16 @@ and false-fail the check.)
   `SgdNode.denseB_den` at their layer.
 * `cnn_W5_tied_totalloss` — at the emitted loss cotangent, the `W₅` op denotes
   `W₅ − lr·∂(crossEntropy ∘ forward)/∂W₅`.
-* `cnn_conv_tied_certified` — the four conv ops at the real forward activations and the chain
-  cotangents driven by the emitted loss cotangent.
+* `cnn_train_step_tied_certified` — all ten parameter ops (the six dense-head ops and the four
+  conv ops) at the real forward activations and the chain cotangents driven by the emitted loss
+  cotangent.
 
 ## Scope
 
-* **Chain cotangent vs loss gradient.** The conv cotangents are the rendered chain
-  (`cnnChainCotW1`, `cnnChainCotW2`: relu masks, select-and-scatter pool-back, conv-back). No theorem here
-  states that they equal the loss gradient at the conv outputs.
+* **Chain cotangent vs loss gradient.** Below the output layer the cotangents are the rendered
+  chain (`mlpCotOut1`/`mlpCotOut0` in the head; `cnnChainCotW1`, `cnnChainCotW2`: relu masks,
+  select-and-scatter pool-back, conv-back). No theorem here states that they equal the loss
+  gradient at those layers' outputs.
 * **Cotangent subgraph ⇄ rendered SHlo.** The chain cotangents (`cnnChainCotW1/2`,
   `mlpCotOut0/1`) are proven = the rendered backward form in `CnnChainClose`
   (`cnnChainCotW1_eq`, `cnnChainCotW2_eq`) and `MlpTrainStep` (`mlpCotOut0_denote`,
@@ -126,8 +128,9 @@ theorem cb1_den {ic c h w kH kW : Nat}
 The pool-output `pool : Vec (c·h·w)` flows through `W₃→relu→W₄→relu→W₅`; the
 per-layer cotangents are exactly the IR `mlpCotOut0/1` (with `(W₅,W₄,W₃)` playing
 the MLP's `(W₂,W₁,W₀)`). Every head op's `den` = certified is `SgdNode.denseW_den` /
-`SgdNode.denseB_den` at that layer; only the output-layer weight op is stated here, as
-the tie reads it. -/
+`SgdNode.denseB_den` at that layer, and `cnn_train_step_tied_certified` states all six at the
+real forward; the output-layer weight op is stated here on its own because the whole-loss fold
+`cnn_W5_tied_totalloss` rewrites with it. -/
 
 /-- Output-layer weight op `W₅` = certified step (cotangent = the loss cotangent `dy`). -/
 theorem dW5_den {c h w d1 nClasses : Nat}
@@ -144,13 +147,13 @@ theorem dW5_den {c h w d1 nClasses : Nat}
 
 /-! ## Tie (dense head) — the top loss cotangent is the composed softmax-CE of the CONV forward
 
-The cnn `*_den_certified` above hold for a free top cotangent `dy` and a free pool output. The
+The `*_den` theorems above hold for a free top cotangent `dy` and a free pool output. The
 renderer feeds the cotangent the emitted loss graph `sub(softmaxDiv(expe(logits)), onehot)` produces,
 with `logits` the REAL conv-forward output `mnistCnnNoBnForward … x`. The lemma below pins that graph
 to the composed softmax-CE gradient *of the conv forward* (the cnn analogue of `mlpLossCot_den`), and
 the headline folds the dense output weight `W₅` to the whole-loss gradient `∂CE/∂W₅` — so the output
-layer is tied forward(conv+dense)→softmax-CE→gradient. The conv layers `W₁`/`W₂` are stated at their
-chain cotangents in the next section. -/
+layer is tied forward(conv+dense)→softmax-CE→gradient. Every parameter op, at the chain cotangent
+this `g` drives, is stated in the next section. -/
 
 /-- **The emitted loss-cotangent graph denotes the composed softmax-CE gradient of the CONV forward**
     (`= softmax(mnistCnnNoBnForward … x) − onehot = ∂CE/∂logits` at the real conv-forward logits). -/
@@ -202,27 +205,28 @@ theorem cnn_W5_tied_totalloss {ic c h w d1 nClasses kH kW : Nat}
   -- are `dense W₅ b₅ (relu … pool)` — unfold both to match.
   simp only [mnistCnnNoBnForward, mnistLinear, Function.comp_apply]
 
-/-! ## The CONV fold — the conv kernels/biases at the real conv forward
+/-! ## The whole step — every parameter op at the real forward
 
-The four conv `*_den` theorems above hold for FREE conv activations (`ac1`/`ac2`/`hc2`) and a free
-cotangent. The capstone below instantiates them at the **real conv forward** (`ac1`/`hc1`/`hc2`/`ac2`
-= the actual `conv₁`/`relu`/`conv₂`/`relu` outputs, `h3`/`h4` the dense pre-acts the head-backward
-reads) and the chain cotangents driven by the composed top cotangent
-`g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`). So all four conv param ops denote
-`θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent — `cnnChainCotW2`
-for conv₂, `cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one more conv-back). No theorem here
-states that `c` equals the loss gradient at the conv output. Together with the dense head
-(`cnn_W5_tied_totalloss` + the `*_den` at the composed cotangent) the WHOLE cnn train step is
-den-composed forward→loss→backward — no free activations, no symbolic cotangent. The
-correspondence between the hand-written conv-backward SSA values and `cnnChainCotW1`/`cnnChainCotW2`
-is the per-op trust the whole suite carries. -/
+The `*_den` theorems above hold for FREE activations (`ac1`/`ac2`/`hc2`, the pool output) and a
+free cotangent. The capstone below instantiates them at the **real forward** (`ac1`/`hc1`/`hc2`/`ac2`
+= the actual `conv₁`/`relu`/`conv₂`/`relu` outputs, `pool` their max-pool, `h3`/`h4` the dense
+pre-activations) and the chain cotangents driven by the composed top cotangent
+`g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`). Each of the ten parameter ops
+denotes `θ − lr·(certified ∂layer/∂θ · c)` with `c` the rendered backward-chain cotangent: `g` for
+`W₅`/`b₅`, `mlpCotOut1` for `W₄`/`b₄`, `mlpCotOut0` for `W₃`/`b₃`, `cnnChainCotW2` for conv₂ and
+`cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one more conv-back). No theorem here states
+that `c` equals the loss gradient at a layer below the output; at the output layer
+`cnn_W5_tied_totalloss` folds `W₅` to `∂CE/∂W₅`. The correspondence between the hand-written
+conv-backward SSA values and `cnnChainCotW1`/`cnnChainCotW2` is the per-op trust the whole suite
+carries. -/
 
-/-- **Whole cnn conv tail, tied.** All four conv kernel/bias ops, at the real conv forward, denote
-    `θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent
-    (`cnnChainCotW2`, `cnnChainCotW1`: relu masks, select-and-scatter pool-back, conv-back) driven
-    by the emitted softmax-CE cotangent `g`. That `c` equals the loss gradient at the conv output is
-    not stated. -/
-theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}
+/-- **Whole cnn train step, tied.** All ten parameter ops — the dense head `W₅,b₅,W₄,b₄,W₃,b₃` and
+    the conv kernels/biases `W₂,b₂,W₁,b₁` — at the real forward denote
+    `θ − lr·(certified ∂layer/∂θ · c)` with `c` the rendered backward-chain cotangent driven by the
+    emitted softmax-CE cotangent `g` (`mlpCotOut1`/`mlpCotOut0` in the head; `cnnChainCotW2`,
+    `cnnChainCotW1` below it: relu masks, select-and-scatter pool-back, conv-back). That `c` equals
+    the loss gradient at a layer below the output is not stated. -/
+theorem cnn_train_step_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
@@ -243,16 +247,23 @@ theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     let h4 : Vec d1 := dense W₄ b₄ (relu d1 h3)
     let g : Vec nClasses := fun k =>
       softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xv) k - oneHot nClasses label k
+    let cotH4 : Vec d1 := (mlpCotOut1 W₅ h4).denote g
+    let cotH3 : Vec d1 := (mlpCotOut0 W₄ W₅ h3 h4).denote g
     let cotW2 := cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 g
-    ConvWSgdTied xN wN lrStr cotN b₂ ac1 W₂ cotW2 lr
+    -- dense head (output layer first)
+    DenseWSgdTied xN wN lrStr cotN (relu d1 h4) W₅ b₅ g lr
+  ∧ DenseBSgdTied bN lrStr cotN W₅ (relu d1 h4) b₅ g lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 h3) W₄ b₄ cotH4 lr
+  ∧ DenseBSgdTied bN lrStr cotN W₄ (relu d1 h3) b₄ cotH4 lr
+  ∧ DenseWSgdTied xN wN lrStr cotN pool W₃ b₃ cotH3 lr
+  ∧ DenseBSgdTied bN lrStr cotN W₃ pool b₃ cotH3 lr
+  -- conv₂, conv₁
+  ∧ ConvWSgdTied xN wN lrStr cotN b₂ ac1 W₂ cotW2 lr
   ∧ ConvBSgdTied bN lrStr cotN W₂ ac1 b₂ cotW2 lr
   ∧ ConvWSgdTied xN wN lrStr cotN b₁ x W₁ (cnnChainCotW1 W₂ hc1 cotW2) lr
-  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr := by
-  intro xv hc1 ac1v ac1 hc2 ac2v ac2 pool h3 h4 g cotW2
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro idx; exact cW2_den xN wN lrStr cotN b₂ ac1 ac2 W₂ W₃ W₄ W₅ h3 h4 hc2 g lr idx
-  · intro o;   exact cb2_den bN lrStr cotN ac1 ac2 W₂ W₃ W₄ W₅ b₂ h3 h4 hc2 g lr o
-  · intro idx; exact cW1_den xN wN lrStr cotN b₁ x W₁ W₂ hc1 cotW2 lr idx
-  · intro o;   exact cb1_den bN lrStr cotN W₁ x b₁ W₂ hc1 cotW2 lr o
+  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr :=
+  ⟨denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds⟩
 
 end Proofs.CnnPoC

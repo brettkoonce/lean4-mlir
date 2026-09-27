@@ -3236,24 +3236,25 @@ reindex factor and the saved input \(x\) is the constant.}
 Chain rule at a point through the six stages; see
 \leandocref{Proofs.mnistCnnNoBnHasVJPAt\_correct}.
 \end{proof}
-\begin{theorem}[Emitted convolution updates are the certified steps]
+\begin{theorem}[Emitted updates are the certified steps]
   \label{thm:cnn_fold}
-  \lean{Proofs.CnnPoC.cnn_conv_tied_certified}
+  \lean{Proofs.CnnPoC.cnn_train_step_tied_certified}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP,
-      ax:maxPool2, ax:pdiv, def:hasvjp}
-  \Prove{} the four convolution updates \texttt{cnn\_train\_step.mlir} emits
-  --- \(W_2, b_2, W_1, b_1\) --- denote the certified SGD step at the real
-  forward: each kernel update is \(W - \alpha\) times the conv weight-VJP at
-  the chain cotangent, where the cotangent reaching \(\mathrm{conv}_2\) is the
-  softmax cross-entropy gradient carried back through the dense head and the
-  max pool, and \(\mathrm{conv}_1\)'s is that carried through \(\mathrm{conv}_2\).
-  The dense head's updates tie as in Chapter~\ref{chap:mlp}.
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
+      ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
+  \Prove{} all ten parameter updates \texttt{cnn\_train\_step.mlir} emits
+  --- the dense head's \(W_5, b_5, W_4, b_4, W_3, b_3\) and the convolutions'
+  \(W_2, b_2, W_1, b_1\) --- denote the certified SGD step at the real
+  forward: each update is the parameter minus \(\alpha\) times its layer's
+  VJP at the chain cotangent. That cotangent starts as the softmax
+  cross-entropy gradient at the logits; the dense head carries it back to the
+  max pool, the max pool to \(\mathrm{conv}_2\), and \(\mathrm{conv}_2\) to
+  \(\mathrm{conv}_1\).
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.CnnPoC.cnn\_conv\_tied\_certified}.
+See \leandocref{Proofs.CnnPoC.cnn\_train\_step\_tied\_certified}.
 \end{proof}
 
 \begin{theorem}[SGD descends through the convolutions]
@@ -4209,22 +4210,22 @@ the two elementary Jacobians into one formula; contracting with
 \end{enumerate}
 \end{proof}
 
-\begin{theorem}[Emitted convolution updates are the certified steps]
+\begin{theorem}[Emitted updates are the certified steps]
   \label{thm:cifar_fold}
-  \lean{Proofs.CifarPoC.cifar_conv_tied_certified}
+  \lean{Proofs.CifarPoC.cifar_train_step_tied_certified}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP,
-      ax:maxPool2, ax:pdiv, def:hasvjp}
-  \Prove{} the eight convolution updates \texttt{cifar\_train\_step.mlir}
-  emits --- kernels and biases of the two-stage CIFAR net's four convolutions
-  --- denote the certified step at the real forward \texttt{cifarCnnForward},
-  each at the chain cotangent carried back from the softmax cross-entropy
-  gradient.
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
+      ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
+  \Prove{} all fourteen parameter updates \texttt{cifar\_train\_step.mlir}
+  emits --- weights and biases of the three dense layers and of the two-stage
+  CIFAR net's four convolutions --- denote the certified step at the real
+  forward \texttt{cifarCnnForward}, each at the chain cotangent carried back
+  from the softmax cross-entropy gradient.
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.CifarPoC.cifar\_conv\_tied\_certified}.
+See \leandocref{Proofs.CifarPoC.cifar\_train\_step\_tied\_certified}.
 \end{proof}
 
 \begin{theorem}[Emitted BatchNorm updates are the certified steps]
@@ -4246,40 +4247,42 @@ See \leandocref{Proofs.CifarBnPoC.bnSgdPairTied\_holds}.
 
 \begin{theorem}[The eight-convolution step is the certified step]
   \label{thm:cifar8_step_tie}
-  \lean{Proofs.Cifar8PoC.cifar8_convs_tied_certified}
+  \lean{Proofs.Cifar8PoC.cifar8_train_step_tied_certified}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP,
-      ax:maxPool2, ax:pdiv, def:hasvjp}
-  \Prove{} all sixteen convolution updates of
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
+      ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
+  \Prove{} all twenty-two parameter updates of
   \texttt{cifar8\_train\_step.mlir} --- kernels and biases of \(W_1, \dots, W_8\)
-  across the four stages --- denote the certified step at
-  \texttt{cifarCnn8Forward}, cotangents chained back stage by stage from the
-  loss gradient, and the dense head's updates are tied to the gradient of the
-  whole loss.
+  across the four stages, and weights and biases of the three dense layers ---
+  denote the certified step at \texttt{cifarCnn8Forward}, each at the chain
+  cotangent carried back from the softmax cross-entropy gradient, through the
+  dense head and then stage by stage.
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.Cifar8PoC.cifar8\_convs\_tied\_certified}.
+See \leandocref{Proofs.Cifar8PoC.cifar8\_train\_step\_tied\_certified}.
 \end{proof}
 
 \begin{theorem}[The eight-convolution BatchNorm step is the certified step]
   \label{thm:cifar8bn_step_tie}
-  \lean{Proofs.Cifar8BnPoC.cifar8Bn_convbn_tied_certified}
+  \lean{Proofs.Cifar8BnPoC.cifar8Bn_train_step_tied_certified}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP,
-      ax:maxPool2, ax:pdiv, def:hasvjp, thm:cifar_bn_fold}
-  \Prove{} with BatchNorm after each of the eight convolutions, the
-  twenty-four update pairs of \texttt{cifar8\_bn\_train\_step.mlir} --- kernel,
-  bias, and BatchNorm \((\gamma, \beta)\) per layer --- denote the certified
-  step at \texttt{cifarCnnBn8Forward}: the BatchNorm updates at the
-  ReLU-masked cotangent, the convolution updates at the cotangent BatchNorm's
-  input gradient passes down.
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
+      ax:pdiv, def:hasvjp, thm:cifar_bn_fold, thm:denseBiasGrad_correct,
+      thm:denseWeightGrad_correct}
+  \Prove{} with BatchNorm after each of the eight convolutions, all
+  thirty-eight parameter updates of \texttt{cifar8\_bn\_train\_step.mlir} ---
+  kernel, bias, and BatchNorm \((\gamma, \beta)\) per convolution, and weight
+  and bias per dense layer --- denote the certified step at
+  \texttt{cifarCnnBn8Forward}: the dense updates at the cotangent the head
+  carries back, the BatchNorm updates at the ReLU-masked cotangent, the
+  convolution updates at the cotangent BatchNorm's input gradient passes down.
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.Cifar8BnPoC.cifar8Bn\_convbn\_tied\_certified}.
+See \leandocref{Proofs.Cifar8BnPoC.cifar8Bn\_train\_step\_tied\_certified}.
 \end{proof}
 
 \begin{theorem}[SGD descends at the last convolution]

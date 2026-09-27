@@ -2,14 +2,15 @@ import LeanMlir.Proofs.Nets.Small.CifarFold
 
 /-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) TIE — tied through the real forward
 
-The 4-stage peer of `CifarFold`'s tie (`cifar_conv_tied_certified`). cifar8 is cifar (ch4)
+The 4-stage peer of `CifarFold`'s tie (`cifar_train_step_tied_certified`). cifar8 is cifar (ch4)
 with **four** conv→conv→pool stages instead of two, so its conv backward chain is the cifar chain
 repeated: within each stage the second conv is the maxpool-back layer (`cnnChainCotW2` for the very
 last, then `cifarChainCotW2`'s cross-pool move) and the first conv is the conv-back layer
 (`cnnChainCotW1`). **Every chain cotangent reuses an existing constructor** (`cnnChainCotW2` /
 `cnnChainCotW1` / `cifarChainCotW2`) at the 4-stage dims — no new constructor, no new ops, no new
 bridges. The conv ties are `SgdNode.convW_den`/`convB_den` (generic in the cotangent); the dense head
-+ loss-cot mirror cifar.
+ties are `SgdNode.denseW_den`/`denseB_den` at the `mlpCotOut0`/`mlpCotOut1`/`g` cotangents, and the
+loss cotangent mirrors cifar.
 
 **No per-net fold file.** cifar8 needs zero new core ops and zero new fold lemmas: every conv
 layer is the generic `SgdNode.convW_den`/`convB_den` (dim- and cotangent-generic, so they certify
@@ -21,8 +22,9 @@ stage 4 (conv₇/conv₈) at `(2h,2w)`; stage 3 (conv₅/conv₆) at `(2(2h),2(2
 `(2(2(2h)),…)`; stage 1 (conv₁/conv₂) at `(2(2(2(2h))),…)`.
 
 ## Scope (same as cifar)
-* The conv cotangents are the rendered chain (`cnnChainCotW2`, `cnnChainCotW1`,
-  `CifarPoC.cifarChainCotW2`); that they equal the loss gradient at each conv output is not stated.
+* Below the output layer the cotangents are the rendered chain (`mlpCotOut1`/`mlpCotOut0` in the
+  head; `cnnChainCotW2`, `cnnChainCotW1`, `CifarPoC.cifarChainCotW2` below it); that they equal the
+  loss gradient at each layer's output is not stated.
 * Conv backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
@@ -77,14 +79,15 @@ theorem cifar8_Wb_tied_totalloss {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
             W₉ b₉ Wa ba Wb bb x) k - oneHot nClasses label k) lr i j,
       StableHLO.lossWeightGrad_eq_sum Wb bb a_head label i j, hlog]
 
-/-- **Whole cifar8 conv tail, tied.** All 16 conv params (8 conv `W`+`b`), at the real cifar8 forward,
-    denote `θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent driven by
-    the composed softmax-CE cotangent `g`; that `c` equals the loss gradient at the conv output is not
-    stated. Each conv op is fed the cotangent the 4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄),
-    `cnnChainCotW1` (conv₇/₅/₃/₁, the within-stage conv-back), `cifarChainCotW2` (conv₆/₄/₂, the
-    cross-pool move). Together with the dense head (`cifar8_Wb_tied_totalloss` + the generic
-    `denseW_den`/`denseB_den` at `g`) the WHOLE cifar8 train step is den-composed forward→loss→backward. -/
-theorem cifar8_convs_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+/-- **Whole cifar8 train step, tied.** All 22 parameter ops (8 conv `W`+`b`, then the dense head
+    `W₉,b₉,Wa,ba,Wb,bb`), at the real cifar8 forward, denote `θ − lr·(certified ∂layer/∂θ · c)` with
+    `c` the rendered backward-chain cotangent driven by the composed softmax-CE cotangent `g`; that
+    `c` equals the loss gradient at a layer below the output is not stated (at the output layer
+    `cifar8_Wb_tied_totalloss` folds `Wb` to `∂CE/∂Wb`). Each conv op is fed the cotangent the
+    4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄), `cnnChainCotW1`
+    (conv₇/₅/₃/₁, the within-stage conv-back), `cifarChainCotW2` (conv₆/₄/₂, the cross-pool move);
+    the dense head is fed `mlpCotOut0`, `mlpCotOut1` and `g`. -/
+theorem cifar8_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -166,10 +169,19 @@ theorem cifar8_convs_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
   ∧ ConvBSgdTied bN lrStr cotN W₇ zp3t b₇ cotC7 lr
   -- conv₈
   ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr := by
+  ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
+  -- dense head
+  ∧ DenseWSgdTied xN wN lrStr cotN zp4 W₉ b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
+  ∧ DenseBSgdTied bN lrStr cotN W₉ zp4 b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 h9) Wa ba ((mlpCotOut1 Wb ha).denote g) lr
+  ∧ DenseBSgdTied bN lrStr cotN Wa (relu d1 h9) ba ((mlpCotOut1 Wb ha).denote g) lr
+  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 ha) Wb bb g lr
+  ∧ DenseBSgdTied bN lrStr cotN Wb (relu d1 ha) bb g lr := by
   exact ⟨convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
-    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds⟩
+    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
+    denseWSgdTied_holds, denseBSgdTied_holds⟩
 
 end Proofs.Cifar8PoC
