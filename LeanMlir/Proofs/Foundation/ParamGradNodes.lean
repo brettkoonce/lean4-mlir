@@ -163,7 +163,7 @@ theorem convB_eq_pdiv {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc 
     (fun y => (conv2d_bias_differentiable W (Tensor3.unflatten y)) _) o]
   rfl
 
-private theorem flatConvStride2_weight_differentiable {ic oc h w kH kW : Nat} (b : Vec oc)
+theorem flatConvStride2_weight_differentiable {ic oc h w kH kW : Nat} (b : Vec oc)
     (y : Vec (ic * (2 * h) * (2 * w))) :
     Differentiable ℝ (fun θ : Vec (oc * ic * kH * kW) =>
       (flatConvStride2 (Kernel4.unflatten θ) b y : Vec (oc * h * w))) := by
@@ -171,7 +171,7 @@ private theorem flatConvStride2_weight_differentiable {ic oc h w kH kW : Nat} (b
   exact (reindexCLM _).differentiable.comp
     (conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))
 
-private theorem flatConvStride2_bias_differentiable {ic oc h w kH kW : Nat}
+theorem flatConvStride2_bias_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (y : Vec (ic * (2 * h) * (2 * w))) :
     Differentiable ℝ (fun θ : Vec oc => (flatConvStride2 W θ y : Vec (oc * h * w))) := by
   unfold flatConvStride2 decimateFlat
@@ -330,7 +330,7 @@ theorem denseW_eq_pdiv {N a c : Nat} (xN cotN : String) (x : Vec (N * a)) (W : M
   rw [hG'.pdiv_param_batchMap (fun θ y => dense (Mat.unflatten θ) b y) x
     (fun y => (denseWeightMap_differentiable b y) _) (finProdFinEquiv (i, j))]
 
-private theorem dense_bias_differentiable {a c : Nat} (W : Mat a c) (x : Vec a) :
+theorem dense_bias_differentiable {a c : Nat} (W : Mat a c) (x : Vec a) :
     Differentiable ℝ (fun b' : Vec c => dense W b' x) := by
   unfold dense; fun_prop
 
@@ -436,6 +436,17 @@ private theorem reassocB_bnchwFwd {N oc h w : Nat} (cot : Vec (N * (oc * h * w))
   simp only [Fin.val_cast, finProdFinEquiv_apply_val]
   ring
 
+/-- A channel-broadcast bias's Jacobian is the channel indicator. -/
+theorem pdiv_bias_of_split {a oc h w : Nat} (per : Vec oc → Vec a → Vec (oc * h * w))
+    (hsplit : ∀ θ y, per θ y = fun k => per 0 y k + broadcastFlat oc h w θ k) (y : Vec a)
+    (b : Vec oc) (o : Fin oc) (j : Fin (oc * h * w)) :
+    pdiv (fun θ => per θ y) b o j = if o = flatChannel oc h w j then 1 else 0 := by
+  rw [show (fun θ => per θ y) = fun θ => fun k => per 0 y k + broadcastFlat oc h w θ k from
+      funext fun θ => hsplit θ y,
+    pdiv_add (fun _ => per 0 y) (broadcastFlat oc h w) b (differentiableAt_const _)
+      ((broadcastFlat_differentiable oc h w) b), pdiv_const, zero_add]
+  exact pdiv_reindex (flatChannel oc h w) b o j
+
 /-- **A channel-broadcast bias, read by the β node, = `∂G/∂b`.** For any per-example op whose
     bias enters as `per 0 y + broadcast b`, the emitted `bnBetaGradB` on the op's output cotangent
     is the loss derivative in the bias. -/
@@ -453,12 +464,7 @@ theorem biasBeta_eq_pdiv {N a oc h w : Nat} (cotN : String)
     rw [hfun y]
     exact (differentiableAt_const (per 0 y)).add ((broadcastFlat_differentiable oc h w) b)
   rw [hG.pdiv_param_batchMap per x hd o]
-  have hp : ∀ y j, pdiv (fun θ => per θ y) b o j = if o = flatChannel oc h w j then 1 else 0 := by
-    intro y j
-    rw [hfun y, pdiv_add (fun _ => per 0 y) (broadcastFlat oc h w) b (differentiableAt_const _)
-      ((broadcastFlat_differentiable oc h w) b), pdiv_const, zero_add]
-    exact pdiv_reindex (flatChannel oc h w) b o j
-  simp_rw [hp]
+  simp_rw [pdiv_bias_of_split per hsplit]
   show bnPerChannelGradBeta oc (N * (h * w)) (bnchwFwd N oc h w (reassocB N oc h w cot)) o = _
   unfold bnPerChannelGradBeta
   rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
@@ -515,5 +521,15 @@ theorem flatConvStride2Xla_bias_split {ic oc h w kH kW : Nat} (W : Kernel4 oc ic
   simp only [flatConvStride2Xla, Function.comp_apply, decimateOddFlat]
   rw [flatConv_bias_split W θ y]
   simp only [broadcastFlat, flatChannel_decimateOddIdx]
+
+/-- The stride-4 patchify conv's bias is a channel broadcast: both decimations keep channels. -/
+theorem flatConvStride4_bias_split {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (θ : Vec oc) (y : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) :
+    (flatConvStride4 W θ y : Vec (oc * h * w))
+      = fun k => flatConvStride4 W 0 y k + broadcastFlat oc h w θ k := by
+  funext k
+  simp only [flatConvStride4, Function.comp_apply, decimateFlat, decimateOddFlat]
+  rw [flatConv_bias_split W θ y]
+  simp only [broadcastFlat, flatChannel_decimateOddIdx, flatChannel_decimateIdx]
 
 end Proofs.GradNodeB

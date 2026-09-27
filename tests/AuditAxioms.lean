@@ -147,6 +147,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1165,6 +1166,20 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_factor_b1
 #print axioms Proofs.EnetTiePoCG.enet_net_lossGrad
 #print axioms Proofs.EnetTiePoCG.enet_net_lossGrad_smoothedCE
+-- ConvNeXt-T: every parameter gradient node IS the loss's derivative (ConvNeXtParamGrad.lean)
+#print axioms Proofs.hasGradAt_linLoss
+#print axioms Proofs.HasGradAt.pdiv_param_batchMap_through
+#print axioms Proofs.smoothedBatchLossDiv_grad
+#print axioms Proofs.GradNodeB.pdiv_bias_of_split
+#print axioms Proofs.CnxTiePoCGB.cnxBlk_hasGradAt
+#print axioms Proofs.CnxTiePoCGB.cnx_block_lossTiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_down_lossTiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_stem_lossTiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_head_lossTiedGB
+#print axioms Proofs.CnxTiePoCGB.cnx_factor_b1
+#print axioms Proofs.CnxTiePoCGB.cnx_logitsB_eq
+#print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad
+#print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment

@@ -16,7 +16,8 @@ into a derivative of the loss:
   the `Σ_n Σ_j` every batched gradient node denotes.
 
 `addConstHasVJPAt` / `constAddHasVJPAt` are the VJP a residual needs when a parameter inside one
-branch varies: the other branch is a constant.
+branch varies: the other branch is a constant. For a net whose every op is batch-separable,
+`HasGradAt.pdiv_param_batchMap_through` does the work per example against `linLoss dy`.
 -/
 
 namespace Proofs
@@ -120,5 +121,60 @@ theorem HasGradAt.pdiv_param_batchMap {P N a q : Nat} {G : Vec (N * q) → Vec 1
     pdiv_eq_fderiv_coord (hper _)]
   simp only [StableHLO.batchMap, Equiv.symm_apply_apply]
   rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § A per-example stage, lifted: nets whose every op is batch-separable (ConvNeXt, ViT)
+-- ════════════════════════════════════════════════════════════════
+
+/-- The linear functional `u ↦ ⟨u, dy⟩`: its gradient is `dy` everywhere. Read per example, it
+    turns "the chain's cotangent contracts a stage Jacobian" into a `HasGradAt` statement. -/
+noncomputable def linLoss {m : Nat} (dy : Vec m) : Vec m → Vec 1 :=
+  fun u _ => ∑ k, u k * dy k
+
+theorem hasGradAt_linLoss {m : Nat} (dy x : Vec m) : HasGradAt (linLoss dy) x dy := by
+  refine ⟨by unfold linLoss; fun_prop, fun j => ?_⟩
+  rw [pdiv_of_linear (linLoss dy)
+    (fun u v => by funext; simp [linLoss, add_mul, Finset.sum_add_distrib])
+    (fun a v => by funext; simp [linLoss, Finset.mul_sum, mul_assoc])]
+  simp [linLoss, basisVec]
+
+/-- `batchSlice` of a `batchMapAux` is the per-example map at the two slices. -/
+theorem batchSlice_batchMapAux {N s a b : Nat} (f : Vec s → Vec a → Vec b) (aux : Vec (N * s))
+    (x : Vec (N * a)) (n : Fin N) :
+    StableHLO.batchSlice N b (StableHLO.batchMapAux N f aux x) n
+      = f (StableHLO.batchSlice N s aux n) (StableHLO.batchSlice N a x n) := by
+  funext i
+  simp [StableHLO.batchSlice, StableHLO.batchMapAux]
+
+/-- **A parameter inside a per-example stage, lifted over the batch.** Each example runs
+    `y ↦ post y (per θ (pre y))`: the stage `per θ` at its input `pre y`, then the rest of the block
+    `post y`. If, per example, the loss `⟨post y ·, dy⟩` has gradient `cot y dy` at the stage output,
+    then the batched node `Σ_n Σ_j ∂per/∂θ · cotₙ` — at any saved activation `A` and cotangent `COT`
+    whose slices are `pre yₙ` and `cot yₙ dyₙ` — is `∂G/∂θ` of the whole batched block. -/
+theorem HasGradAt.pdiv_param_batchMap_through {P N a b m q : Nat} {G : Vec (N * q) → Vec 1}
+    (pre : Vec a → Vec b) (per : Vec P → Vec b → Vec m) (post : Vec a → Vec m → Vec q)
+    (cot : Vec a → Vec q → Vec m) (X : Vec (N * a)) {θ : Vec P} {dY : Vec (N * q)}
+    (hG : HasGradAt G (StableHLO.batchMap N (fun y => post y (per θ (pre y))) X) dY)
+    (hper : ∀ y, DifferentiableAt ℝ (fun θ' => per θ' y) θ)
+    (hpost : ∀ y, Differentiable ℝ (post y))
+    (hcot : ∀ y dy, HasGradAt (fun u => linLoss dy (post y u)) (per θ (pre y)) (cot y dy))
+    (A : Vec (N * b)) (COT : Vec (N * m))
+    (hA : ∀ n, StableHLO.batchSlice N b A n = pre (StableHLO.batchSlice N a X n))
+    (hC : ∀ n, StableHLO.batchSlice N m COT n
+      = cot (StableHLO.batchSlice N a X n) (StableHLO.batchSlice N q dY n))
+    (i : Fin P) :
+    ∑ n : Fin N, ∑ j : Fin m,
+        pdiv (fun θ' => per θ' (StableHLO.batchSlice N b A n)) θ i j
+          * StableHLO.batchSlice N m COT n j
+      = pdiv (fun θ' => G (StableHLO.batchMap N (fun y => post y (per θ' (pre y))) X)) θ i 0 := by
+  rw [hG.pdiv_param_batchMap (fun θ' y => post y (per θ' (pre y))) X
+    (fun y => (hpost y _).comp θ (hper (pre y))) i]
+  refine Finset.sum_congr rfl fun n _ => ?_
+  rw [hA, hC, ← (hcot _ _).pdiv_param
+    (layer := fun θ' => per θ' (pre (StableHLO.batchSlice N a X n))) (hper _) i]
+  exact ((hasGradAt_linLoss _ _).pdiv_param
+    (layer := fun θ' => post (StableHLO.batchSlice N a X n)
+      (per θ' (pre (StableHLO.batchSlice N a X n))))
+    ((hpost _ _).comp θ (hper _)) i)
 
 end Proofs
