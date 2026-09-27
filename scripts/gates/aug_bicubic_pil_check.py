@@ -27,7 +27,7 @@ path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
 src = open(path).read().split("\n")
 a = next(i for i, l in enumerate(src) if l.startswith("_AA_MAX"))
 b = next(i for i, l in enumerate(src) if l.startswith("def _imagenet_decode_random_crop_flip"))
-c = next((i for i in range(a, b) if src[i].startswith("# ── C6 (planning/imagenet_parity.md)")), None)
+c = next((i for i in range(a, b) if src[i].startswith("# ── timm's geometric ops run PIL BICUBIC")), None)
 if c is None:
     sys.exit(f"⛔ {path} carries no bicubic block — not an augBicubic recipe")
 full, bilinear = "\n".join(src[a:b]), "\n".join(src[a:c])
