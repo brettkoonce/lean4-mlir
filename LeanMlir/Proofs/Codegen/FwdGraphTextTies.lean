@@ -2,6 +2,7 @@ import LeanMlir.Proofs.Codegen.ResNet50RenderB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
@@ -28,7 +29,8 @@ graphs describe. The bf16 renders swap in `…Bf16` constructors (`Bf16Fold`, `B
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
-21-row table), the MobileNetV2 and MobileNetV4 heads with classifier dropout (`cd := true`), and
+21-row table), MobileNetV2's per-example inference forward (`MobileNetV2FullPaperEval`), the
+MobileNetV2 and MobileNetV4 heads with classifier dropout (`cd := true`), and
 MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
 sizes its evals are rendered at. Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
 own constructors.
@@ -168,6 +170,58 @@ def mnv2NoExpW0 (ic oc : Nat) : IVWNoExp ic oc :=
   prettyText 2 (mnv2HeadGraphBDo "1.0e-03" doName 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0) (leaf "%in" _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § MobileNetV2 at inference — `mnv2FwdChain`'s pieces vs `mobilenetv2FwdGraphPaperEval`'s
+--   The eval chain is per-example constructors printed at batch `B`; the guards compare them at
+--   `B = 2` with `convBias := false`, the committed artifacts' setting.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Zero inference weights for an expand-bearing bottleneck. -/
+def ivwEval0 (ic mid oc : Nat) : IVWEval ic mid oc :=
+  ⟨fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0,
+   fun _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0,
+   fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+/-- Zero inference weights for the `t = 1` bottleneck. -/
+def ivwNoExpEval0 (ic oc : Nat) : IVWNoExpEval ic oc :=
+  ⟨fun _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0,
+   fun _ _ _ _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0, fun _ => 0⟩
+
+-- Stem: 3×3/s2 XLA-SAME (3 → 32, 224 → 112) → BN → relu6.
+#guard textOf (mnv2EvalStemFwd 2 "1.0e-03" false) (·.1) ==
+  prettyText 2 (mnv2StemGraphPaperEval "1.0e-03" 0 (ic := 3) (oc := 32) (h := 112) (w := 112)
+    (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (leaf "%x" _))
+
+-- `t = 1` (b1: 32 → 16 at 112²).
+#guard textOf (irFwdNoExp 2 32 16 112 "1.0e-03" "1" "%in" false) (·.code) ==
+  prettyText 2 (ivNoExpGraphEvalW "1" "1.0e-03" 112 112 0 (ivwNoExpEval0 32 16) (leaf "%in" _))
+
+-- Strided (b2: 16 → 96 → 24, 112² → 56²).
+#guard textOf (irFwdStrided 2 16 96 24 56 "1.0e-03" "2" "%in" false) (·.code) ==
+  prettyText 2 (ivStridedGraphEvalW "2" "1.0e-03" 56 56 0 (ivwEval0 16 96 24) (leaf "%in" _))
+
+-- Skip (b3: 24 → 144 → 24 at 56²).
+#guard textOf (irFwd 2 24 144 24 56 "1.0e-03" "3" "%in" false) (·.code) ==
+  prettyText 2 (ivResidGraphEvalW "3" "1.0e-03" 56 56 0 (ivwEval0 24 144 24) (leaf "%in" _))
+
+-- Widening, no skip (b11: 64 → 384 → 96 at 14²).
+#guard textOf (irFwdNoSkip 2 64 384 96 14 "1.0e-03" "11" "%in" false) (·.code) ==
+  prettyText 2 (ivExpOnlyGraphEvalW "11" "1.0e-03" 14 14 0 (ivwEval0 64 384 96) (leaf "%in" _))
+
+-- Head: 1×1 (320 → 1280) → BN → relu6 → GAP(7²) → dense(→ 10).
+#guard textOf (mnv2EvalHeadFwd 2 10 "1.0e-03" false "%in") (·.1) ==
+  prettyText 2 (mnv2HeadGraphPaperEval "1.0e-03" 0 (c := 320) (oc := 1280) (h := 7) (w := 7)
+    (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- The batched artifact is the per-example graph at each example: its only reduction is the GAP
+-- over `[2, 3]` — nothing in the eval render reduces across the batch axis.
+#guard
+  let t := mnv2FwdEvalFaithfulV 2 10 "1.0e-03"
+  (t.splitOn "across dimensions = [").length == 2 &&
+    (t.splitOn "across dimensions = [2, 3]").length == 2
 
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV4-Conv-M — `mnv4FwdChainB` vs `mnv4FwdGraphBFull`

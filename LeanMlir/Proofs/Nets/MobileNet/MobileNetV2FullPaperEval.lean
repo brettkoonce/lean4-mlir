@@ -23,13 +23,20 @@ names, and this file's graph carries them verbatim: `bnEvalSite`'s `%stnmu`/`%st
 stem, `%b{k}enmu`,
 `%b{k}dnmu`, `%b{k}pnmu` and their `nvar` peers per block, `%hnmu`/`%hnvar` for the head, around
 `irSig`/`irSigNoExp`'s `%We{k}`/`%ge{k}`/`%bte{k}`/`%Wd{k}`/`%gd{k}`/`%btd{k}`/`%Wp{k}`/`%gp{k}`/
-`%btp{k}`. Names are pretty-printing metadata and do not enter `den`; matching them is what lets a
-reader diff the typed graph against the committed text line for line.
+`%btp{k}`, and every conv bias as `%zb{c}`, the zero constant the render binds it to at
+`convBias := false`. Names are pretty-printing metadata and do not enter `den`.
+`FwdGraphTextTies` checks the render's stem, head and one block of each kind against this file's
+graphs, byte for byte.
 
-**What it is tied to.** `mobilenetv2_fwd_eval.mlir` runs this net (batched): 263 inputs — `%x`, 158 parameter
-tensors (`paperSig` at `convBias := false`, which is why the graph's bias slots `%bs`/`%bd{k}`/…
-have no argument: the render folds each conv bias into the BatchNorm that follows it) and 104
-statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` and
+**Per example, and the artifact is batched.** The render writes this graph's own per-example
+constructors, printed at the artifact's batch `B` (`mnv2FwdChain`): each op takes a leading batch
+dimension and none reduces across it — frozen-statistics BatchNorm reads its `μ, σ²` as inputs, and
+the one reduction is the GAP over `[2, 3]`, which `FwdGraphTextTies` also checks over the whole
+rendered module. So the artifact computes this forward at every example of its batch.
+
+**What it is tied to.** `mobilenetv2_fwd_eval.mlir`: 263 inputs — `%x`, 158 parameter tensors
+(`paperSig` at `convBias := false`, so no bias slot has an argument: the render folds each conv
+bias into the BatchNorm that follows it) and 104 statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` and
 `mobilenetv2in_fwd_eval_eps0001.mlir` its 1000-class twins. The classifier here is generic in
 `nCls` and `ε` is a binder, so one theorem covers all three.
 
@@ -195,10 +202,10 @@ def ivNoExpGraphEvalW (k epsStr : String) (h w : Nat) (ε : ℝ) {ic oc : Nat}
     (p : IVWNoExpEval ic oc) (e : SHlo (ic * h * w)) : SHlo (oc * h * w) :=
   .bnPerChannelEvalF (oc := oc) (h := h) (w := w) s!"%gp{k}" s!"%btp{k}"
       s!"%b{k}pnmu" s!"%b{k}pnvar" epsStr ε p.pγ p.pβ p.pμ p.pv
-    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%bp{k}" p.pW p.pb
+    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%zb{oc}" p.pW p.pb
       (.relu6F (.bnPerChannelEvalF (oc := ic) (h := h) (w := w) s!"%gd{k}" s!"%btd{k}"
           s!"%b{k}dnmu" s!"%b{k}dnvar" epsStr ε p.dγ p.dβ p.dμ p.dv
-        (.depthwiseF (h := h) (w := w) s!"%Wd{k}" s!"%bd{k}" p.dW p.db e))))
+        (.depthwiseF (h := h) (w := w) s!"%Wd{k}" s!"%zb{ic}" p.dW p.db e))))
 
 theorem ivNoExpGraphEvalW_faithful (k epsStr : String) (h w : Nat) (ε : ℝ) {ic oc : Nat}
     (p : IVWNoExpEval ic oc) (e : SHlo (ic * h * w)) :
@@ -212,13 +219,13 @@ def ivExpOnlyGraphEvalW (k epsStr : String) (h w : Nat) (ε : ℝ) {ic mid oc : 
     (p : IVWEval ic mid oc) (e : SHlo (ic * h * w)) : SHlo (oc * h * w) :=
   .bnPerChannelEvalF (oc := oc) (h := h) (w := w) s!"%gp{k}" s!"%btp{k}"
       s!"%b{k}pnmu" s!"%b{k}pnvar" epsStr ε p.pγ p.pβ p.pμ p.pv
-    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%bp{k}" p.pW p.pb
+    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%zb{oc}" p.pW p.pb
       (.relu6F (.bnPerChannelEvalF (oc := mid) (h := h) (w := w) s!"%gd{k}" s!"%btd{k}"
           s!"%b{k}dnmu" s!"%b{k}dnvar" epsStr ε p.dγ p.dβ p.dμ p.dv
-        (.depthwiseF (h := h) (w := w) s!"%Wd{k}" s!"%bd{k}" p.dW p.db
+        (.depthwiseF (h := h) (w := w) s!"%Wd{k}" s!"%zb{mid}" p.dW p.db
           (.relu6F (.bnPerChannelEvalF (oc := mid) (h := h) (w := w) s!"%ge{k}" s!"%bte{k}"
               s!"%b{k}enmu" s!"%b{k}envar" epsStr ε p.eγ p.eβ p.eμ p.ev
-            (.flatConvF (h := h) (w := w) s!"%We{k}" s!"%be{k}" p.eW p.eb e)))))))
+            (.flatConvF (h := h) (w := w) s!"%We{k}" s!"%zb{mid}" p.eW p.eb e)))))))
 
 theorem ivExpOnlyGraphEvalW_faithful (k epsStr : String) (h w : Nat) (ε : ℝ) {ic mid oc : Nat}
     (p : IVWEval ic mid oc) (e : SHlo (ic * h * w)) :
@@ -247,13 +254,13 @@ def ivStridedGraphEvalW (k epsStr : String) (h w : Nat) (ε : ℝ) {ic mid oc : 
     (p : IVWEval ic mid oc) (e : SHlo (ic * (2 * h) * (2 * w))) : SHlo (oc * h * w) :=
   .bnPerChannelEvalF (oc := oc) (h := h) (w := w) s!"%gp{k}" s!"%btp{k}"
       s!"%b{k}pnmu" s!"%b{k}pnvar" epsStr ε p.pγ p.pβ p.pμ p.pv
-    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%bp{k}" p.pW p.pb
+    (.flatConvF (h := h) (w := w) s!"%Wp{k}" s!"%zb{oc}" p.pW p.pb
       (.relu6F (.bnPerChannelEvalF (oc := mid) (h := h) (w := w) s!"%gd{k}" s!"%btd{k}"
           s!"%b{k}dnmu" s!"%b{k}dnvar" epsStr ε p.dγ p.dβ p.dμ p.dv
-        (.depthwiseStridedXlaF (h := h) (w := w) s!"%Wd{k}" s!"%bd{k}" p.dW p.db
+        (.depthwiseStridedXlaF (h := h) (w := w) s!"%Wd{k}" s!"%zb{mid}" p.dW p.db
           (.relu6F (.bnPerChannelEvalF (oc := mid) (h := 2 * h) (w := 2 * w) s!"%ge{k}"
               s!"%bte{k}" s!"%b{k}enmu" s!"%b{k}envar" epsStr ε p.eγ p.eβ p.eμ p.ev
-            (.flatConvF (h := 2 * h) (w := 2 * w) s!"%We{k}" s!"%be{k}" p.eW p.eb e)))))))
+            (.flatConvF (h := 2 * h) (w := 2 * w) s!"%We{k}" s!"%zb{mid}" p.eW p.eb e)))))))
 
 theorem ivStridedGraphEvalW_faithful (k epsStr : String) (h w : Nat) (ε : ℝ) {ic mid oc : Nat}
     (p : IVWEval ic mid oc) (e : SHlo (ic * (2 * h) * (2 * w))) :
@@ -263,6 +270,22 @@ theorem ivStridedGraphEvalW_faithful (k epsStr : String) (h w : Nat) (ε : ℝ) 
              depthwiseStridedXlaF_faithful]
   simp only [invresBodyStridedPCEval, ivExpandPCEval, ivDepthwiseStridedPCEval, ivProjectPCEval,
              Function.comp_apply]
+
+/-- Stem inference graph: 3×3/s2 XLA-`SAME` conv → BN (`stn`) → relu6. -/
+def mnv2StemGraphPaperEval (epsStr : String) (ε : ℝ) {ic oc h w : Nat} (W : Kernel4 oc ic 3 3)
+    (b γ β μ v : Vec oc) (e : SHlo (ic * (2 * h) * (2 * w))) : SHlo (oc * h * w) :=
+  .relu6F (.bnPerChannelEvalF (oc := oc) (h := h) (w := w) "%gs" "%bts" "%stnmu" "%stnvar"
+      epsStr ε γ β μ v
+    (.flatConvStridedXlaF (h := h) (w := w) "%Ws" s!"%zb{oc}" W b e))
+
+/-- Head inference graph: 1×1 conv → BN (`hn`) → relu6 → GAP → dense. -/
+def mnv2HeadGraphPaperEval (epsStr : String) (ε : ℝ) {c oc h w nC : Nat} (W : Kernel4 oc c 1 1)
+    (b γ β μ v : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (e : SHlo (c * h * w)) : SHlo nC :=
+  denseF "%Wfc" "%bfc" Wfc bfc
+    (.gapF (c := oc) (h := h) (w := w)
+      (.relu6F (.bnPerChannelEvalF (oc := oc) (h := h) (w := w) "%gh" "%bth" "%hnmu" "%hnvar"
+          epsStr ε γ β μ v
+        (.flatConvF (h := h) (w := w) "%Wh" s!"%zb{oc}" W b e))))
 
 -- ════════════════════════════════════════════════════════════════
 -- § The full paper-spec inference forward graph + faithfulness (all 17 bottlenecks)
@@ -274,11 +297,7 @@ theorem ivStridedGraphEvalW_faithful (k epsStr : String) (h w : Nat) (ε : ℝ) 
     `bnPerChannelEvalF`. The typed form of the shipped `mobilenetv2_fwd_eval`. -/
 def mobilenetv2FwdGraphPaperEval (epsStr : String) (ε : ℝ) (w : MNV2PaperWeightsEval nCls)
     (x : Vec (3 * 224 * 224)) : SHlo nCls :=
-  denseF "%Wfc" "%bfc" w.fcW w.fcb
-    (.gapF (c := 1280) (h := 7) (w := 7)
-      (.relu6F (.bnPerChannelEvalF (oc := 1280) (h := 7) (w := 7) "%gh" "%bth"
-          "%hnmu" "%hnvar" epsStr ε w.hγ w.hβ w.hμ w.hv
-        (.flatConvF (h := 7) (w := 7) "%Wh" "%bh" w.hW w.hb
+  mnv2HeadGraphPaperEval epsStr ε (h := 7) (w := 7) w.hW w.hb w.hγ w.hβ w.hμ w.hv w.fcW w.fcb
         (ivExpOnlyGraphEvalW "17" epsStr 7 7 ε w.b17
           (ivResidGraphEvalW "16" epsStr 7 7 ε w.b16
             (ivResidGraphEvalW "15" epsStr 7 7 ε w.b15
@@ -296,10 +315,9 @@ def mobilenetv2FwdGraphPaperEval (epsStr : String) (ε : ℝ) (w : MNV2PaperWeig
                                     (ivResidGraphEvalW "3" epsStr 56 56 ε w.b3
                                       (ivStridedGraphEvalW "2" epsStr 56 56 ε w.b2
                                         (ivNoExpGraphEvalW "1" epsStr 112 112 ε w.b1
-                                          (.relu6F (.bnPerChannelEvalF (oc := 32) (h := 112) (w := 112) "%gs" "%bts"
-                                            "%stnmu" "%stnvar" epsStr ε w.sγ w.sβ w.sμ w.sv
-                                            (.flatConvStridedXlaF (h := 112) (w := 112) "%Ws" "%bs" w.sW w.sb
-                                              (.operand "%x" x)))))))))))))))))))))))))
+                                          (mnv2StemGraphPaperEval epsStr ε (h := 112) (w := 112)
+                                            w.sW w.sb w.sγ w.sβ w.sμ w.sv
+                                            (.operand "%x" x)))))))))))))))))))
 
 /-- **Seventeen-block inference MobileNetV2 forward faithfulness.** The typed graph denotes
     `mobilenetv2ForwardPaperEval`, for every shared `ε`, weight record and input example. -/
@@ -307,7 +325,8 @@ theorem mobilenetv2FwdGraphPaperEval_faithful (epsStr : String) (ε : ℝ)
     (w : MNV2PaperWeightsEval nCls) (x : Vec (3 * 224 * 224)) :
     den (mobilenetv2FwdGraphPaperEval epsStr ε w x) = mobilenetv2ForwardPaperEval ε w x := by
   -- Chained from the per-block-kind `*GraphEvalW_faithful` lemmas, then a structural `rfl`.
-  simp only [mobilenetv2FwdGraphPaperEval, denseF_faithful, gapF_faithful, relu6F_faithful,
+  simp only [mobilenetv2FwdGraphPaperEval, mnv2HeadGraphPaperEval, mnv2StemGraphPaperEval,
+             denseF_faithful, gapF_faithful, relu6F_faithful,
              bnPerChannelEvalF_faithful, flatConvF_faithful, flatConvStridedXlaF_faithful,
              ivExpOnlyGraphEvalW_faithful, ivResidGraphEvalW_faithful,
              ivStridedGraphEvalW_faithful, ivNoExpGraphEvalW_faithful, den_operand]

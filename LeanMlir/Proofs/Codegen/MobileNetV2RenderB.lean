@@ -959,7 +959,7 @@ structure MBFwd where
 
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -987,7 +987,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
 
 /-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
     block input (ic = oc). -/
-private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1019,7 +1019,7 @@ private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : B
 /-- **NO-EXPAND inverted-residual forward** (b1): depthwise(stride-1, on `ic` channels)→BN→relu6
     → project(1×1 ic→oc)→BN. NO expand, NO skip. `f.er` = the depthwise INPUT (= block input
     `xName`), `f.dr` = the project input. (`ec`/`en` are unused for this block kind.) -/
-private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1044,7 +1044,7 @@ private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : 
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6
     → project(1×1)→BN. Everything at `hh×ww`; `ic ≠ oc` so NO skip (block output = project-BN out). -/
-private def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1121,6 +1121,36 @@ structure MNV2Fwd where
   bns    : List (String × Nat × Nat)
   deriving Inhabited
 
+/-- The eval forward's stem: 3x3/s2 XLA-`SAME` conv (3->32, 224->112) -> BN (`stn`) -> relu6, on
+    `%x`. Returns the code and the relu6 output's name. -/
+def mnv2EvalStemFwd (B : Nat) (epsStr : String) (convBias : Bool) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+  let zx   : Vec (3*224*224) := fun _ => 0
+  let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+  let z32  : Vec 32 := fun _ => 0
+  let z112 : Vec (32*112*112) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
+  let (cStn, nStn) ← bnEvalSite B 32 112 112 epsStr "%gs" "%bts" "stn" nStc
+  let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
+  pure (cStc ++ cStn ++ cStr, nStr)
+
+/-- The eval forward's head: 1x1 conv (320->1280) -> BN (`hn`) -> relu6 -> GAP(7x7) ->
+    dense(1280->`nClasses`), on block 17's output `xin`. Returns the code and the logits' name. -/
+def mnv2EvalHeadFwd (B nClasses : Nat) (epsStr : String) (convBias : Bool) (xin : String) :
+    StateM Proofs.StableHLO.EmitS (String × String) := do
+  let z7    : Vec (320*7*7) := fun _ => 0
+  let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+  let z1280 : Vec 1280 := fun _ => 0
+  let zH7   : Vec (1280*7*7) := fun _ => 0
+  let zWd   : Mat 1280 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" (biasName convBias "%bh" 1280) zHk z1280 (.operand xin z7))
+  let (cHn, nHn) ← bnEvalSite B 1280 7 7 epsStr "%gh" "%bth" "hn" nHc
+  let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
+  let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
+  let (cLog, nLog) ← pretty B (denseF "%Wfc" "%bfc" zWd zNC (.operand nGap z1280))
+  pure (cHc ++ cHn ++ cHr ++ cGap ++ cLog, nLog)
+
 /-- **The full 17-block paper MobileNetV2 forward as `pretty` of the verified AST**, at the
     PER-EXAMPLE index. 3x3/s2 stem (3->32, 224->112) -> the `[t,c,n,s]` inverted-residual stack
     (112->56->28->14->7) -> 1x1 head (320->1280) -> GAP(7x7) -> dense(1280->`nClasses`).
@@ -1130,13 +1160,7 @@ structure MNV2Fwd where
 private def mnv2FwdChain (B nClasses : Nat) (epsStr : String) (convBias : Bool) :
     StateM Proofs.StableHLO.EmitS MNV2Fwd := do
     -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
-    let zx   : Vec (3*224*224) := fun _ => 0
-    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
-    let z32  : Vec 32 := fun _ => 0
-    let z112 : Vec (32*112*112) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
-    let (cStn, nStn) ← bnEvalSite B 32 112 112 epsStr "%gs" "%bts" "stn" nStc
-    let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
+    let (cSt, nStr) ← mnv2EvalStemFwd B epsStr convBias
     -- forward: 17 inverted-residual blocks
     let f1  ← irFwdNoExp   B 32      16 112 epsStr "1"  nStr convBias
     let f2  ← irFwdStrided B 16  96  24  56 epsStr "2"  f1.o convBias
@@ -1156,21 +1180,11 @@ private def mnv2FwdChain (B nClasses : Nat) (epsStr : String) (convBias : Bool) 
     let f16 ← irFwd        B 160 960 160   7 epsStr "16" f15.o convBias
     let f17 ← irFwdNoSkip  B 160 960 320   7 epsStr "17" f16.o convBias
     -- head: 1x1 conv (320->1280) -> BN -> relu6 -> GAP(7x7) -> dense(1280->nClasses)
-    let z7    : Vec (320*7*7) := fun _ => 0
-    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
-    let z1280 : Vec 1280 := fun _ => 0
-    let zH7   : Vec (1280*7*7) := fun _ => 0
-    let zWd   : Mat 1280 nClasses := fun _ _ => 0
-    let zNC   : Vec nClasses := fun _ => 0
-    let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" (biasName convBias "%bh" 1280) zHk z1280 (.operand f17.o z7))
-    let (cHn, nHn) ← bnEvalSite B 1280 7 7 epsStr "%gh" "%bth" "hn" nHc
-    let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
-    let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
-    let (cLog, nLog) ← pretty B (denseF "%Wfc" "%bfc" zWd zNC (.operand nGap z1280))
-    pure { code := cStc ++ cStn ++ cStr ++
+    let (cHd, nLog) ← mnv2EvalHeadFwd B nClasses epsStr convBias f17.o
+    pure { code := cSt ++
              f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
              f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
-             f15.code ++ f16.code ++ f17.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+             f15.code ++ f16.code ++ f17.code ++ cHd,
            logits := nLog,
            bns := ("stn", 32, 112) ::
              (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
