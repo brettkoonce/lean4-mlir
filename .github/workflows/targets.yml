@@ -13,6 +13,10 @@ name: Target names
 #
 # The build-level companion is `lake build Apps` in certs.yml: this job asks whether a
 # name still resolves, that one asks whether the code behind it still elaborates.
+#
+# The MANIFEST check rides here for the same reason: its `runs` column counts tracked
+# files under runs/ that name each artifact, so a runs/ commit can stale it, and no
+# path-filtered workflow sees runs/ commits. It is Python and git, a few seconds.
 
 on:
   push:
@@ -72,3 +76,10 @@ jobs:
             fi
           } >> $GITHUB_STEP_SUMMARY
           exit $rc
+
+      - name: verified_mlir/MANIFEST.md is current
+        # The index of the committed artifacts (writer, variant decode, runs that compiled each).
+        # Needs no Lean: `git grep` for the writers, tracked `runs/` logs for the counts. Moved
+        # here from proofs.yml 2026-09-27: two runs/ commits staled it unseen behind that
+        # workflow's path filter, and the next lakefile push wore the red.
+        run: python3 scripts/gates/gen_mlir_manifest.py --check

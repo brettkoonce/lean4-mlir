@@ -254,15 +254,15 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mnv4in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 1 |
-| `mnv4in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 1 |
+| `mnv4in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 3 |
+| `mnv4in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 3 |
 | `mnv4in_fwd_eval_s256.mlir` | fwd_eval @256px | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | — |
 | `mnv4in_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.5 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
 | `mnv4in_adam64bf16_train_step.mlir` | train_step | `adam64bf16` | AdamW, bf16, batch 64 | 1.6 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 4 |
 | `mnv4in_adamdp64_train_step.mlir` | train_step | `adamdp64` | AdamW, data-parallel, batch 64 per replica | 1.8 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 6 |
 | `mnv4in_adamdp64bf16_train_step.mlir` | train_step | `adamdp64bf16` | AdamW, data-parallel, bf16, batch 64 per replica | 1.8 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
 | `mnv4in_emaacc8x128wxdowd005bf16_train_step.mlir` | train_step | `emaacc8x128wxdowd005bf16` | EMA shadow (5-region blob), AdamW, grad-accum ×8, classifier dropout, no decay on norm/bias, bf16, weight decay 0.05, micro-batch 128 | 1.7 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 2 |
-| `mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir` | train_step | `emaaccdp8x128wxdowd005bf16` | EMA shadow (5-region blob), AdamW, data-parallel, grad-accum ×8, classifier dropout, no decay on norm/bias, bf16, weight decay 0.05, micro-batch 128 per replica | 2.0 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 2 |
+| `mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir` | train_step | `emaaccdp8x128wxdowd005bf16` | EMA shadow (5-region blob), AdamW, data-parallel, grad-accum ×8, classifier dropout, no decay on norm/bias, bf16, weight decay 0.05, micro-batch 128 per replica | 2.0 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 4 |
 
 ## `mobilenetv2` — 5 artifacts, 3.4 MB
 

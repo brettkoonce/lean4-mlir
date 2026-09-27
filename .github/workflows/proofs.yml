@@ -18,7 +18,6 @@ on:
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
-      - 'scripts/gates/gen_mlir_manifest.py'
       - 'scripts/certs/_gencheck.py'
       - 'scripts/certs/lipschitz_cert_float.py'
       - 'scripts/certs/smooth_scorecard_gen.py'
@@ -40,7 +39,6 @@ on:
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
-      - 'scripts/gates/gen_mlir_manifest.py'
       - 'scripts/certs/_gencheck.py'
       - 'scripts/certs/lipschitz_cert_float.py'
       - 'scripts/certs/smooth_scorecard_gen.py'
@@ -91,13 +89,6 @@ jobs:
         # 4 nets pair cleanly, 3 are recorded splits (§3d(b)) — and a divergence that is NOT on the
         # recorded list fails here.
         run: scripts/regen_verified_mlir.sh check
-
-      - name: verified_mlir/MANIFEST.md is current
-        # The index of the committed artifacts (writer, variant decode, runs that compiled each).
-        # Needs no Lean: `git grep` for the writers, tracked `runs/` logs for the counts. It went
-        # stale unnoticed when the chapter 1–4 writers moved to ChapterArtifacts, because nothing
-        # ran --check.
-        run: python3 scripts/gates/gen_mlir_manifest.py --check
 
       - name: Certificate generators reproduce their committed Lean
         # Three generators whose inputs are all committed (LipschitzCert/Scorecard.lean, the
