@@ -57,16 +57,14 @@ theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
   (conv2dBiasGradHasVJP W x).correct b c o
 
 -- ════════════════════════════════════════════════════════════════
--- § Closing the CNN render — the conv param outputs denote the certified gradients
+-- § Conv SGD steps — the SGD form of the conv bridges
 --
 -- The CNN train step (`cnnTrainStepFaithfulV` — conv→relu→conv→relu→maxpool→dense→relu→
--- dense→relu→dense) renders, per conv layer, `%dWᵢ = convWGrad` (the transpose-trick
--- kernel gradient) and `%Wᵢn = Wᵢ − lr·%dWᵢ`. These theorems are the denotation side:
--- each rendered conv SGD output equals `θ − lr·(certified conv Jacobian · the cotangent
--- the backward chain delivers)`, via the conv bridges. The conv analogue of the MLP
--- `mlp_render_W*_certified`; generic in the cotangent `c`, so one theorem covers both
--- conv layers (W₁, W₂). The three DENSE layers (W₃,W₄,W₅) reuse the M2 dense bridges
--- (`weight_grad_bridge`/`bias_grad_bridge`) exactly as the MLP render close does.
+-- dense→relu→dense) emits, per conv layer, `%dWᵢ = convWGrad` (the transpose-trick
+-- kernel gradient) and `%Wᵢn = Wᵢ − lr·%dWᵢ`. The two theorems below are stated on the
+-- functions, not on emitted text: `θ − lr·(conv backward at c)` equals `θ − lr·(certified
+-- conv Jacobian · c)`. The `SgdNodes` conv nodes carry them to the emitted ops. Generic in the cotangent `c`, so one theorem covers both conv
+-- layers (W₁, W₂); the dense layers use `weight_grad_bridge`/`bias_grad_bridge`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Conv weight SGD step — SGD form of `conv_weight_grad_bridge`.** At the flattened

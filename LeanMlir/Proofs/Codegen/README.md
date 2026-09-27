@@ -1,8 +1,10 @@
 # Codegen/ — the emitted-graph AST, its semantics, and the artifact writers
 
-Every file in `verified_mlir/` is written by an `#eval` in a `*Render*` / `*Artifacts` file here, and
-its text is `pretty` of an `SHlo` term. The theorems about what that term *means* are stated about
-`den`, mostly in `Nets/`.
+The certified files in `verified_mlir/` are written by an `#eval` in a `*Render*` / `*Artifacts` file
+here; their ops are `pretty` of `SHlo` terms, plus hand-written text the renderer adds around them
+(constants, signatures, the report-only `%loss` block). The rest of `verified_mlir/` is written by
+hand-written string emitters in `tests/` (`scripts/regen_verified_mlir.sh` lists both). The
+theorems about what a term *means* are stated about `den`, mostly in `Nets/`.
 
 | file | role |
 |---|---|
@@ -10,7 +12,7 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 | `StableHLO/Pretty.lean` | the printer (`skel` → `Tok` → `emitTok` → `pretty`). Every renderer imports it |
 | `ChapterGraphs.lean` | the chapter 1–4 nets' whole-net graphs and the `*ModuleV` printers that write their committed forwards |
 | `FwdGraphTextTies.lean` | `#guard`s that each net's rendered forward blocks print exactly `pretty` of its T2 block graphs (ResNet-34/50, MobileNetV2/V4, EfficientNet-B0; ConvNeXt and ViT have per-example T2 graphs) |
-| `StableHLO/Lex.lean`, `StableHLO/Parse.lean` | the syntactic round-trip (`parse (lex (pretty g)) = some (skel g)`) |
+| `StableHLO/Parse.lean`, `StableHLO/Lex.lean` | the token round trip `parse (toToks (skel g)) = some (skel g)`, and the decimal `Nat ⟷ String` round trip a lexer would need; no lexer is built, so the text ↔ token step is trusted |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |

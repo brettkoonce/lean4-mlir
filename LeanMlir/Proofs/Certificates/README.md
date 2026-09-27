@@ -1,13 +1,14 @@
 # Certificates/ — machine-emitted scorecards over hand-written engines
 
 The scorecard, instance and witness files in this directory are **generated**
-by a script in `scripts/` (`lipschitz_cert_*.py`, `crown_ibp_*.py`,
+by a script in `scripts/certs/` (`lipschitz_cert_*.py`, `crown_ibp_scorecard.py`,
 `ibp_conv_scorecard.py`, `smooth_*scorecard*_gen.py`,
 `smoothing_net_witness_gen.py`) and then checked by Lean like any other
-proof: same kernel, zero `sorry`s, three-axiom audit. Ten files are
+proof: same kernel, zero `sorry`s, three-axiom audit. Twelve files are
 hand-written — the engines the generated files instantiate and the trained
 weight instance: `LipschitzCert/Basic.lean`, `DenseEuclid.lean` (the dense / ReLU layers, their L2
-bounds and `CertifiedAt`), `LipschitzCert/Instance.lean`, `LipschitzCert/PairSDP.lean`,
+bounds and `CertifiedAt`), `IntervalBound.lean`, `CrownBound.lean`,
+`LipschitzCert/Instance.lean`, `LipschitzCert/PairSDP.lean`,
 `GaussianQuantile.lean` (Φ, Φ⁻¹, full support), `Smoothing/CP.lean`, `Smoothing/Gaussian.lean`,
 `Smoothing/MC.lean`, `Smoothing/NetSemantics.lean` and `Smoothing/PhiBounds.lean`.
 
@@ -19,7 +20,7 @@ and that's expected; they are certified *data*, not exposition. If a
 code-quality metric flags this directory, the honest answer is "yes, it's
 an emitted payload, and here is the emitter."
 
-To regenerate a scorecard, run its generator script from the repo root and
+To regenerate a scorecard, run its generator script (`scripts/certs/`) from the repo root and
 rebuild `lake build CertsHeavy` (the heavy scorecards) or `Certs` (the
 rest). Don't hand-edit a generated file — edits will be clobbered by the next
 generator run.
@@ -35,7 +36,7 @@ the ones with no certificate vocabulary live in `Foundation/` (`IntervalBoundCon
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|
-| L2, pooled 49-d | `lipschitz_margin_certified_radius`, `certified_at_eps` (`DenseEuclid`) | per-entry `simp; norm_num`; Gram via `gram_eq_of_check` | `LipschitzCert/Instance` (data half, hand-merged), `LipschitzCert/Scorecard` | `lipschitz_cert_{rationalize,power_iter,witness_s8}.py` (snippets to merge), `lipschitz_cert_scorecard.py` |
+| L2, pooled 49-d | `lipschitz_margin_certified_radius`, `certified_at_eps` (`DenseEuclid`) | per-entry `simp; norm_num`; Gram via `gram_eq_of_check` | `LipschitzCert/Instance` (data half, hand-merged), `LipschitzCert/Scorecard` | `lipschitz_cert_witness_s8.py` (snippets to merge; the original rationalizer is `historical/lipschitz_cert_rationalize.py`), `lipschitz_cert_scorecard.py` |
 | L2, full 784-d | same | `ListDot.dotZ` | `LipschitzCert/ScorecardFull{,Nets,ImgsA,ImgsB}` | `lipschitz_cert_scorecard_full.py` |
 | LipSDP | `pair_sq_bound`, `certified_at_eps_pair` | `linarith` over LDLᵀ column squares | `LipschitzCert/ScorecardSDP{,Uncon}`; `…SDPFull{,Uncon}` (built by no lib — OOM) | `lipschitz_cert_pair_sdp{,_full}.py` |
 | float tier | `FloatBridge` | — | `LipschitzCert/Float` | `lipschitz_cert_float.py` |

@@ -10,12 +10,12 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 
 | family (render SSA)                  | forward fn                 | certified by |
 |--------------------------------------|----------------------------|--------------|
-| Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the dense outer-product bridge `IR.weight_grad_bridge` row-lifted |
+| Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `rowDense_{weight,bias}_sgd_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the dense outer-product bridge `IR.weight_grad_bridge` row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | `IR.weight_grad_bridge` / `IR.bias_grad_bridge` (**reuse** — single-vector dense) |
-| LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`LayerNorm`) |
+| LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `layerNormVec_{gamma,beta}_sgd_certified` (`LayerNorm`) |
 | `pos_embed`                          | additive (`patchEmbedFlat`) | `posEmbed_sgd_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbedFlat`) | `clsToken_sgd_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
-| patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbedFlat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
+| patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbedFlat`) | `patchEmbed_{weight,bias}_sgd_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
 | attention internals (softmax, scale) | —                          | no parameters |
 
 One genuinely-new bridge family (everything else is reuse or a reindex):
@@ -382,8 +382,9 @@ theorem patchEmbed_bias_sgd_certified {ic H W P N D : Nat}
 -- existing M2 `weight_grad_bridge`/`bias_grad_bridge` (`denseWeightGrad_correct`/
 -- `denseBiasGrad_correct`) at the `[D, nClasses]` shape — single-vector dense, nothing
 -- to row-lift. Softmax and the 1/√d scale carry no parameters. With the per-token dense
--- W/b family (§ A), the row-lifted scalar-LN γ/β (§ B), pos/cls (§ C), and the patch
--- conv Wp/bp (§ E), EVERY parameter family of the representative ViT train step is
--- certified `θ − lr·(certified Jacobian · cotangent)`.
+-- W/b family (§ A), pos/cls (§ C), the patch conv Wp/bp (§ E), and the per-token LN γ/β
+-- (`LayerNorm.layerNormVec_{gamma,beta}_sgd_certified`), every parameter family of the ViT
+-- train step has an SGD bridge `θ − lr·(certified Jacobian · dy)`, each generic in the
+-- cotangent `dy` it is handed.
 
 end Proofs

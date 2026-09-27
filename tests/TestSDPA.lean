@@ -13,7 +13,7 @@ wiring into multi-head (TestMHSA) — compile-clean ≠ correct for a transpose/
 Fragments mirror IRPrint's GPU-validated `sdpaFwdModule`/`sdpaBackModule`, each line
 what the proven-faithful emitter produces: the matmuls are `dot_general` (proven
 dense), the softmax is the V1 row-softmax pattern (`softmaxRowF`/`softmaxRowBack`),
-the `1/√d` scale a `multiply`. The proven backward (`sdpa_back_{Q,K,V}_correct`,
+the `1/√d` scale a `multiply`. The proven backward (`sdpaBack{Q,K,V}_correct`,
 Attention.lean):
   dWeights = dOut·Vᵀ,  dV = weightsᵀ·dOut,
   dScaled  = rowsoftmax-VJP(weights, dWeights) = weights⊙(dWeights − ⟨weights,dWeights⟩),

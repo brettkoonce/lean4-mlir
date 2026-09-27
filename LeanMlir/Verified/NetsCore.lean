@@ -480,7 +480,7 @@ def resnet50Verified : VerifiedNetSpec where
     .bottleneckStage 1024 2048 3 2,  -- stage4                         14→7
     .globalAvgPool,
     .dense 2048 10 ]
-  blurb := "ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224². LAYOUT SKELETON: no render, no proof chain, no artifact yet."
+  blurb := "ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → %LOWERER% → GPU"
   -- 53 BN layers, in `conv_bn` call order: per block the three body convs, then the projection.
   runningBN  := true
 
@@ -498,7 +498,7 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
   imageH   := 224
   imageW   := 224
   data     := .imagenet
-  shimScript := "generated_resnet50_imagenet_shim.py"   -- ⚠ NOT generated yet; scripts/gen_shims.sh
+  shimScript := "generated_resnet50_imagenet_shim.py"
   layers   := [
     .convBnNB 3 64 7 2,
     .maxPool 3 2,                    -- He et al. 3×3-s2 — see `resnet50Verified`
@@ -508,7 +508,7 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
     .bottleneckStage 1024 2048 3 2,
     .globalAvgPool,
     .dense 2048 1000 ]
-  blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer. LAYOUT SKELETON: no render, no proof chain, no artifact yet."
+  blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU"
   runningBN  := true
   -- ▶▶ **STOCHASTIC DEPTH, RSB-A2/A1's `dropPath := 0.05`** (2026-08-27). Sixteen sites, one per
   -- bottleneck block, on the residual branch — `bottleneck_block` drops `out` and leaves the

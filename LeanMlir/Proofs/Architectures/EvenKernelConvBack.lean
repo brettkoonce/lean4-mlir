@@ -129,7 +129,7 @@ theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}
   simp only [flatConv, conv2d_padOdd_eq hH hW W b]
 
 -- ════════════════════════════════════════════════════════════════
--- § The four even-kernel leaf ties
+-- § The three even-kernel leaf ties — stride 1, 2 and 4
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The even-kernel conv input-VJP leaf tie.** `convFlatBack (padOdd W)` — NOT

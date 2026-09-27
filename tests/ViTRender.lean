@@ -553,11 +553,10 @@ def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat)
 /-- `emitAdamV` with the gradient first averaged across `replicas` devices — the
     data-parallel AdamW update. `replicas = 1` is exactly `emitAdamV`.
 
-    The proofs are untouched: each replica evaluates the *same* tied graph at the
-    batch size it was rendered for, and the collective averages gradients of that
-    function over disjoint equal batches.
-    Prefer SCALING the global batch over splitting it — that keeps BatchNorm's
-    group size, and therefore the tie, unchanged. -/
+    Each replica evaluates the same graph at the batch size it was rendered for, and the
+    collective averages its gradients over disjoint equal batches. A BatchNorm in that graph
+    normalizes over one replica's batch only; the cross-replica (sync-BN) renders are
+    `Proofs.StableHLO.SyncBnSites`'. -/
 def emitAdamVDP (θ g m v : String) (ds : List Nat) (t : String)
     (replicas : Nat := 1) : String × String × String × String :=
   let (arS, gAvg) := emitGradAllReduce g ds t replicas

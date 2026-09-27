@@ -90,7 +90,7 @@ theorem mhsaBackFlat_eq_mhsa_vjp
       = _
   unfold coreQFlat coreKFlat coreVFlat
   rw [projBack_core_coord Wq _ idx, projBack_core_coord Wk _ idx, projBack_core_coord Wv _ idx]
-  -- reindex each `Σ k : Fin (h*dh)` to `Σ h' Σ j` and recognize the per-head `sdpa_back_*`
+  -- reindex each `Σ k : Fin (h*dh)` to `Σ h' Σ j` and recognize the per-head `sdpaBack{Q,K,V}`
   rw [← Equiv.sum_comp (finProdFinEquiv : Fin h × Fin dh ≃ Fin (h * dh))
         (fun k => Wq c k * mhsaSdpaBackQ (fun r => Proofs.dense Wq bq (X r))
           (fun r => Proofs.dense Wk bk (X r)) (fun r => Proofs.dense Wv bv (X r))

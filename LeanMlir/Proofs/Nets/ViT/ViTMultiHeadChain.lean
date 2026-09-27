@@ -146,7 +146,7 @@ private lemma vitCotDV_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut :
   rw [headSliceFlat_flat, vitCotDV_eq_sdpaBackV, headPadFlat_flat]
 
 -- ════════════════════════════════════════════════════════════════
--- § The composition theorems — the multi-head dense backward, pinned to `sdpa_back_*`
+-- § The composition theorems — the multi-head dense backward, pinned to `sdpaBack{Q,K,V}`
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Multi-head Q-dense backward, pinned.** At the saved full activations, the rendered

@@ -1,10 +1,10 @@
-"""Descent at TRAINED weights (planning/archive/post_audit_roadmap.md §3).
+"""Descent at TRAINED weights.
 
-Emits LeanMlir/Proofs/Training/Trained/LinearDescent.lean: one binary32 SGD step on a
-TRAINED, /128-rationalized bias-free 49->10 pooled-MNIST linear classifier
-provably decreases the real cross-entropy loss -- retiring the "the only
-concrete descent instance is the degenerate W=0 net" caveat
-(binary32_linear_sgd_descends_concrete).
+Emits LeanMlir/Proofs/Training/Trained/LinearDescent.lean: one SGD step with the
+binary32 FloatModel gradient on a TRAINED, /128-rationalized bias-free 49->10
+pooled-MNIST linear classifier decreases the real cross-entropy loss of one
+example (MNIST test image #8). The update is taken in R and exp is exact
+(fexp := Real.exp); only the gradient is computed in float.
 
 The trick that makes the descent window rational-checkable with ZERO
 exponential evaluations: pick a MISCLASSIFIED test sample. Then

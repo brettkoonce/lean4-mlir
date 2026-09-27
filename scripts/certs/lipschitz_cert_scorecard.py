@@ -1,4 +1,4 @@
-"""Certified-accuracy scorecard generator (planning/archive/post_audit_roadmap.md §1).
+"""Certified-accuracy scorecard generator.
 
 Produces LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard.lean: over the first 100 MNIST
 test images (4x4-pooled, exact pixel-sum rationals), the images whose prediction

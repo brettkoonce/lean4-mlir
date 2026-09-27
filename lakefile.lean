@@ -381,37 +381,14 @@ extern_lib libireeffi pkg := do
 /-- No shim on the link line at all. `ffi/lowerer.c` dlopens whichever of
     `libpjrt_ffi.so` / `libiree_ffi.so` `$LEAN_MLIR_LOWERER` selects (XLA by
     default, `=iree` for the other), so ONE executable serves both backends and
-    a box that has only one of the two shims still starts.
+    a box that has only one of the two shims still starts. `lowerer.h` `#define`s every
+    `iree_ffi_*` / `pjrt_ffi_*` entry point onto a dlopen'd pointer, so the executable
+    resolves nothing against either library at link time.
 
-    **`ireeLink` is retired as of 2026-08-25** — all 95 remaining call sites
-    moved here, and the def is gone. It read
-    `#["-L", "./ffi", "-liree_ffi", "-ldl", "-Wl,-rpath,./ffi", "-Wl,--allow-shlib-undefined"]`,
-    and the `-liree_ffi` in it was **inert on every one of those targets**:
-    `lowerer.h` (≈l.137) `#define`s every `iree_ffi_*` entry point to the
-    corresponding dlopen'd `lowerer_*` pointer, so nothing in the executable
-    ever resolved against that library. Confirmed by construction rather than
-    by argument — `nm -D --undefined-only` on the ireeLink-built `cifar8-verified`
-    lists no `iree_ffi_*` symbol at all. What the flag DID do was stamp a
-    `DT_NEEDED: libiree_ffi.so` + `RUNPATH ./ffi` on the binary, so an
-    ireeLink target refused to *start* on a box without the IREE shim while
-    doing all its actual work through XLA. That is the whole delta, and it is
-    why the three "is an IREE binary" docstrings below (`vit-adam-tie`,
-    `convnext-adam-tie`, `mobilenetv2-adam-tie`) were each wrong.
-
-    **`xlaLink` is retired too, same day, same reason** — its 32 call sites are here as well.
-    It read `#["-L", "./ffi", "-lpjrt_ffi", ...]` and was inert by the identical mechanism: the
-    four `pjrt_ffi_*` entry points are `#define`d onto `lowerer_pjrt_*` OPT-dlsym pointers.
-    ⚠⚠ The check that says so has a trap in it. `nm -D` on the ON-DISK `sgd-render-tie` and
-    `mobilenetv2-dp-check` showed 12 and 14 undefined `iree_ffi_*`/`pjrt_ffi_*` symbols — which
-    looks exactly like "the link line is load-bearing". They were Aug-1 and Aug-2 binaries,
-    predating the lowerer's dlopen refactor, still on the old direct-link + weak-symbol scheme.
-    `lake build` them and both drop to ZERO, matching `shard-check` (Aug 12, already 0). ▶ This is
-    `stale lean_exe gates` in a new costume: **rebuild before you measure a binary**, or you will
-    read a month-old link scheme as today's.
-
-    ▶ `ffi/libpjrt_ffi.so` and `ffi/libiree_ffi.so` are both still REQUIRED — dlopen'd at startup.
-    Retiring the link modes moved the failure from link time to run time; it did not remove the
-    dependency. `ensurePjrtShim` builds the PJRT one on demand. -/
+    The selected shim is still REQUIRED at run time: a missing `ffi/libpjrt_ffi.so` or
+    `ffi/libiree_ffi.so` fails at startup, not at link. `ensurePjrtShim` builds the PJRT one on
+    demand. When checking a binary's link with `nm -D`, `lake build` it first: an old binary on
+    disk can carry an older link scheme. -/
 private def lowererLink : Array String := #["-ldl"]
 
 -- ═══════════════════════════════════════════════════════════════════════

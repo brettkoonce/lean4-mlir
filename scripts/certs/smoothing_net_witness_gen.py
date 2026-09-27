@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Generate per-class strict-argmax witnesses for the smoothing net tie
-(planning/archive/gaussian_smoothing_next.md, the net-semantics closure).
+"""Generate per-class strict-argmax witnesses for the smoothing net tie.
 
 `Proofs.argmaxNet_smoothProb_mem_Ioo` discharges the smoothing chain's `hp`
 interiority hypothesis from ONE strict-argmax witness per class. This script

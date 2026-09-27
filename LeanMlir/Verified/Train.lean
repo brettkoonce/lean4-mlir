@@ -929,8 +929,7 @@ def spawnValStream (net : VerifiedNet) (flat : Nat) (n : Nat := 2) (shimBatch : 
   if let some f := fault then
     IO.println s!"  ⚠ LEAN_MLIR_VAL_FAULT={f}: {if f == "order" then "the round-robin starts on producer 1" else if f == "tail" then "the partial last batch is dropped" else "unknown fault, no effect"} — the gate's CONTROL, not a configuration"
   IO.println s!"  ▸ val: STREAMED per pass — {hs.size} batch-block producer(s), {shimBatch}-row blocks \
-k, k+{hs.size}, … read round-robin, nothing held (the 30 GB drain is gone; \
-planning/streaming_val.md)"
+k, k+{hs.size}, … read round-robin, nothing held"
   pure (.stream hs shimBatch flat offset dropTail)
 
 /-- Kill then wait, so no `<defunct>` child is left: the val stream ends by itself, but a dropped tail or a
@@ -1651,7 +1650,7 @@ micro-batches."
 and loss at this batch."
     else
       IO.println s!"     ⚠ This is AdamW at that batch, NOT rsb-faithful — \
-{String.intercalate " and " missing} still absent (planning/archive/rsb_a3_r50_verified.md §2.3)."
+{String.intercalate " and " missing} still absent."
     -- ⚠⚠ A cycle that straddles the epoch boundary applies with fewer than `k` micro-batches while
     -- the graph still divides by `k`, i.e. a short step at a wrong scale — once per epoch, invisible
     -- in the loss curve. Refuse rather than round.

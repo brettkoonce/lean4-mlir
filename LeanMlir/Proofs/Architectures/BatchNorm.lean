@@ -393,21 +393,9 @@ theorem bnSyncGradInput_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x d
 -- § Correctness statements
 -- ════════════════════════════════════════════════════════════════
 
-/- **A note on the parameter gradients**
-
-   `bnGradGamma` and `bnGradBeta` are scalar-valued derivatives w.r.t.
-   scalar (per-channel) parameters, which doesn't fit our `pdiv` /
-   `HasVJP` framework cleanly (everything in `Tensor.lean` is sized over
-   `Vec`). The mathematical content of "these are the correct gradients"
-   is just the product rule applied to `γ · x̂ᵢ + β`:
-
-       ∂(γ · x̂ᵢ + β)/∂γ = x̂ᵢ        →  dγ = Σᵢ dyᵢ · x̂ᵢ
-       ∂(γ · x̂ᵢ + β)/∂β ​​= 1          →  dβ = Σᵢ dyᵢ
-
-   We state these as the *definitions* `bnGradGamma` and `bnGradBeta`
-   above; the sum-over-i is the bookkeeping that turns "per-output
-   gradient" into "per-parameter gradient."
--/
+-- The parameter gradients `bnGradGamma` (`dγ = Σᵢ dyᵢ · x̂ᵢ`) and `bnGradBeta` (`dβ = Σᵢ dyᵢ`)
+-- are defined above; their `pdiv` correctness, per channel, is
+-- `PerChannelBNGrad.bnPerChannelGradGamma_correct` / `bnPerChannelGradBeta_correct`.
 
 -- See `bn_input_grad_correct` below `bnHasVJP` for the headline correctness theorem.
 

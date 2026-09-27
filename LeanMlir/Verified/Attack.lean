@@ -274,7 +274,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
         if r ≥ 1.5 then cert15 := cert15 + 1
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
-  IO.println "done (phase-3 MLP PGD: input gradient = the proven mlpInputGrad VJP via IREE)."
+  IO.println "done (MLP PGD: input gradient from the hand-typed PgdGen kernel, the mlpInputGrad formula; IREE)."
 
 /-- **Spectral-norm-constrained training of the verified MNIST MLP.** Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
     — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
@@ -522,7 +522,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
         if r ≥ 1.5 then cert15 := cert15 + 1
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
-  IO.println s!"done (phase-3 {net.name} PGD: input gradient = the proven conv/maxpool input-VJP via IREE)."
+  IO.println s!"done ({net.name} PGD: input gradient from the hand-typed PgdGen kernel, the conv/maxpool input-VJP formula; IREE)."
 
 /-- PGD attack on the verified MNIST CNN (the first conv rung). -/
 def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
@@ -783,5 +783,5 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
     IO.println s!"L2 PGD eps={eps}: adv acc = {correct.toFloat/tot*100.0}%  (sandwich: cert ≤ true ≤ this)"
-  IO.println "done (phase-3 PGD: gradient computed by the proven input-VJP kernel via IREE)."
+  IO.println "done (PGD: input gradient from the hand-typed PgdGen kernel, the input-VJP formula; IREE)."
 

@@ -273,8 +273,7 @@ theorem conv2d_1x1 {ic oc h w : Nat} (W : Kernel4 oc ic 1 1) (b : Vec oc)
 -- ════════════════════════════════════════════════════════════════
 -- Chapter-2 MLP: a concrete whole-network instance with every ReLU
 -- smoothness hypothesis discharged (the simplest kinked capstone — one
--- non-smooth op, `relu`, two sites). Closes the gap that `mlpHasVJPAt`
--- is never instantiated. Inside the three-axiom closure.
+-- non-smooth op, `relu`, two sites): `mlpHasVJPAt` instantiated.
 -- ════════════════════════════════════════════════════════════════
 
 namespace MlpConcrete

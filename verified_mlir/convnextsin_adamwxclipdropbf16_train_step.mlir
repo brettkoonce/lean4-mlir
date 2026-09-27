@@ -11032,7 +11032,7 @@ module @m {
     %v9998 = stablehlo.reshape %v9997 : (tensor<32x301056xf32>) -> tensor<32x96x56x56xf32>
     %v9999 = stablehlo.constant dense<0.0> : tensor<f32>
     %v10000 = stablehlo.reduce(%v9998 init: %v9999) applies stablehlo.add across dimensions = [0, 2, 3] : (tensor<32x96x56x56xf32>, tensor<f32>) -> tensor<96xf32>
-    // ── timm no_weight_decay (wdExcludeNormBias): 121 of 180 params take %wdz, not %wd ──
+    // ── timm no_weight_decay (wdExcludeNormBias): 231 of 344 params take %wdz, not %wd ──
     %wdz = stablehlo.constant dense<0.0> : tensor<f32>
     %b1 = stablehlo.constant dense<0.9> : tensor<f32>
     %ob1 = stablehlo.constant dense<0.1> : tensor<f32>

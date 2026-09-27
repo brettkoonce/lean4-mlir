@@ -112,14 +112,8 @@ theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
 -- § Magnitude and closeness — what the float tier needs
 -- ════════════════════════════════════════════════════════════════
 --
--- ⚠⚠ These exist because the r34 forward float chain (`floatClose_r34_stages` composed with
--- `floatClose_maxPool3s2`, `FloatComposeBridge.lean`) supplies its pool CONCRETELY where it supplies
--- all 16 blocks abstractly. So moving the net's pool moved a `rfl` that had nothing to do with the
--- codegen, and it surfaced as a **`(deterministic) timeout at whnf`** on the forward's shape check
--- (the per-example one, since retired; today `resnet34ForwardBFull_eq_slots`) rather than as a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
--- symptom in `xla_pjrt_handoff.md` §0.2 increment 2 — would have spent unbounded compute on a
--- proposition that was FALSE. *A `whnf` timeout on an `rfl` is not evidence about the budget; the
--- first question is whether the two sides should be equal at all.*
+-- The pool selects an existing cell, so it never grows a magnitude and passes an input error
+-- through unchanged. The flat forms feed `FloatComposeBridge.floatClose_maxPool3s2`.
 
 /-- **The 3×3 pool never grows magnitudes** — it selects an existing window cell.
     `Finset.sup'` again makes the window size stop mattering: `maxPool2_abs_le` needs a nested

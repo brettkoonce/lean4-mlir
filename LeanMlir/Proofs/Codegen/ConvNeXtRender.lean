@@ -879,8 +879,10 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     ImageNet configs disagree on it by **500×**. `convnextVerified`'s recipe is the baked 1e-4;
     `convnextTinyImagenetConfig.weightDecay := 0.05`. The default is unchanged, so every committed
     artifact keeps its bytes; only the ImageNet `wx` render passes 0.05. -/
-private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
-  wdzConst wdExclude "121 of 180 params" ++ adamWConsts wdStr
+private def convnextAdamConsts (nClasses : Nat) (V : CnxDims) (wdExclude : Bool := false)
+    (wdStr : String := "0.0001") : String :=
+  let (d, z) := cnxWdCounts nClasses V
+  wdzConst wdExclude s!"{z} of {d + z} params" ++ adamWConsts wdStr
 
 /-- **ConvNeXt AdamW train step rendered from the verified AST** — the wrapper `ConvNeXtRenderB`
     calls (with `traversal` set to its batched chain) to write `convnext_adam_train_step.mlir` and
@@ -1079,7 +1081,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         "    // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm\n" ++
         "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the\n" ++
         "    // §10.3b caveat does not apply.\n") ++
-      body ++ convnextAdamConsts wdExclude wdStr ++ adamCode ++ lossCode ++
+      body ++ convnextAdamConsts nClasses V wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.

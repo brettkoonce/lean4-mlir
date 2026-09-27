@@ -683,7 +683,7 @@ def _test_sdpa_back(var, n=4, d=3):
     }[var]
     err = np.max(np.abs(fd - claimed))
     status = "PASS" if err < TOL else "FAIL"
-    print(f"  {status}: {'sdpa_back_' + var:30s} max_err={err:.2e}")
+    print(f"  {status}: {'sdpaBack' + var:30s} max_err={err:.2e}")
     if err >= TOL:
         idx = np.unravel_index(np.argmax(np.abs(fd - claimed)), fd.shape)
         print(f"         worst at {idx}: fd={fd[idx]:.8f} claimed={claimed[idx]:.8f}")
@@ -843,7 +843,7 @@ def test_mlp_full():
 # ════════════════════════════════════════════════════════════════
 # Multi-head SDPA: H independent single-head SDPAs stacked along the
 # head axis. The bundled `mhsaHasVJPMat` axiom asserts the VJP
-# factors per head; this test confirms that the per-head sdpa_back_*
+# factors per head; this test confirms that the per-head sdpaBack*
 # stacked over heads matches FD on the full multi-head forward.
 # ════════════════════════════════════════════════════════════════
 def test_mhsa_full():
@@ -859,7 +859,7 @@ def test_mhsa_full():
             out[h] = _sdpa_forward(Q_[h], K_[h], V_[h])
         return out
 
-    # Claimed: per-head sdpa_back_* stacked along H axis.
+    # Claimed: per-head sdpaBack* stacked along H axis.
     dQ_claimed = np.zeros_like(Q)
     dK_claimed = np.zeros_like(K)
     dV_claimed = np.zeros_like(V)

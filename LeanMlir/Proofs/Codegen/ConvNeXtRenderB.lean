@@ -1108,7 +1108,7 @@ end Proofs.StableHLO
   Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner (bB := cnxInBS)
 
 -- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
--- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every
+-- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 123 of the 182 params take `%wdz`: every
 -- LN γ/β, every conv bias, and LayerScale γ — all 1-D, so the PLAIN RANK TEST covers them and
 -- ConvNeXt needs no name carve-out (ViT's `pos` has no analogue here; the generated reference sets
 -- `_WD_POS_SHAPE = None`). Same arity, same types, same regions.

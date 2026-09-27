@@ -1,4 +1,4 @@
-"""CROWN-IBP L-infinity scorecard for the full-input nets (planning/archive/crown_ibp.md phase 2).
+"""CROWN-IBP L-infinity scorecard for the full-input nets.
 
 Produces LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardCrown.lean (capped
 sigma<=2 net) and LipschitzCert/ScorecardCrownUncon.lean: per-image pixel-L-infinity

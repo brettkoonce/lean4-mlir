@@ -27,7 +27,7 @@ the pad-sum concat as `addV`/`clsSliceF`/`denseF`) and backward (`dotOut`, `clsP
 backward spelled with the forward `matmulF`/`transposeF`/`headSliceF`/`headPadF` on
 cotangents** — matmul's VJP IS matmul and the slice/pad pair are each other's VJPs:
 `dO_h = slice_h dO`, `dP_h = dO_h·V_hᵀ`, `dV_h = P_hᵀ·dO_h`, `dQ_h = s·dS_h·K_h`,
-`dK_h = s·dS_hᵀ·Q_h`, then `dQ = Σ_h pad_h dQ_h` etc. — the proven `sdpa_back_{Q,K,V}`
+`dK_h = s·dS_hᵀ·Q_h`, then `dQ = Σ_h pad_h dQ_h` etc. — the proven `sdpaBack{Q,K,V}`
 shapes per head). Residual fan-ins are `addV`; the Q/K/V three-way fan-in at LN₁'s
 output is two `addV`s.
 
@@ -167,7 +167,7 @@ private def fwdHeads (q k v : String) : StateM Proofs.StableHLO.EmitS (String ×
     on cotangents (slice and pad are each other's VJPs): per head `dO_h = slice_h dO`,
     `dP_h = dO_h·V_hᵀ`, `dV_h = P_hᵀ·dO_h`, `dS_h = softmaxRowBack`, undo-scale,
     `dQ_h = dS_h·K_h`, `dK_h = dS_hᵀ·Q_h`, then `dQ/dK/dV = Σ_h pad_h(·)` — the proven
-    `sdpa_back_{Q,K,V}` shapes per head. Returns (code, dQ, dK, dV) at `[NT,D]` flat. -/
+    `sdpaBack{Q,K,V}` shapes per head. Returns (code, dQ, dK, dV) at `[NT,D]` flat. -/
 private def bwdHeads (cot_att : String) (hs : List HNames) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let mut code := ""
@@ -258,7 +258,7 @@ private def bwdBlock (i : Nat) (dy : String) (b : FNames) :
   -- attn sublayer back: h = xin + Wo·MHSA(q,k,v)
   let (k6, cot_att) ← pretty BS (.denseRowBack s!"%Wo{i}" (zM : Mat DD DD)
     (.operand cot_h (zV : Vec (NT*DD))))
-  -- per-head SDPA 3-path backward + pad-sum (the proven sdpa_back_{Q,K,V}
+  -- per-head SDPA 3-path backward + pad-sum (the proven sdpaBack{Q,K,V}
   -- shapes per head; slice/pad are each other's VJPs)
   let (k7, dQ, dK, dV) ← bwdHeads cot_att b.hs
   -- Q/K/V dense backs fan IN at LN1's output (three cotangents sum)
