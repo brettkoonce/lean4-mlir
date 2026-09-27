@@ -911,7 +911,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let lossCodeBce :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
       "    // BCE-with-logits, mean over B x K: softplus(z) - t*z, softplus stable as\n" ++
-      "    // max(z,0) + log(1 + exp(-|z|)). ⚠ mean over B*K, NOT mean of the per-example sum.\n" ++
+      "    // max(z,0) + log(1 + exp(-|z|)). Mean over B*K, NOT mean of the per-example sum.\n" ++
       s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
       s!"    %lzb = stablehlo.constant dense<0.0> : {ty [B, nClasses]}\n" ++
       s!"    %labs = stablehlo.abs {nLog} : {ty [B, nClasses]}\n" ++
@@ -978,12 +978,12 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN\n" ++
-        "    // of the per-replica gradient nodes (4d piece 2). BatchNorm is PER REPLICA here.\n"
+        "    // of the per-replica gradient nodes. BatchNorm is PER REPLICA here.\n"
        else
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
         "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
@@ -991,7 +991,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as ResNet50SyncTieB.r50_net_syncTiedB (every all-reduced\n" ++
         "    // gradient) and StableHLO.resnet50FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n" ++
+        "    // LeanMlir/Proofs/Nets/ResNet/.\n" ++
         (if accOn then
           "    // Under accumulation that holds per MICRO-step: BN normalises over the replicas'\n" ++
           "    // micro-batches together, and the accumulator runs after the all-reduced gradient.\n"

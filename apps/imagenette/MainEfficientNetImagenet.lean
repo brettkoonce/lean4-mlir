@@ -47,8 +47,8 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
   -- `RmsSchedule` carries `decayEpochs` rather than the two nets sharing one constant.
   --
   -- With EMA (`ema…`), drop-connect (`drop`) and classifier dropout (`do`) the `emarmsdp64dropdo*`
-  -- renders carry the whole reference recipe; the remaining differences are the BN group before
-  -- the sync-BN render and host-drawn masks.
+  -- renders carry the whole reference recipe; the masks are drawn on the host rather than on
+  -- device.
   let sched := enetImagenetRmsSchedule
   -- SUBSTRING, not prefix. Optimizer and EMA are INDEPENDENT axes in this net's variant names, so
   -- RMSProp+EMA is spelled `emarms`, which does NOT start with "rms" — and six committed artifacts

@@ -882,12 +882,12 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
          "    //    own: jax/MainMobilenetV2Imagenet.lean). Per parameter, in this order:\n" ++
          "    //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)\n" ++
          "    //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)\n" ++
-         "    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)\n" ++
+         "    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)\n" ++
          "    //      θ' <- θ - lr*b'                                           (sgdParamF)\n" ++
          "    //    Packed [θ|m|v] is reused with m = momentum buffer, v = mean-square, so the\n" ++
          "    //    interface is byte-identical to the AdamW render's apart from the entry name.\n" ++
          "    //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.\n" ++
-         "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not\n" ++
+         "    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not\n" ++
          "    //    an implementation detail, since this optimizer is not bias-corrected.\n") ++
       (if replicas ≤ 1 then
         s!"    // ── MobileNetV2 batch-BN {opt.label} train step: {trainStepHandNote} ──\n"
@@ -895,7 +895,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── MobileNetV2 batch-BN {opt.label} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
         "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
@@ -903,7 +903,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as MobileNetV2SyncTieB.mnv2_net_syncTiedB (every all-reduced\n" ++
         "    // gradient) and StableHLO.mobilenetv2FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).\n" ++
+        "    // LeanMlir/Proofs/Nets/MobileNet/.\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
           "    // their operands per element, are not in that statement.)\n"

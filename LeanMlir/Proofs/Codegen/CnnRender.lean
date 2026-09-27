@@ -372,8 +372,8 @@ private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds :
   -- gets its EXACT gate: no BatchNorm, so the loss is a plain mean over examples and the batch
   -- decomposition
   --   (1/2)[(1/B)Σ_A + (1/B)Σ_B] = (1/2B)Σ_{A∪B}
-  -- holds identically — 2×B with the collective must equal 1×2B to fp rounding. R34 cannot be
-  -- checked this way: BN normalises per replica, so there N×b ≠ 1×(N·b) BY DESIGN.
+  -- holds identically — 2×B with the collective must equal 1×2B to fp rounding. The BN nets'
+  -- data-parallel renders synchronise their statistics and are gated by the sync-BN checks.
   -- `pName` is "%W1"; the collective's SSA tag must not carry the '%'. `String.drop` returns a
   -- `String.Slice` on this toolchain (Lean 4.32), hence the explicit `.toString`.
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds (pName.drop 1).toString replicas

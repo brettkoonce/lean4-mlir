@@ -3,7 +3,7 @@ module @m {
     // ── ResNet-50 bottleneck batch-BN LAMB (per-tensor trust ratio) over 4 ACCUMULATED micro-batches train step, DATA-PARALLEL over 4 replicas ──
     // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
-    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN
+    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN
     // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel
     // variance), before normalising with the global [mu | var] (bnSyncF); its
     // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma
@@ -11,7 +11,7 @@ module @m {
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as ResNet50SyncTieB.r50_net_syncTiedB (every all-reduced
     // gradient) and StableHLO.resnet50FwdGraphSyncFull_shard (the forward), both in
-    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).
+    // LeanMlir/Proofs/Nets/ResNet/.
     // Under accumulation that holds per MICRO-step: BN normalises over the replicas'
     // micro-batches together, and the accumulator runs after the all-reduced gradient.
     // (Both are stated without drop-path; this artifact's per-example masks are not in
@@ -21,7 +21,7 @@ module @m {
     // before the all-reduce, where one device rounds the whole sum once. That is the
     // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided
     // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb64 = stablehlo.constant dense<0.0> : tensor<64xf32>
@@ -21405,7 +21405,7 @@ module @m {
     %v18628 = stablehlo.add %v18626, %v18627 : tensor<1000xf32>
     // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──
     // BCE-with-logits, mean over B x K: softplus(z) - t*z, softplus stable as
-    // max(z,0) + log(1 + exp(-|z|)). ⚠ mean over B*K, NOT mean of the per-example sum.
+    // max(z,0) + log(1 + exp(-|z|)). Mean over B*K, NOT mean of the per-example sum.
     %lz = stablehlo.constant dense<0.0> : tensor<f32>
     %lzb = stablehlo.constant dense<0.0> : tensor<128x1000xf32>
     %labs = stablehlo.abs %v2443 : tensor<128x1000xf32>

@@ -42,10 +42,8 @@ def mobilenetv2AdamConfig : VerifiedConfig where
 
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/mobilenetv2_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb and
-    checkpoint). **Only `adam` exists today** — it is `pretty(provenGraph)` out of
-    `Proofs/Codegen/MobileNetV2RenderB.lean`. The knob is threaded anyway because
-    `mnv2AdamVariant` already returns an `adamdp` name and the renderer already takes `replicas`;
-    when someone writes that artifact's `#eval` the driver side is done. Pair a DP variant with
+    checkpoint). The Imagenette renders are `adam`, `adamdp` (2 replicas) and `rms`, all out of
+    `Proofs/Codegen/MobileNetV2RenderB.lean`. Pair a DP variant with
     `LEAN_MLIR_REPLICAS=N PJRT_REPLICAS=N` and `HIP_VISIBLE_DEVICES` unset, and use the XLA build —
     collectives exist only on the PJRT path, and the IREE shim refuses a DP entry point outright
     rather than silently running single-device.

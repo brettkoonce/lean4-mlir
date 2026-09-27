@@ -21,7 +21,7 @@
 #       SHIM_MIX=off|mixup|cutmix|both  -> mixup/cutmix on the PRODUCER side (needs v2).
 #                       'both' alternates per step, as the reference does. Default is this
 #                       config's own useMixup/useCutmix. SHIM_MIXUP_ALPHA / SHIM_CUTMIX_ALPHA
-#                       override the Beta shapes. ⚠ The lambda stream is numpy's, NOT the
+#                       override the Beta shapes. The lambda stream is numpy's, NOT the
 #                       reference's jax.random one — same distribution, different numbers.
 #       TFDS_DATA_DIR  -> the prepared tfds tree (default ~/tensorflow_datasets)
 # ═══════════════════════════════════════════════════════════════════════
@@ -129,36 +129,16 @@ def _main():
     # to run sample_distorted_bounding_box without a non-zero op-level seed, which is what
     # AUG_SEED supplies (installed above, at module scope). Verify with SHIM_HASH, do not assume.
     #
-    # ⚠ IT IS EXPENSIVE IN ISOLATION AND FREE IN SITU, AND THE SECOND HALF IS WHY IT STAYS ON.
-    # `enable_op_determinism()` serializes the tf.data map: MEASURED 2026-08-11 on ares (ViT shim,
-    # bs128, marginal over 100 batches, SHIM_HASH so no transport is involved) — 120 img/s at
-    # 116-125% CPU with it ON against 639 img/s at 386-470% CPU with it OFF. 5.3x, and the CPU%
-    # is the mechanism: a 32-core box runs this pipeline on ~1.2 cores under determinism and ~4.7
-    # without. `enable_op_determinism` is emitted HERE and nowhere else, so the JAX reference
-    # trainer this shim mirrors has never paid it.
     #
-    # ⛔ AND YET IT DOES NOT MOVE THE STEP. Same day, ViT/ImageNet 4x bs128 end-to-end: 567 ms/step
-    # with determinism ON, 592 OFF — i.e. nothing, at 5.3x the producer speed. The producer was
-    # never the binding constraint; the consumer was reading ONE handle at a time while the other
-    # seven producers slept in write() (70% of the box idle). The real fix was depth-n prefetch
-    # (`LeanMlir/Verified/Train.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.
-    # ▶ THE LESSON, since it cost a session: an isolated component measurement (SHIM_HASH) tells
-    # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the
-    # consumer pulls one batch and walks away.
-    #
-    # ▶▶ THE DEFAULT IS NOW OFF (2026-09-08), AND A MEASUREMENT IS WHY. The paragraph above ends
-    # "for a producer-bound net, should one ever be measured" — that net has now been measured.
-    # Verified ViT-Ti / ImageNet on the 4x3060 box: compute-only floor 153 ms/step (the probe's
-    # synth arm) against a fed 300, with 12 producers drawing ~1630% of a 24-thread box while the
-    # trainer took 108%. Producer-bound — and unlike 2026-08-11 the CONSUMER is not the
-    # constraint, because depth-n prefetch has since landed. Turning determinism off took the
-    # 300-epoch job from 69 h to 48 h against a 38.5 h floor.
-    # ⚠ FEWER workers once it is off: a producer wants ~4.3-4.7 cores instead of ~1.2, so 4 beat
-    # 6 and 8 on that box. Raising workers and dropping determinism are not independent knobs.
+    # OFF BY DEFAULT (SHIM_DETERMINISM=1 turns it on). Determinism serializes the tf.data map:
+    # a producer runs on ~1.2 cores with it and ~4.3-4.7 without (ViT shim, bs128, SHIM_HASH:
+    # 120 img/s against 639). Verified ViT-Ti/ImageNet is producer-bound, so it pays that
+    # directly. Use FEWER workers with it off (4 beat 6 and 8 on a 24-thread box): raising
+    # workers and dropping determinism are not independent knobs.
     # What determinism buys is REPLAY, not fidelity: the ops, magnitudes, probabilities and the
-    # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX
-    # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.
-    # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in
+    # policy are identical either way and only the ORDER of random draws moves. The JAX
+    # reference trainer this shim mirrors does not enable it.
+    # EVERY GATE THAT REPLAYS A STREAM MUST ASK FOR IT. SHIM_DETERMINISM=1 is pinned in
     # tests/prefetch_tie.sh, scripts/gates/residency_gate.sh, scripts/gates/mixup_gate.py and
     # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.
     _det_env = os.environ.get('SHIM_DETERMINISM')
@@ -213,7 +193,7 @@ def _main():
         if not _MIX_ON:
             return x, t
         B = t.shape[0]
-        # ⚠ Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded
+        # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded
         # draw makes the run unreproducible and breaks every gate that replays a batch.
         rng = np.random.default_rng([_SHIM_SEED, step])
         # `both` alternates per step, matching the reference's `if _global_step % 2 == 0`.
@@ -235,7 +215,7 @@ def _main():
         mask = np.zeros((H, W), dtype=np.float32)
         mask[y1c:y2c, x1:x2] = np.float32(1.0)
         x4m = x4 * (np.float32(1.0) - mask) + np.flip(x4, 0) * mask
-        # ⚠ λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped
+        # λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped
         # at the border, so the two differ and the label must follow the pixels.
         lam_adj = np.float32(1.0 - float(mask.sum()) / float(H * W))
         tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)

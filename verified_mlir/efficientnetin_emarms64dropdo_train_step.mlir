@@ -5,16 +5,16 @@ module @m {
     //    jax/MainEfficientNetImagenet.lean). Per parameter, in this order:
     //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)
     //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)
-    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)
+    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)
     //      θ' <- θ - lr*b'                                           (sgdParamF)
-    //    ⚠ ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the
+    //    ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the
     //    placement: textbook g/(sqrt(s')+ε) takes a ~31.6x larger step at a collapsed
     //    mean-square, which is what the reference means by "vanilla diverges at the
     //    paper LR" and why it carries no gradient clipping.
     //    Packed [θ|m|v] reused with m = momentum buffer, v = mean-square; %bc1/%bc2 are
     //    Adam bias corrections, unread here and passed through unchanged.
-    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb16 = stablehlo.constant dense<0.0> : tensor<16xf32>

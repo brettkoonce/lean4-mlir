@@ -222,7 +222,7 @@ def _autoaugment(img):
     own affine calls: worst mean |Δ| 0.094 / 255, max 1, over shear, translate and rotate at three
     magnitudes each, where the bilinear ops sit at 2.6–8.0 mean. -/
 private def bicubicGeometryPy : String :=
-"# ── C6 (planning/imagenet_parity.md): timm's geometric ops run PIL BICUBIC, and TF has no bicubic
+"# ── timm's geometric ops run PIL BICUBIC, and TF has no bicubic
 #    projective warp (ImageProjectiveTransformV3 takes NEAREST/BILINEAR only and LOGS, not raises,
 #    on anything else). So the warp is written out: PIL's own affine sampler, a = -1 cubic (PIL's
 #    transform filter; its resize uses -0.5) over a 4x4 neighbourhood, neighbours clamped at the
@@ -653,10 +653,9 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    #   1x1/s2: (0,0) both ways — projections are unaffected.\n" ++
       "    # As with the pool, the two grids are offset by one input position.\n" ++
       "    #\n" ++
-      "    # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers\n" ++
-      "    # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with\n" ++
-      "    # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not\n" ++
-      "    # 'fix' those. See planning/archive/rsb_a3_r50_verified.md §4b.\n" ++
+      "    # Scoped to the ResNet-family helpers ON PURPOSE: MobileNetV2/EfficientNet emit their\n" ++
+      "    # own conv_general_dilated with 'SAME' and are TF-origin ports, where asymmetric\n" ++
+      "    # 'SAME' IS the reference. Do not 'fix' those.\n" ++
       "    if padding is None:\n" ++
       "        padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)\n" ++
       "    x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,\n" ++
@@ -676,8 +675,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    # n=12: 'SAME' window maxima [2,4,6,8,10,11] vs symmetric [1,3,5,7,9,11]).\n" ++
       "    # Output shape is unchanged (112 -> 56) either way.\n" ++
       "    #\n" ++
-      "    # Changed 2026-08-03 for paper-faithfulness; see planning/archive/rsb_a3_r50_verified.md.\n" ++
-      "    # This MOVES the ResNet stem pool, so it voids R34-ImageNet's and R50's numbers.\n" ++
+
       "    p = (size - 1) // 2\n" ++
       "    return jax.lax.reduce_window(x, -jnp.inf, jax.lax.max,\n" ++
       "             (1, 1, size, size), (1, 1, stride, stride),\n" ++
@@ -2792,7 +2790,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "# connected (there is a loss barrier between them), so the result is not merely\n" ++
     "# degraded — it sits at chance.\n" ++
     "#\n" ++
-    "# Measured on MNv4-Conv-M 100ep (2026-07-31): decay 0.9999 = tau 10k steps, but\n" ++
+    "# Measured on MNv4-Conv-M 100ep: decay 0.9999 = tau 10k steps, but\n" ++
     "# gradAccum 8 leaves only 312 optimizer steps/epoch = 31.2k total = 3.1 tau. At\n" ++
     "# epoch 66 the shadow still held 12.8% init and scored 0.00% top-1, while the LIVE\n" ++
     "# weights scored 70.48% on full 50k. Eval and .bin checkpoints both read the EMA,\n" ++
@@ -3576,7 +3574,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "#       SHIM_MIX=off|mixup|cutmix|both  -> mixup/cutmix on the PRODUCER side (needs v2).\n" ++
   "#                       'both' alternates per step, as the reference does. Default is this\n" ++
   "#                       config's own useMixup/useCutmix. SHIM_MIXUP_ALPHA / SHIM_CUTMIX_ALPHA\n" ++
-  "#                       override the Beta shapes. ⚠ The lambda stream is numpy's, NOT the\n" ++
+  "#                       override the Beta shapes. The lambda stream is numpy's, NOT the\n" ++
   "#                       reference's jax.random one — same distribution, different numbers.\n" ++
   "#       TFDS_DATA_DIR  -> the prepared tfds tree (default ~/tensorflow_datasets)\n" ++
   "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
@@ -3601,36 +3599,16 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # to run sample_distorted_bounding_box without a non-zero op-level seed, which is what\n" ++
   "    # AUG_SEED supplies (installed above, at module scope). Verify with SHIM_HASH, do not assume.\n" ++
   "    #\n" ++
-  "    # ⚠ IT IS EXPENSIVE IN ISOLATION AND FREE IN SITU, AND THE SECOND HALF IS WHY IT STAYS ON.\n" ++
-  "    # `enable_op_determinism()` serializes the tf.data map: MEASURED 2026-08-11 on ares (ViT shim,\n" ++
-  "    # bs128, marginal over 100 batches, SHIM_HASH so no transport is involved) — 120 img/s at\n" ++
-  "    # 116-125% CPU with it ON against 639 img/s at 386-470% CPU with it OFF. 5.3x, and the CPU%\n" ++
-  "    # is the mechanism: a 32-core box runs this pipeline on ~1.2 cores under determinism and ~4.7\n" ++
-  "    # without. `enable_op_determinism` is emitted HERE and nowhere else, so the JAX reference\n" ++
-  "    # trainer this shim mirrors has never paid it.\n" ++
   "    #\n" ++
-  "    # ⛔ AND YET IT DOES NOT MOVE THE STEP. Same day, ViT/ImageNet 4x bs128 end-to-end: 567 ms/step\n" ++
-  "    # with determinism ON, 592 OFF — i.e. nothing, at 5.3x the producer speed. The producer was\n" ++
-  "    # never the binding constraint; the consumer was reading ONE handle at a time while the other\n" ++
-  "    # seven producers slept in write() (70% of the box idle). The real fix was depth-n prefetch\n" ++
-  "    # (`LeanMlir/Verified/Train.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.\n" ++
-  "    # ▶ THE LESSON, since it cost a session: an isolated component measurement (SHIM_HASH) tells\n" ++
-  "    # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the\n" ++
-  "    # consumer pulls one batch and walks away.\n" ++
-  "    #\n" ++
-  "    # ▶▶ THE DEFAULT IS NOW OFF (2026-09-08), AND A MEASUREMENT IS WHY. The paragraph above ends\n" ++
-  "    # \"for a producer-bound net, should one ever be measured\" — that net has now been measured.\n" ++
-  "    # Verified ViT-Ti / ImageNet on the 4x3060 box: compute-only floor 153 ms/step (the probe's\n" ++
-  "    # synth arm) against a fed 300, with 12 producers drawing ~1630% of a 24-thread box while the\n" ++
-  "    # trainer took 108%. Producer-bound — and unlike 2026-08-11 the CONSUMER is not the\n" ++
-  "    # constraint, because depth-n prefetch has since landed. Turning determinism off took the\n" ++
-  "    # 300-epoch job from 69 h to 48 h against a 38.5 h floor.\n" ++
-  "    # ⚠ FEWER workers once it is off: a producer wants ~4.3-4.7 cores instead of ~1.2, so 4 beat\n" ++
-  "    # 6 and 8 on that box. Raising workers and dropping determinism are not independent knobs.\n" ++
+  "    # OFF BY DEFAULT (SHIM_DETERMINISM=1 turns it on). Determinism serializes the tf.data map:\n" ++
+  "    # a producer runs on ~1.2 cores with it and ~4.3-4.7 without (ViT shim, bs128, SHIM_HASH:\n" ++
+  "    # 120 img/s against 639). Verified ViT-Ti/ImageNet is producer-bound, so it pays that\n" ++
+  "    # directly. Use FEWER workers with it off (4 beat 6 and 8 on a 24-thread box): raising\n" ++
+  "    # workers and dropping determinism are not independent knobs.\n" ++
   "    # What determinism buys is REPLAY, not fidelity: the ops, magnitudes, probabilities and the\n" ++
-  "    # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX\n" ++
-  "    # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.\n" ++
-  "    # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in\n" ++
+  "    # policy are identical either way and only the ORDER of random draws moves. The JAX\n" ++
+  "    # reference trainer this shim mirrors does not enable it.\n" ++
+  "    # EVERY GATE THAT REPLAYS A STREAM MUST ASK FOR IT. SHIM_DETERMINISM=1 is pinned in\n" ++
   "    # tests/prefetch_tie.sh, scripts/gates/residency_gate.sh, scripts/gates/mixup_gate.py and\n" ++
   "    # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.\n" ++
   "    _det_env = os.environ.get('SHIM_DETERMINISM')\n" ++
@@ -3716,11 +3694,10 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   --    Unset (the default) emits wire v1 byte-for-byte, which is what keeps every existing run
   --    and the committed SHIM_HASH digest valid.
   --
-  --    What v2 carries today is a plain ONE-HOT — the same information as v1, in the shape the
-  --    graph already consumes (`%onehot : [batch, nClasses]`). That is deliberate: it makes the
-  --    transport gateable on its own, because a one-hot sent as a soft target must train
-  --    BIT-IDENTICALLY to the hard-label path. Mixup/CutMix are what put something interesting in
-  --    these slots, and they are a separate change to the PRODUCER, not to the wire.
+  --    `_targets` builds a plain ONE-HOT — the same information as v1, in the shape the graph
+  --    consumes (`%onehot : [batch, nClasses]`). That makes the transport gateable on its own,
+  --    because a one-hot sent as a soft target must train BIT-IDENTICALLY to the hard-label path.
+  --    Mixup/CutMix (below) are what mix these slots, in the PRODUCER, not the wire.
   "    nclasses = int(os.environ.get('SHIM_NCLASSES', '0'))\n" ++
   "    def _targets(y):\n" ++
   "        if nclasses <= 0:\n" ++
@@ -3782,7 +3759,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        if not _MIX_ON:\n" ++
   "            return x, t\n" ++
   "        B = t.shape[0]\n" ++
-  "        # ⚠ Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
+  "        # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
   "        # draw makes the run unreproducible and breaks every gate that replays a batch.\n" ++
   "        rng = np.random.default_rng([_SHIM_SEED, step])\n" ++
   "        # `both` alternates per step, matching the reference's `if _global_step % 2 == 0`.\n" ++
@@ -3808,7 +3785,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        mask = np.zeros((H, W), dtype=np.float32)\n" ++
   "        mask[y1c:y2c, x1:x2] = np.float32(1.0)\n" ++
   "        x4m = x4 * (np.float32(1.0) - mask) + np.flip(x4, 0) * mask\n" ++
-  "        # ⚠ λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped\n" ++
+  "        # λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped\n" ++
   "        # at the border, so the two differ and the label must follow the pixels.\n" ++
   "        lam_adj = np.float32(1.0 - float(mask.sum()) / float(H * W))\n" ++
   "        tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)\n" ++

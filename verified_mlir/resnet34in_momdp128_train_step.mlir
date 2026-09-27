@@ -3,7 +3,7 @@ module @m {
     // ── ResNet-34 batch-BN heavy-ball momentum + coupled L2 train step, DATA-PARALLEL over 2 replicas ──
     // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
-    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN
+    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN
     // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel
     // variance), before normalising with the global [mu | var] (bnSyncF); its
     // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma
@@ -11,8 +11,8 @@ module @m {
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced
     // gradient) and StableHLO.resnet34FwdGraphSyncFull_shard (the forward), both in
-    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    // LeanMlir/Proofs/Nets/ResNet/.
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb64 = stablehlo.constant dense<0.0> : tensor<64xf32>

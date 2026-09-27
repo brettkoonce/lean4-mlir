@@ -803,12 +803,12 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
         " replicas ──\n" ++
         "    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW\n" ++
         "    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is\n" ++
-        "    // the replica MEAN of the per-replica gradient nodes (4d piece 2).\n") ++
+        "    // the replica MEAN of the per-replica gradient nodes.\n") ++
       -- The shadow is NOT a carve-out and the banner says which it is, because a committed
       -- artifact under-describing its own certification level is a wrong statement in the one
       -- place a reader trusts.
       (if ema then
-        "    // ── EMA WEIGHT SHADOW (planning/archive/ema.md): a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
+        "    // ── EMA WEIGHT SHADOW: a 4th [θ|m|v|ema] region, one adamMNextF\n" ++
         "    // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)\n" ++
         "    // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.\n"
        else "") ++

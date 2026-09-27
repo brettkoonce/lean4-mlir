@@ -1044,7 +1044,7 @@ def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
     IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
   let d0 := net.d0
   -- `evalD0` is the EVAL forward's rendered input width, read off the artifact by the caller. It is
-  -- only consulted on the `.imagenet` path (the only one that drains a val split off a shim), and
+  -- only consulted on the `.imagenet` path (the only one whose val split streams from a shim), and
   -- `0` means "not supplied" ⇒ fall back to `net.d0`, which is what every non-split net wants.
   let evalD0 := if evalD0 == 0 then d0 else evalD0
   match net.data with
@@ -1517,8 +1517,8 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
   -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
   -- agree with `(bs, d0)` — every 224 net — nothing below changes.
-  -- COMPUTED HERE, ABOVE `loadData`, and that ordering is load-bearing: the ImageNet val drain
-  -- inside `loadData` has to allocate and read at the EVAL width, so it needs `evalD0` as an input.
+  -- Computed here, above `loadData`: the ImageNet val stream is spawned at the EVAL width, so
+  -- `loadData` and `spawnValStream` both take `evalD0` as an input.
   let (evalBs, evalD0) := (← fwdRenderedShape
     (if useRunning then s!"{net.mlirDir}/{evalStem}.mlir"
      else fwdPath)).getD (bs, d0)
@@ -1930,8 +1930,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- LEAN_MLIR_PROBE_WARM: the step the probe clock STARTS at. Default 8 preserves every
   -- committed number. 8 IS TOO EARLY TO BE A PRODUCTION RATE. `SHIM PREFETCH` keeps one
   -- read in flight PER HANDLE (depth = SHIM_WORKERS = 8), and the producers fill those while
-  -- the graph compiles and while the ~90 s val drain runs — so the first ~8-16 steps are served
-  -- from a queue nobody had to wait for. They measure BURST rate, not production rate. A window
+  -- the graph compiles — so the first ~8-16 steps are served from a queue nobody had to wait for. They measure BURST rate, not production rate. A window
   -- starting at 8 with `LEAN_MLIR_MAX_STEPS=40` is 32 samples of which ~16 are burst, which puts
   -- the median exactly on the boundary: that is how §9.6's ViT row got 159 ms/step where the
   -- steady state is 375 (2.4×). Benchmarks want PROBE_WARM=200 with MAX_STEPS=600.

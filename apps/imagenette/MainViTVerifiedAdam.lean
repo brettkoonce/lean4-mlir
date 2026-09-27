@@ -13,14 +13,13 @@ unchanged).
 
 **The artifact is licensed by `vit-adam-tie`** —
 gradient norm-rel 1e-6, `%loss` **bit-exact**, 0/200 params disagreeing, on all 16,579,041 returned
-floats. `%loss` is the load-bearing check on this net rather than a footnote: ViT has no BN, so
+floats. `%loss` is the main check on this net rather than a footnote: ViT has no BN, so
 nothing else in the output depends on the forward alone.
 
-Recipe: AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch
-warmup, label smoothing 0.1, augment, 80 epochs, bs 32 — the schedule differs from the other four
+Recipe: AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch warmup, label smoothing 0.1, augment,
+80 epochs, bs 32.
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/vit-verified-adam data`. The XLA peer
-`vit-verified-adam` exists but **does not run on this box** — the graph dies in MIOpen; see that
+Run (GPU): `.lake/build/bin/vit-verified-adam data`.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with

@@ -3,7 +3,7 @@ module @m {
     // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over 4 replicas ──
     // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
-    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN
+    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN
     // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel
     // variance), before normalising with the global [mu | var] (bnSyncF); its
     // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma
@@ -11,23 +11,23 @@ module @m {
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as EnetSyncTieG.efficientnet_net_syncTiedG (every all-reduced
     // gradient) and StableHLO.efficientnetFwdGraphSyncFull_shard (the forward), both in
-    // LeanMlir/Proofs/Nets/EfficientNet/ (planning/global_bn_verified.md).
+    // LeanMlir/Proofs/Nets/EfficientNet/.
     // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round
     // their operands per element, are not in that statement.)
     // ── OPTIMIZER: RMSProp + momentum, TENSORFLOW flavour (EfficientNet's own:
     //    jax/MainEfficientNetImagenet.lean). Per parameter, in this order:
     //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)
     //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)
-    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)
+    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)
     //      θ' <- θ - lr*b'                                           (sgdParamF)
-    //    ⚠ ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the
+    //    ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the
     //    placement: textbook g/(sqrt(s')+ε) takes a ~31.6x larger step at a collapsed
     //    mean-square, which is what the reference means by "vanilla diverges at the
     //    paper LR" and why it carries no gradient clipping.
     //    Packed [θ|m|v] reused with m = momentum buffer, v = mean-square; %bc1/%bc2 are
     //    Adam bias corrections, unread here and passed through unchanged.
-    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb16 = stablehlo.constant dense<0.0> : tensor<16xf32>

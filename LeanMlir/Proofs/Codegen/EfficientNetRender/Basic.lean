@@ -1281,7 +1281,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
         "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
@@ -1289,7 +1289,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as EnetSyncTieG.efficientnet_net_syncTiedG (every all-reduced\n" ++
         "    // gradient) and StableHLO.efficientnetFwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/EfficientNet/ (planning/global_bn_verified.md).\n" ++
+        "    // LeanMlir/Proofs/Nets/EfficientNet/.\n" ++
         (if sd || cd then
           "    // (Both are stated without drop-path and dropout; this artifact's per-example masks\n" ++
           "    // are not in that statement.)\n"
@@ -1305,15 +1305,15 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
          "    //    jax/MainEfficientNetImagenet.lean). Per parameter, in this order:\n" ++
          "    //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)\n" ++
          "    //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)\n" ++
-         "    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)\n" ++
+         "    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)\n" ++
          "    //      θ' <- θ - lr*b'                                           (sgdParamF)\n" ++
-         "    //    ⚠ ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the\n" ++
+         "    //    ε = 1e-3 here, against MobileNetV2's 1.0 — this is the SENSITIVE end of the\n" ++
          "    //    placement: textbook g/(sqrt(s')+ε) takes a ~31.6x larger step at a collapsed\n" ++
          "    //    mean-square, which is what the reference means by \"vanilla diverges at the\n" ++
          "    //    paper LR\" and why it carries no gradient clipping.\n" ++
          "    //    Packed [θ|m|v] reused with m = momentum buffer, v = mean-square; %bc1/%bc2 are\n" ++
          "    //    Adam bias corrections, unread here and passed through unchanged.\n" ++
-         "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
+         "    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
       zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++
       (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
       wdzConst wdExclude ++ adamCode ++ lossCode ++

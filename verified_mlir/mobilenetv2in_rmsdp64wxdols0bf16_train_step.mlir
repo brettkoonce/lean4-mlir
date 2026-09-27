@@ -4,17 +4,17 @@ module @m {
     //    own: jax/MainMobilenetV2Imagenet.lean). Per parameter, in this order:
     //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)
     //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)
-    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)
+    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)
     //      θ' <- θ - lr*b'                                           (sgdParamF)
     //    Packed [θ|m|v] is reused with m = momentum buffer, v = mean-square, so the
     //    interface is byte-identical to the AdamW render's apart from the entry name.
     //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.
-    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
+    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
     //    an implementation detail, since this optimizer is not bias-corrected.
     // ── MobileNetV2 batch-BN RMSProp train step, DATA-PARALLEL over 4 replicas ──
     // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
-    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN
+    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN
     // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel
     // variance), before normalising with the global [mu | var] (bnSyncF); its
     // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma
@@ -22,10 +22,10 @@ module @m {
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as MobileNetV2SyncTieB.mnv2_net_syncTiedB (every all-reduced
     // gradient) and StableHLO.mobilenetv2FwdGraphSyncFull_shard (the forward), both in
-    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).
+    // LeanMlir/Proofs/Nets/MobileNet/.
     // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round
     // their operands per element, are not in that statement.)
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb16 = stablehlo.constant dense<0.0> : tensor<16xf32>

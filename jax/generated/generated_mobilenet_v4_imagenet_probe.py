@@ -207,7 +207,7 @@ def _autoaugment(img):
     idx = tf.random.uniform([], 0, len(_AA_POLICY), dtype=tf.int32)
     out = tf.switch_case(idx, branches)
     return tf.cast(out, tf.float32)
-# ── C6 (planning/imagenet_parity.md): timm's geometric ops run PIL BICUBIC, and TF has no bicubic
+# ── timm's geometric ops run PIL BICUBIC, and TF has no bicubic
 #    projective warp (ImageProjectiveTransformV3 takes NEAREST/BILINEAR only and LOGS, not raises,
 #    on anything else). So the warp is written out: PIL's own affine sampler, a = -1 cubic (PIL's
 #    transform filter; its resize uses -0.5) over a 4x4 neighbourhood, neighbours clamped at the
@@ -405,10 +405,9 @@ def conv2d(x, w, b, padding=None, stride=(1,1)):
     #   1x1/s2: (0,0) both ways — projections are unaffected.
     # As with the pool, the two grids are offset by one input position.
     #
-    # Changed 2026-08-04 for paper-faithfulness. ⚠ Scoped to the ResNet-family helpers
-    # ON PURPOSE: MobileNetV2/EfficientNet emit their own conv_general_dilated with
-    # 'SAME' and are TF-origin ports, where asymmetric 'SAME' IS the reference. Do not
-    # 'fix' those. See planning/archive/rsb_a3_r50_verified.md §4b.
+    # Scoped to the ResNet-family helpers ON PURPOSE: MobileNetV2/EfficientNet emit their
+    # own conv_general_dilated with 'SAME' and are TF-origin ports, where asymmetric
+    # 'SAME' IS the reference. Do not 'fix' those.
     if padding is None:
         padding = (((w.shape[2] - 1) // 2,) * 2, ((w.shape[3] - 1) // 2,) * 2)
     x = jax.lax.conv_general_dilated(convdt(x), convdt(w), stride, padding,
@@ -1910,7 +1909,7 @@ EMA_DECAY = 0.999900
 # connected (there is a loss barrier between them), so the result is not merely
 # degraded — it sits at chance.
 #
-# Measured on MNv4-Conv-M 100ep (2026-07-31): decay 0.9999 = tau 10k steps, but
+# Measured on MNv4-Conv-M 100ep: decay 0.9999 = tau 10k steps, but
 # gradAccum 8 leaves only 312 optimizer steps/epoch = 31.2k total = 3.1 tau. At
 # epoch 66 the shadow still held 12.8% init and scored 0.00% top-1, while the LIVE
 # weights scored 70.48% on full 50k. Eval and .bin checkpoints both read the EMA,

@@ -262,7 +262,7 @@ same tree. -/
     `iree-compile`/XLA say "use of undeclared SSA value name" and nothing before them says
     anything. `regen_verified_mlir.sh check`'s prelude audit is what catches it. -/
 def chLnPrelude : String :=
-    "    // §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL\n" ++
+    "    // The channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL\n" ++
     "    // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.\n" ++
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
     "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n"
@@ -1041,17 +1041,15 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       (if replicas ≤ 1 then
         s!"    // ── {cnxModelName V} AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
         s!"    // All {(allParams nClasses V).length} params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
-        "    // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert\n" ++
-        "    // flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).\n"
+        "    // WEIGHT GRADIENTS (flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).\n"
        else
         s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
+        "    // the per-replica gradient nodes. Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
         "    // over disjoint equal batches. Unlike the BN nets, ConvNeXt normalises with LayerNorm\n" ++
-        "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here and the\n" ++
-        "    // §10.3b caveat does not apply.\n") ++
+        "    // — within one example, never across the batch — so N x b IS 1 x (N.b) here.\n") ++
       body ++ convnextAdamConsts nClasses V wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   -- The AdamW body continues the SGD traversal's fresh-name counter. `convNextBackAll` consumed

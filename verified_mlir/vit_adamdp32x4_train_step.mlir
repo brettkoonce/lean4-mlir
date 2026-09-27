@@ -7,7 +7,7 @@ module @m {
     // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over 4 replicas ──
     // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW
     // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is
-    // the replica MEAN of the per-replica gradient nodes (4d piece 2).
+    // the replica MEAN of the per-replica gradient nodes.
     %v0 = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
     %v1 = stablehlo.convolution(%v0, %wConv)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

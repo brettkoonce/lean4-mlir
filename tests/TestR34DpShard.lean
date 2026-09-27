@@ -7,13 +7,9 @@ import LeanMlir.Verified.Train
     unset CUDA_VISIBLE_DEVICES
     PJRT_PLUGIN=... PJRT_REPLICAS=4 .lake/build/bin/r34-dp-shard
 
-**Why this file exists.** `tests/TestShardCheck.lean` says in its own docstring that *"R34 is
-absent on purpose … it has no `adamdp` peer at this batch to pair with"*, and there is no
-`resnet34-dp-check` either. So R34 — the net carrying the 30-epoch ImageNet run — is the ONE net
-whose data-parallel path has no gate at all.
-
-A constant-factor accuracy deficit against a recipe-identical reference is the signature of a
-systematic cause, and "each replica sees a quarter of the data it should" is exactly such a cause.
+**Why this file exists.** `tests/TestShardCheck.lean` has no R34 row (R34 has no `adamdp` peer at
+this batch to pair with). `resnet34-syncbn-check` ties the sync-BN step's arithmetic; this gate asks
+the narrower question of whether the four replicas see different data.
 
 **The construction, and why it is not `shard-check`'s.** The standard identity
 `DP([x0|..|x3]) == mean(single(x0),..,single(x3))` needs a single-device render at the SAME
@@ -34,12 +30,12 @@ already committed:
 `A == B` while `A ≠ C` is the *positive identification* of replication: the collective would be
 averaging four copies of replica 0's gradient, every step, and three quarters of every batch would
 be discarded. This does NOT verify the shard OFFSETS (a permutation of the four shards passes),
-which is what the full `shard-check` identity would add. It answers only the question the accuracy
-deficit poses.
+which is what the full `shard-check` identity would add.
 
-Compared on the **`m` region** `[nP, 2nP)`: the momentum buffer is seeded to 0, so after one step
-`m' = g + wd·θ`, and θ is identical across A/B/C — every difference in `m'` is a difference in the
-gradient, with no optimizer state to launder it.
+Compared on **θ'** `[0, nP)`: the render is heavy-ball, whose velocity buffer is seeded to 0, so after
+one step `v' = g + wd·θ` and `θ' = θ − lr·v'`. θ is identical across A/B/C, so every difference in
+θ' is a difference in the gradient. (The velocity lands in the third region; the second is an
+untouched passthrough.)
 -/
 
 
@@ -108,7 +104,6 @@ backend {← LowererSession.backendName}"
   IO.println "  invoking C (only replica 0 differs)…"; (← IO.getStdout).flush
   let oC ← run xC yC
 
-  -- Compare the momentum region: every difference there is a gradient difference.
   let nP := net.nParams
   -- Compare θ' — [0, nP) — NOT the `m` region. This is HEAVY-BALL, not Adam: the single velocity
   -- buffer lands in the THIRD region and region 2 is an untouched passthrough, so a comparison over

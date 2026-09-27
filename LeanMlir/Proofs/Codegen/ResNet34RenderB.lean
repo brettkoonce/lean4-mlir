@@ -1475,7 +1475,7 @@ here first"
         s!"    // ── ResNet-34 batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
         "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
@@ -1483,7 +1483,7 @@ here first"
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced\n" ++
         "    // gradient) and StableHLO.resnet34FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n" ++
+        "    // LeanMlir/Proofs/Nets/ResNet/.\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++
           "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++

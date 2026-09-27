@@ -1449,10 +1449,10 @@ def mobilenetv4Verified : VerifiedNetSpec where
     `mobilenetv4Verified`, only the head moves (1280→1000). `#guard`ed at 9,715,512 parameters,
     the ~9.7M Conv-M is quoted at.
 
-    The chapter's 75.48% top-1 from the 100-epoch JAX reference behind
-    [`jax/MainMobilenetV4Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4Imagenet.lean) was measured on an earlier transcription
-    that differed from timm's; it is a target for this spec, not a comparison. This spec has no
-    verified ImageNet training run.
+    At 100 epochs this spec reaches 76.68% top-1 on the verified path against 76.57% for the JAX
+    reference behind
+    [`jax/MainMobilenetV4Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4Imagenet.lean)
+    (`runs/2026-09-26-mnv4-verified-bf16-100ep/`, `runs/2026-09-26-mnv4-jax-bf16-100ep/`).
 
     What is proved about it: the train-step capstone `Proofs.Mnv4TieB.mnv4_net_tiedB` binds the
     class count, so it covers this 1000-class head, at one replica, f32 and batch BatchNorm; the
@@ -1533,11 +1533,9 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 -- `trainPix := net.d0` differs from the 224² val width ONLY for a net whose `d0` is not 224², i.e.
 -- only the 160 net. These guards pin every other `.imagenet` net at 224².
 --
--- IF YOU ADD AN `.imagenet` NET AT A NON-224 TRAIN RESOLUTION, ONE OF THESE FIRES — and that is
--- the point, not an obstacle. It means the val drain is still 224 while your train stream is not,
--- so `evalD0` must land before the eval loop can be
--- trusted. Do NOT relax the guard to make it pass; add the net to the exempt list below it only
--- once the eval path reads its own width.
+-- The eval path reads its own width off the eval artifact (`evalD0`, passed to `loadData` and
+-- `spawnValStream`), so a net may train at one resolution and evaluate at another. A new
+-- `.imagenet` net gets a row here stating its train width.
 #guard resnet34ImagenetVerified.d0     == 3*224*224
 #guard vitImagenetVerified.d0          == 3*224*224
 #guard mobilenetv2ImagenetVerified.d0  == 3*224*224
@@ -1545,7 +1543,7 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 #guard convnextImagenetVerified.d0     == 3*224*224
 #guard resnet50ImagenetVerified.d0     == 3*224*224
 #guard mnv4ImagenetVerified.d0         == 3*224*224
--- The one net that is DELIBERATELY not 224, and the reason `evalD0` is still open.
+-- The one net that is DELIBERATELY not 224: RSB-A3 trains at 160² and evaluates at 224².
 #guard resnet50Imagenet160Verified.d0  == 3*160*160
 
 

@@ -123,30 +123,17 @@ Also open: slice I dropped eight unchecked "3-axiom-clean" claims; the audit is 
 - `trainAdamPacked` has no callers and runs IREE only; PGD attacks and `smoothCertify` call
   iree-compile directly (PJRT is the engine).
 
-## 7. Stale facts the process-history sweep surfaced (comments; left as written)
+## 7. Stale facts the process-history sweep surfaced — done 2026-09-27
 
-The sweep removed history, not content. These comments state facts that look out of date; each
-needs a check against the code before rewording.
+Fixed against the code: the per-replica-BN statements (cifar8 DP check, CnnRender,
+`efficientnet-dp-check`); `TestR34DpShard` (compares θ', not `m`; `resnet34-syncbn-check` exists);
+NetsCore's MNv4 note (the 100-epoch pair) and the `evalD0` guard block; Train's val-drain notes;
+MNv2's variant list; jax Codegen's one-hot note; lakefile's MNv4 recipe, bracket and strided-1x1
+docstrings; the ViT Imagenette header; EfficientNet's BN-group note. Emitted text: planning labels,
+dates and glyphs out of the MLIR banners (188 artifacts) and the Python shims (74 files; comment
+lines only in both).
 
-- Sync-BN made these "BN normalises per replica" statements look stale: `CnnRender.lean` ~374,
-  `tests/TestCifar8DpCheck.lean`, the `efficientnet-dp-check` docstring in `lakefile.lean`.
-- `tests/TestR34DpShard.lean` docstring says it compares the `m` region; its code compares θ'.
-  Its "R34 is the one net whose DP path has no gate" is also suspect.
-- "Nothing has been trained" / "NOTHING HAS BEEN TRAINED" in `apps/imagenette/MainViTBImagenet`,
-  `MainViTSImagenet`, `MainConvNeXtBImagenet`.
-- `LeanMlir/Verified/NetsCore.lean` ~1453: MNv4 "no verified ImageNet training run" (76.68 exists);
-  the end-of-file `evalD0` / "val drain is still 224" guard notes.
-- `LeanMlir/Verified/Train.lean`: "~90 s val drain" (`PROBE_WARM`), `loadData`'s `evalD0` "drains a
-  val split off a shim", "the ImageNet val drain inside `loadData`" (~1546).
-- `EfficientNetFullB0.lean:29` "262-param net" vs 213 tensors in NetsCore.
-- `apps/imagenette/MainMobilenetV2VerifiedAdam.lean` ~45 "Only `adam` exists today" (an `rms`
-  render exists); `jax/Jax/Codegen.lean` ~3723 "plain ONE-HOT" (mixup exists).
-- `lakefile.lean`: MNv4 "several reference knobs have no PJRT-side implementation yet"; the
-  direct-mode "ch3 and ch5-8 print a bracket"; strided-1x1 "`downFwdB` builds a 3×3 one".
-- `apps/imagenette/MainEfficientNetImagenet.lean` ~50 "the remaining differences are the BN
-  group …"; `MainViTVerifiedAdam.lean` 21–24 has two truncated sentences.
-- `tests/TestShardCheck.lean` "One harness, three nets"; `TestSgdRenderTie.lean:54` the
-  "XLA/MIOpen patch-embed blocker"; `ViTRenderB` ROCm/MIOpen paragraphs.
-- Emitted text (string literals, so untouched): the 56 DP banners still cite "(4d piece 2)" and
-  `planning/global_bn_verified.md`; `jax/Jax/Codegen.lean` emits `# ⚠⚠ … AS OF 2026-08-14`-style
-  comments into the generated Python shims.
+Checked and left as written: "Nothing has been trained" on ViT-S/B and ConvNeXt-B (only probes
+exist); B0's 262 proof-side parameters (213 tensors + 49 conv biases); "One harness, three nets"
+in `TestShardCheck` (three rows); the MIOpen/gfx1100 notes (ROCm path, still a target). Not
+touched: the `IREE_BACKEND=rocm` run lines in several `apps/imagenette` headers.

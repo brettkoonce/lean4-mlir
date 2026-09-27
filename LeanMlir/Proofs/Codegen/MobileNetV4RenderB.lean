@@ -1097,7 +1097,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
+        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
         "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
         "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
@@ -1105,7 +1105,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as MobileNetV4SyncTieB.mnv4_net_syncTiedB (every all-reduced\n" ++
         "    // gradient) and StableHLO.mnv4FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).\n" ++
+        "    // LeanMlir/Proofs/Nets/MobileNet/.\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
           "    // their operands per element, are not in that statement.)\n"

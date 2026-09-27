@@ -4,15 +4,15 @@ module @m {
     //    own: jax/MainMobilenetV2Imagenet.lean). Per parameter, in this order:
     //      g  <- g + wd*θ        COUPLED L2, BEFORE the accumulator  (momVNextF)
     //      s' <- ρ*s + (1-ρ)*g²                                      (adamVNextF at ρ)
-    //      b' <- μ*b + g/sqrt(s' + ε)   ⚠ ε INSIDE the sqrt          (rmsBufNextF)
+    //      b' <- μ*b + g/sqrt(s' + ε)   ε INSIDE the sqrt            (rmsBufNextF)
     //      θ' <- θ - lr*b'                                           (sgdParamF)
     //    Packed [θ|m|v] is reused with m = momentum buffer, v = mean-square, so the
     //    interface is byte-identical to the AdamW render's apart from the entry name.
     //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.
-    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
+    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
     //    an implementation detail, since this optimizer is not bias-corrected.
     // ── MobileNetV2 batch-BN RMSProp train step: every op is pretty(verified AST node) except the constants, the input passthroughs and the marked report-only %loss ──
-    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
+    // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.
     %zb16 = stablehlo.constant dense<0.0> : tensor<16xf32>

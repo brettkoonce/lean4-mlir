@@ -536,8 +536,9 @@ lean_exe «mobilenetv2-imagenet-verified» where
     **Conv-M.** `mnv4ImagenetVerified` (`Verified.NetsCore`) carries the Conv-M block table and
     names itself "MobileNetV4-Conv-M (ImageNet-1k)".
 
-    Optimizer does NOT match the reference (AdamW @0.004/batch-4096 + EMA + drop-path there, AdamW
-    @1e-3/batch-256 here), and several reference knobs have no PJRT-side implementation yet. -/
+    The job `mnv4-default-4gpu` runs the JAX reference's `default` recipe (AdamW 0.004 at effective
+    batch 4096 by accumulation, EMA, wd 0.05 off norm/bias, classifier dropout); drop-path in the
+    UIB blocks, used only by the 500-epoch paper tier, is absent on this path. -/
 lean_exe «mobilenetv4-imagenet-verified» where
   root := `apps.imagenette.MainMobilenetV4Imagenet
   moreLinkArgs := lowererLink
@@ -1143,9 +1144,9 @@ lean_exe «channel-ln» where
 
 /-- Does the emitter spell a **1×1 strided** conv, and does it compute the right one?
 
-    The paper's ResNet-34 option-B shortcut is a 1×1 stride-2 projection where `downFwdB` builds a
-    3×3 one. It renders the four strided-conv
-    ops at `k = 1` (with the committed `k = 3` alongside as the control), `iree-compile`s both, then
+    The paper's ResNet-34 option-B shortcut is a 1×1 stride-2 projection, which `downFwdB` emits.
+    This renders the four strided-conv ops at `k = 1` (with `k = 3` alongside as the control),
+    `iree-compile`s both, then
     drives each op on device against the **closed form** `den` implies — `flatConvStride2` is
     `decimateFlat ∘ flatConv` and `decimateIdx` reads the even positions, so at `k = 1` all four
     ops are writable in one line each. The `dx` odd-position zeros are the load-bearing check: they
@@ -1415,9 +1416,9 @@ lean_exe «soft-target-tie» where
 
 /-- EfficientNet DP gate. Giving both replicas the SAME batch makes `all_reduce(add)/2` the
     identity, so the data-parallel step must reproduce the single-device one exactly. BatchNorm does
-    not spoil this: BN normalises per replica, and both replicas' groups are the same 32 examples,
-    so their statistics are identical by construction. (The R34 caveat is about SPLITTING a batch —
-    2×32 really is not 1×64 — not duplicating one.)
+    not spoil this: the render all-reduces its BN statistics, and both replicas see the same 32
+    examples, so the averaged statistics are the single device's. A split batch is
+    `efficientnet-syncbn-check`'s job.
 
     Stronger than `vit-dp-check`: EfficientNet returns 98 BN batch statistics, so it has a
     forward-only region that must come back BIT-EXACT. Needs two GPUs and the XLA backend. -/
@@ -2755,16 +2756,16 @@ def gpuBusyPct (backend : String) : IO (Option Nat) := do
 
     `runProbe` answers *"how does my card compare to a 7900 XTX"* and then multiplies a reference.
     That is exact for a chapter which IS its own probe (ch1/2 are the dense probe, ch4 the conv one,
-    ch9 the attn one) and an extrapolation for every other — which is the whole reason ch3 and ch5-8
-    print a bracket. This answers the other question directly: run the chapter's real trainer and
+    ch9 the attn one) and an extrapolation for every other. This answers the other question
+    directly: run the chapter's real trainer and
     multiply by its own epoch count. No reference card, no hardware factor, no bottleneck
     assumption. The method is validated at **0.3%** (ch9's wall extrapolates to 3480 s from a
     marginal-epoch measurement; the real 80-epoch run landed at 3491 s).
 
     **REAL data, not `LEAN_MLIR_BENCH_SYNTH`** — deliberately. The synthetic path exists to take
     the loader out of a *comparison*; here the loader is part of the answer, and it measures
-    ~6.3% of a 1-GPU epoch. Excluding it is most of why even the bracket's transport end came in
-    6% low against the measured ResNet-34 run.
+    ~6.3% of a 1-GPU epoch. Excluding it is most of why the transport-bound estimate came in 6% low
+    against the measured ResNet-34 run.
 
     **AND IT MUST NOT TOUCH A CHECKPOINT**, in either direction. `trainAdamSched` checkpoints per
     epoch, so a naive 3-epoch probe would (a) RESUME an existing checkpoint — measuring a warm

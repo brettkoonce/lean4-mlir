@@ -4512,7 +4512,7 @@ def biasSlot (convBias : Bool) (nm : String) : List String :=
     a conv bias. Emitted once at the top of the body; XLA folds the resulting `add`. -/
 def zeroBiasPrelude (convBias : Bool) (widths : List Nat) : String :=
   if convBias then "" else
-    "    // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s\n" ++
+    "    // The conv biases are not in the signature (BN removes them; He et al.'s\n" ++
     "    // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a\n" ++
     "    // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.\n" ++
     String.join (widths.map (fun c =>

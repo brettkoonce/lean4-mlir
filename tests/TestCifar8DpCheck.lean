@@ -10,9 +10,8 @@ decomposition is an identity,
     (1/2)·[ (1/128)·Σ_A + (1/128)·Σ_B ]  =  (1/256)·Σ_{A∪B}
 
 so a correct data-parallel step must reproduce the single-device step at the global batch to fp
-rounding. **ResNet-34 cannot be checked this way** — BN normalises per replica, so there
-N×b ≠ 1×(N·b) *by design* and no exact tie exists. Hence the ladder: pin the collective
-here, then use it at R34 scale where only structural checks are available.
+rounding. cifar8 has no BatchNorm, so this pins the collective alone; the BN nets' data-parallel
+renders synchronise their statistics and have their own gates (`resnet34-syncbn-check` and peers).
 
 Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
 `cifar8AdamTrainStepFaithfulV` at `replicas := 1` (B=256) and `replicas := 2` (B=128). 1/256 and

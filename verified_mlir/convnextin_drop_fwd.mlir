@@ -5,7 +5,7 @@ module @m {
     // skip add). Emitted in the forward too, at an all-ones mask supplied by the driver:
     // exactly the identity (Proofs.dropPath_ones_id), so this stays a byte-prefix of the
     // SD train step and the forward-subset-train-step audit keeps a partner.
-    // §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL
+    // The channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL
     // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.
     %one = stablehlo.constant dense<1.0> : tensor<f32>
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
