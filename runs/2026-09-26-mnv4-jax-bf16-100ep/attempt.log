@@ -1,0 +1,655 @@
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790385214.481924 1693511 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790385215.300796 1693511 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+MobileNetV4-Conv-M (ImageNet, bf16) · Lean 4 → JAX
+  Conv(3→32,3x3/2)+BN → FMB1(32→48,e4,k3,s2,relu) → UIB(48→80,e4,s2,dw3/5) → UIB(80→80,e2,s1,dw3/3) → UIB(80→160,e6,s2,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/0) → UIB(160→160,e2,s1,dw0/0) → UIB(160→160,e4,s1,dw3/0) → UIB(160→256,e6,s2,dw5/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw3/0) → UIB(256→256,e2,s1,dw3/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e2,s1,dw5/0) → Conv(256→960,1x1/1)+BN → GAP → Conv(960→1280,1x1/1)+BN → 1280→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=100  params=9715512
+steps_per_epoch=312  total_steps=31200
+grad-accum=8x  micro_batch=512 (4 devices x 128)  -> effective_batch=4096  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+  step 100/31200  loss=6.8772  lr=0.00026  (2024.0ms/step avg)
+  step 200/31200  loss=6.6012  lr=0.00051  (1939.0ms/step avg)
+  step 300/31200  loss=6.3628  lr=0.00077  (1911.0ms/step avg)
+[Epoch 1] lr=0.0008 loss(train_avg)=6.7107  [595.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e1.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e1.state.npz (1241 arrays, step=312)
+  step 400/31200  loss=6.1344  lr=0.00103  (1896.0ms/step avg)
+  step 500/31200  loss=5.9488  lr=0.00128  (1887.0ms/step avg)
+  step 600/31200  loss=5.7492  lr=0.00154  (1881.0ms/step avg)
+[Epoch 2] lr=0.0016 loss(train_avg)=6.002  [575.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e2.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e2.state.npz (1241 arrays, step=624)
+  step 700/31200  loss=5.5117  lr=0.00179  (1876.0ms/step avg)
+  step 800/31200  loss=5.3369  lr=0.00205  (1873.0ms/step avg)
+  step 900/31200  loss=5.0979  lr=0.00231  (1870.0ms/step avg)
+[Epoch 3] lr=0.0024 loss(train_avg)=5.3588  [575.4s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e3.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e3.state.npz (1241 arrays, step=936)
+  step 1000/31200  loss=5.0364  lr=0.00256  (1867.0ms/step avg)
+  step 1100/31200  loss=4.8071  lr=0.00282  (1865.0ms/step avg)
+  step 1200/31200  loss=4.6923  lr=0.00308  (1864.0ms/step avg)
+[Epoch 4] lr=0.0032 loss(train_avg)=4.8394  [574.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e4.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e4.state.npz (1241 arrays, step=1248)
+  step 1300/31200  loss=4.5313  lr=0.00333  (1862.0ms/step avg)
+  step 1400/31200  loss=4.4227  lr=0.00359  (1861.0ms/step avg)
+  step 1500/31200  loss=4.2901  lr=0.00385  (1860.0ms/step avg)
+  Running validation ...
+W0926 02:02:35.334374 1693708 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0926 02:02:35.934974 1693707 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0926 02:02:36.365100 1693716 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0926 02:02:36.901604 1693712 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0926 02:02:37.504923 1693713 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[Epoch 5] lr=0.004 loss(train_avg)=4.4387 val_top1=18481/50000 (0.3696) val_top5=0.6223 val_loss=3.0107  [574.8s train, 32.8s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e5.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e5.state.npz (1241 arrays, step=1560)
+  step 1600/31200  loss=4.1652  lr=0.004  (1878.0ms/step avg)
+  step 1700/31200  loss=4.1372  lr=0.004  (1874.0ms/step avg)
+  step 1800/31200  loss=4.0422  lr=0.004  (1874.0ms/step avg)
+[Epoch 6] lr=0.003999 loss(train_avg)=4.0879  [571.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e6.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e6.state.npz (1241 arrays, step=1872)
+  step 1900/31200  loss=3.9121  lr=0.004  (1872.0ms/step avg)
+  step 2000/31200  loss=3.8893  lr=0.004  (1871.0ms/step avg)
+  step 2100/31200  loss=3.819  lr=0.004  (1871.0ms/step avg)
+[Epoch 7] lr=0.003996 loss(train_avg)=3.8404  [576.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e7.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e7.state.npz (1241 arrays, step=2184)
+  step 2200/31200  loss=3.7088  lr=0.004  (1869.0ms/step avg)
+  step 2300/31200  loss=3.6994  lr=0.00399  (1868.0ms/step avg)
+  step 2400/31200  loss=3.5684  lr=0.00399  (1869.0ms/step avg)
+[Epoch 8] lr=0.00399 loss(train_avg)=3.6595  [577.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e8.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e8.state.npz (1241 arrays, step=2496)
+  step 2500/31200  loss=3.6041  lr=0.00399  (1868.0ms/step avg)
+  step 2600/31200  loss=3.5396  lr=0.00399  (1867.0ms/step avg)
+  step 2700/31200  loss=3.517  lr=0.00399  (1866.0ms/step avg)
+  step 2800/31200  loss=3.4756  lr=0.00398  (1866.0ms/step avg)
+[Epoch 9] lr=0.003983 loss(train_avg)=3.5228  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e9.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e9.state.npz (1241 arrays, step=2808)
+  step 2900/31200  loss=3.4751  lr=0.00398  (1865.0ms/step avg)
+  step 3000/31200  loss=3.4024  lr=0.00398  (1866.0ms/step avg)
+  step 3100/31200  loss=3.3756  lr=0.00397  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 10] lr=0.003973 loss(train_avg)=3.4119 val_top1=28667/50000 (0.5733) val_top5=0.8058 val_loss=1.9087  [575.9s train, 26.9s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e10.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e10.state.npz (1241 arrays, step=3120)
+  step 3200/31200  loss=3.3699  lr=0.00397  (1871.0ms/step avg)
+  step 3300/31200  loss=3.3548  lr=0.00397  (1870.0ms/step avg)
+  step 3400/31200  loss=3.2887  lr=0.00396  (1869.0ms/step avg)
+[Epoch 11] lr=0.003961 loss(train_avg)=3.3281  [570.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e11.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e11.state.npz (1241 arrays, step=3432)
+  step 3500/31200  loss=3.3494  lr=0.00396  (1869.0ms/step avg)
+  step 3600/31200  loss=3.2255  lr=0.00395  (1868.0ms/step avg)
+  step 3700/31200  loss=3.1595  lr=0.00395  (1868.0ms/step avg)
+[Epoch 12] lr=0.003947 loss(train_avg)=3.2524  [576.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e12.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e12.state.npz (1241 arrays, step=3744)
+  step 3800/31200  loss=3.2102  lr=0.00394  (1867.0ms/step avg)
+  step 3900/31200  loss=3.2096  lr=0.00394  (1867.0ms/step avg)
+  step 4000/31200  loss=3.1138  lr=0.00393  (1867.0ms/step avg)
+[Epoch 13] lr=0.00393 loss(train_avg)=3.1899  [577.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e13.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e13.state.npz (1241 arrays, step=4056)
+  step 4100/31200  loss=3.146  lr=0.00393  (1866.0ms/step avg)
+  step 4200/31200  loss=3.152  lr=0.00392  (1866.0ms/step avg)
+  step 4300/31200  loss=3.0994  lr=0.00392  (1866.0ms/step avg)
+[Epoch 14] lr=0.003912 loss(train_avg)=3.1369  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e14.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e14.state.npz (1241 arrays, step=4368)
+  step 4400/31200  loss=3.1368  lr=0.00391  (1865.0ms/step avg)
+  step 4500/31200  loss=3.0809  lr=0.0039  (1865.0ms/step avg)
+  step 4600/31200  loss=3.1022  lr=0.0039  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 15] lr=0.003892 loss(train_avg)=3.0894 val_top1=32328/50000 (0.6466) val_top5=0.8562 val_loss=1.5332  [576.8s train, 26.8s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e15.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e15.state.npz (1241 arrays, step=4680)
+  step 4700/31200  loss=3.1287  lr=0.00389  (1870.0ms/step avg)
+  step 4800/31200  loss=3.0838  lr=0.00388  (1868.0ms/step avg)
+  step 4900/31200  loss=3.0544  lr=0.00388  (1869.0ms/step avg)
+[Epoch 16] lr=0.003869 loss(train_avg)=3.0487  [572.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e16.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e16.state.npz (1241 arrays, step=4992)
+  step 5000/31200  loss=3.009  lr=0.00387  (1868.0ms/step avg)
+  step 5100/31200  loss=3.0151  lr=0.00386  (1868.0ms/step avg)
+  step 5200/31200  loss=3.0234  lr=0.00385  (1868.0ms/step avg)
+  step 5300/31200  loss=3.0357  lr=0.00384  (1867.0ms/step avg)
+[Epoch 17] lr=0.003845 loss(train_avg)=3.0123  [577.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e17.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e17.state.npz (1241 arrays, step=5304)
+  step 5400/31200  loss=2.9398  lr=0.00384  (1867.0ms/step avg)
+  step 5500/31200  loss=3.0011  lr=0.00383  (1867.0ms/step avg)
+  step 5600/31200  loss=2.9561  lr=0.00382  (1866.0ms/step avg)
+[Epoch 18] lr=0.003818 loss(train_avg)=2.9779  [576.4s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e18.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e18.state.npz (1241 arrays, step=5616)
+  step 5700/31200  loss=2.9975  lr=0.00381  (1866.0ms/step avg)
+  step 5800/31200  loss=2.9218  lr=0.0038  (1866.0ms/step avg)
+  step 5900/31200  loss=2.9075  lr=0.00379  (1866.0ms/step avg)
+[Epoch 19] lr=0.00379 loss(train_avg)=2.9494  [577.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e19.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e19.state.npz (1241 arrays, step=5928)
+  step 6000/31200  loss=2.9691  lr=0.00378  (1865.0ms/step avg)
+  step 6100/31200  loss=2.9758  lr=0.00377  (1865.0ms/step avg)
+  step 6200/31200  loss=2.9092  lr=0.00376  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 20] lr=0.003759 loss(train_avg)=2.9209 val_top1=33967/50000 (0.6793) val_top5=0.8786 val_loss=1.3746  [576.5s train, 26.7s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e20.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e20.state.npz (1241 arrays, step=6240)
+  step 6300/31200  loss=2.9447  lr=0.00375  (1868.0ms/step avg)
+  step 6400/31200  loss=2.8375  lr=0.00374  (1868.0ms/step avg)
+  step 6500/31200  loss=2.8996  lr=0.00373  (1867.0ms/step avg)
+[Epoch 21] lr=0.003727 loss(train_avg)=2.8925  [569.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e21.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e21.state.npz (1241 arrays, step=6552)
+  step 6600/31200  loss=2.8712  lr=0.00372  (1867.0ms/step avg)
+  step 6700/31200  loss=2.8709  lr=0.00371  (1867.0ms/step avg)
+  step 6800/31200  loss=2.8912  lr=0.0037  (1867.0ms/step avg)
+[Epoch 22] lr=0.003692 loss(train_avg)=2.8702  [579.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e22.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e22.state.npz (1241 arrays, step=6864)
+  step 6900/31200  loss=2.8589  lr=0.00369  (1867.0ms/step avg)
+  step 7000/31200  loss=2.9372  lr=0.00368  (1866.0ms/step avg)
+  step 7100/31200  loss=2.8289  lr=0.00367  (1866.0ms/step avg)
+[Epoch 23] lr=0.003656 loss(train_avg)=2.85  [576.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e23.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e23.state.npz (1241 arrays, step=7176)
+  step 7200/31200  loss=2.8173  lr=0.00365  (1866.0ms/step avg)
+  step 7300/31200  loss=2.827  lr=0.00364  (1866.0ms/step avg)
+  step 7400/31200  loss=2.8704  lr=0.00363  (1866.0ms/step avg)
+[Epoch 24] lr=0.003618 loss(train_avg)=2.8256  [576.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e24.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e24.state.npz (1241 arrays, step=7488)
+  step 7500/31200  loss=2.7957  lr=0.00362  (1865.0ms/step avg)
+  step 7600/31200  loss=2.7693  lr=0.0036  (1865.0ms/step avg)
+  step 7700/31200  loss=2.7826  lr=0.00359  (1865.0ms/step avg)
+  step 7800/31200  loss=2.7979  lr=0.00358  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 25] lr=0.003578 loss(train_avg)=2.805 val_top1=34853/50000 (0.6971) val_top5=0.8904 val_loss=1.2876  [577.1s train, 26.7s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e25.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e25.state.npz (1241 arrays, step=7800)
+  step 7900/31200  loss=2.8168  lr=0.00357  (1867.0ms/step avg)
+  step 8000/31200  loss=2.8638  lr=0.00355  (1867.0ms/step avg)
+  step 8100/31200  loss=2.7363  lr=0.00354  (1867.0ms/step avg)
+[Epoch 26] lr=0.003537 loss(train_avg)=2.7893  [570.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e26.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e26.state.npz (1241 arrays, step=8112)
+  step 8200/31200  loss=2.7754  lr=0.00352  (1867.0ms/step avg)
+  step 8300/31200  loss=2.8007  lr=0.00351  (1867.0ms/step avg)
+  step 8400/31200  loss=2.7808  lr=0.0035  (1866.0ms/step avg)
+[Epoch 27] lr=0.003494 loss(train_avg)=2.7705  [576.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e27.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e27.state.npz (1241 arrays, step=8424)
+  step 8500/31200  loss=2.81  lr=0.00348  (1866.0ms/step avg)
+  step 8600/31200  loss=2.7224  lr=0.00347  (1866.0ms/step avg)
+  step 8700/31200  loss=2.7879  lr=0.00345  (1866.0ms/step avg)
+[Epoch 28] lr=0.003449 loss(train_avg)=2.7555  [577.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e28.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e28.state.npz (1241 arrays, step=8736)
+  step 8800/31200  loss=2.7964  lr=0.00344  (1866.0ms/step avg)
+  step 8900/31200  loss=2.7507  lr=0.00342  (1866.0ms/step avg)
+  step 9000/31200  loss=2.7347  lr=0.00341  (1866.0ms/step avg)
+[Epoch 29] lr=0.003403 loss(train_avg)=2.7374  [577.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e29.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e29.state.npz (1241 arrays, step=9048)
+  step 9100/31200  loss=2.7185  lr=0.00339  (1865.0ms/step avg)
+  step 9200/31200  loss=2.6627  lr=0.00338  (1865.0ms/step avg)
+  step 9300/31200  loss=2.7798  lr=0.00336  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 30] lr=0.003355 loss(train_avg)=2.7205 val_top1=35550/50000 (0.711) val_top5=0.8991 val_loss=1.2236  [578.3s train, 27.8s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e30.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e30.state.npz (1241 arrays, step=9360)
+  step 9400/31200  loss=2.6775  lr=0.00335  (1868.0ms/step avg)
+  step 9500/31200  loss=2.7433  lr=0.00333  (1867.0ms/step avg)
+  step 9600/31200  loss=2.7191  lr=0.00332  (1867.0ms/step avg)
+[Epoch 31] lr=0.003305 loss(train_avg)=2.708  [572.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e31.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e31.state.npz (1241 arrays, step=9672)
+  step 9700/31200  loss=2.7042  lr=0.0033  (1867.0ms/step avg)
+  step 9800/31200  loss=2.7245  lr=0.00328  (1867.0ms/step avg)
+  step 9900/31200  loss=2.6632  lr=0.00327  (1867.0ms/step avg)
+[Epoch 32] lr=0.003255 loss(train_avg)=2.6912  [577.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e32.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e32.state.npz (1241 arrays, step=9984)
+  step 10000/31200  loss=2.706  lr=0.00325  (1867.0ms/step avg)
+  step 10100/31200  loss=2.6648  lr=0.00324  (1867.0ms/step avg)
+  step 10200/31200  loss=2.6613  lr=0.00322  (1867.0ms/step avg)
+[Epoch 33] lr=0.003202 loss(train_avg)=2.6779  [578.4s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e33.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e33.state.npz (1241 arrays, step=10296)
+  step 10300/31200  loss=2.6377  lr=0.0032  (1867.0ms/step avg)
+  step 10400/31200  loss=2.7174  lr=0.00318  (1866.0ms/step avg)
+  step 10500/31200  loss=2.7104  lr=0.00317  (1866.0ms/step avg)
+  step 10600/31200  loss=2.6429  lr=0.00315  (1866.0ms/step avg)
+[Epoch 34] lr=0.003149 loss(train_avg)=2.6638  [576.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e34.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e34.state.npz (1241 arrays, step=10608)
+  step 10700/31200  loss=2.6543  lr=0.00313  (1866.0ms/step avg)
+  step 10800/31200  loss=2.6577  lr=0.00312  (1866.0ms/step avg)
+  step 10900/31200  loss=2.6179  lr=0.0031  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 35] lr=0.003094 loss(train_avg)=2.6484 val_top1=36127/50000 (0.7225) val_top5=0.9058 val_loss=1.1757  [576.2s train, 27.6s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e35.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e35.state.npz (1241 arrays, step=10920)
+  step 11000/31200  loss=2.6127  lr=0.00308  (1868.0ms/step avg)
+  step 11100/31200  loss=2.6529  lr=0.00306  (1867.0ms/step avg)
+  step 11200/31200  loss=2.6484  lr=0.00304  (1867.0ms/step avg)
+[Epoch 36] lr=0.003038 loss(train_avg)=2.6358  [571.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e36.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e36.state.npz (1241 arrays, step=11232)
+  step 11300/31200  loss=2.608  lr=0.00303  (1867.0ms/step avg)
+  step 11400/31200  loss=2.6302  lr=0.00301  (1867.0ms/step avg)
+  step 11500/31200  loss=2.6373  lr=0.00299  (1867.0ms/step avg)
+[Epoch 37] lr=0.002981 loss(train_avg)=2.6233  [575.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e37.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e37.state.npz (1241 arrays, step=11544)
+  step 11600/31200  loss=2.6043  lr=0.00297  (1867.0ms/step avg)
+  step 11700/31200  loss=2.5523  lr=0.00295  (1866.0ms/step avg)
+  step 11800/31200  loss=2.5788  lr=0.00293  (1866.0ms/step avg)
+[Epoch 38] lr=0.002923 loss(train_avg)=2.6124  [577.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e38.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e38.state.npz (1241 arrays, step=11856)
+  step 11900/31200  loss=2.6211  lr=0.00291  (1866.0ms/step avg)
+  step 12000/31200  loss=2.6314  lr=0.0029  (1866.0ms/step avg)
+  step 12100/31200  loss=2.6197  lr=0.00288  (1866.0ms/step avg)
+[Epoch 39] lr=0.002864 loss(train_avg)=2.5997  [577.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e39.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e39.state.npz (1241 arrays, step=12168)
+  step 12200/31200  loss=2.6055  lr=0.00286  (1866.0ms/step avg)
+  step 12300/31200  loss=2.6208  lr=0.00284  (1866.0ms/step avg)
+  step 12400/31200  loss=2.5371  lr=0.00282  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 40] lr=0.002804 loss(train_avg)=2.585 val_top1=36496/50000 (0.7299) val_top5=0.9098 val_loss=1.1395  [576.9s train, 26.6s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e40.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e40.state.npz (1241 arrays, step=12480)
+  step 12500/31200  loss=2.5909  lr=0.0028  (1868.0ms/step avg)
+  step 12600/31200  loss=2.5436  lr=0.00278  (1867.0ms/step avg)
+  step 12700/31200  loss=2.5534  lr=0.00276  (1867.0ms/step avg)
+[Epoch 41] lr=0.002743 loss(train_avg)=2.5776  [569.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e41.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e41.state.npz (1241 arrays, step=12792)
+  step 12800/31200  loss=2.5966  lr=0.00274  (1867.0ms/step avg)
+  step 12900/31200  loss=2.5496  lr=0.00272  (1867.0ms/step avg)
+  step 13000/31200  loss=2.6205  lr=0.0027  (1867.0ms/step avg)
+  step 13100/31200  loss=2.5607  lr=0.00268  (1866.0ms/step avg)
+[Epoch 42] lr=0.002681 loss(train_avg)=2.5614  [575.4s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e42.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e42.state.npz (1241 arrays, step=13104)
+  step 13200/31200  loss=2.5811  lr=0.00266  (1866.0ms/step avg)
+  step 13300/31200  loss=2.5682  lr=0.00264  (1866.0ms/step avg)
+  step 13400/31200  loss=2.5871  lr=0.00262  (1866.0ms/step avg)
+[Epoch 43] lr=0.002618 loss(train_avg)=2.5518  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e43.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e43.state.npz (1241 arrays, step=13416)
+  step 13500/31200  loss=2.5464  lr=0.0026  (1866.0ms/step avg)
+  step 13600/31200  loss=2.4732  lr=0.00258  (1866.0ms/step avg)
+  step 13700/31200  loss=2.5124  lr=0.00256  (1866.0ms/step avg)
+[Epoch 44] lr=0.002555 loss(train_avg)=2.5381  [577.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e44.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e44.state.npz (1241 arrays, step=13728)
+  step 13800/31200  loss=2.524  lr=0.00254  (1866.0ms/step avg)
+  step 13900/31200  loss=2.5917  lr=0.00252  (1866.0ms/step avg)
+  step 14000/31200  loss=2.5415  lr=0.0025  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 45] lr=0.002491 loss(train_avg)=2.525 val_top1=36810/50000 (0.7362) val_top5=0.9131 val_loss=1.1096  [577.9s train, 26.6s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e45.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e45.state.npz (1241 arrays, step=14040)
+  step 14100/31200  loss=2.5522  lr=0.00248  (1867.0ms/step avg)
+  step 14200/31200  loss=2.5367  lr=0.00246  (1867.0ms/step avg)
+  step 14300/31200  loss=2.5071  lr=0.00244  (1867.0ms/step avg)
+[Epoch 46] lr=0.002427 loss(train_avg)=2.5173  [571.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e46.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e46.state.npz (1241 arrays, step=14352)
+  step 14400/31200  loss=2.5071  lr=0.00242  (1867.0ms/step avg)
+  step 14500/31200  loss=2.4663  lr=0.0024  (1867.0ms/step avg)
+  step 14600/31200  loss=2.5248  lr=0.00238  (1867.0ms/step avg)
+[Epoch 47] lr=0.002362 loss(train_avg)=2.5043  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e47.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e47.state.npz (1241 arrays, step=14664)
+  step 14700/31200  loss=2.5128  lr=0.00235  (1866.0ms/step avg)
+  step 14800/31200  loss=2.5331  lr=0.00233  (1866.0ms/step avg)
+  step 14900/31200  loss=2.4972  lr=0.00231  (1866.0ms/step avg)
+[Epoch 48] lr=0.002297 loss(train_avg)=2.4919  [577.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e48.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e48.state.npz (1241 arrays, step=14976)
+  step 15000/31200  loss=2.4804  lr=0.00229  (1866.0ms/step avg)
+  step 15100/31200  loss=2.4553  lr=0.00227  (1866.0ms/step avg)
+  step 15200/31200  loss=2.4701  lr=0.00225  (1866.0ms/step avg)
+[Epoch 49] lr=0.002231 loss(train_avg)=2.4805  [577.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e49.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e49.state.npz (1241 arrays, step=15288)
+  step 15300/31200  loss=2.449  lr=0.00223  (1866.0ms/step avg)
+  step 15400/31200  loss=2.4591  lr=0.00221  (1866.0ms/step avg)
+  step 15500/31200  loss=2.4867  lr=0.00219  (1866.0ms/step avg)
+  step 15600/31200  loss=2.4328  lr=0.00217  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 50] lr=0.002165 loss(train_avg)=2.4684 val_top1=37087/50000 (0.7417) val_top5=0.9174 val_loss=1.0849  [576.8s train, 27.1s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e50.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e50.state.npz (1241 arrays, step=15600)
+  step 15700/31200  loss=2.4741  lr=0.00214  (1867.0ms/step avg)
+  step 15800/31200  loss=2.4416  lr=0.00212  (1867.0ms/step avg)
+  step 15900/31200  loss=2.4557  lr=0.0021  (1867.0ms/step avg)
+[Epoch 51] lr=0.002099 loss(train_avg)=2.4583  [570.3s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e51.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e51.state.npz (1241 arrays, step=15912)
+  step 16000/31200  loss=2.4587  lr=0.00208  (1867.0ms/step avg)
+  step 16100/31200  loss=2.4616  lr=0.00206  (1867.0ms/step avg)
+  step 16200/31200  loss=2.4682  lr=0.00204  (1866.0ms/step avg)
+[Epoch 52] lr=0.002033 loss(train_avg)=2.4463  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e52.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e52.state.npz (1241 arrays, step=16224)
+  step 16300/31200  loss=2.4884  lr=0.00202  (1866.0ms/step avg)
+  step 16400/31200  loss=2.4626  lr=0.002  (1866.0ms/step avg)
+  step 16500/31200  loss=2.4534  lr=0.00197  (1866.0ms/step avg)
+[Epoch 53] lr=0.001967 loss(train_avg)=2.4354  [576.3s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e53.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e53.state.npz (1241 arrays, step=16536)
+  step 16600/31200  loss=2.3905  lr=0.00195  (1866.0ms/step avg)
+  step 16700/31200  loss=2.4278  lr=0.00193  (1866.0ms/step avg)
+  step 16800/31200  loss=2.4423  lr=0.00191  (1866.0ms/step avg)
+[Epoch 54] lr=0.001901 loss(train_avg)=2.4236  [577.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e54.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e54.state.npz (1241 arrays, step=16848)
+  step 16900/31200  loss=2.447  lr=0.00189  (1866.0ms/step avg)
+  step 17000/31200  loss=2.4394  lr=0.00187  (1866.0ms/step avg)
+  step 17100/31200  loss=2.391  lr=0.00185  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 55] lr=0.001835 loss(train_avg)=2.4108 val_top1=37327/50000 (0.7465) val_top5=0.9197 val_loss=1.0621  [577.9s train, 27.4s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e55.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e55.state.npz (1241 arrays, step=17160)
+  step 17200/31200  loss=2.3755  lr=0.00183  (1867.0ms/step avg)
+  step 17300/31200  loss=2.4234  lr=0.00181  (1867.0ms/step avg)
+  step 17400/31200  loss=2.3775  lr=0.00178  (1867.0ms/step avg)
+[Epoch 56] lr=0.001769 loss(train_avg)=2.3992  [569.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e56.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e56.state.npz (1241 arrays, step=17472)
+  step 17500/31200  loss=2.3901  lr=0.00176  (1867.0ms/step avg)
+  step 17600/31200  loss=2.3753  lr=0.00174  (1866.0ms/step avg)
+  step 17700/31200  loss=2.3893  lr=0.00172  (1866.0ms/step avg)
+[Epoch 57] lr=0.001704 loss(train_avg)=2.3892  [578.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e57.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e57.state.npz (1241 arrays, step=17784)
+  step 17800/31200  loss=2.4088  lr=0.0017  (1866.0ms/step avg)
+  step 17900/31200  loss=2.3708  lr=0.00168  (1866.0ms/step avg)
+  step 18000/31200  loss=2.3824  lr=0.00166  (1866.0ms/step avg)
+[Epoch 58] lr=0.001638 loss(train_avg)=2.3785  [577.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e58.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e58.state.npz (1241 arrays, step=18096)
+  step 18100/31200  loss=2.3757  lr=0.00164  (1866.0ms/step avg)
+  step 18200/31200  loss=2.3889  lr=0.00162  (1866.0ms/step avg)
+  step 18300/31200  loss=2.3683  lr=0.0016  (1866.0ms/step avg)
+  step 18400/31200  loss=2.3409  lr=0.00158  (1866.0ms/step avg)
+[Epoch 59] lr=0.001574 loss(train_avg)=2.365  [576.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e59.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e59.state.npz (1241 arrays, step=18408)
+  step 18500/31200  loss=2.3584  lr=0.00155  (1866.0ms/step avg)
+  step 18600/31200  loss=2.3189  lr=0.00153  (1866.0ms/step avg)
+  step 18700/31200  loss=2.3295  lr=0.00151  (1866.0ms/step avg)
+  Running validation ...
+[Epoch 60] lr=0.001509 loss(train_avg)=2.3541 val_top1=37516/50000 (0.7503) val_top5=0.9223 val_loss=1.0448  [575.0s train, 26.6s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e60.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e60.state.npz (1241 arrays, step=18720)
+  step 18800/31200  loss=2.3173  lr=0.00149  (1867.0ms/step avg)
+  step 18900/31200  loss=2.3658  lr=0.00147  (1866.0ms/step avg)
+  step 19000/31200  loss=2.325  lr=0.00145  (1866.0ms/step avg)
+[Epoch 61] lr=0.001445 loss(train_avg)=2.3436  [570.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e61.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e61.state.npz (1241 arrays, step=19032)
+  step 19100/31200  loss=2.3607  lr=0.00143  (1866.0ms/step avg)
+  step 19200/31200  loss=2.3098  lr=0.00141  (1866.0ms/step avg)
+  step 19300/31200  loss=2.3041  lr=0.00139  (1866.0ms/step avg)
+[Epoch 62] lr=0.001382 loss(train_avg)=2.3316  [576.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e62.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e62.state.npz (1241 arrays, step=19344)
+  step 19400/31200  loss=2.3356  lr=0.00137  (1866.0ms/step avg)
+  step 19500/31200  loss=2.3053  lr=0.00135  (1866.0ms/step avg)
+  step 19600/31200  loss=2.3279  lr=0.00133  (1866.0ms/step avg)
+[Epoch 63] lr=0.00132 loss(train_avg)=2.321  [576.3s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e63.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e63.state.npz (1241 arrays, step=19656)
+  step 19700/31200  loss=2.2618  lr=0.00131  (1866.0ms/step avg)
+  step 19800/31200  loss=2.2829  lr=0.00129  (1866.0ms/step avg)
+  step 19900/31200  loss=2.3121  lr=0.00127  (1866.0ms/step avg)
+[Epoch 64] lr=0.001258 loss(train_avg)=2.3075  [576.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e64.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e64.state.npz (1241 arrays, step=19968)
+  step 20000/31200  loss=2.2777  lr=0.00125  (1866.0ms/step avg)
+  step 20100/31200  loss=2.2696  lr=0.00123  (1865.0ms/step avg)
+  step 20200/31200  loss=2.2952  lr=0.00121  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 65] lr=0.001197 loss(train_avg)=2.2968 val_top1=37734/50000 (0.7547) val_top5=0.9242 val_loss=1.0315  [577.2s train, 26.7s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e65.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e65.state.npz (1241 arrays, step=20280)
+  step 20300/31200  loss=2.2918  lr=0.00119  (1867.0ms/step avg)
+  step 20400/31200  loss=2.2698  lr=0.00117  (1866.0ms/step avg)
+  step 20500/31200  loss=2.2801  lr=0.00115  (1866.0ms/step avg)
+[Epoch 66] lr=0.001137 loss(train_avg)=2.2855  [569.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e66.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e66.state.npz (1241 arrays, step=20592)
+  step 20600/31200  loss=2.3046  lr=0.00114  (1866.0ms/step avg)
+  step 20700/31200  loss=2.2791  lr=0.00112  (1866.0ms/step avg)
+  step 20800/31200  loss=2.2769  lr=0.0011  (1866.0ms/step avg)
+  step 20900/31200  loss=2.2376  lr=0.00108  (1866.0ms/step avg)
+[Epoch 67] lr=0.001078 loss(train_avg)=2.2735  [576.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e67.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e67.state.npz (1241 arrays, step=20904)
+  step 21000/31200  loss=2.2612  lr=0.00106  (1866.0ms/step avg)
+  step 21100/31200  loss=2.2591  lr=0.00104  (1866.0ms/step avg)
+  step 21200/31200  loss=2.2494  lr=0.00102  (1866.0ms/step avg)
+[Epoch 68] lr=0.001019 loss(train_avg)=2.2632  [575.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e68.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e68.state.npz (1241 arrays, step=21216)
+  step 21300/31200  loss=2.2195  lr=0.001  (1866.0ms/step avg)
+  step 21400/31200  loss=2.2638  lr=0.00099  (1865.0ms/step avg)
+  step 21500/31200  loss=2.2475  lr=0.00097  (1865.0ms/step avg)
+[Epoch 69] lr=0.000962 loss(train_avg)=2.2526  [576.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e69.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e69.state.npz (1241 arrays, step=21528)
+  step 21600/31200  loss=2.241  lr=0.00095  (1865.0ms/step avg)
+  step 21700/31200  loss=2.2296  lr=0.00093  (1865.0ms/step avg)
+  step 21800/31200  loss=2.2515  lr=0.00091  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 70] lr=0.000906 loss(train_avg)=2.2413 val_top1=37861/50000 (0.7572) val_top5=0.9256 val_loss=1.0214  [576.2s train, 26.5s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e70.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e70.state.npz (1241 arrays, step=21840)
+  step 21900/31200  loss=2.2219  lr=0.0009  (1866.0ms/step avg)
+  step 22000/31200  loss=2.2091  lr=0.00088  (1866.0ms/step avg)
+  step 22100/31200  loss=2.2177  lr=0.00086  (1866.0ms/step avg)
+[Epoch 71] lr=0.000852 loss(train_avg)=2.2282  [571.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e71.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e71.state.npz (1241 arrays, step=22152)
+  step 22200/31200  loss=2.2899  lr=0.00084  (1866.0ms/step avg)
+  step 22300/31200  loss=2.2304  lr=0.00083  (1866.0ms/step avg)
+  step 22400/31200  loss=2.2499  lr=0.00081  (1866.0ms/step avg)
+[Epoch 72] lr=0.000798 loss(train_avg)=2.2192  [575.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e72.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e72.state.npz (1241 arrays, step=22464)
+  step 22500/31200  loss=2.2334  lr=0.00079  (1866.0ms/step avg)
+  step 22600/31200  loss=2.175  lr=0.00078  (1866.0ms/step avg)
+  step 22700/31200  loss=2.1765  lr=0.00076  (1866.0ms/step avg)
+[Epoch 73] lr=0.000746 loss(train_avg)=2.2079  [577.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e73.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e73.state.npz (1241 arrays, step=22776)
+  step 22800/31200  loss=2.1682  lr=0.00074  (1865.0ms/step avg)
+  step 22900/31200  loss=2.2002  lr=0.00073  (1865.0ms/step avg)
+  step 23000/31200  loss=2.2314  lr=0.00071  (1865.0ms/step avg)
+[Epoch 74] lr=0.000695 loss(train_avg)=2.1966  [577.3s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e74.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e74.state.npz (1241 arrays, step=23088)
+  step 23100/31200  loss=2.1892  lr=0.00069  (1865.0ms/step avg)
+  step 23200/31200  loss=2.1674  lr=0.00068  (1865.0ms/step avg)
+  step 23300/31200  loss=2.2049  lr=0.00066  (1865.0ms/step avg)
+  step 23400/31200  loss=2.1402  lr=0.00065  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 75] lr=0.000646 loss(train_avg)=2.1851 val_top1=37996/50000 (0.7599) val_top5=0.9273 val_loss=1.014  [577.2s train, 26.6s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e75.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e75.state.npz (1241 arrays, step=23400)
+  step 23500/31200  loss=2.1717  lr=0.00063  (1866.0ms/step avg)
+  step 23600/31200  loss=2.2092  lr=0.00061  (1866.0ms/step avg)
+  step 23700/31200  loss=2.1616  lr=0.0006  (1866.0ms/step avg)
+[Epoch 76] lr=0.000598 loss(train_avg)=2.1754  [569.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e76.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e76.state.npz (1241 arrays, step=23712)
+  step 23800/31200  loss=2.1642  lr=0.00058  (1866.0ms/step avg)
+  step 23900/31200  loss=2.1959  lr=0.00057  (1866.0ms/step avg)
+  step 24000/31200  loss=2.1455  lr=0.00055  (1866.0ms/step avg)
+[Epoch 77] lr=0.000551 loss(train_avg)=2.1654  [576.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e77.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e77.state.npz (1241 arrays, step=24024)
+  step 24100/31200  loss=2.1174  lr=0.00054  (1866.0ms/step avg)
+  step 24200/31200  loss=2.1369  lr=0.00053  (1866.0ms/step avg)
+  step 24300/31200  loss=2.1966  lr=0.00051  (1866.0ms/step avg)
+[Epoch 78] lr=0.000506 loss(train_avg)=2.1558  [578.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e78.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e78.state.npz (1241 arrays, step=24336)
+  step 24400/31200  loss=2.1514  lr=0.0005  (1866.0ms/step avg)
+  step 24500/31200  loss=2.1303  lr=0.00048  (1865.0ms/step avg)
+  step 24600/31200  loss=2.1668  lr=0.00047  (1865.0ms/step avg)
+[Epoch 79] lr=0.000463 loss(train_avg)=2.1467  [578.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e79.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e79.state.npz (1241 arrays, step=24648)
+  step 24700/31200  loss=2.1435  lr=0.00046  (1865.0ms/step avg)
+  step 24800/31200  loss=2.1043  lr=0.00044  (1865.0ms/step avg)
+  step 24900/31200  loss=2.1171  lr=0.00043  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 80] lr=0.000422 loss(train_avg)=2.1356 val_top1=38114/50000 (0.7623) val_top5=0.928 val_loss=1.0093  [576.2s train, 27.0s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e80.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e80.state.npz (1241 arrays, step=24960)
+  step 25000/31200  loss=2.152  lr=0.00042  (1866.0ms/step avg)
+  step 25100/31200  loss=2.1589  lr=0.0004  (1866.0ms/step avg)
+  step 25200/31200  loss=2.1002  lr=0.00039  (1866.0ms/step avg)
+[Epoch 81] lr=0.000382 loss(train_avg)=2.1281  [570.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e81.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e81.state.npz (1241 arrays, step=25272)
+  step 25300/31200  loss=2.0662  lr=0.00038  (1866.0ms/step avg)
+  step 25400/31200  loss=2.0971  lr=0.00037  (1866.0ms/step avg)
+  step 25500/31200  loss=2.1279  lr=0.00035  (1866.0ms/step avg)
+[Epoch 82] lr=0.000344 loss(train_avg)=2.118  [578.3s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e82.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e82.state.npz (1241 arrays, step=25584)
+  step 25600/31200  loss=2.1094  lr=0.00034  (1866.0ms/step avg)
+  step 25700/31200  loss=2.125  lr=0.00033  (1866.0ms/step avg)
+  step 25800/31200  loss=2.1006  lr=0.00032  (1866.0ms/step avg)
+[Epoch 83] lr=0.000308 loss(train_avg)=2.1097  [576.4s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e83.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e83.state.npz (1241 arrays, step=25896)
+  step 25900/31200  loss=2.0823  lr=0.00031  (1866.0ms/step avg)
+  step 26000/31200  loss=2.0803  lr=0.0003  (1866.0ms/step avg)
+  step 26100/31200  loss=2.1533  lr=0.00029  (1865.0ms/step avg)
+  step 26200/31200  loss=2.089  lr=0.00027  (1865.0ms/step avg)
+[Epoch 84] lr=0.000274 loss(train_avg)=2.1036  [576.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e84.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e84.state.npz (1241 arrays, step=26208)
+  step 26300/31200  loss=2.0806  lr=0.00026  (1865.0ms/step avg)
+  step 26400/31200  loss=2.1107  lr=0.00025  (1865.0ms/step avg)
+  step 26500/31200  loss=2.0913  lr=0.00024  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 85] lr=0.000241 loss(train_avg)=2.0959 val_top1=38186/50000 (0.7637) val_top5=0.9284 val_loss=1.0072  [577.2s train, 27.0s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e85.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e85.state.npz (1241 arrays, step=26520)
+  step 26600/31200  loss=2.1209  lr=0.00023  (1866.0ms/step avg)
+  step 26700/31200  loss=2.1144  lr=0.00022  (1866.0ms/step avg)
+  step 26800/31200  loss=2.0937  lr=0.00021  (1866.0ms/step avg)
+[Epoch 86] lr=0.000211 loss(train_avg)=2.0878  [570.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e86.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e86.state.npz (1241 arrays, step=26832)
+  step 26900/31200  loss=2.1082  lr=0.0002  (1866.0ms/step avg)
+  step 27000/31200  loss=2.0893  lr=0.0002  (1866.0ms/step avg)
+  step 27100/31200  loss=2.0342  lr=0.00019  (1866.0ms/step avg)
+[Epoch 87] lr=0.000182 loss(train_avg)=2.0823  [576.6s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e87.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e87.state.npz (1241 arrays, step=27144)
+  step 27200/31200  loss=2.0714  lr=0.00018  (1866.0ms/step avg)
+  step 27300/31200  loss=2.0644  lr=0.00017  (1866.0ms/step avg)
+  step 27400/31200  loss=2.0605  lr=0.00016  (1866.0ms/step avg)
+[Epoch 88] lr=0.000156 loss(train_avg)=2.0757  [576.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e88.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e88.state.npz (1241 arrays, step=27456)
+  step 27500/31200  loss=2.0799  lr=0.00015  (1865.0ms/step avg)
+  step 27600/31200  loss=2.0616  lr=0.00014  (1865.0ms/step avg)
+  step 27700/31200  loss=2.0612  lr=0.00014  (1865.0ms/step avg)
+[Epoch 89] lr=0.000131 loss(train_avg)=2.0718  [578.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e89.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e89.state.npz (1241 arrays, step=27768)
+  step 27800/31200  loss=2.0958  lr=0.00013  (1865.0ms/step avg)
+  step 27900/31200  loss=2.1007  lr=0.00012  (1865.0ms/step avg)
+  step 28000/31200  loss=2.0163  lr=0.00011  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 90] lr=0.000108 loss(train_avg)=2.0642 val_top1=38243/50000 (0.7649) val_top5=0.9292 val_loss=1.0079  [577.4s train, 26.8s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e90.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e90.state.npz (1241 arrays, step=28080)
+  step 28100/31200  loss=2.0718  lr=0.00011  (1866.0ms/step avg)
+  step 28200/31200  loss=2.055  lr=0.0001  (1866.0ms/step avg)
+  step 28300/31200  loss=2.0485  lr=9e-05  (1866.0ms/step avg)
+[Epoch 91] lr=8.8e-05 loss(train_avg)=2.0596  [571.7s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e91.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e91.state.npz (1241 arrays, step=28392)
+  step 28400/31200  loss=2.0407  lr=9e-05  (1866.0ms/step avg)
+  step 28500/31200  loss=2.0095  lr=8e-05  (1866.0ms/step avg)
+  step 28600/31200  loss=2.0567  lr=8e-05  (1866.0ms/step avg)
+  step 28700/31200  loss=2.0534  lr=7e-05  (1866.0ms/step avg)
+[Epoch 92] lr=7e-05 loss(train_avg)=2.0562  [575.8s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e92.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e92.state.npz (1241 arrays, step=28704)
+  step 28800/31200  loss=2.0392  lr=6e-05  (1866.0ms/step avg)
+  step 28900/31200  loss=2.0159  lr=6e-05  (1866.0ms/step avg)
+  step 29000/31200  loss=2.0677  lr=5e-05  (1866.0ms/step avg)
+[Epoch 93] lr=5.3e-05 loss(train_avg)=2.0529  [575.9s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e93.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e93.state.npz (1241 arrays, step=29016)
+  step 29100/31200  loss=2.0731  lr=5e-05  (1866.0ms/step avg)
+  step 29200/31200  loss=2.0398  lr=4e-05  (1865.0ms/step avg)
+  step 29300/31200  loss=2.0309  lr=4e-05  (1865.0ms/step avg)
+[Epoch 94] lr=3.9e-05 loss(train_avg)=2.0511  [578.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e94.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e94.state.npz (1241 arrays, step=29328)
+  step 29400/31200  loss=2.0642  lr=4e-05  (1865.0ms/step avg)
+  step 29500/31200  loss=2.079  lr=3e-05  (1865.0ms/step avg)
+  step 29600/31200  loss=2.0766  lr=3e-05  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 95] lr=2.7e-05 loss(train_avg)=2.0492 val_top1=38253/50000 (0.7651) val_top5=0.9296 val_loss=1.0117  [577.1s train, 27.1s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e95.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e95.state.npz (1241 arrays, step=29640)
+  step 29700/31200  loss=1.9784  lr=3e-05  (1866.0ms/step avg)
+  step 29800/31200  loss=2.0351  lr=2e-05  (1866.0ms/step avg)
+  step 29900/31200  loss=2.0049  lr=2e-05  (1866.0ms/step avg)
+[Epoch 96] lr=1.7e-05 loss(train_avg)=2.0465  [571.5s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e96.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e96.state.npz (1241 arrays, step=29952)
+  step 30000/31200  loss=2.0648  lr=2e-05  (1866.0ms/step avg)
+  step 30100/31200  loss=2.0813  lr=1e-05  (1866.0ms/step avg)
+  step 30200/31200  loss=2.0639  lr=1e-05  (1866.0ms/step avg)
+[Epoch 97] lr=1e-05 loss(train_avg)=2.0438  [577.2s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e97.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e97.state.npz (1241 arrays, step=30264)
+  step 30300/31200  loss=2.0259  lr=1e-05  (1866.0ms/step avg)
+  step 30400/31200  loss=2.0395  lr=1e-05  (1866.0ms/step avg)
+  step 30500/31200  loss=2.0605  lr=1e-05  (1866.0ms/step avg)
+[Epoch 98] lr=4e-06 loss(train_avg)=2.0444  [577.0s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e98.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e98.state.npz (1241 arrays, step=30576)
+  step 30600/31200  loss=2.0412  lr=0.0  (1866.0ms/step avg)
+  step 30700/31200  loss=2.0448  lr=0.0  (1866.0ms/step avg)
+  step 30800/31200  loss=2.0585  lr=0.0  (1866.0ms/step avg)
+[Epoch 99] lr=1e-06 loss(train_avg)=2.0436  [577.1s train, val skipped]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e99.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e99.state.npz (1241 arrays, step=30888)
+  step 30900/31200  loss=1.9849  lr=0.0  (1865.0ms/step avg)
+  step 31000/31200  loss=2.0432  lr=0.0  (1865.0ms/step avg)
+  step 31100/31200  loss=2.0466  lr=0.0  (1865.0ms/step avg)
+  step 31200/31200  loss=2.0395  lr=0.0  (1865.0ms/step avg)
+  Running validation ...
+[Epoch 100] lr=0.0 loss(train_avg)=2.0431 val_top1=38286/50000 (0.7657) val_top5=0.9298 val_loss=1.0164  [577.7s train, 27.0s val]
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e100.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet_e100.state.npz (1241 arrays, step=31200)
+saved 78 param-groups to /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet.bin (38862048 bytes)
+  saved full train state -> /home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet.state.npz (1241 arrays, step=31200)
+
+Done. Total time: 58226.5s

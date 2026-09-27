@@ -1,0 +1,24 @@
+[sup] 2026-09-26 01:13:33 START job=mnv4-default-jax-4gpu devs=0,1,2,3 epochs=100 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-09-26-mnv4-jax-bf16-100ep
+[sup] 2026-09-26 01:13:33 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_timm_100ep/mobilenet_v4_imagenet
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_mobilenet_v4_imagenet.py
+
+[sup] 2026-09-26 01:13:33 eta: ~16-18 h for 100 ep on 4x 4060 Ti, UNMEASURED on the timm net (the pre-timm 100-ep reference ran ~16 h); re-probe owed
+[sup] 2026-09-26 01:13:33 attempt 1: resuming at epoch 0/100 (next rest: 999)
+[sup] 2026-09-26 01:13:34   launched PID=1693511 PGID=1693511
+[sup]   last line: Done. Total time: 58226.5s
+[sup] 2026-09-26 17:24:17 ✅ COMPLETE — 100/100 epochs
