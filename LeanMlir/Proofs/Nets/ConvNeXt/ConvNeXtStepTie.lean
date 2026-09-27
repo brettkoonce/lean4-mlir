@@ -52,8 +52,10 @@ its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean
 
 ## Coverage
 
-All **182** parameters are tied. 181 of them at the full `θ − lr·(certified ∂Loss/∂θ)` step; the
-stem weight `psW` at its **gradient**, because the render emits `convStride4WeightGrad` and wraps
+All **182** parameters are tied. 181 of them at the fused step `θ − lr·(certified per-layer
+Jacobian · the chain cotangent)`, where each chain cotangent is the certified VJP backward of the
+stages above it (`CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp`, `cnxDownCotInChAt_eq_vjp`,
+`cnxHeadDyXheadChN_eq_vjp`); the stem weight `psW` at its **gradient**, because the render emits `convStride4WeightGrad` and wraps
 it in hand-written `sgd` text (there is no fused `convStride4WeightSgd` op to be the `den` of). What
 remains outside: the block backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
 correspondence is the per-op trust the whole suite carries; plus per-op `pretty` lexing; LN `0 < ε`
@@ -78,8 +80,9 @@ channel-LN input-VJP (`chanLNTensor3Back`) → depthwise-back. `cnxCotP`/`cnxCot
 LN-form-agnostic and are reused verbatim from `ConvNeXtChainClose`. -/
 
 /-- **ConvNeXt block, tied.** All 9 params (depthwise 7×7 `W`+`b`, channel-LN γ/β at `Vec c`,
-    expand/project 1×1 conv `W`+`b`, per-channel layer-scale γ) denote the certified loss-descent
-    step at the real block forward activations + the chain cotangents driven by `dyOut`. -/
+    expand/project 1×1 conv `W`+`b`, per-channel layer-scale γ) denote
+    `θ − lr·(certified per-layer Jacobian · cot)` at the real block forward activations and the
+    chain cotangents driven by `dyOut`. -/
 def cnxBlockChTied {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
@@ -619,8 +622,10 @@ activations, no symbolic cotangent. -/
     per-channel layer-scale) forward and the loss-driven backward cotangent chain (GELU masks, the
     residual fan-in at every identity skip, the channel-LN-back at every downsample and at the
     stem), the 18 ConvNeXt blocks, the 3 downsamples, the 4×4/s4 stem with its LN, the
-    GAP → LN → dense head, and the dense total-loss fold + loss-cotangent graph all denote the
-    certified loss-descent step. All 182 parameters; `psW` at its gradient (its SGD wrap is
+    GAP → LN → dense head, and the dense total-loss fold + loss-cotangent graph all denote
+    `θ − lr·(certified per-layer Jacobian · the chain cotangent)`, each chain cotangent the
+    certified VJP backward of the stages above it (`CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp`,
+    `cnxDownCotInChAt_eq_vjp`, `cnxHeadDyXheadChN_eq_vjp`). All 182 parameters; `psW` at its gradient (its SGD wrap is
     hand-written text). The statement is per example, at one image `x` and a hard label `label`;
     the artifact's batch of 32 and its mean lie outside it (the batched form is
     `CnxTiePoCGB.cnx_net_tiedGB`). -/

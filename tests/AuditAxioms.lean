@@ -1963,6 +1963,13 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_down_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_stem_ch_tiedGB
 #print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
+#print axioms Proofs.CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp
+#print axioms Proofs.CnxTiePoCGB.cnxDownCotInChAt_eq_vjp
+#print axioms Proofs.CnxTiePoCGB.cnxHeadHasVJP
+#print axioms Proofs.CnxTiePoCGB.cnxHeadDyXheadChN_eq_vjp
+#print axioms Proofs.CnxTiePoCGB.cnxBlockCotInB_eq_vjp
+#print axioms Proofs.CnxTiePoCGB.cnxDownCotInB_eq_vjp
+#print axioms Proofs.CnxTiePoCGB.cnxHeadDyB_eq_vjp
 #print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
 -- CAPSTONE RE-POINTING, ViT-TINY (ViTStepTieGB.lean)

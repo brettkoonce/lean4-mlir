@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 
 /-! # ConvNeXt-T's step tie at the batched index, the un-fused gradient and the smoothed loss
 
@@ -320,6 +321,106 @@ private theorem cnx_stem_ch_tiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : S
   unfold cnxStemChTiedGBAt
   exact cnx_stem_ch_tiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
 
+/-! ## Every cotangent the capstone threads is a certified VJP backward
+
+The capstone below threads `batchMapAux N` of three per-example constructors: the head's
+`cnxHeadDyXheadChN`, each block's `cnxBlockCotInChAt` and each downsample's `cnxDownCotInChAt`.
+Per example, each is the backward of its stage's certified VJP (`cnxBlockChWHasVJP`,
+`cnxDownChWHasVJP`, and `cnxHeadHasVJP` below); lifted by `batchMapAux_eq_batchMapHasVJPAt`, the
+batched cotangent is the backward of the `batchMap N` stage. ConvNeXt has no kink, so the only
+hypothesis is the LayerNorm's `0 < ε`. -/
+
+/-- **A ConvNeXt block's input cotangent is its certified VJP's backward.** The chain's
+    per-op pieces (`depthwiseFlatHasVJP`, the 1×1 `conv2dHasVJP3`s, the GELU mask, layer scale,
+    `chanLNTensor3Back`) are rewritten into `cnxBlockChBack_eq_vjp`'s form, which ties the block. -/
+theorem cnxBlockCotInChAt_eq_vjp {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
+    (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
+    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
+    (lg : Vec c) (xin dyOut : Vec (c*h*w)) :
+    cnxBlockCotInChAt ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut
+      = (cnxBlockChWHasVJP (h := h) (w := w)
+          ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε).backward xin dyOut := by
+  rw [← cnxBlockChBack_eq_vjp (by norm_num) (by norm_num)
+    (⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ : CnxBlockParamsCh c cExp h w 7 7) hε xin]
+  simp only [cnxBlockBodyBack]
+  rw [depthwiseFlatBack_eq_vjp_backward (by norm_num) (by norm_num) Wdw bdw xin,
+    convFlatBack_eq_vjp_backward (by norm_num) (by norm_num) Wex bex
+      (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)),
+    convFlatBack_eq_vjp_backward (by norm_num) (by norm_num) Wpr bpr
+      (gelu (cExp * h * w) (flatConv (h := h) (w := w) Wex bex
+        (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin))))]
+  rfl
+
+/-- **A downsample's input cotangent is its certified VJP's backward.** One rewrite:
+    `chanLNTensor3Back` is the channel-LN VJP's backward. -/
+theorem cnxDownCotInChAt_eq_vjp {ci co h w : Nat} (ε : ℝ) (hε : 0 < ε)
+    (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
+    (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) :
+    cnxDownCotInChAt ε dng dnbt Wd bd xin dyOut
+      = (cnxDownChWHasVJP h w ⟨ε, dng, dnbt, Wd, bd⟩ hε).backward xin dyOut := by
+  show chanLNTensor3Back ci (2*h) (2*w) ε dng xin _ = _
+  rw [chanLNTensor3Back_eq_chanLN_vjp (β := dnbt) ε hε dng xin]
+  rfl
+
+/-- The head `dense ∘ head LN ∘ GAP` as one certified VJP, at any class count. -/
+noncomputable def cnxHeadHasVJP (h w : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng hnbt : Vec 768)
+    (Wfc : Mat 768 nC) (bfc : Vec nC) :
+    HasVJP (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w) :=
+  vjpComp (globalAvgPoolFlat 768 h w) (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt)
+    (globalAvgPoolFlat_differentiable 768 h w)
+    ((dense_differentiable Wfc bfc).comp (rowLNVecFlat_differentiable 1 768 ε hng hnbt hε))
+    (globalAvgPoolFlatHasVJP 768 h w)
+    (vjpComp (rowLNVecFlat 1 768 ε hng hnbt) (dense Wfc bfc)
+      (rowLNVecFlat_differentiable 1 768 ε hng hnbt hε) (dense_differentiable Wfc bfc)
+      (rowLNVecFlatHasVJP 1 768 ε hng hnbt hε) (denseHasVJP Wfc bfc))
+
+/-- **The head's input cotangent — the last block's `dyOut` — is its certified VJP's backward**, at
+    any loss cotangent `g`. -/
+theorem cnxHeadDyXheadChN_eq_vjp {h w nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng hnbt : Vec 768)
+    (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (768*h*w)) (g : Vec nC) :
+    cnxHeadDyXheadChN ε hng hnbt Wfc bfc xhead g
+      = (cnxHeadHasVJP h w ε hε hng hnbt Wfc bfc).backward xhead g := by
+  simp only [cnxHeadDyXheadChN, cnxHeadHasVJP, vjpComp_backward]
+  rw [rowLNVecFlatHasVJP_backward_eq_fun (β := hnbt) ε hε hng]
+
+/-- **Batched: a block's `batchMapAux` cotangent is the lifted block VJP's backward.** -/
+theorem cnxBlockCotInB_eq_vjp (N : Nat) {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
+    (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
+    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
+    (lg : Vec c) (xin : Vec (N * (c*h*w))) :
+    batchMapAux N (cnxBlockCotInChAt ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin
+      = (batchMapHasVJPAt (cnxBlockChW (h := h) (w := w)
+            ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩) xin
+          (fun _ => (cnxBlockChWHasVJP ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε).toHasVJPAt _)
+          (fun _ => (cnxBlockChW_differentiable ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε)
+            _)).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ xin _ _ fun _ => by
+    funext dy; exact cnxBlockCotInChAt_eq_vjp ε hε Wdw bdw ng nbt Wex bex Wpr bpr lg _ dy
+
+/-- **Batched: a downsample's `batchMapAux` cotangent is the lifted downsample VJP's backward.** -/
+theorem cnxDownCotInB_eq_vjp (N : Nat) {ci co h w : Nat} (ε : ℝ) (hε : 0 < ε)
+    (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
+    (xin : Vec (N * (ci*(2*h)*(2*w)))) :
+    batchMapAux N (cnxDownCotInChAt (h := h) (w := w) ε dng dnbt Wd bd) xin
+      = (batchMapHasVJPAt (cnxDownChW h w ⟨ε, dng, dnbt, Wd, bd⟩) xin
+          (fun _ => (cnxDownChWHasVJP h w ⟨ε, dng, dnbt, Wd, bd⟩ hε).toHasVJPAt _)
+          (fun _ => (cnxDownChW_differentiable h w ⟨ε, dng, dnbt, Wd, bd⟩ hε) _)).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ xin _ _ fun _ => by
+    funext dy; exact cnxDownCotInChAt_eq_vjp ε hε dng dnbt Wd bd _ dy
+
+/-- **Batched: the head's `batchMapAux` cotangent is the lifted head VJP's backward.** -/
+theorem cnxHeadDyB_eq_vjp (N : Nat) {h w nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng hnbt : Vec 768)
+    (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (N * (768*h*w))) :
+    batchMapAux N (cnxHeadDyXheadChN (h := h) (w := w) ε hng hnbt Wfc bfc) xhead
+      = (batchMapHasVJPAt (dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt ∘
+            globalAvgPoolFlat 768 h w) xhead
+          (fun _ => (cnxHeadHasVJP h w ε hε hng hnbt Wfc bfc).toHasVJPAt _)
+          (fun _ => ((dense_differentiable Wfc bfc).comp
+            ((rowLNVecFlat_differentiable 1 768 ε hng hnbt hε).comp
+              (globalAvgPoolFlat_differentiable 768 h w))) _)).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ xhead _ _ fun _ => by
+    funext g; exact cnxHeadDyXheadChN_eq_vjp ε hε hng hnbt Wfc bfc _ g
+
 /-! ## The whole-net capstone — all 182 params through the REAL batched forward + composed cotangent
 
 The fused file's thread, lifted: block inputs are `batchMap N` of the forward prefixes, and the
@@ -353,7 +454,9 @@ theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTie
     nodes and the smoothed loss.** Threading the real channel-LN / per-channel layer-scale forward
     as `batchMap N` of the per-example prefixes, and the label-smoothed loss cotangent
     (`smoothedLossCotGraphDiv`, at a general target `t`) down through the head and every block's
-    certified cotangent chain as `batchMapAux N` of the per-example chain — GELU masks, the residual
+    cotangent chain as `batchMapAux N` of the per-example chain — each the backward of its stage's
+    lifted certified VJP (`cnxHeadDyB_eq_vjp`, `cnxBlockCotInB_eq_vjp`, `cnxDownCotInB_eq_vjp`) —
+    GELU masks, the residual
     fan-in at every identity skip, the channel-LN-back at every downsample and at the stem — the
     18 ConvNeXt blocks, the 3 downsamples, the 4×4/s4 stem with its LN and the GAP → LN → dense
     head all denote the certified batched `Σ_n` gradient. All 182 parameters, at the `*GradB`

@@ -29,7 +29,8 @@ Hand-written text in the rendered module, outside any `SHlo` term:
 * the AdamW render's report-only `%loss`.
 
 In the SGD render every other parameter is updated by a fused `SHlo` SGD op (gradient and
-`θ − lr·g` in one node), which denotes the certified loss-descent step (`ConvNeXtFold`). Render is
+`θ − lr·g` in one node), which denotes `θ − lr·(certified per-layer Jacobian · its cotangent)`
+(`ConvNeXtFold`). Render is
 value-independent (`skel` erases values), so placeholders + `lr:=0` are passed; the emitted
 `lrStr`/`epsStr` literals carry the real values. -/
 
