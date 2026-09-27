@@ -151,16 +151,33 @@ theorem maxPool3s2_close {c h w : Nat} (xt xa : Tensor3 c (2 * h) (2 * w)) {e : 
 -- § Smoothness and the argmax predicate
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Smoothness**: every 3×3 window has a *strict* argmax. Stated as "distinct offsets that land
-    on distinct input POSITIONS have distinct values", so the clamped duplicate in the first
-    window (`a = 0` ≡ `a = 1`) is not counted as a tie. That carve-out is forced by the padding
-    and has no `maxPool2` analogue — there, distinct offsets always meant distinct positions. -/
+/-- **Smoothness**: every 3×3 window attains its max at exactly one input POSITION — a cell that
+    dominates its window is strictly above every cell at another position. The other cells may
+    tie with each other (post-ReLU zeros below the max are allowed); a window whose max sits at
+    two positions (an all-zero post-ReLU window) does not qualify, and there the pool has no
+    derivative. Stated over positions, so the clamped duplicate in the first window (`a = 0` ≡
+    `a = 1`, one cell named twice) is not a tie. That carve-out is forced by the padding and has
+    no `maxPool2` analogue — there, distinct offsets always meant distinct positions. -/
 def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
   ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
     (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
       (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
-    x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
-      x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)
+    (∀ cd : Fin 3 × Fin 3,
+      x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
+      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
+    x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
+      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)
+
+/-- Windows whose cells at distinct positions have distinct values are smooth: a dominating cell
+    is `≥` every other cell and differs from it. -/
+theorem maxPool3s2Smooth_of_pairwise {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (hd : ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
+      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
+        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
+      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
+        x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)) :
+    MaxPool3s2Smooth x :=
+  fun ci ho wo ab ab' hne hmax => lt_of_le_of_ne (hmax ab') (hd ci ho wo ab' ab (Ne.symm hne))
 
 /-- **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
     pool's smoothness hypothesis (`maxPool3s2FlatHasVJPAt`, the R34 back ties), the peer of
@@ -170,11 +187,12 @@ def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
     at ResNet-34's stem is why case-bashing is not an option.
 
     It is shorter than its 2×2 peer, for the reason the padding forced.
-    `MaxPool2Smooth` is quantified over **offsets**, so its discharge lemma has to get from
+    `maxPool2Smooth_of_pairwise` is quantified over **offsets**, so its discharge has to get from
     "the two input positions coincide" back to "the two offsets coincide" — two `Fin.mk.injEq` +
     `omega` decodes, valid only because there distinct offsets always meant distinct positions.
-    `MaxPool3s2Smooth` is quantified over **positions** precisely because that is false here (the
-    clamped duplicate `a = 0 ≡ a = 1` in the first window, `win3RowInv_first_dup`), so injectivity
+    `maxPool3s2Smooth_of_pairwise` is quantified over **positions** precisely because that is
+    false here (the clamped duplicate `a = 0 ≡ a = 1` in the first window,
+    `win3RowInv_first_dup`), so injectivity
     lands directly on the hypothesis and the decode step does not exist. **The carve-out that made
     the predicate awkward to state is what makes it cheap to discharge.**
 
@@ -184,6 +202,7 @@ theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * 
     (hinj : ∀ (ci : Fin c) (r r' : Fin (2 * h)) (s s' : Fin (2 * w)),
               x ci r s = x ci r' s' → r = r' ∧ s = s') :
     MaxPool3s2Smooth x := by
+  refine maxPool3s2Smooth_of_pairwise x ?_
   intro ci hi_out wi_out ab ab' hne hval
   obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
   exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
@@ -302,8 +321,8 @@ theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
     · obtain ⟨hr, hs⟩ := Prod.mk.inj hab
       exact Filter.Eventually.of_forall fun _ => by rw [hr, hs]
     · refine ((hcont _ _ _).eventually_lt (hcont _ _ _) ?_).mono fun _ => le_of_lt
-      simpa [Tensor3.unflatten_flatten] using lt_of_le_of_ne
-        (maxPool3s2Argmax_max x co ho wo (a', b')) (h_smooth co ho wo (a', b') _ hab)
+      simpa [Tensor3.unflatten_flatten] using
+        h_smooth co ho wo _ (a', b') (Ne.symm hab) (maxPool3s2Argmax_max x co ho wo)
   filter_upwards [hmax] with y hy
   funext k_out
   exact maxPool3s2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)

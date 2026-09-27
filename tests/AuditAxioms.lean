@@ -521,6 +521,7 @@ open Proofs
 #print axioms maxPool3s2FlatHasVJPAt
 -- the DISCHARGE lemma for the smoothness hypothesis
 #print axioms maxPool3s2Smooth_of_injective
+#print axioms maxPool3s2Smooth_of_pairwise
 -- and the float side (`floatClose_maxPool`'s peer)
 #print axioms floatClose_maxPool3s2
 -- and the codegen that denotes it
