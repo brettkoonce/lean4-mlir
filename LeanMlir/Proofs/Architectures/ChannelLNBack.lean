@@ -75,4 +75,20 @@ theorem rowLNVecFlatHasVJP_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ
   rw [layerNormVecHasVJP_backward_eq ε hε γ β]
   rfl
 
+/-- **The backward peer of `rowLN_affine_eq`** (`ChannelLN.lean`). Forward, the emitted
+    subtree normalises at the scalar identities `%one`/`%zero` and only then applies the real `[c]`
+    affine, so three denotations collapse onto `rowLNVecFlat`. Backward it is the same fold one
+    step earlier: the emitted `rowScaleF γ` applied to the COTANGENT is exactly the per-row
+    `diagBack γ` that `rowLNVecFlatBack` folds in, and the LN input gradient then runs at `γ = 1`.
+
+    `β` does not appear on either side — the translation's adjoint is the identity, the same
+    β-freeness `chanLNTensor3Back_eq_chanLN_vjp` has for the certified backward. -/
+theorem rowLNBack_affine_eq (s c : Nat) (ε : ℝ) (γ : Vec c) (X dy : Vec (s * c)) :
+    StableHLO.rowLNBackFlat s c ε 1 X (StableHLO.rowScaleFlat s c γ dy)
+      = rowLNVecFlatBack s c ε γ X dy := by
+  unfold StableHLO.rowLNBackFlat StableHLO.rowScaleFlat rowLNVecFlatBack perRowFlatPR
+         layerScale diagBack
+  simp only [Mat.unflatten_flatten]
+  rfl
+
 end Proofs

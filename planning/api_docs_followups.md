@@ -90,7 +90,7 @@ Each row's landing rewrites these sites to the new statement.
 | MaxPool live-cell predicate | **landed** (2×2 and the 3×3/s2 stem pool): CNN.lean `MaxPool2Smooth` docstring, SgdDescentCnn module pool margin, TrainedCnnWitness `h_mp` bullet (generator), StableHLO/Basic `maxPoolBack` comments, blueprint thm:cnn_sgd_descends. Open: "measure-zero" for post-ReLU pooling (all-zero windows still fail) |
 | `*CotIn_eq_vjp` MNv4 | **landed**: StepTieB module paragraph + `mnv4_net_tiedB` docstring name the five lemmas; WholeBackCertifiedTieB header has the train-step paragraph |
 | `*CotIn_eq_vjp` ConvNeXt | **landed**: "certified loss-descent step" / "certified ∂Loss/∂θ" → `θ − lr·(certified per-layer Jacobian · chain cotangent)` + the cotangent lemmas, in ConvNeXtStepTie (module, block, `cnx_net_tied_certified`), `cnx_net_tiedGB`, ConvNeXtRender, ConvNeXtFold section header |
-| `*CotIn_eq_vjp` ViT | `vit_net_tied_certified`, `vit_net_tiedGB` "certified ∂L" wording |
+| `*CotIn_eq_vjp` ViT | **landed**: `vit_net_tied_certified`, `vit_net_tiedGB` and the ViTFold header state the per-layer form and name `vitBlockCotInAtMHV_eq_vjp` / `vitCotB2outV_eq_vjp` (batched `*B_eq_vjp`) |
 
 Also open: slice I dropped eight unchecked "3-axiom-clean" claims; the audit is green
 (1610/1610), so they can come back if wanted — cite `tests/AuditAxioms.lean` as a repo link.

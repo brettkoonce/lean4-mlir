@@ -344,7 +344,7 @@ noncomputable def cnxDownCotInChAt {ci co h w : Nat} (ε : ℝ)
 
 /-- The cotangent at the last block output `xhead` (= s3b2's `dyOut`): `gap-back(headLN-back(
     dense-back(g)))`. The head LN's input-VJP is the render's `rowScaleF γ` then `lnRowBack` at
-    γ = 1, which is `rowLNVecFlatBack` (`ConvNeXtBackB0.rowLNBack_affine_eq`). -/
+    γ = 1, which is `rowLNVecFlatBack` (`rowLNBack_affine_eq`). -/
 noncomputable def cnxHeadDyXheadCh {h w : Nat} (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (xhead : Vec (768*h*w)) (g : Vec 10) : Vec (768*h*w) :=

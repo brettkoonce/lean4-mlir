@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # ViT-Tiny fold — each emitted param-SGD op `den`otes the certified loss-descent step
+/-! # ViT-Tiny fold — each emitted param-SGD op `den`otes the certified SGD step at its cotangent
 
 The ViT peer of `ConvNeXtFold`/`EfficientNetFold`: for every param-SGD op the
 `vitTrainStepRenderV` renderer emits, prove `den(op) = θ − lr·(certified Jacobian · cotangent)`. The

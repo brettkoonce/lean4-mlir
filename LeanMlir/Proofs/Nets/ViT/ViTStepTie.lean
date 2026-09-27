@@ -328,8 +328,10 @@ theorem _root_.Proofs.BlockParamsV.tied_at {Np1 heads d mlpDim : Nat}
     blocks → final vector-LN → CLS-slice → dense head` and the loss-driven backward cotangent chain
     (the per-block multi-head fan-ins, the final-LN-back `vitCotB2outV`, the classifier-back `vitCotFl`,
     the embed-output cot = block-1's `vitBlockCotInAtMHV` output) are threaded, and EVERY param op
-    `den`otes the certified loss-descent step: the 12 blocks' 192 params (`vitBlockTiedAtMHV`), the
-    final-LN γ/β, the classifier Wcls/bcls, and the patch-embed wConv/bConv/cls/pos — 200/200.
+    `den`otes `θ − lr·(certified per-layer Jacobian · the chain cotangent)`: the 12 blocks' 192
+    params (`vitBlockTiedAtMHV`), the final-LN γ/β, the classifier Wcls/bcls, and the patch-embed
+    wConv/bConv/cls/pos — 200/200. Each chain cotangent is the certified VJP backward of the
+    stages above it (`ViTTiePoCGB.vitBlockCotInAtMHV_eq_vjp`, `ViTTiePoCGB.vitCotB2outV_eq_vjp`).
     The statement is per example, at one image `img` and a hard label `label`; the artifact's
     batch of 32 and its mean lie outside it (the batched form is `ViTTiePoCGB.vit_net_tiedGB`). -/
 theorem vit_net_tied_certified

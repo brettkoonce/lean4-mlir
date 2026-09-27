@@ -2,6 +2,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 
 /-! # ViT-Tiny's step tie at the batched index, the un-fused gradient and the smoothed loss
 
@@ -338,6 +339,221 @@ theorem vit_embed_tiedGB (N : Nat) (xN cotN : String)
   · intro i; exact ViTPoCGB.clsGrad_denB cotN Wc bc cls pos img dyEmbed i
   · intro i; exact ViTPoCGB.posEmbedGradB_den cotN Wc bc cls pos img dyEmbed i
 
+/-! ## Every cotangent the capstone threads is a certified VJP backward
+
+The capstone below threads `batchMapAux N` of two per-example constructors: the head's
+`vitCotB2outV` and each block's `vitBlockCotInAtMHV`. They are the render's spelling of the
+backward — per-head SDPA with pad and slice, LayerNorm as `rowScaleFlat` then `rowLNBackFlat` at
+γ = 1, separate dense backs — so tying them to the certified VJPs is a proof, not a
+definitional match: the lemmas below rewrite each spelling into the one the whole-net tie
+(`ViTWholeBackCertifiedTie`) is stated at. The only hypothesis is the LayerNorm's `0 < ε`. -/
+
+/-- The render's per-token dense backward is `perRowFlat` of the transposed dense — the spelling
+    `mhsaBackFlat` uses. -/
+theorem rowDenseBackFlat_eq_perRowFlat {N D : Nat} (W : Mat D D) :
+    rowDenseBackFlat N D D W = perRowFlat N D (Proofs.dense (Mat.transpose W) (0 : Vec D)) := by
+  funext v idx
+  unfold rowDenseBackFlat perRowFlat
+  congr 1; funext r c
+  unfold Proofs.dense Mat.mulVec Mat.transpose
+  rw [Pi.zero_apply, add_zero]
+  exact Finset.sum_congr rfl fun k _ => mul_comm _ _
+
+/-- The rendered multi-head Q backward (per-head slice → SDPA back → pad, summed) is the
+    certified concatenated core `coreQFlat`: `vitCotDQmh_eq` plus the pad-sum-is-concat lemma. -/
+theorem vitCotDQmh_eq_core {Np1 heads d : Nat} (Q K V : Mat Np1 (heads * d))
+    (dA : Vec (Np1 * (heads * d))) :
+    vitCotDQmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) dA
+      = coreQFlat Q K V dA := by
+  have h := vitCotDQmh_eq Np1 heads d Q K V (Mat.unflatten dA)
+  rw [Mat.flatten_unflatten] at h
+  rw [h, coreQFlat]
+  congr 1; funext r j
+  rw [sum_headPadMat_apply]; rfl
+
+
+/-- The rendered MLP backward (fc2 back, GELU mask, fc1 back) is the per-row fold
+    `vitBlockBackV` uses. -/
+theorem vitCotLn2_eq_perRowFlatPR {Np1 D mlpDim : Nat} (W1 : Mat D mlpDim) (W2 : Mat mlpDim D)
+    (m1 : Mat Np1 mlpDim) (dyOut : Vec (Np1 * D)) :
+    vitCotLn2 W1 W2 (Mat.flatten m1) dyOut
+      = perRowFlatPR Np1 D (fun r => Proofs.dense (Mat.transpose W1) (0 : Vec D)
+          ∘ diagBack (fun c => geluScalarDeriv (m1 r c))
+          ∘ Proofs.dense (Mat.transpose W2) (0 : Vec mlpDim)) dyOut := by
+  show Mat.flatten (fun i => Mat.mulVec W1 (Mat.unflatten (fun k =>
+      rowDenseBackFlat Np1 mlpDim D W2 dyOut k * geluScalarDeriv (Mat.flatten m1 k)) i)) = _
+  unfold perRowFlatPR
+  congr 1; funext r c
+  simp only [Mat.mulVec, Mat.unflatten, Mat.flatten, rowDenseBackFlat, Function.comp_apply,
+    diagBack, Proofs.dense, Mat.transpose, Pi.zero_apply, add_zero, Equiv.symm_apply_apply]
+  refine Finset.sum_congr rfl fun k _ => ?_
+  rw [Finset.sum_congr rfl fun j _ => mul_comm (dyOut (finProdFinEquiv (r, j))) (W2 k j)]
+  ring
+
+
+/-- `vitCotDQmh_eq_core` for K. -/
+theorem vitCotDKmh_eq_core {Np1 heads d : Nat} (Q K V : Mat Np1 (heads * d))
+    (dA : Vec (Np1 * (heads * d))) :
+    vitCotDKmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) dA
+      = coreKFlat Q K V dA := by
+  have h := vitCotDKmh_eq Np1 heads d Q K V (Mat.unflatten dA)
+  rw [Mat.flatten_unflatten] at h
+  rw [h, coreKFlat]
+  congr 1; funext r j
+  rw [sum_headPadMat_apply]; rfl
+
+/-- `vitCotDQmh_eq_core` for V. -/
+theorem vitCotDVmh_eq_core {Np1 heads d : Nat} (Q K V : Mat Np1 (heads * d))
+    (dA : Vec (Np1 * (heads * d))) :
+    vitCotDVmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) dA
+      = coreVFlat Q K V dA := by
+  have h := vitCotDVmh_eq Np1 heads d Q K V (Mat.unflatten dA)
+  rw [Mat.flatten_unflatten] at h
+  rw [h, coreVFlat]
+  congr 1; funext r j
+  rw [sum_headPadMat_apply]; rfl
+
+/-- **The rendered block chain is `vitBlockBackV`, at any saved activations.** The render's
+    LayerNorm backward (`rowScaleFlat γ` then `rowLNBackFlat` at γ = 1) is `rowLNVecFlatBack`
+    (`rowLNBack_affine_eq`); the per-head attention backward is the concatenated core; the MLP
+    backward is the per-row fold; the Q/K/V fan-in and both residual adds reassociate. -/
+theorem vitCotXin_eq_blockBack {Np1 heads d mlpDim : Nat} (ε : ℝ)
+    (γ1 γ2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d))
+    (Wfc1 : Mat (heads * d) mlpDim) (Wfc2 : Mat mlpDim (heads * d))
+    (Q K V H : Mat Np1 (heads * d)) (m1 : Mat Np1 mlpDim) (xin dyOut : Vec (Np1 * (heads * d))) :
+    vitCotXinV ε γ1 Wq Wk Wv xin
+        (vitCotDQmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V)
+          (vitCotAttV ε γ2 Wo Wfc1 Wfc2 (Mat.flatten H) (Mat.flatten m1) dyOut))
+        (vitCotDKmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V)
+          (vitCotAttV ε γ2 Wo Wfc1 Wfc2 (Mat.flatten H) (Mat.flatten m1) dyOut))
+        (vitCotDVmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V)
+          (vitCotAttV ε γ2 Wo Wfc1 Wfc2 (Mat.flatten H) (Mat.flatten m1) dyOut))
+        (vitCotHV ε γ2 Wfc1 Wfc2 (Mat.flatten H) (Mat.flatten m1) dyOut)
+      = vitBlockBackV Wq Wk Wv Wo Q K V ε γ1 xin Wfc1 Wfc2
+          (fun r c => geluScalarDeriv (m1 r c)) γ2 (Mat.flatten H) dyOut := by
+  have hH : vitCotHV ε γ2 Wfc1 Wfc2 (Mat.flatten H) (Mat.flatten m1) dyOut
+      = biPath (rowLNVecFlatBack Np1 (heads * d) ε γ2 (Mat.flatten H)
+          ∘ perRowFlatPR Np1 (heads * d) (fun r => Proofs.dense (Mat.transpose Wfc1) 0
+            ∘ diagBack (fun c => geluScalarDeriv (m1 r c))
+            ∘ Proofs.dense (Mat.transpose Wfc2) 0)) (fun x => x) dyOut := by
+    funext i
+    simp only [vitCotHV, biPath, Function.comp_apply, rowLNBack_affine_eq,
+      vitCotLn2_eq_perRowFlatPR]
+    ring
+  have hL1 : ∀ a b c : Vec (Np1 * (heads * d)), vitCotLn1 Wq Wk Wv a b c
+      = fun j => perRowFlat Np1 (heads * d) (Proofs.dense (Mat.transpose Wq) 0) a j
+          + (perRowFlat Np1 (heads * d) (Proofs.dense (Mat.transpose Wk) 0) b j
+            + perRowFlat Np1 (heads * d) (Proofs.dense (Mat.transpose Wv) 0) c j) := by
+    intro a b c; funext j
+    simp only [vitCotLn1, rowDenseBackFlat_eq_perRowFlat]
+    ring
+  rw [vitCotDQmh_eq_core, vitCotDKmh_eq_core, vitCotDVmh_eq_core]
+  funext i
+  simp only [vitCotXinV, vitCotAttV, hH, rowLNBack_affine_eq, hL1,
+    rowDenseBackFlat_eq_perRowFlat, vitBlockBackV, Proofs.residual, Function.comp_apply,
+    mhsaBackFlat, biPath]
+  refine (add_comm _ _).trans ?_
+  congr 1
+
+
+/-- **A ViT block's input cotangent is its certified VJP's backward.** `vitCotXin_eq_blockBack`
+    at the real saved activations, then `vitBlockBackVAt_eq_vjp`. The one forward fact needed is
+    that the attention output the chain recomputes (per-head spelled) is `transformerAttnSublayerV`
+    (`mhsaLayer_spelled`). -/
+theorem vitBlockCotInAtMHV_eq_vjp {Np1 heads d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
+    (p : BlockParamsV (heads * d) mlpDim) (xin dyOut : Vec (Np1 * (heads * d))) :
+    vitBlockCotInAtMHV (Np1 := Np1) ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
+        p.Wfc1 p.bfc1 p.Wfc2 xin dyOut
+      = (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat Np1 heads d mlpDim ε
+          p.γ1 p.β1 hε p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2
+          p.Wfc1 p.bfc1 p.Wfc2 p.bfc2)).backward xin dyOut := by
+  rw [← vitBlockBackVAt_eq_vjp]
+  have hB : vitBlockBackVAt Np1 heads d mlpDim ε p xin
+      = vitBlockBackV p.Wq p.Wk p.Wv p.Wo
+          (fun r => Proofs.dense p.Wq p.bq (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r)))
+          (fun r => Proofs.dense p.Wk p.bk (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r)))
+          (fun r => Proofs.dense p.Wv p.bv (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r)))
+          ε p.γ1 xin p.Wfc1 p.Wfc2
+          (fun r c => geluScalarDeriv (Proofs.dense p.Wfc1 p.bfc1
+            (layerNormVec (heads * d) ε p.γ2 p.β2
+              (transformerAttnSublayerV Np1 heads d ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
+                p.bq p.bk p.bv p.bo (Mat.unflatten xin) r)) c))
+          p.γ2 (Mat.flatten (transformerAttnSublayerV Np1 heads d ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
+                p.bq p.bk p.bv p.bo (Mat.unflatten xin))) := rfl
+  have hT : transformerAttnSublayerV Np1 heads d ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
+      p.bq p.bk p.bv p.bo (Mat.unflatten xin)
+      = fun r s => Mat.unflatten xin r s + Proofs.dense p.Wo p.bo
+          ((∑ hh : Fin heads, headPadMat Np1 heads d hh
+            (Mat.mul (rowSoftmax (fun i j => sdpaScale d *
+                Mat.mul (headSliceMat Np1 heads d hh
+                    (fun r => Proofs.dense p.Wq p.bq (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r))))
+                  (Mat.transpose (headSliceMat Np1 heads d hh
+                    (fun r => Proofs.dense p.Wk p.bk (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r))))) i j))
+              (headSliceMat Np1 heads d hh
+                (fun r => Proofs.dense p.Wv p.bv (layerNormVec (heads * d) ε p.γ1 p.β1 (Mat.unflatten xin r)))))) r) s := by
+    unfold transformerAttnSublayerV biPathMat
+    simp only [Function.comp_apply]
+    rw [mhsaLayer_spelled]
+  rw [hB, hT]
+  simp only [vitBlockCotInAtMHV]
+  rw [vitCotXin_eq_blockBack]
+  rfl
+
+
+/-- The head `classifier ∘ final LN` as one certified VJP, at any class count. -/
+noncomputable def vitHeadHasVJP (N D nC : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
+    (Wcls : Mat D nC) (bcls : Vec nC) :
+    HasVJP (classifierFlat N D nC Wcls bcls ∘
+      fun v : Vec ((N + 1) * D) => Mat.flatten (fun r => layerNormVec D ε γF βF (Mat.unflatten v r))) :=
+  vjpComp (fun v : Vec ((N + 1) * D) => Mat.flatten (fun r => layerNormVec D ε γF βF (Mat.unflatten v r)))
+    (classifierFlat N D nC Wcls bcls)
+    (layerNormVec_per_token_flat_differentiable (N + 1) D ε γF βF hε)
+    (classifierFlat_differentiable N D nC Wcls bcls)
+    (HasVJPMat.toHasVJP (layerNormVecPerTokenHasVJPMat (N + 1) D ε γF βF hε))
+    (classifierFlatHasVJP N D nC Wcls bcls)
+
+/-- **The head's input cotangent — the last block's `dyOut` — is its certified VJP's backward**:
+    the render's final-LN spelling is `rowLNVecFlatBack` (`rowLNBack_affine_eq`), then the
+    classifier and final-LN leaf ties. -/
+theorem vitCotB2outV_eq_vjp (N D nC : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
+    (Wcls : Mat D nC) (bcls : Vec nC) (b : Vec ((N + 1) * D)) (g : Vec nC) :
+    vitCotB2outV N D nC ε γF Wcls b g = (vitHeadHasVJP N D nC ε hε γF βF Wcls bcls).backward b g := by
+  simp only [vitHeadHasVJP, vjpComp_backward]
+  rw [← vitHeadBack_eq_classifier_vjp N D nC Wcls bcls, ← vitFinalLNBack_eq_vjp (N + 1) D ε hε γF βF]
+  unfold vitCotB2outV
+  rw [rowLNBack_affine_eq]
+  congr 1
+  funext idx
+  simp only [vitCotFl, clsPadFlat, clsScatter, Function.comp_apply, dense_transpose_eq_mulVec]
+
+
+/-- **Batched: a block's `batchMapAux` cotangent is the lifted block VJP's backward.** -/
+theorem vitBlockCotInB_eq_vjp (N : Nat) {Np1 heads d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
+    (p : BlockParamsV (heads * d) mlpDim) (xin : Vec (N * (Np1 * (heads * d)))) :
+    StableHLO.batchMapAux N (p.cotIn (Np1 := Np1) ε) xin
+      = (batchMapHasVJPAt (fun v : Vec (Np1 * (heads * d)) => Mat.flatten
+            (transformerBlockV Np1 heads d mlpDim ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
+              p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 (Mat.unflatten v))) xin
+          (fun _ => (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat Np1 heads d mlpDim ε
+            p.γ1 p.β1 hε p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2
+            p.Wfc1 p.bfc1 p.Wfc2 p.bfc2)).toHasVJPAt _)
+          (fun _ => (transformerBlockV_flat_differentiable Np1 heads d mlpDim ε p.γ1 p.β1 hε
+            p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) _)).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ xin _ _ fun _ => by
+    funext dy; exact vitBlockCotInAtMHV_eq_vjp ε hε p _ dy
+
+/-- **Batched: the head's `batchMapAux` cotangent is the lifted head VJP's backward.** -/
+theorem vitCotB2outB_eq_vjp (N : Nat) {n D nC : Nat} (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
+    (Wcls : Mat D nC) (bcls : Vec nC) (b : Vec (N * ((n + 1) * D))) :
+    StableHLO.batchMapAux N (vitCotB2outV n D nC ε γF Wcls) b
+      = (batchMapHasVJPAt (classifierFlat n D nC Wcls bcls ∘
+            fun v : Vec ((n + 1) * D) => Mat.flatten (fun r => layerNormVec D ε γF βF (Mat.unflatten v r)))
+          b (fun _ => (vitHeadHasVJP n D nC ε hε γF βF Wcls bcls).toHasVJPAt _)
+          (fun _ => ((classifierFlat_differentiable n D nC Wcls bcls).comp
+            (layerNormVec_per_token_flat_differentiable (n + 1) D ε γF βF hε)) _)).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ b _ _ fun _ => by
+    funext g; exact vitCotB2outV_eq_vjp n D nC ε hε γF βF Wcls bcls _ g
+
 /-! ## The whole-net capstone — all 200 params through the REAL batched forward + composed cotangent
 
 The fused file's thread, lifted: `ib1` is `batchMap N` of the patch embedding, `ib_{k+1}` is
@@ -365,8 +581,10 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {Np1 heads d mlpDim : Nat}
     and the backward chain as `batchMapAux N` of the per-example one (the per-block multi-head
     fan-ins, `vitCotB2outV` at the top, the embed-output cotangent at the bottom): the twelve
     blocks' 192 params, the final-LN γ/β, the classifier and the patch-embed wConv/bConv/cls/pos
-    all denote the certified batched `Σ_n` gradient — at the `*GradB` nodes
-    `vit_adam_train_step.mlir` and every f32 `vitin_*` artifact emit; the bf16 artifacts emit
+    all denote the certified batched `Σ_n` gradient at their chain cotangent, and each chain
+    cotangent is the backward of its stage's lifted certified VJP (`vitCotB2outB_eq_vjp`,
+    `vitBlockCotInB_eq_vjp`) — at the `*GradB` nodes `vit_adam_train_step.mlir` and every f32
+    `vitin_*` artifact emit; the bf16 artifacts emit
     `*GradBBf16` and are not covered. The CLS token's gradient sums over the batch inside `den`,
     which the per-example capstone could state only at `N = 1`.
 

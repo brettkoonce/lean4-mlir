@@ -1977,6 +1977,17 @@ open Proofs
 #print axioms Proofs.ViTTiePoCGB.vit_finalLN_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_head_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_embed_tiedGB
+#print axioms Proofs.ViTTiePoCGB.rowDenseBackFlat_eq_perRowFlat
+#print axioms Proofs.ViTTiePoCGB.vitCotDQmh_eq_core
+#print axioms Proofs.ViTTiePoCGB.vitCotDKmh_eq_core
+#print axioms Proofs.ViTTiePoCGB.vitCotDVmh_eq_core
+#print axioms Proofs.ViTTiePoCGB.vitCotLn2_eq_perRowFlatPR
+#print axioms Proofs.ViTTiePoCGB.vitCotXin_eq_blockBack
+#print axioms Proofs.ViTTiePoCGB.vitBlockCotInAtMHV_eq_vjp
+#print axioms Proofs.ViTTiePoCGB.vitHeadHasVJP
+#print axioms Proofs.ViTTiePoCGB.vitCotB2outV_eq_vjp
+#print axioms Proofs.ViTTiePoCGB.vitBlockCotInB_eq_vjp
+#print axioms Proofs.ViTTiePoCGB.vitCotB2outB_eq_vjp
 #print axioms Proofs.ViTTiePoCGB.vit_net_tiedGB
 
 -- DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel/Basic.lean)
