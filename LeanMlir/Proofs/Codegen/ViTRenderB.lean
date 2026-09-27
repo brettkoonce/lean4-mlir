@@ -31,8 +31,9 @@ emission below: this chain's `denseBiasGradB (N := vbB)` sums the batch inside `
 per-example one writes `(N := 1)` and lets `pretty B` lift outside the AST.
 `Proofs.ViTPoCGB.clsGrad_denB` (in `ViTFoldGB`) is the theorem stated at it.
 
-**The gate** (`lake build vit-fwd-b-tie`): this chain and the committed `verified_mlir/vit_fwd.mlir`
-must emit **byte-identical** text. That is available *because* every batched form was built to emit
+**The gate** (`lake build vit-fwd-b-tie`): the committed artifacts are this chain's, so the gate
+renders the independent PER-EXAMPLE chain (`vitFwdRenderV`, `vitAdamTrainStepFaithful`) and
+requires it to emit `verified_mlir/vit_fwd.mlir` and `vit_adam_train_step.mlir` **byte for byte**. That is available *because* every batched form was built to emit
 its per-example peer's text byte-for-byte and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins each
 batched form individually — so the whole-net claim is the per-form claim composed, and when it fails that file
 localises which form did it in one run.
@@ -250,8 +251,8 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
 /-- **`@vit_fwd` from the batched chain** — the batched-index peer of `vitFwdRenderV`, same
     signature (200 parameters at ViT-Tiny) and same `%x`. It writes every committed ViT forward:
     `vit_fwd.mlir`, `vit_drop_fwd.mlir`, `vitin_fwd.mlir`, `vitin_drop_fwd.mlir`, `vitsin_fwd.mlir`,
-    `vitsin_drop_fwd.mlir` and `vitbin_fwd.mlir`. `vit-fwd-b-tie` re-renders `@vit_fwd` with this
-    function and compares it with the committed `vit_fwd.mlir` byte for byte. -/
+    `vitsin_drop_fwd.mlir` and `vitbin_fwd.mlir`. `vit-fwd-b-tie` renders `@vit_fwd` with the
+    per-example `vitFwdRenderV` and compares it with the committed `vit_fwd.mlir` byte for byte. -/
 def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     -- TRAILING.
     (sd : Bool := false)

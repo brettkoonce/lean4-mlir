@@ -1118,7 +1118,9 @@ lean_exe «convnext-fwd-b-tie» where
 lean_exe «vit-ema-drop-render» where
   root := `tests.TestVitEmaDropRender
 
-/-- **ViT's batched-index forward, byte-tied against the committed artifact**.
+/-- **ViT's batched-index chain, byte-tied against the independent per-example chain**. The
+    committed artifacts are the batched chain's, so the forward and train-step checks render the
+    PER-EXAMPLE chain and compare it with them; the backward check compares the two traversals.
 
     The peer of `convnext-fwd-b-tie`, and the bar is STRICTER: ConvNeXt's batched chain differs from
     its per-example one on 78 conv-VJP lines (two emitters for one VJP that were never tied to each

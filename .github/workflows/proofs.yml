@@ -536,6 +536,19 @@ jobs:
           echo "✅ **\`argmax-check\`** — argmax honours its class count at K=1000, at a row offset, and the 10-wide control MISSES." >> $GITHUB_STEP_SUMMARY
           echo "✅ **\`label-check\`** — int32 labels round-trip 0..999, and the byte-0 control MISSES every label > 255." >> $GITHUB_STEP_SUMMARY
 
+      # Batched-chain byte ties: the committed ViT and ConvNeXt artifacts are written by the
+      # batched-index renderers (`ViTRenderB`, `ConvNeXtRenderB`); these render the independent
+      # per-example chains and require the same bytes (ConvNeXt: up to its 78-line conv-VJP
+      # transpose/reverse swap). A string diff, well under a second each.
+      - name: Batched-chain byte ties (ViT, ConvNeXt)
+        run: |
+          lake build vit-fwd-b-tie convnext-fwd-b-tie
+          .lake/build/bin/vit-fwd-b-tie
+          .lake/build/bin/convnext-fwd-b-tie
+          echo "### Batched-chain byte ties" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **\`vit-fwd-b-tie\`**, **\`convnext-fwd-b-tie\`** — the per-example chains emit the committed (batched-chain) forward and train step." >> $GITHUB_STEP_SUMMARY
+
       - name: Summary
         run: |
           echo "## Proof Verification" >> $GITHUB_STEP_SUMMARY

@@ -11,6 +11,13 @@ expressible at all; the claim this file gates is that it changed **nothing else*
 
 > the batched chain emits `verified_mlir/vit_fwd.mlir` byte for byte.
 
+**The committed artifacts ARE the batched chain's** (`ViTRenderB.lean` writes `vit_fwd.mlir` and
+`vit_adam_train_step.mlir`), so comparing the batched chain against them would only catch
+non-determinism. This file renders the independent PER-EXAMPLE chain (`vitFwdRenderV`,
+`vitAdamTrainStepFaithful` over `vitBackAll`, both in `ViTRender.lean`) and checks it against the
+committed bytes — `convnext-fwd-b-tie`'s arrangement. The backward check compares the two
+traversals directly.
+
 **WHY THE BYTE TIE IS THE RIGHT BAR HERE, AND SHARPER ON ViT THAN ON ConvNeXt.** ConvNeXt's
 batched chain differs from its per-example one on 78 lines (two conv-VJP emitters that were never
 tied to each other), so its train-step tie has to carry an allowance. ViT uses ONE emitter per op —
@@ -31,10 +38,10 @@ open Proofs.StableHLO
     `exit` discards every diagnostic. -/
 def main : IO Unit := do
   let want ← IO.FS.readFile "verified_mlir/vit_fwd.mlir"
-  let got := vitFwdRenderB "vit_fwd" 10
-  IO.println "── ViT: the batched-index forward vs the committed per-example artifact ──"
+  let got := vitFwdRenderV "vit_fwd"
+  IO.println "── ViT: the per-example forward vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
-  IO.println s!"  batched   : {got.length} chars, {(got.splitOn "\n").length} lines"
+  IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
   if got == want then
     IO.println "  ✅ BYTE-IDENTICAL — the batched index changed the denotation, not the render"
     IO.println "  ⚠ The den side is NOT checked here: skel erases values, so a wrong denotation \
@@ -46,11 +53,11 @@ emits identical bytes. That half is den_matmulFB_per_example / den_batchOp_clsSl
     for i in [0:min gl.size wl.size] do
       if gl[i]! != wl[i]! then
         if diffs < 8 then
-          IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+          IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
           IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
         diffs := diffs + 1
     IO.println s!"  ✗ {diffs} differing line(s); lengths {gl.size} vs {wl.size}"
-    throw <| IO.userError "MISMATCH: the batched ViT forward does not emit the committed artifact. \
+    throw <| IO.userError "MISMATCH: the per-example ViT forward does not emit the committed (batched-chain) artifact. \
 Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 47 batched \
 forms diverged from its per-example peer, which this whole-net diff cannot."
 
@@ -123,16 +130,18 @@ is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.
   --
-  --  The AdamW tail is rendered by the SAME function on both sides (`vitAdamTrainStepFaithful`
-  --  with `traversal` swapped), because it is parameter-space and never sees the batch. So any
-  --  difference here that the backward check above did not already report is in the seam between
-  --  the traversal and the tail — the fresh-name counter, or the gradient list the tail zips.
+  --  The committed artifact is the batched chain's (`vitAdamTrainStepFaithfulB`), so this renders
+  --  the PER-EXAMPLE one (`vitAdamTrainStepFaithful` over `vitBackAll`). The AdamW tail is the same
+  --  function on both sides (`traversal` swapped), because it is parameter-space and never sees
+  --  the batch. So any difference here that the backward check above did not already report is in
+  --  the seam between the traversal and the tail — the fresh-name counter, or the gradient list the
+  --  tail zips.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let wantTS ← IO.FS.readFile "verified_mlir/vit_adam_train_step.mlir"
-  let gotTS := vitAdamTrainStepFaithfulB "vit_adam_train_step"
-  IO.println "── ViT: the batched AdamW train step vs the committed artifact ──"
+  let gotTS := vitAdamTrainStepFaithful "vit_adam_train_step"
+  IO.println "── ViT: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
-  IO.println s!"  batched   : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
+  IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
   if gotTS == wantTS then
     IO.println "  ✅ BYTE-IDENTICAL — the whole train step, no allowance"
   else
@@ -145,8 +154,8 @@ is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are
       if gl[i]! != wl[i]! then
         diffs := diffs + 1
         if shown < 6 then
-          IO.println s!"  L{i+1} batched  : {(gl[i]!).take 160}"
+          IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
           IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
           shown := shown + 1
-    throw <| IO.userError s!"MISMATCH in the batched ViT TRAIN STEP ({diffs} differing line(s)). \
+    throw <| IO.userError s!"MISMATCH in the per-example ViT TRAIN STEP vs the committed (batched-chain) artifact ({diffs} differing line(s)). \
 The gradient-list check above passed, so the routing is right — look at the fresh-name seam."
