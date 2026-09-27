@@ -141,6 +141,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
 import LeanMlir.Proofs.Nets.Small.LinearFold
 import LeanMlir.Proofs.Float.E4M3Fold
+import LeanMlir.Proofs.Float.Bf16Fold
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1063,6 +1064,11 @@ open Proofs
 -- floatbridge quantization (cont.)
 #print axioms QuantPoC.dequant_factors
 #print axioms QuantPoC.e4m3_render_faithful
+-- The bf16-mixed render-tie, its companion (Bf16Fold.lean)
+#print axioms Proofs.Bf16PoC.bf16_render_faithful
+#print axioms Proofs.Bf16PoC.bf16_render_faithful_emit
+#print axioms Proofs.Bf16PoC.bf16_emit_eq_prerounded
+#print axioms Proofs.Bf16PoC.bf16_render_faithful_depth2
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment

@@ -26,8 +26,7 @@ feeding `|rnd x − x| ≤ 2⁻⁸|x|` into `dense_close_mixed` (`u_leaf = 2⁻�
 give an accuracy bound for the tied graph; that composition is not stated in the repo (there is
 no bf16 `FloatModel`).
 
-The theorems here are `rfl`. They are not among the `#print axioms` lines of
-tests/AuditAxioms.lean.
+The theorems here are `rfl`; tests/AuditAxioms.lean prints all four.
 -/
 
 open Proofs Proofs.StableHLO
