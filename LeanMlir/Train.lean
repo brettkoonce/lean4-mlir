@@ -106,6 +106,7 @@ private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) :
     index. -/
 def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (ds : DatasetKind := .imagenette) : IO String := do
+  MlirCodegen.checkSupported spec
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
 

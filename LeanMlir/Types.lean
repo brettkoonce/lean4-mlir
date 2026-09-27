@@ -61,11 +61,11 @@ deriving Repr, BEq
     lowers it unless its docstring says otherwise). -/
 inductive Layer where
   /-- `ic → oc` convolution, `kSize × kSize`, stride 1, with bias, followed by `act`. The JAX
-      emitter reads `pad`; `MlirCodegen` pads to keep the spatial size whatever `pad` says. -/
+      emitter reads `pad`; `MlirCodegen` pads SAME and refuses `.valid` (`MlirCodegen.unsupported`). -/
   | conv2d  (ic oc kSize : Nat) (pad : Padding) (act : Activation)
   /-- `ic → oc` convolution without bias, `kSize × kSize` at `stride`, then BatchNorm and an
-      activation: the net's `NetSpec.convBnAct` in the JAX emitter, ReLU in `MlirCodegen`. `pad`
-      as for `conv2d`. -/
+      activation: the net's `NetSpec.convBnAct`. `MlirCodegen` emits ReLU and refuses any other
+      `convBnAct` (`MlirCodegen.unsupported`). `pad` as for `conv2d`. -/
   | convBn  (ic oc kSize stride : Nat) (pad : Padding)
   /-- `size × size` max-pool at `stride` (SAME-padded in `MlirCodegen`). -/
   | maxPool (size stride : Nat)
@@ -312,8 +312,8 @@ structure NetSpec where
       Set this to the arm's name and the ablation parallelizes cleanly. Empty
       (the default) leaves `buildPrefix` as `name` alone. -/
   buildTag : String := ""
-  /-- Activation applied after a `.convBn` layer by the JAX emitter, per net (default ReLU).
-      MobileNetV2 is ReLU6 throughout (stem and head included) and EfficientNet-B0 SiLU/swish
+  /-- Activation applied after a `.convBn` layer by the JAX emitter, per net (default ReLU);
+      `MlirCodegen` refuses any value but ReLU (`MlirCodegen.unsupported`). MobileNetV2 is ReLU6 throughout (stem and head included) and EfficientNet-B0 SiLU/swish
       throughout, so their references set this to match the verified renders.
 
       A ReLU/ReLU6 mismatch is invisible on small activations (the two agree below 6), so a
