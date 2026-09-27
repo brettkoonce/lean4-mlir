@@ -143,6 +143,7 @@ import LeanMlir.Proofs.Nets.Small.LinearFold
 import LeanMlir.Proofs.Float.E4M3Fold
 import LeanMlir.Proofs.Float.Bf16Fold
 import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
+import LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1077,8 +1078,12 @@ open Proofs
 #print axioms Proofs.HasGradAt.pdiv_param
 #print axioms Proofs.HasGradAt.pdiv_param_batchMap
 -- The batched smoothed loss, and its gradient is the emitted cotangent (SmoothedBatchLoss.lean)
+#print axioms Proofs.rowSumLoss_pdiv
 #print axioms Proofs.smoothedBatchLoss_pdiv
 #print axioms Proofs.smoothedBatchLoss_grad
+-- The batched BCE-with-logits loss, and its gradient is the emitted cotangent (BceBatchLoss.lean)
+#print axioms Proofs.bceBatchLoss_pdiv
+#print axioms Proofs.bceBatchLoss_grad
 -- Each batched parameter gradient node is a loss derivative (ParamGradNodes.lean)
 #print axioms Proofs.GradNodeB.convW_eq_pdiv
 #print axioms Proofs.GradNodeB.convB_eq_pdiv
@@ -1088,6 +1093,7 @@ open Proofs
 #print axioms Proofs.GradNodeB.denseB_eq_pdiv
 #print axioms Proofs.GradNodeB.bnGamma_eq_pdiv
 #print axioms Proofs.GradNodeB.bnBeta_eq_pdiv
+#print axioms Proofs.GradNodeB.cStridedInB_eq_batchMapBackward
 -- ResNet-34: every parameter gradient node IS the batched smoothed loss's derivative (ResNet34ParamGrad.lean)
 #print axioms Proofs.ResNet34TieB.r34_idblock_lossTiedB
 #print axioms Proofs.ResNet34TieB.r34_downblock_lossTiedB
@@ -1095,6 +1101,14 @@ open Proofs
 #print axioms Proofs.ResNet34TieB.r34_head_lossTiedB
 #print axioms Proofs.ResNet34TieB.r34_factor_a0
 #print axioms Proofs.ResNet34TieB.r34_net_lossGrad
+-- ResNet-50: every parameter gradient node IS the loss's derivative, for both shipped losses (ResNet50ParamGrad.lean)
+#print axioms Proofs.ResNet50TieB.r50_idblock_lossTiedB
+#print axioms Proofs.ResNet50TieB.r50_projblock_lossTiedB
+#print axioms Proofs.ResNet50TieB.r50_downblock_lossTiedB
+#print axioms Proofs.ResNet50TieB.r50_factor_s1b0
+#print axioms Proofs.ResNet50TieB.r50_net_lossGrad
+#print axioms Proofs.ResNet50TieB.r50_net_lossGrad_smoothedCE
+#print axioms Proofs.ResNet50TieB.r50_net_lossGrad_bce
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment

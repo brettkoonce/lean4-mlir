@@ -27,6 +27,15 @@ theorem cInB_eq_batchMapBackward {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH
           x dy :=
   convBackBatched_faithful "" W b x (.operand "" dy)
 
+/-- `cStridedInB` — the emitted strided-conv input-cotangent — is the batched strided conv VJP's
+    backward, at any saved input. -/
+theorem cStridedInB_eq_batchMapBackward {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    cStridedInB N W b dy
+      = (batchMapHasVJP (flatConvStride2 W b) (flatConvStride2HasVJP W b)
+          (flatConvStride2_differentiable W b)).backward x dy :=
+  convStridedBackBatched_faithful "" W b x (.operand "" dy)
+
 -- ════════════════════════════════════════════════════════════════
 -- § Convolutions and dense layers
 -- ════════════════════════════════════════════════════════════════

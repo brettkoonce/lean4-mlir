@@ -38,7 +38,7 @@ private theorem softCE_differentiable (K : Nat) (t : Vec K) :
     exact DifferentiableAt.fun_sum fun k _ =>
       ((crossEntropy_differentiable K k) z).const_mul (t k)
 
-private theorem logitRow_differentiable (N K : Nat) (n : Fin N) :
+theorem logitRow_differentiable (N K : Nat) (n : Fin N) :
     Differentiable ℝ (fun z : Vec (N * K) => logitRow N K z n) :=
   (reindexCLM (fun k : Fin K => finProdFinEquiv (n, k))).differentiable
 
@@ -54,36 +54,24 @@ theorem smoothedBatchLoss_differentiable (N K : Nat) (α B : ℝ) (t : Vec (N * 
   differentiableAt_pi.2 fun _ => DifferentiableAt.fun_sum fun n _ =>
     lossTerm_differentiableAt N K _ n B z
 
-/-- **The batched loss's gradient**, entry `(n, j)`: example `n`'s own soft-CE gradient at its
-    logits, over `B` — no other example contributes. -/
-theorem smoothedBatchLoss_pdiv (N K : Nat) (α B : ℝ) (t : Vec (N * (1 * K))) (z : Vec (N * K))
+/-- **A loss summed over the rows has each row's own gradient**: for `Σ_m ℓ_m(zₘ)`, the partial at
+    `(n, j)` is `∂ℓₙ/∂z_j` at example `n`'s logits — no other example contributes. Shared by every
+    batched loss the renders emit (`smoothedBatchLoss`, `bceBatchLoss`). -/
+theorem rowSumLoss_pdiv (N K : Nat) (ℓ : Fin N → Vec K → ℝ)
+    (hℓ : ∀ m, Differentiable ℝ (fun r : Vec K => fun _ : Fin 1 => ℓ m r)) (z : Vec (N * K))
     (n : Fin N) (j : Fin K) :
-    pdiv (smoothedBatchLoss N K α B t) z (finProdFinEquiv (n, j)) 0
-      = pdiv (fun z' : Vec K => fun _ : Fin 1 =>
-            softCE K (smoothTarget K α (targetRow N K t n)) z') (logitRow N K z n) j 0 / B := by
+    pdiv (fun z' : Vec (N * K) => fun _ : Fin 1 => ∑ m : Fin N, ℓ m (logitRow N K z' m)) z
+        (finProdFinEquiv (n, j)) 0
+      = pdiv (fun r : Vec K => fun _ : Fin 1 => ℓ n r) (logitRow N K z n) j 0 := by
   have hterm : ∀ m : Fin N,
-      pdiv (fun z' : Vec (N * K) => fun _ : Fin 1 =>
-          softCE K (smoothTarget K α (targetRow N K t m)) (logitRow N K z' m) / B)
+      pdiv (fun z' : Vec (N * K) => fun _ : Fin 1 => ℓ m (logitRow N K z' m))
         z (finProdFinEquiv (n, j)) 0
-      = if m = n then pdiv (fun z' : Vec K => fun _ : Fin 1 =>
-            softCE K (smoothTarget K α (targetRow N K t m)) z') (logitRow N K z m) j 0 / B
+      = if m = n then pdiv (fun r : Vec K => fun _ : Fin 1 => ℓ m r) (logitRow N K z m) j 0
         else 0 := by
     intro m
-    have hc : pdiv (fun z' : Vec (N * K) => fun _ : Fin 1 =>
-          B⁻¹ * softCE K (smoothTarget K α (targetRow N K t m)) (logitRow N K z' m))
-          z (finProdFinEquiv (n, j)) 0
-        = B⁻¹ * pdiv ((fun r : Vec K => fun _ : Fin 1 =>
-          softCE K (smoothTarget K α (targetRow N K t m)) r) ∘ fun z' => logitRow N K z' m) z
-          (finProdFinEquiv (n, j)) 0 :=
-      pdiv_const_smul B⁻¹ ((fun r : Vec K => fun _ : Fin 1 =>
-        softCE K (smoothTarget K α (targetRow N K t m)) r) ∘ fun z' => logitRow N K z' m) z
-        (((softCE_differentiable K _).comp (logitRow_differentiable N K m)) z)
-        (finProdFinEquiv (n, j)) 0
-    rw [show (fun z' : Vec (N * K) => fun _ : Fin 1 =>
-          softCE K (smoothTarget K α (targetRow N K t m)) (logitRow N K z' m) / B)
-        = fun z' _ => B⁻¹ * softCE K (smoothTarget K α (targetRow N K t m)) (logitRow N K z' m)
-        from by funext z' _; rw [div_eq_inv_mul], hc,
-      pdiv_comp _ _ z (logitRow_differentiable N K m z) (softCE_differentiable K _ _)]
+    rw [show (fun z' : Vec (N * K) => fun _ : Fin 1 => ℓ m (logitRow N K z' m))
+        = (fun r : Vec K => fun _ : Fin 1 => ℓ m r) ∘ fun z' => logitRow N K z' m from rfl,
+      pdiv_comp _ _ z (logitRow_differentiable N K m z) (hℓ m _)]
     have hr : ∀ k, pdiv (fun z' : Vec (N * K) => logitRow N K z' m) z (finProdFinEquiv (n, j)) k
         = if n = m ∧ j = k then 1 else 0 := fun k => by
       rw [show (fun z' : Vec (N * K) => logitRow N K z' m)
@@ -92,12 +80,29 @@ theorem smoothedBatchLoss_pdiv (N K : Nat) (α B : ℝ) (t : Vec (N * (1 * K))) 
     simp_rw [hr, ite_mul, one_mul, zero_mul]
     by_cases hmn : m = n
     · subst hmn
-      simp only [true_and, Finset.sum_ite_eq, Finset.mem_univ, ite_true, div_eq_inv_mul]
-    · simp only [Ne.symm hmn, false_and, ite_false, Finset.sum_const_zero, mul_zero, hmn]
-  unfold smoothedBatchLoss
-  rw [pdiv_lift_sum _ _ _ (fun m _ => differentiableAt_pi.2 fun _ =>
-      lossTerm_differentiableAt N K _ m B z)]
+      simp only [true_and, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+    · simp only [Ne.symm hmn, false_and, ite_false, Finset.sum_const_zero, hmn]
+  rw [pdiv_lift_sum Finset.univ (fun m z' => ℓ m (logitRow N K z' m)) z
+    (fun m _ => differentiableAt_pi.2 fun _ =>
+      differentiableAt_pi.1 (((hℓ m).comp (logitRow_differentiable N K m)) z) 0)]
   simp only [hterm, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
+
+/-- **The batched loss's gradient**, entry `(n, j)`: example `n`'s own soft-CE gradient at its
+    logits, over `B` — no other example contributes. -/
+theorem smoothedBatchLoss_pdiv (N K : Nat) (α B : ℝ) (t : Vec (N * (1 * K))) (z : Vec (N * K))
+    (n : Fin N) (j : Fin K) :
+    pdiv (smoothedBatchLoss N K α B t) z (finProdFinEquiv (n, j)) 0
+      = pdiv (fun z' : Vec K => fun _ : Fin 1 =>
+            softCE K (smoothTarget K α (targetRow N K t n)) z') (logitRow N K z n) j 0 / B := by
+  have hℓ : ∀ m : Fin N, Differentiable ℝ (fun r : Vec K => fun _ : Fin 1 =>
+      B⁻¹ * softCE K (smoothTarget K α (targetRow N K t m)) r) := fun m r =>
+    differentiableAt_pi.2 fun _ =>
+      (differentiableAt_pi.1 ((softCE_differentiable K _) r) 0).const_mul B⁻¹
+  rw [show smoothedBatchLoss N K α B t = fun z' _ => ∑ m : Fin N,
+      B⁻¹ * softCE K (smoothTarget K α (targetRow N K t m)) (logitRow N K z' m) from by
+    funext z' _; simp only [smoothedBatchLoss, div_eq_inv_mul],
+    rowSumLoss_pdiv N K _ hℓ,
+    pdiv_const_smul B⁻¹ _ _ ((softCE_differentiable K _) _), div_eq_inv_mul]
 
 /-- **The emitted cotangent is the batched loss's gradient.** Read at the head's `N·K` index
     (`unrowB`), the six-op chain at the logits `rowB z` is `∇ smoothedBatchLoss` at `z`, whenever
