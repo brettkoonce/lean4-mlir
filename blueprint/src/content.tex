@@ -10580,7 +10580,7 @@ additive fan-in.
 transformer blocks with their own parameters, the final LayerNorm and
 the head through \texttt{vjpComp} for every $k$, and
 \texttt{vitTinyHasVJP\_correct} is its instance at this network's
-shape --- twelve blocks, $224/16$, ten classes --- carried back to the
+shape --- twelve blocks, $224/16$, any number of classes --- carried back to the
 forward the spec denotes. Its only hypothesis is $\varepsilon > 0$ at
 the LayerNorms. It is a single global
 \texttt{HasVJP} over the entire network for the same reason
@@ -11673,7 +11673,7 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
   \Prove{} the backward of \texttt{vitForwardKVHasVJP} at ViT-Tiny's
   shape --- a \(3 \times 224 \times 224\) image, \(16 \times 16\) patches
   (\(N = 196\) plus the CLS token), \(d = 192 = 3 \times 64\), MLP
-  \(768\), twelve blocks with distinct parameters, ten classes ---
+  \(768\), twelve blocks with distinct parameters, any number of classes ---
   equals the \(\pdiv\)-contracted Jacobian of the flat forward
   \texttt{vitForwardKV} at every input, cotangent and index. The
   statement is generic in the weights.
@@ -11716,9 +11716,9 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
       thm:vjpMatComp, thm:vjpComp}
   \Prove{} at ViT-Tiny's dimensions the batched input-gradient chain
   \texttt{vitInputGradKB} equals the backward of the batched tower
-  \(\mathrm{batchMap}\, B\; \texttt{vitForwardKV}\) for every \(B\), cotangent
-  and index, with only \(\varepsilon > 0\) assumed; the general-depth reading
-  \texttt{vitInputGradKB\_correct} leaves the number of classes free.
+  \(\mathrm{batchMap}\, B\; \texttt{vitForwardKV}\) for every \(B\), number of
+  classes, cotangent and index, with only \(\varepsilon > 0\) assumed;
+  \texttt{vitInputGradKB\_correct} is the same statement at every depth.
 \end{theorem}
 
 \begin{proof}

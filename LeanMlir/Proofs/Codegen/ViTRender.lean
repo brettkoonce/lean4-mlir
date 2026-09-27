@@ -552,7 +552,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
   let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, retNames, _) ← vitBackAll bs nClasses lrStr false
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
-      ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
+      ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [nClasses]]
     pure <|
       "    // ── ViT-Tiny depth-12 train step: every op is pretty(verified AST node) except the prelude above (the %one/%zero/%sc constants, the %x→%ximg reshape) ──\n" ++
       code ++
@@ -563,7 +563,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     s!"%cls: {ty [192]}, %pos: {ty [197,192]}, " ++ blkSigs ++
     s!", %gF: {ty [192]}, %btF: {ty [192]}, %Wc: {ty [192,nClasses]}, %bc: {ty [nClasses]}, %onehot: {ty [bs, nClasses]}"
   let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
-    ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
+    ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [nClasses]]
   "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({String.intercalate ", " retTys}) " ++ "{\n" ++
   "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
   "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

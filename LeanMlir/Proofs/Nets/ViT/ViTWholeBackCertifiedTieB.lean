@@ -31,7 +31,8 @@ each row. The only hypothesis is `0 < ε`; there is no smooth-point condition.
    witness `batchMapHasVJP (vitForwardKV …)` through `HasVJPAt.backward_unique_of_eq`
    (`batchMapHasVJP` is `▸`-transported, so its `.backward` does not reduce), plus the `∑ pdiv`
    reading.
-5. `vitTinyInputGradB_eq_vitTiny_vjp` — the capstone at ViT-Tiny's literal dims, `B` a binder.
+5. `vitTinyInputGradB_eq_vitTiny_vjp` — the capstone at ViT-Tiny's literal dims, the batch `B`
+   and the class count `nCls` binders.
 -/
 
 namespace Proofs
@@ -287,26 +288,27 @@ theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasse
 /-- **ViT-Tiny's batched whole-net backward tie.**
     `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` at the exact `vitTiny` spec
     (`3×224×224`, `16×16` patches, 196 + CLS tokens, `D = 192 = 3 × 64`, MLP 768, 12 distinct
-    blocks, vector-`[D]` LayerNorm, 10 classes), at a variable batch `B` (the `vitin_*` artifacts
-    run 32, 128 or 256 per device; 512 is the global batch of the `128x4` runs). The forward is the
+    blocks, vector-`[D]` LayerNorm), at any class count `nCls` (10 for the Imagenette spec, 1000
+    for the `vitin_*` ImageNet artifacts) and a variable batch `B` (the `vitin_*` artifacts run 32,
+    128 or 256 per device; 512 is the global batch of the `128x4` runs). The forward is the
     drop-free `vitForwardKV` in exact arithmetic; the `*drop*` artifacts compute another function.
     The batched peers of the other nets include `r34InputGradB_eq_r34B_full_vjp` and
     `mnv2InputGradB_eq_mobilenetv2B_full_vjp`. -/
-theorem vitTinyInputGradB_eq_vitTiny_vjp (B : Nat)
+theorem vitTinyInputGradB_eq_vitTiny_vjp (B : Nat) {nCls : Nat}
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
     (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
-    (Wcls : Mat (3 * 64) 10) (bcls : Vec 10) (x : Vec (B * (3 * 224 * 224))) :
-    vitInputGradKB B 3 224 224 16 196 768 3 64 10 12
+    (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls) (x : Vec (B * (3 * 224 * 224))) :
+    vitInputGradKB B 3 224 224 16 196 768 3 64 nCls 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
       = (batchMapHasVJP (N := B)
-          (vitForwardKV 3 224 224 16 196 768 3 64 10 12
+          (vitForwardKV 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-          (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
+          (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
-          (vitForwardKV_differentiable 3 224 224 16 196 768 3 64 10 12
+          (vitForwardKV_differentiable 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).backward x :=
   vitInputGradKB_eq_batchMap_vitForwardKV_vjp (βF := βF) (bcls := bcls) B 3 224 224 16 196 768
-    3 64 10 12 W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
+    3 64 nCls 12 W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
 
 end Proofs
