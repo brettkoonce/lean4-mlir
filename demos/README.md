@@ -538,19 +538,20 @@ python3 scripts/demos/tinystories_decode.py decode "Once upon a time" < gen.txt
 
 Denoising diffusion on MNIST. A tiny UNet predicts the noise
 ε(x_t, t) that was added to an image; sampling runs that prediction backwards.
-Cosine ᾱ schedule, DDIM (η=0) with 50 steps subsampled from T=1000, time
-conditioning via a tiled `t/T_max` channel — which needs no new codegen
+Cosine ᾱ schedule, ancestral sampling (DDIM at η = 1) with 50 steps subsampled from
+T = 1000, time conditioning via a tiled `t/T_max` channel — which needs no new codegen
 primitive, the UNet just sees one extra input channel.
 
 `MainMnistDdpmTrain.lean` + `Sample`. Tiny UNet, base 16, 50 epochs.
 See `planning/archive/ddpm_demo.md`.
 
 ```bash
-lake exe mnist-ddpm-train data 50
-lake exe mnist-ddpm-sample runs/mnist_samples.ppm          # 4x4 grid of samples
+lake exe mnist-ddpm-train                                  # data/, 50 epochs
+lake exe mnist-ddpm-sample runs/mnist_samples.ppm          # 4x4 grid, ancestral; eta=0 for deterministic DDIM
 
-# the two-row trajectory figure below
-lake exe mnist-ddpm-sample trajectory data=data img=7
+# the two-row trajectory figure below — drawn with deterministic DDIM, whose reverse
+# row denoises smoothly; the ancestral row re-injects noise at every step
+lake exe mnist-ddpm-sample trajectory data=data img=7 eta=0
 python3 scripts/demos/ddpm_trajectory_figure.py \
     runs/2026-09-02-mnist-ddpm/trajectory.ppm \
     --out demos/figures/ddpm_mnist_trajectory.png
@@ -592,24 +593,33 @@ of the real-vs-real floor.
 ```bash
 LEAN_MLIR_DUMP_PARAMS=.lake/build/cnn_verified_params.bin \
   lake exe mnist-cnn-verified data                   # the scorer's classifier, ~50 s
-lake exe mnist-ddpm-score 1024 50                    # 1024 samples, 50 DDIM steps, ~13 s
+lake exe mnist-ddpm-score 1024 50                    # 1024 samples, 50 steps, ancestral, ~13 s
+lake exe mnist-ddpm-score 1024 50 0                  # the same at η = 0 (deterministic DDIM)
 python3 scripts/demos/mnist_ddpm_score.py                  # exits non-zero below 10/10 coverage
 ```
 
-| arm | coverage | confidence | energy (× floor) |
-|---|---|---|---|
-| real MNIST, scored as if generated | 10/10 | 99.40% | 1× |
-| **50 epochs, centred to [−1, 1]** (the recipe above) | **10/10** | 90.94% | **15×** |
-| 50 epochs, uncentred | 9/10 | **92.82%** | 33× |
-| 3 epochs, centred | 8/10 | 84.19% | 73× |
-| 3 epochs, uncentred | 9/10 | 63.89% | 119× |
-| unstructured pixels with MNIST's moments | 4/10 | 58.47% | 231× |
+| arm | sampler (50 steps) | coverage | confidence | energy (× floor) |
+|---|---|---|---|---|
+| real MNIST, scored as if generated | — | 10/10 | 99.40% | 1× |
+| **50 epochs, centred to [−1, 1]** (the recipe above) | **ancestral, η = 1** | **10/10** | 92.98% | **4×** |
+| 50 epochs, uncentred | ancestral, η = 1 | 10/10 | **93.60%** | 6× |
+| 50 epochs, centred | deterministic, η = 0 | 10/10 | 90.94% | 15× |
+| 50 epochs, uncentred | deterministic, η = 0 | 9/10 | 92.82% | 33× |
+| 3 epochs, centred | deterministic, η = 0 | 8/10 | 84.19% | 73× |
+| 3 epochs, uncentred | deterministic, η = 0 | 9/10 | 63.89% | 119× |
+| unstructured pixels with MNIST's moments | — | 4/10 | 58.47% | 231× |
 
-⭐ **Confidence alone would pick the wrong model.** The uncentred 50-epoch arm is the more
-confident of the two while dropping a class ("1" gets 0.8% of the mass) and doubling the distance
-to the data; the classifier is 58% confident on noise, so its usable range starts there, not at 0.
-Epochs do most of the work (3 → 50 is 3.6–4.9× on energy), centring the rest (1.6–2.2×). Every arm
-and the per-class masses are in `runs/2026-08-28-mnist-ddpm-verified-score/`.
+⭐ **The sampler is worth as much as the training.** The same 50-epoch checkpoint goes from 15× to
+4× the floor at the same 50 network evaluations when the reverse process re-injects noise, and
+ancestral sampling also restores the class the uncentred arm dropped. The book's η sweep has the
+whole curve: ancestral at 50 evaluations (0.0067) beats deterministic DDIM at 200 (0.0188).
+
+⭐ **Confidence alone would pick the wrong model.** Under the deterministic sampler the uncentred
+50-epoch arm is the more confident of the two while dropping a class ("1" gets 0.8% of the mass) and
+doubling the distance to the data; under the ancestral one it is again the more confident and again
+the farther. The classifier is 58% confident on noise, so its usable range starts there, not at 0.
+Epochs do most of the work (3 → 50 is 3.6–4.9× on energy), centring the rest (1.6–2.2×). The η = 0
+arms and the per-class masses are in `runs/2026-08-28-mnist-ddpm-verified-score/`.
 
 ---
 

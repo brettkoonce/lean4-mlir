@@ -42,7 +42,8 @@ import LeanMlir
     lake exe mnist-ddpm-train data                                   # if no ckpt
     LEAN_MLIR_DUMP_PARAMS=.lake/build/cnn_verified_params.bin \
       lake exe mnist-cnn-verified data                               # 10 ep, ~50 s
-    lake exe mnist-ddpm-score 1024 50
+    lake exe mnist-ddpm-score 1024 50          # 1024 samples, 50 steps, ancestral (η = 1)
+    lake exe mnist-ddpm-score 1024 50 0        # the deterministic DDIM arm (η = 0)
     python3 scripts/demos/mnist_ddpm_score.py
     ```
 -/
@@ -79,12 +80,12 @@ def main (args : List String) : IO Unit := do
   let sampler := (args.find? fun a => Ddpm.samplerNfe.any (·.1 == a)).getD "ddim"
   let nfe := (Ddpm.samplerNfe.lookup sampler).getD 1
   let solverSteps := max 1 (nSteps / nfe)
-  -- η as a PERCENT (the arg parser has only `toNat?`). η = 0 is deterministic
-  -- DDIM; η = 1 is ANCESTRAL sampling, which is the stable discrete form of the
-  -- reverse SDE. The `sde` arm above integrates that SDE with Euler-Maruyama and
-  -- diverges below NFE 200; this is the arm that says whether that is a fact
-  -- about stochastic sampling or a fact about that discretisation.
-  let etaPct := (nums[2]?).getD 0
+  -- η as a PERCENT (the arg parser has only `toNat?`), default 100. η = 1 is
+  -- ANCESTRAL sampling, the stable discrete form of the reverse SDE and the best
+  -- row of the η sweep at every budget; η = 0 is deterministic DDIM. The `sde` arm
+  -- above integrates the same SDE with Euler-Maruyama and diverges below NFE 200,
+  -- so the difference is the discretisation, not stochastic sampling.
+  let etaPct := (nums[2]?).getD 100
   let eta : Float := etaPct.toFloat / 100.0
   let dataDir := "data"
   let out := ".lake/build"
@@ -118,7 +119,7 @@ def main (args : List String) : IO Unit := do
   let alphaBar ← Ddpm.cosineSchedule T.toUSize
   let stride := T / nSteps
   let nBatch := (nGen + B - 1) / B
-  IO.eprintln s!"sampling {nBatch * B} images, {nSteps} DDIM steps, batch {B}..."
+  IO.eprintln s!"sampling {nBatch * B} images, {nSteps} DDIM steps (η = {eta}), batch {B}..."
   -- Uniform-in-t, which the toy measured as the SDE's best grid (log-ᾱ made it
   -- 25× worse). The explicit ODE solvers want the opposite grid; that this
   -- driver offers only one is a limitation, and the reason `euler`/`heun` here
@@ -179,16 +180,8 @@ def main (args : List String) : IO Unit := do
                   evalParams evalShapes xc xShape B.toUSize nPix.toUSize
       let abT := F32.read alphaBar t.toUSize
       let abP := if tPrev == 0 then 0.9999 else F32.read alphaBar tPrev.toUSize
-      let a := Float.sqrt abP / Float.sqrt abT
-      -- Generalized DDIM (Song et al. eq. 12): σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·
-      -- √(1 - ᾱ_t/ᾱ_prev), b' = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t). η = 0
-      -- collapses to the deterministic form; η = 1 is ancestral DDPM sampling.
-      -- The outer root is clamped because η → 1 can drive 1 − ᾱ_prev − σ²
-      -- marginally negative at the ends of the schedule.
-      let sg := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
-                    * Float.sqrt (1.0 - abT / abP)
-      let b := Float.sqrt (max (1.0 - abP - sg * sg) 0.0)
-               - a * Float.sqrt (1.0 - abT)
+      -- Generalized DDIM (`Ddpm.ddimCoefs`): η = 0 deterministic, η = 1 ancestral.
+      let (a, b, sg) := Ddpm.ddimCoefs abT abP eta
       x ← Ddpm.ddimStep x eps a b (B * nPix).toUSize
       if sg > 0.0 then
         let z ← Ddpm.sampleNoise (B * nPix).toUSize (bi * 131071 + k * 8191 + 17).toUSize

@@ -1,30 +1,29 @@
 #!/bin/bash
-# Run a phase-3 trainer with the right env vars set.
+# Run one trainer with the right env vars set — what `lake run mnist|cifar|imagenette` calls
+# for each net.
 #
 # Usage:
 #   ./run.sh <trainer> [gpu] [backend]
 #
-#   trainer  - the lean exec name without "-train" (e.g. "resnet34", "mnv4")
-#              or with it ("resnet34-train"). Also accepts the binary name
-#              ("vit-tiny").
+#   trainer  - the lean_exe name (e.g. "resnet34-verified-adam"); a name without "-train" also
+#              resolves to "<name>-train" if that binary exists
 #   gpu      - GPU index to expose (default: 0)
-#   backend  - "rocm" (default) or "cuda"
+#   backend  - "cuda" (default) or "rocm"
 #
 # Examples:
-#   ./run.sh resnet34
-#   ./run.sh mobilenet-v4 1
-#   ./run.sh efficientnet-v2 0 rocm
-#   ./run.sh vit-tiny 0 cuda
+#   ./run.sh mnist-cnn-verified
+#   ./run.sh resnet34-verified-adam 1
+#   ./run.sh resnet34-verified-adam 0 rocm
 #
 # Output is teed to runs/<YYYY-MM-DD>-<trainer>/<trainer>.log (RUN_LOG_DIR overrides the
 # directory). It used to land in the repo root as <trainer>.log, which .gitignore hid and
 # every run re-created — 57 of them by 2026-09-08.
 
-set -e
+set -e -o pipefail
 
 if [ -z "$1" ]; then
   echo "Usage: $0 <trainer> [gpu] [backend]" >&2
-  echo "  trainer: e.g. resnet34, mobilenet-v4, vit-tiny, efficientnet-v2" >&2
+  echo "  trainer: a lean_exe name, e.g. mnist-cnn-verified, resnet34-verified-adam" >&2
   exit 1
 fi
 
@@ -48,19 +47,20 @@ if [ ! -x "$binpath" ]; then
 fi
 
 gpu="${2:-0}"
-backend="${3:-rocm}"
+backend="${3:-cuda}"
 
 logdir="${RUN_LOG_DIR:-runs/$(date +%F)-$(echo "$trainer" | tr '/' '_')}"
 mkdir -p "$logdir"
 logfile="$logdir/$(echo "$trainer" | tr '/' '_').log"
 
 case "$backend" in
-  rocm) export HIP_VISIBLE_DEVICES="$gpu" ;;
   cuda) export CUDA_VISIBLE_DEVICES="$gpu" ;;
-  *)    echo "Unknown backend: $backend (expected rocm or cuda)" >&2; exit 1 ;;
+  rocm) export HIP_VISIBLE_DEVICES="$gpu" ;;
+  *)    echo "Unknown backend: $backend (expected cuda or rocm)" >&2; exit 1 ;;
 esac
 
 export IREE_BACKEND="$backend"
 
 echo "→ $bin (GPU $gpu, $backend) → $logfile"
-exec "$binpath" 2>&1 | tee "$logfile"
+# pipefail: the trainer's exit status, not tee's, is this script's — `lake run` reports it.
+"$binpath" 2>&1 | tee "$logfile"

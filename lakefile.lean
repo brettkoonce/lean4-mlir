@@ -1973,10 +1973,12 @@ require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
 
 /-- cuda when an NVIDIA GPU is visible (`nvidia-smi -L` succeeds), else rocm. -/
 private def detectBackend : IO String := do
-  try
-    let o ← IO.Process.output { cmd := "nvidia-smi", args := #["-L"] }
-    pure (if o.exitCode == 0 then "cuda" else "rocm")
-  catch _ => pure "rocm"
+  let ok (cmd : String) (args : Array String) : IO Bool := do
+    try pure ((← IO.Process.output { cmd, args }).exitCode == 0) catch _ => pure false
+  -- ROCm only when its tool answers and NVIDIA's does not; anything else is the NVIDIA default.
+  if ← ok "nvidia-smi" #["-L"] then return "cuda"
+  if ← ok "rocm-smi" #[] then return "rocm"
+  return "cuda"
 
 /-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented at the head
     of the XLA/PJRT section. Build it when it is missing or older than its source, so
@@ -2017,12 +2019,22 @@ private def notePjrtPlugin : IO Unit := do
 
     `xla := true` selects the PJRT peers: it builds the shim first and reports the plugin, and
     it does NOT need the venv, because those binaries compile in-process through PJRT instead of
-    shelling out to `iree-compile`. One loop serves both so the two paths cannot drift. -/
+    shelling out to `iree-compile`. One loop serves both so the two paths cannot drift.
+
+    The GPU is `$LEAN_DEMO_GPU`, else the `CUDA_VISIBLE_DEVICES` / `HIP_VISIBLE_DEVICES` the
+    caller already set, else 0 — `run.sh` sets the device variable itself, so an ordinary
+    `CUDA_VISIBLE_DEVICES=1 lake run cifar` used to land on GPU 0.
+
+    A trainer that fails does not stop the group — the rest of a 5½-hour Imagenette pass is worth
+    having — but it is named at the end and the script exits 1. -/
 private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32 := do
   let backend ← match ← IO.getEnv "IREE_BACKEND" with
     | some b => pure b
     | none   => detectBackend
-  let gpu := (← IO.getEnv "LEAN_DEMO_GPU").getD "0"
+  let gpu ← do
+    let pick := [← IO.getEnv "LEAN_DEMO_GPU", ← IO.getEnv "CUDA_VISIBLE_DEVICES",
+                 ← IO.getEnv "HIP_VISIBLE_DEVICES"].filterMap id |>.filter (!·.isEmpty)
+    pure (pick.head?.getD "0")
   if xla then
     IO.println "━━━ XLA/PJRT backend ━━━"
     if !(← ensurePjrtShim) then return 1
@@ -2046,6 +2058,7 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
       pure (#[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
               ("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
     else pure (#[("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
+  let mut failed : Array String := #[]
   for n in names do
     IO.println s!"\n━━━ {n}: build ━━━"
     let bp ← IO.Process.spawn { cmd := "lake", args := #["build", n] }
@@ -2054,8 +2067,13 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
       return 1
     IO.println s!"━━━ {n}: run (gpu {gpu}, {backend}) ━━━"
     let rp ← IO.Process.spawn { cmd := "./run.sh", args := #[n, gpu, backend], env := runEnv }
-    let _ ← rp.wait
-  return 0
+    let rc ← rp.wait
+    if rc != 0 then
+      IO.eprintln s!"━━━ {n}: FAILED (exit {rc}) — continuing with the rest ━━━"
+      failed := failed.push n
+  if failed.isEmpty then return 0
+  IO.eprintln s!"\n━━━ {failed.size} of {names.length} failed: {", ".intercalate failed.toList} ━━━"
+  return 1
 
 /-- `lake run mnist-iree` — the same three binaries as `lake run mnist`, with the
     IREE lowerer selected instead of XLA. ~30 min (XLA is 2.3-4.3x faster here). -/
@@ -2084,7 +2102,7 @@ script «cifar-iree» do
     XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
     `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
     an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes
-    (87.36% / 89.86%), both off the XLA path. **`imagenette` is the official set**; this
+    (86.24% / 89.71%, medians of five), both off the XLA path. **`imagenette` is the official set**; this
     group is the IREE half of the cross-backend comparison. -/
 script «imagenette-iree» do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
@@ -2132,39 +2150,31 @@ script mnist do
 script cifar do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"] (xla := true)
 
-/-- `lake run imagenette` — the XLA peers of `lake run imagenette-iree`.
+/-- `lake run imagenette` — the seven Imagenette nets on the verified XLA path, 80 epochs of AdamW
+    at 224², in book order (ch.5 → ch.9, each chapter's side quest right after it).
 
-    On ROCm the ViT graph can die at *execution* in the patch-embed weight-gradient convolution
-    with `miopenStatusUnknownError` (diagnosed in
-    `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`: a fused interior-dilated pad+conv
-    selects MIOpen's no-workspace `GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build
-    under HIPRTC — it uses the OpenCL builtin `get_global_id`).
+    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (6) +
+    this (7) is the whole demo surface; nothing else is a headline runner. MobileNetV4 and
+    ResNet-50 are here and **only** here, because neither has an IREE driver (see
+    `lake run imagenette-iree`'s note).
 
-    **It runs, with no workaround.** The im2col error fired on one session's first ViT/XLA
-    execution and never again across 11 runs, including the byte-identical invocation that had
-    just failed. Treat a recurrence as possible,
-    and see `probeAttnRefMsXla` for the escape hatch (`MIOPEN_DEBUG_CONV_GEMM=0`, which is a ~7%
-    regression rather than a fix).
+    The latest 80-epoch numbers on the certified bytes, wall clock on one RTX 4060 Ti — about
+    5½ h for the group:
 
-    It is gated, not merely running: the first three step losses agree with the IREE peer to
-    **3e-6** from identical fresh init, it descends (39.7 → 46.7 → **49.6%** over 3 epochs), and
-    `vit-dp-check` passes **bit-exact on all 16,579,041 floats** against a sum-not-mean control
-    that fires at 0.996.
+    | net | top-1 | wall clock | run |
+    |---|---|---|---|
+    | ResNet-34 | 89.99 (mean of five seeds) | 45 min | `runs/2026-09-12-r34-ablation-fp32-seeds/` |
+    | ResNet-50 | 89.71 (median of five) | 74 min | `runs/2026-08-31-imagenette-n3/` |
+    | MobileNetV2 | 89.25 | 36 min | ch 6 |
+    | MobileNetV4-Conv-M | 86.24 (median of five) | 33 min | `runs/2026-08-31-imagenette-n3/` |
+    | EfficientNet-B0 | 89.96 | 39 min | ch 7 |
+    | ConvNeXt-T | 82.27 | 75 min | `runs/2026-09-13-convnext-imagenette-ls1e-6-resident/` |
+    | ViT-Tiny | 68.74 | 24 min | ch 9 |
 
-    Per-epoch, all measured on this card: mnv2 58.0 s, ConvNeXt 84.5 s, EfficientNet 71.1 s,
-    ViT **43.5 s** (marginal, `(T₃−T₁)/2`). ViT is the one net here **without** an 80-epoch run
-    on its certified bytes — the other four have one.
-
-    **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist`
-    (3) + `lake run cifar` (6) + this (7) is the whole demo surface; nothing else is a
-    headline runner. MobileNetV4 and ResNet-50 are here and **only** here, because neither has
-    an IREE driver (see `lake run imagenette-iree`'s note). Their numbers, both 80-epoch AdamW at 224²
-    on the certified bytes: **MNv4-Conv-S 87.36%** (`runs/mnv4_adam_80ep_aug09.log`, ~61 min) and
-    **ResNet-50 89.86%** (`runs/r50_imagenette_adam_80ep.log`).
-
-    MNv4's 87.36% is **not** a reproduction of the JAX baseline's 84.58%: the architectures are
-    tied (forward 1.423e-06, gradient 0/147) but the RECIPES are not — the baseline is bs192 /
-    warmup 5 against this tier's bs32 / warmup 3. Same net, different recipe. -/
+    ConvNeXt's row is the paper's 1e-6 layer-scale init; the 85.07 it used to quote was the old
+    init of 1.0 (`runs/2026-09-13-convnext-imagenette-ls1e-6/README.md` has both). A second
+    `lake run imagenette` scores each finished checkpoint instead of training it again; set
+    `LEAN_MLIR_CKPT_TAG` for a fresh run beside it. -/
 script imagenette do
   -- Book order (ch.5 -> ch.9, each chapter's side quest right after it), so the
   -- group narrates in the order a reader met the nets.

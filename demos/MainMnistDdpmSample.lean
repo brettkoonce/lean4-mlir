@@ -1,27 +1,25 @@
 import LeanMlir
 
-/-! Sample digit-shaped images from a trained tiny DDPM checkpoint.
+/-! Sample digits from a trained tiny DDPM checkpoint.
 
 Pipeline:
-  1. Compile the eval-forward vmfb from the training spec (idempotent;
-     reuses cache if present).
+  1. Compile the eval forward from the training spec (cached).
   2. Load trained params + BN running stats.
-  3. Pick a `nSteps`-subsampled DDIM schedule from the full `T = 1000`
-     cosine alphaBar table.
-  4. Initialize `x_T ~ N(0, I)` for `B` images.
-  5. Loop t = T-1 → 0 over the subsampled schedule:
-       ε_θ ← forward_eval(x_t)
-       a   = √ᾱ_{t-1} / √ᾱ_t
-       b   = √(1-ᾱ_{t-1}) - a·√(1-ᾱ_t)
-       x_{t-1} = a·x_t + b·ε_θ
-  6. Render final `x_0` batch as a 4×4 grid PPM.
+  3. Subsample 50 steps from the `T = 1000` cosine ᾱ table.
+  4. Initialize `x_T ~ N(0, I)` for a batch of 16.
+  5. Loop t = T-1 → 0 over the subsampled schedule, the network conditioned on t through a
+     tiled `t/T` channel:
+       ε_θ ← forward_eval(x_t, t)
+       x_{t-1} = a·x_t + b·ε_θ + σ·z        (`Ddpm.ddimCoefs`, generalized DDIM)
+  6. Render the final batch as a 4×4 grid PPM, or with `trajectory` the two-row figure.
 
-No time conditioning in this MVP — the model has no input telling it
-which `t` it's denoising. Generation will be coarser than canonical
-DDPM but the pipeline correctness is testable from the output shape.
+The default is ANCESTRAL sampling (η = 1), the sampler the book's η sweep puts first at every
+budget; `eta=0` gives deterministic DDIM. The initial and per-step noise use the seeds of
+`mnist-ddpm-score`'s first batch, so the grid shows the first sixteen samples it scores.
 
 Usage:
-  lake exe mnist-ddpm-sample [out.ppm]
+  lake exe mnist-ddpm-sample [out.ppm] [eta=<percent>] [raw]
+  lake exe mnist-ddpm-sample trajectory [data=<dir>] [img=<n>] [eta=<percent>]
 -/
 
 def tinyDdpmUnet (centred : Bool := true) : NetSpec where
@@ -71,8 +69,12 @@ def main (args : List String) : IO Unit := do
                    (fun a => (a.drop 5).toString) |>.getD "data"
   let fwdIdx : Nat := ((args.filter (fun a => a.startsWith "img=")).head?.bind
                    (fun a => (a.drop 4).toString.toNat?)).getD 7
+  -- η as a PERCENT, like `mnist-ddpm-score`: 100 = ancestral (default), 0 = deterministic DDIM.
+  let etaPct : Nat := ((args.filter (fun a => a.startsWith "eta=")).head?.bind
+                   (fun a => (a.drop 4).toString.toNat?)).getD 100
+  let eta : Float := etaPct.toFloat / 100.0
   let outPath := (args.filter (fun a =>
-                     a != "raw" && a != "trajectory"
+                     a != "raw" && a != "trajectory" && !a.startsWith "eta="
                      && !a.startsWith "data=" && !a.startsWith "img=")).head?.getD
                    (if traj then "runs/2026-09-02-mnist-ddpm/trajectory.ppm"
                     else "runs/2026-05-07-mnist-ddpm/samples.ppm")
@@ -127,7 +129,7 @@ def main (args : List String) : IO Unit := do
 
   -- ── Sampling loop ──
   let sess ← LowererSession.create evalVmfb
-  IO.eprintln s!"  sampling: {nSteps} DDIM steps, batch {B}"
+  IO.eprintln s!"  sampling: {nSteps} DDIM steps (η = {eta}), batch {B}"
   -- Every reverse state, with the timestep it sits at. Keep ALL of them and
   -- select later by NOISE LEVEL: indexing the strip by sampler step would make
   -- column c mean a different ᾱ in each row, and the two rows are only worth
@@ -148,16 +150,14 @@ def main (args : List String) : IO Unit := do
     -- model output is [B, 1, 28, 28] = B * 784 floats per batch.
     let eps ← LowererSession.forwardF32 sess spec.evalFnName
                 evalParams evalShapes xCond xShape B.toUSize nPix.toUSize
-    -- DDIM coefs
     let aBarT := alphaBarF t
     let aBarP := if k + 1 < nSteps then alphaBarF tPrev else 0.9999
-    let sqAT := Float.sqrt aBarT
-    let sqAP := Float.sqrt aBarP
-    let sqOmAT := Float.sqrt (1.0 - aBarT)
-    let sqOmAP := Float.sqrt (1.0 - aBarP)
-    let a := sqAP / sqAT
-    let b := sqOmAP - a * sqOmAT
+    let (a, b, sg) := Ddpm.ddimCoefs aBarT aBarP eta
     x ← Ddpm.ddimStep x eps a b nTotal
+    if sg > 0.0 then
+      -- `mnist-ddpm-score`'s step-noise seed at batch 0.
+      let z ← Ddpm.sampleNoise nTotal (k * 8191 + 17).toUSize
+      x ← Ddpm.ddimStep x z 1.0 sg nTotal
     if traj then
       revAll := revAll.push x; revTs := revTs.push tPrev
     if k % 10 == 0 || k == nSteps - 1 then

@@ -1,16 +1,18 @@
 import LeanMlir
 
-/-! Tiny DDPM trainer on MNIST — DDPM demo smoke test.
+/-! Tiny DDPM trainer on MNIST.
 
-    Architecture: tiny UNet (1-channel 28×28, 2 encoder/decoder pairs,
-    base 16 channels, ~250K params). The model is trained to predict
-    the noise ε that was added to a clean image x_0:
+    Architecture: tiny UNet (1-channel 28×28 plus a tiled t/T channel, 2 encoder/decoder pairs,
+    base 16 channels, 118,449 params). The model is trained to predict the noise ε that was added
+    to a clean image x_0, centred to [-1, 1]:
 
         x_t = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε
-        loss = || ε_θ(x_t) - ε ||²  (per-pixel MSE, mean over B·C·H·W)
+        loss = || ε_θ(x_t, t) - ε ||²  (per-pixel MSE, mean over B·C·H·W)
 
-    Usage:
-      lake exe mnist-ddpm-train [data/mnist]
+    Usage — order-free; a number is the epoch count, any other word but `raw` the data dir:
+      lake exe mnist-ddpm-train                  # data/, 50 epochs: the demo's recipe
+      lake exe mnist-ddpm-train 3                # a short run
+      lake exe mnist-ddpm-train data 50 raw      # the uncentred ablation arm
 -/
 
 /-- 2-channel input: image + a scalar t/T_max timestep encoding tiled
@@ -34,7 +36,9 @@ def tinyDdpmUnet (centred : Bool := true) : NetSpec where
 def tinyDdpmConfig : TrainConfig where
   learningRate := 0.0005
   batchSize    := 32
-  epochs       := 3
+  -- The recipe every number in the demo is measured at; 3 epochs scores 73× the real-vs-real
+  -- floor against 50's 15× (deterministic DDIM), `runs/2026-08-28-mnist-ddpm-verified-score/`.
+  epochs       := 50
   optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := false
@@ -42,10 +46,14 @@ def tinyDdpmConfig : TrainConfig where
   augment      := false
 
 def main (args : List String) : IO Unit := do
-  let dataDir := args.head?.getD "data/mnist"
-  let epochsOverride : Option Nat := match args with
-    | _ :: e :: _ => e.toNat?
-    | _ => none
+  -- Order-free, like `unet-brats-train`: taking the data dir as `args[0]` made
+  -- `mnist-ddpm-train raw` look for MNIST in a directory called `raw`.
+  let words := args.filter (· != "raw")
+  let epochsOverride : Option Nat := (words.filterMap String.toNat?).head?
+  let dataDir := (words.filter (·.toNat?.isNone)).head?.getD "data"
+  unless ← System.FilePath.pathExists s!"{dataDir}/train-images-idx3-ubyte" do
+    throw <| IO.userError s!"no MNIST at {dataDir}/train-images-idx3-ubyte — run \
+./scripts/datasets/download_mnist.sh, or pass the directory that holds it"
   -- `raw` trains on UNCENTRED [0,1] data. It exists as an ABLATION ARM, not a
   -- fallback: the centring claim in `runs/2026-08-28-mnist-ddpm-verified-score/`
   -- was established at 3 epochs, and `demos/figures/ddpm_mnist.png` — a 50-epoch

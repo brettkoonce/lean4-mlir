@@ -1333,6 +1333,218 @@ private def fwdRenderedShape (path : String) : IO (Option (Nat × Nat)) := do
     | _, _ => return none
   | _ => return none
 
+/-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
+    front of it. It scores any saved checkpoint, not only the weights live during training — the
+    verified peer of the JAX side's `eval_*_full50k.py`. No new MLIR: every piece is the eval
+    half's own:
+
+    | need | reused |
+    |---|---|
+    | read the val split | `spawnValStream` (ImageNet, streamed per pass) / `loadData` (held splits) |
+    | the eval graph | `mkSession` on `<slug>_fwd_eval`, or the `_fwd` chain for the LN nets |
+    | eval batch AND width | `fwdRenderedShape`, one parse of one declaration |
+    | the eval pass | `evalScore` (short-tail padding, forward, scoring) |
+    | forward | `LowererSession.forwardF32` |
+    | metrics | `F32.argmaxN` (top-1), `F32.rankOf` (top-5) |
+
+    The gate is an equality, not a smoke test: for the same checkpoint at the same region, the
+    number printed here must equal the one the training run printed for that epoch — same
+    denominator, same batching, same graph.
+
+    **BN nets score through `@<slug>_fwd_eval`** with the running statistics read from the
+    `<ckpt>.bn` companion (`[running | ema_bn]`, written at every epoch end): the
+    EMA shadow with `ema_bn`, the live weights with the running stats — the training eval's
+    pairing. A checkpoint older than the companion is refused, since scoring the `.bin` alone would
+    normalise by zeros and still print a plausible percentage.
+
+    **timm's test protocol**: `LEAN_MLIR_EVAL_SIZE` / `LEAN_MLIR_EVAL_CROP` score through the eval
+    graph rendered at that size (`…_fwd_eval_s<S>.mlir`) with the val stream resized and cropped to
+    match (`SHIM_EVAL_SIZE` / `SHIM_EVAL_CROP`). `scripts/parity/score_timm.sh` reads the per-net values
+    from `jax/timm_eval_protocols.json`.
+
+    `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
+    TRAIN time (`LEAN_MLIR_EMA_BN`), so an EMA run reports one of the two numbers and discards the other.
+    timm reports the shadow and RSB-A2 sets `emaDecay := 0.9999`, so without this an A2 result is
+    not quotable the way its reference is. `"auto"` = the shadow when the variant has one, matching
+    what the training run would have scored; `"live"` and `"ema"` name it explicitly. -/
+def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant : String)
+    (ckptPath : String) (region : String := "auto") : IO Unit := do
+  let emaOn := VerifiedVariant.emaOn variant
+  let nRegions := VerifiedVariant.nRegions variant
+  let hasBn := !net.bnChannels.isEmpty
+  let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
+  net.printBlurb
+  IO.println s!"  SCORING A CHECKPOINT — no training. {net.name} {variant}, {ckptPath}"
+  -- timm's TEST protocol: `LEAN_MLIR_EVAL_SIZE=S` scores through an eval graph rendered at S
+  -- (`<slug>_fwd_eval_s<S>.mlir`, or `<slug>_fwd_s<S>.mlir` for the LayerNorm nets) and has the
+  -- val stream resize/crop at S / `LEAN_MLIR_EVAL_CROP` (`SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in the
+  -- net's own shim). Unset ⇒ the recipe's own protocol, exactly as the in-training eval scores.
+  -- The per-net values are timm's (`jax/timm_eval_protocols.json`; `scripts/parity/score_timm.sh`).
+  let evalSize := (← IO.getEnv "LEAN_MLIR_EVAL_SIZE").bind (·.toNat?)
+  let evalCrop := (← IO.getEnv "LEAN_MLIR_EVAL_CROP").getD ""
+  if evalSize.isNone && !evalCrop.isEmpty then
+    throw <| IO.userError "LEAN_MLIR_EVAL_CROP without LEAN_MLIR_EVAL_SIZE — give both (timm's \
+test_input_size and test_crop_pct), so the protocol printed is the protocol scored."
+  let shimEnv : Array (String × Option String) := match evalSize with
+    | some s => #[("SHIM_EVAL_SIZE", some (toString s))] ++
+                (if evalCrop.isEmpty then #[] else #[("SHIM_EVAL_CROP", some evalCrop)])
+    | none   => #[]
+  -- The region to score. `"ema"` on a variant with no fourth region is a REFUSAL and not a
+  -- fallback to live: the request and the artifact disagree, and quietly answering the other
+  -- question is how a live-weight number gets quoted as a shadow one.
+  -- **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the gradient
+  -- accumulator takes region 3 and the shadow is region 4, so a hardcoded index here scores `G`
+  -- as if it were weights — a plausible-looking percentage off a running gradient sum, which is the
+  -- exact failure class this function's BN blocker exists to prevent one line down.
+  let regIdx ← match region with
+    | "auto" => pure ((VerifiedVariant.emaRegion variant).getD 0)
+    | "live" => pure 0
+    | "ema"  =>
+      match VerifiedVariant.emaRegion variant with
+      | none =>
+        throw <| IO.userError s!"region 'ema' asked of variant '{variant}', which has no EMA \
+shadow — its blob is {nRegions} regions and there is no shadow slot to score. Use \
+'live', or score a checkpoint written by an ema* variant."
+      | some i => pure i
+    | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
+  -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
+  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is `@<slug>_fwd` either way — the
+  -- variant artifact re-renders the same entry name.
+  -- A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
+  -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
+  let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
+  let pick (suf : String) : IO String := do
+    let v := s!"{net.mlirDir}/{net.slug}_{variant}_fwd{suf}.mlir"
+    if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}{suf}.mlir"
+    else if (← System.FilePath.pathExists v) then pure v
+    else pure s!"{net.mlirDir}/{net.slug}_fwd{suf}.mlir"
+  -- A protocol that changes only the CROP (DeiT: 224 at 0.9) needs no second render: the base
+  -- artifact serves when it is already rendered at that size.
+  let fwdPath ← do
+    let sized ← pick sizeSuf
+    if sizeSuf.isEmpty || (← System.FilePath.pathExists sized) then pure sized
+    else
+      let base ← pick ""
+      let w ← if (← System.FilePath.pathExists base) then
+          pure ((← fwdRenderedShape base).map (·.2)) else pure none
+      pure (if w == evalSize.map (fun s => 3 * s * s) then base else sized)
+  if !(← System.FilePath.pathExists fwdPath) then
+    throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
+{fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
+  -- REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
+  -- because it has a `cfg.batchSize` the user chose; this tool has no such input, so a guess
+  -- would be a silent mis-slice of the val buffer (RSB-A3: 224² rows read as 160²).
+  let (evalBs, evalD0) ← match ← fwdRenderedShape fwdPath with
+    | some s => pure s
+    | none => throw <| IO.userError s!"could not read `%x: tensor<BxWxf32>` off {fwdPath} — the \
+eval batch and the eval WIDTH both come from that one declaration, and neither is guessable here."
+  if let some s := evalSize then
+    if evalD0 != 3 * s * s then
+      throw <| IO.userError s!"{fwdPath} declares %x width {evalD0}, not 3·{s}² = {3 * s * s} — \
+the artifact is not a {s}px render, and the val stream would be framed at the wrong width."
+    IO.println s!"  ▸ EVAL PROTOCOL: {s}px, crop_pct {if evalCrop.isEmpty then "the shim's own" else evalCrop} \
+(timm's test protocol) through {fwdPath}"
+  if evalD0 != net.d0 then
+    IO.println s!"  ▸ EVAL RES SPLIT: net d0 {net.d0}, eval d0 {evalD0} (batch {evalBs}) — read \
+off {fwdPath}"
+  -- The checkpoint, and its size guard — the same one `trainAdamSched` applies on resume, for the
+  -- same reason: the blob has no header, no fingerprint and no region count, so a layout mismatch
+  -- does not fail, it misaligns every parameter and scores silent garbage.
+  if !(← System.FilePath.pathExists ckptPath) then
+    throw <| IO.userError s!"no checkpoint at {ckptPath}"
+  let thetamv ← IO.FS.readBinFile ckptPath
+  let pBytes := net.nParams * 4
+  let mvBytes := nRegions * pBytes
+  if thetamv.size != mvBytes then
+    throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but variant \
+'{variant}' wants {mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a \
+different blob layout — most likely across the EMA/accumulation boundary, since accumulation \
+adds a 4th region and the EMA shadow a 5th."
+  let theta := thetamv.extract (regIdx * pBytes) ((regIdx + 1) * pBytes)
+  IO.println s!"  region {regIdx} of {nRegions} \
+({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
+{net.nParams} params"
+  -- A diverged run's checkpoint is NaN, and it scores exactly chance with a top-5 of 100% — a
+  -- number that reads like an answer. Say what it is.
+  let nNan : Nat := Id.run do
+    let mut c : Nat := 0
+    for i in [:net.nParams] do
+      if (F32.read theta i.toUSize).isNaN then c := c + 1
+    c
+  if nNan > 0 then
+    IO.println s!"  ⚠ {nNan} of {net.nParams} weights are NaN — this run DIVERGED, and the score \
+below is chance, not a result. Move {ckptPath} and its .epoch marker aside and train again."
+  -- The BN operands: `<ckpt>.bn` = [running stats | their EMA shadow], written at every epoch end.
+  -- The EMA shadow pairs with the EMA-lagged stats, exactly as the training eval
+  -- pairs them; the live weights with the running ones.
+  let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
+  let evalParams ← if !hasBn then pure theta else do
+    let bnPath := ckptPath ++ ".bn"
+    if !(← System.FilePath.pathExists bnPath) then
+      throw <| IO.userError s!"{net.name} has {net.bnChannels.size} batch-norm layers and there is \
+no {bnPath}: the checkpoint predates the BN companion (2026-09-12), so its running statistics were \
+never written. Scoring the .bin alone would normalise by zeros."
+    let bn ← IO.FS.readBinFile bnPath
+    if bn.size != 2 * nBnStats * 4 then
+      throw <| IO.userError s!"{bnPath} is {bn.size} bytes, not 2 x {nBnStats} x 4 — a different net's companion"
+    let scoringEma := VerifiedVariant.emaRegion variant == some regIdx
+    let stats := if scoringEma then bn.extract (nBnStats * 4) (2 * nBnStats * 4)
+                 else bn.extract 0 (nBnStats * 4)
+    IO.println s!"  BN: {net.bnChannels.size} layers from {bnPath} — \
+{if scoringEma then "the EMA-lagged stats (ema_bn), paired with the shadow" else "the running stats"}"
+    pure (F32.concat #[theta, stats])
+  let evalShapes := if hasBn then packShapes (net.paramShapes ++ bnStatShapes) else net.shapesBA
+  let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
+  -- A size-specific artifact declares its own entry (`@<slug>_fwd_eval_s256`: an artifact's entry is
+  -- its file name); the recipe-size ones keep the net's.
+  let sizedStem := (System.FilePath.mk fwdPath).fileStem.getD ""
+  let evalFn := if !sizeSuf.isEmpty && sizedStem.endsWith sizeSuf then s!"m.{sizedStem}"
+                else if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
+                else s!"m.{net.slug}_fwd"
+  (← IO.getStdout).flush
+  -- `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
+  -- read exactly as the trainers read it. This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
+  -- one checkpoint at 1 and at N replicas must give the same count AND the same bitmap, because
+  -- the loop below is the per-epoch eval's own (`evalScore`), not a copy of it.
+  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
+  let sess ← mkSessionDp fwdPath replicas
+  -- `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
+  -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
+  let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
+  let nc := net.nClasses
+  if replicas > 1 then
+    let egB := replicas * evalBs
+    IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} images per invoke, \
+{(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
+{((nEval + egB - 1) / egB) * egB - nEval} pad"
+  -- `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
+  -- correct), in eval order. THIS is the site McNemar wants: score two committed checkpoints,
+  -- then compare their bitmaps. θ never changes here, so the bitmap is a pure function of the
+  -- checkpoint and the val set — re-scoring gives the identical file.
+  let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
+  -- Hold the parameters on device across every batch — one push per replica, not one per invoke.
+  -- `gen` is a constant because θ never changes here, which is the whole difference from the
+  -- training loop.
+  let rows ← if net.data == .imagenet then spawnValStream net evalD0 (extraEnv := shimEnv)
+             else pure (.held evalImg evalLbl)
+  let (correct, correct5, nScored, correctBits) ← evalScore sess evalFn evalParams evalShapes
+    rows nEval evalBs evalD0 nc replicas evalResident 1
+    dumpCorrect.isSome
+  reapValStream rows
+  let acc := correct.toFloat / nScored.toFloat * 100.0
+  let acc5 := correct5.toFloat / nScored.toFloat * 100.0
+  -- Printed in the SAME shape as the in-training line, so the equality gate is a literal
+  -- comparison of two strings rather than an arithmetic one.
+  IO.println s!"  checkpoint: acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
+  match dumpCorrect with
+  | some pfx =>
+      IO.FS.writeBinFile s!"{pfx}.bin" correctBits
+      IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/demos/mcnemar.py"
+  | none => pure ()
+  if nScored != 50000 && net.data == .imagenet then
+    IO.println s!"  ⚠ val is {nScored} of ImageNet's 50,000 — this is NOT over timm's denominator"
+  (← IO.getStdout).flush
+
 /-- **Scheduled AdamW driver** — threads the first/second moment buffers as one packed
     `[θ|m|v]` param blob through the generic FFI (`n_params = 3k`), with a runtime LR and
     bias correction. `lr`/`bc₁`/`bc₂` ride as three rank-0 scalar params in the blob
@@ -1359,6 +1571,30 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     -- on the global step — the reference's `TrainConfig.expLRStaircase`. Off keeps the continuous
     -- form, counted from the end of warmup.
     (expStaircase : Bool := false) : IO Unit := do
+  -- A FINISHED RUN, LAUNCHED AGAIN. The resume below picks a reaped run up where it stopped; once
+  -- the `.epoch` marker has reached `cfg.epochs` there is nothing left to train, and resuming runs
+  -- zero epochs and prints `done` with no accuracy — a second `lake run cifar` looked like a
+  -- success and reported nothing. Score the finished checkpoint instead, and say how to start
+  -- over. Against `cfg.epochs`, not the `LEAN_MLIR_MAX_EPOCHS` cap: a chunk that has reached its
+  -- cap is not a finished run.
+  let ckptPath ← net.ckptPathFor variant
+  let epFile := ckptPath ++ ".epoch"
+  let doneAt ← if ← System.FilePath.pathExists epFile then
+      pure (((← IO.FS.readFile epFile).trimAscii.toString.toNat?).getD 0) else pure 0
+  if doneAt ≥ cfg.epochs && (← System.FilePath.pathExists ckptPath) then
+    let retrain := "To train again, set LEAN_MLIR_CKPT_TAG=<name>, or move it and its .epoch \
+marker aside."
+    -- A BN net's score needs the running statistics, and checkpoints before 2026-09-12 were
+    -- written without their `.bn` companion; `scoreCheckpoint` refuses those rather than
+    -- normalise by zeros, so say so here instead of failing the group.
+    if !net.bnChannels.isEmpty && !(← System.FilePath.pathExists (ckptPath ++ ".bn")) then
+      IO.println s!"  ▸ {ckptPath} is a finished {cfg.epochs}-epoch run from before BN \
+statistics were checkpointed, so it cannot be scored — nothing to train. {retrain}"
+      return
+    IO.println s!"  ▸ {ckptPath} is the finished {cfg.epochs}-epoch run — scoring it instead of \
+training. {retrain}"
+    net.scoreCheckpoint dataDir variant ckptPath
+    return
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
   -- render (same packed [θ|m|v]+lr/bc1/bc2 signature; the momentum step ignores the m/bc slots and
@@ -1786,9 +2022,9 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- on startup, resume from the latest checkpoint if present (survives reaps).
   -- Delete `.lake/build/<slug>_<variant>_ckpt*.bin{,.epoch}` to start fresh.
   -- The PATH — backend scoping and `$LEAN_MLIR_CKPT_TAG` — is `ckptPathFor`, shared with
-  -- `scoreCheckpoint` so the tool that reads this file cannot spell its name differently.
-  let ckptPath ← net.ckptPathFor variant
-  let epPath := ckptPath ++ ".epoch"
+  -- `scoreCheckpoint` so the tool that reads this file cannot spell its name differently;
+  -- `ckptPath` is bound at the top, where a finished run is scored rather than resumed.
+  let epPath := epFile
   let mut startEpoch := 0
   if (← System.FilePath.pathExists ckptPath) && (← System.FilePath.pathExists epPath) then
     thetamv ← IO.FS.readBinFile ckptPath
@@ -2585,208 +2821,6 @@ gate's control, not a configuration.")
   -- otherwise describe a warmup this configuration does not have.
   let doneSched := if expDecayRate == 1.0 then "constant lr" else s!"{schedName}/warmup"
   IO.println s!"done (trained {net.name} {variant} + {doneSched} via packed threading)."
-
-/-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
-    front of it. It scores any saved checkpoint, not only the weights live during training — the
-    verified peer of the JAX side's `eval_*_full50k.py`. No new MLIR: every piece is the eval
-    half's own:
-
-    | need | reused |
-    |---|---|
-    | read the val split | `spawnValStream` (ImageNet, streamed per pass) / `loadData` (held splits) |
-    | the eval graph | `mkSession` on `<slug>_fwd_eval`, or the `_fwd` chain for the LN nets |
-    | eval batch AND width | `fwdRenderedShape`, one parse of one declaration |
-    | the eval pass | `evalScore` (short-tail padding, forward, scoring) |
-    | forward | `LowererSession.forwardF32` |
-    | metrics | `F32.argmaxN` (top-1), `F32.rankOf` (top-5) |
-
-    The gate is an equality, not a smoke test: for the same checkpoint at the same region, the
-    number printed here must equal the one the training run printed for that epoch — same
-    denominator, same batching, same graph.
-
-    **BN nets score through `@<slug>_fwd_eval`** with the running statistics read from the
-    `<ckpt>.bn` companion (`[running | ema_bn]`, written at every epoch end): the
-    EMA shadow with `ema_bn`, the live weights with the running stats — the training eval's
-    pairing. A checkpoint older than the companion is refused, since scoring the `.bin` alone would
-    normalise by zeros and still print a plausible percentage.
-
-    **timm's test protocol**: `LEAN_MLIR_EVAL_SIZE` / `LEAN_MLIR_EVAL_CROP` score through the eval
-    graph rendered at that size (`…_fwd_eval_s<S>.mlir`) with the val stream resized and cropped to
-    match (`SHIM_EVAL_SIZE` / `SHIM_EVAL_CROP`). `scripts/parity/score_timm.sh` reads the per-net values
-    from `jax/timm_eval_protocols.json`.
-
-    `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
-    TRAIN time (`LEAN_MLIR_EMA_BN`), so an EMA run reports one of the two numbers and discards the other.
-    timm reports the shadow and RSB-A2 sets `emaDecay := 0.9999`, so without this an A2 result is
-    not quotable the way its reference is. `"auto"` = the shadow when the variant has one, matching
-    what the training run would have scored; `"live"` and `"ema"` name it explicitly. -/
-def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant : String)
-    (ckptPath : String) (region : String := "auto") : IO Unit := do
-  let emaOn := VerifiedVariant.emaOn variant
-  let nRegions := VerifiedVariant.nRegions variant
-  let hasBn := !net.bnChannels.isEmpty
-  let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
-  net.printBlurb
-  IO.println s!"  SCORING A CHECKPOINT — no training. {net.name} {variant}, {ckptPath}"
-  -- timm's TEST protocol: `LEAN_MLIR_EVAL_SIZE=S` scores through an eval graph rendered at S
-  -- (`<slug>_fwd_eval_s<S>.mlir`, or `<slug>_fwd_s<S>.mlir` for the LayerNorm nets) and has the
-  -- val stream resize/crop at S / `LEAN_MLIR_EVAL_CROP` (`SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in the
-  -- net's own shim). Unset ⇒ the recipe's own protocol, exactly as the in-training eval scores.
-  -- The per-net values are timm's (`jax/timm_eval_protocols.json`; `scripts/parity/score_timm.sh`).
-  let evalSize := (← IO.getEnv "LEAN_MLIR_EVAL_SIZE").bind (·.toNat?)
-  let evalCrop := (← IO.getEnv "LEAN_MLIR_EVAL_CROP").getD ""
-  if evalSize.isNone && !evalCrop.isEmpty then
-    throw <| IO.userError "LEAN_MLIR_EVAL_CROP without LEAN_MLIR_EVAL_SIZE — give both (timm's \
-test_input_size and test_crop_pct), so the protocol printed is the protocol scored."
-  let shimEnv : Array (String × Option String) := match evalSize with
-    | some s => #[("SHIM_EVAL_SIZE", some (toString s))] ++
-                (if evalCrop.isEmpty then #[] else #[("SHIM_EVAL_CROP", some evalCrop)])
-    | none   => #[]
-  -- The region to score. `"ema"` on a variant with no fourth region is a REFUSAL and not a
-  -- fallback to live: the request and the artifact disagree, and quietly answering the other
-  -- question is how a live-weight number gets quoted as a shadow one.
-  -- **`emaRegion`, NOT THE LITERAL 3.** Under accumulation the gradient
-  -- accumulator takes region 3 and the shadow is region 4, so a hardcoded index here scores `G`
-  -- as if it were weights — a plausible-looking percentage off a running gradient sum, which is the
-  -- exact failure class this function's BN blocker exists to prevent one line down.
-  let regIdx ← match region with
-    | "auto" => pure ((VerifiedVariant.emaRegion variant).getD 0)
-    | "live" => pure 0
-    | "ema"  =>
-      match VerifiedVariant.emaRegion variant with
-      | none =>
-        throw <| IO.userError s!"region 'ema' asked of variant '{variant}', which has no EMA \
-shadow — its blob is {nRegions} regions and there is no shadow slot to score. Use \
-'live', or score a checkpoint written by an ema* variant."
-      | some i => pure i
-    | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
-  -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
-  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is `@<slug>_fwd` either way — the
-  -- variant artifact re-renders the same entry name.
-  -- A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
-  -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
-  let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
-  let pick (suf : String) : IO String := do
-    let v := s!"{net.mlirDir}/{net.slug}_{variant}_fwd{suf}.mlir"
-    if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}{suf}.mlir"
-    else if (← System.FilePath.pathExists v) then pure v
-    else pure s!"{net.mlirDir}/{net.slug}_fwd{suf}.mlir"
-  -- A protocol that changes only the CROP (DeiT: 224 at 0.9) needs no second render: the base
-  -- artifact serves when it is already rendered at that size.
-  let fwdPath ← do
-    let sized ← pick sizeSuf
-    if sizeSuf.isEmpty || (← System.FilePath.pathExists sized) then pure sized
-    else
-      let base ← pick ""
-      let w ← if (← System.FilePath.pathExists base) then
-          pure ((← fwdRenderedShape base).map (·.2)) else pure none
-      pure (if w == evalSize.map (fun s => 3 * s * s) then base else sized)
-  if !(← System.FilePath.pathExists fwdPath) then
-    throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
-{fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
-  -- REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
-  -- because it has a `cfg.batchSize` the user chose; this tool has no such input, so a guess
-  -- would be a silent mis-slice of the val buffer (RSB-A3: 224² rows read as 160²).
-  let (evalBs, evalD0) ← match ← fwdRenderedShape fwdPath with
-    | some s => pure s
-    | none => throw <| IO.userError s!"could not read `%x: tensor<BxWxf32>` off {fwdPath} — the \
-eval batch and the eval WIDTH both come from that one declaration, and neither is guessable here."
-  if let some s := evalSize then
-    if evalD0 != 3 * s * s then
-      throw <| IO.userError s!"{fwdPath} declares %x width {evalD0}, not 3·{s}² = {3 * s * s} — \
-the artifact is not a {s}px render, and the val stream would be framed at the wrong width."
-    IO.println s!"  ▸ EVAL PROTOCOL: {s}px, crop_pct {if evalCrop.isEmpty then "the shim's own" else evalCrop} \
-(timm's test protocol) through {fwdPath}"
-  if evalD0 != net.d0 then
-    IO.println s!"  ▸ EVAL RES SPLIT: net d0 {net.d0}, eval d0 {evalD0} (batch {evalBs}) — read \
-off {fwdPath}"
-  -- The checkpoint, and its size guard — the same one `trainAdamSched` applies on resume, for the
-  -- same reason: the blob has no header, no fingerprint and no region count, so a layout mismatch
-  -- does not fail, it misaligns every parameter and scores silent garbage.
-  if !(← System.FilePath.pathExists ckptPath) then
-    throw <| IO.userError s!"no checkpoint at {ckptPath}"
-  let thetamv ← IO.FS.readBinFile ckptPath
-  let pBytes := net.nParams * 4
-  let mvBytes := nRegions * pBytes
-  if thetamv.size != mvBytes then
-    throw <| IO.userError s!"checkpoint {ckptPath} is {thetamv.size} bytes but variant \
-'{variant}' wants {mvBytes} ({nRegions} regions x {net.nParams} params x 4). It was written by a \
-different blob layout — most likely across the EMA/accumulation boundary, since accumulation \
-adds a 4th region and the EMA shadow a 5th."
-  let theta := thetamv.extract (regIdx * pBytes) ((regIdx + 1) * pBytes)
-  IO.println s!"  region {regIdx} of {nRegions} \
-({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
-{net.nParams} params"
-  -- The BN operands: `<ckpt>.bn` = [running stats | their EMA shadow], written at every epoch end.
-  -- The EMA shadow pairs with the EMA-lagged stats, exactly as the training eval
-  -- pairs them; the live weights with the running ones.
-  let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
-  let evalParams ← if !hasBn then pure theta else do
-    let bnPath := ckptPath ++ ".bn"
-    if !(← System.FilePath.pathExists bnPath) then
-      throw <| IO.userError s!"{net.name} has {net.bnChannels.size} batch-norm layers and there is \
-no {bnPath}: the checkpoint predates the BN companion (2026-09-12), so its running statistics were \
-never written. Scoring the .bin alone would normalise by zeros."
-    let bn ← IO.FS.readBinFile bnPath
-    if bn.size != 2 * nBnStats * 4 then
-      throw <| IO.userError s!"{bnPath} is {bn.size} bytes, not 2 x {nBnStats} x 4 — a different net's companion"
-    let scoringEma := VerifiedVariant.emaRegion variant == some regIdx
-    let stats := if scoringEma then bn.extract (nBnStats * 4) (2 * nBnStats * 4)
-                 else bn.extract 0 (nBnStats * 4)
-    IO.println s!"  BN: {net.bnChannels.size} layers from {bnPath} — \
-{if scoringEma then "the EMA-lagged stats (ema_bn), paired with the shadow" else "the running stats"}"
-    pure (F32.concat #[theta, stats])
-  let evalShapes := if hasBn then packShapes (net.paramShapes ++ bnStatShapes) else net.shapesBA
-  let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
-  -- A size-specific artifact declares its own entry (`@<slug>_fwd_eval_s256`: an artifact's entry is
-  -- its file name); the recipe-size ones keep the net's.
-  let sizedStem := (System.FilePath.mk fwdPath).fileStem.getD ""
-  let evalFn := if !sizeSuf.isEmpty && sizedStem.endsWith sizeSuf then s!"m.{sizedStem}"
-                else if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
-                else s!"m.{net.slug}_fwd"
-  (← IO.getStdout).flush
-  -- `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
-  -- read exactly as the trainers read it. This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
-  -- one checkpoint at 1 and at N replicas must give the same count AND the same bitmap, because
-  -- the loop below is the per-epoch eval's own (`evalScore`), not a copy of it.
-  let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
-  let sess ← mkSessionDp fwdPath replicas
-  -- `evalOnly := true` — this tool never touches the train split, and on Imagenette reading it
-  -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
-  let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
-  let nc := net.nClasses
-  if replicas > 1 then
-    let egB := replicas * evalBs
-    IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} images per invoke, \
-{(nEval + egB - 1) / egB} invokes, last one {nEval - (nEval - 1) / egB * egB} real + \
-{((nEval + egB - 1) / egB) * egB - nEval} pad"
-  -- `LEAN_MLIR_DUMP_CORRECT=<prefix>` -> `<prefix>.bin`, one byte per val image (1 = top-1
-  -- correct), in eval order. THIS is the site McNemar wants: score two committed checkpoints,
-  -- then compare their bitmaps. θ never changes here, so the bitmap is a pure function of the
-  -- checkpoint and the val set — re-scoring gives the identical file.
-  let dumpCorrect := (← IO.getEnv "LEAN_MLIR_DUMP_CORRECT")
-  -- Hold the parameters on device across every batch — one push per replica, not one per invoke.
-  -- `gen` is a constant because θ never changes here, which is the whole difference from the
-  -- training loop.
-  let rows ← if net.data == .imagenet then spawnValStream net evalD0 (extraEnv := shimEnv)
-             else pure (.held evalImg evalLbl)
-  let (correct, correct5, nScored, correctBits) ← evalScore sess evalFn evalParams evalShapes
-    rows nEval evalBs evalD0 nc replicas evalResident 1
-    dumpCorrect.isSome
-  reapValStream rows
-  let acc := correct.toFloat / nScored.toFloat * 100.0
-  let acc5 := correct5.toFloat / nScored.toFloat * 100.0
-  -- Printed in the SAME shape as the in-training line, so the equality gate is a literal
-  -- comparison of two strings rather than an arithmetic one.
-  IO.println s!"  checkpoint: acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
-  match dumpCorrect with
-  | some pfx =>
-      IO.FS.writeBinFile s!"{pfx}.bin" correctBits
-      IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/demos/mcnemar.py"
-  | none => pure ()
-  if nScored != 50000 && net.data == .imagenet then
-    IO.println s!"  ⚠ val is {nScored} of ImageNet's 50,000 — this is NOT over timm's denominator"
-  (← IO.getStdout).flush
 
 /-- Train driver for the **2-parameter linear** path (Chapter 1). The verified
     `@<slug>_train_step` takes `W0`/`b0` as *separate* arguments (`linearTrainStepV`),

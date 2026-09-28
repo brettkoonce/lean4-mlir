@@ -559,18 +559,10 @@ wrong times"
         -- Matches the image sampler's convention: the final step uses 0.9999
         -- rather than a literal 1.0, which would send `a = √ᾱ_prev/√ᾱ_t` sky-high.
         let abP := if tPrev == 0 then 0.9999 else F32.read alphaBar tPrev.toUSize
-        let a := Float.sqrt abP / Float.sqrt abT
-        -- Generalized DDIM (Song et al. eq. 12):
-        --   x_{t-1} = a·x_t + b'·ε̂ + σ_t·z
-        --   σ_t = η·√((1-ᾱ_prev)/(1-ᾱ_t))·√(1 - ᾱ_t/ᾱ_prev)
-        --   b'  = √(1 - ᾱ_prev - σ_t²) − a·√(1-ᾱ_t)
-        -- η = 0 collapses to the deterministic form (σ = 0, b' = b) and η = 1 is
-        -- ancestral DDPM sampling. No new primitive: `ddimStep` computes
-        -- `a·x + b·e`, so the noise term is a second call with (1.0, σ_t, z).
-        let sigma := eta * Float.sqrt ((1.0 - abP) / (1.0 - abT))
-                         * Float.sqrt (1.0 - abT / abP)
-        let inner := 1.0 - abP - sigma * sigma
-        let b := Float.sqrt (max inner 0.0) - a * Float.sqrt (1.0 - abT)
+        -- Generalized DDIM, `x_{t-1} = a·x_t + b·ε̂ + σ_t·z` (`Ddpm.ddimCoefs`). No new
+        -- primitive: `ddimStep` computes `a·x + b·e`, so the noise term is a second call
+        -- with (1.0, σ_t, z).
+        let (a, b, sigma) := Ddpm.ddimCoefs abT abP eta
         x ← Ddpm.ddimStep x epsHat a b nM
         if sigma > 0.0 then
           let zk ← noiseCloud m (fun i => i * 131071 + k * 8191 + 17)

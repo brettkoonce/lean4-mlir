@@ -1,0 +1,35 @@
+I0928 20:19:38.590286 1158801 service.cc:154] XLA service 0x7b0f60008380 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0928 20:19:38.590365 1158801 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0928 20:19:38.592137 1158801 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0928 20:19:38.592171 1158801 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0928 20:19:38.598816 1158801 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled .lake/build/tiny_ddpm_unet_t_cond_centered__mnist_28x28x1__fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1108 ms
+sampling 1024 images, 50 DDIM steps (η = 1.000000), batch 16...
+  sampler=ddim (1 eval/step), NFE=50 => 50 solver steps
+  batch 1/64
+  batch 9/64
+  batch 17/64
+  batch 25/64
+  batch 33/64
+  batch 41/64
+  batch 49/64
+  batch 57/64
+  batch 64/64
+I0928 20:19:45.128119 1158801 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0928 20:19:45.128201 1158801 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0928 20:19:45.430040 1159312 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 72 bytes spill stores, 72 bytes spill loads
+
+I0928 20:19:45.708666 1159291 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 40 bytes spill stores, 40 bytes spill loads
+
+I0928 20:19:45.724035 1159299 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/cnn_fwd.mlir (@cnn_fwd, 1 outputs, 1 replica) in 959 ms
+classifying 1024 generated samples...
+classifying 1024 noise images (negative control)...
+classifying 10000 real test images (control)...
+wrote 1024 samples + logits (1024x10 gen, 10000x10 real)
+▶ score it: python3 scripts/demos/mnist_ddpm_score.py
