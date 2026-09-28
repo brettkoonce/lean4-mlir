@@ -351,7 +351,7 @@ written to be, that a data-parallel render's step is one device's step on
 the global batch, or that one SGD step decreases the loss. A theorem that
 only restates a counted one at fixed dimensions or over the committed
 spec, and a smooth-point form that a later global theorem superseded, is
-not counted again. Across Chapters~1--9 there are \textbf{45 contracts},
+not counted again. Across Chapters~1--9 there are \textbf{44 contracts},
 \textbf{9 witnesses} and \textbf{30 step certificates}. Even Chapter~1's
 toolkit is used straight away by a proven model, so no chapter is pure
 scaffolding.
@@ -366,13 +366,13 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 2 (MNIST: 1D)     & 2  & 2   & 2 & ReLU, MLP; witnesses hand-built and at trained weights; the six emitted updates are the certified step; SGD descends on \(W_0\) \\
 3 (MNIST: 2D)     & 3  & 1   & 2 & conv2d, maxPool2, whole-net MNIST CNN; witness at trained weights; the four conv updates are the certified steps; SGD descends on \(W_2\) \\
 4 (CIFAR: BN)     & 6  & 1   & 5 & per-channel BN (flat $+$ NCHW) and BN at batch statistics; CIFAR whole-nets at 2 convs and at 8 convs $\pm$BN; a hand-built tiny witness; conv and BN updates tied, the 8-conv step tied with and without BN; SGD descends at the last conv \\
-5 (ResNet-34)     & 10 & 3   & 5 & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), the $3 \times 3$/s2 stem pool, whole-net \texttt{cnn}; ResNet-34 per example, \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; witnesses: a hand-built BN CNN, and the full-width ResNet-34 and ResNet-50 at $224 \times 224$ (ResNet-50 also at 160) with a non-zero backward; both batched steps tied (ResNet-50 also at BCE), both sync-BN twins, the ResNet-50 backward chain is the VJP \\
+5 (ResNet-34)     & 9  & 3   & 5 & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), the $3 \times 3$/s2 stem pool, whole-net \texttt{cnn}; \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; witnesses: a hand-built BN CNN, and the full-width ResNet-34 and ResNet-50 at $224 \times 224$ (ResNet-50 also at 160) with a non-zero backward; both batched steps tied (ResNet-50 also at BCE), both sync-BN twins, the ResNet-50 backward chain is the VJP \\
 6 (MobileNetV2)   & 6  & 2   & 6 & ReLU6, depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks} at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth; witnesses: full-width V2 and V4 at $224 \times 224$ with a non-zero backward; both steps tied, both sync-BN twins, both backward chains are the VJP \\
 7 (EfficientNet)  & 5  & --- & 3 & swish, sigmoid, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks); step tied, sync-BN twin, the backward chain is the VJP \\
 8 (ConvNeXt)      & 6  & --- & 2 & GELU, LayerNorm, layer-scale, the $4 \times 4$/s4 patchify conv, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks); step tied, the backward chain is the VJP \\
 9 (ViT)           & 6  & --- & 3 & MHSA, block, vector LayerNorm and its block, \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vitFull}; the emitted graph denotes the tower, step tied, the backward chain is the VJP \\
 \hline
-                  & \textbf{45} & \textbf{9} & \textbf{30} & total \textbf{84} \\
+                  & \textbf{44} & \textbf{9} & \textbf{30} & total \textbf{83} \\
 \hline
 \end{tabular}
 \end{center}
@@ -2110,8 +2110,10 @@ the depth the descent half actually reaches.
 \texttt{dot\_general} contracts the batch axis, so $dW_0$ is a batch sum
 rather than a mean. The constant \texttt{0.00078125} is
 $\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into
-the mean update. Everything else in the listing is, line for line, the rendering of
-a theorem proved earlier in this chapter.
+the mean update. Everything else in the listing is the rendering of a theorem
+proved earlier in this chapter, stated for one example: Theorem~\ref{thm:mlp_fold}
+certifies the six updates at $N = 1$, and the batch sum and the $\alpha/N$
+scale are the render's.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
 drives it. Stripped of its logging and its session setup,
@@ -3662,9 +3664,13 @@ whole CNN backward is covered, op by op.
     is linear, so it holds at every input.
   \item \textbf{ReLU is a smooth-point bridge} (no pre-activation exactly
     zero), failing only on that measure-zero set.
-  \item \textbf{Max-pool needs a unique argmax.} The bridge holds only
-    where every $2\times2$ window has a strict argmax. The tie set is the
-    codegen trust boundary for pooling.
+  \item \textbf{Max-pool is a smooth-point bridge too.} It holds where
+    every $2\times2$ window attains its maximum at one cell
+    (\texttt{MaxPool2Smooth}); the other cells may tie with each other. An
+    all-zero post-ReLU window fails it, so for pooling the excluded set is
+    not measure-zero the way ReLU's kink is, and the whole-net theorem
+    states it as a hypothesis (\texttt{h\_mp} in
+    Theorem~\ref{thm:mnistCnnNoBnHasVJPAt}).
   \item \textbf{Representative scale.} $1{\to}2$ channels at $4\times4$
     (production: $1{\to}32$ at $28\times28$).
 \end{itemize}
@@ -5095,7 +5101,7 @@ block's machinery gives us). Composition is just
 fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
 
 That is Theorem~\ref{thm:residualHasVJP} below, and its proof
-is one line. This chapter has exactly one theorem, and
+is one line. The residual is the one theorem the idea needs, and
 that theorem is mechanical. The engineering revolution was not
 in the math. It was in the realization that this
 operation was the missing piece for training deep
@@ -5257,7 +5263,10 @@ See \leandocref{Proofs.r50InputGradB\_eq\_r34B\_full\_vjp}.
   \texttt{resnet34in\_momdp64} at \(N = 64\)) are tied at the chain cotangent of
   the label-smoothed cross-entropy loss (\(\alpha_{\mathrm{ls}} = 0.1\), any
   target): each gradient node denotes the certified batch gradient
-  \(\sum_n \mathrm{Jacobian} \cdot \mathrm{cotangent}\), generic in \(N\).
+  \(\sum_n \mathrm{Jacobian} \cdot \mathrm{cotangent}\), generic in \(N\). The
+  chain cotangents it threads are the certified block backwards
+  (\texttt{r34IdCotIn\_eq\_vjp}, \texttt{r34DownCotIn\_eq\_vjp}); the
+  \(\varepsilon > 0\) and smooth-point hypotheses enter there, not in the tie.
 \end{theorem}
 
 \begin{proof}
@@ -5278,7 +5287,10 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
   at a loss cotangent \(g\) that is a binder, generic in \(N\) and \(q\);
   instantiated at the smoothed cross-entropy and at BCE-with-logits over
   \(N \cdot K\) (\texttt{r50\_lossCot\_is\_bce\_grad}) --- the loss of the
-  76.66\% \texttt{resnet50in160\_lambaccdp8x64bce} run.
+  76.66\% \texttt{resnet50in160\_lambaccdp8x64bce} run. The chain cotangents
+  are the certified block backwards (\texttt{r50IdCotIn\_eq\_vjp},
+  \texttt{r50ProjCotIn\_eq\_vjp}, \texttt{r50DownCotIn\_eq\_vjp}); the
+  \(\varepsilon > 0\) and smooth-point hypotheses enter there, not in the tie.
 \end{theorem}
 
 \begin{proof}
@@ -6070,9 +6082,12 @@ the four replicas, scored over the same $50{,}000$ images.
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
 from the same initialization, the IREE and XLA lowerings of
 this artifact scored $17{,}312$ and $17{,}313$ correct at epoch~5 --- one
-image apart. The proof-carrying tier stops at Imagenette, so the claim is
-``one architecture, two independent lowerings, agreeing'', not ``proven
-at ImageNet scale''.
+image apart. The proof-carrying tier reaches this render's f32 form,
+\texttt{resnet34in\_momdp64} (Theorems~\ref{thm:resnet34_step_tie} and
+\ref{thm:resnet34_sync_tie}), and stops at its bf16 gradient nodes, which are
+the \texttt{*GradBBf16} kinds tied per operator rather than as a step; so for
+this run the claim is ``one architecture, two independent lowerings,
+agreeing'', not ``proven at ImageNet scale''.
 
 \prosesection{The two paths, side by side}
 
@@ -6114,8 +6129,9 @@ against.
 \medskip\noindent Both paths normalize over the global $256$: the
 reference's \texttt{@jit} mesh reduces the batch statistics across its
 shards, and each of the verified render's 36 BatchNorms all-reduces its
-mean and variance across the four replicas --- the render
-Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
+mean and variance across the four replicas --- the data-parallel step
+Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$, on
+the render's f32 form.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
@@ -6690,7 +6706,12 @@ the whole network, at the batch statistics this artifact runs, is
 \texttt{Proofs/Nets/MobileNet/MobileNetV2FullBVJP.lean}, and it covers the
 stem, all seventeen bottlenecks and the head. The typed graph the artifact
 is printed from denotes that forward by
-\texttt{mobilenetv2FwdGraphBFull\_faithful}, and the tie from the
+\texttt{mobilenetv2FwdGraphBFull\_faithful} --- with classifier dropout, at
+every mask, by \texttt{mobilenetv2FwdGraphBFullDo\_faithful}; the inference
+render's typed graph denotes the frozen-statistics forward of one example by
+\texttt{mobilenetv2FwdGraphPaperEval\_faithful}, and both renders' block text
+is \texttt{pretty} of their typed blocks (\texttt{FwdGraphTextTies}) --- and
+the tie from the
 \texttt{mobilenetv2Verified} layer list to that forward is
 \texttt{mobilenetv2VerifiedB\_denote\_eq}, a \texttt{rfl} that stops
 reducing if any \texttt{[t,c,n,s]} entry of the spec drifts, with
@@ -7051,7 +7072,11 @@ See \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}.
   \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) are tied at a loss
   cotangent that is a binder: each gradient node denotes the certified batch
   gradient, generic in \(N\); \texttt{mnv2\_lossCot\_is\_smoothedCE\_grad}
-  instantiates it at the label-smoothed cross-entropy.
+  instantiates it at the label-smoothed cross-entropy. The chain cotangents
+  are the certified segment backwards (the four block kinds'
+  \texttt{*CotIn\_eq\_vjp}, \texttt{mnv2StemCotC\_eq\_vjp},
+  \texttt{mnv2HeadCotBlk\_eq\_vjp}); the \(\varepsilon > 0\) and ReLU6
+  hypotheses enter there, not in the tie.
 \end{theorem}
 
 \begin{proof}
@@ -7074,7 +7099,11 @@ See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_tiedB}.
   step (\texttt{mnv4in\_adamdp64}) are tied at a loss cotangent that is a
   binder, generic in \(N\) and in the number of classes;
   \texttt{mnv4\_lossCot\_is\_smoothedCE\_grad} instantiates it at the
-  smoothed cross-entropy.
+  smoothed cross-entropy. The chain cotangents are the certified segment
+  backwards (\texttt{mnv4BodyCotIn\_eq\_vjp}, \texttt{mnv4SBodyCotIn\_eq\_vjp},
+  \texttt{mnv4SkipCotIn\_eq\_vjp}, \texttt{mnv4FusedCotIn\_eq\_vjp},
+  \texttt{mnv4HeadCotIn\_eq\_vjp}); the \(\varepsilon > 0\) and ReLU
+  hypotheses enter there, not in the tie.
 \end{theorem}
 
 \begin{proof}
@@ -8029,7 +8058,13 @@ It builds as \texttt{mobilenetv4-imagenet-verified}. The renders come
 from the same chain and the same block table as the three 10-class
 artifacts, differing only in the head, the batch and the slug,
 which is why adding them was three \texttt{\#eval} lines rather than a
-new proof chain.
+new proof chain. The inference graphs, \texttt{mnv4in\_fwd\_eval} and
+\texttt{mnv4in\_fwd\_eval\_s256}, denote the frozen-statistics forward at any
+final feature size (\texttt{mnv4FwdGraphBFullEval\_faithful}), and their
+block text is \texttt{pretty} of the typed graph at both sizes
+(\texttt{FwdGraphTextTies}); the classifier-dropout forward is stated at
+every mask in f32 (\texttt{mnv4FwdGraphBFullDo\_faithful}), while the
+\texttt{do} renders here are bf16.
 
 \textbf{The variant carries the recipe.}
 \texttt{emaaccdp8x128wxdowd005bf16} is the artifact the run below used:
@@ -8040,8 +8075,11 @@ shadow at $0.9999$ with the warmup correction above, bf16 matmul and
 convolution. Each of the 77 BatchNorms all-reduces its mean and
 variance across the four replicas, so the statistic group is the
 $512$-image micro-batch, which is the group the reference's
-accumulation gives it; Theorem~\ref{thm:mobilenetv4_sync_tie} ties
-that render to one device's step at $512$. It runs with:
+accumulation gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the f32
+data-parallel render (\texttt{mnv4in\_adamdp64}) to one device's step at the
+global batch; this render's gradient nodes are the bf16 \texttt{*GradBBf16}
+kinds, tied per operator, and its EMA, gradient accumulation and classifier
+dropout sit outside that statement. It runs with:
 
 \begin{verbatim}
 lake run mnv4-default-4gpu
@@ -8478,12 +8516,14 @@ See \leandocref{Proofs.efficientnetInputGradBFull\_correct}.
       thm:denseHasVJP, thm:denseWeightGrad_correct, thm:residualHasVJP,
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Prove{} the 262 parameter gradients of the batched EfficientNet-B0 step
-  (\texttt{efficientnet\_adam\_train\_step.mlir} and every
-  \texttt{efficientnetin\_*} artifact) are tied at the chain cotangent of the
-  label-smoothed cross-entropy, the target a binder: each raw gradient node
-  denotes the certified batch gradient through swish, the SE gate's fan-in
-  and the batch-BatchNorm backward. The AdamW, RMSProp, EMA and
-  data-parallel tails all consume that node.
+  (\texttt{efficientnet\_adam\_train\_step.mlir} and the f32
+  \texttt{efficientnetin\_*} steps) are tied at the chain cotangent of the
+  label-smoothed cross-entropy, the target and the number of classes binders:
+  each raw gradient node denotes the certified batch gradient through swish,
+  the SE gate's fan-in and the batch-BatchNorm backward, at one replica, on
+  the chain without stochastic depth or classifier dropout. The AdamW,
+  RMSProp, EMA and data-parallel tails all consume that node; the bf16 renders
+  emit \texttt{*GradBBf16} nodes, tied per operator kind.
 \end{theorem}
 
 \begin{proof}
@@ -9705,8 +9745,14 @@ See \leandocref{Proofs.convnextInputGradB\_correct}.
   (\([3, 3, 9, 3]\) blocks, channel-LayerNorm at twenty-two sites, per-channel
   layer scale, GELU) are tied at the chain cotangent of the smoothed
   cross-entropy loss, with the batch and the number of classes binders: each
-  raw gradient node of \texttt{convnext\_adam\_train\_step.mlir} and of every
-  \texttt{convnextin\_*} artifact denotes the certified batch gradient.
+  raw gradient node of \texttt{convnext\_adam\_train\_step.mlir} and of the f32
+  \texttt{convnextin\_*} steps denotes the certified batch gradient, at one
+  replica; the \texttt{drop} renders emit the same nodes at a cotangent chain
+  that carries \texttt{dropPathB} sites this statement does not name, and the
+  bf16 renders emit \texttt{*GradBBf16} nodes, tied per operator kind. The
+  chain cotangents are the certified block, downsample and head backwards
+  (\texttt{cnxBlockCotInB\_eq\_vjp}, \texttt{cnxDownCotInB\_eq\_vjp},
+  \texttt{cnxHeadDyB\_eq\_vjp}).
 \end{theorem}
 
 \begin{proof}
@@ -9990,8 +10036,10 @@ nothing to bridge past that identity, so the emitted graph is two
 tensor: a diagonal map is its own transpose, so its VJP is itself. The
 identity skip is the residual fan-in of Chapter~\ref{chap:residual}. The
 surrounding GELU, LayerNorm, and convolution backwards reuse their bridges.
-Uniquely in this book, every one is unconditional (the only hypothesis
-anywhere is LayerNorm's $\epsilon > 0$). The full block is
+Every one is unconditional (the only hypothesis anywhere is LayerNorm's
+$\epsilon > 0$): ConvNeXt has no kinked operator, and neither do
+EfficientNet-B0 and the Vision Transformer, the two other chapter nets whose
+whole-network VJP needs only $\epsilon > 0$. The full block is
 $\mathrm{residual}(\mathrm{layerScale} \circ \mathrm{project} \circ
 \mathrm{gelu} \circ \mathrm{expand} \circ \mathrm{LN} \circ
 \mathrm{depthwise})$, composed by \texttt{convNextBlockHasVJP}.
@@ -10219,7 +10267,10 @@ clipping and stochastic depth are render variants, spelled \texttt{wx},
 \texttt{clip} and \texttt{drop}, and
 \texttt{convnextin\_\allowbreak adamdpwxclipdropbf16} carries all three at
 once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
-the run below used. EMA is a render variant too
+the run below used; Theorem~\ref{thm:convnext_step_tie} is stated on the f32,
+drop-free chain, and this render's gradient nodes are the bf16
+\texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
+carries the drop-path sites. EMA is a render variant too
 (\texttt{convnextin\_emadp}), but no committed artifact combines it with
 the other three, so the verified arm trains and scores its raw weights,
 and the pairing below is made against the reference's raw arm, which the
@@ -10653,7 +10704,7 @@ the cost once, reuse forever.
 The second section (\textbf{Attention proofs}, twenty-one theorems)
 applies the matrix machinery to the actual attention math. Row-wise
 softmax (a per-row softmax applied to the \(N \times N\) score
-matrix) has the well-known closed-form Jacobian \(p_i(\delta_{ij}
+matrix) has the well-known closed-form Jacobian \(p_j(\delta_{ij}
 - p_i)\), and we prove the row-wise lifting that says this holds
 across matrices. Scaled dot-product attention's backward decomposes
 into three matmul-backward applications (one for each of \(Q\),
@@ -11738,7 +11789,13 @@ See \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
   heads of 64, depth 12, \(16 \times 16\) patches) are tied at the chain
   cotangent of the smoothed cross-entropy loss, with the batch and the number
   of classes binders; the CLS gradient is summed over the batch inside the
-  node's denotation. Every \texttt{vitin\_*} artifact renders from this chain.
+  node's denotation. The statement is at one replica, in f32, on the chain
+  without stochastic depth: \texttt{vit\_adam\_train\_step.mlir} and the f32
+  \texttt{vitin\_*} steps emit these nodes, the \texttt{drop} renders at a
+  cotangent chain carrying drop-path sites this statement does not name; the
+  bf16 renders emit \texttt{*GradBBf16}, tied per operator kind. The chain
+  cotangents are the certified backwards of the lifted block and head
+  (\texttt{vitBlockCotInB\_eq\_vjp}, \texttt{vitCotB2outB\_eq\_vjp}).
 \end{theorem}
 
 \begin{proof}
@@ -12300,7 +12357,10 @@ depth are spelled \texttt{wx}, \texttt{clip} and \texttt{drop}, EMA is a
 variant too, and \texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropbf16} is the render
 that carries all four at once on top of AdamW and the four-way
 all-reduce. It is the artifact the run used, and it is what makes the
-pair below one-variable in recipe. Mixup, CutMix and repeated
+pair below one-variable in recipe. Theorem~\ref{thm:vit_step_tie} is stated
+on the f32, drop-free chain; this render's gradient nodes are the bf16
+\texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
+carries the drop-path sites. Mixup, CutMix and repeated
 augmentation never enter the graph at all, because they are data-side
 and ride the shim. It runs with:
 
@@ -17077,8 +17137,10 @@ and bounded:
     real silicon (\S~\ref{sec:precision}) rather than a bare assumption.
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
-network's exact reverse-mode derivative over $\mathbb{R}$, up to one
-printer, one lowerer, and floating point. Where a conventional generator leaves
+network's exact reverse-mode derivative over $\mathbb{R}$ --- at a smooth
+point, at one replica, in f32, on the chain without drop-path --- up to one
+printer, one lowerer, the StableHLO semantics the denotation assumes, and
+floating point. Where a conventional generator leaves
 thousands of lines of string-building linked to the proof by nothing at all,
 the unproven surface here is a single printer, tested end to end.
 
@@ -17098,17 +17160,25 @@ per-operator bridge is the demonstration, and the verified trainers run the
 full construction. Each reads a single committed \texttt{.mlir} holding its
 entire training step, forward through backward through the parameter update,
 and that file is the printout of one graph whose denotation a faithfulness theorem
-proves equal to the certified loss-descent step, output by output. A companion
+proves, output by output, equal to the certified per-layer step: each parameter
+update is $\theta - \mathrm{lr} \cdot (\text{that layer's certified Jacobian}
+\cdot \text{the chain cotangent})$. A companion
 \emph{tie} theorem per network (\texttt{mlp\_train\_step\_tied\_certified},
 \texttt{r34\_net\_tiedB}, \texttt{vit\_net\_tied\_certified} and their peers) then
 closes the gap a per-output bridge leaves open: the cotangent each parameter
 update consumes is the one the network's own backward pass delivers at
 that site, threaded through the real forward activations, so each update is
 one composed equation rooted at the proven forward rather than a quantifier
-over a free cotangent. All twelve chapter networks are tied this way, from the MNIST
-linear classifier to depth-12 ViT-Tiny, and each deep net's rendered
-block-backward is pinned to that block's certified VJP
-(\texttt{vitBlockBackV\_eq\_transformerBlockV\_vjp} and its peers). The axiom
+over a free cotangent. All thirteen chapter networks are tied this way, from the MNIST
+linear classifier to depth-12 ViT-Tiny, and each deep net's chain cotangent
+is pinned to its block's certified VJP
+(\texttt{r34IdCotIn\_eq\_vjp}, \texttt{vitBlockCotInB\_eq\_vjp} and their peers).
+For the seven ImageNet networks one more theorem composes the two halves: at
+the tie's own cotangent, every parameter gradient node is
+$\partial L/\partial\theta$ of the whole network, for any loss $L$ with a
+gradient at the logits and in particular for the label-smoothed cross-entropy
+the artifacts emit (\texttt{r34\_net\_lossGrad} and its peers; one replica,
+f32, the chain without drop-path). The axiom
 audit re-derives every tie under the same three axioms, and CI prints a green
 cell for a network only when its tie capstone is in that closure, so the
 scorecard cannot claim more than the kernel checked. What stays trusted is
@@ -17120,11 +17190,15 @@ what $[\![\cdot]\!]$ says it does.
 bridge is unconditional, holding at every input, and those are BatchNorm and
 LayerNorm (given $\varepsilon > 0$), GELU, swish, sigmoid, softmax, and
 attention. For the kinked operators, which are ReLU, ReLU6 and max-pool, it
-holds only at a \emph{smooth point}, where no pre-activation sits exactly on
-the kink (zero for ReLU, $0$ or $6$ for ReLU6, an argmax tie for max-pool).
-The equality is permitted to fail precisely on that measure-zero set, and
-nowhere else. That set is the one irreducible boundary the smooth-point caveats in
-the chapter sections refer to.
+holds only at a \emph{smooth point}: no pre-activation exactly on the kink
+(zero for ReLU, $0$ or $6$ for ReLU6), and every pooling window's maximum
+attained at one cell (\texttt{MaxPool2Smooth}; \texttt{MaxPool3s2Smooth} for
+the ResNets' $3 \times 3$/s2 stem pool). The equality is permitted to fail
+precisely on that set, and nowhere else. For ReLU the set has measure zero;
+for pooling it does not, because an all-zero post-ReLU window attains its
+maximum at every cell, and the whole-net theorems carry the pooling clause as
+a hypothesis at the activations. That set is the one irreducible boundary the
+smooth-point caveats in the chapter sections refer to.
 
 \subsection{Inside a bridge theorem}
 \label{sec:inside_bridge}
