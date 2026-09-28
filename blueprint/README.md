@@ -34,6 +34,15 @@ leanblueprint web              # build HTML → blueprint/web/index.html
 leanblueprint serve            # local web server on :8000
 ```
 
+To review a change before landing it, `scripts/book/blueprint_preview.py` builds the committed
+tree and the working tree side by side (web + PDF each, four minutes) and writes a rendered
+word-diff of the two PDFs, in page order, with renumbering, reflow and page-break moves filtered
+out:
+
+```bash
+python3 scripts/book/blueprint_preview.py --serve 8765   # /tmp/blueprint_preview, then http://<host>:8765/diff.html
+```
+
 ## Structure
 
 ```
