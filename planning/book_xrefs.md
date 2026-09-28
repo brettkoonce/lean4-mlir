@@ -95,8 +95,13 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 
 ## 3. Order of work
 
-Progress: chapter 1 landed 2026-09-28 (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
-pointers). Next: chapter 5, then 2–4, 6–9, Bestiary + appendices.
+Progress (2026-09-28): chapter 1 landed (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
+pointers); chapter 5 landed (→ 317; `chap:residual` 35 → 24, `sec:r34_pjrt` 10 → 4). Next: 2–4,
+then 6–9, then Bestiary + appendices (the Track-4 status table, item (e)).
+
+Lead for the chapter-7 chunk: `jax/MainEfficientNet.lean`'s Imagenette config is wd 1e-3, warmup 5,
+batch 192, while §7.1's verified transcript prints warmup 3 / baseLR 1e-3 — check whether the B0
+reference and verified Imagenette rows are on one recipe before any sentence says they are.
 
 One target chapter per commit, reading its block of `scripts/book/book_xrefs.py` output: chapter 1
 (32 refs, mostly (b)), chapter 5 (35, mostly (c)/(d)), then 2, 3, 4, 6–9, the appendices.

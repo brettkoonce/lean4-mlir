@@ -6487,9 +6487,7 @@ hands each step --- ghost batch norm, on the reference and the verified
 path alike.
 
 \medskip\noindent\textbf{The two paths agree within $0.21$ points on top-1
-on both recipes}, and within $0.24$ on top-5 --- inside the floor
-\S\ref{sec:r34_pjrt} set, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one
-seed per cell. \textbf{And the recipe delta replicates}: A3 beats 2018 by
+on both recipes}, and within $0.24$ on top-5 --- inside the 95\% Wilson interval, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta replicates}: A3 beats 2018 by
 $+1.31$ on the reference and $+1.17$ on the verified path. Agreement at a
 single configuration can be a coincidence of that configuration; a
 difference that reproduces across two independent implementations is harder
@@ -6767,8 +6765,8 @@ Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
 3,925-image validation split. The best epoch reached $89.32\%$. Set that
 against Chapter~\ref{chap:residual}, which ran the same data, the same
 recipe and the same number of epochs through a network with
-$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 over five
-seeds. MobileNetV2 gives up three quarters of
+$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 over five seeds
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}). MobileNetV2 gives up three quarters of
 a point of top-1 --- less than one run's own $\pm 0.97$ interval --- picks
 up a fifth of a point of top-5, and does it in thirty-five minutes
 against forty-seven.
@@ -6787,10 +6785,9 @@ reimplementation of the network this chapter describes. It executed
 \texttt{verified\_mlir/mobilenetv2\_adam\_train\_step.mlir}, which is
 \texttt{pretty(provenGraph)} off the renderer. Every depthwise
 convolution in it backpropagates by the rule
-Theorem~\ref{ax:depthwiseHasVJP3} proves, every pointwise convolution
-by Chapter~\ref{chap:cnn}'s, every BatchNorm by Chapter~\ref{chap:bn}'s,
-and every residual skip by Chapter~\ref{chap:residual}'s additive
-fan-in. Those per-operation theorems are unconditional and hold at any
+Theorem~\ref{ax:depthwiseHasVJP3} proves, every pointwise convolution by Theorem~\ref{ax:conv2dHasVJP3}, every
+BatchNorm by Theorem~\ref{thm:bnHasVJP}, and every residual skip by
+Theorem~\ref{thm:residualHasVJP}. Those per-operation theorems are unconditional and hold at any
 width or depth, so they cover all seventeen blocks.
 
 One scope note, because this is the chapter where the distinction starts
@@ -6823,9 +6820,8 @@ Chapter~\ref{chap:se} does fold EfficientNet-B0 over all inputs with
 swish is smooth everywhere. The axis that moved here was the depth, from
 two blocks to seventeen, and not the pointwise-to-global one.
 
-The three compile lines are the same three Chapter~\ref{chap:residual}
-showed, and for the same reason. \texttt{@mobilenetv2\_fwd\_eval} is a
-separate forward because BatchNorm evaluates differently than it trains,
+The three compile lines are every BatchNorm net's three:
+\texttt{@mobilenetv2\_fwd\_eval} is a separate forward because BatchNorm evaluates differently than it trains,
 and \texttt{running-stats BN: 52 layers, 34112 stat floats} is the driver
 threading the running averages out of the train step and into it. This
 network has 52 BatchNorms against ResNet-34's 36, which is what a block
@@ -6922,10 +6918,9 @@ takes the expanded width \texttt{mid} directly rather than the ratio
 it is parameterized, and the \texttt{NB} suffix says the three convs
 carry no bias, since the BatchNorm immediately after each one
 subsumes it. The VJP for the whole block composes the depthwise VJP
-from this chapter with the standard conv2d VJPs from
-Chapter~\ref{chap:cnn}, the BN VJP from Chapter~\ref{chap:bn}, and
-the additive fan-in for the residual from
-Chapter~\ref{chap:residual}. Once again there is no new math beyond
+from this chapter with the conv2d VJP (Theorem~\ref{ax:conv2dHasVJP3}), the BN VJP
+(Theorem~\ref{thm:bnHasVJP}) and the residual's additive fan-in
+(Theorem~\ref{thm:residualHasVJP}). Once again there is no new math beyond
 the foundation rules, only the depthwise primitive plus composition.
 
 \prosesection{Stacking the blocks}
@@ -7519,8 +7514,8 @@ too: \texttt{LEAN\_MLIR\_VARIANT=rms} loads
 \S\ref{sec:mnv2_runit} has the run: 80 epochs at about 26
 seconds each on one RTX 4060 Ti, finishing at \textbf{89.25\%}
 top-1 and \textbf{98.68\%} top-5 on Imagenette's 3,925-image
-validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at
-$89.99 \pm 0.32$ on the same data and the same recipe, that is
+validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at $89.99 \pm 0.32$
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) on the same data and the same recipe, that is
 \textbf{0.74 points of top-1} for \textbf{9.5$\times$ fewer parameters}
 (2.24M against 21.3M). That is the depthwise-separable trade, and on
 this evidence it is a better one than the architecture's reputation
@@ -7561,8 +7556,7 @@ in it.
   BN-after-conv pairs. Each one still proves its VJP via
   Theorem~\ref{thm:bnHasVJP}.
 
-\item \textbf{Final loss plateaus near 0.50} again, and for the same reason
-  it did in Chapter~\ref{chap:residual}. The label-smoothing floor at
+\item \textbf{Final loss plateaus near 0.50} again. The label-smoothing floor at
   $\varepsilon = 0.1$ over ten classes is about $0.485$, so this run has
   essentially converged rather than stalled.
 \end{itemize}
@@ -7833,9 +7827,9 @@ def main (argv : List String) : IO Unit :=
 
 \noindent \texttt{slug} names
 \texttt{verified\_mlir/mobilenetv2in\_<variant>\_train\_step.mlir}, the
-rendered graph, and \texttt{shimScript} names this net's own augmentation
-shim rather than ResNet-34's, both for the reasons
-\S\ref{sec:r34_pjrt} gives. The head is the only parameter shape that
+rendered graph, and \texttt{shimScript} names this net's own augmentation shim rather
+than ResNet-34's --- the shim the reference consumes, which is what makes
+the two a matched pair (\S\ref{sec:r34_pjrt}). The head is the only parameter shape that
 moves, from $1280 \times 10$ to $1280 \times 1000$, which takes the count
 from 2.24M to \textbf{3,504,872} and matches the reference exactly.
 The BatchNorm layout is required to be byte-identical to the Imagenette
@@ -7902,7 +7896,7 @@ $50{,}000$ validation images. Rows above the first rule differ; rows
 between the rules are held equal by construction.
 
 \medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
-$0.11$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set ($\pm0.39$ at
+$0.11$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Precision is held equal
 as on ResNet-34's pair, so the one asymmetry left above the
 rule is the BatchNorm group, and this is the pair that isolates it.
@@ -7916,10 +7910,7 @@ agree to within the BatchNorm-group effect --- not that the path has been
 shown neutral. Separating those takes a verified render that all-reduces
 the batch statistics, and when this pair trained none did: the only node
 in the graph language that saw across replicas was the gradient
-collective, and every BatchNorm node consumed a single expression. Every
-BatchNorm pair in this book but the three ResNet pairs of
-Chapter~\ref{chap:residual} and MobileNetV4's (\S\ref{sec:mnv4_side_quest}) was
-trained under that asymmetry.
+collective, and every BatchNorm node consumed a single expression.
 
 \globalbntodo
 
@@ -8168,8 +8159,7 @@ regularization and the length the \texttt{full} tier restores.
 \prosesection{The verified path (PJRT)}
 \label{sec:mnv4_pjrt}
 
-The spec is built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's
-and the way \S\ref{sec:r34_pjrt} built ResNet-34's. The trunk is
+The spec follows \S\ref{sec:mnv2_phase4} and \S\ref{sec:r34_pjrt}. The trunk is
 copied unchanged from the Imagenette spec, a \texttt{\#guard} pins every
 parameter shape but the head against it, and the head moves
 $1280{\times}10 \to 1280{\times}1000$, taking the count from
@@ -8281,8 +8271,7 @@ normalizes over the $512$-image shard its accumulation hands each step,
 and the verified render all-reduces to the same $512$.
 
 \medskip\noindent\textbf{The two paths agree to $0.11$ points on top-1
-and $0.16$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set
-($\pm0.37$ at $77\%$ on $50{,}000$ images), at one seed each. Precision
+and $0.16$ on top-5}, inside the 95\% Wilson interval ($\pm0.37$ at $77\%$ on $50{,}000$ images), at one seed each. Precision
 and the BatchNorm group are both held equal, so nothing above the rule
 but the lowering separates the columns.
 
@@ -8947,9 +8936,8 @@ EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & 89.96\% & 98.45
 
 \noindent Step time is the epoch wall-clock divided by 295 batches, so it
 includes each epoch's validation pass. MLIR sizes are the committed
-\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units. ResNet-34's
-accuracies are the five-seed means of \S\ref{sec:r34_ablation} and its
-times are one of those seeds' (\S\ref{sec:r34_runit}); the other two rows
+\texttt{<slug>\_adam\_train\_step.mlir} in 1000-byte units. ResNet-34's accuracies are the five-seed means of \S\ref{sec:r34_ablation}
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) and its times are one of those seeds' (\S\ref{sec:r34_runit}); the other two rows
 are one run each.
 
 \begin{itemize}
@@ -9360,8 +9348,7 @@ them is bf16 batch-shape noise. Against the in-training figure the verified
 path's $76.878\%$ is $-0.30$, the $\Delta$ the curve table below carries.
 
 \medskip\noindent\textbf{$-0.27$ points --- and unlike MobileNetV2's pair,
-this one is not a dead heat.} Read against the floor \S\ref{sec:r34_pjrt}
-set, one evaluation at $-0.27$ is not a result: the verified final's 95\%
+this one is not a dead heat.} One evaluation at $-0.27$ is not a result: the verified final's 95\%
 Wilson interval, $[76.51, 77.25]$, contains the reference. What separates
 this pair from MobileNetV2's is persistence. From epoch~51 the verified
 curve sits below the reference at every one of 300 evaluations, and over the
@@ -9675,9 +9662,8 @@ every channel-LayerNorm in it backpropagates by
 Theorem~\ref{thm:chanLNTensor3HasVJP} (the head's vector LayerNorm by
 Theorem~\ref{thm:layerNormVecHasVJP}), every GELU by
 Theorem~\ref{thm:geluHasVJP}, every layer scale by its own diagonal
-adjoint, every depthwise convolution by
-Chapter~\ref{chap:depthwise}'s, and every residual skip by
-Chapter~\ref{chap:residual}'s additive fan-in.
+adjoint, every depthwise convolution by Theorem~\ref{ax:depthwiseHasVJP3}, and every
+residual skip by Theorem~\ref{thm:residualHasVJP}.
 
 \medskip\noindent\textbf{And the fold holds at full depth.}
 \texttt{convNextForwardTChHasVJP} chains the patchify stem, all
@@ -10124,10 +10110,10 @@ every downsample $(96 \to 192 \to 384 \to 768)$, with the heavy
 9-block stage at the $14 \times 14$ / 384-channel resolution. The stem
 is a $4 \times 4$ stride-4 conv (mirrored from ViT's patch-embed), not
 the $7 \times 7$ stride-2 stem of a ResNet, and that is one of the nine
-modernization items listed at the top of the chapter. The same base recipe
-as Chapters~\ref{chap:residual}--\ref{chap:se} (AdamW at $10^{-3}$, cosine
-with a three-epoch warmup, weight decay $10^{-4}$, label smoothing $0.1$)
-keeps the cross-architecture comparison clean.
+modernization items listed at the top of the chapter. The base recipe --- AdamW at $10^{-3}$, cosine with a three-epoch warmup,
+weight decay $10^{-4}$, label smoothing $0.1$ --- is Chapter~\ref{chap:residual}'s
+(\S\ref{sec:r34_ablation} measures each knob), so the comparison across
+architectures is of the architecture.
 
 \textbf{\texttt{.convNextBlockCh c} is one block per line, eighteen of
 them.} \texttt{Ch} names the norm: the LayerNorm inside the block reduces over
@@ -10213,8 +10199,8 @@ ConvNeXt-T       & \textbf{27.83M} & 1{,}019\,KB & 188 ms & 1.2 h & 82.27\% & 96
 \end{tabular}
 \end{center}
 
-\noindent Columns as in Chapter~\ref{chap:se}'s table; ResNet-34's row is
-the five-seed mean of \S\ref{sec:r34_ablation} with one seed's timing.
+\noindent Columns as in Chapter~\ref{chap:se}'s table; ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation}
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing.
 
 \begin{itemize}
   \item \textbf{The largest convnet in the column finishes last among
@@ -10270,8 +10256,7 @@ nothing to bridge past that identity, so the emitted graph is two
 
 \noindent The forward \texttt{multiply \%gls, \%pr} and the backward
 \texttt{multiply \%gls, \%dOut} are the same op against the same $\gamma$
-tensor: a diagonal map is its own transpose, so its VJP is itself. The
-identity skip is the residual fan-in of Chapter~\ref{chap:residual}. The
+tensor: a diagonal map is its own transpose, so its VJP is itself. The identity skip is the residual fan-in (Theorem~\ref{thm:residualHasVJP}). The
 surrounding GELU, LayerNorm, and convolution backwards reuse their bridges.
 Every one is unconditional (the only hypothesis anywhere is LayerNorm's
 $\epsilon > 0$): ConvNeXt has no kinked operator, and neither do
@@ -10568,8 +10553,7 @@ is its EMA; its row here is its raw weights, because that is the arm the
 verified path has.
 
 \medskip\noindent\textbf{The two paths agree to $0.21$ points on top-1
-and $0.11$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set
-($\pm0.34$ at $81\%$ on $50{,}000$ images), at one seed each. This is
+and $0.11$ on top-5}, inside the 95\% Wilson interval ($\pm0.34$ at $81\%$ on $50{,}000$ images), at one seed each. This is
 the chapter where the pair can say more than that, because both
 checkpoints were scored on the same images in the same order, so the
 comparison can be paired instead of read off two intervals. Of the
@@ -10861,9 +10845,9 @@ Attention is where you would expect this to break. What ran is
 softmax in it backpropagates by Theorem~\ref{thm:softmaxHasVJP}, every
 scaled dot-product attention by
 Theorems~\ref{thm:sdpaBackQ_correct}--\ref{thm:sdpaBackV_correct},
-every LayerNorm by Chapter~\ref{chap:layernorm}'s, every GELU by that
-chapter's, and every residual skip by Chapter~\ref{chap:residual}'s
-additive fan-in.
+every LayerNorm by Theorem~\ref{thm:layerNormVecHasVJP}, every GELU by
+Theorem~\ref{thm:geluHasVJP}, and every residual skip by
+Theorem~\ref{thm:biPathMatHasVJP}.
 
 \medskip\noindent\textbf{And the fold holds at every depth.}
 \texttt{vitForwardKVHasVJP} chains the patch embedding, $k$
@@ -12295,8 +12279,8 @@ ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68
 \end{tabular}
 \end{center}
 
-\noindent Columns as in Chapter~\ref{chap:se}'s table; ResNet-34's row is
-the five-seed mean of \S\ref{sec:r34_ablation} with one seed's timing.
+\noindent Columns as in Chapter~\ref{chap:se}'s table; ResNet-34's row is the five-seed mean of \S\ref{sec:r34_ablation}
+(\texttt{runs/2026-09-12-r34-ablation-fp32-seeds/}) with one seed's timing.
 
 ViT-Tiny is the fastest per step by a factor of $1.5$ over the next
 network and the lowest-accuracy by more than thirteen points. That gap
@@ -12358,7 +12342,7 @@ head, with the SDPA backward that produces $dQ,dK,dV$ elided to its comment):
 \noindent Read it against the fan-in: each \texttt{dot\_general} carries one
 of the attention gradients back through its projection ($dQ$ through $W_q$,
 and so on, contracting the model axis), and the two \texttt{add}s sum the
-three. This is the residual fan-in of Chapter~\ref{chap:residual} with three
+three. This is the residual fan-in (Theorem~\ref{thm:residualHasVJP}) with three
 branches instead of one, because attention reads the input thrice, so the
 gradient returns thrice and adds. The softmax-weighted $dQ,dK,dV$ that feed the
 \texttt{dot\_general}s come from the proven \texttt{sdpaBackQ/K/V}, and
@@ -12700,7 +12684,7 @@ images. Rows above the first rule differ; rows between the rules are held
 equal by construction.
 
 \medskip\noindent\textbf{The two paths agree to $0.04$ points on top-1 and
-$0.10$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set ($\pm0.39$ at
+$0.10$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Nothing sits above the
 rule but the lowering itself and what it costs: precision is equal, the
 batch is the reference's own $512$, and there is no BatchNorm to
@@ -13523,8 +13507,8 @@ def resNet50 : NetSpec where
   ]
 \end{verbatim}
 
-The same residual chain rule that's proven for ResNet-34 in
-Chapter~\ref{chap:residual} applies to bottleneck-block ResNets ---
+The residual chain rule (Theorem~\ref{thm:residualHasVJP}) applies to
+bottleneck-block ResNets too ---
 the bottleneck just composes three convolutions instead of two
 inside the residual branch. No new math.
 
@@ -17070,10 +17054,9 @@ bundle these targets, and any one builds on its own:
 
 The scale tier. Six networks train on full ImageNet-1k off the same certified
 renderer as their Imagenette counterparts, in the chapter order Track 3
-uses. A row is a (network, recipe)
-pair rather than a network: ResNet-50 appears twice because
-Chapter~\ref{chap:residual} trains it on two recipes, and the recipe is the
-middle field of the job's own name.
+uses. A row is a (network, recipe) pair rather than a network --- ResNet-50 has
+a row per recipe --- and the recipe is the middle field of the job's own
+name.
 
 \begin{center}
 \begin{tabular}{@{}lll@{}}
