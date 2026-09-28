@@ -205,9 +205,9 @@ keeps the audit reproducible until they land.
 - **The remaining theorems in the proof suite** (downstream compositions,
   `_diff` smoothness lemmas, `_eq_compose` rewrites, the per-leaf ties beneath
   each whole-net chain). `tests/AuditAxioms.lean` prints the axiom closure of
-  all 1,596 of them on every proof-path push; this directory re-checks 87 of
-  them with an independent kernel. The gap between those two numbers is
-  deliberate: what the comparator adds is a second, non-elaborator opinion, and
+  every one of them on every proof-path push (count its `#print axioms`
+  lines); this directory re-checks 87 of them with an independent kernel. The
+  gap between the two is deliberate: what the comparator adds is a second, non-elaborator opinion, and
   a second opinion on the advertised set plus the calculus floor it rests on is
   the claim being made. It is not a claim that 87 is all that is proved.
 - **`noncomputable def` *witnesses*** themselves like `vitFullHasVJP`,

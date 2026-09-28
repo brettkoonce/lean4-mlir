@@ -14,7 +14,7 @@ Shrinking `c` pulls the global Lipschitz `L = ∏‖Wᵢ‖₂` down (`L ≤ c³
 certified radius `m/(√2·L)`) — at the cost of clean accuracy. The verified cross-entropy
 gradient stays in the proven kernel; the projection is host-side weight rescaling only.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-spectral data`
+Run (GPU): `.lake/build/bin/mnist-mlp-spectral data`
 -/
 
 def mlpSpectralConfig : VerifiedConfig where

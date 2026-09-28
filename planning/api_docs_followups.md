@@ -84,10 +84,10 @@ Each row's landing rewrites these sites to the new statement.
 
 | D1 row | Sites left verbatim |
 |---|---|
-| small-CNN dense heads | **landed** (Lean + the four fold files + CnnRender + blueprint thm:cnn_fold / cifar_fold / cifar8_step_tie / cifar8bn_step_tie). Still open: SgdDescentCnn "weights and biases via the MLP rungs" needs bias descent (MLP rungs omit bias columns) |
+| small-CNN dense heads | **landed** (Lean + the four fold files + CnnRender + blueprint thm:cnn_fold / cifar_fold / cifar8_step_tie / cifar8bn_step_tie). Bias descent landed too (`f7dd0419`, `SgdDescent/MlpBias`) |
 | nCls for B0 | EfficientNetStepTieG (module + head), EfficientNetFullWholeBackCertifiedTie title, B0 Sync files, VerifiedNetsCore:909 claim ceiling, LeanMlir.lean "the ImageNet head its artifacts run" |
 | nCls for ViT (+ `ty [10]`) | **landed**: both ViT-Tiny capstones bind `nCls`, `ty [nClasses]`, blueprint thm:vitTinyHasVJP_correct / thm:vit_whole_back and the §9 prose. SpecVJP's `Vec 10` is the Imagenette spec's own head, kept |
-| MaxPool live-cell predicate | **landed** (2×2 and the 3×3/s2 stem pool): CNN.lean `MaxPool2Smooth` docstring, SgdDescentCnn module pool margin, TrainedCnnWitness `h_mp` bullet (generator), StableHLO/Basic `maxPoolBack` comments, blueprint thm:cnn_sgd_descends. Open: "measure-zero" for post-ReLU pooling (all-zero windows still fail) |
+| MaxPool live-cell predicate | **landed** (2×2 and the 3×3/s2 stem pool): CNN.lean `MaxPool2Smooth` docstring, SgdDescentCnn module pool margin, TrainedCnnWitness `h_mp` bullet (generator), StableHLO/Basic `maxPoolBack` comments, blueprint thm:cnn_sgd_descends. "Measure-zero" for post-ReLU pooling fixed in `formalization.yaml` fidelity (2)–(3); the book's sites stay with §4 |
 | `*CotIn_eq_vjp` MNv4 | **landed**: StepTieB module paragraph + `mnv4_net_tiedB` docstring name the five lemmas; WholeBackCertifiedTieB header has the train-step paragraph |
 | `*CotIn_eq_vjp` ConvNeXt | **landed**: "certified loss-descent step" / "certified ∂Loss/∂θ" → `θ − lr·(certified per-layer Jacobian · chain cotangent)` + the cotangent lemmas, in ConvNeXtStepTie (module, block, `cnx_net_tied_certified`), `cnx_net_tiedGB`, ConvNeXtRender, ConvNeXtFold section header |
 | `*CotIn_eq_vjp` ViT | **landed**: `vit_net_tied_certified`, `vit_net_tiedGB` and the ViTFold header state the per-layer form and name `vitBlockCotInAtMHV_eq_vjp` / `vitCotB2outV_eq_vjp` (batched `*B_eq_vjp`) |
@@ -97,31 +97,42 @@ Also open: slice I dropped eight unchecked "3-axiom-clean" claims; the audit is 
 
 ## 6. Leads for a correctness pass (no false theorem found)
 
-- `vit-fwd-b-tie` compares `vitFwdRenderB "vit_fwd"` against `vit_fwd.mlir`, which
-  `vitFwdRenderB` itself writes — the gate only catches non-determinism.
-  (`convnext-fwd-b-tie` still compares against the other chain.)
-- `MlirCodegen` ignores `pad := .valid` on `conv2d`/`convBn` and always applies ReLU after
-  `convBn` (`convBnAct` is read only by the JAX emitter).
-- MobileNetV2FullPaperEval states the eval forward per example; `mobilenetv2_fwd_eval.mlir` is
-  batched (32×150528). Check how "diff line for line" is text-tied.
-- No forward statement covers: `mnv4{,in}_fwd_eval` (frozen stats), `mnv4in_fwd_eval_s256`, the
-  `%do` dropout variants (`mnv4in_emaacc*`, `mobilenetv2in_rmsdp64wxdols0*`).
-- MNv2 stem and head segments of the train-step chain (`mnv2HeadCotBlk`, `mnv2StemCotN/C`) have
-  no VJP tie; only the four block-level `*CotIn_eq_vjp` exist.
-- No parameter-level `pdiv (loss ∘ net)` statement for R34/R50; the capstones reach the certified
-  block backwards only through `*CotIn_eq_vjp` under `R34/R50*SmoothAt` + positive ε.
+Still open (2026-09-28): the float-tier items, SpecVJP's canonical witnesses, the float descent
+rungs' scope, and the certificates' `hp` — all report-or-reword, none a Lean gap.
+
+
+- ~~`vit-fwd-b-tie` compares `vitFwdRenderB "vit_fwd"` against `vit_fwd.mlir`, which
+  `vitFwdRenderB` itself writes~~ **done** `66e90873`: it ties the per-example chain to the
+  committed bytes; both fwd-b-ties run in `proofs.yml`.
+- ~~`MlirCodegen` ignores `pad := .valid` on `conv2d`/`convBn` and always applies ReLU after
+  `convBn`~~ **guarded** `ca5eb513`: `MlirCodegen.checkSupported` refuses both; no committed
+  artifact comes from this path. Implement when a net first needs either.
+- ~~MobileNetV2FullPaperEval states the eval forward per example; the artifact is batched~~
+  **done** `29bb72f7`: stem, head and each block kind text-guarded, and the module reduces only
+  over `[2, 3]`.
+- ~~No forward statement covers the MNv4 evals or the `%do` dropout variants~~ **done**
+  `8211e3ca` (MNv4 eval at any size, MNv4/MNv2 `%do` f32 forwards) and `2d361928` (B0's
+  `*do*`/`*drop*` forwards, `EfficientNetFullB0Drop`).
+- ~~MNv2 stem and head segments of the train-step chain have no VJP tie~~ **done** `8eacd2da`
+  (`mnv2HeadCotBlk_eq_vjp`, `mnv2StemCotC_eq_vjp`).
+- ~~No parameter-level `pdiv (loss ∘ net)` statement~~ **done for all seven nets**:
+  `*_net_lossGrad` (R34 `106a15b1`, R50 `c3bd872b`, MNv2 `72d284b9`, MNv4 `d91f281e`, B0
+  `01576a15`, ConvNeXt `8e59f946`, ViT `df2a20d2`) — every parameter gradient node is ∂L/∂θ for
+  any `L` with gradient `g` at the logits, with a smoothed-CE corollary per net (R50 also BCE).
 - No whole-net `FloatClose` fold; `floatClose_dense`, `_flatConvMixed`, `_depthwise`,
   `_r34_stages` unused, `floatClose_bn` used by no net proof; FloatSubnormalBridge lemmas unused,
   no binary32 `FaithfulFloatModel`.
 - Seven SpecVJP `*VerifiedHasVJP` and `mlpHasVJP` are `HasVJP.canonical` (say nothing about the
   net); `bnIstd_close_at` applied only at V = ε.
-- `tests/AuditAxioms.lean` does not print the four `Bf16Fold` theorems.
+- ~~`tests/AuditAxioms.lean` does not print the four `Bf16Fold` theorems~~ **done** `a8d6bb78`.
 - Float descent rungs: one example, update in ℝ, only the gradient in float;
   TrainedLinearDescent uses exact exp (`fexp := Real.exp`).
 - Certificates: `hp` (every class's smoothed probability strictly inside (0,1) everywhere) is
   strong; the pooled scorecard header's "σ ≤ 2 → 66% test acc" is unchecked prose.
-- `trainAdamPacked` has no callers and runs IREE only; PGD attacks and `smoothCertify` call
-  iree-compile directly (PJRT is the engine).
+- ~~`trainAdamPacked` has no callers and runs IREE only; PGD attacks and `smoothCertify` call
+  iree-compile directly~~ **done**: `trainAdamPacked` removed in `d60b56c8`; PGD and
+  `smoothCertify` open their graphs through `mkSession` (`671257d3`), which also fixed their
+  loss-slot arity on the `mlp`/`cnn` renders. IREE stays as the differential oracle only.
 
 ## 7. Stale facts the process-history sweep surfaced — done 2026-09-27
 

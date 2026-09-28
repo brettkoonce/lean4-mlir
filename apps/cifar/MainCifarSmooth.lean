@@ -11,7 +11,7 @@ noisy copies, run the proof-rendered `cifar_fwd`, Clopper–Pearson lower-bound 
 `σ·Φ⁻¹(p_A)`. Base CNN trained with matched Gaussian augmentation (host-side noise before the
 proof-rendered SGD step).
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/cifar-smooth data`
+Run (GPU): `.lake/build/bin/cifar-smooth data`
 -/
 
 def cifarSmoothConfig : VerifiedConfig where
