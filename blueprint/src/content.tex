@@ -17133,25 +17133,24 @@ XLA-only.
 Several chapters end in a variant that is rendered but is not a Track-4 runner,
 and the section heading says which of three kinds it is: a second recipe, a
 wider or deeper size, or an architecture the book reaches for once. They are
-collected here rather than in the table above because none of them has
-been trained, bar one --- MobileNetV4, run once as a consistency check on its
-pair --- and not because they cannot start. Five of the seven have job
-configs, launch like any Track-4 row and ride in \texttt{lake run imagenet}
-right after their chapter's row; only the two ResNet-50 recipes have none. The
-status column says where each one stands.
+collected here rather than in the table above because they are side quests,
+not because they cannot start. Five of the seven have job configs, launch like
+any Track-4 row and ride in \texttt{lake run imagenet} right after their
+chapter's row; only the two ResNet-50 recipes have none. Each row's section
+says where it stands.
 
 \begin{center}
 \small
 \begin{tabular}{@{}llll@{}}
-\textbf{Target} & \textbf{Variant} & \textbf{Status} & \textbf{Section} \\[2pt]
+\textbf{Target} & \textbf{Variant} & \textbf{Job} & \textbf{Section} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & rendered, EMA + sd; untrained & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{resnet50-imagenet-verified}    & \texttt{a1}       & rendered + own shim; untrained & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{mobilenetv4-imagenet-verified} & Conv-M            & \texttt{mnv4-default-4gpu}; run once, tied to its reference & \S\ref{sec:mnv4_side_quest} \\
-\texttt{convnext-s-imagenet-verified}  & ---               & \texttt{cnxs-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
-\texttt{convnext-b-imagenet-verified}  & ---               & \texttt{cnxb-default-4gpu}, untrained & \S\ref{sec:convnext_sb} \\
-\texttt{vit-s-imagenet-verified}       & ---               & global $512$; \texttt{vits-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
-\texttt{vit-b-imagenet-verified}       & ---               & global $512$; \texttt{vitb-default-g512-4gpu}, untrained & \S\ref{sec:vit_sb} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & --- & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a1} & --- & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{mobilenetv4-imagenet-verified} & Conv-M & \texttt{mnv4-default-4gpu} & \S\ref{sec:mnv4_side_quest} \\
+\texttt{convnext-s-imagenet-verified}  & --- & \texttt{cnxs-default-4gpu} & \S\ref{sec:convnext_sb} \\
+\texttt{convnext-b-imagenet-verified}  & --- & \texttt{cnxb-default-4gpu} & \S\ref{sec:convnext_sb} \\
+\texttt{vit-s-imagenet-verified}       & --- & \texttt{vits-default-g512-4gpu} & \S\ref{sec:vit_sb} \\
+\texttt{vit-b-imagenet-verified}       & --- & \texttt{vitb-default-g512-4gpu} & \S\ref{sec:vit_sb} \\
 \end{tabular}
 \end{center}
 

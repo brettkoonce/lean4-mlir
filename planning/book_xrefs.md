@@ -98,9 +98,12 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 Progress (2026-09-28): chapter 1 landed (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
 pointers); chapter 5 landed (→ 317; `chap:residual` 35 → 24, `sec:r34_pjrt` 10 → 4); chapters 2–4
 landed (→ 314; found ch 1 citing `thm:mlp_fold` for the linear listing, and the §2.4/§3.6 sweep tsvs
-deleted from under their captions — restored); chapters 6–9 landed (→ 313). Next: Bestiary +
-appendices — the Track-4 side-quest table, item (e): its Status column and lead-in already say
-MobileNetV4 was "run once as a consistency check" while §6.6 carries its 100-epoch pair.
+deleted from under their captions — restored); chapters 6–9 landed (→ 313); Bestiary + appendices
+landed — the Bestiary/appendix refs were all pointers, and the Track-4 side-quest table (item (e))
+keeps target / variant / job / section and no status (its "MobileNetV4, run once as a consistency
+check" was already behind §6.6's 100-epoch pair). **The pass is done** (2026-09-28): 335 → 313 refs;
+every cross-chapter ref left is a pointer or a proof step. What remains is the discipline in §0:
+re-read the citing sentences whenever a results section changes, and re-read the front matter.
 
 Closed: `jax/MainEfficientNet.lean`'s Imagenette config (wd 1e-3, warmup 5, batch 192) differs from
 §7.1's verified transcript (warmup 3 / baseLR 1e-3), but ch 7's Imagenette section reports only the
