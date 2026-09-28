@@ -289,6 +289,14 @@ jobs:
         # source-link commit hashes with the workflow green. The HTML directory goes too so a
         # renamed module leaves no orphan page.
         #
+        # ⚠ And the per-module search data (2026-09-28). The pass writes a
+        # `doc/declarations/declaration-data-<module>.bmp` (+ `backrefs-<module>.json`) per module
+        # it renders, and builds declaration-data.bmp by merging EVERY such file on disk — so a
+        # moved or deleted module's file, carried forward by the rolling cache, stayed in the
+        # search index for good: 95 dead LeanMlir modules and 551 declarations whose search hits
+        # and find/ links led to 404s. Every live LeanMlir module is re-rendered below, so its
+        # file comes straight back; only the dead ones stay gone.
+        #
         # ⭐ `Certs:docs` TOO (2026-09-22). `LeanMlir:docs` renders what `LeanMlir.lean` imports,
         # and the blueprint's whole-net ladder — the folds, step ties, seals, sync-BN twins and
         # whole-backward ties, 38 of its 127 nodes — lives in `Certs` roots that LeanMlir.lean
@@ -309,6 +317,7 @@ jobs:
           fi
           grep -n 'readDir' "$ub"
           rm -rf .lake/build/doc/LeanMlir/ .lake/build/doc/LeanMlir.html
+          rm -f .lake/build/doc/declarations/declaration-data-LeanMlir*.bmp .lake/build/doc/declarations/backrefs-LeanMlir*.json
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs
 
@@ -438,9 +447,10 @@ jobs:
           # Certs:docs deploy above, a browser still holding the old index sent every new name
           # to 404.html for days. A query string keyed on the commit makes each deploy's index a
           # new resource to browser and CDN alike; Pages ignores the query and serves the file.
+          # The site-root 404.html fetches the same index to find where a moved docs page went.
           if [ -d public/docs ]; then
             v=${GITHUB_SHA::8}
-            grep -rl --include='*.html' --include='*.js' 'declaration-data.bmp' public/docs \
+            grep -rl --include='*.html' --include='*.js' 'declaration-data.bmp' public/docs public/404.html \
               | xargs -r sed -i "s|declaration-data\.bmp|declaration-data.bmp?v=$v|g"
             echo "declaration index versioned as ?v=$v in $(grep -rl --include='*.html' --include='*.js' "declaration-data.bmp?v=$v" public/docs | wc -l) files"
           fi

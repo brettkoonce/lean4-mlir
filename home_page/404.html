@@ -33,6 +33,7 @@
 
 <h1>404</h1>
 <p class="lede">There is no page at this address.</p>
+<div id="moved" hidden></div>
 
 <nav class="doors">
   <a href="/">Start<span>the tour: four commands, one number each</span></a>
@@ -45,6 +46,48 @@
 automatically; if one landed on this page, the path itself has moved. The book's pages are
 <code>/blueprint/chap-*.html</code> and <code>/blueprint/app-*.html</code>; a Lean declaration is
 found through the <a href="/docs/search.html">API docs search</a>.</p>
+
+<script>
+// A missing /docs/ page is usually a module that moved (the 09-26 placement cleanup moved 71).
+// Look it up in doc-gen4's declaration index, which lists every module and declaration of the
+// current deploy: the #anchor's declaration first, then a module with the same last name
+// segment, or one split into a folder (`FooBar` → `Foo/Bar`, `Foo` → `Foo/Basic`). One hit
+// redirects, several are listed.
+// The workflow versions the index URL below with ?v=<sha>, as it does in docs/.
+(function () {
+  var m = location.pathname.match(/^\/docs\/(.+)\.html$/);
+  if (!m) return;
+  var box = document.getElementById("moved");
+  var say = function (html) { box.innerHTML = html; box.hidden = false; };
+  var link = function (u) { return "/docs/" + u.replace(/^\.\//, ""); };
+  var decl = decodeURIComponent(location.hash.slice(1));
+  var old = m[1].split("/");
+  var last = old[old.length - 1];
+  say("<p class=\"meta\">Looking for where this page moved&hellip;</p>");
+  fetch("/docs/declarations/declaration-data.bmp")
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var d = decl && data.declarations[decl];
+      if (d) { location.replace(link(d.docLink)); return; }
+      var hits = Object.keys(data.modules).filter(function (name) {
+        var s = name.split("."), a = s[s.length - 2], b = s[s.length - 1];
+        return s[0] === old[0] && (b === last || a + b === last || (b === "Basic" && a === last));
+      });
+      if (hits.length === 1) {
+        location.replace(link(data.modules[hits[0]].url) + location.hash);
+      } else if (hits.length > 1) {
+        say("<p>This module has moved. It is now one of:</p><ul>" + hits.map(function (h) {
+          return "<li><a href=\"" + link(data.modules[h].url) + location.hash + "\"><code>" + h + "</code></a></li>";
+        }).join("") + "</ul>");
+      } else {
+        say("<p class=\"meta\">The module <code>" + old.join(".") +
+          "</code> is not in the current API docs: it was merged, removed, or moved out of the documented libraries. " +
+          "The <a href=\"/docs/search.html\">API docs search</a> finds a declaration by name.</p>");
+      }
+    })
+    .catch(function () { box.hidden = true; });
+})();
+</script>
 
 </body>
 </html>
