@@ -43,6 +43,17 @@ out:
 python3 scripts/book/blueprint_preview.py --serve 8765   # /tmp/blueprint_preview, then http://<host>:8765/diff.html
 ```
 
+Two censuses read the book against the tree. `scripts/book/book_xrefs.py` lists every
+cross-reference next to the sentence that makes it, so a `\S\ref` that asserts a result rather
+than naming a section can be found (`planning/book_xrefs.md` has the rule). `scripts/book/book_listings.py`
+matches every `verbatim` listing to the file it quotes and prints each quoted unit the file no
+longer has — run it after any change to a spec, config or driver the book shows:
+
+```bash
+python3 scripts/book/book_xrefs.py --summary
+python3 scripts/book/book_listings.py --summary   # DRIFT rows are listings the code has moved under
+```
+
 ## Structure
 
 ```
