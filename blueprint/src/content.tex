@@ -1725,11 +1725,12 @@ def linearConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  linearVerified.trainLinear linearConfig (argv.head?.getD "data")
+  linearVerified.toNet.trainLinear linearConfig (argv.head?.getD "data")
 \end{verbatim}
 
 That is \texttt{apps/mnist/MainMnistLinearVerified.lean}, all of it. One
-spec, one config, one call. The GPU backend does not appear in it at all,
+spec, one config, one call: \texttt{toNet} lowers the spec to the runtime
+net the driver consumes, and \texttt{trainLinear} trains it. The GPU backend does not appear in it at all,
 because the shim is opened with \texttt{dlopen} at run time.
 
 Notice also what \texttt{linearConfig} does not carry: a learning rate.
@@ -1862,8 +1863,8 @@ the execution oracle that checks the result on the GPU.
 \section{What's inside \texttt{.train}?}
 \label{sec:mlp_inside_train}
 
-The section above treated \texttt{linearVerified.trainLinear} as a black
-box. You named the network, you named the epochs and the batch size, and
+The section above treated \texttt{linearVerified.toNet.trainLinear} as a
+black box. You named the network, you named the epochs and the batch size, and
 training happened. That is deliberately the user-facing interface, but
 there is no magic underneath it. The driver is ordinary Lean in
 \texttt{LeanMlir/Verified/Train.lean}, and the interesting thing about it
@@ -2560,7 +2561,7 @@ def mlpConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  mlpVerified.train mlpConfig (argv.head?.getD "data")
+  mlpVerified.toNet.train mlpConfig (argv.head?.getD "data")
 \end{verbatim}
 
 That is \texttt{apps/mnist/MainMnistMlpVerified.lean}. The only
@@ -3399,7 +3400,7 @@ def cnnConfig : VerifiedConfig where
 
 -- 4
 def main (argv : List String) : IO Unit :=
-  cnnVerified.train cnnConfig (argv.head?.getD "data")
+  cnnVerified.toNet.train cnnConfig (argv.head?.getD "data")
 \end{verbatim}
 
 Walking through the numbered sections:
@@ -3445,8 +3446,8 @@ inside the reach of the proofs, so it cannot be set to one thing and
 trained at another.
 
 \textbf{4. The program entry point.} One line, same as the MLP
-chapter. \texttt{cnnVerified.train cnnConfig} replaces
-\texttt{mlpVerified.train mlpConfig}. That's the whole diff.
+chapter. \texttt{cnnVerified.toNet.train cnnConfig} replaces
+\texttt{mlpVerified.toNet.train mlpConfig}. That's the whole diff.
 
 \paragraph{What \texttt{.conv}, \texttt{.maxPool} and \texttt{.flatten}
 contribute.} Three more arms on Chapter~\ref{chap:tensor}'s
