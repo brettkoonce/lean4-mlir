@@ -17845,11 +17845,17 @@ the explicit constant \(2a^2/(1-2aD)\), with no Hessian, because the softmax
 ratio sandwich that powers the float budgets turns out to be the Lipschitz
 engine too. With the float budget fused in, so that the step's
 \(\eta\) is the proven binary32 gradient accuracy rather than an
-assumed parameter, this closes end-to-end for the linear classifier
+assumed parameter, this closes for the linear classifier
 (\texttt{linear\_float\_sgd\_descends}), the entire MLP
 (\texttt{mlp\_\{output,hidden,input\}\_float\_sgd\_descends}), and the
 entire Chapter-3 CNN, both conv weights and biases
-(\texttt{cnn\_conv\{1,2\}\_float\_sgd\_descends}). The \(\mathbb{R}\)-side
+(\texttt{cnn\_conv\{1,2\}\_float\_sgd\_descends}). What is rounded in
+those statements is the gradient and nothing else: each is one example,
+the update \(\theta - \alpha\,\tilde g\) is taken in \(\mathbb{R}\), the
+loss it decreases is the real one, and the \(\exp\) inside the softmax
+enters through an accuracy hypothesis that the trained-weight instance
+(\texttt{trained\_linear\_sgd\_descends\_concrete}) discharges at the
+exact \(\exp\). The \(\mathbb{R}\)-side
 argument reaches one layer further:
 \texttt{cifar8\_lastConv\_sgd\_descends} is the first non-MNIST descent. It is
 CIFAR-8's last conv, proved as an instance of the CNN lemma at its
