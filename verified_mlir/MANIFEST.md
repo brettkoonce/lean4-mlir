@@ -120,7 +120,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 42 |
+| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 44 |
 | `cnn_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 42 |
 
 ## `convnext` — 11 artifacts, 9.2 MB
