@@ -333,10 +333,29 @@ jobs:
           python3 -m venv .venv
           .venv/bin/pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)"
 
+      - name: Fetch Mathlib (clone + oleans)
+        run: lake exe cache get || true
+
+      - name: Cache native objects (the oracle exes' .c.o, Mathlib's included)
+        # The build below was ~95% `clang` on Mathlib's C: `cache get` ships oleans and .c files but
+        # no objects, and the certs cache is oleans only, so every run recompiled ~3,300 modules
+        # (~1,800 CPU-s, 10–16 min) to link the oracle exes. Lake keys each object on its .c's hash,
+        # so a restored object is used exactly when it would have been rebuilt byte for byte, and a
+        # changed module rebuilds alone. Restored AFTER the clone above: into .lake/packages before
+        # it, lake would find a non-git directory where it wants a checkout. Rolling key like
+        # certs.yml's; cache-prune.yml keeps the newest `lake-oracle-` entry.
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/packages/*/.lake/build/ir/**/*.c.o.*
+            .lake/build/ir/**/*.c.o.*
+          key: lake-oracle-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-oracle-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
+
       - name: Build the oracle exes (phase 3 at the root, phase 2 in jax/)
         run: |
           set -e
-          lake exe cache get || true
           oracles() { grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | grep '^vjp-oracle-' | tr '\n' ' '; }
           lake build $(oracles)
           (cd jax && lake build $(oracles))

@@ -46,7 +46,7 @@ on:
     # promptly rather than sitting until the next schedule tick.
     workflows: ["Certify Corpus", "Certify Heavy Corpus", "Verify Proofs",
                 "Comparator (independent kernel re-check)", "JAX subproject",
-                "Compile blueprint"]
+                "Compile blueprint", "IREE"]
     types: [completed]
   schedule:
     # Backstop: catches anything the workflow_run trigger missed (renamed workflows,
