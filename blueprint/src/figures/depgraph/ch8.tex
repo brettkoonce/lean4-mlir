@@ -1,22 +1,34 @@
 \begin{center}
-\begin{tikzpicture}[x=1pt,y=1pt, every node/.style={inner sep=1.50pt, font=\fontsize{7.00}{8.40}\selectfont\ttfamily}]
-  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=48.0pt, minimum height=12.7pt] at (125.9pt,157.4pt) {\hyperref[ax:geluScalar]{geluScalar}};
-  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=69.0pt, minimum height=12.7pt] at (73.9pt,119.6pt) {\hyperref[ax:geluScalarDeriv]{geluScalarDeriv}};
-  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=43.8pt, minimum height=12.7pt] at (21.9pt,81.9pt) {\hyperref[ax:pdiv_gelu]{pdiv\_gelu}};
-  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=69.0pt, minimum height=12.7pt] at (247.9pt,44.1pt) {\hyperref[thm:layerNormHasVJP]{layerNormHasVJP}};
-  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=48.0pt, minimum height=12.7pt] at (107.9pt,44.1pt) {\hyperref[thm:geluHasVJP]{geluHasVJP}};
-  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=85.8pt, minimum height=12.7pt] at (195.9pt,6.4pt) {\hyperref[thm:convnext_whole_back]{convnext\_whole\_back}};
-  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=4.0pt, align=center, minimum width=77.4pt, minimum height=12.7pt] at (116.9pt,81.9pt) {\hyperref[thm:convnext_step_tie]{convnext\_step\_tie}};
-  \draw[->, >=stealth, black!70, line width=0.40pt] (117.8pt,150.8pt) .. controls (110.8pt,146.0pt) and (100.5pt,138.9pt) .. (91.6pt,132.8pt) -- (82.1pt,126.3pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (101.4pt,154.6pt) .. controls (80.7pt,151.7pt) and (51.5pt,144.5pt) .. (33.9pt,126.0pt) .. controls (27.3pt,119.0pt) and (24.2pt,108.7pt) .. (22.9pt,100.0pt) -- (21.9pt,88.7pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (132.0pt,150.7pt) .. controls (145.6pt,137.1pt) and (176.4pt,102.2pt) .. (160.9pt,75.5pt) .. controls (155.8pt,66.7pt) and (147.1pt,60.3pt) .. (138.3pt,55.6pt) -- (127.9pt,51.0pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (136.5pt,150.5pt) .. controls (145.1pt,145.2pt) and (157.0pt,136.6pt) .. (163.9pt,126.0pt) .. controls (184.8pt,94.1pt) and (192.1pt,48.8pt) .. (194.6pt,24.5pt) -- (195.6pt,13.1pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (125.2pt,150.6pt) .. controls (123.9pt,139.7pt) and (120.9pt,115.7pt) .. (118.9pt,99.4pt) -- (117.6pt,88.4pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (65.8pt,113.0pt) .. controls (58.8pt,108.2pt) and (48.5pt,101.1pt) .. (39.6pt,95.0pt) -- (30.1pt,88.5pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (72.3pt,113.0pt) .. controls (70.1pt,104.5pt) and (67.2pt,87.9pt) .. (72.9pt,75.5pt) .. controls (76.1pt,68.4pt) and (82.0pt,62.3pt) .. (87.9pt,57.5pt) -- (97.1pt,51.0pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (80.6pt,113.0pt) .. controls (86.1pt,108.4pt) and (94.2pt,101.8pt) .. (101.3pt,95.9pt) -- (110.1pt,88.5pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (35.7pt,75.1pt) .. controls (48.6pt,69.8pt) and (68.0pt,61.7pt) .. (83.4pt,55.3pt) -- (93.8pt,51.0pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (239.8pt,37.5pt) .. controls (232.8pt,32.7pt) and (222.5pt,25.6pt) .. (213.6pt,19.5pt) -- (204.1pt,13.0pt);
-  \draw[->, >=stealth, black!70, line width=0.40pt] (122.0pt,37.4pt) .. controls (135.2pt,32.0pt) and (155.0pt,24.0pt) .. (170.8pt,17.5pt) -- (181.5pt,13.2pt);
+\begin{tikzpicture}[x=1pt,y=1pt, every node/.style={inner sep=1.45pt, font=\fontsize{6.77}{8.12}\selectfont\ttfamily}]
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=46.4pt, minimum height=12.3pt] at (65.8pt,186.6pt) {\hyperref[ax:geluScalar]{geluScalar}};
+  \node[draw=green!50!black, fill=green!15, rectangle, align=center, minimum width=66.7pt, minimum height=12.3pt] at (92.9pt,140.9pt) {\hyperref[ax:geluScalarDeriv]{geluScalarDeriv}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=42.4pt, minimum height=12.3pt] at (37.8pt,95.2pt) {\hyperref[ax:pdiv_gelu]{pdiv\_gelu}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=66.7pt, minimum height=12.3pt] at (426.6pt,140.9pt) {\hyperref[thm:layerNormHasVJP]{layerNormHasVJP}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=83.0pt, minimum height=12.3pt] at (159.7pt,49.5pt) {\hyperref[thm:chanLNTensor3HasVJP]{chanLNTensor3HasVJP}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=46.4pt, minimum height=12.3pt] at (43.6pt,49.5pt) {\hyperref[thm:geluHasVJP]{geluHasVJP}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=83.0pt, minimum height=12.3pt] at (43.6pt,6.2pt) {\hyperref[thm:convnext_whole_back]{convnext\_whole\_back}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=74.9pt, minimum height=12.3pt] at (312.5pt,95.2pt) {\hyperref[thm:convnext_step_tie]{convnext\_step\_tie}};
+  \node[draw=green!50!black, fill=green!15, rectangle, rounded corners=3.9pt, align=center, minimum width=78.9pt, minimum height=12.3pt] at (198.4pt,6.2pt) {\hyperref[thm:convnext_loss_grad]{convnext\_loss\_grad}};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=63.3pt, minimum height=17.2pt, text=gray!60!black, align=center, font=\fontsize{5.32}{6.38}\selectfont\ttfamily] at (200.3pt,95.2pt) {\hyperref[thm:layerNormVecHasVJP]{layerNormVecHasVJP}\\(ch 9)};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=53.7pt, minimum height=17.2pt, text=gray!60!black, align=center, font=\fontsize{5.32}{6.38}\selectfont\ttfamily] at (128.7pt,95.2pt) {\hyperref[thm:transposeHasVJP]{transposeHasVJP}\\(ch 9)};
+  \node[draw=gray!70, dashed, rounded corners=2pt, minimum width=53.7pt, minimum height=17.2pt, text=gray!60!black, align=center, font=\fontsize{5.32}{6.38}\selectfont\ttfamily] at (426.6pt,186.6pt) {2 statements of\\ch 1, 4};
+  \draw[->, >=stealth, black!70, line width=0.39pt] (69.2pt,180.2pt) .. controls (72.8pt,174.4pt) and (78.7pt,164.8pt) .. (83.7pt,156.7pt) -- (89.6pt,147.2pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (63.8pt,180.1pt) .. controls (61.1pt,172.7pt) and (56.1pt,158.9pt) .. (52.3pt,147.0pt) .. controls (48.7pt,135.6pt) and (44.9pt,122.5pt) .. (42.2pt,112.5pt) -- (39.3pt,101.8pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (60.4pt,180.3pt) .. controls (48.4pt,168.1pt) and (19.9pt,136.7pt) .. (9.7pt,103.7pt) .. controls (7.5pt,96.4pt) and (6.9pt,93.7pt) .. (9.7pt,86.6pt) .. controls (13.4pt,77.3pt) and (20.6pt,69.1pt) .. (27.5pt,62.8pt) -- (35.6pt,56.0pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (57.2pt,180.0pt) .. controls (47.3pt,173.3pt) and (31.2pt,161.1pt) .. (21.3pt,147.0pt) .. controls (9.6pt,130.2pt) and (8.6pt,124.0pt) .. (4.9pt,103.7pt) .. controls (0.0pt,77.0pt) and (1.9pt,67.8pt) .. (13.6pt,43.3pt) .. controls (17.7pt,34.8pt) and (24.2pt,26.6pt) .. (30.1pt,20.2pt) -- (37.5pt,12.6pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (81.3pt,180.0pt) .. controls (122.5pt,165.0pt) and (235.8pt,124.0pt) .. (286.9pt,105.4pt) -- (297.1pt,101.7pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (89.2pt,182.6pt) .. controls (152.4pt,174.1pt) and (324.0pt,147.3pt) .. (357.0pt,103.7pt) .. controls (392.3pt,57.1pt) and (298.0pt,28.1pt) .. (240.0pt,15.1pt) -- (229.3pt,12.8pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (86.2pt,134.5pt) .. controls (78.0pt,128.0pt) and (63.9pt,116.9pt) .. (53.1pt,108.3pt) -- (44.6pt,101.5pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (90.4pt,134.5pt) .. controls (85.7pt,124.8pt) and (75.5pt,103.8pt) .. (65.8pt,86.6pt) .. controls (61.9pt,79.5pt) and (57.2pt,71.8pt) .. (53.2pt,65.3pt) -- (47.2pt,56.0pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (121.2pt,134.3pt) .. controls (159.8pt,126.5pt) and (229.5pt,112.7pt) .. (273.2pt,104.0pt) -- (284.0pt,101.8pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (126.7pt,136.3pt) .. controls (165.4pt,131.4pt) and (225.3pt,121.2pt) .. (239.0pt,103.7pt) .. controls (259.3pt,77.8pt) and (230.5pt,40.1pt) .. (211.9pt,20.4pt) -- (204.1pt,12.5pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (38.5pt,88.8pt) .. controls (39.2pt,83.3pt) and (40.4pt,74.5pt) .. (41.4pt,66.6pt) -- (42.9pt,55.8pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (144.0pt,42.9pt) .. controls (125.0pt,36.1pt) and (92.6pt,24.6pt) .. (69.7pt,16.4pt) -- (59.4pt,12.8pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (164.7pt,43.1pt) .. controls (170.0pt,37.4pt) and (178.6pt,28.3pt) .. (185.7pt,20.7pt) -- (193.2pt,12.7pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (43.6pt,43.1pt) .. controls (43.6pt,38.2pt) and (43.6pt,30.6pt) .. (43.6pt,23.7pt) -- (43.6pt,12.7pt);
+  \draw[->, >=stealth, black!70, line width=0.39pt] (64.8pt,42.8pt) .. controls (91.1pt,35.8pt) and (136.2pt,23.7pt) .. (166.7pt,15.6pt) -- (177.2pt,12.8pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.39pt] (192.8pt,86.2pt) .. controls (187.1pt,80.0pt) and (179.0pt,71.3pt) .. (172.3pt,64.0pt) -- (164.8pt,55.9pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.39pt] (134.4pt,86.2pt) .. controls (138.6pt,80.2pt) and (144.5pt,71.9pt) .. (149.5pt,64.8pt) -- (155.8pt,55.9pt);
+  \draw[->, >=stealth, dashed, gray!60, line width=0.39pt] (426.6pt,177.6pt) .. controls (426.6pt,172.2pt) and (426.6pt,165.0pt) .. (426.6pt,158.4pt) -- (426.6pt,147.3pt);
 \end{tikzpicture}
 \end{center}

@@ -13,7 +13,9 @@
 \newcommand{\depgraphlegend}{The statements of this section and what each stands
 on, in the order the proofs compose them. A dashed box is a statement from
 elsewhere (its chapter, or above/below in this one); a double border marks a
-statement every chapter uses; a statement that leans on many others shows only
+statement every chapter uses; one that feeds eight or more boxes of its own
+figure keeps its box, tagged with the count, and drops the arrows; a statement
+that leans on many others shows only
 what fits, and its \texttt{\textbackslash uses} line has the rest; one that
 stands only on what every chapter uses hangs from the figure's shared box, which
 says where those statements live; every box is a link.}
@@ -348,11 +350,12 @@ the program rather than the math alone: that the train step the book emits
 denotes the certified gradient step (a fold for the small nets, a step tie
 at full width), that a hand-written backward chain is the VJP it was
 written to be, that a data-parallel render's step is one device's step on
-the global batch, or that one SGD step decreases the loss. A theorem that
+the global batch, that a gradient node is the loss's derivative in its
+parameter, or that one SGD step decreases the loss. A theorem that
 only restates a counted one at fixed dimensions or over the committed
 spec, and a smooth-point form that a later global theorem superseded, is
 not counted again. Across Chapters~1--9 there are \textbf{44 contracts},
-\textbf{9 witnesses} and \textbf{30 step certificates}. Even Chapter~1's
+\textbf{9 witnesses} and \textbf{37 step certificates}. Even Chapter~1's
 toolkit is used straight away by a proven model, so no chapter is pure
 scaffolding.
 
@@ -366,13 +369,13 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 2 (MNIST: 1D)     & 2  & 2   & 2 & ReLU, MLP; witnesses hand-built and at trained weights; the six emitted updates are the certified step; SGD descends on \(W_0\) \\
 3 (MNIST: 2D)     & 3  & 1   & 2 & conv2d, maxPool2, whole-net MNIST CNN; witness at trained weights; the four conv updates are the certified steps; SGD descends on \(W_2\) \\
 4 (CIFAR: BN)     & 6  & 1   & 5 & per-channel BN (flat $+$ NCHW) and BN at batch statistics; CIFAR whole-nets at 2 convs and at 8 convs $\pm$BN; a hand-built tiny witness; conv and BN updates tied, the 8-conv step tied with and without BN; SGD descends at the last conv \\
-5 (ResNet-34)     & 9  & 3   & 5 & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), the $3 \times 3$/s2 stem pool, whole-net \texttt{cnn}; \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; witnesses: a hand-built BN CNN, and the full-width ResNet-34 and ResNet-50 at $224 \times 224$ (ResNet-50 also at 160) with a non-zero backward; both batched steps tied (ResNet-50 also at BCE), both sync-BN twins, the ResNet-50 backward chain is the VJP \\
-6 (MobileNetV2)   & 6  & 2   & 6 & ReLU6, depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks} at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth; witnesses: full-width V2 and V4 at $224 \times 224$ with a non-zero backward; both steps tied, both sync-BN twins, both backward chains are the VJP \\
-7 (EfficientNet)  & 5  & --- & 3 & swish, sigmoid, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks); step tied, sync-BN twin, the backward chain is the VJP \\
-8 (ConvNeXt)      & 6  & --- & 2 & GELU, LayerNorm, layer-scale, the $4 \times 4$/s4 patchify conv, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks); step tied, the backward chain is the VJP \\
-9 (ViT)           & 6  & --- & 3 & MHSA, block, vector LayerNorm and its block, \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vitFull}; the emitted graph denotes the tower, step tied, the backward chain is the VJP \\
+5 (ResNet-34)     & 9  & 3   & 7 & residual ($+$proj), GAP, stride-2 conv ($+$its weight grad), the $3 \times 3$/s2 stem pool, whole-net \texttt{cnn}; \textbf{full-depth ResNet-34 and ResNet-50} at batch statistics; witnesses: a hand-built BN CNN, and the full-width ResNet-34 and ResNet-50 at $224 \times 224$ (ResNet-50 also at 160) with a non-zero backward; both batched steps tied (ResNet-50 also at BCE), both sync-BN twins, the ResNet-50 backward chain is the VJP, both steps' gradient nodes are the loss's derivative \\
+6 (MobileNetV2)   & 6  & 2   & 8 & ReLU6, depthwise (stride 1$+$2); \texttt{mobilenetv2} at representative depth and at \textbf{all 17 blocks} at batch statistics; \textbf{\mbox{MobileNetV4}} at full depth; witnesses: full-width V2 and V4 at $224 \times 224$ with a non-zero backward; both steps tied, both sync-BN twins, both backward chains are the VJP, both steps' gradient nodes are the loss's derivative \\
+7 (EfficientNet)  & 5  & --- & 4 & swish, sigmoid, SE, whole-net at representative depth, \textbf{full B0} (16 \mbox{MBConv} blocks); step tied, sync-BN twin, the backward chain is the VJP, the gradient nodes are the loss's derivative \\
+8 (ConvNeXt)      & 6  & --- & 3 & GELU, LayerNorm, layer-scale, the $4 \times 4$/s4 patchify conv, whole-net at representative depth, \textbf{full ConvNeXt-T} (18 blocks); step tied, the backward chain is the VJP, the gradient nodes are the loss's derivative \\
+9 (ViT)           & 6  & --- & 4 & MHSA, block, vector LayerNorm and its block, \textbf{every depth $k$} (ViT-Tiny is $k = 12$), \texttt{vitFull}; the emitted graph denotes the tower, step tied, the backward chain is the VJP, the gradient nodes are the loss's derivative \\
 \hline
-                  & \textbf{44} & \textbf{9} & \textbf{30} & total \textbf{83} \\
+                  & \textbf{44} & \textbf{9} & \textbf{37} & total \textbf{90} \\
 \hline
 \end{tabular}
 \end{center}
@@ -1215,6 +1218,43 @@ three answers fall out by transposing the picture above:
 \[
   dx = W^\top dy, \qquad dW = dy \otimes x, \qquad db = dy.
 \]
+
+Two more notions, used by the ImageNet chapters' loss-gradient theorems: a
+scalar function with a known gradient at a point, and how such a gradient
+pulls back through a certified VJP into a parameter's loss derivative.
+
+\begin{definition}[Gradient of a scalar at a point]
+  \label{def:hasgradat}
+  \lean{Proofs.HasGradAt}
+  \leanok
+  \uses{ax:pdiv}
+  For \(G : \Vect{m} \to \Vect{1}\) and \(x, dy \in \Vect{m}\),
+  \(\texttt{HasGradAt}\, G\, x\, dy\) says \(G\) is differentiable at \(x\)
+  and \(\pdiv\, G\, x\, j\, 0 = dy_j\) for every \(j\). The loss read at any
+  activation of a network is such a \(G\), and the chain's cotangent there is
+  its \(dy\).
+\end{definition}
+
+\begin{theorem}[A gradient pulls back through a VJP]
+  \label{thm:hasGradAt_comp}
+  \lean{Proofs.HasGradAt.comp, Proofs.HasGradAt.pdiv_param, Proofs.HasGradAt.pdiv_param_batchMap}
+  \leanok
+  \uses{ax:pdiv, ax:pdiv_comp, def:hasgradat}
+  If \(G\) has gradient \(dy\) at \(f(x)\) and \(f\) has a VJP at \(x\), then
+  \(G \circ f\) has gradient \(\mathrm{backward}\,x\,dy\) at \(x\)
+  (\texttt{HasGradAt.comp}). Read at a parameterised op
+  \(\theta \mapsto \mathrm{layer}\,\theta\) whose output gradient is \(dy\),
+  the loss derivative in \(\theta_i\) is that op's parameter Jacobian against
+  it, \(\sum_j \pdiv\,\mathrm{layer}\,\theta\,i\,j \cdot dy_j\)
+  (\texttt{pdiv\_param}); at a batched op it is the \(\sum_n \sum_j\) every
+  batched gradient node denotes (\texttt{pdiv\_param\_batchMap}).
+\end{theorem}
+
+\begin{proof}
+\leanok
+The chain rule (Theorem~\ref{ax:pdiv_comp}) at the composite, then the
+gradient hypothesis for the inner factor.
+\end{proof}
 
 One convention to fix before the theorems, because the prose and the
 Lean write the weight matrix two ways. The prose writes \(y = Wx + b\)
@@ -5274,6 +5314,33 @@ See \leandocref{Proofs.r50InputGradB\_eq\_r34B\_full\_vjp}.
 See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
 \end{proof}
 
+\begin{theorem}[Every ResNet-34 gradient node is the loss's derivative]
+  \label{thm:resnet34_loss_grad}
+  \lean{Proofs.ResNet34TieB.r34_net_lossGrad}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad,
+      def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
+      thm:vjpComp}
+  \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{R34PosB}); every ReLU
+  off its kink and every stem-pool window's maximum attained at one cell, at
+  the activations the batch produces (\texttt{R34SmoothAtB}); each example's
+  target summing to one; at least one class. \Prove{} for each of the 146
+  parameter slots of Theorem~\ref{thm:resnet34_step_tie} (the 110 the
+  artifacts emit among them), the node at the chain cotangent is
+  \(\partial L/\partial\theta\) of the whole network --- \(L\) the batched
+  label-smoothed cross-entropy of \texttt{resnet34ForwardBFull} with that one
+  parameter varied --- at any batch \(N\) and any number of classes.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.ResNet34TieB.r34\_net\_lossGrad}.
+\end{proof}
+
 \begin{theorem}[Emitted ResNet-50 step is the certified step]
   \label{thm:resnet50_step_tie}
   \lean{Proofs.ResNet50TieB.r50_net_tiedB, Proofs.ResNet50TieB.r50_lossCot_is_bce_grad}
@@ -5296,6 +5363,34 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
 \begin{proof}
 \leanok
 See \leandocref{Proofs.ResNet50TieB.r50\_net\_tiedB}.
+\end{proof}
+
+\begin{theorem}[Every ResNet-50 gradient node is the loss's derivative]
+  \label{thm:resnet50_loss_grad}
+  \lean{Proofs.ResNet50TieB.r50_net_lossGrad, Proofs.ResNet50TieB.r50_net_lossGrad_smoothedCE, Proofs.ResNet50TieB.r50_net_lossGrad_bce}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad,
+      def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
+      thm:vjpComp}
+  \Assume{} \(0 < q\); every BatchNorm \(\varepsilon > 0\) (\texttt{R50PosB});
+  every ReLU off its kink and every stem-pool window's maximum attained at one
+  cell, at the batch's activations (\texttt{R50SmoothAtB}); and any loss
+  \(L\) of the logits with gradient \(g\) at the network's output. \Prove{}
+  each of the 161 nodes of Theorem~\ref{thm:resnet50_step_tie}, at the chain
+  cotangent from \(g\), is \(\partial L/\partial\theta\) of the whole network,
+  \texttt{resnet50ForwardBFull} with that one parameter varied, at any batch
+  and number of classes. \texttt{r50\_net\_lossGrad\_smoothedCE} and
+  \texttt{r50\_net\_lossGrad\_bce} discharge the loss hypothesis for the two
+  losses the artifacts ship.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.ResNet50TieB.r50\_net\_lossGrad}.
 \end{proof}
 
 \begin{theorem}[ResNet-34 seal: the backward is not degenerate]
@@ -7084,6 +7179,35 @@ See \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}.
 See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_tiedB}.
 \end{proof}
 
+\begin{theorem}[Every MobileNetV2 gradient node is the loss's derivative]
+  \label{thm:mobilenetv2_loss_grad}
+  \lean{Proofs.MobileNetV2TieB.mnv2_net_lossGrad, Proofs.MobileNetV2TieB.mnv2_net_lossGrad_smoothedCE}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3, ax:pdiv,
+      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex,
+      ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat,
+      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:hasGradAt_comp, thm:identityHasVJP,
+      thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{MNV2PosB}); all 35
+  ReLU6 sites off both kinks at the batch's activations
+  (\texttt{MNV2SmoothAtB}); and any loss \(L\) of the logits with gradient
+  \(g\). \Prove{} for each of the 210 parameter slots of
+  Theorem~\ref{thm:mobilenetv2_step_tie} (the 158 the artifacts emit among
+  them), the node at the chain cotangent from \(g\) is
+  \(\partial L/\partial\theta\) of \texttt{mobilenetv2ForwardBFull} with that
+  one parameter varied, at any batch and number of classes;
+  \texttt{mnv2\_net\_lossGrad\_smoothedCE} discharges the loss hypothesis for
+  the label-smoothed cross-entropy.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_lossGrad}.
+\end{proof}
+
 \begin{theorem}[Emitted MobileNetV4 step is the certified step]
   \label{thm:mobilenetv4_step_tie}
   \lean{Proofs.Mnv4TieB.mnv4_net_tiedB, Proofs.Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad}
@@ -7109,6 +7233,32 @@ See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_tiedB}.
 \begin{proof}
 \leanok
 See \leandocref{Proofs.Mnv4TieB.mnv4\_net\_tiedB}.
+\end{proof}
+
+\begin{theorem}[Every MobileNetV4 gradient node is the loss's derivative]
+  \label{thm:mobilenetv4_loss_grad}
+  \lean{Proofs.Mnv4TieB.mnv4_net_lossGrad, Proofs.Mnv4TieB.mnv4_net_lossGrad_smoothedCE}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
+      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const,
+      ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad, def:hasgradat,
+      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
+      thm:denseHasVJP, thm:denseWeightGrad_correct, thm:hasGradAt_comp,
+      thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \Assume{} every ReLU off its kink at the activation its stage sees
+  (\texttt{Mnv4SmoothAt}; the BatchNorm positivities are fields of the
+  weights) and any loss \(L\) of the logits with gradient \(g\). \Prove{}
+  each of the 233 nodes of Theorem~\ref{thm:mobilenetv4_step_tie}, at the
+  chain cotangent from \(g\), is \(\partial L/\partial\theta\) of
+  \texttt{mobilenetv4ForwardBFull} with that one parameter varied, at any
+  batch and number of classes; \texttt{mnv4\_net\_lossGrad\_smoothedCE}
+  discharges the loss hypothesis for the label-smoothed cross-entropy.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.Mnv4TieB.mnv4\_net\_lossGrad}.
 \end{proof}
 
 \begin{theorem}[MobileNetV2 seal: the backward is not degenerate]
@@ -8464,7 +8614,8 @@ return-on-scaling to show up.
 
 \begin{theorem}[EfficientNet-B0 at batch \(N\): VJP and graph]
   \label{thm:efficientnetFullHasVJP}
-  \lean{Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful}
+  \lean{Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful,
+        Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful, Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:depthwiseConv2d,
       ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
@@ -8476,7 +8627,14 @@ return-on-scaling to show up.
   backward equals the \(\pdiv\)-contracted Jacobian of
   \texttt{efficientnetForwardBFull} at every input, cotangent and pixel;
   and the emitted forward graph denotes exactly that forward
-  (\texttt{efficientnetFwdGraphBFull\_faithful}).
+  (\texttt{efficientnetFwdGraphBFull\_faithful}). With stochastic depth on
+  the residual branch of the nine blocks that carry a skip and classifier
+  dropout between the pool and the dense, the \texttt{drop} and
+  \texttt{dropdo} forward graphs denote the masked forward at every mask
+  (\texttt{efficientnetFwdGraphBFullDrop\_faithful}; \texttt{EvalDrop} at
+  inference BatchNorm), in f32 as the committed
+  \texttt{efficientnetin\_drop\_fwd} and \texttt{efficientnetin\_dropdo\_fwd}
+  are.
 \end{theorem}
 
 \begin{proof}
@@ -8529,6 +8687,33 @@ See \leandocref{Proofs.efficientnetInputGradBFull\_correct}.
 \begin{proof}
 \leanok
 See \leandocref{Proofs.EnetTiePoCG.efficientnet\_net\_tiedG}.
+\end{proof}
+
+\begin{theorem}[Every EfficientNet-B0 gradient node is the loss's derivative]
+  \label{thm:efficientnet_loss_grad}
+  \lean{Proofs.EnetTiePoCG.enet_net_lossGrad, Proofs.EnetTiePoCG.enet_net_lossGrad_smoothedCE}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
+      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const,
+      ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat, def:hasvjp,
+      def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
+      thm:denseHasVJP, thm:denseWeightGrad_correct, thm:hasGradAt_comp,
+      thm:identityHasVJP, thm:pdiv_finset_sum, thm:residualHasVJP, thm:rowwiseHasVJPMat,
+      thm:seBlockHasVJP, thm:vjpComp}
+  \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{B0Weights.EpsPos})
+  and any loss \(L\) of the logits with gradient \(g\); no smooth-point
+  clause, the net having no kink. \Prove{} each of the 262 nodes of
+  Theorem~\ref{thm:efficientnet_step_tie}, at the chain cotangent from
+  \(g\), is \(\partial L/\partial\theta\) of \texttt{efficientnetForwardBFull}
+  with that one parameter varied, at any batch and number of classes;
+  \texttt{enet\_net\_lossGrad\_smoothedCE} discharges the loss hypothesis for
+  the label-smoothed cross-entropy.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.EnetTiePoCG.enet\_net\_lossGrad}.
 \end{proof}
 
 \begin{theorem}[The data-parallel step is one device's step at \(R \cdot N\)]
@@ -9487,8 +9672,9 @@ step exists here, because no such statistics exist here.
 Three new operations this chapter, still three rules. What ran is
 \texttt{pretty(provenGraph)}, the file
 \texttt{verified\_mlir/\allowbreak convnext\_adam\_train\_step.mlir}, and
-every LayerNorm in it backpropagates by
-Theorem~\ref{thm:layerNormHasVJP}, every GELU by
+every channel-LayerNorm in it backpropagates by
+Theorem~\ref{thm:chanLNTensor3HasVJP} (the head's vector LayerNorm by
+Theorem~\ref{thm:layerNormVecHasVJP}), every GELU by
 Theorem~\ref{thm:geluHasVJP}, every layer scale by its own diagonal
 adjoint, every depthwise convolution by
 Chapter~\ref{chap:depthwise}'s, and every residual skip by
@@ -9522,7 +9708,8 @@ solves both by flipping the axis: normalize per-sample across the
 feature dimension instead. Same three-term Jacobian cancellation as
 BN (Chapter~\ref{chap:bn}), same closed-form backward. Just a
 different reduction axis. Theorem~\ref{thm:layerNormHasVJP} states
-this formally.
+this formally for one vector, and Theorem~\ref{thm:chanLNTensor3HasVJP}
+lifts it to the channel axis of a feature map.
 
 \textbf{GELU} (Hendrycks \& Gimpel 2016,
 \href{https://arxiv.org/abs/1606.08415}{arXiv:1606.08415}). A smooth
@@ -9683,6 +9870,29 @@ through a projection, convert back to the scalar derivative.}
 \end{enumerate}
 \end{proof}
 
+\begin{theorem}[Channel-LayerNorm VJP]
+  \label{thm:chanLNTensor3HasVJP}
+  \lean{Proofs.chanLNTensor3HasVJP}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
+      def:hasvjpmat, thm:layerNormVecHasVJP, thm:transposeHasVJP, thm:vjpComp}
+  \Assume{} \(\varepsilon > 0\). \Prove{}
+  \(\HasVJP\,(\texttt{chanLNTensor3}\; c\; h\; w\; \varepsilon\; \gamma\; \beta)\),
+  LayerNorm over the channel axis at every pixel of a \((c, h, w)\) tensor with
+  per-channel \(\gamma, \beta\): \texttt{vjpComp} over five proven pieces ---
+  reassociate, transpose, the row-wise vector LayerNorm
+  (Theorem~\ref{thm:layerNormHasVJP} at \(\gamma = 1, \beta = 0\), then the
+  per-channel scale and shift), transpose back, reassociate back. The
+  ConvNeXt-T chain's twenty-two channel-LayerNorms are this witness; the
+  head's, after the pool, is the vector LayerNorm
+  (Theorem~\ref{thm:layerNormVecHasVJP}).
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.chanLNTensor3HasVJP}.
+\end{proof}
+
 \begin{theorem}[GELU VJP]
   \label{thm:geluHasVJP}
   \lean{Proofs.geluHasVJP}
@@ -9709,12 +9919,12 @@ through a projection, convert back to the scalar derivative.}
   \label{thm:convnext_whole_back}
   \lean{Proofs.convnextInputGradB_correct, Proofs.convnextImagenetInputGradB_eq_vjp}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:depthwiseConv2d,
-      ax:depthwiseHasVJP3, ax:geluScalar, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex,
-      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP,
-      thm:geluHasVJP, thm:identityHasVJP, thm:layerNormHasVJP,
-      thm:residualHasVJP, thm:rowwiseHasVJPMat, thm:transposeHasVJP,
-      thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:geluScalar, ax:pdiv, ax:pdiv_comp,
+      ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
+      thm:chanLNTensor3HasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
+      thm:layerNormVecHasVJP, thm:residualHasVJP, thm:rowwiseHasVJPMat,
+      thm:transposeHasVJP, thm:vjpComp}
   \Assume{} the twenty-three LayerNorm positivities. \Prove{} the
   twelve-stage ConvNeXt-T input-gradient chain \texttt{convnextInputGradB}
   equals the backward of the batched forward,
@@ -9758,6 +9968,33 @@ See \leandocref{Proofs.convnextInputGradB\_correct}.
 \begin{proof}
 \leanok
 See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_tiedGB}.
+\end{proof}
+
+\begin{theorem}[Every ConvNeXt-T gradient node is the loss's derivative]
+  \label{thm:convnext_loss_grad}
+  \lean{Proofs.CnxTiePoCGB.cnx_net_lossGrad, Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
+      ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat,
+      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:geluHasVJP, thm:hasGradAt_comp, thm:identityHasVJP, thm:layerNormVecHasVJP,
+      thm:pdiv_finset_sum, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+  \Assume{} \(\varepsilon > 0\) at the LayerNorms and any loss \(L\) of the
+  logits with gradient \(g\). \Prove{} each of the 182 nodes of
+  Theorem~\ref{thm:convnext_step_tie}, at the chain cotangent from \(g\), is
+  \(\partial L/\partial\theta\) of the batched ConvNeXt-T forward
+  \texttt{cnxNetB} with that one parameter varied, for every batch and number
+  of classes; \texttt{cnx\_net\_lossGrad\_smoothedCE} discharges the loss
+  hypothesis for the label-smoothed cross-entropy.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_lossGrad}.
 \end{proof}
 
 \section{Example: ConvNeXt-T on Imagenette}
@@ -9950,7 +10187,8 @@ which is \texttt{timm}'s figure for \texttt{convnext\_tiny} exactly.
 \textbf{Twenty-three LayerNorms are the entire hypothesis budget.} One in
 the stem, one per block, one per downsample, and one on the head between
 the pool and the classifier.
-Theorem~\ref{thm:layerNormHasVJP} wants $\varepsilon > 0$ at each, and
+Theorems~\ref{thm:chanLNTensor3HasVJP} and \ref{thm:layerNormVecHasVJP}
+want $\varepsilon > 0$ at each, and
 those 23 positivities are the only assumptions anywhere in the chain.
 
 \subsection*{Results}
@@ -11458,6 +11696,30 @@ witness. The backward is block-diagonal: each token's gradient is
 computed independently by the 1D three-term formula. \Qed{}
 \end{proof}
 
+\begin{theorem}[Vector LayerNorm VJP, per token]
+  \label{thm:layerNormVecHasVJP}
+  \lean{Proofs.layerNormVecHasVJP, Proofs.layerNormVecPerTokenHasVJPMat}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:pdiv, def:hasvjp, def:hasvjpmat,
+      thm:layerNormHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \Assume{} \(\varepsilon > 0\). \Prove{}
+  \(\HasVJP\,(\texttt{layerNormVec}\; D\; \varepsilon\; \gamma\; \beta)\) for
+  per-feature \(\gamma, \beta \in \Vect{D}\) ---
+  \((+\beta) \circ \mathrm{layerScale}\,\gamma \circ \mathrm{LN}(1, 0)\), three
+  proven pieces glued by \texttt{vjpComp} --- and its row-wise lift to
+  \(\HasVJPMat\) across the \(N\) tokens
+  (\texttt{layerNormVecPerTokenHasVJPMat}). This is the LayerNorm of the
+  rendered block (\texttt{transformerBlockV}) and of the depth-\(k\) tower
+  (Theorem~\ref{thm:vitForwardKVHasVJP}); the scalar-affine
+  Theorem~\ref{thm:layerNormPerTokenHasVJPMat} is the LayerNorm of the
+  weight-shared tower (\texttt{vitFullHasVJP}).
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.layerNormVecHasVJP}.
+\end{proof}
+
 \begin{theorem}[Per-token dense lifted to a matrix]
   \label{thm:densePerTokenHasVJPMat}
   \lean{Proofs.densePerTokenHasVJPMat}
@@ -11676,11 +11938,11 @@ network itself. \Qed{}
   \lean{Proofs.vitForwardKVHasVJP_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
-      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlat_differentiable, ax:patchEmbedFlatHasVJP,
-      ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:denseHasVJP, thm:identityMatHasVJP, thm:identityHasVJP,
-      thm:layerNormHasVJP, thm:rowwiseHasVJPMat, thm:transformerMlpHasVJPMat,
-      thm:vjpMatComp, thm:vjpComp}
+      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
+      def:hasvjpmat, thm:biPathMatHasVJP, thm:denseHasVJP, thm:identityHasVJP,
+      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:transformerMlpHasVJPMat,
+      thm:vjpComp, thm:vjpMatComp}
   \Assume{} \(\varepsilon > 0\). \Prove{} the depth-\(k\) transformer tower
   with distinct parameters per block --- patch embedding, CLS and position
   tables, \(k\) blocks of multi-head self-attention and MLP sublayers under
@@ -11714,11 +11976,11 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
   \lean{Proofs.vitTinyHasVJP_correct}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
-      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlat_differentiable, ax:patchEmbedFlatHasVJP,
-      ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:denseHasVJP, thm:identityMatHasVJP, thm:identityHasVJP,
-      thm:layerNormHasVJP, thm:rowwiseHasVJPMat, thm:transformerMlpHasVJPMat,
-      thm:vitForwardKVHasVJP, thm:vjpMatComp, thm:vjpComp}
+      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
+      def:hasvjpmat, thm:biPathMatHasVJP, thm:denseHasVJP, thm:identityHasVJP,
+      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:transformerMlpHasVJPMat,
+      thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -11740,11 +12002,12 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
     \mathrm{tower}_k \circ \mathrm{patchEmbed}\), and each factor
     carries a \(\HasVJP\) --- the patch embedding
     (Theorem~\ref{ax:patchEmbedFlatHasVJP}), the tower by induction
-    on \(k\) with the block (Theorem~\ref{thm:transformerBlockHasVJPMat})
-    bridged to the flat vector as the step, the per-token final LayerNorm
-    (Theorem~\ref{thm:layerNormPerTokenHasVJPMat}, bridged the same
-    way), and the classifier (Theorem~\ref{thm:denseHasVJP} on the CLS
-    row).
+    on \(k\) with the vector-LN block (\texttt{transformerBlockVHasVJPMat}:
+    Theorem~\ref{thm:transformerBlockHasVJPMat}'s two sublayers with
+    Theorem~\ref{thm:layerNormVecHasVJP} in both LayerNorm slots) bridged
+    to the flat vector as the step, the per-token final LayerNorm
+    (Theorem~\ref{thm:layerNormVecHasVJP}, bridged the same way), and the
+    classifier (Theorem~\ref{thm:denseHasVJP} on the CLS row).
     \pf{Three applications of \texttt{vjpComp}
     (Theorem~\ref{thm:vjpComp}); every factor is smooth, so the
     differentiability side conditions need only assumption 1.}
@@ -11759,14 +12022,14 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
   \label{thm:vit_whole_back}
   \lean{Proofs.vitTinyInputGradB_eq_vitTiny_vjp, Proofs.vitInputGradKB_correct}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv, ax:mhsaHasVJPMat,
-      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlat_differentiable, ax:patchEmbedFlatHasVJP,
-      ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex, ax:rowSoftmax_flat_differentiable, def:hasvjp,
-      def:hasvjpmat, thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseHasVJP,
-      thm:geluHasVJP, thm:identityMatHasVJP, thm:identityHasVJP,
-      thm:layerNormHasVJP, thm:rowwiseHasVJPMat, thm:sdpaBackK_correct,
-      thm:sdpaBackQ_correct, thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat,
-      thm:vjpMatComp, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
+      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex,
+      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
+      thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
+      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
+      thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
+      thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
   \Prove{} at ViT-Tiny's dimensions the batched input-gradient chain
   \texttt{vitInputGradKB} equals the backward of the batched tower
   \(\mathrm{batchMap}\, B\; \texttt{vitForwardKV}\) for every \(B\), number of
@@ -11801,6 +12064,34 @@ See \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
 \begin{proof}
 \leanok
 See \leandocref{Proofs.ViTTiePoCGB.vit\_net\_tiedGB}.
+\end{proof}
+
+\begin{theorem}[Every ViT-Tiny gradient node is the loss's derivative]
+  \label{thm:vit_loss_grad}
+  \lean{Proofs.ViTTiePoCGB.vit_net_lossGrad, Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE}
+  \leanok
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
+      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add,
+      ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex,
+      ax:rowSoftmax_flat_differentiable, ax:softmaxCE_grad, def:hasgradat, def:hasvjp,
+      def:hasvjpmat, thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseBiasGrad_correct,
+      thm:denseHasVJP, thm:densePerTokenHasVJPMat, thm:denseWeightGrad_correct,
+      thm:geluHasVJP, thm:geluPerTokenHasVJPMat, thm:hasGradAt_comp, thm:identityHasVJP,
+      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
+      thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
+      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
+  \Assume{} \(\varepsilon > 0\) at the LayerNorms and any loss \(L\) of the
+  logits with gradient \(g\). \Prove{} each of the 200 nodes of
+  Theorem~\ref{thm:vit_step_tie}, at the chain cotangent from \(g\), is
+  \(\partial L/\partial\theta\) of the batched ViT-Tiny forward
+  \texttt{vitNetB} with that one parameter varied, for every batch and number
+  of classes; \texttt{vit\_net\_lossGrad\_smoothedCE} discharges the loss
+  hypothesis for the label-smoothed cross-entropy.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.ViTTiePoCGB.vit\_net\_lossGrad}.
 \end{proof}
 
 \section{Example: ViT-Tiny on Imagenette}

@@ -11,8 +11,10 @@ blueprint/src/content.tex — the print twin of templates/dep_graph.html. Within
 figure: its statements and the edges between them; a dependency outside the figure
 is a dashed portal naming where it lives ("ch 4", "above", "below"); a statement used
 by four or more chapters (pdiv, hasvjp) is drawn once, in chapter 1; one that feeds four or more nodes of
-a figure, and the imports of a node that has four or more, are left to the
-statement's own \\uses line rather than drawn (the web graph has them all). Graphviz
+a figure from outside it, and the imports of a node that has four or more, are left to the
+statement's own \\uses line rather than drawn (the web graph has them all); one inside
+the figure that feeds eight or more of its boxes keeps its box, tagged with the count,
+and drops its arrows (pdiv in chapter 1 fed 22 of 24). Graphviz
 lays each figure out (pygraphviz); positions and splines are copied into TikZ with
 the node sizes dot was given, so labels are set in the book's font and every node
 is a \\hyperref to its statement."""
@@ -26,6 +28,7 @@ ENVS = ("theorem", "lemma", "definition", "axiom")
 # downstream of it (within the section) become the second figure.
 CUTS = {"Attention proofs": ["ax:mhsaHasVJPMat"]}
 BASE = 7.0          # label font size at scale 1, points (portals 5.5)
+HUB = 8             # a source feeding this many boxes of its own figure keeps its box, drops its arrows
 
 def parse(tex):
     chapters, nodes, edges = [], {}, []
@@ -114,20 +117,28 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     shared = sorted(set().union(*(hidden[b] for b in islands))) if islands else []
     shared_where = sorted({where(a) for a in shared}, key=lambda w: (w[:2] != 'ch', w))
     shared_label = ', '.join(w for w in shared_where).replace(', ch ', ', ')
-    G = pgv.AGraph(directed=True, strict=True, rankdir=rankdir, ranksep=0.35, nodesep=0.15, splines='true')
+    outdeg = defaultdict(int)
+    for a, b in kept: outdeg[a] += 1
+    # A source feeding HUB or more boxes of its own figure (pdiv in chapter 1) would be a
+    # fan of arrows across everything else: its box stays, tagged with the count, and the
+    # arrows go — no edge at all, so a child with no other parent here sits in the first rank
+    # beside the hub, and the ranks are shaped by the arrows that are drawn.
+    hubs = {a: outdeg[a] for a in outdeg if outdeg[a] >= HUB}
+    G = pgv.AGraph(directed=True, strict=True, rankdir=rankdir, ranksep=0.45, nodesep=0.2, splines='true')
     G.node_attr.update(fontsize=1)   # sizes are fixed below; dot's own label metrics are unused
     def box(label, fs, lines=1):   # what TikZ will draw (rectangles; a rounded one costs nothing extra)
         return dict(fixedsize='true', width=(len(label) * 0.6 * fs + 6) / 72.0, height=(fs * 1.25 * lines + 4) / 72.0)
+    hubtag = lambda l: '$\\to$ %d boxes here' % hubs[l]
     for l in mine:
         ls = wrap(l.split(':', 1)[1])
+        if l in hubs: ls = ls + [hubtag(l)]
         G.add_node(l, shape='box', **box(max(ls, key=len), BASE, lines=len(ls)))
     for a in sorted(portals):
         G.add_node('portal|' + a, shape='box', **box(max(a.split(':', 1)[1], where(a), key=len), 5.5, lines=2))
     if shared: G.add_node('shared', shape='box', **box(max('%d statements of' % len(shared), shared_label, key=len), 5.5, lines=2))
-    outdeg = defaultdict(int)
-    for a, b in kept: outdeg[a] += 1
     fan = defaultdict(int)
     for a, b in kept:   # unflatten: a source with many children spreads them over up to four ranks,
+        if a in hubs: continue
         if outdeg[a] >= 5:   # so a top-down figure is a few nodes wide instead of one rank of fourteen
             depth = min(4, (outdeg[a] + 3) // 4)
             G.add_edge(a, b, minlen=1 + fan[a] % depth); fan[a] += 1
@@ -164,6 +175,7 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
             shape = 'rectangle' if nodes[name]['env'] == 'definition' else 'rectangle, rounded corners=%.1fpt' % (4 * s)
             # one \hyperref per line: a line break inside the link text breaks TikZ's align
             label = '\\\\'.join('\\hyperref[%s]{%s}' % (name, esc(x)) for x in wrap(name.split(':', 1)[1]))
+            if name in hubs: label += '\\\\{\\color{gray!60!black}%s\\ttfamily %s}' % (fs(5.5), hubtag(name))
             out.append('  \\node[draw=green!50!black, fill=green!15, %s, align=center, minimum width=%.1fpt, minimum height=%.1fpt%s] at %s {%s};'
                        % (shape, w, h, ', double' if name in ambient else '', P(n.attr['pos']), label))
     for e in G.edges():
@@ -175,7 +187,7 @@ def figure(chapters, nums, nodes, edges, unit, allunits, rankdir='TB', textwidth
     body = '\n'.join(out)
     if rotate: body = '\\rotatebox{-90}{%\n' + body + '}'
     W, H = ((y1 - y0) * s, (x1 - x0) * s) if rotate else ((x1 - x0) * s, (y1 - y0) * s)
-    return body, W, H, (listed, heavy, islands, shared), BASE * s
+    return body, W, H, (listed, heavy, islands, shared, hubs), BASE * s
 
 
 # The chapter-1 map: the ViT chapter's matrix-level machinery is its own box, because
@@ -351,9 +363,9 @@ if __name__ == '__main__':
         # Top-down (sources upper left, the capstone lower right) whenever it reads at 5.5 pt or
         # better; left-right only for a figure that would otherwise be too small.
         cands = {rd: figure(chapters, nums, nodes, edges, u, alls, rankdir=rd) + (rd,) for rd in ('TB', 'LR')}
-        tikz, w, h, (listed, heavy, islands, shared), font, rd = cands['TB'] if cands['TB'][4] >= 5.5 else max(cands.values(), key=lambda r: r[4])
+        tikz, w, h, (listed, heavy, islands, shared, hubs), font, rd = cands['TB'] if cands['TB'][4] >= 5.5 else max(cands.values(), key=lambda r: r[4])
         k += 1
         fname = 'ch%s' % nums.get(u[0]) + ('_' + slug(u[1]) if u[1] else '') + ('_%d' % u[2] if u[2] else '')
         short = lambda x: '\\hyperref[%s]{\\texttt{%s}}' % (x, esc(x.split(':', 1)[1]))
         open('%s/%s.tex' % (outdir, fname), 'w').write('\\begin{center}\n' + tikz + '\n\\end{center}\n')
-        print('%-26s ch %2s %-24s %-18s part %d %s %5.0f x %5.0f pt  font %.1f%s  listed: %s  heavy: %s  shared: %d -> %s' % (fname, nums.get(u[0]), chapters[u[0]][:24], u[1][:18], u[2], rd, w, h, font, '  (rotated)' if tikz.startswith('\\rotatebox') else '', ', '.join(x.split(':', 1)[1] for x in listed) or '-', ', '.join('%s(%d)' % (b.split(':',1)[1], len(v)) for b, v in heavy.items()) or '-', len(shared), ', '.join(b.split(':', 1)[1] for b in islands) or '-'))
+        print('%-26s ch %2s %-24s %-18s part %d %s %5.0f x %5.0f pt  font %.1f%s  hubs: %s  listed: %s  heavy: %s  shared: %d -> %s' % (fname, nums.get(u[0]), chapters[u[0]][:24], u[1][:18], u[2], rd, w, h, font, '  (rotated)' if tikz.startswith('\\rotatebox') else '', ', '.join('%s(%d)' % (a.split(':', 1)[1], n) for a, n in hubs.items()) or '-', ', '.join(x.split(':', 1)[1] for x in listed) or '-', ', '.join('%s(%d)' % (b.split(':',1)[1], len(v)) for b, v in heavy.items()) or '-', len(shared), ', '.join(b.split(':', 1)[1] for b in islands) or '-'))
