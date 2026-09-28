@@ -5,8 +5,7 @@ import LeanMlir.Verified.Attack
 
 The first **conv rung** of the robustness ladder. Trains the
 `conv 1→32 → relu → conv 32→32 → relu → maxpool → flatten → 6272→512 → relu → 512→512 → relu →
-512→10` net on the proof-rendered SGD step, then runs an L∞ / L2 PGD attack through the real IREE
-pipeline. Each step's input gradient is the **full proven backward** run to `dx`: the conv
+512→10` net on the proof-rendered SGD step, then runs an L∞ / L2 PGD attack on the GPU. Each step's input gradient is the **full proven backward** run to `dx`: the conv
 input-VJPs (transpose-`o,i` + spatial-`reverse` kernel) and the maxpool `select_and_scatter`-back,
 mirroring `verified_mlir/cnn_train_step.mlir` — plus the final conv1 input-VJP the train step omits.
 
@@ -14,7 +13,7 @@ The Lipschitz certificate is the conv-aware spectral-norm **product** (`specNorm
 convs × `specNormW` for the denses; ReLU/maxpool are 1-Lipschitz). Over ~5 layers it is even looser
 than the MLP's three-layer product — the linear-tight → MLP-vacuous → CNN-more-vacuous depth-cliff.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-pgd data`
+Run (GPU): `.lake/build/bin/mnist-cnn-pgd data`
 -/
 
 def cnnPgdConfig : VerifiedConfig where

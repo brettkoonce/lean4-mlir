@@ -401,6 +401,19 @@ def mkSessionDp (mlirPath : String) (replicas : Nat) : IO LowererSession := do
   IO.println s!"  xla/pjrt {mlirPath}  (eval, SHARDED over {replicas} replicas)"
   LowererSession.createDp mlirPath replicas.toUSize
 
+/-- One plain SGD step of `net`'s rendered `@<slug>_train_step` on the params-only `theta`,
+    returning the params-only update — for the drivers that keep no loss (PGD, smoothing). A
+    `lossSlot` render takes a trailing scalar and returns it written; the slot is appended here
+    and dropped from the result, so the caller never sees it. -/
+def VerifiedNet.sgdStep (net : VerifiedNet) (sess : LowererSession) (fn : String)
+    (xb theta yb : ByteArray) (bs : Nat) : IO ByteArray := do
+  if net.lossSlot then
+    let out ← LowererSession.mlpTrainStepV sess fn xb (F32.concat #[theta, ← F32.const 1 0.0])
+      (packShapes (net.paramShapes ++ #[#[]])) yb bs.toUSize net.d0.toUSize net.nClasses.toUSize
+    return out.extract 0 (net.nParams * 4)
+  LowererSession.mlpTrainStepV sess fn xb theta net.shapesBA yb bs.toUSize net.d0.toUSize
+    net.nClasses.toUSize
+
 /-- `bs` labels, class `(i + off) % nc`, as the driver's int32 records — the shard labels the
     sync-BN, shard and tie gates feed. -/
 def mkLabels (bs off nc : Nat) : ByteArray := Id.run do

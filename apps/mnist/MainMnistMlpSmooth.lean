@@ -12,7 +12,7 @@ Where the MLP's three-layer spectral-norm product gave a *vacuous* cert (L = 39,
 randomized smoothing certifies a non-vacuous radius on the same net — the contrast that motivates
 the smoothing rung.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-mlp-smooth data`
+Run (GPU): `.lake/build/bin/mnist-mlp-smooth data`
 -/
 
 def mlpSmoothConfig : VerifiedConfig where

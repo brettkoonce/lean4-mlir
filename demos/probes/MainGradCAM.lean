@@ -15,7 +15,7 @@ Usage:
   lake exe gradcam [model=convnext|r34] [N=4] [out.ppm]
 
 The walk is:
-  1. Compile a `forward_cam` vmfb that returns the pre-GAP feature map
+  1. Emit a `forward_cam` graph that returns the pre-GAP feature map
      `[B, C, H, W]` flat (no GAP, no dense).
   2. Run it once for a batch of N images.
   3. For each image, recompute logits with `F32.camLogits`, argmax to
@@ -105,6 +105,8 @@ private def compileCamVmfb (spec : NetSpec) (batchSize : Nat) : IO String := do
   let vmfbPath ← NetSpec.graphArtifact pfx "fwd_cam"
   let mlir := MlirCodegen.generateForwardCam spec batchSize
   IO.FS.writeFile mlirPath mlir
+  -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact the runtime loads.
+  if (← LowererSession.backendName) == "xla" then return mlirPath
   if (← System.FilePath.pathExists vmfbPath) then
     IO.eprintln s!"  cam vmfb cached: {vmfbPath}"
     return vmfbPath

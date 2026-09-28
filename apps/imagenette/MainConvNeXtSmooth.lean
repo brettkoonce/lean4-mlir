@@ -12,11 +12,11 @@ condition randomized smoothing needs — and the generic `smoothCertify` driver 
 (noise-augmented SGD on `convnext_train_step.mlir`, then certify through `convnext_fwd`).
 
 `batchSize` is pinned to **32** (the baked static batch of `convnext_fwd.mlir`). σ is selected by
-`SMOOTH_SIGMA_MILLI` (σ×1000, e.g. 250 → σ=0.25) so the two σ values can run on the two gfx1100 GPUs
+`SMOOTH_SIGMA_MILLI` (σ×1000, e.g. 250 → σ=0.25) so the two σ values can run on the two GPUs
 in parallel; unset → the default `[0.25, 0.5]` sweep. Knobs: `SMOOTH_EPOCHS`, `SMOOTH_N`,
 `SMOOTH_MAXCERT` (the 224² forward is heavy — start light).
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm SMOOTH_N=2000 SMOOTH_MAXCERT=50 \
+Run (GPU): `SMOOTH_N=2000 SMOOTH_MAXCERT=50 \
   SMOOTH_EPOCHS=12 SMOOTH_SIGMA_MILLI=500 .lake/build/bin/convnext-smooth data`
 -/
 

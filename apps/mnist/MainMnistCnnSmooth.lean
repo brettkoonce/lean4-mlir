@@ -13,7 +13,7 @@ proof-rendered SGD step — the forward/backward graph is untouched), the Cohen 
 Unlike the conv-aware spectral-norm product (vacuous past the MLP), this certifies a *non-vacuous*
 radius regardless of depth — the same procedure works identically on CIFAR and the deep nets.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-smooth data`
+Run (GPU): `.lake/build/bin/mnist-cnn-smooth data`
 Smoke: `SMOOTH_EPOCHS=1 SMOOTH_MAXCERT=50 SMOOTH_N=200 ... mnist-cnn-smooth data`
 -/
 

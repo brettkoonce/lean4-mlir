@@ -132,13 +132,9 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  IO.println s!"Randomized-smoothing certificate on {net.name} (verified codegen → IREE → GPU, forward-only)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Randomized-smoothing certificate on {net.name} (verified codegen → GPU, forward-only)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   -- `trainPix`/`crop`: Imagenette train ships at 256² and is center-cropped to 224² per batch
   -- (the val/eval split is already 224² = d0, so certify reads it directly). For MNIST/CIFAR
   -- crop=false and trainPix=d0, so the crop below is a no-op.
@@ -215,7 +211,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
         let xbN ← F32.addGaussianTiled xb 0 (bs*d0).toUSize 1 sigma nseed
         nseed := nseed + 1
-        theta ← LowererSession.mlpTrainStepV tsSess tsFn xbN theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← net.sgdStep tsSess tsFn xbN theta yb bs
       let mut c := 0
       for bi in [0:evalBatches] do
         let xb := F32.sliceImages evalImg (bi * bs) bs d0

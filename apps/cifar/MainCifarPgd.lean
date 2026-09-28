@@ -5,7 +5,7 @@ import LeanMlir.Verified.Attack
 
 The deeper conv rung of the robustness ladder. Trains the verified
 `conv 3→32 → conv 32→32 → pool → conv 32→64 → conv 64→64 → pool → 4096→512→512→10` net on the
-proof-rendered SGD step, then runs L∞/L2 PGD through IREE with `genCifarPgdStep` — the full proven
+proof-rendered SGD step, then runs L∞/L2 PGD with `genCifarPgdStep` — the full proven
 input-VJP to `dx` (4 conv input-VJPs + 2 maxpool `select_and_scatter`-backs + the final conv1 VJP
 the train step omits), mirroring `verified_mlir/cifar_train_step.mlir`.
 
@@ -13,7 +13,7 @@ The conv-aware Lipschitz certificate is a **7-layer** product (4 conv tap-sums �
 norms) — even more astronomically vacuous than the 5-layer MNIST CNN. The depth-cliff, one rung
 deeper. Reuses the generic `attackPgdConvNet` driver.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/cifar-pgd data`
+Run (GPU): `.lake/build/bin/cifar-pgd data`
 -/
 
 def cifarPgdConfig : VerifiedConfig where

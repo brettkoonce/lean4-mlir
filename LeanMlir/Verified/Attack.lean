@@ -20,7 +20,7 @@ private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray 
 
 /-- `oneHotBatch` for a possibly-partial final batch: rows past `total` records get an
     all-zero row (their padded images are never scored, so the gradient they induce is
-    irrelevant — the row just has to exist because the batch dim is baked into the vmfb). -/
+    irrelevant — the row just has to exist because the batch dim is baked into the compiled module). -/
 private def oneHotBatchPad (labels : ByteArray) (start bs d1 total : Nat) : IO ByteArray := do
   let mut oh ← F32.const (bs * d1).toUSize 0.0
   for j in [0:min bs (total - start)] do
@@ -170,7 +170,7 @@ private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat
   return F32.concat parts
 
 /-- **PGD attack on the verified MNIST MLP.** Trains the 784→512→512→10 ReLU MLP on the
-    proof-rendered SGD step, then runs PGD through IREE with `genMlpPgdStep`, a hand-typed
+    proof-rendered SGD step, then runs PGD with `genMlpPgdStep`, a hand-typed
     StableHLO kernel that follows the formula of `Proofs.mlpInputGrad` (no theorem ties the
     kernel's text). The Lipschitz certificate is the product of the three layers' spectral
     norms, which is where the bound, and so the certificate, goes loose. -/
@@ -179,13 +179,9 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   let d0 := net.d0
   let hN := 512
   let d1 := net.nClasses
-  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → GPU)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -193,7 +189,6 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   let xShape := net.xShape bs
   let tsFn := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
-  let nP := net.nParams
   let mut parts : Array ByteArray := #[]
   let mut seed := 1
   for spec in net.specs do
@@ -205,8 +200,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      let out ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
-      theta := out.extract 0 (nP * 4)
+      theta ← net.sgdStep tsSess tsFn xb theta yb bs
   -- split θ (func-arg order: W0 b0 W1 b1 W2 b2)
   let W0 := theta.extract 0 (d0*hN*4)
   let W1 := theta.extract ((d0*hN + hN)*4) ((d0*hN + hN + hN*hN)*4)
@@ -225,8 +219,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
     for eps in epsList do
       let alpha := 2.5 * eps / K.toFloat
       IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
-      compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
-      let pgdSess ← LowererSession.create ".lake/build/mlp_pgd_step.vmfb"
+      let pgdSess ← mkSession ".lake/build/mlp_pgd_step.mlir"
       let mut correct := 0
       for bi in [0:nbt] do
         let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -274,7 +267,7 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
         if r ≥ 1.5 then cert15 := cert15 + 1
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
-  IO.println "done (MLP PGD: input gradient from the hand-typed PgdGen kernel, the mlpInputGrad formula; IREE)."
+  IO.println "done (MLP PGD: input gradient from the hand-typed PgdGen kernel, the mlpInputGrad formula)."
 
 /-- **Spectral-norm-constrained training of the verified MNIST MLP.** Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
     — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
@@ -293,13 +286,9 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   let hN := 512
   let d1 := net.nClasses
   let projEvery := 20            -- lazy projection: every 20 verified steps (+ once at the end)
-  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → GPU)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -313,8 +302,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   let pgdAcc := fun (theta : ByteArray) (linf : Bool) (eps : Float) => do
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/mlp_pgd_step.mlir" (genMlpPgdStep bs d0 hN d1 eps alpha linf)
-    compileVmfb ".lake/build/mlp_pgd_step.mlir" ".lake/build/mlp_pgd_step.vmfb"
-    let pgdSess ← LowererSession.create ".lake/build/mlp_pgd_step.vmfb"
+    let pgdSess ← mkSession ".lake/build/mlp_pgd_step.mlir"
     let mut correct := 0
     for bi in [0:nbt] do
       let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -345,7 +333,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
       for bi in [0:nb] do
         let xb := F32.sliceImages trainImg (bi * bs) bs d0
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
-        theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← net.sgdStep tsSess tsFn xb theta yb bs
         step := step + 1
         if cap < 1.0e8 && step % projEvery == 0 then
           theta ← projectSpectral theta net.specs cap
@@ -395,7 +383,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
 /-- **Generic conv-net PGD attack.** Trains any packed conv net on its proof-rendered SGD step,
-    then runs PGD through IREE with `genKernel`: a hand-typed StableHLO kernel that computes the
+    then runs PGD with `genKernel`: a hand-typed StableHLO kernel that computes the
     input gradient `dx` (conv input-VJPs and maxpool `select_and_scatter` backs, following the
     backward ops of the net's `<slug>_train_step.mlir`); no theorem ties the kernel's text.
     Certificate = the conv-aware spectral-norm **product** (`specNormConvTapSum` for convs ×
@@ -407,13 +395,9 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → GPU)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -446,7 +430,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+      theta ← net.sgdStep tsSess tsFn xb theta yb bs
     let acc ← evalAcc theta
     if acc > bestAcc then bestAcc := acc; bestTheta := theta
     IO.println s!"    epoch {ep + 1}/{cfg.epochs}: acc = {acc}%"
@@ -459,8 +443,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
     for eps in epsList do
       let alpha := 2.5 * eps / K.toFloat
       IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
-      compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
-      let pgdSess ← LowererSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
+      let pgdSess ← mkSession s!".lake/build/{net.slug}_pgd_step.mlir"
       let mut correct := 0
       for bi in [0:nbt] do
         let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -522,7 +505,7 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
         if r ≥ 1.5 then cert15 := cert15 + 1
   IO.println s!"certified-robust acc (L2): ε=0.5 → {cert05.toFloat/tot*100.0}%, ε=1.0 → {cert10.toFloat/tot*100.0}%, ε=1.5 → {cert15.toFloat/tot*100.0}%"
   runSweep false [0.5, 1.0, 1.5]
-  IO.println s!"done ({net.name} PGD: input gradient from the hand-typed PgdGen kernel, the conv/maxpool input-VJP formula; IREE)."
+  IO.println s!"done ({net.name} PGD: input gradient from the hand-typed PgdGen kernel, the conv/maxpool input-VJP formula)."
 
 /-- PGD attack on the verified MNIST CNN (the first conv rung). -/
 def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
@@ -546,13 +529,9 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
   let d0 := net.d0
   let d1 := net.nClasses
   let projEvery := 20
-  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → IREE → GPU)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Spectral-norm-constrained PGD study on {net.name} (verified codegen → GPU)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -565,8 +544,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
   let pgdAcc := fun (theta : ByteArray) (linf : Bool) (eps : Float) => do
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile s!".lake/build/{net.slug}_pgd_step.mlir" (genKernel bs eps alpha linf)
-    compileVmfb s!".lake/build/{net.slug}_pgd_step.mlir" s!".lake/build/{net.slug}_pgd_step.vmfb"
-    let pgdSess ← LowererSession.create s!".lake/build/{net.slug}_pgd_step.vmfb"
+    let pgdSess ← mkSession s!".lake/build/{net.slug}_pgd_step.mlir"
     let mut correct := 0
     for bi in [0:nbt] do
       let x0 := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
@@ -598,7 +576,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
       for bi in [0:nb] do
         let xb := F32.sliceImages trainImg (bi * bs) bs d0
         let yb := F32.sliceLabels trainLbl (bi * bs) bs
-        theta ← LowererSession.mlpTrainStepV tsSess tsFn xb theta shapes yb bs.toUSize d0.toUSize d1.toUSize
+        theta ← net.sgdStep tsSess tsFn xb theta yb bs
         step := step + 1
         if cap < 1.0e8 && step % projEvery == 0 then
           theta ← projectSpectral theta net.specs cap
@@ -675,20 +653,16 @@ def VerifiedNet.attackPgdSpectralCifar (net : VerifiedNet) (cfg : VerifiedConfig
   net.attackPgdSpectralConvNet cfg dataDir caps genCifarPgdStep
 
 /-- **PGD adversarial attack** on the verified linear classifier. Trains via the proof-rendered
-    train step, then runs PGD through IREE: each PGD step's input gradient is computed on the GPU
+    train step, then runs PGD: each PGD step's input gradient is computed on the GPU
     by `genLinearPgdStep`, a hand-typed StableHLO kernel that follows the formula
     `dx = (softmax−onehot)·Wᵀ` (no theorem ties the kernel's text). Reports clean vs L∞-PGD adversarial accuracy over an eps sweep. -/
 def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
-  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → IREE → GPU)"
-  let tsVmfb  := s!".lake/build/{net.slug}_ts_v.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"        fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
+  IO.println s!"Phase-3 PGD attack on {net.name} (verified codegen → GPU)"
+  let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
+  let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir
   let nb  := nTrain / bs
   let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
@@ -720,8 +694,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   for eps in ([0.1, 0.2, 0.3] : List Float) do
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha true)
-    compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
-    let pgdSess ← LowererSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← mkSession ".lake/build/linear_pgd_step.mlir"
     let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
     let mut correct := 0
     for bi in [0:nbt] do
@@ -767,8 +740,7 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   for eps in ([0.5, 1.0, 1.5] : List Float) do
     let alpha := 2.5 * eps / K.toFloat
     IO.FS.writeFile ".lake/build/linear_pgd_step.mlir" (genLinearPgdStep bs d0 d1 eps alpha false)
-    compileVmfb ".lake/build/linear_pgd_step.mlir" ".lake/build/linear_pgd_step.vmfb"
-    let pgdSess ← LowererSession.create ".lake/build/linear_pgd_step.vmfb"
+    let pgdSess ← mkSession ".lake/build/linear_pgd_step.mlir"
     let pgdShapes := packShapes #[#[d0, d1], #[d1], #[bs, d1], #[bs, d0]]
     let mut correct := 0
     for bi in [0:nbt] do
@@ -783,5 +755,5 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
         if (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat == F32.readLabel evalLbl (bi * bs + j) then
           correct := correct + 1
     IO.println s!"L2 PGD eps={eps}: adv acc = {correct.toFloat/tot*100.0}%  (sandwich: cert ≤ true ≤ this)"
-  IO.println "done (PGD: input gradient from the hand-typed PgdGen kernel, the input-VJP formula; IREE)."
+  IO.println "done (PGD: input gradient from the hand-typed PgdGen kernel, the input-VJP formula)."
 

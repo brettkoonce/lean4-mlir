@@ -821,7 +821,7 @@ lean_exe «cifar8wb-bn-ablation» where
 -- ─── apps/mnist/ — MNIST robustness (PGD / spectral / smoothing), grids and low precision ───
 
 -- Phase-3 PGD adversarial attack on the verified linear net:
--- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run via IREE.
+-- the attack's input gradient is the proven dx=(softmax-onehot)·Wᵀ VJP, run on the GPU.
 lean_exe «mnist-linear-pgd» where
   root := `apps.mnist.MainMnistLinearPgd
   moreLinkArgs := lowererLink

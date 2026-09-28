@@ -4,16 +4,15 @@ import LeanMlir.Verified.Attack
 /-! # `mnist-linear-pgd` — PGD adversarial attack on the verified linear net
 
 Trains the Chapter-2 linear classifier on the proof-rendered StableHLO (same as
-`mnist-linear-verified`), then runs an L∞ **PGD adversarial attack** through the real
-IREE pipeline: each attack step's input gradient `dx = (softmax(xW+b) − onehot)·Wᵀ` is
+`mnist-linear-verified`), then runs an L∞ **PGD adversarial attack** on the GPU: each attack step's input gradient `dx = (softmax(xW+b) − onehot)·Wᵀ` is
 computed by a StableHLO kernel (the proven linear input-VJP, `Proofs.mlpInputGrad`'s
 1-layer case) on the GPU — NOT host autodiff. The whole PGD step (forward, gradient,
-sign-step, eps-ball projection, [0,1] clip) runs as one IREE kernel; the host iterates.
+sign-step, eps-ball projection, [0,1] clip) runs as one kernel; the host iterates.
 
 This is the counterpart to `jax/demos/pgd_mnist.py` (which trained a throwaway
 JAX net): here the attack hits the *actual verified net* through the *real codegen path*.
 
-Run (GPU): `IREE_BACKEND=rocm IREE_CHIP=gfx1100 .lake/build/bin/mnist-linear-pgd data`
+Run (GPU): `.lake/build/bin/mnist-linear-pgd data`
 -/
 
 def linearConfig : VerifiedConfig where
