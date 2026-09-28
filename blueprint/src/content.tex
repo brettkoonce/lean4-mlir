@@ -5773,8 +5773,8 @@ Popularized for ImageNet-scale training by He et al.\ 2018's
 ramps the learning rate from zero to its
 peak over the first few epochs (3 for ResNet-34). Stabilizes early
 training when gradients are still reorganizing randomly-initialized
-weights. Becomes essential for larger models and larger batches, and by
-ViT-Tiny in Chapter~\ref{chap:attention} it's a necessity.
+weights. Becomes essential for larger models and larger batches;
+Chapter~\ref{chap:attention}'s ViT-Tiny trains with one.
 
 \textbf{Weight decay}. Adds a small L2 shrink to all trainable weights
 each step: $w \leftarrow w - \eta \lambda w$, with $\lambda = 10^{-4}$
@@ -6810,9 +6810,9 @@ There are thirty-five such sites per example,
 and the reason for every one of them is that relu6 has two kinks. The
 network is differentiable away from them and is not differentiable at
 them, so a statement quantified over all inputs would be false.
-Chapter~\ref{chap:se} does fold EfficientNet-B0 over all inputs with
-\texttt{efficientnetForwardBFullHasVJP}, and it can do that because
-swish is smooth everywhere. The axis that moved here was the depth, from
+Chapter~\ref{chap:se} does fold EfficientNet-B0 over all inputs
+(Theorem~\ref{thm:efficientnetFullHasVJP}), and it can do that because swish
+is smooth everywhere. The axis that moved here was the depth, from
 two blocks to seventeen, and not the pointwise-to-global one.
 
 The three compile lines are every BatchNorm net's three:
@@ -8434,9 +8434,8 @@ weight. As in Chapter~\ref{chap:depthwise}, what ran is
 \texttt{pretty(provenGraph)} ---
 \texttt{verified\_mlir/efficientnet\_adam\_train\_step.mlir} --- and
 every squeeze-excitation gate in it backpropagates by the product rule
-Theorem~\ref{thm:seBlockHasVJP} proves; the depthwise, BatchNorm and
-residual rules are Chapters~\ref{chap:depthwise}, \ref{chap:bn}
-and~\ref{chap:residual}'s.
+Theorem~\ref{thm:seBlockHasVJP} proves; the depthwise, BatchNorm and residual rules are
+Theorems~\ref{ax:depthwiseHasVJP3}, \ref{thm:bnHasVJP} and~\ref{thm:residualHasVJP}.
 
 \medskip\noindent\textbf{And this fold holds at every input.}
 \texttt{efficientnetForwardBFullHasVJP} chains the stem, all
@@ -8445,13 +8444,12 @@ batched over \(N\), assuming a positive \(\varepsilon\) at each BatchNorm
 and nothing else --- so every operation in the graph that just trained
 carries a proved backward, and their composition into the whole network
 carries one too. What buys that is swish. It is smooth, so the statement
-quantifies over all inputs, where Chapter~\ref{chap:depthwise}'s fold had
-to name a point and assume its thirty-five relu6 activations stayed off
-the kink. Depth was never the obstacle, the activation was --- and every
+quantifies over all inputs, where Chapter~\ref{chap:depthwise}'s fold had to name a point and assume
+every relu6 activation stayed off the kink. Depth was never the obstacle, the activation was --- and every
 network after this one is smooth.
 
-The three compile lines and the \texttt{running-stats BN} line are
-Chapter~\ref{chap:depthwise}'s, at 49 BatchNorms; the train step's 740
+The three compile lines and the \texttt{running-stats BN} line are every
+BatchNorm net's, here at 49 BatchNorms; the train step's 740
 outputs are what 213 parameter tensors plus their Adam moments plus the
 batch statistics plus the report-only loss come to.
 
@@ -9355,10 +9353,8 @@ the trajectories differ, it can. This section does not claim to know why.
 
 \medskip\noindent\textbf{The suspect is the BatchNorm group, and it is
 unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
-one numerical asymmetry above the rule is the BatchNorm group: each
-replica's $64$ against the reference's global $256$, for the reason given
-there --- the render this pair trained on normalizes each replica's shard
-on its own. MobileNetV2's pair, which carries the same fourfold difference,
+one numerical asymmetry above the rule is the BatchNorm group: each replica's $64$ against the reference's global $256$: the render this
+pair trained on normalizes each replica's shard on its own. MobileNetV2's pair, which carries the same fourfold difference,
 landed $0.01$ apart, and it has as much BatchNorm as this net
 ($52$ layers to $49$), so the count of normalization layers does not by
 itself explain a $0.3$. What this recipe adds is that evaluation scores an
@@ -9643,11 +9639,11 @@ central swap pays for itself in the build before it pays for itself in
 the mathematics.
 
 \medskip\noindent That also shows in the first four epochs. Top-1 climbs
-28.2, 39.9, 52.4, 56.7, smoothly. Chapter~\ref{chap:se} had to explain a
-jump at epoch 4, where B0's running statistics were averaging over
-weights that were still moving fast and the evaluation forward was
-briefly using statistics that no longer described the network. No such
-step exists here, because no such statistics exist here.
+28.2, 39.9, 52.4, 56.7, smoothly. A BatchNorm net can show a step in its first epochs, when the running
+statistics average over weights that are still moving fast and the
+evaluation forward briefly uses statistics that no longer describe the
+network (Chapter~\ref{chap:se}). No such step exists here, because no such
+statistics exist here.
 
 Three new operations this chapter, still three rules. What ran is
 \texttt{pretty(provenGraph)}, the file
@@ -10393,9 +10389,8 @@ lagging the live weights. Then it climbs for the rest of the schedule
 without an overfitting turn, which is what the heavy-regularization
 regime predicts and what makes the long schedule worth buying.
 
-\textbf{Learning-rate robustness.} The full pack was also a test of
-whether ConvNeXt's AdamW recipe is as learning-rate-robust as
-EfficientNet's RMSProp (Chapter~\ref{chap:se}) proved fragile. It is: at
+\textbf{Learning-rate robustness.} The full pack was also a test of ConvNeXt's learning-rate robustness under
+AdamW, the test Chapter~\ref{chap:se} ran on RMSProp. It is robust: at
 the $2.5\mathrm{e}{-}4$ peak with global-norm gradient clipping at $1.0$,
 top-1 climbed across the whole 300-epoch schedule with no erosion and no
 divergence, the opposite of B0's RMSProp blow-up. AdamW's bounded,

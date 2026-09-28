@@ -98,12 +98,13 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 Progress (2026-09-28): chapter 1 landed (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
 pointers); chapter 5 landed (→ 317; `chap:residual` 35 → 24, `sec:r34_pjrt` 10 → 4); chapters 2–4
 landed (→ 314; found ch 1 citing `thm:mlp_fold` for the linear listing, and the §2.4/§3.6 sweep tsvs
-deleted from under their captions — restored). Next: 6–9, then Bestiary + appendices (the Track-4
-status table, item (e)).
+deleted from under their captions — restored); chapters 6–9 landed (→ 313). Next: Bestiary +
+appendices — the Track-4 side-quest table, item (e): its Status column and lead-in already say
+MobileNetV4 was "run once as a consistency check" while §6.6 carries its 100-epoch pair.
 
-Lead for the chapter-7 chunk: `jax/MainEfficientNet.lean`'s Imagenette config is wd 1e-3, warmup 5,
-batch 192, while §7.1's verified transcript prints warmup 3 / baseLR 1e-3 — check whether the B0
-reference and verified Imagenette rows are on one recipe before any sentence says they are.
+Closed: `jax/MainEfficientNet.lean`'s Imagenette config (wd 1e-3, warmup 5, batch 192) differs from
+§7.1's verified transcript (warmup 3 / baseLR 1e-3), but ch 7's Imagenette section reports only the
+verified run, so no sentence rests on it; ch 8's "same base recipe" now cites chapter 5 only.
 
 One target chapter per commit, reading its block of `scripts/book/book_xrefs.py` output: chapter 1
 (32 refs, mostly (b)), chapter 5 (35, mostly (c)/(d)), then 2, 3, 4, 6–9, the appendices.
