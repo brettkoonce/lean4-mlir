@@ -332,9 +332,10 @@ fidelity:
        grid with the standard model proved (`rndP_err`, `RndP.lean`) -- no hardware
        axiom. `FloatClose A B f fF L` is the one closeness form: a magnitude window `A -> B` with
        an input-error -> output-error modulus `L`, composing by `FloatClose.comp` and through the
-       additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas, the CIFAR
-       block chains, the ResNet-34 stage fold and the bf16-mixed two-roundoff bounds are stated
-       on it. The MNIST/CNN descent chain (`Training/SgdDescent/*.lean`) takes the model and
+       additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas and the
+       residual-block chain are stated on it, and the bf16-mixed two-roundoff bounds
+       (`ConvMixedComposeBridge.lean`) take the inherited input error as an explicit argument.
+       The MNIST/CNN descent chain (`Training/SgdDescent/*.lean`) takes the model and
        `FloatBridge.lean`'s per-layer `*_close` lemmas directly.
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net

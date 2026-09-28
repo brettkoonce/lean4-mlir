@@ -1,19 +1,14 @@
 import LeanMlir.Proofs.Float.ConvFloat
-import LeanMlir.Proofs.Float.FloatClose
 import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 
-/-! # The mixed-precision conv as a `FloatClose`
+/-! # The mixed-precision conv at a perturbed input
 
 `FloatModel.conv_close_mixed` bounds **one** bf16-mixed convolution against exact ℝ at
 an **exactly-represented input**. That is not enough to compose: a net feeds each layer the
 *previous* layer's already-perturbed output, so what a fold needs is an error **modulus** — a map
 from inherited input error to output error — plus a magnitude bound to thread forward. That pair
-is `FloatClose` (`FloatComposeBridge.lean`), and this file supplies its mixed-precision conv instance.
-
-`FloatClose A B f fF L` says nothing about how `fF` rounds — only that it stays within
-`L e` of `f`. So `floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
-`floatClose_residualBlock`, `floatClose_iterate` and `FloatClose.comp` compose with the bf16
-conv instance here unchanged. No whole-net bf16 (or f32) float bound is assembled in the repo.
+is what `flatConvMixed_close` states: the bound at an input that is both perturbed (`E`) and
+magnitude-bounded (`A`). No whole-net bf16 (or f32) float bound is assembled in the repo.
 
 What genuinely had to be proved here, none of which the `e = 0` bound gives:
 
@@ -218,7 +213,7 @@ theorem FloatModel.convMixed_close_prop (M L : FloatModel) {ic oc h w kH kW : Na
   linarith
 
 -- ════════════════════════════════════════════════════════════════
--- § Vec space, and the `FloatClose` instance
+-- § Vec space: the flattened bound at a perturbed input
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Vec-space mixed-precision conv** — the bf16 peer of `FloatModel.flatConvF`, in the flat
@@ -244,25 +239,6 @@ theorem FloatModel.flatConvMixed_close (M L : FloatModel) {ic oc h w kH kW : Nat
     intro c i j; simp only [Tensor3.unflatten]; exact hd _
   simp only [FloatModel.flatConvMixed, flatConv, Tensor3.flatten]
   exact M.convMixed_close_prop L W b _ _ hw' hA hE hW hb huf_a huf_d _ _ _
-
-/-- **A mixed-precision (leaf `L`, accumulate `M`) convolution is `FloatClose`.** Magnitude
-    `A` in, real output `≤ layerAct` and float output `≤ layerAct + convMixedBudget(E := 0)`
-    out; error modulus `E ↦ convMixedBudget … E`. The other `FloatClose` instances
-    (`floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
-    `floatClose_residualBlock`, `floatClose_iterate`, `FloatClose.comp`) compose with it
-    unchanged; nothing in the repo instantiates it. -/
-theorem floatClose_flatConvMixed {ic oc h w kH kW : Nat} (M L : FloatModel)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
-    (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
-    FloatClose A
-      (layerAct (ic * kH * kW) w' β A + convMixedBudget M.u L.u (ic * kH * kW) w' β A 0)
-      (flatConv (h := h) (w := w) W b) (M.flatConvMixed L (h := h) (w := w) W b)
-      (fun E => convMixedBudget M.u L.u (ic * kH * kW) w' β A E) :=
-  FloatClose.of_close (fun v hv i => flatConv_abs_le hA hW hb hv i)
-    (fun v hv i => M.flatConvMixed_close L W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i)
-    (fun vt va E hva _ hd i => M.flatConvMixed_close L W b vt va hw' hA
-      ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd i)
 
 -- ════════════════════════════════════════════════════════════════
 -- § What bf16 costs the WHOLE-NET bound — the per-layer gain

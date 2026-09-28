@@ -21,8 +21,8 @@ claim-bearing refs), then the §6 leads if wanted.
 
 - `sdpa_back_{Q,K,V}` spellings (now `sdpaBack{Q,K,V}`): ViTMhsaBackCertifiedTie.lean:91,
   ViTMultiHeadChain.lean:149; grep the rest of `LeanMlir/` for `sdpa_back_`.
-- MaxPool3s2.lean:115 — "the r34 forward float chain (`floatClose_r34_stages` …)"; no such chain
-  exists (`floatClose_r34_stages` has no users and iterates one block at one width).
+- ~~MaxPool3s2.lean:115 — "the r34 forward float chain (`floatClose_r34_stages` …)"~~ done: the
+  comment names `floatClose_maxPool3s2`; `floatClose_r34_stages` is cut.
 - ConvGrad.lean:~55 — cites a nonexistent `mlp_render_W*_certified`, says "rendered … denotes".
 - TokenParamGrad.lean:~386 — cites a "§ B" that does not exist; "EVERY parameter … certified".
 - EvenKernelConvBack.lean — section header says four leaf ties; the section has three.
@@ -169,9 +169,12 @@ rungs' scope, and the certificates' `hp` — all report-or-reword, none a Lean g
   `*_net_lossGrad` (R34 `106a15b1`, R50 `c3bd872b`, MNv2 `72d284b9`, MNv4 `d91f281e`, B0
   `01576a15`, ConvNeXt `8e59f946`, ViT `df2a20d2`) — every parameter gradient node is ∂L/∂θ for
   any `L` with gradient `g` at the logits, with a smoothed-CE corollary per net (R50 also BCE).
-- No whole-net `FloatClose` fold; `floatClose_dense`, `_flatConvMixed`, `_depthwise`,
+- ~~No whole-net `FloatClose` fold; `floatClose_dense`, `_flatConvMixed`, `_depthwise`,
   `_r34_stages` unused, `floatClose_bn` used by no net proof; FloatSubnormalBridge lemmas unused,
-  no binary32 `FaithfulFloatModel`.
+  no binary32 `FaithfulFloatModel`~~ **cut** (2026-09-28): the five wraps, `FloatSubnormalBridge.lean`
+  and `ResNet34BlockBridge.lean` (`bnStep_close`, orphaned with `floatClose_bn`) are gone; the kit
+  (`FloatClose`, `.comp`, `floatClose_flatConv` / pools / skips / `iterate`) stays as the audit's
+  per-op instances. The appendix's subnormal parenthetical and "block and stage chains" rewritten.
 - Seven SpecVJP `*VerifiedHasVJP` and `mlpHasVJP` are `HasVJP.canonical` (say nothing about the
   net); `bnIstd_close_at` applied only at V = ε.
 - ~~`tests/AuditAxioms.lean` does not print the four `Bf16Fold` theorems~~ **done** `a8d6bb78`.

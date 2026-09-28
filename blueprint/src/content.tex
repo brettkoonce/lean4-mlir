@@ -17753,10 +17753,8 @@ new axioms is the part worth explaining.
 A \texttt{FloatModel} is any rounding operator \(\mathrm{rnd}\)
 with relative error \(u\): \(|\mathrm{rnd}(x) - x| \le u\,|x|\).
 Binary32 round-to-nearest satisfies this with \(u = 2^{-24}\) on the
-normal range (the subnormal range is characterized separately in
-\texttt{FloatSubnormalBridge.lean}, where the normalized blocks provably stay
-normal and the residual underflow floor is proven negligible at
-\(\le 2^{-86}\)). The exact-arithmetic model
+normal range; in the subnormal range the rounding error is absolute, not
+relative, and the model does not cover it. The exact-arithmetic model
 (\(\mathrm{rnd} = \mathrm{id}\), \(u = 0\)) shows the interface is
 inhabited and collapses every budget to zero. Nothing about IEEE-754 is
 postulated, and the theorems are conditional on the standard model, the
@@ -17782,8 +17780,8 @@ rounding operator as round-to-nearest on the \(p\)-bit-significand grid
 and instantiates it twice: \texttt{binary32} at \(p = 23\),
 \(u_{32} = 2^{-24}\), and \texttt{fp8E4M3} at \(p = 3\),
 \(u_{\mathrm{e4m3}} = 2^{-4}\). Every bridge quantifies over
-\texttt{(M : FloatModel)} --- the per-operator lemmas, the block and stage
-chains, the MNIST descent chain --- so none of them is a statement about
+\texttt{(M : FloatModel)} --- the per-operator lemmas, the residual-block
+chain, the MNIST descent chain --- so none of them is a statement about
 binary32 that happens to be proved; each is a statement about any
 rounding model, of which binary32 is one instance.
 

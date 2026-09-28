@@ -10,9 +10,8 @@ bounds. The chains that assemble them for the MNIST MLP and the E4M3 linear net 
 `MlpFloatBridge`.
 
 The tier, in import order: this file (`FloatModel`, per-op `*_close`) →
-`FloatSubnormalBridge` (`FaithfulFloatModel`, the subnormal-honest superset) →
 `FloatComposeBridge` (`FloatClose`, the one closeness form, and `.comp`) → the per-layer
-bridges (`BnFloatBridge`, `ConvMixedFloatBridge`, `DepthwiseFloatBridge`, the ResNet-34 block) →
+bridges (`BnFloatBridge`, `ConvMixedFloatBridge`, `DepthwiseFloatBridge`) →
 `RndP` / `Binary32Instance` (`binary32` and `fp8E4M3` as named `FloatModel`s; `rndP`
 is the grid rounding operator behind them and behind the bf16 sharding lemmas).
 

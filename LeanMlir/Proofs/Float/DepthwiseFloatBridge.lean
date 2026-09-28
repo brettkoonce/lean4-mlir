@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Float.ConvFloat
-import LeanMlir.Proofs.Float.FloatClose
 
 /-!
 # ℝ→Float32 bridge: depthwise convolution
@@ -19,9 +18,7 @@ We get it for free from the existing conv scaffolding. The padded read in the de
 forward is *definitionally* `convPad kH kW x ch kh kw hi wi` (same SAME-padding `dite`),
 so each output channel is a single-output `Proofs.dense` over the `kH·kW`-flattened
 window (`depthwiseConv2d_eq_dense`), and `dense_close` / `denseErr_le_uniform` deliver
-the budget exactly as they do for the regular conv (`flatConvF_close`). Then
-`floatClose_depthwise` is the `FloatClose` wrap, the depthwise peer of
-`floatClose_flatConv`.
+the budget exactly as they do for the regular conv (`flatConvF_close`).
 -/
 
 namespace Proofs
@@ -162,27 +159,5 @@ theorem depthwiseFlat_abs_le {c h w kH kW : Nat} {W : DepthwiseKernel c kH kW}
     intro ch i j; simp only [Tensor3.unflatten]; exact hv _
   simp only [depthwiseFlat, Tensor3.flatten]
   exact depthwiseConv2d_abs_le ha hW hb huf _ _ _
-
--- ════════════════════════════════════════════════════════════════
--- § FloatClose instance: the depthwise peer of floatClose_flatConv
--- ════════════════════════════════════════════════════════════════
-
-/-- **Depthwise convolution is `FloatClose`** with modulus the depthwise-fan-in
-    `layerBudget` (fan-in `kH·kW`, no channel sum — the depthwise efficiency carries
-    into the budget). Real output ≤ `layerAct`; float output ≤ that + the fresh-input
-    rounding `layerBudget(e=0)`. The depthwise peer of `floatClose_flatConv`; it composes
-    by `FloatClose.comp` like the other instances. Nothing in the repo instantiates it. -/
-theorem floatClose_depthwise {c h w kH kW : Nat} (M : FloatModel)
-    (W : DepthwiseKernel c kH kW) (b : Vec c) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)
-    (hW : ∀ ch kh kw, |W ch kh kw| ≤ w') (hb : ∀ ch, |b ch| ≤ β) :
-    FloatClose A
-      (FloatModel.layerAct (kH * kW) w' β A + FloatModel.layerBudget M.u (kH * kW) w' β A 0)
-      (depthwiseFlat (h := h) (w := w) W b) (M.depthwiseFlatF (h := h) (w := w) W b)
-      (fun e => FloatModel.layerBudget M.u (kH * kW) w' β A e) :=
-  FloatClose.of_close (fun v hv k => depthwiseFlat_abs_le hA hW hb hv k)
-    (fun v hv k => M.depthwiseFlatF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) k)
-    (fun vt va e hva _ hd k => M.depthwiseFlatF_close W b vt va hw' hA
-      ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd k)
 
 end Proofs

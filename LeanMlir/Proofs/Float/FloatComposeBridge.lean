@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.FloatClose
-import LeanMlir.Proofs.Float.ResNet34BlockBridge
+import LeanMlir.Proofs.Float.BnInputBridge
 -- He et al.'s 3×3/s2 stem pool, for `floatClose_maxPool3s2` below. It imports only
 -- `Architectures.CNN`, which this file already has transitively (it uses `maxPoolFlat_abs_le`),
 -- so this adds no cycle.
@@ -16,12 +16,9 @@ magnitude precondition is met). `FloatClose.comp` composes two — the moduli
 compose as `Lg ∘ Lf`, magnitudes thread `A → B → C`.
 
 Instances proved here: `floatClose_flatConv` (modulus = the conv-fan-in
-`layerBudget`), `floatClose_dense`, the pools (`floatClose_maxPool`,
-`floatClose_maxPool3s2`, `floatClose_gap`), the skips (`floatClose_addResidual`,
-`floatClose_residualBlock`, `floatClose_residual`), `floatClose_bn` (use the
-operating-point `bnIstd_close_at` for the `eistd`, else the budget is vacuous),
-and `floatClose_r34_stages`. A whole-net bound would be `.comp` of these; none is
-assembled in the repo.
+`layerBudget`), the pools (`floatClose_maxPool`, `floatClose_maxPool3s2`, `floatClose_gap`)
+and the skips (`floatClose_addResidual`, `floatClose_residualBlock`, `floatClose_residual`).
+A whole-net bound would be `.comp` of these; none is assembled in the repo.
 -/
 
 namespace Proofs
@@ -43,24 +40,6 @@ theorem floatClose_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
     (fun v hv i => M.flatConvF_close W b v v hw' hA le_rfl hW hb hv (fun k => by simp) i)
     (fun vt va e hva _ hd i => M.flatConvF_close W b vt va hw' hA
       ((abs_nonneg _).trans (hd ⟨0, hn⟩)) hW hb hva hd i)
-
-/-- **Dense layer is `FloatClose`** with modulus the fan-in `layerBudget` (the dense
-    analogue of `floatClose_flatConv`). Real output ≤ `layerAct`; float output ≤ that
-    + the fresh-input rounding `layerBudget(e=0)`. Stated for any `dense W b`; nothing in
-    the repo instantiates it. -/
-theorem floatClose_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
-    {w' β A : ℝ} (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hm : 0 < m)
-    (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
-    FloatClose A
-      (layerAct m w' β A + layerBudget M.u m w' β A 0)
-      (Proofs.dense W b) (M.dense W b)
-      (fun e => layerBudget M.u m w' β A e) :=
-  FloatClose.of_close (fun v hv i => dense_abs_le hA hW hb hv i)
-    (fun v hv i => (M.dense_close_fresh W b v i).trans
-      (M.denseErr_le_uniform hw' le_rfl hW hb hv i))
-    (fun vt va e hva _ hd i => by
-      have he : 0 ≤ e := (abs_nonneg _).trans (hd ⟨0, hm⟩)
-      exact (M.dense_close W b vt va e he hd i).trans (M.denseErr_le_uniform hw' he hW hb hva i))
 
 /-- **MaxPool is `FloatClose` with modulus `id`** — exact in float, 1-Lipschitz,
     never grows magnitudes (`maxPoolFlat_close` / `maxPoolFlat_abs_le`). -/
@@ -150,58 +129,6 @@ theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
       (fun v => relu m (fun j => M.add (FF v j) (v j)))
       (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
   (floatClose_addResidual M hF).comp (floatClose_relu _)
-
--- ════════════════════════════════════════════════════════════════
--- § BN → relu as a FloatClose instance (the other r34 wrap)
--- ════════════════════════════════════════════════════════════════
-
-/-- **BN (no activation) is `FloatClose`** (per-example, training-mode). The float BN computes
-    its stats from the input via the supplied `fμ`/`fistdv` (within `emean`/`eistd` of the true
-    stats on the magnitude domain — discharged by `bnMean_close` / `bnVar_close` +
-    `bnIstd_close_at` when instantiated). Error from `bnStep_close` (rounding
-    `bnForward_close_of` + input-shift `bnForward_input_close`); magnitude the real
-    `|γ|·|x̂| + |β|` plus that rounding. Stated for a BN with no trailing activation (the form a
-    BN-before-swish or BN-before-GELU position would use); nothing in the repo instantiates it. -/
-theorem floatClose_bn {m : Nat} (M : FloatModel)
-    {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
-    (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
-    (hmean : ∀ v, (∀ k, |v k| ≤ A) → |fμ v - bnMean m v| ≤ emean)
-    (histd : ∀ v, (∀ k, |v k| ≤ A) → |fistdv v - bnIstd m v ε| ≤ eistd)
-    (hD : ∀ v, (∀ k, |v k| ≤ A) → ∀ j, |v j - bnMean m v| ≤ D)
-    (hSabs : ∀ v, (∀ k, |v k| ≤ A) → |bnIstd m v ε| ≤ S) :
-    FloatClose A (G * (D * S) + Bbnd + bnNormBudget M.u D S G Bbnd emean eistd)
-      (fun v => bnForward m ε γ β v)
-      (fun v => M.bnForwardF γ β (fμ v) (fistdv v) v)
-      (fun e => bnReluBudget M.u D S G Bbnd emean eistd A e ε) := by
-  refine FloatClose.of_close (fun v hv i => ?_)
-    (fun v hv i => M.bnForward_close_of (ε := ε) v i (hmean v hv) (histd v hv)
-      (hD v hv i) (hSabs v hv) hγ hβ)
-    (fun vt va e hva hvt hd i => M.bnStep_close vt va i hn hε hd hvt hva (hmean vt hvt)
-      (histd vt hvt) (hD vt hvt) (hSabs vt hvt) hγ hβ)
-  have hxhat : |bnXhat m ε v i| ≤ D * S := by
-    unfold bnXhat; rw [abs_mul]
-    exact mul_le_mul (hD v hv i) (hSabs v hv) (abs_nonneg _) ((abs_nonneg _).trans (hD v hv i))
-  show |bnForward m ε γ β v i| ≤ _
-  unfold bnForward
-  refine (abs_add_le _ _).trans (add_le_add ?_ hβ)
-  rw [abs_mul]; exact mul_le_mul hγ hxhat (abs_nonneg _) ((abs_nonneg _).trans hγ)
-
--- ════════════════════════════════════════════════════════════════
--- § The final fold: a block iterated to depth (r34's [3,4,6,3] stages)
--- ════════════════════════════════════════════════════════════════
-
-/-- **The `[3,4,6,3]` iterates.** Given a dim-preserving block that is `FloatClose A A`
-    (magnitude bound `A` taken as a hypothesis), its 3-, 4-, 6- and 3-fold iterates are
-    `FloatClose A A` — `floatClose_iterate` at ResNet-34's per-stage block counts, for one
-    block `blk` at one width `m`. No whole-net ResNet-34 float bound exists in the repo. -/
-theorem floatClose_r34_stages {m : Nat} {A : ℝ} {blk blkF : Vec m → Vec m} {L : ℝ → ℝ}
-    (hblk : FloatClose A A blk blkF L) :
-    FloatClose A A (blk^[3]) (blkF^[3]) (L^[3]) ∧
-    FloatClose A A (blk^[4]) (blkF^[4]) (L^[4]) ∧
-    FloatClose A A (blk^[6]) (blkF^[6]) (L^[6]) ∧
-    FloatClose A A (blk^[3]) (blkF^[3]) (L^[3]) :=
-  ⟨floatClose_iterate hblk 3, floatClose_iterate hblk 4,
-   floatClose_iterate hblk 6, floatClose_iterate hblk 3⟩
 
 -- ═════════════════════════════════════════════════
 -- § The additive skip

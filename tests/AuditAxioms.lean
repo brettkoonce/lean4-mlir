@@ -50,7 +50,6 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Float.MlpFloatBridge
-import LeanMlir.Proofs.Float.FloatSubnormalBridge
 import LeanMlir.Proofs.Training.SgdDescent.Basic
 import LeanMlir.Proofs.Training.SgdDescent.Linear
 import LeanMlir.Proofs.Training.SgdDescent.Cnn
@@ -58,7 +57,6 @@ import LeanMlir.Proofs.Training.SgdDescent.Cifar
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Float.ResNet34FloatBridge
 import LeanMlir.Proofs.Float.BnInputBridge
-import LeanMlir.Proofs.Float.ResNet34BlockBridge
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
@@ -789,15 +787,6 @@ open Proofs
 #print axioms FloatModel.dense_close
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
--- Subnormal-floor closure (FloatSubnormalBridge.lean)
-#print axioms Proofs.FaithfulFloatModel.toFloatModel
-#print axioms Proofs.FaithfulFloatModel.err_of_normal
-#print axioms Proofs.FaithfulFloatModel.exactFaithful
--- The stays-normal invariant for BN/LN
-#print axioms Proofs.bnDenom_normal
-#print axioms Proofs.bnSqrt_normal
-#print axioms Proofs.istd_ge_minNormal
-#print axioms Proofs.subFloor_total_negligible
 -- MaxPool exact-in-float (CNN.lean)
 #print axioms max_close
 #print axioms maxPool2_close
@@ -843,20 +832,15 @@ open Proofs
 -- THE FINAL FOLD: floatClose_id + floatClose_iterate
 #print axioms floatClose_id
 #print axioms floatClose_iterate
-#print axioms floatClose_r34_stages
 -- EfficientNet float bridge
 #print axioms floatClose_addResidual
 -- The remaining FloatClose instances, all wraps of existing closeness
-#print axioms FloatModel.bnStep_close
-#print axioms floatClose_bn
-#print axioms floatClose_dense
 #print axioms globalAvgPoolFlat_eq_bnMean
 #print axioms floatClose_gap
 -- Depthwise conv
 #print axioms depthwiseConv2d_eq_dense
 #print axioms FloatModel.depthwiseConv2dF_close
 #print axioms FloatModel.depthwiseFlatF_close
-#print axioms floatClose_depthwise
 -- The additive skip's closeness (FloatComposeBridge.lean)
 #print axioms floatClose_residual
 -- Strided-conv backward (r34 down-blocks + stem)
@@ -1928,7 +1912,6 @@ open Proofs
 #print axioms Proofs.conv2d_sub_abs_le
 #print axioms Proofs.FloatModel.convMixed_close_prop
 #print axioms Proofs.FloatModel.flatConvMixed_close
-#print axioms Proofs.floatClose_flatConvMixed
 #print axioms Proofs.convMixedBudget_affine
 #print axioms Proofs.layerBudget_affine
 
