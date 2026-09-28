@@ -290,7 +290,7 @@ jobs:
         # renamed module leaves no orphan page.
         #
         # ⚠ And the per-module search data (2026-09-28). The pass writes a
-        # `doc/declarations/declaration-data-<module>.bmp` (+ `backrefs-<module>.json`) per module
+        # `doc-data/declaration-data-<module>.bmp` (+ `backrefs-<module>.json`) per module
         # it renders, and builds declaration-data.bmp by merging EVERY such file on disk — so a
         # moved or deleted module's file, carried forward by the rolling cache, stayed in the
         # search index for good: 95 dead LeanMlir modules and 551 declarations whose search hits
@@ -317,7 +317,8 @@ jobs:
           fi
           grep -n 'readDir' "$ub"
           rm -rf .lake/build/doc/LeanMlir/ .lake/build/doc/LeanMlir.html
-          rm -f .lake/build/doc/declarations/declaration-data-LeanMlir*.bmp .lake/build/doc/declarations/backrefs-LeanMlir*.json
+          echo "dropping $(ls .lake/build/doc-data/declaration-data-LeanMlir*.bmp 2>/dev/null | wc -l) cached LeanMlir search-data files"
+          rm -f .lake/build/doc-data/declaration-data-LeanMlir*.bmp .lake/build/doc-data/backrefs-LeanMlir*.json
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs
 

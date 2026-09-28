@@ -68,10 +68,11 @@ found through the <a href="/docs/search.html">API docs search</a>.</p>
     .then(function (r) { return r.json(); })
     .then(function (data) {
       var d = decl && data.declarations[decl];
-      if (d) { location.replace(link(d.docLink)); return; }
+      if (d && link(d.docLink).split("#")[0] !== location.pathname) { location.replace(link(d.docLink)); return; }
       var hits = Object.keys(data.modules).filter(function (name) {
         var s = name.split("."), a = s[s.length - 2], b = s[s.length - 1];
-        return s[0] === old[0] && (b === last || a + b === last || (b === "Basic" && a === last));
+        // never the missing module itself: an index that still lists it would loop back here
+        return name !== old.join(".") && s[0] === old[0] && (b === last || a + b === last || (b === "Basic" && a === last));
       });
       if (hits.length === 1) {
         location.replace(link(data.modules[hits[0]].url) + location.hash);
