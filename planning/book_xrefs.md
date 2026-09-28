@@ -96,8 +96,10 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 ## 3. Order of work
 
 Progress (2026-09-28): chapter 1 landed (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
-pointers); chapter 5 landed (→ 317; `chap:residual` 35 → 24, `sec:r34_pjrt` 10 → 4). Next: 2–4,
-then 6–9, then Bestiary + appendices (the Track-4 status table, item (e)).
+pointers); chapter 5 landed (→ 317; `chap:residual` 35 → 24, `sec:r34_pjrt` 10 → 4); chapters 2–4
+landed (→ 314; found ch 1 citing `thm:mlp_fold` for the linear listing, and the §2.4/§3.6 sweep tsvs
+deleted from under their captions — restored). Next: 6–9, then Bestiary + appendices (the Track-4
+status table, item (e)).
 
 Lead for the chapter-7 chunk: `jax/MainEfficientNet.lean`'s Imagenette config is wd 1e-3, warmup 5,
 batch 192, while §7.1's verified transcript prints warmup 3 / baseLR 1e-3 — check whether the B0

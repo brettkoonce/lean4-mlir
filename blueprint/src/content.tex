@@ -1694,8 +1694,7 @@ The init codes are the shared driver's defaults, and this chapter is the
 one place they do not apply. \texttt{trainLinear} sets both tensors to
 zero outright rather than reading them off \texttt{toSpecs}, which is why
 the run at the top of the chapter lands on the same accuracy whatever the
-seed. From Chapter~\ref{chap:mlp} onward the He(fan-in) in code
-\texttt{0} is what actually runs.
+seed. From Chapter~\ref{chap:mlp} onward the codes apply as written.
 
 That binding is why the type exists. The spec lives in
 \texttt{LeanMlir/Verified/NetsCore.lean} rather than beside the trainer,
@@ -1759,9 +1758,8 @@ the run at the top of the chapter compiled.
 The run at the top of this chapter is this network. Accuracy climbs from
 89.77\% after one epoch to 92.10\% after twelve, and the curve is
 essentially flat from epoch~9 on, which is what a model with no hidden
-layer looks like once it has learned everything it can. Adding hidden
-layers and ReLU in Chapter~\ref{chap:mlp} takes the same dataset and the
-same recipe to 97.81\%. That gap of about 5.7 points is the value of
+layer looks like once it has learned everything it can. Adding hidden layers and ReLU in Chapter~\ref{chap:mlp} takes the same
+dataset and the same recipe to 97.81\% (\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}). That gap of about 5.7 points is the value of
 non-linearity on this task.
 
 \paragraph{Where this goes.}
@@ -2132,9 +2130,9 @@ step as a single dispatch.
 with plain $\theta' = \theta - \alpha\nabla$ at a constant learning rate,
 which is three operations per tensor --- the listing's last band is the
 entire optimizer. Adam is available here and the deeper chapters use it,
-but it costs roughly 2.3 times the graph: Chapter~\ref{chap:bn}'s CIFAR
-network, rendered both ways, goes from 1,001 StableHLO operations under
-SGD to 2,293 under AdamW, because the first- and second-moment buffers
+but it costs roughly 2.3 times the graph: Chapter~\ref{chap:bn}'s CIFAR network, rendered both ways
+(\texttt{verified\_mlir/cifar8w\_bn\_\{sgd,adam\}\_train\_step.mlir}), goes
+from 1,001 StableHLO operations under SGD to 2,293 under AdamW, because the first- and second-moment buffers
 enter and leave the signature and an \texttt{rsqrt} appears. Size is not
 the deciding reason, though. Both optimizers are proved \emph{faithful},
 each emitted update certified to be its own update law applied to the
@@ -2151,8 +2149,8 @@ the depth the descent half actually reaches.
 rather than a mean. The constant \texttt{0.00078125} is
 $\alpha/N = 0.1/128$, the per-sample rate that turns that sum back into
 the mean update. Everything else in the listing is the rendering of a theorem
-proved earlier in this chapter, stated for one example: Theorem~\ref{thm:mlp_fold}
-certifies the six updates at $N = 1$, and the batch sum and the $\alpha/N$
+proved earlier in this chapter, stated for one example: Theorem~\ref{thm:linear_fold}
+certifies the two updates at $N = 1$, and the batch sum and the $\alpha/N$
 scale are the render's.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
@@ -2850,8 +2848,8 @@ done (trained MNIST-CNN via the proof-rendered StableHLO).
 
 Twelve epochs at about 4.9 seconds each, and 98.77\% on the full
 10,000-image test set. Two convolutions in front of
-Chapter~\ref{chap:mlp}'s classifier buy about a point over the MLP's
-97.81\%, and they do it with 3.5M parameters against the MLP's 670K.
+Chapter~\ref{chap:mlp}'s classifier buy about a point over the MLP's 97.81\%
+(\texttt{runs/2026-09-01-mlp-verified-xla-cuda/}), and they do it with 3.5M parameters against the MLP's 670K.
 
 This is the noisiest of the three MNIST runs, and the transcript shows it.
 Epoch~1 landed at 92.95\% here; repeated, the same twelve epochs from the
@@ -3595,14 +3593,12 @@ produced. Eight of the ten widths repeat to within 0.4 and their whiskers
 are barely visible. The other two do not: $d=512$ dropped one run to
 96.66\% and $d=4096$ one to 93.52\%, which is what the two long tails are.
 
-\medskip\noindent Those tails are the reason this curve is a median of
-five and Chapter~\ref{chap:mlp}'s is not. A symmetric error bar would have
+\medskip\noindent Those tails are the reason this curve is a median of five. A symmetric error bar would have
 been the wrong shape for them --- four runs cluster and one falls away, so
 there is no spread to put a $\pm$ on --- and the 95\% interval on the test
 set, $\pm 0.22$ at this accuracy, would have hidden a five-point failure
-behind a rounding error. The MLP points are single runs, and
-Chapter~\ref{chap:mlp} gives them half a point of give for the same reason
-the CNN's needed five.
+behind a rounding error. The MLP points are single runs, which
+Chapter~\ref{chap:mlp} reads with half a point of give.
 
 \medskip\noindent The cost is that a handful of runs cannot see this.
 Draw five of the thirty runs in \S\ref{sec:cnn_runit}, build the ordinary 95\% interval on their mean,
@@ -5689,8 +5685,8 @@ the additive-fan-in rule with the identity in one slot: ``send the
 upstream gradient through both branches and add''.
 \texttt{residualHasVJPAt} proves exactly this at the evaluation point
 (a one-line proof: the fan-in lemma with the identity's VJP plugged into
-one slot), and the inner $f$'s VJP is the convolution and BatchNorm
-backward already proven in Chapters~\ref{chap:cnn} and~\ref{chap:bn}. The
+one slot), and the inner $f$'s VJP is the convolution and BatchNorm backward
+(Theorems~\ref{ax:conv2dHasVJP3}, \ref{thm:bnHasVJP}). The
 whole block, and a tower of sixteen of them, composes by the chain
 rule \texttt{vjpCompAt} (Theorem~\ref{thm:vjpComp}).
 
@@ -5737,8 +5733,7 @@ Chapters~\ref{chap:cnn} and~\ref{chap:bn}. Only the fan-in is new here.
   \item \textbf{The fan-in \texttt{add} is unconditional}, because addition is
     linear, so that bridge holds at every input.
   \item \textbf{The post-add ReLU is a smooth-point bridge} (no
-    pre-activation exactly zero), and the two BatchNorms inside $f$ carry
-    their own $\epsilon > 0$ conditions from Chapter~\ref{chap:bn}.
+    pre-activation exactly zero), and the two BatchNorms inside $f$ carry their own $\epsilon > 0$ conditions (Theorem~\ref{thm:bnHasVJP}).
   \item \textbf{Representative scale}, a two-channel block at $4\times4$. The
     same \texttt{\%dadd} fan-in repeats for all sixteen blocks.
 \end{itemize}
@@ -7566,8 +7561,7 @@ in it.
 \noindent\textbf{What is already proven.} A depthwise convolution
 applies one $k\times k$ kernel per channel with no cross-channel sum, so its
 reverse-mode derivative (Theorem~\ref{ax:depthwiseHasVJP3},
-\texttt{depthwiseHasVJP3}) is a reversed-kernel convolution minus
-the channel transpose the full-conv VJP of Chapter~\ref{chap:cnn} needs:
+\texttt{depthwiseHasVJP3}) is a reversed-kernel convolution minus the channel transpose the full-conv VJP (Theorem~\ref{ax:conv2dHasVJP3}) needs:
 with no $\sum_{c_\text{in}}$ to take the adjoint of, there is no in/out
 channel axis to swap. The inverted-residual block composes this with the
 pointwise convs, BatchNorm, and relu6, and
@@ -12199,8 +12193,8 @@ kernel at stride 16, which chops the $224 \times 224 \times 3$ image
 into $14 \times 14 = 196$ non-overlapping patches and projects each to
 192 dimensions. That it is a convolution rather than a distinct
 primitive is the point: a patch embedding is a strided
-convolution whose kernel equals its stride, so it reuses
-Chapter~\ref{chap:cnn}'s proved backward and needs nothing new.
+convolution whose kernel equals its stride, so it reuses the conv2d backward (Theorem~\ref{ax:conv2dHasVJP3}) and needs
+nothing new.
 
 \textbf{The CLS token and the positional embedding are
 \texttt{.param} entries.} They are learned weights that no layer
@@ -12293,10 +12287,8 @@ from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
 the same architecture on 1.28M images reaches $72.31\%$ over a
 thousand classes, which is the regime the design was for.
 
-\medskip\noindent\textbf{It reproduces exactly.} Chapter~\ref{chap:cnn}'s
-width sweep is where this book first had to take run-to-run spread
-seriously, so this number was measured three times before being printed,
-and all three passes came back bit-identical on three different
+\medskip\noindent\textbf{It reproduces exactly.} This number was measured three times
+before being printed, and all three passes came back bit-identical on three different
 cards: the same $68.738854\%$ and $90.420382\%$ at epoch 80, and the same
 160 epoch lines the whole way down. The reason is the graph's shape. XLA
 selects convolution algorithms per process, which
