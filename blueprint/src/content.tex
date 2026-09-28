@@ -625,16 +625,18 @@ the number of layers.
 \textbf{What \(\HasVJP\) packages.} A \(\HasVJP\) record for $f$ holds
 two things:
 \begin{itemize}
-  \item a \texttt{backward} function $\Vect{m} \to \Vect{n}$
+  \item a \texttt{backward} function, taking the input $x$ and a
+  cotangent $dy \in \Vect{n}$ to a vector in $\Vect{m}$
   \item a \texttt{correct} field, which is a proof that
-  $\mathrm{backward}(v)_j = \sum_i v_i \cdot \pdiv\, f\, x\, i\, j$,
-  meaning that the function really does compute $v^T J_f$
+  $\mathrm{backward}(x, dy)_i = \sum_j \pdiv\, f\, x\, i\, j \cdot dy_j$,
+  meaning that the function really does compute $dy^T J_f$
 \end{itemize}
-In Lean that's exactly three lines:
+In Lean that's the whole definition:
 \begin{verbatim}
-structure HasVJP (f : Vec m → Vec n) where
+@[ext] structure HasVJP {m n : Nat} (f : Vec m → Vec n) where
   backward : Vec m → Vec n → Vec m
-  correct  : ∀ x dy i, backward x dy i = ∑ j, pdiv f x i j * dy j
+  correct : ∀ (x : Vec m) (dy : Vec n) (i : Fin m),
+    backward x dy i = ∑ j : Fin n, pdiv f x i j * dy j
 \end{verbatim}
 A structure with two fields: a function, and a proof obligation about
 that function. Constructing a \(\HasVJP\) for some $f$ means writing
@@ -1655,7 +1657,6 @@ def linearVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.dense 784 10]
   blurb    := "MNIST-Linear via the VERIFIED renderer
@@ -1913,43 +1914,39 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
   let d0 := net.d0
   let d1 := net.nClasses
   net.printBlurb
-
-  -- 1. One session per committed render, and the entry point in each
+  -- 1. One session per committed render
   let tsSess  <- mkSession s!"{net.mlirDir}/{net.slug}_train_step.mlir"
   let fwdSess <- mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
-  let tsFn    := s!"m.{net.slug}_train_step"
-  let fwdFn   := s!"m.{net.slug}_fwd"
-
-  -- 2. Data, then zero-initialised parameters
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _, _) <-
+  -- 2. Data, shapes, the entry point in each render, zero-initialised
+  --    parameters
+  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, _trainPix, _crop) <-
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   IO.println s!"  train {nTrain}, {evalName} {nEval};
                   dense {d0}->{d1}, bs {bs}, SGD"
+  let nb  := nTrain / bs
+  let nbt := (nEval + bs - 1) / bs   -- ceil: last eval batch is zero-padded
+  let shapes := net.shapesBA          -- packed [W0|b0] layout for the forward
+  let xShape := net.xShape bs
+  let tsFn  := s!"m.{net.slug}_train_step"
+  let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 <- F32.const (d0 * d1).toUSize 0.0
   let mut b0 <- F32.const d1.toUSize 0.0
-  let nb     := nTrain / bs
-  let nbt    := (nEval + bs - 1) / bs   -- ceil: last eval batch is zero-padded
-  let nResident : USize := 2            -- W0 and b0 stay on the device
+  let nResident : USize := 2          -- W0 and b0 stay on the device
   let pBytes := (d0 * d1 + d1) * 4
-  let shapes := net.shapesBA            -- packed [W0|b0] layout for the forward
-  let xShape := net.xShape bs
   let mut packed := W0 ++ b0
-
   -- 3. Epoch loop
   for ep in [0:cfg.epochs] do
     let tEp0 <- IO.monoMsNow
-
     -- 4. Batch loop: forward, loss, backward, SGD -- one call
     for bi in [0:nb] do
       let xb := F32.sliceImages trainImg (bi * bs) bs d0
       let yb := F32.sliceLabels trainLbl (bi * bs) bs
       let out <- LowererSession.linearTrainStepV tsSess tsFn
-                   xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
+                  xb W0 b0 yb bs.toUSize d0.toUSize d1.toUSize nResident
       packed := out
       W0 := out.extract 0 (d0 * d1 * 4)
       b0 := out.extract (d0 * d1 * 4) pBytes
-
     -- 5. Evaluate on the full test set, every epoch
     packed <- LowererSession.readParams tsSess packed pBytes.toUSize
     W0 := packed.extract 0 (d0 * d1 * 4)
@@ -1959,14 +1956,15 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig)
     for bi in [0:nbt] do
       let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
       let logits <- LowererSession.forwardF32 fwdSess fwdFn params shapes
-                      xb xShape bs.toUSize d1.toUSize nResident (ep+1).toUSize
-      for j in [0:min bs (nEval - bi * bs)] do  -- real rows only, not the pad
+                      xb xShape bs.toUSize d1.toUSize
+                      nResident (ep + 1).toUSize
+      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
         let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
-        if pred == F32.readLabel evalLbl (bi * bs + j) then
-          correct := correct + 1
+        let lbl  := F32.readLabel evalLbl (bi * bs + j)
+        if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (<- IO.monoMsNow) - tEp0
-    IO.println s!"  epoch {ep+1}: {evalName}_acc = {correct}/{nEval} = {acc}%
+    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%
                     [95% CI {wilson95 correct nEval}] ({epMs}ms)"
 \end{verbatim}
 
@@ -2499,7 +2497,6 @@ def mlpVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.dense 784 512, .relu,
                .dense 512 512, .relu,
@@ -3384,7 +3381,6 @@ def cnnVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .flatten,
@@ -4496,7 +4492,6 @@ def cifar8wVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .relu,
                .conv 16 16 3 1, .relu, .maxPool 2 2,
@@ -4522,7 +4517,6 @@ def cifar8wBnVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu,
                .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
@@ -5550,7 +5544,8 @@ almost nothing else, so it is worth reading once here rather than four more
 times later.
 
 \begin{verbatim}
-import LeanMlir
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 -- 1. The network. A VerifiedNetSpec, not a NetSpec: `slug` names the
 --    committed render, and `bnChannels` drives BN statistic threading.
@@ -5560,7 +5555,6 @@ def resnet34Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 64 7 2,          -- 7x7-s2 stem, no conv bias   224->112
@@ -5571,8 +5565,8 @@ def resnet34Verified : VerifiedNetSpec where
     .residualStage 256 512 3 2,  -- stage 4, downsample + 2      14->7
     .globalAvgPool,              -- replaces flatten + fat dense
     .dense 512 10 ]
-  blurb := "Real ResNet-34 on Imagenette 224² (7x7-s2 stem->3x3-s2 overlapping
-            max pool->[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1x1
+  blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem->3×3-s2 overlapping
+            max pool->[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1
             projection shortcuts, no conv biases; 56->28->14->7->GAP->dense)
             via the VERIFIED renderer -> %LOWERER% -> GPU"
   bnChannels := #[64, 64,64, ... ]   -- all 36, in forward order
@@ -6076,7 +6070,6 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   shimScript := "generated_resnet34_imagenet_shim.py"
   layers   := [
@@ -7412,7 +7405,8 @@ carries weight there carries the same weight here, and only the
 are new:
 
 \begin{verbatim}
-import LeanMlir
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 -- 1. The network. `slug` names the committed render, `bnChannels`
 --    drives BN threading, `NB` means the convs carry no bias.
@@ -7422,7 +7416,6 @@ def mobilenetv2Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 32 3 2,                   -- stem       224->112
@@ -7449,9 +7442,19 @@ def mobilenetv2AdamConfig : VerifiedConfig where
   batchSize := 32
 
 -- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
-def main (argv : List String) : IO Unit :=
-  mobilenetv2Verified.toNet.trainAdamSched
-    mobilenetv2AdamConfig (argv.head?.getD "data") 0.001 0.9 0.999 3 "adam"
+--    LEAN_MLIR_VARIANT=rms selects the RMSProp render and its own rate.
+def runMobilenetV2Adam (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let sched := mnv2RmsSchedule
+  let rms := variant.startsWith "rms"
+  let bs := mobilenetv2AdamConfig.batchSize
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
+  mobilenetv2Verified.toNet.trainAdamSched mobilenetv2AdamConfig
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs
+def main (argv : List String) : IO Unit := runMobilenetV2Adam argv
 \end{verbatim}
 
 \noindent Lines marked \texttt{x2} or \texttt{x3} appear that many times
@@ -7804,7 +7807,6 @@ The verified trainer is
 def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   name       := "MobileNetV2 (ImageNet-1k)"
   slug       := "mobilenetv2in"
-  nClasses   := 1000
   data       := .imagenet
   shimScript := "generated_mobilenet_v2_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
@@ -8794,7 +8796,8 @@ The pattern is \S\ref{sec:verified_trainer_pattern}'s; only the
 are new:
 
 \begin{verbatim}
-import LeanMlir
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 -- 1. The network. `slug` names the committed render, `bnChannels`
 --    drives BN threading, `NB` means the BN-followed convs carry
@@ -8805,7 +8808,6 @@ def efficientnetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 32 3 2,             -- stem 3x3-s2   224->112
@@ -8835,12 +8837,28 @@ def efficientnetAdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
 
--- 3. The entry point: AdamW, cosine with a 3-epoch warmup,
---    baseLR 1e-3.
-def main (argv : List String) : IO Unit :=
-  efficientnetVerified.toNet.trainAdamSched
-    efficientnetAdamConfig (argv.head?.getD "data")
-    0.001 0.9 0.999 3 "adam"
+-- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
+--    The rms variant, the EMA decay and the drop rate are env knobs.
+def runEfficientNetAdam (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD
+              efficientnetAdamConfig.batchSize
+  let sched := enetRmsSchedule
+  let rms := variant.contains "rms"
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.9999
+  let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
+    | some u => { efficientnetVerified.toNet with
+                  dropKeeps := efficientnetVerified.dropKeepsAt (u.toFloat * 1e-6) }
+    | none   => efficientnetVerified.toNet
+  dropNet.trainAdamSched { efficientnetAdamConfig with batchSize := bs }
+    (argv.head?.getD "data") baseLR 0.9 0.999 3 variant
+    (if rms then sched.decayRate else 0.0) sched.decayEpochs emaDecay
+def main (argv : List String) : IO Unit := runEfficientNetAdam argv
 \end{verbatim}
 
 \noindent \texttt{.mbConvSENB ic mid oc r k} is one block per line, as
@@ -9246,7 +9264,6 @@ StableHLO that \S\ref{sec:enet_runit} ran at Imagenette scale. It is
 def efficientnetImagenetVerified : VerifiedNetSpec where
   name       := "EfficientNet-B0 (ImageNet-1k)"
   slug       := "efficientnetin"
-  nClasses   := 1000
   data       := .imagenet
   shimScript := "generated_efficientnet_b0_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
@@ -10052,7 +10069,8 @@ The pattern is \S\ref{sec:verified_trainer_pattern}'s, minus
 \texttt{bnChannels}: there is no BatchNorm.
 
 \begin{verbatim}
-import LeanMlir
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 -- 1. The network. `slug` names the committed render. No `bnChannels`:
 --    LayerNorm keeps no running statistics, so nothing has to be
@@ -10063,7 +10081,6 @@ def convnextVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .conv 3 96 4 4, .layerNorm 96,       -- patchify 4x4/s4 + stem LN
@@ -10076,23 +10093,30 @@ def convnextVerified : VerifiedNetSpec where
     .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
     .layerNorm 384, .conv 384 768 2 2,   -- downsample 384->768, 14->7
     .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
-    .globalAvgPool, .dense 768 10 ]      -- head
+    .globalAvgPool, .layerNorm 768, .dense 768 10 ]   -- head: GAP -> LN -> dense
   -- Stochastic depth, read only by the `*drop` variants: one global
-  -- block index, keep_i = 1 - 0.1*i/17 at all eighteen blocks.
-  dropKeeps := (Array.range 18).map (fun i =>
-                 1.0 - 0.1 * i.toFloat / 17.0)
-
+  -- block index over the eighteen blocks, keep_i = 1 - 0.1*i/17.
+  dropSites := Array.range 18
+  dropDenom := 17
+  dropRate  := 0.1
 -- 2. The schedule. ResNet-34's, MobileNetV2's and B0's, unchanged.
 def convnextAdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
-
--- 3. The entry point: AdamW, cosine with a 3-epoch warmup,
---    baseLR 1e-3.
-def main (argv : List String) : IO Unit :=
-  convnextVerified.toNet.trainAdamSched
-    convnextAdamConfig (argv.head?.getD "data")
-    0.001 0.9 0.999 3 "adam"
+-- 3. The entry point: AdamW, cosine with a 3-epoch warmup, baseLR 1e-3.
+--    The EMA decay and the drop rate are env knobs.
+def runConvNeXtAdam (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.9999
+  let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
+    | some u => { convnextVerified.toNet with
+                  dropKeeps := convnextVerified.dropKeepsAt (u.toFloat * 1e-6) }
+    | none   => convnextVerified.toNet
+  dropNet.trainAdamSched convnextAdamConfig
+    (argv.head?.getD "data") 0.001 0.9 0.999 3 variant 0.0 1.0 emaDecay
+def main (argv : List String) : IO Unit := runConvNeXtAdam argv
 \end{verbatim}
 
 \noindent The structure follows the paper's macro-design prescription:
@@ -10442,7 +10466,6 @@ StableHLO that \S\ref{sec:convnext_runit} ran at Imagenette scale. It is
 def convnextImagenetVerified : VerifiedNetSpec where
   name       := "ConvNeXt-T (ImageNet-1k)"
   slug       := "convnextin"
-  nClasses   := 1000
   data       := .imagenet
   shimScript := "generated_convnext_tiny_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
@@ -12139,8 +12162,8 @@ The pattern is \S\ref{sec:verified_trainer_pattern}'s, minus
 \texttt{bnChannels}, as ConvNeXt's was: there is no BatchNorm.
 
 \begin{verbatim}
-import LeanMlir
-
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 -- 1. The network. `slug` names the committed render. No `bnChannels`:
 --    LayerNorm keeps no running statistics, so nothing has to be
 --    threaded from training into evaluation.
@@ -12150,7 +12173,6 @@ def vitVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .conv 3 192 16 16,          -- patch embed 16x16/s16, 224 -> 14x14 = 196
@@ -12162,25 +12184,43 @@ def vitVerified : VerifiedNetSpec where
     .transformerBlock 192 768,  .transformerBlock 192 768,
     .transformerBlock 192 768,  .transformerBlock 192 768,
     .transformerBlock 192 768,  .transformerBlock 192 768,
+    .transformerBlock 192 768,
     .layerNorm 192,             -- final LayerNorm, per-channel
     .dense 192 10 ]             -- CLS-head 192 -> 10
   -- Stochastic depth, read only by the `*drop` variants. TWENTY-FOUR
-  -- entries for TWELVE blocks: ViT drops a block's two residual
-  -- branches independently, at one keep shared by the pair.
-  dropKeeps := (Array.range 24).map (fun s =>
-                 1.0 - 0.1 * (s / 2).toFloat / 11.0)
-
+  -- sites for TWELVE blocks: ViT drops a block's two residual
+  -- branches independently, at one keep shared by the pair,
+  -- keep = 1 - 0.1 * (site/2) / 11.
+  dropSites := (Array.range 24).map (· / 2)
+  dropDenom := 11
+  dropRate  := 0.1
 -- 2. The schedule. Note it is NOT the other four nets' schedule.
 def vitAdamConfig : VerifiedConfig where
   epochs    := 80
   batchSize := 32
-
--- 3. The entry point: AdamW, cosine with a 5-epoch warmup,
---    baseLR 3e-4.
-def main (argv : List String) : IO Unit :=
-  vitVerified.toNet.trainAdamSched
-    vitAdamConfig (argv.head?.getD "data")
-    0.0003 0.9 0.999 5 "adam"
+-- 3. The entry point: AdamW, cosine with a 5-epoch warmup, baseLR 3e-4.
+--    Batch, rate, EMA decay and drop rate are env knobs; the variant's
+--    render must already exist.
+def runViTAdam (argv : List String) : IO Unit := do
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let tsPath := s!"verified_mlir/vit_{variant}_train_step.mlir"
+  if !(← System.FilePath.pathExists tsPath) then
+    throw (IO.userError s!"{tsPath} missing — it is written by \
+LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.ViTRender` first")
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitAdamConfig.batchSize
+  let emaDecay := match (← IO.getEnv "LEAN_MLIR_EMA_DECAY_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.99996
+  let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
+    | some u => u.toFloat * 1e-6
+    | none   => 0.0003
+  let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
+    | some u => { vitVerified.toNet with
+                  dropKeeps := vitVerified.dropKeepsAt (u.toFloat * 1e-6) }
+    | none   => vitVerified.toNet
+  dropNet.trainAdamSched { vitAdamConfig with batchSize := bs }
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant 0.0 1.0 emaDecay
+def main (argv : List String) : IO Unit := runViTAdam argv
 \end{verbatim}
 
 \noindent The body is a patch embedding, twelve blocks and a head. The
@@ -12388,7 +12428,8 @@ def vitTinyImagenet : NetSpec where
 
 -- 2. Full DeiT-Ti recipe: AdamW, cosine, the aug suite, stochastic depth, EMA.
 def vitTinyImagenetConfig : TrainConfig where
-  learningRate      := 5e-4          -- proper DeiT batch-512 LR
+  vitInit           := true          -- timm/DeiT trunc_normal(0.02) init, not Xavier
+  learningRate      := 0.0005        -- proper DeiT batch-512 LR
   batchSize         := 512
   epochs            := 300           -- full DeiT-Ti schedule
   optimizer         := .adam         -- AdamW (decoupled weight decay)
@@ -12408,20 +12449,20 @@ def vitTinyImagenetConfig : TrainConfig where
   valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
   repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
 
--- 3. Weight init. Xavier-uniform is the emitter's generic path, and at
---    ViT-Ti's d=192 it is 3.6x wider than timm's fixed 0.02. vitInit
---    selects trunc_normal(0.02) for every transformer Linear and leaves
---    the patch-embed conv on PyTorch's Conv2d default. The run reported
---    below used THIS recipe, not the bare config above.
-def vitTinyImagenetConfigDeitInit : TrainConfig :=
-  { vitTinyImagenetConfig with vitInit := true }
+-- 3. Weight init. vitInit above selects trunc_normal(0.02) for every
+--    transformer Linear and leaves the patch-embed conv on PyTorch's
+--    Conv2d default; Xavier-uniform is the emitter's generic path, and
+--    at ViT-Ti's d=192 it is 3.6x wider than timm's fixed 0.02. The run
+--    reported below is the default; xavier is the A/B arm.
+def vitTinyImagenetConfigXavier : TrainConfig :=
+  { vitTinyImagenetConfig with vitInit := false }
 
 -- 4. Two named recipes, chosen by a positional CLI arg. This is the
 --    reference driver; the verified path's entry point is trainAdamSched,
 --    in the next section.
 def vitTinyImagenetRecipes : List Recipe := [
-  { name := "default",   cfg := vitTinyImagenetConfig,         ... },
-  { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit, ... }
+  { name := "default", cfg := vitTinyImagenetConfig,       ... },
+  { name := "xavier",  cfg := vitTinyImagenetConfigXavier, ... }
 ]
 
 def main (args : List String) : IO Unit :=
@@ -12579,7 +12620,6 @@ built as \texttt{lake build vit-\allowbreak imagenet-\allowbreak verified}:
 def vitImagenetVerified : VerifiedNetSpec where
   name       := "ViT-Tiny (ImageNet-1k)"
   slug       := "vitin"
-  nClasses   := 1000
   data       := .imagenet
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers     := [ ... the Imagenette stack, 1000-class head ... ]
@@ -12590,7 +12630,7 @@ def vitImagenetVerified : VerifiedNetSpec where
 def vitImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 128
-  vitInit   := true  -- timm/DeiT init, as the reference's `deit-init` recipe above
+  vitInit   := true  -- timm/DeiT init, as the reference's default recipe above
 \end{verbatim}
 
 \noindent The head is the only parameter shape that moves, from
@@ -13479,8 +13519,9 @@ $256 \to 512 \to 1024 \to 2048$), and the same GAP + single-FC
 head. They differ only in stage block-counts.
 
 \begin{verbatim}
-def resNet50 : NetSpec where
-  name   := "ResNet-50"
+def resnet50Imagenet : NetSpec where
+  name := "ResNet-50 (ImageNet)"
+  convPadStyle := .symmetric   -- torchvision's 7x7/s2 stem padding, not XLA SAME
   imageH := 224
   imageW := 224
   layers := [
@@ -14051,7 +14092,7 @@ def yolo : NetSpec where
     -- Head: flatten + 2 FC → reshape to (7, 7, 2·5 + 20) = 1470
     .flatten,
     .dense (7 * 7 * 1024) 4096 .relu,
-    .dense 4096 (7 * 7 * (2 * 5 + 20)) .identity
+    .dense 4096 yoloHeadSize .identity   -- 7 * 7 * (2 * 5 + 20)
   ]
 \end{verbatim}
 
@@ -14711,7 +14752,7 @@ def samEncoderH : NetSpec where
   imageW := 1024
   layers := [
     -- 16×16 patches on 1024×1024 → 64×64 = 4096 tokens
-    .patchEmbed 3 1280 16 4096,
+    .patchEmbed 3 1280 16 SAM_PATCHES,
     .transformerEncoder 1280 16 5120 32          -- 32 blocks, dim 1280
   ]
 \end{verbatim}
@@ -17472,8 +17513,8 @@ backward uses:
 \begin{verbatim}
 inductive Back (inp : Nat) : Nat -> Type where
   | cotangent  : Back inp inp            -- the input dy
-  | dotGeneral (A : Mat m n) : Back inp n -> Back inp m   -- matmul
-  | selectPos  (x : Vec n)   : Back inp n -> Back inp n   -- ReLU mask
+  | dotGeneral {m n : Nat} (A : Mat m n) : Back inp n -> Back inp m   -- matmul
+  | selectPos {n : Nat} (x : Vec n) : Back inp n -> Back inp n   -- ReLU mask
   -- plus scale, sub, add, sumBroadcast, scaleConst (BN, residuals)
 \end{verbatim}
 
