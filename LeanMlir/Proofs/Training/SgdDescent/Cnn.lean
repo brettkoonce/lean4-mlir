@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.ConvFloat
-import LeanMlir.Proofs.Training.SgdDescent.Mlp
+import LeanMlir.Proofs.Training.SgdDescent.MlpBias
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 
@@ -13,7 +13,9 @@ dense`). What's genuinely new versus the MLP:
 * **The dense head is free.** Below the pool the CNN *is* an MLP at the
   pooled activation: the loss-of-`W₅`/`W₄`/`W₃` maps are literal instances
   of `linear_sgd_descends` / `mlp_hidden_sgd_descends` /
-  `mlp_input_sgd_descends` at `x := maxPoolFlat (…)`. No new theorems are
+  `mlp_input_sgd_descends` at `x := maxPoolFlat (…)`, and the loss-of-`b₅`/`b₄`/`b₃`
+  maps of `linear_bias_sgd_descends` / `mlp_hidden_bias_sgd_descends` /
+  `mlp_input_bias_sgd_descends` (`SgdDescent.MlpBias`). No new theorems are
   needed (the MLP statements are generic in the fixed activation vector).
 
 * **The max-pool needs a quantitative SELECTION margin.** `MaxPool2Smooth`
@@ -57,8 +59,8 @@ drift chain, margins and segment-Lipschitz gradient are stated once, for any
 parameter map with per-entry drift `ρ·‖e‖₁` (`Conv2Slot`, `Conv1Slot`): the
 kernel rungs are `ρ = a`, the bias rungs `ρ = 1` — the bare `D` radii and
 `a² ↦ 1` in the constants. Both conv kernels, both conv biases and the
-dense-head weights of the Chapter-3 CNN (the latter via the MLP rungs, which
-omit bias columns) each have a single-layer, single-example descent
+dense-head weights and biases of the Chapter-3 CNN (the latter via the MLP
+rungs, `SgdDescent.Mlp` and `SgdDescent.MlpBias`) each have a single-layer, single-example descent
 statement, conditional on the margins above and the oracle-accuracy,
 small-step and dominance hypotheses. `cnn_conv2_float_sgd_descends`,
 `cnn_conv1_float_sgd_descends`, `cnn_conv2_bias_float_sgd_descends` and
@@ -5405,9 +5407,9 @@ noncomputable def cnnConv1BiasLoss {ic c h w d₃ d₄ nC kH kW : Nat} (W₁ : K
     `D = lr·(‖∇L‖₁ + c·η)` carry no input bound `a` (the bias Jacobian
     is a Kronecker indicator) and the parameter needs no
     flatten/unflatten plumbing. With this theorem both conv kernels,
-    both conv biases and the three dense-layer weight matrices (via the
-    MLP rungs, which omit bias columns) of the Chapter-3 CNN each have a
-    single-layer, single-example descent statement. -/
+    both conv biases and the three dense layers' weights and biases (via the
+    MLP rungs, `SgdDescent.Mlp` and `SgdDescent.MlpBias`) of the Chapter-3 CNN
+    each have a single-layer, single-example descent statement. -/
 theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)

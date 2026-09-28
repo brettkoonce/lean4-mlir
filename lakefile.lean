@@ -121,6 +121,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Training.SgdDescent.Basic,
              `LeanMlir.Proofs.Training.SgdDescent.Linear,
              `LeanMlir.Proofs.Training.SgdDescent.Mlp,
+             `LeanMlir.Proofs.Training.SgdDescent.MlpBias,
              `LeanMlir.Proofs.Training.SgdDescent.Cnn,
              `LeanMlir.Proofs.Training.SgdDescent.Cifar,
              `LeanMlir.Proofs.Float.BnFloatBridge,

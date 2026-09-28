@@ -2379,8 +2379,9 @@ See \leandocref{Proofs.MlpPoC.mlp\_train\_step\_tied\_certified}.
   small-step and dominance conditions of Theorem~\ref{thm:linear_sgd_descends}:
   \Prove{} one SGD step on the input layer's weights \(W_0\) decreases the
   cross-entropy loss by at least \(\alpha\,\|\nabla L\|_2^2/2\).
-  \texttt{mlp\_hidden\_sgd\_descends} is the same statement for \(W_1\); the
-  binary32 twin supplies \(\eta\).
+  \texttt{mlp\_hidden\_sgd\_descends} is the same statement for \(W_1\), and
+  \texttt{mlp\_input\_bias\_sgd\_descends} and its hidden and output peers for the
+  biases; the binary32 twin supplies \(\eta\) for the weights.
 \end{theorem}
 
 \begin{proof}

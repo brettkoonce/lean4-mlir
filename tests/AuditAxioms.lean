@@ -123,7 +123,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
-import LeanMlir.Proofs.Training.SgdDescent.Mlp
+import LeanMlir.Proofs.Training.SgdDescent.MlpBias
 import LeanMlir.Proofs.Training.Optim.AdamStep
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
@@ -1267,6 +1267,13 @@ open Proofs
 #print axioms mlp_input_loss_gradAt_reluMask
 #print axioms mlp_w0_grad_close
 #print axioms mlp_input_float_sgd_descends
+-- Dense-bias descent (SgdDescent/MlpBias.lean)
+#print axioms gradAt_bias_eq_pdiv
+#print axioms linear_bias_sgd_descends
+#print axioms mlp_hidden_bias_loss_grad_lipschitz
+#print axioms mlp_hidden_bias_sgd_descends
+#print axioms mlp_input_bias_loss_grad_lipschitz
+#print axioms mlp_input_bias_sgd_descends
 -- The descent program reaches the Chapter-4 CNN (SgdDescent/Cnn.lean)
 #print axioms max4_sub_abs_le
 #print axioms max4_sub_abs_le_sum

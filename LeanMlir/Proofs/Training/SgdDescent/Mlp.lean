@@ -38,7 +38,7 @@ oracle accuracy, the margins, the small-step and the two dominance conditions
 remain hypotheses. `mlp_output_float_sgd_descends`, `mlp_hidden_float_sgd_descends`
 and `mlp_input_float_sgd_descends` replace the oracle accuracy by the proven
 accuracy of the FloatModel binary32 gradient. Bias columns are the same argument
-with the layer input replaced by the constant `1` and are omitted. The joint
+with the layer input replaced by the constant `1`; they are `SgdDescent.MlpBias`. The joint
 all-layers step (every parameter moving at once, logits no longer affine in the
 moving parameters) is not proved here. -/
 
