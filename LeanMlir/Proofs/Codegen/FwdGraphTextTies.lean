@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 
 /-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the typed block graphs
 
@@ -30,7 +30,8 @@ sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: R
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
 21-row table), MobileNetV2's per-example inference forward (`MobileNetV2FullPaperEval`), the
-MobileNetV2 and MobileNetV4 heads with classifier dropout (`cd := true`), and
+MobileNetV2, MobileNetV4 and EfficientNet-B0 heads with classifier dropout (`cd := true`),
+EfficientNet-B0's residual block with its stochastic-depth site (`sd := true`), and
 MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
 sizes its evals are rendered at. Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
 own constructors.
@@ -376,6 +377,16 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
 
+-- Residual MBConv6 with its stochastic-depth site (`sd := true`, b3 = block index 2): `dropPathB`
+-- on the branch, then the skip add (`EfficientNetFullB0Drop`).
+#guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false (some 2)) (·.code) ==
+  prettyText 2 (mbResidDropGraphB "b3" "1.0e-03" (dpName 2) (N := 2) (c := 24) (mid := 144) (h := 56)
+    (w := 56) (kHd := 3) (kWd := 3) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (some fun _ => 0) (leaf "%in" _))
+
 -- Expand, no skip (b9: 80 → 480 → 112 at 14², 5×5, SE r = 20).
 #guard textOf (eFwdNoSkip 2 80 480 112 14 5 20 .train "1.0e-03" "b9" "%in" false) (·.code) ==
   prettyText 2 (mbExpGraphB "b9" "1.0e-03" (N := 2) (ic := 80) (mid := 480) (oc := 112) (h := 14)
@@ -395,5 +406,18 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
   prettyText 2 (headGraphB "1.0e-03" (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7) (nC := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (leaf "%in" _))
+
+-- Head with classifier dropout (`cd := true`, the `%do` renders): `dropoutB` between the GAP and
+-- the dense, as `enetFwdChain` emits it.
+#guard textOf (do
+    let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false
+    let (cDo, nCin) ← pretty 2 (.dropoutB (N := 2) (n := 1280) doName (fun _ => 0 : Vec (2 * 1280))
+      (.operand hd.gap (fun _ => 0 : Vec (2 * 1280))))
+    let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
+      (.operand nCin (fun _ => 0 : Vec (2 * 1280))))
+    pure (hd.code ++ cDo ++ c)) id ==
+  prettyText 2 (headGraphBDo "1.0e-03" doName (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7)
+    (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (some fun _ => 0) (leaf "%in" _))
 
 end Proofs.StableHLO.FwdGraphTextTies

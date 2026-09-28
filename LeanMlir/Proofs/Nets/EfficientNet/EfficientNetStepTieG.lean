@@ -13,8 +13,8 @@ chain delivers. This file is that statement re-pointed along two axes.
 what `efficientnet_adam_train_step.mlir` and the f32 `efficientnetin_*` artifacts emit; the fused op
 appears only in the SGD-inline file. The optimizer update that consumes the node (Adam, RMSProp,
 EMA, clipping) is outside this statement. The threaded forward is `efficientnetForwardBFull`,
-without drop-path and without classifier dropout, so the `*drop*` / `*do*` artifacts are not
-covered; the bf16 artifacts emit `*GradBBf16` nodes and are not covered either. `GradNodesB` is
+without drop-path and without classifier dropout, so the `*drop*` / `*do*` train steps are not
+covered (their forwards are, in `EfficientNetFullB0Drop`); the bf16 artifacts emit `*GradBBf16` nodes and are not covered either. `GradNodesB` is
 the fold each conjunct delegates to.
 
 **Axis 2 — the loss.** The capstone's top-of-chain cotangent is `smoothedLossCotGraph`'s

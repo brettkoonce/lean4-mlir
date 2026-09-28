@@ -261,44 +261,44 @@ namespace StableHLO
 
 -- § Weight-bundle wrappers (graph) + faithfulness (each = the per-block lemma at the bundle's fields)
 
-private def mbNoExpGraphW (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
+def mbNoExpGraphW (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   mbNoExpGraphB pfx epsStr (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2
     p.pW p.pb p.pε p.pγ p.pβ e
-private theorem mbNoExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat}
+theorem mbNoExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat}
     (p : MBWNoExp ic oc r kh kw) (e : SHlo (N * (ic * h * w))) :
     den (mbNoExpGraphW pfx epsStr N h w p e) = mbNoExpW N h w p (den e) := by
   unfold mbNoExpGraphW mbNoExpW
   exact mbNoExpGraphB_faithful pfx epsStr p.dW p.db p.dε p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2
     p.pW p.pb p.pε p.pγ p.pβ e
 
-private def mbStridedGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
+def mbStridedGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
     (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   mbStridedGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
-private theorem mbStridedGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
+theorem mbStridedGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
     (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (mbStridedGraphW pfx epsStr N h w p e) = mbStridedW N h w p (den e) := by
   unfold mbStridedGraphW mbStridedW
   exact mbStridedGraphB_faithful pfx epsStr p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
 
-private def mbResidGraphW (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
+def mbResidGraphW (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
     (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   mbResidGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
-private theorem mbResidGraphW_faithful (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat}
+theorem mbResidGraphW_faithful (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat}
     (p : MBW c mid c r kh kw) (e : SHlo (N * (c * h * w))) :
     den (mbResidGraphW pfx epsStr N h w p e) = mbResidW N h w p (den e) := by
   unfold mbResidGraphW mbResidW
   exact mbResidGraphB_faithful pfx epsStr p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
 
-private def mbExpGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
+def mbExpGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   mbExpGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
-private theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
+theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
     (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * h * w))) :
     den (mbExpGraphW pfx epsStr N h w p e) = mbExpW N h w p (den e) := by
   unfold mbExpGraphW mbExpW

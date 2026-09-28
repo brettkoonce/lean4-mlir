@@ -34,6 +34,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
@@ -884,6 +885,17 @@ open Proofs
 #print axioms Proofs.StableHLO.mbExpGraphEvalW_faithful
 #print axioms Proofs.efficientnetForwardBFullEval
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful
+-- EfficientNet-B0 with stochastic depth + classifier dropout (EfficientNetFullB0Drop.lean)
+#print axioms Proofs.efficientnetForwardBFullDrop_none
+#print axioms Proofs.efficientnetForwardBFullDrop_ones
+#print axioms Proofs.efficientnetForwardBFullEvalDrop_none
+#print axioms Proofs.efficientnetForwardBFullEvalDrop_ones
+#print axioms Proofs.StableHLO.mbResidDropGraphW_faithful
+#print axioms Proofs.StableHLO.headGraphBDo_faithful
+#print axioms Proofs.StableHLO.mbResidDropGraphEvalW_faithful
+#print axioms Proofs.StableHLO.headGraphBEvalDo_faithful
+#print axioms Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful
+#print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful
 -- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
 #print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
 #print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful

@@ -113,6 +113,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval,
+             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper,
              `LeanMlir.Proofs.Float.FloatBridge,
