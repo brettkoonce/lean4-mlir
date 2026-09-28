@@ -23,8 +23,7 @@ concentrated on one block, or spread L2-wise across blocks). Two nets:
   L = 19.76: **34/100 certified** at the same ε (measured).
 
 Same theorem, same ε — the training method decides whether the certificate
-bites (tighter caps, 1.5–2, cost too much clean accuracy at this scale:
-σ ≤ 2 → 66% test acc; σ ≤ 4 keeps 87.0% vs 89.8% unconstrained).
+bites (the σ ≤ 4 cap keeps 87.0% test accuracy vs 89.8% unconstrained).
 
 **Theorem vs. measurement — read this before quoting a number.** Soundness
 lives in the ENGINE (`certified_at_eps` + `LipschitzCert.Basic`), proved once —

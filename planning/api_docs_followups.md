@@ -178,7 +178,9 @@ rungs' scope, and the certificates' `hp` — all report-or-reword, none a Lean g
 - Float descent rungs: one example, update in ℝ, only the gradient in float;
   TrainedLinearDescent uses exact exp (`fexp := Real.exp`).
 - Certificates: `hp` (every class's smoothed probability strictly inside (0,1) everywhere) is
-  strong; the pooled scorecard header's "σ ≤ 2 → 66% test acc" is unchecked prose.
+  strong. ~~The pooled scorecard header's "σ ≤ 2 → 66% test acc" is unchecked prose~~ **dropped**
+  (generator + `Scorecard.lean`): no run at the pooled scale ever used cap 2; the only cap sweep
+  (`runs/spectral_mlp_phase3.log`, full MLP) has σ ≤ 2 at 96.19% and σ ≤ 1 at 64.38%.
 - ~~`trainAdamPacked` has no callers and runs IREE only; PGD attacks and `smoothCertify` call
   iree-compile directly~~ **done**: `trainAdamPacked` removed in `d60b56c8`; PGD and
   `smoothCertify` open their graphs through `mkSession` (`671257d3`), which also fixed their
