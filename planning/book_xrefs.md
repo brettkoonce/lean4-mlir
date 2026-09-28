@@ -95,6 +95,9 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 
 ## 3. Order of work
 
+Progress: chapter 1 landed 2026-09-28 (335 → 329 refs; `chap:tensor` 31 → 19, the 19 left are
+pointers). Next: chapter 5, then 2–4, 6–9, Bestiary + appendices.
+
 One target chapter per commit, reading its block of `scripts/book/book_xrefs.py` output: chapter 1
 (32 refs, mostly (b)), chapter 5 (35, mostly (c)/(d)), then 2, 3, 4, 6–9, the appendices.
 Rebuild the PDF after each (`cd blueprint/src && latexmk -xelatex -interaction=nonstopmode

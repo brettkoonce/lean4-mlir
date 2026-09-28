@@ -2239,12 +2239,13 @@ done (trained MNIST-MLP via the proof-rendered StableHLO).
 \end{verbatim}
 
 Twelve epochs at about 850\,ms each, and 97.81\% on the full
-10,000-image test set. Adding two hidden layers to
-Chapter~\ref{chap:tensor}'s linear model buys 5.7 points of accuracy at
-close to four times the wall clock per epoch.
+10,000-image test set. Adding two hidden layers to the linear model of
+Chapter~\ref{chap:tensor} buys 5.7 points of accuracy over its 92.10\%
+(\texttt{runs/2026-09-01-linear-verified-xla-cuda/}) at 850\,ms an epoch
+against its 224.
 
-Chapter~\ref{chap:tensor}'s accuracy did not move across seeds, because
-that model starts at zero and has no seed to spend. This one does. Run at
+The linear model has no seed to spend --- it starts at zero --- so it has
+no spread to report. This one does. Run at
 five seeds it averages $97.73\%$ with a spread of $0.06$ either side, and
 every one of those five sits inside the interval printed above --- which
 is $\pm 0.29$ points on its own. Worth noticing once, because it holds
@@ -2270,8 +2271,7 @@ where ``differentiable'' becomes slightly subtle.
 
 A three-layer MLP is
 \(\mathrm{dense}_2 \circ \mathrm{relu} \circ \mathrm{dense}_1 \circ
-\mathrm{relu} \circ \mathrm{dense}_0\). Chapter~\ref{chap:tensor}'s VJP
-chain rule (Theorem~\ref{thm:vjpComp}) says the backward of a
+\mathrm{relu} \circ \mathrm{dense}_0\). The VJP chain rule (Theorem~\ref{thm:vjpComp}) says the backward of a
 composition is the backwards run in reverse order, so the MLP's backward
 is three dense backwards --- each a multiplication by that layer's
 \(W\) --- with ReLU's diagonal mask applied between them. That is the
@@ -2572,8 +2572,9 @@ tensors packed together rather than a separate \texttt{W0} and
 \texttt{b0}.
 
 The two compile lines in \S\ref{sec:mlp_runit} are where that shows up:
-the train step takes about three and a half times as long to compile as
-Chapter~\ref{chap:tensor}'s, which is the cost of six parameter tensors
+the train step compiles in 2,123\,ms against the linear step's 604 (its
+transcript in Chapter~\ref{chap:tensor}, from
+\texttt{runs/2026-09-01-linear-verified-xla-cuda/}), which is the cost of six parameter tensors
 and two ReLU subgradients rather than one dense layer.
 
 \subsection*{Results}
@@ -3421,8 +3422,7 @@ this chapter (Theorem~\ref{ax:conv2dHasVJP3}): the input VJP is
 another convolution, using the kernel reversed along both spatial
 axes. The max-pool backward (Definition~\ref{ax:maxPool2HasVJP3}) routes
 the gradient to the argmax position in each $2 \times 2$ window.
-The dense backward is already proved in
-Chapter~\ref{chap:tensor} (Theorem~\ref{thm:denseHasVJP}). Adding
+The dense backward is Theorem~\ref{thm:denseHasVJP}. Adding
 convolution to the model introduces no new training-loop code, only
 new layer types, which the framework already knows how to compose.
 
@@ -3630,7 +3630,7 @@ the conv\,$\to$\,relu\,$\to$\,conv\,$\to$\,relu\,$\to$\,maxPool\,$\to$\,flatten\
 network, and \texttt{mnistCnnNoBnHasVJPAt}
 (Theorem~\ref{thm:mnistCnnNoBnHasVJPAt}) proves its reverse-mode
 derivative by chaining the per-layer VJPs: the dense backward
-(Theorem~\ref{thm:denseHasVJP}, from Chapter~\ref{chap:tensor}), the
+(Theorem~\ref{thm:denseHasVJP}), the
 max-pool backward (\texttt{maxPool2HasVJP3},
 Definition~\ref{ax:maxPool2HasVJP3}), and the convolution backward
 (\texttt{conv2dHasVJP3}, Theorem~\ref{ax:conv2dHasVJP3}), all through the
@@ -3639,7 +3639,8 @@ derivative is the chapter's headline result: the input VJP of a
 \texttt{conv2d} is another \texttt{conv2d}, against the kernel with
 its in- and out-channels swapped and both spatial axes reversed. The
 parameter gradients are pinned by \texttt{conv2dWeightGradHasVJP}
-(the transpose trick) and the dense grads from Chapter~\ref{chap:tensor}, and
+(the transpose trick) and the dense grads (Theorems~\ref{thm:denseWeightGrad_correct},
+\ref{thm:denseBiasGrad_correct}), and
 the loss gradient by \texttt{softmaxCE\_grad} (Theorem~\ref{ax:softmaxCE_grad}).
 So what the convolution's gradient is, is not in question.
 
@@ -3786,8 +3787,8 @@ Together they are the layer.
 The chapter's first six theorems are the Jacobian of each step
 and the VJPs that fall out of them. Theorem
 \ref{thm:bnHasVJP} closes the loop by composing them. The
-forward is three steps, so the chain rule from
-Chapter~\ref{chap:tensor} gives us three Jacobians to multiply,
+forward is three steps, so the chain rule (Theorem~\ref{ax:pdiv_comp}) gives us three
+Jacobians to multiply,
 and the ``BN three-term backward'' is exactly that
 product written out.
 
@@ -3970,8 +3971,8 @@ here is zero.
 
 Theorem \ref{thm:bnHasVJP} is the composition:
 \(\mathrm{bn} = \mathrm{affine} \circ \mathrm{normalize}\), with VJPs
-chained via the same \(\mathrm{vjpComp}\) rule from
-Chapter~\ref{chap:tensor}. The 3-term backward is the
+chained via the same \(\mathrm{vjpComp}\) rule
+(Theorem~\ref{thm:vjpComp}). The 3-term backward is the
 centerpiece, affine is a corollary, and composition is a one-line
 proof. The structural story of the chapter is: one new
 Mathlib-level analytic dependency (sqrt and recip
@@ -5131,12 +5132,11 @@ us also add another zero on the ImageNet leaderboard.''
 
 From the framework's perspective, what is a residual block?
 \(\mathrm{residual}(x) = f(x) + \mathrm{id}(x)\), a sum of two
-functions sharing the same input. We already proved in
-Chapter~\ref{chap:tensor} that the VJP of an additive fan-in is
-``send the upstream gradient through both branches and add.'' We
-already proved that the VJP of \(\mathrm{id}\) is the identity on
-the gradient (and that the VJP of \(f\) is whatever the inner
-block's machinery gives us). Composition is just
+functions sharing the same input. The VJP of an additive fan-in is ``send the upstream gradient through
+both branches and add'' (Theorem~\ref{thm:biPathHasVJP}); the VJP of
+\(\mathrm{id}\) is the identity on the gradient
+(Theorem~\ref{thm:identityHasVJP}), and the VJP of \(f\) is whatever the
+inner block's machinery gives us. Composition is just
 \(\mathrm{vjpComp}\). So the residual VJP is the additive
 fan-in lemma, with \(\mathrm{id}\) plugged into one slot.
 
@@ -6213,8 +6213,7 @@ above the first rule differ; rows between the rules are held equal by
 construction.
 
 \medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
-$0.03$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
-interval of Chapter~\ref{chap:tensor} is $\pm0.38$ points on either top-1
+$0.03$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson interval is $\pm0.38$ points on either top-1
 --- $[73.77, 74.54]$ for the reference, $[73.78, 74.55]$ for the verified
 path --- so the gap in the table is a fraction of the interval, and
 at this scale a gap under about $0.4$ points is not yet a result in either
@@ -10952,8 +10951,7 @@ MLP sublayer (with residual), then a single transformer block,
 then a \(k\)-deep transformer tower, then the ViT body, then the whole
 network at its real shape. Each step is one or two compositions of the
 previous step. The chain
-that started at \texttt{vjpComp} in Chapter~\ref{chap:tensor}
-reaches all the way to a 5.5M-parameter image classifier here.
+that started at \texttt{vjpComp} (Theorem~\ref{thm:vjpComp}) reaches all the way to a 5.5M-parameter image classifier here.
 
 \prosesection{What's actually proved}
 
@@ -11928,9 +11926,9 @@ the \(k\)-block tower
 (Theorem~\ref{thm:transformerTowerHasVJPMat}) to the final
 per-token LayerNorm
 (Theorem~\ref{thm:layerNormPerTokenHasVJPMat}). Every step of
-the chain that began with \texttt{vjpComp} in
-Chapter~\ref{chap:tensor} is a proved theorem; one link remains, the
-network itself. \Qed{}
+the chain that began with \texttt{vjpComp} (Theorem~\ref{thm:vjpComp})
+is a proved theorem; the network itself is
+Theorem~\ref{thm:vitForwardKVHasVJP}, next. \Qed{}
 \end{proof}
 
 \begin{theorem}[The depth-\(k\) tower has a VJP]
@@ -13447,7 +13445,7 @@ dense $+$ sigmoid, output in $[0, 1]$). The output blends the two:
 $T$ learned per element gives the network a continuous knob between
 ``pass through'' ($T \to 0$) and ``transform fully'' ($T \to 1$). The
 gradient through the blend is exactly product rule + additive
-fan-in --- both already in Chapter~\ref{chap:tensor}'s VJP kit ---
+fan-in (Theorems~\ref{thm:elemwiseProductHasVJP}, \ref{thm:biPathHasVJP}),
 so no new derivation is needed.
 
 \begin{verbatim}
