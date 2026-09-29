@@ -114,9 +114,9 @@ but exploitably structured:
 That's it. Three rules, five tricks. Every architecture in this book
 decomposes into some combination of those eight things, and that includes
 the MLP, the CNN, ResNet, MobileNet, EfficientNet, and the Vision
-Transformer. So does every architecture in the bestiary at the end, which
-covers U-Net, YOLO, Mamba, GAN, VAE, diffusion models, CLIP, and
-GPT-style decoders. There is no ninth.
+Transformer. So does every architecture in Chapter~\ref{chap:bestiary}'s
+bestiary, which covers U-Net, YOLO, Mamba, GAN, VAE, diffusion models,
+CLIP, and GPT-style decoders. There is no ninth.
 
 I didn't set out to prove this. I set out to train a ResNet with verified
 gradients, and by the time I'd done it for enough architectures the
@@ -213,10 +213,10 @@ the time you reach ViT you've seen every primitive there is for modern
 vision, and you've also seen every primitive for modern language models,
 because transformers are the same architecture in both domains.
 
-The bestiary at the end demonstrates that the same primitives cover
-detection (YOLO), segmentation (U-Net), generation (diffusion models),
-self-supervised learning (MAE, CLIP), sequence modeling (Mamba), and
-multi-modal models (LLaVA). Image recognition is the on-ramp. The whole
+The bestiary of Chapter~\ref{chap:bestiary} shows the same primitives
+covering detection (YOLO), segmentation (U-Net), generation (diffusion
+models), vision--language models (CLIP, LLaVA), and sequence modeling
+(Mamba). Image recognition is the on-ramp. The whole
 modern stack is the destination.
 
 \section*{Why Lean}
@@ -319,11 +319,14 @@ started'' is where those commands live.
     capstone.
 \end{itemize}
 
-\textbf{Part 2: The bestiary (Chapter 10).} A catalog of 45
-additional architectures, from U-Net to Mamba to diffusion models,
-each decomposed into the framework's primitives. Organized by the
-question you're asking: ``how do I do detection?'', ``how do I do
-generation?'', etc.
+\textbf{Part 2: The bestiary (Chapter 10).} Forty-five further
+architectures, from U-Net to Mamba to Stable Diffusion, each written as
+a \texttt{NetSpec} in about fifteen lines of Lean and led by how many new
+primitives it asks for beyond Part 1's toolbox: none for VGG or
+AlphaZero, one for Mamba, never more than three. The entries are grouped
+by what they are for --- vision classifiers, detection, segmentation,
+language, generation, physics, signal processing --- and twelve of the
+groups carry a demo trained on a dataset from that field.
 
 \textbf{Appendices.} Data availability (A), toolchain setup (B), and
 the complete proof framework as a reference (C).
@@ -17496,7 +17499,7 @@ lake run imagenet start          # the rows in order, each resuming from its che
 \end{verbatim}
 
 \noindent \texttt{lake run imagenet} is the tier itself, the fourth of the four.
-Bare, it only plans, because its twelve rows --- the table above and the side
+Bare, it only plans, because its fourteen rows --- the table above and the side
 quests below --- are weeks of four-card time; \texttt{start} is the confirmation.
 
 Data parallelism needs both replica knobs, and setting only one fails with a
@@ -17645,12 +17648,12 @@ just the elaborator, accepts them with no project axioms.
 
 \subsection{Trust kernel}
 
-The Verified VJP Proofs suite proves the \textbf{45 VJP contracts and
+The Verified VJP Proofs suite proves the \textbf{44 VJP contracts and
 9 witnesses} of the table in \emph{How this book is organized}, their
 restatements at fixed dimensions and over the committed specs, and the
 two smooth-point forms that global theorems superseded, each asserting
 backward \(= \sum_j \pdiv f\,x\,i\,j \cdot dy_j\); the
-\textbf{30 step certificates} that tie the emitted programs to them; on
+\textbf{37 step certificates} that tie the emitted programs to them; on
 top of the foundation \(\pdiv\) calculus and the
 differentiability/forward/witness machinery they rest on, plus the
 bestiary's 45 architecture families --- and \textbf{zero project
@@ -17697,7 +17700,7 @@ This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
 The 87 are not the whole proof suite --- \texttt{tests/AuditAxioms.lean}
-prints the axiom closure of 1{,}596 declarations, and the same allowlist
+prints the axiom closure of 1{,}751 declarations, and the same allowlist
 applies to all of them, because every theorem in the project closes the
 same way. What the 87 add is a second, non-elaborator opinion, and they
 include every declaration \texttt{formalization.yaml} puts forward as a
