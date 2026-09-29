@@ -1,0 +1,22 @@
+✔ [1427/1843] Built LeanMlir.F32Array (392ms)
+✔ [2947/3285] Built LeanMlir.E4M3Quant (382ms)
+✔ [2948/3285] Built LeanMlir.Cam (324ms)
+✔ [3277/3285] Built LeanMlir.SpecHelpers (451ms)
+✔ [6543/6559] Built LeanMlir.F32Array:c.o (383ms)
+✔ [6544/6559] Built «lean4-mlir»/f32HelpersO (1.2s)
+✔ [6545/6559] Built «lean4-mlir»/libireeffi.static (29ms)
+✔ [6547/6559] Built LeanMlir.Train (1.0s)
+⚠ [6549/6559] Built LeanMlir.Verified.Train (4.6s)
+warning: LeanMlir/Verified/Train.lean:1372:6: Variable name `emaOn` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _emaOn
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+✔ [6551/6559] Built LeanMlir.Verified.Smoothing (1.0s)
+✔ [6553/6559] Built LeanMlir.Verified.Attack (1.9s)
+✔ [6555/6559] Built LeanMlir (1.8s)
+✔ [6557/6559] Built demos.MainRsBands (2.4s)
+✔ [6558/6559] Built demos.MainRsBands:c.o (1.6s)
+✔ [6559/6559] Built «rs-bands»:exe (1.1s)
+Build completed successfully (6559 jobs).

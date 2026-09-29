@@ -343,6 +343,61 @@ here, the laboratory was.
 
 ---
 
+## Remote sensing — the chapter-4 CNN on thirteen Sentinel-2 bands, from Europe to Brazil
+
+Chapter 4's CIFAR-CNN8-wide-BN on **EuroSAT** — 27,000 Sentinel-2 chips over 34 European
+countries, 64 × 64 at 10 m (a 640 m square), all 13 bands from 443 to 2190 nm, ten land-cover
+classes (Helber et al. 2019, MIT) — trained five times with a different part of the spectrum
+at the stem: `rgb`, `rgbn` (+ NIR), `ms10` (the 10 m + 20 m bands), `all`, and `ir` (red edge,
+NIR and SWIR, no visible light). The same weights are then scored, unchanged, on chips cut for
+this demo from Sentinel-2 L1C scenes over Rondônia (June) and western Bahia (September, and the
+same chips in March), labelled from MapBiomas Collection 4 (10 m, CC BY 4.0) through the
+seven classes the two continents share. In Europe the invisible bands are worth a point; in
+the Amazon they are worth ten (pasture recall 74 → 95); in the dry Cerrado every arm fails on
+the seven-class map, because a September paddock is "herbaceous" to a European net and
+savanna has no European name; and no arm is season-stable — the multispectral arms are better
+in both seasons, not stabler. A five-player exact Shapley value over band groups says the
+three atmospheric bands carry Europe's atmosphere (negative value in Brazil), which is why the
+ten-band arm travels best.
+
+`MainRsBands.lean` (`lake exe rs-bands`), `scripts/datasets/{download_rs.sh, preprocess_rs_eurosat.py,
+preprocess_rs_brazil.py, rs_folds.py}`, `scripts/demos/{rs_score.py, rs_table.py, rs_shapley.py,
+rs_figure.py}`. See `planning/remote_sensing_wavelengths_demo.md` and the READMEs under
+`runs/2026-09-29-rs-phase{1,2,3}/` (phase 2's is how the Brazil chips were made).
+
+```bash
+./scripts/datasets/download_rs.sh                  # EuroSAT MS (2 GB) + torchgeo's split lists → data/rs/eurosat_*.bin; Gate 0
+
+# Phase 1: an arm on EuroSAT, 80 epochs, ~5 min on one 4060 Ti; five arms × three seeds is the table
+CUDA_VISIBLE_DEVICES=0 lake exe rs-bands arm=all epochs=80 seed=1 tag=s1 out=runs/x
+.venv-rs/bin/python scripts/demos/rs_score.py runs/x/rs_cifar8w_all_s1_logits_eurosat_test.bin --part eurosat_test
+
+# Phase 2: the Brazil chips (a free CDSE account; keys in the environment, never on disk; ~8 GB of scenes once)
+export CDSE_S3_ACCESS_KEY=… CDSE_S3_SECRET_KEY=…
+.venv-rs/bin/python scripts/datasets/preprocess_rs_brazil.py --tiles 6 --cands 1500 --cap 2000
+.venv-rs/bin/python scripts/datasets/rs_folds.py
+
+# Phase 3: the same weights on the Brazil parts, the wet/dry pair, the tables
+CUDA_VISIBLE_DEVICES=0 lake exe rs-bands arm=all eval tag=s1 out=runs/x score=amazon_dry,cerrado_dry,cerrado_wet
+.venv-rs/bin/python scripts/demos/rs_score.py runs/x/rs_cifar8w_all_s1_logits_cerrado_dry.bin --part cerrado_dry \
+    --pair runs/x/rs_cifar8w_all_s1_logits_cerrado_wet.bin --pair-part cerrado_wet
+CUDA_VISIBLE_DEVICES=0 lake exe rs-bands arm=all train=brazil_all val=brazil_all score=brazil_all classes=7 fold=0 epochs=80 tag=ceil out=runs/x
+.venv-rs/bin/python scripts/demos/rs_table.py runs/x
+
+# Phase 4: five-group Shapley (32 coalitions, exact) and the figure's dense chip grids
+.venv-rs/bin/python scripts/demos/rs_shapley.py make --part amazon_dry --n 300
+CUDA_VISIBLE_DEVICES=0 lake exe rs-bands arm=all eval tag=s1 out=runs/x score=shap_amazon_dry
+.venv-rs/bin/python scripts/demos/rs_shapley.py score --part amazon_dry --logits runs/x/rs_cifar8w_all_s1_logits_shap_amazon_dry.bin
+.venv-rs/bin/python scripts/demos/rs_figure.py make --name rondonia --scene <scene id> --center=-9.0994,-61.2937
+```
+
+![which wavelengths travel](figures/remote_sensing_wavelengths.jpg)
+
+Rows: Rondônia in June, western Bahia in September, the same window in March. Columns: the
+scene in true colour, then the 640 m chip grid coloured by the `rgb`, `ir` and `all` arms'
+predictions, then MapBiomas 2023. The `rgb` column turns a third of the Cerrado to "forest"
+between September and March.
+
 ## Semantic segmentation — a ResNet-34 UNet on BraTS
 
 The segmentation demo. A ResNet-34 encoder (the Ch-5 architecture, reused
@@ -855,6 +910,7 @@ demos/
 ├── MainYolov1NeuDet448.lean               #   and the single-grid arm beside it, out of the archive
 ├── MainAraslSigns.lean                    # chapter-4 CNN on ArASL sign-language letters, random vs blocked split (people watching)
 ├── MainPlantLeaf.lean                     # chapter-6 R34 on PlantVillage lab leaves → PlantDoc field leaves, CAM + Shapley (agriculture)
+├── MainRsBands.lean                       # chapter-4 CNN on EuroSAT's 13 Sentinel-2 bands under five stems, scored on Amazon / Cerrado chips (remote sensing)
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator

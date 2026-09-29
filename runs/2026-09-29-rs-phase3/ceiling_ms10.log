@@ -1,0 +1,6 @@
+ceiling ms10 fold 0: brazil_all 96.86% F1 93.62
+ceiling ms10 fold 1: brazil_all 96.62% F1 86.83
+ceiling ms10 fold 2: brazil_all 94.91% F1 70.53
+ceiling ms10 fold 3: brazil_all 94.64% F1 88.57
+ceiling ms10 fold 4: brazil_all 95.22% F1 74.77
+CEILING_DONE

@@ -1,0 +1,11 @@
+ceiling all fold 0: brazil_all 96.17% F1 91.24
+ceiling all fold 1: brazil_all 96.69% F1 89.09
+ceiling all fold 2: brazil_all 95.18% F1 71.84
+ceiling all fold 3: brazil_all 95.00% F1 86.97
+ceiling all fold 4: brazil_all 96.10% F1 96.37
+ceiling rgb fold 0: brazil_all 94.72% F1 85.01
+ceiling rgb fold 1: brazil_all 94.79% F1 82.40
+ceiling rgb fold 2: brazil_all 93.32% F1 69.63
+ceiling rgb fold 3: brazil_all 93.28% F1 87.62
+ceiling rgb fold 4: brazil_all 94.82% F1 92.83
+CEILING_DONE

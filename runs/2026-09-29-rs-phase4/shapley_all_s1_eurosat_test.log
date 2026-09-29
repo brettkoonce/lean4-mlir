@@ -1,0 +1,20 @@
+/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/demos/rs_shapley.py:86: DeprecationWarning: Bitwise inversion '~' on bool is deprecated. This returns the bitwise inversion of the underlying int object and is usually not what you expect from negating a bool. Use the 'not' operator for boolean negation or ~int(x) if you really want the bitwise inversion of the underlying int.
+  diag = ~euro & (lbl >= len(SHARED))
+eurosat_test: 300 chips, value = log p(target) ; v(N) − v(∅) mean 14.078 ; efficiency residual max |Σφ − (v(N) − v(∅))| = 1.81e-06
+  group         mean φ    share of |φ|   top group on
+  visible        +6.037    33.5%         50.7% of chips
+  red edge       +1.676    14.9%         12.0% of chips
+  NIR            +4.218    24.2%         21.3% of chips
+  SWIR           +2.214    13.2%          5.7% of chips
+  atmospheric    -0.067    14.1%         10.3% of chips
+  per class (mean φ):
+    AnnualCrop             n=  30  visible +0.18  red edge +0.94  NIR -1.24  SWIR +0.28  atmospheric -0.23
+    Forest                 n=  30  visible +11.06  red edge -0.74  NIR +1.58  SWIR +5.22  atmospheric -1.72
+    HerbaceousVegetation   n=  30  visible +2.58  red edge -0.31  NIR +0.98  SWIR +0.82  atmospheric +1.47
+    Highway                n=  30  visible +8.76  red edge +1.56  NIR +7.06  SWIR +0.61  atmospheric -0.54
+    Industrial             n=  30  visible +11.45  red edge +3.50  NIR +4.73  SWIR +1.95  atmospheric +1.75
+    Pasture                n=  30  visible +2.48  red edge -0.73  NIR +5.66  SWIR +1.79  atmospheric +2.41
+    PermanentCrop          n=  30  visible +9.41  red edge +0.45  NIR +2.28  SWIR +2.61  atmospheric +0.76
+    Residential            n=  30  visible +8.37  red edge +2.83  NIR +4.89  SWIR +1.69  atmospheric +2.89
+    River                  n=  30  visible +4.90  red edge +2.35  NIR +7.73  SWIR +1.94  atmospheric -1.43
+    SeaLake                n=  30  visible +1.18  red edge +6.91  NIR +8.50  SWIR +5.22  atmospheric -6.06

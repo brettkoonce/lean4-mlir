@@ -1,0 +1,112 @@
+rs cifar8w all: 13 planes #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 8 BN layers, train on brazil_all fold 4, 80 epochs, batch 64, lr 0.001000, label smoothing 0.000000, seed 1, dihedral augmentation
+I0929 16:22:14.180939 1529961 service.cc:154] XLA service 0x78b640033910 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0929 16:22:14.180980 1529961 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0929 16:22:14.182663 1529961 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0929 16:22:14.182713 1529961 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0929 16:22:14.190396 1529961 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0929 16:22:14.964617 1530012 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0929 16:22:14.978654 1529996 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0929 16:22:15.099306 1530015 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 32 bytes spill stores, 32 bytes spill loads
+
+I0929 16:22:15.183811 1529988 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/rs_cifar8w_all_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1304 ms
+  570327 params (570327 by NetSpec.totalParams), 384 BN stat floats
+  val brazil_all: 1486 chips × 13 planes (1123 ms)
+  train brazil_all: 5578 chips (1255 ms)
+I0929 16:22:18.697460 1529996 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0929 16:22:18.839155 1530009 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/rs_cifar8w_all_train_step.mlir (@main, 107 outputs, 1 replica) in 1737 ms
+    step 0: loss 3.359100 (59 ms so far)
+    step 1: loss 3.214400 (78 ms so far)
+    step 2: loss 2.989000 (97 ms so far)
+  epoch 1/80: loss 0.701500  val acc 90.920000%  (1606 ms train, 209 ms eval)
+  epoch 2/80: loss 0.291200  val acc 92.190000%  (1563 ms train, 200 ms eval)
+  epoch 3/80: loss 0.266100  val acc 94.410000%  (1562 ms train, 201 ms eval)
+  epoch 4/80: loss 0.227300  val acc 94.350000%  (1546 ms train, 201 ms eval)
+  epoch 5/80: loss 0.204700  val acc 94.680000%  (1519 ms train, 193 ms eval)
+  epoch 6/80: loss 0.192300  val acc 93.880000%  (1597 ms train, 199 ms eval)
+  epoch 7/80: loss 0.184400  val acc 92.930000%  (1546 ms train, 188 ms eval)
+  epoch 8/80: loss 0.188900  val acc 94.750000%  (1551 ms train, 204 ms eval)
+  epoch 9/80: loss 0.168900  val acc 94.480000%  (1557 ms train, 202 ms eval)
+  epoch 10/80: loss 0.167200  val acc 93.740000%  (1577 ms train, 188 ms eval)
+  epoch 11/80: loss 0.163500  val acc 94.350000%  (1520 ms train, 200 ms eval)
+  epoch 12/80: loss 0.172700  val acc 94.410000%  (1658 ms train, 179 ms eval)
+  epoch 13/80: loss 0.163200  val acc 95.560000%  (1461 ms train, 187 ms eval)
+  epoch 14/80: loss 0.146600  val acc 95.150000%  (1724 ms train, 201 ms eval)
+  epoch 15/80: loss 0.147900  val acc 94.680000%  (1611 ms train, 206 ms eval)
+  epoch 16/80: loss 0.147400  val acc 95.630000%  (1604 ms train, 207 ms eval)
+  epoch 17/80: loss 0.152000  val acc 95.290000%  (1589 ms train, 212 ms eval)
+  epoch 18/80: loss 0.147600  val acc 95.830000%  (1574 ms train, 206 ms eval)
+  epoch 19/80: loss 0.141100  val acc 95.900000%  (1565 ms train, 199 ms eval)
+  epoch 20/80: loss 0.131900  val acc 95.560000%  (1580 ms train, 205 ms eval)
+  epoch 21/80: loss 0.136100  val acc 96.100000%  (1577 ms train, 203 ms eval)
+  epoch 22/80: loss 0.140700  val acc 95.220000%  (1536 ms train, 202 ms eval)
+  epoch 23/80: loss 0.120300  val acc 95.760000%  (1576 ms train, 209 ms eval)
+  epoch 24/80: loss 0.139100  val acc 95.360000%  (1559 ms train, 209 ms eval)
+  epoch 25/80: loss 0.127400  val acc 95.900000%  (1571 ms train, 210 ms eval)
+  epoch 26/80: loss 0.131000  val acc 95.900000%  (1542 ms train, 196 ms eval)
+  epoch 27/80: loss 0.120200  val acc 96.100000%  (1566 ms train, 196 ms eval)
+  epoch 28/80: loss 0.117400  val acc 95.490000%  (1548 ms train, 207 ms eval)
+  epoch 29/80: loss 0.130300  val acc 95.290000%  (1561 ms train, 200 ms eval)
+  epoch 30/80: loss 0.117100  val acc 96.430000%  (1574 ms train, 209 ms eval)
+  epoch 31/80: loss 0.110200  val acc 95.560000%  (1568 ms train, 195 ms eval)
+  epoch 32/80: loss 0.114600  val acc 95.090000%  (1548 ms train, 205 ms eval)
+  epoch 33/80: loss 0.123900  val acc 95.560000%  (1556 ms train, 204 ms eval)
+  epoch 34/80: loss 0.102400  val acc 96.030000%  (1540 ms train, 198 ms eval)
+  epoch 35/80: loss 0.111300  val acc 95.560000%  (1547 ms train, 204 ms eval)
+  epoch 36/80: loss 0.111000  val acc 95.220000%  (1558 ms train, 198 ms eval)
+  epoch 37/80: loss 0.103100  val acc 95.760000%  (1555 ms train, 194 ms eval)
+  epoch 38/80: loss 0.105100  val acc 96.100000%  (1548 ms train, 204 ms eval)
+  epoch 39/80: loss 0.101900  val acc 95.960000%  (1581 ms train, 195 ms eval)
+  epoch 40/80: loss 0.098300  val acc 96.370000%  (1517 ms train, 185 ms eval)
+  epoch 41/80: loss 0.103000  val acc 95.560000%  (1530 ms train, 195 ms eval)
+  epoch 42/80: loss 0.098600  val acc 95.830000%  (1548 ms train, 193 ms eval)
+  epoch 43/80: loss 0.091700  val acc 96.230000%  (1519 ms train, 192 ms eval)
+  epoch 44/80: loss 0.093300  val acc 95.490000%  (1513 ms train, 194 ms eval)
+  epoch 45/80: loss 0.088900  val acc 96.230000%  (1588 ms train, 199 ms eval)
+  epoch 46/80: loss 0.091300  val acc 96.100000%  (1544 ms train, 193 ms eval)
+  epoch 47/80: loss 0.086100  val acc 95.490000%  (1518 ms train, 195 ms eval)
+  epoch 48/80: loss 0.085500  val acc 95.490000%  (1542 ms train, 189 ms eval)
+  epoch 49/80: loss 0.090400  val acc 95.830000%  (1561 ms train, 197 ms eval)
+  epoch 50/80: loss 0.089300  val acc 95.560000%  (1578 ms train, 202 ms eval)
+  epoch 51/80: loss 0.083000  val acc 96.100000%  (1568 ms train, 208 ms eval)
+  epoch 52/80: loss 0.078300  val acc 95.900000%  (1555 ms train, 199 ms eval)
+  epoch 53/80: loss 0.078600  val acc 95.690000%  (1585 ms train, 210 ms eval)
+  epoch 54/80: loss 0.078800  val acc 95.690000%  (1582 ms train, 195 ms eval)
+  epoch 55/80: loss 0.078500  val acc 96.300000%  (1532 ms train, 193 ms eval)
+  epoch 56/80: loss 0.071400  val acc 95.490000%  (1563 ms train, 198 ms eval)
+  epoch 57/80: loss 0.073400  val acc 95.690000%  (1567 ms train, 199 ms eval)
+  epoch 58/80: loss 0.072600  val acc 95.960000%  (7162 ms train, 7277 ms eval)
+  epoch 59/80: loss 0.071200  val acc 96.030000%  (26345 ms train, 205 ms eval)
+  epoch 60/80: loss 0.064300  val acc 95.690000%  (1553 ms train, 199 ms eval)
+  epoch 61/80: loss 0.062300  val acc 95.900000%  (1518 ms train, 197 ms eval)
+  epoch 62/80: loss 0.059900  val acc 95.900000%  (1480 ms train, 166 ms eval)
+  epoch 63/80: loss 0.061600  val acc 95.830000%  (1537 ms train, 207 ms eval)
+  epoch 64/80: loss 0.059500  val acc 96.160000%  (1501 ms train, 194 ms eval)
+  epoch 65/80: loss 0.064300  val acc 96.100000%  (1520 ms train, 195 ms eval)
+  epoch 66/80: loss 0.057100  val acc 95.830000%  (1654 ms train, 289 ms eval)
+  epoch 67/80: loss 0.057200  val acc 96.100000%  (1455 ms train, 181 ms eval)
+  epoch 68/80: loss 0.052900  val acc 95.900000%  (1497 ms train, 203 ms eval)
+  epoch 69/80: loss 0.057000  val acc 95.760000%  (1773 ms train, 183 ms eval)
+  epoch 70/80: loss 0.050800  val acc 95.900000%  (1519 ms train, 199 ms eval)
+  epoch 71/80: loss 0.049000  val acc 96.160000%  (1549 ms train, 199 ms eval)
+  epoch 72/80: loss 0.052900  val acc 95.830000%  (1569 ms train, 209 ms eval)
+  epoch 73/80: loss 0.050100  val acc 95.960000%  (1559 ms train, 200 ms eval)
+  epoch 74/80: loss 0.048800  val acc 96.030000%  (1547 ms train, 197 ms eval)
+  epoch 75/80: loss 0.050800  val acc 96.230000%  (1563 ms train, 211 ms eval)
+  epoch 76/80: loss 0.049800  val acc 96.160000%  (1547 ms train, 212 ms eval)
+  epoch 77/80: loss 0.047300  val acc 95.900000%  (1556 ms train, 201 ms eval)
+  epoch 78/80: loss 0.049600  val acc 96.100000%  (1583 ms train, 205 ms eval)
+  epoch 79/80: loss 0.049400  val acc 95.960000%  (1537 ms train, 204 ms eval)
+  epoch 80/80: loss 0.048900  val acc 96.100000%  (1528 ms train, 198 ms eval)
+trained: 6960 steps in 178 s
+score: .venv-rs/bin/python scripts/demos/rs_score.py runs/2026-09-29-rs-phase3/rs_cifar8w_all_ceil_fold4_logits_<part>.bin --part <part>
+rs cifar8w all on brazil_all: 1486 chips, 7-way argmax accuracy 96.100000%  -> runs/2026-09-29-rs-phase3/rs_cifar8w_all_ceil_fold4_logits_brazil_all.bin
+rs cifar8w all on brazil_all: 1486 chips, 7-way argmax accuracy 96.100000%  -> runs/2026-09-29-rs-phase3/rs_cifar8w_all_ceil_fold4_logits_brazil_all.bin

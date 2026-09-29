@@ -1,0 +1,16 @@
+/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/demos/rs_shapley.py:86: DeprecationWarning: Bitwise inversion '~' on bool is deprecated. This returns the bitwise inversion of the underlying int object and is usually not what you expect from negating a bool. Use the 'not' operator for boolean negation or ~int(x) if you really want the bitwise inversion of the underlying int.
+  diag = ~euro & (lbl >= len(SHARED))
+amazon_dry: 151 chips, value = log p(target) ; v(N) − v(∅) mean 8.454 ; efficiency residual max |Σφ − (v(N) − v(∅))| = 8.89e-07
+  group         mean φ    share of |φ|   top group on
+  visible        +6.194    35.0%         64.2% of chips
+  red edge       -0.267    12.1%          7.9% of chips
+  NIR            +2.089    15.0%         11.3% of chips
+  SWIR           +3.394    22.5%          6.0% of chips
+  atmospheric    -2.957    15.5%         10.6% of chips
+  per class (mean φ):
+    annual crop            n=  41  visible -1.45  red edge -0.24  NIR -0.58  SWIR -1.52  atmospheric +0.39
+    forest                 n=  50  visible +12.05  red edge +1.24  NIR +1.26  SWIR +6.22  atmospheric -5.37
+    herbaceous             n=   7  visible -5.02  red edge +2.46  NIR +1.83  SWIR -1.78  atmospheric -1.32
+    pasture                n=  50  visible +8.23  red edge -2.52  NIR +4.91  SWIR +5.32  atmospheric -3.63
+    built                  n=   2  visible +7.27  red edge +7.26  NIR +3.82  SWIR +1.79  atmospheric +0.51
+    water                  n=   1  visible +1.50  red edge +1.92  NIR +10.05  SWIR +6.26  atmospheric -4.21

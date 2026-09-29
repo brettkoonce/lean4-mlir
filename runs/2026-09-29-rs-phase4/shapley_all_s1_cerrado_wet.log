@@ -1,0 +1,7 @@
+cerrado_wet: 218 chips, value = log p(target) ; v(N) − v(∅) mean 6.325 ; efficiency residual max |Σφ − (v(N) − v(∅))| = 1.43e-06
+  group         mean φ    share of |φ|   top group on
+  visible        +4.905    34.8%         57.8% of chips
+  red edge       +0.054    16.4%         20.6% of chips
+  NIR            +0.900    16.3%          8.7% of chips
+  SWIR           +1.927    20.3%          8.7% of chips
+  atmospheric    -1.462    12.1%          4.1% of chips

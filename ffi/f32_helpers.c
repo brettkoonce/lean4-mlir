@@ -3281,3 +3281,44 @@ LEAN_EXPORT lean_obj_res lean_nqs_j1j2_eloc(
     }
     return lean_io_result_mk_ok(res);
 }
+
+// ---- Dihedral gather (the remote-sensing demo, demos/MainRsBands.lean) ----
+// Gather `count` chips of a flat f32 [n, C, S, S] set by index (`idx` is `count`
+// little-endian u32 chip indices) and apply to each one of the eight symmetries of the
+// square, drawn per chip from `seed` and the batch position: bit 0 flips columns,
+// bit 1 flips rows, bit 2 transposes. A nadir satellite chip has no up, so every one
+// of the eight is a label-preserving view; the Lean gather (`ByteArray.extract`) can
+// copy a chip but not permute it without a 1.5 µs-per-float push loop, hence C.
+LEAN_EXPORT lean_obj_res lean_f32_dihedral_gather(
+    b_lean_obj_arg img_ba, b_lean_obj_arg idx_ba, size_t count, size_t C, size_t S, uint64_t seed) {
+    const float* img = (const float*)lean_sarray_cptr(img_ba);
+    const uint8_t* idx = lean_sarray_cptr(idx_ba);
+    const size_t hw = S * S, pix = C * hw;
+    const size_t n = lean_sarray_size(img_ba) / (pix * 4);
+    size_t nbytes = count * pix * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* out = (float*)lean_sarray_cptr(ba);
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    for (size_t i = 0; i < count; i++) {
+        size_t k = (size_t)(idx[4*i] | (idx[4*i+1] << 8) | (idx[4*i+2] << 16) | ((uint32_t)idx[4*i+3] << 24));
+        if (k >= n) { lean_dec(ba);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("dihedral_gather: index out of range"))); }
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        const unsigned t = (unsigned)(s >> 61);           // top three bits: uniform over the eight
+        const int fx = t & 1, fy = (t >> 1) & 1, tr = (t >> 2) & 1;
+        const float* src = img + k * pix;
+        float* dst = out + i * pix;
+        for (size_t ch = 0; ch < C; ch++) {
+            const float* sp = src + ch * hw;
+            float* dp = dst + ch * hw;
+            for (size_t y = 0; y < S; y++) {
+                size_t yy = fy ? S - 1 - y : y;
+                for (size_t x = 0; x < S; x++) {
+                    size_t xx = fx ? S - 1 - x : x;
+                    dp[y * S + x] = tr ? sp[xx * S + yy] : sp[yy * S + xx];
+                }
+            }
+        }
+    }
+    return lean_io_result_mk_ok(ba);
+}

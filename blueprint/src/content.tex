@@ -14491,6 +14491,138 @@ leaf at one moment --- no severity, no spread across a field, no symptom
 before the lesion shows --- and the honest number for even that, on a
 photograph a grower would take, is the right-hand column.
 
+\subsection{Remote sensing --- demo: which wavelengths travel, EuroSAT to the Amazon and the Cerrado}
+\label{sec:bestiary_remote_sensing}
+
+Networks that look down. The demo trains the chapter-4 CNN on satellite
+chips whose input is not a photograph --- thirteen bands of Sentinel-2,
+ten of them outside what a camera sees --- five times, each time allowed a
+different part of the spectrum, and then asks the trained nets, unchanged,
+to read land they have never seen. Europe is a target that holds still.
+The Amazon's arc of deforestation is a different place, and the Cerrado,
+read in September and again in March, is a place that moves; the question
+is which bands can follow it.
+
+\textbf{The data.} EuroSAT (Helber et al.\ 2019; MIT) is $27{,}000$ chips
+of Sentinel-2 imagery over 34 European countries, each $64\times64$ pixels
+at 10~m --- a 640~m square --- in all 13 bands from 443 to 2190~nm, in ten
+land-cover classes: annual crop, forest, herbaceous vegetation, highway,
+industrial, pasture, permanent crop, residential, river, sea or lake. A
+leaf is bright in the near infrared, where its spongy interior scatters
+the light that chlorophyll absorbs in the red, and dark in the short-wave
+infrared, where its water absorbs; the red edge is the step between the
+two. Colour-infrared film found camouflage on that principle in the 1940s,
+and the vegetation indices of the 1970s are ratios of exactly these bands.
+The Brazil chips were cut for this section (data appendix): the same 640~m
+squares from Sentinel-2 scenes of 2023 over Rond\^onia in June, and over
+western Bahia in September and again, the same $3{,}620$ squares, in
+March, each labelled by majority vote from MapBiomas, Brazil's 10~m
+land-cover map, through the seven classes EuroSAT's ten collapse into
+(forest, pasture, herbaceous, annual crop, perennial crop, built, water).
+The Cerrado's own class --- savanna, woody and herbaceous at once,
+$2{,}000$ chips --- has no European name and is kept aside. The net is
+Chapter~\ref{chap:bn}'s CIFAR CNN with the stem's input channels as the
+only change: \texttt{rgb} (three bands), \texttt{rgbn} (plus near
+infrared), \texttt{ms10} (the ten bands at 10 and 20~m), \texttt{all}
+(thirteen), and \texttt{ir} (red edge, near and short-wave infrared, and
+no visible light at all); 80 epochs with flips and rotations, three seeds,
+five minutes an arm on one card. Nothing in the codegen moves.
+
+\begin{center}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l c c c c c}
+\hline
+& EuroSAT & Amazon & Cerrado & Cerrado & same answer \\
+& test & June & September & March & both seasons \\
+\hline
+\texttt{rgb}  & 97.1 $\pm$ 0.1 & 87.4 $\pm$ 0.9 & 33.2 $\pm$ 0.5 & 37.7 $\pm$ 0.3 & 38\% \\
+\texttt{rgbn} & 98.0 $\pm$ 0.1 & 89.3 $\pm$ 1.4 & 34.6 $\pm$ 0.6 & 39.0 $\pm$ 0.5 & 41\% \\
+\texttt{ms10} & 98.4 $\pm$ 0.1 & \textbf{97.0} $\pm$ 0.6 & 32.8 $\pm$ 2.3 & \textbf{59.2} $\pm$ 0.5 & 27\% \\
+\texttt{all}  & 98.3 $\pm$ 0.1 & \textbf{97.0} $\pm$ 0.5 & 35.4 $\pm$ 2.5 & 53.8 $\pm$ 4.3 & 24\% \\
+\texttt{ir}   & 97.9 $\pm$ 0.1 & 91.7 $\pm$ 1.5 & 29.0 $\pm$ 2.5 & 39.8 $\pm$ 3.1 & 39\% \\
+\hline
+trained in Brazil, five-fold & --- & \multicolumn{3}{c}{\texttt{rgb} 94.2 $\pm$ 0.7 \quad \texttt{all} 95.8 $\pm$ 0.6} & --- \\
+Helber et al.\ 2019, ResNet-50 & 98.6 & --- & --- & --- & --- \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent \textbf{The first column is the literature's question and the
+second is the demo's.} In Europe the ten invisible bands are worth about a
+point to a small net trained from scratch, and the bands a camera cannot
+see are enough on their own (\texttt{ir}, 97.9); the published ordering
+--- RGB 98.6, colour-infrared 98.3, short-wave infrared 97.1 --- was the
+ImageNet pretraining, not the spectrum. In the Amazon the
+same bands are worth ten. Rond\^onia is forest and pasture; every arm finds
+the forest ($99.8\%$ of it), and RGB loses a quarter of the pasture ($74\%$
+recall) where the ten-band arm keeps $95\%$. Near infrared alone buys four
+of the ten points and the red edge and short-wave infrared buy the rest;
+the arm with no visible light at all reads 91.7.
+
+\textbf{The Cerrado is the harder question, twice.} In September every arm
+falls to a third, and the confusion is one line of the matrix: a paddock in
+the dry season is ``herbaceous vegetation'' to a net that learned pasture
+from European meadows (RGB puts 666 of 884 there), and the biome's own
+class, savanna, is ``herbaceous'' to all five arms. Merge herbaceous and
+pasture into one grass class and RGB reads 76; the multispectral arms 65 to
+73, because they also send a share of the dry paddocks to ``annual crop''
+--- bare, dry ground is a ploughed field in the short-wave infrared. In
+March the same chips are green, the ten-band arm reads 59 and RGB 38, and
+savanna becomes ``forest'' to RGB on $42\%$ of its chips. The last column
+is the check the section was built for, and it fails for every arm: the
+same $3{,}620$ chips get the same answer in the two seasons between a
+quarter and two-fifths of the time. The multispectral arms are better in
+both seasons; they are not stabler. A Cerrado pasture's red and short-wave
+reflectance doubles between March and September, and no European chip
+taught that.
+
+\textbf{Whose fault.} Trained on the Brazil labels themselves, five-fold,
+the same net reads $94.2$ with three bands and $95.8$ with thirteen: the
+labels are learnable, and the thirteen-band margin over RGB is the same
+point and a half as in Europe. Fine-tuned from the European weights on 300
+Brazilian labels, every arm recovers about 90, the thirteen-band arm a
+point more; on all of them the European start is worth nothing over
+scratch. A five-player Shapley value over band groups --- visible, red edge,
+near infrared, short-wave infrared, and the three atmospheric bands at
+60~m; a removed group set to its training mean, exact over 32 forward
+passes per chip --- says where the thirteen-band net's evidence came from:
+a third of it from visible light on either continent, the short-wave share
+rising from $13\%$ at home to $22\%$ abroad, and the atmospheric bands
+worth less than nothing in Brazil ($-3.0$ nats of log-probability in the
+Amazon). They had learned Europe's sky, which is why the arm without them
+travels best.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/remote_sensing_wavelengths.jpg}
+\caption{Three 10~km windows, each a row: Rond\^onia in June, western
+Bahia in September, and the same Bahia window in March. Left, the scene in
+true colour; then the grid of 256 chips of 640~m coloured by what the
+\texttt{rgb}, \texttt{ir} and \texttt{all} arms call each one, blended over
+the scene; right, MapBiomas 2023. In the first row the clearings between
+the forest ribs are pasture on the map, mostly ``herbaceous'' to RGB, and
+pasture to the thirteen-band arm. In the second and third rows the map does
+not change between the seasons and every column of predictions does: RGB
+turns a third of the window to ``forest'' in March.}
+\label{fig:remote_sensing_wavelengths}
+\end{figure}
+
+\noindent What travelled was the physics: the bands where a leaf's
+structure and water are, which read the same over a Bavarian spruce stand
+and a Rond\^onia pasture, and carried a net trained on one to the other
+with no loss worth mentioning. What did not travel was the vocabulary. A
+class list written for one continent has no word for the other's biome and
+a different word for its grass, and the season that turns that grass brown
+turns every one of these nets around with it. The first is a reason to keep
+the invisible bands; the second is a reason to label where you look.
+
+\medskip\noindent What this classifier is not: a map. It says what a 640~m
+square mostly is --- not where the boundary runs, when the forest was cut,
+or how much of it is gone. The Bahia chips are the first half of the
+instrument that could say the last two: the same square on two dates, and
+the difference between them.
+
 \subsection{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
 
@@ -16609,6 +16741,14 @@ physics, and each has a dataset of its own:
     ResNet-34 (\texttt{plant-leaf}) trains on the first and is scored on the
     second, and the demo of \S\ref{sec:bestiary_agriculture} is what the
     second number does to the first.
+  \item \textbf{EuroSAT and the Brazil chips} are the remote-sensing pair:
+    $27{,}000$ Sentinel-2 chips over 34 European countries, $64\times64$ at
+    10~m in all 13 bands and ten land-cover classes, and $3{,}826$ chips over
+    Rond\^onia plus $3{,}620$ over western Bahia in each of two seasons, cut
+    from Sentinel-2 scenes of 2023 and labelled from MapBiomas. Chapter~\ref{chap:bn}'s
+    CNN (\texttt{rs-bands}) trains on the first under five band subsets and is
+    scored on the second, and the demo of \S\ref{sec:bestiary_remote_sensing}
+    is what each subset does abroad.
   \item \textbf{MSD Task01 (BraTS)} is the segmentation dataset. It is
     four-modality brain-tumour MRI, and the thin-class collapse is the
     whole problem rather than a nuisance
@@ -16672,6 +16812,15 @@ PlantVillage & PV & Hughes \& Salath\'e, 2015;\newline Mohanty et al., 2016 &
 PlantDoc & PD & Singh et al., 2020 &
   \href{https://github.com/pratikkayal/PlantDoc-Dataset}{\nolinkurl{github.com/pratikkayal/PlantDoc-Dataset}} &
   \texttt{download\_plant.sh}\newline $\to$ \texttt{data/plant/}  \\[2pt]
+EuroSAT & ES & Helber et al., 2019 &
+  \href{https://zenodo.org/records/7711810}{\nolinkurl{zenodo.org/records/7711810}} &
+  \texttt{download\_rs.sh}\newline $\to$ \texttt{data/rs/}  \\[2pt]
+Sentinel-2 L1C, 2023 & S2 & ESA / Copernicus &
+  \href{https://dataspace.copernicus.eu/}{\nolinkurl{dataspace.copernicus.eu}} &
+  \texttt{preprocess\_rs\_brazil.py}\newline $\to$ \texttt{data/rs/s2/}  \\[2pt]
+MapBiomas Collection 4 & MB & Souza et al., 2020 &
+  \href{https://brasil.mapbiomas.org/}{\nolinkurl{brasil.mapbiomas.org}} &
+  \texttt{preprocess\_rs\_brazil.py}\newline $\to$ \texttt{data/rs/mapbiomas/}  \\[2pt]
 MSD Task01 (BraTS) & BraTS & Antonelli et al., 2022 &
   \href{http://medicaldecathlon.com/}{\nolinkurl{medicaldecathlon.com}} &
   \texttt{download\_brats.sh}\newline $\to$ \texttt{data/brats/}  \\[2pt]
@@ -16826,6 +16975,50 @@ photometric-and-geometric variant, as two further training parts. PlantDoc's
 $256$ shorter side and centre-cropped; and it is written whole, under its
 official split, and as five stratified folds, so a net fine-tuned on field
 images scores every field image once, held out.
+
+\medskip\noindent\textbf{Building the EuroSAT and Brazil chip sets.}
+EuroSAT is Helber, Bischke, Dengel \& Borth's land-cover benchmark
+(\emph{EuroSAT: a novel dataset and deep learning benchmark for land use and
+land cover classification}, IEEE JSTARS 12(7), 2019; Zenodo 10.5281/zenodo.7711810,
+MIT, plus the Copernicus Sentinel data terms): $27{,}000$ GeoTIFFs of
+$64\times64\times13$ unsigned 16-bit values, Sentinel-2A Level-1C
+top-of-atmosphere reflectance $\times 10{,}000$ at 10~m with the 20 and
+60~m bands cubic-spline upsampled, $2{,}000$ to $3{,}000$ chips in each of
+ten class folders, the planes in the order B01--B12 then B8A.
+\texttt{download\_rs.sh} fetches the archive and torchgeo's split lists
+(Neumann et al.\ 2019; $16{,}200$ / $5{,}400$ / $5{,}400$) and
+\texttt{preprocess\_rs\_eurosat.py} checks the census, derives the plane
+order from the chips rather than the documentation (over forest B08 and B8A
+agree and both dwarf B04; B10 is near zero; B08's most correlated plane is
+the thirteenth), asserts the lists partition the $27{,}000$, and writes
+each chip as 13 planes of standardised reflectance --- the per-band mean and
+standard deviation of the training split, which every Brazilian chip is
+standardised with unchanged.
+
+The Brazil chips are cut by \texttt{preprocess\_rs\_brazil.py} from
+Sentinel-2 Level-1C scenes of 2023 found through the Copernicus Data Space
+catalogue and read per band from its object store (a free account; the keys
+live in the environment): six tiles over Rond\^onia's arc of deforestation
+in June, and six over western Bahia in September and again, the same tiles
+and the same windows, in the wet season (January to April), each scene the
+least cloudy of its season with ties going to the earliest date in the
+Amazon --- the later the dry season, the thicker the fire smoke, which the
+agency's cloud figure does not count --- and the latest in the Cerrado's
+dry part. Every scene carries the 2022 radiometric offset ($-1{,}000$ in
+every band, the archive having been reprocessed under it); it is read from
+each scene's metadata and removed before anything else, and the 20 and
+60~m bands are upsampled as EuroSAT's were. $1{,}500$ chip origins per tile
+are drawn on the 60~m grid inside the swath from a seed derived from the
+tile id, so a Bahia tile's two seasons share their windows; a chip is kept
+if s2cloudless finds no pixel over probability 0.2 (in both seasons, for
+Bahia), and labelled from MapBiomas Collection 4 (Souza et al.\ 2020;
+CC~BY~4.0), Brazil's annual land-cover map at 10~m, by the majority class
+over the chip's footprint at purity 0.8 or better --- forest formation,
+pasture, grassland, temporary and perennial crops, urban, river; savanna
+formation and forest plantation kept as diagnostic classes, every other
+code dropping the chip --- capped at $2{,}000$ chips per class. The census,
+the scenes with their dates and offsets, the class map and the dropped
+codes are in \texttt{runs/2026-09-29-rs-phase2/README.md}.
 
 \medskip\noindent\textbf{Building the BraTS dataset.}
 BraTS~2021 proper (1{,}251 cases) is

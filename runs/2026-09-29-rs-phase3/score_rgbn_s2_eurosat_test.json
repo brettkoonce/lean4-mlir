@@ -1,0 +1,214 @@
+eurosat_test (10-way): n=5400  acc 98.19% [97.79, 98.51]  macro-F1 98.16
+   AnnualCrop             n=   596  recall  97.5
+   Forest                 n=   608  recall  99.8
+   HerbaceousVegetation   n=   573  recall  96.3
+   Highway                n=   496  recall  99.0
+   Industrial             n=   501  recall  97.8
+   Pasture                n=   396  recall  97.0
+   PermanentCrop          n=   538  recall  96.5
+   Residential            n=   554  recall  98.9
+   River                  n=   529  recall  98.7
+   SeaLake                n=   609  recall  99.8
+   top confusions (true → predicted): HerbaceousVegetation→PermanentCrop 10; PermanentCrop→HerbaceousVegetation 9; PermanentCrop→AnnualCrop 7; AnnualCrop→PermanentCrop 7; Pasture→HerbaceousVegetation 6
+{
+ "logits": "runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s2_logits_eurosat_test.bin",
+ "part": "eurosat_test",
+ "fold": null,
+ "scored": {
+  "n": 5400,
+  "acc": 98.18518518518519,
+  "wilson": [
+   97.79337257522674,
+   98.50848793822723
+  ],
+  "macro_f1": 98.16160835519489,
+  "recall": {
+   "AnnualCrop": 0.9748322147651006,
+   "Forest": 0.9983552631578947,
+   "HerbaceousVegetation": 0.9633507853403142,
+   "Highway": 0.9899193548387096,
+   "Industrial": 0.9780439121756487,
+   "Pasture": 0.9696969696969697,
+   "PermanentCrop": 0.9646840148698885,
+   "Residential": 0.9891696750902527,
+   "River": 0.9867674858223062,
+   "SeaLake": 0.9983579638752053
+  },
+  "support": {
+   "AnnualCrop": 596,
+   "Forest": 608,
+   "HerbaceousVegetation": 573,
+   "Highway": 496,
+   "Industrial": 501,
+   "Pasture": 396,
+   "PermanentCrop": 538,
+   "Residential": 554,
+   "River": 529,
+   "SeaLake": 609
+  },
+  "top_confusions": [
+   [
+    10,
+    "HerbaceousVegetation",
+    "PermanentCrop"
+   ],
+   [
+    9,
+    "PermanentCrop",
+    "HerbaceousVegetation"
+   ],
+   [
+    7,
+    "PermanentCrop",
+    "AnnualCrop"
+   ],
+   [
+    7,
+    "AnnualCrop",
+    "PermanentCrop"
+   ],
+   [
+    6,
+    "Pasture",
+    "HerbaceousVegetation"
+   ],
+   [
+    5,
+    "Industrial",
+    "Residential"
+   ],
+   [
+    4,
+    "River",
+    "Highway"
+   ],
+   [
+    4,
+    "Industrial",
+    "Highway"
+   ]
+  ],
+  "confusion": [
+   [
+    581,
+    2,
+    2,
+    1,
+    0,
+    2,
+    7,
+    0,
+    0,
+    1
+   ],
+   [
+    0,
+    607,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   [
+    4,
+    1,
+    552,
+    1,
+    0,
+    1,
+    10,
+    1,
+    0,
+    3
+   ],
+   [
+    1,
+    0,
+    1,
+    491,
+    0,
+    0,
+    0,
+    0,
+    3,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    4,
+    490,
+    0,
+    1,
+    5,
+    1,
+    0
+   ],
+   [
+    2,
+    1,
+    6,
+    0,
+    0,
+    384,
+    2,
+    0,
+    1,
+    0
+   ],
+   [
+    7,
+    0,
+    9,
+    0,
+    0,
+    2,
+    519,
+    1,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    3,
+    3,
+    0,
+    0,
+    548,
+    0,
+    0
+   ],
+   [
+    1,
+    0,
+    0,
+    4,
+    0,
+    0,
+    0,
+    0,
+    522,
+    2
+   ],
+   [
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    608
+   ]
+  ]
+ }
+}

@@ -294,6 +294,14 @@ opaque imagenetteGather (raw : @& ByteArray) (idx : @& ByteArray) (count : USize
 @[extern "lean_f32_imagenette_labels"]
 opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
 
+/-- Gather `count` chips of a flat f32 `[n, C, S, S]` set by index (`idx` is `count`
+    little-endian u32 chip indices), each under one of the eight symmetries of the square
+    drawn from `seed` and its batch position (bit 0 flips columns, bit 1 rows, bit 2
+    transposes). The remote-sensing demo's training augmentation: a nadir chip has no up,
+    so every one of the eight is a label-preserving view. -/
+@[extern "lean_f32_dihedral_gather"]
+opaque dihedralGather (img : @& ByteArray) (idx : @& ByteArray) (count C S : USize) (seed : UInt64) : IO ByteArray
+
 /-- Load a BraTS (MSD Task01_BrainTumour) binary file at the given in-plane
     size. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
     Images are `imgSize`×`imgSize`×4 (FLAIR / T1w / T1gd / T2w), channel-first.

@@ -748,6 +748,13 @@ lean_exe «plant-leaf» where
   root := `demos.MainPlantLeaf
   moreLinkArgs := lowererLink
 
+-- The remote-sensing demo: chapter 4's CNN on EuroSAT's thirteen
+-- Sentinel-2 bands under five stems (rgb / rgbn / ms10 / all / ir), the same weights scored on
+-- Sentinel-2 chips over the Amazon and the Cerrado labelled from MapBiomas. Zero new codegen.
+lean_exe «rs-bands» where
+  root := `demos.MainRsBands
+  moreLinkArgs := lowererLink
+
 -- ─── Gates — the two checkers CI and every doc commit run ───
 
 /-- `lake exe blueprint-checkdecls blueprint/lean_decls` — the split-aware

@@ -1,0 +1,15 @@
+EuroSATallBands.zip: OK
+unzipping /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/rs/eurosat/EuroSATallBands.zip (2.07 GB) ...
+census: {'AnnualCrop': 3000, 'Forest': 3000, 'HerbaceousVegetation': 3000, 'Highway': 2500, 'Industrial': 2500, 'Pasture': 2000, 'PermanentCrop': 2500, 'Residential': 3000, 'River': 2500, 'SeaLake': 3000}  (27000 tifs)
+loaded (27000, 13, 64, 64) uint16 (19 s)
+band order: forest B08/B8A 0.872, B08/B04 6.44, B10 median 11 DN, B08's twin is plane 12 (B8A), SeaLake B12 median 34 DN, global min 0 DN  -> OK
+splits: train 16200, val 5400, test 5400
+train mean (refl): B01=0.1354 B02=0.1118 B03=0.1043 B04=0.0948 B05=0.1199 B06=0.2000 B07=0.2369 B08=0.2297 B09=0.0732 B10=0.0012 B11=0.1819 B12=0.1119 B8A=0.2594
+train std  (refl): B01=0.0246 B02=0.0333 B03=0.0395 B04=0.0594 B05=0.0566 B06=0.0861 B07=0.1087 B08=0.1118 B09=0.0405 B10=0.0005 B11=0.1003 B12=0.0761 B8A=0.1232
+leak audit val :  32.9% of chips have a train chip within 6 grey levels at 16×16 (median nearest 9.1); nearest is same class 24.9%  (16 s)
+leak audit test:  32.3% of chips have a train chip within 6 grey levels at 16×16 (median nearest 9.2); nearest is same class 25.8%  (16 s)
+1-NN on 16×16 grey thumbnails, test: 25.8%
+wrote eurosat_train.bin (16200, 13, 64, 64) (3.45 GB)
+wrote eurosat_val.bin (5400, 13, 64, 64) (1.15 GB)
+wrote eurosat_test.bin (5400, 13, 64, 64) (1.15 GB)
+done (78 s)

@@ -1,0 +1,149 @@
+brazil_all (7-way, restricted argmax; 0 diagnostic chips aside): n=1307  acc 96.17% [94.99, 97.09]  macro-F1 91.24
+   annual crop            n=   173  recall  94.8
+   perennial crop         n=     0  recall    -
+   forest                 n=   441  recall  94.6
+   herbaceous             n=    11  recall  54.5
+   pasture                n=   681  recall  98.2
+   built                  n=     1  recall 100.0
+   water                  n=     0  recall    -
+   top confusions (true → predicted): forest→pasture 24; pasture→forest 10; annual crop→pasture 9; herbaceous→pasture 5; pasture→herbaceous 1
+   grass merged (herbaceous ∪ pasture): acc 96.63% [95.51, 97.48]  macro-F1 97.50  grass recall 98.4
+{
+ "logits": "runs/2026-09-29-rs-phase3/rs_cifar8w_all_ceil_fold0_logits_brazil_all.bin",
+ "part": "brazil_all",
+ "fold": 0,
+ "grass_merged": {
+  "acc": 96.6335118592196,
+  "wilson": [
+   95.51091537576954,
+   97.48277661569608
+  ],
+  "macro_f1": 97.49873104809764,
+  "grass_recall": 0.9841040462427746
+ },
+ "scored": {
+  "n": 1307,
+  "acc": 96.17444529456772,
+  "wilson": [
+   94.9919604663549,
+   97.08628911010042
+  ],
+  "macro_f1": 91.23774612365224,
+  "recall": {
+   "annual crop": 0.9479768786127167,
+   "perennial crop": null,
+   "forest": 0.9455782312925171,
+   "herbaceous": 0.5454545454545454,
+   "pasture": 0.9823788546255506,
+   "built": 1.0,
+   "water": null
+  },
+  "support": {
+   "annual crop": 173,
+   "perennial crop": 0,
+   "forest": 441,
+   "herbaceous": 11,
+   "pasture": 681,
+   "built": 1,
+   "water": 0
+  },
+  "top_confusions": [
+   [
+    24,
+    "forest",
+    "pasture"
+   ],
+   [
+    10,
+    "pasture",
+    "forest"
+   ],
+   [
+    9,
+    "annual crop",
+    "pasture"
+   ],
+   [
+    5,
+    "herbaceous",
+    "pasture"
+   ],
+   [
+    1,
+    "pasture",
+    "herbaceous"
+   ],
+   [
+    1,
+    "pasture",
+    "annual crop"
+   ]
+  ],
+  "confusion": [
+   [
+    164,
+    0,
+    0,
+    0,
+    9,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    417,
+    0,
+    24,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    6,
+    5,
+    0,
+    0
+   ],
+   [
+    1,
+    0,
+    10,
+    1,
+    669,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  ]
+ },
+ "diagnostic": {}
+}

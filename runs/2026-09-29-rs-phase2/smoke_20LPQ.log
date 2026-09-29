@@ -1,0 +1,7 @@
+amazon/dry: 200 scenes under 5% cloud, 20 tiles
+   20LPQ: dry 2023-08-10 0.0% (05.10)
+fetch route: s3; labels: data/rs/mapbiomas/brazil_coverage-col4_10m_2023.tif
+  amazon_dry 20LPQ 2023-08-10: fetched in 18 s, loaded in 80 s; offset -1000, baseline 05.10; 300 windows, 129 nodata, 11 cloudy
+  20LPQ: 160 windows clear in every season, 138 labelled and pure  (131 s)
+amazon_dry: 138 chips (138 before caps) {'annual crop': 0, 'perennial crop': 0, 'forest': 127, 'herbaceous': 0, 'pasture': 11, 'built': 0, 'water': 0, 'savanna formation': 0, 'forest plantation': 0}  -> amazon_dry.bin (0.03 GB)
+done (131 s)

@@ -1,0 +1,161 @@
+brazil_all (7-way, restricted argmax; 0 diagnostic chips aside): n=1486  acc 91.25% [89.71, 92.58]  macro-F1 54.77
+   annual crop            n=   244  recall  86.1
+   perennial crop         n=     0  recall    -
+   forest                 n=   520  recall  88.7
+   herbaceous             n=     8  recall   0.0
+   pasture                n=   713  recall  96.1
+   built                  n=     1  recall   0.0
+   water                  n=     0  recall    -
+   top confusions (true → predicted): forest→pasture 55; annual crop→pasture 28; pasture→forest 16; pasture→annual crop 10; herbaceous→pasture 7
+   grass merged (herbaceous ∪ pasture): acc 91.86% [90.36, 93.14]  macro-F1 68.58  grass recall 96.3
+   (10-way argmax would have said Highway for 0.3% of chips)
+{
+ "logits": "runs/2026-09-29-rs-phase3/rs_cifar8w_rgb_ft_fold4_n300_logits_brazil_all.bin",
+ "part": "brazil_all",
+ "fold": 4,
+ "grass_merged": {
+  "acc": 91.85733512786003,
+  "wilson": [
+   90.35646017466732,
+   93.14234936320571
+  ],
+  "macro_f1": 68.5807918486133,
+  "grass_recall": 0.9625520110957004
+ },
+ "highway_rate_10way": 0.0026917900403768506,
+ "scored": {
+  "n": 1486,
+  "acc": 91.25168236877523,
+  "wilson": [
+   89.70665086257625,
+   92.58397654371981
+  ],
+  "macro_f1": 54.7719081903098,
+  "recall": {
+   "annual crop": 0.860655737704918,
+   "perennial crop": null,
+   "forest": 0.8865384615384615,
+   "herbaceous": 0.0,
+   "pasture": 0.9607293127629734,
+   "built": 0.0,
+   "water": null
+  },
+  "support": {
+   "annual crop": 244,
+   "perennial crop": 0,
+   "forest": 520,
+   "herbaceous": 8,
+   "pasture": 713,
+   "built": 1,
+   "water": 0
+  },
+  "top_confusions": [
+   [
+    55,
+    "forest",
+    "pasture"
+   ],
+   [
+    28,
+    "annual crop",
+    "pasture"
+   ],
+   [
+    16,
+    "pasture",
+    "forest"
+   ],
+   [
+    10,
+    "pasture",
+    "annual crop"
+   ],
+   [
+    7,
+    "herbaceous",
+    "pasture"
+   ],
+   [
+    4,
+    "forest",
+    "annual crop"
+   ],
+   [
+    3,
+    "annual crop",
+    "forest"
+   ],
+   [
+    2,
+    "pasture",
+    "herbaceous"
+   ]
+  ],
+  "confusion": [
+   [
+    210,
+    0,
+    3,
+    2,
+    28,
+    0,
+    1
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   [
+    4,
+    0,
+    461,
+    0,
+    55,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    1,
+    0,
+    7,
+    0,
+    0
+   ],
+   [
+    10,
+    0,
+    16,
+    2,
+    685,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  ]
+ },
+ "diagnostic": {}
+}

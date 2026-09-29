@@ -1,0 +1,188 @@
+cerrado_wet (7-way, restricted argmax; 2001 diagnostic chips aside): n=1619  acc 39.72% [37.36, 42.12]  macro-F1 34.81
+   annual crop            n=   520  recall  59.4
+   perennial crop         n=     0  recall    -
+   forest                 n=   198  recall  36.9
+   herbaceous             n=    17  recall  70.6
+   pasture                n=   884  recall  28.2
+   built                  n=     0  recall    -
+   water                  n=     0  recall    -
+   top confusions (true → predicted): pasture→herbaceous 259; pasture→forest 186; annual crop→forest 97; pasture→annual crop 95; pasture→perennial crop 83
+   grass merged (herbaceous ∪ pasture): acc 55.71% [53.28, 58.12]  macro-F1 52.20  grass recall 57.7
+   (10-way argmax would have said Highway for 0.6% of chips)
+   savanna formation (n=2000, diagnostic): annual crop 15%  perennial crop 6%  forest 34%  herbaceous 25%  pasture 20%  water 1%
+   forest plantation (n=1, diagnostic): herbaceous 100%
+{
+ "logits": "runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_cerrado_wet.bin",
+ "part": "cerrado_wet",
+ "fold": null,
+ "grass_merged": {
+  "acc": 55.71340333539222,
+  "wilson": [
+   53.28307802486351,
+   58.11667904323235
+  ],
+  "macro_f1": 52.197731182430516,
+  "grass_recall": 0.5771365149833518
+ },
+ "highway_rate_10way": 0.0055248618784530384,
+ "scored": {
+  "n": 1619,
+  "acc": 39.71587399629401,
+  "wilson": [
+   37.359411271976825,
+   42.121026005450624
+  ],
+  "macro_f1": 34.80693675364814,
+  "recall": {
+   "annual crop": 0.5942307692307692,
+   "perennial crop": null,
+   "forest": 0.3686868686868687,
+   "herbaceous": 0.7058823529411765,
+   "pasture": 0.2816742081447964,
+   "built": null,
+   "water": null
+  },
+  "support": {
+   "annual crop": 520,
+   "perennial crop": 0,
+   "forest": 198,
+   "herbaceous": 17,
+   "pasture": 884,
+   "built": 0,
+   "water": 0
+  },
+  "top_confusions": [
+   [
+    259,
+    "pasture",
+    "herbaceous"
+   ],
+   [
+    186,
+    "pasture",
+    "forest"
+   ],
+   [
+    97,
+    "annual crop",
+    "forest"
+   ],
+   [
+    95,
+    "pasture",
+    "annual crop"
+   ],
+   [
+    83,
+    "pasture",
+    "perennial crop"
+   ],
+   [
+    75,
+    "forest",
+    "herbaceous"
+   ],
+   [
+    69,
+    "annual crop",
+    "pasture"
+   ],
+   [
+    38,
+    "annual crop",
+    "herbaceous"
+   ]
+  ],
+  "confusion": [
+   [
+    309,
+    6,
+    97,
+    38,
+    69,
+    0,
+    1
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   [
+    9,
+    19,
+    73,
+    75,
+    16,
+    0,
+    6
+   ],
+   [
+    0,
+    0,
+    5,
+    12,
+    0,
+    0,
+    0
+   ],
+   [
+    95,
+    83,
+    186,
+    259,
+    249,
+    0,
+    12
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  ]
+ },
+ "diagnostic": {
+  "savanna formation": {
+   "n": 2000,
+   "predicted": {
+    "annual crop": 0.148,
+    "perennial crop": 0.055,
+    "forest": 0.339,
+    "herbaceous": 0.246,
+    "pasture": 0.2025,
+    "built": 0.0,
+    "water": 0.0095
+   }
+  },
+  "forest plantation": {
+   "n": 1,
+   "predicted": {
+    "annual crop": 0.0,
+    "perennial crop": 0.0,
+    "forest": 0.0,
+    "herbaceous": 1.0,
+    "pasture": 0.0,
+    "built": 0.0,
+    "water": 0.0
+   }
+  }
+ }
+}

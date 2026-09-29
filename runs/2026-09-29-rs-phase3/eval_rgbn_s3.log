@@ -1,0 +1,26 @@
+rs cifar8w rgbn: 4 planes #[3, 2, 1, 7], 8 BN layers, train on eurosat_train, 20 epochs, batch 64, lr 0.001000, label smoothing 0.000000, seed 1, dihedral augmentation (eval only)
+I0929 17:05:32.239400 1581566 service.cc:154] XLA service 0x707570033910 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0929 17:05:32.239444 1581566 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0929 17:05:32.240901 1581566 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0929 17:05:32.240935 1581566 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0929 17:05:32.247547 1581566 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0929 17:05:32.784546 1581592 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 32 bytes spill stores, 32 bytes spill loads
+
+I0929 17:05:32.966296 1581582 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0929 17:05:33.093435 1581593 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0929 17:05:33.246816 1581601 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/rs_cifar8w_rgbn_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1341 ms
+  570570 params (570570 by NetSpec.totalParams), 384 BN stat floats
+  val eurosat_val: 5400 chips × 4 planes (543 ms)
+  loaded runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_params.bin
+score: .venv-rs/bin/python scripts/demos/rs_score.py runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_<part>.bin --part <part>
+rs cifar8w rgbn on eurosat_val: 5400 chips, 10-way argmax accuracy 97.610000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_eurosat_val.bin
+rs cifar8w rgbn on eurosat_test: 5400 chips, 10-way argmax accuracy 98.060000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_eurosat_test.bin
+rs cifar8w rgbn on amazon_dry: 3826 chips, 10-way argmax accuracy 0.710000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_amazon_dry.bin
+rs cifar8w rgbn on cerrado_dry: 3620 chips, 10-way argmax accuracy 17.350000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_cerrado_dry.bin
+rs cifar8w rgbn on cerrado_wet: 3620 chips, 10-way argmax accuracy 10.550000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_rgbn_s3_logits_cerrado_wet.bin

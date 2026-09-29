@@ -348,7 +348,7 @@ net found the pasture between the forest ribs. (b) The same for a 10 × 10 km
 window of the Cerrado tile in the dry season and the wet season side by
 side, the `rgb` and `ir` nets, with the false-colour (B08/B04/B03) rendering
 of the wet and dry scene between them so the reader sees what the infrared
-arm sees. `demos/figures/remote_sensing_wavelengths.png` and a copy to
+arm sees. `demos/figures/remote_sensing_wavelengths.jpg` and a copy to
 `blueprint/src/figures/demos/`.
 
 Section: *Remote sensing — demo: which wavelengths travel, EuroSAT to the
@@ -384,7 +384,43 @@ Phase 0 (½ session, CPU):   .venv-rs (numpy, rasterio, scipy, pystac-client, s2
                                     median < 500 DN); split lists partition the 27,000 exactly;
                                     audit printed; quicklook eyeballed (Residential looks like
                                     Residential)
+                            ✅ 2026-09-29 PASS (runs/2026-09-29-rs-gate0/gate0.log, 78 s): 27,000 tifs,
+                            3,000/3,000/3,000/2,500/2,500/2,000/2,500/3,000/2,500/3,000 in class order;
+                            (13, 64, 64) uint16; from the chips: forest B08/B8A 0.87, B08/B04 6.4, B10
+                            median 11 DN, B08's most-correlated plane is 12 (B8A), SeaLake B12 median
+                            34 DN, global min 0 → the torchgeo order with B8A last, no offset. The
+                            torchgeo lists partition exactly (16,200 / 5,400 / 5,400). Train mean /
+                            std per band in manifest_rs.json (B08 0.230 ± 0.112, B10 0.0012 ±
+                            0.0005). ⚠ The ArASL 16×16 grey audit is uninformative here: 32.9% of
+                            val chips have a train chip within 6 grey levels but the nearest is the
+                            same class only 25% of the time and 1-NN scores 25.8% — 640 m land
+                            patches are low-contrast at 16×16, not duplicates; reported, not a leak.
+                            The archive came from torchgeo's HF mirror (sha256 751f070f…, 2 GB in
+                            ~4 min; Zenodo served 0.4 MB/s). MapBiomas Collection 4 (10 m) 2023
+                            exists at the URL pattern (4.6 GB, tiled 256², LZW, EPSG:4326 at
+                            8.98e-5°), downloaded to data/rs/mapbiomas/; the CDSE STAC search is
+                            open (no key) and every 2023 scene over both boxes is baseline 05.10 —
+                            offsets come from MTD_MSIL1C.xml as planned.
 Phase 1 (½ session, GPU):   demos/MainRsBands.lean from MainGwDetect; the five arms, seed 1, 20 ep
+                            2026-09-29: one epoch is 2.6 s on a 4060 Ti (253 steps), so every arm
+                            runs at three seeds. ⚠ The GW gather has no augmentation and the plain
+                            ladder memorises (train loss 0.03): seed 1 plain = rgb 92.24 / rgbn 95.33
+                            / ms10 96.85 / all 95.96 / ir 95.09 (runs/2026-09-29-rs-phase1/noaug/) —
+                            under Gate 1 for rgb, and already the opposite of Helber's pretrained-R50
+                            ordering: from scratch, every invisible-band arm beats RGB in Europe,
+                            the no-visible-light arm included. Fix: `F32.dihedralGather` (ffi/
+                            f32_helpers.c), each training chip under a random one of the eight
+                            symmetries of the square (`aug=1`, default; `aug=0` is the plain row).
+                            Augmented, 20 ep, three seeds (ep20/): rgb 94.30/94.39/94.30, rgbn
+                            96.46/96.41/96.50, ms10 97.04/97.19/97.09, all 97.30/97.09/97.13, ir
+                            96.20/96.02/96.06. ⚠ RGB was not converged at 20 epochs: rgb at 40 /
+                            80 / 160 epochs = 96.20 / 97.19 / 97.30 (e40/, e80/, e160/), all at 40
+                            / 80 = 97.70 / 98.26 — so the schedule is 80 epochs for every arm
+                            (RGB has converged there, +0.1 at 160) and the in-domain gap that
+                            remains (~1 point) is spectrum, not schedule. Gate 1's "rgb ≥ 97" is
+                            met at 80 epochs; the published tie it was written against is a
+                            pretrained ResNet-50 and the 13-band arm from scratch lands on it
+                            (98.26 vs 98.57). The ladder at 80 epochs × three seeds is the table.
                             Gate 1: rgb ≥ 97.0 on the test list (Helber 98.57 at R50 on a random
                                     80/20; a 0.83M-param net a point under is expected, five
                                     under is a wrong plane list); all within 1 of rgb; ir ≥ 95
@@ -398,18 +434,70 @@ Phase 2 (1 session, CPU):   preprocess_rs_brazil.py: tile choice by box + cloud 
                                     (resampling right); class census per part printed with the
                                     dropped codes; wet/dry chip sets identical; quicklooks of ten
                                     chips per class per part eyeballed against MapBiomas
+                            ✅ 2026-09-29 (runs/2026-09-29-rs-phase2/, README.md = the dataset notes):
+                            18 scenes, all baseline 05.10/05.11 with offset −1000 read from MTD;
+                            amazon_dry 3,826 chips (forest 2,000 capped, pasture 1,775, crop 41,
+                            one water chip — the water sentinel is a note), cerrado_dry/wet 3,620
+                            each on identical chip ids (savanna 2,000 capped as the diagnostic
+                            row, pasture 884, crop 520, gallery forest 198); purity median 0.985.
+                            Amazon forest band means sit on EuroSAT's forest medians (level and
+                            offset right); the same Cerrado chips read red 0.121 → 0.065, SWIR1
+                            0.322 → 0.217, NIR 0.229 → 0.294 from September to March. ⚠ The first
+                            pass lost two Rondônia tiles to fire-season smoke at ESA cloud 0.0%
+                            (s2cloudless flagged every window): now June first for the Amazon,
+                            September for the Cerrado dry, the STAC search paged (351 scenes,
+                            not 200), a next-date fallback, candidates drawn inside the swath.
 Phase 3 (½ session, GPU):   score the five European arms on the three parts; the Brazil-trained
                             ceiling (5-fold); Tables 1 and 2
+                            2026-09-29, seed 1 at 80 epochs (runs/2026-09-29-rs-phase3/, rs_table.py):
+                              arm    EuroSAT  amazon_dry  cerrado_dry  cerrado_wet   pasture recall (amazon)
+                              rgb     97.06     87.01       33.66        37.92        73.6
+                              rgbn    97.89     87.87       35.15        38.42        74.9
+                              ms10    98.52     96.31       35.45        59.91        93.6
+                              all     98.20     96.65       34.28        47.99        94.8
+                              ir      98.00     93.57       29.15        42.80        87.1
+                            ⭐ In the Amazon the invisible bands travel: +9.6 over rgb, pasture
+                            recall 74 → 95; NIR alone (rgbn) does not do it, red edge + SWIR do.
+                            ⭐ The dry Cerrado breaks every arm on the 7-way map (pasture recall
+                            1–16%: a September Cerrado pasture is "herbaceous" to a European net;
+                            with herbaceous ∪ pasture merged rgb reads 74.8) — partly taxonomy.
+                            ⛔ Season stability REFUTED: same prediction in September and March
+                            on 39% (rgb) / 37% (ir) / 31% (ms10) / 22% (all) of chips — the
+                            multispectral arms are better in both seasons, not stabler; savanna
+                            is "herbaceous" in September and 34–42% "forest" in March for every
+                            arm.
+                            ✅ FINAL, three seeds (runs/2026-09-29-rs-phase3/README.md, tables_final.txt):
+                              arm    EuroSAT        Amazon June    Cerrado Sept   Cerrado March  same answer
+                              rgb    97.09 ± 0.05   87.37 ± 0.92   33.15 ± 0.46   37.66 ± 0.34   38%
+                              rgbn   98.04 ± 0.12   89.30 ± 1.35   34.61 ± 0.55   39.04 ± 0.53   41%
+                              ms10   98.40 ± 0.08   96.95 ± 0.55   32.76 ± 2.25   59.21 ± 0.50   27%
+                              all    98.33 ± 0.11   97.02 ± 0.46   35.39 ± 2.45   53.82 ± 4.27   24%
+                              ir     97.94 ± 0.09   91.71 ± 1.48   29.03 ± 2.52   39.84 ± 3.05   39%
+                            Ceiling from scratch on brazil_all (5 folds): rgb 94.19 ± 0.72, ms10
+                            95.65 ± 0.91, all 95.83 ± 0.64. Fine-tune from EuroSAT s1: 300 labels
+                            rgb 90.0 / all 91.0 / ir 89.2; all labels 94.3 / 95.1 / 94.9.
+Phase 4 (½ session, GPU):   seeds on rgb and all; Table 3's ladder; rs_shapley.py on 500 chips
+                            per part
+                            ✅ 2026-09-29 (runs/2026-09-29-rs-phase4/): five-group exact Shapley on the
+                            all arm (300 chips per part, residual ≤ 2e-6): visible is the largest
+                            player everywhere (32–35% of |φ|), SWIR 13% in Europe → 21–22% in
+                            Brazil, red edge 15% → 20% in the dry Cerrado, and the atmospheric
+                            trio has NEGATIVE mean φ in Brazil (−3.0 Amazon, −1.5 March) — it
+                            carries Europe's atmosphere; hence ms10 (no B01/B09/B10) is the best
+                            zero-shot arm abroad and equals all in-domain (ceiling 95.65 / 95.83).
                             Gate 3: ceiling ≥ 85 (else labels, not physics); every European arm's
                                     water recall > 90 on amazon_dry (the Madeira and the Ji-Paraná
                                     are in the tiles; a net that cannot find a river has a
                                     plumbing fault, not a domain gap); rgb on cerrado_wet vs
                                     cerrado_dry differ (if not, the seasons were not what the
                                     dates said — check the scenes)
-Phase 4 (½ session, GPU):   seeds on rgb and all; Table 3's ladder; rs_shapley.py on 500 chips
-                            per part
 Phase 5 (½ session):        figure, section, appendix, demos/README, runs README, lakefile,
                             check_target_names.sh
+                            2026-09-29: figure = demos/figures/remote_sensing_wavelengths.jpg (three
+                            rows × scene | rgb | ir | all | MapBiomas, seed-1 weights; the windows
+                            are the most mixed forest/pasture 10 km of 20LPQ and the most mixed
+                            mosaic of 23LKF, chosen from MapBiomas inside the swath); section
+                            written after Agriculture; appendix rows; READMEs under runs/.
 ```
 
 ## 8. Gates that fail loudly
@@ -447,7 +535,9 @@ Phase 5 (½ session):        figure, section, appendix, demos/README, runs READM
 - Pretrained Sentinel-2 encoders (SSL4EO, Prithvi, the foundation-model
   route): the section's one sentence on what the field does instead.
 - Deforestation *change* detection against PRODES / DETER: two dates and a
-  difference; a different demo.
+  difference; a different demo. The Cerrado wet/dry pair (same windows, two
+  dates, per-chip agreement in `rs_score.py --pair`) is the first half of it;
+  the user flagged this 2026-09-29 as the next trick worth a section.
 - Re-standardising on the target's band statistics: one row if a reader
   asks; the plan measures the shift, it does not paper over it.
 - BigEarthNet (590k chips, multi-label, 66 GB) and So2Sat LCZ42: EuroSAT is

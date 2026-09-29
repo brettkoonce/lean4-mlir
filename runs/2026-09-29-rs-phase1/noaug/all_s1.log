@@ -1,0 +1,52 @@
+rs cifar8w all: 13 planes #[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 8 BN layers, train on eurosat_train, 20 epochs, batch 64, lr 0.001000, label smoothing 0.000000, seed 1
+I0929 15:12:15.463337 1431220 service.cc:154] XLA service 0x7c2174033910 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0929 15:12:15.463381 1431220 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0929 15:12:15.464887 1431220 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0929 15:12:15.464923 1431220 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0929 15:12:15.471488 1431220 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0929 15:12:16.238281 1431235 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 32 bytes spill stores, 32 bytes spill loads
+
+I0929 15:12:16.239973 1431249 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 64 bytes spill stores, 64 bytes spill loads
+
+I0929 15:12:16.363482 1431264 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 812 bytes spill stores, 812 bytes spill loads
+
+I0929 15:12:16.402597 1431259 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/rs_cifar8w_all_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1105 ms
+  571866 params (571866 by NetSpec.totalParams), 384 BN stat floats
+  val eurosat_val: 5400 chips × 13 planes (607 ms)
+  train eurosat_train: 16200 chips (4374 ms)
+I0929 15:12:22.296658 1431262 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 32 bytes spill stores, 32 bytes spill loads
+
+I0929 15:12:22.427843 1431240 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/rs_cifar8w_all_train_step.mlir (@main, 107 outputs, 1 replica) in 1500 ms
+    step 0: loss 3.068900 (41 ms so far)
+    step 1: loss 2.941500 (64 ms so far)
+    step 2: loss 2.750100 (76 ms so far)
+  epoch 1/20: loss 1.118300  val acc 79.570000%  (3680 ms train, 638 ms eval)
+  epoch 2/20: loss 0.484800  val acc 87.520000%  (3801 ms train, 647 ms eval)
+  epoch 3/20: loss 0.355300  val acc 83.810000%  (3689 ms train, 642 ms eval)
+  epoch 4/20: loss 0.273800  val acc 90.460000%  (3781 ms train, 696 ms eval)
+  epoch 5/20: loss 0.245700  val acc 93.200000%  (3694 ms train, 622 ms eval)
+  epoch 6/20: loss 0.209200  val acc 92.570000%  (3698 ms train, 616 ms eval)
+  epoch 7/20: loss 0.178600  val acc 92.870000%  (3716 ms train, 713 ms eval)
+  epoch 8/20: loss 0.161100  val acc 94.190000%  (3633 ms train, 691 ms eval)
+  epoch 9/20: loss 0.135900  val acc 94.610000%  (3706 ms train, 710 ms eval)
+  epoch 10/20: loss 0.121800  val acc 94.890000%  (3752 ms train, 604 ms eval)
+  epoch 11/20: loss 0.097900  val acc 95.170000%  (3656 ms train, 734 ms eval)
+  epoch 12/20: loss 0.082100  val acc 95.560000%  (3683 ms train, 727 ms eval)
+  epoch 13/20: loss 0.064600  val acc 95.500000%  (3735 ms train, 628 ms eval)
+  epoch 14/20: loss 0.053900  val acc 95.560000%  (3766 ms train, 625 ms eval)
+  epoch 15/20: loss 0.044700  val acc 95.800000%  (3726 ms train, 619 ms eval)
+  epoch 16/20: loss 0.035400  val acc 96.040000%  (3730 ms train, 631 ms eval)
+  epoch 17/20: loss 0.029100  val acc 95.980000%  (3724 ms train, 620 ms eval)
+  epoch 18/20: loss 0.025900  val acc 96.200000%  (3781 ms train, 613 ms eval)
+  epoch 19/20: loss 0.022700  val acc 96.090000%  (3678 ms train, 647 ms eval)
+  epoch 20/20: loss 0.021900  val acc 96.110000%  (3744 ms train, 728 ms eval)
+trained: 5060 steps in 87 s
+score: .venv-rs/bin/python scripts/demos/rs_score.py runs/2026-09-29-rs-phase1/rs_cifar8w_all_s1_logits_<part>.bin --part <part>
+rs cifar8w all on eurosat_val: 5400 chips, 10-way argmax accuracy 96.110000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_all_s1_logits_eurosat_val.bin
+rs cifar8w all on eurosat_test: 5400 chips, 10-way argmax accuracy 95.960000%  -> runs/2026-09-29-rs-phase1/rs_cifar8w_all_s1_logits_eurosat_test.bin

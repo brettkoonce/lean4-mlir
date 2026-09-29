@@ -1,0 +1,11 @@
+fig_rondonia: 16×16 chips at row 120 col 8238 of S2B_MSIL1C_20230616T141719_N0510_R010_T20LPQ_20240926T072904; MapBiomas classes in the window: forest 126, pasture 130
+fig_cerrado_dry: 16×16 chips at row 6258 col 7314 of S2A_MSIL1C_20230911T132241_N0510_R038_T23LKF_20241104T064627; MapBiomas classes in the window: forest 26, pasture 152, savanna 78
+fig_cerrado_wet: 16×16 chips at row 6258 col 7314 of S2A_MSIL1C_20230325T132231_N0510_R038_T23LKF_20240831T002851; MapBiomas classes in the window: forest 26, pasture 152, savanna 78
+rs cifar8w rgb on fig_rondonia: 256 chips, 10-way argmax accuracy 0.000000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_rgb_e80_logits_fig_rondonia.bin
+rs cifar8w rgb on fig_cerrado_dry: 256 chips, 10-way argmax accuracy 10.160000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_rgb_e80_logits_fig_cerrado_dry.bin
+rs cifar8w rgb on fig_cerrado_wet: 256 chips, 10-way argmax accuracy 0.000000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_rgb_e80_logits_fig_cerrado_wet.bin
+rs cifar8w all on fig_rondonia: 256 chips, 10-way argmax accuracy 0.000000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_all_e80_logits_fig_rondonia.bin
+rs cifar8w all on fig_cerrado_dry: 256 chips, 10-way argmax accuracy 8.980000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_all_e80_logits_fig_cerrado_dry.bin
+rs cifar8w all on fig_cerrado_wet: 256 chips, 10-way argmax accuracy 0.000000%  -> runs/2026-09-29-rs-phase1/e80/rs_cifar8w_all_e80_logits_fig_cerrado_wet.bin
+wrote runs/2026-09-29-rs-figure/draft_e80.png (4120×3186)
+FIG_EXIT 0

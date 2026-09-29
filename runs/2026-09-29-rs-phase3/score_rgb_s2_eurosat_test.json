@@ -1,0 +1,214 @@
+eurosat_test (10-way): n=5400  acc 97.06% [96.57, 97.47]  macro-F1 96.98
+   AnnualCrop             n=   596  recall  98.0
+   Forest                 n=   608  recall  99.5
+   HerbaceousVegetation   n=   573  recall  94.2
+   Highway                n=   496  recall  97.6
+   Industrial             n=   501  recall  97.4
+   Pasture                n=   396  recall  95.5
+   PermanentCrop          n=   538  recall  94.6
+   Residential            n=   554  recall  99.1
+   River                  n=   529  recall  94.5
+   SeaLake                n=   609  recall  99.2
+   top confusions (true → predicted): HerbaceousVegetation→PermanentCrop 25; PermanentCrop→HerbaceousVegetation 15; River→Highway 11; PermanentCrop→AnnualCrop 10; Pasture→HerbaceousVegetation 10
+{
+ "logits": "runs/2026-09-29-rs-phase1/rs_cifar8w_rgb_s2_logits_eurosat_test.bin",
+ "part": "eurosat_test",
+ "fold": null,
+ "scored": {
+  "n": 5400,
+  "acc": 97.05555555555556,
+  "wilson": [
+   96.57013384720302,
+   97.47407351816459
+  ],
+  "macro_f1": 96.9803225995587,
+  "recall": {
+   "AnnualCrop": 0.9798657718120806,
+   "Forest": 0.9950657894736842,
+   "HerbaceousVegetation": 0.9424083769633508,
+   "Highway": 0.9758064516129032,
+   "Industrial": 0.9740518962075848,
+   "Pasture": 0.9545454545454546,
+   "PermanentCrop": 0.9460966542750929,
+   "Residential": 0.9909747292418772,
+   "River": 0.945179584120983,
+   "SeaLake": 0.9917898193760263
+  },
+  "support": {
+   "AnnualCrop": 596,
+   "Forest": 608,
+   "HerbaceousVegetation": 573,
+   "Highway": 496,
+   "Industrial": 501,
+   "Pasture": 396,
+   "PermanentCrop": 538,
+   "Residential": 554,
+   "River": 529,
+   "SeaLake": 609
+  },
+  "top_confusions": [
+   [
+    25,
+    "HerbaceousVegetation",
+    "PermanentCrop"
+   ],
+   [
+    15,
+    "PermanentCrop",
+    "HerbaceousVegetation"
+   ],
+   [
+    11,
+    "River",
+    "Highway"
+   ],
+   [
+    10,
+    "PermanentCrop",
+    "AnnualCrop"
+   ],
+   [
+    10,
+    "Pasture",
+    "HerbaceousVegetation"
+   ],
+   [
+    8,
+    "River",
+    "AnnualCrop"
+   ],
+   [
+    6,
+    "River",
+    "Pasture"
+   ],
+   [
+    5,
+    "Industrial",
+    "Residential"
+   ]
+  ],
+  "confusion": [
+   [
+    584,
+    0,
+    0,
+    1,
+    0,
+    2,
+    3,
+    0,
+    3,
+    3
+   ],
+   [
+    0,
+    605,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    1
+   ],
+   [
+    3,
+    0,
+    540,
+    0,
+    1,
+    2,
+    25,
+    0,
+    2,
+    0
+   ],
+   [
+    2,
+    0,
+    1,
+    484,
+    4,
+    1,
+    2,
+    1,
+    1,
+    0
+   ],
+   [
+    0,
+    0,
+    2,
+    3,
+    488,
+    0,
+    2,
+    5,
+    1,
+    0
+   ],
+   [
+    2,
+    3,
+    10,
+    0,
+    0,
+    378,
+    2,
+    0,
+    1,
+    0
+   ],
+   [
+    10,
+    0,
+    15,
+    0,
+    1,
+    2,
+    509,
+    0,
+    1,
+    0
+   ],
+   [
+    0,
+    0,
+    1,
+    1,
+    3,
+    0,
+    0,
+    549,
+    0,
+    0
+   ],
+   [
+    8,
+    0,
+    1,
+    11,
+    0,
+    6,
+    2,
+    0,
+    500,
+    1
+   ],
+   [
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    3,
+    604
+   ]
+  ]
+ }
+}

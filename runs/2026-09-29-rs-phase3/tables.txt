@@ -1,0 +1,77 @@
+Table 1 — accuracy (EuroSAT 10-way; Brazil 7-way restricted argmax), mean ± sd over seeds [1, 2, 3]
+arm       eurosat_test      amazon_dry     cerrado_dry     cerrado_wet  wet − dry
+rgb    97.09 ± 0.05  87.37 ± 0.92  33.15 ± 0.46  37.66 ± 0.34   4.51 ± 0.58
+rgbn   98.04 ± 0.12  89.30 ± 1.35  34.61 ± 0.55  39.04 ± 0.53   4.43 ± 0.82
+ms10   98.40 ± 0.08  96.95 ± 0.55  32.76 ± 2.25  59.21 ± 0.50  26.46 ± 1.88
+all    98.33 ± 0.11  97.02 ± 0.46  35.39 ± 2.45  53.82 ± 4.27  18.43 ± 4.80
+ir     97.94 ± 0.09  91.71 ± 1.48  29.03 ± 2.52  39.84 ± 3.05  10.81 ± 2.03
+
+grass merged (herbaceous ∪ pasture as one class), accuracy
+rgb    93.93 ± 0.65  75.97 ± 0.98  56.27 ± 0.92
+rgbn   91.37 ± 1.19  71.38 ± 1.32  55.98 ± 0.26
+ms10   97.09 ± 0.56  64.73 ± 4.40  61.77 ± 0.38
+all    97.22 ± 0.38  65.82 ± 5.65  59.09 ± 1.88
+ir     92.77 ± 1.05  73.19 ± 0.64  57.90 ± 2.63
+
+macro-F1 on the Brazil parts
+rgb    54.63 ± 0.66  29.14 ± 0.39  34.48 ± 0.41
+rgbn   55.03 ± 3.19  31.87 ± 1.67  34.54 ± 0.24
+ms10   60.93 ± 2.12  24.07 ± 1.12  45.16 ± 0.57
+all    63.50 ± 1.11  27.51 ± 1.54  40.34 ± 1.76
+ir     52.78 ± 8.29  24.70 ± 0.82  36.02 ± 1.87
+
+recall of forest / pasture / water (Brazil parts)
+rgb    99.90 / 74.42 / 100.00        10.61 / 1.17 / —       33.33 / 29.79 / —
+rgbn   100.00 / 78.08 / 100.00        19.87 / 0.94 / —       35.02 / 25.49 / —
+ms10   99.90 / 95.02 / 100.00         4.55 / 4.37 / —       36.20 / 62.10 / —
+all    99.77 / 95.42 / 100.00        6.40 / 13.65 / —       29.80 / 65.08 / —
+ir     99.98 / 83.00 / 100.00         4.71 / 3.36 / —       28.62 / 30.96 / —
+
+Table 2 — what each arm calls the classes Europe does not have (% of chips, seed mean)
+  cerrado_dry, savanna formation (n=2000):
+    rgb   annual crop  7.9  perennial crop  1.6  forest  1.4  herbaceous 81.4  pasture  4.8  water  2.8
+    rgbn  annual crop 13.5  perennial crop  3.7  forest  1.4  herbaceous 76.6  pasture  4.8
+    ms10  annual crop  6.1  perennial crop  1.0  herbaceous 62.8  pasture 30.0
+    all   annual crop  4.0  perennial crop  1.5  herbaceous 51.4  pasture 43.0
+    ir    annual crop  7.1  perennial crop  4.9  herbaceous 70.7  pasture 17.2
+  cerrado_dry, forest plantation (n=1):
+    rgb   annual crop 33.3  perennial crop 66.7
+    rgbn  perennial crop 66.7  pasture 33.3
+    ms10  perennial crop 33.3  herbaceous 66.7
+    all   perennial crop 100.0
+    ir    perennial crop 100.0
+  cerrado_wet, savanna formation (n=2000):
+    rgb   annual crop  9.1  perennial crop  2.9  forest 42.3  herbaceous 28.3  pasture 13.2  water  4.0
+    rgbn  annual crop 13.9  perennial crop  6.1  forest 35.2  herbaceous 24.9  pasture 18.8  water  1.1
+    ms10  annual crop 10.5  perennial crop  8.7  forest 39.0  herbaceous  6.3  pasture 33.9  water  1.6
+    all   annual crop  3.6  perennial crop 13.0  forest 31.6  herbaceous  8.6  pasture 42.0  water  1.1
+    ir    annual crop  5.9  perennial crop 12.1  forest 40.6  herbaceous 18.0  pasture 22.1  water  1.3
+  cerrado_wet, forest plantation (n=1):
+    rgb   annual crop 33.3  perennial crop 33.3  forest 33.3
+    rgbn  herbaceous 100.0
+    ms10  annual crop 66.7  herbaceous 33.3
+    all   annual crop 33.3  perennial crop 33.3  built 33.3
+    ir    annual crop 33.3  perennial crop 66.7
+
+Table 3 — trained or fine-tuned on Brazil labels, five folds by chip id (brazil_all: acc / macro-F1, fold mean ± sd; n folds)
+  ceiling, all   from scratch, all labels     95.83 ± 0.64 / 87.10 ± 8.25  (5)
+  ceiling, ms10  from scratch, all labels     95.65 ± 0.91 / 82.86 ± 8.74  (5)
+  ceiling, rgb   from scratch, all labels     94.19 ± 0.72 / 83.50 ± 7.74  (5)
+  fine-tune, all   from EuroSAT s1, 300 labels  91.02 ± 1.29 / 60.62 ± 6.27  (5)
+  fine-tune, all   from EuroSAT s1, all labels 95.07 ± 0.71 / 75.34 ± 9.10  (5)
+  fine-tune, ir    from EuroSAT s1, 300 labels  89.20 ± 0.84 / 59.56 ± 6.73  (5)
+  fine-tune, ir    from EuroSAT s1, all labels 94.91 ± 0.40 / 81.17 ± 8.17  (5)
+  fine-tune, rgb   from EuroSAT s1, 300 labels  90.02 ± 0.99 / 61.09 ± 6.97  (5)
+  fine-tune, rgb   from EuroSAT s1, all labels 94.33 ± 0.54 / 75.28 ± 7.41  (5)
+
+per-chip agreement between the seasons, and the recall swing per class (dry − wet, seed mean):
+  rgb   same prediction on  38.2% of chips
+  rgb   annual crop +42.8  forest -22.7  herbaceous +13.7  pasture -28.6
+  rgbn  same prediction on  40.6% of chips
+  rgbn  annual crop +33.2  forest -15.2  herbaceous +15.7  pasture -24.5
+  ms10  same prediction on  27.4% of chips
+  ms10  annual crop +25.6  forest -31.6  herbaceous +68.6  pasture -57.7
+  all   same prediction on  24.0% of chips
+  all   annual crop +37.2  forest -23.4  herbaceous +52.9  pasture -51.4
+  ir    same prediction on  38.7% of chips
+  ir    annual crop +21.3  forest -23.9  herbaceous +33.3  pasture -27.6
