@@ -417,14 +417,38 @@ python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/
 lake exe brats-predict net=r34 arm=scratch,r34 best out.ppm   # best-by-val checkpoints
 python3 scripts/demos/brats_figure.py out.ppm demos/figures/brats_r34_skip_transfer.png \
     --labels "T1gd,ground truth,from scratch,ImageNet R34"
+lake exe brats-eval net=r34 arm=r34 best out=pervol.csv        # per-patient Dice, the literature's protocol
 ```
 
-Best-by-val checkpoint (epoch 9 in both arms), 2,569 held-out slices from 73 patients:
+Best-by-val checkpoint (epoch 9 in both arms), 2,569 held-out slices from 73 patients, pooled:
 
 | arm | mIoU | WT | TC | ET |
 |---|---|---|---|---|
 | `r34` (ImageNet bootstrap) | 0.743 | 0.912 | 0.869 | 0.856 |
 | `scratch` (He-init) | 0.741 | 0.910 | 0.867 | 0.856 |
+
+The same checkpoints scored the way BraTS papers score — one Dice per patient over every slice
+of the volume, mean over the 73 patients (`brats-eval`, from `preprocess_brats.py --val-full`):
+
+| arm | WT | TC | ET |
+|---|---|---|---|
+| `r34` (ImageNet bootstrap) | 0.893 | 0.821 | 0.790 |
+| `scratch` (He-init) | 0.889 | 0.819 | 0.783 |
+| `scratch noskip` | 0.843 | 0.749 | 0.620 |
+
+Two to seven points below the pooled numbers, with medians at the pooled values: a tail of
+small-tumour patients pulls the means down, which is what the per-patient protocol is for. The
+tumour-free slices themselves cost under 0.003.
+
+**Through-plane context, measured two ways** (`runs/2026-09-29-brats-25d/`). `unet-brats-r34
+ctx=1` is the same net fed the slice above and below as eight extra channels, from a 2.5D build
+(`preprocess_brats.py --context 1`), everything else matched to the 2D run: it ties, +0.001 to
++0.004 on every metric, pooled and per patient. A 3D UNet on 128³ patches in JAX
+(`jax/scripts/unet3d_brats.py`, the reference a Lean 3D port would tie to) reaches per-patient
+WT 0.894 / TC 0.810 / ET 0.790 after one hour on one card, level with the anchor and still
+improving; rank-5 convolution runs at 77% of the 2D per-voxel rate (`jax/scripts/unet3d_gate0.py`).
+Whether 3D goes past the slice model on this data is a longer-schedule question, and the 3D
+codegen port waits on it (`planning/brats_25d_3d.md`).
 
 ![The ResNet-34 UNet on four held-out BraTS patients, both arms](figures/brats_r34_skip_transfer.png)
 

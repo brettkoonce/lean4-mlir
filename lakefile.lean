@@ -655,6 +655,12 @@ lean_exe «brats-predict» where
   root := `demos.MainBratsPredict
   moreLinkArgs := lowererLink
 
+/-- Per-volume BraTS Dice (the literature's protocol) for a trained checkpoint, from
+    `preprocess_brats.py --val-full`'s whole-volume export. -/
+lean_exe «brats-eval» where
+  root := `demos.MainBratsEval
+  moreLinkArgs := lowererLink
+
 lean_exe «bigram-shakespeare» where
   root := `demos.MainBigramShakespeare
   moreLinkArgs := lowererLink

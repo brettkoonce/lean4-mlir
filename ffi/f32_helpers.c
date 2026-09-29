@@ -307,9 +307,11 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
 
 // ---- BraTS (MSD Task01_BrainTumour) loader ----
 // Binary format per record (written by scripts/datasets/preprocess_brats.py):
-//   image: 4 * S * S bytes (channel-first [modality][y][x], uint8)
+//   image: C * S * S bytes (channel-first [channel][y][x], uint8)
 //   mask:  S * S     bytes (per-pixel class 0..3)
-// At the default S=240: 288,000 bytes/record.
+// C = 4 (the modalities) in a 2D build, 4*(2K+1) in a 2.5D build with K
+// context slices each side (`--context K`). At the default S=240, C=4:
+// 288,000 bytes/record.
 //
 // Returns (image_f32_dequantized, mask_uint8, count) as a 3-tuple, the shape the
 // segmentation train path expects.
@@ -321,10 +323,13 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
 // sees per-volume z-scored intensities. The inverse must stay in lockstep with
 // quantize_u8() in scripts/datasets/preprocess_brats.py.
 #define BRATS_CLIP_SIGMA 5.0f
-#define BRATS_CHANNELS 4
 
-LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img_size) {
+LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img_size,
+                                             size_t channels) {
     const char* path = lean_string_cstr(path_obj);
+    if (channels == 0 || channels % 4 != 0)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+            "brats: channels must be a positive multiple of 4 (the modalities)")));
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open brats file")));
     uint32_t file_count;
@@ -332,7 +337,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
         return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad header"))); }
     uint32_t count = file_count;
     const size_t hw = img_size * img_size;
-    const size_t pix = BRATS_CHANNELS * hw;
+    const size_t pix = channels * hw;
     const size_t mask_pix = hw;
     size_t img_bytes  = (size_t)count * pix * 4;         // f32 image buffer
     size_t mask_bytes = (size_t)count * mask_pix;        // uint8 mask buffer
@@ -344,6 +349,22 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
     // Zero is anchored at 128 there, so background (exact zero in a
     // skull-stripped volume) round-trips to exact zero here.
     const float dequant = BRATS_CLIP_SIGMA / 127.0f;
+    // The record size is not in the header, so a 2.5D file read at the 2D
+    // channel count would parse as ~2.6x the records and misalign every mask
+    // after the first. Check the byte count once, up front.
+    {
+        long here = ftell(f);
+        if (fseek(f, 0, SEEK_END) == 0) {
+            long end = ftell(f);
+            fseek(f, here, SEEK_SET);
+            if (end >= 0 && (size_t)end != 4 + (size_t)count * (pix + mask_pix)) {
+                fclose(f);
+                return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+                    "brats: file size does not match count * (channels*S*S + S*S) — "
+                    "wrong --size or channel count for this build")));
+            }
+        }
+    }
     uint8_t* buf = (uint8_t*)malloc(pix + mask_pix);
     if (!buf) { fclose(f);
         return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("brats: malloc failed"))); }

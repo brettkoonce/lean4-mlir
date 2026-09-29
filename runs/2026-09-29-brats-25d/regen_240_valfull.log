@@ -1,0 +1,17 @@
+dataset: BRATS | 484 labelled volumes
+modalities: {'0': 'FLAIR', '1': 'T1w', '2': 't1gd', '3': 'T2w'}
+labels: {'0': 'background', '1': 'edema', '2': 'non-enhancing tumor', '3': 'enhancing tumour'}
+split (seed 0): 411 train / 73 val volumes
+Processing validation volumes, every slice (val_full)...
+    25/73 volumes -> 3875 slices
+    50/73 volumes -> 7750 slices
+  11315 slices from 73 volumes (0 skipped)
+  wrote data/brats/val_full.bin (3.26 GB)
+  f32 RAM at load: 10.43 GB
+  class balance (per-pixel):
+    0 background     98.804%
+    1 edema           0.749%
+    2 non-enhancing   0.211%
+    3 enhancing       0.236%
+Per-volume index -> data/brats/val_full.idx (73 volumes, 11315 slices)
+Done.

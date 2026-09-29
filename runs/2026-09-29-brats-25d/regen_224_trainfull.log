@@ -1,0 +1,31 @@
+dataset: BRATS | 484 labelled volumes
+modalities: {'0': 'FLAIR', '1': 'T1w', '2': 't1gd', '3': 'T2w'}
+labels: {'0': 'background', '1': 'edema', '2': 'non-enhancing tumor', '3': 'enhancing tumour'}
+split (seed 0): 411 train / 73 val volumes
+Processing train volumes, every slice (train_full)...
+    25/411 volumes -> 3875 slices
+    50/411 volumes -> 7750 slices
+    75/411 volumes -> 11625 slices
+    100/411 volumes -> 15500 slices
+    125/411 volumes -> 19375 slices
+    150/411 volumes -> 23250 slices
+    175/411 volumes -> 27125 slices
+    200/411 volumes -> 31000 slices
+    225/411 volumes -> 34875 slices
+    250/411 volumes -> 38750 slices
+    275/411 volumes -> 42625 slices
+    300/411 volumes -> 46500 slices
+    325/411 volumes -> 50375 slices
+    350/411 volumes -> 54250 slices
+    375/411 volumes -> 58125 slices
+    400/411 volumes -> 62000 slices
+  63705 slices from 411 volumes (0 skipped)
+  wrote data/brats224/train_full.bin (15.98 GB)
+  f32 RAM at load: 51.14 GB
+  class balance (per-pixel):
+    0 background     98.680%
+    1 edema           0.831%
+    2 non-enhancing   0.230%
+    3 enhancing       0.259%
+Per-volume index -> data/brats224/train_full.idx (411 volumes, 63705 slices)
+Done.

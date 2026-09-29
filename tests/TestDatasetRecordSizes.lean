@@ -95,6 +95,10 @@ def main : IO UInt32 := do
     { name := "brats (val)", path := "data/brats/val.bin"
       pixels := 4 * 240 * 240, labelBytes := 240 * 240
       load := F32.loadBrats "data/brats/val.bin" 240 },
+    -- 2.5D: 4 modalities × 3 slices per record; the loader takes the channel count.
+    { name := "brats224c3 2.5D (val)", path := "data/brats224c3/val.bin"
+      pixels := 12 * 224 * 224, labelBytes := 224 * 224
+      load := F32.loadBrats "data/brats224c3/val.bin" 224 12 },
     -- Detection: f32 target tensors.
     { name := "visdrone yolov1 224 (val)", path := "data/visdrone/val.bin"
       pixels := 3 * 224 * 224, labelBytes := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20

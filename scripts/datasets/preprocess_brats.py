@@ -15,12 +15,29 @@ Usage: python3 scripts/datasets/preprocess_brats.py <task_dir> <output_dir> [opt
 Writes train.bin, val.bin in the format `lean_f32_load_brats` expects:
   Header: count (4 bytes, little-endian uint32)
   Per record:
-    image: 4*240*240 bytes  (channel-first [modality][y][x], uint8)
+    image: C*240*240 bytes  (channel-first [channel][y][x], uint8)
     mask:  240*240   bytes  (per-pixel class label, 0..3)
-  Total per record: 288,000 bytes.
+  C = 4 in the 2D build (288,000 bytes per record at 240).
 
 Modalities (channel order, from dataset.json):
   0 = FLAIR, 1 = T1w, 2 = T1gd (post-contrast), 3 = T2w
+
+2.5D (`--context K`, optionally `--context-step S`): each record's image
+carries the 2K+1 axial slices z-K*S, ..., z, ..., z+K*S of its volume, in
+that order, each with its 4 modalities, so C = 4*(2K+1) and the centre
+slice's modalities sit at channels 4K..4K+3 (T1gd at 4K+2). Neighbours come
+from the UNFILTERED volume — a tumour-free or off-stride neighbour is still
+a neighbour — and are replicated at the volume's two ends. Which centre
+slices are kept, and in which order, is exactly the 2D build's choice, so a
+2.5D build at the same seed sees the same records as its 2D control.
+
+`--val-full` additionally writes val_full.bin: EVERY axial slice of every
+validation volume, volume by volume in z order, no tumour filter and no
+stride, with val_full.idx beside it (uint32 volume count, then one uint32
+slice count per volume, in file order) and val_full.json naming the volumes.
+That is what per-volume scoring reads (`lake exe brats-eval`): the
+literature's Dice is over whole volumes, tumour-free slices included, and
+val.bin's tumour-bearing subset cannot give it.
 
 Mask classes (MSD's remap of the native BraTS 0/1/2/4 labels):
   0 = background   1 = edema   2 = non-enhancing tumour   3 = enhancing tumour
@@ -186,8 +203,17 @@ def fit_plane(a, size):
     return a
 
 
-def process_volume(img_path, lbl_path, args):
-    """One volume -> list of per-slice record bytes."""
+def channels_of(args):
+    """Image channels per record: the 4 modalities of each of the 2K+1 slices."""
+    return MODALITIES * (2 * args.context + 1)
+
+
+def process_volume(img_path, lbl_path, args, all_slices=False):
+    """One volume -> list of per-slice record bytes.
+
+    `all_slices` keeps every z (the whole-volume export); otherwise the
+    tumour filter and the stride pick the centres, exactly as in 2D.
+    """
     img = read_nifti(img_path)
     lbl = read_nifti(lbl_path)
 
@@ -214,24 +240,43 @@ def process_volume(img_path, lbl_path, args):
     depth = img_q.shape[2]
     tumor_per_slice = (lbl_q > 0).reshape(-1, depth).sum(axis=0)
 
-    keep = [z for z in range(depth) if tumor_per_slice[z] >= args.min_tumor_px]
-    keep = keep[::args.stride]
+    if all_slices:
+        keep = list(range(depth))
+    else:
+        keep = [z for z in range(depth) if tumor_per_slice[z] >= args.min_tumor_px]
+        keep = keep[::args.stride]
+
+    # Slice offsets stacked into the channels: -K*S, ..., 0, ..., +K*S. The
+    # 2D build is K = 0, i.e. the single offset 0.
+    K, S = args.context, args.context_step
+    offsets = [j * S for j in range(-K, K + 1)]
+    n_ch = channels_of(args)
 
     records = []
     for z in keep:
-        # (X, Y, M) -> (M, Y, X): channel-first, row-major within each channel.
-        sl = img_q[:, :, z, :].transpose(2, 1, 0)
+        planes = []
+        for off in offsets:
+            # Replicate at the ends: a slice near the top of the volume sees
+            # the top slice again rather than a zero plane it never trained on.
+            zz = min(max(z + off, 0), depth - 1)
+            # (X, Y, M) -> (M, Y, X): channel-first, row-major within each channel.
+            planes.append(img_q[:, :, zz, :].transpose(2, 1, 0))
+        sl = np.concatenate(planes, axis=0) if len(planes) > 1 else planes[0]
         mask = lbl_q[:, :, z].T
         img_bytes = np.ascontiguousarray(sl).tobytes()
         mask_bytes = np.ascontiguousarray(mask).tobytes()
-        assert len(img_bytes) == MODALITIES * args.size * args.size
+        assert len(img_bytes) == n_ch * args.size * args.size
         assert len(mask_bytes) == args.size * args.size
         records.append(img_bytes + mask_bytes)
     return records
 
 
-def write_split(task_dir, cases, out_path, args):
-    rec_bytes = MODALITIES * args.size * args.size + args.size * args.size
+def write_split(task_dir, cases, out_path, args, all_slices=False, manifest=None):
+    """Stream one split to `out_path`. With `manifest` (a list), append one
+    `{name, start, count}` entry per volume in file order — the per-volume
+    index the whole-volume export needs."""
+    n_ch = channels_of(args)
+    rec_bytes = n_ch * args.size * args.size + args.size * args.size
     count = 0
     class_hist = np.zeros(NUM_CLASSES, dtype=np.int64)
     skipped = 0
@@ -244,15 +289,17 @@ def write_split(task_dir, cases, out_path, args):
             img_path = os.path.join(task_dir, 'imagesTr', case)
             lbl_path = os.path.join(task_dir, 'labelsTr', case)
             try:
-                records = process_volume(img_path, lbl_path, args)
+                records = process_volume(img_path, lbl_path, args, all_slices=all_slices)
             except Exception as e:
                 print(f"  skipping {case}: {e}", file=sys.stderr)
                 skipped += 1
                 continue
+            if manifest is not None:
+                manifest.append({'name': case, 'start': count, 'count': len(records)})
             for r in records:
                 assert len(r) == rec_bytes
                 f.write(r)
-                m = np.frombuffer(r[MODALITIES * args.size * args.size:], dtype=np.uint8)
+                m = np.frombuffer(r[n_ch * args.size * args.size:], dtype=np.uint8)
                 class_hist += np.bincount(m, minlength=NUM_CLASSES)
             count += len(records)
             if (i + 1) % 25 == 0:
@@ -263,7 +310,7 @@ def write_split(task_dir, cases, out_path, args):
     total_px = class_hist.sum()
     print(f"  {count} slices from {len(cases) - skipped} volumes ({skipped} skipped)")
     print(f"  wrote {out_path} ({os.path.getsize(out_path) / 1e9:.2f} GB)")
-    print(f"  f32 RAM at load: {count * MODALITIES * args.size * args.size * 4 / 1e9:.2f} GB")
+    print(f"  f32 RAM at load: {count * n_ch * args.size * args.size * 4 / 1e9:.2f} GB")
     if total_px:
         names = ['background', 'edema', 'non-enhancing', 'enhancing']
         print("  class balance (per-pixel):")
@@ -293,11 +340,37 @@ def main():
                          'the file and the f32 footprint at load (~73 tumour slices '
                          'per volume at stride 1 => ~33 GB RAM; stride 2 => ~16 GB). '
                          'Use 1 for the full set.')
+    ap.add_argument('--context', type=int, default=0, metavar='K',
+                    help='2.5D: stack the K slices on each side of every kept slice '
+                         'into the channels (4*(2K+1) channels per record; default 0 = 2D). '
+                         'The centre slices kept are exactly the 2D build\'s.')
+    ap.add_argument('--context-step', type=int, default=1, metavar='S',
+                    help='spacing of the context slices in slices (default 1 = adjacent, '
+                         '1 mm apart on this data; 2 = every other slice)')
+    ap.add_argument('--val-full', action='store_true',
+                    help='also write val_full.bin/.idx/.json: every slice of every '
+                         'validation volume, for per-volume scoring (brats-eval)')
+    ap.add_argument('--only-val-full', action='store_true',
+                    help='write only the val_full files (implies --val-full); adds '
+                         'per-volume scoring to an existing build at the same seed')
+    ap.add_argument('--train-full', action='store_true',
+                    help='also write train_full.bin/.idx/.json: every slice of every '
+                         'TRAINING volume, volume by volume — the whole-volume corpus a '
+                         '3D patch sampler reads (jax/scripts/unet3d_brats.py)')
+    ap.add_argument('--only-train-full', action='store_true',
+                    help='write only the train_full files (implies --train-full)')
     args = ap.parse_args()
+    if args.only_val_full:
+        args.val_full = True
+    if args.only_train_full:
+        args.train_full = True
 
     if args.size % 16 != 0:
         print(f"ERROR: --size {args.size} is not a multiple of 16; a depth-4 UNet "
               f"halves the resolution 4 times and would not divide evenly.")
+        sys.exit(1)
+    if args.context < 0 or args.context_step < 1:
+        print("ERROR: --context must be >= 0 and --context-step >= 1")
         sys.exit(1)
 
     with open(os.path.join(args.task_dir, 'dataset.json')) as f:
@@ -320,17 +393,45 @@ def main():
     print(f"split (seed {args.seed}): {len(train_cases)} train / {len(val_cases)} val volumes")
 
     os.makedirs(args.out_dir, exist_ok=True)
-    print("Processing training split...")
-    n_tr = write_split(args.task_dir, train_cases, os.path.join(args.out_dir, 'train.bin'), args)
-    print("Processing validation split...")
-    n_va = write_split(args.task_dir, val_cases, os.path.join(args.out_dir, 'val.bin'), args)
+    n_ch = channels_of(args)
+    if args.context:
+        print(f"2.5D: context ±{args.context} at step {args.context_step} -> "
+              f"{n_ch} channels per record")
+    if not (args.only_val_full or args.only_train_full):
+        print("Processing training split...")
+        n_tr = write_split(args.task_dir, train_cases, os.path.join(args.out_dir, 'train.bin'), args)
+        print("Processing validation split...")
+        n_va = write_split(args.task_dir, val_cases, os.path.join(args.out_dir, 'val.bin'), args)
 
-    with open(os.path.join(args.out_dir, 'split.json'), 'w') as f:
-        json.dump({'seed': args.seed, 'size': args.size, 'clip_sigma': CLIP_SIGMA,
-                   'stride': args.stride, 'min_tumor_px': args.min_tumor_px,
-                   'train_volumes': train_cases, 'val_volumes': val_cases,
-                   'train_slices': n_tr, 'val_slices': n_va}, f, indent=2)
-    print(f"Done. Split manifest -> {os.path.join(args.out_dir, 'split.json')}")
+        with open(os.path.join(args.out_dir, 'split.json'), 'w') as f:
+            json.dump({'seed': args.seed, 'size': args.size, 'clip_sigma': CLIP_SIGMA,
+                       'stride': args.stride, 'min_tumor_px': args.min_tumor_px,
+                       'context': args.context, 'context_step': args.context_step,
+                       'channels': n_ch,
+                       'train_volumes': train_cases, 'val_volumes': val_cases,
+                       'train_slices': n_tr, 'val_slices': n_va}, f, indent=2)
+        print(f"Split manifest -> {os.path.join(args.out_dir, 'split.json')}")
+
+    for flag, cases, stem in ((args.val_full, val_cases, 'val_full'),
+                              (args.train_full, train_cases, 'train_full')):
+        if not flag:
+            continue
+        print(f"Processing {stem.split('_')[0]} volumes, every slice ({stem})...")
+        manifest = []
+        n_full = write_split(args.task_dir, cases, os.path.join(args.out_dir, f'{stem}.bin'),
+                             args, all_slices=True, manifest=manifest)
+        # The Lean side reads the binary index; the JSON is for people.
+        with open(os.path.join(args.out_dir, f'{stem}.idx'), 'wb') as f:
+            f.write(struct.pack('<I', len(manifest)))
+            for m in manifest:
+                f.write(struct.pack('<I', m['count']))
+        with open(os.path.join(args.out_dir, f'{stem}.json'), 'w') as f:
+            json.dump({'seed': args.seed, 'size': args.size, 'channels': n_ch,
+                       'context': args.context, 'context_step': args.context_step,
+                       'slices': n_full, 'volumes': manifest}, f, indent=2)
+        print(f"Per-volume index -> {os.path.join(args.out_dir, f'{stem}.idx')} "
+              f"({len(manifest)} volumes, {n_full} slices)")
+    print("Done.")
 
 
 if __name__ == '__main__':

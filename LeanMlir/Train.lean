@@ -441,6 +441,20 @@ private def brats224IO : DatasetIO :=
       loadTrain := fun dir => F32.loadBrats (dir ++ "/train.bin") 224
       loadVal   := fun dir => F32.loadBrats (dir ++ "/val.bin") 224 }
 
+/-- BraTS at 224×224 in 2.5D — `brats224IO` with the channel count changed: `4·(2·ctx+1)`
+    channels per record, the centre slice's mask as the label. Same regions, same label
+    numbering, same split; the loader takes the channel count and checks the file length
+    against it, so a 2D file read as 2.5D (or the reverse) fails at load rather than
+    misaligning every mask after the first. -/
+private def brats224CtxIO (ctx : Nat) : DatasetIO :=
+  let ch := 4 * (2 * ctx + 1)
+  { brats224IO with
+      trainPixels := ch * 224 * 224
+      valPixels   := ch * 224 * 224
+      channels    := ch
+      loadTrain := fun dir => F32.loadBrats (dir ++ "/train.bin") 224 ch.toUSize
+      loadVal   := fun dir => F32.loadBrats (dir ++ "/val.bin") 224 ch.toUSize }
+
 private def datasetIO : DatasetKind → DatasetIO
   | .imagenette => imagenetteIO
   | .mnist      => mnistIO
@@ -448,6 +462,7 @@ private def datasetIO : DatasetKind → DatasetIO
   | .detection  => detectionIO
   | .brats      => bratsIO
   | .brats224   => brats224IO
+  | .brats224Ctx ctx => brats224CtxIO ctx
   | .imagenet   =>
     -- This path doesn't support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the
@@ -457,7 +472,7 @@ private def datasetIO : DatasetKind → DatasetIO
 
 -- `DatasetKind.pixelLabels` (which `TrainConfig.lossKindFor` reads) names exactly the datasets whose
 -- label record is not a 4-byte class, detection aside (it resolves first; `.imagenet` panics here).
-#guard [DatasetKind.mnist, .cifar10, .imagenette, .brats, .brats224].all fun ds =>
+#guard [DatasetKind.mnist, .cifar10, .imagenette, .brats, .brats224, .brats224Ctx 1].all fun ds =>
   ds.pixelLabels == ((datasetIO ds).labelBytesPerRecord != 4)
 
 /-- Adam or SGD+momentum (`TrainConfig.optimizer`), cosine LR, running-BN-stats training loop, generic over
@@ -663,6 +678,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .detection  => "detection"
           | .brats      => "brats"
           | .brats224   => "brats224"
+          | .brats224Ctx ctx => s!"brats224c{2 * ctx + 1}"
         let hdr :=
           "{\"kind\":\"header\",\"phase\":\"phase3\"" ++
           s!",\"netspec_name\":\"{spec.name}\"" ++

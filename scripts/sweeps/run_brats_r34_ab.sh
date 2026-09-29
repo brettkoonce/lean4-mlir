@@ -9,7 +9,11 @@
 # checkpoints — the failure the BraTS loss ablation already paid for once.
 #
 # Usage:
-#   ./run_brats_r34_ab.sh [epochs] [data_dir]
+#   ./run_brats_r34_ab.sh [epochs] [data_dir] [skip|noskip] [ctx]
+#
+# `ctx` (default 0) runs the 2.5D variant on `data/brats224c<2ctx+1>` — pass
+# that directory as data_dir — with `ctx=` on both arms and `c<k>` in the log
+# names, so a 2D and a 2.5D A/B can sit side by side in runs/.
 set -euo pipefail
 
 EPOCHS="${1:-10}"
@@ -18,12 +22,15 @@ DATA="${2:-data/brats224}"
 # two variants are different experiments and a fixed log name silently
 # overwrote one with the other once already.
 VARIANT="${3:-skip}"
+CTX="${4:-0}"
 EXTRA=""
 if [ "$VARIANT" = "noskip" ]; then EXTRA="noskip"; fi
+if [ "$CTX" != "0" ]; then EXTRA="$EXTRA ctx=$CTX"; VARIANT="${VARIANT}_c$CTX"; fi
 
 if [ ! -f "$DATA/train.bin" ] || [ ! -f "$DATA/val.bin" ]; then
   echo "missing $DATA/{train,val}.bin — build it with:"
-  echo "  python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour $DATA --size 224 --seed 0"
+  echo "  python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour $DATA --size 224 --seed 0 --val-full"
+  echo "  (add --context <k> for the 2.5D build)"
   exit 1
 fi
 if [ ! -f .lake/build/jax_r34_imagenet.bin ]; then

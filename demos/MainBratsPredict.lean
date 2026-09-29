@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.ReferenceNets
 
-open ReferenceNets (unetBrats)
+open ReferenceNets (unetBrats r34UnetBratsOf)
 
 /-! Render predictions from a trained BraTS segmentation checkpoint.
 
@@ -35,11 +35,14 @@ open ReferenceNets (unetBrats)
       near-empty tumour edges. Rendering those would show nothing either way.
 
     Usage:
-        lake exe brats-predict [arm=<name>] [out.ppm] [params.bin] [bn_stats.bin]
+        lake exe brats-predict [net=r34|r34noskip] [ctx=<k>] [arm=<name>,…] [best] [out.ppm] [params.bin] [bn_stats.bin]
 
     `arm=` selects which ablation arm's checkpoint to render, matching the tag
     `unet-brats-train` stamps on its artifacts (`NetSpec.buildTag`) — `arm=ce`,
     `arm=wce`, `arm=focal_pb`, and so on. Omit it for an untagged run.
+    `net=r34` renders the ResNet-34 UNet (`unet-brats-r34`, arms `r34` /
+    `scratch`), `ctx=k` its 2.5D variant, whose records carry `4·(2k+1)`
+    channels; the backdrop and the brain mask then read the centre slice.
 
     That is what makes the money figure a two-command job: the arms do not
     overwrite each other's checkpoints, so both survive to be rendered.
@@ -53,49 +56,13 @@ open ReferenceNets (unetBrats)
     outside `.lake/build` (a copy saved aside, a file from another box).
 -/
 
-/-- MUST match `demos/MainUnetBratsR34.lean` exactly, name string included:
-    `buildPrefix` is derived from `spec.name`, so a single edited character
-    here points this renderer at a checkpoint that does not exist.
-
-    Selected with `net=r34`. It renders through the rest of this file
-    unchanged: it keeps all four modalities, so the brain mask and the T1gd
-    backdrop are still computed the same way, and every panel dimension below
-    already reads H/W off the spec. Only the input size and the checkpoint
-    prefix differ, and both follow from the spec. -/
-def r34UnetBratsOf (skips : Bool) : NetSpec where
-  name := if skips
-          then "ResNet-34 UNet skip (BraTS, 224×224 4-modality MRI → 4-class tumour)"
-          else "ResNet-34 → UNet (BraTS, 224×224 4-modality MRI → 4-class tumour)"
-  imageH := 224
-  imageW := 224
-  layers :=
-    [ .convBn 4 64 7 2 .same,
-      .maxPool 2 2,
-      .residualBlock  64  64 3 1,
-      .residualBlock  64 128 4 2,
-      .residualBlock 128 256 6 2,
-      .residualBlock 256 512 3 2
-    ] ++
-    (if skips then
-      [ .unetUp 512 256, .unetUp 256 128, .unetUp 128 64, .unetUp 64 64,
-        .bilinearUpsample 2, .convBn 64 32 3 1 .same,
-        .conv2d 32 4 1 .same .identity ]
-     else
-      [ .bilinearUpsample 2, .convBn 512 256 3 1 .same,
-        .bilinearUpsample 2, .convBn 256 128 3 1 .same,
-        .bilinearUpsample 2, .convBn 128 64 3 1 .same,
-        .bilinearUpsample 2, .convBn 64 32 3 1 .same,
-        .bilinearUpsample 2, .convBn 32 32 3 1 .same,
-        .conv2d 32 4 1 .same .identity ])
-
-/-- Default to the skip-equipped net; `net=r34noskip` renders the v0. -/
-def r34UnetBrats : NetSpec := r34UnetBratsOf true
-
-/-- Channel index of the modality used as the grayscale backdrop.
-    0 = FLAIR, 1 = T1w, 2 = T1gd, 3 = T2w (order fixed by
+/-- Channel index of the modality used as the grayscale backdrop, within one
+    slice's four: 0 = FLAIR, 1 = T1w, 2 = T1gd, 3 = T2w (order fixed by
     `scripts/datasets/preprocess_brats.py`, which reads it from MSD's dataset.json). -/
 private def backdropModality : Nat := 2   -- T1gd
 
+/-- Modalities per slice. A 2.5D record holds `2k+1` slices of these; the
+    centre slice's start at channel `4k`. -/
 private def numModalities : Nat := 4
 private def numClasses : Nat := 4
 
@@ -112,10 +79,12 @@ private def zToGray (z : Float) : UInt8 :=
   let tc := if t < 0.0 then 0.0 else if t > 1.0 then 1.0 else t
   (tc * 255.0).toUInt8
 
-/-- Grayscale backdrop for one pixel of batch element `b`. -/
-private def backdropGray (xba : ByteArray) (b h w H W : Nat) : UInt8 :=
+/-- Grayscale backdrop for one pixel of batch element `b`, read off the centre
+    slice: `channels` per record, the centre slice's four modalities starting
+    at `centre0` (0 in 2D, `4k` in 2.5D). -/
+private def backdropGray (xba : ByteArray) (b h w H W channels centre0 : Nat) : UInt8 :=
   let stride := H * W
-  let imgOff := b * numModalities * stride
+  let imgOff := b * channels * stride + centre0 * stride
   let pix := h * W + w
   -- Brain mask: background is exact 0 in a skull-stripped volume and
   -- `znorm_brain` preserves that (it writes z only at nonzero voxels), so
@@ -188,13 +157,23 @@ def main (args : List String) : IO Unit := do
     | none => [""]
   -- `net=r34` renders the ResNet-34-transfer net instead of the from-scratch
   -- UNet. It changes which NetSpec (and so which `buildPrefix`, params, and
-  -- vmfb) every path below resolves to — nothing else, because both nets take
-  -- the same 4×240×240 input and emit the same 4×240×240 logits.
+  -- graph) every path below resolves to — nothing else, because both nets take
+  -- a 4-modality input and emit the same 4-class logits.
   let noSkip := args.any (· == "net=r34noskip")
   let useR34 := noSkip || args.any (· == "net=r34")
-  let spec := if useR34 then r34UnetBratsOf (!noSkip) else unetBrats
+  -- `ctx=<k>`: the R34 net's 2.5D variant, on `4·(2k+1)`-channel records.
+  let ctx : Nat :=
+    ((args.filter (·.startsWith "ctx=")).head?.bind (fun a => (a.drop 4).toNat?)).getD 0
+  if ctx > 0 && !useR34 then
+    IO.eprintln "ctx= is the ResNet-34 UNet's 2.5D variant — pass net=r34 with it"
+    IO.Process.exit 1
+  let spec := if useR34 then r34UnetBratsOf (!noSkip) ctx else unetBrats
+  let kind : DatasetKind :=
+    if !useR34 then .brats else if ctx == 0 then .brats224 else .brats224Ctx ctx
+  let channels := kind.bratsChannels
+  let centre0 := numModalities * ctx
   let positional := args.filter (fun a =>
-    !a.startsWith "arm=" && !a.startsWith "net=" && a != "best")
+    !a.startsWith "arm=" && !a.startsWith "net=" && !a.startsWith "ctx=" && a != "best")
   let outPath := positional[0]?.getD "demos/figures/brats_pred.ppm"
   -- The explicit params/bn override is single-arm only: with several arms
   -- there is no one checkpoint to point at, and silently applying one arm's
@@ -229,13 +208,14 @@ def main (args : List String) : IO Unit := do
     evalParamsList := evalParamsList ++ [params.append bnStats]
   IO.eprintln s!"  net: {spec.name}"
   -- The val set must be the one this net was trained against: the r34 arm uses
-  -- the 224 center-cropped build, the from-scratch UNet the native 240 one.
-  -- Reading the wrong one would misparse the record stride and render
-  -- convincing garbage rather than fail, so it is derived from the spec.
-  let dataDir := if useR34 then "data/brats224" else "data/brats"
-  IO.eprintln s!"  loading {dataDir}/val.bin at {spec.imageH}² ..."
+  -- the 224 center-cropped build (or its 2.5D build), the from-scratch UNet the
+  -- native 240 one. Reading the wrong one would misparse the record stride and
+  -- render convincing garbage rather than fail, so it is derived from the kind,
+  -- and the loader checks the file length against the channel count.
+  let dataDir := kind.bratsDataDir
+  IO.eprintln s!"  loading {dataDir}/val.bin at {spec.imageH}², {channels} channels ..."
   let (valImg, valMask, nVal) ←
-    F32.loadBrats s!"{dataDir}/val.bin" spec.imageH.toUSize
+    F32.loadBrats s!"{dataDir}/val.bin" spec.imageH.toUSize channels.toUSize
   -- The eval vmfb is compiled at the training batch size; we fill a full
   -- batch and render only the first `nVis` of it.
   let evalBatch : Nat := 16
@@ -244,7 +224,7 @@ def main (args : List String) : IO Unit := do
     IO.eprintln "val.bin has no records"; IO.Process.exit 1
   let H := spec.imageH
   let W := spec.imageW
-  let imgPixels := numModalities * H * W
+  let imgPixels := channels * H * W
   let maskPixels := H * W
 
   -- Slice selection. Score every val slice by tumour burden, on a stride-2
@@ -325,11 +305,11 @@ def main (args : List String) : IO Unit := do
     for h in [:H] do
       -- panel 1: T1gd backdrop, no overlay
       for w in [:W] do
-        let g := backdropGray xba k h w H W
+        let g := backdropGray xba k h w H W channels centre0
         ppm := ppm.push g |>.push g |>.push g
       -- panel 2: ground truth over T1gd
       for w in [:W] do
-        let g := backdropGray xba k h w H W
+        let g := backdropGray xba k h w H W channels centre0
         let cls := valMask.get! (idx * maskPixels + h * W + w)
         if cls != 0 then gtPx := gtPx + 1
         let (r, gg, b) := overlayPx g cls
@@ -337,7 +317,7 @@ def main (args : List String) : IO Unit := do
       -- panels 3..: one prediction per arm, same slice, same backdrop
       for (logits, ai) in logitsList.zipIdx do
         for w in [:W] do
-          let g := backdropGray xba k h w H W
+          let g := backdropGray xba k h w H W channels centre0
           let cls := argmaxChannel logits k h w H W
           if cls != 0 then predPx := predPx.set! ai (predPx[ai]! + 1)
           let (r, gg, b) := overlayPx g cls

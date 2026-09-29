@@ -1,0 +1,105 @@
+backend gpu cuda:0 jax 0.11.0; args {'data': 'data/brats224', 'steps': 4000, 'batch': 2, 'patch': 128, 'lr': 0.0003, 'warmup': 200, 'wd': 0.0001, 'fg': 0.3333333333333333, 'loss': 'dicece', 'eval_every': 2000, 'seed': 0, 'out': 'runs/2026-09-29-brats-25d/unet3d', 'init': None, 'val_limit': None}
+3D UNet: 23,537,924 params; patch 128³ × B2; 73 val volumes
+train: 411 volumes, 63705 slices
+  step 1/4000: loss=2.1981 (51546 ms; median 51546 ms; queue 8; 0.9 min)
+  step 2/4000: loss=2.1982 (910 ms; median 26228 ms; queue 8; 0.9 min)
+  step 3/4000: loss=2.1860 (923 ms; median 923 ms; queue 8; 0.9 min)
+  step 50/4000: loss=1.9259 (909 ms; median 910 ms; queue 8; 1.6 min)
+  step 100/4000: loss=1.4715 (908 ms; median 909 ms; queue 8; 2.4 min)
+  step 150/4000: loss=1.3116 (907 ms; median 909 ms; queue 8; 3.1 min)
+  step 200/4000: loss=1.2201 (909 ms; median 909 ms; queue 8; 3.9 min)
+  step 250/4000: loss=1.1151 (917 ms; median 912 ms; queue 8; 4.6 min)
+  step 300/4000: loss=1.0050 (911 ms; median 911 ms; queue 8; 5.4 min)
+  step 350/4000: loss=0.9366 (913 ms; median 911 ms; queue 8; 6.2 min)
+  step 400/4000: loss=0.8473 (942 ms; median 911 ms; queue 8; 6.9 min)
+  step 450/4000: loss=0.7570 (909 ms; median 911 ms; queue 8; 7.7 min)
+  step 500/4000: loss=0.7221 (911 ms; median 911 ms; queue 8; 8.4 min)
+  step 550/4000: loss=0.5966 (924 ms; median 912 ms; queue 8; 9.2 min)
+  step 600/4000: loss=0.6295 (911 ms; median 911 ms; queue 8; 10.0 min)
+  step 650/4000: loss=0.5978 (928 ms; median 911 ms; queue 8; 10.7 min)
+  step 700/4000: loss=0.5288 (910 ms; median 911 ms; queue 8; 11.5 min)
+  step 750/4000: loss=0.5058 (910 ms; median 911 ms; queue 8; 12.2 min)
+  step 800/4000: loss=0.4597 (912 ms; median 911 ms; queue 8; 13.0 min)
+  step 850/4000: loss=0.4797 (912 ms; median 912 ms; queue 8; 13.8 min)
+  step 900/4000: loss=0.4411 (909 ms; median 911 ms; queue 8; 14.5 min)
+  step 950/4000: loss=0.4862 (910 ms; median 912 ms; queue 8; 15.3 min)
+  step 1000/4000: loss=0.4411 (912 ms; median 911 ms; queue 8; 16.1 min)
+  step 1050/4000: loss=0.4172 (924 ms; median 911 ms; queue 8; 16.8 min)
+  step 1100/4000: loss=0.3997 (910 ms; median 912 ms; queue 8; 17.6 min)
+  step 1150/4000: loss=0.4389 (937 ms; median 912 ms; queue 8; 18.3 min)
+  step 1200/4000: loss=0.4205 (913 ms; median 911 ms; queue 8; 19.1 min)
+  step 1250/4000: loss=0.3808 (929 ms; median 911 ms; queue 8; 19.9 min)
+  step 1300/4000: loss=0.3706 (911 ms; median 911 ms; queue 8; 20.6 min)
+  step 1350/4000: loss=0.4179 (909 ms; median 911 ms; queue 8; 21.4 min)
+  step 1400/4000: loss=0.4473 (922 ms; median 911 ms; queue 8; 22.1 min)
+  step 1450/4000: loss=0.3691 (910 ms; median 910 ms; queue 8; 22.9 min)
+  step 1500/4000: loss=0.3478 (910 ms; median 910 ms; queue 8; 23.7 min)
+  step 1550/4000: loss=0.3994 (908 ms; median 910 ms; queue 8; 24.4 min)
+  step 1600/4000: loss=0.3844 (910 ms; median 912 ms; queue 8; 25.2 min)
+  step 1650/4000: loss=0.3532 (912 ms; median 911 ms; queue 8; 25.9 min)
+  step 1700/4000: loss=0.3859 (911 ms; median 911 ms; queue 8; 26.7 min)
+  step 1750/4000: loss=0.3601 (909 ms; median 912 ms; queue 8; 27.5 min)
+  step 1800/4000: loss=0.3760 (913 ms; median 911 ms; queue 8; 28.2 min)
+  step 1850/4000: loss=0.3533 (910 ms; median 911 ms; queue 8; 29.0 min)
+  step 1900/4000: loss=0.3387 (909 ms; median 911 ms; queue 8; 29.7 min)
+  step 1950/4000: loss=0.3671 (911 ms; median 911 ms; queue 8; 30.5 min)
+  step 2000/4000: loss=0.3679 (927 ms; median 911 ms; queue 8; 31.3 min)
+--- eval at step 2000
+  scored 73 volumes in 117 s
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9053  TC 0.8439  ET 0.8421  mIoU 0.7233
+  pooled Dice, every slice (11315 slices): WT 0.9046  TC 0.8427  ET 0.8414  mIoU 0.7234
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8818 ± 0.1097  median 0.9118   present-only 0.8818 (n=73)   absent in 0
+    TC: 0.7834 ± 0.1887  median 0.8465   present-only 0.7834 (n=73)   absent in 0
+    ET: 0.7805 ± 0.1763  median 0.8450   present-only 0.7774 (n=72)   absent in 1
+  step 2050/4000: loss=0.3735 (907 ms; median 907 ms; queue 8; 34.0 min)
+  step 2100/4000: loss=0.3265 (907 ms; median 909 ms; queue 8; 34.7 min)
+  step 2150/4000: loss=0.3575 (907 ms; median 909 ms; queue 8; 35.5 min)
+  step 2200/4000: loss=0.3160 (906 ms; median 908 ms; queue 8; 36.3 min)
+  step 2250/4000: loss=0.3012 (926 ms; median 909 ms; queue 8; 37.0 min)
+  step 2300/4000: loss=0.3242 (909 ms; median 909 ms; queue 8; 37.8 min)
+  step 2350/4000: loss=0.3444 (909 ms; median 909 ms; queue 8; 38.5 min)
+  step 2400/4000: loss=0.3230 (908 ms; median 907 ms; queue 8; 39.3 min)
+  step 2450/4000: loss=0.3449 (907 ms; median 907 ms; queue 8; 40.0 min)
+  step 2500/4000: loss=0.3415 (907 ms; median 906 ms; queue 8; 40.8 min)
+  step 2550/4000: loss=0.3352 (907 ms; median 907 ms; queue 8; 41.6 min)
+  step 2600/4000: loss=0.3343 (907 ms; median 907 ms; queue 8; 42.3 min)
+  step 2650/4000: loss=0.3413 (905 ms; median 907 ms; queue 8; 43.1 min)
+  step 2700/4000: loss=0.3133 (907 ms; median 907 ms; queue 8; 43.8 min)
+  step 2750/4000: loss=0.3211 (906 ms; median 907 ms; queue 8; 44.6 min)
+  step 2800/4000: loss=0.3206 (907 ms; median 907 ms; queue 8; 45.3 min)
+  step 2850/4000: loss=0.3195 (908 ms; median 907 ms; queue 8; 46.1 min)
+  step 2900/4000: loss=0.3367 (906 ms; median 906 ms; queue 8; 46.8 min)
+  step 2950/4000: loss=0.3182 (907 ms; median 907 ms; queue 8; 47.6 min)
+  step 3000/4000: loss=0.3454 (906 ms; median 907 ms; queue 8; 48.4 min)
+  step 3050/4000: loss=0.3409 (906 ms; median 907 ms; queue 8; 49.1 min)
+  step 3100/4000: loss=0.3391 (907 ms; median 907 ms; queue 8; 49.9 min)
+  step 3150/4000: loss=0.3173 (907 ms; median 907 ms; queue 8; 50.6 min)
+  step 3200/4000: loss=0.3281 (908 ms; median 907 ms; queue 8; 51.4 min)
+  step 3250/4000: loss=0.3357 (908 ms; median 908 ms; queue 8; 52.1 min)
+  step 3300/4000: loss=0.3369 (907 ms; median 908 ms; queue 8; 52.9 min)
+  step 3350/4000: loss=0.2752 (907 ms; median 907 ms; queue 8; 53.6 min)
+  step 3400/4000: loss=0.3088 (908 ms; median 907 ms; queue 8; 54.4 min)
+  step 3450/4000: loss=0.3459 (910 ms; median 909 ms; queue 8; 55.2 min)
+  step 3500/4000: loss=0.3208 (910 ms; median 910 ms; queue 8; 55.9 min)
+  step 3550/4000: loss=0.3318 (908 ms; median 909 ms; queue 8; 56.7 min)
+  step 3600/4000: loss=0.3172 (908 ms; median 908 ms; queue 8; 57.4 min)
+  step 3650/4000: loss=0.3209 (909 ms; median 909 ms; queue 8; 58.2 min)
+  step 3700/4000: loss=0.3137 (909 ms; median 909 ms; queue 8; 58.9 min)
+  step 3750/4000: loss=0.3384 (907 ms; median 908 ms; queue 8; 59.7 min)
+  step 3800/4000: loss=0.3159 (908 ms; median 908 ms; queue 8; 60.5 min)
+  step 3850/4000: loss=0.2930 (908 ms; median 908 ms; queue 8; 61.2 min)
+  step 3900/4000: loss=0.3064 (908 ms; median 908 ms; queue 8; 62.0 min)
+  step 3950/4000: loss=0.3069 (909 ms; median 908 ms; queue 8; 62.7 min)
+  step 4000/4000: loss=0.3037 (908 ms; median 908 ms; queue 8; 63.5 min)
+trained 4000 steps in 63.5 min; median step 909 ms
+  saved runs/2026-09-29-brats-25d/unet3d_params.npz
+--- final eval
+  scored 73 volumes in 90 s
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9096  TC 0.8591  ET 0.8476  mIoU 0.7370
+  pooled Dice, every slice (11315 slices): WT 0.9093  TC 0.8589  ET 0.8474  mIoU 0.7375
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8943 ± 0.0632  median 0.9142   present-only 0.8943 (n=73)   absent in 0
+    TC: 0.8099 ± 0.1620  median 0.8582   present-only 0.8099 (n=73)   absent in 0
+    ET: 0.7902 ± 0.1712  median 0.8536   present-only 0.7873 (n=72)   absent in 1
+  wrote runs/2026-09-29-brats-25d/unet3d_pervol.csv

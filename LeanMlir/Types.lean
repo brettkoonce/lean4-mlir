@@ -981,13 +981,34 @@ inductive DatasetKind where
       voxels — MSD's volumes are skull-stripped and centered, so the margin is
       pure background. Used by [`demos/MainUnetBratsR34.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/demos/MainUnetBratsR34.lean). -/
   | brats224
+  /-- `brats224` in **2.5D**: the same slices, same split, same order, each record carrying the
+      `ctx` axial neighbours on either side of its slice as extra channels — `4·(2·ctx+1)`
+      channels, the centre slice's four modalities at `4·ctx .. 4·ctx+3`, neighbours replicated
+      at the volume's ends. Produced by `preprocess_brats.py --size 224 --seed 0 --context ctx`
+      into `data/brats224c<2·ctx+1>/`. The mask is the centre slice's, so the net still predicts
+      one slice; the through-plane context is what a 2D slice model cannot see and a 3D one
+      would, at a loader's cost rather than a rank-5 codegen's. -/
+  | brats224Ctx (ctx : Nat)
 deriving Repr, BEq
 
 /-- Does this dataset carry a per-pixel label record (a segmentation mask) rather than an int32
     class? Pinned against `datasetIO`'s label sizes by a `#guard` beside it. -/
 def DatasetKind.pixelLabels : DatasetKind → Bool
-  | .brats | .brats224 => true
+  | .brats | .brats224 | .brats224Ctx _ => true
   | _ => false
+
+/-- Image channels a BraTS record carries: the 4 modalities, times the `2·ctx+1` slices of a
+    2.5D build. -/
+def DatasetKind.bratsChannels : DatasetKind → Nat
+  | .brats224Ctx ctx => 4 * (2 * ctx + 1)
+  | _ => 4
+
+/-- The directory `preprocess_brats.py` writes each BraTS kind to by convention, and the
+    trainer's and predictor's default. -/
+def DatasetKind.bratsDataDir : DatasetKind → String
+  | .brats => "data/brats"
+  | .brats224Ctx ctx => s!"data/brats224c{2 * ctx + 1}"
+  | _ => "data/brats224"
 
 /-- The loss a run trains with: `cfg.lossKind` when set, else derived from the dataset (detection →
     `.yolov1Masked`, per-pixel labels → `.perPixelCE`) and the soft-label augs (`.softLabelCE`),

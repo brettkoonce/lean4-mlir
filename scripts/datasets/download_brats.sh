@@ -100,13 +100,18 @@ if [ ! -d "Task01_BrainTumour" ]; then
   tar xf Task01_BrainTumour.tar
 fi
 
-echo "Preprocessing NIfTI volumes to train.bin / val.bin..."
-echo "  (484 volumes to decode — this takes a while.)"
-python3 "$REPO_ROOT/preprocess_brats.py" Task01_BrainTumour .
+echo "Preprocessing NIfTI volumes to train.bin / val.bin (+ val_full.* for per-volume scoring)..."
+echo "  (484 volumes to decode — a few minutes.)"
+python3 "$REPO_ROOT/scripts/datasets/preprocess_brats.py" Task01_BrainTumour . --val-full
 
 echo
 echo "Done. Train with:"
-echo "  lake exe unet-brats-train data/brats"
+echo "  lake exe unet-brats-train                 # from-scratch UNet at 240²"
+echo "The ResNet-34 UNet (the anchor) and its 2.5D variant read their own builds:"
+echo "  python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 --size 224 --seed 0 --val-full"
+echo "  python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224c3 --size 224 --seed 0 --context 1 --val-full"
+echo "  lake exe unet-brats-r34 10 r34            # data/brats224"
+echo "  lake exe unet-brats-r34 10 r34 ctx=1      # data/brats224c3"
 echo
 echo "The tar and the extracted NIfTI tree are no longer needed once"
 echo "train.bin / val.bin exist; reclaim ~18 GB with:"

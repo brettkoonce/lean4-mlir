@@ -21,6 +21,11 @@ planning/archive/r34_brats_retrain.md §5, and both earned by real bugs:
 
 Usage:
     python3 scripts/probes/brats_r34_ab.py runs/brats_r34_gpu0.log runs/brats_scratch_gpu1.log
+
+    # any two logs of the same arm at different data — the 2D and 2.5D `r34`
+    # arms, say — filed under names of your own; the arm guard then checks
+    # that BOTH logs declare the arm `--arm` names
+    python3 scripts/probes/brats_r34_ab.py 2d.log 25d.log --names "2D r34,2.5D r34 ctx=1" --arm r34
 """
 import argparse
 import re
@@ -75,6 +80,8 @@ def guard_distinct(name, rows):
 
 
 def guard_arm(name, declared, path):
+    if name is None:
+        name = (declared or '').split('_')[0]
     if declared is None:
         print(f"  GUARD FAILED [{name}]: {path} has no 'arm:' line — cannot confirm which arm this is")
         return False
@@ -105,44 +112,56 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('r34_log')
     ap.add_argument('scratch_log')
+    ap.add_argument('--names', default=None,
+                    help='"A,B": file the two logs under these names instead of r34/scratch')
+    ap.add_argument('--arm', default=None,
+                    help='with --names: the arm stem BOTH logs must declare (e.g. r34)')
     args = ap.parse_args()
 
     arm_a, rows_a = parse(args.r34_log)
     arm_b, rows_b = parse(args.scratch_log)
+    if args.names:
+        name_a, name_b = (n.strip() for n in args.names.split(','))
+        stem_a = stem_b = args.arm or arm_a.split('_')[0] if arm_a else None
+        title_a, title_b = name_a, name_b
+    else:
+        name_a, name_b, stem_a, stem_b = 'r34', 'scratch', 'r34', 'scratch'
+        title_a, title_b = 'r34 (ImageNet bootstrap)', 'scratch (He-init control)'
+    col_a, col_b = name_a[:12], name_b[:12]
 
     print("guards:")
     ok = all([
-        guard_arm('r34', arm_a, args.r34_log),
-        guard_arm('scratch', arm_b, args.scratch_log),
-        guard_distinct('r34', rows_a),
-        guard_distinct('scratch', rows_b),
+        guard_arm(stem_a, arm_a, args.r34_log),
+        guard_arm(stem_b, arm_b, args.scratch_log),
+        guard_distinct(name_a, rows_a),
+        guard_distinct(name_b, rows_b),
     ])
     if not rows_a or not rows_b:
         print("  GUARD FAILED: one arm has no completed eval rows yet")
         ok = False
     if not ok:
         sys.exit(1)
-    print(f"  OK — arms distinct, {len(rows_a)} r34 rows / {len(rows_b)} scratch rows, no repeats")
+    print(f"  OK — {len(rows_a)} {name_a} rows / {len(rows_b)} {name_b} rows, no repeats")
 
-    table('r34 (ImageNet bootstrap)', rows_a)
-    table('scratch (He-init control)', rows_b)
+    table(title_a, rows_a)
+    table(title_b, rows_b)
 
     # The headline: same net, same data, same schedule — only the init differs.
-    print("\n=== transfer: epochs to reach a target (lower is the win) ===")
-    print(f"  {'metric':>6} {'target':>7}  {'r34':>6}  {'scratch':>8}")
+    print("\n=== epochs to reach a target (lower is the win) ===")
+    print(f"  {'metric':>6} {'target':>7}  {col_a:>12}  {col_b:>12}")
     for key in ('miou', 'WT', 'TC', 'ET'):
         best = max([r.get(key, 0.0) for r in rows_a + rows_b] or [0.0])
         for frac in (0.5, 0.8, 0.9):
             tgt = best * frac
             ea, eb = epochs_to(rows_a, key, tgt), epochs_to(rows_b, key, tgt)
-            print(f"  {key:>6} {tgt:>7.4f}  {str(ea):>6}  {str(eb):>8}")
+            print(f"  {key:>6} {tgt:>7.4f}  {str(ea):>12}  {str(eb):>12}")
 
     peak = lambda rows, k: max((r.get(k, 0.0) for r in rows), default=0.0)
     print("\n=== peak ===")
-    print(f"  {'metric':>6}  {'r34':>7}  {'scratch':>7}  {'delta':>7}")
+    print(f"  {'metric':>6}  {col_a:>12}  {col_b:>12}  {'delta':>7}")
     for key in ('miou', 'WT', 'TC', 'ET'):
         pa, pb = peak(rows_a, key), peak(rows_b, key)
-        print(f"  {key:>6}  {pa:>7.4f}  {pb:>7.4f}  {pa - pb:>+7.4f}")
+        print(f"  {key:>6}  {pa:>12.4f}  {pb:>12.4f}  {pa - pb:>+7.4f}")
 
 
 if __name__ == '__main__':

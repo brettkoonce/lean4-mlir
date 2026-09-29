@@ -14764,9 +14764,10 @@ on FLAIR, enhancing tumour on T1gd --- so the input is genuinely multi-modal
 rather than three correlated views of one scene, and the classes are brutally
 imbalanced: enhancing tumour is $\sim$0.5\% of voxels.
 
-Scored the way the clinical literature scores it --- Dice over the nested
-regions WT (whole tumour), TC (tumour core) and ET (enhancing tumour) --- ten
-epochs of plain per-pixel cross-entropy gives:
+Scored on the clinical literature's regions --- Dice over the nested WT (whole
+tumour), TC (tumour core) and ET (enhancing tumour) --- pooled over the 2{,}569
+tumour-bearing validation slices, ten epochs of plain per-pixel cross-entropy
+gives:
 
 \begin{center}
 \begin{tabular}{lcccc}
@@ -14860,6 +14861,62 @@ predicts, since a decoder without skips must reconstruct every boundary from a
 $7 \times 7$ bottleneck. It is visible in the renders as well: the thin
 enhancing rim around the necrotic core is resolved with skips and smeared into
 the core without them.
+
+\paragraph{Scored per patient.} The tables above pool every pixel of every
+tumour-bearing slice into one Dice. The literature does something else: one
+Dice per patient volume, over all of its slices including the tumour-free
+ones, then the mean over patients --- so a small tumour counts as much as a
+large one, and the slices where there is nothing to paint count against a model
+that paints anyway. \texttt{brats-eval} (\texttt{demos/MainBratsEval.lean})
+computes that from a whole-volume export of the 73 validation patients
+(\texttt{preprocess\_brats.py --val-full}), and first re-derives the pooled
+number on the same slices, where it agrees with the trainer's log line to
+$0.0004$. Best-by-val checkpoints:
+
+\begin{center}
+\begin{tabular}{lccc}
+\hline
+per-patient mean Dice (median) & WT & TC & ET \\
+\hline
+ResNet-34 UNet, ImageNet bootstrap & 0.893 (0.914) & 0.821 (0.867) & 0.790 (0.858) \\
+ResNet-34 UNet, from scratch       & 0.889 (0.917) & 0.819 (0.869) & 0.783 (0.851) \\
+\quad without skips               & 0.843 (0.873) & 0.749 (0.801) & 0.620 (0.679) \\
+from-scratch UNet $240^2$, Dice+CE, 3 ep & 0.882 (0.908) & 0.802 (0.850) & 0.782 (0.839) \\
+\hline
+ResNet-34 UNet, 2.5D ($\pm 1$ slice) & 0.893 (0.916) & 0.824 (0.868) & 0.788 (0.850) \\
+3D UNet, $128^3$ patches, 1~h (JAX)  & 0.894 (0.914) & 0.810 (0.858) & 0.790 (0.854) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Two things the pooled number hid. The tumour-free slices cost almost
+nothing: pooled over every slice the Dice is within $0.003$ of the tumour-slice
+value, so the slice model does not paint tumour where there is none. And the
+per-patient mean sits two to seven points below the pooled number with a wide
+spread (standard deviations of $0.07$ on WT to $0.19$ on ET): the medians are
+at the pooled values, and the means are pulled down by a tail of small-tumour
+patients --- which is what the per-patient protocol exists to expose. The skips
+are worth more per patient than per pixel, $+0.17$ on ET against $+0.12$. These
+are the numbers to put beside published BraTS work, with the remaining caveat
+that the 484-case MSD Task01 is not the 1{,}251-case BraTS~2021 set.
+
+\paragraph{Through-plane context.} A slice model never sees the slice above or
+below. The last two rows measure what that costs, two ways. \texttt{unet-brats-r34
+ctx=1} is the same net with the two neighbouring slices fed in as eight extra
+input channels (a 2.5D build from \texttt{preprocess\_brats.py --context 1};
+the stem is the only tensor that changes, and the records, their order, the seed
+and the schedule are the 2D run's): it ties the 2D anchor within $0.004$ on every
+metric, pooled and per patient. At 1~mm spacing the neighbours are nearly the
+centre slice again, so this says adjacent slices add nothing the slice model
+cannot infer, not that volumetric context is useless. The direct test is a 3D
+UNet --- this section's UNet with $3^3$ kernels and $2^3$ pools, 23.5M
+parameters --- trained in JAX on random $128^3$ patches for one hour on one card
+(\texttt{jax/scripts/unet3d\_brats.py}, the reference a Lean rank-5 port would
+be tied to): per patient it lands on the anchor on WT and ET, a point behind on
+TC, and it was still improving when the schedule ended. Rank-5 convolution itself
+runs at 77\% of the 2D per-voxel rate through XLA on this card, so the port is
+affordable; whether it is warranted is a longer-schedule question the plan keeps
+open (\texttt{planning/brats\_25d\_3d.md}).
 
 \paragraph{Pairing a decoder to a backbone that has no \texttt{unetDown}.} The
 canonical UNet below pairs skips implicitly --- $i$-th \texttt{unetUp} from the

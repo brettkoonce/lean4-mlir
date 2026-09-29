@@ -12,12 +12,17 @@ the opposite: affordable, unwarranted until Gate D.
 * **Data:** MSD Task01 (BraTS-derived), 484 volumes, modalities FLAIR/T1w/T1gd/T2w, MSD labels
   0/1/2/3 (1↔2 permuted vs raw BraTS; `Train.lean:457` has the WT/TC/ET map). Axial slices,
   tumour-bearing only (`--min-tumor-px 1`), **`--stride 2`**, z-scored over brain voxels then u8
-  at ±5σ. 411/73 patients → 14,415 / 2,569 slices. Records: `4·S·S` image bytes + `S·S` mask,
-  **no volume id, no z index** (`scripts/datasets/preprocess_brats.py:8-14, 184-227`).
-* **Nets:** `unetBrats` from scratch (7.85M, 240²) and `r34UnetBratsOf true` (24.5M, 224²,
-  ImageNet-bootstrapped encoder). The 4-channel stem is FRESH `[64,4,7,7]`; the bootstrap skips
-  it by byte range (`stemFloats ic`, `MainUnetBratsR34.lean:71,241-247`) — **channel-count
-  agnostic already.**
+  at ±5σ. 411/73 patients → 14,415 / 2,569 slices. Records: `C·S·S` image bytes + `S·S` mask,
+  no volume id or z index in `train.bin`/`val.bin`. **Since 2026-09-29:** `--context K` stacks
+  the `K` neighbours each side into the channels (`C = 4·(2K+1)`, `DatasetKind.brats224Ctx K`,
+  `data/brats224c<2K+1>/`); `--val-full` / `--train-full` write every slice of every volume in
+  volume order with a per-volume index (`*_full.bin/.idx/.json`), which is what per-volume
+  scoring (`brats-eval`) and the 3D patch sampler read.
+* **Nets:** `unetBrats` from scratch (7.85M, 240²) and `ReferenceNets.r34UnetBratsOf skips ctx`
+  (24.5M, 224², ImageNet-bootstrapped encoder; one definition since 09-29, shared by the trainer,
+  the predictor and the scorer — the predictor used to carry a "MUST match" copy). The stem is
+  FRESH `[64, 4·(2·ctx+1), 7, 7]`; the bootstrap skips it by byte range (`stemFloats ic`), so
+  `unet-brats-r34 ctx=k` is the 2D trainer with one tensor wider.
 * ⚠ **Every published number is IREE-era** (0.740/0.910/0.869/0.856 at 10 ep); the only XLA row
   is 3 epochs (0.730). `content.tex` ~12496–12502 labels the **scratch** arm's number as the
   ResNet-34 arm. XLA is ~12× the ROCm box (217 ms/step, ~201 s/epoch from-scratch 240²);
@@ -31,7 +36,14 @@ Both arms at 10 epochs on XLA via `scripts/sweeps/run_brats_r34_ab.sh 10 data/br
 `IREE_BACKEND` default at :23); record ms/step for `unet-brats-r34`. **Gate:** 0.740 ± 0.01
 reproduces. Fix the `content.tex` label while there.
 
+**DONE 2026-09-25** (`runs/2026-09-25-brats-r34-xla/`): r34 0.743 / 0.912 / 0.869 / 0.856,
+scratch 0.741 / 0.910 / 0.867 / 0.856, noskip 0.633; the IREE numbers reproduce within 0.003;
+252 / 259 ms/step at batch 16 on one 4060 Ti, ~4.5–5.5 min per epoch.
+
 ## §2 Stage B — 2.5D, the gate that decides 3D (1–2 days + a regen + ~2 GPU-days)
+
+**Code LANDED 2026-09-29** (items 1–5 below, as written; the regen took 8 min per build); the
+A/B (item 6) ran the same day — results in §2a.
 
 Neighbours are NOT recoverable from the records (no z, stride 2, non-uniform filter, and the
 loader shuffles) — a regen is required.
@@ -52,6 +64,27 @@ GB at 20**. ⚠ Decide ±1 slice (true adjacency) vs ±stride (matched spacing) 
 ever did. **Gate D:** ≥ +0.02 mIoU or ≥ +0.03 ET → Stage C. Small or zero → a FINDING; write it
 into `brats_demo.md` §5 and stop. This is the highest information per GPU-hour on the table.
 
+### §2a Gate D result, 2026-09-29: a tie. ±1 slice (1 mm) is worth +0.001 to +0.004.
+
+`runs/2026-09-29-brats-25d/` (README, logs, per-patient CSVs). ±1 slice at step 1 (true
+adjacency; 12 channels, 34.7 GB host), both arms, 10 epochs, matched to the 09-25 2D run in every
+other respect:
+
+| pooled peak | mIoU | WT | TC | ET |
+|---|---|---|---|---|
+| 2D r34 → 2.5D r34 | 0.744 → 0.744 | 0.913 → 0.913 | 0.869 → 0.874 | 0.857 → 0.858 |
+| 2D scratch → 2.5D scratch | 0.741 → 0.744 | 0.910 → 0.911 | 0.867 → 0.871 | 0.857 → 0.858 |
+
+Per patient (brats-eval, best checkpoints): r34 0.893/0.821/0.790 → 0.893/0.824/0.788; scratch
+0.889/0.819/0.783 → 0.891/0.819/0.790. Curves coincide from epoch 2; epochs-to-target identical.
+The 2.5D trainer costs nothing (240 vs 252 ms/step) and stays in the tree as `ctx=k`.
+
+**Reading.** At 1 mm spacing on skull-stripped brain the neighbours are nearly the centre slice
+again, so this is the narrow finding "adjacent slices add nothing the slice model cannot infer",
+not "through-plane context is useless": a ±4 mm build (`--context 2 --context-step 2`, 20
+channels, 58 GB) is untested, and the 3D probe (§4a) is the direct measurement. Gate D as
+written is failed; the decision it was meant to make is taken over by §4a's number.
+
 ## §3 Stage C — Gate 0 for real (1–2 days, only if D passed)
 
 Extend `planning/archive/conv3d_spike.mlir` from 16³ toys to a 128³×32ch patch at batch 2
@@ -59,6 +92,26 @@ through `ffi/libpjrt_ffi.so`; measure ms/step against Stage A. Add the **rank-8 
 tile** (`MlirCodegen.lean:7773` widened; 512 MiB per pool at 128³/B2) — the one op NOT in the
 spike and the largest memory risk. Gate: per-voxel throughput within ~3–5× of the 2D conv and no
 OOM at 11.68 GiB; else re-plan at 96³ or drop.
+
+**MEASURED 2026-09-29 — the gate passes, by a wide margin.** `jax/scripts/unet3d_gate0.py`: the
+whole 3D UNet (unetBrats's shape with 3³ kernels and 2³ pools, 23.5M params), forward + backward
++ SGD update on a 4-channel patch under XLA on one 4060 Ti (jax 0.11, the same compiler the
+Lean path drives through the PJRT shim), against the 2D twin at the from-scratch trainer's
+16 × 240² batch from the same harness:
+
+| net | input | ms/step | Mvox/s | per voxel vs 2D | peak GiB |
+|---|---|---|---|---|---|
+| 2D UNet (unetBrats shape) | 16 × 240² | 155 | 5.95 | 1× | 2.9 |
+| 3D UNet | 128³ × B2 | 897 | 4.68 | 1.3× slower | 8.6 |
+| 3D UNet | 128³ × B1 | 452 | 4.64 | 1.3× | — |
+| 3D UNet | 96³ × B2 | 378 | 4.67 | 1.3× | — |
+| 3D UNet | 64³ × B4 | 221 | 4.75 | 1.3× | — |
+
+Rank-5 convolution runs at 77% of the 2D conv's per-voxel rate — not the 3–5× the gate allowed
+for, let alone the 20× that would have sunk it — and nnU-Net's 128³ × B2 patch fits with 6 GiB
+to spare. The rank-8 pool-backward tile is inside those numbers (XLA's `reduce_window`
+gradient, which is what the Lean codegen's tile lowers to). 3D is affordable; §2 decides
+whether it is warranted. The log: `runs/2026-09-29-brats-25d/gate0.log`.
 
 ## §4 Stages D–F — the 3D UNet (~4–5 weeks total if every gate passes)
 
@@ -82,8 +135,47 @@ OOM at 11.68 GiB; else re-plan at 96³ or drop.
   transfer), `DatasetKind.brats3d`, `unet3dBrats` + `lean_exe unet3d-brats-train`. Memory: 96³×B2
   (~2.8 GiB activations) or 128³×B1–2 fits the 11.68 GiB arena; ~23M params ×3 with Adam.
 
+### §4a The direct test, 2026-09-29: a JAX 3D UNet on 128³ patches, one hour, ties the 2D anchor
+
+`jax/scripts/unet3d_brats.py` (the reference a Lean 3D UNet would tie to; whole volumes from
+`--train-full`, nnU-Net's patch/oversampling/mirroring, Dice + CE, BN with running stats). 4,000
+steps × B2 in 63.5 min on one 4060 Ti. Per patient: **WT 0.894 / TC 0.810 / ET 0.790** against the
+2D R34 anchor's 0.893 / 0.821 / 0.790 (pooled 0.910 / 0.859 / 0.848 vs 0.912 / 0.869 / 0.855).
+Between the step-2,000 and step-4,000 evals every per-patient number rose (+0.012 / +0.027 /
++0.010) and the loss was still falling, so this is a floor on what 3D does here, not its ceiling.
+
+**Standing verdict on Stages D–F.** Not started. Gate 0 says 3D is affordable; Gate D says 1 mm
+of context is nothing; the 3D probe says a from-scratch volumetric net reaches the bootstrapped
+slice model's per-patient Dice in an hour and was still improving. The experiment that decides
+the port is a longer JAX run (~20k steps, ~5 h on one card; a data-parallel loop over four would
+be ~1.5 h) with a per-patient eval every 2k steps: past the anchor by more than seed noise → the
+port has its reason; a plateau at parity → the slice model is the right model and Stages D–F
+stay unbuilt. Either way the codegen work waits for that number.
+
 ## §5 Stage G — sliding-window whole-volume inference (separate line item)
 
 The only thing that makes ANY BraTS number here comparable to the literature
 (`brats_demo.md:110-118`: slice-level over tumour-bearing slices). Do it for the **2D** model
 first, where it is cheap and immediately makes the 0.910 WT honest.
+
+**DONE 2026-09-29: `lake exe brats-eval`** (`demos/MainBratsEval.lean`). `preprocess_brats.py
+--val-full` writes every slice of every validation volume in volume order with a per-volume
+index (`val_full.bin/.idx/.json`); the scorer runs the eval forward over all 11,315 slices and
+keeps one confusion matrix per patient. No sliding window is needed in-plane: the 224 crop
+holds every brain voxel. Three numbers per checkpoint — the trainer's pooled Dice recomputed on
+the tumour-bearing slices (agrees with the trainer's own log line to 0.0004, the instrument
+check), the pooled Dice over every slice, and the literature's per-volume mean. The best-by-val
+2D checkpoints of 09-25:
+
+| checkpoint | pooled, tumour slices | pooled, every slice | per-volume mean ± sd (median) |
+|---|---|---|---|
+| r34 (bootstrap) | WT 0.912 TC 0.869 ET 0.855 | 0.910 / 0.868 / 0.854 | WT 0.893 ± 0.074 (0.914) · TC 0.821 ± 0.152 (0.867) · ET 0.790 ± 0.185 (0.858) |
+| scratch | WT 0.910 TC 0.867 ET 0.855 | 0.907 / 0.866 / 0.854 | WT 0.889 ± 0.077 (0.917) · TC 0.819 ± 0.158 (0.869) · ET 0.783 ± 0.186 (0.851) |
+
+Two things the pooled number hid. The tumour-free slices cost almost nothing — every-slice Dice
+is within 0.003 of tumour-slice Dice, so the slice model does not paint tumour where there is
+none. The per-volume mean is 2–7 points lower than the pooled number and carries a wide spread:
+the mean is pulled down by a tail of small-tumour patients (medians sit at the pooled values),
+which is what the literature's protocol is designed to expose and the pooled protocol cannot.
+One of the 73 validation patients has no enhancing tumour; the BraTS convention scores it 1 or 0
+outright, and it is included above (the present-only ET means are 0.801 / 0.794).

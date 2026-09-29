@@ -1,0 +1,200 @@
+=== net=r34 ctx=1 arm=r34 best out=runs/2026-09-29-brats-25d/pervol_25d_r34.csv
+  net: ResNet-34 UNet skip (BraTS, 224×224 12-channel 2.5D±1 MRI → 4-class tumour)
+  checkpoint: .lake/build/resnet_34_unet_skip__brats__224_224_12_channel_2_5d_1_mri___4_class_tumour__r34_best_params.bin
+  loading data/brats224c3/val_full.bin at 224², 12 channels ...
+  73 volumes, 11315 slices
+  708 eval forwards at batch 16 ...
+  scored in 42 s
+  wrote runs/2026-09-29-brats-25d/pervol_25d_r34.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9118  TC 0.8710  ET 0.8575  mIoU 0.7440
+  pooled Dice, every slice (11315 slices): WT 0.9107  TC 0.8705  ET 0.8568  mIoU 0.7440
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8930 ± 0.0739  median 0.9160   present-only 0.8930 (n=73)   absent in 0
+    TC: 0.8240 ± 0.1539  median 0.8679   present-only 0.8240 (n=73)   absent in 0
+    ET: 0.7876 ± 0.1904  median 0.8498   present-only 0.7985 (n=72)   absent in 1
+=== net=r34 ctx=1 arm=scratch best out=runs/2026-09-29-brats-25d/pervol_25d_scratch.csv
+  net: ResNet-34 UNet skip (BraTS, 224×224 12-channel 2.5D±1 MRI → 4-class tumour)
+  checkpoint: .lake/build/resnet_34_unet_skip__brats__224_224_12_channel_2_5d_1_mri___4_class_tumour__scratch_best_params.bin
+  loading data/brats224c3/val_full.bin at 224², 12 channels ...
+  73 volumes, 11315 slices
+  708 eval forwards at batch 16 ...
+  scored in 42 s
+  wrote runs/2026-09-29-brats-25d/pervol_25d_scratch.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9107  TC 0.8678  ET 0.8575  mIoU 0.7430
+  pooled Dice, every slice (11315 slices): WT 0.9095  TC 0.8671  ET 0.8566  mIoU 0.7428
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8907 ± 0.0810  median 0.9208   present-only 0.8907 (n=73)   absent in 0
+    TC: 0.8186 ± 0.1628  median 0.8682   present-only 0.8186 (n=73)   absent in 0
+    ET: 0.7895 ± 0.1831  median 0.8484   present-only 0.8004 (n=72)   absent in 1
+=== A/B: 2D r34 vs 2.5D r34
+guards:
+  OK — 10 2D r34 rows / 10 2.5D r34 rows, no repeats
+
+=== 2D r34 ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2728   0.6310   0.8917   0.7262   0.8053
+    2    0.0257   0.7088   0.8957   0.8456   0.8410
+    3    0.0199   0.7260   0.9022   0.8562   0.8474
+    4    0.0177   0.7299   0.9073   0.8622   0.8362
+    5    0.0164   0.7322   0.9085   0.8605   0.8502
+    6    0.0150   0.7347   0.9054   0.8694   0.8511
+    7    0.0139   0.7436   0.9108   0.8661   0.8562
+    8    0.0129   0.7410   0.9126   0.8661   0.8566
+    9    0.0121   0.7430   0.9123   0.8693   0.8558
+   10    0.0115   0.7423   0.9112   0.8687   0.8565
+
+=== 2.5D r34 ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2632   0.6550   0.8887   0.7519   0.8194
+    2    0.0256   0.7237   0.8995   0.8507   0.8425
+    3    0.0194   0.7230   0.9001   0.8534   0.8489
+    4    0.0174   0.7252   0.9042   0.8584   0.8331
+    5    0.0163   0.7332   0.9102   0.8624   0.8511
+    6    0.0148   0.7425   0.9124   0.8736   0.8536
+    7    0.0137   0.7409   0.9097   0.8646   0.8569
+    8    0.0127   0.7413   0.9128   0.8676   0.8572
+    9    0.0119   0.7439   0.9125   0.8705   0.8576
+   10    0.0113   0.7443   0.9118   0.8710   0.8579
+
+=== epochs to reach a target (lower is the win) ===
+  metric  target        2D r34      2.5D r34
+    miou  0.3722             1             1
+    miou  0.5955             1             1
+    miou  0.6699             2             2
+      WT  0.4564             1             1
+      WT  0.7303             1             1
+      WT  0.8215             1             1
+      TC  0.4368             1             1
+      TC  0.6989             1             1
+      TC  0.7862             2             2
+      ET  0.4290             1             1
+      ET  0.6864             1             1
+      ET  0.7722             1             1
+
+=== peak ===
+  metric        2D r34      2.5D r34    delta
+    miou        0.7436        0.7443  -0.0007
+      WT        0.9126        0.9128  -0.0002
+      TC        0.8694        0.8736  -0.0042
+      ET        0.8566        0.8579  -0.0014
+=== A/B: 2D scratch vs 2.5D scratch
+guards:
+  OK — 10 2D scratch rows / 10 2.5D scratch rows, no repeats
+
+=== 2D scratch ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2661   0.6163   0.8964   0.7114   0.7416
+    2    0.0279   0.7185   0.9001   0.8495   0.8325
+    3    0.0221   0.7240   0.8974   0.8519   0.8442
+    4    0.0195   0.7137   0.8950   0.8510   0.8389
+    5    0.0181   0.7366   0.9096   0.8652   0.8485
+    6    0.0165   0.7353   0.9029   0.8672   0.8518
+    7    0.0153   0.7411   0.9063   0.8662   0.8547
+    8    0.0141   0.7361   0.9081   0.8608   0.8535
+    9    0.0132   0.7411   0.9095   0.8666   0.8562
+   10    0.0126   0.7398   0.9080   0.8648   0.8565
+
+=== 2.5D scratch ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2596   0.6129   0.8938   0.7198   0.7893
+    2    0.0279   0.7182   0.8983   0.8503   0.8359
+    3    0.0219   0.7089   0.8769   0.8413   0.8403
+    4    0.0193   0.7259   0.9060   0.8550   0.8450
+    5    0.0178   0.7357   0.9089   0.8630   0.8483
+    6    0.0161   0.7362   0.9053   0.8708   0.8507
+    7    0.0149   0.7422   0.9079   0.8685   0.8535
+    8    0.0138   0.7386   0.9107   0.8622   0.8573
+    9    0.0129   0.7430   0.9112   0.8681   0.8572
+   10    0.0124   0.7435   0.9107   0.8680   0.8582
+
+=== epochs to reach a target (lower is the win) ===
+  metric  target    2D scratch  2.5D scratch
+    miou  0.3717             1             1
+    miou  0.5948             1             1
+    miou  0.6691             2             2
+      WT  0.4556             1             1
+      WT  0.7290             1             1
+      WT  0.8201             1             1
+      TC  0.4354             1             1
+      TC  0.6966             1             1
+      TC  0.7837             2             2
+      ET  0.4291             1             1
+      ET  0.6865             1             1
+      ET  0.7724             2             1
+
+=== peak ===
+  metric    2D scratch  2.5D scratch    delta
+    miou        0.7411        0.7435  -0.0024
+      WT        0.9096        0.9112  -0.0016
+      TC        0.8672        0.8708  -0.0036
+      ET        0.8565        0.8582  -0.0017
+=== A/B: 2.5D r34 vs 2.5D scratch
+guards:
+  OK — 10 r34 rows / 10 scratch rows, no repeats
+
+=== r34 (ImageNet bootstrap) ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2632   0.6550   0.8887   0.7519   0.8194
+    2    0.0256   0.7237   0.8995   0.8507   0.8425
+    3    0.0194   0.7230   0.9001   0.8534   0.8489
+    4    0.0174   0.7252   0.9042   0.8584   0.8331
+    5    0.0163   0.7332   0.9102   0.8624   0.8511
+    6    0.0148   0.7425   0.9124   0.8736   0.8536
+    7    0.0137   0.7409   0.9097   0.8646   0.8569
+    8    0.0127   0.7413   0.9128   0.8676   0.8572
+    9    0.0119   0.7439   0.9125   0.8705   0.8576
+   10    0.0113   0.7443   0.9118   0.8710   0.8579
+
+=== scratch (He-init control) ===
+   ep      loss     mIoU       WT       TC       ET
+    1    0.2596   0.6129   0.8938   0.7198   0.7893
+    2    0.0279   0.7182   0.8983   0.8503   0.8359
+    3    0.0219   0.7089   0.8769   0.8413   0.8403
+    4    0.0193   0.7259   0.9060   0.8550   0.8450
+    5    0.0178   0.7357   0.9089   0.8630   0.8483
+    6    0.0161   0.7362   0.9053   0.8708   0.8507
+    7    0.0149   0.7422   0.9079   0.8685   0.8535
+    8    0.0138   0.7386   0.9107   0.8622   0.8573
+    9    0.0129   0.7430   0.9112   0.8681   0.8572
+   10    0.0124   0.7435   0.9107   0.8680   0.8582
+
+=== epochs to reach a target (lower is the win) ===
+  metric  target           r34       scratch
+    miou  0.3722             1             1
+    miou  0.5955             1             1
+    miou  0.6699             2             2
+      WT  0.4564             1             1
+      WT  0.7303             1             1
+      WT  0.8215             1             1
+      TC  0.4368             1             1
+      TC  0.6989             1             1
+      TC  0.7862             2             2
+      ET  0.4291             1             1
+      ET  0.6865             1             1
+      ET  0.7724             1             1
+
+=== peak ===
+  metric           r34       scratch    delta
+    miou        0.7443        0.7435  +0.0009
+      WT        0.9128        0.9112  +0.0016
+      TC        0.8736        0.8708  +0.0028
+      ET        0.8579        0.8582  -0.0002
+=== render: 2.5D arms on the same slices
+  loading .lake/build/resnet_34_unet_skip__brats__224_224_12_channel_2_5d_1_mri___4_class_tumour__scratch_best_params.bin ...
+  loading .lake/build/resnet_34_unet_skip__brats__224_224_12_channel_2_5d_1_mri___4_class_tumour__r34_best_params.bin ...
+  net: ResNet-34 UNet skip (BraTS, 224×224 12-channel 2.5D±1 MRI → 4-class tumour)
+  loading data/brats224c3/val.bin at 224², 12 channels ...
+  scoring 2569 val slices for tumour burden ...
+  rendering slices [932, 127, 1185, 2490] of 2569
+  running 2 eval forward(s) (batch=16, rendering 4) ...
+  rendering PPM ...
+    slice 932: gt tumour px=5350  predicted: scratch=5156  r34=5205
+    slice 127: gt tumour px=5330  predicted: scratch=5115  r34=5210
+    slice 1185: gt tumour px=5046  predicted: scratch=4953  r34=4835
+    slice 2490: gt tumour px=4939  predicted: scratch=4760  r34=4790
+  wrote runs/2026-09-29-brats-25d/brats_25d_pred.ppm (2408463 bytes)
+  panels: T1gd | +ground truth | +scratch | +r34
+  colours: edema green, non-enhancing red, enhancing yellow
+  view with e.g. `display runs/2026-09-29-brats-25d/brats_25d_pred.ppm` or convert:
+    convert runs/2026-09-29-brats-25d/brats_25d_pred.ppm runs/2026-09-29-brats-25d/brats_25d_pred.png
+ALL-DONE

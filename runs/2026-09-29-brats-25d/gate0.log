@@ -1,0 +1,17 @@
+backend: gpu cuda:0 jax 0.11.0
+--- 2D control (unetBrats shape, 16×240²): 2D UNet, 7,849,988 params, input (16, 4, 240, 240) = 0.92 Mvox/step
+    first step (incl. compile) 15.7 s; then median 155 ms/step over 10 (155–155); 5.95 Mvox/s; peak 2.90 GiB of 14.80; loss 1.597
+--- 3D 128³ × B2: 3D UNet, 23,537,924 params, input (2, 4, 128, 128, 128) = 4.19 Mvox/step
+    first step (incl. compile) 49.9 s; then median 897 ms/step over 10 (897–897); 4.68 Mvox/s; peak 8.61 GiB of 14.80; loss 1.599
+--- 3D 128³ × B1: 3D UNet, 23,537,924 params, input (1, 4, 128, 128, 128) = 2.10 Mvox/step
+    first step (incl. compile) 27.3 s; then median 452 ms/step over 10 (452–454); 4.64 Mvox/s; peak 8.61 GiB of 14.80; loss 1.598
+--- 3D 96³ × B2: 3D UNet, 23,537,924 params, input (2, 4, 96, 96, 96) = 1.77 Mvox/step
+    first step (incl. compile) 23.5 s; then median 378 ms/step over 10 (377–380); 4.67 Mvox/s; peak 8.61 GiB of 14.80; loss 1.598
+--- 3D 64³ × B4: 3D UNet, 23,537,924 params, input (4, 4, 64, 64, 64) = 1.05 Mvox/step
+    first step (incl. compile) 13.5 s; then median 221 ms/step over 10 (220–222); 4.75 Mvox/s; peak 8.61 GiB of 14.80; loss 1.597
+
+per-voxel throughput against the 2D control:
+  3D 128³ × B2     4.68 Mvox/s = 1.3× slower per voxel; 897 ms/step, peak 8.61 GiB
+  3D 128³ × B1     4.64 Mvox/s = 1.3× slower per voxel; 452 ms/step, peak 8.61 GiB
+  3D 96³ × B2      4.67 Mvox/s = 1.3× slower per voxel; 378 ms/step, peak 8.61 GiB
+  3D 64³ × B4      4.75 Mvox/s = 1.3× slower per voxel; 221 ms/step, peak 8.61 GiB

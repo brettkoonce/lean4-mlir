@@ -1,0 +1,54 @@
+=== net=r34noskip arm=scratch_noskip best out=runs/2026-09-29-brats-25d/pervol_2d_noskip.csv
+  net: ResNet-34 → UNet (BraTS, 224×224 4-modality MRI → 4-class tumour)
+  checkpoint: .lake/build/resnet_34___unet__brats__224_224_4_modality_mri___4_class_tumour__scratch_noskip_best_params.bin
+  loading data/brats224/val_full.bin at 224², 4 channels ...
+  73 volumes, 11315 slices
+=== Source Location Trace: === 
+external/xla/xla/stream_executor/cuda/cuda_status.cc:50
+
+uncaught exception: iree_ffi_session_create failed (see stderr)
+=== arm=dicece best out=runs/2026-09-29-brats-25d/pervol_2d_unet240_dicece.csv
+  net: UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)
+  checkpoint: .lake/build/unet__brats__240_240_4_modality_mri___4_class_tumour__dicece_best_params.bin
+  loading data/brats/val_full.bin at 240², 4 channels ...
+  73 volumes, 11315 slices
+  708 eval forwards at batch 16 ...
+    batch 0/708
+    batch 100/708
+    batch 200/708
+    batch 300/708
+    batch 400/708
+    batch 500/708
+    batch 600/708
+    batch 700/708
+  scored in 46 s
+  wrote runs/2026-09-29-brats-25d/pervol_2d_unet240_dicece.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9027  TC 0.8562  ET 0.8543  mIoU 0.7325
+  pooled Dice, every slice (11315 slices): WT 0.9007  TC 0.8551  ET 0.8525  mIoU 0.7317
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8824 ± 0.0823  median 0.9078   present-only 0.8824 (n=73)   absent in 0
+    TC: 0.8016 ± 0.1644  median 0.8503   present-only 0.8016 (n=73)   absent in 0
+    ET: 0.7824 ± 0.1738  median 0.8392   present-only 0.7933 (n=72)   absent in 1
+=== arm=ce best out=runs/2026-09-29-brats-25d/pervol_2d_unet240_ce.csv
+  net: UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)
+  checkpoint: .lake/build/unet__brats__240_240_4_modality_mri___4_class_tumour__ce_best_params.bin
+  loading data/brats/val_full.bin at 240², 4 channels ...
+  73 volumes, 11315 slices
+  708 eval forwards at batch 16 ...
+    batch 0/708
+    batch 100/708
+    batch 200/708
+    batch 300/708
+    batch 400/708
+    batch 500/708
+    batch 600/708
+    batch 700/708
+  scored in 44 s
+  wrote runs/2026-09-29-brats-25d/pervol_2d_unet240_ce.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.8984  TC 0.8574  ET 0.8443  mIoU 0.7275
+  pooled Dice, every slice (11315 slices): WT 0.8974  TC 0.8567  ET 0.8433  mIoU 0.7274
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8704 ± 0.0993  median 0.9046   present-only 0.8704 (n=73)   absent in 0
+    TC: 0.8005 ± 0.1631  median 0.8442   present-only 0.8005 (n=73)   absent in 0
+    ET: 0.7734 ± 0.1776  median 0.8352   present-only 0.7841 (n=72)   absent in 1
+ALL-DONE

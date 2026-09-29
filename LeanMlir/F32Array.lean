@@ -303,15 +303,21 @@ opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
 opaque dihedralGather (img : @& ByteArray) (idx : @& ByteArray) (count C S : USize) (seed : UInt64) : IO ByteArray
 
 /-- Load a BraTS (MSD Task01_BrainTumour) binary file at the given in-plane
-    size. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
-    Images are `imgSize`×`imgSize`×4 (FLAIR / T1w / T1gd / T2w), channel-first.
+    size and channel count. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
+    Images are `imgSize`×`imgSize`×`channels`, channel-first: the 4 modalities
+    (FLAIR / T1w / T1gd / T2w) of a 2D build, or `4·(2K+1)` for a 2.5D build with
+    `K` context slices each side (`preprocess_brats.py --context K`), the centre
+    slice's modalities at channels `4K..4K+3`.
     Unlike the RGB datasets these carry no ImageNet normalization: the loader
     inverts the uint8 quantization `scripts/datasets/preprocess_brats.py` applied, yielding the
     per-volume, per-modality z-scored intensities the preprocessor computed over
     brain voxels. Masks are `imgSize`×`imgSize` uint8 per-pixel class labels
-    (0=background, 1=edema, 2=non-enhancing tumour, 3=enhancing tumour). -/
+    (0=background, 1=edema, 2=non-enhancing tumour, 3=enhancing tumour).
+    The record size is not in the file's header, so the loader checks the file
+    length against `count · (channels·S² + S²)` and refuses a mismatch. -/
 @[extern "lean_f32_load_brats"]
-opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
+opaque loadBrats (path : @& String) (imgSize : USize) (channels : USize := 4) :
+    IO (ByteArray × ByteArray × Nat)
 
 /-- YOLOv1 detection-bin loader (target+mask format, 224 input / 7×7 grid). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes

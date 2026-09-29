@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
+
+open ReferenceNets (r34UnetBratsOf)
 
 /-! **Transfer learning**: the self-hosted ImageNet ResNet-34, retrained on
     BraTS brain-tumour segmentation.
@@ -21,7 +24,7 @@ import LeanMlir
     that comparison confounds the initialization with a different architecture,
     and could not tell you which one moved the number.
 
-    The from-scratch `unetBrats` result (mIoU ~0.69) is a
+    The from-scratch `unetBrats` result (mIoU 0.736, 3 epochs) is a
     separate reference point — "is this architecture competitive at all" — not
     the transfer measurement.
 
@@ -49,7 +52,7 @@ import LeanMlir
 
       Dropping the encoder's maxPool to make the stride /16 (240/16 = 15, also
       exact) needs no new data, but runs every encoder stage at 2× resolution —
-      4× the FLOPs, measured at ~67 min/epoch against ~15 here.
+      4× the FLOPs.
 
     * **The stem is fresh, and that is correct.** BraTS is 4 co-registered MRI
       modalities (FLAIR / T1w / T1gd / T2w); ImageNet is 3-channel RGB. So the
@@ -65,11 +68,27 @@ import LeanMlir
       from-scratch control sees, and that `brats-predict net=r34` renders it
       with no changes beyond the spec swap.
 
+    ## 2.5D — `ctx=<k>`
+
+    A slice model never sees the slice above or below. `ctx=k` feeds it the `k`
+    axial neighbours on each side as extra input channels (`4·(2k+1)` in all,
+    `DatasetKind.brats224Ctx k`, from `preprocess_brats.py --context k`), still
+    predicting the centre slice's mask. Because the stem is the fresh layer
+    anyway, the bootstrap skips `stemFloats (4·(2k+1))` instead of
+    `stemFloats 4` and nothing else changes: same records, same order, same
+    schedule, same seed as the 2D run, so the 2D and 2.5D arms are an A/B on
+    through-plane context alone. That number decides whether a 3D UNet is
+    worth its codegen (planning/brats_25d_3d.md).
+
     Usage:
       python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
               --size 224 --seed 0                 # same split as data/brats
       lake exe unet-brats-r34 data/brats224 10 r34       # bootstrapped arm
       lake exe unet-brats-r34 data/brats224 10 scratch   # control arm
+
+      python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224c3 \
+              --size 224 --seed 0 --context 1     # 2.5D, ±1 slice, 12 channels
+      lake exe unet-brats-r34 10 r34 ctx=1               # reads data/brats224c3
 -/
 
 /-- Floats in a `convBn ic 64 7 2` stem, all three tensors: W `[64,ic,7,7]`
@@ -84,76 +103,6 @@ private def stemFloats (ic : Nat) : Nat := 64 * ic * 7 * 7 + 64 + 64
     the four residual stages. The file itself is 21,797,672 floats; the
     difference, 513,000, is exactly the `512×1000 + 1000` classifier. -/
 private def r34BackboneFloats : Nat := 21284672
-
-/-- R34 encoder (stride /32, as pretrained) + a UNet decoder, with or without
-    skip connections.
-
-    **`skips := true` (default).** The decoder concatenates four encoder taps on
-    the way back up. This needs no new backward math: the encoder→decoder
-    gradient join is `fpnTapGrad`, built for `.fpnDetect`, which
-    adds an externally-supplied gradient to a residual stage's output before its
-    skip-add/ReLU backward. `unetUp`'s concat-split backward saves the
-    skip-half gradient as `%unet_skip_g{e}`. The stem's skip needs even less: our
-    `.maxPool 2 2` sits exactly where a `unetDown`'s internal maxpool sits, so it reuses that
-    path verbatim.
-
-    Taps are matched by **exact shape**, not stack order — which is why stage 4
-    is correctly ignored (nothing upsamples into 7²) without special-casing.
-
-    **`skips := false`.** The skipless decoder, kept reproducible. Its decoder has to
-    rebuild every boundary from the 7×7 bottleneck alone, and its masks are
-    visibly blobbier for it (~0.64 mIoU, against the from-scratch skip-equipped
-    `unetBrats`'s ~0.69).
-
-    Either way the transfer A/B is internally controlled: both arms of a given
-    variant differ only in initialization. -/
-def r34UnetBratsOf (skips : Bool) : NetSpec where
-  -- Distinct names ⇒ distinct `buildPrefix` ⇒ the two variants can never
-  -- overwrite each other's checkpoints or race on the same vmfb.
-  name := if skips
-          then "ResNet-34 UNet skip (BraTS, 224×224 4-modality MRI → 4-class tumour)"
-          else "ResNet-34 → UNet (BraTS, 224×224 4-modality MRI → 4-class tumour)"
-  imageH := 224
-  imageW := 224
-  layers :=
-    -- Encoder: R34 exactly as pretrained — stem, maxPool, four stages ⇒ /32.
-    -- With `skips`, four of these feed the decoder: the stem's pre-pool output
-    -- (112², 64ch) and stages 1–3 (56²/64, 28²/128, 14²/256). Stage 4 is the
-    -- bottleneck, not a skip — nothing upsamples into 7², so the codegen's
-    -- shape-matched tap lookup excludes it without being told to.
-    [ .convBn 4 64 7 2 .same,       -- 224 → 112, 64ch   ← skip
-      .maxPool 2 2,                 -- 112 →  56
-      .residualBlock  64  64 3 1,   --  56, 64ch         ← skip
-      .residualBlock  64 128 4 2,   --  28, 128ch        ← skip
-      .residualBlock 128 256 6 2,   --  14, 256ch        ← skip
-      .residualBlock 256 512 3 2    --   7, 512ch  (bottleneck)
-    ] ++
-    (if skips then
-      -- Each `unetUp` upsamples ×2, concatenates the matching encoder tap,
-      -- then runs 2× (conv+BN). R34's channel ladder (64/64/128/256/512) is
-      -- already UNet-shaped, so no adapter convs are needed anywhere.
-      [ .unetUp 512 256,            --   7 →  14, + stage3 (256)
-        .unetUp 256 128,            --  14 →  28, + stage2 (128)
-        .unetUp 128 64,             --  28 →  56, + stage1 (64)
-        .unetUp 64 64,              --  56 → 112, + stem   (64)
-        .bilinearUpsample 2,        -- 112 → 224 (no tap at full res)
-        .convBn 64 32 3 1 .same,
-        .conv2d 32 4 1 .same .identity
-      ]
-     else
-      -- The no-skip decoder, kept EXACTLY as run so its published numbers stay
-      -- reproducible. The decoder must rebuild every boundary from the 7×7
-      -- bottleneck alone, which is why its masks come out visibly blobbier.
-      [ .bilinearUpsample 2, .convBn 512 256 3 1 .same,
-        .bilinearUpsample 2, .convBn 256 128 3 1 .same,
-        .bilinearUpsample 2, .convBn 128 64 3 1 .same,
-        .bilinearUpsample 2, .convBn 64 32 3 1 .same,
-        .bilinearUpsample 2, .convBn 32 32 3 1 .same,
-        .conv2d 32 4 1 .same .identity
-      ])
-
-/-- The skip-equipped net (the default). -/
-def r34UnetBrats : NetSpec := r34UnetBratsOf true
 
 /-- **Equivalence probe.** `unetDown ic oc` is defined as
     `convBn(ic→oc) + convBn(oc→oc) + maxPool 2`, pushing the pre-pool feature as
@@ -204,7 +153,20 @@ def r34UnetBratsConfig : TrainConfig where
   checkpointEveryNEpochs := 2
 
 def main (args : List String) : IO Unit := do
-  let epochs := (args[1]?.bind String.toNat?).getD r34UnetBratsConfig.epochs
+  -- `ctx=<k>`: the 2.5D context (0 = the 2D net). Picks the dataset kind, its
+  -- channel count and its default directory in one place.
+  let ctx : Nat :=
+    ((args.filter (·.startsWith "ctx=")).head?.bind (fun a => (a.drop 4).toNat?)).getD 0
+  let kind : DatasetKind := if ctx == 0 then .brats224 else .brats224Ctx ctx
+  let inCh := kind.bratsChannels
+  -- Positionals: the data dir is the first argument that is not a number or a
+  -- keyword, the epoch count the first bare number — order-free, so
+  -- `unet-brats-r34 10 r34 ctx=1` needs no directory spelled out.
+  let keywords := ["r34", "scratch", "noskip", "equivdown", "equivtap", "fdprobe"]
+  let positionals := args.filter (fun a =>
+    !(keywords.contains a || a.startsWith "lr=" || a.startsWith "tag=" || a.startsWith "ctx="))
+  let epochs := (positionals.findSome? String.toNat?).getD r34UnetBratsConfig.epochs
+  let dataDir := (positionals.find? (fun a => (String.toNat? a).isNone)).getD kind.bratsDataDir
   -- The arm switch. `r34` bootstraps the encoder; `scratch` is the control.
   -- Default is the control on purpose: an unlabelled run should be the boring
   -- one, so a forgotten flag understates the result rather than inventing it.
@@ -217,7 +179,7 @@ def main (args : List String) : IO Unit := do
   let spec :=
     if args.any (· == "equivdown") then r34EquivProbe false
     else if args.any (· == "equivtap") then r34EquivProbe true
-    else r34UnetBratsOf skips
+    else r34UnetBratsOf skips ctx
   -- `fdprobe` makes one training step an exactly-invertible function of the
   -- gradient, so `scripts/probes/brats_r34_fd_probe.py` can recover g = (θ−θ′)/η and
   -- check it against finite differences of the loss.
@@ -247,14 +209,16 @@ def main (args : List String) : IO Unit := do
   let bootstrap : Option (String × Nat × Nat × Nat) :=
     if !useR34 then none
     else
-      -- dst: skip THIS spec's 4-channel stem. src: skip the checkpoint's
-      -- 3-channel stem. count: the rest of the backbone.
-      let dstOff := stemFloats 4          -- 12,672
+      -- dst: skip THIS spec's stem (4 channels in 2D, 4·(2k+1) in 2.5D). src:
+      -- skip the checkpoint's 3-channel stem. count: the rest of the backbone.
+      let dstOff := stemFloats inCh       -- 12,672 at 4 channels
       let srcOff := stemFloats 3          --  9,536
       some (".lake/build/jax_r34_imagenet.bin", dstOff, srcOff,
             r34BackboneFloats - srcOff)   -- 21,275,136
 
   IO.eprintln s!"  arm: {fullTag}  ({if useR34 then "R34 ImageNet bootstrap" else "He-init control"})"
+  if ctx > 0 then
+    IO.eprintln s!"  2.5D: ctx=±{ctx} → {inCh} input channels, records from {dataDir}"
   IO.eprintln s!"  artifacts: {(spec.withBuildTag fullTag).buildPrefix}_*"
   if useR34 then
     let ckpt := ".lake/build/jax_r34_imagenet.bin"
@@ -269,4 +233,4 @@ def main (args : List String) : IO Unit := do
     { cfg with optimizer := .sgd, cosineDecay := false, warmupEpochs := 0
              , weightDecay := 0.0, gradClipNorm := 0.0, augment := false
              , evalEveryNEpochs := 0, checkpointEveryNEpochs := 0 }
-  (spec.withBuildTag fullTag).train cfg (args.head?.getD "data/brats224") .brats224
+  (spec.withBuildTag fullTag).train cfg dataDir kind

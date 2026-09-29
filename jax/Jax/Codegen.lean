@@ -329,7 +329,7 @@ def _randaugment(img, n, m, mstd=0.0):
 
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
   match ds with
-  | .brats | .brats224 => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
+  | .brats | .brats224 | .brats224Ctx _ => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
   | .mnist =>
     "# ═══════════════════════════════════════════════════════════════════════\n" ++
     "#  MNIST data loading (raw IDX format)\n" ++
@@ -2936,7 +2936,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
 private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetSpec) : String :=
   let imgDesc := toString spec.imageH ++ "x" ++ toString spec.imageW
   match ds with
-  | .brats | .brats224 => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
+  | .brats | .brats224 | .brats224Ctx _ => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
   | .mnist =>
     "    data_dir = \"" ++ dataDir ++ "\"\n" ++
     "    print(\"Loading training set …\")\n" ++
@@ -3410,7 +3410,8 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
                                 | .detection => "'detection'"
                                 | .imagenet => "'imagenet'"
                                 | .brats => "'brats'"
-                                | .brats224 => "'brats224'") ++ ",\n" ++
+                                | .brats224 => "'brats224'"
+                                | .brats224Ctx ctx => s!"'brats224c{2 * ctx + 1}'") ++ ",\n" ++
   "            'emitter_version': '1',\n" ++
   "        }\n" ++
   "        _trace_f.write(json.dumps(_hdr) + '\\n')\n" ++

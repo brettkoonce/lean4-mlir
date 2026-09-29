@@ -1,0 +1,55 @@
+dataset: BRATS | 484 labelled volumes
+modalities: {'0': 'FLAIR', '1': 'T1w', '2': 't1gd', '3': 'T2w'}
+labels: {'0': 'background', '1': 'edema', '2': 'non-enhancing tumor', '3': 'enhancing tumour'}
+split (seed 0): 411 train / 73 val volumes
+2.5D: context ±1 at step 1 -> 12 channels per record
+Processing training split...
+    25/411 volumes -> 783 slices
+    50/411 volumes -> 1696 slices
+    75/411 volumes -> 2642 slices
+    100/411 volumes -> 3583 slices
+    125/411 volumes -> 4483 slices
+    150/411 volumes -> 5445 slices
+    175/411 volumes -> 6304 slices
+    200/411 volumes -> 7241 slices
+    225/411 volumes -> 8165 slices
+    250/411 volumes -> 9024 slices
+    275/411 volumes -> 9838 slices
+    300/411 volumes -> 10696 slices
+    325/411 volumes -> 11462 slices
+    350/411 volumes -> 12327 slices
+    375/411 volumes -> 13195 slices
+    400/411 volumes -> 14022 slices
+  14415 slices from 411 volumes (0 skipped)
+  wrote data/brats224c3/train.bin (9.40 GB)
+  f32 RAM at load: 34.72 GB
+  class balance (per-pixel):
+    0 background     97.083%
+    1 edema           1.837%
+    2 non-enhancing   0.508%
+    3 enhancing       0.572%
+Processing validation split...
+    25/73 volumes -> 874 slices
+    50/73 volumes -> 1795 slices
+  2569 slices from 73 volumes (0 skipped)
+  wrote data/brats224c3/val.bin (1.68 GB)
+  f32 RAM at load: 6.19 GB
+  class balance (per-pixel):
+    0 background     96.977%
+    1 edema           1.893%
+    2 non-enhancing   0.533%
+    3 enhancing       0.596%
+Split manifest -> data/brats224c3/split.json
+Processing validation volumes, every slice (val_full)...
+    25/73 volumes -> 3875 slices
+    50/73 volumes -> 7750 slices
+  11315 slices from 73 volumes (0 skipped)
+  wrote data/brats224c3/val_full.bin (7.38 GB)
+  f32 RAM at load: 27.25 GB
+  class balance (per-pixel):
+    0 background     98.627%
+    1 edema           0.860%
+    2 non-enhancing   0.242%
+    3 enhancing       0.271%
+Per-volume index -> data/brats224c3/val_full.idx (73 volumes, 11315 slices)
+Done.
