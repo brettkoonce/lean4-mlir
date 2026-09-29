@@ -113,7 +113,8 @@ def mobilenetV4ConvMImagenetConfigFull : TrainConfig :=
       weightDecay    := 0.1        -- paper
       dropout        := 0.2        -- paper
       randAugmentM   := 15.0       -- paper; NOT clamped at mstd 0: the shim scales ops by m/_AA_MAX (10), so 15 extrapolates past timm's range
-      dropPath       := 0.075 }    -- paper; drop-path reaches every residual UIB (`uib_block`'s `_drop_branch`)
+      dropPath       := 0.075      -- paper; drop-path reaches every residual UIB (`uib_block`'s `_drop_branch`)
+      useEMA         := false }    -- paper: Conv-M trains without EMA, so the live weights are scored
 
 def mobilenetV4ConvMImagenetRecipes : List Recipe := [
   { name := "default", cfg := mobilenetV4ConvMImagenetConfig,

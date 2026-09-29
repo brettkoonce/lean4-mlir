@@ -254,18 +254,24 @@ def resnet50ImagenetConfigA2Accum : TrainConfig :=
   { resnet50ImagenetConfig with
       learningRate      := 0.005   -- RSB-A2 lr @ bs2048 (native, not 512-scaled)
       gradAccumSteps    := 4       -- 512 micro × 4 = effective bs2048 (LAMB's design batch)
-      wdExcludeNormBias := true }  -- timm no_weight_decay: BN γ/β + biases skip wd
+      wdExcludeNormBias := true    -- timm no_weight_decay: BN γ/β + biases skip wd
+      useEMA            := false   -- RSB Table 2: no EMA for A1/A2/A3
+      bceTargetThresh   := some 0.2 }  -- every mixed class a target of 1 (RSB §2.2; timm --bce-target-thresh 0.2)
 
 /-- **RSB-A1** (timm "ResNet Strikes Back" A1) → **80.4%** top-1, the strongest of
     the three RSB tiers and the most expensive: 600 epochs, twice A2's schedule.
 
-    A1 differs from A2 in exactly three fields per the RSB paper's hyperparameter
+    A1 differs from A2 in four fields per the RSB paper's hyperparameter
     table — everything else (LAMB, BCE, RandAugment m7-mstd0.5-inc1, CutMix 1.0,
     repeated-aug 3×, stochastic depth 0.05, 224px) is shared:
 
       epochs  300 → 600
       wd      0.02 → 0.01
       mixup α 0.1 → 0.2
+      label smoothing 0 → 0.1
+
+    The smoothing is applied to the mixed target before the inherited
+    0.2 threshold, as timm does, so it moves the cut from λ > 0.2 to λ·0.9 + 1e-4 > 0.2.
 
     Built on `a2-accum`, so it inherits the effective-bs2048 fix rather than the
     starved bs512 default. At 600 epochs this is the single longest run in the
@@ -275,7 +281,8 @@ def resnet50ImagenetConfigA1 : TrainConfig :=
   { resnet50ImagenetConfigA2Accum with
       epochs      := 600     -- A1: 600ep (A2 is 300)
       weightDecay := 0.01    -- A1: wd 0.01 (A2 is 0.02)
-      mixupAlpha  := 0.2 }   -- A1: Mixup α0.2 (A2 is 0.1)
+      mixupAlpha  := 0.2     -- A1: Mixup α0.2 (A2 is 0.1)
+      labelSmoothing := 0.1 }  -- A1: ε 0.1 (A2 has none)
 
 /-- A named training recipe: a `TrainConfig`, its generated-file name, and a
     one-line description. Recipe selection is a positional CLI arg

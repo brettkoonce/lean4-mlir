@@ -2513,6 +2513,10 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      else "") ++
     "    else:\n" ++
     "        tgt = y\n" ++
+    -- timm thresholds after smoothing, on hard and mixed targets alike
+    (match cfg.bceTargetThresh with
+     | some t => "    tgt = (tgt > " ++ toString t ++ ").astype(tgt.dtype)  # timm --bce-target-thresh\n"
+     | none => "") ++
     "    # stable log-sigmoid via softplus: -log(sig(z))=softplus(-z), -log(1-sig(z))=softplus(z)\n" ++
     "    bce = tgt * jax.nn.softplus(-logits) + (1.0 - tgt) * jax.nn.softplus(logits)\n" ++
     -- timm BCE reduction='mean' over B×C (NOT mean(sum-over-classes); that would be

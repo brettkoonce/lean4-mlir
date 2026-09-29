@@ -1335,8 +1335,10 @@ def loss_fn(params, bn, x, y, drop_key=None):
     # independent sigmoid. y.ndim is static at trace time, so this is jit-safe.
     if y.ndim == 1:
         tgt = jax.nn.one_hot(y, 1000)
+        tgt = tgt * (1.0 - 0.100000) + 0.100000 / 1000
     else:
         tgt = y
+    tgt = (tgt > 0.200000).astype(tgt.dtype)  # timm --bce-target-thresh
     # stable log-sigmoid via softplus: -log(sig(z))=softplus(-z), -log(1-sig(z))=softplus(z)
     bce = tgt * jax.nn.softplus(-logits) + (1.0 - tgt) * jax.nn.softplus(logits)
     return jnp.mean(bce), _new_bn
@@ -1404,33 +1406,12 @@ def train_step(params, opt_state, bn, x, y, lr, drop_key=None):
     params = jax.tree.map(_lamb, params, mc, vc, WD_MASK)
     return params, (m, v, t), _new_bn, loss
 
-EMA_DECAY = 0.999900
-# Warmup-corrected decay, matching TF's tf.train.ExponentialMovingAverage(decay,
-# num_updates) — the EMA this net family (MobileNet/EfficientNet, TF lineage) is
-# defined against. Without it the shadow starts AT THE RANDOM INIT and decays that
-# init away only as decay^t, so a run shorter than ~10 time constants evaluates a
-# weighted average of init and trained weights. Those two are not linearly
-# connected (there is a loss barrier between them), so the result is not merely
-# degraded — it sits at chance.
-#
-# Measured on MNv4-Conv-M 100ep: decay 0.9999 = tau 10k steps, but
-# gradAccum 8 leaves only 312 optimizer steps/epoch = 31.2k total = 3.1 tau. At
-# epoch 66 the shadow still held 12.8% init and scored 0.00% top-1, while the LIVE
-# weights scored 70.48% on full 50k. Eval and .bin checkpoints both read the EMA,
-# so the run looked like a total failure when only the shadow was broken.
-#
-# min(decay, (1+t)/(10+t)) ramps from 0.09 at t=0, so the shadow tracks the live
-# weights from the first step and reaches the nominal decay once t >> 10. Long runs
-# (ENet-B0 350ep = 175 tau) are unaffected either way; short/grad-accum tiers need it.
-@jit
-def ema_update(ema, params, step):
-    d = jnp.minimum(EMA_DECAY, (1.0 + step) / (10.0 + step))
-    return jax.tree.map(lambda e, p: d * e + (1.0 - d) * p, ema, params)
-
 @jit
 def _mixup(x, y, key):
     lam = jax.random.beta(key, 0.200000, 0.200000)
-    y1 = jax.nn.one_hot(y, 1000)
+    # timm folds label smoothing INTO the mixed target (Mixup(label_smoothing=0.100000): on=1-s+s/K, off=s/K), so it goes on the one-hot
+    # BEFORE mixing, not in loss_fn — whose soft-label branch is a pass-through.
+    y1 = (jax.nn.one_hot(y, 1000) * (1.0 - 0.100000) + 0.100000 / 1000)
     xm = lam * x + (1.0 - lam) * jnp.flip(x, 0)
     ym = lam * y1 + (1.0 - lam) * jnp.flip(y1, 0)
     return xm, ym
@@ -1451,7 +1432,9 @@ def _cutmix(x, y, key):
     mask = (my[:, None] & mx[None, :]).astype(x.dtype)
     x4m = x4 * (1.0 - mask) + jnp.flip(x4, 0) * mask
     lam_adj = 1.0 - jnp.sum(mask) / (224 * 224)
-    y1h = jax.nn.one_hot(y, 1000)
+    # timm folds label smoothing INTO the mixed target (Mixup(label_smoothing=0.100000): on=1-s+s/K, off=s/K), so it goes on the one-hot
+    # BEFORE mixing, not in loss_fn — whose soft-label branch is a pass-through.
+    y1h = (jax.nn.one_hot(y, 1000) * (1.0 - 0.100000) + 0.100000 / 1000)
     ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)
     return x4m.reshape(B, -1), ym
 
@@ -1605,7 +1588,7 @@ if __name__ == "__main__":
                 'cosine': True,
                 'warmup_epochs': 5,
                 'augment': True,
-                'label_smoothing': 0.000000,
+                'label_smoothing': 0.100000,
                 'seed': 314159,
             },
             'total_params': 25557032,
@@ -1630,13 +1613,11 @@ if __name__ == "__main__":
     if _global_step > 0:
         print(f'Resuming at global_step={_global_step} (= epoch {_start_epoch + 1}/{EPOCHS}); LR schedule continues from there')
     t0 = time.time()
-    ema_params = params  # EMA shadow starts at the (fresh or resumed) weights
-    ema_bn = bn_state  # EMA shadow of the BN running buffers — eval pairs EMA weights with EMA-lagged BN stats, avoiding the weights/stats mismatch that blows up early eval
     _drop_base = random.PRNGKey(314159 + 1)  # stochastic-depth + dropout RNG stream
     _resume = os.environ.get('LEAN_MLIR_RESUME')
     if _resume:
-        _rstate, _global_step = load_train_state(_resume, (params, opt_state, ema_params, ema_bn, bn_state))
-        (params, opt_state, ema_params, ema_bn, bn_state) = jax.device_put(_rstate, replicated_sharding)
+        _rstate, _global_step = load_train_state(_resume, (params, opt_state, bn_state))
+        (params, opt_state, bn_state) = jax.device_put(_rstate, replicated_sharding)
         _start_epoch = _global_step // steps_per_epoch
         print(f'Resumed full train state from {_resume}: step={_global_step} (epoch {_start_epoch + 1}/{EPOCHS})')
     for epoch in range(_start_epoch, EPOCHS):
@@ -1661,8 +1642,6 @@ if __name__ == "__main__":
             params, opt_state, bn_state, loss = train_step(params, opt_state, bn_state, x, y, lr, jax.random.fold_in(_drop_base, _global_step))
             epoch_loss += loss  # jax scalar: defer the device sync to epoch end
             n_batches += 1
-            ema_params = ema_update(ema_params, params, _global_step)
-            ema_bn = ema_update(ema_bn, bn_state, _global_step)
             _global_step += 1
             if _trace_f:
                 _trace_f.write(json.dumps({
@@ -1688,7 +1667,7 @@ if __name__ == "__main__":
         total_eval_loss = 0.0
         v_batches = 0
         for x, y in v_iter:
-            c1, c5, l = eval_batch(ema_params, ema_bn, x, y, len(y))
+            c1, c5, l = eval_batch(params, bn_state, x, y, len(y))
             correct1 += int(c1)
             correct5 += int(c5)
             total   += y.shape[0]
@@ -1714,16 +1693,16 @@ if __name__ == "__main__":
         _ckpt_every = int(os.environ.get('LEAN_MLIR_CKPT_EVERY', '10'))
         if _ckpt_base and _ckpt_every > 0 and (epoch + 1) % _ckpt_every == 0:
             _ckpt_path = f'{_ckpt_base}_e{epoch+1}.bin'
-            params_to_file(ema_params, _ckpt_path)
-            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', (params, opt_state, ema_params, ema_bn, bn_state), _global_step)
+            params_to_file(params, _ckpt_path)
+            save_train_state(f'{_ckpt_base}_e{epoch+1}.state.npz', (params, opt_state, bn_state), _global_step)
             _prune_state_ckpts(_ckpt_base)
             _prune_bin_ckpts(_ckpt_base)
 
     # Final save (always, if LEAN_MLIR_PARAMS_OUT was set).
     _ckpt_base = os.environ.get('LEAN_MLIR_PARAMS_OUT')
     if _ckpt_base:
-        params_to_file(ema_params, f'{_ckpt_base}.bin')
-        save_train_state(f'{_ckpt_base}.state.npz', (params, opt_state, ema_params, ema_bn, bn_state), _global_step)
+        params_to_file(params, f'{_ckpt_base}.bin')
+        save_train_state(f'{_ckpt_base}.state.npz', (params, opt_state, bn_state), _global_step)
 
     print("")
     print("Done. Total time: " + str(round(time.time() - t0, 1)) + "s")

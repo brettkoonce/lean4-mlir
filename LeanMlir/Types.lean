@@ -762,6 +762,10 @@ structure TrainConfig where
       (detection → `.yolov1Masked`, a per-pixel label record → `.perPixelCE`) and the soft-label
       augs (`.softLabelCE`), else `.classCE`. See `LossKind`. -/
   lossKind       : Option LossKind := none
+  /-- `.bce` only: binarise the target at this threshold before the loss (timm
+      `--bce-target-thresh`, `BinaryCrossEntropy.target_threshold`), so a mixed soft label counts
+      as 1 where it exceeds `t` and 0 elsewhere. timm's RSB configuration sets 0.2. -/
+  bceTargetThresh : Option Float := none
   /-- Bootstrap from a pretrained backbone checkpoint. When set to
       `some (paramsPath, prefixFloats)`, `runTraining` overwrites the
       first `prefixFloats * 4` bytes of the He-init with bytes read
