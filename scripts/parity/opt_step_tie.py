@@ -136,12 +136,20 @@ VARIANTS = [
     # PARAMETER this row could not have existed without hand-writing a reference. Now the fixture
     # renders `.adamw` at wdStr = "0.02" and the two agree by construction rather than by luck.
     ("adamwxclipwd002", "generated_resnet50_imagenet_adamprobe.py", 1, False, False),
-    # ⭐⭐⭐ RSB-A2's REAL composition — accumulation AND the model-EMA shadow, the five-region
-    # render (`verified_side_quest_counterparts.md` §6a, 2026-08-27). Until the fifth region landed
-    # these two were mutually exclusive, so every A2/A1 artifact was A2's graph MINUS the shadow.
-    # ⚠ The reference side runs `…a2accum.py`'s OWN `ema_update`, not a re-implementation of it —
-    # the same rule the optimizer span follows. See `run_ref_ema`.
-    ("emalambacc8wxclip", "generated_resnet50_imagenet_a2accum.py", 8, True, True),
+    # ⭐⭐⭐ Accumulation AND the model-EMA shadow, the five-region render
+    # (`verified_side_quest_counterparts.md` §6a, 2026-08-27). Until the fifth region landed these
+    # two were mutually exclusive, so every A2/A1 artifact was A2's graph MINUS the shadow. This
+    # was RSB-A2's composition until b84da996 took EMA out of A2 (RSB Table 2 runs none); the row
+    # stays because ViT-S/B, ConvNeXt-S/B, B0 and MNv4 still ship the shadow, and this is the only
+    # check in CI on the EMA update itself.
+    # ⚠ Both halves run a generated trainer's OWN code, never a re-implementation: the optimizer
+    # span from `…a2accum.py` (the recipe with this LAMB + no_weight_decay + clip), and
+    # `ema_update` from the sixth field, the default R50 trainer, because `…a2accum.py` no longer
+    # defines one (StopIteration on aa1559b1). ⚠ The default trainer cannot serve the optimizer
+    # half: it has no `wx` mask, and against it θ'[1] — the 1-D parameter the mask exempts from
+    # decay — lands 5.0e-3 off. See `run_ref_ema`.
+    ("emalambacc8wxclip", "generated_resnet50_imagenet_a2accum.py", 8, True, True,
+     "generated_resnet50_imagenet.py"),
 ]
 
 # Tolerance. The two sides run the SAME arithmetic in the same f32 order for the most part, but not
@@ -337,7 +345,7 @@ def main():
     G0 = [f32(*s) * 5.0 for s in SHAPES]
     dg = [f32(*s) * 5.0 for s in SHAPES]
 
-    assert_references_fresh(sorted({ref for _, ref, _, _, _ in VARIANTS}))
+    assert_references_fresh(sorted({r for row in VARIANTS for r in (row[1], *row[5:])}))
     print("── one-step optimizer tie (planning/archive/verified_optimizer_parity.md §5) ──")
     gnorm = np.sqrt(sum(float(np.sum((a + b) ** 2)) for a, b in zip(G0, dg)))
     print(f"  ‖Gt‖ = {gnorm:.3f}   (clip threshold k·C; the clip is ACTIVE in every clip row)")
@@ -348,11 +356,13 @@ def main():
     # would pass with the two operands swapped. A distinct array is what makes the ORDER visible.
     e0 = [f32(*s) * 0.5 for s in SHAPES]
 
-    for slug, ref, K, accum, ema in VARIANTS:
-        # ⚠ The EMA scalars come from the REFERENCE's own `ema_update`, never from a formula
+    for slug, ref, K, accum, ema, *rest in VARIANTS:
+        # ⚠ The EMA scalars come from a REFERENCE's own `ema_update`, never from a formula
         # written here — see `run_ref_ema`. `T` is the driver's `gstep`, and the reference's `step`
-        # is its 0-based `_global_step`, i.e. `T − 1`.
-        ref_e, d = run_ref_ema(ref, e0, theta, T - 1) if ema else (None, 0.0)
+        # is its 0-based `_global_step`, i.e. `T − 1`. An optional sixth field names the trainer
+        # the `ema_update` is read from when the optimizer's own recipe no longer carries one.
+        ema_ref = rest[0] if rest else ref
+        ref_e, d = run_ref_ema(ema_ref, e0, theta, T - 1) if ema else (None, 0.0)
         if accum:
             gsum = [a + b for a, b in zip(G0, dg)]          # Gt = akeep·G + g at akeep = 1
             arrays = ([*theta, *m0, *v0, *G0] + ([*e0] if ema else []) +
@@ -373,7 +383,7 @@ def main():
         # Re-run it here on the reference's OWN θ′ rather than on the input θ — a render wired to
         # the incoming parameter lags by one step, trains, descends, and is not the reference.
         if ema:
-            ref_e, _ = run_ref_ema(ref, e0, rt, T - 1)
+            ref_e, _ = run_ref_ema(ema_ref, e0, rt, T - 1)
 
         rels = []
         for i in range(3):
@@ -396,8 +406,10 @@ def main():
         ok = bad <= RTOL
         failures += 0 if ok else 1
         tag = "✓" if ok else "✗"
+        ema_note = (f" ema={ema_ref.replace('generated_resnet50_imagenet', 'r50')}"
+                    if ema_ref != ref else "")
         print(f"  {tag} {slug:<16} K={K}  ref={ref.replace('generated_resnet50_imagenet', 'r50')}"
-              f"  worst rel {bad:.2e}")
+              f"{ema_note}  worst rel {bad:.2e}")
 
     worst.sort(reverse=True)
     print(f"\n  worst 3: " + ", ".join(f"{l} {r:.2e}" for r, l in worst[:3]))
