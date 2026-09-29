@@ -130,7 +130,9 @@ const CHAPTER_OF = {
 {%- endfor %}
 {%- endfor %}
 };
-// Insertion order is document order, which is how sections are laid out.
+// Insertion order is document order, but nothing below may rely on that:
+// the leaf-cluster order comes from SECTION_INDEX, generated from the same
+// tree, so a chapter's sections stack the way the book prints them.
 const SECTION_OF = {
 {%- for ch in document.getElementsByTagName('chapter') %}
 {%- for sec in ch.getElementsByTagName('section') %}
@@ -141,6 +143,19 @@ const SECTION_OF = {
 {%- endif %}
 {%- endfor %}
 {%- endfor %}
+{%- endfor %}
+{%- endfor %}
+};
+// "chapter|section title" -> position of that section in the book, so the
+// clusterizer can sort a split chapter's sections by where they print rather
+// than by which of their nodes plasTeX happened to emit first — which is
+// what put the matrix machinery under the attention proofs on every other
+// rebuild of chapter 9.
+const SECTION_INDEX = {
+{%- for ch in document.getElementsByTagName('chapter') %}
+{%- set chloop = loop %}
+{%- for sec in ch.getElementsByTagName('section') %}
+  "{{ chloop.index0 }}|{{ sec.title.textContent.replace('"', '') }}": {{ loop.index0 }},
 {%- endfor %}
 {%- endfor %}
 };
@@ -239,7 +254,11 @@ function clusterizeDot(dot) {
     out += 'subgraph cluster_ch' + ch + ' { label="' + (num ? num + '. ' : '') +
            (CHAPTER_TITLE[ch] || '') + '"; fontsize=22; color=gray55; ' +
            'style="rounded,filled"; fillcolor="#eef2f8"; labeljust=l; margin=18; ';
-    const keys = [...new Set(Object.keys(nodeStmt).filter(id => chapterOf(id) === ch).map(keyOf))];
+    // Leaf clusters in DOCUMENT order. `new Set` alone gives first-seen order,
+    // i.e. whichever section's node plasTeX emitted first, and the anchors
+    // below then enforce that accident.
+    const keys = [...new Set(Object.keys(nodeStmt).filter(id => chapterOf(id) === ch).map(keyOf))]
+      .sort((a, b) => (SECTION_INDEX[a] ?? -1) - (SECTION_INDEX[b] ?? -1));
     keys.forEach((k, i) => {
       const sec = k.slice(k.indexOf('|') + 1);
       leafOrder.push(k); members[k] = [];
