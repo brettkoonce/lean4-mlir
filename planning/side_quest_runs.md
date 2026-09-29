@@ -17,82 +17,150 @@ then its verified pass. Running a side quest does not promote it into the Track-
 
 ## 1. Schedule
 
-Clean compute from the 2026-08/09 probes on this box, ±20% until each job's re-probe (§3). Every
-job takes all four cards, so the queue is sequential.
+Stall-free hours on this box, i.e. once the DIMM throttle is cooled away (§5). Every job takes
+all four cards, so the queue is sequential. Per-epoch evals (a few hours per run) are not included.
 
-| batch | runs | clean hours | days 24/7 |
+| batch | runs (hours) | total | days 24/7 |
 |---|---|---|---|
-| 1, JAX | R50 A2 ~71 · MNv4 `full` 500 ep ~95 · ViT-S ~60–79 | ~225–245 | ~10 |
-| 2, verified | R50 A2 ~95 · MNv4 500 ep ~210 · ViT-S ~70 | ~375 | ~15.5 |
-| 3, JAX | R50 A1 ~143 · ViT-B ~80 · ConvNeXt-S ~120 | ~345 | ~14.5 |
-| 4, verified | R50 A1 ~190 · ViT-B ~175 · ConvNeXt-S ~160 | ~525 | ~22 |
-| 5 | ConvNeXt-B JAX ~183, then verified ~253 | ~435 | ~18 |
-| total | | ~1,900 | ~80 |
+| 1, JAX | R50 A2 73 · MNv4 `full` 500 ep ~70–85 · ViT-S 63 | ~210 | ~9 |
+| 2, verified | R50 A2 ~95 · MNv4 500 ep ~90 · ViT-S ~68 | ~255 | ~10.5 |
+| 3, JAX | R50 A1 ~146 · ViT-B ~146 · ConvNeXt-S ~110 | ~400 | ~16.7 |
+| 4, verified | R50 A1 ~190 · ViT-B ~170 · ConvNeXt-S ~159 | ~520 | ~21.7 |
+| 5 | ConvNeXt-B JAX ~167, then verified ~253 | ~420 | ~17.5 |
+| total | | ~1,805 | ~75 |
 
-The box's periodic stall ([[imagenet_periodic_invoke_stall]]) took 16–47% of wall per net on
-09-22; loader respawn landed 09-27 and may have changed that, so the batch-1 smokes measure it.
+Where each number comes from:
 
-## 2. Code per batch
+| run | basis |
+|---|---|
+| A2 JAX 73, ViT-S JAX 63 | measured today, clean windows (§5) |
+| A1 JAX | 2× A2's measured rate |
+| ViT-B / ConvNeXt-S / ConvNeXt-B JAX | the 4-GPU compute probe (`runs/2026-08-27-jax-sb-tier-step-probe`: 700.8 / 260.8 / 399.3 ms per step); the feed does not bind them |
+| MNv4 JAX | between the tf.data ceiling (1.5 s/step) and the 3060 box's 1.9 s/step |
+| MNv4 / ViT-S verified | their shim ceilings (§4.2); MNv4's matches the 3060 box's run |
+| A2 / A1 verified | the 08-27 device-probe model |
+| ViT-B / ConvNeXt verified | the 09-10 bf16 probes, which predate sync-BN, so re-probe before launch |
 
-### Batch 1 (JAX) — prepared 2026-09-28, uncommitted
+## 2. Where things stand (2026-09-29)
 
-| item | where | state |
-|---|---|---|
-| BCE target threshold (timm `--bce-target-thresh`), a `TrainConfig` field emitted after smoothing | `LeanMlir/Types.lean` `bceTargetThresh`, `jax/Jax/Codegen.lean` BCE branch | done |
-| A2/A1 per RSB Table 2: no EMA, threshold 0.2; A1 adds label smoothing 0.1 | `jax/MainResnet50Imagenet.lean` `a2-accum`, `a1` | done |
-| MNv4 `full` scores live weights (paper: no EMA) | `jax/MainMobilenetV4Imagenet.lean` | done |
-| `jax/generated/` re-emitted: only the a2accum, a1 and MNv4 full trainers move | `scripts/regen_jax_generated.sh` | done, synced |
-| confs `r50-a2accum-jax-4gpu`, `mnv4-full-jax-4gpu`, `vits-default-jax-4gpu`; all three DRY_RUN prechecks pass | `scripts/jobs/` | done |
-| 15-min smoke of each trainer on the four cards (compile, first steps, windowed ms/step with the real feed) | — | owed; needs the user |
+* **Batch-1 JAX software is done**, committed as `b84da996` (not pushed). Its three trainers pass
+  their smokes (§5).
+* **A2 JAX can launch now.** It does not stall even without the fan:
+  `setsid nohup scripts/supervise.sh r50-a2accum-jax-4gpu >/dev/null 2>&1 &`
+* **MNv4 `full` and ViT-S JAX are ready but wait for the DIMM fan** (§5). After the fan goes in,
+  rerun the ViT-S thermal smoke (scratchpad `thermal/run.sh`, re-created from §5's description).
+  Pass = the hottest DIMM stays below 77 °C and ViT-S runs at its clean ~300 ms/step.
+* **Next session:** the software list in §3, in order. When it is done, the software side of the
+  whole queue is prepared.
 
-Notes:
-* RSB Table 2 lists no gradient clip; the trainers' clip is timm LAMB's own `max_grad_norm=1.0`,
-  kept.
-* The A3 recipes (`short`, `rsb-faithful`) are untouched: their runs are in the book.
-* MNv4 `full` still differs from the paper in RandAugment p 0.5 (paper 0.7) and m15 over the
-  shim's `_AA_MAX` of 10.
+## 3. Software work list
 
-### Batch 2 (verified, A2 / MNv4 / ViT-S)
+In queue order. Sizes: S = small, M = medium, L = large.
 
-| item | where | size |
-|---|---|---|
-| A2: no-EMA render `resnet50in_lambaccdp4x128wxclipdropbce{,bf16}`; target threshold in the host label build | `ResNet50RenderB.lean`, trainer label path | M |
-| A2: verified conf, lakefile row, `resnet50in_fwd_eval_s288` (timm scores at 288/1.0) | `scripts/jobs/`, `lakefile.lean`, renders | S |
-| A2: R50 timm parity gate | `scripts/parity/` | M |
-| MNv4: no-EMA render (DP + 1-replica peer), render-guard/MANIFEST/test rows | `MobileNetV4RenderB.lean`, `proofs.yml` | S |
-| MNv4: m15 shim selection, classifier dropout 0.2 knob, UIB drop-path 0.075 on the verified side | driver, `NetsCore`, renderer | S, S, M–L |
-| ViT-S: `vitInit := true`, EMA+bf16 render, emaDecay 0.99996, layout-gate arm, emabf16 conf | `MainViTSImagenet.lean`, `ViTRenderB.lean`, tests, conf | S each |
-| ViT-S: §5.5 decisions (clip, LN eps + erf GELU, cooldown, EMA vs live scoring; DeiT scores live) | `imagenet_parity.md` §5.5 | decide |
+### Batch 1, JAX A2 / MNv4 `full` / ViT-S — done (`b84da996`)
 
-### Batch 3 (JAX, A1 / ViT-B / ConvNeXt-S)
+* BCE target threshold, timm's `--bce-target-thresh`: `TrainConfig.bceTargetThresh`
+  (`LeanMlir/Types.lean`), emitted after smoothing in `jax/Jax/Codegen.lean`'s BCE branch.
+* A2/A1 per RSB Table 2: no EMA, threshold 0.2; A1 adds label smoothing 0.1
+  (`jax/MainResnet50Imagenet.lean` `a2-accum`, `a1`).
+  * RSB lists no gradient clip; the trainers' clip is timm LAMB's own `max_grad_norm=1.0`, kept.
+  * The A3 recipes (`short`, `rsb-faithful`) are untouched: their runs are in the book.
+* MNv4 `full` scores live weights, since the paper runs no EMA. It still differs from the paper
+  in RandAugment p 0.5 (paper 0.7) and in m15 exceeding the shim's `_AA_MAX` of 10.
+* `jax/generated/`: only the a2accum, a1 and MNv4 `full` trainers moved.
+* Confs `r50-a2accum-jax-4gpu`, `mnv4-full-jax-4gpu` and `vits-default-jax-4gpu`; the DRY_RUN
+  prechecks pass.
 
-| item | where | size |
-|---|---|---|
-| A1 conf (trainer done in batch 1) | `scripts/jobs/` | S |
-| ViT-B JAX conf; 4-GPU memory/speed probe | `scripts/jobs/` | S + probe |
-| ConvNeXt-S `cnxInit := true`, JAX conf | `jax/MainConvNeXtSImagenet.lean` | S |
+### Batch 2, verified A2 / MNv4 / ViT-S — needed in ~9 days, when the batch-1 JAX runs finish
 
-### Batch 4 (verified, A1 / ViT-B / ConvNeXt-S)
+1. **ViT-S**
+   * `vitInit := true` in the verified driver (`apps/imagenette/MainViTSImagenet.lean:47-49`;
+     Ti has it at `MainViTImagenet.lean:43`).
+   * EMA+bf16 render `vitsin_emadp128x4wxclipdropbf16`: one `#eval` after
+     `LeanMlir/Proofs/Codegen/ViTRenderB.lean` ~816, on the Ti template at :750, with
+     `V := vitSDims`, plus its `#guard`.
+   * Pass `emaDecay := 0.99996` in the driver (`MainViTSImagenet.lean:69`; Ti at
+     `MainViTImagenet.lean:64-72`).
+   * A `vitsin` arm in `tests/TestVitEmaDropRender.lean:75-79`.
+   * Conf `vits-default-emabf16-4gpu` on the Ti emabf16 conf's checks, plus its lakefile
+     `imagenetRows` row and `script` line.
+   * Size: S each.
+2. **A2**
+   * No-EMA render `resnet50in_lambaccdp4x128wxclipdropbce{,bf16}`
+     (`ResNet50RenderB.lean` ~1766-1797). M.
+   * The 0.2 target threshold in the verified trainer's target build. M.
+   * A verified conf from `r50-a2-*`/`r50-a3-wxclip4x128-bf16-4gpu`, with 300 epochs,
+     `BASE_LR_U=5000`, `LEAN_MLIR_BATCH=128`, prechecks and a lakefile row. S.
+   * The `resnet50in_fwd_eval_s288` scoring render, since timm scores at 288/1.0. S.
+   * An R50 timm parity gate in `scripts/parity/`. M.
+3. **MNv4**
+   * No-EMA render plus its 1-replica peer for `mnv4-dp-check`
+     (`MobileNetV4RenderB.lean:1282-1289`, `ema := false`, `wdStr := "0.1"`). S.
+   * Select the m15 `full` shim; `SHIM_SCRIPT` works as a stopgap. S.
+   * A classifier dropout 0.2 knob (`NetsCore.lean:1511`; the keep is fixed at 0.9 today). S.
+   * UIB drop-path 0.075 on the verified side: render plus tie carve-out. M–L; the one big item.
+   * Conf and lakefile row. S.
+4. **All three:** new renders go on the `proofs.yml` render-guard list, then regenerate MANIFEST
+   and add `TestVariantPredicates.lean` rows.
 
-| item | where | size |
-|---|---|---|
-| A1: no-EMA wd 0.01 render, smoothing 0.1 before the threshold, conf; stale 8×64 driver comment | renders, driver | M |
-| ViT-B: the ViT-S list, plus EMA+bf16 memory probe at `LEAN_MLIR_MEM_FRACTION=0.97` | as ViT-S | S + probe |
-| ConvNeXt-S: `cnxInit`, batch-64 EMA+bf16 render, `_fwd_s288`, conf, layout gate | `ConvNeXtRenderB.lean`, driver | S each |
+### Batch 3, JAX A1 / ViT-B / ConvNeXt-S
 
-### Batch 5 (ConvNeXt-B)
+5. Confs for A1 and ViT-B; their trainers exist. ViT-B uses `accum` (4×128), because a single
+   512 micro-batch OOMs. S.
+6. ConvNeXt-S: `cnxInit := true` in `jax/MainConvNeXtSImagenet.lean`, then re-emit, plus a JAX
+   conf. S.
 
-| item | where | size |
-|---|---|---|
-| everything ConvNeXt-S needs, plus memory: 9.73 GiB at 32/replica, 64 likely overflows and 0.97 OOMs this net — may need an accumulation render | `ConvNeXtRenderB.lean` | M |
-| proofs: whole-net ties pinned at T, B's 1024-wide head uncovered | `ConvNeXtStepTieGB.lean` | proof tier only |
+### Batch 4, verified A1 / ViT-B / ConvNeXt-S
 
-## 3. Probes owed before each batch
+7. **A1**
+   * No-EMA wd 0.01 render. M.
+   * Label smoothing 0.1 applied before the threshold on the verified side. M.
+   * Conf. S.
+   * Fix the driver comment naming the deleted 8×64 variant
+     (`apps/imagenette/MainResnet50Imagenet.lean:91-94`), and refuse recipe `a1` on a
+     non-wd001 variant. S.
+8. **ViT-B**
+   * Item 1 for `vitbin`: `MainViTBImagenet.lean:93-95` / `136-138`, render after
+     `ViTRenderB.lean:889`. S each.
+   * Probe EMA+bf16 memory at `LEAN_MLIR_MEM_FRACTION=0.97`. bf16 alone peaks at 12.61 of
+     15.11 GiB.
+9. **ConvNeXt-S**
+   * `cnxInit` in the verified driver. S.
+   * Driver defaults: batch 64 and the EMA variant. S.
+   * EMA+bf16 render at batch 64, plus `_fwd` / `_drop_fwd` re-rendered at 64
+     (`ConvNeXtRenderB.lean:804-810` pattern, `V := cnxSmall`, `bB := 64`). S.
+   * `convnextsin_fwd_s288`. S.
+   * Layout-gate arm, render-guard entries and conf. S.
 
-* Batch 1: the three 15-min smokes (§2); windowed ms/step and stall share from their step lines.
-* Every batch: graph / synthetic-feed / real-feed split for its verified jobs
-  ([[host_draw_costed_at_wrong_batch]]), and median and mean both
-  ([[imagenet_mean_is_a_memory_leak]]).
+### Batch 5, ConvNeXt-B
+
+10. **ConvNeXt-B**
+    * Item 9 for `convnextbin`.
+    * Memory: it is 9.73 GiB at 32/replica, 64/replica likely overflows 11.68, and 0.97 OOMs this
+      net. Probe it first; it probably needs an accumulation render, and none exists for
+      ConvNeXt. M.
+    * Proof tier only, not a run blocker: the whole-net ties are pinned at T, and B's 1024-wide
+      head is uncovered (`ConvNeXtStepTieGB.lean`).
+
+### Optional feed work (§4.3)
+
+* Mixup/cutmix in place in the shims: blocked numpy, bit-identical. S. Worth up to +34% shim
+  throughput; only verified ViT-S is shim-bound.
+* uint8 wire plus PIL Rotate: −28% ms/step on ViT-S JAX under the stall. M. Matters far less if
+  the fan removes the stall.
+
+### Decisions for the user (before the verified ViT / ConvNeXt renders)
+
+* ViT (`imagenet_parity.md` §5.5): clip on or off; LN eps 1e-6 with exact-erf GELU; cooldown and
+  min_lr; EMA vs live scoring (DeiT scores live weights).
+* ConvNeXt: exact-erf vs tanh GELU; the clip at 300 epochs.
+
+### Probes before each verified launch
+
+* A 15-minute run with the three-number split: graph, synthetic feed, real feed
+  ([[host_draw_costed_at_wrong_batch]]).
+* Median and mean both ([[imagenet_mean_is_a_memory_leak]]).
+* It replaces §1's modelled hours with measured ones.
 
 ## 4. Feed performance (measured 2026-09-28, CPU only)
 
@@ -163,7 +231,7 @@ Where the JAX feed binds (compute rates from the 08-27 step probes, not re-measu
 | ConvNeXt-S | ~980 | 2,551 | compute-bound |
 | ConvNeXt-B | ~640 | ~2,550 | compute-bound |
 | ViT-S | ~1,770 | 2,580 | compute-bound on paper |
-| ViT-B | ~2,600–2,800 | 2,580 | at the ceiling |
+| ViT-B | ~730 (701 ms/step) | 2,580 | compute-bound |
 | MNv4 | ≥2,200 (the 3060 box's measured rate) | 2,692 | at the ceiling |
 
 ViT-Ti's real run went feed-bound at 380 ms/step against a 200 ms feed and 124 ms of compute, so
@@ -241,3 +309,24 @@ Perf-only ViT-S probes (scratch copies; erasing done in pixel space, so not reci
 
 Cutting host bytes and CPU per image thins the stall but does not remove it; the clean rate
 (290–300 ms) is compute either way.
+
+### 5.1 The stall is the DIMMs' thermal throttle (2026-09-29)
+
+With `jc42` loaded, the four DIMM sensors show up in `sensors`: i2c 1-001c to 1-001f, high 80.0 °C,
+hysteresis 77.0, critical 95. The shipped ViT-S trainer ran 15 minutes with every DIMM and the CPU
+(k10temp) logged every 2 s. There was a 30 s idle baseline before and a 2 min cool-down after.
+
+| phase | DIMM 1-001d (hottest) | trainer |
+|---|---|---|
+| idle | 56 °C | — |
+| 0–200 s | climbs to 79.7 °C | clean, 300 ms/step |
+| ~200 s | reaches 80 °C | first pause |
+| after | oscillates 77–80 °C | pauses at 80, resumes near 77 |
+
+* The oscillation sits exactly between the sensor's high and hysteresis marks.
+* The other three DIMMs peak at 74–76 °C. The peak reading was 80.2 °C.
+* The CPU sits at 95.7 °C Tctl under load, the 5955WX's limit. That does not pause the trainer,
+  but it caps the tf.data rate.
+
+The fix is airflow across the DIMMs. The re-test is the same smoke with the same logging.
+Baseline: 54% of wall stalled, 656 ms/step overall, 300 clean.
