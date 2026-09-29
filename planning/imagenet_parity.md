@@ -186,6 +186,15 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
   at the reference's tanh GELU / LN ε 1e-5: Imagenette 4.7e-7, ImageNet 6.9e-7 at tol 1e-5 (tanh vs
   erf is only ~4e-5 of scale, so the CNN gates' 1e-3 would be blind to it); controls red (k/v swapped
   1.3e-1, erf GELU 3.8e-5). `--deit` (erf, 1e-6): 4.6e-5 / 3.9e-5 at random init.
+* ✅ G3 for R34, R50 and ConvNeXt, and the verified side of ViT (2026-09-29):
+  * `resnet_timm_parity.py`: `resnet50` and `resnet34`. Both paths and the drop-path ramp;
+    `--break` controls.
+  * `cnx_timm_parity.py`: `convnext_{tiny,small,base}` at tanh GELU, 224 and 288. Controls: erf
+    GELU, LayerScale swap. `--paper` measures timm's erf.
+  * `vit_timm_parity.py`: the verified `vit{,s,b}in_fwd` through IREE, beside S/B on the JAX side.
+  * `convnext_forward_tie.py` compares at f32 (it had compared the render against a bf16 reference).
+  * Numbers in `planning/side_quest_runs.md` §3. The verified halves need IREE and the full Lean
+    build, so CI runs them `--skip-verified`.
 * ✅ G4: `jax.yml` job `timm-parity` runs all four parity gates (with controls) and the two IREE
   forward ties (`mnv4_forward_tie.py`, `mnv2_forward_tie.py --imagenet` + its ε control) on CPU:
   jax at the lockfile's version, the pinned timm env torch-first from the CPU index, IREE 3.11.0 from

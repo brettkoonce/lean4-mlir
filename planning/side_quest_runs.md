@@ -88,11 +88,16 @@ Shared pieces:
   side-quest job table. The g512 and 4 × 32 confs stay as siblings.
 
 timm parity, every side-quest net, on shared weights (CPU, in CI's jax.yml `timm parity` job):
-* `r50_timm_parity.py`: the JAX reference AND the verified forwards (train 224/160, eval 224/288)
-  against timm `resnet50`, plus the drop-path ramp on both paths. JAX ≤ 2.2e-5 and verified
-  ≤ 5.5e-5 of max |logit|. `--break` (one BN's γ/β swapped) goes red at 0.19–0.38. CI runs the
-  JAX half, because the verified half needs IREE.
-* `vit_timm_parity.py` now covers ViT-S and ViT-B (deit_small/base): 1.1e-6 and 1.7e-6.
+* `resnet_timm_parity.py`: the JAX references AND the verified forwards against timm, plus the
+  drop-path ramp on both paths.
+  * `resnet50`: train 224/160, eval 224/288. JAX ≤ 2.2e-5, verified ≤ 5.5e-5 of max |logit|.
+  * `resnet34`, the main-track anchor: JAX 4.0e-6, verified 5.6e-6.
+  * `--break` (one BN's γ/β swapped) turns all 12 logit checks red at 0.16–0.38.
+  * CI runs the JAX half, because the verified half needs IREE.
+* `vit_timm_parity.py` covers ViT-S and ViT-B (deit_small/base), and now the verified renders too
+  (`vitin/vitsin/vitbin_fwd` through IREE).
+  * JAX 6.9e-7 / 1.1e-6 / 1.7e-6.
+  * Verified 8.0e-7 / 1.1e-6 / 2.1e-6.
 * `cnx_timm_parity.py` (new): ConvNeXt-T/S/B against timm at tanh GELU, 224 and 288, ≤ 1.1e-6 plus
   the ramp. Its controls, erf GELU (1.4e-4) and two LayerScales swapped (1.1e-2), both go red.
   `convnext_forward_tie.py` (verified ↔ JAX) gained `convnextbin` and now runs the reference at f32.
