@@ -1,6 +1,8 @@
 # BraTS: 2.5D first, and let it decide 3D
 
-**Opened 2026-09-09.** Scoped, not started. Companions: `planning/archive/unet3d.md` (the 3D scope,
+**Opened 2026-09-09.** Scoped, not started. **2026-09-29: §1, §2, §3, §5 done (committed
+`145b911b`); §2 is a tie, §3 passes, §4a/§4b measured; §4c is the plan for the long 3D
+session that decides the port.** Companions: `planning/archive/unet3d.md` (the 3D scope,
 with the XLA compile spike and the DECIDED-2026-07-15 entry: **codegen + FD, no proofs** — Phase 5
 struck, not deferred) and `planning/archive/brats_demo.md` §Dimensionality / Workstream D (Gate D:
 2.5D must beat 2D at matched budget before 3D starts). ⚠ `brats_demo.md:315,347` say "3D is not
@@ -151,6 +153,83 @@ the port is a longer JAX run (~20k steps, ~5 h on one card; a data-parallel loop
 be ~1.5 h) with a per-patient eval every 2k steps: past the anchor by more than seed noise → the
 port has its reason; a plateau at parity → the slice model is the right model and Stages D–F
 stay unbuilt. Either way the codegen work waits for that number.
+
+## §4b The tail is the needle (2026-09-29, from the per-patient CSVs)
+
+The clinical question is not the mean Dice but how many patients get an unusable segmentation.
+From `runs/2026-09-29-brats-25d/pervol_*.csv` (73 patients; worst-10% = the 7 lowest):
+
+| model | WT worst-10% · n<0.7 | TC worst-10% · n<0.7 | ET worst-10% · n<0.7 | ET-absent patient |
+|---|---|---|---|---|
+| 2D R34 anchor | 0.713 · 3 | 0.470 · 14 | 0.341 · 14 | 55 false ET voxels → 0 |
+| 2D R34 scratch | 0.696 · 4 | 0.465 · 13 | 0.338 · 17 | 101 → 0 |
+| 2.5D R34 | 0.713 · 3 | 0.467 · 11 | 0.320 · 14 | 122 → 0 |
+| 3D UNet, 1 h | 0.744 · 1 | 0.457 · 17 | 0.397 · 15 | 0 → 1 |
+
+* ⭐ **The anchor's headline for a clinician is 14 of 73**: one patient in five gets a core or
+  enhancing segmentation under Dice 0.7. Invisible in the pooled 0.869.
+* ⭐ **The one-hour 3D net moved the tail, not the mean.** Paired per patient it is worse than
+  the anchor on the middle of the distribution (TC: worse on 38, better on 21, mean −0.011 — an
+  undertrained model) but better on the anchor's ten worst patients on every region: WT
+  0.739 → 0.767, TC 0.527 → 0.562, ET 0.415 → 0.528. The only ET-absent validation patient
+  gets 55–272 spurious ET voxels from every slice model and none from the 3D net.
+* ⚠ **Not yet a finding.** n = 1 run of one hour; the tail counts carry ~3 patients of seed
+  noise (the two 2D arms differ by that on ET n<0.7); one ET-absent patient is an anecdote;
+  and the 55-voxel false call is also cleared by the standard BraTS post-process (drop ET under
+  a few hundred voxels), so on that case 3D buys what a threshold buys.
+* The deep tail is shared: volume 8 (a 2,466-voxel core) scores 0.00–0.11 for every model,
+  volume 55 (large, atypical) 0.11–0.37 for all. Training longer will not fix those two; they
+  need the images and possibly the labels looked at.
+
+**Current belief:** probably yes on the missed-small-core side, unproven on the false-alarm
+side. Mechanism: a slice model decides from one plane, so a speck or a sliver on a single slice
+has nothing to check itself against; a 3D model sees it has no extent above or below.
+
+## §4c The long 3D session — the experiment that decides Stages D–F
+
+**Status 2026-09-29:** everything above is committed (`145b911b`, not pushed); the session is
+scheduled for when the box can be held for 1–2 days. Box: the 2× RX 7900 XTX (ROCm 7.2,
+`jax/requirements-rocm-lock.txt`: jax-rocm7 0.11), or the 4× 4060 Ti here with a data-parallel
+loop. Throughput there is unmeasured: on paper 2–3× a 4060 Ti per card (24 GB, ~3× the
+bandwidth), in practice MIOpen's 3D conv kernels are the unknown, and the only ROCm number this
+repo ever recorded for BraTS (the 2D UNet at ~40 min/epoch, IREE era) was 17× slower than XLA.
+
+**Step 0 on the target box (10 min):** `unet3d_gate0.py`. Its ms/step sets steps-per-day and
+whether batch 4 (≈16 GiB at 128³) is on; nothing else is planned until it prints.
+
+**Prep, software, before the box-days (~1 day, here, no GPU-hours to speak of):**
+1. Tail metrics by default in `brats-eval` and `unet3d_brats.py`'s eval: worst-decile mean,
+   n<0.7, n<0.5 per region; the ET-absent count under the convention; and a per-slice ET
+   false-alarm rate (slices with 0 ET in the ground truth on which ≥ k ET voxels are predicted,
+   over all 11,315 slices — more cases than the one ET-absent patient gives).
+2. A post-processing control applied to BOTH sides at eval: `--min-et N` (an ET prediction under
+   N voxels in a volume is relabelled to core, the standard BraTS trick), so the tail comparison
+   is threshold-matched and 3D is credited only for what a threshold does not do.
+3. `--tta` (mirror test-time augmentation, 8 flips averaged) in the 3D eval; the 2D scorer gets
+   the h-flip equivalent or is left as is and said so.
+4. Checkpoint + eval every 2,000 steps with the tail metrics, resumable (`--init` plus a step
+   offset), so a killed run loses at most 20 minutes and the curve reports as it goes.
+5. Batch-4 and 2-card `pmap` options (one file, both behind flags).
+6. ⭐ A second 2D anchor seed (50 min on one 4060 Ti, `unet-brats-r34 10 r34 tag=s2`) and its
+   per-patient CSV — the seed noise on the tail metrics, without which no tail delta can be
+   called. Cheap; do it here before the session.
+
+**The run:** ~170k steps at B2 (or ~85k at B4) ≈ one day at 0.5 s/step — nnU-Net's schedule
+within 2×; Adam 3e-4, 200-step warmup, cosine to zero; Dice + CE; eval every 2k. A second day,
+if available, is a second seed rather than a longer first run: the decision below needs the
+noise more than it needs more steps.
+
+**Decision rule (write the answer into §4a either way):** with the same post-processing on both
+sides, the port has its reason if the 3D net beats the 2D anchor on the worst decile by more
+than the seed noise (≈3 points) on TC or ET, or lowers the per-slice ET false-alarm rate by
+more than noise, or clears the mean by > 2 points on TC. A plateau at parity on all three means
+the slice model is the right model for this data and Stages D–F stay unbuilt. Expected
+(§"projection" on the results page): mean +1 / +3 / +1.5 points (WT / TC / ET), most of the
+value in the tail; the floor is parity.
+
+**If go, the port (§4 Stages D–F):** 4–5 weeks, no proofs (the 2026-07-15 decision), gated by
+byte-identical 2D MLIR after the rank-generic refactor; the JAX trainer above is what the Lean
+train step ties to, per op through FD probes and end to end through per-patient Dice.
 
 ## §5 Stage G — sliding-window whole-volume inference (separate line item)
 
