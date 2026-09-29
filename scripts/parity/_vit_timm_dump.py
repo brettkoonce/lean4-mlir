@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """timm half of `scripts/parity/vit_timm_parity.py` — runs in `.venv-timm` (CPU torch, timm 1.0.28).
 
-Builds `deit_tiny_patch16_224` at a fixed seed with drop/drop-path 0, randomises every LayerNorm's
+Builds `deit_{tiny,small,base}_patch16_224` (`--model`) at a fixed seed with drop/drop-path 0, randomises every LayerNorm's
 affine and the cls / position embeddings (so none sits at an init value that hides a slot mix-up),
 runs one forward, and writes the parameters in the JAX reference's `params[k][j]` order:
 
@@ -32,11 +32,13 @@ def main():
     ap.add_argument("--gelu", default="tanh", choices=["tanh", "erf"])
     ap.add_argument("--ln-eps", type=float, default=1e-5)
     ap.add_argument("--swap-kv", action="store_true")
+    ap.add_argument("--model", default="deit_tiny_patch16_224",
+                    choices=["deit_tiny_patch16_224", "deit_small_patch16_224", "deit_base_patch16_224"])
     a = ap.parse_args()
 
     torch.manual_seed(a.seed)
     act = partial(nn.GELU, approximate="tanh") if a.gelu == "tanh" else nn.GELU
-    m = timm.create_model("deit_tiny_patch16_224", num_classes=a.classes, drop_rate=0.0,
+    m = timm.create_model(a.model, num_classes=a.classes, drop_rate=0.0,
                           drop_path_rate=0.0, act_layer=act,
                           norm_layer=partial(nn.LayerNorm, eps=a.ln_eps))
     g = torch.Generator().manual_seed(a.seed + 1)
@@ -76,7 +78,7 @@ def main():
         for j, arr in enumerate(group):
             out[f"p{k_}_{j}"] = arr
     np.savez(a.out, **out)
-    print(f"timm deit_tiny_patch16_224 (GELU {a.gelu}, LN ε {a.ln_eps:g}{', k/v SWAPPED' if a.swap_kv else ''}): "
+    print(f"timm {a.model} (GELU {a.gelu}, LN ε {a.ln_eps:g}{', k/v SWAPPED' if a.swap_kv else ''}): "
           f"{len(params)} param groups, {sum(p.numel() for p in m.parameters())} params")
 
 

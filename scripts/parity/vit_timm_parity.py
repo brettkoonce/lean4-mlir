@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ViT-Ti timm parity: the JAX reference against timm's `deit_tiny_patch16_224`, on SHARED weights
+"""ViT timm parity: the JAX references against timm's `deit_{tiny,small,base}_patch16_224`, on SHARED weights
 (planning/imagenet_parity.md G3).
 
 Nothing compared the ViT reference with an independent ViT: `vit-dp-check` and the forward ties
@@ -26,8 +26,15 @@ EMIT = """import {mod}
 #eval IO.FS.writeFile "{out}" (JaxCodegen.generate {spec} {cfg} {ds} "data")
 """
 NETS = [
-    ("imagenette", "MainVit", "vitTiny", "vitConfig", ".imagenette", 10),
-    ("imagenet", "MainVitImagenet", "vitTinyImagenet", "vitTinyImagenetConfig", ".imagenet", 1000),
+    # (label, module, spec, config, dataset, classes, timm model)
+    ("imagenette", "MainVit", "vitTiny", "vitConfig", ".imagenette", 10, "deit_tiny_patch16_224"),
+    ("imagenet", "MainVitImagenet", "vitTinyImagenet", "vitTinyImagenetConfig", ".imagenet", 1000,
+     "deit_tiny_patch16_224"),
+    # the side-quest widths: the same emitter at D = 384 / 768
+    ("imagenet-S", "MainVitSImagenet", "vitSImagenet", "vitSImagenetConfig", ".imagenet", 1000,
+     "deit_small_patch16_224"),
+    ("imagenet-B", "MainVitBImagenet", "vitBImagenet", "vitBImagenetConfig", ".imagenet", 1000,
+     "deit_base_patch16_224"),
 ]
 
 
@@ -57,11 +64,11 @@ def load_forward(path):
     return mod["forward"]
 
 
-def timm_dump(tmp, classes, batch, seed, *flags):
-    out = os.path.join(tmp, f"timm_{classes}_{'_'.join(flags) or 'ours'}.npz")
+def timm_dump(tmp, model, classes, batch, seed, *flags):
+    out = os.path.join(tmp, f"timm_{model}_{classes}_{'_'.join(flags) or 'ours'}.npz")
     r = subprocess.run([TIMM_PY, os.path.join(ROOT, "scripts", "parity", "_vit_timm_dump.py"), out,
-                        "--classes", str(classes), "--batch", str(batch), "--seed", str(seed),
-                        *flags], capture_output=True, text=True)
+                        "--model", model, "--classes", str(classes), "--batch", str(batch),
+                        "--seed", str(seed), *flags], capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"⛔ timm dump failed:\n{r.stdout}{r.stderr}")
     print("  " + r.stdout.strip())
@@ -94,24 +101,24 @@ def main():
     target = ("--gelu", "erf", "--ln-eps", "1e-6") if a.deit else ()
     fails = 0
     with tempfile.TemporaryDirectory() as tmp:
-        for label, mod, spec, cfg, ds, classes in NETS:
+        for label, mod, spec, cfg, ds, classes, model in NETS:
             print(f"[{label}] {spec} / {cfg}")
             fwd = load_forward(emit(tmp, mod, spec, cfg, ds))
-            e = run(fwd, timm_dump(tmp, classes, a.batch, a.seed, *target))
+            e = run(fwd, timm_dump(tmp, model, classes, a.batch, a.seed, *target))
             ok = e <= a.tol
             fails += not ok
             print(f"  max|Δ|/max|timm| = {e:.3e}  {'✅' if ok else '⛔'}")
             if a.controls and label == "imagenet":
                 for why, flags in (("k and v swapped", ("--swap-kv",)),
                                    ("erf GELU against the reference's tanh", ("--gelu", "erf"))):
-                    e = run(fwd, timm_dump(tmp, classes, a.batch, a.seed, *flags))
+                    e = run(fwd, timm_dump(tmp, model, classes, a.batch, a.seed, *flags))
                     red = e > a.tol
                     fails += not red
                     print(f"  CONTROL {why}: {e:.3e}  "
                           f"{'✅ red, as it must be' if red else '⛔ GREEN — the gate is blind to this'}")
     if fails:
         sys.exit(f"⛔ {fails} check(s) failed at tolerance {a.tol}")
-    print("✅ the JAX ViT-Ti references compute timm's deit_tiny_patch16_224"
+    print("✅ the JAX ViT-Ti/S/B references compute timm's deit_{tiny,small,base}_patch16_224"
           + (" at DeiT's own settings" if a.deit else " (tanh GELU, LN ε 1e-5)"))
 
 

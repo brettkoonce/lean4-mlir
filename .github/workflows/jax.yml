@@ -528,8 +528,12 @@ jobs:
     #   MNv4  mobilenetv4_conv_medium
     #   B0    efficientnet_b0 with a SAME stem (the paths' hybrid; `--pad tf` measures TF's net);
     #         controls: symmetric padding, BN ε 1e-5
-    #   ViT   deit_tiny_patch16_224 at tanh GELU / LN ε 1e-5 (`--deit` measures DeiT's); controls:
-    #         k/v swapped, erf GELU
+    #   ViT   deit_{tiny,small,base}_patch16_224 at tanh GELU / LN ε 1e-5 (`--deit` measures DeiT's);
+    #         controls: k/v swapped, erf GELU
+    #   R50   resnet50 (the RSB nets), train at 224/160 and eval at 224/288, and the drop-path ramp;
+    #         control: one BN's γ/β swapped. The verified half needs IREE and runs locally.
+    #   CNX   convnext_{tiny,small,base} at tanh GELU (`--paper` measures timm's erf), 224 and 288,
+    #         and the drop-path ramp; controls: erf GELU, two LayerScales swapped
     # ⚠ The timm env is its OWN venv with the CPU torch build, installed torch-first from the CPU
     # index as the lockfile says: a plain `-r` resolves torch from PyPI, i.e. the CUDA build.
     needs: build
@@ -587,7 +591,9 @@ jobs:
           set -e
           lake exe cache get || true
           lake build mobilenet-v2 mobilenet-v2-imagenet mobilenet-v4 mobilenet-v4-imagenet \
-                     efficientnet-b0 efficientnet-b0-imagenet vit-tiny vit-tiny-imagenet
+                     efficientnet-b0 efficientnet-b0-imagenet vit-tiny vit-tiny-imagenet \
+                     vit-s-imagenet vit-b-imagenet resnet50-imagenet \
+                     convnext-tiny-imagenet convnext-s-imagenet convnext-b-imagenet
           lake exe mobilenet-v4 /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
           [ -s .lake/build/generated_mobilenet_v4.py ] || { echo "::error::generated_mobilenet_v4.py was not emitted"; exit 1; }
 
@@ -596,7 +602,9 @@ jobs:
           set -eo pipefail
           export JAX_PLATFORMS=cpu
           for g in "mnv2_timm_parity.py --controls" "mnv4_timm_parity.py" \
-                   "enet_timm_parity.py --controls" "vit_timm_parity.py --controls"; do
+                   "enet_timm_parity.py --controls" "vit_timm_parity.py --controls" \
+                   "r50_timm_parity.py --skip-verified" "r50_timm_parity.py --skip-verified --break" \
+                   "cnx_timm_parity.py --controls"; do
             python3 scripts/parity/$g 2>&1 | tee -a /tmp/parity.log
           done
 

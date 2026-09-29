@@ -41,12 +41,12 @@ structure both sides walk, and the entry count is asserted against the reference
 rather than hardcoded — a regrouping that is off by one tuple produces a shape error most of the
 time and a *wrong but plausible* tie the rest of the time.
 
-⭐ **Measured 2026-08-30, and the control is what makes the tolerance defensible.** The tie passes
-at max |Δ| **1.44e-03** (tol 2e-03, logits in [-0.31, 0.40]) — which looks uncomfortably close to
-the bar until you run `--break`, which reintroduces the B1 defect on the reference side and lands
-at **6.83e-01**. That is **475×** the passing residual, so the 2e-03 bar sits in a very wide gap,
-not on a knife edge. The residual itself is two fp32 backends (IREE llvm-cpu vs XLA-CPU) sixty-odd
-layers deep; it is accumulation, not disagreement.
+⭐ **Both sides at f32 (2026-09-29).** The reference's `DT`/`CONV_DT` are forced to f32 and JAX runs
+at `highest` matmul precision, as the timm gates do. Until then the reference ran its trainers' bf16
+convs and matmuls, and the tie passed at max |Δ| 1.44e-03 against a 2e-03 bar (ConvNeXt-B at
+1.86e-03, 93 % of it): bf16 rounding, which a 2e-03 bar would also have hidden a real defect under.
+At f32 the residual is **4.8e-07** (T), 7.2e-07 (S) and 8.0e-07 (B), and the tolerance is 1e-05.
+`--break`, which reintroduces the B1 defect on the reference side, lands at 8.8e-01.
 
     .venv/bin/python3 scripts/parity/convnext_forward_tie.py
     .venv/bin/python3 scripts/parity/convnext_forward_tie.py --break        # expect a FAIL; rc 0 if it fails
@@ -58,6 +58,9 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lib"))  # the shared helpers
 import _iree  # noqa: E402
+os.environ.setdefault("JAX_PLATFORMS", "cpu")
+import jax  # noqa: E402
+jax.config.update("jax_default_matmul_precision", "highest")
 
 # (mlir slug, reference file). Both members of each pair are the 1000-class ImageNet artifacts.
 NETS = {
@@ -65,6 +68,8 @@ NETS = {
                     "jax/generated/generated_convnext_tiny_imagenet.py"),
     "convnextsin": ("verified_mlir/convnextsin_fwd.mlir",
                     "jax/generated/generated_convnext_s_imagenet.py"),
+    "convnextbin": ("verified_mlir/convnextbin_fwd.mlir",
+                    "jax/generated/generated_convnext_b_imagenet.py"),
 }
 
 
@@ -100,6 +105,12 @@ def load_reference_forward(ref_py, drop_head_ln=False):
         body = body.replace(hits[0], "    pass  # --break: head LN removed (the B1 defect)")
     mod = {"__name__": "not_main"}
     exec(body, mod)
+    # `mm` / `convdt` read these at call time. The trainers run bf16; the render is f32, so the
+    # comparison is at f32 (as the timm gates run it) and the residual is the two backends'.
+    import jax.numpy as jnp
+    for k in ("DT", "CONV_DT"):
+        if k in mod:
+            mod[k] = jnp.float32
     if "forward" not in mod:
         sys.exit("reference prefix did not define forward()")
     return mod["forward"], mod
@@ -152,7 +163,7 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--scale", type=float, default=0.05,
                     help="σ of the random weights; LN is scale-free but the conv stack is not")
-    ap.add_argument("--tol", type=float, default=2e-3,
+    ap.add_argument("--tol", type=float, default=1e-5,
                     help="max |Δ| over the logits (llvm-cpu vs XLA-CPU fp32, 60+ layers deep)")
     ap.add_argument("--keep", action="store_true", help="keep the work directory")
     ap.add_argument("--break", dest="brk", action="store_true",

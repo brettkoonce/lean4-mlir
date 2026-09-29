@@ -87,8 +87,19 @@ Shared pieces:
 * The lakefile rows for ViT-S/B and ConvNeXt-S/B now name the emabf16 jobs, as does the book's
   side-quest job table. The g512 and 4 × 32 confs stay as siblings.
 
+timm parity, every side-quest net, on shared weights (CPU, in CI's jax.yml `timm parity` job):
+* `r50_timm_parity.py`: the JAX reference AND the verified forwards (train 224/160, eval 224/288)
+  against timm `resnet50`, plus the drop-path ramp on both paths. JAX ≤ 2.2e-5 and verified
+  ≤ 5.5e-5 of max |logit|. `--break` (one BN's γ/β swapped) goes red at 0.19–0.38. CI runs the
+  JAX half, because the verified half needs IREE.
+* `vit_timm_parity.py` now covers ViT-S and ViT-B (deit_small/base): 1.1e-6 and 1.7e-6.
+* `cnx_timm_parity.py` (new): ConvNeXt-T/S/B against timm at tanh GELU, 224 and 288, ≤ 1.1e-6 plus
+  the ramp. Its controls, erf GELU (1.4e-4) and two LayerScales swapped (1.1e-2), both go red.
+  `convnext_forward_tie.py` (verified ↔ JAX) gained `convnextbin` and now runs the reference at f32.
+  It had run the trainers' bf16, passing at 1.4e-3 (B at 1.86e-3) against a 2e-3 bar, i.e. bf16
+  rounding. At f32: T 4.8e-7, S 7.2e-7, B 8.0e-7, tolerance 1e-5, `--break` 8.8e-1.
+
 Not done:
-* R50 timm parity gate (`scripts/parity/`).
 * The MNv4 drop-path known-answer and misplacement gates (`droppath-tie` gates A/B). They need a
   `mnv4in_drop_fwd` render and a GPU. Structurally, all 18 masks are used once forward on the
   branch and once backward on the branch cotangent, with the skip fan-in unmasked.
