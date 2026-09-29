@@ -815,6 +815,16 @@ end Proofs.StableHLO
 #guard "vitsin_adamdp128x4wxclipdropbf16_train_step" ==
   "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
 
+-- S's pair render: Tiny's `vitin_emadp128x4wxclipdropbf16` at `vitSDims`. EMA **and** wx + clip +
+-- drop, since the S reference (`vits-default-jax-4gpu`) trains with EMA and the non-EMA
+-- `adamdp` renders above would give it up. `vit-ema-drop-render vitsin` gates the layout.
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
+#guard "vitsin_emadp128x4wxclipdropbf16_train_step" ==
+  "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
+
 #eval IO.FS.writeFile "verified_mlir/vitsin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitsin_drop_fwd" 1000 (sd := true) (V := Proofs.StableHLO.vitSDims))
 
@@ -887,6 +897,16 @@ end Proofs.StableHLO
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
 #guard "vitbin_adamdp128x4wxclipdropbf16_train_step" ==
   "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
+
+-- B's pair render, the same one call at `vitBDims`. The EMA shadow is a fourth parameter-sized
+-- region (86.6 M floats, ~0.35 GB per replica) on top of the bf16 twin's 12.61 GiB peak at
+-- 15.11, so it runs under `LEAN_MLIR_MEM_FRACTION=0.97`; probe the peak before a launch.
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+#guard "vitbin_emadp128x4wxclipdropbf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
 
 -- **The 1-replica peers are a CONTROL, not a second recipe.** "The all-reduce buffer is not in a
 -- single-device peak" cannot be checked without a graph that has no all-reduce in it. These two are

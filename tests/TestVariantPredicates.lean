@@ -178,6 +178,15 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("emalambaccdp4x128wxclipdropbce", true, false, true)
   , ("emalambacc4x128wxclipdropbce", true, false, true)
   , ("emalambaccdp4x128wxclipdropbcewd001", true, false, true)
+    -- RSB-A2/A1 as RSB's Table 2 has them: the same four markers without the `ema` prefix
+  , ("lambaccdp4x128wxclipdropbcebf16", false, false, true)
+  , ("lambaccdp4x128wxclipdropbce", false, false, true)
+  , ("lambaccdp4x128wxclipdropbcewd001bf16", false, false, true)
+  , ("lambaccdp4x128wxclipdropbcewd001", false, false, true)
+    -- MobileNetV4's paper tier: `drop` ++ `do` ++ `wd01`. `dropdo` must read as stochastic depth
+    -- AND as dropout, each once, and `wd01` must not reach `accK`.
+  , ("accdp8x128wxdropdowd01bf16", false, false, true)
+  , ("acc8x128wxdropdowd01bf16", false, false, true)
   , ("emalambacc4x128wxclipdropbcewd001", true, false, true)
     -- GRADIENT ACCUMULATION's spellings (`r34AdamVariant .adamwAccum`). Both carry `k` and a
     -- batch, so the marker concatenates against DIGITS and an `x` — a shape none of the other four
@@ -254,7 +263,8 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- immediately.
 private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64",
   "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16",
-  "rmsdp64wxdols0bf16", "rmsdp64wxdols0eps0001bf16", "emarmsdp64dropdowxeps0001bf16"]
+  "rmsdp64wxdols0bf16", "rmsdp64wxdols0eps0001bf16", "emarmsdp64dropdowxeps0001bf16",
+  "accdp8x128wxdropdowd01bf16", "acc8x128wxdropdowd01bf16"]
 #guard table.all (fun (v, _, _, _) => cdOn v == dropoutSpellings.contains v)
 #guard dropoutSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 #guard cdOn "emarms64drop" == false      -- `drop` alone must NOT read as dropout
@@ -340,11 +350,17 @@ private def accumSpellings : List String :=
    "emalambaccdp4x128wxclipdropbce", "emalambacc4x128wxclipdropbce",
    "emalambaccdp4x128wxclipdropbcewd001", "emalambacc4x128wxclipdropbcewd001",
    -- MobileNetV4's reference recipe, 8 × (4 × 128)
-   "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16"]
+   "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16",
+   -- RSB-A2/A1 without the EMA shadow, and MobileNetV4's paper tier
+   "lambaccdp4x128wxclipdropbcebf16", "lambaccdp4x128wxclipdropbce",
+   "lambaccdp4x128wxclipdropbcewd001bf16", "lambaccdp4x128wxclipdropbcewd001",
+   "accdp8x128wxdropdowd01bf16", "acc8x128wxdropdowd01bf16"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 -- MobileNetV4's recipe: k = 8 read back past `dp`, and nothing else read into it
 #guard accK "emaaccdp8x128wxdowd005bf16" == 8
 #guard accK "emaacc8x128wxdowd005bf16" == 8
+#guard accK "accdp8x128wxdropdowd01bf16" == 8
+#guard accK "lambaccdp4x128wxclipdropbcewd001bf16" == 4
 #guard lambOn "emaaccdp8x128wxdowd005bf16" == false
 #guard bceOn "emaaccdp8x128wxdowd005bf16" == false
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))

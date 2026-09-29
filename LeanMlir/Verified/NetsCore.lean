@@ -1,5 +1,6 @@
 import LeanMlir.Verified.Spec
 import LeanMlir.ParamLayouts
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 
 /-! # Concrete verified architectures — the shared specs
 
@@ -622,8 +623,9 @@ def resnet50Imagenet2018Verified : VerifiedNetSpec :=
     `stablehlo.constant`, so it is a separate render — the
     `resnet50in_emalambacc4x128wxclipdropbcewd001` and `…accdp4x128…wd001` renders and their bf16
     twins, kept on their own paths by `Proofs.StableHLO.wdVariantMark`. The Mixup α is data-side,
-    and this spec carries it: `generated_resnet50_imagenet_a1_shim.py` differs from the `default`/A2 shim in the `_MIX_A`
-    default, `0.1` → `0.2`.
+    and this spec carries it: `generated_resnet50_imagenet_a1_shim.py` differs from the `default`
+    shim in the `_MIX_A` default, `0.1` → `0.2`, and in its BCE target transform (label smoothing
+    0.1, then the target threshold 0.2), which the BCE renders cannot apply themselves.
 
     That line reads `float(os.environ.get('SHIM_MIXUP_ALPHA', …))`, so the α is also an
     environment override on the default shim. Setting A1's α that way leaves nothing in the run's
@@ -648,10 +650,27 @@ def resnet50ImagenetA1Verified : VerifiedNetSpec :=
 #guard resnet50ImagenetA1Verified.shimScript == "generated_resnet50_imagenet_a1_shim.py"
 #guard resnet50ImagenetA1Verified.shimScript != resnet50ImagenetVerified.shimScript
 #guard resnet50ImagenetA1Verified.shimScript != resnet50Imagenet2018Verified.shimScript
--- Stated as a 3-element distinctness rather than two inequalities, so a FOURTH recipe cannot be
--- added by copying one of these and forgetting to change the shim.
+
+/-- **ResNet-50 at 224² with RSB-A2's own augmentation** — the fourth `shimScript` on the 224 net.
+
+    `default`'s shim is A2's augmentation pack, and until 2026-09-29 A2 streamed it. The A2 recipe
+    (`resnet50ImagenetConfigA2Accum`) adds timm's BCE target threshold 0.2: a mixed class whose
+    weight exceeds 0.2 is a target of 1. The BCE renders take `%onehot` as given, so the threshold
+    is a target transform the shim applies after mixing, and
+    `generated_resnet50_imagenet_a2accum_shim.py` differs from the `default` shim there alone. -/
+def resnet50ImagenetA2Verified : VerifiedNetSpec :=
+  { resnet50ImagenetVerified with
+      name       := "ResNet-50 (ImageNet-1k, RSB-A2)",
+      shimScript := "generated_resnet50_imagenet_a2accum_shim.py",
+      blurb      := "ResNet-50 on full 1000-class ImageNet with RSB-A2's augmentation and BCE \
+                     target threshold, via the VERIFIED renderer." }
+
+#guard resnet50ImagenetA2Verified.toSpecs == resnet50ImagenetVerified.toSpecs
+#guard resnet50ImagenetA2Verified.slug == resnet50ImagenetVerified.slug
+-- Stated as a distinctness over all four rather than pairwise inequalities, so a FIFTH recipe cannot
+-- be added by copying one of these and forgetting to change the shim.
 #guard ([resnet50ImagenetVerified.shimScript, resnet50Imagenet2018Verified.shimScript,
-         resnet50ImagenetA1Verified.shimScript].eraseDups).length == 3
+         resnet50ImagenetA1Verified.shimScript, resnet50ImagenetA2Verified.shimScript].eraseDups).length == 4
 
 -- The cross-net form of this invariant needs every `.imagenet` spec in scope, so it lives at the
 -- END of this file (search "trainPix := net.d0").
@@ -1525,6 +1544,33 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
 -- The same stat-alignment gate the Imagenette spec carries, re-run against the 1000-class layout.
 #guard mnv4ImagenetVerified.bnChannels ==
   (mnv4ImagenetVerified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
+
+/-- **MobileNetV4-Conv-M, the paper tier** (500 epochs) — the verified peer of the JAX `full` recipe.
+    The same net and slug as `mnv4ImagenetVerified`; three host-side fields move. The shim is the
+    `full` recipe's (RandAugment m15), the classifier dropout is the paper's 0.2 (keep 0.8), and
+    stochastic depth reaches the 18 skip UIB blocks at the reference's ramp: block `i` of 21 keeps
+    with `1 − 0.075 · i / 20`, as `forward` in `generated_mobilenet_v4_imagenet_full.py` passes it.
+    The masks are read only by `drop` variants (`mnv4in_accdp8x128wxdropdowd01bf16`). -/
+def mnv4ImagenetFullVerified : VerifiedNetSpec :=
+  { mnv4ImagenetVerified with
+      name        := "MobileNetV4-Conv-M (ImageNet-1k, paper tier)",
+      shimScript  := "generated_mobilenet_v4_imagenet_full_shim.py",
+      dropoutKeep := some (0.8, 1280),
+      dropSites   := #[1, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+      dropDenom   := 20,
+      dropRate    := 0.075,
+      blurb       := "MobileNetV4-Conv-M on full 1000-class ImageNet, the paper's 500-epoch \
+                      regularisation (RandAugment m15, dropout 0.2, drop-path 0.075), via the \
+                      VERIFIED renderer." }
+
+#guard mnv4ImagenetFullVerified.toSpecs == mnv4ImagenetVerified.toSpecs
+#guard mnv4ImagenetFullVerified.shimScript != mnv4ImagenetVerified.shimScript
+-- The sites are the renderer's (`mnv4DropSites`, the skip rows of `mnv4Blocks`), read off the same
+-- table here; a site list that disagreed would scale the wrong blocks' branches.
+#guard mnv4ImagenetFullVerified.dropSites.toList ==
+  ((Proofs.StableHLO.mnv4Blocks.zipIdx).filter (fun (b, _) => !b.stride2)).map (·.2)
+#guard mnv4ImagenetFullVerified.dropKeeps[0]! == 1.0 - 0.075 / 20.0
+#guard mnv4ImagenetFullVerified.dropKeeps.back! == 1.0 - 0.075
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`Verified.Train`,

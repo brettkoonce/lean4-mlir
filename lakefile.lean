@@ -1119,7 +1119,8 @@ lean_exe «convnext-fwd-b-tie» where
     what those predicates make the driver pack — regions, scalar tail, drop-mask count, and the
     arity identity that closes only if every region is a full `nP` wide.
     `vit-ema-drop-render convnextin` runs the same checks on ConvNeXt-T's EMA peer of its shipping
-    recipe, `convnextin_emadpwxclipdropbf16`.
+    recipe, `convnextin_emadpwxclipdropbf16`, and `vitsin` / `vitbin` / `convnextsin` / `convnextbin`
+    on ViT-S's, ViT-B's, ConvNeXt-S's and ConvNeXt-B's.
 
     The failure it exists for is silent: a wrongly-packed region **trains and reports a loss**. No
     crash, no NaN — just a run optimising a misaligned view of its own parameters. No GPU; a parse
@@ -2205,7 +2206,8 @@ script imagenette do
     rows are the ones with chapter numbers; the five side quests have job configs, and only
     MobileNetV4's has run (once, as a consistency check on its pair). Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
     `r50-a3-wxclip-bf16-4gpu` (RSB-A3 at 8 × 64: the same effective 2048 at a BatchNorm group of 256),
-    `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
+    `vit-default-4gpu`, `vits-default-g512-4gpu`, `vitb-default-g512-4gpu` (the non-EMA f32 S/B jobs),
+    `cnx-default-emabf16-4gpu`, `cnxs-default-4gpu` / `cnxb-default-4gpu` (ConvNeXt-S/B f32 at 4 × 32) (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
     overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
     `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` are the 4× 3060
     box's confs, named by the
@@ -2219,11 +2221,11 @@ private def imagenetRows : List (String × String × String) :=
     ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
     ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
     ("cnx-default-4gpu",       "convnext-imagenet-verified",     "Ch. 8  ConvNeXt-T"),
-    ("cnxs-default-4gpu",      "convnext-s-imagenet-verified",   "Ch. 8  ConvNeXt-S (side quest)"),
-    ("cnxb-default-4gpu",      "convnext-b-imagenet-verified",   "Ch. 8  ConvNeXt-B (side quest)"),
+    ("cnxs-default-emabf16-4gpu", "convnext-s-imagenet-verified", "Ch. 8  ConvNeXt-S, EMA + bf16 (side quest)"),
+    ("cnxb-default-emabf16-4gpu", "convnext-b-imagenet-verified", "Ch. 8  ConvNeXt-B, EMA + bf16 (side quest)"),
     ("vit-default-emabf16-4gpu", "vit-imagenet-verified",        "Ch. 9  ViT-Tiny (DeiT-Ti), EMA + bf16"),
-    ("vits-default-g512-4gpu", "vit-s-imagenet-verified",        "Ch. 9  ViT-S at DeiT's global 512 (side quest)"),
-    ("vitb-default-g512-4gpu", "vit-b-imagenet-verified",        "Ch. 9  ViT-B at DeiT's global 512 (side quest)") ]
+    ("vits-default-emabf16-4gpu", "vit-s-imagenet-verified",     "Ch. 9  ViT-S (DeiT-S), EMA + bf16 (side quest)"),
+    ("vitb-default-emabf16-4gpu", "vit-b-imagenet-verified",     "Ch. 9  ViT-B (DeiT-B), EMA + bf16 (side quest)") ]
 
 /-- One job in one mode. `plan` skips the build and says whether the binary exists; the other
     two build the exe first (the `runDemoGroup` convention) and then hand the job to the engine,
@@ -2268,11 +2270,11 @@ script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" arg
 script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
 script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args
 script «cnx-default-4gpu»       (args) do runJobScript "cnx-default-4gpu" args
-script «cnxs-default-4gpu»      (args) do runJobScript "cnxs-default-4gpu" args
-script «cnxb-default-4gpu»      (args) do runJobScript "cnxb-default-4gpu" args
+script «cnxs-default-emabf16-4gpu» (args) do runJobScript "cnxs-default-emabf16-4gpu" args
+script «cnxb-default-emabf16-4gpu» (args) do runJobScript "cnxb-default-emabf16-4gpu" args
 script «vit-default-emabf16-4gpu» (args) do runJobScript "vit-default-emabf16-4gpu" args
-script «vits-default-g512-4gpu» (args) do runJobScript "vits-default-g512-4gpu" args
-script «vitb-default-g512-4gpu» (args) do runJobScript "vitb-default-g512-4gpu" args
+script «vits-default-emabf16-4gpu» (args) do runJobScript "vits-default-emabf16-4gpu" args
+script «vitb-default-emabf16-4gpu» (args) do runJobScript "vitb-default-emabf16-4gpu" args
 
 /-- `lake run imagenet` — the fourth tier: the twelve ImageNet rows, in chapter order.
 

@@ -54,6 +54,12 @@ and a classifier-dropout mask — takes the same gate at its own batch:
     DP_BATCH=128 DP_VARIANT=emaacc8x128wxdowd005bf16 DP_VARIANT_DP=emaaccdp8x128wxdowd005bf16 \
       PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check
 
+The paper-tier render adds 18 stochastic-depth masks after the BN stats (`mnv4ImagenetFullVerified`,
+selected by the `drop` marker), duplicated with the batch like the dropout mask:
+
+    DP_BATCH=128 DP_VARIANT=acc8x128wxdropdowd01bf16 DP_VARIANT_DP=accdp8x128wxdropdowd01bf16 \
+      PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check
+
 The layout is read off the variant name (`VerifiedVariant.nRegions` / `nScalars` / `cdOn`), the
 driver's own reading. The step is an APPLY step onto a non-zero accumulator (`%aup = %akeep = 1`),
 so `G' = G + g` carries the raw gradient and is gated beside `m`; the EMA shadow moves too. The
@@ -73,13 +79,14 @@ def main (args : List String) : IO Unit := do
   -- the configuration the committed result was measured at — so it reproduces with no arguments.
   -- Unlike those two the defaults are 4 replicas and the ImageNet spec, because MNv4's only DP
   -- renders are 4-replica and 1000-class. There is nothing cheaper to fall back to.
-  let net := mnv4ImagenetVerified.toNet
   let bs := ((← IO.getEnv "DP_BATCH").bind (·.toNat?)).getD 64       -- the BAKED per-replica batch
   let replicas := ((← IO.getEnv "DP_REPLICAS").bind (·.toNat?)).getD 4
   -- `mnv4AdamVariant` appends the per-device batch, so the variant strings carry the 64 —
   -- `adam64`/`adamdp64` rather than the bare `adam`/`adamdp` the Imagenette-scale gates use.
   let vSg := (← IO.getEnv "DP_VARIANT").getD "adam64"
   let vDp := (← IO.getEnv "DP_VARIANT_DP").getD "adamdp64"
+  -- a `drop` variant is the paper tier's, whose spec carries the drop sites (the driver's choice)
+  let net := (if VerifiedVariant.sdOn vDp then mnv4ImagenetFullVerified else mnv4ImagenetVerified).toNet
   let sgPath := s!"verified_mlir/{net.slug}_{vSg}_train_step.mlir"
   -- The DP render is overridable so a deliberately-broken one can be fed in. That is not a
   -- convenience: a gate nobody has seen go red is an assertion. The control to run is the `%arn`
@@ -92,8 +99,11 @@ def main (args : List String) : IO Unit := do
   let emaOn := VerifiedVariant.emaOn vDp
   let cdOn := VerifiedVariant.cdOn vDp && net.dropoutKeep.isSome
   let doW := if cdOn then (net.dropoutKeep.map (·.2)).getD 0 else 0
+  let sdOn := VerifiedVariant.sdOn vDp && !net.dropKeeps.isEmpty
+  let nDrop := if sdOn then net.dropKeeps.size else 0
   if nR != VerifiedVariant.nRegions vSg || nS != VerifiedVariant.nScalars vSg ||
-     cdOn != (VerifiedVariant.cdOn vSg && net.dropoutKeep.isSome) then
+     cdOn != (VerifiedVariant.cdOn vSg && net.dropoutKeep.isSome) ||
+     sdOn != VerifiedVariant.sdOn vSg then
     IO.eprintln s!"LAYOUT MISMATCH: {vSg} and {vDp} are not the same blob layout"; IO.Process.exit 1
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
@@ -131,14 +141,21 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   -- so the mask is not the identity. Duplicated with the batch below.
   let keep := (net.dropoutKeep.map (·.1)).getD 1.0
   let doMask1 ← if cdOn then F32.dropoutMask keep (bs * doW) 777 else pure ByteArray.empty
-  let pbuf1 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++ (if cdOn then #[doMask1] else #[]))
-  let pbuf2 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++
+  -- the stochastic-depth scales, site-major (`bs` per site) as the driver draws them; each site's
+  -- block is duplicated across the replicas, so every replica drops the same examples
+  let dpAll ← if sdOn then F32.dropScales net.dropKeeps bs 999 else pure ByteArray.empty
+  let dpSite (j : Nat) : ByteArray := dpAll.extract (j * bs * 4) ((j + 1) * bs * 4)
+  let dp1 : Array ByteArray := (Array.range nDrop).map dpSite
+  let dp2 : Array ByteArray := (Array.range nDrop).map (fun j => F32.concat (Array.replicate replicas (dpSite j)))
+  let pbuf1 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++ dp1 ++ (if cdOn then #[doMask1] else #[]))
+  let pbuf2 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++ dp2 ++
                  (if cdOn then #[F32.concat (Array.replicate replicas doMask1)] else #[]))
   let pShapes := (List.range nR).foldl (fun acc _ => acc ++ net.paramShapes) #[]
   let scalarShapes : Array (Array Nat) := Array.replicate nS #[]
-  let shapes1 := packShapes (pShapes ++ scalarShapes ++ bnStatShapes ++
+  let shapes1 := packShapes (pShapes ++ scalarShapes ++ bnStatShapes ++ Array.replicate nDrop #[bs] ++
                    (if cdOn then #[#[bs, doW]] else #[]))
   let shapes2 := packShapes (pShapes ++ scalarShapes ++ bnStatShapes ++
+                   Array.replicate nDrop #[bs * replicas] ++
                    (if cdOn then #[#[bs * replicas, doW]] else #[]))
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   -- The SAME batch on EVERY replica. `all_reduce(add)/N` over N identical gradients is `(N·g)/N =
@@ -167,12 +184,12 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   -- it splits `x` (the driver's own call); every replica then gets the same `bs` rows.
   let o2 ← LowererSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf2 shapes2 y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
-             (nShardTail := if cdOn then 1 else 0)
+             (nShardTail := (nDrop + if cdOn then 1 else 0).toUSize)
 
   -- The sharded tail comes back WHOLE from the DP call: under dropout its mask passthrough is all
   -- `bs·replicas` rows against the single-device call's `bs`. Everything before it is laid out
   -- identically, so the regions below read replica 0's rows of the mask and nothing past them.
-  let extraMask := if cdOn then (replicas - 1) * bs * doW * 4 else 0
+  let extraMask := ((replicas - 1) * bs * 4) * (nDrop + if cdOn then doW else 0)
   if o1.size + extraMask != o2.size then
     IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size} (expected +{extraMask} for the mask)"; IO.Process.exit 1
   let n := o1.size / 4
@@ -184,8 +201,10 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let regions : List (String × Nat × Nat) :=
     ((List.range nR).map (fun i => (regNames.getD i "?", i * nP, (i + 1) * nP))) ++
     [("scalars", pEnd, sEnd), ("bnstat", sEnd, bEnd)] ++
-    (if cdOn then [("do (passthrough)", bEnd, n)] else [])
-  if !cdOn && bEnd != n then
+    -- with drop masks the passthroughs are laid out per site at the global batch on the DP side,
+    -- so only the single-mask layout lines up row for row
+    (if cdOn && !sdOn then [("do (passthrough)", bEnd, n)] else [])
+  if bEnd + nDrop * bs + (if cdOn then bs * doW else 0) != n then
     IO.eprintln s!"LAYOUT MISMATCH: {n} returned floats, expected {bEnd}"; IO.Process.exit 1
   let mut gradRel : Float := 0.0
   let mut accRel : Float := 0.0

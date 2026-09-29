@@ -71,12 +71,16 @@ def operandNames (src : String) : List String :=
 /-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
     `exit` discards every diagnostic. -/
 def main (args : List String) : IO Unit := do
-  -- `vitin` (the default) or `convnextin`
+  -- `vitin` (the default), `vitsin`, `vitbin`, `convnextin`, `convnextsin` or `convnextbin`
   let which := args.headD "vitin"
   let (slug, variantUnderTest, net, label) ← match which with
     | "vitin"      => pure ("vitin", variantUnderTest, vitImagenetVerified.toNet, "ViT")
+    | "vitsin"     => pure ("vitsin", variantUnderTest, vitSImagenetVerified.toNet, "ViT-S")
+    | "vitbin"     => pure ("vitbin", variantUnderTest, vitBImagenetVerified.toNet, "ViT-B")
     | "convnextin" => pure ("convnextin", cnxVariantUnderTest, convnextImagenetVerified.toNet, "ConvNeXt-T")
-    | other        => throw <| IO.userError s!"unknown net '{other}': vitin | convnextin"
+    | "convnextsin" => pure ("convnextsin", cnxVariantUnderTest, convnextSImagenetVerified.toNet, "ConvNeXt-S")
+    | "convnextbin" => pure ("convnextbin", cnxVariantUnderTest, convnextBImagenetVerified.toNet, "ConvNeXt-B")
+    | other        => throw <| IO.userError s!"unknown net '{other}': vitin | vitsin | vitbin | convnextin | convnextsin | convnextbin"
   let path := s!"verified_mlir/{slug}_{variantUnderTest}_train_step.mlir"
   let src ← IO.FS.readFile path
   let names := operandNames src

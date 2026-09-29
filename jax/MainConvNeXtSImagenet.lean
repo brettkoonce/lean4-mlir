@@ -44,6 +44,8 @@ def convNeXtSImagenetConfig : TrainConfig where
   optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true
+  cnxInit        := true    -- ConvNeXt `_init_weights`, as ConvNeXt-T: trunc_normal(0.02) on every
+                            -- conv and the head, where the generic path is Xavier
   cosineDecay    := true
   warmupEpochs   := 20
   augment        := true

@@ -66,11 +66,13 @@ EXES=(
   # env override on the default shim. Taking it that way would run, and nothing in a 600-epoch log
   # would record which α trained — the same shape as the `LEAN_MLIR_RECIPE=2018` omission above.
   # A named shim the driver refuses to start without is the version that cannot be got wrong.
-  # ⚠ There is deliberately NO `a2-accum` row: A2's shim is BYTE-IDENTICAL to `default`'s
-  # (md5 d42c412beb4f…, verified 2026-08-27), because A2 differs from `default` only in
-  # `learningRate`, `gradAccumSteps` and `wdExcludeNormBias` — all three optimizer-side. Adding one
-  # would be a second writer for the same bytes under a second name.
+  # A1 also carries label smoothing 0.1 and the BCE target threshold 0.2 (the `_emit` transform).
   "resnet50-imagenet:a1:generated_resnet50_imagenet_a1_shim.py"
+  # ⭐ RSB-A2's own shim (2026-09-29). Until then A2 streamed `default`'s bytes, which was right while
+  # A2 differed from `default` only optimizer-side. The BCE target threshold 0.2 is a target
+  # transform the verified BCE render cannot see, so it rides the shim (`_emit`), and this file
+  # differs from `default`'s there and nowhere else.
+  "resnet50-imagenet:a2-accum:generated_resnet50_imagenet_a2accum_shim.py"
 )
 
 echo "── generating $(( ${#EXES[@]} )) per-net ImageNet shims ──"

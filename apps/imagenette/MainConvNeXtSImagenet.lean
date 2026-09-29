@@ -32,54 +32,52 @@ so `LEAN_MLIR_DROP_RATE_U` retunes it without touching an artifact. At the 80-ep
 `LEAN_MLIR_DROP_RATE_U=200000` (0.2): the paper's 0.4 underfits on the short schedule
 (measured on the JAX side).
 
-**Batch is 32 per device**, because `cBS` is still a private constant in the renderer. At four
-replicas that is global 128 and 10,009 steps/epoch — more steps than the paper's 5,004 at batch
-256, which is the axis accuracy actually tracks. Threading `cBS` is a separate refactor.
+**Batch is 64 per device** for the pair, ConvNeXt-T's rescope: global 256 and 5,004 steps/epoch,
+the paper's batch scaled as the LR is. The pair variant is `emadpwxclipdropbf16` (the EMA shadow
+the reference scores, bf16), with `emawxclipdropbf16` its single-device peer and the default here.
+The `adam*wxclipdrop{,bf16}` siblings are rendered at 32 and need `LEAN_MLIR_BATCH=32`.
 
 ConvNeXt has no BatchNorm, so there is no running-stats eval forward: `convnextsin_fwd.mlir`
-(drop-free, the identity an all-ones mask would give anyway) plus the train step is the complete
-artifact set. Two variants are rendered — `adamwxclipdrop` (single device, the default) and
-`adamdpwxclipdrop` (4 replicas, what a real run loads).
+(drop-free, at 64) plus the train step is the complete artifact set, and `convnextsin_fwd_s288`
+scores at timm's test size.
 
 **NOTHING HAS BEEN TRAINED.** The artifacts render, the shapes tie to `VLayer.toSpecs`, the
 parameter count is `#guard`ed against the published 50.22M and against the independent JAX emitter,
 and the drop ramp is tied to the renderer's own `cnxBlockIdx`. No accuracy has been measured and
 none is claimed.
 
-Run (4 GPUs — BOTH replica knobs are required):
-```
-CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
-  LEAN_MLIR_VARIANT=adamdpwxclipdrop LEAN_MLIR_BATCH=32 \
-  PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/convnext-s-imagenet-verified data
-```
+Run through the job config: `scripts/supervise.sh cnxs-default-emabf16-4gpu`.
 -/
 
-/-- 300 epochs at 32 per device — the ConvNeXt paper's schedule length, unchanged from Tiny. The
+/-- 300 epochs at 64 per device — the ConvNeXt paper's schedule length, unchanged from Tiny. The
     paper changes the stochastic-depth rate between T and S, not the schedule.
-    `batchSize` is PER DEVICE and must match the batch the variant was rendered at (32; it is
-    baked into the graph, so a mismatch is a shape error at the first invoke, not a silent limp). -/
+    `batchSize` is PER DEVICE and must match the batch the variant was rendered at (64 for the EMA
+    pair, 32 for the `adam*` siblings; it is baked into the graph, so a mismatch is a shape error at
+    the first invoke, not a silent limp). -/
 def convnextSImagenetConfig : VerifiedConfig where
   epochs    := 300
-  batchSize := 32
+  -- 64 per replica, ConvNeXt-T's rescope: × 4 = global 256, the batch the LR below is scaled to.
+  -- The EMA pair renders are at 64; the `adam*` siblings are at 32 (`LEAN_MLIR_BATCH=32`).
+  batchSize := 64
+  -- ConvNeXt `_init_weights` (σ = 0.02 on every conv and the head), as the Tiny driver and the JAX
+  -- reference. Host-side, so no re-render.
+  cnxInit   := true
   -- The reference samples validation every 5 epochs (`jax/MainConvNeXtSImagenet.lean`); so does this.
   valEveryEpochs := 5
 
-/-- Entry point. Defaults to the SINGLE-DEVICE `adamwxclipdrop`, matching the ConvNeXt-T ImageNet
-    driver rather than the ViT-S one: a DP default makes a plain invocation fail at the first step
-    with a replica-count refusal, which reads as a broken build rather than a missing flag. Both
-    variants are rendered, so either default would have been runnable — this one fails better. -/
+/-- Entry point. Defaults to the SINGLE-DEVICE `emawxclipdropbf16` at 64, the pair recipe's
+    single-device peer: a DP default makes a plain invocation fail at the first step with a
+    replica-count refusal, which reads as a broken build rather than a missing flag. The job is
+    `scripts/jobs/cnxs-default-emabf16-4gpu.conf` (`emadpwxclipdropbf16`). -/
 def runConvNeXtSImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamwxclipdrop"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdropbf16"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextSImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.00025   -- `convNeXtTinyImagenetConfig.learningRate`: 4e-3@bs4096 scaled to bs256.
                           -- NOT retuned for S, and that matches the reference: the ConvNeXt paper
                           -- uses one LR across T/S/B and varies only the stochastic-depth rate.
-                          -- This run is at global 128, so the linear rule would put it near
-                          -- 1.25e-4; 2.5e-4 is kept to match the reference knob, exactly as the
-                          -- Tiny driver does, and is the first thing to tune if it over-steps.
+                          -- At 64 × 4 this is global 256, the batch the rate is scaled to.
   -- `LEAN_MLIR_EPOCHS` SETS the schedule where `LEAN_MLIR_MAX_EPOCHS` only CAPS it. The cosine
   -- anneals over `cfg.epochs`, so EPOCHS=80 is a complete 80-epoch experiment while MAX_EPOCHS=80
   -- is a PREFIX of the 300-epoch decay stopped with the LR high. If you set EPOCHS=80, set

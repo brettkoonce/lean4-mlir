@@ -65,6 +65,20 @@ open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
+/-- **The stochastic-depth sites**: the block indices (into `mnv4Blocks`) of the 18 skip rows, in
+    order. Site `k` is `%dp<k>`, and the driver's `dropKeeps` lists one keep per site in this
+    order. The three strided rows (0, 2, 10) have no residual, so no site, as in the reference's
+    `uib_block` (`_drop_branch` only under `residual.shape == x.shape`). -/
+def mnv4DropSites : List Nat :=
+  ((mnv4Blocks.zipIdx).filter (fun (b, _) => !b.stride2)).map (·.2)
+
+/-- Block `bi`'s drop site, `none` for a strided row. -/
+def mnv4DropSite (bi : Nat) : Option Nat := mnv4DropSites.idxOf? bi
+
+#guard mnv4DropSites.length == 18
+#guard mnv4DropSites.take 3 == [1, 3, 4]
+#guard mnv4DropSite 0 == none ∧ mnv4DropSite 1 == some 0 ∧ mnv4DropSite 20 == some 17
+
 /-- One UIB block's parameters, in **`VLayer.toSpecs` order**: pre-DW? → expand → post-DW? →
     project, each `{W, γ, β}` and bias-free. The names are exactly what `uibFwd*B` emits, and the
     order is exactly what `toSpecs` lays out — those two facts are what make the signature and the
@@ -198,7 +212,10 @@ deriving Inhabited
     bottleneck is LINEAR, no activation after the add. -/
 private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
     (epsStr p xName : String)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
+    -- stochastic depth: `some i` scales the project-BN output (the residual branch) by the
+    -- per-example mask `%dp<i>` before the skip add, as the reference's `_drop_branch`.
+    (drop : Option Nat := none) :
     StateM Proofs.StableHLO.EmitS UibFwdB := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
@@ -240,8 +257,12 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
   let (cPc, nPc) ← pretty B (.batchOp (N := B)
     (.convAt bf16 (ic := mid) (oc := c) (h := h) (w := h) zrnd s!"%u{p}pW" s!"%zb{c}" zkp zc) (.operand cur zmb))
   let (cPn, nPn, pst) ← mnv4Bn B c h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc replicas sync
-  let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
-  code := code ++ cPc ++ cPn ++ cA
+  let (cD, nD) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := c*h*h) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand nPn zcb))
+    | none   => pure ("", nPn)
+  let (cA, nA) ← pretty B (.addVB (.operand nD zcb) (.operand xName zcb))
+  code := code ++ cPc ++ cPn ++ cD ++ cA
 
   pure { code := code, o := nA, qc := qc, qr := qr,
          ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc,
@@ -343,12 +364,13 @@ def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     post-DW carries it (timm's rule when both depthwise convs exist). The two cannot be one
     function — `.depthwise` and `.depthwiseStrided` differ in INPUT type. -/
 def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
+    (drop : Option Nat := none) :
     StateM Proofs.StableHLO.EmitS UibFwdB :=
   if b.stride2 then
     uibFwdStridedB B b.ic b.oc b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16 replicas sync
   else
-    uibFwdSkipB B b.ic b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16 replicas sync
+    uibFwdSkipB B b.ic b.expand b.preDWk b.postDWk b.h mode epsStr b.p xName bf16 replicas sync drop
 
 /-- Everything the whole-net render needs out of one forward traversal: the emitted code, the
     logits, and every saved activation the backward reads. `inputs` is each block's INPUT SSA name
@@ -492,7 +514,11 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- 32f, stem 16f, fused 8f, the block rows' `h` scaled by f/7 — so the default is byte-identical.
     -- Eval renders only: every train step and the training-mode proofs stay at 224; the eval
     -- graph `mnv4FwdGraphBFullEval` is stated at any `f`.
-    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
+    (f : Nat := 7)
+    -- stochastic depth on the skip blocks' residual branches, train step only; defaulted off, so
+    -- every committed artifact re-renders byte-identical. Sites are numbered in skip-block order
+    -- (`mnv4DropSite`).
+    (sd : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu (symmetric pad; see `mnv4StemFwdB`) ═══
   let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync f
   let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
@@ -505,8 +531,9 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let mut bcode := ""
   let mut blocks : List UibFwdB := []
   let mut inputs : List String := []
-  for b in mnv4Blocks do
-    let r ← uibFwdDispatch B (if f == 7 then b else { b with h := b.h * f / 7 }) mode epsStr cur bf16 replicas sync
+  for (b, bi) in mnv4Blocks.zipIdx do
+    let r ← uibFwdDispatch B (if f == 7 then b else { b with h := b.h * f / 7 }) mode epsStr cur bf16
+      replicas sync (if sd then mnv4DropSite bi else none)
     bcode := bcode ++ r.code
     blocks := blocks ++ [r]
     inputs := inputs ++ [cur]
@@ -603,8 +630,9 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
     So the forward record `f` is read for which
     positions exist (`f.qr`/`f.dn` are `""` when absent) rather than re-deriving it. -/
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
-    (epsStr p xName : String) (f : UibFwdB) (dyName : String)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (epsStr p xName : String) (f : UibFwdB) (dyName0 : String)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
+    (drop : Option Nat := none) :
     StateM Proofs.StableHLO.EmitS BlockBack := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
@@ -617,6 +645,12 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   let zcp  : Vec (B*(c*(h*h))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
+  -- ── stochastic depth: the branch's cotangent is the mask times `dy` (the mask is linear and
+  --    per-example); the skip fan-in below keeps the unmasked `dy` ──
+  let (cDd, dyName) ← match drop with
+    | some i => pretty B (.dropPathB (N := B) (n := c*h*h) (dpName i) (fun _ => 0 : Vec B)
+                            (.operand dyName0 zcb))
+    | none   => pure ("", dyName0)
   -- ── project 1×1 + BN ──
   let pIn := if postDWk > 0 then f.dr else f.er
   let (cPn, nPn) ← bnBackSite B c h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
@@ -627,7 +661,7 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (.operand dyName zcp))
   let (cPx, nPx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := c) (h := h) (w := h) zrnd
     s!"%u{p}pW" zkp zc (.operand nPn zcb))
-  let mut code := cPn ++ cPW ++ cPg ++ cPt ++ cPx
+  let mut code := cDd ++ cPn ++ cPW ++ cPg ++ cPt ++ cPx
   let mut cur := nPx
   -- ── post-DW (present iff postDWk > 0), stride 1 on `mid` channels ──
   let mut dGrads : List String := []
@@ -673,7 +707,7 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     qGrads := [n3, n4, n5]
     cur := n6
   -- ── skip fan-in: (body dx) + dy, at the block-input shape ──
-  let (cDx, nDx) ← pretty B (.addVB (.operand cur zcb) (.operand dyName zcb))
+  let (cDx, nDx) ← pretty B (.addVB (.operand cur zcb) (.operand dyName0 zcb))
   pure { code := code ++ cDx, dx := nDx,
          ps := zipPs (uibSig p c c expand preDWk postDWk)
                  (qGrads ++ [nEW, nEg, nEt] ++ dGrads ++ [nPW, nPg, nPt]) }
@@ -799,11 +833,12 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     for the dispatch to be written down differently. -/
 private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     (f : UibFwdB) (dyName : String) (bf16 : Bool := false)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack :=
+    (replicas : Nat := 1) (sync : Bool := false) (drop : Option Nat := none) :
+    StateM Proofs.StableHLO.EmitS BlockBack :=
   if b.stride2 then
     uibBackStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
   else
-    uibBackSkipGradB B b.ic b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
+    uibBackSkipGradB B b.ic b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync drop
 
 -- ════════════════════════════════════════════════════════════════
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
@@ -836,7 +871,7 @@ def mnv4OptLabel : Option R34Opt → String
     `ema` first (`emaOn` is a PREFIX test), then the optimizer with its `k` (`accK` parses it back
     out after `acc[dp]`), the per-replica batch, `wx`, `do`, the decay mark, `bf16`. -/
 def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (ema wdExclude : Bool)
-    (wdStr : String) (cd : Bool) : String :=
+    (wdStr : String) (cd : Bool) (sd : Bool := false) : String :=
   match opt with
   | none => mnv4AdamVariant B replicas bf16
   | some o =>
@@ -845,7 +880,8 @@ def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (em
       | .adamwAccum k => s!"acc{dp}{k}x"
       | _ => s!"adam{dp}"
     (if ema then "ema" else "") ++ core ++ toString B ++ (if wdExclude then "wx" else "") ++
-      (if cd then "do" else "") ++ wdVariantMark o wdStr ++ (if bf16 then "bf16" else "")
+      (if sd then "drop" else "") ++ (if cd then "do" else "") ++ wdVariantMark o wdStr ++
+      (if bf16 then "bf16" else "")
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
@@ -883,7 +919,10 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- (accumulation, EMA shadow, timm `no_weight_decay`), imported rather than copied. `cd` is
     -- classifier dropout at the driver's `%do` mask.
     (opt : Option R34Opt := none) (ema : Bool := false) (wdExclude : Bool := false)
-    (wdStr : String := "") (cd : Bool := false) : String :=
+    (wdStr : String := "") (cd : Bool := false)
+    -- stochastic depth on the 18 skip blocks (`mnv4DropSites`), masks `%dp0 … %dp17` after the BN
+    -- stats and before `%do` (EfficientNet's placement), handed back as passthroughs.
+    (sd : Bool := false) : String :=
   let sync : Bool := replicas > 1 || forceSync
   let accOn : Bool := match opt with | some (.adamwAccum _) => true | some (.lambAccum _) => true | _ => false
   let alphaStr := fmt6 0.1
@@ -894,7 +933,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- inline a second transcription of the block table into their train step and rely on eyes to
     -- keep the two in step; here there is only one, so a train/score divergence — which
     -- `regen_verified_mlir.sh check` reports green — cannot arise.
-    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync cd
+    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync cd (sd := sd)
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32   : Vec 32 := fun _ => 0
@@ -966,9 +1005,9 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut dy := nDh1x
     let mut gcode := ""
     let mut blockPs : List (List PGrad) := []
-    for (b, f, xin) in (mnv4Blocks.zip (fwd.blocks.zip fwd.inputs)).reverse.map
-        (fun (b, f, xin) => (b, f, xin)) do
+    for ((b, bi), f, xin) in (mnv4Blocks.zipIdx.zip (fwd.blocks.zip fwd.inputs)).reverse do
       let g ← uibBackDispatch B b epsStr xin f dy bf16 replicas sync
+        (if sd then mnv4DropSite bi else none)
       gcode := gcode ++ g.code
       blockPs := [g.ps] ++ blockPs
       dy := g.dx
@@ -1084,14 +1123,15 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- passthroughs (so `#out = #in − 2` at every combination, as in R50), the BN stats, and the
     -- dropout mask LAST (EfficientNet's placement: after the stats, before `%onehot`).
     let accScalars := if accOn then ["%aup", "%akeep"] else []
+    let dropNames := if sd then (List.range mnv4DropSites.length).map dpName else []
     let emaScalars := if ema then ["%emad", "%oemad"] else []
     let retVals := thetaN ++ mNames ++ vNames ++ aNames ++ eNames ++ ["%loss", "%bc1", "%bc2"] ++
-      accScalars ++ emaScalars ++ statNames ++ (if cd then [doName] else [])
+      accScalars ++ emaScalars ++ statNames ++ dropNames ++ (if cd then [doName] else [])
     let retTys  := pTypes ++ pTypes ++ pTypes ++ (if accOn then pTypes else []) ++
       (if ema then pTypes else []) ++
       ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
       (accScalars ++ emaScalars).map (fun _ => "tensor<f32>") ++ statTypes ++
-      (if cd then [ty [B, 1280]] else [])
+      dropNames.map (fun _ => ty [B]) ++ (if cd then [ty [B, 1280]] else [])
     pure <|
       (if replicas ≤ 1 then
         s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step: {trainStepHandNote accOn} ──\n"
@@ -1121,14 +1161,17 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   let statSig := String.intercalate ", " (mnv4StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
   -- EMA's region suffix is `ema`, `optOne`'s spelling (the ResNet family's; see its note).
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList accOn ema (emaSuf := "ema") ++
-    ", " ++ statSig ++ (if cd then s!", {doName}: {ty [B, 1280]}" else "") ++
+    ", " ++ statSig ++ dropMaskSig B sd (List.range mnv4DropSites.length) ++
+    (if cd then s!", {doName}: {ty [B, 1280]}" else "") ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
     (packedTrainRetTys pTy accOn ema ++
-     (mnv4StatSigList.map (·.2)) ++ (if cd then [ty [B, 1280]] else []))
+     (mnv4StatSigList.map (·.2)) ++
+     (if sd then (List.range mnv4DropSites.length).map (fun _ => ty [B]) else []) ++
+     (if cd then [ty [B, 1280]] else []))
   let inner : String := go.run' (0, [])
-  let fname := s!"{slug}_{mnv4RecipeVariant B replicas bf16 opt ema wdExclude wdStr cd}_train_step"
+  let fname := s!"{slug}_{mnv4RecipeVariant B replicas bf16 opt ema wdExclude wdStr cd sd}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1288,6 +1331,25 @@ end Proofs.StableHLO
     (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
 #guard Proofs.StableHLO.mnv4RecipeVariant 128 4 true (some (.adamwAccum 8)) true true "0.05" true ==
   "emaaccdp8x128wxdowd005bf16"
+
+-- **THE PAPER TIER** (the JAX `full` recipe, 500 epochs): the recipe above without the EMA (Conv-M
+-- trains without one, so the live weights are scored), at the paper's wd 0.1, with stochastic depth
+-- on the 18 skip blocks (`sd`, masks `%dp0 … %dp17`, the keeps the driver's
+-- `mnv4ImagenetFullVerified` draws). Dropout 0.2 is the driver's mask keep, not a render change.
+-- The drop masks are not in the tie statements (stated at the drop-free net), as for
+-- EfficientNet's and ResNet-50's `drop` renders.
+#eval IO.FS.writeFile "verified_mlir/mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 4 "mnv4in" true
+    (opt := some (.adamwAccum 8)) (wdExclude := true) (wdStr := "0.1") (cd := true) (sd := true))
+-- its single-device peer, for `mnv4-dp-check`
+#eval IO.FS.writeFile "verified_mlir/mnv4in_acc8x128wxdropdowd01bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 1 "mnv4in" true
+    (opt := some (.adamwAccum 8)) (wdExclude := true) (wdStr := "0.1") (cd := true) (sd := true))
+#guard Proofs.StableHLO.mnv4RecipeVariant 128 4 true (some (.adamwAccum 8)) false true "0.1" true true ==
+  "accdp8x128wxdropdowd01bf16"
+#guard "accdp8x128wxdropdowd01bf16".contains "drop"
+#guard "accdp8x128wxdropdowd01bf16".contains "do"
+#guard !"accdp8x128wxdropdowd01bf16".startsWith "ema"
 #guard Proofs.StableHLO.mnv4RecipeVariant 64 4 true none false false "" false == "adamdp64bf16"
 
 -- The bf16 marker, and the wiring that actually breaks: the entry name derives from

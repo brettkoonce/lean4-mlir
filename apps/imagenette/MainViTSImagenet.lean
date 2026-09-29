@@ -28,9 +28,12 @@ probed (40 steps on real ImageNet, four cards): **531 ms/step fp32, 323 bf16**, 
 **Run it through the job config**, which owns the device list, the epoch budget and the restart
 policy:
 ```
-scripts/supervise.sh vits-default-g512-4gpu
-DRY_RUN=1 scripts/supervise.sh vits-default-g512-4gpu   # print the plan, run nothing
+scripts/supervise.sh vits-default-emabf16-4gpu
+DRY_RUN=1 scripts/supervise.sh vits-default-emabf16-4gpu   # print the plan, run nothing
 ```
+`vits-default-emabf16-4gpu` is the pair job: `vitsin_emadp128x4wxclipdropbf16`, Tiny's pair
+recipe (EMA 0.99996, timm/DeiT init, bf16) at this width. `vits-default-g512-4gpu` is the non-EMA
+f32 sibling.
 
 By hand (4 GPUs — BOTH replica knobs are required):
 ```
@@ -55,6 +58,10 @@ leave it alone for one that does. `runs/2026-08-28-convnext-sb-jobs/`.
 def vitSImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 128
+  -- timm/DeiT init, as the Tiny driver and the JAX reference (`vitInit := true` in every JAX
+  -- ViT base config since VT-1). Without it every transformer Linear is Glorot. Host-side, so no
+  -- re-render.
+  vitInit   := true
 
 /-- Entry point. Defaults to the FOUR-REPLICA variant, unlike every other ImageNet driver here,
     because it is the only one rendered for this net. A plain invocation therefore needs
@@ -70,8 +77,10 @@ def runViTSImagenet (argv : List String) : IO Unit := do
                          -- DeiT-S uses the same 5e-4 at batch 512, so this matches the reference
                          -- rather than being an untuned carry-over.
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD vitSImagenetConfig.epochs
+  -- DeiT's EMA decay, named because `trainAdamSched` defaults to 0.9999 (see the Tiny driver).
+  -- Inert unless the variant starts with `ema`.
   vitSImagenetVerified.toNet.trainAdamSched
     { vitSImagenetConfig with batchSize := bs, epochs := epochs }
-    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant (emaDecay := 0.99996)
 
 def main (argv : List String) : IO Unit := runViTSImagenet argv

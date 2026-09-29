@@ -3795,8 +3795,30 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)\n" ++
   "        return (np.ascontiguousarray(x4m.reshape(B, -1), dtype=np.float32),\n" ++
   "                np.ascontiguousarray(tm, dtype=np.float32))\n" ++
-  "    def _emit(x, y, step):\n" ++
-  "        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n" ++
+  -- ── BCE TARGET TRANSFORM, the verified path's copy of the reference loss's target build. The
+  --    BCE renders take `%onehot` as given (no smoothing node, unlike the CE renders), so a
+  --    recipe's label smoothing and timm's `--bce-target-thresh` are applied here, on the train
+  --    split, after mixing: smoothing is affine with weights summing to 1, so it commutes with
+  --    the mix, and timm thresholds last. Emitted only for a recipe that sets either, so every
+  --    other shim and its SHIM_HASH digest are unchanged.
+  (let ls := cfg.labelSmoothing
+   let bceT := cfg.lossKind == some .bce && (ls > 0.0 || cfg.bceTargetThresh.isSome)
+   if !bceT then
+    "    def _emit(x, y, step):\n" ++
+    "        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n"
+   else
+    "    def _emit(x, y, step):\n" ++
+    "        xo, to = _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n" ++
+    "        if not training or nclasses <= 0:\n" ++
+    "            return xo, to\n" ++
+    (if ls > 0.0 then
+      "        to = to * np.float32(1.0 - " ++ toString ls ++ ") + np.float32(" ++ toString ls ++
+        " / nclasses)  # label smoothing, as the reference's BCE\n"
+     else "") ++
+    (match cfg.bceTargetThresh with
+     | some t => "        to = (to > np.float32(" ++ toString t ++ ")).astype(np.float32)  # timm --bce-target-thresh\n"
+     | none => "") ++
+    "        return xo, np.ascontiguousarray(to, dtype=np.float32)\n") ++
   "    if hash_n:\n" ++
   "        h = hashlib.sha256()\n" ++
   "        for i, (x, y) in enumerate(it):\n" ++

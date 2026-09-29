@@ -435,7 +435,12 @@ def _main():
         return (np.ascontiguousarray(x4m.reshape(B, -1), dtype=np.float32),
                 np.ascontiguousarray(tm, dtype=np.float32))
     def _emit(x, y, step):
-        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)
+        xo, to = _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)
+        if not training or nclasses <= 0:
+            return xo, to
+        to = to * np.float32(1.0 - 0.100000) + np.float32(0.100000 / nclasses)  # label smoothing, as the reference's BCE
+        to = (to > np.float32(0.200000)).astype(np.float32)  # timm --bce-target-thresh
+        return xo, np.ascontiguousarray(to, dtype=np.float32)
     if hash_n:
         h = hashlib.sha256()
         for i, (x, y) in enumerate(it):

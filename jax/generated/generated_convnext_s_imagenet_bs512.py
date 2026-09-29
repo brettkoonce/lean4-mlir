@@ -500,614 +500,501 @@ replicated_sharding = NamedSharding(mesh, P())
 # ═══════════════════════════════════════════════════════════════════════
 
 def init_params(key):
-    """Xavier/Kaiming uniform init."""
+    """ConvNeXt paper init: trunc_normal(std=0.02) on every conv/dense."""
     params = []
-    # CNXStem conv 4x4 3→96
+    # CNXStem conv 4x4 3→96  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 144)
-    params.append((random.uniform(k_, (96, 3, 4, 4), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 3, 4, 4)) * 0.02, jnp.zeros(96)))
     # CNXStem LN 96
     params.append((jnp.ones(96), jnp.zeros(96)))
-    # ConvNeXt[0] DW 7x7 96ch
+    # ConvNeXt[0] DW 7x7 96ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 145)
-    params.append((random.uniform(k_, (96, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 1, 7, 7)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[0] LN 96
     params.append((jnp.ones(96), jnp.zeros(96)))
-    # ConvNeXt[0] PW expand 96→384
+    # ConvNeXt[0] PW expand 96→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (384, 96, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # ConvNeXt[0] PW project 384→96
+    params.append((random.normal(k_, (384, 96, 1, 1)) * 0.02, jnp.zeros(384)))
+    # ConvNeXt[0] PW project 384→96  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (96, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 384, 1, 1)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[0] LayerScale 96
     params.append((jnp.full((96,), 1e-6),))
-    # ConvNeXt[1] DW 7x7 96ch
+    # ConvNeXt[1] DW 7x7 96ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 145)
-    params.append((random.uniform(k_, (96, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 1, 7, 7)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[1] LN 96
     params.append((jnp.ones(96), jnp.zeros(96)))
-    # ConvNeXt[1] PW expand 96→384
+    # ConvNeXt[1] PW expand 96→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (384, 96, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # ConvNeXt[1] PW project 384→96
+    params.append((random.normal(k_, (384, 96, 1, 1)) * 0.02, jnp.zeros(384)))
+    # ConvNeXt[1] PW project 384→96  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (96, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 384, 1, 1)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[1] LayerScale 96
     params.append((jnp.full((96,), 1e-6),))
-    # ConvNeXt[2] DW 7x7 96ch
+    # ConvNeXt[2] DW 7x7 96ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 145)
-    params.append((random.uniform(k_, (96, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 1, 7, 7)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[2] LN 96
     params.append((jnp.ones(96), jnp.zeros(96)))
-    # ConvNeXt[2] PW expand 96→384
+    # ConvNeXt[2] PW expand 96→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (384, 96, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # ConvNeXt[2] PW project 384→96
+    params.append((random.normal(k_, (384, 96, 1, 1)) * 0.02, jnp.zeros(384)))
+    # ConvNeXt[2] PW project 384→96  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 480)
-    params.append((random.uniform(k_, (96, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(96)))
+    params.append((random.normal(k_, (96, 384, 1, 1)) * 0.02, jnp.zeros(96)))
     # ConvNeXt[2] LayerScale 96
     params.append((jnp.full((96,), 1e-6),))
     # CNXDown LN 96
     params.append((jnp.ones(96), jnp.zeros(96)))
-    # CNXDown conv 2x2 96→192
+    # CNXDown conv 2x2 96→192  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 576)
-    params.append((random.uniform(k_, (192, 96, 2, 2), minval=-scale, maxval=scale), jnp.zeros(192)))
-    # ConvNeXt[0] DW 7x7 192ch
+    params.append((random.normal(k_, (192, 96, 2, 2)) * 0.02, jnp.zeros(192)))
+    # ConvNeXt[0] DW 7x7 192ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 241)
-    params.append((random.uniform(k_, (192, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 1, 7, 7)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[0] LN 192
     params.append((jnp.ones(192), jnp.zeros(192)))
-    # ConvNeXt[0] PW expand 192→768
+    # ConvNeXt[0] PW expand 192→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (768, 192, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
-    # ConvNeXt[0] PW project 768→192
+    params.append((random.normal(k_, (768, 192, 1, 1)) * 0.02, jnp.zeros(768)))
+    # ConvNeXt[0] PW project 768→192  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (192, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 768, 1, 1)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[0] LayerScale 192
     params.append((jnp.full((192,), 1e-6),))
-    # ConvNeXt[1] DW 7x7 192ch
+    # ConvNeXt[1] DW 7x7 192ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 241)
-    params.append((random.uniform(k_, (192, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 1, 7, 7)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[1] LN 192
     params.append((jnp.ones(192), jnp.zeros(192)))
-    # ConvNeXt[1] PW expand 192→768
+    # ConvNeXt[1] PW expand 192→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (768, 192, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
-    # ConvNeXt[1] PW project 768→192
+    params.append((random.normal(k_, (768, 192, 1, 1)) * 0.02, jnp.zeros(768)))
+    # ConvNeXt[1] PW project 768→192  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (192, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 768, 1, 1)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[1] LayerScale 192
     params.append((jnp.full((192,), 1e-6),))
-    # ConvNeXt[2] DW 7x7 192ch
+    # ConvNeXt[2] DW 7x7 192ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 241)
-    params.append((random.uniform(k_, (192, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 1, 7, 7)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[2] LN 192
     params.append((jnp.ones(192), jnp.zeros(192)))
-    # ConvNeXt[2] PW expand 192→768
+    # ConvNeXt[2] PW expand 192→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (768, 192, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
-    # ConvNeXt[2] PW project 768→192
+    params.append((random.normal(k_, (768, 192, 1, 1)) * 0.02, jnp.zeros(768)))
+    # ConvNeXt[2] PW project 768→192  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 960)
-    params.append((random.uniform(k_, (192, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(192)))
+    params.append((random.normal(k_, (192, 768, 1, 1)) * 0.02, jnp.zeros(192)))
     # ConvNeXt[2] LayerScale 192
     params.append((jnp.full((192,), 1e-6),))
     # CNXDown LN 192
     params.append((jnp.ones(192), jnp.zeros(192)))
-    # CNXDown conv 2x2 192→384
+    # CNXDown conv 2x2 192→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1152)
-    params.append((random.uniform(k_, (384, 192, 2, 2), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # ConvNeXt[0] DW 7x7 384ch
+    params.append((random.normal(k_, (384, 192, 2, 2)) * 0.02, jnp.zeros(384)))
+    # ConvNeXt[0] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[0] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[0] PW expand 384→1536
+    # ConvNeXt[0] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[0] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[0] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[0] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[1] DW 7x7 384ch
+    # ConvNeXt[1] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[1] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[1] PW expand 384→1536
+    # ConvNeXt[1] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[1] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[1] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[1] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[2] DW 7x7 384ch
+    # ConvNeXt[2] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[2] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[2] PW expand 384→1536
+    # ConvNeXt[2] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[2] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[2] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[2] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[3] DW 7x7 384ch
+    # ConvNeXt[3] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[3] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[3] PW expand 384→1536
+    # ConvNeXt[3] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[3] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[3] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[3] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[4] DW 7x7 384ch
+    # ConvNeXt[4] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[4] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[4] PW expand 384→1536
+    # ConvNeXt[4] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[4] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[4] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[4] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[5] DW 7x7 384ch
+    # ConvNeXt[5] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[5] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[5] PW expand 384→1536
+    # ConvNeXt[5] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[5] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[5] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[5] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[6] DW 7x7 384ch
+    # ConvNeXt[6] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[6] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[6] PW expand 384→1536
+    # ConvNeXt[6] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[6] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[6] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[6] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[7] DW 7x7 384ch
+    # ConvNeXt[7] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[7] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[7] PW expand 384→1536
+    # ConvNeXt[7] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[7] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[7] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[7] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[8] DW 7x7 384ch
+    # ConvNeXt[8] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[8] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[8] PW expand 384→1536
+    # ConvNeXt[8] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[8] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[8] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[8] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[9] DW 7x7 384ch
+    # ConvNeXt[9] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[9] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[9] PW expand 384→1536
+    # ConvNeXt[9] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[9] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[9] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[9] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[10] DW 7x7 384ch
+    # ConvNeXt[10] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[10] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[10] PW expand 384→1536
+    # ConvNeXt[10] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[10] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[10] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[10] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[11] DW 7x7 384ch
+    # ConvNeXt[11] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[11] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[11] PW expand 384→1536
+    # ConvNeXt[11] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[11] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[11] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[11] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[12] DW 7x7 384ch
+    # ConvNeXt[12] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[12] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[12] PW expand 384→1536
+    # ConvNeXt[12] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[12] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[12] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[12] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[13] DW 7x7 384ch
+    # ConvNeXt[13] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[13] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[13] PW expand 384→1536
+    # ConvNeXt[13] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[13] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[13] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[13] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[14] DW 7x7 384ch
+    # ConvNeXt[14] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[14] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[14] PW expand 384→1536
+    # ConvNeXt[14] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[14] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[14] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[14] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[15] DW 7x7 384ch
+    # ConvNeXt[15] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[15] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[15] PW expand 384→1536
+    # ConvNeXt[15] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[15] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[15] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[15] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[16] DW 7x7 384ch
+    # ConvNeXt[16] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[16] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[16] PW expand 384→1536
+    # ConvNeXt[16] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[16] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[16] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[16] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[17] DW 7x7 384ch
+    # ConvNeXt[17] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[17] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[17] PW expand 384→1536
+    # ConvNeXt[17] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[17] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[17] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[17] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[18] DW 7x7 384ch
+    # ConvNeXt[18] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[18] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[18] PW expand 384→1536
+    # ConvNeXt[18] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[18] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[18] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[18] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[19] DW 7x7 384ch
+    # ConvNeXt[19] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[19] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[19] PW expand 384→1536
+    # ConvNeXt[19] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[19] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[19] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[19] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[20] DW 7x7 384ch
+    # ConvNeXt[20] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[20] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[20] PW expand 384→1536
+    # ConvNeXt[20] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[20] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[20] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[20] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[21] DW 7x7 384ch
+    # ConvNeXt[21] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[21] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[21] PW expand 384→1536
+    # ConvNeXt[21] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[21] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[21] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[21] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[22] DW 7x7 384ch
+    # ConvNeXt[22] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[22] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[22] PW expand 384→1536
+    # ConvNeXt[22] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[22] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[22] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[22] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[23] DW 7x7 384ch
+    # ConvNeXt[23] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[23] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[23] PW expand 384→1536
+    # ConvNeXt[23] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[23] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[23] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[23] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[24] DW 7x7 384ch
+    # ConvNeXt[24] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[24] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[24] PW expand 384→1536
+    # ConvNeXt[24] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[24] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[24] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[24] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[25] DW 7x7 384ch
+    # ConvNeXt[25] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[25] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[25] PW expand 384→1536
+    # ConvNeXt[25] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[25] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[25] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[25] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
-    # ConvNeXt[26] DW 7x7 384ch
+    # ConvNeXt[26] DW 7x7 384ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 433)
-    params.append((random.uniform(k_, (384, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1, 7, 7)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[26] LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # ConvNeXt[26] PW expand 384→1536
+    # ConvNeXt[26] PW expand 384→1536  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384, 1, 1), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # ConvNeXt[26] PW project 1536→384
+    params.append((random.normal(k_, (1536, 384, 1, 1)) * 0.02, jnp.zeros(1536)))
+    # ConvNeXt[26] PW project 1536→384  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536, 1, 1), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536, 1, 1)) * 0.02, jnp.zeros(384)))
     # ConvNeXt[26] LayerScale 384
     params.append((jnp.full((384,), 1e-6),))
     # CNXDown LN 384
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # CNXDown conv 2x2 384→768
+    # CNXDown conv 2x2 384→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 2304)
-    params.append((random.uniform(k_, (768, 384, 2, 2), minval=-scale, maxval=scale), jnp.zeros(768)))
-    # ConvNeXt[0] DW 7x7 768ch
+    params.append((random.normal(k_, (768, 384, 2, 2)) * 0.02, jnp.zeros(768)))
+    # ConvNeXt[0] DW 7x7 768ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 817)
-    params.append((random.uniform(k_, (768, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 1, 7, 7)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[0] LN 768
     params.append((jnp.ones(768), jnp.zeros(768)))
-    # ConvNeXt[0] PW expand 768→3072
+    # ConvNeXt[0] PW expand 768→3072  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (3072, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(3072)))
-    # ConvNeXt[0] PW project 3072→768
+    params.append((random.normal(k_, (3072, 768, 1, 1)) * 0.02, jnp.zeros(3072)))
+    # ConvNeXt[0] PW project 3072→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (768, 3072, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 3072, 1, 1)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[0] LayerScale 768
     params.append((jnp.full((768,), 1e-6),))
-    # ConvNeXt[1] DW 7x7 768ch
+    # ConvNeXt[1] DW 7x7 768ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 817)
-    params.append((random.uniform(k_, (768, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 1, 7, 7)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[1] LN 768
     params.append((jnp.ones(768), jnp.zeros(768)))
-    # ConvNeXt[1] PW expand 768→3072
+    # ConvNeXt[1] PW expand 768→3072  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (3072, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(3072)))
-    # ConvNeXt[1] PW project 3072→768
+    params.append((random.normal(k_, (3072, 768, 1, 1)) * 0.02, jnp.zeros(3072)))
+    # ConvNeXt[1] PW project 3072→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (768, 3072, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 3072, 1, 1)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[1] LayerScale 768
     params.append((jnp.full((768,), 1e-6),))
-    # ConvNeXt[2] DW 7x7 768ch
+    # ConvNeXt[2] DW 7x7 768ch  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 817)
-    params.append((random.uniform(k_, (768, 1, 7, 7), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 1, 7, 7)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[2] LN 768
     params.append((jnp.ones(768), jnp.zeros(768)))
-    # ConvNeXt[2] PW expand 768→3072
+    # ConvNeXt[2] PW expand 768→3072  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (3072, 768, 1, 1), minval=-scale, maxval=scale), jnp.zeros(3072)))
-    # ConvNeXt[2] PW project 3072→768
+    params.append((random.normal(k_, (3072, 768, 1, 1)) * 0.02, jnp.zeros(3072)))
+    # ConvNeXt[2] PW project 3072→768  (ConvNeXt trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 3840)
-    params.append((random.uniform(k_, (768, 3072, 1, 1), minval=-scale, maxval=scale), jnp.zeros(768)))
+    params.append((random.normal(k_, (768, 3072, 1, 1)) * 0.02, jnp.zeros(768)))
     # ConvNeXt[2] LayerScale 768
     params.append((jnp.full((768,), 1e-6),))
     # head LN 768
     params.append((jnp.ones(768), jnp.zeros(768)))
-    # Dense 768→1000
+    # Dense 768→1000 (head)  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1768)
-    params.append((random.uniform(k_, (1000, 768), minval=-scale, maxval=scale), jnp.zeros(1000)))
+    params.append((random.normal(k_, (1000, 768)) * 0.02, jnp.zeros(1000)))
     return params
 
 def init_params_from_file(path):

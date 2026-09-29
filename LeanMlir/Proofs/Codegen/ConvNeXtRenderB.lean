@@ -84,11 +84,10 @@ private def reassocB {N c h : Nat} (e : SHlo (N*(c*h*h))) : SHlo (N*(c*(h*h))) :
     Spelled once because it has to reach every `convnextin_*` `#eval` AND both halves of every
     train step (body at `N := bB`, wrapper via `cBS`).
 
-    **`convnextsin_*` and `convnextbin_*` (ConvNeXt-S and -B at ImageNet) stay at the 32
-    default, deliberately.** Neither has been trained or paired with a reference. If either is ever
-    launched, its job's `LEAN_MLIR_BATCH` must be checked against its render — the `PRECHECK` in
-    `scripts/jobs/cnx-default-4gpu.conf` greps the artifact for its own baked batch and is the
-    template for that. -/
+    ConvNeXt-S's and -B's EMA pair renders and eval forwards are at this batch too; their `adam*`
+    train steps stay at the 32 default. A job's `LEAN_MLIR_BATCH` must match its render —
+    the `PRECHECK` in `scripts/jobs/cnx-default-4gpu.conf` greps the artifact for its own baked
+    batch and is the template for that. -/
 def cnxInBS : Nat := 64
 
 /-- Eps and the stage table — read from the per-example renderer's own constants where they
@@ -873,6 +872,22 @@ end Proofs.StableHLO
     (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxSmall)
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
 
+-- **S's PAIR RENDERS, at T's batch.** The EMA peers of the shipping recipe, as
+-- `convnextin_ema{,dp}wxclipdropbf16`: 64 per replica × 4 = global 256, the reference's batch and
+-- the LR's (2.5e-4 = 4e-3 @ 4096 scaled to 256). The 32-per-replica renders above stay as the
+-- f32/bf16 siblings, with `convnextsin_drop_fwd` their prefix partner at 32. The eval forwards
+-- (`convnextsin_fwd`, `_fwd_s288`) are at 64, and the driver reads the eval batch off the forward,
+-- so either train batch scores through them.
+-- `vit-ema-drop-render convnextsin` pins the arity.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emawxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emadpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
+
 -- ── ConvNeXt-**B** on ImageNet, slug `convnextbin` ────────────────────────────────────────────
 -- The size that made the DIMS a parameter. B is S's depth table at `[128,256,512,1024]`, so it
 -- shares S's 36 drop sites and its 342 parameter tensors and differs only in every width —
@@ -911,6 +926,19 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 4 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase))
+-- **B's PAIR RENDERS, at T's batch**, as S's: 64 per replica × 4 = global 256, the EMA shadow, bf16.
+-- The size question the app docstring raised is answered by a compile probe (2026-09-29): the DP
+-- render peaks at **9.53 GiB of the plugin's 11.68 default**, so B needs no accumulation render
+-- and no `LEAN_MLIR_MEM_FRACTION` (0.97 OOMs ConvNeXt's bf16 arms outside the pool).
+-- `vit-ema-drop-render convnextbin` pins the arity.
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emawxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emadpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_drop_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextbin_drop_fwd" 1000
     (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxBase)
@@ -1124,7 +1152,14 @@ end Proofs.StableHLO
 -- class-batch-independent.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextsin_fwd" 1000
-    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall))
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
+    (bB := cnxInBS))
+-- timm's TEST protocol for ConvNeXt-S (`convnext_small.fb_in1k`: 288px, crop 1.0), as T's
+-- `convnextin_fwd_s288`.
+#eval IO.FS.writeFile "verified_mlir/convnextsin_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextsin_fwd_s288" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
+    (bB := cnxInBS) (s := 288))
 
 -- ── ConvNeXt-**B**, slug `convnextbin` — the eval forward ─────────────────────────────────────
 -- B is S's depth at `[128,256,512,1024]`. Unlike S, it moves the STEM (96 → 128) and the HEAD
@@ -1138,7 +1173,13 @@ end Proofs.StableHLO
 -- those sizes; the shape check of the emitted B artifact says B's is right.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextbin_fwd" 1000
-    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase))
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
+    (bB := cnxInBS))
+-- timm's TEST protocol for ConvNeXt-B (`convnext_base.fb_in1k`: 288px, crop 1.0).
+#eval IO.FS.writeFile "verified_mlir/convnextbin_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextbin_fwd_s288" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
+    (bB := cnxInBS) (s := 288))
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call
 -- ("entry mismatch"). These matter MORE for `drop` than for `wx` or `clip`, because `drop` also

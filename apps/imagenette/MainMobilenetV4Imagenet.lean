@@ -26,8 +26,9 @@ The job is `scripts/jobs/mnv4-default-4gpu.conf`: `emaaccdp8x128wxdowd005bf16`, 
 over 512, wd 0.05 off norm/bias, classifier dropout 0.1, EMA 0.9999, bf16, 100 epochs, RandAugment
 N2 m9 from the shim: the JAX reference's `default` recipe. The optimizer, schedule and
 regularisers are selected by the variant string; this file only supplies the defaults below.
-Still absent on this path: drop-path in the UIB blocks and the
-paper's RandAugment m15, both of which only the 500-epoch paper tier uses.
+The 500-epoch paper tier is `LEAN_MLIR_RECIPE=full` with `accdp8x128wxdropdowd01bf16`
+(`scripts/jobs/mnv4-full-4gpu.conf`): the `full` shim's RandAugment m15, dropout 0.2, drop-path
+0.075 on the 18 skip blocks, wd 0.1, no EMA.
 
 A single-card figure off this driver is not comparable to the book's other ImageNet rows, which
 were all measured at 4×. Run the job, not the bare binary, for anything printable.
@@ -75,7 +76,21 @@ def runMnv4Imagenet (argv : List String) : IO Unit := do
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.001   -- NOT the reference's 0.004: that is a batch-4096 rate, this is 256.
-  mnv4ImagenetVerified.toNet.trainAdamSched
+  -- `LEAN_MLIR_RECIPE` picks the NET SPEC, hence the shim and the host-drawn masks: `default` (the
+  -- 100-epoch pair, RandAugment m9, dropout 0.1) or `full` (the paper tier: m15, dropout 0.2,
+  -- drop-path 0.075 on the skip blocks). A `drop` variant on `default` would draw no masks
+  -- (`default` has no drop sites) and `full` without one would skip the drop-path, so the two
+  -- must agree.
+  let recipe := ((← IO.getEnv "LEAN_MLIR_RECIPE").getD "default").trimAscii.toString
+  let net ← match recipe with
+    | "default" => pure mnv4ImagenetVerified
+    | "full"    => pure mnv4ImagenetFullVerified
+    | r => throw <| IO.userError s!"LEAN_MLIR_RECIPE={r}: `default` or `full`"
+  if VerifiedVariant.sdOn variant != (recipe == "full") then
+    throw <| IO.userError s!"LEAN_MLIR_RECIPE={recipe} with LEAN_MLIR_VARIANT={variant}: the `full` \
+      recipe trains a `drop` variant (e.g. accdp8x128wxdropdowd01bf16) and `default` does not."
+  IO.println s!"  ▸ RECIPE: {recipe} — augmentation from {net.shimScript}"
+  net.toNet.trainAdamSched
     { mnv4ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
 

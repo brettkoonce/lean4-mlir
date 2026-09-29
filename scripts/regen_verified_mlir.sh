@@ -246,9 +246,9 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_adam_train_step.mlir"),
 #   fails if an ImageNet forward is in neither this dict nor PAIRS, so a new one cannot be added
 #   without a decision.
 NO_PARTNER = {
-  "convnextsin_fwd.mlir":  "drop-free at B=32; every convnextsin train step carries drop "
+  "convnextsin_fwd.mlir":  "drop-free at B=64; every convnextsin train step carries drop "
                            "(convnextsin_drop_fwd is the paired one)",
-  "convnextbin_fwd.mlir":  "drop-free at B=32; every convnextbin train step carries drop "
+  "convnextbin_fwd.mlir":  "drop-free at B=64; every convnextbin train step carries drop "
                            "(convnextbin_drop_fwd is the paired one)",
   "vitin_fwd.mlir":        "drop-free at B=256; the only B=256 vitin step "
                            "(adamdp256x2wxclipdrop) carries drop",

@@ -23,48 +23,47 @@ per step), so `LEAN_MLIR_DROP_RATE_U` retunes it without touching an artifact. O
 tier use `LEAN_MLIR_DROP_RATE_U=300000` (0.3): the paper's per-size values underfit on the short
 schedule (measured on the JAX side).
 
-**Batch is 32 per device** — `cBS` is a private constant. At four replicas that is global
-128, half the paper's 256. For B this is the binding constraint rather than a scope note.
+**Batch is 64 per device** for the pair, ConvNeXt-T's rescope: global 256, the batch the LR is
+scaled to. The pair variant is `emadpwxclipdropbf16` (EMA shadow, bf16), `emawxclipdropbf16` its
+single-device peer and the default here; it peaks at 9.53 GiB of the plugin's 11.68 default arena
+(compile probe, 2026-09-29), so no accumulation render and no `LEAN_MLIR_MEM_FRACTION`. The
+`adam*wxclipdrop{,bf16}` siblings are rendered at 32 and need `LEAN_MLIR_BATCH=32`.
 
-ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_fwd.mlir`
-plus the train step is the complete artifact set; `convnextbin_drop_fwd.mlir` is the SD render's
-structural prefix partner, not what the driver evals.
+ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_fwd.mlir` (at
+64) plus the train step is the complete artifact set, and `convnextbin_fwd_s288` scores at timm's
+test size; `convnextbin_drop_fwd.mlir` is the 32-batch SD renders' structural prefix partner, not
+what the driver evals.
 
 **NOTHING HAS BEEN TRAINED.** The artifacts render, the shapes tie to `VLayer.toSpecs`, the
 count is `#guard`ed against the published 88.59M and against the independent JAX emitter. No
 accuracy has been measured and none is claimed.
 
-Run (4 GPUs — BOTH replica knobs are required):
-```
-CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
-  LEAN_MLIR_VARIANT=adamdpwxclipdrop LEAN_MLIR_BATCH=32 \
-  PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
-  .lake/build/bin/convnext-b-imagenet-verified data
-```
+Run through the job config: `scripts/supervise.sh cnxb-default-emabf16-4gpu`.
 -/
 
-/-- 300 epochs at 32 per device — the ConvNeXt paper's schedule length, unchanged across T/S/B.
+/-- 300 epochs at 64 per device — the ConvNeXt paper's schedule length, unchanged across T/S/B.
     The paper varies the stochastic-depth rate with size, not the schedule or the LR. -/
 def convnextBImagenetConfig : VerifiedConfig where
   epochs    := 300
-  batchSize := 32
+  batchSize := 64
+  -- ConvNeXt `_init_weights` (σ = 0.02 on every conv and the head), as the Tiny driver and the JAX
+  -- reference. Host-side, so no re-render.
+  cnxInit   := true
   -- The reference samples validation every 5 epochs (`jax/MainConvNeXtBImagenet.lean`); so does this.
   valEveryEpochs := 5
 
-/-- Entry point. Defaults to the single-device `adamwxclipdrop`, as the T and S drivers do: a DP
+/-- Entry point. Defaults to the single-device `emawxclipdropbf16` at 64, as the S driver does: a DP
     default makes a plain invocation fail at the first step on a replica-count refusal, which reads
     as a broken build rather than a missing flag. -/
 def runConvNeXtBImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamwxclipdrop"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdropbf16"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextBImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => 0.00025   -- `convNeXtTinyImagenetConfig.learningRate`: 4e-3@bs4096 scaled to bs256.
                           -- NOT retuned for B, matching the reference: the ConvNeXt paper uses
                           -- one LR across T/S/B and varies only the stochastic-depth rate.
-                          -- This runs at global 128, so the linear rule would put it near
-                          -- 1.25e-4; 2.5e-4 matches the reference knob and is the first thing to
-                          -- tune if it over-steps. Eight replicas would make it exactly right.
+                          -- At 64 × 4 this is global 256, the batch the rate is scaled to.
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD convnextBImagenetConfig.epochs
   -- Stochastic-depth rate in MICRO-units (`500000` = 0.5, this spec's committed value). Unset ⇒
   -- the spec's ramp. `0` is THE GATE: every keep becomes 1.0, so each drop op is the identity

@@ -41,106 +41,71 @@ Where each number comes from:
 | A2 / A1 verified | the 08-27 device-probe model |
 | ViT-B / ConvNeXt verified | the 09-10 bf16 probes, which predate sync-BN, so re-probe before launch |
 
-## 2. Where things stand (2026-09-29)
+## 2. Where things stand (2026-09-29, afternoon)
 
-* **Batch-1 JAX software is done**, committed as `b84da996` (not pushed). Its three trainers pass
-  their smokes (§5).
+* **The software side of the whole queue is written** (§3), uncommitted. Every conf's DRY_RUN
+  PRECHECK passes. `lake build`, `lake build Certs`, `regen_verified_mlir.sh check`, the render
+  coverage and target-name gates, `docstring-checkrefs`, `TestVariantPredicates` and the new
+  `bce_target_gate.py` are green. Every committed artifact re-renders byte-identical, except the
+  two ConvNeXt S/B eval forwards, which moved to batch 64.
+* **Nothing new has run on a GPU** except compile-only peak-memory probes. The launch smokes in §3a
+  are the user's to start.
 * **A2 JAX can launch now.** It does not stall even without the fan:
   `setsid nohup scripts/supervise.sh r50-a2accum-jax-4gpu >/dev/null 2>&1 &`
-* **MNv4 `full` and ViT-S JAX are ready but wait for the DIMM fan** (§5). After the fan goes in,
-  rerun the ViT-S thermal smoke (scratchpad `thermal/run.sh`, re-created from §5's description).
-  Pass = the hottest DIMM stays below 77 °C and ViT-S runs at its clean ~300 ms/step.
-* **Next session:** the software list in §3, in order. When it is done, the software side of the
-  whole queue is prepared.
+* **MNv4 `full` and ViT-S JAX wait for the DIMM fan** (§5.1). After the fan goes in, rerun the
+  ViT-S thermal smoke. Pass = the hottest DIMM stays below 77 °C and ViT-S runs at ~300 ms/step.
 
 ## 3. Software work list
 
-In queue order. Sizes: S = small, M = medium, L = large.
-
 ### Batch 1, JAX A2 / MNv4 `full` / ViT-S — done (`b84da996`)
 
-* BCE target threshold, timm's `--bce-target-thresh`: `TrainConfig.bceTargetThresh`
-  (`LeanMlir/Types.lean`), emitted after smoothing in `jax/Jax/Codegen.lean`'s BCE branch.
-* A2/A1 per RSB Table 2: no EMA, threshold 0.2; A1 adds label smoothing 0.1
-  (`jax/MainResnet50Imagenet.lean` `a2-accum`, `a1`).
-  * RSB lists no gradient clip; the trainers' clip is timm LAMB's own `max_grad_norm=1.0`, kept.
-  * The A3 recipes (`short`, `rsb-faithful`) are untouched: their runs are in the book.
-* MNv4 `full` scores live weights, since the paper runs no EMA. It still differs from the paper
-  in RandAugment p 0.5 (paper 0.7) and in m15 exceeding the shim's `_AA_MAX` of 10.
-* `jax/generated/`: only the a2accum, a1 and MNv4 `full` trainers moved.
-* Confs `r50-a2accum-jax-4gpu`, `mnv4-full-jax-4gpu` and `vits-default-jax-4gpu`; the DRY_RUN
-  prechecks pass.
+(as committed: `TrainConfig.bceTargetThresh`, A2/A1 per RSB Table 2, MNv4 `full` without EMA,
+confs `r50-a2accum-jax-4gpu`, `mnv4-full-jax-4gpu`, `vits-default-jax-4gpu`)
 
-### Batch 2, verified A2 / MNv4 / ViT-S — needed in ~9 days, when the batch-1 JAX runs finish
+### Batches 2–5 — done (2026-09-29, uncommitted)
 
-1. **ViT-S**
-   * `vitInit := true` in the verified driver (`apps/imagenette/MainViTSImagenet.lean:47-49`;
-     Ti has it at `MainViTImagenet.lean:43`).
-   * EMA+bf16 render `vitsin_emadp128x4wxclipdropbf16`: one `#eval` after
-     `LeanMlir/Proofs/Codegen/ViTRenderB.lean` ~816, on the Ti template at :750, with
-     `V := vitSDims`, plus its `#guard`.
-   * Pass `emaDecay := 0.99996` in the driver (`MainViTSImagenet.lean:69`; Ti at
-     `MainViTImagenet.lean:64-72`).
-   * A `vitsin` arm in `tests/TestVitEmaDropRender.lean:75-79`.
-   * Conf `vits-default-emabf16-4gpu` on the Ti emabf16 conf's checks, plus its lakefile
-     `imagenetRows` row and `script` line.
-   * Size: S each.
-2. **A2**
-   * No-EMA render `resnet50in_lambaccdp4x128wxclipdropbce{,bf16}`
-     (`ResNet50RenderB.lean` ~1766-1797). M.
-   * The 0.2 target threshold in the verified trainer's target build. M.
-   * A verified conf from `r50-a2-*`/`r50-a3-wxclip4x128-bf16-4gpu`, with 300 epochs,
-     `BASE_LR_U=5000`, `LEAN_MLIR_BATCH=128`, prechecks and a lakefile row. S.
-   * The `resnet50in_fwd_eval_s288` scoring render, since timm scores at 288/1.0. S.
-   * An R50 timm parity gate in `scripts/parity/`. M.
-3. **MNv4**
-   * No-EMA render plus its 1-replica peer for `mnv4-dp-check`
-     (`MobileNetV4RenderB.lean:1282-1289`, `ema := false`, `wdStr := "0.1"`). S.
-   * Select the m15 `full` shim; `SHIM_SCRIPT` works as a stopgap. S.
-   * A classifier dropout 0.2 knob (`NetsCore.lean:1511`; the keep is fixed at 0.9 today). S.
-   * UIB drop-path 0.075 on the verified side: render plus tie carve-out. M–L; the one big item.
-   * Conf and lakefile row. S.
-4. **All three:** new renders go on the `proofs.yml` render-guard list, then regenerate MANIFEST
-   and add `TestVariantPredicates.lean` rows.
+| net | verified conf | JAX conf | render / code |
+|---|---|---|---|
+| ViT-S | `vits-default-emabf16-4gpu` | `vits-default-jax-4gpu` (batch 1) | `vitsin_emadp128x4wxclipdropbf16`; driver `vitInit` + `emaDecay := 0.99996` |
+| ViT-B | `vitb-default-emabf16-4gpu` (MEM 0.97) | `vitb-accum-jax-4gpu` | `vitbin_emadp128x4wxclipdropbf16`, peak 13.19 of 15.11 GiB; driver as S |
+| R50 A2 | `r50-a2-bf16-4gpu` | `r50-a2accum-jax-4gpu` (batch 1) | `resnet50in_lambaccdp4x128wxclipdropbce{,bf16}` (no EMA); `a2` recipe + `resnet50ImagenetA2Verified` |
+| R50 A1 | `r50-a1-bf16-4gpu` | `r50-a1-jax-4gpu` | `…bcewd001{,bf16}` (no EMA); A1 shim now smooths 0.1 |
+| MNv4 paper | `mnv4-full-4gpu` | `mnv4-full-jax-4gpu` (batch 1) | `mnv4in_acc{dp,}8x128wxdropdowd01bf16`: UIB drop-path on the 18 skip blocks, `mnv4ImagenetFullVerified` (m15 shim, dropout 0.2, keeps 1 − 0.075·i/20) |
+| ConvNeXt-S | `cnxs-default-emabf16-4gpu` | `cnxs-default-jax-4gpu` | `convnextsin_ema{dp,}wxclipdropbf16` at 64, peak 6.80 GiB; `convnextsin_fwd` at 64, `_fwd_s288`; `cnxInit` both paths |
+| ConvNeXt-B | `cnxb-default-emabf16-4gpu` | `cnxb-default-jax-4gpu` | as S; peak **9.53 GiB of the 11.68 default**, so no accumulation render |
 
-### Batch 3, JAX A1 / ViT-B / ConvNeXt-S
+Shared pieces:
+* **The BCE target transform rides the shim.** The BCE renders take `%onehot` as given, so the
+  0.2 threshold (and A1's ε 0.1) is applied in the generated shim's `_emit` after mixing
+  (`Jax/Codegen.lean`). Only the a1/a2accum shims changed. `scripts/gates/bce_target_gate.py`
+  checks it against the default shim at one seed; it is bit-exact and has a control.
+* The R50 driver refuses an `a1`/`a2` recipe whose variant has the wrong decay or an EMA. The MNv4
+  driver refuses `full` without a `drop` variant and `default` with one.
+* `resnet50in_fwd_eval_s288` scores A2/A1 at timm's 288 / 1.0.
+* `mnv4-dp-check` feeds the drop masks. `vit-ema-drop-render` has `vitsin`, `vitbin`,
+  `convnextsin` and `convnextbin` arms.
+* The lakefile rows for ViT-S/B and ConvNeXt-S/B now name the emabf16 jobs, as does the book's
+  side-quest job table. The g512 and 4 × 32 confs stay as siblings.
 
-5. Confs for A1 and ViT-B; their trainers exist. ViT-B uses `accum` (4×128), because a single
-   512 micro-batch OOMs. S.
-6. ConvNeXt-S: `cnxInit := true` in `jax/MainConvNeXtSImagenet.lean`, then re-emit, plus a JAX
-   conf. S.
+Not done:
+* R50 timm parity gate (`scripts/parity/`).
+* The MNv4 drop-path known-answer and misplacement gates (`droppath-tie` gates A/B). They need a
+  `mnv4in_drop_fwd` render and a GPU. Structurally, all 18 masks are used once forward on the
+  branch and once backward on the branch cotangent, with the skip fan-in unmasked.
+* MNv4 training at 256.
 
-### Batch 4, verified A1 / ViT-B / ConvNeXt-S
+### 3a. GPU smokes owed before each launch (the user starts these)
 
-7. **A1**
-   * No-EMA wd 0.01 render. M.
-   * Label smoothing 0.1 applied before the threshold on the verified side. M.
-   * Conf. S.
-   * Fix the driver comment naming the deleted 8×64 variant
-     (`apps/imagenette/MainResnet50Imagenet.lean:91-94`), and refuse recipe `a1` on a
-     non-wd001 variant. S.
-8. **ViT-B**
-   * Item 1 for `vitbin`: `MainViTBImagenet.lean:93-95` / `136-138`, render after
-     `ViTRenderB.lean:889`. S each.
-   * Probe EMA+bf16 memory at `LEAN_MLIR_MEM_FRACTION=0.97`. bf16 alone peaks at 12.61 of
-     15.11 GiB.
-9. **ConvNeXt-S**
-   * `cnxInit` in the verified driver. S.
-   * Driver defaults: batch 64 and the EMA variant. S.
-   * EMA+bf16 render at batch 64, plus `_fwd` / `_drop_fwd` re-rendered at 64
-     (`ConvNeXtRenderB.lean:804-810` pattern, `V := cnxSmall`, `bB := 64`). S.
-   * `convnextsin_fwd_s288`. S.
-   * Layout-gate arm, render-guard entries and conf. S.
+A capped step window with the job's own env, no checkpoint written:
 
-### Batch 5, ConvNeXt-B
+    ONCE=1 LEAN_MLIR_MAX_STEPS=400 LEAN_MLIR_PROBE_WARM=200 scripts/supervise.sh <job>
 
-10. **ConvNeXt-B**
-    * Item 9 for `convnextbin`.
-    * Memory: it is 9.73 GiB at 32/replica, 64/replica likely overflows 11.68, and 0.97 OOMs this
-      net. Probe it first; it probably needs an accumulation render, and none exists for
-      ConvNeXt. M.
-    * Proof tier only, not a run blocker: the whole-net ties are pinned at T, and B's 1024-wide
-      head is uncovered (`ConvNeXtStepTieGB.lean`).
+in this order: `vits-default-emabf16-4gpu`, `vitb-default-emabf16-4gpu`, `r50-a2-bf16-4gpu`,
+`mnv4-full-4gpu`, `cnxs-default-emabf16-4gpu`, `cnxb-default-emabf16-4gpu`. Each gives median and
+mean ms/step ([[imagenet_mean_is_a_memory_leak]]), replacing §1's modelled hours. Plus:
+
+    DP_BATCH=128 DP_VARIANT=acc8x128wxdropdowd01bf16 DP_VARIANT_DP=accdp8x128wxdropdowd01bf16 \
+      PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check
 
 ### Optional feed work (§4.3)
 
@@ -149,7 +114,10 @@ In queue order. Sizes: S = small, M = medium, L = large.
 * uint8 wire plus PIL Rotate: −28% ms/step on ViT-S JAX under the stall. M. Matters far less if
   the fan removes the stall.
 
-### Decisions for the user (before the verified ViT / ConvNeXt renders)
+### Decisions for the user
+
+The S/B renders took ViT-Ti's and ConvNeXt-T's answers (clip on, EMA scored, their GELU form and LN ε). A different
+answer is a re-render plus a JAX re-emit, not new machinery.
 
 * ViT (`imagenet_parity.md` §5.5): clip on or off; LN eps 1e-6 with exact-erf GELU; cooldown and
   min_lr; EMA vs live scoring (DeiT scores live weights).

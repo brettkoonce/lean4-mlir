@@ -54,9 +54,12 @@ parameter count is `#guard`ed. No accuracy has been measured and no wall clock h
 **Run it through the job config**, which is where the required options live and which refuses
 to start without them:
 ```
-scripts/supervise.sh vitb-default-g512-4gpu
-DRY_RUN=1 scripts/supervise.sh vitb-default-g512-4gpu   # print the plan, run nothing
+scripts/supervise.sh vitb-default-emabf16-4gpu
+DRY_RUN=1 scripts/supervise.sh vitb-default-emabf16-4gpu   # print the plan, run nothing
 ```
+`vitb-default-emabf16-4gpu` is the pair job: `vitbin_emadp128x4wxclipdropbf16`, Tiny's pair
+recipe (EMA 0.99996, timm/DeiT init, bf16) at this width. `vitb-default-g512-4gpu` is the non-EMA
+f32 sibling.
 
 By hand, at DeiT's global 512 (4 GPUs — and BOTH replica knobs are required):
 ```
@@ -85,6 +88,10 @@ sentence rather than letting XLA raise `RESOURCE_EXHAUSTED`.
 def vitBImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 128
+  -- timm/DeiT init, as the Tiny driver and the JAX reference (`vitInit := true` in every JAX
+  -- ViT base config since VT-1). Without it every transformer Linear is Glorot. Host-side, so no
+  -- re-render.
+  vitInit   := true
 
 /-- Entry point. Defaults to the FOUR-REPLICA variant, unlike every other ImageNet driver here,
     because it is the only one rendered for this net. A plain invocation therefore needs
@@ -136,8 +143,10 @@ def runViTBImagenet (argv : List String) : IO Unit := do
                          -- DeiT-S uses the same 5e-4 at batch 512, so this matches the reference
                          -- rather than being an untuned carry-over.
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD vitBImagenetConfig.epochs
+  -- DeiT's EMA decay, named because `trainAdamSched` defaults to 0.9999 (see the Tiny driver).
+  -- Inert unless the variant starts with `ema`.
   vitBImagenetVerified.toNet.trainAdamSched
     { vitBImagenetConfig with batchSize := bs, epochs := epochs }
-    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant
+    (argv.head?.getD "data") baseLR 0.9 0.999 5 variant (emaDecay := 0.99996)
 
 def main (argv : List String) : IO Unit := runViTBImagenet argv

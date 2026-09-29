@@ -1890,6 +1890,38 @@ end Proofs.StableHLO
 -- these four names in `tests/TestVariantPredicates.lean`, which is where that file's own header
 -- says the consuming half belongs.
 
+-- ══════════════════════════════════════════════════════════════════════════════
+-- § RSB-A2 and A1 **AS RSB's TABLE 2 HAS THEM: no EMA.** The `emalambacc…` renders above carry a
+-- model-EMA shadow that the paper's A1/A2/A3 rows do not; the JAX A2/A1 recipes dropped it on
+-- 2026-09-29 (`useEMA := false`), and these are their verified peers. Stochastic depth 0.05 stays.
+-- The BCE target threshold 0.2 (and A1's ε 0.1) are applied by the recipe's shim, not here: the
+-- BCE render takes `%onehot` as given. bf16 for the runs (the A3 pair's precision), fp32 as the
+-- precision peer; `LEAN_MLIR_MEM_FRACTION=0.97` for fp32, as above.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcebf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbce_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
+#eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+    (wdExclude := true) (gradClip := true) (sd := true))
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "" true false true == "lambaccdp4x128wxclipdropbcebf16"
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "" false false true == "lambaccdp4x128wxclipdropbce"
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "0.01" true false true == "lambaccdp4x128wxclipdropbcewd001bf16"
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+         true true true "0.01" false false true == "lambaccdp4x128wxclipdropbcewd001"
+
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))
 
@@ -1904,6 +1936,16 @@ end Proofs.StableHLO
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval.mlir"
   (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in")
+
+-- timm's TEST protocol for RSB-A2/A1 (`resnet50.a{2,1}_in1k`: 288px, crop 1.0,
+-- jax/timm_eval_protocols.json): the same eval graph at a 288 input (`q = 9`), entry
+-- `@resnet50in_fwd_eval_s288` (an artifact's entry is its file name). Same operands, so
+-- `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`; frozen BN statistics are
+-- resolution-independent, as for A3's 160/224 split.
+#eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval_s288.mlir"
+  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in" (q := 9) (vSuffix := "_s288"))
+#guard (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in" (q := 7)) ==
+  Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in"
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- § `resnet50Verified` — the IMAGENETTE (10-class) renders.
