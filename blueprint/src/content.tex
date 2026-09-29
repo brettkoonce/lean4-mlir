@@ -4704,8 +4704,7 @@ gradients with different arithmetic stacked on top. And for plain
 SGD, that the binary32 step actually decreases the loss is itself a
 proved theorem.
 
-\noindent It is worth being precise about what that does and does not
-cover. The proofs say the emitted graph computes the gradient this
+\noindent The proofs say the emitted graph computes the gradient this
 chapter derives, and they say it in exact real arithmetic. They say
 nothing about whether forty epochs of binary32 updates stay in range,
 and nothing at all about the progress line: the scalar loss it prints is
@@ -4737,8 +4736,7 @@ what the full-ImageNet jobs need, and the tables there say so per row.) The
 question this chapter would like to answer is whether that costs any
 accuracy.
 
-\medskip\noindent It can, on the net that matters, and getting there
-took one change worth a paragraph. The renderer has two convolution op
+\medskip\noindent The renderer has two convolution op
 families --- the per-example one these MNIST and CIFAR chapters use, and
 the batched one the ImageNet chapters use --- and the bf16 twins were
 built for the batched family only. The normalized net was rendered
@@ -5539,10 +5537,9 @@ each residual block adds its input back, $y = f(x) + x$.
 \subsection*{The verified trainer, which is the pattern every later chapter reuses}
 \label{sec:verified_trainer_pattern}
 
-This is the reference configuration. Chapters~\ref{chap:depthwise}
+This is the reference configuration; Chapters~\ref{chap:depthwise}
 through~\ref{chap:attention} each swap the \texttt{layers} list and change
-almost nothing else, so it is worth reading once here rather than four more
-times later.
+almost nothing else.
 
 \begin{verbatim}
 import LeanMlir.Verified.NetsCore
@@ -5644,7 +5641,7 @@ post-2015 vision architecture in the bestiary.
 \textbf{90.06\%} top-1 and \textbf{98.32\%} top-5 on Imagenette's 3,925-image
 validation split, one seed of the five that average $89.99 \pm 0.32$. That is
 the going rate for a scratch-trained ResNet-34 at this resolution and data
-size. Rather than reprint the log, here is what is worth noticing in it.
+size. From the log:
 
 \begin{itemize}
 \item \textbf{Per-step time is about 120\,ms} at batch 32, 295 steps to the
@@ -7521,8 +7518,7 @@ validation split. Against Chapter~\ref{chap:residual}'s ResNet-34 at $89.99 \pm 
 \textbf{0.74 points of top-1} for \textbf{9.5$\times$ fewer parameters}
 (2.24M against 21.3M). That is the depthwise-separable trade, and on
 this evidence it is a better one than the architecture's reputation
-suggests. Rather than reprint the log, here is what is worth noticing
-in it.
+suggests. From the log:
 
 \begin{itemize}
 \item \textbf{2.24M parameters, and 1.07\,MB of MLIR} (1\,070\,905 chars)
@@ -9202,8 +9198,8 @@ GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \noindent (CUDA, bf16, batch 256.) That is the paper recipe end to end,
 and it reached $\mathbf{77.15\%}$ top-1 / $\mathbf{93.30\%}$ top-5 on the
 full 50{,}000-image validation split against EfficientNet-B0's published
-$77.1\%\,/\,93.3\%$ --- a match. Four details of the recipe are worth stating precisely, because in each
-one the obvious implementation is not the one B0 was trained with.
+$77.1\%\,/\,93.3\%$ --- a match. In four details of the recipe the obvious
+implementation is not the one B0 was trained with.
 
 \textbf{RMSProp in TensorFlow's form.} B0's optimizer is RMSProp
 ($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$) in TensorFlow's variant of
@@ -10216,7 +10212,7 @@ $10^{-6}$, so a fresh block starts near the identity on its residual
 branch. It is the smallest parameter in the chapter and the one whose
 backward is a pure diagonal.
 
-\textbf{And it is worth three points here, the wrong way.} Until
+\textbf{The wrong init is worth three points here.} Until
 2026-09-13 the verified path initialised layer scale to ones, and the same
 render on the same recipe landed at $85.45\%$ against the $82.27\%$
 above, resolved at $\pm 1.2$ per run
@@ -12745,8 +12741,8 @@ that hold ConvNeXt's two specs together hold these: equal
 \texttt{toSpecs.size}, equal \texttt{toSpecs.pop.pop}, and a
 \texttt{back!} of \texttt{(\#[1000], 2)}.
 
-\medskip\noindent\textbf{The collectives are gated one way here, and it
-is worth saying which.} \texttt{tests/TestViTDpCheck.lean} pins the
+\medskip\noindent\textbf{The collectives are gated one way here.}
+\texttt{tests/TestViTDpCheck.lean} pins the
 data-parallel step against its single-device peer by handing both
 replicas the same rows, where the all-reduce mean is an
 identity. ViT has no BatchNorm, so that identity is exact rather than
