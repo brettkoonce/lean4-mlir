@@ -273,29 +273,41 @@ static int fault_mode(void) {
 }
 static int fault_enabled(void) { return fault_mode() == 1; }
 
-// ─── device residency, opt-in (§2d.3) ──────────────────────────────────────
+// ─── device residency, ON by default (§2d.3) ───────────────────────────────
 //
-// $PJRT_FFI_RESIDENT=1. OFF by default, and that is a design decision rather
-// than caution: the FFI surface is symbol-identical across `iree_ffi.c` and
-// `pjrt_ffi.c` (`nm -D`), and every cross-backend gate in the repo depends on
-// IREE and XLA running the SAME Lean code path. The switch therefore lives in C
-// — `iree_lean_ffi.c` reads it and picks an entry point — so the training loop
-// above has no backend branch to drift.
+// $PJRT_FFI_RESIDENT=0 turns it off. The switch lives in C, and that is a design
+// decision rather than caution: the FFI surface is symbol-identical across
+// `iree_ffi.c` and `pjrt_ffi.c` (`nm -D`), and every cross-backend gate in the
+// repo depends on IREE and XLA running the SAME Lean code path. So
+// `iree_lean_ffi.c` asks this shim which transport serves a call, and the
+// training loop above has no backend branch to drift.
 //
-// The gate is `scripts/gates/residency_gate.sh` with GATE_ALT=PJRT_FFI_RESIDENT=1:
-// residency must be BIT-IDENTICAL to the copying path over N steps. That bar is
-// achievable because nothing about the arithmetic changes — the same graph
-// consumes the same bits; all that is removed is a d2h followed by an h2d of
-// those bits back again.
+// The DEFAULT flipped from off to on 2026-09-29. For two months every job conf
+// had set it and prechecked for it, the tour runner injected it, and the only
+// runs that ever took the copying path were the ones that forgot — at 1.3–3×
+// the wall clock with nothing in the log to say so. The copying path is now the
+// gates' control arm (`PJRT_FFI_RESIDENT=0`) and IREE's only path. The tie and
+// DP-check harnesses were never behind this switch: they pass `n_resident = 0`
+// and copy by construction (see `use_resident` in iree_lean_ffi.c).
+//
+// The gate is `scripts/gates/residency_gate.sh`: the copying base
+// (`PJRT_FFI_RESIDENT=0`) against GATE_ALT=PJRT_FFI_RESIDENT=1, BIT-IDENTICAL
+// over N steps. That bar is achievable because nothing about the arithmetic
+// changes — the same graph consumes the same bits; all that is removed is a d2h
+// followed by an h2d of those bits back again.
 static int resident_enabled(void) {
   static int t = -1;
-  if (t < 0) { const char* e = getenv("PJRT_FFI_RESIDENT"); t = (e && atoi(e)) ? 1 : 0; }
+  if (t < 0) {
+    const char* e = getenv("PJRT_FFI_RESIDENT");
+    t = (e && *e) ? (atoi(e) ? 1 : 0) : 1;   // unset or empty = on
+  }
   return t;
 }
 
-// Exported so `iree_lean_ffi.c` can decide WITHOUT duplicating the env-var
-// reading, and so the IREE build (where this symbol does not exist) can never
-// accidentally report residency as available.
+// Exported so `iree_lean_ffi.c` decides WITHOUT duplicating the env-var reading
+// (it resolves this symbol at load and treats "absent" as off), and so the IREE
+// build, where this symbol does not exist, can never report residency as
+// available.
 int pjrt_ffi_resident_available(void) { return resident_enabled(); }
 
 static void buffer_destroy(PJRT_Buffer* b) {
@@ -656,6 +668,14 @@ static int ensure_client(void) {
             ? " ($PJRT_COMMAND_BUFFERS)"
             : (g_platform_rocm ? " (ROCm default — see command_buffers_disabled())"
                                : " (CUDA default)"));
+  // Same rule for residency, and more so since the default flipped to on: a run
+  // that says nothing is the resident one, so the copying path must announce
+  // itself too.
+  fprintf(stderr, "[pjrt_ffi] residency: %s%s\n",
+          resident_enabled() ? "on — parameters stay on the device between steps"
+                             : "OFF — the copying path",
+          getenv("PJRT_FFI_RESIDENT") && *getenv("PJRT_FFI_RESIDENT")
+            ? " ($PJRT_FFI_RESIDENT)" : " (default)");
   return 0;
 }
 

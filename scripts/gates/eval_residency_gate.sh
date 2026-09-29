@@ -61,7 +61,8 @@ for bin in "${BINS[@]}"; do
   [ -x ".lake/build/bin/$bin" ] || { printf "  %-28s ✗ FAIL — not built (lake build %s)\n" "$bin" "$bin"; FAILED=1; continue; }
   resumed=0
   for tag in copy res; do
-    extra=""; [ "$tag" = res ] && extra="PJRT_FFI_RESIDENT=1"
+    # Residency is the default, so the copying arm pins it OFF explicitly.
+    extra="PJRT_FFI_RESIDENT=0"; [ "$tag" = res ] && extra="PJRT_FFI_RESIDENT=1"
     # shellcheck disable=SC2086
     env $extra LEAN_MLIR_CKPT_TAG="${GATE_TAG}-${bin}-$tag" SHIM_DETERMINISM=1 LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
       LEAN_MLIR_MAX_EPOCHS="$EPOCHS" \

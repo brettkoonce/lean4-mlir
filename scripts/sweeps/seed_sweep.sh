@@ -39,8 +39,8 @@
 # ⚠ Every trap in that document's §3 is handled HERE and nowhere else — do not run these
 # binaries by hand and expect the same numbers:
 #
-#   1. PJRT_FFI_RESIDENT=1 is set. Off by default (ffi/pjrt_ffi.c:284); absent, ConvNeXt takes
-#      2 h 14 m instead of 1 h 19 m and prints no RESIDENT: line to say so.
+#   1. Residency is on (the shim's default since 2026-09-29; PJRT_FFI_RESIDENT=0 would turn it
+#      off — under it ConvNeXt takes 2 h 14 m instead of 1 h 19 m). The banner names the path.
 #   3. LEAN_MLIR_CKPT_TAG=s<seed> gives every seed its OWN checkpoint path. Without it all three
 #      seeds share one blob and seeds 2 and 3 resume seed 1's finished epoch 80 and exit clean.
 #      It also keeps the sweep off the untagged checkpoints already in .lake/build.
@@ -152,7 +152,6 @@ run_job() {
   say "gpu$gpu  $tag  start  ($exe)"
   local t0=$SECONDS
   CUDA_VISIBLE_DEVICES="$gpu" \
-  PJRT_FFI_RESIDENT=1 \
   LEAN_MLIR_SEED="$seed" \
   LEAN_MLIR_CKPT_TAG="s$seed" \
   LEAN_MLIR_DUMP_CORRECT="$LOGDIR/bitmaps/$tag" \

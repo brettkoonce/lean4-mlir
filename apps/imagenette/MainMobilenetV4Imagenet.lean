@@ -39,7 +39,7 @@ run time (`ffi/lowerer.h`).
 
 Run (GPU, single device):
 ```
-PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+SHIM_WORKERS=8 \
   .lake/build/bin/mobilenetv4-imagenet-verified data
 ```
 

@@ -29,10 +29,10 @@ LEAN_EXPORT lean_obj_res lean_iree_backend_name(void) {
 
 // ---- Device-resident parameters (handoff §2d.3) ----
 // Both entry points are exported ONLY by the XLA shim, so the references are
-// WEAK exactly as `pjrt_ffi_invoke_f32_dp`'s is: the IREE build links fine and
-// takes the copying path unconditionally.
+// NULL-or-not by dlsym exactly as `pjrt_ffi_invoke_f32_dp`'s is: the IREE build
+// links fine and takes the copying path unconditionally.
 //
-// ⚠ THE SWITCH LIVES HERE, IN C, AND THAT IS DELIBERATE. The FFI surface is
+// ⚠ THE SWITCH LIVES IN C, AND THAT IS DELIBERATE. The FFI surface is
 // symbol-identical across the two shims by design (`nm -D`), and every
 // cross-backend gate in the repo depends on IREE and XLA running the SAME Lean
 // code path — a backend branch inside the training loop would break the "one
@@ -40,10 +40,13 @@ LEAN_EXPORT lean_obj_res lean_iree_backend_name(void) {
 // design decision that protects every existing gate"). So the Lean driver
 // always calls the same function with the same arguments; this file decides
 // which transport serves it, and on IREE the question never arises.
+//
+// The switch itself is read ONCE, inside the XLA shim (`resident_enabled` in
+// pjrt_ffi.c: on unless `$PJRT_FFI_RESIDENT=0`, since 2026-09-29), and asked
+// for here through `pjrt_ffi_resident_available` — NULL on IREE, which is "off".
+// Reading the env var here as well is how two copies of one rule drift.
 static int resident_wanted(void) {
-  static int t = -1;
-  if (t < 0) { const char* e = getenv("PJRT_FFI_RESIDENT"); t = (e && atoi(e)) ? 1 : 0; }
-  return t;
+  return pjrt_ffi_resident_available ? pjrt_ffi_resident_available() : 0;
 }
 
 // `n_resident` is a tensor COUNT supplied by the driver, which is the only place
@@ -279,7 +282,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_softlabel(
 // `y_ddpm_ba` is an f32 [batch, outC, outH, outW] target.
 // Routes to the codegen produced with `useDdpm := true`.
 //
-// `n_resident` > 0 with PJRT_FFI_RESIDENT=1 on the XLA shim keeps the leading
+// `n_resident` > 0 on the XLA shim (resident unless PJRT_FFI_RESIDENT=0) keeps the leading
 // `n_resident` param tensors (`[theta|m|v]`, inputs AND outputs 0..np-1 — the graph's
 // params-in / params-out correspondence is index for index) on the device, as
 // `lean_iree_linear_train_step` does; the result's param region is then unwritten

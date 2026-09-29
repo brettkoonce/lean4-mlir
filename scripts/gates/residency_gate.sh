@@ -28,8 +28,11 @@
 #                    test, which is the only thing this gate is for. ⚠ Which
 #                    fault is usable is NET-DEPENDENT — see $GATE_FAULT below.
 #
-# To point it at device residency once that lands, change nothing but GATE_ALT:
+# To point it at device residency, change nothing but GATE_ALT:
 #   GATE_ALT=PJRT_FFI_RESIDENT=1 scripts/gates/residency_gate.sh
+# ⚠ Residency is the DEFAULT since 2026-09-29, so the base arms (A1, A2, C) pin the
+# copying path explicitly with $GATE_BASE (PJRT_FFI_RESIDENT=0); without that the
+# gate would compare the resident path with itself.
 #
 # ⚠⚠ ON CUDA YOU MUST RUN THIS AGAINST A DETERMINISTIC SHIM, or every verdict
 # below is noise. Measured on ares 2026-08-01: with the committed compile
@@ -61,6 +64,9 @@ VARIANT=${LEAN_MLIR_VARIANT:-adam}
 # (§2d.3) but is a perfectly good stand-in here, because the property being
 # gated is "changes no bits", not "is faster".
 GATE_ALT=${GATE_ALT:-PJRT_FFI_PINNED=1}
+# The base transport: the copying path, pinned explicitly now that residency is the
+# shim's default. Every base-arm run (A1, A2, C) carries it.
+GATE_BASE=${GATE_BASE:-PJRT_FFI_RESIDENT=0}
 # The transport fault used for run D, applied TO THE ALT PATH — the one under
 # test, which is what the control is supposed to be about.
 #
@@ -95,6 +101,7 @@ ckpt_of () { echo ".lake/build/${SLUG}_${VARIANT}_ckpt_xla_${GATE_TAG}-$1.bin"; 
 echo "── §2d.3 phase-3 residency gate ──"
 echo "   binary   $BIN   (slug $SLUG, variant $VARIANT)"
 echo "   steps    $STEPS, 1 epoch, synthetic inputs, eval skipped"
+echo "   base path $GATE_BASE"
 echo "   alt path $GATE_ALT"
 echo "   scratch  $OUT"
 
@@ -143,10 +150,10 @@ diffbytes () {
 
 echo
 echo "── runs ──"
-run A1
-run A2
+run A1 $GATE_BASE
+run A2 $GATE_BASE
 run B  $GATE_ALT
-run C  LEAN_MLIR_PERTURB_R=15990
+run C  $GATE_BASE LEAN_MLIR_PERTURB_R=15990
 # D faults the ALT path, not the default one: the question this control answers
 # is "could this harness see a defect in the transport under test", and the
 # transport under test is the alt. (It was the default path until 2026-08-01;

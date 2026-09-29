@@ -93,8 +93,9 @@ opaque trainStepAdamF32Ddpm
 
 /-- `trainStepAdamF32Ddpm` with device residency: `nResident` = the number of
     param tensors in `[θ|m|v]` (all of them — the graph's params-in / params-out
-    correspondence is index for index). With `PJRT_FFI_RESIDENT=1` on the XLA backend
-    they stay on the device after the first call, the result's param region is left
+    correspondence is index for index). On the XLA backend (residency is its default;
+    `PJRT_FFI_RESIDENT=0` turns it off) they stay on the device after the first call, the
+    result's param region is left
     UNWRITTEN, and `readParams` / `readParamsPrefix` is the way back; `packed`'s param
     region is ignored after the seed. Unset, or on IREE, this is `trainStepAdamF32Ddpm`. -/
 @[extern "lean_iree_train_step_adam_f32_ddpm_r"]
@@ -233,11 +234,12 @@ opaque mlpTrainStepVDP
     and output `i` really are the same tensor before retaining anything.
 
     It is a request, not a mode. The transport is chosen in C — residency
-    engages only under `$PJRT_FFI_RESIDENT=1` on the XLA build, and is inert
+    engages on the XLA build unless `$PJRT_FFI_RESIDENT=0`, and is inert
     everywhere else — so that this driver keeps no backend branch to drift.
-    Default `0` = the copying path, which is what every tie and DP-check harness
-    wants: those read the whole returned blob, and a retained prefix would leave
-    it unwritten. -/
+    A count of `0`, the default at every call site that has not opted in, is
+    the copying path, which is what every tie and DP-check harness wants: those
+    read the whole returned blob, and a retained prefix would leave it
+    unwritten. -/
 @[extern "lean_iree_mlp_train_step_v"]
 opaque mlpTrainStepV
   (sess : @& LowererSession) (fnName : @& String)

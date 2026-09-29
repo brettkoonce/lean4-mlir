@@ -14,7 +14,7 @@ See `vitImagenetVerified`'s claim-ceiling note for what the variant carries of t
 
 The job is `scripts/jobs/vit-default-emabf16-4gpu.conf` (`emadp128x4wxclipdropbf16`: EMA, clip,
 drop-path, weight decay off norm/bias, bf16, 4 × 128 = global 512). It sets `SHIM_WORKERS`,
-`PJRT_FFI_RESIDENT`, `LEAN_MLIR_EPOCHS` and both replica knobs; run the job, not the bare binary,
+`LEAN_MLIR_EPOCHS` and both replica knobs; run the job, not the bare binary,
 for anything printable. The worker count is an open probe.
 
 ```bash

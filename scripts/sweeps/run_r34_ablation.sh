@@ -33,9 +33,9 @@ PREC="${PREC:-fp32}"
 # `seed_sweep.sh` documents: without it seeds 2.. resume seed 1's checkpoint and report its number.
 SEEDS="${SEEDS:-1}"
 NSEED=$(echo $SEEDS | wc -w)
-# PJRT_FFI_RESIDENT defaults ON here now. It is what made the seed sweep's ResNet-34 runs take 45
-# minutes where these arms took 80 (same net, same recipe); the 2026-09-01 tables ran with it off.
-RESIDENT="${PJRT_FFI_RESIDENT:-1}"
+# Residency is the shim's default (2026-09-29); it is what made the seed sweep's ResNet-34 runs
+# take 45 minutes where these arms took 80 (same net, same recipe); the 2026-09-01 tables ran with
+# it off. PJRT_FFI_RESIDENT=0 in the environment passes through to the trainer.
 # ⛔⛔ THE DEFAULT IS RESOLVED **AFTER** PREC, AND THAT ORDER IS THE WHOLE POINT. Setting
 # `OUT="${OUT:-…}"` before this line makes the bf16 branch a no-op — `${OUT:-…}` cannot override a
 # value already set — so both precisions land in ONE directory and the second sweep's
@@ -84,7 +84,7 @@ PLUG="${PJRT_PLUGIN:-$BOX_PLUG}"
 
 IFS=',' read -r -a GPUARR <<< "$GPUS"
 NSLOT=${#GPUARR[@]}
-echo "queue: $(echo $ARMS | wc -w) arm(s) x $NSEED seed(s) [$SEEDS] $PREC resident=$RESIDENT over ${NSLOT} card(s) [$GPUS] -> $OUT"
+echo "queue: $(echo $ARMS | wc -w) arm(s) x $NSEED seed(s) [$SEEDS] $PREC resident=${PJRT_FFI_RESIDENT:-1} over ${NSLOT} card(s) [$GPUS] -> $OUT"
 # DRY_RUN=1 prints the queue and exits before anything waits on a card.
 if [ -n "${DRY_RUN:-}" ]; then
   for sd in $SEEDS; do for a in $ARMS; do
@@ -114,7 +114,7 @@ run_arm () {  # arm seed gpu
   local extra=()
   [ "$arm" = "noaug" ] && extra=(LEAN_MLIR_NO_AUG=1)
   local log; log="$(logname "$arm" "$seed")"
-  env CUDA_VISIBLE_DEVICES="$gpu" PJRT_PLUGIN="$PLUG" PJRT_FFI_RESIDENT="$RESIDENT" \
+  env CUDA_VISIBLE_DEVICES="$gpu" PJRT_PLUGIN="$PLUG" \
       LEAN_MLIR_SEED="$seed" LEAN_MLIR_CKPT_TAG="abl-$PREC-$arm-s$seed" "${extra[@]}" \
       .lake/build/bin/resnet34-ablation data "$arm" $([ "$PREC" = bf16 ] && echo bf16) \
       > "$log" 2>&1

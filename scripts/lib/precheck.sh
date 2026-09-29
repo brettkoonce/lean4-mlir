@@ -24,7 +24,7 @@
 pc_env_get() { printf '%s\n' "${ENV_EXTRA[@]}" | sed -n "s/^$1=//p" | tail -1; }
 
 # pc_env KEY=VAL [WHY] — ENV_EXTRA must carry exactly KEY=VAL. Most of these knobs are opt-in and
-# SILENT when absent (residency, worker count, epoch count), so the conf names why each one matters.
+# SILENT when absent (worker count, epoch count), so the conf names why each one matters.
 pc_env() {
   printf '%s\n' "${ENV_EXTRA[@]}" | grep -qxF "$1" && return 0
   echo "⛔ $1 is missing from ENV_EXTRA${2:+ — $2}"; return 1

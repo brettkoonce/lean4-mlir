@@ -1200,8 +1200,8 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- 55%), and residency measured **3.1×** on cifar8-bn. These loops are what a reader sits and
   -- watches, so this is an interactivity win rather than a throughput one.
   --
-  -- A REQUEST, not a mode: honoured only under `$PJRT_FFI_RESIDENT=1`, and the
-  -- copying path stays the default and byte-identical.
+  -- A REQUEST, not a mode: honoured on the XLA build unless `$PJRT_FFI_RESIDENT=0`,
+  -- and the copying path stays byte-identical.
   let nResident := net.paramShapes.size.toUSize
   -- init params in func-arg order from the layout specs (one seed per slot).
   -- Seed base is overridable via LEAN_MLIR_SEED (default 1) to probe how
@@ -1930,8 +1930,8 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- steps, and at R34 that is 260 MB each way per step that stops crossing PCIe (55% of a bs32
   -- step, measured).
   --
-  -- This is a REQUEST, and nothing here selects a transport. The C boundary honours it only under
-  -- `$PJRT_FFI_RESIDENT=1` on the XLA build, so IREE and XLA still run this identical body — the
+  -- This is a REQUEST, and nothing here selects a transport. The C boundary honours it on the
+  -- XLA build (off under `$PJRT_FFI_RESIDENT=0`), so IREE and XLA still run this identical body — the
   -- property every cross-backend gate rests on. The gate is `scripts/gates/residency_gate.sh`:
   -- bit-identical parameters, or it did not land.
   let nResident := (nRegions * net.paramShapes.size).toUSize

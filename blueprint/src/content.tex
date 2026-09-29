@@ -5039,7 +5039,7 @@ minutes of GPU time:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build resnet34-verified-adam
-PJRT_FFI_RESIDENT=1 ./.lake/build/bin/resnet34-verified-adam data
+./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -6713,7 +6713,7 @@ and about thirty-five minutes of GPU time:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build mobilenetv2-verified-adam
-PJRT_FFI_RESIDENT=1 ./.lake/build/bin/mobilenetv2-verified-adam data
+./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -8407,7 +8407,7 @@ commands, and about forty minutes of GPU time:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build efficientnet-verified-adam
-PJRT_FFI_RESIDENT=1 ./.lake/build/bin/efficientnet-verified-adam data
+./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -9651,7 +9651,7 @@ inside an hour and a quarter:
 lake exe cache get                            # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build convnext-verified-adam
-PJRT_FFI_RESIDENT=1 ./.lake/build/bin/convnext-verified-adam data
+./.lake/build/bin/convnext-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -10876,7 +10876,7 @@ one in it:
 lake exe cache get                         # Mathlib oleans, ~30 s
 ./scripts/datasets/download_imagenette.sh  # 330 MB dl, 2.4 GB unpacked
 lake build vit-verified-adam
-PJRT_FFI_RESIDENT=1 ./.lake/build/bin/vit-verified-adam data
+./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
 
 On one RTX 4060 Ti (CUDA 12.9), from
@@ -17371,13 +17371,14 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
     the device.
 \begin{verbatim}
 lake build resnet34-verified-adam
-PJRT_FFI_RESIDENT=1 .lake/build/bin/resnet34-verified-adam data
+.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
-    \texttt{PJRT\_FFI\_RESIDENT=1} keeps the parameters on the device
-    between steps. Every transcript in this book ran that way and the tiers
-    below set it; without it the same run is slower --- 1.3--2$\times$ on
-    the Imagenette nets, about 5$\times$ on MNIST and CIFAR --- and its
-    numerics are unchanged. Use
+    Parameters stay on the device between steps by default; every
+    transcript in this book ran that way, and the tiers below are timed
+    that way. \texttt{PJRT\_FFI\_RESIDENT=0} forces the copying path, which
+    the residency gate uses as its control: the same run is slower ---
+    1.3--2$\times$ on the Imagenette nets, about 5$\times$ on MNIST and
+    CIFAR --- and its numerics are unchanged. Use
     \texttt{CUDA\_VISIBLE\_DEVICES} / \texttt{HIP\_VISIBLE\_DEVICES} to
     pick a card, as with any GPU program.
 \end{enumerate}

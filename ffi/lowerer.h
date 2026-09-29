@@ -112,6 +112,9 @@ extern int (*lowerer_train_step_adam_yolov1)(
 // on the link line". dlsym-returns-NULL is the same contract, so every existing
 // `if (pjrt_ffi_x)` guard keeps working unchanged.
 extern void (*lowerer_pjrt_marker)(void);
+// The residency switch, read once inside the XLA shim (`resident_enabled`); NULL on IREE,
+// which `iree_lean_ffi.c` treats as "off" — so the copying path there needs no env var at all.
+extern int (*lowerer_pjrt_resident_available)(void);
 
 extern int (*lowerer_pjrt_invoke_f32_resident_v2)(
     iree_ffi_session_t*, const char*, int, int, int, int, long long, int,
@@ -136,6 +139,7 @@ extern int (*lowerer_pjrt_invoke_f32_dp)(
 #define iree_ffi_train_step_adam_ddpm      lowerer_train_step_adam_ddpm
 #define iree_ffi_train_step_adam_yolov1    lowerer_train_step_adam_yolov1
 #define pjrt_ffi_marker                    lowerer_pjrt_marker
+#define pjrt_ffi_resident_available        lowerer_pjrt_resident_available
 #define pjrt_ffi_invoke_f32_resident_v2    lowerer_pjrt_invoke_f32_resident_v2
 #define pjrt_ffi_resident_read             lowerer_pjrt_resident_read
 #define pjrt_ffi_resident_read_prefix      lowerer_pjrt_resident_read_prefix

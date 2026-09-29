@@ -69,7 +69,7 @@ echo "   logs   $OUT"
 arm() {  # arm <tag> <replicas> [extra env...]
   local tag=$1 reps=$2; shift 2
   local t0=$SECONDS
-  env "${SHIMENV[@]}" PJRT_REPLICAS="$N" LEAN_MLIR_REPLICAS="$reps" PJRT_FFI_RESIDENT=1 \
+  env "${SHIMENV[@]}" PJRT_REPLICAS="$N" LEAN_MLIR_REPLICAS="$reps" \
       LEAN_MLIR_VARIANT="$VARIANT" LEAN_MLIR_CKPT="$CKPT" LEAN_MLIR_DUMP_CORRECT="$OUT/$tag" "$@" \
       "$BIN" "$NET" "$DATA" > "$OUT/$tag.log" 2>&1
   local rc=$?

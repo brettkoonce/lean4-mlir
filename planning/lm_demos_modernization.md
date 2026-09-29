@@ -27,9 +27,9 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
    there is no trained final model. ~6 lines: load-if-exists, keyed on the spec name.
 2. **TinyStories never stops on the EOT token.** `historical/preprocess_tinystories.py:100` writes `eot_id`
    to `meta.txt` "so the sampler can stop on it"; `MainTinyStories.lean:215-256` never reads it.
-3. **No `PJRT_FFI_RESIDENT=1` / `SHIM_WORKERS` on any LM run line** (docstrings :30-33 / :25-27,
-   and §5's 8K run line). Off by default (`ffi/pjrt_ffi.c:284`); TinyStories at 2.7 s/step is
-   host-bound, the exact profile residency fixes. Add to the run lines and re-measure.
+3. **No `SHIM_WORKERS` on any LM run line** (docstrings :30-33 / :25-27, and §5's 8K run
+   line). Residency is the shim's default since 2026-09-29, so that half is closed; TinyStories
+   at 2.7 s/step is host-bound, the exact profile residency fixes. Re-measure.
 4. **`gradClipNorm` 0 and no dropout** (`MainTinyGptShakespeare.lean:133-141`,
    `MainTinyStories.lean:74-83`) while `tiny` overfits from step ~3500 (`RESULTS.md:65`). Dropout
    is the indicated fix, not more steps. `useEMA := false` — if turned on, the EMA warm-up bug

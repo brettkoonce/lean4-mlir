@@ -39,7 +39,7 @@ By hand (4 GPUs — BOTH replica knobs are required):
 ```
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
-  PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+  SHIM_WORKERS=8 \
   .lake/build/bin/vit-s-imagenet-verified data
 ```
 **DO NOT SET `LEAN_MLIR_MEM_FRACTION` FOR THIS NET.** S's graph

@@ -66,7 +66,7 @@ By hand, at DeiT's global 512 (4 GPUs — and BOTH replica knobs are required):
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_MEM_FRACTION=0.97 \
   LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
-  PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
+  SHIM_WORKERS=8 \
   .lake/build/bin/vit-b-imagenet-verified data
 ```
 `LEAN_MLIR_MEM_FRACTION` is not optional in that command and its absence is not a slowdown —

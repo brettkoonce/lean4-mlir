@@ -2054,18 +2054,15 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   -- their backend from this at run time and DEFAULT to XLA, so without it
   -- `lake run *-iree` would silently run XLA.
   let lowerer := if xla then "xla" else "iree"
-  -- The XLA tiers run resident — parameters stay on the device between steps — because that
-  -- is how every chapter transcript ran and what Appendix B's tier times assume (1.3–2× the
-  -- wall clock without it, numerics unchanged). The switch lives in ffi/pjrt_ffi.c and defaults
-  -- off so the Lean loop has no backend branch; a PJRT_FFI_RESIDENT already in the env wins.
-  let resident : Array (String × Option String) ←
-    if xla && (← IO.getEnv "PJRT_FFI_RESIDENT").isNone then pure #[("PJRT_FFI_RESIDENT", some "1")]
-    else pure #[]
+  -- The XLA tiers run resident — parameters stay on the device between steps — which is how
+  -- every chapter transcript ran and what Appendix B's tier times assume (1.3–2× the wall
+  -- clock without it, numerics unchanged). Since 2026-09-29 that is ffi/pjrt_ffi.c's default,
+  -- so nothing is injected here; PJRT_FFI_RESIDENT=0 in the env takes the copying path.
   let runEnv ← do
     if ← System.FilePath.pathExists (venvBin / "iree-compile") then
-      pure (#[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
-              ("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
-    else pure (#[("LEAN_MLIR_LOWERER", some lowerer)] ++ resident)
+      pure #[("PATH", some s!"{venvBin}:{(← IO.getEnv "PATH").getD ""}"),
+             ("LEAN_MLIR_LOWERER", some lowerer)]
+    else pure #[("LEAN_MLIR_LOWERER", some lowerer)]
   let mut failed : Array String := #[]
   for n in names do
     IO.println s!"\n━━━ {n}: build ━━━"
@@ -2952,8 +2949,8 @@ corrupt it (and contend for the GPU). Stop it first."
     IO.println "    per-epoch ms, so they are measured as median ms/step × 295 steps × 80 ep via the"
     IO.println "    MAX_STEPS probe — which returns before the eval pass. Eval adds ~5% on R34 and"
     IO.println "    ~8% on ConvNeXt (§2h). Add that back before comparing to a wall clock."
-    IO.println "  * PJRT_FFI_RESIDENT is not set, so this is the COPYING path (§2d.3: residency is"
-    IO.println "    2.03× on ResNet-34 bs32). Set it to measure the other one."
+    IO.println "  * residency is on by default — parameters stay on the device (§2d.3: 2.03× on"
+    IO.println "    ResNet-34 bs32). PJRT_FFI_RESIDENT=0 measures the copying path."
     return 0
   let denseMs ← runProbe ref.denseProbe "dense" ref.denseRefMs ref.card backend gpu runEnv
   let convMs  ← runProbe ref.convProbe  "conv"  ref.convRefMs  ref.card backend gpu runEnv

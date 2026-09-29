@@ -9,9 +9,9 @@ can be a system result rather than a statement about the emitted graph:
 
   1. the shim feed          (§13.2 — MobileNetV2 is 1.92x on one GPU and 1.37x on four)
   2. the f32 all-reduce     (§13.2 — same measurement)
-  3. the PARAMETER ROUND TRIP (§16.2 — ConvNeXt-T is 1.29x with `PJRT_FFI_RESIDENT=1` and
-     1.11x without it, SAME GRAPH: its 540 parameter tensors are 327 MB and cross PCIe every
-     step when residency is off, which it is BY DEFAULT)
+  3. the PARAMETER ROUND TRIP (§16.2 — ConvNeXt-T is 1.29x resident and 1.11x under
+     `PJRT_FFI_RESIDENT=0`, SAME GRAPH: its 540 parameter tensors are 327 MB and cross PCIe
+     every step when residency is off, which is no longer the default)
 
 ⚠ `LEAN_MLIR_BENCH_SYNTH=1` controls for (1) ONLY. It removes the data feed and leaves the
 parameter traffic untouched, so a synth-vs-real agreement does NOT rule out (3) — §14.1 used it

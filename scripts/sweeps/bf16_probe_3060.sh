@@ -27,7 +27,8 @@
 #   exit instantly at "resuming from checkpoint" and report nothing. ⚠ It is qualified PER VARIANT
 #   here, not one tag for the whole sweep: checkpoints are per-variant and outlive their artifact,
 #   and a shared tag is an invitation for r50 to resume r34's (different region count).
-# ⚠ `PJRT_FFI_RESIDENT=1` is OFF BY DEFAULT and worth ~2×; `SHIM_WORKERS` ~6.5×. Both silent.
+# ⚠ Residency (on by default since 2026-09-29; PJRT_FFI_RESIDENT=0 turns it off) is worth ~2×;
+#   `SHIM_WORKERS` ~6.5× and silent when absent.
 # ⚠ On the 3060 box `.venv/bin/python` cannot run the shim; `_box.sh` supplies .venv-cuda's.
 # ⚠⚠ Every number here is a SYSTEM result — shim feed and f32 all-reduce included. For a statement
 #   about the RENDERER alone use scripts/probes/bf16_device_step.py.
@@ -114,7 +115,7 @@ probe () {  # net exe variant prec bs arm extra
   [ -z "$effw" ] && effw="$WORKERS"
   echo "  ▶ $net/$prec/$arm (variant $var, bs $bs, workers $effw) ..."
   env CUDA_VISIBLE_DEVICES="$DEVS" PJRT_PLUGIN="$PLUG" SHIM_PYTHON="$PY" \
-      PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 PJRT_FFI_RESIDENT=1 SHIM_WORKERS="$WORKERS" \
+      PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 SHIM_WORKERS="$WORKERS" \
       LEAN_MLIR_VARIANT="$var" LEAN_MLIR_BATCH="$bs" \
       LEAN_MLIR_PROBE_WARM="$WARM" LEAN_MLIR_MAX_STEPS="$STEPS" \
       LEAN_MLIR_CKPT_TAG="${TAG}-${net}-${var}" "${synthenv[@]}" "${extraenv[@]}" \

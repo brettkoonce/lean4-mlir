@@ -855,7 +855,7 @@ end Proofs.StableHLO
 -- **DO NOT ASSUME THIS IS FASTER.** A bf16 op can be SLOWER than its f32 peer with every gate
 -- green — ViT's stem wgrad runs 0.19× — so the render existing says nothing about the wall clock.
 -- Measure with `scripts/probes/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
--- system number that also moves with `PJRT_FFI_RESIDENT` (off by default) and the shim feed.
+-- system number that also moves with `PJRT_FFI_RESIDENT` (on by default) and the shim feed.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")

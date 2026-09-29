@@ -24,8 +24,9 @@
 #
 #   A1, A2  FLOOR    1 replica against ITSELF. If A1 != A2 the gate stops: an equality below
 #                    would mean nothing. ⚠ It measures 1-REPLICA noise only — see GATE_DET below.
-#   B       TEST     N replicas, resident HOLD mode — the path a PJRT_FFI_RESIDENT=1 run takes.
-#   C       TEST     N replicas, COPYING path (`pjrt_ffi_invoke_f32_dp`) — the other read-back site.
+#   B       TEST     N replicas, resident HOLD mode — the path a run takes by default.
+#   C       TEST     N replicas, COPYING path (`pjrt_ffi_invoke_f32_dp`, PJRT_FFI_RESIDENT=0) —
+#                    the other read-back site.
 #   D       CONTROL  B with PJRT_FFI_FAULT=3: every replica's slot filled from replica 0 — the
 #                    replica-0-only read-back this replaces. MUST DIFFER. A gate nobody has seen
 #                    fail is not a gate. First run: Imagenette ViT 51.77% → 46.27%, 1,438 of 3,925
@@ -102,7 +103,7 @@ ndiff() { cmp -l "$OUT/$1.bin" "$OUT/$2.bin" 2>/dev/null | wc -l; }
 arm A1 1 PJRT_FFI_RESIDENT=1
 arm A2 1 PJRT_FFI_RESIDENT=1
 arm B  "$N" PJRT_FFI_RESIDENT=1
-arm C  "$N"
+arm C  "$N" PJRT_FFI_RESIDENT=0   # the copying path, pinned: residency is the default
 arm D  "$N" PJRT_FFI_RESIDENT=1 PJRT_FFI_FAULT=3
 echo
 

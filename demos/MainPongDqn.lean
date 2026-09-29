@@ -25,7 +25,7 @@ import LeanMlir.Pong
      [k=4] [opp=1.5] [tag=<name>]`; writes `<prefix>_curve.csv` and
      `<prefix>_params.bin` under `.lake/build/`.
 
-    Run it with `PJRT_FFI_RESIDENT=1`: [θ|m|v] then stays on the card across train
+    Residency is the shim's default: [θ|m|v] stays on the card across train
     steps and the forwards hold their parameters, 24 → 14.6 ms per pixel update on
     one 4060 Ti. Bit-identical to the copying path on the deterministic shim
     (`scripts/det_shim.sh`); on the shipping shim the two differ in the last bits
@@ -219,7 +219,7 @@ def main (args : List String) : IO Unit := do
   -- `pmv` is the train step's own output, params ‖ Adam m ‖ Adam v ‖ loss, fed straight
   -- back as the next step's input: the shim reads each tensor at its offset from the
   -- shapes and ignores the tail, so there is no per-step slice or append. With
-  -- PJRT_FFI_RESIDENT=1 the step keeps [θ|m|v] on the device (`trainStepAdamF32DdpmR`)
+  -- residency (the default; PJRT_FFI_RESIDENT=0 copies) the step keeps [θ|m|v] on the device (`trainStepAdamF32DdpmR`)
   -- and `pmv`'s param region is unwritten after the seed; `theta` — what every forward
   -- reads — comes back through `readParamsPrefix`, θ alone, m and v never leaving the card.
   let mut pmv := ((p0.append (← F32.const nP.toUSize 0.0)).append (← F32.const nP.toUSize 0.0)).append
