@@ -564,9 +564,10 @@ The \texttt{correct} field then holds by \texttt{rfl}, because by
 definition that is exactly what \texttt{backward} computes. Wherever
 $f$ is smooth, \(\pdiv\) agrees with \(\fderiv\), and that agreement is
 proved. At the non-smooth points \(\pdiv\) takes the standard convention
-by definition. We call this the canonical pdiv-derived witness
-pattern, and it shows up by name in the next few chapters for ReLU,
-maxPool, and the depthwise input VJP.
+by definition. The later chapters call this the \emph{pdiv-derived
+backward}: ReLU, maxPool and the depthwise input VJP each get a
+\(\HasVJP\) whose backward is built from \(\pdiv\) and whose
+\texttt{correct} is \texttt{rfl}.
 
 The codegen then substitutes the same subgradient and argmax convention
 every framework already uses. The benefit isn't a different numerical
@@ -2339,8 +2340,8 @@ that map's derivative and transport it.}
   \lean{Proofs.reluHasVJP}
   \leanok
   \uses{ax:pdiv, def:hasvjp}
-  \texttt{noncomputable def} over the canonical pdiv-derived
-  witness; \texttt{HasVJP.correct} holds by \texttt{rfl} since
+  \texttt{noncomputable def} with the pdiv-derived
+  backward; \texttt{HasVJP.correct} holds by \texttt{rfl} since
   \(\pdiv\) is a \texttt{def} over \(\fderiv\). At non-smooth
   points the canonical backward is \(\fderiv\)'s junk default
   of \(0\); the codegen substitutes the standard subgradient
@@ -2352,8 +2353,8 @@ that map's derivative and transport it.}
   \lean{Proofs.mlpHasVJP}
   \leanok
   \uses{ax:pdiv, def:hasvjp}
-  \texttt{noncomputable def} over the canonical pdiv-derived
-  witness; same shape as \texttt{reluHasVJP}. Codegen
+  \texttt{noncomputable def} with the pdiv-derived
+  backward; same shape as \texttt{reluHasVJP}. Codegen
   routes the ReLU subgradient at the kink.
 \end{definition}
 
@@ -3242,8 +3243,8 @@ reindex factor and the saved input \(x\) is the constant.}
   \lean{Proofs.maxPool2HasVJP3}
   \leanok
   \uses{ax:maxPool2, ax:pdiv, def:hasvjp3}
-  \texttt{noncomputable def} over the canonical pdiv-derived
-  witness. \texttt{HasVJP.correct} holds by \texttt{rfl}; codegen
+  \texttt{noncomputable def} with the pdiv-derived
+  backward. \texttt{HasVJP.correct} holds by \texttt{rfl}; codegen
   substitutes the standard argmax routing convention at tiebreaks.
 \end{definition}
 
@@ -6425,7 +6426,7 @@ decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
 and the accumulation, at threshold $kC$,
 \texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
 left out of layer adaptation. The optimizer is tied to the reference at the
-update as well as the gradient, six variants to $\sim\!10^{-7}$. Two things
+update as well as the gradient, seven variants to $\sim\!10^{-7}$. Two things
 differ from the reference: $0.08\%$ of each epoch is dropped because
 $4 \nmid 2{,}502$, and Mixup's $\lambda$ is drawn host-side, so agreement
 there is distributional rather than per-step.
@@ -6623,7 +6624,8 @@ extra epochs would cost. Every one of these is a one-line
 
 A3 is the cheap tier of ``ResNet Strikes Back''. The other two --- A2 at
 300 epochs and A1 at 600, both at $224^2$ --- render on the verified path
-as \texttt{a2-accum} and \texttt{a1}, and neither has been run:
+as \texttt{a2} and \texttt{a1} (the reference's \texttt{a2-accum} and
+\texttt{a1}), and neither has been run:
 
 \begin{center}
 \begin{tabular}{@{}l c c l l@{}}
@@ -6631,14 +6633,14 @@ as \texttt{a2-accum} and \texttt{a1}, and neither has been run:
 tier & epochs & train res & verified render & top-1 \\
 \hline
 A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_pjrt}) & $\mathbf{78.33\%}$ \\
-A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $79.8\%$ (paper) \\
-A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $80.4\%$ (paper) \\
+A2 (\texttt{a2})           & 300 & $224$ & rendered, sd $0.05$, no EMA & $79.8\%$ (paper) \\
+A1 (\texttt{a1})           & 600 & $224$ & rendered, sd $0.05$, no EMA & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Eight artifacts: each tier at one and four replicas, in both
-precisions, at $4\times128$ --- under synchronised BatchNorm the recipe's
+\noindent Four artifacts: each tier at four replicas of $128$, in both
+precisions --- under synchronised BatchNorm the recipe's
 ghost batch of $512$ per micro-step, as for A3. A1 is its own render rather
 than A2's with a flag: the weight decay is baked into the artifact, $0.01$
 against A2's $0.02$.
@@ -6651,12 +6653,12 @@ the paper:
 \hline
 In & Still out \\
 \hline
-\textbf{Model EMA} at decay $0.9999$ --- a fifth blob region, $[\theta|m|v|G|E]$
-  & Repeated augmentation is stream-level, not per-batch \\[2pt]
+\textbf{BCE target threshold} $0.2$ (\texttt{timm}'s \texttt{--bce-target-thresh}), applied in each recipe's own shim after mixing; A1 adds label smoothing $0.1$
+  & Model EMA --- RSB Table~2 runs none; the \texttt{emalamb} twins stay on disk unused \\[2pt]
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
+  & Repeated augmentation is stream-level, not per-batch \\[2pt]
+Repeated augmentation $3\times$; both tiers, four replicas
   & Neither tier has been run \\[2pt]
-Repeated augmentation $3\times$; both tiers, one and four replicas
-  & \\[2pt]
 A1's own weight decay and own shim
   & \\[2pt]
 As A3: \texttt{wdExcludeNormBias}, LAMB's clip at $kC$ after the all-reduce and the accumulation, BCE-with-logits over Mixup/CutMix soft labels, accumulation to $2048$ at $k=4$
@@ -7469,18 +7471,19 @@ residual skip when \texttt{ic == oc} and \texttt{stride == 1}. Its VJP
 is Theorem~\ref{ax:depthwiseHasVJP3} for the depthwise conv composed with
 the dense, BN and biPath theorems already proved.
 
-\textbf{Fifty-two BatchNorms, and the list is not three per block.} Every
-inverted-residual block normalizes after each of its three convs, which
-would be $17 \times 3 + 2$ for the stem and head, or 53. The first block
-has expansion $t{=}1$, so it has no expand conv at all and contributes
-two entries rather than three, and the real count is 52. That is the kind
-of detail \texttt{bnChannels} exists to get right: the running-stat region
-is positional, and an off-by-one there misaligns every frozen statistic
-downstream of it at evaluation time.
+\textbf{The BatchNorm list has 52 entries, not the 53 a per-block count
+gives.} Every inverted-residual block normalizes after each of its three
+convs, which would be $17 \times 3 + 2$ for the stem and head, or 53. The
+first block has expansion $t{=}1$, so it has no expand conv at all and
+contributes two entries rather than three, and the real count is 52. That
+is the kind of detail \texttt{bnChannels} exists to get right: the
+running-stat region is positional, and an off-by-one there misaligns every
+frozen statistic downstream of it at evaluation time.
 
-\textbf{And the arm shows you the 52.} \texttt{.invertedResidualNB} is
-one more entry on Chapter~\ref{chap:tensor}'s \texttt{toSpecs}, and the
-$t{=}1$ carve-out above is not prose --- it is the conditional:
+\textbf{The \texttt{toSpecs} arm carries the same count.}
+\texttt{.invertedResidualNB} is one more entry on
+Chapter~\ref{chap:tensor}'s \texttt{toSpecs}, and the $t{=}1$ carve-out
+above is not prose --- it is the conditional:
 
 \begin{verbatim}
   | invertedResidualNB ic mid oc _ =>          -- Ch. 6
@@ -7522,8 +7525,8 @@ suggests. Rather than reprint the log, here is what is worth noticing
 in it.
 
 \begin{itemize}
-\item \textbf{2.24M parameters, and 1.05\,MB of MLIR} (1\,047\,327 chars)
-  for the AdamW training step. ResNet-34 emitted 729\,KB with $9.5\times$
+\item \textbf{2.24M parameters, and 1.07\,MB of MLIR} (1\,070\,905 chars)
+  for the AdamW training step. ResNet-34 emitted 754\,KB with $9.5\times$
   the parameters, so the smaller network renders the larger
   program. Emission is per-op, and the separable block trades one
   convolution for three, each with its own BatchNorm. Parameter count
@@ -7544,9 +7547,9 @@ in it.
   \S\ref{sec:mnv2_imagenet} sees the same sub-proportional scaling at
   ImageNet.
 
-\item \textbf{Three artifacts, not one.} The train step is accompanied by
-  \texttt{mobilenetv2\_fwd} (143\,476 chars) and
-  \texttt{mobilenetv2\_fwd\_eval} (111\,150 chars), the second existing
+\item \textbf{The net renders as three artifacts.} The train step is accompanied by
+  \texttt{mobilenetv2\_fwd} (152\,793 chars) and
+  \texttt{mobilenetv2\_fwd\_eval} (120\,698 chars), the second existing
   only because BatchNorm evaluates differently than it trains. It is
   the concrete cost of the \texttt{bnChannels} line in the spec above.
 
@@ -7651,28 +7654,42 @@ def mobilenetV2Imagenet : NetSpec where
     .dense 1280 1000 .identity      -- 1000-class head
   ]
 
--- RMSProp recipe, MobileNet-native: smaller weight decay, bf16 conv on.
+-- RMSProp recipe in TF-slim's form: staircase decay from step 0, no warmup,
+-- no decay on BN or biases, BN decay 0.997 / eps 1e-3, bf16 conv on.
 def mobilenetV2ImagenetConfig : TrainConfig where
-  learningRate   := 0.045           -- MobileNetV2-native RMSProp peak (was 0.1 for SGD)
+  learningRate   := 0.045           -- MobileNetV2-native RMSProp peak
   batchSize      := 256
-  epochs         := 90              -- the real run; validate at 30 first
+  epochs         := 90              -- near-paper run
   optimizer      := .rmsprop        -- paper: RMSProp + momentum, not SGD
   momentum       := 0.9             -- mu for the RMSProp momentum buffer
   rmspropDecay   := 0.9             -- rho, the running mean-square decay
   rmspropEps     := 1.0             -- MobileNetV2 uses epsilon = 1.0
   weightDecay    := 4e-5            -- smaller than R34's 1e-4
-  cosineDecay      := false         -- replaced by the paper exp-decay (gap B)
-  expLRDecayRate   := 0.98          -- MobileNetV2: x0.98 per epoch, after warmup
+  wdExcludeNormBias := true         -- no decay on BN gamma/beta or biases (slim's rule)
+  cosineDecay      := false         -- replaced by the paper exp-decay
+  expLRDecayRate   := 0.98          -- MobileNetV2: x0.98 per epoch
   expLRDecayEpochs := 1.0
-  dropout          := 0.2           -- MobileNetV2 classifier dropout (gap C)
-  warmupEpochs   := 5
+  expLRStaircase   := true          -- the paper's staircase, counted from step 0
+  dropout          := 0.2           -- MobileNetV2 classifier dropout
+  warmupEpochs   := 0               -- the paper has no warmup
   augment        := true            -- random-crop + horizontal flip
   useAutoAugment := false           -- MNv2 paper used crop/flip only, no AA
   labelSmoothing := 0.0             -- Sandler 2018 used none
   bf16           := true
   bf16Conv       := true            -- reaches the inverted-residual blocks
-  runningBN      := true            -- paper-faithful eval (gap A)
+  runningBN      := true            -- paper-faithful eval: running BN stats
+  bnMomentum     := 0.997           -- TF-slim's BN decay (PyTorch momentum 0.003)
+  bnEps          := 1e-3            -- TF-slim's BN epsilon
+
+-- The 350-epoch run below is the same recipe, longer.
+def mobilenetV2ImagenetConfigFull : TrainConfig :=
+  { mobilenetV2ImagenetConfig with epochs := 350 }
 \end{verbatim}
+
+\noindent The run reported below predates four of those lines ---
+\texttt{wdExcludeNormBias}, the staircase from step $0$ with no warmup,
+and the two BatchNorm constants --- and the ledger at the end of the
+section carries them.
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
 convolutions cast to bfloat16 the instant the flag is on, but MobileNet's
@@ -7761,14 +7778,15 @@ it is flat from about epoch $250$ onward, so the last $100$ epochs are
 worth almost nothing and the schedule is genuinely exhausted rather than
 cut short.
 
-\medskip\noindent \textbf{[TODO: re-run.]} This result predates four fixes
-that landed while it was training, so it is a clean run of a recipe that is no
-longer the current one. The ledger, worst first:
+\medskip\noindent \textbf{[TODO: re-run.]} This result predates the fixes
+that landed while and after it trained, so it is a clean run of a recipe that
+is no longer the current one. What the run had, and what the code has since
+taken on, worst first:
 
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
 \hline
-In & Still out, worst first \\
+In & Since landed, unmeasured, worst first \\
 \hline
 Antialiased resize on train and eval, and \texttt{timm}'s $50{,}000$-image
 denominator --- both halves of that protocol
@@ -7776,16 +7794,19 @@ denominator --- both halves of that protocol
     plain \texttt{relu} while every inverted-residual interior used ReLU6. Landed
     2026-08-30, one day after this run started, and it is a reference-only defect:
     the verified render was always ReLU6 \\[2pt]
-Label smoothing $0$, as Sandler et al.\ used
-  & \textbf{BN running-stat decay} as a per-net knob --- still $0.99$ here where
-    PyTorch's default works out to $0.9$ \\[2pt]
 RMSProp $\varepsilon$ inside the root, matching TensorFlow
-  & Mixup/CutMix label-smoothing fix --- inert for this recipe, which runs neither,
-    but it moves the shared emitter \\[2pt]
+  & \textbf{Label smoothing} --- the shim this run streamed most likely smoothed
+    at $0.1$; the recipe says $0$, as Sandler et al.\ used, and the rerun trains
+    at $0$ \\[2pt]
 Exponential decay $\times0.98$/epoch over the full $350$, dropout $0.2$, running-BN eval
-  & Nothing re-run: the four above are known, none is measured \\[2pt]
+  & \textbf{BN running-stat decay $0.997$ and $\varepsilon = 10^{-3}$}, TF-slim's
+    values, against this run's $0.99$ / $10^{-5}$; both paths carry them now \\[2pt]
 $38.4$ h, one attempt, zero restarts, zero thermal pauses
-  & \\
+  & \textbf{The staircase from step $0$, no warmup, and no decay on BN or biases}
+    (\texttt{wx}) --- the paper's schedule; this run warmed up for five epochs and
+    decayed everything \\[2pt]
+  & Nothing re-run: every line above is known, none is measured. The pair is
+    \texttt{mnv2-full-jax-4gpu} and \texttt{mnv2-default-4gpu} \\
 \hline
 \end{tabular}
 \end{center}
@@ -7842,8 +7863,11 @@ $\times 0.98$ per epoch after it, data-parallel over four replicas in
 bf16. Those constants live in \texttt{mnv2RmsSchedule} and
 \texttt{mnv2RmsHyper}, shared with the Imagenette peer so the two cannot
 carry different values. \texttt{adam64} is AdamW at $10^{-3}$ instead,
-which is the default because it matches the other four ImageNet drivers.
-It runs with:
+the default because it matches the other ImageNet drivers. Since the run
+the job has moved on to \texttt{rmsdp64wxdols0eps0001bf16}: the same RMSProp
+with no decay on BN or biases, the staircase from step $0$ with no warmup,
+BatchNorm at TF-slim's $0.997$ / $10^{-3}$ and synchronised statistics ---
+the rerun's artifact, not this table's. It runs with:
 
 \begin{verbatim}
 lake run mnv2-default-4gpu
@@ -7896,7 +7920,9 @@ between the rules are held equal by construction.
 $0.11$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Precision is held equal
 as on ResNet-34's pair, so the one asymmetry left above the
-rule is the BatchNorm group, and this is the pair that isolates it.
+rule is the BatchNorm group, and this is the pair that isolates it. The
+committed render has since moved to synchronised statistics
+(Theorem~\ref{thm:mobilenetv2_sync_tie}), so the rerun closes the row.
 
 \medskip\noindent\textbf{What the BatchNorm group is.} MobileNetV2 has
 BatchNorm in every block. The verified path runs four replicas of $64$ with
@@ -7966,6 +7992,9 @@ the fed step is $97$; the difference is host work the reference does
 in-process, and \S\ref{sec:vit_phase4} has the accounting. This is the net
 where it shows most plainly: the compute floor is already at the
 reference's wall clock, so every hour of the gap is pipeline.
+\textbf{[TODO: feed fixes --- mixing in place on the shim host, the uint8
+wire, PIL rotate --- measured at $+34$/$+22$/$+13\%$, none built; re-measure
+the gap when they land.]}
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
@@ -7998,8 +8027,9 @@ Augmentation  & RRC + hflip            & RRC + hflip                   & unchang
 \end{center}
 
 \noindent What carries over unchanged: batch 256, train and eval both
-at $224$, running-BN evaluation, bf16 matmul and convolution, and our
-5-epoch warmup (an addition to both papers).
+at $224$, running-BN evaluation, and bf16 matmul and convolution. R34's
+5-epoch warmup does not: MobileNetV2's staircase starts at step $0$, as
+the paper's does.
 
 The through-line of this fork is that nothing here regularizes harder.
 MobileNetV2's recipe is the SGD recipe's contemporary, tuned for a
@@ -8058,8 +8088,8 @@ Epochs        & $\sim$300--400         & 500                           & the fam
 Weight decay  & $4\times10^{-5}$       & $0.1$, skip norm/bias         & $2500\times$ stronger, applied selectively, because AdamW makes heavy decay usable \\
 Augmentation  & RRC + hflip            & + RandAugment (N2, m15, p0.7) & heavy learned augmentation, and still no Mixup/CutMix for Conv-M \\
 Label smoothing & none                 & $0.1$                         & standard by 2024 \\
-Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 21 UIB blocks \\
-EMA           & none                   & none in the paper; $0.9999$ here, warmup-corrected & weight averaging on both paths below (with the BN buffers shadowed, per Ch~\ref{chap:se}'s lesson), an addition to the paper's recipe \\
+Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 18 skip-carrying UIB blocks \\
+EMA           & none                   & none in the paper; $0.9999$ here, warmup-corrected & weight averaging on both paths below (with the BN buffers shadowed, per Ch~\ref{chap:se}'s lesson), an addition to the paper's recipe that the \texttt{full} tier drops \\
 \hline
 \end{tabular}
 \end{center}
@@ -8321,20 +8351,21 @@ $\Delta$              & $-2.19$ & $+4.40$ & $+1.24$ & $+0.48$ & $+0.37$ & $+0.20
 \noindent One recipe, two paths to XLA, scored every five epochs over
 all $50{,}000$ validation images.
 
-\medskip\noindent\textbf{[TODO, 500 epochs.]} \texttt{mobilenet-v4-imagenet full}.
-The tier above is detuned by construction, at wd $0.05$ against
-the paper's $0.1$, dropout $0.1$ against $0.2$, RandAugment $m9$
-against $m15$, no drop-path against $0.075$, $224$ against $256$ and
-$100$ epochs against $500$, so its $76.57\%$ and $76.68\%$ are not a
-reproduction of $79.9\%$. Both curves are flat over their last ten
-epochs; the remaining points live in the regularization and the length
-the \texttt{full} tier restores, and that run is the one this section
-still owes.
-
-\medskip\noindent\textbf{[TODO: remove EMA.]} Both paths above score the
-EMA shadow, and the paper's Conv-M recipe carries none; the shadow is this
-book's addition, on both sides. The tie stands, since both columns carry it,
-but the next pair drops it, scoring the live weights as the paper does.
+\medskip\noindent\textbf{[TODO, 500 epochs.]} The tier above is detuned by
+construction, at wd $0.05$ against the paper's $0.1$, dropout $0.1$ against
+$0.2$, RandAugment $m9$ against $m15$, no drop-path against $0.075$, $224$
+against $256$ and $100$ epochs against $500$, so its $76.57\%$ and
+$76.68\%$ are not a reproduction of $79.9\%$. Both curves are flat over
+their last ten epochs; the remaining points live in the regularization and
+the length. The paper tier exists on both paths and has not run:
+\texttt{mnv4-full-jax-4gpu} and \texttt{mnv4-full-4gpu}, the latter on
+\texttt{mnv4in\_accdp8x128wxdropdowd01bf16} --- wd $0.1$, dropout $0.2$,
+$m15$, drop-path $0.075$ ramped over the 18 skip-carrying UIB blocks, $500$
+epochs. Both paths above score the EMA shadow, which the paper's Conv-M
+recipe does not carry; the tie stands, since both columns carry it, and the
+\texttt{full} pair drops it, scoring the live weights as the paper does. It
+trains at $224$; the paper's $256$ is the one gap the \texttt{full} tier
+leaves open.
 
 \chapter{EfficientNet}
 \label{chap:se}
@@ -8604,7 +8635,7 @@ return-on-scaling to show up.
       ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
       def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP, thm:residualHasVJP,
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
-  \Assume{} the fifty BatchNorm positivities. \Prove{} the batched
+  \Assume{} the forty-nine BatchNorm positivities. \Prove{} the batched
   EfficientNet-B0 --- all sixteen MBConv blocks with squeeze-and-excitation
   and swish, at training BatchNorm and batch \(N\) --- has the VJP: its
   backward equals the \(\pdiv\)-contracted Jacobian of
@@ -8656,9 +8687,11 @@ See \leandocref{Proofs.efficientnetInputGradBFull\_correct}.
       def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
       thm:denseHasVJP, thm:denseWeightGrad_correct, thm:residualHasVJP,
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
-  \Prove{} the 262 parameter gradients of the batched EfficientNet-B0 step
+  \Prove{} the 213 parameter gradients of the batched EfficientNet-B0 step
   (\texttt{efficientnet\_adam\_train\_step.mlir} and the f32
-  \texttt{efficientnetin\_*} steps) are tied at the chain cotangent of the
+  \texttt{efficientnetin\_*} steps) --- the theorem's further 49 conjuncts,
+  one per convolution bias, cover a \texttt{convBias := true} census that no
+  committed render emits --- are tied at the chain cotangent of the
   label-smoothed cross-entropy, the target and the number of classes binders:
   each raw gradient node denotes the certified batch gradient through swish,
   the SE gate's fan-in and the batch-BatchNorm backward, at one replica, on
@@ -8687,7 +8720,8 @@ See \leandocref{Proofs.EnetTiePoCG.efficientnet\_net\_tiedG}.
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{B0Weights.EpsPos})
   and any loss \(L\) of the logits with gradient \(g\); no smooth-point
   clause, the net having no kink. \Prove{} each of the 262 nodes of
-  Theorem~\ref{thm:efficientnet_step_tie}, at the chain cotangent from
+  Theorem~\ref{thm:efficientnet_step_tie} ($213$ in every committed render,
+  the other $49$ its convolution-bias census), at the chain cotangent from
   \(g\), is \(\partial L/\partial\theta\) of \texttt{efficientnetForwardBFull}
   with that one parameter varied, at any batch and number of classes;
   \texttt{enet\_net\_lossGrad\_smoothedCE} discharges the loss hypothesis for
@@ -8902,8 +8936,8 @@ strided, and the remaining nine as residual. The spec's job is the
 parameter layout, and \texttt{efficientnetVerified.toSpecs} is
 kernel-\texttt{\#guard}ed against an independently audited hand-list.
 
-\textbf{Forty-nine BatchNorms, and the list is not three per block.}
-Every MBConv normalizes after its expand, depthwise and project convs,
+\textbf{The BatchNorm list has 49 entries, not the 50 a per-block count
+gives.} Every MBConv normalizes after its expand, depthwise and project convs,
 which would be $16 \times 3 + 2$ for the stem and head, or 50. Stage 1
 has $t=1$ and therefore no expand conv, so it contributes two entries
 rather than three, and the real count is 49. \texttt{bnChannels} exists
@@ -8938,9 +8972,9 @@ on the verified XLA path, on one RTX 4060 Ti:
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 729\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNetV2      &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
+ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
+MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
 \hline
 \end{tabular}
 \end{center}
@@ -8966,8 +9000,8 @@ are one run each.
   much better trade than it looks on the ImageNet leaderboard, where B0
   is usually compared against far larger models.
 
-\item \textbf{1{,}316\,KB of MLIR is the largest render in the book},
-  ahead of MobileNetV2's 1{,}047\,KB and ResNet-34's 729\,KB. The extra
+\item \textbf{1{,}317\,KB of MLIR is the largest render in the book},
+  ahead of MobileNetV2's 1{,}071\,KB and ResNet-34's 754\,KB. The extra
   ops are SE's: each block emits a global-average-pool, two denses, a
   sigmoid and an elementwise multiply, and then the product-rule backward
   for all of it. Sixteen blocks of that is a lot of StableHLO.
@@ -9089,8 +9123,8 @@ def efficientNetB0Imagenet : NetSpec where
     .dense 1280 1000 .identity      -- 1000-class head
   ]
 
--- The paper's own recipe: RMSProp in TensorFlow's form, exponential
--- LR decay, AutoAugment, stochastic depth, EMA, bf16 conv on.
+-- The paper's own recipe: RMSProp in TensorFlow's form, staircase LR
+-- decay, AutoAugment, stochastic depth, EMA, bf16 conv on.
 def efficientNetB0ImagenetConfig : TrainConfig where
   learningRate   := 0.016   -- 0.256@4096, linearly scaled to bs 256
   batchSize      := 256
@@ -9101,19 +9135,24 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   rmspropEps     := 1e-3
   gradClipNorm   := 0.0     -- OFF: the paper uses none
   weightDecay    := 1e-5    -- small: protects depthwise/SE params
+  wdExcludeNormBias := true -- no decay on BN gamma/beta or biases (TF, timm)
   cosineDecay      := false -- replaced by the paper's exp decay
-  expLRDecayRate   := 0.97  -- x0.97 every 2.4 epochs, after warmup
+  expLRDecayRate   := 0.97  -- x0.97 every 2.4 epochs
   expLRDecayEpochs := 2.4
+  expLRStaircase   := true  -- TF: floored, on the global step (warmup overrides while it runs)
   dropout          := 0.2   -- classifier dropout
   warmupEpochs   := 5
   augment        := true
   useAutoAugment := true    -- the full ImageNet policy
+  augBicubic     := true    -- PIL-bicubic geometry, as timm
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- reaches the MBConv expand/dw/project
   useEMA         := true    -- weight averaging, decay 0.9999
   dropPath       := 0.2     -- stochastic depth (B0 drop-connect rate)
+  dropPathOverN  := true    -- TF's ramp: 0.2 * i/16, not timm's i/15
   runningBN      := true    -- eval on running stats, not batch stats
+  bnEps          := 1e-3    -- TF's BN epsilon
 
 -- The 350-epoch tier is the same recipe, longer.
 def efficientNetB0ImagenetConfigFull : TrainConfig :=
@@ -9302,19 +9341,36 @@ inside the square root ($g/\sqrt{s+\varepsilon}$, not
 $g/(\sqrt{s}+\varepsilon)$), and the mean-square accumulator starts at $1.0$
 rather than $0$. Drop-connect is a linear ramp over blocks, as the official
 implementation does it, and the EMA shadows the BN buffers as well as the
-weights.
+weights. That is the recipe the pair below trained on.
+\textbf{[TODO: the final pair --- the staircase floored on the global step
+from step $0$, no decay on BN or biases, drop-connect $0.2 \cdot i/16$, BN
+$\varepsilon = 10^{-3}$, synchronised BatchNorm, and the strided-depthwise
+padding decision below; \texttt{enet-full-jax-4gpu} and
+\texttt{enet-default-4gpu}.]}
 
-\medskip\noindent\textbf{One difference is known and open: batch-norm
-$\varepsilon$ is $10^{-5}$ here against the TF reference's $10^{-3}$.}
-\texttt{\_bn(..., eps=1e-5)} in the reference's emitted code, and $147$ splat
-constants of \texttt{1.0e-5} in the verified render --- so the two paths agree
-with each other and both differ from the paper. It is unquantified: nobody has
-run the $10^{-3}$ arm. Nor is there a deficit for it to explain: the reference scores
-$77.15\%$ / $93.30\%$ against the paper's $77.1$ / $93.3$. The difference stands
-and remains unquantified; what it does not have is a symptom.
+\medskip\noindent\textbf{One difference was known and open: batch-norm
+$\varepsilon$ was $10^{-5}$ in this pair against the TF reference's
+$10^{-3}$.} \texttt{\_bn(..., eps=1e-5)} in the reference's emitted code of
+the time, and $196$ splat constants of \texttt{1.0e-5} in the render it
+trained on --- so the two paths agreed with each other and both differed from
+the paper. Both now carry $10^{-3}$: \texttt{bnEps} on the reference, and
+the \texttt{emarmsdp64dropdowxeps0001bf16} render with its
+\texttt{efficientnetin\_fwd\_eval\_eps0001} scorer on the verified path, so
+the rerun is what quantifies it. There was no deficit for it to explain: the
+reference scores $77.15\%$ / $93.30\%$ against the paper's $77.1$ / $93.3$.
+
+\medskip\noindent\textbf{One difference is known and open: the four strided
+depthwise convolutions pad symmetrically on both paths where TensorFlow pads
+\texttt{SAME}.} TF's \texttt{SAME} puts the odd pixel of padding on the
+bottom and right; ours splits it evenly, so at stride two the depthwise
+window sits one pixel off. Measured against \texttt{tf\_efficientnet\_b0} on
+shared weights (\texttt{scripts/enet\_timm\_parity.py --pad tf}), the
+logits differ by $0.37$ of their scale at training resolution and $0.048$
+at evaluation. It is the largest deviation left, it is the same on both
+paths, and it is decided before the rerun rather than by it.
 
 \medskip\noindent\textbf{The activation agrees on both sides.} The verified
-render is swish throughout --- $194$ \texttt{stablehlo.logistic} and not one
+render is swish throughout --- $178$ \texttt{stablehlo.logistic} and not one
 \texttt{stablehlo.maximum} --- and the reference sets \texttt{convBnAct} to
 swish on the stem and the $1\times1$ head. The two paths describe the same
 network.
@@ -9349,7 +9405,9 @@ augmentation         & AutoAugment              & AutoAugment \\
 \noindent Both columns are EfficientNet-B0 on the paper's RMSProp recipe at
 350 epochs, on the same four RTX 3060 cards, scored over the same
 $50{,}000$ validation images; the verified column is the
-\texttt{emarmsdp64dropdobf16} render, \texttt{lake run enet-default-4gpu}.
+\texttt{emarmsdp64dropdobf16} render of the time. \texttt{lake run
+enet-default-4gpu} today runs its TF-recipe successor,
+\texttt{emarmsdp64dropdowxeps0001bf16}, with synchronised BatchNorm.
 Rows above the first rule differ; rows between the rules are held equal by
 construction. The reference's in-training evaluation reads $77.18\%$ at
 epoch~350; the $77.15\%$ headline is the same checkpoint rescored from its
@@ -9372,7 +9430,10 @@ the trajectories differ, it can. This section does not claim to know why.
 \medskip\noindent\textbf{The suspect is the BatchNorm group, and it is
 unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
 one numerical asymmetry above the rule is the BatchNorm group: each replica's $64$ against the reference's global $256$: the render this
-pair trained on normalizes each replica's shard on its own. MobileNetV2's pair, which carries the same fourfold difference,
+pair trained on normalizes each replica's shard on its own. The committed
+render has since moved to synchronised BatchNorm (global $256$,
+Theorem~\ref{thm:efficientnet_sync_tie}), and the rerun pair is the test.
+MobileNetV2's pair, which carries the same fourfold difference,
 landed $0.01$ apart, and it has as much BatchNorm as this net
 ($52$ layers to $49$), so the count of normalization layers does not by
 itself explain a $0.3$. What this recipe adds is that evaluation scores an
@@ -9457,9 +9518,9 @@ Knob & ResNet-34 (2018) & EfficientNet-B0 (2019) & What the B0 choice buys \\
 Backbone      & basic block, 21.8\,M   & MBConv + SE + Swish, 5.3\,M  & depthwise sandwich + SE gating --- ResNet-34-class accuracy at a quarter of the parameters \\
 Optimizer     & SGD + momentum $0.9$   & RMSProp (TF form)             & $\rho{=}0.9$, $\mu{=}0.9$, $\varepsilon{=}10^{-3}$ --- and the exact variant matters (below) \\
 Peak LR       & $0.1$                  & $0.016$                       & linearly scaled from the official $0.256$@4096 --- RMSProp's scale, not comparable to SGD's $0.1$ \\
-LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase anneal, after the same 5-epoch warmup \\
+LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase, floored on the global step, under the same 5-epoch warmup \\
 Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need, and the row the exponential decay above makes non-negotiable \\
-Weight decay  & $10^{-4}$, all params  & $10^{-5}$                     & $10\times$ weaker --- depthwise and SE parameters are decay-sensitive \\
+Weight decay  & $10^{-4}$, all params  & $10^{-5}$, BN and biases excluded & $10\times$ weaker --- depthwise and SE parameters are decay-sensitive \\
 Augmentation  & RRC + hflip            & + AutoAugment                 & the learned ImageNet policy --- 2019's forerunner of ConvNeXt's DeiT pack \\
 Stochastic depth & none                & drop-path $0.2$               & randomly drops whole residual branches per step, at B0's drop-connect rate \\
 EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights and the BN buffers (below) \\
@@ -10206,9 +10267,9 @@ and every row a measurement on the verified XLA path, on one RTX 4060 Ti:
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 729\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNetV2      &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
+ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
+MobileNetV2      &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
 ConvNeXt-T       & \textbf{27.83M} & 1{,}019\,KB & 188 ms & 1.2 h & 82.27\% & 96.51\% \\
 \hline
 \end{tabular}
@@ -10240,7 +10301,7 @@ ConvNeXt-T       & \textbf{27.83M} & 1{,}019\,KB & 188 ms & 1.2 h & 82.27\% & 96
     and the channel LayerNorms touch every spatial position twice per
     block, and the $4\times$ expansion makes its $1 \times 1$s the largest
     matmuls in the column.
-  \item \textbf{The MLIR is mid-pack at 1{,}019\,KB}, above ResNet-34's 729
+  \item \textbf{The MLIR is mid-pack at 1{,}019\,KB}, above ResNet-34's 754
     and below MobileNetV2's 1,047 and EfficientNet-B0's 1,316. Block
     count is not what separates them, since ConvNeXt's eighteen is more
     than either. What separates them is what one block costs to emit:
@@ -10333,9 +10394,14 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   augment           := true
   useRandAugment    := true         -- geometric RandAugment N=2, M=9, mstd0.5, inc1
   randAugmentGeometric := true
+  augBicubic        := true         -- PIL-bicubic geometry, as timm (after the run below)
+  randAugmentMstd   := 0.5
+  randAugmentInc    := true
   useMixup          := true         -- Mixup alpha 0.8 ...
   useCutmix         := true         -- ... + CutMix alpha 1.0 (alternates per step) ...
   randomErasing     := true         -- ... + Random Erasing p 0.25 (full DeiT pack)
+  randomErasingProb := 0.25
+  erasingPixel      := true         -- timm mode='pixel', N(0,1) fill (after the run below)
   labelSmoothing    := 0.1
   bf16              := true
   bf16Conv          := true         -- dw-7x7 + 1x1s; LN/GELU stay fp32
@@ -10373,8 +10439,11 @@ Every element of the paper recipe is now wired and on:
 
 \noindent The peak LR is $2.5\mathrm{e}{-}4$ (the
 $4\mathrm{e}{-}3$@4096 official value linearly scaled to batch 256)
-over a 20-epoch warmup. No architectural deviation from the paper
-remains, and the schedule is no longer short of it either. The run below is the full 300-epoch tier, trained and
+over a 20-epoch warmup. No deviation from the paper's architecture remains
+but the GELU, which is the tanh approximation on both paths
+(Definition~\ref{ax:geluScalar}); the recipe adds a global-norm clip at
+$1.0$ and runs at batch $256$ rather than $4096$, and the schedule is no
+longer short of it either. The run below is the full 300-epoch tier, trained and
 evaluated on timm's antialiased bicubic resampler and validation
 protocol.
 
@@ -10399,7 +10468,8 @@ The full 300-epoch tier (\texttt{convnext-tiny-imagenet full},
 \texttt{convNeXtTinyImagenetConfigFull}) reached $\mathbf{81.53\%}$ top-1
 and $\mathbf{95.50\%}$ top-5 on the held-out validation pass. That is the
 strongest result in this book's sweep by a wide margin, ahead of
-EfficientNet-B0 ($77.15\%$) and ResNet-34 ($74.16\%$), and it lands within
+ResNet-50 RSB-A3 ($78.33\%$), EfficientNet-B0 ($77.15\%$) and ResNet-34
+($74.16\%$), and it lands within
 $\sim$0.6\% of ConvNeXt-T's $82.1\%$ paper headline from a from-scratch
 Lean$\to$JAX-codegen reimplementation. Two candidate explanations for
 that residual can be ruled out from this run: weight averaging is
@@ -10476,6 +10546,7 @@ def convnextImagenetVerified : VerifiedNetSpec where
 def convnextImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 64
+  cnxInit   := true   -- ConvNeXt _init_weights: trunc_normal(0.02), as the reference
 \end{verbatim}
 
 \noindent The head is the only parameter shape that moves, from
@@ -10505,9 +10576,10 @@ once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
 the run below used; Theorem~\ref{thm:convnext_step_tie} is stated on the f32,
 drop-free chain, and this render's gradient nodes are the bf16
 \texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
-carries the drop-path sites. EMA is a render variant too
-(\texttt{convnextin\_emadp}), but no committed artifact combines it with
-the other three, so the verified arm trains and scores its raw weights,
+carries the drop-path sites. EMA is rendered too, and
+\texttt{convnextin\_emadpwxclipdropbf16} carries all four, but it landed
+after this run, which trained \texttt{adamdpwxclipdropbf16} and scores its
+raw weights,
 and the pairing below is made against the reference's raw arm, which the
 reference section measured at $0.03$ points under its EMA. Mixup and
 CutMix never enter the graph at all, because they are data-side and ride
@@ -10550,6 +10622,7 @@ precision            & bf16                     & bf16 \\
 global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
 peak LR              & $2.5\mathrm{e}{-4}$      & $2.5\mathrm{e}{-4}$ \\
+init                 & trunc-normal $0.02$      & trunc-normal $0.02$ \\
 scored               & raw weights, epoch 300   & raw weights, epoch 300 \\
 \hline
 \textbf{val top-1}   & $\mathbf{81.51\%}$       & $\mathbf{81.30\%}$ \\
@@ -10579,8 +10652,10 @@ was checked rather than assumed --- the two agree on $92.6\%$ of images,
 where unrelated orderings would agree on $69.7\%$. What the pair does not
 isolate is variance. The drop-path and Mixup masks are host-drawn on one
 path and \texttt{jax.random}'s on the other, and the seeds differ, so
-$7.4\%$ of images decided differently is the run-to-run spread of two
-ConvNeXt-Ts, and ``not separable'' is the claim, not ``identical''. Like
+$7.4\%$ of images decided differently is what two ConvNeXt-Ts differing in
+seed and mask source disagree on here; a two-seed pair on one path, which
+would bound the spread alone, has not been run. ``Not separable'' is the
+claim, not ``identical''. Like
 ViT, ConvNeXt has no BatchNorm to normalize over a different group;
 unlike ViT, its verified arm ran without EMA, so this is a two-variable
 pair with the second variable measured at $0.03$.
@@ -10723,15 +10798,16 @@ are parameter edits. On the verified side they are not the same job at all.
 model & shape & params & graph, one card bs$32$: fp32 $\to$ bf16 \\
 \hline
 ConvNeXt-T & $9$ blocks, $96$ wide  & $28.6$\,M        & $150.6 \to 68.5$\,ms \;($2.20\times$) \\
-ConvNeXt-S & $27$ blocks, $96$ wide & $50{,}222{,}152$ & $255.2 \to 105.3$\,ms \;($\mathbf{2.42\times}$) \\
-ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}589{,}416$ & $378.6 \to 158.0$\,ms \;($2.40\times$) \\
+ConvNeXt-S & $27$ blocks, $96$ wide & $50{,}223{,}688$ & $255.2 \to 105.3$\,ms \;($\mathbf{2.42\times}$) \\
+ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}591{,}464$ & $378.6 \to 158.0$\,ms \;($2.40\times$) \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Every number in this section was measured in one session on
-4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed against
-$50.22$\,M and $88.59$\,M.
+4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed at
+$50{,}223{,}688$ and $88{,}591{,}464$, $344$ tensors each, the head
+LayerNorm's $\gamma$ and $\beta$ included.
 
 \medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
 including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
@@ -10748,6 +10824,18 @@ ConvNeXt-B & $128$ & $10{,}009$ & $521 \to 301$ & $438 \to 254$\,h \;($18.2 \to 
 \hline
 \end{tabular}
 \end{center}
+
+\noindent\textbf{What is queued.} The tables above are the $4\times32$
+probes. The jobs that will run are \texttt{cnxs-default-emabf16-4gpu} and
+\texttt{cnxb-default-emabf16-4gpu} on
+\texttt{convnext\{s,b\}in\_emadpwxclipdropbf16}: $64$ per replica, the
+reference's global $256$, EMA scored, \texttt{cnxInit} on both paths, with
+\texttt{\_fwd\_s288} forwards for \texttt{timm}'s test protocol; their
+references are \texttt{cnxs-default-jax-4gpu} and
+\texttt{cnxb-default-jax-4gpu}. At $64$ per replica S peaks at $6.80$\,GiB
+and B at $9.53$ of the $11.68$\,GiB arena, so B needs no accumulation
+render. Neither has run; the modelled totals are ${\sim}159$ and
+${\sim}253$ hours, re-probed before launch.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -12300,9 +12388,9 @@ eighty epochs, and one RTX 4060 Ti:
 \hline
 Model            & Params  & MLIR       & Step time & Total    & Top-1 & Top-5 \\
 \hline
-ResNet-34        & 21.29M  & 729\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
-MobileNet V2     &  2.24M  & 1{,}047\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
-EfficientNet-B0  &  4.02M  & 1{,}316\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
+ResNet-34        & 21.29M  & 754\,KB    & 120 ms    & 47 min   & \textbf{89.99\%} & 98.46\% \\
+MobileNet V2     &  2.24M  & 1{,}071\,KB &  90 ms   & 35 min   & 89.25\% & \textbf{98.68\%} \\
+EfficientNet-B0  &  4.02M  & 1{,}317\,KB & 103 ms   & 41 min   & 89.96\% & 98.45\% \\
 ConvNeXt-T       & 27.83M  & 1{,}019\,KB & 188 ms   & 1.2 h    & 82.27\% & 96.51\% \\
 ViT-Tiny         &  5.53M  & 1{,}282\,KB & \textbf{61 ms} & \textbf{24 min} & 68.74\% & 90.42\% \\
 \hline
@@ -12442,9 +12530,14 @@ def vitTinyImagenetConfig : TrainConfig where
   useMixup          := true          -- Mixup alpha 0.8
   useCutmix         := true          -- CutMix alpha 1.0 (alternates with Mixup)
   useRandAugment    := true          -- rand-m9-mstd0.5-inc1 (color + geometric)
+  randAugmentGeometric := true
+  augBicubic        := true          -- PIL-bicubic geometry, as timm (after the run below)
   randomErasing     := true          -- Random-Erase p 0.25
+  randomErasingProb := 0.25
+  erasingPixel      := true          -- timm mode='pixel', N(0,1) fill (after the run below)
   dropPath          := 0.1           -- stochastic depth (linear 0 -> 0.1)
-  useEMA            := true          -- model EMA decay 0.99996 (eval on shadow)
+  useEMA            := true          -- model EMA (eval on shadow)
+  emaDecay          := 0.99996       -- DeiT default
   bf16              := true          -- bf16 matmul compute
   valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
   repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
@@ -12549,8 +12642,7 @@ not empty.
 \emph{What matches.} Architecture (patch16, $d{=}192$, 12 blocks, 3
 heads, 5{,}717{,}416 parameters); schedule (300 epochs, 5-epoch warmup,
 cosine to zero); optimizer (AdamW, weight decay $0.05$, no decay on
-norms, biases, CLS or positional embedding); loss (cross-entropy with
-label smoothing $0.1$); the augmentation stack (Mixup $0.8$, CutMix
+norms, biases, CLS or positional embedding); the augmentation stack (Mixup $0.8$, CutMix
 $1.0$, \texttt{rand-m9-mstd0.5-inc1} with the SolarizeAdd$+$Invert
 op-set and per-op apply probability $0.5$, Random-Erase $p{=}0.25$,
 repeated augmentation $3\times$); stochastic depth $0.1$; and model EMA
@@ -12565,10 +12657,15 @@ ViT-Ti, while the patch embed came out ${\sim}6\times$ too narrow
 (it divided by the output fan $d\cdot p^2$ rather than the input fan
 $c\cdot p^2$). The smallest model was the worst case.
 
-\emph{What does not match.} Four things, in rough order of how much
+\emph{What does not match.} Six things, in rough order of how much
 they could matter:
 
 \begin{enumerate}
+\item \textbf{The reference trained at an effective label smoothing of
+  $0$.} Its Mixup and CutMix targets were built from the unsmoothed
+  one-hots (fixed in 4b765be7, after this run); the verified render smooths
+  the mixed target at $0.1$, so the pair below differs in this one recipe
+  field until the reference reruns.
 \item \textbf{Batch $512$, not DeiT's $1024$.} The learning rate is
   scaled consistently for it ($5\times 10^{-4}$ at $512$ is DeiT's own
   $\mathrm{lr} = 5\times10^{-4}\cdot B/512$), so this is a
@@ -12584,21 +12681,29 @@ they could matter:
   init fix is untested. Until it is, the clip stays and is an addition.
 \item \textbf{RandomResizedCrop and Random-Erasing are a from-scratch
   \texttt{tf.data} reimplementation}, not timm's code, so they agree by
-  specification rather than bit-for-bit. Random-Erase fills with zero
-  where timm fills with noise.
-\item \textbf{Geometric RandAugment interpolates bilinearly}, where
-  timm resolves bicubic from the model's data config. Measured, this is a
-  bound rather than a gap: on a $21^\circ$ rotation our bilinear warp sits
-  $0.56$ / $2.53$ of $255$ from PIL's bicubic on a smooth / noisy image,
-  and PIL's own bilinear sits $0.39$ / $2.41$ from it, so we are as close
-  as a bilinear implementation can be. TensorFlow's own \texttt{BICUBIC}
-  is a third resampler, ${\sim}30$ from both, so asking for it would make
-  this worse, not better.
+  specification rather than bit-for-bit. Random-Erase filled with zero
+  where timm fills with noise; the trainer now erases in timm's pixel mode
+  (\texttt{erasingPixel}), so this is a property of the run, not of the
+  recipe as it stands.
+\item \textbf{Geometric RandAugment interpolated bilinearly}, where
+  timm resolves bicubic from the model's data config. On a $21^\circ$
+  rotation the bilinear warp sits $0.56$ / $2.53$ of $255$ from PIL's
+  bicubic on a smooth / noisy image, and PIL's own bilinear sits $0.39$ /
+  $2.41$ from it, so it was as close as a bilinear implementation can be;
+  TensorFlow's own \texttt{BICUBIC} is a third resampler, ${\sim}30$ from
+  both. The trainer now carries a PIL-matched bicubic warp
+  (\texttt{augBicubic}, worst mean $0.094$ of $255$ against PIL), so the
+  rerun closes this one.
+\item \textbf{Smaller things the parity ledger carries.} Evaluation
+  scores the EMA shadow where DeiT scores the live weights; there is no
+  cooldown or \texttt{min\_lr}; repeated-augmentation copies are spread by
+  a shuffle window rather than placed in one batch; and the in-training
+  evaluation centre-crops at $0.875$ where timm scores DeiT at $0.9$.
 \end{enumerate}
 
-\noindent None of these is a bug, and the loss curve is textbook DeiT. All
-four are properties of the recipe and of the shim rather than of this
-trainer, and the verified path inherits every one of them: it runs the
+\noindent The first is a bug, on the reference side only; the loss curve is
+textbook DeiT. The rest are properties of the recipe and of the shim rather
+than of this trainer, and the verified path inherits them: it runs the
 same $4\times128$, clips at the same $1.0$ inside the render, and streams
 the same \texttt{tf.data} pipeline. But ``matches the paper's number'' and
 ``matches the paper'' are different claims, and only the first is
@@ -12694,6 +12799,7 @@ Python in the step   & yes                      & none \\
 ms/step              & 161                      & 199 \\
 per epoch            & 6.8 min                  & 9.6 min \\
 total                & 34.2 hr                  & 48.0 hr \\
+label smoothing      & $0$ (effective)          & $0.1$ \\
 \hline
 precision            & bf16                     & bf16 \\
 global batch         & 512 ($4\times128$)       & 512 ($4\times128$) \\
@@ -12713,11 +12819,12 @@ equal by construction.
 
 \medskip\noindent\textbf{The two paths agree to $0.04$ points on top-1 and
 $0.10$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
-$72\%$ on $50{,}000$ images), at one seed each. Nothing sits above the
-rule but the lowering itself and what it costs: precision is equal, the
+$72\%$ on $50{,}000$ images), at one seed each. Above the rule sit the
+lowering, what it costs, and one recipe field: the reference's effective
+label smoothing of $0$ against the render's $0.1$. Precision is equal, the
 batch is the reference's own $512$, and there is no BatchNorm to
-normalize over a different group. This is the one-variable pair in the
-book.
+normalize over a different group; the reference's rerun makes this the
+one-variable pair in the book.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end together.}
 The verified path runs half a point behind through warmup, is level by
@@ -12777,6 +12884,9 @@ Turning it off took this run from $69$ to $48$ hours; it moves the order of
 random draws and nothing else, and the reference has never paid it either.
 The same accounting holds for every verified ImageNet run in this book,
 and the convnets' gaps are read against it.
+\textbf{[TODO: feed fixes --- mixing in place on the shim host, the uint8
+wire, PIL rotate --- measured at $+34$/$+22$/$+13\%$, none built; re-measure
+the gap when they land.]}
 
 \medskip\noindent A caution on reading the two side by side: the training
 loss is not the metric to compare. It runs ${\sim}0.47$ apart at epoch 50 where
@@ -12835,8 +12945,21 @@ compile, so it times the graph with the data feed all but removed.
 \S\ref{sec:vit_phase4} is the check: ViT-Ti's bf16 figure here is $153$\,ms/step
 and $35$ hours, and the completed run measured $153$\,ms/step with the shim
 removed but $199$ fed, for $48.0$ hours. The ratio is not a constant --- it is
-whatever the host pipeline costs for that recipe --- so ViT-S and ViT-B should
-be expected to run over these figures by a margin nobody has measured.
+whatever the host pipeline costs for that recipe. ViT-S has since been
+measured: the verified trainer sits at $310$--$323$\,ms/step against its
+shim's $326$\,ms ceiling per $512$ images, so it is feed-bound at ${\sim}68$
+hours; ViT-B's margin is unmeasured.
+
+\medskip\noindent\textbf{What is queued.} Both pairs exist. The verified jobs
+are \texttt{vits-default-emabf16-4gpu} and \texttt{vitb-default-emabf16-4gpu}
+on \texttt{vit\{s,b\}in\_emadp128x4wxclipdropbf16} --- \texttt{vitInit}, EMA
+at $0.99996$, the clip, bf16 --- and their references are
+\texttt{vits-default-jax-4gpu} and \texttt{vitb-accum-jax-4gpu}, the latter
+accumulating $4\times128$ to DeiT's $512$. The reference steps were probed
+at $290$\,ms for S and $701$\,ms for B on four cards, ${\sim}63$ and
+${\sim}146$ hours. ViT-B's EMA render peaks at $13.19$\,GiB, over the
+$11.68$\,GiB default arena, so its job raises the allocator fraction to
+$0.97$ ($15.11$\,GiB); S fits the default at $10.27$. Neither has run.
 
 \subsection*{What Part 1 has established}
 
@@ -12845,7 +12968,7 @@ CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT) has a
 machine-checked backward pass. The same \texttt{VerifiedNetSpec} /
 \texttt{VerifiedConfig} / \texttt{trainAdamSched} pipeline trains all
 of them with at most config-level changes. The MLIR each emits is
-between 7\,KB (MLP) and 1{,}316\,KB (EfficientNet-B0), and the
+between 7\,KB (MLP) and 1{,}317\,KB (EfficientNet-B0), and the
 lowerer compiles all of them the same way.
 
 The bestiary in Part 2 then shows that every other
@@ -16658,7 +16781,17 @@ and 50{,}000 validation images across 64 shards (6.74\,GB), which is the
 exact layout every ImageNet trainer in this book consumes. Budget disk
 accordingly: the raw tarballs ($\sim$144\,GB) plus the 5.1.0 output
 ($\sim$155\,GB) plus TFDS's intermediate extraction mean you want roughly
-\textbf{500\,GB of free space} to prepare it in one pass. From there
+\textbf{500\,GB of free space} to prepare it in one pass. Budget host
+memory too. Neither trainer holds the dataset in process, but a run reads
+every shard every epoch, and the kernel's page cache keeps as much of the
+$155$\,GB resident as the box has to spare; below that, part of every
+epoch comes back off disk. On top sit the producer processes that feed
+the verified trainer (\texttt{SHIM\_WORKERS}, four for most nets, eight
+for the RandAugment recipes), each a \texttt{tf.data} pipeline that
+settles at roughly $5$--$8$\,GB once its buffers fill, and the trainer
+itself at about $2.5$\,GB. A four-producer run therefore wants
+\textbf{${\sim}190$\,GB of RAM} to keep the whole dataset in memory, and
+runs in $168$ with the difference streaming from disk. From there
 neither path loads images itself: the reference trainer and the verified
 path's generated shim both call
 \texttt{tfds.load('imagenet2012', split=\ldots, data\_dir=\ldots)} and
@@ -16672,7 +16805,7 @@ top-1 and top-5 in this book faithfully follows the validation protocol of
 \texttt{timm}'s ``ResNet Strikes Back''
 (\href{https://arxiv.org/abs/2110.00476}{arXiv:2110.00476}), so that a
 number here and a number there are answers to the same question.
-Concretely, four things are matched, and each uses \texttt{timm} as a
+Concretely, five things are matched, and each uses \texttt{timm} as a
 reference:
 
 \begin{itemize}
@@ -16705,6 +16838,18 @@ reference:
     Antialiased \texttt{tf.image.resize} agrees with PIL to a mean
     $|\Delta|$ of $0.30$ of $255$, flat across the whole range of
     downscale ratios ImageNet's validation set spans.
+  \item \textbf{Each net can also be scored at \texttt{timm}'s test
+    resolution.} \texttt{timm} validates many of its pretrained weights
+    at a size other than the one they trained at --- $288 / 1.0$ for
+    RSB-A1/A2 and ConvNeXt, $256 / 1.0$ for MNv4-Conv-M --- and the
+    resize-then-crop above takes that size and crop as parameters, read
+    from the pinned \texttt{timm} into
+    \texttt{jax/timm\_eval\_protocols.json}. The reference forward
+    accepts any size; the verified number comes from a verified graph
+    rendered at the test size, never from the JAX forward on converted
+    weights. The ImageNet chapters report each run's own evaluation at
+    the recipe's training size; the test-resolution scorer is for
+    comparing a checkpoint against \texttt{timm}'s.
 \end{itemize}
 
 \section*{Demo datasets}
@@ -17370,18 +17515,17 @@ Several chapters end in a variant that is rendered but is not a Track-4 runner,
 and the section heading says which of three kinds it is: a second recipe, a
 wider or deeper size, or an architecture the book reaches for once. They are
 collected here rather than in the table above because they are side quests,
-not because they cannot start. Five of the seven have job configs, launch like
+not because they cannot start. All seven have job configs, launch like
 any Track-4 row and ride in \texttt{lake run imagenet} right after their
-chapter's row; only the two ResNet-50 recipes have none. Each row's section
-says where it stands.
+chapter's row. Each row's section says where it stands.
 
 \begin{center}
 \small
 \begin{tabular}{@{}llll@{}}
 \textbf{Target} & \textbf{Variant} & \textbf{Job} & \textbf{Section} \\[2pt]
 \hline \\[-6pt]
-\texttt{resnet50-imagenet-verified}    & \texttt{a2-accum} & --- & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{resnet50-imagenet-verified}    & \texttt{a1} & --- & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a2} & \texttt{r50-a2-bf16-4gpu} & \S\ref{sec:r50_a2_a1_cost} \\
+\texttt{resnet50-imagenet-verified}    & \texttt{a1} & \texttt{r50-a1-bf16-4gpu} & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{mobilenetv4-imagenet-verified} & Conv-M & \texttt{mnv4-default-4gpu} & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & --- & \texttt{cnxs-default-emabf16-4gpu} & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & --- & \texttt{cnxb-default-emabf16-4gpu} & \S\ref{sec:convnext_sb} \\

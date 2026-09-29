@@ -819,8 +819,9 @@ end Proofs.StableHLO
 -- ops carry are per-SITE and stage-generic, so 18 more blocks is 18 more uses of theorems that
 -- already quantify over `c`, `e` and `h`. Depth was never a hypothesis.
 --
--- 342 parameter tensors and **50,222,152** scalars at K = 1000 — the published ConvNeXt-S figure,
--- and the count `jax/MainConvNeXtSImagenet.lean` emits from an independent implementation.
+-- 344 parameter tensors and **50,223,688** scalars at K = 1000 (the published 50.22M plus the
+-- head LayerNorm's γ, β), and the count `jax/MainConvNeXtSImagenet.lean` emits from an
+-- independent implementation.
 --
 -- **BOTH the single-device and the DP peer**, as ConvNeXt-T carries both: an ImageNet run loads
 -- the DP render, and DP renders are exactly the ones that silently fall behind. `wx` ++ `clip` ++ `drop` is `convNeXtTinyImagenetConfig` entire, and it is
@@ -890,9 +891,9 @@ end Proofs.StableHLO
 
 -- ── ConvNeXt-**B** on ImageNet, slug `convnextbin` ────────────────────────────────────────────
 -- The size that made the DIMS a parameter. B is S's depth table at `[128,256,512,1024]`, so it
--- shares S's 36 drop sites and its 342 parameter tensors and differs only in every width —
--- 88,589,416 scalars at K = 1000, the published 88.59M and the count
--- `jax/MainConvNeXtBImagenet.lean` emits independently.
+-- shares S's 36 drop sites and its 344 parameter tensors and differs only in every width —
+-- 88,591,464 scalars at K = 1000 (the published 88.59M plus the head LayerNorm's γ, β), and
+-- the count `jax/MainConvNeXtBImagenet.lean` emits independently.
 --
 -- **The proof side needs nothing here either**, and B is the stronger evidence for that claim than
 -- S: S reuses theorems at the SAME widths, where B instantiates them at four widths T and S do not

@@ -2224,6 +2224,8 @@ private def imagenetRows : List (String × String × String) :=
   [ ("r34-default-bf16-4gpu",  "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe, bf16"),
     ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
     ("r50-a3-wxclip4x128-bf16-4gpu", "resnet50-imagenet-verified", "Ch. 5  ResNet-50, RSB-A3 (train@160, 4 × 128), bf16"),
+    ("r50-a2-bf16-4gpu",       "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A2 (300 ep, 4 × 128), bf16 (side quest)"),
+    ("r50-a1-bf16-4gpu",       "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A1 (600 ep, 4 × 128), bf16 (side quest)"),
     ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
     ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
     ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
@@ -2273,6 +2275,8 @@ private def runJobScript (job : String) (args : List String) : IO UInt32 := do
 script «r34-default-bf16-4gpu»  (args) do runJobScript "r34-default-bf16-4gpu" args
 script «r50-2018-bf16-4gpu»     (args) do runJobScript "r50-2018-bf16-4gpu" args
 script «r50-a3-wxclip4x128-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip4x128-bf16-4gpu" args
+script «r50-a2-bf16-4gpu»       (args) do runJobScript "r50-a2-bf16-4gpu" args
+script «r50-a1-bf16-4gpu»       (args) do runJobScript "r50-a1-bf16-4gpu" args
 script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
 script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
 script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args
@@ -2283,7 +2287,7 @@ script «vit-default-emabf16-4gpu» (args) do runJobScript "vit-default-emabf16-
 script «vits-default-emabf16-4gpu» (args) do runJobScript "vits-default-emabf16-4gpu" args
 script «vitb-default-emabf16-4gpu» (args) do runJobScript "vitb-default-emabf16-4gpu" args
 
-/-- `lake run imagenet` — the fourth tier: the twelve ImageNet rows, in chapter order.
+/-- `lake run imagenet` — the fourth tier: the fourteen ImageNet rows, in chapter order.
 
     PLAN-ONLY unless the first argument is `start`. Bare, it runs every row's `plan` — the name
     check, the PRECHECK, the wall-clock on file — and launches nothing, because the tier is weeks
