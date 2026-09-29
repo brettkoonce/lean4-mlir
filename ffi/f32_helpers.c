@@ -3343,3 +3343,289 @@ LEAN_EXPORT lean_obj_res lean_f32_dihedral_gather(
     }
     return lean_io_result_mk_ok(ba);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Tic-tac-toe (n×n, k in a row): the solved-game instrument of the AlphaZero demo.
+//
+// A position is a base-3 number over the n² cells in row-major order — digit 0 empty,
+// 1 X, 2 O, cell c weighted 3^c — with X moving first, so the side to move is the stone
+// count's parity. The table holds one byte per index, from the SIDE TO MOVE's view:
+// bits 0–1 the value (0 loss, 1 draw, 2 win), bit 2 set at a terminal position (the
+// opponent just completed k in a row, or the board is full), 255 where no legal game
+// reaches. A memoised minimax from the empty board fills it with no pruning, so
+// "reachable" means by any legal play: 19,683 bytes at 3×3, 3^16 = 43 MB at 4×4.
+// The walk, the reachable-index list, the plane builder and the scorer all live here
+// because a Lean ByteArray loop costs ~1.5 µs a push and the 4×4 sweep is millions
+// of positions.
+// ═══════════════════════════════════════════════════════════════════════
+
+#define TTT_MAXN 4
+#define TTT_UNREACHED 255
+#define TTT_TERMINAL 4
+
+typedef struct { int n, k, nc; uint32_t pow3[TTT_MAXN * TTT_MAXN + 1]; uint8_t* tbl; } ttt_ctx;
+
+// Did `who` complete k in a row through cell `c`? Four directions, extended both ways.
+static int ttt_wins_through(const uint8_t* cells, int n, int k, int c, uint8_t who) {
+    const int r0 = c / n, c0 = c % n;
+    static const int dr[4] = {0, 1, 1, 1}, dc[4] = {1, 0, 1, -1};
+    for (int d = 0; d < 4; d++) {
+        int run = 1;
+        for (int s = 1; s < k; s++) {
+            int r = r0 + s * dr[d], cc = c0 + s * dc[d];
+            if (r < 0 || r >= n || cc < 0 || cc >= n || cells[r * n + cc] != who) break;
+            run++;
+        }
+        for (int s = 1; s < k; s++) {
+            int r = r0 - s * dr[d], cc = c0 - s * dc[d];
+            if (r < 0 || r >= n || cc < 0 || cc >= n || cells[r * n + cc] != who) break;
+            run++;
+        }
+        if (run >= k) return 1;
+    }
+    return 0;
+}
+
+// The memoised walk: `idx` the position's index, `stones` its stone count, `last` the
+// cell just played (-1 at the root). Returns the table entry (value | terminal bit).
+static uint8_t ttt_walk(ttt_ctx* x, uint8_t* cells, uint32_t idx, int stones, int last) {
+    uint8_t e = x->tbl[idx];
+    if (e != TTT_UNREACHED) return e;
+    const uint8_t mover = (uint8_t)(stones % 2 + 1);   // 1 = X, 2 = O
+    const uint8_t prev = (uint8_t)(3 - mover);
+    if (last >= 0 && ttt_wins_through(cells, x->n, x->k, last, prev)) return x->tbl[idx] = TTT_TERMINAL | 0;
+    if (stones == x->nc) return x->tbl[idx] = TTT_TERMINAL | 1;
+    uint8_t best = 0;
+    for (int c = 0; c < x->nc; c++) {
+        if (cells[c]) continue;
+        cells[c] = mover;
+        uint8_t child = ttt_walk(x, cells, idx + x->pow3[c] * mover, stones + 1, c) & 3;
+        cells[c] = 0;
+        uint8_t v = (uint8_t)(2 - child);   // the child's entry is the opponent's view
+        if (v > best) best = v;             // no cut-off: every child must reach the table
+    }
+    return x->tbl[idx] = best;
+}
+
+static int ttt_setup(ttt_ctx* x, size_t n, size_t k) {
+    if (n < 1 || n > TTT_MAXN || k < 1 || k > n) return 0;
+    x->n = (int)n; x->k = (int)k; x->nc = (int)(n * n);
+    x->pow3[0] = 1;
+    for (int c = 1; c <= x->nc; c++) x->pow3[c] = x->pow3[c - 1] * 3;
+    return 1;
+}
+
+// Decode an index into cells; returns the stone count.
+static int ttt_decode(uint32_t idx, int nc, uint8_t* cells) {
+    int stones = 0;
+    for (int c = 0; c < nc; c++) { cells[c] = (uint8_t)(idx % 3); idx /= 3; stones += cells[c] != 0; }
+    return stones;
+}
+
+// ---- The table: 3^(n²) bytes, filled from the empty board ----
+LEAN_EXPORT lean_obj_res lean_ttt_solve(size_t n, size_t k) {
+    ttt_ctx x;
+    if (!ttt_setup(&x, n, k))
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_solve: need 1 <= k <= n <= 4")));
+    size_t size = x.pow3[x.nc];
+    lean_object* ba = lean_alloc_sarray(1, size, size);
+    x.tbl = lean_sarray_cptr(ba);
+    memset(x.tbl, TTT_UNREACHED, size);
+    uint8_t cells[TTT_MAXN * TTT_MAXN] = {0};
+    ttt_walk(&x, cells, 0, 0, -1);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Reachable indices as u32 LE, decision positions only unless `include_terminal` ----
+LEAN_EXPORT lean_obj_res lean_ttt_reachable(b_lean_obj_arg tbl_ba, size_t n, uint8_t include_terminal) {
+    const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
+    const size_t size = lean_sarray_size(tbl_ba);
+    size_t count = 0;
+    for (size_t i = 0; i < size; i++)
+        if (tbl[i] != TTT_UNREACHED && (include_terminal || !(tbl[i] & TTT_TERMINAL))) count++;
+    lean_object* ba = lean_alloc_sarray(1, count * 4, count * 4);
+    uint32_t* out = (uint32_t*)lean_sarray_cptr(ba);
+    size_t j = 0;
+    for (size_t i = 0; i < size; i++)
+        if (tbl[i] != TTT_UNREACHED && (include_terminal || !(tbl[i] & TTT_TERMINAL))) out[j++] = (uint32_t)i;
+    (void)n;
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Canonical planes for an index list: f32 [count, 2, n, n], plane 0 the mover's
+// stones, plane 1 the opponent's ----
+LEAN_EXPORT lean_obj_res lean_ttt_planes(b_lean_obj_arg idx_ba, size_t count, size_t n) {
+    const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+    const int nc = (int)(n * n);
+    size_t nbytes = count * 2 * nc * 4;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    float* out = (float*)lean_sarray_cptr(ba);
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    for (size_t i = 0; i < count; i++) {
+        int stones = ttt_decode(idx[i], nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1);
+        float* dst = out + i * 2 * nc;
+        for (int c = 0; c < nc; c++) {
+            dst[c] = cells[c] == mover ? 1.0f : 0.0f;
+            dst[nc + c] = cells[c] == 3 - mover ? 1.0f : 0.0f;
+        }
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Score a logits block [count, n_out] against the table: the masked argmax over
+// the empty cells against the optimal set, and slot n² (the value, pre-tanh) against the
+// exact value z ∈ {−1, 0, 1}. Returns f32 [agree, Σ(tanh v − z)², sign agree, Σ|tanh v − z|]. ----
+LEAN_EXPORT lean_obj_res lean_ttt_score(b_lean_obj_arg tbl_ba, b_lean_obj_arg idx_ba, size_t count, size_t n,
+                                        b_lean_obj_arg out_ba, size_t n_out) {
+    const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
+    const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+    const float* out = (const float*)lean_sarray_cptr(out_ba);
+    const int nc = (int)(n * n);
+    if (n_out < (size_t)nc + 1 || lean_sarray_size(out_ba) < count * n_out * 4)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_score: logits block too small")));
+    uint32_t pow3[TTT_MAXN * TTT_MAXN + 1];
+    pow3[0] = 1;
+    for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    double agree = 0, mse = 0, sign = 0, mae = 0;
+    for (size_t i = 0; i < count; i++) {
+        int stones = ttt_decode(idx[i], nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1);
+        int v = tbl[idx[i]] & 3;
+        const float* row = out + i * n_out;
+        int best = -1;
+        for (int c = 0; c < nc; c++)
+            if (!cells[c] && (best < 0 || row[c] > row[best])) best = c;
+        if (best >= 0 && (2 - (tbl[idx[i] + pow3[best] * mover] & 3)) == v) agree += 1;
+        double t = tanh((double)row[nc]), z = (double)(v - 1);
+        mse += (t - z) * (t - z);
+        mae += fabs(t - z);
+        int ts = t > 0.5 ? 1 : (t < -0.5 ? -1 : 0);
+        if (ts == v - 1) sign += 1;
+    }
+    lean_object* ba = lean_alloc_sarray(1, 16, 16);
+    float* r = (float*)lean_sarray_cptr(ba);
+    r[0] = (float)agree; r[1] = (float)mse; r[2] = (float)sign; r[3] = (float)mae;
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Replay gather with one random dihedral view per sample, applied alike to the
+// planes [N, 2, n, n] and the policy target [N, n²]: returns (x [count, 2, n, n],
+// pi [count, n²]). The transform is `lean_f32_dihedral_gather`'s. ----
+LEAN_EXPORT lean_obj_res lean_ttt_gather_aug(b_lean_obj_arg planes_ba, b_lean_obj_arg pi_ba, b_lean_obj_arg idx_ba,
+                                             size_t count, size_t n, uint64_t seed) {
+    const float* planes = (const float*)lean_sarray_cptr(planes_ba);
+    const float* pi = (const float*)lean_sarray_cptr(pi_ba);
+    const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+    const size_t nc = n * n, N = lean_sarray_size(pi_ba) / (nc * 4);
+    lean_object* xba = lean_alloc_sarray(1, count * 2 * nc * 4, count * 2 * nc * 4);
+    lean_object* pba = lean_alloc_sarray(1, count * nc * 4, count * nc * 4);
+    float* x = (float*)lean_sarray_cptr(xba);
+    float* po = (float*)lean_sarray_cptr(pba);
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    for (size_t i = 0; i < count; i++) {
+        size_t k = idx[i];
+        if (k >= N) { lean_dec(xba); lean_dec(pba);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_gather_aug: index out of range"))); }
+        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+        const unsigned t = (unsigned)(s >> 61);
+        const int fx = t & 1, fy = (t >> 1) & 1, tr = (t >> 2) & 1;
+        for (size_t y = 0; y < n; y++) {
+            size_t yy = fy ? n - 1 - y : y;
+            for (size_t xc = 0; xc < n; xc++) {
+                size_t xx = fx ? n - 1 - xc : xc;
+                size_t src = tr ? xx * n + yy : yy * n + xx, dst = y * n + xc;
+                x[i * 2 * nc + dst] = planes[k * 2 * nc + src];
+                x[i * 2 * nc + nc + dst] = planes[k * 2 * nc + nc + src];
+                po[i * nc + dst] = pi[k * nc + src];
+            }
+        }
+    }
+    lean_object* pr = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pr, 0, xba);
+    lean_ctor_set(pr, 1, pba);
+    return lean_io_result_mk_ok(pr);
+}
+
+// ---- The MSE block's target for the AlphaZero loss (z − tanh v)² − πᵀ log softmax(p):
+// y = out − scale·g with g the loss's output cotangent — softmax(p) − π on the n² policy
+// slots, (tanh v − z)(1 − tanh² v) on the value slot. The block's gradient is
+// 2(out − y)/(B·n_out) = 2·scale·g/(B·n_out), so scale = n_out/2 delivers g/B, the
+// gradient of the batch-mean loss. Returns (y [count, n_out], [mean loss]). ----
+LEAN_EXPORT lean_obj_res lean_ttt_targets(b_lean_obj_arg out_ba, b_lean_obj_arg pi_ba, b_lean_obj_arg z_ba,
+                                          size_t count, size_t n_out, double scale) {
+    const float* out = (const float*)lean_sarray_cptr(out_ba);
+    const float* pi = (const float*)lean_sarray_cptr(pi_ba);
+    const float* z = (const float*)lean_sarray_cptr(z_ba);
+    const size_t nc = n_out - 1;
+    lean_object* yba = lean_alloc_sarray(1, count * n_out * 4, count * n_out * 4);
+    float* y = (float*)lean_sarray_cptr(yba);
+    double loss = 0;
+    for (size_t i = 0; i < count; i++) {
+        const float* row = out + i * n_out;
+        double mx = -1e30;
+        for (size_t c = 0; c < nc; c++) if (row[c] > mx) mx = row[c];
+        double se = 0;
+        for (size_t c = 0; c < nc; c++) se += exp((double)row[c] - mx);
+        const double lse = mx + log(se);
+        for (size_t c = 0; c < nc; c++) {
+            double q = exp((double)row[c] - lse), p = pi[i * nc + c];
+            y[i * n_out + c] = (float)((double)row[c] - scale * (q - p));
+            if (p > 0) loss -= p * ((double)row[c] - lse);
+        }
+        double t = tanh((double)row[nc]), zi = z[i];
+        y[i * n_out + nc] = (float)((double)row[nc] - scale * (t - zi) * (1.0 - t * t));
+        loss += (zi - t) * (zi - t);
+    }
+    lean_object* lba = lean_alloc_sarray(1, 4, 4);
+    *(float*)lean_sarray_cptr(lba) = (float)(loss / (double)(count ? count : 1));
+    lean_object* pr = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pr, 0, yba);
+    lean_ctor_set(pr, 1, lba);
+    return lean_io_result_mk_ok(pr);
+}
+
+// ---- The scripted players' expected agreement with the table over every decision
+// position — the bracket rows of the demo's table. Random plays uniformly over the empty
+// cells; win-or-block takes a winning cell if one exists, else blocks an opponent's
+// immediate win, else plays uniformly. Returns f32 [decision positions, random, win-or-block]. ----
+LEAN_EXPORT lean_obj_res lean_ttt_scripted_agreement(b_lean_obj_arg tbl_ba, size_t n, size_t k) {
+    const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
+    const size_t size = lean_sarray_size(tbl_ba);
+    const int nc = (int)(n * n);
+    uint32_t pow3[TTT_MAXN * TTT_MAXN + 1];
+    pow3[0] = 1;
+    for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    double count = 0, rnd = 0, wob = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (tbl[i] == TTT_UNREACHED || (tbl[i] & TTT_TERMINAL)) continue;
+        int stones = ttt_decode((uint32_t)i, nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1), other = (uint8_t)(3 - mover);
+        int v = tbl[i] & 3;
+        int legal = 0, opt = 0, wins = 0, winsOpt = 0, blocks = 0, blocksOpt = 0;
+        for (int c = 0; c < nc; c++) {
+            if (cells[c]) continue;
+            legal++;
+            int isOpt = (2 - (tbl[i + pow3[c] * mover] & 3)) == v;
+            opt += isOpt;
+            cells[c] = mover;
+            int w = ttt_wins_through(cells, (int)n, (int)k, c, mover);
+            cells[c] = other;
+            int b = ttt_wins_through(cells, (int)n, (int)k, c, other);
+            cells[c] = 0;
+            if (w) { wins++; winsOpt += isOpt; }
+            if (b) { blocks++; blocksOpt += isOpt; }
+        }
+        count += 1;
+        rnd += (double)opt / legal;
+        if (wins) wob += (double)winsOpt / wins;
+        else if (blocks) wob += (double)blocksOpt / blocks;
+        else wob += (double)opt / legal;
+    }
+    lean_object* ba = lean_alloc_sarray(1, 12, 12);
+    float* r = (float*)lean_sarray_cptr(ba);
+    r[0] = (float)count; r[1] = (float)(rnd / count); r[2] = (float)(wob / count);
+    return lean_io_result_mk_ok(ba);
+}

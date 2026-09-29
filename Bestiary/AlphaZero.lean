@@ -54,7 +54,11 @@ specs below.
   blocks for quick inspection / testing. Useful as a fixture.
 
 All are pure `NetSpec` values; no training runs here. The book's Part 2
-(Bestiary) uses these as read-only examples of architecture idioms.
+(Bestiary) uses these as read-only examples of architecture idioms. The
+self-play loop itself is trained in `demos/MainAlphaZeroTtt.lean`, on the Lean
+tic-tac-toe of `LeanMlir/TicTacToe.lean` and scored against the solved game —
+with AlphaGo's plain conv stack rather than this conv-BN tower, whose batch
+statistics over nine binary cells diverged (see that file's docstring).
 -/
 
 -- ════════════════════════════════════════════════════════════════

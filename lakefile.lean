@@ -725,6 +725,19 @@ lean_exe «pong-dqn» where
   root := `demos.MainPongDqn
   moreLinkArgs := lowererLink
 
+-- Tic-tac-toe (n×n, k in a row): the game, the solved-game instrument — a C minimax
+-- table over every reachable position, 43 MB at 4×4 — and the scripted players, with
+-- the solver's own gates. No stack, no GPU.
+lean_exe «ttt-env» where
+  root := `demos.MainTttEnv
+
+-- AlphaZero on the Lean tic-tac-toe: self-play + PUCT on the bestiary's tinyAlphaZero
+-- body, the two-headed loss through the rank-2 DDPM MSE block (zero new codegen),
+-- every arm scored against the solved game. `n=` is the board.
+lean_exe «alphazero-ttt» where
+  root := `demos.MainAlphaZeroTtt
+  moreLinkArgs := lowererLink
+
 -- The gravitational-wave detection demo: a chapter
 -- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
 -- `scripts/demos/gw_metrics.py` against the matched filter's closed form. Zero new codegen.

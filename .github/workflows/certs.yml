@@ -256,7 +256,7 @@ jobs:
         run: |
           set -e
           lake build Apps
-          echo "✅ **All 111 apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All 113 apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
 
       - name: No implied imports (import_audit.py implied)
         # An import another import of the same file already reaches: removing it changes no

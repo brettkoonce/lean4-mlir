@@ -482,18 +482,24 @@ byte-equal to the checkpoint and the stem must be untouched, or it throws.
 
 ---
 
-## Reinforcement learning — blackjack from tabular Q to DQN, and the Pong environment
+## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, and AlphaZero on tic-tac-toe
 
-Two games written in Lean, no FFI, each with its own exact instrument. They are
-rungs 1 and 3 of the reinforcement-learning ladder in
-`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2 is the
-blackjack DQN, trained through the stack on the rank-2 DDPM MSE block.
+Three games written in Lean, each with its own exact instrument. They are the
+reinforcement-learning ladder of `planning/blackjack_dqn_demo.md`,
+`planning/pong_dqn_demo.md` and `planning/alphazero_ttt_demo.md`: rung 1 tabular Q on
+blackjack, rung 2 the blackjack DQN, rung 3 DQN from pixels on Pong, rung 4 self-play
+and tree search on tic-tac-toe — every trained rung through the stack on the rank-2
+DDPM MSE block, zero new codegen.
 
 ```bash
 lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
 lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
 lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
 lake exe pong-env 100                     # games per baseline arm
+lake exe pong-dqn mode=pixels k=4         # DQN from frames; mode=state is the ceiling row
+lake exe ttt-env n=4                      # the solved game: counts, scripted pairings, the solver's gates
+lake exe alphazero-ttt n=3                # 20 iterations, ~5 min on one card
+lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, ~35 min
 ```
 
 The environment, the DP instrument and tabular Q live in
@@ -539,6 +545,78 @@ opponent with a speed and a reaction-delay knob, deterministic from a seed, five
 million raw frames per second single-threaded. Random scores −17.9 per game, a
 reactive tracker +11.2 against the default opponent; the frame strip the
 network will see is written to `.lake/build/pong_stack.pgm`.
+
+### AlphaZero on tic-tac-toe, scored against the solved game
+
+`MainAlphaZeroTtt.lean` is Silver et al.'s self-play loop on tic-tac-toe written in
+Lean (`LeanMlir/TicTacToe.lean`), n×n with k in a row, `n=` the one knob. Each
+iteration plays 256 games in lockstep: at every move a PUCT search of 25 (3×3) or 100
+(4×4) simulations over the net's priors and value, one batched forward over the games'
+pending leaves per simulation, Dirichlet noise at the root, the move drawn from the
+visit counts; the visit distribution π and the outcome z are the targets, and the next
+iteration plays with the new net. The net is AlphaGo's plain conv + ReLU stack
+(`Bestiary/AlphaGo.lean`) at tic-tac-toe width — three 3×3 convs at 64, a 1×1 at 4, a
+dense 64 — with the policy and value heads merged into one dense output of n² + 1
+slots: 78k params at 3×3, 155k at 4×4. The loss `(z − v)² − πᵀ log p` goes through the
+DDPM MSE block as a host-built target (`lean_ttt_targets` in `ffi/f32_helpers.c`): the
+host asks for the output cotangent it wants, the NQS demo's move.
+
+The instrument is the solved game. A position is a base-3 number over the cells, so a
+memoised minimax in C fills one byte per index — 5,478 reachable positions at 3×3,
+9,722,011 at 4×4 (43 MB, 0.6 s) — with the exact value and the optimal-move set of
+every position. `ttt-env` runs the solver's gates before anything trains (perfect
+draws itself 1000/1000, loses to nobody), and the trainer scores every iteration three
+ways: the argmax of the net's masked logits against the optimal set over **every**
+reachable decision position (4,520 and 9,062,619), the value head against the exact
+value, and 256 games each side against a perfect player that draws uniformly from the
+optimal set. Run logs, curves, sweeps and the figure's inputs are in
+`runs/2026-09-29-alphazero-ttt/`; `scripts/demos/ttt_figure.py` draws the figure and
+`scripts/demos/ttt_sweep_stats.py` the miss breakdown.
+
+![AlphaZero on tic-tac-toe: the policy at X-centre, the curves for both boards, the value head against the theorem](figures/alphazero_ttt.png)
+
+Left: X in the centre, O to move — the trained 3×3 net's move probabilities over the
+empty cells with the solved game's optimal moves ringed (the corners draw, the edges
+lose; the net puts 85% on the corners). Middle: the net alone's agreement with the
+solved game over every decision position against iteration, both boards, with the draw
+rate of net + search against the perfect player dashed. Right: the value head against
+the exact value of all 4,520 3×3 decision positions.
+
+| arm | 3×3 agree | vs perfect as X · as O (W/D/L) | 4×4 agree | vs perfect as X · as O |
+|---|---|---|---|---|
+| random | 58.0% | 0/207/793 · 0/33/967 | 60.4% | 0/487/513 · 0/341/659 |
+| win-or-block | 94.0% | 0/831/169 · 0/215/785 | 95.6% | 0/930/70 · 0/840/160 |
+| **net alone** | **97.9%** | 0/256/0 · 0/256/0 | **99.2%** | 0/256/0 · 0/256/0 |
+| net + search | — | 0/256/0 · 0/256/0 | — | 0/256/0 · 0/256/0 |
+| perfect | 100% | 0/1000/0 · 0/1000/0 | 100% | 0/1000/0 · 0/1000/0 |
+
+Scripted rows play 1,000 games each way and "agree" is their expected agreement over
+the same positions; net rows play 256. 3×3: 20 iterations, **4.8 min** on one 4060 Ti;
+4×4: 40 iterations, **34.9 min** — the Python implementation this loop follows
+(alpha-zero-general) was expected to take a day on that board. The untrained net's
+sweep, 57.9% and 60.3%, is the random player's 58.0% and 60.4%.
+
+⭐ **99.2% of 9.06 million positions from 1.2% of them.** Self-play stood at 107,153 of
+the 4×4 decision positions and at 2,010 of the 4,520 at 3×3 (44.5%); the sweep scores
+all of them. Every 4×4 miss in the 50,000-position subsample lies outside the visited
+set, and 411 of the 444 are forced wins not taken — positions at 7–14 stones a competent
+opponent never produces; the 3×3 misses (95) are the same kind, 66 missed wins and 29
+losing moves, at 3–6 stones. The search closes them: with 25 or 100 simulations the net
+is unbeaten from iteration 4 on both boards, before the net alone is (14 and 38).
+
+⭐ **The value head estimates self-play, not the theorem.** Its sign agrees with the
+exact value on 92% (3×3) and 94% (4×4) of positions, worst on lost ones (83% and 65%),
+which 4×4 self-play almost never produces (234 of the last iteration's 256 games drew).
+The root ends at +0.26 at 3×3 and +0.03 at 4×4 against the theorem's 0: 3×3 self-play
+under root noise stays X-favoured (83 X wins / 145 draws / 28 O wins in the last
+iteration).
+
+⚠ **Not the bestiary's tower.** The first run used the conv-BN-residual body of
+`Bestiary/AlphaZero.lean`, was unbeaten from iteration 4 and diverged at iteration 11
+(loss 1.26 → 10.8 in three iterations, `n3_convbn_collapse.txt`). BatchNorm's batch
+statistics over nine binary cells are a liability — a channel whose batch variance
+vanishes is divided by √1e-5 — and with BN the eval forward the loss trick reads and the
+train step's forward are different functions. Blackjack and Pong made the same call.
 
 ## Natural language processing — TinyGPT on Shakespeare
 
@@ -946,6 +1024,9 @@ demos/
 ├── MainBlackjackEnv.lean                  # blackjack tables, play/dump/curve modes (RL rung 1; env in LeanMlir/Blackjack.lean)
 ├── MainBlackjackDqn.lean                  # DQN on blackjack through the DDPM MSE block, scored exactly (RL rung 2)
 ├── MainPongEnv.lean                       # Pong in Lean, 84×84 frames, scripted opponent (RL rung 3, Phase 0)
+├── MainPongDqn.lean                       # DQN from the six-number state or 84×84 frames on that Pong (RL rung 3)
+├── MainTttEnv.lean                        # tic-tac-toe n×n: the solved game, scripted players, the solver's gates (RL rung 4, no GPU)
+├── MainAlphaZeroTtt.lean                  # AlphaZero self-play + PUCT on that game, scored against the solved game (RL rung 4)
 │
 ├── probes/                                # gates and tools, not demos — these RUN IN CI
 │   ├── MainFpnLossProbe.lean              #   finite-difference gate on the detector loss

@@ -1,0 +1,32 @@
+# The first 3×3 run, on the bestiary's conv-BN-residual body (`.convBn 2 64 3 1 .same,
+# .residualBlock 64 64 2 1, .convBn 64 4 1 1 .same, .flatten, .dense 36 64 .relu,
+# .dense 64 10`), `lake exe alphazero-ttt n=3 tag=run1`, 20 iterations, 25 sims, 256 games,
+# 2026-09-29 22:1x. EXCERPT: the run was stopped at iteration 15 once the divergence was
+# clear, and its log file was then overwritten by the plain-conv relaunch under the same
+# tag; these are the instrument lines as printed, copied from the session transcript
+# (self-play lines from iteration 9 on; the 200-character cut on iterations 0–8 is the
+# transcript's). Nothing here is reconstructed.
+  iter 0: sweep agree 54.42% value mse 0.8533 sign 26.11%  net alone vs perfect X 0/0/256 O 0/6/250  +MCTS X 0/196/60 O 0/156/100  root value 0.000
+  iter 1: sweep agree 89.07% value mse 0.3573 sign 64.16%  net alone vs perfect X 0/256/0 O 0/189/67  +MCTS X 0/256/0 O 0/228/28  root value 0.385
+  iter 2: sweep agree 93.43% value mse 0.2753 sign 71.73%  net alone vs perfect X 0/256/0 O 0/214/42  +MCTS X 0/256/0 O 0/238/18  root value 0.412
+  iter 3: sweep agree 94.71% value mse 0.2476 sign 72.90%  net alone vs perfect X 0/256/0 O 0/252/4  +MCTS X 0/256/0 O 0/232/24  root value 0.296
+  iter 4: sweep agree 95.75% value mse 0.1756 sign 81.11%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.363
+  iter 5: sweep agree 96.22% value mse 0.2180 sign 75.18%  net alone vs perfect X 0/256/0 O 0/246/10  +MCTS X 0/256/0 O 0/256/0  root value 0.310
+  iter 6: sweep agree 96.33% value mse 0.1801 sign 79.54%  net alone vs perfect X 0/256/0 O 0/235/21  +MCTS X 0/256/0 O 0/256/0  root value 0.289
+  iter 7: sweep agree 96.06% value mse 0.1637 sign 82.30%  net alone vs perfect X 0/256/0 O 0/247/9  +MCTS X 0/256/0 O 0/256/0  root value 0.273
+  iter 8: sweep agree 96.68% value mse 0.1779 sign 79.78%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.346
+    self-play 2043 positions (X 77 / draw 166 / O 13), 2422 steps over 15504 samples, loss 1.3099  (play 2292 train 13043 score 2394 ms)
+  iter 9: sweep agree 96.97% value mse 0.1643 sign 83.10%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.303
+    self-play 2036 positions (X 74 / draw 164 / O 18), 2740 steps over 17540 samples, loss 1.2828  (play 2301 train 15525 score 2416 ms)
+  iter 10: sweep agree 96.84% value mse 0.1709 sign 81.55%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.314
+    self-play 1992 positions (X 82 / draw 154 / O 20), 3051 steps over 19532 samples, loss 1.2615  (play 2232 train 17380 score 2593 ms)
+  iter 11: sweep agree 56.42% value mse 0.6274 sign 41.44%  net alone vs perfect X 0/35/221 O 0/22/234  +MCTS X 0/170/86 O 0/153/103  root value 0.018
+    self-play 1968 positions (X 97 / draw 141 / O 18), 3359 steps over 21500 samples, loss 2.6345  (play 2190 train 17057 score 1780 ms)
+  iter 12: sweep agree 57.90% value mse 0.8107 sign 35.84%  net alone vs perfect X 0/43/213 O 0/22/234  +MCTS X 0/195/61 O 0/69/187  root value 0.133
+    self-play 1707 positions (X 169 / draw 42 / O 45), 3626 steps over 23207 samples, loss 3.7597  (play 1542 train 17695 score 2120 ms)
+  iter 13: sweep agree 58.78% value mse 2.3008 sign 24.73%  net alone vs perfect X 0/28/228 O 0/44/212  +MCTS X 0/83/173 O 0/58/198  root value 1.000
+    self-play 1762 positions (X 167 / draw 55 / O 34), 3901 steps over 24969 samples, loss 10.7758  (play 1980 train 20170 score 1773 ms)
+  iter 14: sweep agree 54.14% value mse 0.8563 sign 61.11%  net alone vs perfect X 0/87/169 O 0/10/246  +MCTS X 0/232/24 O 0/33/223  root value 1.000
+    self-play 1781 positions (X 142 / draw 51 / O 63), 4179 steps over 26750 samples, loss 6.1592  (play 2001 train 24285 score 1882 ms)
+  iter 15: sweep agree 57.74% value mse 2.7425 sign 13.98%  net alone vs perfect X 0/28/228 O 0/23/233  +MCTS X 0/88/168 O 0/54/202  root value -1.000
+    self-play 1785 positions (X 141 / draw 46 / O 69), 4458 steps over 28535 samples, loss 6.7290  (play 1816 train 24488 score 2000 ms)

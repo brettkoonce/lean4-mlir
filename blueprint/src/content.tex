@@ -15079,14 +15079,14 @@ is scored against it rather than against a held-out set. The networks are
 the same kit; what changes is the outer loop, and the catalogue beside each
 demo is that domain's architectures.
 
-\subsection{Reinforcement learning --- demo: DQN on Blackjack}
+\subsection{Reinforcement learning --- demos: DQN on blackjack, AlphaZero on tic-tac-toe}
 \label{sec:bestiary_rl}
 
 Networks that learn from the rewards of their own actions rather than from a
-labelled set. The architectural side is small --- an MLP here, residual CNN
-blocks in the AlphaGo family below --- and the complexity lives in the outer
-loop: how experience is gathered, what the target is, and how you would ever
-know the policy is good.
+labelled set. The architectural side is small --- an MLP for blackjack, a plain
+convolution stack for tic-tac-toe, residual towers in the AlphaGo family below ---
+and the complexity lives in the outer loop: how experience is gathered, what the
+target is, and how you would ever know the policy is good.
 
 \begin{figure}[H]
 \centering
@@ -15188,9 +15188,105 @@ actions are worth the same to three decimals. The 1000-update readouts move by
 $\pm 0.005$ late in every arm, so the gap between the first two 200k rows is
 inside that. Ten minutes on one card at 6\% utilisation, each.
 
-The entries below are the same idea at the scale that made it famous:
-the network is bigger, the outer loop is self-play and tree search, and the
-target is still the model's own later estimate.
+\paragraph{AlphaZero on tic-tac-toe.} The \texttt{demos/MainAlphaZeroTtt.lean}
+trainer is Silver et al.'s self-play loop (AlphaGo Zero, 2017,
+\href{https://www.nature.com/articles/nature24270}{Nature}; AlphaZero, 2018,
+\href{https://www.science.org/doi/10.1126/science.aar6404}{Science}) on tic-tac-toe
+written in Lean (\texttt{LeanMlir/TicTacToe.lean}), $n \times n$ with $k$ in a row,
+$n$ the one knob. Each iteration plays 256 games in lockstep: at every move a PUCT
+search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations over the network's
+priors and value, one batched forward over the games' pending leaves per simulation,
+Dirichlet noise at the root, the move drawn from the visit counts; the visit
+distribution $\pi$ and the outcome $z$ are the targets, and the next iteration plays
+with the new network. The network is AlphaGo's plain convolution + ReLU stack
+(\texttt{Bestiary/AlphaGo.lean}) at tic-tac-toe width --- three $3 \times 3$
+convolutions at 64 channels, a $1 \times 1$ at 4, a dense 64 --- with the policy and
+value heads merged into one dense output of $n^2 + 1$ slots, 78k parameters at
+$3 \times 3$ and 155k at $4 \times 4$. Three things change relative to the DQN:
+
+\begin{itemize}
+  \item \textbf{The loss has two heads and the codegen has one.} The paper's
+    $(z - v)^2 - \pi^{\top} \log p$ goes through the squared-error block blackjack's
+    Bellman target went through: the host runs the eval graph on the batch and writes
+    $y = \mathrm{out} - \tfrac{n_{\mathrm{out}}}{2}\, g$, with
+    $g = \mathrm{softmax}(p) - \pi$ on the $n^2$ policy slots and
+    $(\tanh v - z)(1 - \tanh^2 v)$ on the value slot, so the block's gradient is
+    $g / B$ exactly --- the gradient of the batch-mean AlphaZero loss. It is the move
+    the neural-quantum-state demo (\S~\ref{sec:bestiary_beyond}) makes with its energy
+    gradient. Zero new codegen; the block's own printed loss means nothing.
+  \item \textbf{Not the bestiary's tower.} The first run used the
+    convolution--BatchNorm--residual body of \texttt{Bestiary/AlphaZero.lean}, was
+    unbeaten by the perfect player from iteration 4, and diverged at iteration 11, the
+    loss going $1.26 \to 10.8$ in three iterations. BatchNorm's batch statistics over
+    nine binary cells are a liability --- a channel whose batch variance vanishes is
+    divided by $\sqrt{10^{-5}}$ --- and with BatchNorm the eval forward the loss reads
+    and the train step's forward are different functions. Blackjack and Pong made the
+    same choice for the same reason.
+  \item \textbf{The instrument is the solved game.} A position is a base-3 number
+    over the cells, so a memoised minimax fills one byte per index --- 5,478 reachable
+    positions at $3 \times 3$, 9,722,011 at $4 \times 4$ in 0.6 seconds of C --- with
+    the exact value and the optimal-move set of every position. The network alone is
+    scored by the argmax of its masked logits over \emph{every} reachable decision
+    position (4,520 and 9,062,619), its value head against the exact value, and its
+    match play against a perfect player that draws uniformly from the optimal set.
+    Nothing in the table is sampled but the games.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/alphazero_ttt.png}
+\caption{Left: X in the centre, O to move --- the trained $3 \times 3$ network's move
+probabilities over the empty cells, with the solved game's optimal moves ringed: the
+corners draw, the edges lose, and the network puts 85\% on the corners. Middle:
+agreement of the network alone with the solved game over every reachable decision
+position, against iteration, for both boards, with the draw rate of network + search
+against the perfect player dashed; both boards are unbeaten with search from
+iteration 4. Right: the value head against the exact value of all 4,520 $3 \times 3$
+decision positions, one dot per position, medians as bars.}
+\label{fig:alphazero_ttt}
+\end{figure}
+
+\paragraph{Every arm against the solved game.} Agreement of the arm's move with the
+optimal set over every decision position (the scripted players' is their expected
+agreement), and W/D/L against the perfect player as X and as O --- 1,000 games each
+way for the scripted rows, 256 for the network's:
+
+\begin{center}
+\begin{tabular}{@{}l r l r l@{}}
+\hline
+ & \multicolumn{2}{c}{$3 \times 3$} & \multicolumn{2}{c}{$4 \times 4$} \\
+arm & agrees & vs perfect, X $\cdot$ O & agrees & vs perfect, X $\cdot$ O \\
+\hline
+random           & 58.0\% & 0/207/793 $\cdot$ 0/33/967   & 60.4\% & 0/487/513 $\cdot$ 0/341/659 \\
+win-or-block     & 94.0\% & 0/831/169 $\cdot$ 0/215/785  & 95.6\% & 0/930/70 $\cdot$ 0/840/160 \\
+network alone    & $\mathbf{97.9\%}$ & 0/256/0 $\cdot$ 0/256/0 & $\mathbf{99.2\%}$ & 0/256/0 $\cdot$ 0/256/0 \\
+network + search & ---    & 0/256/0 $\cdot$ 0/256/0      & ---    & 0/256/0 $\cdot$ 0/256/0 \\
+perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\cdot$ 0/1000/0 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Twenty iterations and 4.8 minutes on one card at $3 \times 3$; forty
+iterations and 34.9 minutes at $4 \times 4$, the same binary with \texttt{n=4} ---
+the Python implementation this loop follows was expected to take a day on that
+board. The untrained network's sweep, 57.9\% and 60.3\%, is the random player's.
+Self-play stood at 2,010 of the 4,520 $3 \times 3$ decision positions and at 107,153
+of the 9,062,619 at $4 \times 4$ --- 1.2\% --- and the sweep scores all of them.
+Every $4 \times 4$ miss in a 50,000-position subsample lies outside the visited set,
+and 411 of the 444 are forced wins not taken, at 7--14 stones, in positions a
+competent opponent never produces; the 95 misses at $3 \times 3$ are the same kind,
+66 missed wins and 29 losing moves at 3--6 stones. The search closes them: with 25
+or 100 simulations the network is unbeaten from iteration 4 on both boards, before
+the network alone is (iterations 14 and 38). The value head estimates self-play
+rather than the theorem: its sign agrees with the exact value on 92\% and 94\% of
+positions, worst on lost ones (83\% and 65\%), which $4 \times 4$ self-play almost
+never produces (234 of the last iteration's 256 games drew), and the root ends at
+$+0.26$ at $3 \times 3$ against the theorem's 0, because self-play under root noise
+stays X-favoured there.
+
+The entries below are the same loop at the scale that made it famous: the network is
+a residual tower, the game is Go or chess, and the target is still the model's own
+later estimate.
 
 \subsubsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
 \emph{Zero} new primitives. The original 2016 Lee Sedol system
