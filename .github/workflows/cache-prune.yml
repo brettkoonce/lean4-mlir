@@ -83,6 +83,9 @@ jobs:
           REPO: ${{ github.repository }}
           KEEP: ${{ inputs.keep || '1' }}
           DRY: ${{ inputs.dry_run && '1' || '' }}
+          # what triggered this run, for the summary: the workflow whose completion fired it
+          TRIGGER: ${{ github.event.workflow_run.name || github.event_name }}
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess, collections
@@ -118,6 +121,7 @@ jobs:
               groups[re.sub(r"-\d{6,}$", "", g)].append(c)
 
           freed = 0
+          rows = []          # (group, deleted, kept, GB freed) for the step summary
           for prefix, entries in sorted(groups.items()):
               entries.sort(key=lambda c: c["created_at"], reverse=True)
               survivors, doomed = entries[:keep], entries[keep:]
@@ -134,7 +138,32 @@ jobs:
                                      capture_output=True, text=True)
                       print(f"    deleted      id={c['id']}  {gb:.2f} GB  {c['created_at']}")
                   freed += c["size_in_bytes"]
+              rows.append((prefix, len(doomed), len(survivors), sum(c["size_in_bytes"] for c in doomed) / 1e9))
 
           verb = "would free" if dry else "freed"
-          print(f"\n{verb} {freed/1e9:.2f} GB -> ~{(total-freed)/1e9:.2f} GB remaining")
+          line = (f"{verb} {freed/1e9:.2f} GB ({sum(r[1] for r in rows)} entries in {len(rows)} groups); "
+                  f"{(total-freed)/1e9:.2f} GB of ~10 GB remaining")
+          print(f"\n{line}")
+
+          # ── what GitHub shows: a one-line notice on the run, and a table on its summary page ──
+          trig, sha = os.environ.get("TRIGGER", ""), os.environ.get("TRIGGER_SHA", "")[:8]
+          print(f"::notice title=Cache prune{' (dry run)' if dry else ''}::{line} — after {trig} {sha}")
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if summary:
+              with open(summary, "a") as f:
+                  f.write(f"## Cache prune{' (dry run)' if dry else ''}\n\n")
+                  f.write(f"Triggered by **{trig}** at `{sha}`. Keeping the newest {keep} per key-group.\n\n")
+                  f.write(f"{len(caches)} caches, {total/1e9:.2f} GB before → {(total-freed)/1e9:.2f} GB after "
+                          f"(cap ~10 GB).\n\n")
+                  if rows:
+                      f.write("| key-group | deleted | kept | GB freed |\n|---|---|---|---|\n")
+                      for g, n, k, gb in rows:
+                          f.write(f"| `{g}` | {n} | {k} | {gb:.2f} |\n")
+                  else:
+                      f.write("Nothing to delete: every key-group already holds one entry.\n")
+                  f.write("\n<details><summary>Survivors by size</summary>\n\n| key | GB | created |\n|---|---|---|\n")
+                  for g in sorted(groups, key=lambda g: -groups[g][0]["size_in_bytes"]):
+                      c = groups[g][0]
+                      f.write(f"| `{c['key']}` | {c['size_in_bytes']/1e9:.2f} | {c['created_at']} |\n")
+                  f.write("\n</details>\n")
           PY

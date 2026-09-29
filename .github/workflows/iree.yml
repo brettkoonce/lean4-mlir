@@ -67,7 +67,10 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # The event is in the group so the nightly schedule does not cancel a push run on the same
+  # ref (aa1559b1's push run was cancelled by a delayed nightly tick); a newer push still cancels an
+  # older one.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -262,11 +265,11 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
   vjp-oracle:
-    name: VJP oracle (phase 3 through IREE vs phase 2 JAX)
-    # tests/vjp_oracle/run.sh, whole: each of the 14 layer-family nets trains in phase 3 (Lean → MLIR →
-    # IREE, the hand-derived VJPs) and in phase 2 (Lean → JAX, autodiff) from one init, and step 2's
-    # loss — the first that depends on the backward — must agree. jax.yml's oracle job runs phase 2
-    # alone; this is the half that checks the VJPs. Phase 3 drives IREE through libiree_ffi.so, which
+    name: VJP oracle (IREE vs JAX)
+    # tests/vjp_oracle/run.sh, whole: each of the 14 layer-family nets trains through IREE (Lean → MLIR
+    # → IREE, the hand-derived VJPs) and through JAX (Lean → JAX, autodiff) from one init, and step 2's
+    # loss — the first that depends on the backward — must agree. jax.yml's oracle job runs the JAX
+    # side alone; this is the half that checks the VJPs. The IREE side runs through libiree_ffi.so, which
     # pip does not ship: it is built here, CPU-only, from the IREE release the compiler comes from.
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -326,7 +329,7 @@ jobs:
               $B/build_tools/third_party/flatcc/libflatcc_parsing.a $B/build_tools/third_party/printf/libprintf_printf.a \
             -Wl,--end-group -lm -lpthread -ldl -Wl,--no-undefined
 
-      - name: Python (IREE compiler; .venv with jax CPU at the lockfile's version, for phase 2)
+      - name: Python (IREE compiler; .venv with jax CPU at the lockfile's version, for the JAX side)
         run: |
           set -e
           python3 -m pip install --quiet iree-base-compiler==$IREE_VERSION
@@ -353,7 +356,7 @@ jobs:
           restore-keys: |
             lake-oracle-${{ hashFiles('lean-toolchain', 'lake-manifest.json') }}-
 
-      - name: Build the oracle exes (phase 3 at the root, phase 2 in jax/)
+      - name: Build the oracle exes (IREE side at the root, JAX side in jax/)
         run: |
           set -e
           oracles() { grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | grep '^vjp-oracle-' | tr '\n' ' '; }
@@ -370,7 +373,7 @@ jobs:
           {
             echo "## VJP oracle"
             echo ""
-            echo "Each layer family trains one step in phase 3 (Lean → MLIR → IREE on the CPU, the hand-derived VJPs) and in phase 2 (Lean → JAX, autodiff) from the same init. Step 2 is the first loss that depends on the backward, so |Δ step 2| below the tolerance means the VJPs agree with autodiff. Synthetic MNIST (64 / 512); IREE $IREE_VERSION."
+            echo "Each layer family trains one step through IREE (Lean → MLIR → IREE on the CPU, the hand-derived VJPs) and through JAX (Lean → JAX, autodiff) from the same init. Step 2 is the first loss that depends on the backward, so |Δ step 2| below the tolerance means the VJPs agree with autodiff. Synthetic MNIST (64 / 512); IREE $IREE_VERSION."
             echo ""
             echo "| | case | Δ step 1 | Δ step 2 | tol |"
             echo "|---|---|---|---|---|"
@@ -379,7 +382,7 @@ jobs:
                 [ "$v" = PASS ] && m=✅ || m=❌
                 echo "| $m | \`$c\` | $d1 | $d2 | $t |"
               done
-            grep -E '^FAIL +[a-z-]+ +phase' /tmp/oracle.log | sed -E 's/^FAIL +([a-z-]+) +(.*)/| ❌ | `\1` | \2 | | |/' || true
+            grep -E '^FAIL +[a-z-]+ +(IREE|JAX) side' /tmp/oracle.log | sed -E 's/^FAIL +([a-z-]+) +(.*)/| ❌ | `\1` | \2 | | |/' || true
           } >> $GITHUB_STEP_SUMMARY
           n=$(grep -c '^PASS' /tmp/oracle.log)
           [ "$n" = 14 ] || { echo "::error::$n of 14 oracle cases passed"; rc=1; }
@@ -387,13 +390,13 @@ jobs:
 
       - name: Control (mismatched traces must go red)
         run: |
-          # dense's phase-3 trace against dense-relu's phase-2 trace: two different nets. If the differ
+          # dense's IREE trace against dense-relu's JAX trace: two different nets. If the differ
           # passes that, a green row above says nothing.
-          if .venv/bin/python3 tests/vjp_oracle/diff_step.py /tmp/vo_p3_dense.jsonl /tmp/vo_p2_dense-relu.jsonl control 1e-5; then
+          if .venv/bin/python3 tests/vjp_oracle/diff_step.py /tmp/vo_iree_dense.jsonl /tmp/vo_jax_dense-relu.jsonl control 1e-5; then
             echo "::error::control came out GREEN — the differ cannot fail"
             echo "" >> $GITHUB_STEP_SUMMARY; echo "❌ **Control came out green.**" >> $GITHUB_STEP_SUMMARY; exit 1
           fi
           {
             echo ""
-            echo "✅ **Control is red, as it must be:** dense's phase-3 trace against dense-relu's phase-2 trace fails the differ."
+            echo "✅ **Control is red, as it must be:** dense's IREE trace against dense-relu's JAX trace fails the differ."
           } >> $GITHUB_STEP_SUMMARY

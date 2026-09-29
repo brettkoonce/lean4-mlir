@@ -6,7 +6,7 @@ identical init). Step 2 is the first step whose value depends on the
 backward pass + optimizer. Small abs(step-2-Δ) means the Lean
 hand-derived VJP agrees with JAX `value_and_grad` at f32 precision.
 
-Usage: diff_step.py <phase3.jsonl> <phase2.jsonl> <name> [tolerance]
+Usage: diff_step.py <iree.jsonl> <jax.jsonl> <name> [tolerance]
 
 Exit 0 on pass (|step 2 delta| < tol), exit 1 on fail.
 """
@@ -30,15 +30,15 @@ def load_step(path, step):
 
 def main():
     if len(sys.argv) < 4:
-        print("usage: diff_step.py <phase3.jsonl> <phase2.jsonl> <name> [tolerance]")
+        print("usage: diff_step.py <iree.jsonl> <jax.jsonl> <name> [tolerance]")
         sys.exit(2)
-    p3_path, p2_path, name = sys.argv[1], sys.argv[2], sys.argv[3]
+    iree_path, jax_path, name = sys.argv[1], sys.argv[2], sys.argv[3]
     tol = float(sys.argv[4]) if len(sys.argv) > 4 else 1e-4
 
-    l3_1 = load_step(p3_path, 1)
-    l2_1 = load_step(p2_path, 1)
-    l3_2 = load_step(p3_path, 2)
-    l2_2 = load_step(p2_path, 2)
+    l3_1 = load_step(iree_path, 1)
+    l2_1 = load_step(jax_path, 1)
+    l3_2 = load_step(iree_path, 2)
+    l2_2 = load_step(jax_path, 2)
 
     if None in (l3_1, l2_1, l3_2, l2_2):
         print(f"FAIL  {name:30s} missing step 1 or 2 in one of the traces")
