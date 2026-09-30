@@ -15195,7 +15195,8 @@ trainer is Silver et al.'s self-play loop (AlphaGo Zero, 2017,
 written in Lean (\texttt{LeanMlir/TicTacToe.lean}), $n \times n$ with $k$ in a row,
 $n$ the one knob. Each iteration plays 256 games in lockstep: at every move a PUCT
 search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations over the network's
-priors and value, one batched forward over the games' pending leaves per simulation,
+priors and value --- the trees are flat per-game arrays in C, the lockstep stays in
+Lean --- one batched forward over the games' pending leaves per simulation,
 Dirichlet noise at the root, the move drawn from the visit counts; the visit
 distribution $\pi$ and the outcome $z$ are the targets, and the next iteration plays
 with the new network. The network is AlphaGo's plain convolution + ReLU stack
@@ -15237,11 +15238,10 @@ $3 \times 3$ and 155k at $4 \times 4$. Three things change relative to the DQN:
 \includegraphics[width=\textwidth]{demos/alphazero_ttt.png}
 \caption{Left: X in the centre, O to move --- the trained $3 \times 3$ network's move
 probabilities over the empty cells, with the solved game's optimal moves ringed: the
-corners draw, the edges lose, and the network puts 85\% on the corners. Middle:
+corners draw, the edges lose, and the network puts 81\% on the corners. Middle:
 agreement of the network alone with the solved game over every reachable decision
 position, against iteration, for both boards, with the draw rate of network + search
-against the perfect player dashed; both boards are unbeaten with search from
-iteration 4. Right: the value head against the exact value of all 4,520 $3 \times 3$
+against the perfect player dashed; unbeaten with search from iteration 5 and 4. Right: the value head against the exact value of all 4,520 $3 \times 3$
 decision positions, one dot per position, medians as bars.}
 \label{fig:alphazero_ttt}
 \end{figure}
@@ -15259,30 +15259,33 @@ arm & agrees & vs perfect, X $\cdot$ O & agrees & vs perfect, X $\cdot$ O \\
 \hline
 random           & 58.0\% & 0/207/793 $\cdot$ 0/33/967   & 60.4\% & 0/487/513 $\cdot$ 0/341/659 \\
 win-or-block     & 94.0\% & 0/831/169 $\cdot$ 0/215/785  & 95.6\% & 0/930/70 $\cdot$ 0/840/160 \\
-network alone    & $\mathbf{97.9\%}$ & 0/256/0 $\cdot$ 0/256/0 & $\mathbf{99.2\%}$ & 0/256/0 $\cdot$ 0/256/0 \\
+network alone    & $\mathbf{97.3\%}$ & 0/256/0 $\cdot$ 0/256/0 & $\mathbf{99.4\%}$ & 0/256/0 $\cdot$ 0/256/0 \\
 network + search & ---    & 0/256/0 $\cdot$ 0/256/0      & ---    & 0/256/0 $\cdot$ 0/256/0 \\
 perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\cdot$ 0/1000/0 \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Twenty iterations and 4.8 minutes on one card at $3 \times 3$; forty
-iterations and 34.9 minutes at $4 \times 4$, the same binary with \texttt{n=4} ---
+\noindent Twenty iterations and 2.5 minutes on one card at $3 \times 3$; forty
+iterations and 10.0 minutes at $4 \times 4$, the same binary with \texttt{n=4} ---
 the Python implementation this loop follows was expected to take a day on that
-board. The untrained network's sweep, 57.9\% and 60.3\%, is the random player's.
-Self-play stood at 2,010 of the 4,520 $3 \times 3$ decision positions and at 107,153
+board. (With the trees in Lean rather than C the same runs took 4.8 and 34.9
+minutes: the search was the wall clock, 18.5 seconds of self-play and 17.8 of matches
+per $4 \times 4$ iteration against 0.7 and 0.8 now, and the train step is what is
+left.) The untrained network's sweep, 57.9\% and 60.3\%, is the random player's.
+Self-play stood at 2,035 of the 4,520 $3 \times 3$ decision positions and at 108,483
 of the 9,062,619 at $4 \times 4$ --- 1.2\% --- and the sweep scores all of them.
-Every $4 \times 4$ miss in a 50,000-position subsample lies outside the visited set,
-and 411 of the 444 are forced wins not taken, at 7--14 stones, in positions a
-competent opponent never produces; the 95 misses at $3 \times 3$ are the same kind,
-66 missed wins and 29 losing moves at 3--6 stones. The search closes them: with 25
-or 100 simulations the network is unbeaten from iteration 4 on both boards, before
-the network alone is (iterations 14 and 38). The value head estimates self-play
-rather than the theorem: its sign agrees with the exact value on 92\% and 94\% of
-positions, worst on lost ones (83\% and 65\%), which $4 \times 4$ self-play almost
-never produces (234 of the last iteration's 256 games drew), and the root ends at
-$+0.26$ at $3 \times 3$ against the theorem's 0, because self-play under root noise
-stays X-favoured there.
+One $4 \times 4$ miss in a 50,000-position subsample lies inside the visited set,
+and 289 of the 308 are forced wins not taken, at 7--14 stones, in positions a
+competent opponent never produces; the 122 misses at $3 \times 3$ are the same kind,
+98 missed wins and 24 losing moves at 3--6 stones. The search closes them: with 25
+or 100 simulations the network is unbeaten from iteration 5 and 4, before the network
+alone is (iterations 11 and 10). The value head estimates self-play rather than the
+theorem: its sign agrees with the exact value on 90\% and 96\% of positions, worst
+at $4 \times 4$ on lost ones (59\%), which its self-play almost never produces (242
+of the last iteration's 256 games drew), and the root ends at $+0.32$ at
+$3 \times 3$ against the theorem's 0, because self-play under root noise stays
+X-favoured there.
 
 The entries below are the same loop at the scale that made it famous: the network is
 a residual tower, the game is Go or chess, and the target is still the model's own

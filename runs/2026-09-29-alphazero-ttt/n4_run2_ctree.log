@@ -1,0 +1,143 @@
+alphazero ttt 4x4: 80597 params, 4 in a row, 40 iterations of 256 games at 100 sims, batch 64 × 5 epochs over the last 20 iterations, lr 0.001000, cpuct 1.500000, Dir(1.000000) at 0.250000, seed 1
+  table 43046721 bytes, 9062619 decision positions (1034 ms)
+I0929 23:25:53.184950 1770772 service.cc:154] XLA service 0x760dc4033920 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0929 23:25:53.185017 1770772 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0929 23:25:53.187129 1770772 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0929 23:25:53.187187 1770772 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0929 23:25:53.197452 1770772 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I0929 23:25:53.743409 1771152 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_4x4_run2_train_step.mlir (@main, 37 outputs, 1 replica) in 1132 ms
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_4x4_run2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 513 ms
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_4x4_run2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 72 ms
+  sessions loaded
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 0: sweep agree 60.26% value mse 0.3493 sign 58.19%  net alone vs perfect X 0/150/106 O 0/87/169  +MCTS X 0/238/18 O 0/191/65  root value 0.000
+  first step: alphazero loss 3.8288, block loss 3.2033
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 1: sweep agree 64.00% value mse 0.3371 sign 66.16%  net alone vs perfect X 0/168/88 O 0/90/166  +MCTS X 0/231/25 O 0/211/45  root value 0.071
+    self-play 3486 positions (X 78 / draw 137 / O 41), 272 steps over 3486 samples, loss 2.9215  (play 703 train 691 score 808 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 2: sweep agree 79.63% value mse 0.2944 sign 66.43%  net alone vs perfect X 0/212/44 O 0/157/99  +MCTS X 0/255/1 O 0/245/11  root value 0.090
+    self-play 3471 positions (X 73 / draw 135 / O 48), 543 steps over 6957 samples, loss 2.5358  (play 694 train 1186 score 813 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 3: sweep agree 87.98% value mse 0.3660 sign 66.44%  net alone vs perfect X 0/229/27 O 0/199/57  +MCTS X 0/256/0 O 0/249/7  root value 0.092
+    self-play 3744 positions (X 48 / draw 178 / O 30), 836 steps over 10701 samples, loss 2.3424  (play 745 train 1775 score 800 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 4: sweep agree 93.10% value mse 0.2323 sign 66.89%  net alone vs perfect X 0/252/4 O 0/236/20  +MCTS X 0/256/0 O 0/256/0  root value 0.160
+    self-play 3734 positions (X 50 / draw 185 / O 21), 1127 steps over 14435 samples, loss 2.2448  (play 719 train 2414 score 789 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 5: sweep agree 94.66% value mse 0.1979 sign 71.02%  net alone vs perfect X 0/254/2 O 0/251/5  +MCTS X 0/256/0 O 0/256/0  root value 0.139
+    self-play 3860 positions (X 36 / draw 202 / O 18), 1429 steps over 18295 samples, loss 2.1747  (play 714 train 3711 score 824 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 6: sweep agree 96.37% value mse 0.1483 sign 79.17%  net alone vs perfect X 0/250/6 O 0/254/2  +MCTS X 0/256/0 O 0/256/0  root value 0.118
+    self-play 3849 positions (X 31 / draw 205 / O 20), 1730 steps over 22144 samples, loss 2.1156  (play 722 train 3682 score 889 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 7: sweep agree 97.44% value mse 0.1469 sign 82.00%  net alone vs perfect X 0/254/2 O 0/250/6  +MCTS X 0/256/0 O 0/256/0  root value 0.048
+    self-play 3898 positions (X 26 / draw 211 / O 19), 2034 steps over 26042 samples, loss 2.0805  (play 749 train 4798 score 755 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 8: sweep agree 97.59% value mse 0.1050 sign 86.42%  net alone vs perfect X 0/255/1 O 0/252/4  +MCTS X 0/256/0 O 0/256/0  root value 0.056
+    self-play 3941 positions (X 17 / draw 224 / O 15), 2342 steps over 29983 samples, loss 2.0398  (play 743 train 5934 score 814 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 9: sweep agree 97.98% value mse 0.1001 sign 88.37%  net alone vs perfect X 0/256/0 O 0/255/1  +MCTS X 0/256/0 O 0/256/0  root value 0.095
+    self-play 3907 positions (X 27 / draw 217 / O 12), 2647 steps over 33890 samples, loss 2.0097  (play 743 train 6501 score 819 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 10: sweep agree 97.74% value mse 0.0823 sign 90.25%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.109
+    self-play 3953 positions (X 19 / draw 226 / O 11), 2956 steps over 37843 samples, loss 1.9835  (play 747 train 7548 score 855 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 11: sweep agree 98.24% value mse 0.0773 sign 90.59%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.047
+    self-play 3925 positions (X 29 / draw 221 / O 6), 3263 steps over 41768 samples, loss 1.9645  (play 740 train 7192 score 830 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 12: sweep agree 97.39% value mse 0.0838 sign 89.65%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.085
+    self-play 3980 positions (X 16 / draw 233 / O 7), 3574 steps over 45748 samples, loss 1.9469  (play 754 train 8711 score 764 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 13: sweep agree 98.17% value mse 0.0746 sign 90.91%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.119
+    self-play 3947 positions (X 21 / draw 228 / O 7), 3882 steps over 49695 samples, loss 1.9315  (play 689 train 8444 score 798 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 14: sweep agree 98.37% value mse 0.0623 sign 92.28%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.084
+    self-play 3977 positions (X 15 / draw 233 / O 8), 4193 steps over 53672 samples, loss 1.9181  (play 756 train 9879 score 762 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 15: sweep agree 97.98% value mse 0.0660 sign 91.97%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.091
+    self-play 3990 positions (X 16 / draw 233 / O 7), 4504 steps over 57662 samples, loss 1.9104  (play 741 train 10383 score 821 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 16: sweep agree 98.36% value mse 0.0658 sign 91.97%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.064
+    self-play 3957 positions (X 19 / draw 229 / O 8), 4813 steps over 61619 samples, loss 1.8997  (play 737 train 10731 score 836 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 17: sweep agree 98.46% value mse 0.0634 sign 92.28%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.045
+    self-play 3976 positions (X 16 / draw 229 / O 11), 5124 steps over 65595 samples, loss 1.8931  (play 746 train 10365 score 806 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 18: sweep agree 98.28% value mse 0.0704 sign 91.15%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.041
+    self-play 3991 positions (X 15 / draw 233 / O 8), 5436 steps over 69586 samples, loss 1.8853  (play 743 train 12243 score 750 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 19: sweep agree 98.97% value mse 0.0496 sign 93.87%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.052
+    self-play 3973 positions (X 17 / draw 231 / O 8), 5746 steps over 73559 samples, loss 1.8821  (play 694 train 16703 score 868 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 20: sweep agree 99.12% value mse 0.0472 sign 94.03%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.063
+    self-play 4001 positions (X 11 / draw 237 / O 8), 6059 steps over 77560 samples, loss 1.8718  (play 827 train 17859 score 845 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 21: sweep agree 98.67% value mse 0.0603 sign 92.58%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.039
+    self-play 4035 positions (X 13 / draw 241 / O 2), 6102 steps over 78109 samples, loss 1.8464  (play 729 train 19746 score 827 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 22: sweep agree 99.04% value mse 0.0459 sign 94.25%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.051
+    self-play 4019 positions (X 15 / draw 238 / O 3), 6145 steps over 78657 samples, loss 1.8163  (play 705 train 19168 score 914 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 23: sweep agree 99.17% value mse 0.0726 sign 92.25%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.007
+    self-play 4004 positions (X 14 / draw 235 / O 7), 6165 steps over 78917 samples, loss 1.8014  (play 834 train 18322 score 806 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 24: sweep agree 99.33% value mse 0.0450 sign 94.61%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.054
+    self-play 3984 positions (X 18 / draw 230 / O 8), 6184 steps over 79167 samples, loss 1.7869  (play 730 train 16862 score 773 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 25: sweep agree 99.14% value mse 0.0450 sign 94.83%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.015
+    self-play 4027 positions (X 7 / draw 242 / O 7), 6197 steps over 79334 samples, loss 1.7787  (play 834 train 17996 score 907 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 26: sweep agree 99.14% value mse 0.0434 sign 94.65%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.024
+    self-play 3945 positions (X 19 / draw 228 / O 9), 6205 steps over 79430 samples, loss 1.7736  (play 686 train 18296 score 787 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 27: sweep agree 99.33% value mse 0.0400 sign 95.28%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.025
+    self-play 3955 positions (X 19 / draw 230 / O 7), 6209 steps over 79487 samples, loss 1.7693  (play 694 train 19617 score 920 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 28: sweep agree 99.43% value mse 0.0389 sign 95.39%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.031
+    self-play 4008 positions (X 10 / draw 238 / O 8), 6215 steps over 79554 samples, loss 1.7651  (play 769 train 20973 score 902 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 29: sweep agree 99.25% value mse 0.0460 sign 94.92%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.035
+    self-play 4021 positions (X 9 / draw 241 / O 6), 6224 steps over 79668 samples, loss 1.7632  (play 782 train 17763 score 776 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 30: sweep agree 99.11% value mse 0.0527 sign 93.82%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.038
+    self-play 4023 positions (X 11 / draw 241 / O 4), 6229 steps over 79738 samples, loss 1.7611  (play 694 train 17177 score 893 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 31: sweep agree 98.97% value mse 0.0376 sign 95.52%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.031
+    self-play 4006 positions (X 10 / draw 236 / O 10), 6235 steps over 79819 samples, loss 1.7606  (play 705 train 17453 score 793 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 32: sweep agree 98.86% value mse 0.0459 sign 94.47%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.033
+    self-play 4027 positions (X 9 / draw 240 / O 7), 6239 steps over 79866 samples, loss 1.7614  (play 722 train 19534 score 820 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 33: sweep agree 97.57% value mse 0.0829 sign 90.63%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.023
+    self-play 4034 positions (X 10 / draw 243 / O 3), 6246 steps over 79953 samples, loss 1.7574  (play 744 train 20925 score 783 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 34: sweep agree 98.81% value mse 0.0489 sign 94.46%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.016
+    self-play 3994 positions (X 14 / draw 233 / O 9), 6247 steps over 79970 samples, loss 1.7589  (play 694 train 20019 score 789 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 35: sweep agree 99.05% value mse 0.0508 sign 94.18%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.022
+    self-play 4018 positions (X 14 / draw 237 / O 5), 6249 steps over 79998 samples, loss 1.7645  (play 711 train 20106 score 798 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 36: sweep agree 99.18% value mse 0.0422 sign 95.01%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.036
+    self-play 4007 positions (X 13 / draw 238 / O 5), 6253 steps over 80048 samples, loss 1.7623  (play 687 train 20192 score 791 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 37: sweep agree 99.33% value mse 0.0415 sign 95.10%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.038
+    self-play 3971 positions (X 17 / draw 230 / O 9), 6253 steps over 80043 samples, loss 1.7641  (play 698 train 20199 score 795 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 38: sweep agree 98.99% value mse 0.0459 sign 94.91%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.014
+    self-play 4011 positions (X 9 / draw 235 / O 12), 6254 steps over 80063 samples, loss 1.7630  (play 685 train 19052 score 784 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 39: sweep agree 99.39% value mse 0.0416 sign 95.45%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.030
+    self-play 4007 positions (X 17 / draw 236 / O 3), 6257 steps over 80097 samples, loss 1.7601  (play 688 train 20043 score 798 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 40: sweep agree 99.38% value mse 0.0370 sign 95.55%  net alone vs perfect X 0/256/0 O 0/256/0  +MCTS X 0/256/0 O 0/256/0  root value 0.030
+    self-play 4031 positions (X 11 / draw 242 / O 3), 6259 steps over 80127 samples, loss 1.7596  (play 710 train 18295 score 745 ms)
+trained: 40 iterations, 186877 steps, 598274 ms
+full sweep, 9062619 decision positions: agree 99.42% value mse 0.0369 sign 95.57% mae 0.0746 (11354 ms)
+self-play stood at 108483 of the 9062619 decision positions
+wrote .lake/build/alphazero_ttt_4x4_run2_curve.csv, .lake/build/alphazero_ttt_4x4_run2_sweep.csv, .lake/build/alphazero_ttt_4x4_run2_policy.csv, .lake/build/alphazero_ttt_4x4_run2_params.bin

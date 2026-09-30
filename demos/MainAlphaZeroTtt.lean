@@ -1,6 +1,5 @@
 import LeanMlir.Train
 import LeanMlir.TicTacToe
-import Std.Data.HashMap
 
 /-! AlphaZero on the Lean tic-tac-toe, scored against the solved game.
 
@@ -25,9 +24,11 @@ import Std.Data.HashMap
     held on the device under a generation token.
 
     Everything batched runs in lockstep: `bf` self-play games advance one simulation at
-    a time with one forward over their pending leaves; the matches against the solved
-    game's perfect player run `bf` games with the net on one side; the sweep over the
-    reachable decision positions runs `bf` positions per forward.
+    a time — one PUCT descent per game in C (`lean_mcts_*`: the trees are flat per-game
+    arrays in one Lean-owned arena), one forward over their pending leaves, expand and
+    back up in C; the matches against the solved game's perfect player run `bf` games
+    with the net on one side; the sweep over the reachable decision positions runs `bf`
+    positions per forward.
 
     `lake exe alphazero-ttt [n=3] [k=n] [iters=20] [sims=25] [bf=256] [batch=64]
      [epochs=10] [lr=1e-3] [window=20] [cpuct=1.5] [alpha=1.0] [noise=0.25]
@@ -96,44 +97,6 @@ def uniform (g : StdGen) : Float × StdGen :=
   let (u, g) := randNat g 0 999999999
   ((u.toFloat + 0.5) / 1.0e9, g)
 
-def normal (g : StdGen) : Float × StdGen :=
-  let (u1, g) := uniform g
-  let (u2, g) := uniform g
-  (Float.sqrt (-2.0 * Float.log u1) * Float.cos (2.0 * 3.141592653589793 * u2), g)
-
-/-- Gamma(α, 1) by Marsaglia–Tsang, the α < 1 case boosted through α + 1. -/
-partial def gamma (alpha : Float) (g : StdGen) : Float × StdGen :=
-  if alpha < 1.0 then
-    let (x, g) := gamma (alpha + 1.0) g
-    let (u, g) := uniform g
-    (x * Float.pow u (1.0 / alpha), g)
-  else
-    let d := alpha - 1.0 / 3.0
-    let c := 1.0 / Float.sqrt (9.0 * d)
-    let rec loop (g : StdGen) : Float × StdGen :=
-      let (x, g) := normal g
-      let v := (1.0 + c * x) * (1.0 + c * x) * (1.0 + c * x)
-      if v <= 0.0 then loop g else
-      let (u, g) := uniform g
-      if Float.log u < 0.5 * x * x + d - d * v + d * Float.log v then (d * v, g) else loop g
-    loop g
-
-/-- `(1 − ε)·P + ε·Dir(α)` over the legal cells. -/
-def dirichletMix (P : Array Float) (legal : Array Nat) (alpha eps : Float) (g : StdGen) :
-    Array Float × StdGen := Id.run do
-  let mut g := g
-  let mut noise : Array Float := Array.replicate P.size 0.0
-  let mut tot := 0.0
-  for c in legal do
-    let (x, g') := gamma alpha g
-    g := g'
-    noise := noise.set! c x
-    tot := tot + x
-  let mut out := P
-  for c in legal do
-    out := out.set! c ((1.0 - eps) * P[c]! + eps * noise[c]! / tot)
-  return (out, g)
-
 def sampleFrom (p : Array Float) (g : StdGen) : Nat × StdGen := Id.run do
   let (u, g) := uniform g
   let mut acc := 0.0
@@ -145,61 +108,47 @@ def sampleFrom (p : Array Float) (g : StdGen) : Nat × StdGen := Id.run do
       if u < acc then return (i, g)
   return (last, g)
 
--- ── The tree ──
+/-- A fresh 64-bit seed for one C-side draw. -/
+def seed64 (g : StdGen) : UInt64 × StdGen :=
+  let (a, g) := randNat g 0 0xFFFFFFFF
+  let (b, g) := randNat g 0 0xFFFFFFFF
+  ((a.toUInt64 <<< 32) ||| b.toUInt64, g)
 
-/-- One expanded position: priors over the cells (0 off the legal set), visit counts
-    and total values of each move, from the mover's view. -/
-structure Node where
-  P : Array Float
-  N : Array Nat
-  W : Array Float
-  nSum : Nat := 0
-deriving Inhabited
+-- ── The search: trees in C (`lean_mcts_*` in ffi/f32_helpers.c), the lockstep in Lean ──
 
-/-- A game's search tree, keyed by position index. Positions cannot recur within a
-    game (the stone count only grows), so a transposition is a genuine share. -/
-abbrev Tree := Std.HashMap Nat Node
+/-- The arena for `G` games at board `n`, `k` in a row, `cap` nodes each: every game's
+    nodes, its position-index → node hash and its pending path, as flat arrays. Lean
+    never reads it; the C calls mutate it in place. -/
+@[extern "lean_mcts_alloc"]
+opaque mctsAlloc (G n k cap : USize) : IO ByteArray
 
-structure Leaf where
-  path : Array (Nat × Nat)   -- (node key, move) from the root down
-  pos : Pos
-  needsEval : Bool
-  value : Float              -- a terminal leaf's result from its mover's view
-deriving Inhabited
+/-- Forget every tree: before a self-play iteration or a match. -/
+@[extern "lean_mcts_reset"]
+opaque mctsReset (arena : @& ByteArray) : IO Unit
 
-/-- PUCT descent from `pos` to a leaf: a terminal position, or one the tree has not
-    expanded. Unvisited moves count as Q = 0. -/
-partial def descend (tree : Tree) (cpuct : Float) (pos : Pos) (path : Array (Nat × Nat)) : Leaf :=
-  if pos.terminal then { path, pos, needsEval := false, value := Float.ofInt pos.resultForMover }
-  else match tree[pos.index]? with
-  | none => { path, pos, needsEval := true, value := 0.0 }
-  | some nd => Id.run do
-    let sq := Float.sqrt (nd.nSum.toFloat + 1.0e-8)
-    let mut best := 0
-    let mut bestU := -1.0e30
-    for c in pos.legal do
-      let q := if nd.N[c]! > 0 then nd.W[c]! / nd.N[c]!.toFloat else 0.0
-      let u := q + cpuct * nd.P[c]! * sq / (1.0 + nd.N[c]!.toFloat)
-      if u > bestU then
-        bestU := u
-        best := c
-    return descend tree cpuct (pos.play best) (path.push (pos.index, best))
+/-- One PUCT descent per live game from its root (u64 LE indices): `G` records of
+    `{u32 kind, f32 value, u64 leaf index}` — kind 1 needs the net, kind 2 is a terminal
+    leaf carrying its value from its mover's view, 0 was not live. -/
+@[extern "lean_mcts_select"]
+opaque mctsSelect (arena roots live : @& ByteArray) (cpuct : Float) : IO ByteArray
 
-/-- Credit `v` (the leaf mover's view) up the path, flipping sign each ply. -/
-def backup (tree : Tree) (path : Array (Nat × Nat)) (v : Float) : Tree := Id.run do
-  let mut t := tree
-  let mut val := v
-  for i in [0:path.size] do
-    let (key, a) := path[path.size - 1 - i]!
-    val := -val
-    match t[key]? with
-    | some nd =>
-      t := t.insert key { nd with N := nd.N.modify a (· + 1), W := nd.W.modify a (· + val),
-                                  nSum := nd.nSum + 1 }
-    | none => pure ()
-  return t
+/-- Expand the pending leaves from the logits block (row `r` is the `r`-th game whose
+    kind was 1, in game order), Dirichlet noise on a freshly expanded root when `noise`,
+    then back every value up its path. -/
+@[extern "lean_mcts_expand_backup"]
+opaque mctsExpandBackup (arena logits : @& ByteArray) (nOut : USize) (noise : UInt8)
+    (alpha eps : Float) (seed : UInt64) : IO Unit
 
-/-- The net's priors at `pos` from logits row `row`: softmax over the legal cells. -/
+/-- Mix Dirichlet noise into the priors of every live game's root already in its tree. -/
+@[extern "lean_mcts_root_noise"]
+opaque mctsRootNoise (arena roots live : @& ByteArray) (alpha eps : Float) (seed : UInt64) : IO Unit
+
+/-- The roots' visit distributions, f32 `[G, n²]`, zeros where a root is not in its tree. -/
+@[extern "lean_mcts_root_visits"]
+opaque mctsRootVisits (arena roots : @& ByteArray) : IO ByteArray
+
+/-- The net's priors at `pos` from logits row `row`: softmax over the legal cells. The
+    search does its own in C; this is the figure's readout. -/
 def priors (logits : ByteArray) (row nOut : Nat) (pos : Pos) : Array Float := Id.run do
   let nc := pos.n * pos.n
   let legal := pos.legal
@@ -213,8 +162,8 @@ def priors (logits : ByteArray) (row nOut : Nat) (pos : Pos) : Array Float := Id
     se := se + e
   return P.map (· / se)
 
-/-- What a batched forward needs: the board, the widths, and the forward itself,
-    which takes up to `bf` position indices as u32 and returns logits `[bf, nOut]`. -/
+/-- What a search needs: the board, the widths, the arena, and the forward itself, which
+    takes up to `bf` position indices as u32 and returns logits `[bf, nOut]`. -/
 structure Ctx where
   n : Nat
   nOut : Nat
@@ -222,64 +171,51 @@ structure Ctx where
   cpuct : Float
   alpha : Float
   eps : Float
+  arena : ByteArray
   forward : ByteArray → Nat → IO ByteArray
 
 def Ctx.nc (ctx : Ctx) : Nat := ctx.n * ctx.n
 
-/-- `sims` simulations on every live game at once: one PUCT descent per game, one
-    forward over the pending leaves, expand, back up. Root noise (self-play only) is
-    mixed into the root's priors, whether it was expanded this move or reused. -/
-def search (ctx : Ctx) (trees : Array Tree) (roots : Array Pos) (live : Array Bool)
-    (sims : Nat) (noise : Bool) (g0 : StdGen) : IO (Array Tree × StdGen) := do
-  let mut trees := trees
+def pushU64LE (acc : ByteArray) (v : Nat) : ByteArray :=
+  pushU32LE (pushU32LE acc (v % 4294967296)) (v / 4294967296)
+
+def rootsOf (pos : Array Pos) : ByteArray :=
+  pos.foldl (fun acc p => pushU64LE acc p.index) ByteArray.empty
+
+def liveOf (live : Array Bool) : ByteArray :=
+  ByteArray.mk (live.map fun b => if b then 1 else 0)
+
+/-- `sims` simulations on every live game at once: one descent per game in C, one
+    forward over the pending leaves, expand and back up in C. Root noise (self-play
+    only) is mixed into the root's priors, whether it was expanded this move or reused. -/
+def search (ctx : Ctx) (roots : Array Pos) (live : Array Bool) (sims : Nat) (noise : Bool)
+    (g0 : StdGen) : IO StdGen := do
+  let rootsBA := rootsOf roots
+  let liveBA := liveOf live
   let mut g := g0
   if noise then
-    for i in [0:roots.size] do
-      if live[i]! then
-        match trees[i]![roots[i]!.index]? with
-        | some nd =>
-          let (P, g') := dirichletMix nd.P roots[i]!.legal ctx.alpha ctx.eps g
-          g := g'
-          trees := trees.modify i (·.insert roots[i]!.index { nd with P })
-        | none => pure ()
+    let (sd, g') := seed64 g
+    g := g'
+    mctsRootNoise ctx.arena rootsBA liveBA ctx.alpha ctx.eps sd
   for _ in [0:sims] do
-    let mut leaves : Array (Option Leaf) := Array.replicate roots.size none
-    let mut pend : ByteArray := ByteArray.empty
+    let sel ← mctsSelect ctx.arena rootsBA liveBA ctx.cpuct
+    let mut pend := ByteArray.empty
     let mut nPend := 0
     for i in [0:roots.size] do
-      if live[i]! then
-        let lf := descend trees[i]! ctx.cpuct roots[i]! #[]
-        leaves := leaves.set! i (some lf)
-        if lf.needsEval then
-          pend := pushU32LE pend lf.pos.index
-          nPend := nPend + 1
+      if readU32 sel (4 * i) == 1 then
+        pend := pushU32LE pend (readU32 sel (4 * i + 2))   -- the leaf index, below 2³² at n ≤ 4
+        nPend := nPend + 1
     let logits ← if nPend == 0 then pure ByteArray.empty else ctx.forward pend nPend
-    let mut row := 0
-    for i in [0:roots.size] do
-      match leaves[i]! with
-      | none => pure ()
-      | some lf =>
-        let mut v := lf.value
-        if lf.needsEval then
-          let mut P := priors logits row ctx.nOut lf.pos
-          if noise && lf.path.isEmpty then
-            let (P', g') := dirichletMix P lf.pos.legal ctx.alpha ctx.eps g
-            P := P'
-            g := g'
-          v := Float.tanh (F32.read logits (row * ctx.nOut + ctx.nc).toUSize)
-          trees := trees.modify i (·.insert lf.pos.index
-            { P, N := Array.replicate ctx.nc 0, W := Array.replicate ctx.nc 0.0 })
-          row := row + 1
-        trees := trees.modify i (backup · lf.path v)
-  return (trees, g)
+    let (sd, g') := seed64 g
+    g := g'
+    mctsExpandBackup ctx.arena logits ctx.nOut.toUSize (if noise then 1 else 0) ctx.alpha ctx.eps sd
+  return g
 
-/-- The root's visit distribution over the cells. -/
-def visitDist (tree : Tree) (pos : Pos) : Array Float :=
-  match tree[pos.index]? with
-  | some nd =>
-    let tot := nd.nSum.toFloat
-    nd.N.map fun c => c.toFloat / tot
-  | none => Array.replicate (pos.n * pos.n) 0.0
+/-- The roots' visit distributions, one array per game. -/
+def visitDists (ctx : Ctx) (roots : Array Pos) : IO (Array (Array Float)) := do
+  let v ← mctsRootVisits ctx.arena (rootsOf roots)
+  return (Array.range roots.size).map fun i =>
+    (Array.range ctx.nc).map fun c => F32.read v (i * ctx.nc + c).toUSize
 
 def argmaxLegal (score : Nat → Float) (pos : Pos) : Nat := Id.run do
   let mut best := 0
@@ -297,21 +233,20 @@ def argmaxLegal (score : Nat → Float) (pos : Pos) : Nat := Id.run do
 def selfPlay (ctx : Ctx) (root : Pos) (sims tempPlies : Nat) (g0 : StdGen) :
     IO (Array Nat × Array (Array Float) × Array Float × Array Int × StdGen) := do
   let G := ctx.bf
+  mctsReset ctx.arena
   let mut pos : Array Pos := Array.replicate G root
-  let mut trees : Array Tree := Array.replicate G (∅ : Tree)
   let mut live : Array Bool := Array.replicate G true
   let mut hist : Array (Array (Nat × Array Float × UInt8)) := Array.replicate G #[]
   let mut results : Array Int := Array.replicate G 0
   let mut g := g0
   let mut ply := 0
   while live.any id do
-    let (trees', g') ← search ctx trees pos live sims true g
-    trees := trees'
-    g := g'
+    g ← search ctx pos live sims true g
+    let pis ← visitDists ctx pos
     for i in [0:G] do
       if live[i]! then
         let p := pos[i]!
-        let pi := visitDist trees[i]! p
+        let pi := pis[i]!
         hist := hist.modify i (·.push (p.index, pi, p.mover))
         let (a, g') := if ply < tempPlies then sampleFrom pi g
                        else (argmaxLegal (fun c => pi[c]!) p, g)
@@ -338,8 +273,8 @@ def selfPlay (ctx : Ctx) (root : Pos) (sims tempPlies : Nat) (g0 : StdGen) :
 def matchVsPerfect (ctx : Ctx) (t : Table) (root : Pos) (netIsX : Bool) (sims : Nat)
     (g0 : StdGen) : IO (WDL × StdGen) := do
   let G := ctx.bf
+  mctsReset ctx.arena
   let mut pos : Array Pos := Array.replicate G root
-  let mut trees : Array Tree := Array.replicate G (∅ : Tree)
   let mut live : Array Bool := Array.replicate G true
   let mut res : WDL := {}
   let mut g := g0
@@ -358,13 +293,11 @@ def matchVsPerfect (ctx : Ctx) (t : Table) (root : Pos) (netIsX : Bool) (sims : 
         for i in [0:G] do
           moves := moves.set! i (argmaxLegal (fun c => F32.read logits (i * ctx.nOut + c).toUSize) pos[i]!)
       else
-        let (trees', g') ← search ctx trees pos live sims false g
-        trees := trees'
-        g := g'
+        g ← search ctx pos live sims false g
+        let pis ← visitDists ctx pos
         for i in [0:G] do
           if live[i]! then
-            let pi := visitDist trees[i]! pos[i]!
-            moves := moves.set! i (argmaxLegal (fun c => pi[c]!) pos[i]!)
+            moves := moves.set! i (argmaxLegal (fun c => pis[i]![c]!) pos[i]!)
     else
       for i in [0:G] do
         if live[i]! then
@@ -521,7 +454,9 @@ lr {lr}, cpuct {cpuct}, Dir({alpha}) at {eps}, seed {seed}"
     let x ← planesOf idxF bf.toUSize n.toUSize
     LowererSession.forwardF32 evalSess spec.evalFnName (← evalParamsRef.get) evalShapes x xShF
       bf.toUSize nOut.toUSize nRes (← genRef.get).toUSize
-  let ctx : Ctx := { n, nOut, bf, cpuct, alpha, eps, forward }
+  -- a game's tree holds at most one node per simulation per ply, plus the root
+  let arena ← mctsAlloc bf.toUSize n.toUSize k.toUSize (nc * sims + 16).toUSize
+  let ctx : Ctx := { n, nOut, bf, cpuct, alpha, eps, arena, forward }
   -- a shape check before anything trains: bf boards in, bf × nOut logits out
   let probeOut ← forward (pushU32LE ByteArray.empty 0) 1
   unless probeOut.size == bf * nOut * 4 do

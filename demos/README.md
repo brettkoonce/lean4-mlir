@@ -498,8 +498,8 @@ lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdeca
 lake exe pong-env 100                     # games per baseline arm
 lake exe pong-dqn mode=pixels k=4         # DQN from frames; mode=state is the ceiling row
 lake exe ttt-env n=4                      # the solved game: counts, scripted pairings, the solver's gates
-lake exe alphazero-ttt n=3                # 20 iterations, ~5 min on one card
-lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, ~35 min
+lake exe alphazero-ttt n=3                # 20 iterations, 2.5 min on one card
+lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, 10 min
 ```
 
 The environment, the DP instrument and tabular Q live in
@@ -551,7 +551,8 @@ network will see is written to `.lake/build/pong_stack.pgm`.
 `MainAlphaZeroTtt.lean` is Silver et al.'s self-play loop on tic-tac-toe written in
 Lean (`LeanMlir/TicTacToe.lean`), n×n with k in a row, `n=` the one knob. Each
 iteration plays 256 games in lockstep: at every move a PUCT search of 25 (3×3) or 100
-(4×4) simulations over the net's priors and value, one batched forward over the games'
+(4×4) simulations over the net's priors and value — the trees are flat per-game arrays
+in C (`lean_mcts_*`), the lockstep stays in Lean — one batched forward over the games'
 pending leaves per simulation, Dirichlet noise at the root, the move drawn from the
 visit counts; the visit distribution π and the outcome z are the targets, and the next
 iteration plays with the new net. The net is AlphaGo's plain conv + ReLU stack
@@ -577,7 +578,7 @@ optimal set. Run logs, curves, sweeps and the figure's inputs are in
 
 Left: X in the centre, O to move — the trained 3×3 net's move probabilities over the
 empty cells with the solved game's optimal moves ringed (the corners draw, the edges
-lose; the net puts 85% on the corners). Middle: the net alone's agreement with the
+lose; the net puts 81% on the corners). Middle: the net alone's agreement with the
 solved game over every decision position against iteration, both boards, with the draw
 rate of net + search against the perfect player dashed. Right: the value head against
 the exact value of all 4,520 3×3 decision positions.
@@ -586,30 +587,37 @@ the exact value of all 4,520 3×3 decision positions.
 |---|---|---|---|---|
 | random | 58.0% | 0/207/793 · 0/33/967 | 60.4% | 0/487/513 · 0/341/659 |
 | win-or-block | 94.0% | 0/831/169 · 0/215/785 | 95.6% | 0/930/70 · 0/840/160 |
-| **net alone** | **97.9%** | 0/256/0 · 0/256/0 | **99.2%** | 0/256/0 · 0/256/0 |
+| **net alone** | **97.3%** | 0/256/0 · 0/256/0 | **99.4%** | 0/256/0 · 0/256/0 |
 | net + search | — | 0/256/0 · 0/256/0 | — | 0/256/0 · 0/256/0 |
 | perfect | 100% | 0/1000/0 · 0/1000/0 | 100% | 0/1000/0 · 0/1000/0 |
 
 Scripted rows play 1,000 games each way and "agree" is their expected agreement over
-the same positions; net rows play 256. 3×3: 20 iterations, **4.8 min** on one 4060 Ti;
-4×4: 40 iterations, **34.9 min** — the Python implementation this loop follows
+the same positions; net rows play 256. 3×3: 20 iterations, **2.5 min** on one 4060 Ti;
+4×4: 40 iterations, **10.0 min** — the Python implementation this loop follows
 (alpha-zero-general) was expected to take a day on that board. The untrained net's
 sweep, 57.9% and 60.3%, is the random player's 58.0% and 60.4%.
 
-⭐ **99.2% of 9.06 million positions from 1.2% of them.** Self-play stood at 107,153 of
-the 4×4 decision positions and at 2,010 of the 4,520 at 3×3 (44.5%); the sweep scores
-all of them. Every 4×4 miss in the 50,000-position subsample lies outside the visited
-set, and 411 of the 444 are forced wins not taken — positions at 7–14 stones a competent
-opponent never produces; the 3×3 misses (95) are the same kind, 66 missed wins and 29
+⭐ **99.4% of 9.06 million positions from 1.2% of them.** Self-play stood at 108,483 of
+the 4×4 decision positions and at 2,035 of the 4,520 at 3×3 (45.0%); the sweep scores
+all of them. One 4×4 miss in the 50,000-position subsample lies inside the visited set,
+and 289 of the 308 are forced wins not taken — positions at 7–14 stones a competent
+opponent never produces; the 3×3 misses (122) are the same kind, 98 missed wins and 24
 losing moves, at 3–6 stones. The search closes them: with 25 or 100 simulations the net
-is unbeaten from iteration 4 on both boards, before the net alone is (14 and 38).
+is unbeaten from iteration 5 (3×3) and 4 (4×4), before the net alone is (11 and 10).
 
 ⭐ **The value head estimates self-play, not the theorem.** Its sign agrees with the
-exact value on 92% (3×3) and 94% (4×4) of positions, worst on lost ones (83% and 65%),
-which 4×4 self-play almost never produces (234 of the last iteration's 256 games drew).
-The root ends at +0.26 at 3×3 and +0.03 at 4×4 against the theorem's 0: 3×3 self-play
-under root noise stays X-favoured (83 X wins / 145 draws / 28 O wins in the last
+exact value on 90% (3×3) and 96% (4×4) of positions, worst at 4×4 on lost ones (59%),
+which 4×4 self-play almost never produces (242 of the last iteration's 256 games drew).
+The root ends at +0.32 at 3×3 and +0.03 at 4×4 against the theorem's 0: 3×3 self-play
+under root noise stays X-favoured (99 X wins / 141 draws / 16 O wins in the last
 iteration).
+
+⭐ **The search was the wall clock, and it was Lean.** With the tree in Lean (a
+`HashMap` of nodes per game, ~90 µs a descent) the same 4×4 run took 34.9 min: 18.5 s of
+self-play and 17.8 s of matches per iteration. Flat per-game arrays in C take 0.7 and
+0.8 s, the run 10.0 min, and what is left is the train step — 18–20 s of every 4×4
+iteration at the full replay window. The Lean-tree runs are kept beside the C-tree
+ones (`n3_run2.log`, `n4_run1.log`: 97.9% / 99.2%, unbeaten alone from 14 / 38).
 
 ⚠ **Not the bestiary's tower.** The first run used the conv-BN-residual body of
 `Bestiary/AlphaZero.lean`, was unbeaten from iteration 4 and diverged at iteration 11

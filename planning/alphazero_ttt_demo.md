@@ -169,3 +169,11 @@ Go, Othello, Connect-Four; MuZero's learned model; a boards-larger-than-4 solver
 - Phase 3: figure `demos/figures/alphazero_ttt.png` (+ the blueprint copy), run README,
   demos README section, book paragraph + table in the RL subsection (retitled), bestiary
   cross-links, tree entries, `certs.yml` entry-point count 111 → 113.
+- Phase 4, the search in C (`lean_mcts_*`: flat per-game arrays in one Lean-owned arena —
+  nodes, a position-index hash, the pending path; select / expand-backup / root noise /
+  root visits; the lockstep stays in Lean): same configs, `n3_run3_ctree.log` 151.7 s
+  (was 285.9), 97.30%, unbeaten alone from 11 / MCTS from 5; `n4_run2_ctree.log` 598.3 s
+  (was 2,091.5), full sweep 99.42% / MSE 0.037 / sign 95.6%, unbeaten alone from 10 /
+  MCTS from 4, self-play stood at 108,483 positions. Per 4×4 iteration: self-play 18.5 →
+  0.7 s, matches 17.8 → 0.8 s, training 18–20 s at the full window (the remainder).
+  The Lean-tree runs stay in the run directory as the before-row.

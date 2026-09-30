@@ -3629,3 +3629,302 @@ LEAN_EXPORT lean_obj_res lean_ttt_scripted_agreement(b_lean_obj_arg tbl_ba, size
     r[0] = (float)count; r[1] = (float)(rnd / count); r[2] = (float)(wob / count);
     return lean_io_result_mk_ok(ba);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// PUCT search in C: the AlphaZero demo's trees as flat per-game arrays.
+//
+// One Lean-owned ByteArray is the arena for G games. Per game: `cap` nodes (priors P,
+// visit counts N and total values W over the n² cells, the visit sum, the node's
+// position index), an open-addressing hash from position index to node (positions
+// cannot recur within a game, so a transposition is a genuine share), and the path of
+// the pending descent. Lean never reads the arena; it hands it to the four calls below
+// with the roots and the live mask, and the lockstep loop stays in Lean: select on every
+// live game → one batched forward over the pending leaves → expand + back up. Descent
+// and backup were 90 µs a simulation in Lean and are the whole wall clock at 4×4.
+// ═══════════════════════════════════════════════════════════════════════
+
+typedef struct { uint32_t G, nc, cap, hcap, n, k, stride, pad; } mcts_hdr;
+typedef struct {
+    uint64_t* keys; uint64_t* hkey; uint64_t* leaf_idx;
+    float* P; int32_t* N; float* W; int32_t* nsum; int32_t* hnode; int32_t* pnode; int32_t* pact;
+    int32_t* count; int32_t* plen; int32_t* leaf_kind; float* leaf_val;
+} mcts_game;
+
+static size_t mcts_align8(size_t x) { return (x + 7) & ~(size_t)7; }
+
+static size_t mcts_game_stride(uint32_t nc, uint32_t cap, uint32_t hcap) {
+    size_t b = (size_t)cap * 8 + (size_t)hcap * 8 + 8;
+    b += 3 * mcts_align8((size_t)cap * nc * 4);
+    b += mcts_align8((size_t)cap * 4) + mcts_align8((size_t)hcap * 4);
+    b += 2 * mcts_align8((size_t)nc * 4);
+    b += 16;
+    return b;
+}
+
+static void mcts_game_ptrs(const mcts_hdr* h, uint8_t* base, uint32_t g, mcts_game* p) {
+    uint8_t* q = base + sizeof(mcts_hdr) + (size_t)g * h->stride;
+    p->keys = (uint64_t*)q;     q += (size_t)h->cap * 8;
+    p->hkey = (uint64_t*)q;     q += (size_t)h->hcap * 8;
+    p->leaf_idx = (uint64_t*)q; q += 8;
+    p->P = (float*)q;           q += mcts_align8((size_t)h->cap * h->nc * 4);
+    p->N = (int32_t*)q;         q += mcts_align8((size_t)h->cap * h->nc * 4);
+    p->W = (float*)q;           q += mcts_align8((size_t)h->cap * h->nc * 4);
+    p->nsum = (int32_t*)q;      q += mcts_align8((size_t)h->cap * 4);
+    p->hnode = (int32_t*)q;     q += mcts_align8((size_t)h->hcap * 4);
+    p->pnode = (int32_t*)q;     q += mcts_align8((size_t)h->nc * 4);
+    p->pact = (int32_t*)q;      q += mcts_align8((size_t)h->nc * 4);
+    p->count = (int32_t*)q; p->plen = p->count + 1; p->leaf_kind = p->count + 2; p->leaf_val = (float*)(p->count + 3);
+}
+
+static uint64_t mcts_mix64(uint64_t x) {
+    x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; x *= 0xc4ceb9fe1a85ec53ULL; x ^= x >> 33;
+    return x;
+}
+
+static int32_t mcts_find(const mcts_hdr* h, const mcts_game* p, uint64_t key) {
+    uint32_t mask = h->hcap - 1, s = (uint32_t)mcts_mix64(key) & mask;
+    for (;;) {
+        int32_t nd = p->hnode[s];
+        if (nd < 0) return -1;
+        if (p->hkey[s] == key) return nd;
+        s = (s + 1) & mask;
+    }
+}
+
+// A new node for `key` with priors `P`; -1 when the game's block is full.
+static int32_t mcts_insert(const mcts_hdr* h, mcts_game* p, uint64_t key, const float* P) {
+    if (*p->count >= (int32_t)h->cap) return -1;
+    int32_t nd = (*p->count)++;
+    p->keys[nd] = key;
+    memcpy(p->P + (size_t)nd * h->nc, P, h->nc * sizeof(float));
+    memset(p->N + (size_t)nd * h->nc, 0, h->nc * sizeof(int32_t));
+    memset(p->W + (size_t)nd * h->nc, 0, h->nc * sizeof(float));
+    p->nsum[nd] = 0;
+    uint32_t mask = h->hcap - 1, s = (uint32_t)mcts_mix64(key) & mask;
+    while (p->hnode[s] >= 0) s = (s + 1) & mask;
+    p->hkey[s] = key;
+    p->hnode[s] = nd;
+    return nd;
+}
+
+static int ttt_decode64(uint64_t idx, int nc, uint8_t* cells) {
+    int stones = 0;
+    for (int c = 0; c < nc; c++) { cells[c] = (uint8_t)(idx % 3); idx /= 3; stones += cells[c] != 0; }
+    return stones;
+}
+
+// Any k in a row for `who` anywhere: the root check, where the last move is unknown.
+static int ttt_any_win(const uint8_t* cells, int n, int k, uint8_t who) {
+    for (int c = 0; c < n * n; c++)
+        if (cells[c] == who && ttt_wins_through(cells, n, k, c, who)) return 1;
+    return 0;
+}
+
+// xorshift64* uniform in (0, 1), a normal by Box–Muller, Gamma(α, 1) by Marsaglia–Tsang.
+static double mcts_uniform(uint64_t* s) {
+    *s ^= *s >> 12; *s ^= *s << 25; *s ^= *s >> 27;
+    return (double)((*s * 0x2545F4914F6CDD1DULL) >> 11) / 9007199254740992.0 + 5e-17;
+}
+static double mcts_normal(uint64_t* s) {
+    double u1 = mcts_uniform(s), u2 = mcts_uniform(s);
+    return sqrt(-2.0 * log(u1)) * cos(6.283185307179586 * u2);
+}
+static double mcts_gamma(double alpha, uint64_t* s) {
+    if (alpha < 1.0) return mcts_gamma(alpha + 1.0, s) * pow(mcts_uniform(s), 1.0 / alpha);
+    double d = alpha - 1.0 / 3.0, c = 1.0 / sqrt(9.0 * d);
+    for (;;) {
+        double x = mcts_normal(s), v = 1.0 + c * x;
+        if (v <= 0) continue;
+        v = v * v * v;
+        double u = mcts_uniform(s);
+        if (log(u) < 0.5 * x * x + d - d * v + d * log(v)) return d * v;
+    }
+}
+
+// (1 − ε)·P + ε·Dir(α) over the empty cells.
+static void mcts_dirichlet(float* P, const uint8_t* cells, int nc, double alpha, double eps, uint64_t* s) {
+    double noise[TTT_MAXN * TTT_MAXN], tot = 0;
+    for (int c = 0; c < nc; c++) { noise[c] = cells[c] ? 0 : mcts_gamma(alpha, s); tot += noise[c]; }
+    if (tot <= 0) return;
+    for (int c = 0; c < nc; c++)
+        if (!cells[c]) P[c] = (float)((1.0 - eps) * P[c] + eps * noise[c] / tot);
+}
+
+static const mcts_hdr* mcts_header(b_lean_obj_arg arena) { return (const mcts_hdr*)lean_sarray_cptr(arena); }
+
+// ---- The arena: G games at board n, k in a row, `cap` nodes each ----
+LEAN_EXPORT lean_obj_res lean_mcts_alloc(size_t G, size_t n, size_t k, size_t cap) {
+    if (n < 1 || n > TTT_MAXN || k < 1 || k > n || cap < 1 || G < 1)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_alloc: bad arguments")));
+    uint32_t hcap = 1;
+    while (hcap < 2 * cap) hcap <<= 1;
+    mcts_hdr h = { (uint32_t)G, (uint32_t)(n * n), (uint32_t)cap, hcap, (uint32_t)n, (uint32_t)k, 0, 0 };
+    h.stride = (uint32_t)mcts_game_stride(h.nc, h.cap, h.hcap);
+    size_t nbytes = sizeof(mcts_hdr) + (size_t)G * h.stride;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    uint8_t* base = lean_sarray_cptr(ba);
+    memcpy(base, &h, sizeof h);
+    for (uint32_t g = 0; g < h.G; g++) {
+        mcts_game p; mcts_game_ptrs(&h, base, g, &p);
+        *p.count = 0; *p.plen = 0; *p.leaf_kind = 0;
+        for (uint32_t s = 0; s < h.hcap; s++) p.hnode[s] = -1;
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Forget every tree: before a self-play iteration or a match ----
+LEAN_EXPORT lean_obj_res lean_mcts_reset(b_lean_obj_arg arena) {
+    const mcts_hdr* h = mcts_header(arena);
+    uint8_t* base = lean_sarray_cptr(arena);
+    for (uint32_t g = 0; g < h->G; g++) {
+        mcts_game p; mcts_game_ptrs(h, base, g, &p);
+        *p.count = 0; *p.plen = 0; *p.leaf_kind = 0;
+        for (uint32_t s = 0; s < h->hcap; s++) p.hnode[s] = -1;
+    }
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+// ---- One PUCT descent per live game from its root (u64 LE indices) to a leaf. Returns
+// G records of 16 bytes: u32 kind (0 skipped, 1 needs the net, 2 terminal), f32 value
+// (a terminal's, from its mover's view), u64 leaf index. The path waits in the arena. ----
+LEAN_EXPORT lean_obj_res lean_mcts_select(b_lean_obj_arg arena, b_lean_obj_arg roots_ba, b_lean_obj_arg live_ba,
+                                          double cpuct) {
+    const mcts_hdr* h = mcts_header(arena);
+    uint8_t* base = lean_sarray_cptr(arena);
+    const uint64_t* roots = (const uint64_t*)lean_sarray_cptr(roots_ba);
+    const uint8_t* live = lean_sarray_cptr(live_ba);
+    if (lean_sarray_size(roots_ba) < (size_t)h->G * 8 || lean_sarray_size(live_ba) < h->G)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_select: roots/live too short")));
+    const int n = (int)h->n, k = (int)h->k, nc = (int)h->nc;
+    uint64_t pow3[TTT_MAXN * TTT_MAXN + 1];
+    pow3[0] = 1;
+    for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
+    lean_object* out = lean_alloc_sarray(1, (size_t)h->G * 16, (size_t)h->G * 16);
+    uint8_t* rec = lean_sarray_cptr(out);
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    for (uint32_t g = 0; g < h->G; g++) {
+        mcts_game p; mcts_game_ptrs(h, base, g, &p);
+        uint32_t kind = 0; float val = 0; uint64_t idx = roots[g];
+        *p.plen = 0;
+        if (live[g]) {
+            int stones = ttt_decode64(idx, nc, cells);
+            uint8_t mover = (uint8_t)(stones % 2 + 1);
+            if (ttt_any_win(cells, n, k, (uint8_t)(3 - mover))) { kind = 2; val = -1.0f; }
+            else if (stones == nc) { kind = 2; val = 0.0f; }
+            else for (;;) {
+                int32_t nd = mcts_find(h, &p, idx);
+                if (nd < 0) { kind = 1; break; }
+                const float* P = p.P + (size_t)nd * nc;
+                const int32_t* N = p.N + (size_t)nd * nc;
+                const float* W = p.W + (size_t)nd * nc;
+                float sq = sqrtf((float)p.nsum[nd] + 1e-8f);
+                int best = -1; float bestU = -1e30f;
+                for (int c = 0; c < nc; c++) {
+                    if (cells[c]) continue;
+                    float q = N[c] > 0 ? W[c] / (float)N[c] : 0.0f;
+                    float u = q + (float)cpuct * P[c] * sq / (1.0f + (float)N[c]);
+                    if (u > bestU) { bestU = u; best = c; }
+                }
+                p.pnode[*p.plen] = nd; p.pact[*p.plen] = best; (*p.plen)++;
+                cells[best] = mover;
+                idx += pow3[best] * mover;
+                stones++;
+                if (ttt_wins_through(cells, n, k, best, mover)) { kind = 2; val = -1.0f; break; }
+                if (stones == nc) { kind = 2; val = 0.0f; break; }
+                mover = (uint8_t)(3 - mover);
+            }
+        }
+        *p.leaf_kind = (int32_t)kind; *p.leaf_val = val; *p.leaf_idx = idx;
+        memcpy(rec + g * 16, &kind, 4); memcpy(rec + g * 16 + 4, &val, 4); memcpy(rec + g * 16 + 8, &idx, 8);
+    }
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- Expand every pending leaf from the logits block (row r = the r-th game whose kind
+// was 1, in game order; slots 0..n²−1 the policy, slot n² the value pre-tanh), Dirichlet
+// noise on a freshly expanded root when `noise`, then back the value up each path. ----
+LEAN_EXPORT lean_obj_res lean_mcts_expand_backup(b_lean_obj_arg arena, b_lean_obj_arg logits_ba, size_t n_out,
+                                                 uint8_t noise, double alpha, double eps, uint64_t seed) {
+    const mcts_hdr* h = mcts_header(arena);
+    uint8_t* base = lean_sarray_cptr(arena);
+    const float* logits = (const float*)lean_sarray_cptr(logits_ba);
+    const size_t rows = lean_sarray_size(logits_ba) / (n_out * 4);
+    const int nc = (int)h->nc;
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    float P[TTT_MAXN * TTT_MAXN];
+    size_t r = 0;
+    for (uint32_t g = 0; g < h->G; g++) {
+        mcts_game p; mcts_game_ptrs(h, base, g, &p);
+        int32_t kind = *p.leaf_kind;
+        if (kind == 0) continue;
+        float v;
+        if (kind == 1) {
+            if (r >= rows)
+                return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_expand: logits block too short")));
+            const float* row = logits + r * n_out;
+            r++;
+            ttt_decode64(*p.leaf_idx, nc, cells);
+            float mx = -1e30f;
+            for (int c = 0; c < nc; c++) if (!cells[c] && row[c] > mx) mx = row[c];
+            float se = 0;
+            for (int c = 0; c < nc; c++) { P[c] = cells[c] ? 0.0f : expf(row[c] - mx); se += P[c]; }
+            for (int c = 0; c < nc; c++) P[c] /= se;
+            if (noise && *p.plen == 0) mcts_dirichlet(P, cells, nc, alpha, eps, &s);
+            if (mcts_insert(h, &p, *p.leaf_idx, P) < 0)
+                return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_expand: a game's tree is full")));
+            v = tanhf(row[nc]);
+        } else v = *p.leaf_val;
+        float val = v;
+        for (int i = *p.plen - 1; i >= 0; i--) {
+            val = -val;
+            int32_t nd = p.pnode[i], a = p.pact[i];
+            p.N[(size_t)nd * nc + a] += 1;
+            p.W[(size_t)nd * nc + a] += val;
+            p.nsum[nd] += 1;
+        }
+        *p.leaf_kind = 0; *p.plen = 0;
+    }
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+// ---- Mix Dirichlet noise into the priors of every live game's root that is already
+// in its tree (a root reused from the previous move). ----
+LEAN_EXPORT lean_obj_res lean_mcts_root_noise(b_lean_obj_arg arena, b_lean_obj_arg roots_ba, b_lean_obj_arg live_ba,
+                                              double alpha, double eps, uint64_t seed) {
+    const mcts_hdr* h = mcts_header(arena);
+    uint8_t* base = lean_sarray_cptr(arena);
+    const uint64_t* roots = (const uint64_t*)lean_sarray_cptr(roots_ba);
+    const uint8_t* live = lean_sarray_cptr(live_ba);
+    const int nc = (int)h->nc;
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    for (uint32_t g = 0; g < h->G; g++) {
+        if (!live[g]) continue;
+        mcts_game p; mcts_game_ptrs(h, base, g, &p);
+        int32_t nd = mcts_find(h, &p, roots[g]);
+        if (nd < 0) continue;
+        ttt_decode64(roots[g], nc, cells);
+        mcts_dirichlet(p.P + (size_t)nd * nc, cells, nc, alpha, eps, &s);
+    }
+    return lean_io_result_mk_ok(lean_box(0));
+}
+
+// ---- The root's visit distribution per game: f32 [G, n²], zeros where the root is not
+// in the tree. ----
+LEAN_EXPORT lean_obj_res lean_mcts_root_visits(b_lean_obj_arg arena, b_lean_obj_arg roots_ba) {
+    const mcts_hdr* h = mcts_header(arena);
+    uint8_t* base = lean_sarray_cptr(arena);
+    const uint64_t* roots = (const uint64_t*)lean_sarray_cptr(roots_ba);
+    const int nc = (int)h->nc;
+    lean_object* out = lean_alloc_sarray(1, (size_t)h->G * nc * 4, (size_t)h->G * nc * 4);
+    float* o = (float*)lean_sarray_cptr(out);
+    memset(o, 0, (size_t)h->G * nc * 4);
+    for (uint32_t g = 0; g < h->G; g++) {
+        mcts_game p; mcts_game_ptrs(h, base, g, &p);
+        int32_t nd = mcts_find(h, &p, roots[g]);
+        if (nd < 0 || p.nsum[nd] == 0) continue;
+        for (int c = 0; c < nc; c++) o[(size_t)g * nc + c] = (float)p.N[(size_t)nd * nc + c] / (float)p.nsum[nd];
+    }
+    return lean_io_result_mk_ok(out);
+}
