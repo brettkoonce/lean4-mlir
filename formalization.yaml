@@ -165,6 +165,14 @@ status:
     - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTiePoCGB.vit_net_tiedGB)
     - {declaration: "Proofs.CnxTiePoCGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica, f32
+    - {declaration: "Proofs.ResNet34TieB.r34_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet50TieB.r50_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.MobileNetV2TieB.mnv2_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.Mnv4TieB.mnv4_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.EnetTiePoCG.enet_net_lossGrad", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.CnxTiePoCGB.cnx_net_lossGrad", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTiePoCGB.vit_net_lossGrad", file: "LeanMlir/Proofs/Nets/ViT/ViTParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness

@@ -1075,9 +1075,12 @@ open Proofs
 -- The loss gradient in a parameter, from the gradient at its op's output (ParamGrad.lean)
 #print axioms Proofs.addConstHasVJPAt
 #print axioms Proofs.constAddHasVJPAt
+#print axioms Proofs.hasGradAt_iff
 #print axioms Proofs.HasGradAt.comp
-#print axioms Proofs.HasGradAt.pdiv_param
-#print axioms Proofs.HasGradAt.pdiv_param_batchMap
+#print axioms Proofs.HasGradAt.congr_left
+#print axioms Proofs.HasGradAt.congr_of_eventuallyEq
+#print axioms Proofs.HasGradAt.param
+#print axioms Proofs.HasGradAt.param_batchMap
 -- The batched smoothed loss, and its gradient is the emitted cotangent (SmoothedBatchLoss.lean)
 #print axioms Proofs.rowSumLoss_pdiv
 #print axioms Proofs.smoothedBatchLoss_pdiv
@@ -1086,23 +1089,23 @@ open Proofs
 #print axioms Proofs.bceBatchLoss_pdiv
 #print axioms Proofs.bceBatchLoss_grad
 -- Each batched parameter gradient node is a loss derivative (ParamGradNodes.lean)
-#print axioms Proofs.GradNodeB.convW_eq_pdiv
-#print axioms Proofs.GradNodeB.convB_eq_pdiv
-#print axioms Proofs.GradNodeB.convStridedW_eq_pdiv
-#print axioms Proofs.GradNodeB.convStridedB_eq_pdiv
-#print axioms Proofs.GradNodeB.denseW_eq_pdiv
-#print axioms Proofs.GradNodeB.denseB_eq_pdiv
-#print axioms Proofs.GradNodeB.bnGamma_eq_pdiv
-#print axioms Proofs.GradNodeB.bnBeta_eq_pdiv
+#print axioms Proofs.GradNodeB.convW_hasGradAt
+#print axioms Proofs.GradNodeB.convB_hasGradAt
+#print axioms Proofs.GradNodeB.convStridedW_hasGradAt
+#print axioms Proofs.GradNodeB.convStridedB_hasGradAt
+#print axioms Proofs.GradNodeB.denseW_hasGradAt
+#print axioms Proofs.GradNodeB.denseB_hasGradAt
+#print axioms Proofs.GradNodeB.bnGamma_hasGradAt
+#print axioms Proofs.GradNodeB.bnBeta_hasGradAt
 #print axioms Proofs.GradNodeB.cStridedInB_eq_batchMapBackward
 #print axioms Proofs.GradNodeB.dInB_eq_batchMapBackward
-#print axioms Proofs.GradNodeB.convStridedXlaW_eq_pdiv
-#print axioms Proofs.GradNodeB.convStridedXlaB_eq_pdiv
-#print axioms Proofs.GradNodeB.depthwiseW_eq_pdiv
-#print axioms Proofs.GradNodeB.depthwiseB_eq_pdiv
-#print axioms Proofs.GradNodeB.depthwiseStridedXlaW_eq_pdiv
-#print axioms Proofs.GradNodeB.depthwiseStridedXlaB_eq_pdiv
-#print axioms Proofs.GradNodeB.depthwiseStridedW_eq_pdiv
+#print axioms Proofs.GradNodeB.convStridedXlaW_hasGradAt
+#print axioms Proofs.GradNodeB.convStridedXlaB_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseW_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseB_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaW_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaB_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseStridedW_hasGradAt
 #print axioms Proofs.GradNodeB.dStridedInB_eq_batchMapBackward
 #print axioms Proofs.GradNodeB.hasGradAt_bnBatchLA
 #print axioms Proofs.GradNodeB.hasGradAt_relu
@@ -1117,6 +1120,8 @@ open Proofs
 #print axioms Proofs.ResNet34TieB.r34_head_lossTiedB
 #print axioms Proofs.ResNet34TieB.r34_factor_a0
 #print axioms Proofs.ResNet34TieB.r34_net_lossGrad
+#print axioms Proofs.ResNet34TieB.r34_net_lossGrad_smoothedCE
+#print axioms Proofs.ResNet34TieB.r34_net_tied_lossGrad
 -- ResNet-50: every parameter gradient node IS the loss's derivative, for both shipped losses (ResNet50ParamGrad.lean)
 #print axioms Proofs.ResNet50TieB.r50_idblock_lossTiedB
 #print axioms Proofs.ResNet50TieB.r50_projblock_lossTiedB
@@ -1125,6 +1130,7 @@ open Proofs
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad_smoothedCE
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad_bce
+#print axioms Proofs.ResNet50TieB.r50_net_tied_lossGrad
 -- MobileNetV2: every parameter gradient node IS the loss's derivative (MobileNetV2ParamGrad.lean)
 #print axioms Proofs.MobileNetV2TieB.mnv2_stem_lossTiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_noexp_lossTiedB
@@ -1135,6 +1141,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_factor_b1
 #print axioms Proofs.MobileNetV2TieB.mnv2_net_lossGrad
 #print axioms Proofs.MobileNetV2TieB.mnv2_net_lossGrad_smoothedCE
+#print axioms Proofs.MobileNetV2TieB.mnv2_net_tied_lossGrad
 -- MobileNetV4-Conv-M: every parameter gradient node IS the loss's derivative (MobileNetV4ParamGrad.lean)
 #print axioms Proofs.Mnv4TieB.mnv4_stem_lossTiedB
 #print axioms Proofs.Mnv4TieB.mnv4_fused_lossTiedB
@@ -1147,8 +1154,9 @@ open Proofs
 #print axioms Proofs.Mnv4TieB.mnv4_factor_b21
 #print axioms Proofs.Mnv4TieB.mnv4_net_lossGrad
 #print axioms Proofs.Mnv4TieB.mnv4_net_lossGrad_smoothedCE
+#print axioms Proofs.Mnv4TieB.mnv4_net_tied_lossGrad
 -- EfficientNet-B0: every parameter gradient node IS the loss's derivative (EfficientNetParamGrad.lean)
-#print axioms Proofs.GradNodeB.biasBeta_eq_pdiv
+#print axioms Proofs.GradNodeB.biasBeta_hasGradAt
 #print axioms Proofs.GradNodeB.hasGradAt_swish
 #print axioms Proofs.GradNodeB.hasGradAt_bnBackB
 #print axioms Proofs.EnetTiePoCG.seGateMulBHasVJP
@@ -1165,7 +1173,7 @@ open Proofs
 #print axioms Proofs.EnetTiePoCG.enet_net_lossGrad_smoothedCE
 -- ConvNeXt-T: every parameter gradient node IS the loss's derivative (ConvNeXtParamGrad.lean)
 #print axioms Proofs.hasGradAt_linLoss
-#print axioms Proofs.HasGradAt.pdiv_param_batchMap_through
+#print axioms Proofs.HasGradAt.param_batchMap_through
 #print axioms Proofs.smoothedBatchLossDiv_grad
 #print axioms Proofs.GradNodeB.pdiv_bias_of_split
 #print axioms Proofs.CnxTiePoCGB.cnxBlk_hasGradAt
@@ -1176,6 +1184,7 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_factor_b1
 #print axioms Proofs.CnxTiePoCGB.cnx_logitsB_eq
 #print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad
+#print axioms Proofs.CnxTiePoCGB.cnxNetB_eq_convNextForwardTCh
 #print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE
 -- ViT-Tiny: every parameter gradient node IS the loss's derivative (ViTParamGrad.lean)
 #print axioms Proofs.ViTTiePoCGB.pdivMat_colIndepH
@@ -1196,6 +1205,8 @@ open Proofs
 #print axioms Proofs.ViTTiePoCGB.vit_factor_b1
 #print axioms Proofs.ViTTiePoCGB.vit_logitsB_eq
 #print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad
+#print axioms Proofs.ViTTiePoCGB.fwdO_eq_blockVFlat
+#print axioms Proofs.ViTTiePoCGB.vitNetB_eq_vitForwardKV
 #print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad

@@ -33,6 +33,13 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.Trained.LinearDescent
+import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
+import LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad
+import LeanMlir.Proofs.Nets.ViT.ViTParamGrad
 
 universe u_1
 
@@ -692,6 +699,79 @@ theorem chk_cnx_net_tiedGB :
                                                 w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18 ∧
                                                   Proofs.CnxTiePoCGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
                                                     w.bfc xhead g := by sorry
+
+/-- `Proofs.ResNet34TieB.r34_net_lossGrad` -/
+theorem chk_r34_net_lossGrad :
+    ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R34BWeights nCls),
+      Proofs.R34PosB w →
+        ∀ (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))))),
+          Proofs.ResNet34TieB.R34LossSmoothAtB N w x →
+            ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
+              Proofs.HasGradAt L (Proofs.resnet34ForwardBFull N w x) g →
+                Proofs.ResNet34TieB.R34NetLossTiedB N xN cotN vN epsStr w x L g := by sorry
+
+/-- `Proofs.ResNet50TieB.r50_net_lossGrad` -/
+theorem chk_r50_net_lossGrad :
+    ∀ (N q : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
+      (w : Proofs.R50BWeights nCls),
+      Proofs.R50PosB w →
+        ∀
+          (x :
+            Proofs.Vec
+              (N *
+                ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
+                  ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
+          Proofs.ResNet50TieB.R50LossSmoothAtB N q w x →
+            ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
+              Proofs.HasGradAt L (Proofs.resnet50ForwardBFull N q w x) g →
+                Proofs.ResNet50TieB.R50NetLossTiedB N q xN cotN vN epsStr w x L g := by sorry
+
+/-- `Proofs.MobileNetV2TieB.mnv2_net_lossGrad` -/
+theorem chk_mnv2_net_lossGrad :
+    ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
+      (w : Proofs.MNV2BWeights nCls),
+      Proofs.MNV2PosB w →
+        ∀ (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
+          Proofs.MNV2SmoothAtB N w x →
+            ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
+              Proofs.HasGradAt L (Proofs.mobilenetv2ForwardBFull N w x) g →
+                Proofs.MobileNetV2TieB.MNV2NetLossTiedB N xN cotN vN epsStr w x L g := by sorry
+
+/-- `Proofs.Mnv4TieB.mnv4_net_lossGrad` -/
+theorem chk_mnv4_net_lossGrad :
+    ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
+      (w : Proofs.StableHLO.Mnv4BWeights nCls) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
+      Proofs.StableHLO.Mnv4SmoothAt N w x →
+        ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
+          Proofs.HasGradAt L (Proofs.StableHLO.mobilenetv4ForwardBFull N w x) g →
+            Proofs.Mnv4TieB.Mnv4NetLossTiedB N xN cotN vN epsStr w x L g := by sorry
+
+/-- `Proofs.EnetTiePoCG.enet_net_lossGrad` -/
+theorem chk_enet_net_lossGrad :
+    ∀ (xN vN epsStr cotN dN : String) (N : ℕ) {nCls : ℕ} (w : Proofs.B0Weights nCls)
+      (hεw : w.EpsPos) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+      {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
+      Proofs.HasGradAt L (Proofs.efficientnetForwardBFull N w x) g →
+        Proofs.EnetTiePoCG.EnetNetLossTiedG xN vN epsStr cotN dN N w hεw x L g := by sorry
+
+/-- `Proofs.CnxTiePoCGB.cnx_net_lossGrad` -/
+theorem chk_cnx_net_lossGrad :
+    ∀ (xN epsStr cotN dN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
+      (0 : ℝ) < ε →
+        ∀ (w : Proofs.CnxTiePoC.CnxTieWeights nC) (xstem : Proofs.Vec (N * ((3 : ℕ) * (56 : ℕ) * (56 : ℕ))))
+          (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)}
+          {g : Proofs.Vec (N * nC)},
+          Proofs.HasGradAt L (Proofs.CnxTiePoCGB.cnxNetB N ε w x) g →
+            Proofs.CnxTiePoCGB.CnxNetLossTiedGB xN epsStr cotN dN N ε w xstem x L g := by sorry
+
+/-- `Proofs.ViTTiePoCGB.vit_net_lossGrad` -/
+theorem chk_vit_net_lossGrad :
+    ∀ (xN aN epsStr cotN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
+      (0 : ℝ) < ε →
+        ∀ (w : Proofs.ViTTiePoC.ViTTieWeights nC) (img : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+          {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
+          Proofs.HasGradAt L (Proofs.ViTTiePoCGB.vitNetB N ε w img) g →
+            Proofs.ViTTiePoCGB.ViTNetLossTiedGB xN aN epsStr cotN N ε w img L g := by sorry
 
 /-- `Proofs.dpMeanGrad_ne_globalBatchGrad` -/
 theorem chk_dpMeanGrad_ne_globalBatchGrad :

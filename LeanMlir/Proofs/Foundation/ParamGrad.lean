@@ -11,13 +11,13 @@ into a derivative of the loss:
   net is such a `G`, and the chain's cotangent there is its `dy`.
 * `HasGradAt.comp` — gradients pull back through a certified VJP: `G ∘ f` has gradient
   `f.backward dy`. Applied stage by stage, it walks the loss gradient down the net.
-* `HasGradAt.pdiv_param` / `pdiv_param_batchMap` — with the gradient at a parameterised op's
-  output known, the loss derivative in the parameter is the op's parameter Jacobian against it:
-  the `Σ_n Σ_j` every batched gradient node denotes.
+* `HasGradAt.param` / `param_batchMap` — with the gradient at a parameterised op's output known,
+  the loss, read as a function of the parameter, has a gradient there: the op's parameter
+  Jacobian against the output gradient, the `Σ_n Σ_j` every batched gradient node denotes.
 
 `addConstHasVJPAt` / `constAddHasVJPAt` are the VJP a residual needs when a parameter inside one
 branch varies: the other branch is a constant. For a net whose every op is batch-separable,
-`HasGradAt.pdiv_param_batchMap_through` does the work per example against `linLoss dy`.
+`HasGradAt.param_batchMap_through` does the work per example against `linLoss dy`.
 -/
 
 namespace Proofs
@@ -63,19 +63,26 @@ theorem batchMap_param_differentiableAt {P N a q : Nat} (per : Vec P → Vec a �
 
 /-- **`G : Vec m → Vec 1` has gradient `dy` at `x`**: differentiable there, and each partial is
     `dy`'s entry. The loss, read as a function of any activation of the net, is such a `G`; the
-    backward chain's cotangent at that activation is its `dy`. -/
-def HasGradAt {m : Nat} (G : Vec m → Vec 1) (x : Vec m) (dy : Vec m) : Prop :=
-  DifferentiableAt ℝ G x ∧ ∀ j, pdiv G x j 0 = dy j
+    backward chain's cotangent at that activation is its `dy`. Read as a function of a
+    parameter, it is the statement "`dy` IS the loss gradient in that parameter": `pdiv` alone is
+    `0` wherever `G` is not differentiable, so the differentiability is part of the claim. -/
+structure HasGradAt {m : Nat} (G : Vec m → Vec 1) (x : Vec m) (dy : Vec m) : Prop where
+  differentiableAt : DifferentiableAt ℝ G x
+  pdiv_eq : ∀ j, pdiv G x j 0 = dy j
+
+theorem hasGradAt_iff {m : Nat} {G : Vec m → Vec 1} {x dy : Vec m} :
+    HasGradAt G x dy ↔ DifferentiableAt ℝ G x ∧ ∀ j, pdiv G x j 0 = dy j :=
+  ⟨fun h => ⟨h.1, h.2⟩, fun h => ⟨h.1, h.2⟩⟩
 
 /-- **Gradients pull back through a certified VJP**: if `G` has gradient `dy` at `f x`, then
     `G ∘ f` has gradient `f`'s backward of `dy` at `x`. -/
 theorem HasGradAt.comp {m n : Nat} {G : Vec n → Vec 1} {f : Vec m → Vec n} {x : Vec m}
     {dy : Vec n} (hG : HasGradAt G (f x) dy) (hf : DifferentiableAt ℝ f x) (vf : HasVJPAt f x) :
     HasGradAt (fun y => G (f y)) x (vf.backward dy) := by
-  refine ⟨hG.1.comp x hf, fun i => ?_⟩
+  refine ⟨hG.differentiableAt.comp x hf, fun i => ?_⟩
   change pdiv (G ∘ f) x i 0 = _
-  rw [pdiv_comp f G x hf hG.1 i 0, vf.correct dy i]
-  simp_rw [hG.2]
+  rw [pdiv_comp f G x hf hG.differentiableAt i 0, vf.correct dy i]
+  simp_rw [hG.pdiv_eq]
 
 /-- `HasGradAt.comp` through a global VJP, the cotangent spelled `vf.backward x dy`. At a large
     certified VJP the two spellings are definitionally equal but the unifier reaches the equality
@@ -93,27 +100,44 @@ theorem HasGradAt.of_eq {m : Nat} {G : Vec m → Vec 1} {x dy dy' : Vec m}
 theorem HasGradAt.congr_point {m : Nat} {G : Vec m → Vec 1} {x x' dy : Vec m}
     (h : x = x') (hG : HasGradAt G x dy) : HasGradAt G x' dy := h ▸ hG
 
-/-- **A parameter's loss derivative, from the gradient at its op's output.** -/
-theorem HasGradAt.pdiv_param {P m : Nat} {G : Vec m → Vec 1} {layer : Vec P → Vec m}
-    {θ : Vec P} {dy : Vec m} (hG : HasGradAt G (layer θ) dy) (hl : DifferentiableAt ℝ layer θ)
-    (i : Fin P) :
-    pdiv (fun θ' => G (layer θ')) θ i 0 = ∑ j, pdiv layer θ i j * dy j := by
+/-- Restate a gradient at an equal function. -/
+theorem HasGradAt.congr_left {m : Nat} {G G' : Vec m → Vec 1} {x dy : Vec m}
+    (hG : HasGradAt G x dy) (h : G = G') : HasGradAt G' x dy := h ▸ hG
+
+/-- A gradient transports along a germ: `G' = G` near `x`. -/
+theorem HasGradAt.congr_of_eventuallyEq {m : Nat} {G G' : Vec m → Vec 1} {x dy : Vec m}
+    (hG : HasGradAt G x dy) (h : G =ᶠ[nhds x] G') : HasGradAt G' x dy := by
+  refine ⟨hG.differentiableAt.congr_of_eventuallyEq h.symm, fun j => ?_⟩
+  have hj := hG.pdiv_eq j
+  unfold pdiv at hj ⊢
+  rw [← h.fderiv_eq]
+  exact hj
+
+/-- **A parameter's loss gradient, from the gradient at its op's output**: the loss read as a
+    function of the parameter is differentiable, with the op's parameter Jacobian contracted
+    against `dy` as its gradient. -/
+theorem HasGradAt.param {P m : Nat} {G : Vec m → Vec 1} {layer : Vec P → Vec m}
+    {θ : Vec P} {dy : Vec m} (hG : HasGradAt G (layer θ) dy) (hl : DifferentiableAt ℝ layer θ) :
+    HasGradAt (fun θ' => G (layer θ')) θ (fun i => ∑ j, pdiv layer θ i j * dy j) := by
+  refine ⟨hG.differentiableAt.comp θ hl, fun i => ?_⟩
   change pdiv (G ∘ layer) θ i 0 = _
-  rw [pdiv_comp layer G θ hl hG.1 i 0]
-  simp_rw [hG.2]
+  rw [pdiv_comp layer G θ hl hG.differentiableAt i 0]
+  simp_rw [hG.pdiv_eq]
 
 /-- **…at a batched op**: `θ ↦ batchMap N (per θ) r`, the Jacobian split by example — the
     `Σ_n Σ_j` every batched parameter gradient node denotes. -/
-theorem HasGradAt.pdiv_param_batchMap {P N a q : Nat} {G : Vec (N * q) → Vec 1}
+theorem HasGradAt.param_batchMap {P N a q : Nat} {G : Vec (N * q) → Vec 1}
     (per : Vec P → Vec a → Vec q) (r : Vec (N * a)) {θ : Vec P} {dy : Vec (N * q)}
     (hG : HasGradAt G (StableHLO.batchMap N (per θ) r) dy)
-    (hper : ∀ y, DifferentiableAt ℝ (fun θ' => per θ' y) θ) (i : Fin P) :
-    pdiv (fun θ' => G (StableHLO.batchMap N (per θ') r)) θ i 0
-      = ∑ n : Fin N, ∑ j : Fin q,
+    (hper : ∀ y, DifferentiableAt ℝ (fun θ' => per θ' y) θ) :
+    HasGradAt (fun θ' => G (StableHLO.batchMap N (per θ') r)) θ
+      (fun i => ∑ n : Fin N, ∑ j : Fin q,
           pdiv (fun θ' => per θ' (StableHLO.batchSlice N a r n)) θ i j
-            * StableHLO.batchSlice N q dy n j := by
-  rw [hG.pdiv_param (layer := fun θ' => StableHLO.batchMap N (per θ') r)
-    (batchMap_param_differentiableAt per r θ hper) i]
+            * StableHLO.batchSlice N q dy n j) := by
+  have hP := hG.param (layer := fun θ' => StableHLO.batchMap N (per θ') r)
+    (batchMap_param_differentiableAt per r θ hper)
+  refine ⟨hP.differentiableAt, fun i => ?_⟩
+  rw [hP.pdiv_eq i]
   rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
   refine Finset.sum_congr rfl fun n _ => Finset.sum_congr rfl fun j _ => ?_
   congr 1
@@ -150,8 +174,9 @@ theorem batchSlice_batchMapAux {N s a b : Nat} (f : Vec s → Vec a → Vec b) (
     `y ↦ post y (per θ (pre y))`: the stage `per θ` at its input `pre y`, then the rest of the block
     `post y`. If, per example, the loss `⟨post y ·, dy⟩` has gradient `cot y dy` at the stage output,
     then the batched node `Σ_n Σ_j ∂per/∂θ · cotₙ` — at any saved activation `A` and cotangent `COT`
-    whose slices are `pre yₙ` and `cot yₙ dyₙ` — is `∂G/∂θ` of the whole batched block. -/
-theorem HasGradAt.pdiv_param_batchMap_through {P N a b m q : Nat} {G : Vec (N * q) → Vec 1}
+    whose slices are `pre yₙ` and `cot yₙ dyₙ` — is the gradient in `θ` of the whole batched
+    block's loss. -/
+theorem HasGradAt.param_batchMap_through {P N a b m q : Nat} {G : Vec (N * q) → Vec 1}
     (pre : Vec a → Vec b) (per : Vec P → Vec b → Vec m) (post : Vec a → Vec m → Vec q)
     (cot : Vec a → Vec q → Vec m) (X : Vec (N * a)) {θ : Vec P} {dY : Vec (N * q)}
     (hG : HasGradAt G (StableHLO.batchMap N (fun y => post y (per θ (pre y))) X) dY)
@@ -162,19 +187,21 @@ theorem HasGradAt.pdiv_param_batchMap_through {P N a b m q : Nat} {G : Vec (N * 
     (hA : ∀ n, StableHLO.batchSlice N b A n = pre (StableHLO.batchSlice N a X n))
     (hC : ∀ n, StableHLO.batchSlice N m COT n
       = cot (StableHLO.batchSlice N a X n) (StableHLO.batchSlice N q dY n))
-    (i : Fin P) :
-    ∑ n : Fin N, ∑ j : Fin m,
+    :
+    HasGradAt (fun θ' => G (StableHLO.batchMap N (fun y => post y (per θ' (pre y))) X)) θ
+      (fun i => ∑ n : Fin N, ∑ j : Fin m,
         pdiv (fun θ' => per θ' (StableHLO.batchSlice N b A n)) θ i j
-          * StableHLO.batchSlice N m COT n j
-      = pdiv (fun θ' => G (StableHLO.batchMap N (fun y => post y (per θ' (pre y))) X)) θ i 0 := by
-  rw [hG.pdiv_param_batchMap (fun θ' y => post y (per θ' (pre y))) X
-    (fun y => (hpost y _).comp θ (hper (pre y))) i]
+          * StableHLO.batchSlice N m COT n j) := by
+  have hP := hG.param_batchMap (fun θ' y => post y (per θ' (pre y))) X
+    (fun y => (hpost y _).comp θ (hper (pre y)))
+  refine ⟨hP.differentiableAt, fun i => ?_⟩
+  rw [hP.pdiv_eq i]
   refine Finset.sum_congr rfl fun n _ => ?_
-  rw [hA, hC, ← (hcot _ _).pdiv_param
-    (layer := fun θ' => per θ' (pre (StableHLO.batchSlice N a X n))) (hper _) i]
-  exact ((hasGradAt_linLoss _ _).pdiv_param
+  rw [hA, hC, ← ((hcot _ _).param
+    (layer := fun θ' => per θ' (pre (StableHLO.batchSlice N a X n))) (hper _)).2 i]
+  exact (((hasGradAt_linLoss _ _).param
     (layer := fun θ' => post (StableHLO.batchSlice N a X n)
       (per θ' (pre (StableHLO.batchSlice N a X n))))
-    ((hpost _ _).comp θ (hper _)) i)
+    ((hpost _ _).comp θ (hper _))).2 i).symm
 
 end Proofs

@@ -135,15 +135,15 @@ def mnv4StemLossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kH kW) (b
     (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (Φ : Kernel4 oc ic kH kW → Vec oc → Vec oc → Vec 1) (dy : Vec (N * (oc * h * w))) : Prop :=
   let sc := batchMap N (flatConvStride2 Ws bs) x
-  (∀ idx, den (SHlo.convStridedWeightGradB xN bs x Ws
-        (.operand cotN (mnv4StemCotC N h w Ws bs εs γs βs x dy))) idx
-      = pdiv (fun θ => Φ (Kernel4.unflatten θ) γs βs) (Kernel4.flatten Ws) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc h w sc)
-        (.operand cotN (reassocB N oc h w (mnv4StemCotN N h w Ws bs εs γs βs x dy)))) k
-      = pdiv (fun θ => Φ Ws θ βs) γs k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-        (.operand cotN (reassocB N oc h w (mnv4StemCotN N h w Ws bs εs γs βs x dy)))) k
-      = pdiv (fun θ => Φ Ws γs θ) βs k 0)
+  (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) γs βs) (Kernel4.flatten Ws)
+        (den (SHlo.convStridedWeightGradB xN bs x Ws
+          (.operand cotN (mnv4StemCotC N h w Ws bs εs γs βs x dy)))))
+  ∧ (HasGradAt (fun θ => Φ Ws θ βs) γs
+        (den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc h w sc)
+          (.operand cotN (reassocB N oc h w (mnv4StemCotN N h w Ws bs εs γs βs x dy))))))
+  ∧ (HasGradAt (fun θ => Φ Ws γs θ) βs
+        (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
+          (.operand cotN (reassocB N oc h w (mnv4StemCotN N h w Ws bs εs γs βs x dy))))))
 
 theorem mnv4_stem_lossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
     (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
@@ -157,9 +157,9 @@ theorem mnv4_stem_lossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kH 
     funext fun W => funext fun γ => funext fun β => hΦ W γ β]
   have hN := hasGradAt_relu _ hs hGn
   have hC := hasGradAt_bnBatchLA εs hεs γs βs _ hN
-  exact ⟨fun idx => GradNodeB.convStridedW_eq_pdiv xN cotN bs x Ws hC idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εs γs βs _ hN k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN εs γs βs _ hN k⟩
+  exact ⟨GradNodeB.convStridedW_hasGradAt xN cotN bs x Ws hC,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN εs γs βs _ hN,
+    GradNodeB.bnBeta_hasGradAt cotN εs γs βs _ hN⟩
 
 end Stem
 
@@ -183,22 +183,22 @@ def mnv4FusedLossTiedB (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (�
   let cotN' := mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotC := mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotPc := mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
-  (∀ idx, den (SHlo.convStridedWeightGradB xN bc xin Wc (.operand cotN cotC)) idx
-      = pdiv (fun θ => Φ (Kernel4.unflatten θ) γc βc Wp γp βp) (Kernel4.flatten Wc) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr εc (reassocB N mid h w fc)
-        (.operand cotN (reassocB N mid h w cotN'))) k
-      = pdiv (fun θ => Φ Wc θ βc Wp γp βp) γc k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-        (.operand cotN (reassocB N mid h w cotN'))) k
-      = pdiv (fun θ => Φ Wc γc θ Wp γp βp) βc k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN bp sw Wp (.operand cotN cotPc)) idx
-      = pdiv (fun θ => Φ Wc γc βc (Kernel4.unflatten θ) γp βp) (Kernel4.flatten Wp) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr εp (reassocB N oc h w pc)
-        (.operand cotN (reassocB N oc h w dyF))) k
-      = pdiv (fun θ => Φ Wc γc βc Wp θ βp) γp k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-        (.operand cotN (reassocB N oc h w dyF))) k
-      = pdiv (fun θ => Φ Wc γc βc Wp γp θ) βp k 0)
+  (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) γc βc Wp γp βp) (Kernel4.flatten Wc)
+        (den (SHlo.convStridedWeightGradB xN bc xin Wc (.operand cotN cotC))))
+  ∧ (HasGradAt (fun θ => Φ Wc θ βc Wp γp βp) γc
+        (den (SHlo.bnGammaGradB vN epsStr εc (reassocB N mid h w fc)
+          (.operand cotN (reassocB N mid h w cotN')))))
+  ∧ (HasGradAt (fun θ => Φ Wc γc θ Wp γp βp) βc
+        (den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
+          (.operand cotN (reassocB N mid h w cotN')))))
+  ∧ (HasGradAt (fun θ => Φ Wc γc βc (Kernel4.unflatten θ) γp βp) (Kernel4.flatten Wp)
+        (den (SHlo.convWeightGradB xN bp sw Wp (.operand cotN cotPc))))
+  ∧ (HasGradAt (fun θ => Φ Wc γc βc Wp θ βp) γp
+        (den (SHlo.bnGammaGradB vN epsStr εp (reassocB N oc h w pc)
+          (.operand cotN (reassocB N oc h w dyF)))))
+  ∧ (HasGradAt (fun θ => Φ Wc γc βc Wp γp θ) βp
+        (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
+          (.operand cotN (reassocB N oc h w dyF)))))
 
 theorem mnv4_fused_lossTiedB (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (hεc : 0 < εc)
     (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp)
@@ -218,12 +218,12 @@ theorem mnv4_fused_lossTiedB (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : �
   have hPc := hasGradAt_bnBatchLA εp hεp γp βp _ hGn
   have hN := hasGradAt_relu _ hs (hasGradAt_conv Wp bp _ hPc)
   have hC := hasGradAt_bnBatchLA εc hεc γc βc _ hN
-  exact ⟨fun idx => GradNodeB.convStridedW_eq_pdiv xN cotN bc xin Wc hC idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εc γc βc _ hN k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN εc γc βc _ hN k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN bp _ Wp hPc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εp γp βp _ hGn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN εp γp βp _ hGn k⟩
+  exact ⟨GradNodeB.convStridedW_hasGradAt xN cotN bc xin Wc hC,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN εc γc βc _ hN,
+    GradNodeB.bnBeta_hasGradAt cotN εc γc βc _ hN,
+    GradNodeB.convW_hasGradAt xN cotN bp _ Wp hPc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN εp γp βp _ hGn,
+    GradNodeB.bnBeta_hasGradAt cotN εp γp βp _ hGn⟩
 
 end Fused
 
@@ -265,27 +265,26 @@ def mnv4HeadLossTiedB (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 �
   let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  (∀ idx, den (SHlo.convWeightGradB xN b1 xin W1 (.operand cotN cotH1c)) idx
-      = pdiv (fun θ => Φ (Kernel4.unflatten θ) γ1 β1 W2 γ2 β2 Wd bd) (Kernel4.flatten W1) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr ε1 (reassocB N mid h w c1)
-        (.operand cotN (reassocB N mid h w cotH1n))) k
-      = pdiv (fun θ => Φ W1 θ β1 W2 γ2 β2 Wd bd) γ1 k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
-        (.operand cotN (reassocB N mid h w cotH1n))) k
-      = pdiv (fun θ => Φ W1 γ1 θ W2 γ2 β2 Wd bd) β1 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN b2 pool W2 (.operand cotN cotHc)) idx
-      = pdiv (fun θ => Φ W1 γ1 β1 (Kernel4.unflatten θ) γ2 β2 Wd bd) (Kernel4.flatten W2) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr ε2 (reassocB N oc 1 1 c2)
-        (.operand cotN (reassocB N oc 1 1 cotHn))) k
-      = pdiv (fun θ => Φ W1 γ1 β1 W2 θ β2 Wd bd) γ2 k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 1) (w := 1)
-        (.operand cotN (reassocB N oc 1 1 cotHn))) k
-      = pdiv (fun θ => Φ W1 γ1 β1 W2 γ2 θ Wd bd) β2 k 0)
-  ∧ (∀ i j, den (SHlo.denseWeightGradB (c := nCls) xN feat (.operand cotN g)) (finProdFinEquiv (i, j))
-      = pdiv (fun θ => Φ W1 γ1 β1 W2 γ2 β2 (Mat.unflatten θ) bd) (Mat.flatten Wd)
-          (finProdFinEquiv (i, j)) 0)
-  ∧ (∀ j, den (SHlo.denseBiasGradB (N := N) (.operand cotN g)) j
-      = pdiv (fun θ => Φ W1 γ1 β1 W2 γ2 β2 Wd θ) bd j 0)
+  (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) γ1 β1 W2 γ2 β2 Wd bd) (Kernel4.flatten W1)
+        (den (SHlo.convWeightGradB xN b1 xin W1 (.operand cotN cotH1c))))
+  ∧ (HasGradAt (fun θ => Φ W1 θ β1 W2 γ2 β2 Wd bd) γ1
+        (den (SHlo.bnGammaGradB vN epsStr ε1 (reassocB N mid h w c1)
+          (.operand cotN (reassocB N mid h w cotH1n)))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 θ W2 γ2 β2 Wd bd) β1
+        (den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w)
+          (.operand cotN (reassocB N mid h w cotH1n)))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 β1 (Kernel4.unflatten θ) γ2 β2 Wd bd) (Kernel4.flatten W2)
+        (den (SHlo.convWeightGradB xN b2 pool W2 (.operand cotN cotHc))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 β1 W2 θ β2 Wd bd) γ2
+        (den (SHlo.bnGammaGradB vN epsStr ε2 (reassocB N oc 1 1 c2)
+          (.operand cotN (reassocB N oc 1 1 cotHn)))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 β1 W2 γ2 θ Wd bd) β2
+        (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 1) (w := 1)
+          (.operand cotN (reassocB N oc 1 1 cotHn)))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 β1 W2 γ2 β2 (Mat.unflatten θ) bd) (Mat.flatten Wd)
+        (den (SHlo.denseWeightGradB (c := nCls) xN feat (.operand cotN g))))
+  ∧ (HasGradAt (fun θ => Φ W1 γ1 β1 W2 γ2 β2 Wd θ) bd
+        (den (SHlo.denseBiasGradB (N := N) (.operand cotN g))))
 
 theorem mnv4_head_lossTiedB (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1)
     (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2)
@@ -324,14 +323,14 @@ theorem mnv4_head_lossTiedB (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) 
         (globalAvgPoolFlat_differentiable mid h w)).toHasVJPAt _)
   have hH1n := hasGradAt_relu _ hs1 hR1
   have hH1c := hasGradAt_bnBatchLA ε1 hε1 γ1 β1 _ hH1n
-  exact ⟨fun idx => GradNodeB.convW_eq_pdiv xN cotN b1 xin W1 hH1c idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN ε1 γ1 β1 _ hH1n k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN ε1 γ1 β1 _ hH1n k,
-    fun idx => GradNodeB.convW_eq_pdiv (h := 1) (w := 1) xN cotN b2 _ W2 hHc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN ε2 γ2 β2 _ hHn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN ε2 γ2 β2 _ hHn k,
-    fun i j => GradNodeB.denseW_eq_pdiv xN cotN _ Wd bd hL i j,
-    fun j => GradNodeB.denseB_eq_pdiv cotN Wd (fun _ => 0) _ bd hL j⟩
+  exact ⟨GradNodeB.convW_hasGradAt xN cotN b1 xin W1 hH1c,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN ε1 γ1 β1 _ hH1n,
+    GradNodeB.bnBeta_hasGradAt cotN ε1 γ1 β1 _ hH1n,
+    GradNodeB.convW_hasGradAt (h := 1) (w := 1) xN cotN b2 _ W2 hHc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN ε2 γ2 β2 _ hHn,
+    GradNodeB.bnBeta_hasGradAt cotN ε2 γ2 β2 _ hHn,
+    GradNodeB.denseW_hasGradAt xN cotN _ Wd bd hL,
+    GradNodeB.denseB_hasGradAt cotN Wd (fun _ => 0) _ bd hL⟩
 
 end Head
 
@@ -356,42 +355,40 @@ def mnv4ExtraDWLossTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p
   let ec := batchMap N (flatConv p.We p.be) qr
   let dc := batchMap N (depthwiseFlat p.Wd p.bd) er
   let pc := batchMap N (flatConv p.Wz p.bz) dr
-  (∀ idx, den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
-        (.operand cotN (mnv4CotQc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ }))
-          (Tensor3.flatten p.Wq) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic s.h s.h qc)
-        (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with ge := θ }) p.ge k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with be2 := θ }) p.be2 k 0)
-  ∧ (∀ idx, den (SHlo.depthwiseWeightGradB xN p.bd er p.Wd
-        (.operand cotN (mnv4CotDc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with W := Tensor3.unflatten θ }))
-          (Tensor3.flatten p.Wd) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ed (reassocB N (s.ic * s.expand) s.h s.h dc)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotDn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with γ := θ })) p.gd k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotDn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with β := θ })) p.bd2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with gz := θ }) p.gz k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with bz2 := θ }) p.bz2 k 0)
+  (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ })) (Tensor3.flatten p.Wq)
+        (den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
+          (.operand cotN (mnv4CotQc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq
+        (den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic s.h s.h qc)
+          (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We)
+        (den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with ge := θ }) p.ge
+        (den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with be2 := θ }) p.be2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with W := Tensor3.unflatten θ })) (Tensor3.flatten p.Wd)
+        (den (SHlo.depthwiseWeightGradB xN p.bd er p.Wd
+          (.operand cotN (mnv4CotDc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with γ := θ })) p.gd
+        (den (SHlo.bnGammaGradB vN epsStr p.ed (reassocB N (s.ic * s.expand) s.h s.h dc)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotDn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with β := θ })) p.bd2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotDn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz)
+        (den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with gz := θ }) p.gz
+        (den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with bz2 := θ }) p.bz2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
 
 theorem mnv4_extradw_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     (hq0 : s.preDWk ≠ 0) (hd0 : s.postDWk ≠ 0) (v : Vec (N * (s.ic * s.h * s.h)))
@@ -435,18 +432,18 @@ theorem mnv4_extradw_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     UibParams.eq_, UibParams.gq, UibParams.bq2, UibParams.Wd, UibParams.bd, UibParams.ed,
     UibParams.gd, UibParams.bd2, UibParams.withPre_pre_params _ _ hq0,
     UibParams.withPost_post_params _ _ hd0]
-  exact ⟨fun idx => GradNodeB.depthwiseW_eq_pdiv xN cotN _ v _ hQc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hQn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hQn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hEc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hEn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hEn k,
-    fun idx => GradNodeB.depthwiseW_eq_pdiv xN cotN _ _ _ hDc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hDn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hDn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hPc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hGb k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hGb k⟩
+  exact ⟨GradNodeB.depthwiseW_hasGradAt xN cotN _ v _ hQc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hQn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hQn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hEc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hEn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hEn,
+    GradNodeB.depthwiseW_hasGradAt xN cotN _ _ _ hDc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hDn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hDn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hPc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hGb,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hGb⟩
 
 end ExtraDW
 
@@ -468,32 +465,31 @@ def mnv4ConvNeXtLossTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (
   let qc := batchMap N (depthwiseFlat p.Wq p.bq) xin
   let ec := batchMap N (flatConv p.We p.be) qr
   let pc := batchMap N (flatConv p.Wz p.bz) dr
-  (∀ idx, den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
-        (.operand cotN (mnv4CotQc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ }))
-          (Tensor3.flatten p.Wq) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic s.h s.h qc)
-        (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with ge := θ }) p.ge k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with be2 := θ }) p.be2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with gz := θ }) p.gz k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with bz2 := θ }) p.bz2 k 0)
+  (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ })) (Tensor3.flatten p.Wq)
+        (den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
+          (.operand cotN (mnv4CotQc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq
+        (den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic s.h s.h qc)
+          (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.ic s.h s.h (mnv4CotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We)
+        (den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with ge := θ }) p.ge
+        (den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with be2 := θ }) p.be2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz)
+        (den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with gz := θ }) p.gz
+        (den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with bz2 := θ }) p.bz2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
 
 theorem mnv4_convnext_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     (hq0 : s.preDWk ≠ 0) (hd0 : s.postDWk = 0) (v : Vec (N * (s.ic * s.h * s.h)))
@@ -526,15 +522,15 @@ theorem mnv4_convnext_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     mnv4PreDWSlot_fwd_apply_of_ne_zero N hq0, hd0,
     ↓reduceIte, hfwd, UibParams.Wq, UibParams.bq, UibParams.eq_, UibParams.gq, UibParams.bq2,
     UibParams.withPre_pre_params _ _ hq0]
-  exact ⟨fun idx => GradNodeB.depthwiseW_eq_pdiv xN cotN _ v _ hQc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hQn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hQn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hEc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hEn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hEn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hPc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hGb k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hGb k⟩
+  exact ⟨GradNodeB.depthwiseW_hasGradAt xN cotN _ v _ hQc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hQn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hQn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hEc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hEn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hEn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hPc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hGb,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hGb⟩
 
 /-- **FFN body, every parameter node a loss derivative** — the six nodes `mnv4FfnTiedB` ties. -/
 def mnv4FfnLossTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
@@ -545,22 +541,22 @@ def mnv4FfnLossTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
   let ec := batchMap N (flatConv p.We p.be) qr
   let pc := batchMap N (flatConv p.Wz p.bz) dr
-  (∀ idx, den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with ge := θ }) p.ge k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with be2 := θ }) p.be2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with gz := θ }) p.gz k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with bz2 := θ }) p.bz2 k 0)
+  (HasGradAt (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We)
+        (den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4CotEc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with ge := θ }) p.ge
+        (den (SHlo.bnGammaGradB vN epsStr p.ee (reassocB N (s.ic * s.expand) s.h s.h ec)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with be2 := θ }) p.be2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4CotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz)
+        (den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4CotPc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with gz := θ }) p.gz
+        (den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with bz2 := θ }) p.bz2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
 
 theorem mnv4_ffn_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     (hq0 : s.preDWk = 0) (hd0 : s.postDWk = 0) (v : Vec (N * (s.ic * s.h * s.h)))
@@ -587,12 +583,12 @@ theorem mnv4_ffn_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
   have hEc := hasGradAt_bnBatchLA p.ee p.he p.ge p.be2 _ hEn
   simp only [mnv4FfnLossTiedB, mnv4CotEc, mnv4CotEn, mnv4CotPc,
     mnv4PreDWSlot_fwd_apply_of_eq_zero N hq0, hd0, ↓reduceIte, hfwd]
-  exact ⟨fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hEc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hEn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hEn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hPc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hGb k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hGb k⟩
+  exact ⟨GradNodeB.convW_hasGradAt xN cotN _ _ _ hEc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hEn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hEn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hPc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hGb,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hGb⟩
 
 end ConvNeXtFfn
 
@@ -615,45 +611,43 @@ def mnv4StridedLossTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p
   let ec := batchMap N (flatConv p.We p.be) qr
   let dc := batchMap N (depthwiseStride2Flat p.Wd p.bd) er
   let pc := batchMap N (flatConv p.Wz p.bz) dr
-  (∀ idx, den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
-        (.operand cotN (mnv4SCotQc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ }))
-          (Tensor3.flatten p.Wq) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic (2 * s.h) (2 * s.h) qc)
-        (.operand cotN (reassocB N s.ic (2 * s.h) (2 * s.h) (mnv4SCotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := 2 * s.h) (w := 2 * s.h)
-        (.operand cotN (reassocB N s.ic (2 * s.h) (2 * s.h) (mnv4SCotQn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4SCotEc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ee
-        (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) ec)
-        (.operand cotN (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h)
-          (mnv4SCotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with ge := θ }) p.ge k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h)
-          (mnv4SCotEn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ { p with be2 := θ }) p.be2 k 0)
-  ∧ (∀ idx, den (SHlo.depthwiseStridedWeightGradB xN p.bd er p.Wd
-        (.operand cotN (mnv4SCotDc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with W := Tensor3.unflatten θ }))
-          (Tensor3.flatten p.Wd) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ed (reassocB N (s.ic * s.expand) s.h s.h dc)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4SCotDn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with γ := θ })) p.gd k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4SCotDn N s p xin dyOut)))) k
-      = pdiv (fun θ => Φ (p.withPost { p.post.params with β := θ })) p.bd2 k 0)
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4SCotPc N s p xin dyOut))) idx
-      = pdiv (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz) idx 0)
-  ∧ (∀ k, den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with gz := θ }) p.gz k 0)
-  ∧ (∀ k, den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
-        (.operand cotN (reassocB N s.oc s.h s.h dyOut))) k
-      = pdiv (fun θ => Φ { p with bz2 := θ }) p.bz2 k 0)
+  (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with W := Tensor3.unflatten θ })) (Tensor3.flatten p.Wq)
+        (den (SHlo.depthwiseWeightGradB xN p.bq xin p.Wq
+          (.operand cotN (mnv4SCotQc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with γ := θ })) p.gq
+        (den (SHlo.bnGammaGradB vN epsStr p.eq_ (reassocB N s.ic (2 * s.h) (2 * s.h) qc)
+          (.operand cotN (reassocB N s.ic (2 * s.h) (2 * s.h) (mnv4SCotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPre { p.pre.params with β := θ })) p.bq2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic) (h := 2 * s.h) (w := 2 * s.h)
+          (.operand cotN (reassocB N s.ic (2 * s.h) (2 * s.h) (mnv4SCotQn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with We := Kernel4.unflatten θ }) (Kernel4.flatten p.We)
+        (den (SHlo.convWeightGradB xN p.be qr p.We (.operand cotN (mnv4SCotEc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with ge := θ }) p.ge
+        (den (SHlo.bnGammaGradB vN epsStr p.ee
+          (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) ec)
+          (.operand cotN (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h)
+          (mnv4SCotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with be2 := θ }) p.be2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h)
+          (mnv4SCotEn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with W := Tensor3.unflatten θ })) (Tensor3.flatten p.Wd)
+        (den (SHlo.depthwiseStridedWeightGradB xN p.bd er p.Wd
+          (.operand cotN (mnv4SCotDc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with γ := θ })) p.gd
+        (den (SHlo.bnGammaGradB vN epsStr p.ed (reassocB N (s.ic * s.expand) s.h s.h dc)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4SCotDn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ (p.withPost { p.post.params with β := θ })) p.bd2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N (s.ic * s.expand) s.h s.h (mnv4SCotDn N s p xin dyOut))))))
+  ∧ (HasGradAt (fun θ => Φ { p with Wz := Kernel4.unflatten θ }) (Kernel4.flatten p.Wz)
+        (den (SHlo.convWeightGradB xN p.bz dr p.Wz (.operand cotN (mnv4SCotPc N s p xin dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with gz := θ }) p.gz
+        (den (SHlo.bnGammaGradB vN epsStr p.ez (reassocB N s.oc s.h s.h pc)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
+  ∧ (HasGradAt (fun θ => Φ { p with bz2 := θ }) p.bz2
+        (den (SHlo.bnBetaGradB (N := N) (oc := s.oc) (h := s.h) (w := s.h)
+          (.operand cotN (reassocB N s.oc s.h s.h dyOut)))))
 
 theorem mnv4_strided_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     (hq0 : s.preDWk ≠ 0) (hd0 : s.postDWk ≠ 0) (v : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))))
@@ -697,18 +691,18 @@ theorem mnv4_strided_lossTiedB (xN cotN vN epsStr : String) (p : UibParams s)
     UibParams.bq, UibParams.eq_, UibParams.gq, UibParams.bq2, UibParams.Wd, UibParams.bd,
     UibParams.ed, UibParams.gd, UibParams.bd2, UibParams.withPre_pre_params _ _ hq0,
     UibParams.withPost_post_params _ _ hd0]
-  exact ⟨fun idx => GradNodeB.depthwiseW_eq_pdiv xN cotN _ v _ hQc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hQn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hQn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hEc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hEn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hEn k,
-    fun idx => GradNodeB.depthwiseStridedW_eq_pdiv xN cotN _ _ _ hDc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hDn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hDn k,
-    fun idx => GradNodeB.convW_eq_pdiv xN cotN _ _ _ hPc idx,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN _ _ _ _ hGn k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN _ _ _ _ hGn k⟩
+  exact ⟨GradNodeB.depthwiseW_hasGradAt xN cotN _ v _ hQc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hQn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hQn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hEc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hEn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hEn,
+    GradNodeB.depthwiseStridedW_hasGradAt xN cotN _ _ _ hDc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hDn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hDn,
+    GradNodeB.convW_hasGradAt xN cotN _ _ _ hPc,
+    GradNodeB.bnGamma_hasGradAt vN epsStr cotN _ _ _ _ hGn,
+    GradNodeB.bnBeta_hasGradAt cotN _ _ _ _ hGn⟩
 
 end Strided
 
@@ -1387,5 +1381,133 @@ theorem mnv4_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
   mnv4_net_lossGrad N xN cotN vN epsStr w x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+
+
+/-- **The emitted MobileNetV4 step's gradient nodes ARE the loss's gradient, at one chain.** For
+    each of the 233 parameter slots, at ONE cotangent chain (the tie's own, from `g`): the node
+    denotes its layer's Jacobian against the chain cotangent (`mnv4_net_tiedB`), and any loss `L` of
+    the logits with gradient `g` at the network's output, read on `mobilenetv4ForwardBFull` with
+    that one slot varied, is differentiable there with the node as its gradient
+    (`mnv4_net_lossGrad`). The two theorems each state the chain; this one states it once, so an
+    edit to either chain breaks its proof. -/
+theorem mnv4_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
+    (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (g : Vec (N * nCls))
+    (hx : Mnv4SmoothAt N w x) {L : Vec (N * nCls) → Vec 1}
+    (hL : HasGradAt L (mobilenetv4ForwardBFull N w x) g) :
+  let dy21 := mnv4HeadCotIn N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
+               w.Wd w.bd (mnv4Blk21 N w x) g
+  let dy20 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row21 w.b21 (mnv4Blk20 N w x) dy21) dy21
+  let dy19 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row20 w.b20 (mnv4Blk19 N w x) dy20) dy20
+  let dy18 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row19 w.b19 (mnv4Blk18 N w x) dy19) dy19
+  let dy17 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row18 w.b18 (mnv4Blk17 N w x) dy18) dy18
+  let dy16 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row17 w.b17 (mnv4Blk16 N w x) dy17) dy17
+  let dy15 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row16 w.b16 (mnv4Blk15 N w x) dy16) dy16
+  let dy14 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row15 w.b15 (mnv4Blk14 N w x) dy15) dy15
+  let dy13 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row14 w.b14 (mnv4Blk13 N w x) dy14) dy14
+  let dy12 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row13 w.b13 (mnv4Blk12 N w x) dy13) dy13
+  let dy11 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row12 w.b12 (mnv4Blk11 N w x) dy12) dy12
+  let dy10 := mnv4SBodyCotIn N mnv4Row11 w.b11 (mnv4Blk10 N w x) dy11
+  let dy9 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row10 w.b10 (mnv4Blk9 N w x) dy10) dy10
+  let dy8 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row9 w.b9 (mnv4Blk8 N w x) dy9) dy9
+  let dy7 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row8 w.b8 (mnv4Blk7 N w x) dy8) dy8
+  let dy6 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row7 w.b7 (mnv4Blk6 N w x) dy7) dy7
+  let dy5 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row6 w.b6 (mnv4Blk5 N w x) dy6) dy6
+  let dy4 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row5 w.b5 (mnv4Blk4 N w x) dy5) dy5
+  let dy3 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row4 w.b4 (mnv4Blk3 N w x) dy4) dy4
+  let dy2 := mnv4SBodyCotIn N mnv4Row3 w.b3 (mnv4Blk2 N w x) dy3
+  let dy1 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row2 w.b2 (mnv4Blk1 N w x) dy2) dy2
+  let dy0 := mnv4SBodyCotIn N mnv4Row1 w.b1 (mnv4Blk0 N w x) dy1
+  let dyStem := mnv4FusedCotIn N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
+                 w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt (mnv4Pre0 N w x) dy0
+  (mnv4StemTiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x dyStem
+      ∧ mnv4StemLossTiedB (N := N) (h := 112) (w := 112) xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x
+        (fun W γ β => L (mobilenetv4ForwardBFull N { w with sW := W, sg := γ, sbt := β } x)) dyStem)
+  ∧ (mnv4FusedTiedB N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
+        w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x) dy0
+      ∧ mnv4FusedLossTiedB (N := N) (h := 56) (w := 56) w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
+        w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x)
+        (fun Wc γc βc Wp γp βp => L (mobilenetv4ForwardBFull N
+        { w with f0cW := Wc, f0cg := γc, f0cbt := βc, f0pW := Wp, f0pg := γp, f0pbt := βp } x)) dy0)
+  ∧ (mnv4StridedTiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1
+      ∧ mnv4StridedLossTiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b1 := p } x)) dy1)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x) dy2
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b2 := p } x)) dy2)
+  ∧ (mnv4StridedTiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3
+      ∧ mnv4StridedLossTiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b3 := p } x)) dy3)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x) dy4
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b4 := p } x)) dy4)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x) dy5
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b5 := p } x)) dy5)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x) dy6
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b6 := p } x)) dy6)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row7 xN cotN vN epsStr w.b7 (mnv4Blk6 N w x) dy7
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row7 xN cotN vN epsStr w.b7 (mnv4Blk6 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b7 := p } x)) dy7)
+  ∧ (mnv4ConvNeXtTiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x) dy8
+      ∧ mnv4ConvNeXtLossTiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b8 := p } x)) dy8)
+  ∧ (mnv4FfnTiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x) dy9
+      ∧ mnv4FfnLossTiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b9 := p } x)) dy9)
+  ∧ (mnv4ConvNeXtTiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x) dy10
+      ∧ mnv4ConvNeXtLossTiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b10 := p } x)) dy10)
+  ∧ (mnv4StridedTiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11
+      ∧ mnv4StridedLossTiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b11 := p } x)) dy11)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x) dy12
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b12 := p } x)) dy12)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x) dy13
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b13 := p } x)) dy13)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x) dy14
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b14 := p } x)) dy14)
+  ∧ (mnv4FfnTiedB N mnv4Row15 xN cotN vN epsStr w.b15 (mnv4Blk14 N w x) dy15
+      ∧ mnv4FfnLossTiedB N mnv4Row15 xN cotN vN epsStr w.b15 (mnv4Blk14 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b15 := p } x)) dy15)
+  ∧ (mnv4ConvNeXtTiedB N mnv4Row16 xN cotN vN epsStr w.b16 (mnv4Blk15 N w x) dy16
+      ∧ mnv4ConvNeXtLossTiedB N mnv4Row16 xN cotN vN epsStr w.b16 (mnv4Blk15 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b16 := p } x)) dy16)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row17 xN cotN vN epsStr w.b17 (mnv4Blk16 N w x) dy17
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row17 xN cotN vN epsStr w.b17 (mnv4Blk16 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b17 := p } x)) dy17)
+  ∧ (mnv4ExtraDWTiedB N mnv4Row18 xN cotN vN epsStr w.b18 (mnv4Blk17 N w x) dy18
+      ∧ mnv4ExtraDWLossTiedB N mnv4Row18 xN cotN vN epsStr w.b18 (mnv4Blk17 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b18 := p } x)) dy18)
+  ∧ (mnv4FfnTiedB N mnv4Row19 xN cotN vN epsStr w.b19 (mnv4Blk18 N w x) dy19
+      ∧ mnv4FfnLossTiedB N mnv4Row19 xN cotN vN epsStr w.b19 (mnv4Blk18 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b19 := p } x)) dy19)
+  ∧ (mnv4FfnTiedB N mnv4Row20 xN cotN vN epsStr w.b20 (mnv4Blk19 N w x) dy20
+      ∧ mnv4FfnLossTiedB N mnv4Row20 xN cotN vN epsStr w.b20 (mnv4Blk19 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b20 := p } x)) dy20)
+  ∧ (mnv4ConvNeXtTiedB N mnv4Row21 xN cotN vN epsStr w.b21 (mnv4Blk20 N w x) dy21
+      ∧ mnv4ConvNeXtLossTiedB N mnv4Row21 xN cotN vN epsStr w.b21 (mnv4Blk20 N w x)
+        (fun p => L (mobilenetv4ForwardBFull N { w with b21 := p } x)) dy21)
+  ∧ (mnv4HeadTiedB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
+        w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x) g
+      ∧ mnv4HeadLossTiedB (N := N) (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg
+        w.hbt w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x)
+        (fun W1 γ1 β1 W2 γ2 β2 Wd bd => L (mobilenetv4ForwardBFull N
+        { w with h1W := W1, h1g := γ1, h1bt := β1, hW := W2, hg := γ2, hbt := β2, Wd := Wd, bd := bd } x))
+        g) := by
+  intro dy21 dy20 dy19 dy18 dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0 dyStem
+  obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19,
+    t20, t21, t22, t23⟩ :=
+    mnv4_net_tiedB N xN cotN vN epsStr w x g
+  have hl :=
+    mnv4_net_lossGrad N xN cotN vN epsStr w x hx hL
+  obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19,
+    l20, l21, l22, l23⟩ := hl
+  exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
+    ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, l12⟩, ⟨t13, l13⟩, ⟨t14, l14⟩, ⟨t15, l15⟩, ⟨t16, l16⟩,
+    ⟨t17, l17⟩, ⟨t18, l18⟩, ⟨t19, l19⟩, ⟨t20, l20⟩, ⟨t21, l21⟩, ⟨t22, l22⟩, ⟨t23, l23⟩⟩
 
 end Proofs.Mnv4TieB

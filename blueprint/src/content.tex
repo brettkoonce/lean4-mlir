@@ -1229,7 +1229,7 @@ three answers fall out by transposing the picture above:
 
 Two more notions, used by the ImageNet chapters' loss-gradient theorems: a
 scalar function with a known gradient at a point, and how such a gradient
-pulls back through a certified VJP into a parameter's loss derivative.
+pulls back through a certified VJP into a parameter's loss gradient.
 
 \begin{definition}[Gradient of a scalar at a point]
   \label{def:hasgradat}
@@ -1240,22 +1240,23 @@ pulls back through a certified VJP into a parameter's loss derivative.
   \(\texttt{HasGradAt}\, G\, x\, dy\) says \(G\) is differentiable at \(x\)
   and \(\pdiv\, G\, x\, j\, 0 = dy_j\) for every \(j\). The loss read at any
   activation of a network is such a \(G\), and the chain's cotangent there is
-  its \(dy\).
+  its \(dy\). The differentiability is part of the claim: \(\pdiv\) alone is
+  \(0\) wherever \(G\) is not differentiable.
 \end{definition}
 
 \begin{theorem}[A gradient pulls back through a VJP]
   \label{thm:hasGradAt_comp}
-  \lean{Proofs.HasGradAt.comp, Proofs.HasGradAt.pdiv_param, Proofs.HasGradAt.pdiv_param_batchMap}
+  \lean{Proofs.HasGradAt.comp, Proofs.HasGradAt.param, Proofs.HasGradAt.param_batchMap}
   \leanok
   \uses{ax:pdiv, ax:pdiv_comp, def:hasgradat}
   If \(G\) has gradient \(dy\) at \(f(x)\) and \(f\) has a VJP at \(x\), then
   \(G \circ f\) has gradient \(\mathrm{backward}\,x\,dy\) at \(x\)
   (\texttt{HasGradAt.comp}). Read at a parameterised op
   \(\theta \mapsto \mathrm{layer}\,\theta\) whose output gradient is \(dy\),
-  the loss derivative in \(\theta_i\) is that op's parameter Jacobian against
-  it, \(\sum_j \pdiv\,\mathrm{layer}\,\theta\,i\,j \cdot dy_j\)
-  (\texttt{pdiv\_param}); at a batched op it is the \(\sum_n \sum_j\) every
-  batched gradient node denotes (\texttt{pdiv\_param\_batchMap}).
+  the loss as a function of \(\theta\) has gradient the op's parameter
+  Jacobian against it, \(\sum_j \pdiv\,\mathrm{layer}\,\theta\,i\,j \cdot dy_j\)
+  (\texttt{HasGradAt.param}); at a batched op it is the \(\sum_n \sum_j\) every
+  batched gradient node denotes (\texttt{HasGradAt.param\_batchMap}).
 \end{theorem}
 
 \begin{proof}
@@ -5312,7 +5313,7 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
 
 \begin{theorem}[Every ResNet-34 gradient node is the loss's derivative]
   \label{thm:resnet34_loss_grad}
-  \lean{Proofs.ResNet34TieB.r34_net_lossGrad}
+  \lean{Proofs.ResNet34TieB.r34_net_lossGrad, Proofs.ResNet34TieB.r34_net_lossGrad_smoothedCE}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
@@ -5326,13 +5327,15 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
   attained at one position, ties allowed only between cells that read
   identical input patches, at the activations the batch produces
   (\texttt{R34LossSmoothAtB}; real batches meet this stem clause, the
-  input-gradient one they do not); each example's
-  target summing to one; at least one class. \Prove{} for each of the 146
+  input-gradient one they do not); and any loss \(L\) of the logits with
+  gradient \(g\) at the network's output. \Prove{} for each of the 146
   parameter slots of Theorem~\ref{thm:resnet34_step_tie} (the 110 the
-  artifacts emit among them), the node at the chain cotangent is
-  \(\partial L/\partial\theta\) of the whole network --- \(L\) the batched
-  label-smoothed cross-entropy of \texttt{resnet34ForwardBFull} with that one
-  parameter varied --- at any batch \(N\) and any number of classes.
+  artifacts emit among them), the node at the chain cotangent from \(g\) is
+  \(\partial L/\partial\theta\) of \texttt{resnet34ForwardBFull} with that
+  one parameter varied, at any batch \(N\) and any number of classes.
+  \texttt{r34\_net\_lossGrad\_smoothedCE} discharges the loss hypothesis for
+  the batched label-smoothed cross-entropy, given each example's target
+  summing to one and at least one class.
 \end{theorem}
 
 \begin{proof}
@@ -10033,7 +10036,7 @@ See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_tiedGB}.
 
 \begin{theorem}[Every ConvNeXt-T gradient node is the loss's derivative]
   \label{thm:convnext_loss_grad}
-  \lean{Proofs.CnxTiePoCGB.cnx_net_lossGrad, Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE}
+  \lean{Proofs.CnxTiePoCGB.cnx_net_lossGrad, Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE, Proofs.CnxTiePoCGB.cnxNetB_eq_convNextForwardTCh}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
@@ -10048,8 +10051,9 @@ See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_tiedGB}.
   logits with gradient \(g\). \Prove{} each of the 182 nodes of
   Theorem~\ref{thm:convnext_step_tie}, at the chain cotangent from \(g\), is
   \(\partial L/\partial\theta\) of the batched ConvNeXt-T forward
-  \texttt{cnxNetB} with that one parameter varied, for every batch and number
-  of classes; \texttt{cnx\_net\_lossGrad\_smoothedCE} discharges the loss
+  \texttt{cnxNetB} (which is \texttt{convNextForwardTCh} applied per example,
+  \texttt{cnxNetB\_eq\_convNextForwardTCh}) with that one parameter varied,
+  for every batch and number of classes; \texttt{cnx\_net\_lossGrad\_smoothedCE} discharges the loss
   hypothesis for the label-smoothed cross-entropy.
 \end{theorem}
 
@@ -12158,7 +12162,7 @@ See \leandocref{Proofs.ViTTiePoCGB.vit\_net\_tiedGB}.
 
 \begin{theorem}[Every ViT-Tiny gradient node is the loss's derivative]
   \label{thm:vit_loss_grad}
-  \lean{Proofs.ViTTiePoCGB.vit_net_lossGrad, Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE}
+  \lean{Proofs.ViTTiePoCGB.vit_net_lossGrad, Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE, Proofs.ViTTiePoCGB.vitNetB_eq_vitForwardKV}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
       ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add,
@@ -12174,8 +12178,9 @@ See \leandocref{Proofs.ViTTiePoCGB.vit\_net\_tiedGB}.
   logits with gradient \(g\). \Prove{} each of the 200 nodes of
   Theorem~\ref{thm:vit_step_tie}, at the chain cotangent from \(g\), is
   \(\partial L/\partial\theta\) of the batched ViT-Tiny forward
-  \texttt{vitNetB} with that one parameter varied, for every batch and number
-  of classes; \texttt{vit\_net\_lossGrad\_smoothedCE} discharges the loss
+  \texttt{vitNetB} (which is \texttt{vitForwardKV} applied per example,
+  \texttt{vitNetB\_eq\_vitForwardKV}) with that one parameter varied, for
+  every batch and number of classes; \texttt{vit\_net\_lossGrad\_smoothedCE} discharges the loss
   hypothesis for the label-smoothed cross-entropy.
 \end{theorem}
 

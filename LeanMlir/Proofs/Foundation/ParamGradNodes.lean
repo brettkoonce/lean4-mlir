@@ -7,11 +7,12 @@ import LeanMlir.Proofs.Foundation.SmoothedBatchLoss
 `GradNodesB` states each emitted parameter gradient node as its layer's parameter Jacobian
 contracted with an arbitrary output cotangent. Here the cotangent is the gradient of a scalar `G`
 at the layer's output (`HasGradAt`), and the node becomes `∂G/∂θ` with the layer's parameter
-varied: one lemma per node kind, shared by every net.
+varied: one lemma per node kind, shared by every net, each concluding `HasGradAt` in the
+parameter (the loss is differentiable there and the node is its gradient).
 
 The BatchNorm γ/β nodes are stated in the transposed `[C, N·H·W]` layout at the `reassocB`
-index; their lemmas re-sum the Jacobian over that permutation (`bnLA_perm`). A conv or depthwise
-bias that the render reads with the β op (EfficientNet-B0's) is `biasBeta_eq_pdiv`: the bias enters
+index; their lemmas re-sum the Jacobian over that permutation (`bnLAPerm`). A conv or depthwise
+bias that the render reads with the β op (EfficientNet-B0's) is `biasBeta_hasGradAt`: the bias enters
 as a channel broadcast (`*_bias_split`), so the channel sum the β node computes is its derivative.
 -/
 
@@ -136,31 +137,31 @@ theorem hasGradAt_depthwiseStrided {N c h w kH kW : Nat} (W : DepthwiseKernel c 
 -- § Convolutions and dense layers
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Conv weight node = `∂G/∂W`.** -/
-theorem convW_eq_pdiv {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
+/-- **Conv weight node = `∇_W G`.** -/
+theorem convW_hasGradAt {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
     (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConv W b) x) cot)
-    (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (flatConv (Kernel4.unflatten θ) b) x))
-          (Kernel4.flatten W) idx 0 := by
-  rw [convWGradB_den]
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConv W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConv (Kernel4.unflatten θ) b) x)) (Kernel4.flatten W)
+      (den (SHlo.convWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => flatConv (Kernel4.unflatten θ) b y) (Kernel4.flatten W)) x) cot := by
     simpa only [Kernel4.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => flatConv (Kernel4.unflatten θ) b y) x
-    (fun y => (conv2d_weight_differentiable b (Tensor3.unflatten y)) _) idx]
+  have hP := hG'.param_batchMap (fun θ y => flatConv (Kernel4.unflatten θ) b y) x
+    (fun y => (conv2d_weight_differentiable b (Tensor3.unflatten y)) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, convWGradB_den]
   rfl
 
-/-- **Conv bias node = `∂G/∂b`.** -/
-theorem convB_eq_pdiv {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+/-- **Conv bias node = `∇_b G`.** -/
+theorem convB_hasGradAt {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
     (x : Vec (N * (ic * h * w))) (b : Vec oc) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConv W b) x) cot)
-    (o : Fin oc) :
-    den (SHlo.convBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
-      = pdiv (fun θ => G (batchMap N (flatConv W θ) x)) b o 0 := by
-  rw [convBGradB_den, hG.pdiv_param_batchMap (fun θ y => flatConv W θ y) x
-    (fun y => (conv2d_bias_differentiable W (Tensor3.unflatten y)) _) o]
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConv W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConv W θ) x)) b
+      (den (SHlo.convBiasGradB (h := h) (w := w) W x b (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => flatConv W θ y) x
+    (fun y => (conv2d_bias_differentiable W (Tensor3.unflatten y)) _)
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o, convBGradB_den]
   rfl
 
 theorem flatConvStride2_weight_differentiable {ic oc h w kH kW : Nat} (b : Vec oc)
@@ -178,171 +179,179 @@ theorem flatConvStride2_bias_differentiable {ic oc h w kH kW : Nat}
   exact (reindexCLM _).differentiable.comp
     (conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten y))
 
-/-- **Stride-2 (symmetric) conv weight node = `∂G/∂W`.** -/
-theorem convStridedW_eq_pdiv {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
+/-- **Stride-2 (symmetric) conv weight node = `∇_W G`.** -/
+theorem convStridedW_hasGradAt {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
     {G : Vec (N * (oc * h * w)) → Vec 1} {cot : Vec (N * (oc * h * w))}
-    (hG : HasGradAt G (batchMap N (flatConvStride2 W b) x) cot) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (flatConvStride2 (Kernel4.unflatten θ) b) x))
-          (Kernel4.flatten W) idx 0 := by
-  rw [convStridedWGradB_den]
+    (hG : HasGradAt G (batchMap N (flatConvStride2 W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConvStride2 (Kernel4.unflatten θ) b) x))
+      (Kernel4.flatten W) (den (SHlo.convStridedWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => (flatConvStride2 (Kernel4.unflatten θ) b y : Vec (oc * h * w)))
         (Kernel4.flatten W)) x) cot := by
     simpa only [Kernel4.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => (flatConvStride2 (Kernel4.unflatten θ) b y : Vec (oc * h * w))) x
-    (fun y => (flatConvStride2_weight_differentiable b y) _) idx]
+  have hP := hG'.param_batchMap
+    (fun θ y => (flatConvStride2 (Kernel4.unflatten θ) b y : Vec (oc * h * w))) x
+    (fun y => (flatConvStride2_weight_differentiable b y) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, convStridedWGradB_den]
 
-/-- **Stride-2 (symmetric) conv bias node = `∂G/∂b`.** -/
-theorem convStridedB_eq_pdiv {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+/-- **Stride-2 (symmetric) conv bias node = `∇_b G`.** -/
+theorem convStridedB_hasGradAt {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (b : Vec oc) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConvStride2 W b) x) cot)
-    (o : Fin oc) :
-    den (SHlo.convStridedBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
-      = pdiv (fun θ => G (batchMap N (flatConvStride2 W θ) x)) b o 0 := by
-  rw [convStridedBGradB_den, hG.pdiv_param_batchMap
-    (fun θ y => (flatConvStride2 W θ y : Vec (oc * h * w))) x
-    (fun y => (flatConvStride2_bias_differentiable W y) _) o]
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConvStride2 W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConvStride2 W θ) x)) b
+      (den (SHlo.convStridedBiasGradB (h := h) (w := w) W x b (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => (flatConvStride2 W θ y : Vec (oc * h * w))) x
+    (fun y => (flatConvStride2_bias_differentiable W y) _)
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o, convStridedBGradB_den]
 
-/-- **XLA-`SAME` strided conv weight node = `∂G/∂W`** (MobileNetV2's and B0's stem). -/
-theorem convStridedXlaW_eq_pdiv {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
+/-- **XLA-`SAME` strided conv weight node = `∇_W G`** (MobileNetV2's and B0's stem). -/
+theorem convStridedXlaW_hasGradAt {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
     {G : Vec (N * (oc * h * w)) → Vec 1} {cot : Vec (N * (oc * h * w))}
-    (hG : HasGradAt G (batchMap N (flatConvStride2Xla W b) x) cot) (idx : Fin (oc * ic * kH * kW)) :
-    den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (flatConvStride2Xla (Kernel4.unflatten θ) b) x))
-          (Kernel4.flatten W) idx 0 := by
-  rw [convStridedXlaWGradB_den]
+    (hG : HasGradAt G (batchMap N (flatConvStride2Xla W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConvStride2Xla (Kernel4.unflatten θ) b) x))
+      (Kernel4.flatten W) (den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => (flatConvStride2Xla (Kernel4.unflatten θ) b y : Vec (oc * h * w)))
         (Kernel4.flatten W)) x) cot := by
     simpa only [Kernel4.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => (flatConvStride2Xla (Kernel4.unflatten θ) b y : Vec (oc * h * w))) x
+  have hP := hG'.param_batchMap
+    (fun θ y => (flatConvStride2Xla (Kernel4.unflatten θ) b y : Vec (oc * h * w))) x
     (fun y => ((decimateOddFlat_differentiable oc h w).comp
-      (conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _) idx]
+      (conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, convStridedXlaWGradB_den]
 
-/-- **XLA-`SAME` strided conv bias node = `∂G/∂b`.** -/
-theorem convStridedXlaB_eq_pdiv {N ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
-    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (b : Vec oc) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConvStride2Xla W b) x) cot)
-    (o : Fin oc) :
-    den (SHlo.convStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
-      = pdiv (fun θ => G (batchMap N (flatConvStride2Xla W θ) x)) b o 0 := by
-  rw [convStridedXlaBGradB_den, hG.pdiv_param_batchMap
-    (fun θ y => (flatConvStride2Xla W θ y : Vec (oc * h * w))) x
+/-- **XLA-`SAME` strided conv bias node = `∇_b G`.** -/
+theorem convStridedXlaB_hasGradAt {N ic oc h w kH kW : Nat} (cotN : String)
+    (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (b : Vec oc)
+    {G : Vec (N * (oc * h * w)) → Vec 1} {cot : Vec (N * (oc * h * w))}
+    (hG : HasGradAt G (batchMap N (flatConvStride2Xla W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (flatConvStride2Xla W θ) x)) b
+      (den (SHlo.convStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => (flatConvStride2Xla W θ y : Vec (oc * h * w))) x
     (fun y => ((decimateOddFlat_differentiable oc h w).comp
-      (conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten y))) _) o]
+      (conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten y))) _)
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o, convStridedXlaBGradB_den]
 
-/-- **Depthwise weight node = `∂G/∂W`.** -/
-theorem depthwiseW_eq_pdiv {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
+/-- **Depthwise weight node = `∇_W G`.** -/
+theorem depthwiseW_hasGradAt {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) {G : Vec (N * (c * h * w)) → Vec 1}
-    {cot : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseFlat W b) x) cot)
-    (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (depthwiseFlat (Tensor3.unflatten θ) b) x))
-          (Tensor3.flatten W) idx 0 := by
-  rw [depthwiseWGradB_den]
+    {cot : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseFlat W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (depthwiseFlat (Tensor3.unflatten θ) b) x))
+      (Tensor3.flatten W) (den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => depthwiseFlat (h := h) (w := w)
         (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y) (Tensor3.flatten W)) x) cot := by
     simpa only [Tensor3.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => depthwiseFlat (h := h) (w := w)
+  have hP := hG'.param_batchMap (fun θ y => depthwiseFlat (h := h) (w := w)
       (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y) x
-    (fun y => (depthwise_weight_differentiable b (Tensor3.unflatten y)) _) idx]
+    (fun y => (depthwise_weight_differentiable b (Tensor3.unflatten y)) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, depthwiseWGradB_den]
   rfl
 
-/-- **Depthwise bias node = `∂G/∂b`.** -/
-theorem depthwiseB_eq_pdiv {N c h w kH kW : Nat} (cotN : String) (W : DepthwiseKernel c kH kW)
+/-- **Depthwise bias node = `∇_b G`.** -/
+theorem depthwiseB_hasGradAt {N c h w kH kW : Nat} (cotN : String) (W : DepthwiseKernel c kH kW)
     (x : Vec (N * (c * h * w))) (b : Vec c) {G : Vec (N * (c * h * w)) → Vec 1}
-    {cot : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseFlat W b) x) cot)
-    (o : Fin c) :
-    den (SHlo.depthwiseBiasGradB W x b (.operand cotN cot)) o
-      = pdiv (fun θ => G (batchMap N (depthwiseFlat W θ) x)) b o 0 := by
-  rw [depthwiseBGradB_den, hG.pdiv_param_batchMap (fun θ y => depthwiseFlat (h := h) (w := w) W θ y) x
-    (fun y => (depthwise_bias_differentiable W (Tensor3.unflatten y)) _) o]
+    {cot : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseFlat W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (depthwiseFlat W θ) x)) b
+      (den (SHlo.depthwiseBiasGradB W x b (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => depthwiseFlat (h := h) (w := w) W θ y) x
+    (fun y => (depthwise_bias_differentiable W (Tensor3.unflatten y)) _)
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o, depthwiseBGradB_den]
   rfl
 
-/-- **Symmetric strided depthwise weight node = `∂G/∂W`** (MobileNetV4's `dw_mid` at its three
+/-- **Symmetric strided depthwise weight node = `∇_W G`** (MobileNetV4's `dw_mid` at its three
     downsampling rows). -/
-theorem depthwiseStridedW_eq_pdiv {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
+theorem depthwiseStridedW_hasGradAt {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
     {G : Vec (N * (c * h * w)) → Vec 1} {cot : Vec (N * (c * h * w))}
-    (hG : HasGradAt G (batchMap N (depthwiseStride2Flat W b) x) cot) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (depthwiseStride2Flat (Tensor3.unflatten θ) b) x))
-          (Tensor3.flatten W) idx 0 := by
-  rw [depthwiseStridedWGradB_den]
+    (hG : HasGradAt G (batchMap N (depthwiseStride2Flat W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (depthwiseStride2Flat (Tensor3.unflatten θ) b) x))
+      (Tensor3.flatten W) (den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => (depthwiseStride2Flat
         (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w)))
         (Tensor3.flatten W)) x) cot := by
     simpa only [Tensor3.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => (depthwiseStride2Flat
+  have hP := hG'.param_batchMap (fun θ y => (depthwiseStride2Flat
       (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w))) x
     (fun y => by
       unfold depthwiseStride2Flat decimateFlat
       exact ((reindexCLM _).differentiable.comp
-        (depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _) idx]
+        (depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, depthwiseStridedWGradB_den]
 
-/-- **XLA-`SAME` strided depthwise weight node = `∂G/∂W`.** -/
-theorem depthwiseStridedXlaW_eq_pdiv {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
+/-- **XLA-`SAME` strided depthwise weight node = `∇_W G`.** -/
+theorem depthwiseStridedXlaW_hasGradAt {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
     {G : Vec (N * (c * h * w)) → Vec 1} {cot : Vec (N * (c * h * w))}
-    (hG : HasGradAt G (batchMap N (depthwiseStride2FlatXla W b) x) cot) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx
-      = pdiv (fun θ => G (batchMap N (depthwiseStride2FlatXla (Tensor3.unflatten θ) b) x))
-          (Tensor3.flatten W) idx 0 := by
-  rw [depthwiseStridedXlaWGradB_den]
+    (hG : HasGradAt G (batchMap N (depthwiseStride2FlatXla W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (depthwiseStride2FlatXla (Tensor3.unflatten θ) b) x))
+      (Tensor3.flatten W)
+      (den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => (depthwiseStride2FlatXla
         (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w)))
         (Tensor3.flatten W)) x) cot := by
     simpa only [Tensor3.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => (depthwiseStride2FlatXla
+  have hP := hG'.param_batchMap (fun θ y => (depthwiseStride2FlatXla
       (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w))) x
     (fun y => ((decimateOddFlat_differentiable c h w).comp
-      (depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _) idx]
+      (depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  rw [hP.pdiv_eq idx, depthwiseStridedXlaWGradB_den]
 
-/-- **XLA-`SAME` strided depthwise bias node = `∂G/∂b`.** -/
-theorem depthwiseStridedXlaB_eq_pdiv {N c h w kH kW : Nat} (cotN : String)
+/-- **XLA-`SAME` strided depthwise bias node = `∇_b G`.** -/
+theorem depthwiseStridedXlaB_hasGradAt {N c h w kH kW : Nat} (cotN : String)
     (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * (2 * h) * (2 * w)))) (b : Vec c)
     {G : Vec (N * (c * h * w)) → Vec 1} {cot : Vec (N * (c * h * w))}
-    (hG : HasGradAt G (batchMap N (depthwiseStride2FlatXla W b) x) cot) (o : Fin c) :
-    den (SHlo.depthwiseStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
-      = pdiv (fun θ => G (batchMap N (depthwiseStride2FlatXla W θ) x)) b o 0 := by
-  rw [depthwiseStridedXlaBGradB_den, hG.pdiv_param_batchMap
-    (fun θ y => (depthwiseStride2FlatXla W θ y : Vec (c * h * w))) x
+    (hG : HasGradAt G (batchMap N (depthwiseStride2FlatXla W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (depthwiseStride2FlatXla W θ) x)) b
+      (den (SHlo.depthwiseStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => (depthwiseStride2FlatXla W θ y : Vec (c * h * w))) x
     (fun y => ((decimateOddFlat_differentiable c h w).comp
-      (depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten y))) _) o]
+      (depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten y))) _)
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o, depthwiseStridedXlaBGradB_den]
 
-/-- **Dense weight node = `∂G/∂W`.** -/
-theorem denseW_eq_pdiv {N a c : Nat} (xN cotN : String) (x : Vec (N * a)) (W : Mat a c)
+/-- **Dense weight node = `∇_W G`**, at the flat `Mat.flatten` index `finProdFinEquiv (i, j)`. -/
+theorem denseW_hasGradAt {N a c : Nat} (xN cotN : String) (x : Vec (N * a)) (W : Mat a c)
     (b : Vec c) {G : Vec (N * c) → Vec 1} {cot : Vec (N * c)}
-    (hG : HasGradAt G (batchMap N (dense W b) x) cot) (i : Fin a) (j : Fin c) :
-    den (SHlo.denseWeightGradB (c := c) xN x (.operand cotN cot)) (finProdFinEquiv (i, j))
-      = pdiv (fun θ => G (batchMap N (dense (Mat.unflatten θ) b) x)) (Mat.flatten W)
-          (finProdFinEquiv (i, j)) 0 := by
-  rw [denseWGradB_den xN cotN x W b cot i j]
+    (hG : HasGradAt G (batchMap N (dense W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (dense (Mat.unflatten θ) b) x)) (Mat.flatten W)
+      (den (SHlo.denseWeightGradB (c := c) xN x (.operand cotN cot))) := by
   have hG' : HasGradAt G
       (batchMap N ((fun θ y => dense (Mat.unflatten θ) b y) (Mat.flatten W)) x) cot := by
     simpa only [Mat.unflatten_flatten] using hG
-  rw [hG'.pdiv_param_batchMap (fun θ y => dense (Mat.unflatten θ) b y) x
-    (fun y => (denseWeightMap_differentiable b y) _) (finProdFinEquiv (i, j))]
+  have hP := hG'.param_batchMap (fun θ y => dense (Mat.unflatten θ) b y) x
+    (fun y => (denseWeightMap_differentiable b y) _)
+  refine ⟨hP.differentiableAt, fun idx => ?_⟩
+  obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  rw [hP.pdiv_eq, denseWGradB_den xN cotN x W b cot i j]
 
 theorem dense_bias_differentiable {a c : Nat} (W : Mat a c) (x : Vec a) :
     Differentiable ℝ (fun b' : Vec c => dense W b' x) := by
   unfold dense; fun_prop
 
-/-- **Dense bias node = `∂G/∂b`.** The node's statement carries one activation `x₀` for every
+/-- **Dense bias node = `∇_b G`.** The node's statement carries one activation `x₀` for every
     example; the bias Jacobian is the identity whatever the activation, so any `x₀` serves. -/
-theorem denseB_eq_pdiv {N a c : Nat} (cotN : String) (W : Mat a c) (x₀ : Vec a)
+theorem denseB_hasGradAt {N a c : Nat} (cotN : String) (W : Mat a c) (x₀ : Vec a)
     (x : Vec (N * a)) (b : Vec c) {G : Vec (N * c) → Vec 1} {cot : Vec (N * c)}
-    (hG : HasGradAt G (batchMap N (dense W b) x) cot) (j : Fin c) :
-    den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
-      = pdiv (fun θ => G (batchMap N (dense W θ) x)) b j 0 := by
-  rw [denseBGradB_den cotN W x₀ b cot j, hG.pdiv_param_batchMap (fun θ y => dense W θ y) x
-    (fun y => (dense_bias_differentiable W y) _) j]
+    (hG : HasGradAt G (batchMap N (dense W b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (dense W θ) x)) b
+      (den (SHlo.denseBiasGradB (N := N) (.operand cotN cot))) := by
+  have hP := hG.param_batchMap (fun θ y => dense W θ y) x
+    (fun y => (dense_bias_differentiable W y) _)
+  refine ⟨hP.differentiableAt, fun j => ?_⟩
+  rw [hP.pdiv_eq j, denseBGradB_den cotN W x₀ b cot j]
   simp only [pdiv_dense_b]
 
 -- ════════════════════════════════════════════════════════════════
@@ -374,48 +383,52 @@ theorem bnPerChannelFlat_beta_differentiable (oc m : Nat) (ε : ℝ) (γ : Vec o
   unfold bnPerChannelFlat bnPerChannelMat Mat.flatten bnForward
   fun_prop
 
-/-- A parameter entering `bnBatchLA` through its per-channel core: the loss derivative re-sums
+/-- A parameter entering `bnBatchLA` through its per-channel core: the loss gradient re-sums
     over the permutation into the core's layout. -/
-private theorem bnLA_param_pdiv {P N oc h w : Nat} (F : Vec P → Vec (oc * (N * (h * w))))
+private theorem bnLA_param_hasGradAt {P N oc h w : Nat} (F : Vec P → Vec (oc * (N * (h * w))))
     (hF : Differentiable ℝ F) {G : Vec (N * (oc * h * w)) → Vec 1} {θ : Vec P}
     {cot : Vec (N * (oc * h * w))}
-    (hG : HasGradAt G (fun J => F θ (bnLAPerm N oc h w J)) cot) (i : Fin P) :
-    pdiv (fun θ' => G (fun J => F θ' (bnLAPerm N oc h w J))) θ i 0
-      = ∑ j, pdiv F θ i j * bnchwFwd N oc h w (reassocB N oc h w cot) j := by
+    (hG : HasGradAt G (fun J => F θ (bnLAPerm N oc h w J)) cot) :
+    HasGradAt (fun θ' => G (fun J => F θ' (bnLAPerm N oc h w J))) θ
+      (fun i => ∑ j, pdiv F θ i j * bnchwFwd N oc h w (reassocB N oc h w cot) j) := by
   have hl : Differentiable ℝ (fun θ' => fun J => F θ' (bnLAPerm N oc h w J)) :=
     (reindexCLM (bnLAPerm N oc h w)).differentiable.comp hF
-  rw [hG.pdiv_param (layer := fun θ' => fun J => F θ' (bnLAPerm N oc h w J)) (hl θ) i]
+  have hP := hG.param (layer := fun θ' => fun J => F θ' (bnLAPerm N oc h w J)) (hl θ)
+  refine ⟨hP.differentiableAt, fun i => ?_⟩
+  rw [hP.pdiv_eq i]
   rw [← (bnLAPerm N oc h w).symm.sum_comp]
   refine Finset.sum_congr rfl fun j _ => ?_
   congr 1
   rw [pdiv_eq_fderiv_coord (hl θ), pdiv_eq_fderiv_coord (hF θ)]
   simp only [Equiv.apply_symm_apply]
 
-/-- **BatchNorm γ node = `∂G/∂γ`**, at the `reassocB` index the render's node reads. -/
-theorem bnGamma_eq_pdiv {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+/-- **BatchNorm γ node = `∇_γ G`**, at the `reassocB` index the render's node reads. -/
+theorem bnGamma_hasGradAt {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
     (v : Vec (N * (oc * h * w))) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (bnBatchLA N oc h w ε γ β v) cot)
-    (c : Fin oc) :
-    den (SHlo.bnGammaGradB vN epsStr ε (reassocB N oc h w v)
-        (.operand cotN (reassocB N oc h w cot))) c
-      = pdiv (fun θ => G (bnBatchLA N oc h w ε θ β v)) γ c 0 := by
-  rw [bnGammaGradB_den vN epsStr cotN ε γ β]
-  exact (bnLA_param_pdiv
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (bnBatchLA N oc h w ε γ β v) cot) :
+    HasGradAt (fun θ => G (bnBatchLA N oc h w ε θ β v)) γ
+      (den (SHlo.bnGammaGradB vN epsStr ε (reassocB N oc h w v)
+        (.operand cotN (reassocB N oc h w cot)))) := by
+  have hP := bnLA_param_hasGradAt
     (fun θ => bnPerChannelFlat oc (N * (h * w)) ε θ β (bnchwFwd N oc h w (reassocB N oc h w v)))
-    (bnPerChannelFlat_gamma_differentiable _ _ _ _ _) hG c).symm
+    (bnPerChannelFlat_gamma_differentiable _ _ _ _ _) hG
+  refine ⟨hP.differentiableAt, fun c => ?_⟩
+  refine (hP.pdiv_eq c).trans ?_
+  rw [bnGammaGradB_den vN epsStr cotN ε γ β]
 
-/-- **BatchNorm β node = `∂G/∂β`**, at the `reassocB` index. -/
-theorem bnBeta_eq_pdiv {N oc h w : Nat} (cotN : String) (ε : ℝ) (γ β : Vec oc)
+/-- **BatchNorm β node = `∇_β G`**, at the `reassocB` index. -/
+theorem bnBeta_hasGradAt {N oc h w : Nat} (cotN : String) (ε : ℝ) (γ β : Vec oc)
     (v : Vec (N * (oc * h * w))) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (bnBatchLA N oc h w ε γ β v) cot)
-    (c : Fin oc) :
-    den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-        (.operand cotN (reassocB N oc h w cot))) c
-      = pdiv (fun θ => G (bnBatchLA N oc h w ε γ θ v)) β c 0 := by
-  rw [bnBetaGradB_den cotN ε γ β (bnchwFwd N oc h w (reassocB N oc h w v))]
-  exact (bnLA_param_pdiv
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (bnBatchLA N oc h w ε γ β v) cot) :
+    HasGradAt (fun θ => G (bnBatchLA N oc h w ε γ θ v)) β
+      (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
+        (.operand cotN (reassocB N oc h w cot)))) := by
+  have hP := bnLA_param_hasGradAt
     (fun θ => bnPerChannelFlat oc (N * (h * w)) ε γ θ (bnchwFwd N oc h w (reassocB N oc h w v)))
-    (bnPerChannelFlat_beta_differentiable _ _ _ _ _) hG c).symm
+    (bnPerChannelFlat_beta_differentiable _ _ _ _ _) hG
+  refine ⟨hP.differentiableAt, fun c => ?_⟩
+  refine (hP.pdiv_eq c).trans ?_
+  rw [bnBetaGradB_den cotN ε γ β (bnchwFwd N oc h w (reassocB N oc h w v))]
 
 -- ════════════════════════════════════════════════════════════════
 -- § A conv or depthwise bias, emitted as a BatchNorm β node
@@ -447,23 +460,26 @@ theorem pdiv_bias_of_split {a oc h w : Nat} (per : Vec oc → Vec a → Vec (oc 
       ((broadcastFlat_differentiable oc h w) b), pdiv_const, zero_add]
   exact pdiv_reindex (flatChannel oc h w) b o j
 
-/-- **A channel-broadcast bias, read by the β node, = `∂G/∂b`.** For any per-example op whose
+/-- **A channel-broadcast bias, read by the β node, = `∇_b G`.** For any per-example op whose
     bias enters as `per 0 y + broadcast b`, the emitted `bnBetaGradB` on the op's output cotangent
-    is the loss derivative in the bias. -/
-theorem biasBeta_eq_pdiv {N a oc h w : Nat} (cotN : String)
+    is the loss gradient in the bias. -/
+theorem biasBeta_hasGradAt {N a oc h w : Nat} (cotN : String)
     (per : Vec oc → Vec a → Vec (oc * h * w))
     (hsplit : ∀ θ y, per θ y = fun k => per 0 y k + broadcastFlat oc h w θ k)
     (x : Vec (N * a)) (b : Vec oc) {G : Vec (N * (oc * h * w)) → Vec 1}
-    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (per b) x) cot) (o : Fin oc) :
-    den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-        (.operand cotN (reassocB N oc h w cot))) o
-      = pdiv (fun θ => G (batchMap N (per θ) x)) b o 0 := by
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (per b) x) cot) :
+    HasGradAt (fun θ => G (batchMap N (per θ) x)) b
+      (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
+        (.operand cotN (reassocB N oc h w cot)))) := by
   have hfun : ∀ y, (fun θ => per θ y) = fun θ => fun k => per 0 y k + broadcastFlat oc h w θ k :=
     fun y => funext fun θ => hsplit θ y
   have hd : ∀ y, DifferentiableAt ℝ (fun θ => per θ y) b := fun y => by
     rw [hfun y]
     exact (differentiableAt_const (per 0 y)).add ((broadcastFlat_differentiable oc h w) b)
-  rw [hG.pdiv_param_batchMap per x hd o]
+  have hP := hG.param_batchMap per x hd
+  refine ⟨hP.differentiableAt, fun o => ?_⟩
+  rw [hP.pdiv_eq o]
+  symm
   simp_rw [pdiv_bias_of_split per hsplit]
   show bnPerChannelGradBeta oc (N * (h * w)) (bnchwFwd N oc h w (reassocB N oc h w cot)) o = _
   unfold bnPerChannelGradBeta

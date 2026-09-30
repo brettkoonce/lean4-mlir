@@ -6,8 +6,10 @@ import LeanMlir.Proofs.Foundation.ParamGradNodes
 `cnx_net_tiedGB` says each of the 182 parameter gradient nodes denotes its layer's parameter
 Jacobian contracted with the cotangent the emitted backward chain threads to it, the chain's top
 being the smoothed-loss cotangent. `cnx_net_lossGrad` composes that with the chain: for any loss
-`L` of the logits whose gradient at the net's output is `g`, every node is `∂L/∂θ` of the WHOLE
-net `cnxNetB` with that one parameter varied. `cnx_net_lossGrad_smoothedCE` discharges `hL` for
+`L` of the logits whose gradient at the net's output is `g`, the loss of the WHOLE net `cnxNetB`
+with that one parameter varied is differentiable in it and every node is its gradient
+(`HasGradAt`). `cnxNetB` is the canonical forward, batched: `batchMap N` of `convNextForwardTCh`
+(`cnxNetB_eq_convNextForwardTCh`). `cnx_net_lossGrad_smoothedCE` discharges `hL` for
 the label-smoothed loss the artifacts ship (`smoothedBatchLossDiv`, whose gradient is the
 `softmaxDiv` cotangent the render emits).
 
@@ -18,7 +20,7 @@ the label-smoothed loss the artifacts ship (`smoothedBatchLossDiv`, whose gradie
   (`cnxBlk_hasGradAt`, `cnxDown_hasGradAt`, …). Every stage VJP is global — GELU has no kink and
   LayerNorm needs only `0 < ε` — so each step is one `HasGradAt.comp_global`, and the channel-LN
   step is `chanLNTensor3Back_eq_chanLN_vjp`.
-* **Lifted** (`HasGradAt.pdiv_param_batchMap_through`, ParamGrad): read against the linear loss
+* **Lifted** (`HasGradAt.param_batchMap_through`, ParamGrad): read against the linear loss
   `⟨·, dyₙ⟩` per example, those gradients turn each tied node's `Σ_n Σ_j ∂per/∂θ · cotₙ` into
   `∂G/∂θ` of the batched block, `G` the loss at the block's output.
 * **Per net**: the loss read after each stage (`cnxSuf*`), pulled back through the certified
@@ -218,32 +220,32 @@ def cnxBlockLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ
   let cotDB : Vec (N * (c * h * w))    :=
     batchMapAux N (blkCotD ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL) xin dyOut
   -- depthwise 7×7 W/b
-  (∀ idx, den (SHlo.depthwiseWeightGradB xN p.aB xin p.aW (.operand cotN cotDB)) idx
-      = pdiv (fun θ => Φ { p with aW := Tensor3.unflatten θ }) (Tensor3.flatten p.aW) idx 0)
-  ∧ (∀ o, den (SHlo.depthwiseBiasGradB p.aW xin p.aB (.operand cotN cotDB)) o
-      = pdiv (fun θ => Φ { p with aB := θ }) p.aB o 0)
+  (HasGradAt (fun θ => Φ { p with aW := Tensor3.unflatten θ }) (Tensor3.flatten p.aW)
+        (den (SHlo.depthwiseWeightGradB xN p.aB xin p.aW (.operand cotN cotDB))))
+  ∧ (HasGradAt (fun θ => Φ { p with aB := θ }) p.aB
+        (den (SHlo.depthwiseBiasGradB p.aW xin p.aB (.operand cotN cotDB))))
   -- channel-LN γ/β
-  ∧ (∀ k, den (SHlo.veclnGammaGradB (N := N) (R := h * w) (D := c) xN epsStr ε
+  ∧ (HasGradAt (fun θ => Φ { p with nG := θ }) p.nG
+        (den (SHlo.veclnGammaGradB (N := N) (R := h * w) (D := c) xN epsStr ε
           (batchMap N (chanLNRows c h w) dB)
-          (.operand cotN (batchMap N (chanLNRows c h w) cotNB))) k
-      = pdiv (fun θ => Φ { p with nG := θ }) p.nG k 0)
-  ∧ (∀ k, den (SHlo.rowDenseBiasGradB (N := N) (R := h * w) (c := c)
-          (.operand cotN (batchMap N (chanLNRows c h w) cotNB))) k
-      = pdiv (fun θ => Φ { p with nB := θ }) p.nB k 0)
+          (.operand cotN (batchMap N (chanLNRows c h w) cotNB)))))
+  ∧ (HasGradAt (fun θ => Φ { p with nB := θ }) p.nB
+        (den (SHlo.rowDenseBiasGradB (N := N) (R := h * w) (c := c)
+          (.operand cotN (batchMap N (chanLNRows c h w) cotNB)))))
   -- expand 1×1 conv W/b
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.eB nlB p.eW (.operand cotN cotEB)) idx
-      = pdiv (fun θ => Φ { p with eW := Kernel4.unflatten θ }) (Kernel4.flatten p.eW) idx 0)
-  ∧ (∀ o, den (SHlo.convBiasGradB (h := h) (w := w) p.eW nlB p.eB (.operand cotN cotEB)) o
-      = pdiv (fun θ => Φ { p with eB := θ }) p.eB o 0)
+  ∧ (HasGradAt (fun θ => Φ { p with eW := Kernel4.unflatten θ }) (Kernel4.flatten p.eW)
+        (den (SHlo.convWeightGradB xN p.eB nlB p.eW (.operand cotN cotEB))))
+  ∧ (HasGradAt (fun θ => Φ { p with eB := θ }) p.eB
+        (den (SHlo.convBiasGradB (h := h) (w := w) p.eW nlB p.eB (.operand cotN cotEB))))
   -- project 1×1 conv W/b
-  ∧ (∀ idx, den (SHlo.convWeightGradB xN p.pB gB p.pW (.operand cotN cotPB)) idx
-      = pdiv (fun θ => Φ { p with pW := Kernel4.unflatten θ }) (Kernel4.flatten p.pW) idx 0)
-  ∧ (∀ o, den (SHlo.convBiasGradB (h := h) (w := w) p.pW gB p.pB (.operand cotN cotPB)) o
-      = pdiv (fun θ => Φ { p with pB := θ }) p.pB o 0)
+  ∧ (HasGradAt (fun θ => Φ { p with pW := Kernel4.unflatten θ }) (Kernel4.flatten p.pW)
+        (den (SHlo.convWeightGradB xN p.pB gB p.pW (.operand cotN cotPB))))
+  ∧ (HasGradAt (fun θ => Φ { p with pB := θ }) p.pB
+        (den (SHlo.convBiasGradB (h := h) (w := w) p.pW gB p.pB (.operand cotN cotPB))))
   -- per-channel layer-scale γ
-  ∧ (∀ cc, den (SHlo.layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) xN pB
-          (.operand cotN dyOut)) cc
-      = pdiv (fun θ => Φ { p with sL := θ }) p.sL cc 0)
+  ∧ (HasGradAt (fun θ => Φ { p with sL := θ }) p.sL
+        (den (SHlo.layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) xN pB
+          (.operand cotN dyOut))))
 
 theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (hε : 0 < ε) (p : CnxTieBlk c cExp) (xin : Vec (N * (c * h * w)))
@@ -254,46 +256,44 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
     cnxBlockLossTiedGB N xN epsStr cotN ε p xin Φ dyOut := by
   rw [show Φ = fun p' => Lb (batchMap N (p'.fwdO (h := h) (w := w) ε) xin) from funext hΦ]
   have hc := fun y dy => cnxBlk_hasGradAt (h := h) (w := w) ε hε p y dy (hasGradAt_linLoss dy _)
-  refine ⟨fun idx => ?_, fun o => ?_, fun k => ?_, fun k => ?_, fun idx => ?_, fun o => ?_,
-    fun idx => ?_, fun o => ?_, fun cc => ?_⟩
-  · refine (GradNodeB.depthwiseWGradB_den xN cotN p.aB xin p.aW _ idx).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => y)
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => depthwiseFlat (h := h) (w := w) (Tensor3.unflatten θ : DepthwiseKernel c 7 7) p.aB y)
         (cnxPostD h w ε p) (fun y dy => blkCotD ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := Tensor3.flatten p.aW) (by rw [Tensor3.unflatten_flatten]; exact hLb)
         (fun y => (depthwise_weight_differentiable p.aB (Tensor3.unflatten y)) _)
         (fun y => cnxPostD_differentiable h w ε hε p y)
         (fun y dy => by rw [Tensor3.unflatten_flatten]; exact (hc y dy).2.2.2.2)
-        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) idx)
-  · refine (GradNodeB.depthwiseBGradB_den cotN p.aW xin p.aB _ o).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => y)
+        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun idx => (GradNodeB.depthwiseWGradB_den xN cotN p.aB xin p.aW _ idx).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => depthwiseFlat (h := h) (w := w) p.aW θ y)
         (cnxPostD h w ε p) (fun y dy => blkCotD ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := p.aB) hLb
         (fun y => (depthwise_bias_differentiable p.aW (Tensor3.unflatten y)) _)
         (fun y => cnxPostD_differentiable h w ε hε p y)
         (fun y dy => (hc y dy).2.2.2.2)
-        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) o)
-  · refine (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.nB _ p.nG _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActD h w p y)
+        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun o => (GradNodeB.depthwiseBGradB_den cotN p.aW xin p.aB _ o).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActD h w p y)
         (fun θ d => chanLNTensor3 c h w ε θ p.nB d)
         (cnxPostN h w p) (fun y dy => blkCotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := p.nG) hLb
         (fun y => (chanLNTensor3_gamma_differentiable c h w ε p.nB y) _)
         (fun y => cnxPostN_differentiable h w p y)
         (fun y dy => (hc y dy).2.2.2.1)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n) k)
-  · refine (CnxPoCGB.chanLnBetaGradB_den cotN ε p.nG _ p.nB _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActD h w p y)
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.nB _ p.nG _ k).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActD h w p y)
         (fun θ d => chanLNTensor3 c h w ε p.nG θ d)
         (cnxPostN h w p) (fun y dy => blkCotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := p.nB) hLb
         (fun y => (chanLNTensor3_beta_differentiable c h w ε p.nG y) _)
         (fun y => cnxPostN_differentiable h w p y)
         (fun y dy => (hc y dy).2.2.2.1)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n) k)
-  · refine (GradNodeB.convWGradB_den xN cotN p.eB _ p.eW _ idx).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActNl h w ε p y)
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε p.nG _ p.nB _ k).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActNl h w ε p y)
         (fun θ nl => flatConv (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 cExp c 1 1) p.eB nl)
         (cnxPostE h w p) (fun y dy => blkCotE ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := Kernel4.flatten p.eW) (by rw [Kernel4.unflatten_flatten]; exact hLb)
@@ -301,9 +301,9 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostE_differentiable h w p y)
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact (hc y dy).2.2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
-        (fun n => batchSlice_batchMapAux _ _ _ n) idx)
-  · refine (GradNodeB.convBGradB_den cotN p.eW _ p.eB _ o).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActNl h w ε p y)
+        (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun idx => (GradNodeB.convWGradB_den xN cotN p.eB _ p.eW _ idx).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActNl h w ε p y)
         (fun θ nl => flatConv (h := h) (w := w) p.eW θ nl)
         (cnxPostE h w p) (fun y dy => blkCotE ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
         xin (θ := p.eB) hLb
@@ -311,9 +311,9 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostE_differentiable h w p y)
         (fun y dy => (hc y dy).2.2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
-        (fun n => batchSlice_batchMapAux _ _ _ n) o)
-  · refine (GradNodeB.convWGradB_den xN cotN p.pB _ p.pW _ idx).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActG h w ε p y)
+        (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun o => (GradNodeB.convBGradB_den cotN p.eW _ p.eB _ o).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActG h w ε p y)
         (fun θ g => flatConv (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 c cExp 1 1) p.pB g)
         (cnxPostP h w p) (fun _ dy => cnxCotP (fun k => p.sL (chanIdx c h w k)) dy)
         xin (θ := Kernel4.flatten p.pW) (by rw [Kernel4.unflatten_flatten]; exact hLb)
@@ -321,9 +321,9 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostP_differentiable h w p y)
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact (hc y dy).2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
-        (fun n => batchSlice_batchMap _ _ n) idx)
-  · refine (GradNodeB.convBGradB_den cotN p.pW _ p.pB _ o).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActG h w ε p y)
+        (fun n => batchSlice_batchMap _ _ n)).of_eq
+      (funext fun idx => (GradNodeB.convWGradB_den xN cotN p.pB _ p.pW _ idx).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActG h w ε p y)
         (fun θ g => flatConv (h := h) (w := w) p.pW θ g)
         (cnxPostP h w p) (fun _ dy => cnxCotP (fun k => p.sL (chanIdx c h w k)) dy)
         xin (θ := p.pB) hLb
@@ -331,16 +331,17 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostP_differentiable h w p y)
         (fun y dy => (hc y dy).2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
-        (fun n => batchSlice_batchMap _ _ n) o)
-  · refine (CnxPoCGB.layerScaleChGammaGradB_den xN cotN _ p.sL _ cc).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => cnxActP h w ε p y)
+        (fun n => batchSlice_batchMap _ _ n)).of_eq
+      (funext fun o => (GradNodeB.convBGradB_den cotN p.pW _ p.pB _ o).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => cnxActP h w ε p y)
         (fun θ u => layerScale (fun k => θ (chanIdx c h w k)) u)
         (fun y u i => u i + y i) (fun _ dy => dy)
         xin (θ := p.sL) hLb
         (fun y => (layerScaleCh_gamma_differentiable c h w y) _)
         (fun y => differentiable_id.add_const y)
         (fun y dy => (hc y dy).1)
-        _ _ (fun n => by simp only [batchSlice_batchMap]; rfl) (fun _ => rfl) cc)
+        _ _ (fun n => by simp only [batchSlice_batchMap]; rfl) (fun _ => rfl)).of_eq
+      (funext fun cc => (CnxPoCGB.layerScaleChGammaGradB_den xN cotN _ p.sL _ cc).symm)
 
 end Block
 
@@ -360,17 +361,17 @@ def cnxDownLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     batchMap N (chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T) xin
   let cotNB : Vec (N * (ci * (2 * h) * (2 * w))) :=
     batchMapAux N (dnCotN (h := h) (w := w) ε p.G p.T p.W p.B) xin dyOut
-  (∀ k, den (SHlo.veclnGammaGradB (N := N) (R := (2 * h) * (2 * w)) (D := ci) xN epsStr ε
+  (HasGradAt (fun θ => Φ { p with G := θ }) p.G
+        (den (SHlo.veclnGammaGradB (N := N) (R := (2 * h) * (2 * w)) (D := ci) xN epsStr ε
           (batchMap N (chanLNRows ci (2 * h) (2 * w)) xin)
-          (.operand cotN (batchMap N (chanLNRows ci (2 * h) (2 * w)) cotNB))) k
-      = pdiv (fun θ => Φ { p with G := θ }) p.G k 0)
-  ∧ (∀ k, den (SHlo.rowDenseBiasGradB (N := N) (R := (2 * h) * (2 * w)) (c := ci)
-          (.operand cotN (batchMap N (chanLNRows ci (2 * h) (2 * w)) cotNB))) k
-      = pdiv (fun θ => Φ { p with T := θ }) p.T k 0)
-  ∧ (∀ idx, den (SHlo.convStridedWeightGradB xN p.B nB p.W (.operand cotN dyOut)) idx
-      = pdiv (fun θ => Φ { p with W := Kernel4.unflatten θ }) (Kernel4.flatten p.W) idx 0)
-  ∧ (∀ o, den (SHlo.convStridedBiasGradB (h := h) (w := w) p.W nB p.B (.operand cotN dyOut)) o
-      = pdiv (fun θ => Φ { p with B := θ }) p.B o 0)
+          (.operand cotN (batchMap N (chanLNRows ci (2 * h) (2 * w)) cotNB)))))
+  ∧ (HasGradAt (fun θ => Φ { p with T := θ }) p.T
+        (den (SHlo.rowDenseBiasGradB (N := N) (R := (2 * h) * (2 * w)) (c := ci)
+          (.operand cotN (batchMap N (chanLNRows ci (2 * h) (2 * w)) cotNB)))))
+  ∧ (HasGradAt (fun θ => Φ { p with W := Kernel4.unflatten θ }) (Kernel4.flatten p.W)
+        (den (SHlo.convStridedWeightGradB xN p.B nB p.W (.operand cotN dyOut))))
+  ∧ (HasGradAt (fun θ => Φ { p with B := θ }) p.B
+        (den (SHlo.convStridedBiasGradB (h := h) (w := w) p.W nB p.B (.operand cotN dyOut))))
 
 theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (p : CnxTieDown ci co) (xin : Vec (N * (ci * (2 * h) * (2 * w))))
@@ -386,40 +387,40 @@ theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
     fun y dy => HasGradAt.comp_global (f := flatConvStride2 (h := h) (w := w) p.W p.B)
       (x := chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T y) (hasGradAt_linLoss dy _)
       (flatConvStride2_differentiable p.W p.B) (flatConvStride2HasVJP p.W p.B)
-  refine ⟨fun k => ?_, fun k => ?_, fun idx => ?_, fun o => ?_⟩
-  · refine (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.T xin p.G _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => y)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => chanLNTensor3 ci (2 * h) (2 * w) ε θ p.T y)
         (fun _ u => flatConvStride2 (h := h) (w := w) p.W p.B u)
         (fun y dy => dnCotN ε p.G p.T p.W p.B y dy) xin (θ := p.G) hLb
         (fun y => (chanLNTensor3_gamma_differentiable ci (2 * h) (2 * w) ε p.T y) _)
         (fun _ => flatConvStride2_differentiable p.W p.B) hc
-        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) k)
-  · refine (CnxPoCGB.chanLnBetaGradB_den cotN ε p.G xin p.T _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => y)
+        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.T xin p.G _ k).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G θ y)
         (fun _ u => flatConvStride2 (h := h) (w := w) p.W p.B u)
         (fun y dy => dnCotN ε p.G p.T p.W p.B y dy) xin (θ := p.T) hLb
         (fun y => (chanLNTensor3_beta_differentiable ci (2 * h) (2 * w) ε p.G y) _)
         (fun _ => flatConvStride2_differentiable p.W p.B) hc
-        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) k)
-  · refine (GradNodeB.convStridedWGradB_den xN cotN p.B _ p.W _ idx).trans
-      (HasGradAt.pdiv_param_batchMap_through
+        xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε p.G xin p.T _ k).symm)
+  · exact (HasGradAt.param_batchMap_through
         (fun y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T y)
         (fun θ n => flatConvStride2 (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 co ci 2 2) p.B n)
         (fun _ z => z) (fun _ dy => dy) xin (θ := Kernel4.flatten p.W)
         (by rw [Kernel4.unflatten_flatten]; exact hLb)
         (fun y => (GradNodeB.flatConvStride2_weight_differentiable p.B y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl) idx)
-  · refine (GradNodeB.convStridedBGradB_den cotN p.W _ p.B _ o).trans
-      (HasGradAt.pdiv_param_batchMap_through
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
+      (funext fun idx => (GradNodeB.convStridedWGradB_den xN cotN p.B _ p.W _ idx).symm)
+  · exact (HasGradAt.param_batchMap_through
         (fun y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T y)
         (fun θ n => flatConvStride2 (h := h) (w := w) p.W θ n)
         (fun _ z => z) (fun _ dy => dy) xin (θ := p.B) hLb
         (fun y => (GradNodeB.flatConvStride2_bias_differentiable p.W y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl) o)
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
+      (funext fun o => (GradNodeB.convStridedBGradB_den cotN p.W _ p.B _ o).symm)
 
 end Down
 
@@ -439,18 +440,18 @@ def cnxStemLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
   let patchB : Vec (N * (c * h * w)) := batchMap N (flatConvStride4 Wst psb) x
   let cotPatchB : Vec (N * (c * h * w)) :=
     batchMapAux N (stemCotPatch (h := h) (w := w) ε Wst psb psng) x dyStem
-  (∀ k, den (SHlo.veclnGammaGradB (N := N) (R := h * w) (D := c) xN epsStr ε
+  (HasGradAt (fun θ => Φ Wst psb θ psnbt) psng
+        (den (SHlo.veclnGammaGradB (N := N) (R := h * w) (D := c) xN epsStr ε
           (batchMap N (chanLNRows c h w) patchB)
-          (.operand cotN (batchMap N (chanLNRows c h w) dyStem))) k
-      = pdiv (fun θ => Φ Wst psb θ psnbt) psng k 0)
-  ∧ (∀ k, den (SHlo.rowDenseBiasGradB (N := N) (R := h * w) (c := c)
-          (.operand cotN (batchMap N (chanLNRows c h w) dyStem))) k
-      = pdiv (fun θ => Φ Wst psb psng θ) psnbt k 0)
-  ∧ (∀ o, den (SHlo.convBiasGradB (N := N) (ic := 3) (oc := c) (h := h) (w := w) (kH := 4) (kW := 4)
-          Wst xstem psb (.operand cotN cotPatchB)) o
-      = pdiv (fun θ => Φ Wst θ psng psnbt) psb o 0)
-  ∧ (∀ idx, den (SHlo.convStride4WeightGradB xN psb x Wst (.operand cotN cotPatchB)) idx
-      = pdiv (fun θ => Φ (Kernel4.unflatten θ) psb psng psnbt) (Kernel4.flatten Wst) idx 0)
+          (.operand cotN (batchMap N (chanLNRows c h w) dyStem)))))
+  ∧ (HasGradAt (fun θ => Φ Wst psb psng θ) psnbt
+        (den (SHlo.rowDenseBiasGradB (N := N) (R := h * w) (c := c)
+          (.operand cotN (batchMap N (chanLNRows c h w) dyStem)))))
+  ∧ (HasGradAt (fun θ => Φ Wst θ psng psnbt) psb
+        (den (SHlo.convBiasGradB (N := N) (ic := 3) (oc := c) (h := h) (w := w) (kH := 4) (kW := 4)
+          Wst xstem psb (.operand cotN cotPatchB))))
+  ∧ (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) psb psng psnbt) (Kernel4.flatten Wst)
+        (den (SHlo.convStride4WeightGradB xN psb x Wst (.operand cotN cotPatchB))))
 
 theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ) (hε : 0 < ε)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
@@ -469,20 +470,26 @@ theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
       (hasGradAt_linLoss dy _) (chanLNTensor3_differentiable c h w ε psng psnbt hε)
       (chanLNTensor3HasVJP c h w ε psng psnbt hε)).of_eq
       (congrFun (chanLNTensor3Back_eq_chanLN_vjp ε hε psng psnbt _) dy).symm
-  refine ⟨fun k => ?_, fun k => ?_, fun o => ?_, fun idx => ?_⟩
-  · refine (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt _ psng _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => flatConvStride4 (h := h) (w := w) Wst psb y)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact (HasGradAt.param_batchMap_through (fun y => flatConvStride4 (h := h) (w := w) Wst psb y)
         (fun θ u => chanLNTensor3 c h w ε θ psnbt u) (fun _ z => z) (fun _ dy => dy) x (θ := psng)
         hLb (fun y => (chanLNTensor3_gamma_differentiable c h w ε psnbt y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl) k)
-  · refine (CnxPoCGB.chanLnBetaGradB_den cotN ε psng _ psnbt _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => flatConvStride4 (h := h) (w := w) Wst psb y)
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt _ psng _ k).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => flatConvStride4 (h := h) (w := w) Wst psb y)
         (fun θ u => chanLNTensor3 c h w ε psng θ u) (fun _ z => z) (fun _ dy => dy) x (θ := psnbt)
         hLb (fun y => (chanLNTensor3_beta_differentiable c h w ε psng y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl) k)
+        _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
+      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε psng _ psnbt _ k).symm)
   · -- the emitted bias node reads the channel sum; any conv's bias Jacobian is the indicator
+    refine (HasGradAt.param_batchMap_through (fun y => y)
+      (fun θ y => flatConvStride4 (h := h) (w := w) Wst θ y)
+      (fun _ u => chanLNTensor3 c h w ε psng psnbt u) (fun y dy => stemCotPatch ε Wst psb psng y dy)
+      x (θ := psb) hLb (fun y => (flatConvStride4_bias_differentiable Wst y) _)
+      (fun _ => chanLNTensor3_differentiable c h w ε psng psnbt hε) hc
+      x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq (funext fun o => ?_)
     have hb : ∀ n j,
         pdiv (fun b' : Vec c => Tensor3.flatten (conv2d Wst b'
             (Tensor3.unflatten (batchSlice N (3 * h * w) xstem n)))) psb o j
@@ -492,24 +499,18 @@ theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
           (GradNodeB.flatConv_bias_split Wst) _ psb o j).trans
         (GradNodeB.pdiv_bias_of_split (fun θ y => flatConvStride4 (h := h) (w := w) Wst θ y)
           (GradNodeB.flatConvStride4_bias_split Wst) _ psb o j).symm
-    refine (GradNodeB.convBGradB_den cotN Wst xstem psb _ o).trans ?_
     refine (Finset.sum_congr rfl fun n _ => Finset.sum_congr rfl fun j _ =>
-      congrArg (· * _) (hb n j)).trans ?_
-    exact HasGradAt.pdiv_param_batchMap_through (fun y => y)
-      (fun θ y => flatConvStride4 (h := h) (w := w) Wst θ y)
-      (fun _ u => chanLNTensor3 c h w ε psng psnbt u) (fun y dy => stemCotPatch ε Wst psb psng y dy)
-      x (θ := psb) hLb (fun y => (flatConvStride4_bias_differentiable Wst y) _)
-      (fun _ => chanLNTensor3_differentiable c h w ε psng psnbt hε) hc
-      x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) o
-  · refine (GradNodeB.psWGradB_den xN cotN psb x Wst _ idx).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => y)
+      congrArg (· * _) (hb n j)).symm.trans ?_
+    exact (GradNodeB.convBGradB_den cotN Wst xstem psb _ o).symm
+  · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => flatConvStride4 (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 c 3 4 4) psb y)
         (fun _ u => chanLNTensor3 c h w ε psng psnbt u) (fun y dy => stemCotPatch ε Wst psb psng y dy)
         x (θ := Kernel4.flatten Wst) (by rw [Kernel4.unflatten_flatten]; exact hLb)
         (fun y => (flatConvStride4_weight_differentiable psb y) _)
         (fun _ => chanLNTensor3_differentiable c h w ε psng psnbt hε)
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact hc y dy)
-        x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n) idx)
+        x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
+      (funext fun idx => (GradNodeB.psWGradB_den xN cotN psb x Wst _ idx).symm)
 
 end Stem
 
@@ -533,19 +534,16 @@ def cnxHeadLossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε 
   let gapB   : Vec (N * (1 * 768)) := batchMap N (globalAvgPoolFlat 768 h w) xhead
   let hnB    : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε hng hnbt) gapB
   let cotHnB : Vec (N * (1 * 768)) := batchMapAux N (headCotHn Wfc bfc) hnB g
-  (∀ k, den (SHlo.veclnGammaGradB (N := N) (R := 1) (D := 768) xN epsStr ε gapB
-          (.operand cotN cotHnB)) k
-      = pdiv (fun θ => Φ θ hnbt Wfc bfc) hng k 0)
-  ∧ (∀ i, den (SHlo.rowDenseBiasGradB (N := N) (R := 1) (c := 768) (.operand cotN cotHnB)) i
-      = pdiv (fun θ => Φ hng θ Wfc bfc) hnbt i 0)
-  ∧ (∀ (i : Fin 768) (j : Fin nC),
-      den (SHlo.weightGradB (N := N) (m := 768) (n := nC) dN hnB (.operand cotN g))
-          (finProdFinEquiv (i, j))
-        = pdiv (fun θ => Φ hng hnbt (Mat.unflatten θ) bfc) (Mat.flatten Wfc)
-            (finProdFinEquiv (i, j)) 0)
-  ∧ (∀ i : Fin nC,
-      ∑ n : Fin N, batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i
-        = pdiv (fun θ => Φ hng hnbt Wfc θ) bfc i 0)
+  (HasGradAt (fun θ => Φ θ hnbt Wfc bfc) hng
+        (den (SHlo.veclnGammaGradB (N := N) (R := 1) (D := 768) xN epsStr ε gapB
+          (.operand cotN cotHnB))))
+  ∧ (HasGradAt (fun θ => Φ hng θ Wfc bfc) hnbt
+        (den (SHlo.rowDenseBiasGradB (N := N) (R := 1) (c := 768) (.operand cotN cotHnB))))
+  ∧ HasGradAt (fun θ => Φ hng hnbt (Mat.unflatten θ) bfc) (Mat.flatten Wfc)
+      (den (SHlo.weightGradB (N := N) (m := 768) (n := nC) dN hnB (.operand cotN g)))
+  ∧ HasGradAt (fun θ => Φ hng hnbt Wfc θ) bfc
+      (fun i => ∑ n : Fin N,
+        batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i)
 
 theorem cnx_head_lossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (N * (768 * h * w)))
@@ -563,42 +561,44 @@ theorem cnx_head_lossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String
     fun y dy => HasGradAt.comp_global (f := dense Wfc bfc)
       (x := rowLNVecFlat 1 768 ε hng hnbt (globalAvgPoolFlat 768 h w y)) (hasGradAt_linLoss dy _)
       (dense_differentiable Wfc bfc) (denseHasVJP Wfc bfc)
-  refine ⟨fun k => ?_, fun i => ?_, fun i j => ?_, fun i => ?_⟩
-  · refine (GradNodeB.veclnGammaGradB_den xN epsStr cotN ε hnbt _ hng _ k).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => globalAvgPoolFlat 768 h w y)
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · exact (HasGradAt.param_batchMap_through (fun y => globalAvgPoolFlat 768 h w y)
         (fun θ u => rowLNVecFlat 1 768 ε θ hnbt u) (fun _ z => dense Wfc bfc z)
         (fun y dy => headCotHn Wfc bfc (rowLNVecFlat 1 768 ε hng hnbt (globalAvgPoolFlat 768 h w y)) dy)
         xhead (θ := hng) hL (fun y => (rowLNVecFlat_gamma_differentiable 1 768 ε hnbt y) _)
         (fun _ => dense_differentiable Wfc bfc) hc
         _ _ (fun n => batchSlice_batchMap _ _ n)
-        (fun n => by rw [batchSlice_batchMapAux, batchSlice_batchMap, batchSlice_batchMap]) k)
-  · refine (GradNodeB.rowDenseBiasGradB_den_lnbeta cotN ε hng
-      (fun n => Mat.unflatten (batchSlice N (1 * 768) (batchMap N (globalAvgPoolFlat 768 h w) xhead) n))
-      hnbt _ i).trans
-      (HasGradAt.pdiv_param_batchMap_through (fun y => globalAvgPoolFlat 768 h w y)
+        (fun n => by rw [batchSlice_batchMapAux, batchSlice_batchMap, batchSlice_batchMap])).of_eq
+      (funext fun k => (GradNodeB.veclnGammaGradB_den xN epsStr cotN ε hnbt _ hng _ k).symm)
+  · exact (HasGradAt.param_batchMap_through (fun y => globalAvgPoolFlat 768 h w y)
         (fun θ u => rowLNVecFlat 1 768 ε hng θ u) (fun _ z => dense Wfc bfc z)
         (fun y dy => headCotHn Wfc bfc (rowLNVecFlat 1 768 ε hng hnbt (globalAvgPoolFlat 768 h w y)) dy)
         xhead (θ := hnbt) hL (fun y => (rowLNVecFlat_beta_differentiable 1 768 ε hng y) _)
         (fun _ => dense_differentiable Wfc bfc) hc
         _ _ (fun n => batchSlice_batchMap _ _ n)
-        (fun n => by rw [batchSlice_batchMapAux, batchSlice_batchMap, batchSlice_batchMap]) i)
-  · refine (GradNodeB.headWGradB_den dN cotN _ Wfc bfc g i j).trans
-      (HasGradAt.pdiv_param_batchMap_through
+        (fun n => by rw [batchSlice_batchMapAux, batchSlice_batchMap, batchSlice_batchMap])).of_eq
+      (funext fun i => (GradNodeB.rowDenseBiasGradB_den_lnbeta cotN ε hng
+      (fun n => Mat.unflatten (batchSlice N (1 * 768) (batchMap N (globalAvgPoolFlat 768 h w) xhead) n))
+      hnbt _ i).symm)
+  · exact (HasGradAt.param_batchMap_through
         (fun y => rowLNVecFlat 1 768 ε hng hnbt (globalAvgPoolFlat 768 h w y))
         (fun θ z => dense (Mat.unflatten θ) bfc z) (fun _ l => l) (fun _ dy => dy)
         xhead (θ := Mat.flatten Wfc) (by rw [Mat.unflatten_flatten]; exact hL)
         (fun y => (denseWeightMap_differentiable bfc y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl) _)
-  · refine (Finset.sum_congr rfl fun n _ =>
-      GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 (batchMap N (rowLNVecFlat 1 768 ε hng hnbt)
-        (batchMap N (globalAvgPoolFlat 768 h w) xhead)) n) bfc g n i).trans
-      (HasGradAt.pdiv_param_batchMap_through
+        _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl)).of_eq
+      (funext fun idx => by
+        obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
+        exact (GradNodeB.headWGradB_den dN cotN _ Wfc bfc g i j).symm)
+  · exact (HasGradAt.param_batchMap_through
         (fun y => rowLNVecFlat 1 768 ε hng hnbt (globalAvgPoolFlat 768 h w y))
         (fun θ z => dense Wfc θ z) (fun _ l => l) (fun _ dy => dy) xhead (θ := bfc) hL
         (fun y => (GradNodeB.dense_bias_differentiable Wfc y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
-        _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl) i)
+        _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl)).of_eq
+      (funext fun i => (Finset.sum_congr rfl fun n _ =>
+      GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 (batchMap N (rowLNVecFlat 1 768 ε hng hnbt)
+        (batchMap N (globalAvgPoolFlat 768 h w) xhead)) n) bfc g n i).symm)
 
 end Head
 
@@ -655,7 +655,8 @@ theorem cnxHeadB_hasGradAt_comp (N : Nat) {h w nC : Nat} (ε : ℝ) (hε : 0 < �
     (congrFun (cnxHeadDyB_eq_vjp N ε hε hng hnbt Wfc bfc X) g).symm
 
 /-- **ConvNeXt-T, batched**: the tie's forward, stage by stage — `batchMap N` of the stem, each
-    block and downsample, then of the head. -/
+    block and downsample, then of the head. It is `batchMap N (convNextForwardTCh (w.toCh ε))`
+    (`cnxNetB_eq_convNextForwardTCh`). -/
 noncomputable def cnxNetB (N : Nat) {nC : Nat} (ε : ℝ) (w : CnxTieWeights nC) (x : Vec (N * (3 * 224 * 224))) :
     Vec (N * nC) :=
   batchMap N (cnxHeadO 7 7 ε w.hG w.hT w.Wfc w.bfc)
@@ -1161,6 +1162,37 @@ theorem cnx_logitsB_eq (N : Nat) {nC : Nat} (ε : ℝ) (w : CnxTieWeights nC) (x
     batchMap N (dense w.Wfc w.bfc) (batchMap N (rowLNVecFlat 1 768 ε w.hG w.hT)
       (batchMap N (globalAvgPoolFlat 768 7 7) (cnxPreB18 N ε w x))) = cnxNetB N ε w x := by
   rw [cnx_forward_eq_head, cnxHeadO, batchMap_comp, batchMap_comp]; rfl
+
+/-- **`cnxNetB` is the canonical ConvNeXt-T forward, batched**: `convNextForwardTCh` at
+    `w.toCh ε`, the FullT forward whose VJP is `convNextForwardTChHasVJP`, applied per example. The
+    per-example identity is `CnxTieWeights.forward_eq_convNextForwardTCh`; `batchMap_comp` splits
+    the batched composite into the capstone's stage-by-stage chain. -/
+theorem cnxNetB_eq_convNextForwardTCh (N : Nat) {nC : Nat} (ε : ℝ) (w : CnxTieWeights nC)
+    (x : Vec (N * (3 * 224 * 224))) :
+    cnxNetB N ε w x = batchMap N (convNextForwardTCh (w.toCh ε)) x := by
+  have hper : ∀ y, convNextForwardTCh (w.toCh ε) y
+      = (cnxHeadO 7 7 ε w.hG w.hT w.Wfc w.bfc ∘ w.b18.fwdO (h := 7) (w := 7) ε
+        ∘ w.b17.fwdO (h := 7) (w := 7) ε ∘ w.b16.fwdO (h := 7) (w := 7) ε
+        ∘ w.d2.fwdO (h := 7) (w := 7) ε ∘ w.b15.fwdO (h := 14) (w := 14) ε
+        ∘ w.b14.fwdO (h := 14) (w := 14) ε ∘ w.b13.fwdO (h := 14) (w := 14) ε
+        ∘ w.b12.fwdO (h := 14) (w := 14) ε ∘ w.b11.fwdO (h := 14) (w := 14) ε
+        ∘ w.b10.fwdO (h := 14) (w := 14) ε ∘ w.b9.fwdO (h := 14) (w := 14) ε
+        ∘ w.b8.fwdO (h := 14) (w := 14) ε ∘ w.b7.fwdO (h := 14) (w := 14) ε
+        ∘ w.d1.fwdO (h := 14) (w := 14) ε ∘ w.b6.fwdO (h := 28) (w := 28) ε
+        ∘ w.b5.fwdO (h := 28) (w := 28) ε ∘ w.b4.fwdO (h := 28) (w := 28) ε
+        ∘ w.d0.fwdO (h := 28) (w := 28) ε ∘ w.b3.fwdO (h := 56) (w := 56) ε
+        ∘ w.b2.fwdO (h := 56) (w := 56) ε ∘ w.b1.fwdO (h := 56) (w := 56) ε
+        ∘ cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) y := by
+    intro y
+    rw [← CnxTiePoC.CnxTieWeights.forward_eq_convNextForwardTCh w ε y]
+    simp only [Function.comp_apply, cnxHeadO, mnistLinear]
+  rw [show convNextForwardTCh (w.toCh ε) = _ from funext hper, batchMap_comp, batchMap_comp,
+    batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp,
+    batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp,
+    batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp,
+    batchMap_comp, batchMap_comp]
+  unfold cnxNetB
+  simp only [Function.comp_apply]
 
 /-- **Every ConvNeXt-T parameter gradient node is the derivative of `L` in that parameter**, for a
     loss `L` of the logits and `g` the cotangent the chain starts from: the 182 nodes
