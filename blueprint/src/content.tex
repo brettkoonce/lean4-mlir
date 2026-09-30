@@ -277,8 +277,8 @@ Let's find out.
 \addcontentsline{toc}{chapter}{How this book is organized}
 
 A short \emph{Foundations} chapter comes first: what a derivative is in
-Mathlib, and why the book tracks vector--Jacobian products rather than
-Jacobians. Everything after assumes it.
+Mathlib, why the book tracks vector--Jacobian products rather than
+Jacobians, and what training adds to inference. Everything after assumes it.
 
 \textbf{Part 1: The framework (Chapters 1--9).} One new primitive per
 chapter, proved correct as we go. The first half pins down the
@@ -656,6 +656,52 @@ $\ldots$). Autograd records each forward op on a tape and replays its
 derivative at backward time. We ship the closed form instead: codegen
 reads off the \texttt{backward} field and emits a single fused StableHLO
 kernel, with no tape and no replay.
+
+\section*{Inference and training}
+
+A deployed network is its forward pass. The weights \(\theta\) are
+fixed, an image goes in, a prediction \(f(x;\theta)\) comes out, and
+that is \emph{inference}: all a trained model ever does. Nothing in this
+chapter so far is about it. The derivative, the VJP and the
+\(\HasVJP\) record exist for the other job, which is choosing
+\(\theta\).
+
+\emph{Training} adds one step to the forward pass. Pick a loss
+\(\mathcal{L}\) that scores the prediction against the label. After the
+forward pass, run the backward pass of the previous section: the
+cotangent \(\nabla\mathcal{L}\) enters at the output and each layer's
+VJP carries it one layer down, until every parameter has its gradient.
+Then move each parameter a small step against its gradient. Forward,
+loss, backward, update. In this book those four are one function,
+\(\texttt{train\_step} : (\theta, \text{batch}) \mapsto \theta'\), and
+training is that function applied batch after batch:
+
+\begin{verbatim}
+θ := init
+for epoch in 0..E:
+  for batch in batches(data):
+    θ := train_step(θ, batch)   // forward, loss, backward, update
+  eval(θ)                       // forward only
+\end{verbatim}
+
+\noindent Five lines of host control flow around two compiled functions.
+The loop counts epochs and slices batches; it never computes a gradient
+or touches a tensor. \texttt{eval} is the forward pass, inference again,
+run over the held-out set to see how \(\theta\) is doing.
+\texttt{train\_step} is the same forward pass with the loss, the
+backward pass and the update appended. The two are compiled separately,
+and one is the other's opening: the linear classifier's
+forward render is the first three of its training step's twenty-seven
+operations, and Chapter~\ref{chap:tensor} prints both.
+
+Every architecture in Part~1 trains under this loop. What changes from
+one chapter to the next is the inside of \texttt{train\_step}: the
+forward pass gains a layer, the backward pass gains that layer's VJP, and
+the proof that the VJP is correct is the chapter's theorem.
+Chapter~\ref{chap:tensor} builds the function for a single matrix
+multiply, proves it, compiles it to one GPU kernel and runs the loop;
+\S\ref{sec:mlp_inside_train} is the loop as Lean and
+\S\ref{sec:mlir_training_step} is the compiled function.
 
 \chapter{MNIST: linear classifier}
 \label{chap:tensor}
@@ -2160,21 +2206,12 @@ certifies the two updates at $N = 1$, and the batch sum and the $\alpha/N$
 scale are the render's.
 
 \medskip\noindent That one function is the only heavy thing in the loop that
-drives it. Stripped of its logging and its session setup,
-\S~\ref{sec:mlp_inside_train}'s driver is five lines:
-
-\begin{verbatim}
-(W, b) := 0                            // zero-initialised, no Adam buffers
-for epoch in 0..E:
-  for batch in batches(data):
-    (W, b) := train_step(W, b, batch)  // <- the function above
-  eval(W, b)                           // the forward-only render
-\end{verbatim}
-
-\noindent Five lines of host control flow around one compiled dispatch. The
-loop counts epochs and slices batches. It never computes a gradient or
-touches a tensor. The lone \texttt{train\_step} call is the function
-above, and it is the only place arithmetic happens.
+drives it. Strip \S~\ref{sec:mlp_inside_train}'s driver of its logging
+and its session setup and it is the Foundations chapter's five lines. The
+\texttt{train\_step} call is the listing above; the \texttt{eval} is the
+forward render printed in ``MLIR: Linear'', which is this listing's first
+three operations; and the loop around them counts epochs and slices
+batches, nothing more.
 
 \medskip\noindent\textbf{Where this stands.} The scheme above is the one
 every architecture in Part~I trains under, and the book's official claim
