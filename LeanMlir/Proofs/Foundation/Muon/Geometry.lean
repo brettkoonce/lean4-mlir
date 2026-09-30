@@ -46,7 +46,12 @@ of the gradient onto `O(n)`. The latter reuses the von Neumann bound: minimizing
 to `O(n)` *is* maximizing `⟨G,·⟩_F` over it, so "steepest" and "nearest orthogonal" are the same fact.
 
 Scope: the `_of_isUnit` forms need `G` invertible; the singular case (which needs the orthonormal
-completion of `U`) is not proved. All `propext / Classical.choice / Quot.sound`-clean. -/
+completion of `U`) is not proved. All `propext / Classical.choice / Quot.sound`-clean.
+
+## References
+
+- Bernstein & Newhouse 2024, *Old Optimizer, New Norm: An Anthology*. <https://arxiv.org/abs/2409.20325>
+- Gupta, Koren, Singer 2018, *Shampoo: Preconditioned Stochastic Tensor Optimization*. <https://arxiv.org/abs/1802.09568> -/
 
 namespace Proofs.MuonGeometry
 

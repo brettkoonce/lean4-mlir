@@ -55,6 +55,10 @@ BN case and the commutation lemmas the non-BN cases reduce to, and each net's DP
 own chain with them. That the `R` graphs' host inputs ARE the replica shards of one batch —
 `hx` / `hxv` / `hdy` below — remains the driver's, exactly as in `DataParallel.Node`. The
 lowerer's `all_reduce` is trusted as every other op's lowering is.
+
+## References
+
+- Chan, Golub, LeVeque 1982, *Updating Formulae and a Pairwise Algorithm for Computing Sample Variances* (COMPSTAT; the pairwise combine rule). <https://doi.org/10.1007/978-3-642-51461-6_3>
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

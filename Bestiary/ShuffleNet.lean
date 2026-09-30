@@ -62,6 +62,10 @@ scale with a width multiplier:
 Per-stage unit counts are `[4, 8, 4]` across the three shuffle stages,
 matching the paper's Table 1 (a total of 16 shuffle units plus the
 stem + classifier).
+
+## References
+
+- Zhang, Zhou, Lin, Sun 2018, *ShuffleNet*. <https://arxiv.org/abs/1707.01083>
 -/
 
 -- ════════════════════════════════════════════════════════════════

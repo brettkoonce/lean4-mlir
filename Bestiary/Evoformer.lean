@@ -93,6 +93,10 @@ Weights are **shared across the 8 rounds** (it's recurrent), so
   the evoformer, ~10M in structure module.
 - `alphaFold2Mini` — 16 evoformer + 4 structure (useful for fine-tune / ablation).
 - `tinyEvoformer` — 4 blocks, `c_m = 64`, `c_z = 32`. Fixture.
+
+## References
+
+- Jumper et al. 2021, *Highly accurate protein structure prediction with AlphaFold*. <https://doi.org/10.1038/s41586-021-03819-2>
 -/
 
 -- ════════════════════════════════════════════════════════════════

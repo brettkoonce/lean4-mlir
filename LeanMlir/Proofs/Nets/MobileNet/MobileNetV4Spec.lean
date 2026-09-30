@@ -4,7 +4,11 @@
 transcription of the net's layout. The renderer (`MobileNetV4RenderB`) folds over it to
 emit the artifacts, and the proof chain from `MobileNetV4BackB0.lean` on folds over it to state the
 net, so the proofs read the table without importing the renderer. Names are in `Proofs.StableHLO`,
-where the renderer first defined them. -/
+where the renderer first defined them.
+
+## References
+
+- Qin et al. 2024, *MobileNetV4: Universal Models for the Mobile Ecosystem*. <https://arxiv.org/abs/2404.10518> -/
 
 namespace Proofs.StableHLO
 

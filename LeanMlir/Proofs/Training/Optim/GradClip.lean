@@ -34,7 +34,11 @@ rank-0 arithmetic tail. Four small ops, all in the `ds : List Nat` parameter-sha
 
 **Claim ceiling.** Like `AdamStep`, the verified target is **faithfulness** (the rendered clip
 denotes these functions) plus **well-definedness** (`clipDenom_pos`) — *not* that clipping improves
-anything. Say "the clipped render is certified", never "clipping is proven to help". -/
+anything. Say "the clipped render is certified", never "clipping is proven to help".
+
+## References
+
+- Pascanu, Mikolov, Bengio 2013, *On the difficulty of training Recurrent Neural Networks* (global-norm clipping). <https://arxiv.org/abs/1211.5063> -/
 
 namespace Proofs
 

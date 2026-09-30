@@ -52,6 +52,10 @@ open ReferenceNets (unetBrats)
     Modifiers: pb (prior-bias init) · cos (cosine LR) · aug (paired hflip)
                lr=<n, in units of 1e-4> · tag=<s> (keep two runs of one arm
                from clobbering each other's checkpoints)
+
+    ## References
+
+    - Ronneberger, Fischer, Brox 2015, *U-Net*. <https://arxiv.org/abs/1505.04597>
 -/
 
 /-- Inverse-frequency class weights, measured over `data/brats/train.bin` by

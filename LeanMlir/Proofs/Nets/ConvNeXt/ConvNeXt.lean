@@ -42,6 +42,10 @@ LayerNorm is per spatial position over the channel axis; that is
 `convNextForwardTCh`. The stem here is a 1×1 conv. Every other piece
 (depthwise 7×7, 1×1 convs, GELU, layer scale, GAP, dense) is the same
 map as in ConvNeXt-T.
+
+## References
+
+- Liu et al. 2022, *A ConvNet for the 2020s* (ConvNeXt). <https://arxiv.org/abs/2201.03545>
 -/
 
 namespace Proofs

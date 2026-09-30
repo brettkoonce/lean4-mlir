@@ -49,6 +49,13 @@ multiply. One more `pdiv_*` theorem, one more `HasVJP` instance.
 
 Imported directly by SE, Attention, DropPath and Nets/ConvNeXt/ConvNeXt; the rest of the corpus
 reaches it through them.
+
+## References
+
+- Ba, Kiros, Hinton 2016, *Layer Normalization*. <https://arxiv.org/abs/1607.06450>
+- Hendrycks & Gimpel 2016, *Gaussian Error Linear Units (GELUs)* (incl. tanh approximation). <https://arxiv.org/abs/1606.08415>
+- Ramachandran, Zoph, Le 2017, *Searching for Activation Functions* (Swish). <https://arxiv.org/abs/1710.05941>
+- Touvron et al. 2021, *Going deeper with Image Transformers* (CaiT, layer-scale). <https://arxiv.org/abs/2103.17239>
 -/
 
 open Finset BigOperators

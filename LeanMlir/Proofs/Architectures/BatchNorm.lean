@@ -35,6 +35,11 @@ The actual implementation reduces over `[batch, h, w]` per channel. For
 clarity, this file works on a single 1D `Vec n` (think of `n` as
 `B · H · W` flattened, for one channel). The math is identical; only the
 indexing changes when you go to 4D.
+
+## References
+
+- Ioffe & Szegedy 2015, *Batch Normalization*. <https://arxiv.org/abs/1502.03167>
+- Chan, Golub, LeVeque 1982, *Updating Formulae and a Pairwise Algorithm for Computing Sample Variances* (COMPSTAT; the pairwise combine rule). <https://doi.org/10.1007/978-3-642-51461-6_3>
 -/
 
 open Finset BigOperators

@@ -8,7 +8,12 @@ BraTS UNet, used by its trainer, its predictor, the UNet forward test and the UN
 entry; and the ResNet-34 UNet on BraTS, used by its trainer, the predictor and the per-volume
 scorer. One
 definition, so a change to the net reaches every consumer. A consumer that trains under another
-name overrides `name`: it is the checkpoint prefix (`NetSpec.buildPrefix`). -/
+name overrides `name`: it is the checkpoint prefix (`NetSpec.buildPrefix`).
+
+## References
+
+- He, Zhang, Ren, Sun 2016, *Deep Residual Learning for Image Recognition*. <https://arxiv.org/abs/1512.03385>
+- Ronneberger, Fischer, Brox 2015, *U-Net*. <https://arxiv.org/abs/1505.04597> -/
 
 namespace ReferenceNets
 

@@ -6,7 +6,12 @@ One namespace per verified ImageNet-scale net (`ResNet34Layout`, `MobileNetV2Lay
 train step's argument order, plus the packed shape descriptors (`packShapes`, `packXShape`) the
 runtime passes to the FFI. Pure data — importing only `LEBytes` — so the spec side
 (`Verified.NetsCore`'s `#guard spec.toSpecs == XLayout.specs`) can read the tables without
-importing the runtime. -/
+importing the runtime.
+
+## References
+
+- He et al. 2015, *Delving Deep into Rectifiers* (He init). <https://arxiv.org/abs/1502.01852>
+- Glorot & Bengio 2010, *Understanding the difficulty of training deep feedforward neural networks*. <https://proceedings.mlr.press/v9/glorot10a.html> -/
 
 /-- Pack param shape descriptors: `[nParams, rank0, d0..., rank1, d1..., ...]` as int32 LE. -/
 def packShapes (shapes : Array (Array Nat)) : ByteArray := Id.run do

@@ -47,6 +47,11 @@ earlier chapters.
 5. **Final commentary** — why the taxonomy is complete.
 6. **Bridging ranks** — patch embedding, classifier head, and the weight-tied
    whole-ViT witness `vitFullHasVJP` (`vitFullHasVJP_correct`).
+
+## References
+
+- Vaswani et al. 2017, *Attention Is All You Need*. <https://arxiv.org/abs/1706.03762>
+- Dosovitskiy et al. 2021, *An Image is Worth 16x16 Words* (ViT). <https://arxiv.org/abs/2010.11929>
 -/
 
 open Finset BigOperators

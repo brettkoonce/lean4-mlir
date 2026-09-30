@@ -16,7 +16,12 @@ import LeanMlir.Blackjack
     XLA backend only. `lake exe blackjack-dqn [steps=50000] [seed=1] [double] [lrdecay]`;
     `lrdecay` runs the learning rate linearly from 1e-3 to 1e-4 over the updates;
     `tag=<name>` suffixes every file the run writes under `.lake/build/`.
-    Writes `<prefix>_curve.csv` and `<prefix>_policy.csv` next to the graphs. -/
+    Writes `<prefix>_curve.csv` and `<prefix>_policy.csv` next to the graphs.
+
+    ## References
+
+    - Mnih et al. 2015, *Human-level control through deep reinforcement learning* (DQN). <https://doi.org/10.1038/nature14236>
+    - van Hasselt, Guez, Silver 2016, *Deep Reinforcement Learning with Double Q-learning*. <https://arxiv.org/abs/1509.06461> -/
 
 open FloatFmt
 

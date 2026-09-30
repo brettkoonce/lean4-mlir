@@ -51,6 +51,12 @@ import LeanMlir
       lake exe diffusion-2d muller_brown 20000 50 euler              # the DDPM path, same target
       python3 scripts/demos/toy2d_metrics.py --target=spiral
       python3 scripts/demos/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
+
+    ## References
+
+    - Ho, Jain, Abbeel 2020, *Denoising Diffusion Probabilistic Models*. <https://arxiv.org/abs/2006.11239>
+    - Lipman et al. 2023, *Flow Matching for Generative Modeling*. <https://arxiv.org/abs/2210.02747>
+    - Noé, Olsson, Köhler, Wu 2019, *Boltzmann generators*. <https://doi.org/10.1126/science.aaw1147>
 -/
 
 /-- Frequencies in the sinusoidal time encoding; the input is the 2-vector

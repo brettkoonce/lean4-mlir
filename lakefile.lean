@@ -682,10 +682,6 @@ lean_exe «tinygpt-shakespeare» where
   root := `demos.MainTinyGptShakespeare
   moreLinkArgs := lowererLink
 
-lean_exe «tinystories» where
-  root := `demos.MainTinyStories
-  moreLinkArgs := lowererLink
-
 lean_exe «mnist-ddpm-train» where
   root := `demos.MainMnistDdpmTrain
   moreLinkArgs := lowererLink

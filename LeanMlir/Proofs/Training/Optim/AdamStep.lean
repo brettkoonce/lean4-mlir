@@ -14,7 +14,12 @@ positive) — NOT a loss-decrease bound.
 
 `bc₁`/`bc₂` are the bias-correction denominators `1 − β₁ᵗ` / `1 − β₂ᵗ`, passed in
 (host-computed per step) rather than recomputed in-graph — matching the emitter,
-which threads them as scalar `tensor<f32>` function arguments. -/
+which threads them as scalar `tensor<f32>` function arguments.
+
+## References
+
+- Kingma & Ba 2015, *Adam: A Method for Stochastic Optimization*. <https://arxiv.org/abs/1412.6980>
+- Loshchilov & Hutter 2019, *Decoupled Weight Decay Regularization* (AdamW). <https://arxiv.org/abs/1711.05101> -/
 
 namespace Proofs
 

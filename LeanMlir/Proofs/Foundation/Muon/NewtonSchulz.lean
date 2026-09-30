@@ -28,7 +28,12 @@ asks when the matmul iteration `X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` (`nsStep`) c
   (`qScalar_not_le_one`, `qScalar_one_lt_one`); what is proved for it is a five-step band bound
   at `σ = 1/2` (`qScalar_iterate_band_half`).
 
-All `propext / Classical.choice / Quot.sound`-clean. -/
+All `propext / Classical.choice / Quot.sound`-clean.
+
+## References
+
+- Higham 2008, *Functions of Matrices: Theory and Computation* (ch. 8, Newton–Schulz). <https://doi.org/10.1137/1.9780898717778>
+- Jordan et al. 2024, *Muon: An optimizer for hidden layers in neural networks* (blog). <https://kellerjordan.github.io/posts/muon/> -/
 
 namespace Proofs.MuonNewtonSchulz
 

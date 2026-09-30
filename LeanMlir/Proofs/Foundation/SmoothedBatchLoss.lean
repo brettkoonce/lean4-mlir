@@ -9,6 +9,10 @@ flat batch of logits — `smoothedBatchLoss`, the `1/B`-weighted sum of every ex
 cross-entropy against its smoothed target — and proves its full gradient is the emitted cotangent,
 read at the head's `N·K` index (`smoothedBatchLoss_grad`). That is the `hg` a parameter-level
 statement asks for (`HasGradAt` at the logits, `ParamGrad`).
+
+## References
+
+- Szegedy et al. 2016, *Rethinking the Inception Architecture for Computer Vision* (§7 label smoothing). <https://arxiv.org/abs/1512.00567>
 -/
 
 namespace Proofs

@@ -69,6 +69,10 @@ its names from `s.p` off the table rather than taking them as arguments.
 
 Checked against the committed bytes: `verified_mlir/mnv4_fwd.mlir`'s signature is **234
 arguments = `%x` + 233 parameters**, and every name this file writes appears there.
+
+## References
+
+- Qin et al. 2024, *MobileNetV4: Universal Models for the Mobile Ecosystem*. <https://arxiv.org/abs/2404.10518>
 -/
 
 namespace Proofs

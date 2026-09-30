@@ -42,7 +42,11 @@ import Std.Data.HashSet
      [tempPlies=n²] [sweep=0 (all; 20000 above 4×4)] [sweepMin=6] [opening=3 above 4×4]
      [cap=22] [probe=0,81] [seed=1] [tag=<name>] [params=<file>]`;
     writes `<prefix>_curve.csv`, `<prefix>_sweep.csv`, `<prefix>_policy.csv` and
-    `<prefix>_params.bin` under `.lake/build/`. XLA only. -/
+    `<prefix>_params.bin` under `.lake/build/`. XLA only.
+
+    ## References
+
+    - Nair, *alpha-zero-general* (software). <https://github.com/suragnair/alpha-zero-general> -/
 
 open FloatFmt TTT
 

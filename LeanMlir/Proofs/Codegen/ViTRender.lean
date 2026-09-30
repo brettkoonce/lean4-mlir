@@ -14,7 +14,11 @@ Render is value-independent (`skel` erases the `ℝ`/`Mat`/`Vec` fields), so pla
 mats/vecs) are passed; the emitted `epsStr`/`sStr` literals carry the real ε / SDPA-scale.
 
 ViT-Tiny: ic=3, 224², patch 16×16/s16 (N=196 patches, 197 tokens), D=192 = 3 heads × 64, MLP 768,
-12 blocks, `nClasses` classes (10 as committed), BS=32, ε=1e-5, SDPA scale = 1/√64 = 0.125. -/
+12 blocks, `nClasses` classes (10 as committed), BS=32, ε=1e-5, SDPA scale = 1/√64 = 0.125.
+
+## References
+
+- Dosovitskiy et al. 2021, *An Image is Worth 16x16 Words* (ViT). <https://arxiv.org/abs/2010.11929> -/
 
 open Proofs Proofs.StableHLO
 

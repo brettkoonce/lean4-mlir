@@ -6,7 +6,11 @@ import LeanMlir
     `scripts/probes/diou_grad_check.py`. Forward only.
 
     Usage: lake exe diou-loss-probe [B gH gW] [outPath]
-    Defaults: 2 14 14 diou_loss_gen.mlir -/
+    Defaults: 2 14 14 diou_loss_gen.mlir
+
+    ## References
+
+    - Zheng et al. 2020, *Distance-IoU Loss*. <https://arxiv.org/abs/1911.08287> -/
 def main (args : List String) : IO Unit := do
   let nums := args.filterMap String.toNat?
   let n (i d : Nat) : Nat := (nums[i]?).getD d

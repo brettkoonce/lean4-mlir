@@ -66,6 +66,10 @@ prose explains the pairing; the NetSpec stays readable.
   `LeanMlir.ReferenceNets`, which the BraTS trainer, its predictor and
   the forward test import.
 - `tinyUnet` — depth 2, base 16 — bestiary fixture.
+
+## References
+
+- Ronneberger et al. 2015, *U-Net*. <https://arxiv.org/abs/1505.04597>
 -/
 
 -- ════════════════════════════════════════════════════════════════

@@ -54,6 +54,10 @@ shared zero constant each conv, depthwise and project bias is bound to once its 
 folded into the BatchNorm that follows it. That is what makes the shipped parameter census 158 and
 not 210. Every graph below is `∀`-quantified over the bias VALUE, so it covers the
 `convBias := true` render too; only the name would differ there.
+
+## References
+
+- Sandler et al. 2018, *MobileNetV2: Inverted Residuals and Linear Bottlenecks*. <https://arxiv.org/abs/1801.04381>
 -/
 
 namespace Proofs

@@ -21,6 +21,10 @@ LN positivities (1 stem + 18 block + 3 downsample + head) and no other hypothesi
 `efficientnetForwardBFullHasVJP` and `vitForwardKVHasVJP`. The `ConvNeXtFold`/`ConvNeXtChainClose`
 param bridges are dim-generic and cover all 18 blocks verbatim; the downsample conv W/b reuse the
 proven stride-2 bridges.
+
+## References
+
+- Liu et al. 2022, *A ConvNet for the 2020s* (ConvNeXt). <https://arxiv.org/abs/2201.03545>
 -/
 
 namespace Proofs

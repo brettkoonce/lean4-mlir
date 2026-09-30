@@ -47,6 +47,10 @@ rational. On the data-parallel artifacts the render's `N` is the PER-REPLICA bat
 BatchNorm is synchronised, and `ResNet34SyncB` is this file's twin for them: replica
 `r`'s forward graph denotes shard `r` of `resnet34ForwardBFull (R * N)`, this file's forward at
 the global batch.
+
+## References
+
+- He, Zhang, Ren, Sun 2016, *Deep Residual Learning for Image Recognition*. <https://arxiv.org/abs/1512.03385>
 -/
 
 namespace Proofs

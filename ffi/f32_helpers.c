@@ -3646,6 +3646,8 @@ LEAN_EXPORT lean_obj_res lean_ttt_scripted_agreement(b_lean_obj_arg tbl_ba, size
 
 // ═══════════════════════════════════════════════════════════════════════
 // PUCT search in C: the AlphaZero demo's trees as flat per-game arrays.
+// PUCT and the search it drives: Silver et al. 2017, AlphaGo Zero,
+// https://doi.org/10.1038/nature24270.
 //
 // One Lean-owned ByteArray is the arena for G games. Per game: `cap` nodes (priors P,
 // visit counts N and total values W over the n² cells, the visit sum, the node's

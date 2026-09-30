@@ -80,6 +80,11 @@ its `_faithful`, over four per-block-kind graphs at `r50FwdChainB`'s own tokens.
 the committed bytes: `verified_mlir/resnet50_fwd.mlir`'s signature is **162 arguments = `%x` + 161
 parameters**, with 12 projection slots, and every name this file writes (`%sW`, `%sg`, `%sbt`,
 `%zb64` … `%zb2048`, `%s1b0W1` … `%s4b2bt3`, `%s1b0Wp`/`%gp`/`%btp`, `%Wd`, `%bd`) appears there.
+
+## References
+
+- He, Zhang, Ren, Sun 2016, *Deep Residual Learning for Image Recognition*. <https://arxiv.org/abs/1512.03385>
+- torchvision. <https://github.com/pytorch/vision>
 -/
 
 namespace Proofs

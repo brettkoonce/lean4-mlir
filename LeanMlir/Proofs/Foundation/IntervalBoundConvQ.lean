@@ -16,7 +16,11 @@ one `decide +kernel` on the checker.
 
 The weights and the image enter as `ℚ` data and the `ℝ` net is DEFINED as their
 cast (`castK`, `castV`, `castW`, `castT`), so no per-tensor bridge is needed.
-Closes under `propext / Classical.choice / Quot.sound`. -/
+Closes under `propext / Classical.choice / Quot.sound`.
+
+## References
+
+- Gowal et al. 2018, *On the Effectiveness of Interval Bound Propagation for Training Verifiably Robust Models*. <https://arxiv.org/abs/1810.12715> -/
 
 namespace Proofs
 namespace IBP

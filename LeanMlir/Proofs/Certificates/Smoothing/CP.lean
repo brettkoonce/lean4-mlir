@@ -39,7 +39,11 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
   each per-image hypothesis is ONE `decide +kernel` bignum inequality
   (`binomTail_le_of_kernel_check`), as `Smoothing.CPScorecard` states them.
 
-All results are `propext / Classical.choice / Quot.sound`-clean. -/
+All results are `propext / Classical.choice / Quot.sound`-clean.
+
+## References
+
+- Clopper & Pearson 1934, *The use of confidence or fiducial limits illustrated in the case of the binomial*. <https://doi.org/10.1093/biomet/26.4.404> -/
 
 namespace Proofs
 

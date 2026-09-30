@@ -65,6 +65,10 @@ the bestiary is pure architecture, no VJP commitment.
 - `tinyMamba` — 4 blocks, dim 128 — smallest pedagogical fixture
 
 All use `stateSize = 16` and `expand = 2`, matching the paper's defaults.
+
+## References
+
+- Gu & Dao 2023, *Mamba: Linear-Time Sequence Modeling with Selective State Spaces*. <https://arxiv.org/abs/2312.00752>
 -/
 
 -- ════════════════════════════════════════════════════════════════

@@ -57,6 +57,10 @@ giving a fixed `d_head = 32` throughout.
 
 MLP ratio = 4 everywhere; window size = 7 (12 for `^` variants trained at
 384×384).
+
+## References
+
+- Liu et al. 2021, *Swin Transformer*. <https://arxiv.org/abs/2103.14030>
 -/
 
 -- ════════════════════════════════════════════════════════════════

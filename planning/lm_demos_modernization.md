@@ -5,6 +5,9 @@
 complete for what it planned) and `planning/archive/demo_xla_port.md` (the runtime record). The
 TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this is what is left.
 
+**2026-09-30: the TinyStories demo is deleted** (user; with its lakefile target, data scripts,
+decode script and sample figure). Its items below are closed by deletion; the rest stand.
+
 ## §0 Verified today
 
 * **Runtime: XLA/PJRT since `bc946fe6` (2026-08-26).** Zero IREE tokens in the three sources; all

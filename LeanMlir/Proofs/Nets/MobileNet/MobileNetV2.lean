@@ -44,6 +44,10 @@ here has a stride-1 stem.
 
 All new defs/theorems certify to exactly `[propext, Classical.choice,
 Quot.sound]`.
+
+## References
+
+- Sandler et al. 2018, *MobileNetV2: Inverted Residuals and Linear Bottlenecks*. <https://arxiv.org/abs/1801.04381>
 -/
 
 namespace Proofs

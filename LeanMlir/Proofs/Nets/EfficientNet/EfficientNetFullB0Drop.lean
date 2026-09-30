@@ -29,6 +29,11 @@ The residual-block-with-drop and the dropout head are text-guarded against the r
 graph's SSA names, as `EfficientNetFullB0Eval` records). These artifacts are f32. The train steps'
 backward through the drop sites is outside this statement, as it is outside
 `EfficientNetStepTieG`.
+
+## References
+
+- Huang et al. 2016, *Deep Networks with Stochastic Depth*. <https://arxiv.org/abs/1603.09382>
+- Srivastava et al. 2014, *Dropout: A Simple Way to Prevent Neural Networks from Overfitting*. <https://jmlr.org/papers/v15/srivastava14a.html>
 -/
 
 namespace Proofs

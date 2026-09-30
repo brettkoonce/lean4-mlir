@@ -5,7 +5,21 @@ conventions), `TrainConfig` (optimizer, schedule, loss and augmentation settings
 `OptimizerKind` and `DatasetKind`. `Spec` counts and validates specs; `MlirCodegen` (NetSpec →
 StableHLO at run time) and the JAX emitter (jax/Jax/Codegen.lean) lower them; `Train` runs them.
 None of this is the verified path, which trains from the committed `verified_mlir/` renders
-(`Verified.Spec`, `Verified.Train`). Also here: the `iree-compile` argument builders. -/
+(`Verified.Spec`, `Verified.Train`). Also here: the `iree-compile` argument builders.
+
+## References
+
+- Ramachandran, Zoph, Le 2017, *Searching for Activation Functions* (Swish). <https://arxiv.org/abs/1710.05941>
+- Glorot & Bengio 2010, *Understanding the difficulty of training deep feedforward neural networks*. <https://proceedings.mlr.press/v9/glorot10a.html>
+- Milletari, Navab, Ahmadi 2016, *V-Net* (soft Dice loss). <https://arxiv.org/abs/1606.04797>
+- Izmailov et al. 2018, *Averaging Weights Leads to Wider Optima* (SWA). <https://arxiv.org/abs/1803.05407>
+- Szegedy et al. 2016, *Rethinking the Inception Architecture for Computer Vision* (§7 label smoothing). <https://arxiv.org/abs/1512.00567>
+- Zhang et al. 2018, *mixup: Beyond Empirical Risk Minimization*. <https://arxiv.org/abs/1710.09412>
+- Yun et al. 2019, *CutMix*. <https://arxiv.org/abs/1905.04899>
+- Zhong et al. 2020, *Random Erasing Data Augmentation*. <https://arxiv.org/abs/1708.04896>
+- Loshchilov & Hutter 2017, *SGDR* (cosine schedule). <https://arxiv.org/abs/1608.03983>
+- Goyal et al. 2017, *Accurate, Large Minibatch SGD* (linear warmup / lr scaling). <https://arxiv.org/abs/1706.02677>
+- Zheng et al. 2020, *Distance-IoU Loss*. <https://arxiv.org/abs/1911.08287> -/
 
 /-- Pointwise activation carried by a layer: ReLU, ReLU6, identity, swish (SiLU), hard-swish,
     GELU. -/

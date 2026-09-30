@@ -29,6 +29,11 @@ derived from the regular-conv ones; they have the same shape as
 `conv2dInputGrad` / `conv2dWeightGrad` from `CNN.lean` with the sum over
 input channels removed. The transpose trick and the reversed-kernel trick
 still apply — they just operate per-channel.
+
+## References
+
+- Chollet 2017, *Xception: Deep Learning with Depthwise Separable Convolutions*. <https://arxiv.org/abs/1610.02357>
+- Howard et al. 2017, *MobileNets*. <https://arxiv.org/abs/1704.04861>
 -/
 
 open Finset BigOperators

@@ -25,6 +25,10 @@ With those in hand, the residual definitions are one-liners — no sorry's.
    and its VJP.
 3. Comments on how this matches the ResNet skip connection in the
    MLIR (`MlirCodegen.lean` residual block emission).
+
+## References
+
+- He, Zhang, Ren, Sun 2016, *Deep Residual Learning for Image Recognition*. <https://arxiv.org/abs/1512.03385>
 -/
 
 open Finset BigOperators

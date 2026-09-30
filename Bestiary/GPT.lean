@@ -52,6 +52,10 @@ primitives; this entry exists to make that explicit.
 - `gpt2Large`   — 36 layers, dim 1280, heads 20                         → 773M (paper: 774M)
 - `gpt2XL`      — 48 layers, dim 1600, heads 25                         → 1.56B (paper: 1.5B)
 - `tinyGPT`     — 4  layers, dim 128,  heads 2, vocab 1000              → ~1M fixture
+
+## References
+
+- Karpathy, *nanoGPT* (software). <https://github.com/karpathy/nanoGPT>
 -/
 
 -- ════════════════════════════════════════════════════════════════

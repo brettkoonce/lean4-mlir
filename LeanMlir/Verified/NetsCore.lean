@@ -9,7 +9,11 @@ and a proof (`LeanMlir/Proofs/*`). Kept in this light module (no Mathlib) so the
 side can import the *exact* object the trainer runs — there's then a single source of
 truth, and the spec the trainer runs is the object `SpecVJP` states its ties about.
 
-Every verified spec lives here, including the ImageNet and sweep specs that no proof names. -/
+Every verified spec lives here, including the ImageNet and sweep specs that no proof names.
+
+## References
+
+- He, Zhang, Ren, Sun 2016, *Deep Residual Learning for Image Recognition*. <https://arxiv.org/abs/1512.03385> -/
 
 /-- **The driver-side half of the MobileNetV2 / EfficientNet RMSProp recipe** — peak LR, the
     exponential decay `VerifiedNet.trainAdamSched` runs, and the warmup length.

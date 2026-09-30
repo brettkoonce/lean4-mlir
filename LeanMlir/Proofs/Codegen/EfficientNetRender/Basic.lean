@@ -19,7 +19,11 @@ dense W₁ → z = batchOp swish → e2 = batchOp dense W₂` (only to expose `s
 are **swish** (smooth, no relu6 kink), the head GAP-back uses the batched `gapBackBatched`.
 
 Render is value-independent (`skel` erases values), so placeholder zeros + `lr := 0`/`ε := 0` are
-passed; the emitted `lrStr`/`epsStr` literals carry the real values. -/
+passed; the emitted `lrStr`/`epsStr` literals carry the real values.
+
+## References
+
+- Tan & Le 2019, *EfficientNet: Rethinking Model Scaling for CNNs*. <https://arxiv.org/abs/1905.11946> -/
 
 open Proofs.StableHLO
 

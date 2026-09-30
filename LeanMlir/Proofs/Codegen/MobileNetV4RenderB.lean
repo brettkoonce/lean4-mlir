@@ -59,6 +59,10 @@ the reference on shared weights pins the order. Same class as R50's stride-on-th
 Note: the baseline drops the stride entirely for a stride-2 FFN block (no depthwise to carry it,
 `MlirCodegen.emitTrainStepBody`'s `.uib` case). No such block exists in the table; this file has no function for that
 shape, so the case is absent rather than silently wrong.
+
+## References
+
+- Qin et al. 2024, *MobileNetV4: Universal Models for the Mobile Ecosystem*. <https://arxiv.org/abs/2404.10518>
 -/
 
 open Proofs.StableHLO

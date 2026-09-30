@@ -59,6 +59,10 @@ The file then defines the concrete gate `seGate` (GAP → dense → swish →
 dense → sigmoid → broadcast) with its VJP `seGateHasVJP`, the pieces it
 needs (`sigmoidHasVJP`, `broadcastFlatHasVJP`), and the full block
 `seBlockFull` / `seBlockFullHasVJP`.
+
+## References
+
+- Hu, Shen, Sun 2018, *Squeeze-and-Excitation Networks*. <https://arxiv.org/abs/1709.01507>
 -/
 
 namespace Proofs

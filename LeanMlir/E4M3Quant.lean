@@ -15,7 +15,11 @@ hardware or fp8 StableHLO type is needed — `q` runs here, in Lean, before the
 verified matmul sees the bytes.
 
 Values move through `F32.read` (extern f32→Float) and are re-encoded f32→`Float32`
-→ 4 little-endian bytes; the master weights stay fp32 across the gradient update. -/
+→ 4 little-endian bytes; the master weights stay fp32 across the gradient update.
+
+## References
+
+- Micikevicius et al. 2022, *FP8 Formats for Deep Learning* (E4M3). <https://arxiv.org/abs/2209.05433> -/
 
 namespace F32E4M3
 

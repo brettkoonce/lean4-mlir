@@ -60,6 +60,11 @@ For bestiary purposes, we **approximate v3 and v4 with the v1-style
 `.inceptionModule`** at appropriate channel counts. The shape / flow
 is the same; the total param count lands within ~20% of the paper's
 numbers. Honest limitation, worth the simplification.
+
+## References
+
+- Szegedy et al. 2015, *Going Deeper with Convolutions* (Inception v1). <https://arxiv.org/abs/1409.4842>
+- Szegedy et al. 2017, *Inception-v4, Inception-ResNet and the Impact of Residual Connections*. <https://arxiv.org/abs/1602.07261>
 -/
 
 -- ════════════════════════════════════════════════════════════════

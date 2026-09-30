@@ -65,6 +65,11 @@ both certified, neither part of this file.
 statements instantiated at explicitly constructed cotangents. The relu-kink and positivity
 conditions enter ONLY in the three `*CotIn_eq_vjp` lemmas, which say those cotangents ARE the
 certified whole-net backward. `N` and `q` are both binders.
+
+## References
+
+- You et al. 2020, *Large Batch Optimization for Deep Learning: Training BERT in 76 minutes* (LAMB). <https://arxiv.org/abs/1904.00962>
+- Wightman, Touvron, Jégou 2021, *ResNet strikes back* (RSB A3: BCE, LAMB recipe). <https://arxiv.org/abs/2110.00476>
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR Proofs.BackLinks Proofs.ResNet34TieB

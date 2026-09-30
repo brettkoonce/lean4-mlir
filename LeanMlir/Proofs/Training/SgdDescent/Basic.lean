@@ -27,7 +27,11 @@ curvature term is similarly dominated, one inexact step decreases the loss
 by at least `lr·‖∇f‖₂²/2`. The per-net discharges of the smoothness hypothesis
 (explicit segment-Lipschitz constants, one layer and one example at a time) are
 in `SgdDescent.Linear`, `SgdDescent.Mlp` and `SgdDescent.Cnn`; this file is the
-ℝ-side statement the float budgets plug into. -/
+ℝ-side statement the float budgets plug into.
+
+## References
+
+- Nesterov 2004, *Introductory Lectures on Convex Optimization* (Lemma 1.2.3, descent lemma). <https://doi.org/10.1007/978-1-4419-8853-9> -/
 
 namespace Proofs
 

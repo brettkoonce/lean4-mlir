@@ -83,6 +83,11 @@ whole story.
   7B; 10.0B vs 13.0B at 13B). The spec still shows the right depth,
   width, and head count --- the gap is in the FFN's internal wiring.
 - Causal mask for the LLM is a training-time detail, not a parameter.
+
+## References
+
+- Liu, Li, Wu, Lee 2023, *Visual Instruction Tuning* (LLaVA). <https://arxiv.org/abs/2304.08485>
+- Liu, Li, Li, Lee 2024, *Improved Baselines with Visual Instruction Tuning* (LLaVA-1.5). <https://arxiv.org/abs/2310.03744>
 -/
 
 -- ════════════════════════════════════════════════════════════════

@@ -39,17 +39,18 @@ before this plan was written (marked ✔).
 
 ## ▶ Start here (next session)
 
-**State at 2026-09-30.** Branch `rubric-review`, four commits on `main@42de93de`, none pushed:
+**State at 2026-09-30.** Branch `rubric-review`, five commits on `main@42de93de`, none pushed:
 - `5ff18875`: this plan.
 - `0069e30d`: WP1 part 1.
 - `9bebaed8`: WP1 part 2A.
 - `5c0deb1a`: WP3.
+- `3f20d71d`: WP2.
 
-WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) is committed (`5c0deb1a`). WP2
-is **staged, not committed**; its status is under WP2 below, and one item is parked for the CPU
-box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
-design is under WP1 below, and it should be done together with A-pq-1. **Next (user,
-2026-09-30): WP7, the attribution links** (`rubric_review/citations.md`).
+WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) and WP2 are committed. One WP2
+item is parked for the CPU box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
+design is under WP1 below, and it should be done together with A-pq-1. WP7 (the attribution
+links, plus the TinyStories deletion) is **staged, not committed**; its status is under WP7
+below. Next: not yet chosen. The suggested order leaves WP4, WP5 and WP6 open.
 
 ## Decisions (user, 2026-09-30)
 
@@ -246,7 +247,7 @@ for the step tie and the loss gradient; today "the same cotangent" is a textual 
 - Pins: the 14 capstones keep their names, and their statements change.
 - Add yaml rows plus comparator challenges for `*_net_lossGrad` (a gap: none exist).
 
-**Status 2026-09-30: done except P-API-2 for three nets (staged).**
+**Status 2026-09-30: done except P-API-2 for three nets (committed `3f20d71d`).**
 - **P-API-1:** `HasGradAt` is a `structure` with fields `differentiableAt` / `pdiv_eq`, plus
   `hasGradAt_iff`, `.congr_left` and `.congr_of_eventuallyEq`. The foundation files use the
   field names.
@@ -304,7 +305,7 @@ Frobenius/Gram upper bound, or power iteration × proven slack.
   - Gate: the `mnist-*-pgd` smokes. The certified accuracy may drop; say so in the demo README and
     the book.
 
-**Status 2026-09-30: done (staged).**
+**Status 2026-09-30: done (committed `5c0deb1a`).**
 - `Verified/Attack.lean`: `specNormW` / `specNormGet` / `specNormConvTapSum` are gone.
   - `denseLip` / `convLip` return a `LipPair`:
     - `bound` is `denseE_lipschitzL2_gram2`'s Schatten-8 `B = (Σ H²)^{1/8}` over the output-side
@@ -425,6 +426,32 @@ A richer format (titles, book cite keys) is a later pass.
     - Bestiary full citations (**X-att-6**).
 - `formalization.yaml` references gain IBP/CROWN rows.
 - Batch the root-file docstrings (BatchNorm, LayerNorm) with WP9's root edits.
+
+**Status 2026-09-30: done (staged).**
+- Every Lean file in `citations.md`'s "Cite in" column (80 files, including the root files) ends
+  its module docstring with `## References`: one bullet per work, author–year, title, `<link>`.
+  - A file named for several works lists them all.
+  - Derived files carry the link themselves rather than pointing at the defining file. The
+    column already picked the files, and a pointer would be a module path that
+    docstring-checkrefs cannot resolve.
+  - The inline author-year credits already in these docstrings stay.
+- Non-Lean sites:
+  - `README.md` gains an Acknowledgements section (X-att-1): Lean 4, Mathlib, StableHLO,
+    XLA/PJRT, IREE, JAX, timm, torchvision, leanblueprint, plasTeX, doc-gen4.
+  - `TRUST.md` links XLA/PJRT, IREE and timm.
+  - `formalization.yaml` `sources` gains Gowal (IBP), CROWN, CROWN-IBP and Clopper–Pearson; the
+    authors were checked against the arXiv API.
+  - alpha-zero-general is linked in `demos/README.md` and the book's tic-tac-toe paragraph
+    (X-att-2). PUCT is credited to AlphaGo Zero in `ffi/f32_helpers.c`.
+- Not done:
+  - Delattre 2023 (optional). Only if the Gram-iteration idea came from there.
+  - The Chan 1983 companion. The 1982 COMPSTAT paper is the one cited.
+  - The book's missing inline credits (the "—" cells in the Book column). That is a later pass.
+- **TinyStories demo deleted (user, 2026-09-30).** Gone: `demos/MainTinyStories.lean`, its
+  lakefile target, the download/preprocess scripts, `scripts/demos/tinystories_decode.py`,
+  `blueprint/src/figures/tinystories/` (the book never referenced it), the demos/README section,
+  and the README and home-page mentions. Nothing else becomes an orphan: RoPE, flash attention,
+  the id-gather embedding and the token-stream helpers all serve TinyGPT.
 
 ## Tier 3 — reuse, factoring, placement (farm in parallel by file cluster)
 

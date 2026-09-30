@@ -21,6 +21,10 @@ supplies the RENDERING + faithfulness at heads > 1:
 
 The graph layer is stated at `heads = hm1 + 1` (the head fold needs a first
 head); the Mat-level spelling is fully general in `heads`.
+
+## References
+
+- Vaswani et al. 2017, *Attention Is All You Need*. <https://arxiv.org/abs/1706.03762>
 -/
 
 namespace Proofs

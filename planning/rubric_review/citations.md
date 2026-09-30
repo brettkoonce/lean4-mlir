@@ -130,7 +130,6 @@ in `content.tex`).
 | Silver et al. 2017, *Mastering the game of Go without human knowledge* (AlphaGo Zero; PUCT, the 40-block net) | https://doi.org/10.1038/nature24270 | `Bestiary/AlphaZero.lean`, `ffi/f32_helpers.c` (PUCT, :3648) | 16666, 16820 | no | X-att-5, X-att-6 |
 | Silver et al. 2018, *A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play* (AlphaZero) | https://doi.org/10.1126/science.aar6404 | `Bestiary/AlphaZero.lean` (add title/venue) | 16667, 16817 (arXiv 1712.01815) | yes (author-year): `Bestiary/AlphaZero.lean`, `demos/MainAlphaZeroTtt.lean` | X-att-6 |
 | Nair, *alpha-zero-general* (software) | https://github.com/suragnair/alpha-zero-general | `demos/MainAlphaZeroTtt.lean`, `demos/README.md` (:596), book RL paragraph | — | name only: `demos/README.md` | X-att-2 |
-| Eldan & Li 2023, *TinyStories* | https://arxiv.org/abs/2305.07759 | `demos/MainTinyStories.lean`, `demos/README.md` (:685), book dataset appendix | — | no | X-att-5 |
 | Redmon et al. 2016, *You Only Look Once* (YOLOv1) | https://arxiv.org/abs/1506.02640 | `demos/MainYolov1NeuDetFpn.lean`, `MainYolov1VisdroneFpn.lean`, `MainYolov1NeuDet448.lean` | 14174 | yes: `Bestiary/YOLO.lean` | X-att-5 |
 | Lin et al. 2017, *Feature Pyramid Networks for Object Detection* | https://arxiv.org/abs/1612.03144 | `demos/MainYolov1NeuDetFpn.lean`, `MainYolov1VisdroneFpn.lean` | 13280 (author-year) | partial: `Types.lean`, `Bestiary/MaskRCNN.lean` | X-att-5 |
 
@@ -206,5 +205,5 @@ the one to cite.
   (`TicTacToe.lean`, `ffi`), Gram/Schatten operator-norm bounds, the Sutton & Barto blackjack env
   (already credited), Grad-CAM/CAM, DDIM and score-SDE, improved DDPM, SWAG, Mixup/CutMix/RandAugment
   in `ffi` (already fully credited).
-- **Datasets:** the book appendix (content.tex:16968–17220) already credits every dataset but
-  TinyStories, which is listed above. Licences are a separate X-att-5 item and need no citation.
+- **Datasets:** the book appendix (content.tex:16968–17220) already credits every dataset. (The
+  TinyStories demo was deleted 2026-09-30, so its row is gone.) Licences are a separate X-att-5 item and need no citation.

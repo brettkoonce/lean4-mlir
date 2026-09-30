@@ -9,7 +9,11 @@ jax/tests/vjp_oracle/phase2/) from the same init, and diffs the step-2 loss. Bot
 hand-written: the oracle checks them against each other, not against the verified_mlir/
 artifacts or a theorem. The declarations the docstrings below name are the proof-side
 statements of the same math. The diff is evidence only if both sides train the same `NetSpec`
-under the same config, so both import them from here rather than each carrying a copy. -/
+under the same config, so both import them from here rather than each carrying a copy.
+
+## References
+
+- Howard et al. 2019, *Searching for MobileNetV3* (h-swish / h-sigmoid). <https://arxiv.org/abs/1905.02244> -/
 
 namespace VjpOracle
 

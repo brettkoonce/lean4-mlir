@@ -32,6 +32,10 @@ not, the math and the artifact are different functions with no gate between them
 They ARE the same map, and `reassocFwdIdx_val` proves it: row-major `finProdFinEquiv` sends both
 `((c,hi),wi)` and `(c,(hi,wi))` to the same linear offset, so the bridge preserves the underlying
 natural and is therefore exactly the type-level cast. `den_reassocS` lifts that to the graph.
+
+## References
+
+- Liu et al. 2022, *A ConvNet for the 2020s* (ConvNeXt). <https://arxiv.org/abs/2201.03545>
 -/
 -- Device check (`lake build channel-ln`): the composition ties the closed form at rel 0 forward
 -- and on all three backward pieces, the whole-map `.bnF` control differs at rel 0.82, and the

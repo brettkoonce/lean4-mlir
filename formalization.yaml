@@ -92,6 +92,42 @@ sources:
     note: "formalized: steepest descent, sign descent, nearest semi-orthogonal matrix, Shampoo = spectral-norm steepest descent; square matrices (Muon/Geometry.lean)"
     license: ""
     author_endorsement: "not-contacted"
+  - title: "On the Effectiveness of Interval Bound Propagation for Training Verifiably Robust Models"
+    authors: ["Sven Gowal", "Krishnamurthy Dvijotham", "Robert Stanforth", "Rudy Bunel", "Chongli Qin", "Jonathan Uesato", "Relja Arandjelovic", "Timothy Mann", "Pushmeet Kohli"]
+    id: "arXiv:1810.12715"
+    type: "paper"
+    location: "Section 3 (interval bound propagation)"
+    relationship: "other"
+    note: "formalized: the L-infinity box pushed through dense and ReLU layers certifies the argmax (Certificates/IntervalBound.lean); conv peers in Foundation/IntervalBoundConv.lean"
+    license: ""
+    author_endorsement: "not-contacted"
+  - title: "Efficient Neural Network Robustness Certification with General Activation Functions (CROWN)"
+    authors: ["Huan Zhang", "Tsui-Wei Weng", "Pin-Yu Chen", "Cho-Jui Hsieh", "Luca Daniel"]
+    id: "arXiv:1811.00866"
+    type: "paper"
+    location: "Section 3 (linear bounds propagated backward)"
+    relationship: "other"
+    note: "adapted: the output pass of a two-layer net, stated on the logit margin (Certificates/CrownBound.lean)"
+    license: ""
+    author_endorsement: "not-contacted"
+  - title: "Towards Stable and Efficient Training of Verifiably Robust Neural Networks (CROWN-IBP)"
+    authors: ["Huan Zhang", "Hongge Chen", "Chaowei Xiao", "Sven Gowal", "Robert Stanforth", "Bo Li", "Duane Boning", "Cho-Jui Hsieh"]
+    id: "arXiv:1906.06316"
+    type: "paper"
+    location: "Section 3 (IBP pre-activation bounds, CROWN output pass)"
+    relationship: "other"
+    note: "adapted: the ReLU relaxation bounds are the IBP box, the output pass is CROWN (Certificates/CrownBound.lean)"
+    license: ""
+    author_endorsement: "not-contacted"
+  - title: "The use of confidence or fiducial limits illustrated in the case of the binomial"
+    authors: ["C. J. Clopper", "E. S. Pearson"]
+    id: "doi:10.1093/biomet/26.4.404"
+    type: "paper"
+    location: "the one-sided binomial lower limit"
+    relationship: "other"
+    note: "formalized: coverage of the Clopper-Pearson lower bound, used for the smoothing certificate's confidence (Certificates/Smoothing/CP.lean)"
+    license: ""
+    author_endorsement: "not-contacted"
 
 related_formalizations:
   - id: "arXiv:1706.08605"                 # Certigrad: Selsam, Liang, Dill, ICML 2017; Lean 3

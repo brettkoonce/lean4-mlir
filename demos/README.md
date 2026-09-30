@@ -539,21 +539,6 @@ A `bigram-shakespeare` baseline (single dense V→V predicting next
 char given current char) also lives here as a smoke test that the
 data pipeline + sampler work end-to-end without the transformer.
 
-`tinystories` is the same transformer scaled to a word-piece corpus: vocab-4096 BPE, T = 256,
-D = 256, 8 layers, 8.5M params, and the embedding as a true gather/scatter instead of a one-hot.
-It trains and samples on XLA (a 600-step probe: 9.24 → 3.06 nats/token, val 3.08) but has no
-finished run yet; `planning/lm_demos_modernization.md` is its backlog. The corpus is 1.9 GB and
-the tokenizer wants its own venv (`tokenizers` must stay out of the pinned `.venv`).
-
-```bash
-bash historical/download_tinystories.sh
-python3 historical/preprocess_tinystories.py 4096 200000000
-lake exe tinystories train 12000                            # steps; ⚠ a rerun starts over
-python3 scripts/demos/tinystories_decode.py encode "Once upon a time"
-lake exe tinystories sample 200 80 40 95 1 > gen.txt        # ids out; BPE decode is Python's
-python3 scripts/demos/tinystories_decode.py decode "Once upon a time" < gen.txt
-```
-
 ---
 
 ## Diffusion — DDPM on MNIST
@@ -1010,7 +995,7 @@ agreement over the same positions (every decision position at 3×3 and 4×4, the
 sample at 5×5); net rows pool three independent evaluations of the saved net
 (`alphazero-ttt … iters=0 params=<file>`, seeds 2–4, 256 games each). 3×3: 20 iterations, **2.5 min** on one 4060 Ti;
 4×4: 40 iterations, **10.0 min** — the Python implementation this loop follows
-(alpha-zero-general) was expected to take a day on that board; 5×5: 100 iterations at
+([alpha-zero-general](https://github.com/suragnair/alpha-zero-general), Nair) was expected to take a day on that board; 5×5: 100 iterations at
 400 sims, **64 min**. The untrained net's sweep, 57.9% and 60.3%, is the random
 player's 58.0% and 60.4%.
 
@@ -1083,7 +1068,6 @@ demos/
 ├── MainNqsIsing.lean                      # neural quantum states: MLP/ViT/GPT wavefunctions on the Ising chain
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
-├── MainTinyStories.lean                   # the same transformer at a larger corpus
 ├── MainBlackjackEnv.lean                  # blackjack tables, play/dump/curve modes (RL rung 1; env in LeanMlir/Blackjack.lean)
 ├── MainBlackjackDqn.lean                  # DQN on blackjack through the DDPM MSE block, scored exactly (RL rung 2)
 ├── MainPongEnv.lean                       # Pong in Lean, 84×84 frames, scripted opponent (RL rung 3, Phase 0)

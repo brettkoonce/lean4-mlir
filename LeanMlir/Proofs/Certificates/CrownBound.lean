@@ -59,7 +59,12 @@ tier stays on IBP (max-pool is not an elementwise nonlinearity), and the trained
 dense nets are two-layer.
 
 Everything is elementary and closes under `propext / Classical.choice /
-Quot.sound`. Engine only; the generated instance is a separate file. -/
+Quot.sound`. Engine only; the generated instance is a separate file.
+
+## References
+
+- Zhang et al. 2018, *Efficient Neural Network Robustness Certification with General Activation Functions* (CROWN). <https://arxiv.org/abs/1811.00866>
+- Zhang et al. 2020, *Towards Stable and Efficient Training of Verifiably Robust Neural Networks* (CROWN-IBP). <https://arxiv.org/abs/1906.06316> -/
 
 namespace Proofs
 namespace LipschitzCertDemo

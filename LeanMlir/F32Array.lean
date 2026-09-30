@@ -6,7 +6,11 @@
     (loss printing, argmax, debugging).
 
     Heavy-lift operations (He init, const fill, image loading) are @[extern]
-    to C for speed — avoids millions of Lean-level push calls. -/
+    to C for speed — avoids millions of Lean-level push calls.
+
+    ## References
+
+    - He et al. 2015, *Delving Deep into Rectifiers* (He init). <https://arxiv.org/abs/1502.01852> -/
 
 namespace F32
 

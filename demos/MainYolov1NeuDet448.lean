@@ -27,6 +27,10 @@ checkpoints — and, as with `FPN_TAG`, it must be set on `infer` too;
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 `=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`).
+
+## References
+
+- Redmon et al. 2016, *You Only Look Once* (YOLOv1). <https://arxiv.org/abs/1506.02640>
 -/
 
 def r34Yolov1_448NeuDet : NetSpec where

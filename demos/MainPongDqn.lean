@@ -29,7 +29,11 @@ import LeanMlir.Pong
     steps and the forwards hold their parameters, 24 → 14.6 ms per pixel update on
     one 4060 Ti. Bit-identical to the copying path on the deterministic shim
     (`scripts/det_shim.sh`); on the shipping shim the two differ in the last bits
-    from update 2 on, as autotuned kernels do across buffer origins. -/
+    from update 2 on, as autotuned kernels do across buffer origins.
+
+    ## References
+
+    - van Hasselt, Guez, Silver 2016, *Deep Reinforcement Learning with Double Q-learning*. <https://arxiv.org/abs/1509.06461> -/
 
 open FloatFmt
 

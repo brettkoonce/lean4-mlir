@@ -17,6 +17,13 @@ The loss + backward live in the `useDdpm` codegen branch of
 
 The schedule is the cosine variant from Nichol & Dhariwal 2021,
 which trains more stably than Ho et al.'s original linear schedule.
+
+## References
+
+- Lipman et al. 2023, *Flow Matching for Generative Modeling*. <https://arxiv.org/abs/2210.02747>
+- Liu, Gong, Liu 2023, *Flow Straight and Fast* (rectified flow / reflow). <https://arxiv.org/abs/2209.03003>
+- Tong et al. 2024, *Improving and generalizing flow-based generative models with minibatch optimal transport*. <https://arxiv.org/abs/2302.00482>
+- Pooladian et al. 2023, *Multisample Flow Matching*. <https://arxiv.org/abs/2304.14772>
 -/
 
 namespace Ddpm

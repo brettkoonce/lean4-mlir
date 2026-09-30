@@ -14,6 +14,10 @@ channel-LN shares. This file is ViT's use of it:
 * §2 **the row-broadcast flat bridges** (`rowScaleFlat_flat`, `rowBiasFlat_flat`) for the tokens
   each vector-LN site is spelled with: `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`.
 * §3 **the chain cotangents** at vector LN.
+
+## References
+
+- Ba, Kiros, Hinton 2016, *Layer Normalization*. <https://arxiv.org/abs/1607.06450>
 -/
 
 namespace Proofs

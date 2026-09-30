@@ -59,6 +59,11 @@ self-play loop itself is trained in `demos/MainAlphaZeroTtt.lean`, on the Lean
 tic-tac-toe of `LeanMlir/TicTacToe.lean` and scored against the solved game —
 with AlphaGo's plain conv stack rather than this conv-BN tower, whose batch
 statistics over nine binary cells diverged (see that file's docstring).
+
+## References
+
+- Silver et al. 2017, *Mastering the game of Go without human knowledge* (AlphaGo Zero; PUCT, the 40-block net). <https://doi.org/10.1038/nature24270>
+- Silver et al. 2018, *A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play* (AlphaZero). <https://doi.org/10.1126/science.aar6404>
 -/
 
 -- ════════════════════════════════════════════════════════════════

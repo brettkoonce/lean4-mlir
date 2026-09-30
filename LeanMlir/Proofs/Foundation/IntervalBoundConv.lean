@@ -42,7 +42,12 @@ simply contains both branches. The certificate is sound and incomplete; counts
 derived from it are lower bounds only.
 
 Everything is elementary and closes under `propext / Classical.choice /
-Quot.sound`. -/
+Quot.sound`.
+
+## References
+
+- Gowal et al. 2018, *On the Effectiveness of Interval Bound Propagation for Training Verifiably Robust Models*. <https://arxiv.org/abs/1810.12715>
+- Mirman, Gehr, Vechev 2018, *Differentiable Abstract Interpretation for Provably Robust Neural Networks*. <https://proceedings.mlr.press/v80/mirman18b.html> -/
 
 namespace Proofs
 namespace IBP

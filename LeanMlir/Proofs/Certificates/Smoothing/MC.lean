@@ -16,7 +16,11 @@ certified (`smoothing_mc_certified`, composed with the classifier theorem
 through the quantile's monotonicity). The guarantee has the shape of Cohen et
 al.'s CERTIFY procedure, a confidence-qualified radius, under the classifier
 theorem's hypotheses: `C` measurable and `hp` (every class's smoothed
-probability in `(0,1)` at every point). -/
+probability in `(0,1)` at every point).
+
+## References
+
+- Hoeffding 1963, *Probability Inequalities for Sums of Bounded Random Variables*. <https://doi.org/10.1080/01621459.1963.10500830> -/
 
 namespace Proofs
 

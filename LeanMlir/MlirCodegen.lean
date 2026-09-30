@@ -17,7 +17,14 @@ set_option maxRecDepth 2000
 
     Layout: NCHW tensors, OIHW kernels (matches the JAX codegen convention).
     Params are interleaved as (W0, b0, W1, b1, ...) in the function signature,
-    with `idx` advancing for every conv or dense layer. -/
+    with `idx` advancing for every conv or dense layer.
+
+    ## References
+
+    - Howard et al. 2019, *Searching for MobileNetV3* (h-swish / h-sigmoid). <https://arxiv.org/abs/1905.02244>
+    - Su et al. 2021, *RoFormer: Enhanced Transformer with Rotary Position Embedding* (RoPE). <https://arxiv.org/abs/2104.09864>
+    - Ronneberger, Fischer, Brox 2015, *U-Net*. <https://arxiv.org/abs/1505.04597>
+    - Zheng et al. 2020, *Distance-IoU Loss*. <https://arxiv.org/abs/1911.08287> -/
 
 namespace MlirCodegen
 

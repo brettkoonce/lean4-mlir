@@ -68,6 +68,12 @@ durable idea.
   stride-1 configuration at the last stage (matching atrous-v3+'s
   ``output stride 16'' mode) --- param count is correct, the
   dilation itself lives in the comment.
+
+## References
+
+- Sandler et al. 2018, *MobileNetV2: Inverted Residuals and Linear Bottlenecks*. <https://arxiv.org/abs/1801.04381>
+- Chen et al. 2018, *Encoder-Decoder with Atrous Separable Convolution* (DeepLab v3+). <https://arxiv.org/abs/1802.02611>
+- TensorFlow Model Garden (software). <https://github.com/tensorflow/models>
 -/
 
 -- ════════════════════════════════════════════════════════════════

@@ -32,7 +32,11 @@ In the SGD render every other parameter is updated by a fused `SHlo` SGD op (gra
 `θ − lr·g` in one node), which denotes `θ − lr·(certified per-layer Jacobian · its cotangent)`
 (`ConvNeXtFold`). Render is
 value-independent (`skel` erases values), so placeholders + `lr:=0` are passed; the emitted
-`lrStr`/`epsStr` literals carry the real values. -/
+`lrStr`/`epsStr` literals carry the real values.
+
+## References
+
+- Liu et al. 2022, *A ConvNet for the 2020s* (ConvNeXt). <https://arxiv.org/abs/2201.03545> -/
 
 open Proofs Proofs.StableHLO
 

@@ -20,7 +20,13 @@ hypotheses; nothing below claims Nesterov descends. Say "the momentum render is 
 
 The velocity convention matches the emitter it replaces (`tests/TestCifar8AdamTrain.emitMomentum`):
 the **`v` slot carries the velocity** and the `m` slot is an untouched passthrough, so the packed
-`[θ|m|v]` signature is shared verbatim with the AdamW render. -/
+`[θ|m|v]` signature is shared verbatim with the AdamW render.
+
+## References
+
+- Polyak 1964, *Some methods of speeding up the convergence of iteration methods* (heavy ball). <https://doi.org/10.1016/0041-5553(64)90137-5>
+- Nesterov 1983, *A method of solving a convex programming problem with convergence rate O(1/k²)*. <https://www.mathnet.ru/eng/dan46009>
+- Sutskever, Martens, Dahl, Hinton 2013, *On the importance of initialization and momentum in deep learning*. <https://proceedings.mlr.press/v28/sutskever13.html> -/
 
 namespace Proofs
 

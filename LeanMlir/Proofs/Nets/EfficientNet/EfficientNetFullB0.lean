@@ -19,6 +19,11 @@ Per-block (ic, mid=t·ic, oc, r=⌈ic/4⌉, k, spatial, kind):
   b6  40→80   mid240 r10 k3 28→14  strided          b14 192→192 mid1152 r48 k5 @7   resid
   b7  80→80   mid480 r20 k3 @14    resid            b15 192→192 mid1152 r48 k5 @7   resid
   b8  80→80   mid480 r20 k3 @14    resid            b16 192→320 mid1152 r48 k3 @7   exp(no-resid)
+
+## References
+
+- Hu, Shen, Sun 2018, *Squeeze-and-Excitation Networks*. <https://arxiv.org/abs/1709.01507>
+- Tan & Le 2019, *EfficientNet: Rethinking Model Scaling for CNNs*. <https://arxiv.org/abs/1905.11946>
 -/
 
 namespace Proofs

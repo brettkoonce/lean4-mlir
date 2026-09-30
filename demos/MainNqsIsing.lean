@@ -42,7 +42,11 @@ import LeanMlir
     [lr=0.001] [cosine] [evalb=8] [tag=x] [noref] [symref] [check]`. Writes `<prefix>_metrics.json`,
     `_curve.csv`, `_samples.bin`, `_params.bin` under `.lake/build/`;
     `scripts/demos/nqs_metrics.py score` brackets the JSON against enumeration
-    (N ≤ 14) or Jordan-Wigner (any even N). -/
+    (N ≤ 14) or Jordan-Wigner (any even N).
+
+    ## References
+
+    - Carleo & Troyer 2017, *Solving the quantum many-body problem with artificial neural networks*. <https://doi.org/10.1126/science.aag2302> -/
 
 namespace NQS
 

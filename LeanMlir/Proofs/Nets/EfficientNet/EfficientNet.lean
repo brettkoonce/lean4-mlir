@@ -29,6 +29,10 @@ own composed VJP — plus its differentiability.
   separable striding/pooling plumbing is already in `CNN.lean`).  Only the
   `0 < ε` batch-norm hypotheses are required — swish and sigmoid are
   smooth, so there are no relu-style kink hypotheses anywhere in the block.
+
+## References
+
+- Tan & Le 2019, *EfficientNet: Rethinking Model Scaling for CNNs*. <https://arxiv.org/abs/1905.11946>
 -/
 
 namespace Proofs

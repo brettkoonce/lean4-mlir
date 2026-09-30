@@ -12,7 +12,12 @@ variants rescale the weights toward a norm ball every few steps (`projectSpectra
 
 The certificate is for the real-arithmetic net at the margin the float forward prints; the f32
 evaluation error of the logits is not accounted for (`LipschitzCert.Float` does that for its
-reduced model only). -/
+reduced model only).
+
+## References
+
+- Madry et al. 2018, *Towards Deep Learning Models Resistant to Adversarial Attacks* (PGD). <https://arxiv.org/abs/1706.06083>
+- Miyato et al. 2018, *Spectral Normalization for GANs*. <https://arxiv.org/abs/1802.05957> -/
 
 /-- One-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F), for a possibly
     partial final batch: rows past `total` records get an all-zero row (their padded images are

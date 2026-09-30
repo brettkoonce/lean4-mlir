@@ -25,6 +25,10 @@ Only the DP step (and, where one exists, the per-replica `b` single-device step)
 committed artifact here; the `Rb` single-device step and both one-replica sync graphs are rendered
 to `.lake/build/` at run time from the same functions — and so is the DP step when `dpPath := ""`
 (ResNet-50, gated below its committed batch). Needs `R` GPUs and the XLA backend.
+
+## References
+
+- Chan, Golub, LeVeque 1982, *Updating Formulae and a Pairwise Algorithm for Computing Sample Variances* (COMPSTAT; the pairwise combine rule). <https://doi.org/10.1007/978-3-642-51461-6_3>
 -/
 
 namespace SyncBnCheck

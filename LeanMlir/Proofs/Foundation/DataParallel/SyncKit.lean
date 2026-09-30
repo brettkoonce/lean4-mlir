@@ -19,6 +19,10 @@ The per-op facts that argument is assembled from are stated here once:
 | the divisor: a replica's loss cotangent is `R ×` its shard of the global one | `replicaLossCot_eq` | `SyncKit` |
 
 Every twin cites these names.
+
+## References
+
+- Chan, Golub, LeVeque 1982, *Updating Formulae and a Pairwise Algorithm for Computing Sample Variances* (COMPSTAT; the pairwise combine rule). <https://doi.org/10.1007/978-3-642-51461-6_3>
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

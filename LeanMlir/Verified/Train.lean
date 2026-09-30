@@ -31,6 +31,10 @@ these three it runs.
 NB `VerifiedConfig` carries no learning rate. The SGD-inline train steps bake it
 into the rendered MLIR (re-render to change it); the Adam-family steps take it as a runtime operand,
 from `trainAdamSched`'s own `baseLR` argument and schedule.
+
+## References
+
+- Loshchilov & Hutter 2019, *Decoupled Weight Decay Regularization* (AdamW). <https://arxiv.org/abs/1711.05101>
 -/
 
 /-- A verified trainer: a pinned codegen artifact (`slug`) + its param layout

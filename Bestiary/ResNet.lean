@@ -53,6 +53,10 @@ All four share the same stem (7×7 stride-2 conv + 3×3 stride-2 max
 pool) and GAP + single-FC head. The basic-block variant tops out at
 512 channels in stage 4; the bottleneck variants run 256 → 512 →
 1024 → 2048.
+
+## References
+
+- Wightman, Touvron, Jégou 2021, *ResNet strikes back* (RSB A3: BCE, LAMB recipe). <https://arxiv.org/abs/2110.00476>
 -/
 
 -- ════════════════════════════════════════════════════════════════

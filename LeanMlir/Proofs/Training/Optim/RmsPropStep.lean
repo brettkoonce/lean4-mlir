@@ -34,7 +34,11 @@ and the reason no driver or signature change is needed.
 
 **Claim ceiling.** Like `AdamStep`, the verified target is **faithfulness** (the rendered update
 denotes these functions) plus **well-definedness** (`rms_denom_pos`) — *not* a loss-decrease bound.
-Say "the RMSProp render is certified", never "RMSProp is proven to descend". -/
+Say "the RMSProp render is certified", never "RMSProp is proven to descend".
+
+## References
+
+- Tieleman & Hinton 2012, *Neural Networks for Machine Learning*, lecture 6e (RMSProp). <https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf> -/
 
 namespace Proofs
 

@@ -46,6 +46,10 @@ replica mean on top of it (`DataParallel.Node`).
 Note: **`α` is a free real.** The committed renders bake `0.1`, and the `ls0` twins bake `0`; both are
 instances. Note: Nothing here says `t` is a probability vector — only `Σ t = 1` is ever used, which is
 what mixup's convex combination of two one-hots satisfies.
+
+## References
+
+- Szegedy et al. 2016, *Rethinking the Inception Architecture for Computer Vision* (§7 label smoothing). <https://arxiv.org/abs/1512.00567>
 -/
 
 open Proofs Proofs.StableHLO

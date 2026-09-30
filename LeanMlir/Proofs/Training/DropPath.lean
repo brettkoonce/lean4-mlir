@@ -36,7 +36,13 @@ impossible or contingent on seeding an XLA RNG identically across two lowerers a
 
 **Claim ceiling.** The verified target is **faithfulness** (the rendered op denotes `dropPath`) plus
 the exact identity at a ones mask. Stochastic depth is a *regulariser*; nothing here says it
-improves generalisation, and no theorem in this repo could. -/
+improves generalisation, and no theorem in this repo could.
+
+## References
+
+- Huang et al. 2016, *Deep Networks with Stochastic Depth*. <https://arxiv.org/abs/1603.09382>
+- Larsson, Maire, Shakhnarovich 2017, *FractalNet* ("drop-path"). <https://arxiv.org/abs/1605.07648>
+- Srivastava et al. 2014, *Dropout: A Simple Way to Prevent Neural Networks from Overfitting*. <https://jmlr.org/papers/v15/srivastava14a.html> -/
 
 namespace Proofs
 

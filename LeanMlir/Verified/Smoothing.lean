@@ -7,7 +7,11 @@ probit `Φ⁻¹` for the radius `σ·Φ⁻¹(p_A)`, and the Clopper–Pearson lo
 `p_A` (the exact binomial bound, not a normal approximation). CP is built bottom-up from the
 regularized incomplete beta `Iₓ(a,b)` (Lanczos `lgamma`, Lentz continued fraction) and solved
 by 60-step bisection. None of this is proved, and the bisection returns the midpoint of its
-final bracket rather than rounding toward the conservative end. -/
+final bracket rather than rounding toward the conservative end.
+
+## References
+
+- Clopper & Pearson 1934, *The use of confidence or fiducial limits illustrated in the case of the binomial*. <https://doi.org/10.1093/biomet/26.4.404> -/
 
 /-- Inverse standard-normal CDF `Φ⁻¹` (probit), Peter Acklam's rational approximation
     (relative error < 1.15e-9 over `(0,1)`). `p_A` here lives in `(0.5, ~0.99)`, far from

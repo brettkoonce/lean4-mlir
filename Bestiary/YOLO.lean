@@ -77,6 +77,12 @@ architectural shape and param count are unchanged by that substitution.
 
 Note: "tiny-YOLO" in the wild also refers to a specific published
 variant of YOLOv2/v3; `tinyYolo` here is just a bestiary toy, not that.
+
+## References
+
+- Redmon & Farhadi 2018, *YOLOv3: An Incremental Improvement*. <https://arxiv.org/abs/1804.02767>
+- Ultralytics, *YOLOv5* (software). <https://github.com/ultralytics/yolov5>
+- Ultralytics, *ultralytics* (YOLOv8 / YOLO11, software). <https://github.com/ultralytics/ultralytics>
 -/
 
 -- ════════════════════════════════════════════════════════════════

@@ -45,6 +45,11 @@ the run's own artifacts.
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 `=iree` -- resolved by dlopen at run time (`ffi/lowerer.h`).
+
+## References
+
+- Redmon et al. 2016, *You Only Look Once* (YOLOv1). <https://arxiv.org/abs/1506.02640>
+- Lin et al. 2017, *Feature Pyramid Networks for Object Detection*. <https://arxiv.org/abs/1612.03144>
 -/
 
 -- Per-scale k-means priors over the NEU-DET TRAIN split, w_rel h_rel

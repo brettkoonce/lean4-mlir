@@ -23,6 +23,11 @@ file builds the net with distinct per-block params at every depth, at the produc
 
 The ViT-Tiny instantiation (depth 12, P=16, D=192, heads=3) is
 `vitTinyHasVJP_correct`.
+
+## References
+
+- Dosovitskiy et al. 2021, *An Image is Worth 16x16 Words* (ViT). <https://arxiv.org/abs/2010.11929>
+- Touvron et al. 2021, *Training data-efficient image transformers & distillation through attention* (DeiT). <https://arxiv.org/abs/2012.12877>
 -/
 
 namespace Proofs
