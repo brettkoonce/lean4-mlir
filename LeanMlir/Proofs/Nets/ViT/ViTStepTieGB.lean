@@ -262,8 +262,7 @@ theorem vit_finalLN_tiedGB (N : Nat) {nC : Nat} (xN epsStr cotN : String) (ε : 
       (fun n => Mat.unflatten (batchSlice N (197 * 192) b12out n)) βF cotFlB i
 
 /-- **Classifier Wcls/bcls, tied at the loss cotangent `g`** — the weight at the batched CLS row,
-    the bias PER EXAMPLE (`biasGradB` is the identity on its operand; the batch reduce is emitted
-    text — `GradNodeB.headBGradB_den`). -/
+    the bias summed over the batch (`GradNodeB.headBGradB_den`). -/
 def vitHeadTiedGB (N : Nat) {nC : Nat} (aN cotN : String)
     (hn : Vec (N * 192)) (Wcls : Mat 192 nC) (bcls : Vec nC) (g : Vec (N * nC)) : Prop :=
   (∀ (i : Fin 192) (j : Fin nC),
@@ -272,9 +271,9 @@ def vitHeadTiedGB (N : Nat) {nC : Nat} (aN cotN : String)
         = ∑ n : Fin N, ∑ k : Fin nC,
             pdiv (fun v : Vec (192 * nC) => dense (Mat.unflatten v) bcls (batchSlice N 192 hn n))
                  (Mat.flatten Wcls) (finProdFinEquiv (i, j)) k * batchSlice N nC g n k)
-  ∧ (∀ (n : Fin N) (i : Fin nC),
-      batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i
-        = ∑ j : Fin nC,
+  ∧ (∀ i : Fin nC,
+      den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g)) i
+        = ∑ n : Fin N, ∑ j : Fin nC,
             pdiv (fun b' : Vec nC => dense Wcls b' (batchSlice N 192 hn n)) bcls i j
               * batchSlice N nC g n j)
 
@@ -284,7 +283,7 @@ theorem vit_head_tiedGB (N : Nat) {nC : Nat} (aN cotN : String)
   unfold vitHeadTiedGB
   refine ⟨?_, ?_⟩
   · intro i j; exact GradNodeB.headWGradB_den aN cotN hn Wcls bcls g i j
-  · intro n i; exact GradNodeB.headBGradB_den cotN Wcls (batchSlice N 192 hn n) bcls g n i
+  · intro i; exact GradNodeB.headBGradB_den cotN Wcls (batchSlice N 192 hn) bcls g i
 
 /-- **Patch embed wConv/bConv/cls/pos, tied at the batched embed-output cotangent.** The third
     conjunct is the CLS token's gradient with the batch sum INSIDE `den` — the statement the

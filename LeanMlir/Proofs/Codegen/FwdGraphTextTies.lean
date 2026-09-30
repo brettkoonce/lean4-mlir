@@ -7,6 +7,8 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
+import LeanMlir.Proofs.Codegen.ConvNeXtRender
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 
 /-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the typed block graphs
 
@@ -33,8 +35,16 @@ each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, ever
 MobileNetV2, MobileNetV4 and EfficientNet-B0 heads with classifier dropout (`cd := true`),
 EfficientNet-B0's residual block with its stochastic-depth site (`sd := true`), and
 MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
-sizes its evals are rendered at. Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
-own constructors.
+sizes its evals are rendered at. ConvNeXt-T's per-example forward (`convNextFwdGraphTCh`) is
+covered per kind too: block, downsample, stem and head at batch 2. What stays outside is its
+chain's prefixes: the render names block `j` of stage `si` `s{si}b{j}` and the typed graph numbers
+them `b{n}_` across stages, so the two agree block by block, not name by name across the net.
+
+**Not covered: ViT.** `vitBlockGraphMHV` shares non-leaf subterms (LN1's output feeds Q, K and V;
+Q, K and V feed every head; the first residual feeds LN2 and the second residual), and `pretty`
+shares nothing, so the graph prints them again at every use where the render names each once; the
+render also slices Q, K and V for a head before any of that head's products, where the graph's
+postorder interleaves them. A text tie would need a sharing printer or a reordered render.
 
 A `#guard` failing here means the emitted text and the proven graph drifted: the graph's operand
 order, a name, a constructor or a shape differs from what the renderer writes. Fix the side that is
@@ -419,5 +429,42 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
   prettyText 2 (headGraphBDo "1.0e-03" doName (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7)
     (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (some fun _ => 0) (leaf "%in" _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § ConvNeXt-T — `ConvNeXtRender`'s per-example chain vs `convNextFwdGraphTCh`
+-- ════════════════════════════════════════════════════════════════
+
+-- Block (`s0b0`, 96 ch at 56², expansion 384): depthwise 7×7 → channel-LN → 1×1 → GELU → 1×1 →
+-- layer-scale → + input.
+#guard textOf (cnxFwdBlock 2 "s0b0" "%in" 96 384 56) (·.1) ==
+  prettyText 2 (cnxBlockChGraphW "s0b0" "1.0e-6" (c := 96) (cExp := 384) (h := 56) (w := 56)
+    (kH := 7) (kW := 7)
+    ⟨fun _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0,
+     fun _ _ _ _ => 0, fun _ => 0, fun _ => 0⟩ (leaf "%in" _))
+
+-- Downsample (`d0`, 96 → 192, 56² → 28²): channel-LN → 2×2/s2.
+#guard textOf (cnxFwdDown 2 "d0" "%in" 96 192 28) (·.1) ==
+  prettyText 2 (cnxDownChGraphW "d0" "1.0e-6" 28 28 (cin := 96) (cout := 192)
+    ⟨0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0⟩ (leaf "%in" _))
+
+-- Stem: 4×4/s4 patchify (3 → 96, 224 → 56) → channel-LN, on `%x`.
+#guard textOf (do
+    let (cS, stemC) ← pretty 2 (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
+      (0 : Kernel4 96 3 4 4) 0 (.operand "%x" (0 : Vec (3*(2*(2*56))*(2*(2*56))))))
+    let (cL, _) ← cnxLnFwdSite 2 "%psng" "%psnbt" stemC 96 56
+    pure (cS ++ cL)) id ==
+  prettyText 2 (chanLNGraph "%psng" "%psnbt" "1.0e-6" (c := 96) (h := 56) (w := 56) 0 0 0
+    (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb" (0 : Kernel4 96 3 4 4) 0
+      (leaf "%x" _)))
+
+-- Head: GAP(7²) → head LN → dense(768 → 10).
+#guard textOf (do
+    let (cG, gap) ← pretty 2 (.gapF (c := 768) (h := 7) (w := 7) (.operand "%in" 0))
+    let (cH, hn) ← cnxHeadLnFwdSite 2 "%hng" "%hnbt" gap 768
+    let (cD, _) ← pretty 2 (denseF "%Wd" "%bd" (0 : Mat 768 10) 0 (.operand hn 0))
+    pure (cG ++ cH ++ cD)) id ==
+  prettyText 2 (denseF "%Wd" "%bd" (0 : Mat 768 10) 0
+    (headLNGraph "%hng" "%hnbt" "1.0e-6" (c := 768) 0 0 0
+      (.gapF (c := 768) (h := 7) (w := 7) (leaf "%in" _))))
 
 end Proofs.StableHLO.FwdGraphTextTies

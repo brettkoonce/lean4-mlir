@@ -503,21 +503,11 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
-    let (cD0, nD0) ← pretty vbB (.subB (.operand nSm zCls) (.operand "%onehot" zCls))
-    let (cSmooth, nDy) ← match smooth with
-      | none => pure ("", nD0)
-      | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty vbB (.scaleB (N := vbB) (n := nClasses) aStr 0
-              (.operand "%onehot" zCls))
-          let (c2, n2) ← pretty vbB (.addVB (.operand nD0 zCls) (.operand n1 zCls))
-          -- `N := vbB` where the per-example render writes `N := 1`. Same emitted text (the
-          -- emitter reads `n`), different denotation — and here the denotation is right either way,
-          -- because both are POINTWISE. It is `denseBiasGradB` below where the change bites.
-          let (c3, n3) ← pretty vbB (.shiftB (N := vbB) (n := nClasses) negAK 0 (.operand n2 zCls))
-          let (c4, n4) ← pretty vbB (.divConstB (N := vbB) (n := nClasses) bStr 0
-              (.operand n3 zCls))
-          pure (c1 ++ c2 ++ c3 ++ c4, n4)
-    let cDy := cSm ++ cD0 ++ cSmooth
+    -- The softmax above, then `smoothedCotB`: together `pretty` of `smoothedLossCotGraphDiv`.
+    let (cD, nDy) ← match smooth with
+      | none => pretty vbB (.subB (.operand nSm zCls) (.operand "%onehot" zCls))
+      | some (aStr, negAK, bStr) => smoothedCotB vbB nClasses aStr negAK bStr nSm
+    let cDy := cSm ++ cD
     -- head
     let (cDc, dcls) ← pretty vbB (.batchOp (N := vbB)
         (.dotOut (m := vbD) (n := nClasses) "%Wc" (0 : Mat vbD nClasses)) (.operand nDy zCls))

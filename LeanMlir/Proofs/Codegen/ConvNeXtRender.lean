@@ -275,7 +275,7 @@ def chLnPrelude : String :=
 /-- One **LayerNorm forward** site — ConvNeXt's real channel-LN: transpose to `[h·w, c]`,
     normalise each spatial row over its channels at the scalar identities `%one`/`%zero`, apply
     the real `[c]` affine, transpose back. -/
-private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
+def cnxLnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty cBS (.transposeF (m := c) (n := h*h)
                                   (reassoc (.operand xin (0 : Vec (c*h*h)))))
@@ -290,7 +290,7 @@ private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
 
 /-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`.
 
-    It is `lnFwdSite` with the two transposes DELETED, and that is the whole difference: after
+    It is `cnxLnFwdSite` with the two transposes DELETED, and that is the whole difference: after
     GAP the tensor is a single `[d]` row, so "normalise each spatial row over its channels" and
     "normalise the feature vector" are the same function at `m = 1`. Mirrors
     `Proofs.StableHLO.headLNGraph` op for op.
@@ -299,7 +299,7 @@ private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d` here is `V.dims[3]!`, which
     moves with the ConvNeXt size. It is the same annotation `convNextBackAll`'s smoothing chain
     carries, for the same reason. -/
-private def headLnFwdSite (cBS : Nat) (gN btN xin : String) (d : Nat) :
+def cnxHeadLnFwdSite (cBS : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty cBS (.lnRowF (m := 1) (n := d) "%one" "%zero" cEPS 0 1 0
                                   (.operand xin (0 : Vec (1*d))))
@@ -392,9 +392,9 @@ structure FNames where
   deriving Inhabited
 
 -- ── forward + backward-cotangent block helpers (verbatim pretty(SHlo), from the committed emitter) ──
-private def fwdBlock (cBS : Nat) (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
+def cnxFwdBlock (cBS : Nat) (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty cBS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (0 : DepthwiseKernel c 7 7) 0 (.operand xin 0))
-  let (k2, n) ← lnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" d c h
+  let (k2, n) ← cnxLnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   let (k3, e') ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (0 : Kernel4 e c 1 1) 0 (.operand n 0))
   let (k4, g) ← pretty cBS (.geluF (.operand e' (0 : Vec (e*h*h))))
   let (k5, p) ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (0 : Kernel4 c e 1 1) 0 (.operand g 0))
@@ -413,8 +413,8 @@ private def bwdBlock (cBS : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) :
   let (k7, cot_xin) ← pretty cBS (.addV (.operand cot_main (0 : Vec (c*h*h))) (.operand dy 0))
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d)
 
-private def fwdDown (cBS : Nat) (pfx xin : String) (ci co h2 : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
-  let (k1, n) ← lnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
+def cnxFwdDown (cBS : Nat) (pfx xin : String) (ci co h2 : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
+  let (k1, n) ← cnxLnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
   let (k2, o) ← pretty cBS (.flatConvStridedF (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (0 : Kernel4 co ci 2 2) 0 (.operand n 0))
   pure (k1 ++ k2, n, o)
 
@@ -609,7 +609,7 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
     (0 : Kernel4 (V.dims[0]!) 3 4 4) 0 (.operand "%x" (0 : Vec (3*(2*(2*56))*(2*(2*56))))))
   -- The reference's `convnext_stem` is patchify conv → channel-LN.
-  let (cSln, stem) ← lnFwdSite cBS "%psng" "%psnbt" stemC V.dims[0]! 56
+  let (cSln, stem) ← cnxLnFwdSite cBS "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
@@ -619,19 +619,19 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     let c := V.dims[si]!; let e := 4 * c; let h := cSpats[si]!
     let mut blks : Array FNames := #[]
     for j in [0:V.depths[si]!] do
-      let (code, bn) ← fwdBlock cBS s!"s{si}b{j}" cur c e h
+      let (code, bn) ← cnxFwdBlock cBS s!"s{si}b{j}" cur c e h
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDown cBS s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
+      let (code, n, o) ← cnxFwdDown cBS s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur 0))
   -- **THE HEAD LN.** The paper and timm both do `GAP → LN → Linear` (`facebookresearch/ConvNeXt`:
   -- `self.norm(x.mean([-2,-1]))`; timm:
   -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`). Without it the
   -- parameter count is 28,587,592 against timm's 28,589,128 — short by exactly 2×768.
-  let (cHn, hn) ← headLnFwdSite cBS "%hng" "%hnbt" gap V.dims[3]!
+  let (cHn, hn) ← cnxHeadLnFwdSite cBS "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (0 : Mat (V.dims[3]!) nClasses) 0 (.operand hn 0))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,

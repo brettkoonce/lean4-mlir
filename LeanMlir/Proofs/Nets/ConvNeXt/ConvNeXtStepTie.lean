@@ -24,9 +24,9 @@ its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean
 |---|---|---|
 | depth / widths | `[3,3,9,3]`, 96 → 192 → 384 → 768 | `ConvNeXtRender.cnxTiny` |
 | stem | 4×4/s4 patchify conv **then channel-LN** | `convNextFwdChain` |
-| normalisation | `chanLNTensor3` (per-channel `[c]` affine, `h·w` statistics per example) at all 22 spatial sites: 1 stem + 18 block + 3 downsample | `ConvNeXtRender.lnFwdSite` |
-| head | GAP → **vector-LN at one row** (`rowLNVecFlat 1 768`) → dense | `headLnFwdSite` |
-| activation | GELU (smooth — no kink mask anywhere) | `fwdBlock` |
+| normalisation | `chanLNTensor3` (per-channel `[c]` affine, `h·w` statistics per example) at all 22 spatial sites: 1 stem + 18 block + 3 downsample | `cnxLnFwdSite` |
+| head | GAP → **vector-LN at one row** (`rowLNVecFlat 1 768`) → dense | `cnxHeadLnFwdSite` |
+| activation | GELU (smooth — no kink mask anywhere) | `cnxFwdBlock` |
 | layer scale | per-channel `Vec c`, broadcast by `chanIdx` | `layerScaleChF` |
 | padding | symmetric; ConvNeXt is a PyTorch-origin net and has no XLA-`SAME` site | — |
 | params | 182 | `allParams`, and the artifact's 184 func args (`%x` + 182 + `%onehot`) |
@@ -241,7 +241,7 @@ theorem cnx_stem_ch_tied {c h w : Nat}
 
 After GAP the tensor is a single `[768]` row, so "normalise each spatial row over its channels"
 and "normalise the feature vector" are the same function at `m = 1`: the head is ViT's per-token
-LN with one token, and `headLnFwdSite` is `lnFwdSite` with the two transposes deleted. Stated at
+LN with one token, and `cnxHeadLnFwdSite` is `cnxLnFwdSite` with the two transposes deleted. Stated at
 the LITERAL 768 — `1 * m` does not reduce at a variable `m` (`Nat.mul` recurses on its second
 argument), which is the annotation trap the render carries in its own comment. -/
 

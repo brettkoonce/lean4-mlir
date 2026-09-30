@@ -162,6 +162,12 @@ theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
 -- § The emitted graph
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The two ops after the sigmoid**: `(sg − oh) / bk`. `bceLossCotGraph` is this applied to its
+    sigmoid; it is computable, so the render prints its cotangent as `pretty` of this node over the
+    sigmoid's name (`RenderKit.bceCotB`). -/
+def bceCotTail {N n : Nat} (bk : ℝ) (bStr : String) (sg oh : SHlo (N * n)) : SHlo (N * n) :=
+  .divConstB bStr bk (.subB sg oh)
+
 /-- **The three-op BCE cotangent chain `ResNet50RenderB` emits under `bce := true`**, at one row
     per example (`m = 1`, `n = K`) and batch `N`. `logits` is the head's output, `t` the graph
     input `%onehot`, and `bk` the baked divisor.
@@ -173,16 +179,14 @@ theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
     `smoothedLossCotGraph` nests through the same `.operand` seam for the same reason. -/
 noncomputable def bceLossCotGraph (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) : SHlo (N * (1 * K)) :=
-  .divConstB bStr bk
-    (.subB (.sigmoidB (N := N) (n := 1 * K) (.operand logN logits))
-           (.operand ohN t))
+  bceCotTail bk bStr (.sigmoidB (N := N) (n := 1 * K) (.operand logN logits)) (.operand ohN t)
 
 /-- **What the chain denotes**, coordinatewise: `(σ(logits) − t) / bk`. -/
 theorem bceLossCotGraph_den (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) (i : Fin (N * (1 * K))) :
     den (bceLossCotGraph N K bk bStr logN ohN logits t) i
       = (sigmoid (N * (1 * K)) logits i - t i) / bk := by
-  simp only [bceLossCotGraph, denStep, denStepApp]
+  simp only [bceLossCotGraph, bceCotTail, denStep, denStepApp]
 
 /-- **Each row of the emitted cotangent is BCE-with-logits' gradient at that example's logits,
     divided by the baked constant.** `SmoothedLossCot`'s `smoothedLossCotGraph_row` at this loss,

@@ -159,7 +159,9 @@ structure BSaves where
 
 /-- One **transformer block** forward (pre-norm, multi-head vector-LN), prefix `pfx`. Mirrors
     `vitBlockGraphMHV` node-by-node: LN1 → Q/K/V dense → per-head SDPA (slice→QKᵀ→scale→softmax→·V→pad,
-    summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names). -/
+    summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names).
+    Not text-guarded against the graph, unlike the other nets' blocks: the graph shares LN1, Q/K/V
+    and the first residual, which `pretty` would print again at each use (`FwdGraphTextTies`). -/
 private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let (c1, ln1) ← vlnFwd bs s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))

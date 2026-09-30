@@ -36,9 +36,8 @@ per example and lifted once.
   batched block and head VJPs (`vitBlockCotInB_eq_vjp`, `vitCotB2outB_eq_vjp`), and each `Φ`
   identified with the whole net at updated weights by a standalone `vit_factor_*` theorem.
 
-**Two nodes are stated as in the tie.** The classifier bias node `biasGradB` is the identity on
-its operand and the batch reduce is emitted text, so its statement is the sum over the batch of
-the node's per-example slices. The CLS token's node carries the batch sum inside `den`.
+**Two nodes carry the batch sum inside `den`,** as their text does: the classifier bias
+(`biasGradB`) and the CLS token.
 
 **Hypotheses.** `0 < ε` (the LayerNorms' VJPs); no smoothness hypothesis (GELU has no kink). For
 the smoothed loss, every example's target sums to one and `0 < nC`. Drop-path and the bf16 nodes
@@ -1107,9 +1106,7 @@ noncomputable def vitHeadO {nC : Nat} (ε : ℝ) (γF βF : Vec 192) (Wcls : Mat
     fun v : Vec ((196 + 1) * 192) => Mat.flatten (fun r => layerNormVec 192 ε γF βF (Mat.unflatten v r))
 
 /-- **Head, every parameter node a loss derivative** — the final LN's two nodes
-    (`vitFinalLNTiedGB`) and the classifier's two (`vitHeadTiedGB`). The classifier bias node is
-    the identity on its operand (the batch reduce is emitted text), so its statement is the batch
-    sum of the node's slices. -/
+    (`vitFinalLNTiedGB`) and the classifier's two (`vitHeadTiedGB`). -/
 def vitHeadLossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (ε : ℝ)
     (γF βF : Vec 192) (Wcls : Mat 192 nC) (bcls : Vec nC) (b12out : Vec (N * (197 * 192)))
     (Φ : Vec 192 → Vec 192 → Mat 192 nC → Vec nC → Vec 1) (g : Vec (N * nC)) : Prop :=
@@ -1124,8 +1121,7 @@ def vitHeadLossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (ε : �
   ∧ HasGradAt (fun θ => Φ γF βF (Mat.unflatten θ) bcls) (Mat.flatten Wcls)
       (den (SHlo.weightGradB (N := N) (m := 192) (n := nC) aN hnB (.operand cotN g)))
   ∧ HasGradAt (fun θ => Φ γF βF Wcls θ) bcls
-      (fun i => ∑ n : Fin N,
-        batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i)
+      (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g)))
 
 theorem vit_head_lossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (ε : ℝ)
     (γF βF : Vec 192) (Wcls : Mat 192 nC) (bcls : Vec nC) (b12out : Vec (N * (197 * 192)))
@@ -1177,10 +1173,10 @@ theorem vit_head_lossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (�
         (fun y => (GradNodeB.dense_bias_differentiable Wcls y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl)).of_eq
-      (funext fun i => (Finset.sum_congr rfl fun n _ =>
-      GradNodeB.headBGradB_den cotN Wcls (batchSlice N 192 (batchMap N (clsSliceFlat 196 192)
-        (batchMap N (fun b => Mat.flatten (fun r => layerNormVec 192 ε γF βF (Mat.unflatten b r)))
-          b12out)) n) bcls g n i).symm)
+      (funext fun i => (GradNodeB.headBGradB_den cotN Wcls
+        (batchSlice N 192 (batchMap N (clsSliceFlat 196 192)
+          (batchMap N (fun b => Mat.flatten (fun r => layerNormVec 192 ε γF βF (Mat.unflatten b r)))
+            b12out))) bcls g i).symm)
 
 end Head
 

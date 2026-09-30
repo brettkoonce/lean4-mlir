@@ -170,7 +170,7 @@ def main : IO Unit := do
   IO.println "  Notes"
   IO.println "────────────────────────────────────────────────────────────────"
   IO.println "  • `.swinStage` and `.patchMerging` are NEW Layer constructors"
-  IO.println "    added for this bestiary. Codegen emits UNSUPPORTED for both;"
+  IO.println "    added for this bestiary. Codegen has no emitter for either;"
   IO.println "    implementing them would require windowed-MHSA + shifted-"
   IO.println "    window cyclic-shift + attention-masking kernels in StableHLO."
   IO.println "  • Within a swinStage, alternating blocks use W-MSA and SW-MSA"

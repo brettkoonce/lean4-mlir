@@ -265,8 +265,8 @@ Stated at the LITERAL 768 for the fused file's reason: `1 * m` does not reduce a
 `g` is a PARAMETER — the loss cotangent arrives from `smoothedLossCotGraphDiv` in the capstone. -/
 
 /-- **Head, tied at the batched gradient nodes.** The head-LN γ/β at the pooled row, the
-    classifier weight at the LN output, the classifier bias PER EXAMPLE (`biasGradB` is the
-    identity on its operand; the batch reduce is emitted text — `GradNodeB.headBGradB_den`). -/
+    classifier weight at the LN output, and the classifier bias summed over the batch
+    (`GradNodeB.headBGradB_den`). -/
 def cnxHeadChTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
     (xhead : Vec (N * (768*h*w))) (g : Vec (N * nC)) : Prop :=
@@ -281,9 +281,9 @@ def cnxHeadChTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : 
         = ∑ n : Fin N, ∑ k : Fin nC,
             pdiv (fun v : Vec (768 * nC) => dense (Mat.unflatten v) bfc (batchSlice N 768 hnB n))
                  (Mat.flatten Wfc) (finProdFinEquiv (i, j)) k * batchSlice N nC g n k)
-  ∧ (∀ (n : Fin N) (i : Fin nC),
-      batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i
-        = ∑ j : Fin nC,
+  ∧ (∀ i : Fin nC,
+      den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g)) i
+        = ∑ n : Fin N, ∑ j : Fin nC,
             pdiv (fun b' : Vec nC => dense Wfc b' (batchSlice N 768 hnB n)) bfc i j
               * batchSlice N nC g n j)
 
@@ -299,7 +299,7 @@ theorem cnx_head_ch_tiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
     exact GradNodeB.rowDenseBiasGradB_den_lnbeta cotN ε hng
       (fun n => Mat.unflatten (batchSlice N (1*768) gapB n)) hnbt cotHnB k
   · intro i j; exact GradNodeB.headWGradB_den dN cotN hnB Wfc bfc g i j
-  · intro n i; exact GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
+  · intro i; exact GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 hnB) bfc g i
 
 /-! ## The stem wrapper — `@[irreducible]`
 

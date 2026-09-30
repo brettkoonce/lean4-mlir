@@ -12055,9 +12055,10 @@ See \leandocref{Proofs.vitForwardKVHasVJP\_correct}.
   \lean{Proofs.StableHLO.vitFwdGraphKMHV_faithful}
   \leanok
   \uses{ax:geluScalar}
-  \Prove{} for every depth \(k\) the emitted forward graph
-  \texttt{vitFwdGraphKMHV} denotes \texttt{vitForwardKV}: the rendered ViT is
-  the tower above.
+  \Prove{} for every depth \(k\) the typed forward graph
+  \texttt{vitFwdGraphKMHV} denotes \texttt{vitForwardKV}. The ViT render emits
+  the same ops block by block but names each shared intermediate once, so unlike
+  the other nets' forward blocks it is not tied to this graph by a text check.
 \end{theorem}
 
 \begin{proof}
@@ -13160,7 +13161,8 @@ plain ones, \texttt{.separableConv} (Xception, QANet) and
 \texttt{.fireModule} (SqueezeNet), are described in their entries; the
 twenty-two bundled ones are defined here. Two of these are codegen-backed,
 \texttt{.unetDown} and \texttt{.unetUp}, which the segmentation and diffusion
-demos train through; the rest emit \texttt{// UNSUPPORTED}, and their goal
+demos train through; the rest have no emitter, the reference codegen refuses a spec
+that contains one, and their goal
 is pedagogical shape and parameter accounting, not training runs.
 
 \begin{definition}[Inception module]

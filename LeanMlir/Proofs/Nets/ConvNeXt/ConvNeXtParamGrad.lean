@@ -28,11 +28,9 @@ the label-smoothed loss the artifacts ship (`smoothedBatchLossDiv`, whose gradie
   `cnxHeadDyB_eq_vjp`), and each `Φ` identified with the whole net at updated weights by a
   standalone `cnx_factor_*` theorem.
 
-**Two nodes are stated differently from the tie.** The stem's bias node is emitted as a stride-1
+**One node is stated differently from the tie.** The stem's bias node is emitted as a stride-1
 `convBiasGradB` over a free `xstem`; its Jacobian in the bias is the channel indicator whatever the
-conv, so it equals the patchify conv's (`GradNodeB.pdiv_bias_of_split`). The classifier bias node
-`biasGradB` is the identity on its operand and the batch reduce is emitted text, so the statement
-is the sum over the batch of the node's per-example slices.
+conv, so it equals the patchify conv's (`GradNodeB.pdiv_bias_of_split`).
 
 **Hypotheses.** `0 < ε` (the LayerNorms' VJPs); no smoothness hypothesis. For the smoothed loss,
 every example's target sums to one and `0 < nC`. Drop-path and the bf16 nodes are outside this
@@ -525,9 +523,7 @@ noncomputable def cnxHeadO (h w : Nat) {nC : Nat} (ε : ℝ) (hng hnbt : Vec 768
     (bfc : Vec nC) : Vec (768 * h * w) → Vec nC :=
   dense Wfc bfc ∘ rowLNVecFlat 1 768 ε hng hnbt ∘ globalAvgPoolFlat 768 h w
 
-/-- **Head, every parameter node a loss derivative** — the four nodes `cnxHeadChTiedGB` ties. The
-    classifier bias node is the identity on its operand (the batch reduce is emitted text), so its
-    statement is the batch sum of the node's slices. -/
+/-- **Head, every parameter node a loss derivative** — the four nodes `cnxHeadChTiedGB` ties. -/
 def cnxHeadLossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (N * (768 * h * w)))
     (Φ : Vec 768 → Vec 768 → Mat 768 nC → Vec nC → Vec 1) (g : Vec (N * nC)) : Prop :=
@@ -542,8 +538,7 @@ def cnxHeadLossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε 
   ∧ HasGradAt (fun θ => Φ hng hnbt (Mat.unflatten θ) bfc) (Mat.flatten Wfc)
       (den (SHlo.weightGradB (N := N) (m := 768) (n := nC) dN hnB (.operand cotN g)))
   ∧ HasGradAt (fun θ => Φ hng hnbt Wfc θ) bfc
-      (fun i => ∑ n : Fin N,
-        batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g))) n i)
+      (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN g)))
 
 theorem cnx_head_lossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC) (xhead : Vec (N * (768 * h * w)))
@@ -596,9 +591,9 @@ theorem cnx_head_lossTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String
         (fun y => (GradNodeB.dense_bias_differentiable Wfc y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         _ _ (fun n => by rw [batchSlice_batchMap, batchSlice_batchMap]) (fun _ => rfl)).of_eq
-      (funext fun i => (Finset.sum_congr rfl fun n _ =>
-      GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 (batchMap N (rowLNVecFlat 1 768 ε hng hnbt)
-        (batchMap N (globalAvgPoolFlat 768 h w) xhead)) n) bfc g n i).symm)
+      (funext fun i => (GradNodeB.headBGradB_den cotN Wfc
+        (batchSlice N 768 (batchMap N (rowLNVecFlat 1 768 ε hng hnbt)
+          (batchMap N (globalAvgPoolFlat 768 h w) xhead))) bfc g i).symm)
 
 end Head
 

@@ -4486,11 +4486,60 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       pure (txt, o :: st)
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
+/-- Why `t`'s emitted pad would not compute its `den`, or `none`. Two families are faithful only
+    on a kernel-size domain their constructors do not enforce:
+    * the stride-2 XLA-`SAME` ops (`flatConvStride2Xla` and its depthwise, backward and
+      weight-gradient peers) emit pad `[p−1, p]` with `p = (k−1)/2`, which reads the `den`'s
+      odd-offset taps only at odd `k ≥ 3`;
+    * the stride-4 patchify ops (`flatConvStride4` and its peers) emit pad `(k−1)/2 − 1`, which
+      reads the `den`'s offset-1 taps only at `k ≥ 3`.
+
+    Below those bounds Nat subtraction floors the pad at 0, and the text is a well-typed
+    convolution at the wrong offset: it parses, runs, and computes a different function. Even `k`
+    on the symmetric arms changes the output shape instead, so it fails loudly and is not
+    listed. -/
+private def kernelOutsideDomain (t : Tok) : Option String :=
+  let xla (tag : String) (kH kW : Nat) : Option String :=
+    if kH % 2 == 1 && kH ≥ 3 && kW % 2 == 1 && kW ≥ 3 then none
+    else some s!"{tag}: kernel {kH}×{kW} outside the XLA-SAME domain (odd k ≥ 3)"
+  let s4 (tag : String) (kH kW : Nat) : Option String :=
+    if kH ≥ 3 && kW ≥ 3 then none
+    else some s!"{tag}: kernel {kH}×{kW} outside the stride-4 domain (k ≥ 3)"
+  match t with
+  | .flatConvStridedXlaF _ _ _ _ _ _ kH kW => xla "flatConvStridedXlaF" kH kW
+  | .convStridedXlaWeightSgd _ _ _ _ _ _ _ kH kW => xla "convStridedXlaWeightSgd" kH kW
+  | .depthwiseStridedXlaWeightSgd _ _ _ _ _ _ kH kW => xla "depthwiseStridedXlaWeightSgd" kH kW
+  | .depthwiseStridedXlaF _ _ _ _ _ kH kW => xla "depthwiseStridedXlaF" kH kW
+  | .depthwiseStridedXlaBack _ _ _ _ kH kW => xla "depthwiseStridedXlaBack" kH kW
+  | .flatConvStride4F _ _ _ _ _ _ kH kW => s4 "flatConvStride4F" kH kW
+  | .batched tag _ info | .batched2 tag _ info =>
+    match info.reverse with
+    | kW :: kH :: _ =>
+      if (tag.splitOn "StridedXla").length > 1 then xla tag kH kW
+      else if (tag.splitOn "Stride4").length > 1 then s4 tag kH kW
+      else none
+    | _ => none
+  | _ => none
+
+#guard (kernelOutsideDomain (.flatConvStridedXlaF "w" "b" 1 1 1 1 1 1)).isSome
+#guard (kernelOutsideDomain (.flatConvStridedXlaF "w" "b" 1 1 1 1 3 3)).isNone
+#guard (kernelOutsideDomain (.batched "depthwiseStridedXlaBf16" ["w", "b"] [1, 1, 1, 1, 4, 4])).isSome
+#guard (kernelOutsideDomain (.batched "convStridedXlaWeightGrad" ["x"] [1, 1, 1, 1, 1, 5, 5])).isNone
+#guard (kernelOutsideDomain (.batched "convStride4P" ["w", "b"] [1, 1, 1, 1, 1, 2, 2])).isSome
+#guard (kernelOutsideDomain (.batched "convStride4P" ["w", "b"] [1, 1, 1, 1, 1, 4, 4])).isNone
+#guard (kernelOutsideDomain (.batched "convWeightGrad" ["x"] [1, 1, 1, 1, 1, 2, 2])).isNone
+
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
 private def serializeToks (B : Nat) : List Tok → (String × List String) → StateM EmitS (String × List String)
   | [], acc           => pure acc
   | t :: ts, (code, st) => do
       let (c, st') ← emitTok B t st
+      -- Outside its kernel domain the op's text is valid and wrong, so it is replaced by a marker
+      -- and its result by a name no module defines: the render fails to parse, and
+      -- `regen_verified_mlir.sh`'s silent-emit audit fails on the marker.
+      let (c, st') := match kernelOutsideDomain t with
+        | some why => (s!"    // MALFORMED {why}\n", "%MALFORMED" :: st'.drop 1)
+        | none => (c, st')
       -- The ONE place the shape table is written. Doing it here rather than in the 94 `emitTok`
       -- arms is what keeps them free of it — and it is why the table can be keyed by NAME at all:
       -- only here are the operand stack before and after the token both in hand.

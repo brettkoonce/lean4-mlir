@@ -141,7 +141,7 @@ private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
 
 /-- **The HEAD LN, batched-index peer** — `lnFwdSiteB` with the transposes deleted, at `m = 1`:
     after GAP the tensor is one `[d]` row per example. Must stay op-for-op with
-    `ConvNeXtRender.headLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers emit the
+    `cnxHeadLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers emit the
     same bytes. -/
 private def headLnFwdSiteB (bB : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
@@ -525,26 +525,15 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
           (.operand F.logits (0 : Vec (bB*nClasses)))))
-    let (cSub, dyr) ← pretty bB (.subB (.operand nSm (0 : Vec (bB*nClasses)))
-        (.operand "%onehot" 0))
-    let fwd := F.code ++ cSm ++ cSub
-    -- ═══ the cotangent ═══
+    let fwd := F.code ++ cSm
+    -- ═══ the cotangent: the softmax above, then `smoothedCotB`, together `pretty` of
+    --     `smoothedLossCotGraphDiv` ═══
     let (cDyC, dyName) ← match smooth with
-      | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [bB, nClasses]}\n", "%dy")
-      | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty bB (.scaleB (N := bB) (n := nClasses) aStr 0
-              (.operand "%onehot" (0 : Vec (bB*nClasses))))
-          let (c2, n2) ← pretty bB (.addVB (.operand dyr (0 : Vec (bB*nClasses)))
-              (.operand n1 (0 : Vec (bB*nClasses))))
-          -- At the batched index these are `N := bB`, where the per-example render writes
-          -- `N := 1` — the SAME emitted text (the tag's `n` is what the emitter reads), and the
-          -- annotation trap that note warns about disappears, because `bB * nClasses` never has to
-          -- reduce definitionally to anything.
-          let (c3, n3) ← pretty bB (.shiftB (N := bB) (n := nClasses) negAK 0
-              (.operand n2 (0 : Vec (bB*nClasses))))
-          let (c4, n4) ← pretty bB (.divConstB (N := bB) (n := nClasses) bStr 0
-              (.operand n3 (0 : Vec (bB*nClasses))))
-          pure (c1 ++ c2 ++ c3 ++ c4, n4)
+      | none => do
+          let (cSub, dyr) ← pretty bB (.subB (.operand nSm (0 : Vec (bB*nClasses)))
+              (.operand "%onehot" 0))
+          pure (cSub ++ s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [bB, nClasses]}\n", "%dy")
+      | some (aStr, negAK, bStr) => smoothedCotB bB nClasses aStr negAK bStr nSm
     -- ═══ head ═══
     let (cDd, cot_hn) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (0 : Mat (V.dims[3]!) nClasses))
         (.operand dyName 0))

@@ -131,17 +131,21 @@ theorem smoothedCE_grad (K : Nat) (hK : 0 < K) (α : ℝ) (t z : Vec K)
 -- § The emitted graph
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The five ops after the softmax**: `(sm − oh + α·oh + s) / B`. Both smoothed graphs below
+    are this applied to their softmax, and it is computable (the shift `s` is an argument, where
+    the graphs pass `-(α/K)`), so a render prints its cotangent as `pretty` of this node over its
+    softmax's name (`RenderKit.smoothedCotB`). -/
+def smoothedCotTail {N n : Nat} (α s B : ℝ) (aStr negAK bStr : String) (sm oh : SHlo (N * n)) :
+    SHlo (N * n) :=
+  .divConstB bStr B (.shiftB negAK s (.addVB (.subB sm oh) (.scaleB aStr α oh)))
+
 /-- **The six-op label-smoothed cotangent chain the batched renders emit**, at one row per example
     (`m = 1`, `n = K`) and batch `N`. `logits` is the head's output and `t` the graph input
     `%onehot`; `α` is the smoothing and `B` the batch divisor (the render bakes `B = N`). -/
 noncomputable def smoothedLossCotGraph (N K : Nat) (α B : ℝ) (aStr negAK bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) : SHlo (N * (1 * K)) :=
-  .divConstB bStr B
-    (.shiftB negAK (-(α / K))
-      (.addVB
-        (.subB (.batchOp (N := N) (.softmaxRow (m := 1) (n := K)) (.operand logN logits))
-               (.operand ohN t))
-        (.scaleB aStr α (.operand ohN t))))
+  smoothedCotTail α (-(α / K)) B aStr negAK bStr
+    (.batchOp (N := N) (.softmaxRow (m := 1) (n := K)) (.operand logN logits)) (.operand ohN t)
 
 /-- **What the chain denotes**, coordinatewise: `(rowSoftmax(logits) − t + α·t − α/K) / B`. -/
 theorem smoothedLossCotGraph_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN ohN : String)
@@ -149,7 +153,7 @@ theorem smoothedLossCotGraph_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN 
     den (smoothedLossCotGraph N K α B aStr negAK bStr logN ohN logits t) i
       = (StableHLO.batchMap N (StableHLO.rowSoftmaxFlat 1 K) logits i - t i + t i * α
           + -(α / K)) / B := by
-  simp only [smoothedLossCotGraph, denStep, denStepApp, denOp]
+  simp only [smoothedLossCotGraph, smoothedCotTail, denStep, denStepApp, denOp]
 
 /-- **Each row of the emitted cotangent is the smoothed loss's gradient at that example's
     logits, divided by the batch.** `Mat.unflatten` splits the flat `N·(1·K)` activation into its
@@ -191,13 +195,10 @@ theorem smoothedLossCotGraph_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
     `smoothedLossCotGraphDiv_row` is the per-example statement at `batchSlice`. -/
 noncomputable def smoothedLossCotGraphDiv (N K : Nat) (α B : ℝ)
     (aStr negAK bStr logN ohN : String) (logits t : Vec (N * K)) : SHlo (N * K) :=
-  .divConstB bStr B
-    (.shiftB negAK (-(α / K))
-      (.addVB
-        (.subB (.batchOp (N := N) (.softmaxDiv (n := K))
-                  (.batchOp (N := N) (.expe (n := K)) (.operand logN logits)))
-               (.operand ohN t))
-        (.scaleB aStr α (.operand ohN t))))
+  smoothedCotTail α (-(α / K)) B aStr negAK bStr
+    (.batchOp (N := N) (.softmaxDiv (n := K))
+      (.batchOp (N := N) (.expe (n := K)) (.operand logN logits)))
+    (.operand ohN t)
 
 /-- **What the chain denotes**, coordinatewise: `(softmax(logits_n) − t + α·t − α/K) / B`, the
     per-example softmax lifted by `batchMap` — the same function `smoothedLossCotGraph_den` reads
@@ -206,7 +207,7 @@ theorem smoothedLossCotGraphDiv_den (N K : Nat) (α B : ℝ) (aStr negAK bStr lo
     (logits t : Vec (N * K)) (i : Fin (N * K)) :
     den (smoothedLossCotGraphDiv N K α B aStr negAK bStr logN ohN logits t) i
       = (StableHLO.batchMap N (softmax K) logits i - t i + t i * α + -(α / K)) / B := by
-  simp only [smoothedLossCotGraphDiv, denStepApp, denOp, StableHLO.batchMap, softmax,
+  simp only [smoothedLossCotGraphDiv, smoothedCotTail, denStepApp, denOp, StableHLO.batchMap, softmax,
     Equiv.symm_apply_apply]
 
 /-- **Each example's row of the emitted cotangent is the smoothed loss's gradient at that

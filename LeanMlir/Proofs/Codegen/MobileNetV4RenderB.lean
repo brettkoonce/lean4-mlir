@@ -961,15 +961,12 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let nStc := fwd.stc; let nStn := fwd.stn
     let nH1c := fwd.h1c; let nH1n := fwd.h1n
     let nHc := fwd.hc; let nHn := fwd.hn; let nGap := fwd.gap; let nLog := fwd.logits
-    -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
-    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node. ═══
+    -- ═══ label-smoothed softmax-CE cotangent (α = 0.1, K = nClasses):
+    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. The softmax, then `smoothedCotB`:
+    --     together `pretty` of `smoothedLossCotGraph`, the graph the step tie starts from. ═══
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses))
       (.operand nLog zNCb))
-    let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
-    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
-    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    let (cDy,  nDy)  ← smoothedCotB B (1 * nClasses) alphaStr negAlphaKStr s!"{B}.0" nSm
     -- ═══ head backward + the 8 head/dense gradients (bias-free convs ⇒ no `hb`), unwound in
     --     timm's order: dense → conv_head (960→1280 at 1×1) → GAP back → cn_960 (256→960 at 7×7). ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
@@ -1117,7 +1114,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let body := fwd.code ++
-      cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+      cSm ++ cDy ++
       cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++ cDgp ++
       cDh1m ++ cDh1n ++ cDh1x ++ cH1W ++ cH1g ++ cH1t ++
       gcode ++ g0.code ++ cDsm ++ cDsn ++ csW ++ csg ++ cst ++ statCode

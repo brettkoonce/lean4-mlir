@@ -48,11 +48,6 @@ bf16 one, so its weight gradients go through the bf16 kinds listed below.
 **The LayerNorm form is the vector one** (`γ β : Vec D`), which is what `vitForwardKV` runs.
 
 ## Scope
-* **`biasGradB` is the identity on its operand** and the classifier bias's batch reduce is in the
-  emitted text, outside the AST — the constructor says so (*"the channel sum happens in the emitted
-  reduce"*) and it is the per-example `biasGrad` carve-out carried over unchanged, not a new one.
-  So `headBGradB_den` is stated PER EXAMPLE, at `batchSlice n`, which is the whole of what the node
-  denotes.
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
   delivers, is `ViTTiePoCGB.vit_net_tiedGB`; the per-example `ViTStepTie.lean` stays at the
   SGD-inline `vit_train_step.mlir`.

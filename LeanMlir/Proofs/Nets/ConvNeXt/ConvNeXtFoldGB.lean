@@ -44,9 +44,6 @@ emit these `*GradB` kinds, and the optimizer update that consumes the node is ou
 lemmas.
 
 ## Scope
-* **`biasGradB` is the identity on its operand** and the classifier bias's batch reduce is in
-  the emitted text, outside the AST — so `GradNodeB.headBGradB_den` is stated PER EXAMPLE at `batchSlice n`,
-  the per-example `biasGrad` carve-out carried over unchanged (as in `ViTFoldGB`).
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
   delivers and the smoothed loss, is `CnxTiePoCGB.cnx_net_tiedGB`.
 * `convnextin_adamdp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each

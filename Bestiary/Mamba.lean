@@ -150,7 +150,7 @@ def main : IO Unit := do
   IO.println "  Notes"
   IO.println "────────────────────────────────────────────────────────────────"
   IO.println "  • .mambaBlock is a NEW Layer constructor added for this"
-  IO.println "    bestiary. The codegen emits `// UNSUPPORTED` for it; this"
+  IO.println "    bestiary. The codegen has no emitter for it; this"
   IO.println "    entry is shape/param only. A real Mamba trainer would need"
   IO.println "    MlirCodegen.emitMambaBlock implementing the selective scan"
   IO.println "    (the hardware-aware scan kernel from the paper)."

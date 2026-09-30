@@ -423,7 +423,7 @@ namespace Proofs.StableHLO
 -- § The channel-LN graph + faithfulness
 -- ════════════════════════════════════════════════════════════════
 
-/-- **One channel-LN forward site**, mirroring `ConvNeXtRender.lnFwdSite` at `chLN := true`
+/-- **One channel-LN forward site**, mirroring `cnxLnFwdSite` at `chLN := true`
     op-for-op: transpose to `[h·w, c]`, normalise each spatial row over its channels at the
     scalar identities `%one`/`%zero`, apply the real `[c]` affine, transpose back. The two
     transports are the `reassoc` / `unassoc` casts the render uses; `den_reassocS`
@@ -450,7 +450,7 @@ theorem chanLNGraph_faithful (gN btN epsStr : String) {c h w : Nat} (ε : ℝ) (
     It is `chanLNGraph` with the transposes deleted, and that is not a shortcut: after GAP the
     tensor is a single `[768]` row, so "normalise each spatial row over its channels" and
     "normalise the feature vector" are the same function — `m = 1`. The render emits exactly these
-    three ops, which is what makes `ConvNeXtRender.headLnFwdSite` a mirror rather than a peer.
+    three ops, which is what makes `cnxHeadLnFwdSite` a mirror rather than a peer.
     Note: indexed `SHlo (1 * c)`; `c` is the literal 768 at every call site, so `1 * c` reduces
     and no transport is needed. Do not generalise `c` to a variable without adding one — that is the
     trap `convNextBackAll`'s `Vec (1 * nClasses)` annotations already record. -/
@@ -471,12 +471,12 @@ private theorem headLNGraph_faithful (gN btN epsStr : String) {c : Nat} (ε : �
 def cnxBlockChGraphW (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
   .addV
-    (.layerScaleChF s!"%{pfx}gls" p.γls
-      (.flatConvF (h := h) (w := w) s!"%{pfx}Wpr" s!"%{pfx}bpr" p.Wpr p.bpr
+    (.layerScaleChF s!"%{pfx}lg" p.γls
+      (.flatConvF (h := h) (w := w) s!"%{pfx}pW" s!"%{pfx}pb" p.Wpr p.bpr
         (.geluF
-          (.flatConvF (h := h) (w := w) s!"%{pfx}Wex" s!"%{pfx}bex" p.Wex p.bex
-            (chanLNGraph s!"%{pfx}gn" s!"%{pfx}btn" epsStr p.εn p.γn p.βn
-              (.depthwiseF (h := h) (w := w) s!"%{pfx}Wdw" s!"%{pfx}bdw" p.Wdw p.bdw e))))))
+          (.flatConvF (h := h) (w := w) s!"%{pfx}eW" s!"%{pfx}eb" p.Wex p.bex
+            (chanLNGraph s!"%{pfx}ng" s!"%{pfx}nbt" epsStr p.εn p.γn p.βn
+              (.depthwiseF (h := h) (w := w) s!"%{pfx}dW" s!"%{pfx}db" p.Wdw p.bdw e))))))
     e
 
 theorem cnxBlockChGraphW_faithful (pfx epsStr : String) {c cExp h w kH kW : Nat}
@@ -514,7 +514,7 @@ def cnxDownChGraphW (pfx epsStr : String) (h w : Nat) {cin cout : Nat}
     (p : CnxDownParamsCh cin cout) (e : SHlo (cin * (2 * h) * (2 * w))) :
     SHlo (cout * h * w) :=
   .flatConvStridedF (h := h) (w := w) s!"%{pfx}W" s!"%{pfx}b" p.W p.b
-    (chanLNGraph s!"%{pfx}gn" s!"%{pfx}btn" epsStr p.ε p.γ p.β e)
+    (chanLNGraph s!"%{pfx}ng" s!"%{pfx}nbt" epsStr p.ε p.γ p.β e)
 
 theorem cnxDownChGraphW_faithful (pfx epsStr : String) (h w : Nat) {cin cout : Nat}
     (p : CnxDownParamsCh cin cout) (e : SHlo (cin * (2 * h) * (2 * w))) :
@@ -537,8 +537,8 @@ def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
               (cnxStageChGraphK epsStr 3 3 w.s2
                 (cnxDownChGraphW "d1" epsStr 28 28 w.d1
                   (cnxStageChGraphK epsStr 0 3 w.s1
-                    (chanLNGraph "%gst" "%btst" epsStr w.sε w.sγ w.sβ
-                      (.flatConvStride4F (h := 56) (w := 56) "%Wst" "%bst" w.sW w.sb
+                    (chanLNGraph "%psng" "%psnbt" epsStr w.sε w.sγ w.sβ
+                      (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb" w.sW w.sb
                         (.operand "%x" x))))))))))))
 
 /-- **Channel-LN forward faithfulness** — the `[3,3,9,3]` channel-LN graph denotes

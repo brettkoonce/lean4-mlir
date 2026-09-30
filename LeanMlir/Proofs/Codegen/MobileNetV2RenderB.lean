@@ -685,19 +685,17 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let nGap := F.gap; let nLog := F.log
     let _ := (zx, zSk, z32, z112, z112p, z7, zHk, z1280, zH7p, z1280b, zWd, zNC, zNCb,
               zNCp, nStr, nHr, nGap)
-    -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
-    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node;
-    --     the hand-written render fuses this into one [B,K] block, so the two graphs differ. ═══
+    -- ═══ label-smoothed softmax-CE cotangent (α = 0.1, K = nClasses):
+    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. The softmax, then `smoothedCotB`:
+    --     together `pretty` of `smoothedLossCotGraph`, the graph the step tie starts from. ═══
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses))
       (.operand nLog zNCb))
-    let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
     -- At α = 0 the smoothing chain is not emitted: `dy = (softmax − onehot)/B`.
-    let (cLsa, cD1, cD2, nD2) ← if alpha == 0.0 then pure ("", "", "", nD0) else do
-      let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
-      let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-      let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
-      pure (cLsa, cD1, cD2, nD2)
-    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    let (cDy,  nDy)  ← if alpha == 0.0 then do
+        let (cD0, nD0) ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
+        let (cDv, nDv) ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD0 zNCb))
+        pure (cD0 ++ cDv, nDv)
+      else smoothedCotB B (1 * nClasses) alphaStr negAlphaKStr s!"{B}.0" nSm
     -- ═══ head backward + the 6 head/dense gradients ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
@@ -860,7 +858,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let body := F.code ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+    let body := F.code ++ cSm ++ cDy ++
       cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHb ++ cHg ++ cHt ++
       b17.code ++ b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++
       b10.code ++ b9.code ++ b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++

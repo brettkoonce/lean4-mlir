@@ -39,18 +39,20 @@ before this plan was written (marked ✔).
 
 ## ▶ Start here (next session)
 
-**State at 2026-09-30.** Branch `rubric-review`, five commits on `main@42de93de`, none pushed:
+**State at 2026-09-30.** Branch `rubric-review`; everything through `d2d15b4e` is pushed to `origin/main`:
 - `5ff18875`: this plan.
 - `0069e30d`: WP1 part 1.
 - `9bebaed8`: WP1 part 2A.
 - `5c0deb1a`: WP3.
 - `3f20d71d`: WP2.
+- `84ee2bd1`: WP7.
+- `d2d15b4e`: the MANIFEST regeneration CI asked for.
 
 WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) and WP2 are committed. One WP2
 item is parked for the CPU box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
 design is under WP1 below, and it should be done together with A-pq-1. WP7 (the attribution
-links, plus the TinyStories deletion) is **staged, not committed**; its status is under WP7
-below. Next: not yet chosen. The suggested order leaves WP4, WP5 and WP6 open.
+links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 is **staged, not
+committed**; its status is under WP4 below. Next: not yet chosen; WP5 and WP6 are open.
 
 ## Decisions (user, 2026-09-30)
 
@@ -354,6 +356,40 @@ printed via one RenderKit helper, so the T3 start is the printed text), **G-corr
 ConvNeXt-T forward text guards; fixes book content.tex:12046).
 - Gate: byte-identical artifacts throughout.
 
+**Status 2026-09-30: done (staged); every artifact byte-identical.**
+- **X-cor-1.** `MlirCodegen.noEmitter` names the constructors neither walk lowers, and
+  `unsupported` refuses a spec containing one. There are 24, not 22: `layerNorm` and
+  `convNextStem` are lowered only by the JAX emitter, and this path would also have skipped
+  them. `#guard`s sit beside it. The module header drops its stale "28 of 50" counts. The book's
+  Bestiary preamble and three Bestiary printouts say "no emitter". (The UNet printout is stale
+  for another reason and is left for WP6.)
+- **G-corr-4.** `Pretty.kernelOutsideDomain`, checked in `serializeToks`, replaces an
+  XLA-SAME stride-2 op outside odd `k ≥ 3`, or a stride-4 op outside `k ≥ 3`, with a
+  `// MALFORMED` line and a `%MALFORMED` result. Re-checked: at `k ∈ {1, 2}` the pad floors at 0
+  and reads the wrong phase. Even `k` on the symmetric stride-1 arms changes the output shape
+  (loud), so it is not guarded. The domains are stated in `Basic`'s constructor comments and
+  `flatConvStride2Xla`'s docstring.
+- **G-corr-1.** `biasGradB : SHlo (N*n) → SHlo n`, with `denseBiasGradB`'s Σ as its `den`.
+  `headBGradB_den` (name kept) is stated at the summed node. The ViT/ConvNeXt ParamGrad clauses
+  and head step ties drop the external Σ, and the fold files drop the carve-out.
+- **G-corr-2 + G-reuse-2.** The three loss-cotangent graphs are defined as a computable tail
+  (`smoothedCotTail`, `bceCotTail`) applied to their softmax/sigmoid head. `RenderKit.smoothedCotB`
+  and `bceCotB` print that tail, and the seven renderers call them after printing the head, whose
+  name the `%loss` report needs. The printed cotangent is therefore `pretty` of the capstones'
+  graph. MNv2's α = 0 path (sub, divide) is neither graph and stays as two calls.
+- **G-corr-3, ConvNeXt half.** The per-example emitters are public as `cnxFwdBlock`,
+  `cnxFwdDown`, `cnxLnFwdSite` and `cnxHeadLnFwdSite`. `convNextFwdGraphTCh`'s blocks, downsamples
+  and stem use the artifact's parameter names (strings only, so `den` is untouched).
+  `FwdGraphTextTies` guards block, downsample, stem and head. A probe confirmed the guards are not
+  vacuous: the block text is 6.6 kB, and a wrong prefix fails.
+- **G-corr-3, ViT half: the proposed fix does not hold.** `vitBlockGraphMHV` shares non-leaf
+  subterms (LN1 → Q/K/V; Q/K/V → every head; the first residual → LN2 and the second residual).
+  `pretty` shares nothing, so the graph's text repeats them, and the render's slice order differs
+  from the graph's postorder. A text tie needs a sharing printer or a reordered render (artifact
+  change). `FwdGraphTextTies`' coverage paragraph, `vBlockFwd`'s docstring and the book's
+  `thm:vitFwdGraphKMHV_faithful` now say so; the book no longer says "the rendered ViT is the
+  tower above".
+
 ### WP5 — Per-net capstone reach · M each · parallelisable by net
 - **N1-corr-1** ✔ ConvNeXt stem bias is tied on a free `xstem`. State it at `flatConvStride4`.
   The docstring's "same modelling as mnv2/r34" is false.
@@ -427,7 +463,7 @@ A richer format (titles, book cite keys) is a later pass.
 - `formalization.yaml` references gain IBP/CROWN rows.
 - Batch the root-file docstrings (BatchNorm, LayerNorm) with WP9's root edits.
 
-**Status 2026-09-30: done (staged).**
+**Status 2026-09-30: done (committed `84ee2bd1`).**
 - Every Lean file in `citations.md`'s "Cite in" column (80 files, including the root files) ends
   its module docstring with `## References`: one bullet per work, author–year, title, `<link>`.
   - A file named for several works lists them all.

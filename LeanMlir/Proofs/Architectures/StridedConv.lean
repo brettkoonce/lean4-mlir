@@ -333,7 +333,12 @@ only compositions of results already closed under the three standard axioms.
 `((k-1)/2, (k-1)/2)` — symmetric — so `flatConvStride2` is already the right op there and this one
 would be wrong. The type enforces it: the input index is `ic*(2*h)*(2*w)`, structurally even.
 Verified against `jax.lax.conv_general_dilated(…, 'SAME')` over
-`H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule. -/
+`H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule.
+
+**Odd `k ≥ 3` only.** The identity needs `(k−2)/2 = (k−1)/2 − 1`, which holds at odd `k ≥ 3`. At
+`k = 1` XLA `SAME` pads `(0, 0)` and reads `x[2·ho]`, not the odd phase, so this op is not XLA
+`SAME` there; even `k` changes the pad split. The printer emits a `MALFORMED` marker for these
+ops outside that domain rather than a convolution that computes something else. -/
 
 /-- **Stride-2 XLA-`SAME` convolution**, flattened: `Vec (ic·2h·2w) → Vec (oc·h·w)`.
     `decimateOddFlat ∘ flatConv` — the stride-1 symmetric-SAME conv on the `2h×2w` grid, then keep

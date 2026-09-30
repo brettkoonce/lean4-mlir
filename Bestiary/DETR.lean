@@ -143,7 +143,7 @@ def main : IO Unit := do
   IO.println "    constructors for this bestiary. Decoder wraps 6 blocks of"
   IO.println "    (self-attn + cross-attn + FFN) with a learned query matrix;"
   IO.println "    `detrHeads` bundles the per-query class (→ nClasses+1) and"
-  IO.println "    box (→ 4) MLPs. Codegen emits UNSUPPORTED for both."
+  IO.println "    box (→ 4) MLPs. Codegen has no emitter for either."
   IO.println "  • `patchEmbed` with patchSize=1 does channel projection"
   IO.println "    (2048→256 for R50) + flatten spatial + positional embed"
   IO.println "    in one step — absorbs the explicit 1×1 conv that most"

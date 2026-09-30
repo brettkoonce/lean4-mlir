@@ -1,4 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Foundation.BceLossCot
 
 /-! # The renderers' shared optimizer tail
 
@@ -15,6 +17,11 @@ and the train step's **packed interface** — the one positional contract the dr
 `packedTrainSig` (arguments) and `packedTrainRetTys` (results), used by every batched renderer.
 Last, the precision-switched constructors `XAt bf16 rnd …` (`convAt`, `convBackBatchedAt`, …): one
 `if bf16 then .XBf16 rnd … else .X …` per op instead of one per call site.
+
+The loss cotangent's text comes from here too: `smoothedCotB` / `bceCotB` print the capstones'
+own cotangent graphs (`smoothedLossCotGraph`, `smoothedLossCotGraphDiv`, `bceLossCotGraph`) after
+their softmax or sigmoid head, which each render prints first because its `%loss` report reads
+that name.
 
 `ResNet34RenderB.optOne` is the multi-optimizer step (AdamW / LAMB / heavy-ball / accumulation /
 EMA) that ResNet-34 and ResNet-50 fold; it reads the same `PGrad`.
@@ -415,5 +422,19 @@ def bnEvalSite (B oc hh ww : Nat) (epsStr gName btName statP xin : String) :
   let zin : Vec (oc*hh*ww) := fun _ => 0
   pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := ww)
     gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc (.operand xin zin))
+
+/-- The label-smoothed cotangent after a render's softmax: `pretty` of `smoothedCotTail` over the
+    softmax's name `smN` and `%onehot`, at width `n` per example (`1 * K` under the row softmax,
+    `K` under `softmaxDiv ∘ expe`). The ℝ arguments do not print, so `0` stands for them. With the
+    softmax printed first, the text is `pretty` of `smoothedLossCotGraph` (row) or
+    `smoothedLossCotGraphDiv`, the graphs the step ties start from. -/
+def smoothedCotB (B n : Nat) (aStr negAK bStr smN : String) : StateM EmitS (String × String) :=
+  pretty B (smoothedCotTail (N := B) (n := n) 0 0 0 aStr negAK bStr
+    (.operand smN 0) (.operand "%onehot" 0))
+
+/-- The BCE cotangent after a render's sigmoid: `pretty` of `bceCotTail` over the sigmoid's name
+    `sgN` and `%onehot`; with the sigmoid printed first, the text is `pretty` of `bceLossCotGraph`. -/
+def bceCotB (B n : Nat) (bStr sgN : String) : StateM EmitS (String × String) :=
+  pretty B (bceCotTail (N := B) (n := n) 0 bStr (.operand sgN 0) (.operand "%onehot" 0))
 
 end Proofs.StableHLO

@@ -115,6 +115,9 @@ inductive BatchableOp : Nat → Nat → Type where
   -- `den` is `flatConvStride2Xla` = `decimateOddFlat ∘ flatConv` — the SAME stride-1 conv, read at
   -- the odd phase. So this adds no proof obligation: the forward, input-VJP, weight-VJP and
   -- bias-VJP are all `vjpComp`s of results already proven (`Architectures/StridedConv.lean`).
+  --
+  -- The printed pad matches `den` only at odd `k ≥ 3`; below that it floors at 0 and reads the
+  -- wrong phase, so the printer emits a `MALFORMED` marker there instead of the op.
   | convStridedXla {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   -- bf16 peer of `convStridedXla` — MobileNetV2's stem. Same asymmetric `((k-2)/2, k/2)` pad;
@@ -243,7 +246,9 @@ inductive BatchableOp : Nat → Nat → Type where
   -- emit discipline as every other conv here: bf16 operands, **bf16-TYPED result**, convert back,
   -- bias in f32.
   --
-  -- `convStride4`'s **pad-one-less** rule is preserved verbatim: the denotation reads the stride-1
+  -- `convStride4`'s pad `(k-1)/2 − 1` matches `den` only at `k ≥ 3` (below that it floors at 0
+  -- and the printer emits a `MALFORMED` marker). Its **pad-one-less** rule is preserved
+  -- verbatim: the denotation reads the stride-1
   -- SAME conv at the offset positions `4i+1`, so the emitted pad is `(k-1)/2 − 1`, which at the 4×4
   -- stem is `[[0,0]]` — the paper's left-aligned window, and NOT the symmetric `(k-1)/2` every other
   -- forward conv emits. Copying `convBf16`'s pad here renders a different net at identical shapes.
@@ -742,8 +747,9 @@ inductive SHlo : Nat → Type where
   -- ConvNeXt's and ViT's head emits `weightGrad`/`biasGrad`. Reusing them would change the
   -- emitted text, so these two alias the per-example Raw instead. A reminder that two ops
   -- denoting the same function are still two RENDERS, and the byte tie is what notices.
+  -- Both sum over the batch, in `den` as in the printed `reduce … dimensions = [0]`.
   | weightGradB {N m n : Nat} (xName : String) (x : Vec (N*m))  : SHlo (N*n) → SHlo (m*n)
-  | biasGradB   {N n : Nat}                                     : SHlo (N*n) → SHlo (N*n)
+  | biasGradB   {N n : Nat}                                     : SHlo (N*n) → SHlo n
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
   -- The BATCHED forward sigmoid, for **BCE-with-logits** (RSB-A2/A3's loss). `sigmoidF` already
@@ -2197,7 +2203,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- `biasGrad` is the IDENTITY on its operand (the per-example peer returns `SHlo n`, not
   -- `SHlo` of the bias width) — the channel sum happens in the emitted reduce, outside the AST.
   -- Carried over verbatim so the batched form is the same carve-out, not a new one.
-  | _, .biasGradB e => den e
+  | _, .biasGradB (N := N) (n := n) e => fun j => ∑ k : Fin N, batchSlice N n (den e) k j
   -- LayerNorm's backward is NOT pointwise (it reduces within a row), so this one genuinely needs
   -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
   | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>

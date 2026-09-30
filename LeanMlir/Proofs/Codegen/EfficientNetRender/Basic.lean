@@ -944,22 +944,16 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     -- build that leaf themselves. See `zCc1` for the same wrinkle inside the SE gate.
     let zNCb  : Vec (B * (1 * nClasses)) := fun _ => 0
     let (cSm, nSm) ← pretty B (.batchOp (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
-    let (cD0, nD0) ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    -- ═══ the cotangent tail. `none` emits NOTHING (so the SGD render is byte-identical); `some`
-    --     appends the label-smoothing chain `scaleB → addVB → shiftB → divConstB`, every line
-    --     `pretty` of a verified node. `shiftB` emits `add x, dense<−α/K>` where the hand-written
-    --     render emits `subtract x, α/K` — IEEE subtraction IS addition of the exact negation, so
-    --     the two are bit-identical. `divConstB` emits a real `divide` rather than a multiply by
-    --     `1/B`, which is only exact in binary32 at powers of two. ═══
-    let (cSmooth, nDy) ← match smooth with
-      | none => pure ("", nD0)
-      | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty B (.scaleB aStr 0 (.operand "%onehot" zNCb))
-          let (c2, n2) ← pretty B (.addVB (.operand nD0 zNCb) (.operand n1 zNCb))
-          let (c3, n3) ← pretty B (.shiftB negAK 0 (.operand n2 zNCb))
-          let (c4, n4) ← pretty B (.divConstB bStr 0 (.operand n3 zNCb))
-          pure (c1 ++ c2 ++ c3 ++ c4, n4)
-    let cDy := cD0 ++ cSmooth
+    -- ═══ the cotangent tail. `none` emits the subtraction alone (so the SGD render is
+    --     byte-identical); `some` emits `smoothedCotB`, which with the softmax above is `pretty` of
+    --     `smoothedLossCotGraph`, the graph the step tie starts from. `shiftB` emits
+    --     `add x, dense<−α/K>` where the hand-written render emits `subtract x, α/K` — IEEE
+    --     subtraction IS addition of the exact negation, so the two are bit-identical. `divConstB`
+    --     emits a real `divide` rather than a multiply by `1/B`, which is only exact in binary32 at
+    --     powers of two. ═══
+    let (cDy, nDy) ← match smooth with
+      | none => pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
+      | some (aStr, negAK, bStr) => smoothedCotB B (1 * nClasses) aStr negAK bStr nSm
     -- ═══ head backward: dense back → GAP back → swish mask → bn back → 1×1 conv back ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
     -- `F.cin`, NOT `nGap` — the classifier weight gradient reads the DENSE'S INPUT, which with

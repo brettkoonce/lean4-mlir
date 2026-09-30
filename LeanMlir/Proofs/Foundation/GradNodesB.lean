@@ -609,18 +609,17 @@ theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
   intro n _
   exact denseWeightGrad_correct Wc bc (batchSlice N D a n) (batchSlice N nC cot n) i j
 
-/-- **Batched classifier bias GRADIENT denotes the certified cotangent, PER EXAMPLE.**
-
-    Note: `biasGradB` is the identity on its operand — the reduce over the batch is in the emitted
-    text, outside the AST — so the statement this node supports is the per-example one at every
-    `batchSlice n`, and it is the per-example `biasGrad` carve-out carried over rather than a new
-    one. `StableHLO.Basic`'s constructor comment records the same thing on the emitter side. -/
+/-- **Batched classifier bias GRADIENT denotes the certified cotangent, summed over the batch.**
+    The node's `den` carries the batch reduce its text prints, so this is the whole statement
+    the classifier bias's update needs, as `headWGradB_den` is for the weight. `a n` is example
+    `n`'s head input (the bias gradient does not depend on it). -/
 theorem headBGradB_den {N D nC : Nat} (cotN : String)
-    (Wc : Mat D nC) (a : Vec D) (bc : Vec nC) (cot : Vec (N * nC)) (n : Fin N) (i : Fin nC) :
-    batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot))) n i
-      = ∑ j : Fin nC, pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * batchSlice N nC cot n j := by
+    (Wc : Mat D nC) (a : Fin N → Vec D) (bc : Vec nC) (cot : Vec (N * nC)) (i : Fin nC) :
+    den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot)) i
+      = ∑ n : Fin N, ∑ j : Fin nC,
+          pdiv (fun b' : Vec nC => dense Wc b' (a n)) bc i j * batchSlice N nC cot n j := by
   simp only [denStep]
-  exact denseBiasGrad_correct Wc bc a (batchSlice N nC cot n) i
+  exact Finset.sum_congr rfl fun n _ => denseBiasGrad_correct Wc bc (a n) (batchSlice N nC cot n) i
 
 /-- A batched vector-LN γ gradient node, tied (`veclnGammaGradB_den`). -/
 def VecLNGammaTiedB (N R : Nat) {D : Nat} (xN epsStr cotN : String) (ε : ℝ) (βv : Vec D)

@@ -1322,15 +1322,12 @@ here first"
     let zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
     let zNCp  : Vec (B*nClasses) := fun _ => 0
     let nGap := F.gap; let nLog := F.log
-    -- ═══ label-smoothed softmax-CE cotangent, COMPOSED from kit ops (α = 0.1, K = nClasses):
-    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. Every line is a verified node;
-    --     the hand-written render fuses this into one [B,K] block, so the two graphs differ. ═══
+    -- ═══ label-smoothed softmax-CE cotangent (α = 0.1, K = nClasses):
+    --     dy = (softmax(logits) − onehot + α·onehot − α/K) / B. The softmax, then `smoothedCotB`:
+    --     together `pretty` of `smoothedLossCotGraph`, the graph the step tie starts from. ═══
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses)) (.operand nLog zNCb))
-    let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB (fmt6 alpha) 0 (.operand "%onehot" zNCb))
-    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB s!"-{alphaOverK nClasses alpha}" 0 (.operand nD1 zNCb))
-    let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
+    let (cDy,  nDy)  ← smoothedCotB B (1 * nClasses) (fmt6 alpha) s!"-{alphaOverK nClasses alpha}"
+      s!"{B}.0" nSm
     -- ═══ head backward + dense grads ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) (a := 512) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
     let (cWd,  nWd)  ← pretty B (.denseWeightGradB (c := nClasses) nGap z512 (.operand nDy zNCp))
@@ -1457,7 +1454,7 @@ here first"
       s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
-    let body := F.code ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
+    let body := F.code ++ cSm ++ cDy ++
       cDgi ++ cWd ++ cbd ++ cDgp ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
       b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++ b2.code ++ b1.code ++

@@ -6,14 +6,11 @@ set_option maxRecDepth 2000
     at run time. Unverified — the verified path renders `verified_mlir/` from the proof side
     (`LeanMlir/Proofs/Codegen/`) instead.
 
-    Emits 28 of `Layer`'s 50 constructors (dense, conv, BN, depthwise, MBConv/SE, UIB,
-    attention, UNet, ConvNeXt, detection and token-model layers). The other 22 — `separableConv`,
-    `fireModule`, `mambaBlock`, `swinStage`, `patchMerging`, `transformerDecoder`, `detrHeads`,
-    `shuffleBlock`, `shuffleV2Block`, `evoformerBlock`, `structureModule`, `mobileVitBlock`,
-    `waveNetBlock`, `positionalEncoding`, `nerfMLP`, `darknetBlock`, `cspBlock`,
-    `inceptionModule`, `asppModule`, `fpnModule`, `denseBlock`, `transitionLayer` — have no
-    emitter here; the forward walk writes an `UNSUPPORTED LAYER` comment for them. Walks layers tracking the current activation shape; for a flat input it emits a reshape
-    to (batch, ic, imageH, imageW) at the head.
+    Emits dense, conv, BN, depthwise, MBConv/SE, UIB, attention, UNet, ConvNeXt, detection and
+    token-model layers. The constructors `noEmitter` names have no emitter here, and
+    `unsupported` refuses any spec that contains one: the walks would skip such a layer and the
+    net would train without it. Walks layers tracking the current activation shape; for a flat
+    input it emits a reshape to (batch, ic, imageH, imageW) at the head.
 
     Layout: NCHW tensors, OIHW kernels (matches the JAX codegen convention).
     Params are interleaved as (W0, b0, W1, b1, ...) in the function signature,
@@ -28,13 +25,51 @@ set_option maxRecDepth 2000
 
 namespace MlirCodegen
 
-/-- The spec fields this emitter does not implement, or `none`. The JAX emitter reads both; this
-    one would silently emit something else: a `.conv2d`/`.convBn` at `pad := .valid` would be
-    padded to keep its spatial size, and a bare `.convBn` would get ReLU whatever
-    `NetSpec.convBnAct` says. No spec on this path uses either, so they are refused rather than
-    implemented. -/
+/-- The constructor's name when this emitter has no lowering for it, else `none`. The forward
+    and train walks have no arm for these: they write an `UNSUPPORTED` comment and leave the
+    activation and the parameter list as they were, so the layer would silently become the
+    identity (or a shape error downstream). `layerNorm` and `convNextStem` are lowered only by
+    the JAX emitter. -/
+def noEmitter : Layer → Option String
+  | .layerNorm .. => some "layerNorm"
+  | .separableConv .. => some "separableConv"
+  | .fireModule .. => some "fireModule"
+  | .mambaBlock .. => some "mambaBlock"
+  | .swinStage .. => some "swinStage"
+  | .patchMerging .. => some "patchMerging"
+  | .transformerDecoder .. => some "transformerDecoder"
+  | .detrHeads .. => some "detrHeads"
+  | .shuffleBlock .. => some "shuffleBlock"
+  | .shuffleV2Block .. => some "shuffleV2Block"
+  | .evoformerBlock .. => some "evoformerBlock"
+  | .structureModule .. => some "structureModule"
+  | .mobileVitBlock .. => some "mobileVitBlock"
+  | .convNextStem .. => some "convNextStem"
+  | .waveNetBlock .. => some "waveNetBlock"
+  | .positionalEncoding .. => some "positionalEncoding"
+  | .nerfMLP .. => some "nerfMLP"
+  | .darknetBlock .. => some "darknetBlock"
+  | .cspBlock .. => some "cspBlock"
+  | .inceptionModule .. => some "inceptionModule"
+  | .asppModule .. => some "asppModule"
+  | .fpnModule .. => some "fpnModule"
+  | .denseBlock .. => some "denseBlock"
+  | .transitionLayer .. => some "transitionLayer"
+  | _ => none
+
+/-- What this emitter cannot render faithfully, or `none`:
+    * a layer with no emitter (`noEmitter`);
+    * `pad := .valid` on a `.conv2d`/`.convBn`, which this emitter would pad to keep its spatial
+      size;
+    * a bare `.convBn` with `NetSpec.convBnAct` other than ReLU, which this emitter would apply
+      ReLU to anyway.
+
+    The JAX emitter implements all three; no spec on this path uses them, so they are refused
+    rather than implemented. -/
 def unsupported (spec : NetSpec) : Option String := Id.run do
   for l in spec.layers do
+    if let some n := noEmitter l then
+      return some s!"{n} has no emitter here (the walks would skip it)"
     match l with
     | .conv2d ic oc k .valid _ =>
       return some s!"conv2d {ic}→{oc} {k}×{k} at pad := .valid (this emitter pads SAME)"
@@ -44,6 +79,15 @@ def unsupported (spec : NetSpec) : Option String := Id.run do
   if spec.convBnAct != .relu && spec.layers.any (fun | .convBn .. => true | _ => false) then
     return some s!"convBnAct := {repr spec.convBnAct} on a bare convBn (this emitter applies ReLU)"
   return none
+
+/-- A flat-input spec with the given layers, for the guards below. -/
+private def guardSpec (layers : List Layer) : NetSpec :=
+  { name := "guard", imageH := 1, imageW := 1, layers := layers }
+
+#guard unsupported (guardSpec [.flatten, .mambaBlock 8 4 2 1, .dense 8 2 .identity]) ==
+  some "mambaBlock has no emitter here (the walks would skip it)"
+#guard (unsupported (guardSpec [.flatten, .layerNorm 8, .dense 8 2 .identity])).isSome
+#guard unsupported (guardSpec [.flatten, .dense 8 2 .identity]) == none
 
 /-- Refuse a spec this emitter cannot render faithfully (`unsupported`). -/
 def checkSupported (spec : NetSpec) : IO Unit :=
@@ -2596,7 +2640,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
         curSSA := s!"%su_t{pos}"
         curShape := bchw
       | _ => code := code ++ "    // spatialUnflatten error: expected rank-3 input\n"
-    | _ =>
+    | _ =>  -- unreachable: `unsupported` refuses every constructor with no arm here
       code := code ++ "    // UNSUPPORTED LAYER\n"
     pos := pos + 1
   code := code ++ s!"    return {curSSA} : {tensorTy curShape}\n"
@@ -6790,7 +6834,7 @@ private def emitTrainForward (spec : NetSpec) (B : Nat)
         curShape := [B, Ntot]
         pidx := base + fpnNumParams tower
 
-    | _ => code := code ++ "    // UNSUPPORTED\n"
+    | _ => code := code ++ "    // UNSUPPORTED\n"  -- unreachable: `unsupported` refuses these
     pos := pos + 1
   return (code, curSSA, curShape, records)
 
