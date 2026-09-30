@@ -4371,6 +4371,28 @@ See \leandocref{Proofs.Cifar8PoC.cifar8\_train\_step\_tied\_certified}.
 See \leandocref{Proofs.Cifar8BnPoC.cifar8Bn\_train\_step\_tied\_certified}.
 \end{proof}
 
+\begin{theorem}[The trained steps' gradients are the certified gradients]
+  \label{thm:cifar8_step_tieG}
+  \lean{Proofs.Cifar8PoCG.cifar8_train_step_tiedG, Proofs.Cifar8BnPoCG.cifar8Bn_train_step_tiedG}
+  \leanok
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
+      ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
+  The runs this chapter reports train the packed steps
+  \texttt{cifar8w\_\{sgd,mom,adam\}} and \texttt{cifar8w\_bn\_\{sgd,mom,adam\}},
+  not the fused SGD steps of the two theorems above: the same backward chain
+  hands each parameter's gradient to a separate optimizer. \Prove{} every one
+  of those gradient nodes, twenty-two without BatchNorm and thirty-eight with
+  it, denotes the certified per-layer Jacobian contracted with the chain
+  cotangent. The optimizer update itself (SGD, Nesterov or AdamW) is outside
+  the statement.
+\end{theorem}
+
+\begin{proof}
+\leanok
+See \leandocref{Proofs.Cifar8PoCG.cifar8\_train\_step\_tiedG} and
+\leandocref{Proofs.Cifar8BnPoCG.cifar8Bn\_train\_step\_tiedG}.
+\end{proof}
+
 \begin{theorem}[SGD descends at the last convolution]
   \label{thm:cifar8_sgd_descends}
   \lean{Proofs.cifar8_lastConv_sgd_descends}
@@ -10046,10 +10068,10 @@ See \leandocref{Proofs.convnextInputGradB\_correct}.
   \label{thm:convnext_step_tie}
   \lean{Proofs.CnxTiePoCGB.cnx_net_tiedGB}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3,
-      ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseBiasGradHasVJP,
-      ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3, ax:geluScalar,
-      ax:geluScalarDeriv, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex, def:hasvjp,
+  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP,
+      ax:depthwiseBiasGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
+      ax:depthwiseWeightGradHasVJP3, ax:geluScalar, ax:geluScalarDeriv, ax:pdiv,
+      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp,
       def:hasvjp3, thm:denseBiasGrad_correct, thm:denseHasVJP,
       thm:denseWeightGrad_correct, thm:vjpComp}
   \Prove{} the 182 parameter gradients of the batched ConvNeXt-T step

@@ -205,23 +205,24 @@ theorem vitInputGradK_correct
     `vitInputGradK_eq_vitForwardKV_vjp` instantiated at the exact ViT-Tiny
     spec: a `3×224×224` image, `16×16` patches (196 patch tokens + CLS), `D = 192 = 3 heads × 64`,
     MLP dim 768, **12 transformer blocks with DISTINCT per-block parameters**, vector-`[D]`
-    LayerNorm at all 25 sites, and Imagenette's 10 classes.
+    LayerNorm at all 25 sites, and any number of classes `nCls` (10 on Imagenette, 1000 on
+    ImageNet).
 
     So the hand-written input-gradient chain IS the certified gradient of the committed depth-12
     forward, at every image.
     The backward peer of `vitTinyHasVJP_correct`, beside
     `convnextInputGrad_eq_convNextForwardTCh_vjp` and
     `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`. -/
-theorem vitTinyInputGrad_eq_vitTiny_vjp
+theorem vitTinyInputGrad_eq_vitTiny_vjp {nCls : Nat}
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
     (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
-    (Wcls : Mat (3 * 64) 10) (bcls : Vec 10) (x : Vec (3 * 224 * 224)) :
-    vitInputGradK 3 224 224 16 196 768 3 64 10 12
+    (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls) (x : Vec (3 * 224 * 224)) :
+    vitInputGradK 3 224 224 16 196 768 3 64 nCls 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
+      = (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 nCls 12
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x :=
-  vitInputGradK_eq_vitForwardKV_vjp (βF := βF) (bcls := bcls) 3 224 224 16 196 768 3 64 10 12
+  vitInputGradK_eq_vitForwardKV_vjp (βF := βF) (bcls := bcls) 3 224 224 16 196 768 3 64 nCls 12
     W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
 
 end Proofs

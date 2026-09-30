@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
-import LeanMlir.Proofs.Foundation.ParamGradNodes
 
 /-! # ConvNeXt-T — every parameter gradient node IS the loss's derivative in that parameter
 
@@ -28,9 +27,9 @@ the label-smoothed loss the artifacts ship (`smoothedBatchLossDiv`, whose gradie
   `cnxHeadDyB_eq_vjp`), and each `Φ` identified with the whole net at updated weights by a
   standalone `cnx_factor_*` theorem.
 
-**One node is stated differently from the tie.** The stem's bias node is emitted as a stride-1
-`convBiasGradB` over a free `xstem`; its Jacobian in the bias is the channel indicator whatever the
-conv, so it equals the patchify conv's (`GradNodeB.pdiv_bias_of_split`).
+**The stem's bias node** is emitted as a stride-1 `convBiasGradB` at the output resolution, and
+reads no input; its Jacobian in the bias is the channel indicator whatever the conv, so it is the
+patchify conv's (`GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d`), as in the tie.
 
 **Hypotheses.** `0 < ε` (the LayerNorms' VJPs); no smoothness hypothesis. For the smoothed loss,
 every example's target sums to one and `0 < nC`. Drop-path and the bf16 nodes are outside this
@@ -430,10 +429,10 @@ section Stem
 variable {c : Nat}
 
 /-- **Stem, every parameter node a loss derivative** — the four nodes `cnxStemChTiedGB` ties. The
-    bias node is the emitted stride-1 `convBiasGradB` over a free `xstem`, as in the tie. -/
+    bias node is the emitted stride-1 `convBiasGradB`, which reads no input (stated at zero). -/
 def cnxStemLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
-    (xstem : Vec (N * (3 * h * w))) (Φ : Kernel4 c 3 4 4 → Vec c → Vec c → Vec c → Vec 1)
+    (Φ : Kernel4 c 3 4 4 → Vec c → Vec c → Vec c → Vec 1)
     (dyStem : Vec (N * (c * h * w))) : Prop :=
   let patchB : Vec (N * (c * h * w)) := batchMap N (flatConvStride4 Wst psb) x
   let cotPatchB : Vec (N * (c * h * w)) :=
@@ -447,18 +446,18 @@ def cnxStemLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
           (.operand cotN (batchMap N (chanLNRows c h w) dyStem)))))
   ∧ (HasGradAt (fun θ => Φ Wst θ psng psnbt) psb
         (den (SHlo.convBiasGradB (N := N) (ic := 3) (oc := c) (h := h) (w := w) (kH := 4) (kW := 4)
-          Wst xstem psb (.operand cotN cotPatchB))))
+          Wst 0 psb (.operand cotN cotPatchB))))
   ∧ (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) psb psng psnbt) (Kernel4.flatten Wst)
         (den (SHlo.convStride4WeightGradB xN psb x Wst (.operand cotN cotPatchB))))
 
 theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ) (hε : 0 < ε)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
-    (xstem : Vec (N * (3 * h * w))) {Lb : Vec (N * (c * h * w)) → Vec 1}
+    {Lb : Vec (N * (c * h * w)) → Vec 1}
     {dyStem : Vec (N * (c * h * w))}
     (hLb : HasGradAt Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε Wst psb psng psnbt) x) dyStem)
     {Φ : Kernel4 c 3 4 4 → Vec c → Vec c → Vec c → Vec 1}
     (hΦ : ∀ W b γ β, Φ W b γ β = Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε W b γ β) x)) :
-    cnxStemLossTiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem Φ dyStem := by
+    cnxStemLossTiedGB N xN epsStr cotN ε Wst psb psng psnbt x Φ dyStem := by
   rw [show Φ = fun W b γ β => Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε W b γ β) x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
   have hc : ∀ (y : Vec (3 * (2 * (2 * h)) * (2 * (2 * w)))) (dy : Vec (c * h * w)),
@@ -490,16 +489,13 @@ theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
       x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq (funext fun o => ?_)
     have hb : ∀ n j,
         pdiv (fun b' : Vec c => Tensor3.flatten (conv2d Wst b'
-            (Tensor3.unflatten (batchSlice N (3 * h * w) xstem n)))) psb o j
+            (Tensor3.unflatten (batchSlice N (3 * h * w) (0 : Vec (N * (3 * h * w))) n)))) psb o j
           = pdiv (fun b' : Vec c => (flatConvStride4 Wst b'
               (batchSlice N (3 * (2 * (2 * h)) * (2 * (2 * w))) x n) : Vec (c * h * w))) psb o j :=
-      fun n j => (GradNodeB.pdiv_bias_of_split (fun θ y => flatConv (h := h) (w := w) Wst θ y)
-          (GradNodeB.flatConv_bias_split Wst) _ psb o j).trans
-        (GradNodeB.pdiv_bias_of_split (fun θ y => flatConvStride4 (h := h) (w := w) Wst θ y)
-          (GradNodeB.flatConvStride4_bias_split Wst) _ psb o j).symm
+      fun n j => (GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d Wst _ _ psb o j).symm
     refine (Finset.sum_congr rfl fun n _ => Finset.sum_congr rfl fun j _ =>
       congrArg (· * _) (hb n j)).symm.trans ?_
-    exact (GradNodeB.convBGradB_den cotN Wst xstem psb _ o).symm
+    exact (GradNodeB.convBGradB_den cotN Wst 0 psb _ o).symm
   · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => flatConvStride4 (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 c 3 4 4) psb y)
         (fun _ u => chanLNTensor3 c h w ε psng psnbt u) (fun y dy => stemCotPatch ε Wst psb psng y dy)
@@ -1194,7 +1190,7 @@ theorem cnxNetB_eq_convNextForwardTCh (N : Nat) {nC : Nat} (ε : ℝ) (w : CnxTi
     `cnx_net_tiedGB` ties, each at the cotangent the tie threads to it from `g`, stated against
     `L` of `cnxNetB` with that one parameter varied. -/
 def CnxNetLossTiedGB (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ)
-    (w : CnxTieWeights nC) (xstem : Vec (N * (3 * 56 * 56))) (x : Vec (N * (3 * 224 * 224)))
+    (w : CnxTieWeights nC) (x : Vec (N * (3 * 224 * 224)))
     (L : Vec (N * nC) → Vec 1) (g : Vec (N * nC)) : Prop :=
   let dyO18 := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc)
     (cnxPreB18 N ε w x) g
@@ -1219,7 +1215,7 @@ def CnxNetLossTiedGB (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ
   let dyO2 := batchMapAux N (w.b3.cotIn (h := 56) (w := 56) ε) (cnxPreB2 N ε w x) dyO3
   let dyO1 := batchMapAux N (w.b2.cotIn (h := 56) (w := 56) ε) (cnxPreB1 N ε w x) dyO2
   let dyStem := batchMapAux N (w.b1.cotIn (h := 56) (w := 56) ε) (cnxPreS N ε w x) dyO1
-  cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem
+  cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x
       (fun W b γ β => L (cnxNetB N ε { w with sW := W, sb := b, sγ := γ, sβ := β } x)) dyStem
   ∧ cnxBlockLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.b1 (cnxPreS N ε w x)
       (fun p => L (cnxNetB N ε { w with b1 := p } x)) dyO1
@@ -1275,9 +1271,9 @@ def CnxNetLossTiedGB (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ
     Hypothesis: `0 < ε`, the LayerNorms' (the tie itself needs none). The loss enters only through
     `hL`; `cnx_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
 theorem cnx_net_lossGrad (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε)
-    (w : CnxTieWeights nC) (xstem : Vec (N * (3 * 56 * 56))) (x : Vec (N * (3 * 224 * 224)))
+    (w : CnxTieWeights nC) (x : Vec (N * (3 * 224 * 224)))
     {L : Vec (N * nC) → Vec 1} {g : Vec (N * nC)} (hL : HasGradAt L (cnxNetB N ε w x) g) :
-    CnxNetLossTiedGB xN epsStr cotN dN N ε w xstem x L g := by
+    CnxNetLossTiedGB xN epsStr cotN dN N ε w x L g := by
   unfold CnxNetLossTiedGB
   intro dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   have hL' : HasGradAt L (batchMap N (cnxHeadO 7 7 ε w.hG w.hT w.Wfc w.bfc) (cnxPreB18 N ε w x)) g :=
@@ -1326,7 +1322,7 @@ theorem cnx_net_lossGrad (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε :
     cnxBlkB_hasGradAt_comp N (h := 56) (w := 56) ε hε w.b2 _ (hB2.congr_point (cnxPreB2_apply N ε w x))
   have hS : HasGradAt (fun y => L (cnxSufS N ε w y)) (cnxPreS N ε w x) dyStem :=
     cnxBlkB_hasGradAt_comp N (h := 56) (w := 56) ε hε w.b1 _ (hB1.congr_point (cnxPreB1_apply N ε w x))
-  refine ⟨cnx_stem_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.sW w.sb w.sγ w.sβ x xstem
+  refine ⟨cnx_stem_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.sW w.sb w.sγ w.sβ x
       (hS.congr_point (cnxPreS_apply N ε w x)) (fun W b γ β => by rw [cnx_factor_stem]), ?_⟩
   refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b1 _
       (hB1.congr_point (cnxPreB1_apply N ε w x)) (fun p => by rw [cnx_factor_b1]), ?_⟩
@@ -1378,11 +1374,11 @@ theorem cnx_net_lossGrad (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε :
     tie's own `g`, whose logits are `cnxNetB N ε w x` (`cnx_logitsB_eq`). -/
 theorem cnx_net_lossGrad_smoothedCE (xN epsStr cotN dN aStr negAK bStr logN ohN : String)
     (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : CnxTieWeights nC)
-    (xstem : Vec (N * (3 * 56 * 56))) (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
+    (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
     (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
-    CnxNetLossTiedGB xN epsStr cotN dN N ε w xstem x (smoothedBatchLossDiv N nC α B t)
+    CnxNetLossTiedGB xN epsStr cotN dN N ε w x (smoothedBatchLossDiv N nC α B t)
       (den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN (cnxNetB N ε w x) t)) :=
-  cnx_net_lossGrad xN epsStr cotN dN N ε hε w xstem x
+  cnx_net_lossGrad xN epsStr cotN dN N ε hε w x
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
       fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
 

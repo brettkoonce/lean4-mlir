@@ -21,6 +21,10 @@ Spatial bookkeeping (the 2-stage `(h,w)` convention nested two levels deeper): f
 stage 4 (conv₇/conv₈) at `(2h,2w)`; stage 3 (conv₅/conv₆) at `(2(2h),2(2w))`; stage 2 (conv₃/conv₄) at
 `(2(2(2h)),…)`; stage 1 (conv₁/conv₂) at `(2(2(2(2h))),…)`.
 
+**Not the trained artifact.** No trainer runs `cifar8_train_step.mlir`; the packed `cifar8w_*`
+arms the chapter's runs use feed the same chain to `*Grad` nodes and a separate optimizer, tied in
+`Cifar8PoCG.cifar8_train_step_tiedG`.
+
 ## Scope (same as cifar)
 * Below the output layer the cotangents are the rendered chain (`mlpCotOut1`/`mlpCotOut0` in the
   head; `cnnChainCotW2`, `cnnChainCotW1`, `CifarPoC.cifarChainCotW2` below it); that they equal the

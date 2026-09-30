@@ -1,37 +1,32 @@
-import LeanMlir.Proofs.Nets.Small.CifarFold
+import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 
-/-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
+/-! # The cifar8-bn step tie at its UN-FUSED gradient nodes — the packed `cifar8w_bn_*` arms
 
-cifar8's tie (`Cifar8PoC.cifar8_train_step_tied_certified`) + a BN-back at every conv. The backward
-chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
-cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
-over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
+`Cifar8BnPoC.cifar8Bn_train_step_tied_certified` ties the fused-SGD render
+(`cifar8BnTrainStepFaithfulV` at `opt := none`). The artifacts the book's Chapter-4 runs train
+(`cifar8w_bn_{sgd,mom,adam}_train_step.mlir`, and the narrow `cifar8_bn_*` width sweep) are the same
+renderer at `opt := some _`: the same forward and backward chain, feeding `*Grad` ops (the `*Sgd`
+arms with `θ − lr·` stripped) to a separate optimizer. This file states those nodes, each at the
+same chain cotangent: all 38 parameter tensors, via `GradNode` (Foundation/SgdNodes.lean). The
+optimizer update that consumes them (SGD, Nesterov, AdamW) is outside the statement.
 
-**Zero new ops/bridges/constructors.** Conv ties reuse `SgdNode.convW_den`/`convB_den`; BN ties reuse
-`SgdNode.bnGamma_den`/`bnBeta_den`; the dense head reuses `SgdNode.denseW_den`/`denseB_den`, the
-loss cotangent cifar8's. All 38 parameter tensors (8 conv W/b, 8 BN γ/β, 3 dense W/b) are stated in
-`cifar8Bn_train_step_tied_certified`, each with the generics.
-
-**Not the trained artifact.** The committed `cifar8_bn_*` / `cifar8w_bn_*` arms are this
-renderer with a separate optimizer, feeding the same chain to `*Grad` nodes; they are tied in
-`Cifar8BnPoCG.cifar8Bn_train_step_tiedG`.
-
-## Scope (same as the rest of the suite)
-* Below the output layer the cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
-  `cifar8Bn_train_step_tied_certified`, and `mlpCotOut1`/`mlpCotOut0` in the head); that they equal
-  the loss gradient at each layer output is not stated.
+## Scope (as the fused tie)
+* Below the output layer the cotangents are the rendered chain; that they equal the loss gradient
+  at each layer's output is not stated.
 * Conv/BN backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
-open Proofs.SgdNode (bnSgdPairTied_holds)
 
-namespace Proofs.Cifar8BnPoC
+namespace Proofs.Cifar8BnPoCG
 
-/-- **The emitted loss-cotangent graph denotes the softmax-CE gradient of the cifar8-bn forward.** -/
-theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (nlogN ohN : String)
+/-- **Whole cifar8-bn train step at its gradient nodes.** All 38 parameter tensors (8 conv `W`+`b`,
+    8 BN `γ`+`β`, 3 dense `W`+`b`), at the real cifar8-bn forward: each emitted `*Grad` node denotes
+    the certified per-layer Jacobian contracted with the rendered backward-chain cotangent, driven
+    by the composed softmax-CE cotangent `g` — the fused tie's chain, node for node. -/
+theorem cifar8Bn_train_step_tiedG {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    (xN vN epsStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
     (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2)
@@ -42,37 +37,7 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4)
     (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) (label : Fin nClasses) :
-    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN
-            (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
-              W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x))))
-          (.operand ohN (oneHot nClasses label)))
-      = fun j => softmax nClasses (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
-                    W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈
-                    W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
-  StableHLO.softmaxCELossCot_den nlogN ohN _ label
-
-/-- **Whole cifar8-bn train step, tied.** All 38 parameter tensors (8 conv `W`+`b`, 8 BN `γ`+`β`,
-    3 dense `W`+`b`; 30 conjuncts, one `BnSgdPairTied` per γ/β pair), at the real cifar8-bn forward,
-    denote `θ − lr·(certified per-layer Jacobian · c)` with `c` the rendered backward-chain
-    cotangent driven by the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back
-    cotangents `cotC1–8`; the BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered
-    cifar8-bn backward chain (cifar8's chain + a BN-back at every conv). The dense head is fed
-    `mlpCotOut0`, `mlpCotOut1` and `g`. That `c` equals the loss gradient at a layer below the
-    output is not stated. -/
-theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (xN wN bN gN vN epsStr lrStr cotN : String)
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
-    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2)
-    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2)
-    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3)
-    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3)
-    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4)
-    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4)
-    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
-    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Tensor3 ic (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) (label : Fin nClasses) (lr : ℝ) :
+    (x : Tensor3 ic (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) (label : Fin nClasses) :
     let xv : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := Tensor3.flatten x
     -- stage 1 (conv₁/conv₂ at s1, c1)
     let cc1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁ xv
@@ -153,51 +118,52 @@ theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW
       then (Back3.conv (c₁ := c1) (h₁ := 2*(2*(2*(2*h)))) (w₁ := 2*(2*(2*(2*w)))) W₂ Back3.cot).flatDenote cotC2 i else 0
     let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3GradInput c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ cc1 dyBn1
     -- conv₁ + bn₁
-    ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotC1 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotC1 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
+    GradNode.ConvWGradTied xN cotN b₁ x W₁ cotC1
+  ∧ GradNode.ConvBGradTied cotN W₁ x b₁ cotC1
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₁ γ₁ β₁ cc1 dyBn1
   -- conv₂ + bn₂
-  ∧ ConvWSgdTied xN wN lrStr cotN b₂ r1t W₂ cotC2 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₂ r1t b₂ cotC2 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₂ r1t W₂ cotC2
+  ∧ GradNode.ConvBGradTied cotN W₂ r1t b₂ cotC2
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₂ γ₂ β₂ cc2 dyBn2
   -- conv₃ + bn₃
-  ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₃ zp1t b₃ cotC3 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₃ zp1t W₃ cotC3
+  ∧ GradNode.ConvBGradTied cotN W₃ zp1t b₃ cotC3
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₃ γ₃ β₃ cc3 dyBn3
   -- conv₄ + bn₄
-  ∧ ConvWSgdTied xN wN lrStr cotN b₄ r3t W₄ cotC4 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₄ r3t b₄ cotC4 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₄ r3t W₄ cotC4
+  ∧ GradNode.ConvBGradTied cotN W₄ r3t b₄ cotC4
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₄ γ₄ β₄ cc4 dyBn4
   -- conv₅ + bn₅
-  ∧ ConvWSgdTied xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₅ zp2t b₅ cotC5 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₅ zp2t W₅ cotC5
+  ∧ GradNode.ConvBGradTied cotN W₅ zp2t b₅ cotC5
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₅ γ₅ β₅ cc5 dyBn5
   -- conv₆ + bn₆
-  ∧ ConvWSgdTied xN wN lrStr cotN b₆ r5t W₆ cotC6 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₆ r5t b₆ cotC6 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₆ r5t W₆ cotC6
+  ∧ GradNode.ConvBGradTied cotN W₆ r5t b₆ cotC6
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₆ γ₆ β₆ cc6 dyBn6
   -- conv₇ + bn₇
-  ∧ ConvWSgdTied xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₇ zp3t b₇ cotC7 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₇ zp3t W₇ cotC7
+  ∧ GradNode.ConvBGradTied cotN W₇ zp3t b₇ cotC7
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₇ γ₇ β₇ cc7 dyBn7
   -- conv₈ + bn₈
-  ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
-  ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
-  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr
+  ∧ GradNode.ConvWGradTied xN cotN b₈ r7t W₈ cotC8
+  ∧ GradNode.ConvBGradTied cotN W₈ r7t b₈ cotC8
+  ∧ GradNode.BnGradPairTied vN epsStr cotN ε₈ γ₈ β₈ cc8 dyBn8
   -- dense head
-  ∧ DenseWSgdTied xN wN lrStr cotN zp4 W₉ b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
-  ∧ DenseBSgdTied bN lrStr cotN W₉ zp4 b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g) lr
-  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 h9) Wa ba ((mlpCotOut1 Wb ha).denote g) lr
-  ∧ DenseBSgdTied bN lrStr cotN Wa (relu d1 h9) ba ((mlpCotOut1 Wb ha).denote g) lr
-  ∧ DenseWSgdTied xN wN lrStr cotN (relu d1 ha) Wb bb g lr
-  ∧ DenseBSgdTied bN lrStr cotN Wb (relu d1 ha) bb g lr := by
-  exact ⟨convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
-    convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
-    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,
-    convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
-    convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
-    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,
-    denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
-    denseWSgdTied_holds, denseBSgdTied_holds⟩
+  ∧ GradNode.DenseWGradTied xN cotN zp4 W₉ b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g)
+  ∧ GradNode.DenseBGradTied cotN W₉ zp4 b₉ ((mlpCotOut0 Wa Wb h9 ha).denote g)
+  ∧ GradNode.DenseWGradTied xN cotN (relu d1 h9) Wa ba ((mlpCotOut1 Wb ha).denote g)
+  ∧ GradNode.DenseBGradTied cotN Wa (relu d1 h9) ba ((mlpCotOut1 Wb ha).denote g)
+  ∧ GradNode.DenseWGradTied xN cotN (relu d1 ha) Wb bb g
+  ∧ GradNode.DenseBGradTied cotN Wb (relu d1 ha) bb g := by
+  exact ⟨GradNode.convWGradTied_holds, GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds,
+    GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds, GradNode.convBGradTied_holds,
+    GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds, GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds,
+    GradNode.convWGradTied_holds, GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds,
+    GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds, GradNode.convBGradTied_holds,
+    GradNode.bnGradPairTied_holds, GradNode.convWGradTied_holds, GradNode.convBGradTied_holds, GradNode.bnGradPairTied_holds,
+    GradNode.denseWGradTied_holds, GradNode.denseBGradTied_holds, GradNode.denseWGradTied_holds, GradNode.denseBGradTied_holds,
+    GradNode.denseWGradTied_holds, GradNode.denseBGradTied_holds⟩
 
-end Proofs.Cifar8BnPoC
+
+end Proofs.Cifar8BnPoCG

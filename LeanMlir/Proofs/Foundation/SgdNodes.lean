@@ -7,7 +7,8 @@ import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 The per-example train steps (the MNIST / CIFAR chapter nets, and the per-example tiers of
 ResNet-34, MobileNetV2, ConvNeXt and ViT) emit fused `θ − lr·∂Loss/∂θ` ops. Each lemma here says
 one such op denotes the certified SGD step at an arbitrary cotangent, so a net's fold is these at
-its layers. The batched, un-fused peers are in `GradNodesB`.
+its layers. The per-example UN-FUSED peers (a render with a separate optimizer) are the last
+section, in `GradNode`; the batched ones are in `GradNodesB`.
 
 | op | lemma | namespace |
 |---|---|---|
@@ -19,6 +20,7 @@ its layers. The batched, un-fused peers are in `GradNodesB`.
 | stride-1 depthwise weight / bias (`depthwiseWeightSgd`, `depthwiseBiasSgd`) | `depthwiseW_den`, `depthwiseB_den` | `SgdNode` |
 | stride-2 conv weight / bias (`convStridedWeightSgd`, `convStridedBiasSgd`) | `convStridedW_den`, `convStridedB_den` | `SgdNode` |
 | vector-LN γ / β (`veclnGammaSgd`, `rowDenseBiasSgd` at the LN forward), and their clauses | `veclnGammaSgd_den`, `rowDenseBiasSgd_den_lnbeta`, `VecLN{Gamma,Beta}SgdTied`, `vecLN{Gamma,Beta}SgdTied_holds` | `SgdNode` |
+| the un-fused per-example peers (`weightGrad`, `biasGrad`, `convWeightGrad`, `convBiasGrad`, `bnGammaGrad`, `bnBetaGrad`), and their clauses | `denseWGrad_den`, `denseBGrad_den`, `convWGrad_den`, `convBGrad_den`, `bnGammaGrad_den`, `bnBetaGrad_den`, `ConvWGradTied`, `ConvBGradTied`, `BnGradPairTied`, `DenseWGradTied`, `DenseBGradTied` | `GradNode` |
 
 -/
 
@@ -324,3 +326,141 @@ theorem vecLNBetaSgdTied_holds {N D : Nat} {bN lrStr cotN : String} {ε : ℝ} {
   rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γv (Mat.unflatten x) β dy lr i
 
 end Proofs.SgdNode
+
+/-! ## The per-example UN-FUSED gradient nodes
+
+A renderer with a separate optimizer (`cifar8BnTrainStepFaithfulV` at `opt := some _`, the packed
+`cifar8w{,_bn}_*` arms) emits `*Grad` ops where the SGD renders emit `*Sgd`: the same arm with
+`θ − lr·` stripped. Each lemma here says one such op, at an arbitrary cotangent, denotes the
+certified per-layer Jacobian contraction; the optimizer that consumes it is outside these lemmas.
+The batched peers are `GradNodesB`. -/
+
+namespace Proofs.GradNode
+
+open Proofs.StableHLO Proofs.IR
+
+/-- **The emitted dense weight gradient = certified.** -/
+theorem denseWGrad_den {m n : Nat} (aN cotN : String)
+    (a : Vec m) (W : Mat m n) (b : Vec n) (c : Vec n) (i : Fin m) (j : Fin n) :
+    den (SHlo.weightGrad aN a (.operand cotN c)) (finProdFinEquiv (i, j))
+      = ∑ k : Fin n,
+          pdiv (fun v : Vec (m*n) => dense (Mat.unflatten v) b a) (Mat.flatten W)
+               (finProdFinEquiv (i, j)) k * c k := by
+  have step : den (SHlo.weightGrad aN a (.operand cotN c)) (finProdFinEquiv (i, j))
+            = emitWeightGrad a Back.cotangent c i j := by
+    simp only [denStepApp, emitWeightGrad, Mat.outer, Back.denote, Mat.flatten, Equiv.symm_apply_apply]
+  rw [step, weight_grad_bridge W b a Back.cotangent c i j]; rfl
+
+/-- **The emitted dense bias gradient = certified.** -/
+theorem denseBGrad_den {m n : Nat} (cotN : String)
+    (W : Mat m n) (a : Vec m) (b : Vec n) (c : Vec n) (i : Fin n) :
+    den (SHlo.biasGrad (.operand cotN c)) i
+      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * c j := by
+  have step : den (SHlo.biasGrad (.operand cotN c)) i = emitBiasGrad Back.cotangent c i := by
+    simp only [denStepApp, emitBiasGrad, Back.denote]
+  rw [step, bias_grad_bridge W b a Back.cotangent c i]; rfl
+
+/-- **The emitted conv weight gradient = certified.** -/
+theorem convWGrad_den {ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
+    (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (c : Vec (oc*h*w))
+    (idx : Fin (oc*ic*kH*kW)) :
+    den (SHlo.convWeightGrad xN b x W (.operand cotN c)) idx
+      = ∑ j : Fin (oc*h*w),
+          pdiv (fun v' : Vec (oc*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
+               (Kernel4.flatten W) idx j * c j :=
+  conv_weight_grad_bridge b x (Kernel4.flatten W) c idx
+
+/-- **The emitted conv bias gradient = certified.** -/
+theorem convBGrad_den {ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+    (x : Tensor3 ic h w) (b : Vec oc) (c : Vec (oc*h*w)) (o : Fin oc) :
+    den (SHlo.convBiasGrad W x b (.operand cotN c)) o
+      = ∑ j : Fin (oc*h*w), pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j :=
+  conv_bias_grad_bridge W x b c o
+
+/-- **The emitted per-channel BN γ gradient = certified**, fed the BN-output cotangent `c` at the
+    saved conv output `v`. -/
+theorem bnGammaGrad_den {oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v c : Vec (oc*h*w)) (idx : Fin oc) :
+    den (SHlo.bnGammaGrad vN epsStr ε v (.operand cotN c)) idx
+      = ∑ j : Fin (oc*(h*w)),
+          pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (h*w) ε γ' β (reassocFwd oc h w v))
+               γ idx j * reassocFwd oc h w c j :=
+  bnPerChannelGradGamma_correct oc (h*w) ε γ β (reassocFwd oc h w v) (reassocFwd oc h w c) idx
+
+/-- **The emitted per-channel BN β gradient = certified.** -/
+theorem bnBetaGrad_den {oc h w : Nat} (cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v c : Vec (oc*h*w)) (idx : Fin oc) :
+    den (SHlo.bnBetaGrad (oc := oc) (h := h) (w := w) (.operand cotN c)) idx
+      = ∑ j : Fin (oc*(h*w)),
+          pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ β' (reassocFwd oc h w v))
+               β idx j * reassocFwd oc h w c j :=
+  bnPerChannelGradBeta_correct oc (h*w) ε γ β (reassocFwd oc h w v) (reassocFwd oc h w c) idx
+
+/-- The conv weight-gradient node as a tie clause (`convWGrad_den` under `∀`). -/
+def ConvWGradTied {ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc) (x : Tensor3 ic h w)
+    (W : Kernel4 oc ic kH kW) (c : Vec (oc*h*w)) : Prop :=
+  ∀ idx : Fin (oc*ic*kH*kW),
+    den (SHlo.convWeightGrad xN b x W (.operand cotN c)) idx
+      = ∑ j : Fin (oc*h*w),
+          pdiv (fun v' : Vec (oc*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
+               (Kernel4.flatten W) idx j * c j
+
+/-- The conv bias-gradient node as a tie clause. -/
+def ConvBGradTied {ic oc h w kH kW : Nat} (cotN : String) (W : Kernel4 oc ic kH kW)
+    (x : Tensor3 ic h w) (b : Vec oc) (c : Vec (oc*h*w)) : Prop :=
+  ∀ o : Fin oc,
+    den (SHlo.convBiasGrad W x b (.operand cotN c)) o
+      = ∑ j : Fin (oc*h*w), pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j
+
+/-- One per-channel BN layer's γ and β gradient nodes as one tie clause. -/
+def BnGradPairTied {oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
+    (v c : Vec (oc*h*w)) : Prop :=
+  (∀ idx : Fin oc,
+    den (SHlo.bnGammaGrad vN epsStr ε v (.operand cotN c)) idx
+      = ∑ j : Fin (oc*(h*w)),
+          pdiv (fun γ' : Vec oc => bnPerChannelFlat oc (h*w) ε γ' β (reassocFwd oc h w v))
+               γ idx j * reassocFwd oc h w c j)
+  ∧ (∀ idx : Fin oc,
+    den (SHlo.bnBetaGrad (oc := oc) (h := h) (w := w) (.operand cotN c)) idx
+      = ∑ j : Fin (oc*(h*w)),
+          pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ β' (reassocFwd oc h w v))
+               β idx j * reassocFwd oc h w c j)
+
+/-- The dense weight-gradient node as a tie clause. -/
+def DenseWGradTied {m n : Nat} (aN cotN : String) (a : Vec m) (W : Mat m n) (b : Vec n)
+    (c : Vec n) : Prop :=
+  ∀ (i : Fin m) (j : Fin n),
+    den (SHlo.weightGrad aN a (.operand cotN c)) (finProdFinEquiv (i, j))
+      = ∑ k : Fin n,
+          pdiv (fun v : Vec (m*n) => dense (Mat.unflatten v) b a) (Mat.flatten W)
+               (finProdFinEquiv (i, j)) k * c k
+
+/-- The dense bias-gradient node as a tie clause. -/
+def DenseBGradTied {m n : Nat} (cotN : String) (W : Mat m n) (a : Vec m) (b : Vec n)
+    (c : Vec n) : Prop :=
+  ∀ i : Fin n,
+    den (SHlo.biasGrad (.operand cotN c)) i
+      = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' a) b i j * c j
+
+theorem convWGradTied_holds {ic oc h w kH kW : Nat} {xN cotN : String} {b : Vec oc}
+    {x : Tensor3 ic h w} {W : Kernel4 oc ic kH kW} {c : Vec (oc*h*w)} :
+    ConvWGradTied xN cotN b x W c := fun idx => convWGrad_den xN cotN b x W c idx
+
+theorem convBGradTied_holds {ic oc h w kH kW : Nat} {cotN : String} {W : Kernel4 oc ic kH kW}
+    {x : Tensor3 ic h w} {b : Vec oc} {c : Vec (oc*h*w)} :
+    ConvBGradTied cotN W x b c := fun o => convBGrad_den cotN W x b c o
+
+theorem bnGradPairTied_holds {oc h w : Nat} {vN epsStr cotN : String} {ε : ℝ} {γ β : Vec oc}
+    {v c : Vec (oc*h*w)} : BnGradPairTied vN epsStr cotN ε γ β v c :=
+  ⟨fun idx => bnGammaGrad_den vN epsStr cotN ε γ β v c idx,
+   fun idx => bnBetaGrad_den cotN ε γ β v c idx⟩
+
+theorem denseWGradTied_holds {m n : Nat} {aN cotN : String} {a : Vec m} {W : Mat m n}
+    {b : Vec n} {c : Vec n} : DenseWGradTied aN cotN a W b c :=
+  fun i j => denseWGrad_den aN cotN a W b c i j
+
+theorem denseBGradTied_holds {m n : Nat} {cotN : String} {W : Mat m n} {a : Vec m}
+    {b : Vec n} {c : Vec n} : DenseBGradTied cotN W a b c :=
+  fun i => denseBGrad_den cotN W a b c i
+
+end Proofs.GradNode

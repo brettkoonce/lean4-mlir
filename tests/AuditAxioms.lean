@@ -153,6 +153,8 @@ import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
+import LeanMlir.Proofs.Nets.Small.Cifar8StepTieG
+import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTieG
 import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
@@ -442,6 +444,14 @@ open Proofs
 -- ch5-cifar8-bn TIE
 #print axioms Cifar8BnPoC.cifar8BnLossCot_den
 #print axioms Cifar8BnPoC.cifar8Bn_train_step_tied_certified
+#print axioms Cifar8PoCG.cifar8_train_step_tiedG
+#print axioms Cifar8BnPoCG.cifar8Bn_train_step_tiedG
+#print axioms GradNode.convWGrad_den
+#print axioms GradNode.convBGrad_den
+#print axioms GradNode.bnGammaGrad_den
+#print axioms GradNode.bnBetaGrad_den
+#print axioms GradNode.denseWGrad_den
+#print axioms GradNode.denseBGrad_den
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params)
 #print axioms SgdNode.convStridedW_den
 #print axioms SgdNode.convStridedB_den

@@ -548,4 +548,19 @@ theorem flatConvStride4_bias_split {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH
   rw [flatConv_bias_split W θ y]
   simp only [broadcastFlat, flatChannel_decimateOddIdx, flatChannel_decimateIdx]
 
+/-- **The stride-4 stem's bias Jacobian is a stride-1 conv's, at any input.** Both are the channel
+    indicator (`pdiv_bias_of_split`), so a node the render emits as a stride-1 bias reduce at the
+    output resolution is the patchify conv's bias gradient at the real image `x`. -/
+theorem pdiv_flatConvStride4_bias_eq_conv2d {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) (y : Tensor3 ic h w) (b : Vec oc) (o : Fin oc)
+    (j : Fin (oc * h * w)) :
+    pdiv (fun b' : Vec oc => (flatConvStride4 W b' x : Vec (oc * h * w))) b o j
+      = pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' y)) b o j := by
+  have h1 := pdiv_bias_of_split (fun θ v => flatConv (h := h) (w := w) W θ v)
+    (flatConv_bias_split W) (Tensor3.flatten y) b o j
+  simp only [flatConv, Tensor3.unflatten_flatten] at h1
+  rw [h1]
+  exact pdiv_bias_of_split (fun θ v => flatConvStride4 (h := h) (w := w) W θ v)
+    (flatConvStride4_bias_split W) x b o j
+
 end Proofs.GradNodeB

@@ -229,6 +229,8 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.SgdNodes,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
+             `LeanMlir.Proofs.Nets.Small.Cifar8StepTieG,
+             `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTieG,
              `LeanMlir.Proofs.Codegen.EfficientNetRender.Basic,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie,

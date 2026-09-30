@@ -18,15 +18,10 @@ the fourth at inference — `mbExpFwdBEval` / `mbExpGraphBEval`: expand, stride 
 **What it is tied to.** `efficientnet_fwd_eval.mlir` is THIS net: `%x` plus 213 parameters (the
 render folds each conv bias into the BatchNorm that follows it, so `%sb`/`%b1db`/… have no slot)
 plus 98 statistic slots — 312 inputs at ten classes, and `efficientnetin_fwd_eval.mlir` its
-1000-class twin. Note: the typed graph below inherits the three-block eval graph's SSA names, and
-they differ from the artifact's in four ways, none of which enters `den` (names are
-pretty-printing metadata): the graph carries a bias slot per conv (`"%sb"`, `s!"%{p}db"`, …) that
-the render folds away; it names the statistic slots `%smu`/`%svar`, `%b{k}{e,d,p}mu`/`var`,
-`%hmu`/`%hvar` where the artifact has `%stnmu`/`%stnvar`, `%b{k}{e,d,p}nmu`/`nvar`,
-`%hnmu`/`%hnvar`; it names the SE denses `zWa/zba/zWb/zbb` where the artifact has
-`zW1/zb1/zW2/zb2`; and its classifier is `%Wfc`/`%bfc` where the artifact's is `%Wd`/`%bd`. The
-`den`-level statement is what the number needs; matching the text is a separate, cosmetic pass
-over `EfficientNetRender.PCEval`.
+1000-class twin. The typed graph uses the artifact's names (folded biases as the shared
+zero-bias constant, `%stnmu`/`%b{k}{e,d,p}nmu`/`%hnmu` statistics, `zW1`…`zb2` SE denses,
+`%Wd`/`%bd`), and `FwdGraphTextTies` checks the render's stem, block and head text against it
+per kind.
 
 B0 stage spec `[t,c,n,s,k]`: s1 (1,16,1,1,3) s2 (6,24,2,2,3) s3 (6,40,2,2,5) s4 (6,80,3,2,3)
 s5 (6,112,3,1,5) s6 (6,192,4,2,5) s7 (6,320,1,1,3); stem 3×3/s2 (3→32) at the XLA-`SAME` phase,
@@ -62,17 +57,17 @@ def mbExpGraphBEval (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat} (ε : 
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
-  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pmu" s!"%{p}pvar"
+  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pnmu" s!"%{p}pnvar"
       epsStr ε γp βp μp vp)
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb" s!"%{p}zbb"
+    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
+      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
           Wz₁ bz₁ Wz₂ bz₂)
-        (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
-            s!"%{p}dmu" s!"%{p}dvar" epsStr ε γd βd μd vd)
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd)
-            (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
-                s!"%{p}emu" s!"%{p}evar" epsStr ε γe βe μe ve)
-              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" s!"%{p}eb" We be) e))))))))
+        (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
+            s!"%{p}dnmu" s!"%{p}dnvar" epsStr ε γd βd μd vd)
+          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+            (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
+                s!"%{p}enmu" s!"%{p}envar" epsStr ε γe βe μe ve)
+              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be) e))))))))
 
 theorem mbExpGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat} (ε : ℝ)
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (γe βe μe ve : Vec mid)
@@ -85,7 +80,7 @@ theorem mbExpGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r 
       = mbExpFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbExpGraphBEval mbExpFwdBEval projBEval seB dwbsBEval cbsBEval
-  simp only [den_batchOp, denOp,
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF,
              swishF_faithful, Function.comp_apply]
 
 end StableHLO

@@ -35,7 +35,8 @@ each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, ever
 MobileNetV2, MobileNetV4 and EfficientNet-B0 heads with classifier dropout (`cd := true`),
 EfficientNet-B0's residual block with its stochastic-depth site (`sd := true`), and
 MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
-sizes its evals are rendered at. ConvNeXt-T's per-example forward (`convNextFwdGraphTCh`) is
+sizes its evals are rendered at, and EfficientNet-B0's inference forward
+(`efficientnetFwdGraphBFullEval`: stem, the four block shapes, head). ConvNeXt-T's per-example forward (`convNextFwdGraphTCh`) is
 covered per kind too: block, downsample, stem and head at batch 2. What stays outside is its
 chain's prefixes: the render names block `j` of stage `si` `s{si}b{j}` and the typed graph numbers
 them `b{n}_` across stages, so the two agree block by block, not name by name across the net.
@@ -429,6 +430,44 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
   prettyText 2 (headGraphBDo "1.0e-03" doName (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7)
     (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (some fun _ => 0) (leaf "%in" _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § EfficientNet-B0 at inference — `enetFwdChain … .eval` vs `efficientnetFwdGraphBFullEval`
+-- ════════════════════════════════════════════════════════════════
+
+-- Stem: 3×3/s2 XLA-SAME → frozen-statistics BN → swish.
+#guard textOf (enetStemFwdB 2 .eval "1.0e-03" false) (·.code) ==
+  prettyText 2 (stemGraphBEval "1.0e-03" (N := 2) (ic := 3) (oc := 32) (h := 112) (w := 112)
+    0 0 0 0 0 0 0 (leaf "%x" _))
+
+-- MBConv1, no expand (b1).
+#guard textOf (eFwdNoExp 2 32 16 112 3 8 .eval "1.0e-03" "b1" "%in" false) (·.code) ==
+  prettyText 2 (mbNoExpGraphBEval "b1" "1.0e-03" (N := 2) (ic := 32) (oc := 16) (h := 112) (w := 112)
+    (kHd := 3) (kWd := 3) (r := 8) 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 (leaf "%in" _))
+
+-- Strided MBConv6 (b4).
+#guard textOf (eFwdStrided 2 24 144 40 28 5 6 .eval "1.0e-03" "b4" "%in" false) (·.code) ==
+  prettyText 2 (mbStridedGraphBEval "b4" "1.0e-03" (N := 2) (ic := 24) (mid := 144) (oc := 40)
+    (h := 28) (w := 28) (kHd := 5) (kWd := 5) (r := 6) 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 (leaf "%in" _))
+
+-- Residual MBConv6 (b3).
+#guard textOf (eFwd 2 24 144 24 56 3 6 .eval "1.0e-03" "b3" "%in" false) (·.code) ==
+  prettyText 2 (mbResidGraphBEval "b3" "1.0e-03" (N := 2) (c := 24) (mid := 144) (h := 56) (w := 56)
+    (kHd := 3) (kWd := 3) (r := 6) 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 (leaf "%in" _))
+
+-- Expand, no skip (b9).
+#guard textOf (eFwdNoSkip 2 80 480 112 14 5 20 .eval "1.0e-03" "b9" "%in" false) (·.code) ==
+  prettyText 2 (mbExpGraphBEval "b9" "1.0e-03" (N := 2) (ic := 80) (mid := 480) (oc := 112)
+    (h := 14) (w := 14) (kHd := 5) (kWd := 5) (r := 20) 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 (leaf "%in" _))
+
+-- Head: 1×1 → frozen-statistics BN → swish → GAP → dense.
+#guard textOf (do
+    let hd ← enetHeadFwdB 2 10 .eval "1.0e-03" "%in" false
+    let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
+      (.operand hd.gap (fun _ => 0 : Vec (2 * 1280))))
+    pure (hd.code ++ c)) id ==
+  prettyText 2 (headGraphBEval "1.0e-03" (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7) (nC := 10)
+    0 0 0 0 0 0 0 0 0 (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § ConvNeXt-T — `ConvNeXtRender`'s per-example chain vs `convNextFwdGraphTCh`

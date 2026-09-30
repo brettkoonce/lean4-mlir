@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
-import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 
 /-! # ConvNeXt-T's step tie at the batched index, the un-fused gradient and the smoothed loss
@@ -218,14 +217,15 @@ theorem cnx_down_ch_tiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String)
 /-! ## Stem — 4×4/s4 patchify conv → channel-LN, all 4 gradient nodes, batched
 
 The bias grad is a pure cotangent reduce, so the render emits it as a stride-1 `convBiasGradB` at
-the OUTPUT resolution and the carried `W`/`x` are generic (`xstem` is a free parameter here, as
-`Tensor3 3 h w` is in the fused file). The weight is `convStride4WeightGradB`, at its gradient
+the OUTPUT resolution; the node carries an input it never reads (stated at zero), and the clause
+is at the real stride-4 stem on each example's image through
+`GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d`. The weight is `convStride4WeightGradB`, at its gradient
 on both chains. -/
 
 /-- **Stem, tied at the batched gradient nodes.** Channel-LN γ/β, the conv bias, the conv weight. -/
 def cnxStemChTiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
-    (x : Vec (N * (3*(2*(2*h))*(2*(2*w))))) (xstem : Vec (N * (3*h*w)))
+    (x : Vec (N * (3*(2*(2*h))*(2*(2*w)))))
     (dyStem : Vec (N * (c*h*w))) : Prop :=
   let patchB : Vec (N * (c*h*w)) := batchMap N (flatConvStride4 Wst psb) x
   let cotPatchB : Vec (N * (c*h*w)) := batchMapAux N (stemCotPatch ε Wst psb psng) x dyStem
@@ -233,10 +233,10 @@ def cnxStemChTiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
   ∧ CnxPoCGB.ChanLNBetaTiedB N h w cotN ε psng patchB psnbt dyStem
   ∧ (∀ o : Fin c,
       den (SHlo.convBiasGradB (N := N) (ic := 3) (oc := c) (h := h) (w := w) (kH := 4) (kW := 4)
-            Wst xstem psb (.operand cotN cotPatchB)) o
+            Wst 0 psb (.operand cotN cotPatchB)) o
         = ∑ n : Fin N, ∑ j : Fin (c*h*w),
             pdiv (fun b' : Vec c =>
-                    Tensor3.flatten (conv2d Wst b' (Tensor3.unflatten (batchSlice N (3*h*w) xstem n))))
+                    (flatConvStride4 Wst b' (batchSlice N (3*(2*(2*h))*(2*(2*w))) x n) : Vec (c*h*w)))
                  psb o j * batchSlice N (c*h*w) cotPatchB n j)
   ∧ (∀ idx : Fin (c*3*4*4),
       den (SHlo.convStride4WeightGradB xN psb x Wst (.operand cotN cotPatchB)) idx
@@ -248,15 +248,19 @@ def cnxStemChTiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
 
 theorem cnx_stem_ch_tiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
-    (x : Vec (N * (3*(2*(2*h))*(2*(2*w))))) (xstem : Vec (N * (3*h*w)))
+    (x : Vec (N * (3*(2*(2*h))*(2*(2*w)))))
     (dyStem : Vec (N * (c*h*w))) :
-    cnxStemChTiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem := by
+    cnxStemChTiedGB N xN epsStr cotN ε Wst psb psng psnbt x dyStem := by
   unfold cnxStemChTiedGB
   intro patchB cotPatchB
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact chanLNGammaTiedB_holds
   · exact chanLNBetaTiedB_holds
-  · exact convBTiedB_holds
+  · intro o
+    refine (convBTiedB_holds o).trans (Finset.sum_congr rfl fun n _ => Finset.sum_congr rfl
+      fun j _ => ?_)
+    rw [GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d Wst _
+      (Tensor3.unflatten (batchSlice N (3*h*w) (0 : Vec (N * (3*h*w))) n))]
   · intro idx; exact GradNodeB.psWGradB_den xN cotN psb x Wst cotPatchB idx
 
 /-! ## Head — GAP → vector-LN at one row → dense, all 4 gradient nodes, batched
@@ -309,17 +313,17 @@ default budget. The block, downsample and head ties need no wrapper: the capston
 
 @[irreducible] def cnxStemChTiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
-    (x : Vec (N * (3*(2*(2*h))*(2*(2*w))))) (xstem : Vec (N * (3*h*w)))
+    (x : Vec (N * (3*(2*(2*h))*(2*(2*w)))))
     (dyStem : Vec (N * (c*h*w))) : Prop :=
-  cnxStemChTiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
+  cnxStemChTiedGB N xN epsStr cotN ε Wst psb psng psnbt x dyStem
 
 private theorem cnx_stem_ch_tiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
-    (x : Vec (N * (3*(2*(2*h))*(2*(2*w))))) (xstem : Vec (N * (3*h*w)))
+    (x : Vec (N * (3*(2*(2*h))*(2*(2*w)))))
     (dyStem : Vec (N * (c*h*w))) :
-    cnxStemChTiedGBAt N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem := by
+    cnxStemChTiedGBAt N xN epsStr cotN ε Wst psb psng psnbt x dyStem := by
   unfold cnxStemChTiedGBAt
-  exact cnx_stem_ch_tiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
+  exact cnx_stem_ch_tiedGB N xN epsStr cotN ε Wst psb psng psnbt x dyStem
 
 /-! ## Every cotangent the capstone threads is a certified VJP backward
 
@@ -473,7 +477,7 @@ theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTie
     `dropPathB` sites, which this thread does not name. -/
 theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    (w : CnxTieWeights nC) (xstem : Vec (N * (3*56*56)))
+    (w : CnxTieWeights nC)
     (x : Vec (N * (3*224*224))) (t : Vec (N * nC)) :
     -- forward block inputs (the prefixes of the committed render's forward)
     let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) x
@@ -529,7 +533,7 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
     let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (w.b2.cotIn ε) ib2 dyO2
     let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn ε) ib1 dyO1
     -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
-    cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem
+    cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem
   ∧ w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1
   ∧ w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2
   ∧ w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3
@@ -553,7 +557,7 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
   ∧ w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18
   ∧ cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g := by
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
-  refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem,
+  refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact w.b1.tied_gb N xN epsStr cotN ε ib1 dyO1
   · exact w.b2.tied_gb N xN epsStr cotN ε ib2 dyO2

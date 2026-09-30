@@ -13,8 +13,9 @@ per-example — `batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)`, `de
 off by `den_batchOp` — and every stage is `batchMap N` of a per-example op or a pointwise map.
 
 One ε for the whole net, as the render emits, where the training def carries a separate `ε` per
-site. The SSA names extend the training graph's (`%sg`/`%sbt` → `%smu`/`%svar`, `%b1dg`/`%b1dbt` →
-`%b1dmu`/`%b1dvar`, …); names are pretty-printing metadata and do not enter `den`. 3-axiom clean.
+site. The SSA names are the render's (`%stnmu`/`%stnvar`, `%b1dnmu`/`%b1dnvar`, …, the shared
+zero-bias constant for the folded conv biases), so `FwdGraphTextTies` compares the text directly;
+names do not enter `den`. 3-axiom clean.
 -/
 
 namespace Proofs
@@ -118,9 +119,9 @@ namespace StableHLO
 def stemGraphBEval (epsStr : String) {N ic oc h w : Nat}
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (ε : ℝ) (γs βs μs vs : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
-  .swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) "%sg" "%sbt" "%smu" "%svar" epsStr
+  .batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) "%sg" "%sbt" "%stnmu" "%stnvar" epsStr
       ε γs βs μs vs)
-    (.batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" "%sb" Ws bs) e))
+    (.batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" (biasName false "" oc) Ws bs) e))
 
 theorem stemGraphBEval_faithful (epsStr : String) {N ic oc h w : Nat}
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (ε : ℝ) (γs βs μs vs : Vec oc)
@@ -128,7 +129,7 @@ theorem stemGraphBEval_faithful (epsStr : String) {N ic oc h w : Nat}
     den (stemGraphBEval epsStr Ws bs ε γs βs μs vs e)
       = stemBEval N (h := h) (w := w) Ws bs ε γs βs μs vs (den e) := by
   unfold stemGraphBEval stemBEval
-  simp only [den_batchOp, denOp, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
 
 /-- MBConv1 (no expand) at inference: dw-bn-swish → SE → project-bn, batched. -/
 def mbNoExpGraphBEval (p epsStr : String) {N ic oc h w kHd kWd r : Nat} (ε : ℝ)
@@ -136,14 +137,14 @@ def mbNoExpGraphBEval (p epsStr : String) {N ic oc h w kHd kWd r : Nat} (ε : �
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
-  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pmu" s!"%{p}pvar"
+  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pnmu" s!"%{p}pnvar"
       epsStr ε γp βp μp vp)
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb" s!"%{p}zbb"
+    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
+      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
           Wz₁ bz₁ Wz₂ bz₂)
-        (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
-            s!"%{p}dmu" s!"%{p}dvar" epsStr ε γd βd μd vd)
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd) e)))))
+        (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
+            s!"%{p}dnmu" s!"%{p}dnvar" epsStr ε γd βd μd vd)
+          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" ic) Wd bd) e)))))
 
 theorem mbNoExpGraphBEval_faithful (p epsStr : String) {N ic oc h w kHd kWd r : Nat} (ε : ℝ)
     (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (γd βd μd vd : Vec ic)
@@ -154,7 +155,7 @@ theorem mbNoExpGraphBEval_faithful (p epsStr : String) {N ic oc h w kHd kWd r : 
       = mbNoExpFwdBEval N (h := h) (w := w) ε Wd bd γd βd μd vd Wz₁ bz₁ Wz₂ bz₂
           Wp bp γp βp μp vp (den e) := by
   unfold mbNoExpGraphBEval mbNoExpFwdBEval projBEval seB dwbsBEval
-  simp only [den_batchOp, denOp,
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF,
              swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 strided at inference: expand-bn-swish (at `2h×2w`) → strided dw-bn-swish → SE →
@@ -165,17 +166,17 @@ def mbStridedGraphBEval (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat} (�
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
-  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pmu" s!"%{p}pvar"
+  .batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pnmu" s!"%{p}pnvar"
       epsStr ε γp βp μp vp)
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb" s!"%{p}zbb"
+    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
+      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
           Wz₁ bz₁ Wz₂ bz₂)
-        (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
-            s!"%{p}dmu" s!"%{p}dvar" epsStr ε γd βd μd vd)
-          (.batchOp (N := N) (.depthwiseStrided (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd)
-            (.swishF (.batchOp (N := N) (.bnEval (h := 2 * h) (w := 2 * w) s!"%{p}eg" s!"%{p}ebt"
-                s!"%{p}emu" s!"%{p}evar" epsStr ε γe βe μe ve)
-              (.batchOp (N := N) (.conv (h := 2 * h) (w := 2 * w) s!"%{p}eW" s!"%{p}eb" We be)
+        (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
+            s!"%{p}dnmu" s!"%{p}dnvar" epsStr ε γd βd μd vd)
+          (.batchOp (N := N) (.depthwiseStrided (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+            (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := 2 * h) (w := 2 * w) s!"%{p}eg" s!"%{p}ebt"
+                s!"%{p}enmu" s!"%{p}envar" epsStr ε γe βe μe ve)
+              (.batchOp (N := N) (.conv (h := 2 * h) (w := 2 * w) s!"%{p}eW" (biasName false "" mid) We be)
                 e))))))))
 
 theorem mbStridedGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat} (ε : ℝ)
@@ -189,7 +190,7 @@ theorem mbStridedGraphBEval_faithful (p epsStr : String) {N ic mid oc h w kHd kW
       = mbStridedFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbStridedGraphBEval mbStridedFwdBEval projBEval seB dwbsSBEval cbsBEval
-  simp only [den_batchOp, denOp, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
 
 /-- MBConv6 with identity residual at inference: `addV body skip`. -/
 def mbResidGraphBEval (p epsStr : String) {N c mid h w kHd kWd r : Nat} (ε : ℝ)
@@ -198,18 +199,18 @@ def mbResidGraphBEval (p epsStr : String) {N c mid h w kHd kWd r : Nat} (ε : �
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (γp βp μp vp : Vec c)
     (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
-  .addV
-    (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pmu" s!"%{p}pvar"
+  .addVB
+    (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pnmu" s!"%{p}pnvar"
         epsStr ε γp βp μp vp)
-      (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-        (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb"
-            s!"%{p}zbb" Wz₁ bz₁ Wz₂ bz₂)
-          (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
-              s!"%{p}dmu" s!"%{p}dvar" epsStr ε γd βd μd vd)
-            (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd)
-              (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
-                  s!"%{p}emu" s!"%{p}evar" epsStr ε γe βe μe ve)
-                (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" s!"%{p}eb" We be)
+      (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" c) Wp bp)
+        (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2"
+            s!"%{p}zb2" Wz₁ bz₁ Wz₂ bz₂)
+          (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
+              s!"%{p}dnmu" s!"%{p}dnvar" epsStr ε γd βd μd vd)
+            (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+              (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
+                  s!"%{p}enmu" s!"%{p}envar" epsStr ε γe βe μe ve)
+                (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be)
                   e))))))))) e
 
 theorem mbResidGraphBEval_faithful (p epsStr : String) {N c mid h w kHd kWd r : Nat} (ε : ℝ)
@@ -223,19 +224,19 @@ theorem mbResidGraphBEval_faithful (p epsStr : String) {N c mid h w kHd kWd r : 
       = mbResidFwdBEval N (h := h) (w := w) ε We be γe βe μe ve Wd bd γd βd μd vd
           Wz₁ bz₁ Wz₂ bz₂ Wp bp γp βp μp vp (den e) := by
   unfold mbResidGraphBEval mbResidFwdBEval projBEval seB dwbsBEval cbsBEval residual biPath
-  simp only [den_batchOp, denOp,
-             swishF_faithful, den_addV, Function.comp_apply]
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF,
+             swishF_faithful, den_addVB, Function.comp_apply]
 
 /-- Head at inference: 1×1 conv-bn-swish → GAP → dense, batched. -/
 def headGraphBEval (epsStr : String) {N c oc h w nC : Nat} (ε : ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (γh βh μh vh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC)
     (e : SHlo (N * (c * h * w))) : SHlo (N * nC) :=
-  .batchOp (N := N) (.dense "%Wfc" "%bfc" Wfc bfc)
+  .batchOp (N := N) (.dense "%Wd" "%bd" Wfc bfc)
     (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
-      (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) "%hg" "%hbt" "%hmu" "%hvar" epsStr
+      (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) "%hg" "%hbt" "%hnmu" "%hnvar" epsStr
           ε γh βh μh vh)
-        (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" "%hb" Wh bh) e))))
+        (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" (biasName false "" oc) Wh bh) e))))
 
 theorem headGraphBEval_faithful (epsStr : String) {N c oc h w nC : Nat} (ε : ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (γh βh μh vh : Vec oc)
@@ -244,7 +245,7 @@ theorem headGraphBEval_faithful (epsStr : String) {N c oc h w nC : Nat} (ε : �
     den (headGraphBEval epsStr ε Wh bh γh βh μh vh Wfc bfc e)
       = headFwdBEval N (h := h) (w := w) ε Wh bh γh βh μh vh Wfc bfc (den e) := by
   unfold headGraphBEval headFwdBEval cbsBEval
-  simp only [den_batchOp, denOp,
+  simp only [den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF,
              swishF_faithful, Function.comp_apply]
 
 end StableHLO

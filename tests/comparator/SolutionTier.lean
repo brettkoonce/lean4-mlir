@@ -626,8 +626,8 @@ theorem chk_vit_net_tied_certified :
 /-- `Proofs.CnxTiePoCGB.cnx_net_tiedGB` -/
 theorem chk_cnx_net_tiedGB :
     ∀ (N : ℕ) {nC : ℕ} (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-      (w : Proofs.CnxTiePoC.CnxTieWeights nC) (xstem : Proofs.Vec (N * ((3 : ℕ) * (56 : ℕ) * (56 : ℕ))))
-      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (t : Proofs.Vec (N * nC)),
+      (w : Proofs.CnxTiePoC.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+      (t : Proofs.Vec (N * nC)),
       have ib1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
         Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
       have ib2 := Proofs.StableHLO.batchMap N (w.b1.fwdO ε) ib1;
@@ -677,7 +677,7 @@ theorem chk_cnx_net_tiedGB :
       have dyO2 := Proofs.StableHLO.batchMapAux N (w.b3.cotIn ε) ib3 dyO3;
       have dyO1 := Proofs.StableHLO.batchMapAux N (w.b2.cotIn ε) ib2 dyO2;
       have dyStem := Proofs.StableHLO.batchMapAux N (w.b1.cotIn ε) ib1 dyO1;
-      Proofs.CnxTiePoCGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem ∧
+      Proofs.CnxTiePoCGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem ∧
         w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1 ∧
           w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2 ∧
             w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3 ∧
@@ -766,11 +766,10 @@ theorem chk_enet_net_lossGrad :
 theorem chk_cnx_net_lossGrad :
     ∀ (xN epsStr cotN dN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.CnxTiePoC.CnxTieWeights nC) (xstem : Proofs.Vec (N * ((3 : ℕ) * (56 : ℕ) * (56 : ℕ))))
-          (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)}
-          {g : Proofs.Vec (N * nC)},
+        ∀ (w : Proofs.CnxTiePoC.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+          {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
           Proofs.HasGradAt L (Proofs.CnxTiePoCGB.cnxNetB N ε w x) g →
-            Proofs.CnxTiePoCGB.CnxNetLossTiedGB xN epsStr cotN dN N ε w xstem x L g :=
+            Proofs.CnxTiePoCGB.CnxNetLossTiedGB xN epsStr cotN dN N ε w x L g :=
   Proofs.CnxTiePoCGB.cnx_net_lossGrad
 
 /-- `Proofs.ViTTiePoCGB.vit_net_lossGrad` -/

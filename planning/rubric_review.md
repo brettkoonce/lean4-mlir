@@ -39,7 +39,7 @@ before this plan was written (marked ✔).
 
 ## ▶ Start here (next session)
 
-**State at 2026-09-30.** Branch `rubric-review`; everything through `d2d15b4e` is pushed to `origin/main`:
+**State at 2026-09-30.** Branch `rubric-review`; everything through `994b1eb6` is pushed to `origin/main`:
 - `5ff18875`: this plan.
 - `0069e30d`: WP1 part 1.
 - `9bebaed8`: WP1 part 2A.
@@ -47,12 +47,14 @@ before this plan was written (marked ✔).
 - `3f20d71d`: WP2.
 - `84ee2bd1`: WP7.
 - `d2d15b4e`: the MANIFEST regeneration CI asked for.
+- `dc9fe1ea`: WP4.
+- `994b1eb6`: the Foundations closing section (cherry-picked from `foundations-intro`).
 
 WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) and WP2 are committed. One WP2
 item is parked for the CPU box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
 design is under WP1 below, and it should be done together with A-pq-1. WP7 (the attribution
-links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 is **staged, not
-committed**; its status is under WP4 below. Next: not yet chosen; WP5 and WP6 are open.
+links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 is committed and pushed
+(`dc9fe1ea`). WP5 is **staged, not committed** (status under WP5). Next: not yet chosen; WP6 is open.
 
 ## Decisions (user, 2026-09-30)
 
@@ -401,6 +403,41 @@ ConvNeXt-T forward text guards; fixes book content.tex:12046).
 - **N1-gen-1**: ConvNeXt ties are at T only, though S and B ship. Size L.
 - **N1-gen-2**: the five small nets have no param-level loss gradient.
 - **N2-gen-1**: a ViT per-example tie is still at 10 classes.
+
+**Status 2026-09-30: four done (staged), three parked.**
+- **N2-gen-1 done.** `vitTinyInputGrad_eq_vitTiny_vjp` binds `{nCls}`.
+- **N1-corr-1 done.** The stem-bias clause of `cnxStemChTied`, `cnxStemChTiedGB` and the
+  ParamGrad stem is at the real `flatConvStride4 Wst b' x`; `xstem` is gone from every capstone.
+  The node carries an input it never reads (stated at zero). The bridge is
+  `GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d` (ParamGradNodes), which ConvNeXtParamGrad now
+  reuses. The "same modelling as mnv2/r34" sentence is gone; the comparator tier is regenerated.
+- **N2-corr-2 done.** B0's inference graphs use the render's names, and two actual TEXT bugs are
+  fixed:
+  - `.swishF` and `.addV` at the batched index printed `tensor<2x802816>` and `tensor<2x150528>`;
+    they are now `.batchOp .swish` / `.addVB`, as the train graphs spell them.
+  - `FwdGraphTextTies` guards stem, the four block shapes and head at `.eval`.
+- **N1-corr-2 done, at the headline arms (user's choice).** The finding named `cifar8wb`, but the
+  book's chapter-4 runs train `cifar8w{,_bn}_*`: `cifar8{Bn,Adam}TrainStepFaithfulV` at
+  `opt := some _`, which emit per-example UN-FUSED `*Grad` nodes.
+  - New `GradNode` section in SgdNodes: `conv{W,B}Grad_den`, `bn{Gamma,Beta}Grad_den`,
+    `dense{W,B}Grad_den`, the `*GradTied` clauses and their `_holds`.
+  - New `Cifar8StepTieG` / `Cifar8BnStepTieG` (`cifar8{,Bn}_train_step_tiedG`) state the fused
+    ties' chain node for node, with lakefile roots, audit pins and book `thm:cifar8_step_tieG`.
+  - The fused ties' docs say they tie no trained artifact.
+- **Parked: N2-scope-1** (ViT and MNv4 drop-path forwards).
+  - ViT has no batched typed forward graph, and its drop sites are batched ops.
+  - MNv4 needs drop-carrying copies of five group graphs in the file whose `simp only` spelling
+    already dies in the kernel.
+  - Both are size L and belong on the CPU box. MNv4FullB's "not this graph" row now lists
+    `mnv4in_acc{,dp}8x128wxdropdowd01bf16`.
+- **Parked: N1-gen-2** (small-net loss gradients). `cnnHasVJPAt` / `cifarCnn8HasVJPAt` take the
+  activation-level pool hypothesis real MNIST fails on 99.5% of images. Stating capstones on it
+  would recreate WP1's defect, so do it with WP1 part 2B.
+- **Parked: N1-gen-1** (ConvNeXt S/B), per the user.
+- Noted, not done: `EfficientNetSyncB`'s train-mode sync graphs still use the old SE names
+  (`zWa…`), and nothing text-checks them.
+- Local only: `leanblueprint web` fails in plasTeX's imager (a missing temp PNG) after writing
+  `lean_decls`; the PDF build is fine.
 
 ## Tier 2 — prose and credit (cheap, broad, one agent each)
 

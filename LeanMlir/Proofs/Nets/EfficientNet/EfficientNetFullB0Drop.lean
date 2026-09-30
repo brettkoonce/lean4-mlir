@@ -25,8 +25,8 @@ statement covers `efficientnet_drop_fwd` (`sd` only), `efficientnet_do_fwd` (`cd
   identity is exact: the keep probability is folded into the mask (`Training/DropPath`).
 
 The residual-block-with-drop and the dropout head are text-guarded against the renderer in
-`Codegen/FwdGraphTextTies` at training BatchNorm (the eval graphs carry the three-block eval
-graph's SSA names, as `EfficientNetFullB0Eval` records). These artifacts are f32. The train steps'
+`Codegen/FwdGraphTextTies` at training BatchNorm; the eval graphs use the render's names too, and
+their drop-free blocks are guarded at inference BatchNorm. These artifacts are f32. The train steps'
 backward through the drop sites is outside this statement, as it is outside
 `EfficientNetStepTieG`.
 
@@ -333,19 +333,19 @@ def mbResidDropGraphBEval (p epsStr mN : String) {N c mid h w kHd kWd r : Nat} (
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
     (Wp : Kernel4 c mid 1 1) (bp : Vec c) (γp βp μp vp : Vec c) (s : Option (Vec N))
     (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
-  .addV
+  .addVB
     (dropPathOptG mN s
-      (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pmu" s!"%{p}pvar"
+      (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}pg" s!"%{p}pbt" s!"%{p}pnmu" s!"%{p}pnvar"
           epsStr ε γp βp μp vp)
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-          (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb"
-              s!"%{p}zbb" Wz₁ bz₁ Wz₂ bz₂)
-            (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
-                s!"%{p}dmu" s!"%{p}dvar" epsStr ε γd βd μd vd)
-              (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd)
-                (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
-                    s!"%{p}emu" s!"%{p}evar" epsStr ε γe βe μe ve)
-                  (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" s!"%{p}eb" We be)
+        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" c) Wp bp)
+          (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2"
+              s!"%{p}zb2" Wz₁ bz₁ Wz₂ bz₂)
+            (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}dg" s!"%{p}dbt"
+                s!"%{p}dnmu" s!"%{p}dnvar" epsStr ε γd βd μd vd)
+              (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+                (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) s!"%{p}eg" s!"%{p}ebt"
+                    s!"%{p}enmu" s!"%{p}envar" epsStr ε γe βe μe ve)
+                  (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be)
                     e)))))))))) e
 
 /-- The inference graph with its drop site as a weight-bundle wrapper. -/
@@ -361,19 +361,20 @@ theorem mbResidDropGraphEvalW_faithful (pfx epsStr mN : String) (N h w : Nat) (�
     den (mbResidDropGraphEvalW pfx epsStr mN N h w ε p s e) = mbResidEvalDropW N h w ε p s (den e) := by
   unfold mbResidDropGraphEvalW mbResidDropGraphBEval mbResidEvalDropW projBEval seB dwbsBEval
     cbsBEval residual biPath
-  simp only [den_addV, den_dropPathOptG, den_batchOp, denOp, swishF_faithful, Function.comp_apply]
+  simp only [den_addVB, den_dropPathOptG, den_batchOp, denOp, ↓den_batchOp_swish_eq_swishF,
+    swishF_faithful, Function.comp_apply]
 
 /-- `headGraphBDo` at inference BatchNorm (`headGraphBEval`'s nodes). -/
 def headGraphBEvalDo (epsStr mN : String) {N c oc h w nC : Nat} (ε : ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (γh βh μh vh : Vec oc)
     (Wfc : Mat oc nC) (bfc : Vec nC) (m : Option (Vec (N * oc)))
     (e : SHlo (N * (c * h * w))) : SHlo (N * nC) :=
-  .batchOp (N := N) (.dense "%Wfc" "%bfc" Wfc bfc)
+  .batchOp (N := N) (.dense "%Wd" "%bd" Wfc bfc)
     (dropoutOptG mN m
       (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
-        (.swishF (.batchOp (N := N) (.bnEval (h := h) (w := w) "%hg" "%hbt" "%hmu" "%hvar" epsStr
+        (.batchOp (N := N) .swish (.batchOp (N := N) (.bnEval (h := h) (w := w) "%hg" "%hbt" "%hnmu" "%hnvar" epsStr
             ε γh βh μh vh)
-          (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" "%hb" Wh bh) e)))))
+          (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" (biasName false "" oc) Wh bh) e)))))
 
 theorem headGraphBEvalDo_faithful (epsStr mN : String) {N c oc h w nC : Nat} (ε : ℝ)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (γh βh μh vh : Vec oc)
@@ -381,7 +382,7 @@ theorem headGraphBEvalDo_faithful (epsStr mN : String) {N c oc h w nC : Nat} (ε
     den (headGraphBEvalDo epsStr mN ε Wh bh γh βh μh vh Wfc bfc m e)
       = headDoFwdBEval N (h := h) (w := w) ε Wh bh γh βh μh vh Wfc bfc m (den e) := by
   unfold headGraphBEvalDo headDoFwdBEval cbsBEval
-  simp only [den_batchOp, denOp, den_dropoutOptG, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, denOp, den_dropoutOptG, ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net graphs + faithfulness
