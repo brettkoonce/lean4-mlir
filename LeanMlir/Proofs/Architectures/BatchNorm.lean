@@ -89,11 +89,12 @@ noncomputable def bnMeanSq (n : Nat) (x : Vec n) : ℝ :=
     Stated at an arbitrary shard `e`, in the style `DataParallel.meanLoss_shard` sets: WHICH
     cells land on which replica never enters, only that together they are the whole. The
     contiguous cut the DP shim makes is the `finProdFinEquiv` instance. -/
-theorem bnMean_shard {R m M : Nat} (_hR : R ≠ 0) (_hm : m ≠ 0)
+theorem bnMean_shard {R m M : Nat}
     (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
     bnMean M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) := by
   -- `M = R * m` is not a hypothesis — the equiv forces it, so this applies at ANY association
-  -- of the target index (`(R*N)*(h*w)` as readily as `R*(N*(h*w))`). An average over `Fin M` is an
+  -- of the target index (`(R*N)*(h*w)` as readily as `R*(N*(h*w))`). Nor is `R ≠ 0` or `m ≠ 0`:
+  -- with no replicas or empty shards both sides are `0`. An average over `Fin M` is an
   -- average over `Fin R × Fin m` (`expect_equiv`), which is an average of averages.
   simp only [bnMean_eq_expect]
   rw [← Fintype.expect_equiv e (fun p => x (e p)) x (fun _ => rfl), ← Finset.univ_product_univ,
@@ -107,10 +108,10 @@ theorem bnMean_shard {R m M : Nat} (_hR : R ≠ 0) (_hm : m ≠ 0)
     `bnVar` unless every shard mean coincides, and that spread is what a per-replica BatchNorm
     drops. The variance's shard formula is `bnVar_shard_chan`, which adds each shard mean's
     squared offset from the global mean. -/
-theorem bnMeanSq_shard {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
+theorem bnMeanSq_shard {R m M : Nat}
     (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
     bnMeanSq M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq m (fun k => x (e (r, k))) :=
-  bnMean_shard hR hm e (fun i => x i * x i)
+  bnMean_shard e (fun i => x i * x i)
 
 /-- `σ² = E[x²] − μ²` — the identity that lets the sync-BN definitions be stated at the
     second moment (`bnSyncXhat` reads `m2 − μ²`). -/
@@ -156,9 +157,9 @@ theorem bnVar_shard_chan {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
   have hM : R * m ≠ 0 := Nat.mul_ne_zero hR hm
   have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hR
   have hS1 : ∑ r : Fin R, bnMeanSq m (fun k => x (e (r, k))) = (R : ℝ) * bnMeanSq (R * m) x := by
-    rw [bnMeanSq_shard hR hm e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
+    rw [bnMeanSq_shard e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
   have hS2 : ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) = (R : ℝ) * bnMean (R * m) x := by
-    rw [bnMean_shard hR hm e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
+    rw [bnMean_shard e x, ← mul_assoc, mul_one_div_cancel hRr, one_mul]
   have hpt : ∀ r : Fin R,
       bnVar m (fun k => x (e (r, k)))
         + (bnMean m (fun k => x (e (r, k))) - bnMean (R * m) x)

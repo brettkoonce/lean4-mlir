@@ -94,7 +94,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.StableHLO.Pretty,
              `LeanMlir.Proofs.Codegen.FwdGraphTextTies,
              `LeanMlir.Proofs.Codegen.StableHLO.Parse,
-             `LeanMlir.Proofs.Codegen.StableHLO.Lex,
              `LeanMlir.Proofs.Nets.Small.LinearTrainStep,
              `LeanMlir.Proofs.Nets.Small.MlpTrainStep,
              `LeanMlir.Proofs.Architectures.ConvGrad,

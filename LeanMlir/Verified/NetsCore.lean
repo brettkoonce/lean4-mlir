@@ -895,9 +895,9 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   runningBN  := true
   -- The ImageNet peer of `efficientnetVerified.dropKeeps`. The SITES are identical —
   -- `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips) — but the
-  -- ramp is TF's `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where the
-  -- Imagenette peer keeps timm's `i/15`. Checked against the regenerated reference's call
-  -- sites: `dpkeys[2], 0.975000` and `dpkeys[14], 0.825000`.
+  -- ramp is TF's (and timm's) `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where
+  -- the Imagenette peer keeps the reference's default `i/15`. Checked against the regenerated
+  -- reference's call sites: `dpkeys[2], 0.975000` and `dpkeys[14], 0.825000`.
   -- Host-fed, so it reaches every `…drop…` variant this driver runs.
   dropSites := #[2, 4, 6, 7, 9, 10, 12, 13, 14]
   dropDenom := 16

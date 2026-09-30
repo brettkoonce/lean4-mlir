@@ -52,7 +52,10 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard (efficientnetVerified.dropKeeps[8]! - 0.8).abs > 1e-3
 
 -- The ImageNet peer rides TF's ramp — `0.2 · i/16`, the reference's
--- `dropPathOverN` (`efficientNetB0ImagenetConfig`), where the Imagenette spec keeps timm's `i/15`.
+-- `dropPathOverN` (`efficientNetB0ImagenetConfig`), where the Imagenette spec keeps the
+-- reference's default `i/15` (block count minus one, the arm `refKeep` restates). timm's
+-- EfficientNet builder divides by the block count too (`block_idx / block_count`), so `i/16` is
+-- both TF's and timm's ramp; `i/15` is the reference's alone.
 -- Same sites, different denominator; the second guard is the control that the two ramps differ.
 private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
   1.0 - dropRate * i.toFloat / (Nat.max 1 totalDrop).toFloat

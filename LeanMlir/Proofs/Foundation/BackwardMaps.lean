@@ -251,11 +251,10 @@ noncomputable def maxPool3s2FlatHasVJPAtVec {c h w : Nat} (v : Vec (c * (2*h) * 
 
 /-- The `Vec`-point differentiability companion of `maxPool3s2FlatHasVJPAtVec`. -/
 theorem maxPool3s2Flat_differentiableAt_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
-    (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w)))
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
     DifferentiableAt ℝ (maxPool3s2Flat c h w) v := by
   have h := maxPool3s2Flat_differentiableAt (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))
-    h_smooth hc hh hw
+    h_smooth
   rwa [Tensor3.flatten_unflatten] at h
 
 -- ═════════════════════════════════════════════════

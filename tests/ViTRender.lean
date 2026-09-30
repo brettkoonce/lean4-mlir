@@ -7,9 +7,8 @@ Hand-rendered batched StableHLO string fragments for the Vision Transformer (cha
 a String emitter written by hand, not `pretty` of a proven graph, and no theorem ties its text;
 the ViT train steps in verified_mlir/ are rendered by the proof-side
 LeanMlir/Proofs/Codegen/ViTRender.lean instead. It is test support, built by the `TestSupport`
-lean_lib: the tests that import it (TestAdamOpTie, TestMHSA, TestViTBlock, TestViTFwd,
-TestViTTrain, TestViTTiny, TestCifar8AdamTrain, TestMobilenetV2TrainPC, RenderAdamSmoke) use it
-as a numeric reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
+lean_lib: the tests that import it (TestMHSA, TestViTBlock, TestViTFwd, TestViTTrain,
+TestViTTiny, TestCifar8AdamTrain, TestMobilenetV2TrainPC) use it as a numeric reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
 the row-softmax is the op pattern of `Proofs.StableHLO.SHlo.softmaxRowF` /
 `Proofs.StableHLO.SHlo.softmaxRowBack` (plain exp/sum), GELU is the tanh approximation of
 `Proofs.StableHLO.SHlo.geluF`, and LayerNorm is `Proofs.layerNormForward` (per-token over D,
@@ -556,7 +555,7 @@ def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat)
     Each replica evaluates the same graph at the batch size it was rendered for, and the
     collective averages its gradients over disjoint equal batches. A BatchNorm in that graph
     normalizes over one replica's batch only; the cross-replica (sync-BN) renders are
-    `Proofs.StableHLO.SyncBnSites`'. -/
+    `Codegen.SyncBnSites`'. -/
 def emitAdamVDP (θ g m v : String) (ds : List Nat) (t : String)
     (replicas : Nat := 1) : String × String × String × String :=
   let (arS, gAvg) := emitGradAllReduce g ds t replicas

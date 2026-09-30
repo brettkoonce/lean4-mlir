@@ -347,14 +347,6 @@ noncomputable def swishHasVJP (n : Nat) : HasVJP (swish n) where
     intro x dy i
     simp [pdiv_swish, mul_comm]
 
-/-- **Public correctness theorem for `swishHasVJP`**: diagonal scaling
-    by `swishScalarDeriv` equals the `pdiv`-contracted Jacobian of
-    `swish n`. -/
-theorem swishHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (swishHasVJP n).backward x dy i =
-    ∑ j : Fin n, pdiv (swish n) x i j * dy j :=
-  (swishHasVJP n).correct x dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Layer scale (per-channel learnable elementwise scale)
 -- ════════════════════════════════════════════════════════════════
@@ -385,12 +377,6 @@ noncomputable def layerScaleHasVJP {n : Nat} (γ : Vec n) :
   correct := by
     intro x dy i
     simp [pdiv_layerScale]
-
-theorem layerScaleHasVJP_correct {n : Nat} (γ : Vec n)
-    (x dy : Vec n) (i : Fin n) :
-    (layerScaleHasVJP γ).backward x dy i =
-    ∑ j : Fin n, pdiv (layerScale γ) x i j * dy j :=
-  (layerScaleHasVJP γ).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Vector-[D] LayerNorm — per-token forward + VJP, and its per-token (rowwise) lift

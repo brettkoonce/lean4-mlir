@@ -150,7 +150,6 @@ for k2 in range(72):
     pdiv ({G2}) (Tensor3.flatten r2V) {fm2(k2, '2*(2*3)*(2*3)')} {JCL} = t2V {fm2(k2, '2*(2*3)*(2*3)')} := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ({G3}) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -284,7 +283,6 @@ theorem r2flat_eq :
 
 theorem diffP_r2 : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
   maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-    (by norm_num) (by norm_num) (by norm_num)
 
 theorem diffG2_r2 : DifferentiableAt ℝ ({G2}) (Tensor3.flatten r2V) := by
   refine DifferentiableAt.comp _ ?_ diffP_r2

@@ -410,7 +410,7 @@ inductive R34Opt
   /-- **LAMB** (You et al. 2019) — RSB-A3's optimizer, at **two new ops** (`lambDirF`,
       `lambScaleF`). Adam moments give a direction
       `r = m̂/(√v̂+ε) + wd·θ`, then a PER-PARAMETER-TENSOR trust ratio `‖θ‖/‖r‖` rescales the step.
-      `Proofs.Lamb` is the ℝ reference; see `optOne`. -/
+      `Optim.Lamb` is the ℝ reference; see `optOne`. -/
   | lamb
   /-- **AdamW over `k` accumulated micro-batches.** A FOURTH parameter region `G` holds the running gradient sum, and the graph is
       one function for both phases with two runtime scalars deciding which it is. See `optOne`. -/
@@ -582,7 +582,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     pure (arS ++ cA ++ cE, nT, nM, nV, none, nE)
   | .lamb =>
     -- LAMB, in four ops per parameter, TWO of which are LAMB's own (`gradSumSqAccF` serves the
-    -- clip too, and `sgdParamF` heavy-ball). `Proofs.Lamb` carries the ℝ reference and the clauses.
+    -- clip too, and `sgdParamF` heavy-ball). `Optim.Lamb` carries the ℝ reference and the clauses.
     let z1 : Vec 1 := fun _ => 0
     -- ① the DIRECTION, `r = m̂/(√v̂+ε) + wd·θ`, from the incoming moments and this step's gradient.
     -- ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both

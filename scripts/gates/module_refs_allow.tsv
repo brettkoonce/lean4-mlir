@@ -1,0 +1,2 @@
+# Known module citations that resolve to nothing, whose fix is deferred. file<TAB>token<TAB>why.
+# May shrink, never grow: fix the citation and delete its row.

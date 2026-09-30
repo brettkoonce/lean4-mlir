@@ -17,7 +17,7 @@ by `Proofs/Float/E4M3Fold.lean` (render-tie) and whose accuracy bound is
 as operand byte-prep, exactly the render-tie's model. The numpy oracle
 (`scripts/demos/mnist_e4m3_demo.py` / `mnist_e4m3_train_demo.py`) uses the identical grid.
 
-Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-linear-e4m3-verified data`
+Run (GPU): `.lake/build/bin/mnist-linear-e4m3-verified data`
 -/
 
 def linearE4M3Config : VerifiedConfig where

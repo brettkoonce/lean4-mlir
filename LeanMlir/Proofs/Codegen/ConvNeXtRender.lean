@@ -797,6 +797,7 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++
     chLnPrelude ++
+    s!"    // ── {cnxModelName V} SGD train step: every op is pretty(verified AST node) except the constants and the hand-written GAP-backward block (%dgi…%dgapf) ──\n" ++
     body ++
     s!"    return {retVals} : {retTyL}\n" ++ "  }\n}\n"
 

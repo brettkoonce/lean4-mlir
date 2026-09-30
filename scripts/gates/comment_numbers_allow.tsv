@@ -170,7 +170,6 @@ LeanMlir/Proofs/Float/MlpFloatBridge.lean	1/100	spec
 LeanMlir/Proofs/Float/MlpFloatBridge.lean	12.5%	example
 LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean	76 minutes	citation
 LeanMlir/Proofs/Training/Optim/RmsPropStep.lean	31.6×	example
-LeanMlir/Proofs/Training/SgdDescent/Cnn.lean	0.4%	statement
 LeanMlir/TicTacToe.lean	42 MB	spec
 LeanMlir/TicTacToe.lean	43 MB	spec
 LeanMlir/Train.lean	mAP@0.5	spec
@@ -239,5 +238,4 @@ tests/TestResnet34AdamBench.lean	b856deb	spec
 tests/TestResnet34AdamTie.lean	b856deb	spec
 tests/TestResnet34BatchCheck.lean	11.68 GiB	spec
 tests/TestResnet34BatchCheck.lean	15.11 GiB	spec
-tests/TestRmsPropOpTie.lean	31.6×	example
 tests/TestRmsTie.lean	31.6×	example

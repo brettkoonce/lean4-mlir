@@ -6,6 +6,7 @@ module @m {
     // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.
     %one = stablehlo.constant dense<1.0> : tensor<f32>
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
+    // ── ConvNeXt-T SGD train step: every op is pretty(verified AST node) except the constants and the hand-written GAP-backward block (%dgi…%dgapf) ──
     %v0 = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
     %v1 = stablehlo.convolution(%v0, %psW)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

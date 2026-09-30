@@ -57,10 +57,13 @@ links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 
 (`dc9fe1ea`). WP5 is committed as `bee5ab0d` and **not pushed**; its status (four done, three
 parked) is under WP5.
 
-**WP6 is staged, not committed** (status under WP6). Housekeeping done: the
+**WP6 is committed** (`2e759820`; status under WP6). Housekeeping done: the
 `foundations-intro` worktree and branch are removed, and the 33 local branches already merged
-into `origin/main` are deleted. Still owed (ask first): push `bee5ab0d` and WP6 once committed.
-Next: not yet chosen; the open items WP6 turned up are listed under it.
+into `origin/main` are deleted. Not pushed: `bee5ab0d`, `2e759820`.
+
+**Small tier done (staged):** see §Small tier below.
+
+After that: WP8f/WP8g in parallel, then WP8a, then WP1 part 2B with WP8b.
 
 ## Decisions (user, 2026-09-30)
 
@@ -445,6 +448,56 @@ ConvNeXt-T forward text guards; fixes book content.tex:12046).
 - Local only: `leanblueprint web` fails in plasTeX's imager (a missing temp PNG) after writing
   `lean_decls`; the PDF build is fine.
 
+### Small tier (user, 2026-09-30) — done, staged
+- **WP11:**
+  - `StableHLO/Lex.lean` deleted (G-scope-1), along with the 18 stale `tests/*.lean` smokes and
+    render scripts. X-sco-1 was wrong about `TestConvNeXtBlock`: it is compile-only, with no
+    gradcheck.
+  - The five `#guard` scripts now run in certs.yml as a "#guard scripts" step.
+  - `LossKind.floatTargetMse` throws, and the book's DDPM line no longer names it.
+  - certs.yml's Bestiary guard also triggers on `Bestiary/**` and `LeanMlir/Spec.lean`.
+  - Deleted as dead: `r34StemB_continuous`, both `sealX_continuous`, `addConstHasVJPAt_backward`,
+    `bnBatchLA_apply_perm`, the six A-reuse-1 `.correct` restatements, the A-scope-1 MNIST-CNN
+    float-budget cluster, and `dotSgd_step_close` / `sumSgd_step_close`, which only that cluster
+    used.
+- **WP10:**
+  - The pool positivity binders are gone everywhere they cascaded (the whole-net CNN VJPs, the
+    SgdDescent rungs, the comparator arch tier, the CNN seal and witness generators).
+    `bnMean_shard`'s and `mask_scalar_close`'s unused binders are gone too.
+  - IR.lean's four fixed-shape conv bridges are three general ones.
+  - F-gen-2's unused binders are dropped.
+  - SyncBf16's base-2 lemmas are over `z : ℤ` and any base `b > 1`, and `rndP_mul_four` is
+    dropped. The F-pl-3 move is skipped because it would put them in a root file.
+- **X-cor-3:** `roundE4M3` rounds half to even, as numpy and OCP E4M3 do. 11 `#guard`s are
+  checked against the oracle, and the old code fails two of them.
+- **TestDropPathRamp:** its two formulas match every renderer and reference. What was wrong was
+  the claim about timm: `efficientnet_b0` / `tf_efficientnet_b0` both ramp `i/16`, so `i/15` is
+  only the JAX reference's default. The comment is fixed in the test, NetsCore, the jax driver and
+  the book's printed config.
+- **`ibp_conv_scorecard.py`:** fixed and given a `--check`; it reproduces the committed files, and
+  its counts are in `runs/2026-09-30-cert-scorecards/`.
+- **Gates:**
+  - #5 is `scripts/gates/module_refs.py`, in targets.yml. Every `…/X.lean` path and every dotted
+    module name in a Lean file must resolve. It found and fixed five stale citations plus three
+    `Proofs.Lamb` → `Optim.Lamb`.
+  - #2 is `scripts/gates/audit_only_mentions.py`, a report only. It lists declarations reachable
+    from no root but AuditAxioms: 158 at first run, several of them capstone-shaped (e.g.
+    `r34/r50/mnv2/mnv4_net_tied_lossGrad`), so the gap may be yaml/book citation rather than dead
+    code. Triage that list before deleting from it.
+  - #7 is deferred. `allReduceMeanF`'s `ds.prod = n` holds by construction at the only printer
+    entry, `prettyAllReduceMean`. `pretty B` vs `N` needs every batched `skel` descriptor to carry
+    `N`: a Pretty.lean change plus a lowerer-wide regen.
+- **Banner:** `convnext_train_step.mlir` (SGD) now names its GAP-backward block. That is its
+  only artifact change.
+- **Open from this pass:**
+  - The book's B0 ImageNet section prints `dropPathOverN := true` (i/16), but the 350-epoch
+    runs it reports (JAX 77.15, verified 76.878) predate that flag and trained at i/15.
+    `runs/2026-09-12-enet-verified-350ep` logs keeps 0.973 → 0.813. The book now says so (user: re-run on the i/16 config eventually).
+  - The MNv4 reference ramps i/20 over its 21 UIB blocks. timm's `mobilenetv4_conv_medium` ramps
+    i/23 over 23. Imagenette B0's i/15 is not timm's either.
+  - `apps/imagenette/MainMobilenetV4VerifiedAdam.lean` called the net Conv-S and said "no
+    composed-backward theorem yet"; both are fixed.
+
 ## Tier 2 — prose and credit (cheap, broad, one agent each)
 
 ### WP6 — Doc-honesty residue · S×~40 · 1 agent (book + docstrings)
@@ -548,15 +601,10 @@ was already fixed by WP5; the rest are done.
   - *Stale Imagenette numbers in comments.* The user's call: they were out of date; the
     comments point at the logs, and nothing more is needed.
 - **Open (found by WP6, not done):**
-  - `scripts/certs/ibp_conv_scorecard.py` crashes on `OUT.with_name(...)` and its paths predate
-    the 9e84e41b layout. `IbpConvScorecard/*` was hand-matched.
   - The lakefile benchTable cited `runs/<net>_xla_80ep_jul29.log` / `vit_xla_80ep_jul30.log`,
     which were never tracked.
-  - `tests/TestDropPathRamp.lean`'s `refKeep` divides by `totalDrop − 1`, while the reference's
-    `dropPathOverN` divides by `totalDrop`; check which one the runs used.
   - `historical/lipschitz_cert_rationalize.py` still prints the old accuracy lines into its
     snippets. Harmless, because `Instance.lean` is hand-merged.
-  - `convnext_train_step.mlir` (SGD) has no train-step banner.
 
 ### WP7 — Attribution pass · S · 1 agent; applies `rubric_review/citations.md`
 No earlier audit covered this. **First pass (decided): a web link only.** Add a `## References`

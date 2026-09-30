@@ -218,11 +218,6 @@ noncomputable def sigmoidHasVJP (n : Nat) : HasVJP (sigmoid n) where
     intro x dy i
     simp [pdiv_sigmoid, mul_comm]
 
-theorem sigmoidHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (sigmoidHasVJP n).backward x dy i =
-    ∑ j : Fin n, pdiv (sigmoid n) x i j * dy j :=
-  (sigmoidHasVJP n).correct x dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Broadcast: per-channel scalar → spatial (adjoint of GAP)
 -- ════════════════════════════════════════════════════════════════

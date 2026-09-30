@@ -9247,7 +9247,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   bf16Conv       := true    -- reaches the MBConv expand/dw/project
   useEMA         := true    -- weight averaging, decay 0.9999
   dropPath       := 0.2     -- stochastic depth (B0 drop-connect rate)
-  dropPathOverN  := true    -- TF's ramp: 0.2 * i/16, not timm's i/15
+  dropPathOverN  := true    -- TF's and timm's ramp: 0.2 * i/16, not the default i/15
   runningBN      := true    -- eval on running stats, not batch stats
   bnEps          := 1e-3    -- TF's BN epsilon
 
@@ -9257,7 +9257,9 @@ def efficientNetB0ImagenetConfigFull : TrainConfig :=
 \end{verbatim}
 
 \noindent The number this section reports is the \texttt{full} recipe,
-the 350-epoch one.
+the 350-epoch one. Those runs predate \texttt{dropPathOverN}: they ramped
+stochastic depth as \(0.2 \cdot i/15\), not the \(i/16\) printed above, and
+will be re-run on this config.
 
 Two details are specific to EfficientNet. First, \texttt{bf16Conv}
 casts the MBConv block's heavy convolutions (the $1\times1$
@@ -15634,8 +15636,8 @@ change relative to the classifiers, segmentation nets and detectors so far:
     so far compares against something a human provided --- a class, a mask, a
     set of boxes. Diffusion manufactures its own: sample a timestep $t$, sample
     noise $\varepsilon$, add it per the schedule, predict $\varepsilon$, under
-    the same squared-error backward from Part~1
-    (\texttt{lossKind := .floatTargetMse}).
+    the same squared-error backward from Part~1 (the demo compiles its own
+    train step, with \texttt{useDdpm := true}).
   \item \textbf{The backbone is the segmentation UNet, conditioned on $t$.} One
     network must denoise at every level, so $t$ is fed in: this demo
     concatenates it as an extra channel (hence \texttt{.unetDown 2 16} --- one

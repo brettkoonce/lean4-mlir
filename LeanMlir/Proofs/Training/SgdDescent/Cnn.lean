@@ -76,164 +76,9 @@ namespace Proofs
 open StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § Whole-net MNIST-CNN forward rounding budget
+-- § Conv kernel drift: the output moves by the kernel perturbation's slab
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The float MNIST-CNN (no BN) forward** — the float peer of
-    `mnistCnnNoBnForward`: rounded conv (`flatConvF`) and rounded dense
-    (`M.dense`); `relu` and `maxPoolFlat` appear bare (exact in float). -/
-noncomputable def FloatModel.mnistCnnNoBnForwardF
-    {ic c h w d1 nClasses kH kW : Nat} (M : FloatModel)
-    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
-    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
-    (W₄ : Mat d1 d1) (b₄ : Vec d1)
-    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) :
-    Vec (ic * (2*h) * (2*w)) → Vec nClasses :=
-  M.dense W₅ b₅
-  ∘ (relu d1 ∘ M.dense W₄ b₄)
-  ∘ (relu d1 ∘ M.dense W₃ b₃)
-  ∘ maxPoolFlat c h w
-  ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₂ b₂)
-  ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₁ b₁)
-
-/-- **Whole-net MNIST-CNN forward rounding budget.** The
-    rounded forward is within an explicit closed-form `layerBudget` of the real
-    `conv→relu→conv→relu→maxpool→dense→relu→dense→relu→dense` forward, per
-    output logit — the binary32 forward-error bound for the Chapter-3 CNN.
-
-    Each weight layer threads identically: conv layers as `dense` at their
-    fan-in (`ic·kH·kW`, then `c·kH·kW`), the dense head at `c·h·w` / `d1`; relu
-    and maxpool pass error through exactly (no rounding, no amplification). The
-    budget is the `mlp_float_close_uniform` nest extended to the CNN's six
-    layers — `norm_num`-evaluable at a concrete net and magnitude profile. -/
-theorem FloatModel.cnn_float_close
-    {ic c h w d1 nClasses kH kW : Nat} (M : FloatModel)
-    (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
-    (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
-    (W₄ : Mat d1 d1) (b₄ : Vec d1)
-    (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic * (2*h) * (2*w)))
-    {w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ a : ℝ}
-    (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
-    (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄)
-    (hw₅ : 0 ≤ w₅) (ha : 0 ≤ a)
-    (hW₁ : ∀ o cc kh kw, |W₁ o cc kh kw| ≤ w₁) (hb₁ : ∀ o, |b₁ o| ≤ β₁)
-    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂) (hb₂ : ∀ o, |b₂ o| ≤ β₂)
-    (hW₃ : ∀ i j, |W₃ i j| ≤ w₃) (hb₃ : ∀ j, |b₃ j| ≤ β₃)
-    (hW₄ : ∀ i j, |W₄ i j| ≤ w₄) (hb₄ : ∀ j, |b₄ j| ≤ β₄)
-    (hW₅ : ∀ i j, |W₅ i j| ≤ w₅) (hb₅ : ∀ j, |b₅ j| ≤ β₅)
-    (hx : ∀ i, |x i| ≤ a) (k : Fin nClasses) :
-    |M.mnistCnnNoBnForwardF W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x k -
-        mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x k| ≤
-      FloatModel.layerBudget M.u d1 w₅ β₅
-        (FloatModel.layerAct d1 w₄ β₄
-          (FloatModel.layerAct (c * h * w) w₃ β₃
-            (FloatModel.layerAct (c * kH * kW) w₂ β₂
-              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))))
-        (FloatModel.layerBudget M.u d1 w₄ β₄
-          (FloatModel.layerAct (c * h * w) w₃ β₃
-            (FloatModel.layerAct (c * kH * kW) w₂ β₂
-              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)))
-          (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
-            (FloatModel.layerAct (c * kH * kW) w₂ β₂
-              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a))
-            (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂
-              (FloatModel.layerAct (ic * kH * kW) w₁ β₁ a)
-              (FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0)))) := by
-  simp only [FloatModel.mnistCnnNoBnForwardF, mnistCnnNoBnForward, Function.comp]
-  -- real activation magnitudes, layer by layer
-  set A1 := FloatModel.layerAct (ic * kH * kW) w₁ β₁ a with hA1
-  set A2 := FloatModel.layerAct (c * kH * kW) w₂ β₂ A1 with hA2
-  set A3 := FloatModel.layerAct (c * h * w) w₃ β₃ A2 with hA3
-  set A4 := FloatModel.layerAct d1 w₄ β₄ A3 with hA4
-  set E1 := FloatModel.layerBudget M.u (ic * kH * kW) w₁ β₁ a 0 with hE1
-  set E2 := FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ A1 E1 with hE2
-  set E3 := FloatModel.layerBudget M.u (c * h * w) w₃ β₃ A2 E2 with hE3
-  set E4 := FloatModel.layerBudget M.u d1 w₄ β₄ A3 E3 with hE4
-  have hA1_0 : 0 ≤ A1 := FloatModel.layerAct_nonneg hw₁ hβ₁ ha
-  have hE1_0 : 0 ≤ E1 := FloatModel.layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
-  have hA2_0 : 0 ≤ A2 := FloatModel.layerAct_nonneg hw₂ hβ₂ hA1_0
-  have hE2_0 : 0 ≤ E2 := FloatModel.layerBudget_nonneg M.u_nonneg hw₂ hβ₂ hA1_0 hE1_0
-  have hA3_0 : 0 ≤ A3 := FloatModel.layerAct_nonneg hw₃ hβ₃ hA2_0
-  have hE3_0 : 0 ≤ E3 := FloatModel.layerBudget_nonneg M.u_nonneg hw₃ hβ₃ hA2_0 hE2_0
-  have hA4_0 : 0 ≤ A4 := FloatModel.layerAct_nonneg hw₄ hβ₄ hA3_0
-  -- real activation magnitude bounds
-  have mA1 : ∀ j, |relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x) j| ≤ A1 :=
-    fun j => (FloatModel.relu_abs_le _ j).trans (flatConv_abs_le ha hW₁ hb₁ hx j)
-  have mA2 : ∀ j, |relu (c * (2*h) * (2*w))
-      (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))) j| ≤ A2 :=
-    fun j => (FloatModel.relu_abs_le _ j).trans
-      (flatConv_abs_le hA1_0 hW₂ hb₂ mA1 j)
-  have mAp : ∀ j, |maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w))
-        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))) j| ≤ A2 :=
-    fun j => maxPoolFlat_abs_le mA2 j
-  have mA3 : ∀ j, |relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w))
-        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))) j| ≤ A3 :=
-    fun j => (FloatModel.relu_abs_le _ j).trans (FloatModel.dense_abs_le hA2_0 hW₃ hb₃ mAp j)
-  have mA4 : ∀ j, |relu d1 (Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃
-      (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (flatConv W₂ b₂
-        (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))))) j| ≤ A4 :=
-    fun j => (FloatModel.relu_abs_le _ j).trans (FloatModel.dense_abs_le hA3_0 hW₄ hb₄ mA3 j)
-  -- float-vs-real error, layer by layer
-  have e1 : ∀ j, |M.flatConvF W₁ b₁ x j - flatConv W₁ b₁ x j| ≤ E1 :=
-    fun j => M.flatConvF_close W₁ b₁ x x hw₁ ha le_rfl hW₁ hb₁ hx
-      (fun i => by simp) j
-  have r1 : ∀ j, |relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x) j -
-      relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x) j| ≤ E1 :=
-    fun j => FloatModel.relu_close _ _ E1 e1 j
-  have e2 : ∀ j, |M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)) j -
-      flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)) j| ≤ E2 :=
-    fun j => M.flatConvF_close W₂ b₂ _ _ hw₂ hA1_0 hE1_0 hW₂ hb₂ mA1 r1 j
-  have r2 : ∀ j, |relu (c * (2*h) * (2*w))
-      (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))) j -
-      relu (c * (2*h) * (2*w))
-      (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))) j| ≤ E2 :=
-    fun j => FloatModel.relu_close _ _ E2 e2 j
-  have ep : ∀ j, |maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w))
-        (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))) j -
-      maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w))
-        (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))) j| ≤ E2 :=
-    fun j => maxPoolFlat_close _ _ r2 j
-  have e3 : ∀ j, |M.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))))) j -
-      Proofs.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))))) j| ≤ E3 :=
-    fun j => (M.dense_close W₃ b₃ _ _ E2 hE2_0 ep j).trans
-      (M.denseErr_le_uniform hw₃ hE2_0 hW₃ hb₃ mAp j)
-  have r3 : ∀ j, |relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))))) j -
-      relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))) j| ≤ E3 :=
-    fun j => FloatModel.relu_close _ _ E3 e3 j
-  have e4 : ∀ j, |M.dense W₄ b₄ (relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x))))))) j -
-      Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x))))))) j| ≤ E4 :=
-    fun j => (M.dense_close W₄ b₄ _ _ E3 hE3_0 r3 j).trans
-      (M.denseErr_le_uniform hw₄ hE3_0 hW₄ hb₄ mA3 j)
-  have r4 : ∀ j, |relu d1 (M.dense W₄ b₄ (relu d1 (M.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (M.flatConvF W₂ b₂ (relu (c * (2*h) * (2*w)) (M.flatConvF W₁ b₁ x)))))))) j -
-      relu d1 (Proofs.dense W₄ b₄ (relu d1 (Proofs.dense W₃ b₃ (maxPoolFlat c h w
-        (relu (c * (2*h) * (2*w))
-          (flatConv W₂ b₂ (relu (c * (2*h) * (2*w)) (flatConv W₁ b₁ x)))))))) j| ≤ E4 :=
-    fun j => FloatModel.relu_close _ _ E4 e4 j
-  -- final dense layer
-  have hE4_0 : 0 ≤ E4 :=
-    FloatModel.layerBudget_nonneg M.u_nonneg hw₄ hβ₄ hA3_0 hE3_0
-  exact (M.dense_close W₅ b₅ _ _ E4 hE4_0 r4 k).trans
-    (M.denseErr_le_uniform hw₅ hE4_0 hW₅ hb₅ mA4 k)
 theorem conv2d_kernel_sub {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) (v e : Vec (oc * ic * kH * kW))
     (o : Fin oc) (hi : Fin h) (wi : Fin w) :
@@ -400,7 +245,6 @@ theorem ce_head3_input_grad {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
 private theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (z₂ : Vec (c * (2*h) * (2*w))) (hz2 : ∀ k, z₂ k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) z₂) : Tensor3 c (2*h) (2*w)))
@@ -415,7 +259,7 @@ private theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
       z₂ := by
   have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w) (relu (c * (2*h) * (2*w)) z₂) := by
     rw [← Tensor3.flatten_unflatten (relu _ z₂)]
-    exact maxPoolFlat_differentiableAt _ hmp hc hh hw
+    exact maxPoolFlat_differentiableAt _ hmp
   fun_prop (disch := assumption)
 
 /-- **Loss input-gradient at the conv output** — the key glue of the conv
@@ -460,9 +304,6 @@ theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
                             (relu (c * (2*h) * (2*w)) z₂))))))) k -
                         oneHot nC label k)))
             else 0) := by
-  have hc : 0 < c := Fin.pos ci
-  have hh : 0 < h := by have := Fin.pos hi; omega
-  have hw : 0 < w := by have := Fin.pos wi; omega
   have hHd := ce_head3_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label
     (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) z₂)) hz3 hz4
   have hpt : Tensor3.flatten (Tensor3.unflatten
@@ -471,7 +312,7 @@ theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
   have hmp_d : DifferentiableAt ℝ (maxPoolFlat c h w)
       (relu (c * (2*h) * (2*w)) z₂) := by
     rw [← hpt]
-    exact maxPoolFlat_differentiableAt _ hmp hc hh hw
+    exact maxPoolFlat_differentiableAt _ hmp
   have hG : DifferentiableAt ℝ
       ((fun u : Vec (c * h * w) => fun _ : Fin 1 => crossEntropy nC
           (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ u)))))
@@ -562,9 +403,9 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
   simp [ite_and, @eq_comm _ o co]
 
 -- ════════════════════════════════════════════════════════════════
--- § Conv gradient-step rounding: the conv weight grad is
---   a spatial correlation (a dot), the bias grad a spatial sum — so both
---   rounded SGD steps reduce to the generic dot/sum step closes.
+-- § Conv gradient windows: the conv weight grad is a spatial
+--   correlation (a dot), the bias grad a spatial sum — the forms the float
+--   dot and sum round.
 -- ════════════════════════════════════════════════════════════════
 
 /-- The padded-input window for a fixed kernel slot, flattened over the
@@ -612,153 +453,6 @@ theorem convBiasGrad_eq_sum {oc h w : Nat} (cot : Tensor3 oc h w) (o : Fin oc) :
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
   rw [cotWin_apply]
 
-/-- **Rounded conv weight update.** The float update
-    `fl(Wₒ,cc,kh,kw − fl(lr·fl(convPadWin · cotWin)))` — the conv weight
-    gradient is a correlation, a dot over the `h·w` spatial positions — is
-    within `sgdErr` of the real step `W − lr·(Σ_{hi,wi} convPad·cot)`, the
-    dot's Higham γ (fan-in `h·w`) as the gradient-error slot. Reuses the
-    generic `dotSgd_step_close`; the cotangent is supplied (the loss-head
-    `exp` accuracy lives in `cotErr`). -/
-theorem FloatModel.cnn_convW_step_float_close {ic oc h w kH kW : Nat}
-    (M : FloatModel) (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
-    (cot : Tensor3 oc h w) {lr G : ℝ} (o : Fin oc) (cc : Fin ic)
-    (kh : Fin kH) (kw : Fin kW)
-    (hG : |∑ s, convPadWin kH kW x cc kh kw s * cotWin cot o s| ≤ G)
-    (hlr : 0 ≤ lr) :
-    |M.sub (W o cc kh kw)
-        (M.mul lr (M.dot (convPadWin kH kW x cc kh kw) (cotWin cot o))) -
-      (W o cc kh kw - lr * ∑ s,
-        convPadWin kH kW x cc kh kw s * cotWin cot o s)| ≤
-      sgdErr M.u lr |W o cc kh kw| G
-        (((1 + M.u) ^ (h * w + 1) - 1) *
-          ∑ s, |convPadWin kH kW x cc kh kw s * cotWin cot o s|) :=
-  M.dotSgd_step_close (W o cc kh kw) (convPadWin kH kW x cc kh kw)
-    (cotWin cot o) hG hlr
-
-/-- **Rounded conv bias update** — the bias gradient is the spatial
-    sum `Σ cot`, so the rounded update reduces to `sumSgd_step_close`. -/
-theorem FloatModel.cnn_convb_step_float_close {oc h w : Nat} (M : FloatModel)
-    (b : Vec oc) (cot : Tensor3 oc h w) {lr G : ℝ} (o : Fin oc)
-    (hG : |∑ s, cotWin cot o s| ≤ G) (hlr : 0 ≤ lr) :
-    |M.sub (b o) (M.mul lr (M.sum (cotWin cot o))) -
-      (b o - lr * ∑ s, cotWin cot o s)| ≤
-      sgdErr M.u lr |b o| G
-        (((1 + M.u) ^ (h * w + 1) - 1) * ∑ s, |cotWin cot o s|) :=
-  M.sumSgd_step_close (b o) (cotWin cot o) hG hlr
-
-/-- **Numeric conv-weight-step capstone at the committed MNIST-CNN dims (Item
-    C).** The Chapter-3 conv2 is `32→32`, `3×3`, at `28×28` (the conv output
-    grid, before maxpool), so the weight gradient is a dot over `28·28 = 784`
-    spatial positions. At binary32 (`u ≤ 2⁻²⁴`), `lr = 1/10`, kernel `|W| ≤ 3/5`
-    (the trained-magnitude bound, matching the MLP capstone), every rounded
-    conv2 weight SGD entry is within **`(a·g)/250 + 10⁻⁷`** of the certified
-    real step — where `a` bounds the conv2-input activation and `g` the conv2
-    cotangent magnitude.
-
-    Both `a` and `g` are **a-posteriori / measured** quantities (the conv input
-    and back-propagated cotangent are not intrinsically `≤ 1`, unlike the
-    softmax−onehot loss head), supplied as hypotheses — the same worst-case→
-    measured hand-off as the forward `δ`. The decimal rate `1/250 ≈ 0.4%` is
-    dominated by `lr·γ₇₈₅` (the gradient's Higham error at learning-rate scale):
-    the conv weight step is as accurate as the gradient itself, no worse. -/
-theorem FloatModel.mnist_cnn_convW_step_float_budget (M : FloatModel)
-    (hMu : M.u ≤ u32) (W : Kernel4 32 32 3 3) (act : Tensor3 32 28 28)
-    (cot : Tensor3 32 28 28) {a g : ℝ} (ha : 0 ≤ a) (hg : 0 ≤ g)
-    (hW : ∀ o cc kh kw, |W o cc kh kw| ≤ 3/5)
-    (hact : ∀ c i j, |act c i j| ≤ a) (hcot : ∀ o i j, |cot o i j| ≤ g)
-    (o cc : Fin 32) (kh kw : Fin 3) :
-    |M.sub (W o cc kh kw)
-        (M.mul (1/10) (M.dot (convPadWin 3 3 act cc kh kw) (cotWin cot o))) -
-      (W o cc kh kw - (1/10) * ∑ s,
-        convPadWin 3 3 act cc kh kw s * cotWin cot o s)| ≤
-      (a * g) / 250 + 1/10000000 := by
-  have hu := M.u_nonneg
-  -- per-term and summed magnitude of the conv weight gradient
-  have hterm : ∀ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤ a * g := by
-    intro s
-    rw [abs_mul]
-    refine mul_le_mul ?_ ?_ (abs_nonneg _) ha
-    · simp only [convPadWin]; exact abs_convPad_le act ha hact _ _ _ _ _
-    · simp only [cotWin]; exact hcot _ _ _
-  have hsum : ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤
-      784 * (a * g) :=
-    (Finset.sum_le_card_nsmul _ _ _ fun s _ => hterm s).trans_eq (by norm_num)
-  have hG : |∑ s, convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤ 784 * (a * g) :=
-    (Finset.abs_sum_le_sum_abs _ _).trans hsum
-  -- the conv weight step budget, with G := 784·a·g
-  have hstep := M.cnn_convW_step_float_close W act cot o cc kh kw hG
-    (by norm_num : (0:ℝ) ≤ 1/10)
-  refine hstep.trans ?_
-  -- eg ≤ (47/10⁶)·784·a·g  (γ₇₈₅ × the summed gradient mass)
-  have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
-    M.gamma_num hMu (by norm_num [u32]) (by norm_num [u32])
-  have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hsum0 : 0 ≤ ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| :=
-    Finset.sum_nonneg fun s _ => abs_nonneg _
-  have heg : ((1 + M.u) ^ (28 * 28 + 1) - 1) *
-      ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| ≤
-      (47/1000000) * (784 * (a * g)) :=
-    mul_le_mul hhigham hsum hsum0 (by norm_num)
-  have hag0 : (0:ℝ) ≤ a * g := mul_nonneg ha hg
-  have h1 : u32 ≤ 1/16000000 := by norm_num [u32]
-  -- push u → the LITERAL 1/16000000, |W| → 3/5, eg → its rational bound (G fixed),
-  -- so the closing goal is linear in a·g with constant coefficients
-  refine (sgdErr_mono hu (hMu.trans h1) (by norm_num) (abs_nonneg _)
-    (hW o cc kh kw) (mul_nonneg (by norm_num) hag0)
-    (mul_nonneg hhigham0 hsum0) heg).trans ?_
-  set s := a * g with hs
-  have hs0 : (0:ℝ) ≤ s := hag0
-  unfold FloatModel.sgdErr
-  linarith [hs0]
-
-/-- **Numeric conv-BIAS-step capstone at the committed MNIST-CNN dims** — the
-    bias peer of `mnist_cnn_convW_step_float_budget`. The conv2 bias gradient is
-    the spatial SUM `∑ₛ cotWin cot o` over the `28·28 = 784` conv-output
-    positions (no input window, so no `a` factor — the bias Jacobian is the bare
-    channel indicator). At binary32 (`u ≤ 2⁻²⁴`), `lr = 1/10`, `|b| ≤ 3/5`, every
-    rounded conv2 bias SGD entry is within **`g/250 + 10⁻⁷`** of the certified
-    real step — where `g` bounds the conv2 cotangent magnitude. The same `1/250`
-    rate as the weight step (it is `lr·γ₇₈₅`, the gradient's Higham error at
-    learning-rate scale), with `a·g ↦ g` — the bias step is as accurate as the
-    gradient, no worse. -/
-theorem FloatModel.mnist_cnn_convb_step_float_budget (M : FloatModel)
-    (hMu : M.u ≤ u32) (b : Vec 32) (cot : Tensor3 32 28 28)
-    {g : ℝ} (hg : 0 ≤ g)
-    (hb : ∀ o, |b o| ≤ 3/5) (hcot : ∀ o i j, |cot o i j| ≤ g)
-    (o : Fin 32) :
-    |M.sub (b o) (M.mul (1/10) (M.sum (cotWin cot o))) -
-      (b o - (1/10) * ∑ s, cotWin cot o s)| ≤
-      g / 250 + 1/10000000 := by
-  have hu := M.u_nonneg
-  -- per-term and summed magnitude of the conv bias gradient
-  have hterm : ∀ s, |cotWin cot o s| ≤ g := by
-    intro s; simp only [cotWin]; exact hcot _ _ _
-  have hsum : ∑ s, |cotWin cot o s| ≤ 784 * g :=
-    (Finset.sum_le_card_nsmul _ _ _ fun s _ => hterm s).trans_eq (by norm_num)
-  have hG : |∑ s, cotWin cot o s| ≤ 784 * g :=
-    (Finset.abs_sum_le_sum_abs _ _).trans hsum
-  -- the conv bias step budget, with G := 784·g
-  have hstep := M.cnn_convb_step_float_close b cot o hG (by norm_num : (0:ℝ) ≤ 1/10)
-  refine hstep.trans ?_
-  -- eg ≤ (47/10⁶)·784·g  (γ₇₈₅ × the summed gradient mass)
-  have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
-    M.gamma_num hMu (by norm_num [u32]) (by norm_num [u32])
-  have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
-    sub_nonneg.mpr (one_le_pow₀ (by linarith))
-  have hsum0 : 0 ≤ ∑ s, |cotWin cot o s| :=
-    Finset.sum_nonneg fun s _ => abs_nonneg _
-  have heg : ((1 + M.u) ^ (28 * 28 + 1) - 1) * ∑ s, |cotWin cot o s| ≤
-      (47/1000000) * (784 * g) :=
-    mul_le_mul hhigham hsum hsum0 (by norm_num)
-  have h1 : u32 ≤ 1/16000000 := by norm_num [u32]
-  -- push u → the LITERAL 1/16000000, |b| → 3/5, eg → its rational bound (G fixed)
-  refine (sgdErr_mono hu (hMu.trans h1) (by norm_num) (abs_nonneg _)
-    (hb o) (mul_nonneg (by norm_num) hg)
-    (mul_nonneg hhigham0 hsum0) heg).trans ?_
-  unfold FloatModel.sgdErr
-  linarith [hg]
-
 -- ════════════════════════════════════════════════════════════════
 -- § The conv2 loss-of-kernel map: differentiability and gradient
 -- ════════════════════════════════════════════════════════════════
@@ -770,7 +464,6 @@ theorem cnn_conv2_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (v : Vec (c * c * kH * kW))
     (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -787,7 +480,7 @@ theorem cnn_conv2_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
           label) v := by
-  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _
+  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label _
     hz2 hmp hz3 hz4) 0).comp (f := fun v' : Vec (c * c * kH * kW) =>
       Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)) v ((conv2d_weight_differentiable b₂ x₁) v)
 
@@ -815,7 +508,6 @@ theorem cnn_conv2_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
     (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     (v : Vec (c * c * kH * kW))
     (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -860,7 +552,7 @@ theorem cnn_conv2_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
     (fun y => crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
       (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label) v
     (conv2d_weight_differentiable b₂ x₁ v)
-    (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label (Fin.pos o) hh hw _
+    (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label _
       hz2 hmp hz3 hz4) _).trans
     (Finset.sum_congr rfl fun ci _ => Finset.sum_congr rfl fun hi _ =>
       Finset.sum_congr rfl fun wi _ => ?_)
@@ -923,7 +615,6 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     (v : Vec (c * c * kH * kW))
     (hz2 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten v) b₂ x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -965,7 +656,7 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
                                     b₂ x₁))))))))) k - oneHot nC label k)))))
                   (t3Idx ci (winRow hi) (winCol wi))
                 else 0)) o s := by
-  rw [cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw v hz2 hmp hz3
+  rw [cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label v hz2 hmp hz3
       hz4 o cc kh kw]
   -- restate the head into dense/reluMask form (head-local lemma — does not
   -- touch the spatial `∑ convPad·cot` sum), then package as the spatial dot
@@ -985,7 +676,7 @@ theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     `𝟙[z₂>0]` in the conv-2 grad-close sits on a scalar cell (not a `Vec`), so
     it needs this rather than the vector `reluMask_close`. -/
 theorem mask_scalar_close {zt z xt x ez ex : ℝ}
-    (hz : |zt - z| ≤ ez) (hm : ez < |z|) (hx : |xt - x| ≤ ex) (_hex : 0 ≤ ex) :
+    (hz : |zt - z| ≤ ez) (hm : ez < |z|) (hx : |xt - x| ≤ ex) :
     |(if zt > 0 then (1:ℝ) else 0) * xt -
       (if z > 0 then (1:ℝ) else 0) * x| ≤ ex := by
   rw [if_congr (sign_stable_of_close hz hm).2 rfl rfl, ← mul_sub, abs_mul]
@@ -1301,12 +992,9 @@ theorem cnn_conv2_cot_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
   have E4nn : 0 ≤ E4 := layerBudget_nonneg M.u_nonneg hw₄ hβ₄ A3nn E3nn
   have DLnn : 0 ≤ DL := layerBudget_nonneg M.u_nonneg hw₅ hβ₅ A4nn E4nn
   have C4nn : 0 ≤ C4 := layerAct_nonneg hw₅ le_rfl zero_le_one
-  have C3nn : 0 ≤ C3 := layerAct_nonneg hw₄ le_rfl C4nn
   have ecHnn : 0 ≤ ecH := M.cotErr_nonneg heexp0 DLnn hρ1
   have ec4nn : 0 ≤ ec4 := layerBudget_nonneg M.u_nonneg hw₅ le_rfl zero_le_one ecHnn
   have ec3nn : 0 ≤ ec3 := layerBudget_nonneg M.u_nonneg hw₄ le_rfl C4nn ec4nn
-  have ecvnn : 0 ≤ FloatModel.layerBudget M.u d₃ w₃ 0 C3 ec3 :=
-    layerBudget_nonneg M.u_nonneg hw₃ le_rfl C3nn ec3nn
   -- forward magnitudes (real)
   have hMconv : ∀ k, |Z2C k| ≤ A2 := by
     intro k; obtain ⟨ci, hi, wi, rfl⟩ := t3Idx_surj k
@@ -1397,7 +1085,7 @@ theorem cnn_conv2_cot_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
   have hpb := hmarginPool.poolBack_close hPostRelu co ho wo
     (hcPool (t3Idx co (winRow ho) (winCol wo)))
   exact mask_scalar_close (hEconv (t3Idx co ho wo)) (hmarginConv (t3Idx co ho wo))
-    hpb ecvnn
+    hpb
 
 open FloatModel in
 /-- **The real conv-2-output cotangent is magnitude-bounded** by `cnnConv2CotMag`
@@ -1494,7 +1182,6 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     (v : Vec (c * c * kH * kW))
     {a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
     (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅)
     (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -1548,7 +1235,7 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
       hw₃ hw₄ hw₅ hW₃ hW₄ hW₅ co ho wo
   -- assemble: rewrite to the dot form (apply + bridge), then the dot composite
   rw [M.cnnConv2FloatGrad_apply b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label v o cc kh kw,
-    cnn_conv2_loss_gradAt_reluMask b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw v
+    cnn_conv2_loss_gradAt_reluMask b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label v
       (fun k => abs_pos.mp (lt_of_le_of_lt Ecnn (hmarginConv k)))
       (hmarginPool.smooth Ecnn)
       (fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
@@ -2255,7 +1942,6 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     {a w₃ w₄ w₅ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
@@ -2299,7 +1985,7 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     (conv2d_flat_kernel_drift_total b₂ x₁ ha hx) (conv2d_flat_kernel_drift_sum b₂ x₁ ha hx) hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
     (fun ci hi wi => if ci = o then convPad kH kW x₁ cc kh kw hi wi else 0)
     (convPad_row_l1 x₁ ha hx o cc kh kw) _ (fun _ => True)
-    (fun v' _ hz2 hmp hz3 hz4 => cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+    (fun v' _ hz2 hmp hz3 hz4 => cnn_conv2_loss_gradAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
       v' hz2 hmp hz3 hz4 o cc kh kw)
     v d hd hm2 hmq hm3 hm4 hsmall t ht trivial trivial
 
@@ -2335,7 +2021,6 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (gh : Vec (c * c * kH * kW))
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     {lr η a w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
@@ -2441,7 +2126,7 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Kernel4.flatten W₂) gh hlr hη hC0 hgh
     (fun t ht => cnn_conv2_loss_differentiableAt b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
-      label hc hh hw _
+      label _
       (fun k => (cnn_margin2_keeps_offkink b₂ x₁ ha hx
         (Kernel4.flatten W₂) (-(lr • gh)) hD hm2' t ht.1 ht.2 k).1)
       (hmq'.smooth_of_close (fun ci hi wi => cnn_postrelu_close_seg b₂ x₁
@@ -2452,7 +2137,7 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
         hw₄ hW₄ (Kernel4.flatten W₂) (-(lr • gh)) hD hm4' t ht.1 ht.2 q).1))
     (fun t ht idx => by
       have h := cnn_conv2_loss_grad_lipschitz b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
-        label hh hw ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ (Kernel4.flatten W₂)
+        label ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ (Kernel4.flatten W₂)
         (-(lr • gh)) hD hm2' hmq' hm3' hm4' hsmall t ht idx
       exact h)
     h1 h2
@@ -2477,7 +2162,6 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     {lr a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
     (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr)
     (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -2575,7 +2259,7 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
     intro idx
     obtain ⟨o', c', kh', kw', rfl⟩ := k4Idx_surj idx
     exact cnn_conv2_grad_close M b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label fexp
-      (Kernel4.flatten W₂) hh hw ha hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅
+      (Kernel4.flatten W₂) ha hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅
       heexp0 heexp1 hfexp hρ1 hx hv2 hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅
       (fun k => by rw [Kernel4.unflatten_flatten]; exact hmarginConv k)
       (by rw [Kernel4.unflatten_flatten]; exact hmarginPool)
@@ -2584,7 +2268,7 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
       o' c' kh' kw'
   exact cnn_conv2_sgd_descends W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
     (M.cnnConv2FloatGrad b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label (Kernel4.flatten W₂))
-    hc hh hw ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
+    ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv as a function of its INPUT: the tap Jacobian and its masses
@@ -3417,7 +3101,6 @@ private theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (z₁ : Vec (c * (2*h) * (2*w))) (hz1 : ∀ k, z₁ k ≠ 0)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) z₁))) k ≠ 0)
@@ -3436,7 +3119,7 @@ private theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
           (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
               (relu (c * (2*h) * (2*w)) y))))))))))) label) z₁ := by
-  exact (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _ hz2 hmp hz3 hz4).comp
+  exact (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label _ hz2 hmp hz3 hz4).comp
     (f := fun y : Vec (c * (2*h) * (2*w)) => Tensor3.flatten (conv2d W₂ b₂
       (Tensor3.unflatten (relu (c * (2*h) * (2*w)) y)))) z₁ (by fun_prop (disch := assumption))
 
@@ -3500,10 +3183,7 @@ theorem cnn1_pool_head_input_grad {c h w d₃ d₄ nC kH kW : Nat}
                                         z₁))))))))))) k -
                               oneHot nC label k)))
                   else 0)) := by
-  have hc : 0 < c := Fin.pos ci
-  have hh : 0 < h := by have := Fin.pos hi; omega
-  have hw : 0 < w := by have := Fin.pos wi; omega
-  have hG2 := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw
+  have hG2 := pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label
     (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) z₁)))) hz2 hmp hz3 hz4
   have hflat : DifferentiableAt ℝ
@@ -3587,7 +3267,7 @@ theorem cnn_conv1_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
     (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW)
     (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     (u : Vec (c * ic * kH * kW))
     (hz1 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀)
       k ≠ 0)
@@ -3616,7 +3296,7 @@ theorem cnn_conv1_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
                 (conv2d (Kernel4.unflatten u') b₁ x₀)))))))))))))
           label) u := by
   exact (differentiableAt_pi.mp (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
-    hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun u' : Vec (c * ic * kH * kW) =>
+    _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun u' : Vec (c * ic * kH * kW) =>
       Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) u ((conv2d_weight_differentiable b₁ x₀) u)
 
 /-- **Closed form of the conv1 loss gradient** at any five-margin point —
@@ -3629,7 +3309,7 @@ theorem cnn_conv1_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
     (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW)
     (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     (u : Vec (c * ic * kH * kW))
     (hz1 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀)
       k ≠ 0)
@@ -3711,7 +3391,7 @@ theorem cnn_conv1_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
       (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
         (Tensor3.unflatten (relu (c * (2*h) * (2*w)) y))))))))))) label) u
     (conv2d_weight_differentiable b₁ x₀ u)
-    (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label (Fin.pos o) hh hw _
+    (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label _
       hz1 hz2 hmp hz3 hz4) _).trans
     (Finset.sum_congr rfl fun ci _ => Finset.sum_congr rfl fun hi _ =>
       Finset.sum_congr rfl fun wi _ => ?_)
@@ -3732,7 +3412,7 @@ theorem cnn_conv1_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
     (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW)
     (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     (u : Vec (c * ic * kH * kW))
     (hz1 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀) k ≠ 0)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -3803,7 +3483,7 @@ theorem cnn_conv1_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
                                   oneHot nC label k)))))
                         (t3Idx co (winRow ho) (winCol wo))
                       else 0))) o s := by
-  rw [cnn_conv1_loss_gradAt b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw u
+  rw [cnn_conv1_loss_gradAt b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label u
       hz1 hz2 hmp hz3 hz4 o cc kh kw]
   simp_rw [head3_cot_reluMask]
   rw [convWeightGrad_eq_dot x₀ _ o cc kh kw]
@@ -4041,7 +3721,6 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
     (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     (u : Vec (c * ic * kH * kW))
     {a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
     (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
     (hβ₅ : 0 ≤ β₅) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -4100,7 +3779,6 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
           label) u (k4Idx o cc kh kw)|
       ≤ M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp := by
-  have hc : 0 < c := Fin.pos o
   have hu2' : ∀ o' c' kh' kw', |Kernel4.unflatten u o' c' kh' kw'| ≤ w₁ :=
     fun o' c' kh' kw' => by rw [unflatten_k4Idx]; exact hu1 _
   -- off-kink + smooth conditions from the quantitative margins
@@ -4135,7 +3813,7 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
           (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)))) (hmargin4 q))
   rw [M.cnnConv1FloatGrad_apply b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label u
       o cc kh kw,
-    cnn_conv1_loss_gradAt_reluMask b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw u
+    cnn_conv1_loss_gradAt_reluMask b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label u
       hz1 hz2 hmp hz3 hz4 o cc kh kw]
   -- abbreviate the conv-1 forward and the conv-2 input
   set Z1C := Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀) with hZ1C
@@ -4153,16 +3831,6 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
       (((c * (2*h) * (2*w) : ℕ) : ℝ) * (w₂ * e2)) with heback
   have hA1nn : 0 ≤ A1 := layerAct_nonneg hw₁ hβ₁ ha
   have hE1nn : 0 ≤ E1 := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
-  have hCPnn : 0 ≤ CP := FloatModel.cnnConv2CotMag_nonneg hw₃ hw₄ hw₅
-  have he2nn : 0 ≤ e2 := M.cnnConv2CotBudget_nonneg hA1nn hE1nn hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄
-    hw₅ hβ₅ heexp0 hρ1
-  have hebacknn : 0 ≤ eback := by
-    rw [heback]
-    have hγ : (0:ℝ) ≤ (1 + M.u) ^ ((c * (2*h) * (2*w)) + 1) - 1 :=
-      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
-    have hn : (0:ℝ) ≤ ((c * (2*h) * (2*w) : ℕ) : ℝ) := Nat.cast_nonneg _
-    exact add_nonneg (mul_nonneg hγ (mul_nonneg hn (mul_nonneg hw₂
-      (add_nonneg hCPnn he2nn)))) (mul_nonneg hn (mul_nonneg hw₂ he2nn))
   -- conv-1 forward closeness, conv-2 input closeness + magnitude
   have hZ1close : ∀ k, |Z1CF k - Z1C k| ≤ E1 := by
     intro k; obtain ⟨ci, hi, wi, rfl⟩ := t3Idx_surj k
@@ -4202,7 +3870,7 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
     (fun s => by
       simp only [cotWin]
       exact mask_scalar_close (hZ1close _) (hmargin1 _)
-        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _) hebacknn)
+        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § Segment-Lipschitz gradient for the conv1 loss, explicit constant
@@ -4220,7 +3888,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW)
     (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     {a w₂ w₃ w₄ w₅ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
@@ -4283,7 +3951,7 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     (fun ci hi wi => if ci = o then convPad kH kW x₀ cc kh kw hi wi else 0)
     (convPad_row_l1 x₀ ha hx o cc kh kw) _
     (fun u' hz1 hz2 hmp hz3 hz4 => cnn_conv1_loss_gradAt b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-      label hh hw u' hz1 hz2 hmp hz3 hz4 o cc kh kw)
+      label u' hz1 hz2 hmp hz3 hz4 o cc kh kw)
     u d hd hm1 hm2 hmq hm3 hm4 hsmall t ht
 -- ════════════════════════════════════════════════════════════════
 -- § The conv1 capstone: one inexact SGD step provably descends
@@ -4316,7 +3984,6 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (gh : Vec (c * ic * kH * kW))
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     {lr η a w₂ w₃ w₄ w₅ : ℝ} (ha : 0 ≤ a)
     (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
@@ -4418,7 +4085,7 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f (Kernel4.flatten W₁) gh hlr hη hC0 hgh
     (fun t ht => cnn_conv1_loss_differentiableAt b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄
-      W₅ b₅ label hc hh hw _
+      W₅ b₅ label _
       (fun k => (cnn1_margin1_keeps_offkink b₁ x₀ ha hx
         (Kernel4.flatten W₁) (-(lr • gh)) hD hm1' t ht.1 ht.2 k).1)
       (fun k => (cnn1_margin2_keeps_offkink b₁ x₀ W₂ b₂ ha hx hw₂ hW₂
@@ -4434,7 +4101,7 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
         hD hm4' t ht.1 ht.2 q).1))
     (fun t ht idx => by
       have hlip := cnn_conv1_loss_grad_lipschitz b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄
-        W₅ b₅ label hh hw ha hx hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
+        W₅ b₅ label ha hx hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
         (Kernel4.flatten W₁) (-(lr • gh)) hD hm1' hm2' hmq' hm3' hm4'
         hsmall t ht idx
       exact hlip)
@@ -4460,7 +4127,6 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     {lr a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
     (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
     (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -4600,7 +4266,7 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     intro idx
     obtain ⟨o', c', kh', kw', rfl⟩ := k4Idx_surj idx
     exact cnn_conv1_grad_close M b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label fexp
-      (Kernel4.flatten W₁) hh hw ha hw₁ hβ₁ hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅
+      (Kernel4.flatten W₁) ha hw₁ hβ₁ hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅
       heexp0 heexp1 hfexp hρ1 hx₀ huf hb₁ hW₂ hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅
       (fun k => by rw [Kernel4.unflatten_flatten]; exact hr1 k)
       (fun k => by rw [Kernel4.unflatten_flatten]; exact hr2 k)
@@ -4611,7 +4277,7 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
   exact cnn_conv1_sgd_descends W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
     (M.cnnConv1FloatGrad b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label
       (Kernel4.flatten W₁))
-    hc hh hw ha hx₀ hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm1 hm2 hmq hm3
+    ha hx₀ hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm1 hm2 hmq hm3
     hm4 hsmall h1 h2
 
 -- ════════════════════════════════════════════════════════════════
@@ -4784,7 +4450,6 @@ theorem cnn_conv2_bias_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (b : Vec c)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -4799,7 +4464,7 @@ theorem cnn_conv2_bias_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
         crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
           (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
             (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b := by
-  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label hc hh hw _
+  exact (differentiableAt_pi.mp (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label _
     hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
       Tensor3.flatten (conv2d W₂ b' x₁)) b ((conv2d_bias_differentiable W₂ x₁) b)
 
@@ -4811,7 +4476,6 @@ theorem cnn_conv2_bias_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     (b : Vec c)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -4854,7 +4518,7 @@ theorem cnn_conv2_bias_loss_gradAt {c h w d₃ d₄ nC kH kW : Nat}
     (fun y => crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
       (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) y))))))) label) b
     (conv2d_bias_differentiable W₂ x₁ b)
-    (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label (Fin.pos o) hh hw _
+    (pool_head_differentiableAt W₃ b₃ W₄ b₄ W₅ b₅ label _
       hz2 hmp hz3 hz4) _).trans
     (Finset.sum_congr rfl fun ci _ => Finset.sum_congr rfl fun hi _ =>
       Finset.sum_congr rfl fun wi _ => ?_)
@@ -4874,7 +4538,6 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     {w₃ w₄ w₅ D : ℝ}
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
@@ -4911,7 +4574,7 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
   have h := Conv2Slot.loss_grad_lipschitz (ρ := 1) (fun b' => Tensor3.flatten (conv2d W₂ b' x₁)) W₃ b₃ W₄ b₄ W₅ b₅ label zero_le_one
     (fun v e k => by simpa only [one_mul] using conv2d_flat_bias_drift_total W₂ x₁ v e k) (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₂ x₁ v e) hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
     (fun ci _ _ => if ci = o then (1:ℝ) else 0) (biasRow_l1 o) o (fun _ => True)
-    (fun b' _ hz2 hmp hz3 hz4 => cnn_conv2_bias_loss_gradAt W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+    (fun b' _ hz2 hmp hz3 hz4 => cnn_conv2_bias_loss_gradAt W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
       b' hz2 hmp hz3 hz4 o)
     b d hd (by simpa only [one_mul] using hm2) (by rwa [one_mul])
     (by simpa only [one_mul] using hm3) (by simpa only [one_mul] using hm4)
@@ -4943,7 +4606,6 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (gh : Vec c)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     {lr η w₃ w₄ w₅ : ℝ}
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
@@ -5008,7 +4670,7 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f b₂ gh hlr hη hC0 hgh
     (fun t ht => cnn_conv2_bias_loss_differentiableAt W₂ x₁ W₃ b₃ W₄ b₄
-      W₅ b₅ label hc hh hw _
+      W₅ b₅ label _
       (fun k => (cnnb2_margin2_keeps_offkink W₂ x₁
         b₂ (-(lr • gh)) hD hm2 t ht.1 ht.2 k).1)
       (hmq.smooth_of_close (fun ci hi wi => cnnb2_postrelu_close_seg W₂ x₁
@@ -5019,7 +4681,7 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
         hw₄ hW₄ b₂ (-(lr • gh)) hD hm4 t ht.1 ht.2 q).1))
     (fun t ht o => by
       have h := cnn_conv2_bias_loss_grad_lipschitz W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
-        label hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₂
+        label hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₂
         (-(lr • gh)) hD hm2 hmq hm3 hm4 hsmall t ht o
       exact h)
     h1 h2
@@ -5175,7 +4837,7 @@ theorem cnn_conv1_bias_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     (b : Vec c)
     (hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b x₀) k ≠ 0)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -5203,7 +4865,7 @@ theorem cnn_conv1_bias_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
                 (conv2d W₁ b' x₀)))))))))))))
           label) b := by
   exact (differentiableAt_pi.mp (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
-    hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
+    _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
       Tensor3.flatten (conv2d W₁ b' x₀)) b ((conv2d_bias_differentiable W₁ x₀) b)
 
 /-- **Closed form of the conv1 bias loss gradient** at any five-margin
@@ -5216,7 +4878,7 @@ theorem cnn_conv1_bias_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     (b : Vec c)
     (hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b x₀) k ≠ 0)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -5297,7 +4959,7 @@ theorem cnn_conv1_bias_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
       (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
         (Tensor3.unflatten (relu (c * (2*h) * (2*w)) y))))))))))) label) b
     (conv2d_bias_differentiable W₁ x₀ b)
-    (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label (Fin.pos o) hh hw _
+    (cnn1_pool_head_differentiableAt W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label _
       hz1 hz2 hmp hz3 hz4) _).trans
     (Finset.sum_congr rfl fun ci _ => Finset.sum_congr rfl fun hi _ =>
       Finset.sum_congr rfl fun wi _ => ?_)
@@ -5318,7 +4980,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
-    (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (label : Fin nC)
     {w₂ w₃ w₄ w₅ D : ℝ}
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
@@ -5378,7 +5040,7 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
     (fun v e => by simpa only [one_mul] using conv2d_flat_bias_drift_sum W₁ x₀ v e)
     hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ (fun ci _ _ => if ci = o then (1:ℝ) else 0) (biasRow_l1 o) o
     (fun b' hz1 hz2 hmp hz3 hz4 => cnn_conv1_bias_loss_gradAt W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-      label hh hw b' hz1 hz2 hmp hz3 hz4 o)
+      label b' hz1 hz2 hmp hz3 hz4 o)
     b d hd (by simpa only [one_mul] using hm1) (by simpa only [one_mul] using hm2)
     (by rwa [one_mul]) (by simpa only [one_mul] using hm3)
     (by simpa only [one_mul] using hm4) (by simpa only [one_mul] using hsmall) t ht
@@ -5416,7 +5078,6 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (gh : Vec c)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     {lr η w₂ w₃ w₄ w₅ : ℝ}
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
     (hw₃ : 0 ≤ w₃) (hW₃ : ∀ i j, |W₃ i j| ≤ w₃)
@@ -5477,7 +5138,7 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     sgd_step_l1_le _ gh hlr hgh
   have hmain := sgd_descends f b₁ gh hlr hη hC0 hgh
     (fun t ht => cnn_conv1_bias_loss_differentiableAt W₁ x₀ W₂ b₂ W₃ b₃
-      W₄ b₄ W₅ b₅ label hc hh hw _
+      W₄ b₄ W₅ b₅ label _
       (fun k => (cnnb1_margin1_keeps_offkink W₁ x₀
         b₁ (-(lr • gh)) hD hm1 t ht.1 ht.2 k).1)
       (fun k => (cnnb1_margin2_keeps_offkink W₁ x₀ W₂ b₂ hw₂ hW₂
@@ -5490,7 +5151,7 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
         hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ b₁ (-(lr • gh)) hD hm4 t ht.1 ht.2 q).1))
     (fun t ht o => by
       have hlip := cnn_conv1_bias_loss_grad_lipschitz W₁ x₀ W₂ b₂ W₃ b₃
-        W₄ b₄ W₅ b₅ label hh hw hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₁
+        W₄ b₄ W₅ b₅ label hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₁
         (-(lr • gh)) hD hm1 hm2 hmq hm3 hm4 hsmall t ht o
       exact hlip)
     h1 h2
@@ -5576,7 +5237,6 @@ theorem cnn_conv2_bias_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
-    (hh : 0 < h) (hw : 0 < w)
     (b : Vec c)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b x₁) k ≠ 0)
     (hmp : MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
@@ -5611,7 +5271,7 @@ theorem cnn_conv2_bias_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
                                 (conv2d W₂ b x₁))))))))) k - oneHot nC label k)))))
                 (t3Idx ci (winRow hi) (winCol wi))
               else 0)) o s := by
-  rw [cnn_conv2_bias_loss_gradAt W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw b hz2 hmp hz3
+  rw [cnn_conv2_bias_loss_gradAt W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label b hz2 hmp hz3
       hz4 o]
   simp_rw [head3_cot_reluMask]
   rw [convBiasGrad_eq_sum _ o]
@@ -5648,7 +5308,6 @@ theorem cnn_conv2_bias_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatMod
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     {a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
     (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅)
     (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -5715,7 +5374,7 @@ theorem cnn_conv2_bias_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatMod
     abs_le_of_close (hc2close co ho wo) (hc2realmag co ho wo)
   -- assemble: unfold the float grad, rewrite gradAt to the sum (bridge), apply
   simp only [FloatModel.cnnConv2BiasFloatGrad]
-  rw [cnn_conv2_bias_loss_gradAt_reluMask W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+  rw [cnn_conv2_bias_loss_gradAt_reluMask W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
       b₂ hz2 hmp hz3 hz4 o]
   simp only [FloatModel.cnnConv2BiasGradBudget]
   refine M.sum_perturbed_close _ _
@@ -5738,7 +5397,6 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     {lr a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃)
     (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr)
     (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -5828,11 +5486,11 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
             (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o| ≤
       M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp :=
     fun o => cnn_conv2_bias_grad_close M W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label fexp
-      hh hw ha hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1 hx hW₂ hb₂
+      ha hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1 hx hW₂ hb₂
       hW₃ hb₃ hW₄ hb₄ hW₅ hb₅ hmarginConv hmarginPool hmargin3 hmargin4 o
   exact cnn_conv2_bias_sgd_descends W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label
     (M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
-    hc hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
+    hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
 /-- **The binary32 conv-1 bias gradient (FloatModel transcription of the
     per-example gradient)** — the bias peer of `cnnConv1FloatGrad`: at output channel `o` it is
@@ -5894,7 +5552,7 @@ theorem cnn_conv1_bias_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
-    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (hh : 0 < h) (hw : 0 < w)
+    (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (b : Vec c)
     (hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b x₀) k ≠ 0)
     (hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
@@ -5962,7 +5620,7 @@ theorem cnn_conv1_bias_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
                                   oneHot nC label k)))))
                         (t3Idx co (winRow ho) (winCol wo))
                       else 0))) o s := by
-  rw [cnn_conv1_bias_loss_gradAt W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw b
+  rw [cnn_conv1_bias_loss_gradAt W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label b
       hz1 hz2 hmp hz3 hz4 o]
   simp_rw [head3_cot_reluMask]
   rw [convBiasGrad_eq_sum _ o]
@@ -6006,7 +5664,6 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (fexp : ℝ → ℝ)
     {a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hh : 0 < h) (hw : 0 < w)
     (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
     (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
     (hβ₅ : 0 ≤ β₅) (heexp0 : 0 ≤ eexp) (heexp1 : eexp ≤ 1)
@@ -6092,7 +5749,7 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
         (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
           (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)))) (hmargin4 q))
   simp only [FloatModel.cnnConv1BiasFloatGrad]
-  rw [cnn_conv1_bias_loss_gradAt_reluMask W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label hh hw
+  rw [cnn_conv1_bias_loss_gradAt_reluMask W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
       b₁ hz1 hz2 hmp hz3 hz4 o]
   set Z1C := Tensor3.flatten (conv2d W₁ b₁ x₀) with hZ1C
   set Z1CF := Tensor3.flatten (M.convF W₁ b₁ x₀) with hZ1CF
@@ -6108,16 +5765,6 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
       (((c * (2*h) * (2*w) : ℕ) : ℝ) * (w₂ * e2)) with heback
   have hA1nn : 0 ≤ A1 := layerAct_nonneg hw₁ hβ₁ ha
   have hE1nn : 0 ≤ E1 := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl
-  have hCPnn : 0 ≤ CP := FloatModel.cnnConv2CotMag_nonneg hw₃ hw₄ hw₅
-  have he2nn : 0 ≤ e2 := M.cnnConv2CotBudget_nonneg hA1nn hE1nn hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄
-    hw₅ hβ₅ heexp0 hρ1
-  have hebacknn : 0 ≤ eback := by
-    rw [heback]
-    have hγ : (0:ℝ) ≤ (1 + M.u) ^ ((c * (2*h) * (2*w)) + 1) - 1 :=
-      sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
-    have hn : (0:ℝ) ≤ ((c * (2*h) * (2*w) : ℕ) : ℝ) := Nat.cast_nonneg _
-    exact add_nonneg (mul_nonneg hγ (mul_nonneg hn (mul_nonneg hw₂
-      (add_nonneg hCPnn he2nn)))) (mul_nonneg hn (mul_nonneg hw₂ he2nn))
   have hZ1close : ∀ k, |Z1CF k - Z1C k| ≤ E1 := by
     intro k; obtain ⟨ci, hi, wi, rfl⟩ := t3Idx_surj k
     rw [hZ1CF, hZ1C, flatten_t3Idx, flatten_t3Idx]
@@ -6153,7 +5800,7 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
     (fun s => by
       simp only [cotWin]
       exact mask_scalar_close (hZ1close _) (hmargin1 _)
-        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _) hebacknn)
+        (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _))
 
 open FloatModel in
 /-- **One SGD step with the FloatModel binary32 conv-1 bias gradient decreases one
@@ -6171,7 +5818,7 @@ theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) (fexp : ℝ → ℝ)
     {lr a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ}
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
+    (hc : 0 < c)
     (ha : 0 ≤ a) (hw₁ : 0 ≤ w₁) (hβ₁ : 0 ≤ β₁) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
     (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅)
     (hβ₅ : 0 ≤ β₅) (hlr : 0 ≤ lr)
@@ -6273,14 +5920,14 @@ theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
       M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
         w₅ β₅ eexp :=
     fun idx => cnn_conv1_bias_grad_close M W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
-      fexp hh hw ha hw₁ hβ₁ hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1
+      fexp ha hw₁ hβ₁ hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hw₅ hβ₅ heexp0 heexp1 hfexp hρ1
       hx hW₁ hb₁ hW₂ hb₂ hW₃ hb₃ hW₄ hb₄ hW₅ hb₅
       hmargin1 hmargin2 hmarginPool hmargin3 hmargin4 idx
   have hη0 : 0 ≤ M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃
       w₄ β₄ w₅ β₅ eexp := le_trans (abs_nonneg _) (hgh ⟨0, hc⟩)
   exact cnn_conv1_bias_sgd_descends W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
     (M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
-    hc hh hw hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm1 hm2 hmq hm3 hm4 hsmall
+    hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm1 hm2 hmq hm3 hm4 hsmall
     h1 h2
 
 

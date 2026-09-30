@@ -917,8 +917,6 @@ theorem gd_ray (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (hn : 0 < nCl
 -- § 11. `R` is continuous
 -- ════════════════════════════════════════════════════════════════
 
-theorem sealX_continuous (q : Nat) : Continuous (sealX q) := rayX_continuous _ _
-
 /-- `R` is continuous: every bottleneck is, and `fun_prop` composes the thirteen-block prefix once
     the chain is unfolded to its atoms. Every BN on the witness has `ε = 1`. -/
 theorem Rr_continuous (q : Nat) (_hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q nCls) := by

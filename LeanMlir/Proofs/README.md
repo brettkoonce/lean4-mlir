@@ -41,7 +41,7 @@ the lakefile's libs encode (rationale: `planning/archive/repo_shape_deletion_aud
   research results *about* the engine that no demo imports — the float model (`FloatClose`),
   the §1a tie certificates (`*Fold`/`*StepTie`), trained-net seals, SGD-descent
   capstones, the Lipschitz/LipSDP robustness scorecards, Muon geometry, the
-  binary32/E4M3 hardware models, the lexer/SSA syntactic line. Built and
+  binary32/E4M3 hardware models, the token/SSA syntactic line. Built and
   three-axiom-audited by `.github/workflows/certs.yml` (proof-path pushes +
   nightly cron), not by the per-push workflow.
 

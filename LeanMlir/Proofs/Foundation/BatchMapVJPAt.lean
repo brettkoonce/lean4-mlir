@@ -18,7 +18,7 @@ lemma with the same map on every row.
 The r34 stem's instance lives with r34's VJP (`ResNet34FullBVJP`) and in `HeadLayers`. It is
 two lines:
 `batchMapHasVJPAt _ v (fun r => maxPool3s2FlatHasVJPAtVec (Mat.unflatten v r) (hs r))
-(fun r => maxPool3s2Flat_differentiableAt_vec (Mat.unflatten v r) (hs r) hc hh hw)`, with no
+(fun r => maxPool3s2Flat_differentiableAt_vec (Mat.unflatten v r) (hs r))`, with no
 glue between the two, which is what says the lemma below has the right shape.
 -/
 

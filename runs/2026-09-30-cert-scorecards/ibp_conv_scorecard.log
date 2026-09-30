@@ -1,0 +1,34 @@
+[data] train (60000, 8, 8)  test (10000, 8, 8)
+[net]  quantized test accuracy 0.8256
+[measure] eps=1/255: 79 of the first 100 test images
+[measure] eps=2/255: 73 of the first 100 test images
+[measure] eps=4/255: 47 of the first 100 test images
+[measure] eps=8/255: 13 of the first 100 test images
+[emit]    eps=1/255: 8 of the 8 images carrying Lean certificates
+[emit]    eps=2/255: 7 of the 8 images carrying Lean certificates
+[emit]    eps=4/255: 6 of the 8 images carrying Lean certificates
+[emit]    eps=8/255: 3 of the 8 images carrying Lean certificates
+✅ 6 generated file(s) match ibp_conv_scorecard.py
+	Command being timed: "python3 scripts/certs/ibp_conv_scorecard.py --check"
+	User time (seconds): 78.76
+	System time (seconds): 0.16
+	Percent of CPU this job got: 104%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:15.39
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 589680
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 42005
+	Voluntary context switches: 59
+	Involuntary context switches: 500
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 8
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

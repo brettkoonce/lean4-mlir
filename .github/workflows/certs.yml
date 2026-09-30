@@ -39,6 +39,16 @@ on:
       - '.github/workflows/proofs.yml'
       - 'tests/bestiary_params.yml'
       - 'tests/test_bestiary_params.py'
+      # What the Bestiary drift guard measures: the specs, and the layer kit's
+      # Layer.paramSlots / NetSpec.totalParams that count them.
+      - 'Bestiary/**'
+      - 'LeanMlir/Spec.lean'
+      # The `#guard` scripts step below runs these by `lake env lean`.
+      - 'tests/TestVariantPredicates.lean'
+      - 'tests/TestDropPathRamp.lean'
+      - 'tests/TestBatchedEmitTie.lean'
+      - 'tests/TestR50Contract.lean'
+      - 'tests/TestXlaPadOps.lean'
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
@@ -64,6 +74,16 @@ on:
       - '.github/workflows/proofs.yml'
       - 'tests/bestiary_params.yml'
       - 'tests/test_bestiary_params.py'
+      # What the Bestiary drift guard measures: the specs, and the layer kit's
+      # Layer.paramSlots / NetSpec.totalParams that count them.
+      - 'Bestiary/**'
+      - 'LeanMlir/Spec.lean'
+      # The `#guard` scripts step below runs these by `lake env lean`.
+      - 'tests/TestVariantPredicates.lean'
+      - 'tests/TestDropPathRamp.lean'
+      - 'tests/TestBatchedEmitTie.lean'
+      - 'tests/TestR50Contract.lean'
+      - 'tests/TestXlaPadOps.lean'
   schedule:
     - cron: '17 8 * * *'   # nightly, 08:17 UTC (off the top-of-hour rush)
   workflow_dispatch:
@@ -258,6 +278,37 @@ jobs:
           lake build Apps
           echo "✅ **All apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
 
+      - name: "#guard scripts (lake env lean tests/…)"
+        # tests/ files that are `#guard` / `#eval` gates rather than lake exes, each named as the
+        # authority by a docstring, the lakefile or a gate script: the variant-predicate table
+        # (gen_mlir_manifest.py reads it), the drop-path ramp, the batched-emit text tie, R50's
+        # layout contract, and the XLA-SAME pad known answers. A failing `#guard`, or a `throw`
+        # under `#eval`, is an elaboration error, so `lake env lean` exits non-zero.
+        # TestXlaPadOps also writes probe modules under .lake/build for the manual IREE check
+        # (scripts/gates/xla_pad_op_check.py); only its guards are gated here.
+        run: |
+          lake build LeanMlir LeanMlir.Verified.Train LeanMlir.Verified.NetsCore \
+            LeanMlir.Proofs.Codegen.StableHLO.Pretty LeanMlir.Proofs.Codegen.ResNet50RenderB \
+            LeanMlir.Proofs.Codegen.EfficientNetRender.Basic LeanMlir.Proofs.Codegen.ConvNeXtRenderB \
+            LeanMlir.Proofs.Codegen.ViTRenderB
+          {
+            echo ""
+            echo "## \`#guard\` scripts"
+            echo ""
+          } >> $GITHUB_STEP_SUMMARY
+          rc=0
+          for t in TestVariantPredicates TestDropPathRamp TestBatchedEmitTie TestR50Contract TestXlaPadOps; do
+            if lake env lean tests/$t.lean > /tmp/$t.log 2>&1; then
+              echo "✅ \`tests/$t.lean\`" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::error::tests/$t.lean failed"
+              grep -m20 -E "error" /tmp/$t.log || tail -20 /tmp/$t.log
+              echo "❌ \`tests/$t.lean\`" >> $GITHUB_STEP_SUMMARY
+              rc=1
+            fi
+          done
+          exit $rc
+
       - name: No implied imports (import_audit.py implied)
         # An import another import of the same file already reaches: removing it changes no
         # closure, so the check is exact and reads only sources (Mathlib's from .lake/packages,
@@ -273,8 +324,8 @@ jobs:
         # BUILT binaries in .lake/build/bin, so it only guards what CI builds
         # — hence the explicit `lake build` of every bestiary-* exe first.
         # Lives here rather than proofs.yml because the counts move when the
-        # shared layer kit (LeanMlir/Spec.lean) changes, which no proof-path
-        # filter sees; the nightly cron is what catches that. Ran nowhere for
+        # shared layer kit (LeanMlir/Spec.lean) changes; both it and Bestiary/**
+        # are in this workflow's path filters, and the nightly cron backs them up. Ran nowhere for
         # the three months to 2026-07-26, in which time 41 counts drifted.
         run: |
           set -e

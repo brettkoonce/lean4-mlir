@@ -7,6 +7,7 @@
 | axiom audit | `AuditAxioms.lean`, `AuditAxiomsHeavy.lean`: `#print axioms` over every pinned theorem |
 | citation gates | `BlueprintCheckDecls.lean`, `DocstringCheckRefs.lean`: every name the book or a docstring cites resolves |
 | ties and checks | `Test*.lean`, one `lake exe` each: a committed render against the proven math (`*Tie`), data-parallel and sync-BN equivalence (`*DpCheck`, `*SyncBnCheck`, `*ShardCheck`), and regression guards for specific bugs |
+| `#guard` scripts | `TestVariantPredicates.lean`, `TestDropPathRamp.lean`, `TestBatchedEmitTie.lean`, `TestR50Contract.lean`, `TestXlaPadOps.lean`: no exe; `lake env lean tests/<file>` runs them, and `certs.yml` does so on every run |
 | Bestiary | `bestiary_params.yml`, `verify_bestiary_timm.py`: the catalogue's parameter counts against timm |
 
 The exe names are in [`lakefile.lean`](../lakefile.lean) under `tests/`. The proofs themselves

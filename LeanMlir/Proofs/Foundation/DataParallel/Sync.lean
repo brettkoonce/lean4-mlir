@@ -161,24 +161,24 @@ theorem bnSyncTensor4_batchShard (R N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Ve
 /-- **P1b — the GLOBAL per-channel mean is the mean of the replicas' per-channel means.**
     `bnMean_shard` transported along the row shard. This is precisely what `syncStats`'s first
     collective — `allReduceMeanF` over the replicas' `bnBatchMeanB` — computes. -/
-theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
+theorem bnMean_row_shard (R N oc h w : Nat)
     (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
     bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
       = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean (N*(h*w))
           (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c) := by
-  rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
+  rw [bnMean_shard (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
 /-- **…and so is the global per-channel SECOND MOMENT.** Note: There is no such statement for
     the variance alone — the mean of the shards' variances is not the variance of the union —
     which is why the exchange carries Chan's corrected variance (`bnVar_row_shard_chan`) rather
     than a plain `σ²_r`. -/
-theorem bnMeanSq_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
+theorem bnMeanSq_row_shard (R N oc h w : Nat)
     (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
     bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
       = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq (N*(h*w))
           (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c) := by
-  rw [bnMeanSq_shard hR hm (bnShardEquiv R N (h*w))]
+  rw [bnMeanSq_shard (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
 /-- **Chan's parallel variance on the channel rows**: the global channel variance is the
@@ -204,14 +204,14 @@ theorem bnVar_row_shard_chan (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w)
     is the mean of the replicas' means of the same.** Both dy-reductions the sync backward needs
     have this shape — `mdy` reads only `dy`, `mdyx` reads `x` and `dy` together — so one lemma
     covers both, and `bnMean_row_shard` is its one-row special case. -/
-theorem bnMean_pair_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
+theorem bnMean_pair_row_shard (R N oc h w : Nat)
     (X DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) (f : ℝ → ℝ → ℝ) :
     bnMean ((R*N)*(h*w)) (fun k => f (Mat.unflatten (bnchwFwd (R*N) oc h w X) c k)
                                       (Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k))
       = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean (N*(h*w)) (fun k =>
           f (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c k)
             (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c k)) := by
-  rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
+  rw [bnMean_shard (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
 /-- The global batch-spatial count is nonzero when a replica's is: `(R·N)·(h·w) = R·(N·(h·w))`. -/
@@ -247,11 +247,11 @@ theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N 
   have hμ : ∀ c : Fin oc, (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
       (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c)
       = bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) :=
-    fun c => (bnMean_row_shard R N oc h w hR hm X c).symm
+    fun c => (bnMean_row_shard R N oc h w X c).symm
   have hm2 : ∀ c : Fin oc, (1 / (R : ℝ)) * ∑ r' : Fin R, bnMeanSq (N*(h*w))
       (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c)
       = bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) :=
-    fun c => (bnMeanSq_row_shard R N oc h w hR hm X c).symm
+    fun c => (bnMeanSq_row_shard R N oc h w X c).symm
   simp only [hμ, hm2]
   rw [← bnSyncTensor4_batchShard]
   exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
@@ -409,15 +409,15 @@ theorem bnSyncTensor4GradInput_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
   have hM := mulR_nhw_ne_zero (Nat.pos_of_ne_zero hR) hm
   -- 1. the forward statistics are the global row's own (P1b)
   have hμ' : μg = fun c => bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
-    rw [hμ]; funext c; rw [← bnMean_row_shard R N oc h w hR hm X c]
+    rw [hμ]; funext c; rw [← bnMean_row_shard R N oc h w X c]
   have hm2' : m2g = fun c => bnMeanSq ((R*N)*(h*w))
       (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
-    rw [hm2]; funext c; rw [← bnMeanSq_row_shard R N oc h w hR hm X c]
+    rw [hm2]; funext c; rw [← bnMeanSq_row_shard R N oc h w X c]
   -- 2. and so are the two dy reductions (P2b), via the pair lemma
   have hmdy' : mdyg = fun c => bnMean ((R*N)*(h*w)) (fun k =>
       γ c * Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k) := by
     rw [hmdy]; funext c
-    exact (bnMean_pair_row_shard R N oc h w hR hm X DY c (fun _ d => γ c * d)).symm
+    exact (bnMean_pair_row_shard R N oc h w X DY c (fun _ d => γ c * d)).symm
   have hmdyx' : mdyxg = fun c => bnMean ((R*N)*(h*w)) (fun k =>
       bnSyncXhat ((R*N)*(h*w)) ε
         (bnMean   ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
@@ -426,7 +426,7 @@ theorem bnSyncTensor4GradInput_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
       * (γ c * Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k)) := by
     rw [hmdyx, hμ', hm2']; funext c
     simp only [bnSyncXhat_apply]
-    exact (bnMean_pair_row_shard R N oc h w hR hm X DY c
+    exact (bnMean_pair_row_shard R N oc h w X DY c
       (fun xv dv => (xv - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
         * (1 / Real.sqrt (bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
             - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
@@ -500,14 +500,14 @@ def syncStats {N oc h w : Nat} (R : Nat) (hR : 0 < R) (t t' : String) (ds ds' : 
       (.allReduceMeanF R hR t ds (fun r' => .bnBatchMeanB (x r')))))
 
 /-- **The first collective IS the global mean** — `bnMean_shard` on the channel rows. -/
-theorem den_syncStats_left {N oc h w : Nat} (R : Nat) (hR : 0 < R) (hm : N * (h * w) ≠ 0)
+theorem den_syncStats_left {N oc h w : Nat} (R : Nat) (hR : 0 < R)
     (t t' : String) (ds ds' : List Nat) (x : Fin R → SHlo (N * (oc * (h * w))))
     (X : Vec ((R * N) * (oc * (h * w))))
     (hx : ∀ r, den (x r) = batchShard R N (oc * (h * w)) X r) (c : Fin oc) :
     den (syncStats R hR t t' ds ds' x) (Fin.castAdd oc c)
       = bnMean ((R * N) * (h * w)) (Mat.unflatten (bnchwFwd (R * N) oc h w X) c) := by
   simp only [syncStats, den_bnPackB, Fin.append_left, den_allReduceMeanF, den_bnBatchMeanB, hx]
-  exact (bnMean_row_shard R N oc h w (Nat.pos_iff_ne_zero.mp hR) hm X c).symm
+  exact (bnMean_row_shard R N oc h w X c).symm
 
 /-- **The second collective IS the global variance** — Chan's parallel variance
     (`bnVar_row_shard_chan`): each replica's two-pass `σ²_r` plus `(μ_r − μ)²`, averaged. This
@@ -521,7 +521,7 @@ theorem den_syncStats_right {N oc h w : Nat} (R : Nat) (hR : 0 < R) (hm : N * (h
   have hRne : R ≠ 0 := Nat.pos_iff_ne_zero.mp hR
   simp only [syncStats, den_bnPackB, Fin.append_right, den_allReduceMeanF, den_bnBatchVarAtB,
              den_bnBatchMeanB, hx]
-  rw [← bnMean_row_shard R N oc h w hRne hm X c]
+  rw [← bnMean_row_shard R N oc h w X c]
   exact (bnVar_row_shard_chan R N oc h w hRne hm X c).symm
 
 /-- `σ² + μ²` at the global statistics is the global second moment — how a consumer's `den`,
@@ -547,7 +547,7 @@ theorem den_bnSyncF_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
       = batchShard R N (oc * (h * w)) (bnBatchTensor4 (R * N) oc h w ε γ β X) r := by
   have hM := mulR_nhw_ne_zero hR hm
   rw [den_bnSyncF]
-  simp only [den_syncStats_left R hR hm t t' ds ds' x X hx,
+  simp only [den_syncStats_left R hR t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM, hx]
   rw [← bnSyncTensor4_batchShard]
   exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
@@ -576,12 +576,12 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
   rw [den_bnSyncBack, hxv r, hdy r]
   -- the outer collective is [μ ‖ σ² ‖ mdy ‖ mdyx]; μ and σ² pass through (`dpMean_const_mul`)
   simp only [den_allReduceMeanF, den_bnSyncDyStatsB, Fin.append_left, Fin.append_right,
-             den_syncStats_left R hR hm t t' ds ds' x X hx,
+             den_syncStats_left R hR t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM,
              hxv, hdy, dpMean_const_mul hRr]
   exact bnSyncTensor4GradInput_shard_eq_global R N oc h w hRne hm ε γ X DY r
-    _ _ _ _ (by funext c; exact bnMean_row_shard R N oc h w hRne hm X c)
-    (by funext c; exact bnMeanSq_row_shard R N oc h w hRne hm X c) rfl rfl
+    _ _ _ _ (by funext c; exact bnMean_row_shard R N oc h w X c)
+    (by funext c; exact bnMeanSq_row_shard R N oc h w X c) rfl rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § P4 — the parameter collective is 1/R of the global-batch gradient node
@@ -606,7 +606,7 @@ theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 <
           (bnchwFwd (R * N) oc h w X) (bnchwFwd (R * N) oc h w DY) c := by
   have hM := mulR_nhw_ne_zero hR hm
   simp only [den_allReduceMeanF, den_bnSyncGammaGradB,
-             den_syncStats_left R hR hm t t' ds ds' x X hx,
+             den_syncStats_left R hR t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM, hxv, hdy]
   -- the shard sums are the global row sum, and at the global statistics that is the γ gradient
   rw [← bnSyncPerChannelGradGamma_row_shard,
@@ -617,13 +617,13 @@ theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 <
     on the packed statistics denotes what `bnBatchMeanB` at `N := R·N` denotes, so the host
     EMAs the global statistic on every replica. -/
 theorem den_bnStatsMeanB_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
-    (hm : N * (h * w) ≠ 0) (t t' : String) (ds ds' : List Nat)
+    (t t' : String) (ds ds' : List Nat)
     (x : Fin R → SHlo (N * (oc * (h * w)))) (X : Vec ((R * N) * (oc * (h * w))))
     (hx : ∀ r, den (x r) = batchShard R N (oc * (h * w)) X r) :
     den (.bnStatsMeanB (syncStats R hR t t' ds ds' x))
       = fun c => bnMean ((R * N) * (h * w)) (Mat.unflatten (bnchwFwd (R * N) oc h w X) c) := by
   funext c
-  simp only [den_bnStatsMeanB, den_syncStats_left R hR hm t t' ds ds' x X hx]
+  simp only [den_bnStatsMeanB, den_syncStats_left R hR t t' ds ds' x X hx]
 
 /-- **…and so is the handed-back VARIANCE** — the global batch's `bnVar`, what `bnBatchVarB` at
     `N := R·N` denotes. Note: No per-replica variance is ever averaged on its own: the between-shard

@@ -4,8 +4,9 @@ import LeanMlir.Types
 /-! # MobileNetV2 forward: the `iree-compile` smoke over the COMMITTED bytes
 
 `verified_mlir/mobilenetv2_fwd.mlir` and `verified_mlir/mobilenetv2_fwd_eval.mlir` are
-written by `LeanMlir/Proofs/Codegen/MobileNetV2Render.lean`'s `mnv2Fwd{,Eval}FaithfulV` —
-`pretty(provenGraph)`, both off the single `mnv2FwdChain` the train step differentiates — and those
+written by `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean`'s `mobilenetv2FwdFaithfulB` and
+`mnv2FwdEvalFaithfulV` — `pretty(provenGraph)`, off the `mnv2FwdChainB` the train step
+differentiates — and those
 `#eval`s are their only writers. This file keeps only the part `lake build` genuinely cannot do:
 running `iree-compile`, which needs the compiler on PATH.
 
@@ -36,8 +37,8 @@ open Proofs Proofs.StableHLO
 private def smoke (path dst label : String) : IO Unit := do
   if !(← System.FilePath.pathExists path) then
     throw (IO.userError s!"{path} missing — it is written by \
-LeanMlir/Proofs/Codegen/MobileNetV2Render.lean; run \
-`lake build LeanMlir.Proofs.Codegen.MobileNetV2Render` first")
+LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean; run \
+`lake build LeanMlir.Proofs.Codegen.MobileNetV2RenderB` first")
   tryCompile path dst label
 
 def main : IO Unit := do

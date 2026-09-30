@@ -352,8 +352,8 @@ def linearTrainStepModule (B d₀ d₁ : Nat) (lr : String) : String :=
 -- The repo's `conv2d` is SAME-padding, stride-1 cross-correlation, which is
 -- exactly `stablehlo.convolution` (XLA conv is cross-correlation, no flip).
 -- The proven conv input-gradient is `IR.convBackDenote W = conv2d(reverseSwap
--- W, 0)` (`IR.conv3_node_bridge_1to2`, via the reversed-kernel identity
--- `conv_back_bridge_1to2`): swap in/out channels + flip both spatial axes,
+-- W, 0)` for odd `kH`, `kW` (`IR.conv3_node_bridge`, via the reversed-kernel identity
+-- `conv_back_bridge`): swap in/out channels + flip both spatial axes,
 -- then convolve. So the backward is `transpose [1,0,2,3]` + `reverse [2,3]` +
 -- `convolution`. Layout: NCHW input/output `[B,C,H,W]`, OIHW kernel
 -- `[oc,ic,kH,kW]` (= `Kernel4 oc ic kH kW`).
@@ -419,9 +419,8 @@ def convFwdModule (B ic oc H Wd kH kW : Nat) : String :=
 /-- Conv input-gradient backward `IR.convBackDenote W` as `@conv_back`:
     `transpose` (swap channels) + `reverse` (flip spatial) + `convolution`.
     For odd `kH`, `kW` its op sequence is the conv input-VJP formula
-    (`IR.convBackDenote_eq_input_grad_formula`, which takes the two oddness hypotheses;
-    `conv_back_bridge_1to2` is its instance at `Kernel4 2 1 3 3` on a 4×4 map). The printed text
-    is trusted. -/
+    (`IR.convBackDenote_eq_input_grad_formula` and `IR.conv_back_bridge`, which take the two
+    oddness hypotheses). The printed text is trusted. -/
 def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
   "module @m {\n" ++
@@ -482,7 +481,7 @@ def maxpoolBackModule (B c h w : Nat) : String :=
 --   reshape     (flatten bijection)   conv_flatten_bridge / maxpool_flatten_bridge
 --   maxpool_back(select_and_scatter)  maxpool_back_bridge   (route dy to argmax)
 --   relu_back   (compare GT + select) relu_at_bridge
---   conv_back   (transpose+reverse+conv) conv_back_bridge_1to2
+--   conv_back   (transpose+reverse+conv) conv_back_bridge
 --
 -- composed via the proven chain rules `denote_subst` / `denote_subst3`. The
 -- Tensor3 flatten is C-order row-major (`Tensor3.flatten` = `stablehlo.reshape`),
@@ -548,7 +547,7 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
 --   SGD      θ' = θ − lr·dθ (trusted).
 -- (The transpose-trick render is numerically validated here, as the repo's
 -- check_jacobians does; the graph-denotation bridge is the same expansion
--- as conv_back_bridge_1to2 — deferred, not a gap in the math.)
+-- as conv_back_bridge — deferred, not a gap in the math.)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A full CNN SGD train step `@cnn_train_step`. Inputs: `x`, conv `%Wc,%bc`,

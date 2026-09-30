@@ -642,7 +642,7 @@ theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
 noncomputable def trainedCnnHasVJPAt :
     HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
   mnistCnnNoBnHasVJPAt W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
-    (by norm_num) (by norm_num) (by norm_num) X
+    X
     -- h1: conv1 pre-activations nonzero
     (by intro k
         have he : flatConv (h := 2*3) (w := 2*3) W1 b1 X

@@ -798,13 +798,6 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 -- § 11. `R` is continuous (every block is, `relu` and the pool included)
 -- ════════════════════════════════════════════════════════════════
 
-theorem sealX_continuous : Continuous sealX := rayX_continuous _ _
-
-theorem r34StemB_continuous (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
-    (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) : Continuous (r34StemB N h w Ws bs εs γs βs) := by
-  unfold r34StemB StableHLO.cbReluStridedB
-  fun_prop (disch := assumption)
-
 /-- `R` is continuous: every block is (`relu`, the pool and the residual adds included), and
     `fun_prop` composes them through the fourteen-block prefix once the chain is unfolded to its
     atoms. Every BN on the witness has `ε = 1`. -/

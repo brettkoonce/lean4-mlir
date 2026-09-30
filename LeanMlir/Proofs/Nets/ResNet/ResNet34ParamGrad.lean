@@ -547,14 +547,14 @@ theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
       (fun y => (GradNodeB.flatConvStride2_bias_differentiable Ws y) _)).continuousAt)
   have hγc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs θ βs
       (batchMap N (flatConvStride2 Ws bs) x)) := by
-    -- `bnBatchLA` is the per-channel core read at a permuted cell (`bnBatchLA_apply_perm`, `rfl`)
+    -- `bnBatchLA` is the per-channel core read at the `bnLAPerm` cell, by `rfl`
     exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
       (GradNodeB.bnPerChannelFlat_gamma_differentiable oc (N * (2 * h * (2 * w))) εs βs
         (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
           (batchMap N (flatConvStride2 Ws bs) x)))).continuous
   have hβc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs γs θ
       (batchMap N (flatConvStride2 Ws bs) x)) := by
-    -- `bnBatchLA` is the per-channel core read at a permuted cell (`bnBatchLA_apply_perm`, `rfl`)
+    -- `bnBatchLA` is the per-channel core read at the `bnLAPerm` cell, by `rfl`
     exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
       (GradNodeB.bnPerChannelFlat_beta_differentiable oc (N * (2 * h * (2 * w))) εs γs
         (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)

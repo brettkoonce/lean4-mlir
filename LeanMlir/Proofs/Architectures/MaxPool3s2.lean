@@ -348,11 +348,10 @@ noncomputable def maxPool3s2LocalReindex {c h w : Nat}
     one structural change is that the domination argument branches on whether an offset names the
     argmax's own **position** (the clamped duplicate), not on whether the offsets are equal —
     `MaxPool3s2Smooth` says nothing about coincident positions because there the values are
-    literally the same number. The positivity hypotheses are not used. -/
+    literally the same number. -/
 theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
-    (h_smooth : MaxPool3s2Smooth x)
-    (_hc : 0 < c) (_hh : 0 < h) (_hw : 0 < w) :
+    (h_smooth : MaxPool3s2Smooth x) :
     HasFDerivAt
       (fun v : Vec (c * (2 * h) * (2 * w)) =>
         Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
@@ -402,10 +401,7 @@ theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
       (if maxPool3s2LocalReindex x (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
             = finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)
         then (1 : ℝ) else 0) := by
-  have hc : 0 < c := Fin.pos ci
-  have hh : 0 < h := Fin.pos ho
-  have hw : 0 < w := Fin.pos wo
-  have h_fderiv := maxPool3s2_flat_hasFDerivAt x h_smooth hc hh hw
+  have h_fderiv := maxPool3s2_flat_hasFDerivAt x h_smooth
   unfold pdiv3
   rw [pdiv_eq_of_hasFDerivAt h_fderiv]
   show reindexCLM (maxPool3s2LocalReindex x)
@@ -443,10 +439,9 @@ noncomputable def maxPool3s2Flat (c h w : Nat) :
   fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v))
 
 theorem maxPool3s2Flat_differentiableAt {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     DifferentiableAt ℝ (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
-  (maxPool3s2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
+  (maxPool3s2_flat_hasFDerivAt x h_smooth).differentiableAt
 
 /-- The VJP of `maxPool3s2Flat` at a flattened input satisfying `MaxPool3s2Smooth`:
     `maxPool3s2HasVJPAt3` moved to `Vec` form. -/

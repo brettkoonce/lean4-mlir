@@ -157,7 +157,7 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
 -- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))`.
 -- `convBackDenote_eq_input_grad_formula` proves it at every shape with odd
 -- `kH`, `kW`, against the (co, ho, wo) form `conv2dInputGradFormula`;
--- `conv_back_bridge_1to2` / `_2to2` are its instances at two 3×3 shapes.
+-- `conv_back_bridge` restates it against the conv layer's VJP.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Spatial reversal of a kernel index: `k − 1 − i`. -/
@@ -272,22 +272,15 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
   simp only [conv2d, reverseSwap, zero_add, conv2dInputGradFormula]
   exact Finset.sum_congr rfl fun co _ => reverseSlab_eq_gradSlab hkH hkW (W co ci) (dy co) hi wi
 
-/-- **Conv backward bridge, 1→2 channels (`Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
-    graph denotes the proven conv input-VJP `(conv2dHasVJP3 W b).backward`.
-    An instance of the general `convBackDenote_eq_input_grad_formula` (3×3 is odd). -/
-theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
-    (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
-    convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy := by
-  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy
-  exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
-
-/-- **Conv backward bridge, 2→2 channels (`Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape — also a
-    one-line instance of the general lemma. -/
-theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
-    (x : Tensor3 2 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
-    convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy := by
-  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy
-  exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
+/-- **Conv backward bridge (odd kernels, all dims).** The emitted transposed-convolution
+    graph denotes the proven conv input-VJP `(conv2dHasVJP3 W b).backward`:
+    `convBackDenote_eq_input_grad_formula` read against the layer's VJP. -/
+theorem conv_back_bridge {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w) :
+    convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy :=
+  convBackDenote_eq_input_grad_formula hkH hkW W dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § Max-pool (the other kinked op)
@@ -527,13 +520,15 @@ theorem maxpool3_node_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
   funext ci hi wi
   simp only [Back3.denote, maxPoolBackDenote, maxPool2HasVJPAt3]
 
-/-- The `Back3` conv node denotes the proven conv backward, at the `1→2`
-    3×3 conv shape (via `conv_back_bridge_1to2`). -/
-theorem conv3_node_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
-    (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
+/-- The `Back3` conv node denotes the proven conv backward, for odd `kH`, `kW`
+    (via `conv_back_bridge`). -/
+theorem conv3_node_bridge {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Tensor3 ic h w) (dy : Tensor3 oc h w) :
     (Back3.conv W Back3.cot).denote dy = (conv2dHasVJP3 W b).backward x dy := by
   simp only [Back3.denote]
-  exact conv_back_bridge_1to2 W b x dy
+  exact conv_back_bridge hkH hkW W b x dy
 
 /-- **Tensor3 composition demonstrator.** The `Back3` `subst` of two conv
     layers' backward graphs denotes the composition of their Tensor3
@@ -573,17 +568,19 @@ theorem maxpool_flatten_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
              HasVJPAt3.toHasVJPAt, maxPoolBackDenote, maxPool2HasVJPAt3,
              Tensor3.flatten]
 
-/-- **Flatten bridge, conv (`1→2` 3×3 shape).** The flattened `Back3`
+/-- **Flatten bridge, conv (odd kernels).** The flattened `Back3`
     conv graph denotes the proven flattened conv layer backward
-    `HasVJP3.toHasVJP (conv2dHasVJP3 W b)` — chains `conv_back_bridge_1to2`
+    `HasVJP3.toHasVJP (conv2dHasVJP3 W b)` — chains `conv_back_bridge`
     (the reversed-kernel identity) with the `Tensor3.flatten` decode. -/
-theorem conv_flatten_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
-    (v : Vec (1 * (2*2) * (2*2))) (dy : Vec (2 * (2*2) * (2*2))) :
+theorem conv_flatten_bridge {ic oc h w kH kW : Nat}
+    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (v : Vec (ic * h * w)) (dy : Vec (oc * h * w)) :
     (Back3.conv W Back3.cot).flatDenote dy
       = (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward v dy := by
   funext idx
   simp only [Back3.flatDenote, Back3.denote, HasVJP3.toHasVJP_backward, Tensor3.flatten]
-  rw [conv_back_bridge_1to2 W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
+  rw [conv_back_bridge hkH hkW W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § `HasVJPAt` (smooth-point) variants — the form whole-network VJPs use

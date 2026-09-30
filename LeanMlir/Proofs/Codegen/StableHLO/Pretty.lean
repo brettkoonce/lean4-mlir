@@ -2252,7 +2252,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!"    {fac} = stablehlo.minimum {one}, {rat} : tensor<f32>\n" ++
         s!"    {fb} = stablehlo.broadcast_in_dim {fac}, dims = [] : (tensor<f32>) -> {T}\n" ++
         s!"    {o} = stablehlo.multiply {fb}, {g} : {T}\n", o :: st)
-  -- ══ LAMB (`Proofs.Lamb`), RSB-A3's optimizer. `lambDirF` is `adamWParamF`'s block truncated at
+  -- ══ LAMB (`Optim.Lamb`), RSB-A3's optimizer. `lambDirF` is `adamWParamF`'s block truncated at
   --    the ratio with `wd·θ` ADDED rather than subtracted at the end — the decay is decoupled and
   --    lands INSIDE the direction, hence inside the norm the trust ratio takes. ══
   | .lambDirF θN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN ds, r :: st => do

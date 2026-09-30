@@ -102,6 +102,30 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
           exit $rc
 
+      - name: Module citations resolve (planning/rubric_review.md, new gate 5)
+        # docstring-checkrefs resolves marked declaration names against the environment; a
+        # module named by dotted name or by path, in a docstring, comment or emitted string,
+        # falls through it. Python and git only, and the scan covers apps/, demos/, jax/ and tests/.
+        run: |
+          set -o pipefail
+          rc=0
+          python3 scripts/gates/module_refs.py 2>&1 | tee /tmp/modrefs.log || rc=$?
+          {
+            echo "## Module citations"
+            echo ""
+            if [ $rc -eq 0 ]; then
+              sed -n 's/^✓ /✅ /p' /tmp/modrefs.log
+            else
+              echo "❌ **A cited module does not exist** — repoint the citation after a move or"
+              echo "rename (\`scripts/gates/module_refs.py\`)."
+              echo ""
+              echo '```'
+              grep '✗' /tmp/modrefs.log
+              echo '```'
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+          exit $rc
+
       - name: verified_mlir/MANIFEST.md is current
         # The index of the committed artifacts (writer, variant decode, runs that compiled each).
         # Needs no Lean: `git grep` for the writers, tracked `runs/` logs for the counts. Moved

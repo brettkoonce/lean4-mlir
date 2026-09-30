@@ -849,7 +849,6 @@ end Proofs.StableHLO
 -- Regenerate the committed `verified_mlir/vit_train_step.mlir` from the certified renderer
 -- (pure Lean, no iree) — the drift-guard source: `lake env lean LeanMlir/Proofs/Codegen/ViTRender.lean`
 -- rewrites it, and proofs.yml git-diffs it. The bytes `MainViTVerified` trains on ARE this render.
--- (tests/TestViTTrainPC.lean writes the SAME render + additionally iree-compiles on the rocm box.)
 --
 -- **THIS IS THE ONLY ARTIFACT ON THE PER-EXAMPLE TRAVERSAL, AND IT IS DELIBERATE.** Every other
 -- committed ViT artifact — `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train steps —

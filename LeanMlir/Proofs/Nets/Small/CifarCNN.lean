@@ -83,7 +83,6 @@ noncomputable def cifarCnnHasVJPAt
     (W₅ : Mat (c2 * h * w) d1) (b₅ : Vec d1)
     (W₆ : Mat d1 d1) (b₆ : Vec d1)
     (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*h)) * (2*(2*w))))
     (h1 : ∀ k, flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₁ b₁ x k ≠ 0)
     (h2 : ∀ k, flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₂ b₂
@@ -153,7 +152,7 @@ noncomputable def cifarCnnHasVJPAt
   have mp1_v : HasVJPAt (maxPoolFlat c1 (2*h) (2*w)) zmp1 := by
     rw [← hpt1]; exact maxPoolFlatHasVJPAt _ h_mp1
   have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*h) (2*w)) zmp1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1 hc1 (by omega) (by omega)
+    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- conv→relu block 3 at (pool-1 output)
@@ -175,7 +174,7 @@ noncomputable def cifarCnnHasVJPAt
   have mp2_v : HasVJPAt (maxPoolFlat c2 h w) zmp2 := by
     rw [← hpt2]; exact maxPoolFlatHasVJPAt _ h_mp2
   have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 h w) zmp2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2 hc2 hh hw
+    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- dense→relu block 5 at (pool-2 output)
@@ -205,16 +204,15 @@ theorem cifarCnnHasVJPAt_correct
     (W₅ : Mat (c2 * h * w) d1) (b₅ : Vec d1)
     (W₆ : Mat d1 d1) (b₆ : Vec d1)
     (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*h)) * (2*(2*w))))
     (h1 h2 h_mp1 h3 h4 h_mp2 h5 h6)
     (dy : Vec nClasses) (i : Fin (ic * (2*(2*h)) * (2*(2*w)))) :
     (cifarCnnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
-        hc1 hc2 hh hw x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).backward dy i =
+        x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇) x i j * dy j :=
   (cifarCnnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
-      hc1 hc2 hh hw x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).correct dy i
+      x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Concrete tiny instance — every smoothness hypothesis DISCHARGED
@@ -347,7 +345,7 @@ private theorem pool1_inj : ∀ (ci : Fin 1) (r r' s s' : Fin (2*1)),
 noncomputable def cifarTinyCnnHasVJPAt :
     HasVJPAt (cifarCnnForward K Bz K Bz K Bz K Bz Wd5 Bp Wd6 Bp Wd7 Bz2) X :=
   cifarCnnHasVJPAt K Bz K Bz K Bz K Bz Wd5 Bp Wd6 Bp Wd7 Bz2
-    (by norm_num) (by norm_num) (by norm_num) (by norm_num) X
+    X
     -- h1: conv1 preactivation nonzero
     (by intro k; rw [flatConvK_id]; exact ne_of_gt (X_pos k))
     -- h2: conv2 preactivation nonzero
@@ -451,8 +449,6 @@ noncomputable def cifarCnn8HasVJPAt
     (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
     (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
-    (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
     (hf1 : ∀ k, flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁ x k ≠ 0)
     (hf2 : ∀ k, flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂
@@ -605,7 +601,7 @@ noncomputable def cifarCnn8HasVJPAt
   have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
     rw [← hpt1]; exact maxPoolFlatHasVJPAt _ hp1
   have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1 hc1 (by omega) (by omega)
+    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- stage 2: conv→relu ×2
@@ -626,7 +622,7 @@ noncomputable def cifarCnn8HasVJPAt
   have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
     rw [← hpt2]; exact maxPoolFlatHasVJPAt _ hp2
   have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ hp2 hc2 (by omega) (by omega)
+    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ hp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- stage 3: conv→relu ×2
@@ -647,7 +643,7 @@ noncomputable def cifarCnn8HasVJPAt
   have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
     rw [← hpt3]; exact maxPoolFlatHasVJPAt _ hp3
   have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ hp3 hc3 (by omega) (by omega)
+    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ hp3
   have s9 := vjpCompAt _ _ x s8d mp3_d s8 mp3_v
   have s9d := mp3_d.comp x s8d
   -- stage 4: conv→relu ×2
@@ -668,7 +664,7 @@ noncomputable def cifarCnn8HasVJPAt
   have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
     rw [← hpt4]; exact maxPoolFlatHasVJPAt _ hp4
   have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ hp4 hc4 hh hw
+    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ hp4
   have s12 := vjpCompAt _ _ x s11d mp4_d s11 mp4_v
   have s12d := mp4_d.comp x s11d
   -- dense→relu ×2
@@ -701,18 +697,16 @@ theorem cifarCnn8HasVJPAt_correct
     (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
     (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
-    (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
     (hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa)
     (dy : Vec nClasses) (i : Fin (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))) :
     (cifarCnn8HasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
-        hc1 hc2 hc3 hc4 hh hw x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).backward dy i =
+        x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
           W₉ b₉ Wa ba Wb bb) x i j * dy j :=
   (cifarCnn8HasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
-      hc1 hc2 hc3 hc4 hh hw x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).correct dy i
+      x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter-4 BatchNorm block — conv→BN→relu
@@ -820,8 +814,6 @@ noncomputable def cifarCnnBn8HasVJPAt
     (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
     (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
-    (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
     (h1 : ∀ k, bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁
             (flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁
@@ -945,7 +937,7 @@ noncomputable def cifarCnnBn8HasVJPAt
   have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
     rw [← hpt1]; exact maxPoolFlatHasVJPAt _ h_mp1
   have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1 hc1 (by omega) (by omega)
+    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- stage 2
@@ -968,7 +960,7 @@ noncomputable def cifarCnnBn8HasVJPAt
   have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
     rw [← hpt2]; exact maxPoolFlatHasVJPAt _ h_mp2
   have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2 hc2 (by omega) (by omega)
+    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- stage 3
@@ -991,7 +983,7 @@ noncomputable def cifarCnnBn8HasVJPAt
   have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
     rw [← hpt3]; exact maxPoolFlatHasVJPAt _ h_mp3
   have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ h_mp3 hc3 (by omega) (by omega)
+    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ h_mp3
   have s9 := vjpCompAt _ _ x s8d mp3_d s8 mp3_v
   have s9d := mp3_d.comp x s8d
   -- stage 4
@@ -1014,7 +1006,7 @@ noncomputable def cifarCnnBn8HasVJPAt
   have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
     rw [← hpt4]; exact maxPoolFlatHasVJPAt _ h_mp4
   have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ h_mp4 hc4 hh hw
+    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ h_mp4
   have s12 := vjpCompAt _ _ x s11d mp4_d s11 mp4_v
   have s12d := mp4_d.comp x s11d
   -- dense head
@@ -1046,21 +1038,19 @@ theorem cifarCnnBn8HasVJPAt_correct
     (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
     (Wa : Mat d1 d1) (ba : Vec d1)
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (hc1 : 0 < c1) (hc2 : 0 < c2) (hc3 : 0 < c3) (hc4 : 0 < c4)
-    (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
     (h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha)
     (dy : Vec nClasses) (i : Fin (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))) :
     (cifarCnnBn8HasVJPAt W₁ b₁ ε₁ γ₁ β₁ hε₁ W₂ b₂ ε₂ γ₂ β₂ hε₂ W₃ b₃ ε₃ γ₃ β₃ hε₃ W₄ b₄ ε₄ γ₄ β₄ hε₄
         W₅ b₅ ε₅ γ₅ β₅ hε₅ W₆ b₆ ε₆ γ₆ β₆ hε₆ W₇ b₇ ε₇ γ₇ β₇ hε₇ W₈ b₈ ε₈ γ₈ β₈ hε₈
-        W₉ b₉ Wa ba Wb bb hc1 hc2 hc3 hc4 hh hw x
+        W₉ b₉ Wa ba Wb bb x
         h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
           W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb) x i j * dy j :=
   (cifarCnnBn8HasVJPAt W₁ b₁ ε₁ γ₁ β₁ hε₁ W₂ b₂ ε₂ γ₂ β₂ hε₂ W₃ b₃ ε₃ γ₃ β₃ hε₃ W₄ b₄ ε₄ γ₄ β₄ hε₄
         W₅ b₅ ε₅ γ₅ β₅ hε₅ W₆ b₆ ε₆ γ₆ β₆ hε₆ W₇ b₇ ε₇ γ₇ β₇ hε₇ W₈ b₈ ε₈ γ₈ β₈ hε₈
-        W₉ b₉ Wa ba Wb bb hc1 hc2 hc3 hc4 hh hw x
+        W₉ b₉ Wa ba Wb bb x
       h1 h2 h3 h4 h5 h6 h7 h8 h_mp1 h_mp2 h_mp3 h_mp4 h9 ha).correct dy i
 
 

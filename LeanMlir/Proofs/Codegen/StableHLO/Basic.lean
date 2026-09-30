@@ -1411,7 +1411,7 @@ inductive SHlo : Nat → Type where
   | gradSumSqAccF {n : Nat} (ds : List Nat)                     : SHlo 1 → SHlo n → SHlo 1
   | clipScaleF   {n : Nat} (clipStr epsStr : String) (c ε : ℝ)
       (ds : List Nat)                                           : SHlo 1 → SHlo n → SHlo n
-  -- ══ LAMB (`Proofs.Lamb`), RSB-A3's optimizer. TWO ops, and `gradSumSqAccF` above is the third
+  -- ══ LAMB (`Optim.Lamb`), RSB-A3's optimizer. TWO ops, and `gradSumSqAccF` above is the third
   --    it needs — already here for the clip, and deliberately reused: the per-leaf squared norm is
   --    one quantity and writing a second one is the double-writer failure.
   --

@@ -79,7 +79,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   bf16Conv       := true    -- reaches the MBConv expand/depthwise/project
   useEMA         := true     -- weight averaging (decay 0.9999) — paper-faithful; the emitter EMA-shadows the BN buffers too (eval uses ema_bn); EMA weights with live BN stats blow up at eval
   dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
-  dropPathOverN  := true     -- TF's ramp: 0.2 · i/16, not timm's i/15
+  dropPathOverN  := true     -- TF's and timm's ramp: 0.2 · i/16, not the default i/15
   runningBN      := true     -- paper-faithful eval: running BN stats, not eval-batch stats
   bnEps          := 1e-3     -- TF's BN ε
 

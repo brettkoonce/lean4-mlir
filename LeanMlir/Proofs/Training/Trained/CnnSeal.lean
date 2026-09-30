@@ -100,7 +100,6 @@ theorem r2flat_eq :
 
 theorem diffP_r2 : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
   maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-    (by norm_num) (by norm_num) (by norm_num)
 
 theorem diffG2_r2 : DifferentiableAt ℝ (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) := by
   refine DifferentiableAt.comp _ ?_ diffP_r2
@@ -228,7 +227,6 @@ theorem S2_c0 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -251,7 +249,6 @@ theorem S2_c1 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -274,7 +271,6 @@ theorem S2_c2 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -297,7 +293,6 @@ theorem S2_c3 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -320,7 +315,6 @@ theorem S2_c4 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -343,7 +337,6 @@ theorem S2_c5 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -366,7 +359,6 @@ theorem S2_c6 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -389,7 +381,6 @@ theorem S2_c7 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -411,7 +402,6 @@ theorem S2_c8 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -433,7 +423,6 @@ theorem S2_c9 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -456,7 +445,6 @@ theorem S2_c10 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -478,7 +466,6 @@ theorem S2_c11 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -501,7 +488,6 @@ theorem S2_c12 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -524,7 +510,6 @@ theorem S2_c13 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -546,7 +531,6 @@ theorem S2_c14 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -569,7 +553,6 @@ theorem S2_c15 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -592,7 +575,6 @@ theorem S2_c16 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -614,7 +596,6 @@ theorem S2_c17 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -637,7 +618,6 @@ theorem S2_c18 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -660,7 +640,6 @@ theorem S2_c19 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -683,7 +662,6 @@ theorem S2_c20 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -706,7 +684,6 @@ theorem S2_c21 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -728,7 +705,6 @@ theorem S2_c22 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -751,7 +727,6 @@ theorem S2_c23 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -774,7 +749,6 @@ theorem S2_c24 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -797,7 +771,6 @@ theorem S2_c25 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -819,7 +792,6 @@ theorem S2_c26 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -842,7 +814,6 @@ theorem S2_c27 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -864,7 +835,6 @@ theorem S2_c28 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -887,7 +857,6 @@ theorem S2_c29 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -910,7 +879,6 @@ theorem S2_c30 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -933,7 +901,6 @@ theorem S2_c31 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -956,7 +923,6 @@ theorem S2_c32 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -979,7 +945,6 @@ theorem S2_c33 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1002,7 +967,6 @@ theorem S2_c34 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1024,7 +988,6 @@ theorem S2_c35 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1047,7 +1010,6 @@ theorem S2_c36 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1070,7 +1032,6 @@ theorem S2_c37 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1093,7 +1054,6 @@ theorem S2_c38 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1116,7 +1076,6 @@ theorem S2_c39 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1139,7 +1098,6 @@ theorem S2_c40 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1162,7 +1120,6 @@ theorem S2_c41 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1185,7 +1142,6 @@ theorem S2_c42 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1208,7 +1164,6 @@ theorem S2_c43 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1230,7 +1185,6 @@ theorem S2_c44 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1252,7 +1206,6 @@ theorem S2_c45 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1275,7 +1228,6 @@ theorem S2_c46 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1297,7 +1249,6 @@ theorem S2_c47 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1320,7 +1271,6 @@ theorem S2_c48 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1343,7 +1293,6 @@ theorem S2_c49 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1365,7 +1314,6 @@ theorem S2_c50 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1387,7 +1335,6 @@ theorem S2_c51 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1410,7 +1357,6 @@ theorem S2_c52 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1432,7 +1378,6 @@ theorem S2_c53 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1455,7 +1400,6 @@ theorem S2_c54 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1478,7 +1422,6 @@ theorem S2_c55 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1501,7 +1444,6 @@ theorem S2_c56 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1524,7 +1466,6 @@ theorem S2_c57 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1547,7 +1488,6 @@ theorem S2_c58 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1570,7 +1510,6 @@ theorem S2_c59 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1593,7 +1532,6 @@ theorem S2_c60 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1616,7 +1554,6 @@ theorem S2_c61 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1639,7 +1576,6 @@ theorem S2_c62 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1662,7 +1598,6 @@ theorem S2_c63 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1685,7 +1620,6 @@ theorem S2_c64 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1708,7 +1642,6 @@ theorem S2_c65 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1731,7 +1664,6 @@ theorem S2_c66 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1754,7 +1686,6 @@ theorem S2_c67 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1776,7 +1707,6 @@ theorem S2_c68 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1799,7 +1729,6 @@ theorem S2_c69 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1821,7 +1750,6 @@ theorem S2_c70 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]
@@ -1843,7 +1771,6 @@ theorem S2_c71 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
-      (by norm_num) (by norm_num) (by norm_num)
   have hG : DifferentiableAt ℝ ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) (maxPoolFlat 2 3 3 (Tensor3.flatten r2V)) := by
     rw [pooled_eq]; exact diffG3_p2f
   rw [pdiv_comp _ _ _ hP hG]

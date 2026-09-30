@@ -47,7 +47,7 @@ E4M3_MAX = 448.0  # S.1111.110 = 2^8 * 1.75
 
 
 def to_e4m3(x):
-    """Round to the nearest E4M3-representable value (round-to-nearest).
+    """Round to the nearest E4M3-representable value (round-to-nearest, ties to even: np.round).
     Per-binade mantissa step 2^(e-3); subnormals share the e=-6 grid
     (step 2^-9); clamp magnitude to 448. Saturating, no inf/nan."""
     x = x.astype(np.float64)

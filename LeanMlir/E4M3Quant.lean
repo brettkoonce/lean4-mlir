@@ -5,8 +5,9 @@ import LeanMlir.LEBytes
 
 The quantizer the **Lean fp8 trainer** (`MainMnistLinearE4M3Verified`) wraps around
 the verified linear train-step kernel. It implements the *same* E4M3 (1-4-3, bias 7)
-round-to-nearest grid as the numpy oracle (`scripts/demos/mnist_e4m3_demo.py:to_e4m3`):
-subnormals on the `e = −6` grid (step `2⁻⁹`), saturating at ±448.
+round-to-nearest-even grid as the numpy oracle (`scripts/demos/mnist_e4m3_demo.py:to_e4m3`,
+whose `np.round` rounds ties to even, as OCP FP8 E4M3 does): subnormals on the `e = −6`
+grid (step `2⁻⁹`), saturating at ±448.
 
 This is the host-side "operand byte preparation" half of the fp8 render tie
 ([`LeanMlir/Proofs/Float/E4M3Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/E4M3Fold.lean)): fp8 = fp32 arithmetic on operands
@@ -26,8 +27,18 @@ namespace F32E4M3
 /-- E4M3 largest finite magnitude: `S.1111.110 = 2⁸·1.75`. -/
 @[inline] private def e4m3Max : Float := 448.0
 
-/-- Round one value to the E4M3 grid (round-to-nearest, subnormals on the
-    `e = −6` grid, saturating). Mirrors `to_e4m3` in the numpy oracle. -/
+/-- Round half to even: `Float.round` (C `round`) sends ties away from zero, so a
+    tie whose away-from-zero neighbour is odd steps back one toward zero. Agrees
+    with numpy's `np.round`. -/
+private def roundHalfEven (y : Float) : Float :=
+  let r := Float.round y
+  if (r - y).abs == 0.5 && Float.floor (r / 2.0) * 2.0 != r then
+    if y < 0.0 then r + 1.0 else r - 1.0
+  else r
+
+/-- Round one value to the E4M3 grid (round-to-nearest, ties to even, subnormals
+    on the `e = −6` grid, saturating). Mirrors `to_e4m3` in the numpy oracle,
+    tie rule included. -/
 private def roundE4M3 (x : Float) : Float :=
   let s : Float := if x < 0.0 then -1.0 else 1.0
   let a := min x.abs e4m3Max
@@ -36,8 +47,24 @@ private def roundE4M3 (x : Float) : Float :=
     -- binade exponent, clamped to the normal range (subnormals share e = −6)
     let e := max (-6.0) (min 8.0 (Float.floor (Float.log2 a)))
     let step := Float.exp2 (e - 3.0)          -- 3-bit mantissa LSB
-    let q := min (Float.round (a / step) * step) e4m3Max
+    let q := min (roundHalfEven (a / step) * step) e4m3Max
     s * q
+
+-- Ties go to the even grid point, as `np.round` does in the oracle: a subnormal
+-- tie (2.5 steps of `2⁻⁹` → 2), a tie up (3.5 → 4), a negative tie, and normal
+-- ties in the `e = 0` binade (8.5 → 8 and 9.5 → 10 steps of `2⁻³`).
+#guard roundE4M3 (2.5 * Float.exp2 (-9.0)) == 2.0 * Float.exp2 (-9.0)
+#guard roundE4M3 (3.5 * Float.exp2 (-9.0)) == 4.0 * Float.exp2 (-9.0)
+#guard roundE4M3 (-2.5 * Float.exp2 (-9.0)) == -2.0 * Float.exp2 (-9.0)
+#guard roundE4M3 1.0625 == 1.0
+#guard roundE4M3 1.1875 == 1.25
+-- Off-tie values and the saturation clamp, checked against the oracle.
+#guard roundE4M3 0.3 == 0.3125
+#guard roundE4M3 (-7.3) == -7.5
+#guard roundE4M3 300.0 == 288.0
+#guard roundE4M3 447.0 == 448.0
+#guard roundE4M3 500.0 == 448.0
+#guard roundE4M3 0.00001 == 0.0
 
 /-- **Per-tensor E4M3 quant** (one scale `s = max|·|/448`). Round-trips through
     the grid: returns `s · q(vᵢ/s)` as f32 bytes (the dequantized operand). -/

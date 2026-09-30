@@ -106,7 +106,6 @@ noncomputable def mnistCnnNoBnHasVJPAt
     (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
     (W₄ : Mat d1 d1) (b₄ : Vec d1)
     (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     (h1 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₁ b₁ x k ≠ 0)
     (h2 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₂ b₂
@@ -139,7 +138,7 @@ noncomputable def mnistCnnNoBnHasVJPAt
   have mp_v : HasVJPAt (maxPoolFlat c h w) zmp := by
     rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
   have mp_d : DifferentiableAt ℝ (maxPoolFlat c h w) zmp := by
-    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp hc hh hw
+    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp
   have s3 := vjpCompAt _ _ x s2d mp_d s2 mp_v
   have s3d := mp_d.comp x s2d
   -- dense→relu block 3
@@ -167,7 +166,6 @@ theorem mnistCnnNoBnHasVJPAt_correct
     (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
     (W₄ : Mat d1 d1) (b₄ : Vec d1)
     (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     (h1 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₁ b₁ x k ≠ 0)
     (h2 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₂ b₂
@@ -184,11 +182,11 @@ theorem mnistCnnNoBnHasVJPAt_correct
               ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x))) k ≠ 0)
     (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
     (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-        hc hh hw x h1 h2 h_mp h3 h4).backward dy i =
+        x h1 h2 h_mp h3 h4).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x i j * dy j :=
   (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-      hc hh hw x h1 h2 h_mp h3 h4).correct dy i
+      x h1 h2 h_mp h3 h4).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Reusable discharge lemmas for the smoothness hypotheses
@@ -420,7 +418,7 @@ noncomputable def cnnConcreteHasVJPAt :
     W₁ b₁ W₂ b₂ 1 0 1 1 0 1 (by norm_num) (by norm_num)
     W₁' b₁' W₂' b₂' Wp bp
     1 0 1 1 0 1 1 0 1 (by norm_num) (by norm_num) (by norm_num)
-    Wd bd (by norm_num) (by norm_num) (by norm_num) X
+    Wd bd X
     -- h_stem
     (fun k => ne_of_gt (by rw [flatConv_ws]; exact bnX_pos k))
     -- h_mp (maxpool no ties): the stem output is positionally injective

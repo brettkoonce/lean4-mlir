@@ -30,7 +30,7 @@ open FloatModel
     extra rounding) — that sum is the propagated magnitude `B`. -/
 theorem floatClose_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
-    (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
+    (hw' : 0 ≤ w') (hA : 0 ≤ A) (hn : 0 < ic * h * w)
     (hW : ∀ o c kh kw, |W o c kh kw| ≤ w') (hb : ∀ o, |b o| ≤ β) :
     FloatClose A
       (layerAct (ic * kH * kW) w' β A + layerBudget M.u (ic * kH * kW) w' β A 0)
@@ -64,7 +64,7 @@ theorem floatClose_maxPool3s2 {c h w : Nat} (A : ℝ) :
     back to `e`); the float roundoff is `gapFlat_close`'s budget `gb`. Output magnitude
     `A + gb`, modulus `e ↦ gb + e`. -/
 theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
-    (_hA0 : 0 ≤ A) (hhw : 0 < h * w) :
+    (hhw : 0 < h * w) :
     FloatClose A
       (A + (M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A))
       (globalAvgPoolFlat c h w) M.gapFlatF

@@ -770,32 +770,6 @@ theorem sum_close : ∀ {n : ℕ} (x : Vec n),
           exact mul_nonneg M.u_nonneg (abs_nonneg _))
       (M.err _)
 
--- ════════════════════════════════════════════════════════════════
--- § Gradient-is-a-reduction SGD step (the conv-grad reuse)
--- ════════════════════════════════════════════════════════════════
-
-/-- **SGD step whose gradient is a rounded dot product.** When the gradient is
-    a correlation `g = Σ pᵢqᵢ` computed in float as `M.dot p q` — the shape of
-    a conv *weight* gradient (`Σ_{hi,wi} convPad · cot`) and of any dense weight
-    gradient — the rounded update `fl(θ − fl(lr·fl(p·q)))` is within `sgdErr` of
-    the real step `θ − lr·g`, with the dot's Higham γ as the gradient-error
-    slot `eg`. This is `dot_close` feeding `sgd_step_close`. -/
-theorem dotSgd_step_close (θ : ℝ) {n : ℕ} (p q : Vec n) {lr G : ℝ}
-    (hG : |∑ i, p i * q i| ≤ G) (hlr : 0 ≤ lr) :
-    |M.sub θ (M.mul lr (M.dot p q)) - (θ - lr * ∑ i, p i * q i)| ≤
-      sgdErr M.u lr |θ| G (((1 + M.u) ^ (n + 1) - 1) * ∑ i, |p i * q i|) :=
-  M.sgd_step_close θ (M.dot_close p q) hG hlr
-
-/-- **SGD step whose gradient is a rounded sum.** When the gradient is a plain
-    reduction `g = Σ xᵢ` computed in float as `M.sum x` — the shape of a conv
-    *bias* gradient (`Σ_{hi,wi} cot`) — the rounded update is within `sgdErr` of
-    the real step, with the sum's Higham γ as the `eg` slot. -/
-theorem sumSgd_step_close (θ : ℝ) {n : ℕ} (x : Vec n) {lr G : ℝ}
-    (hG : |∑ i, x i| ≤ G) (hlr : 0 ≤ lr) :
-    |M.sub θ (M.mul lr (M.sum x)) - (θ - lr * ∑ i, x i)| ≤
-      sgdErr M.u lr |θ| G (((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i|) :=
-  M.sgd_step_close θ (M.sum_close x) hG hlr
-
 /-- The float softmax: rounded `exp`, rounded sum, rounded division — the
     structure of the rendered loss head. `fexp` is hypothesis-supplied
     (GPU `exp` has no IEEE spec); its relative accuracy `eexp` is assumed by

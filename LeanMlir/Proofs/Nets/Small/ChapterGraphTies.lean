@@ -112,7 +112,6 @@ theorem cnnBackGraph_faithful
     (W₃ : Mat (c * h * w) d1) (b₃ : Vec d1)
     (W₄ : Mat d1 d1) (b₄ : Vec d1)
     (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     (h1 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₁ b₁ x k ≠ 0)
     (h2 : ∀ k, flatConv (h := 2*h) (w := 2*w) W₂ b₂
@@ -130,7 +129,7 @@ theorem cnnBackGraph_faithful
     (dy : Vec nClasses) :
     den (cnnBackGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ x dy)
       = (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
-          hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
+          x h1 h2 h_mp h3 h4).backward dy := by
   simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBnHasVJPAt, convReluHasVJPAt,
     denseReluHasVJPAt, vjpCompAt_backward, denseHasVJP, reluHasVJPAt,
     HasVJP3.toHasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]

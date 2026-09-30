@@ -359,19 +359,13 @@ theorem denseB_hasGradAt {N a c : Nat} (cotN : String) (W : Mat a c) (x₀ : Vec
 -- ════════════════════════════════════════════════════════════════
 
 /-- The permutation `bnBatchLA` reads its per-channel core through: network index `J` ↦ the
-    `[C, N·H·W]` cell `bnchwBackIdx (J at the mul_assoc cast)`. -/
+    `[C, N·H·W]` cell `bnchwBackIdx (J at the mul_assoc cast)`. `bnBatchLA … v J` is
+    `bnPerChannelFlat … (bnchwFwd … (reassocB … v)) (bnLAPerm … J)` by `rfl`. -/
 noncomputable def bnLAPerm (N oc h w : Nat) : Fin (N * (oc * h * w)) ≃ Fin (oc * (N * (h * w))) where
   toFun J := bnchwBackIdx N oc h w (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) J)
   invFun j := Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm (bnchwFwdIdx N oc h w j)
   left_inv J := by simp [bnchwFwdIdx_bnchwBackIdx]
   right_inv j := by simp [bnchwBackIdx_bnchwFwdIdx]
-
-/-- `bnBatchLA` at a network index IS the per-channel core at the permuted cell. -/
-theorem bnBatchLA_apply_perm (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N * (oc * h * w)))
-    (J : Fin (N * (oc * h * w))) :
-    bnBatchLA N oc h w ε γ β v J
-      = bnPerChannelFlat oc (N * (h * w)) ε γ β (bnchwFwd N oc h w (reassocB N oc h w v))
-          (bnLAPerm N oc h w J) := rfl
 
 theorem bnPerChannelFlat_gamma_differentiable (oc m : Nat) (ε : ℝ) (β : Vec oc)
     (v : Vec (oc * m)) : Differentiable ℝ (fun γ' : Vec oc => bnPerChannelFlat oc m ε γ' β v) := by

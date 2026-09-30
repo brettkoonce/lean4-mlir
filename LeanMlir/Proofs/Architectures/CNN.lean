@@ -1037,12 +1037,10 @@ noncomputable def maxPool2LocalReindex {c h w : Nat}
     flattened max-pool agrees with the reindex `y ↦ y ∘ σ` where σ routes each
     output position to its argmax's input position: every window keeps its
     argmax, since finitely many strict inequalities persist on a neighbourhood
-    (`Filter.eventually_all`). Promoted via `EventuallyEq`. The positivity
-    hypotheses are not used. -/
+    (`Filter.eventually_all`). Promoted via `EventuallyEq`. -/
 theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
-    (h_smooth : MaxPool2Smooth x)
-    (_hc : 0 < c) (_hh : 0 < h) (_hw : 0 < w) :
+    (h_smooth : MaxPool2Smooth x) :
     HasFDerivAt
       (fun v : Vec (c * (2 * h) * (2 * w)) =>
         Tensor3.flatten (maxPool2 (Tensor3.unflatten v)))
@@ -1079,10 +1077,7 @@ theorem pdiv3_maxPool2_smooth {c h w : Nat}
       (if co = ci ∧ ho = winRow hi_in ∧ wo = winCol wi_in
           ∧ MaxPool2IsArgmax x ci hi_in wi_in
         then (1 : ℝ) else 0) := by
-  have hc : 0 < c := Fin.pos ci
-  have hh : 0 < h := Fin.pos ho
-  have hw : 0 < w := Fin.pos wo
-  have h_fderiv := maxPool2_flat_hasFDerivAt x h_smooth hc hh hw
+  have h_fderiv := maxPool2_flat_hasFDerivAt x h_smooth
   unfold pdiv3
   rw [pdiv_eq_of_hasFDerivAt h_fderiv]
   show reindexCLM (maxPool2LocalReindex x)
@@ -1439,10 +1434,9 @@ noncomputable def maxPoolFlat (c h w : Nat) :
   fun v => Tensor3.flatten (maxPool2 (Tensor3.unflatten v))
 
 theorem maxPoolFlat_differentiableAt {c h w : Nat}
-    (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x) :
     DifferentiableAt ℝ (maxPoolFlat c h w) (Tensor3.flatten x) :=
-  (maxPool2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
+  (maxPool2_flat_hasFDerivAt x h_smooth).differentiableAt
 
 /-- The VJP of `maxPoolFlat` at a flattened input whose 2×2 windows each have a unique max
     (`MaxPool2Smooth`): `maxPool2HasVJPAt3` moved to `Vec` form. -/
@@ -1603,11 +1597,10 @@ noncomputable def cnnForward
   (maxPoolFlat c h w) ∘
   (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs)
 
-/-- The whole-net VJP of `cnnForward` at `x`, folded by `vjpCompAt`, given positive BN `ε`s and
-    dimensions and six smoothness binders: `h_stem` (stem BN output nonzero), `h_mp` (unique
-    window maxima of the post-ReLU stem output the pool reads), `h_rb1` / `h_rb1o` (the identity
-    block's inner BN output and pre-ReLU residual sum nonzero) and `h_rb2` / `h_rb2o` (the same
-    two for the projection block). -/
+/-- The whole-net VJP of `cnnForward` at `x`, folded by `vjpCompAt`, given positive BN `ε`s and six smoothness binders: `h_stem` (stem BN output
+    nonzero), `h_mp` (unique window maxima of the post-ReLU stem output the pool reads), `h_rb1` /
+    `h_rb1o` (the identity block's inner BN output and pre-ReLU residual sum nonzero) and `h_rb2` /
+    `h_rb2o` (the same two for the projection block). -/
 noncomputable def cnnHasVJPAt
     {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
     (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
@@ -1617,7 +1610,6 @@ noncomputable def cnnHasVJPAt
     (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
     (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
     (Wd : Mat oc nClasses) (bd : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     -- stem smoothness
     (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
@@ -1661,7 +1653,7 @@ noncomputable def cnnHasVJPAt
   have mp_vjp : HasVJPAt (maxPoolFlat c h w) (S0 x) := by
     rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
   have mp_diff : DifferentiableAt ℝ (maxPoolFlat c h w) (S0 x) := by
-    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp hc hh hw
+    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp
   have s1_vjp : HasVJPAt (maxPoolFlat c h w ∘ S0) x :=
     vjpCompAt S0 (maxPoolFlat c h w) x s0_diff mp_diff s0_vjp mp_vjp
   have s1_diff : DifferentiableAt ℝ (maxPoolFlat c h w ∘ S0) x :=
@@ -1716,7 +1708,6 @@ theorem cnnHasVJPAt_correct
     (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
     (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
     (Wd : Mat oc nClasses) (bd : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
     (h_mp : MaxPool2Smooth (Tensor3.unflatten
@@ -1744,14 +1735,14 @@ theorem cnnHasVJPAt_correct
     (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
     (cnnHasVJPAt Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
         W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
-        hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
+        x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
                 W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
              x i j * dy j :=
   (cnnHasVJPAt Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
       W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
-      hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).correct dy i
+      x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).correct dy i
 
 /-- **GAP of a uniformly shifted channel is shifted by the same constant.** -/
 theorem globalAvgPool_shift {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (x y : Tensor3 c h w) (δ : ℝ)

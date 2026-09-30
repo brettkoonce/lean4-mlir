@@ -104,17 +104,6 @@ theorem conv_bias_sgd_certified {ic oc h w kH kW : Nat}
 -- two conv bridges (`ResNet34PoC.convStrided{W,B}_den`). The cotangent is a binder here too.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Depthwise bias-gradient bridge.** Likewise the per-channel depthwise bias gradient
-    (`db[c] = Σ_spatial dy`) is the certified Jacobian of `depthwiseConv2d` wrt the bias, contracted
-    with `dy` — the `.correct` field of `depthwiseBiasGradHasVJP`. -/
-theorem depthwise_bias_grad_bridge {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w)
-    (b : Vec c) (dy : Vec (c * h * w)) (cc : Fin c) :
-    (depthwiseBiasGradHasVJP W x).backward b dy cc
-      = ∑ j : Fin (c * h * w),
-          pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j :=
-  (depthwiseBiasGradHasVJP W x).correct b dy cc
-
 /-- **Depthwise bias output, certified.** Likewise `bⁿ = b − lr·(spatial reduce)` denotes
     `b − lr·(certified ∂(depthwiseConv2d)/∂b · cotangent)`. -/
 theorem depthwise_bias_sgd_certified {c h w kH kW : Nat}
@@ -123,7 +112,7 @@ theorem depthwise_bias_sgd_certified {c h w kH kW : Nat}
     b cc - lr * (depthwiseBiasGradHasVJP W x).backward b dy cc
       = b cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j := by
-  rw [depthwise_bias_grad_bridge]
+  rw [(depthwiseBiasGradHasVJP W x).correct]
 
 /-- **Stem conv weight output, certified.** `sWⁿ = sW − lr·(strided transpose-trick grad)` denotes
     `sW − lr·(certified ∂(flatConvStride2)/∂sW · cotangent)`, via `flatConvStride2WeightGradHasVJP`

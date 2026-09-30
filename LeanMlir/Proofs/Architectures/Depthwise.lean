@@ -299,15 +299,6 @@ noncomputable def depthwiseStride2FlatHasVJP {c h w kH kW : Nat}
   show HasVJP (decimateFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
   vjpComp _ _ hf_diff (decimateFlat_differentiable c h w) hf_vjp (decimateFlatHasVJP c h w)
 
-/-- **Stride-2 depthwise input-VJP correctness**:
-    the backward equals the `pdiv`-contracted Jacobian of `depthwiseStride2Flat`. -/
-theorem depthwiseStride2FlatHasVJP_correct {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (x : Vec (c * (2 * h) * (2 * w))) (dy : Vec (c * h * w)) (i : Fin (c * (2 * h) * (2 * w))) :
-    (depthwiseStride2FlatHasVJP W b).backward x dy i
-      = ∑ j : Fin (c * h * w), pdiv (depthwiseStride2Flat W b) x i j * dy j :=
-  (depthwiseStride2FlatHasVJP W b).correct x dy i
-
 /-! ### Depthwise weight gradient (proved from foundation rules)
 
 Per-channel transpose trick:

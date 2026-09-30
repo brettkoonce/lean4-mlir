@@ -31,9 +31,9 @@ the collective is `(1/R)·Σ_r rnd S_r` where the batch-`R·N` node is `rnd (Σ_
 A DP render divides its loss by the per-replica batch, so its cotangents are `R ×` the shard of
 the global ones (`DataParallel.Sync`, "The `1/R`"). At f32 linearity carries that factor
 through every backward; at bf16 it has to pass through `rnd` as well. The `*_smul` lemmas below
-take that as a hypothesis, `∀ x, rnd (s * x) = s * rnd x`, and `rndP_two_pow_mul` proves it for
-the repo's rounding model at every power of two — so for bf16 (`rndP 7`) at `R = 4`
-(`rndP_mul_four`), the replica count of every ImageNet run.
+take that as a hypothesis, `∀ x, rnd (s * x) = s * rnd x`, and `rndP_zpow_mul` proves it for
+the repo's rounding model at every integer power of two — so for bf16 (`rndP 7`) at `s = R` and
+`s = 1/R` whenever `R` is a power of two, the ImageNet runs' `R = 4` among them.
 
 ## What is NOT claimed
 
@@ -263,56 +263,55 @@ theorem den_allReduceMeanF_convStridedWeightGradBBf16_sub_global {N ic oc h w kH
 -- § The divisor step at bf16 — scaling through `rnd`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **`Int.log 2` shifts by `k` under scaling by `2^k`.** -/
-theorem int_log_two_pow_mul (k : ℕ) {y : ℝ} (hy : 0 < y) :
-    Int.log 2 ((2 : ℝ) ^ k * y) = (k : ℤ) + Int.log 2 y := by
-  have hb : 1 < (2 : ℕ) := by norm_num
-  have h2k : (0 : ℝ) < (2 : ℝ) ^ k := by positivity
-  have hky : 0 < (2 : ℝ) ^ k * y := mul_pos h2k hy
-  have hpow : ∀ z : ℤ, ((2 : ℕ) : ℝ) ^ ((k : ℤ) + z) = (2 : ℝ) ^ k * ((2 : ℕ) : ℝ) ^ z := by
-    intro z
-    rw [zpow_add₀ (by norm_num), zpow_natCast]
-    norm_num
+/-- **`Int.log b` shifts by `z` under scaling by `b^z`**, for any base `b > 1` and any integer
+    exponent. -/
+theorem int_log_zpow_mul {b : ℕ} (hb : 1 < b) (z : ℤ) {r : ℝ} (hr : 0 < r) :
+    Int.log b ((b : ℝ) ^ z * r) = z + Int.log b r := by
+  have hb0 : (0 : ℝ) < b := by exact_mod_cast zero_lt_one.trans hb
+  have hbz : (0 : ℝ) < (b : ℝ) ^ z := zpow_pos hb0 z
+  have hzr : 0 < (b : ℝ) ^ z * r := mul_pos hbz hr
+  have hpow : ∀ y : ℤ, (b : ℝ) ^ (z + y) = (b : ℝ) ^ z * (b : ℝ) ^ y :=
+    fun y => zpow_add₀ hb0.ne' z y
   apply le_antisymm
-  · -- log (2^k y) < k + log y + 1, since 2^k·y < 2^(k + log y + 1)
-    have hlt : (2 : ℝ) ^ k * y < ((2 : ℕ) : ℝ) ^ ((k : ℤ) + (Int.log 2 y + 1)) := by
+  · -- log (b^z r) < z + log r + 1, since b^z·r < b^(z + log r + 1)
+    have hlt : (b : ℝ) ^ z * r < (b : ℝ) ^ (z + (Int.log b r + 1)) := by
       rw [hpow]
-      exact mul_lt_mul_of_pos_left (by exact_mod_cast Int.lt_zpow_succ_log_self hb y) h2k
-    have := (Int.lt_zpow_iff_log_lt hb hky).mp hlt
+      exact mul_lt_mul_of_pos_left (Int.lt_zpow_succ_log_self hb r) hbz
+    have := (Int.lt_zpow_iff_log_lt hb hzr).mp hlt
     omega
-  · -- 2^(k + log y) ≤ 2^k·y
-    apply (Int.zpow_le_iff_le_log hb hky).mp
+  · -- b^(z + log r) ≤ b^z·r
+    apply (Int.zpow_le_iff_le_log hb hzr).mp
     rw [hpow]
-    exact mul_le_mul_of_nonneg_left (by exact_mod_cast Int.zpow_log_le_self hb hy) h2k.le
+    exact mul_le_mul_of_nonneg_left (Int.zpow_log_le_self hb hr) hbz.le
 
 /-- **`Int.log` reads `|x|`, so the shift holds for either sign.** -/
-theorem int_log_abs_two_pow_mul (k : ℕ) {x : ℝ} (hx : x ≠ 0) :
-    Int.log 2 |(2 : ℝ) ^ k * x| = (k : ℤ) + Int.log 2 |x| := by
-  rw [abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ k)]
-  exact int_log_two_pow_mul k (abs_pos.mpr hx)
+theorem int_log_abs_zpow_mul {b : ℕ} (hb : 1 < b) (z : ℤ) {x : ℝ} (hx : x ≠ 0) :
+    Int.log b |(b : ℝ) ^ z * x| = z + Int.log b |x| := by
+  have hb0 : (0 : ℝ) < b := by exact_mod_cast zero_lt_one.trans hb
+  rw [abs_mul, abs_of_pos (zpow_pos hb0 z)]
+  exact int_log_zpow_mul hb z (abs_pos.mpr hx)
 
 /-- **The repo's rounding model commutes with scaling by a power of two** — the grid at
-    `2^k·x` is the grid at `x` scaled by `2^k`, because the exponent is unbounded. -/
-theorem rndP_two_pow_mul (p k : ℕ) (x : ℝ) :
-    rndP p ((2 : ℝ) ^ k * x) = (2 : ℝ) ^ k * rndP p x := by
+    `2^z·x` is the grid at `x` scaled by `2^z`, because the exponent is unbounded. The
+    exponent `z` is an integer, so this covers the multiplier `R = 2^k` and the divisor
+    `1/R = 2^(-k)` alike. -/
+theorem rndP_zpow_mul (p : ℕ) (z : ℤ) (x : ℝ) :
+    rndP p ((2 : ℝ) ^ z * x) = (2 : ℝ) ^ z * rndP p x := by
   rcases eq_or_ne x 0 with hx | hx
   · simp [hx]
-  have hkx : (2 : ℝ) ^ k * x ≠ 0 := mul_ne_zero (by positivity) hx
+  have h2z : (2 : ℝ) ^ z ≠ 0 := zpow_ne_zero z two_ne_zero
+  have hzx : (2 : ℝ) ^ z * x ≠ 0 := mul_ne_zero h2z hx
+  have hlog : Int.log 2 |(2 : ℝ) ^ z * x| = z + Int.log 2 |x| := by
+    have := int_log_abs_zpow_mul (b := 2) (by norm_num) z hx
+    simpa using this
   unfold rndP
-  rw [ite_eq_right hkx, ite_eq_right hx, int_log_abs_two_pow_mul k hx]
-  have hs : (2 : ℝ) ^ ((k : ℤ) + Int.log 2 |x| - (p : ℤ))
-      = (2 : ℝ) ^ k * (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ)) := by
-    rw [show (k : ℤ) + Int.log 2 |x| - (p : ℤ) = (k : ℤ) + (Int.log 2 |x| - (p : ℤ)) by ring,
-        zpow_add₀ (by norm_num), zpow_natCast]
-  have h2k : (2 : ℝ) ^ k ≠ 0 := by positivity
-  rw [hs, mul_div_mul_left _ _ h2k]
+  rw [ite_eq_right hzx, ite_eq_right hx, hlog]
+  have hs : (2 : ℝ) ^ (z + Int.log 2 |x| - (p : ℤ))
+      = (2 : ℝ) ^ z * (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ)) := by
+    rw [show z + Int.log 2 |x| - (p : ℤ) = z + (Int.log 2 |x| - (p : ℤ)) by ring,
+        zpow_add₀ two_ne_zero]
+  rw [hs, mul_div_mul_left _ _ h2z]
   ring
-
-/-- **At `R = 4`, the replica count of every ImageNet run.** -/
-theorem rndP_mul_four (p : ℕ) (x : ℝ) : rndP p (4 * x) = 4 * rndP p x := by
-  have := rndP_two_pow_mul p 2 x
-  norm_num at this
-  exact this
 
 /-- **The bf16 conv input-VJP scales with its cotangent** when `rnd` commutes with the scale. -/
 theorem convBackBatchedBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (s : ℝ)

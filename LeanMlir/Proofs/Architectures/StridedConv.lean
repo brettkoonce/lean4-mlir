@@ -102,15 +102,6 @@ noncomputable def flatConvStride2HasVJP {ic oc h w kH kW : Nat}
   show HasVJP (decimateFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)) from
   vjpComp _ _ hf_diff (decimateFlat_differentiable oc h w) hf_vjp (decimateFlatHasVJP oc h w)
 
-/-- **Stride-2 conv input-VJP correctness**: the
-    backward equals the `pdiv`-contracted Jacobian of `flatConvStride2`. -/
-theorem flatConvStride2HasVJP_correct {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (x : Vec (ic * (2 * h) * (2 * w))) (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
-    (flatConvStride2HasVJP W b).backward x dy i
-      = ∑ j : Fin (oc * h * w), pdiv (flatConvStride2 W b) x i j * dy j :=
-  (flatConvStride2HasVJP W b).correct x dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 conv weight-VJP (reuses the stride-1 weight-grad)
 -- ════════════════════════════════════════════════════════════════

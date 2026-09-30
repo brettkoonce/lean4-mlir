@@ -19,8 +19,8 @@ migration check. To re-run the real tie, recover the hand-written render and pas
 same graph. SSA names differ (tagged vs counter), and so does the op sequence: the hand-written
 render fuses label smoothing and the softmax into one `[B,10]` block, while the kit composes
 `softmaxRow → subB → scaleB → addVB → shiftB → divConstB` with the batched ops' reshape
-round-trips. So neither a byte diff nor the SSA-name-independent verb-sequence trick
-(`tests/TestAdamOpTie.lean`) applies — only running both and comparing every returned float does.
+round-trips. So neither a byte diff nor an SSA-name-independent comparison of the op sequence
+applies — only running both and comparing every returned float does.
 
 The interface IS identical (515 in / 513 out, types positionally equal), so both take the same
 packed `[θ|m|v | lr,bc1,bc2 | bn stats]` buffer that `trainAdamSched` builds.

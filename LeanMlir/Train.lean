@@ -179,9 +179,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     if lossKind == .perPixelDice && cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "perPixelDice + label smoothing is meaningless (Dice is a set-overlap ratio, not a log-likelihood target) — use .perPixelDiceCE if you want smoothing on the CE half"
   | .floatTargetMse =>
-    -- DDPM bypasses compileVmfbs entirely (see demos/MainMnistDdpmTrain.lean);
-    -- reaching this branch via compileVmfbs is currently unused but reserved.
-    pure ()
+    throw <| IO.userError "lossKind = .floatTargetMse has no compileVmfbs path — DDPM trains through demos/MainMnistDdpmTrain.lean's own compile, not compileVmfbs"
   | .yolov1Masked =>
     if useSoftLabels then
       throw <| IO.userError "yolov1Masked is incompatible with useMixup/useCutmix/useKnnMixup — YOLOv1 targets are per-cell float tensors, not class-mixable"

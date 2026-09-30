@@ -45,11 +45,17 @@ an upper bracket on what any certificate can reach.
 | capped (`SF`) | 92 / 88 / 69 / 24 | 93 / 93 / 92 / 81 | 92 / 85 / 49 / 2 | 93 / 93 / 92 / 88 |
 | unconstrained (`TF`) | 87 / 42 / 2 / 0 | 94 / 92 / 76 / 15 | 71 / 14 / 0 / 0 | 95 / 92 / 85 / 36 |
 
+## Conv net (conv → relu → max-pool → dense on 8×8 pooled MNIST), pixel L∞ at ε = 1, 2, 4, 8 /255
+
+`ibp_conv_scorecard.py`, re-run later the same day once its output paths were fixed for the
+certificate-directory layout (it used to crash writing them). Run with `--check`: all six
+`IbpConvScorecard/*` files match what it emits. Log: `ibp_conv_scorecard.log`.
+
+| net | quantized test acc | IBP |
+|---|---|---|
+| conv, 4 channels, /256 weights | 0.8256 | 79 / 73 / 47 / 13 |
+
 ## Not re-run
 
-- `ibp_conv_scorecard.py` (the conv-net IBP tier, `IbpConvScorecard/*`) crashes at
-  `OUT.with_name(...)` and its paths predate the certificate-directory layout; its files were
-  hand-matched in WP6c. Its last recorded counts (79 / 73 / 47 / 13 at ε = 1, 2, 4, 8 /255) are in
-  `historical/comment_measurements.md`.
 - The randomized-smoothing scorecards keep their inputs in `runs/2026-07-12-smooth-scorecard/`;
   `smooth_scorecard_gen.py --check` and `smooth_dec_scorecard_gen.py --check` pass.

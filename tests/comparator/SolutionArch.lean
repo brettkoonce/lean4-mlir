@@ -272,7 +272,6 @@ theorem chk_cnnHasVJPAt_correct
     (Wp : Kernel4 oc c kHp kWp) (bp : Vec oc)
     (f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip : ℝ) (hf₁ : 0 < f₁) (hf₂ : 0 < f₂) (hfp : 0 < fp)
     (Wd : Mat oc nClasses) (bd : Vec nClasses)
-    (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (ic * (2*h) * (2*w)))
     (h_stem : ∀ k, bnForward (c * (2*h) * (2*w)) εs γs βs (flatConv Ws bs x) k ≠ 0)
     (h_mp : MaxPool2Smooth (Tensor3.unflatten
@@ -300,12 +299,12 @@ theorem chk_cnnHasVJPAt_correct
     (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
     (cnnHasVJPAt Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
         W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
-        hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
+        x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
                 W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
              x i j * dy j :=
-  cnnHasVJPAt_correct Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂ W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o dy i
+  cnnHasVJPAt_correct Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂ W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o dy i
 
 theorem chk_mobilenetv2HasVJPAt_correct
     {ic c mid₁ oc mid₂ h w kHs kWs

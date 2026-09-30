@@ -116,7 +116,6 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     (x₁ : Tensor3 c4 (2*h) (2*w)) (label : Fin nClasses) (gh : Vec (c4 * c4 * kH * kW))
     (hx₁ : x₁ = Tensor3.unflatten
       (cifar8Prefix7 W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ image))
-    (hc4 : 0 < c4) (hh : 0 < h) (hw : 0 < w)
     {lr η a w₉ wa wb : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
     (hw₉ : 0 ≤ w₉) (hW₉ : ∀ i j, |W₉ i j| ≤ w₉)
     (hwa : 0 ≤ wa) (hWa : ∀ i j, |Wa i j| ≤ wa)
@@ -177,7 +176,7 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     rw [cifarCnn8Forward_factor]
     simp only [Function.comp_apply, cifar8Head, flatConv, hx₁]
   rw [hfac (Kernel4.flatten W₈ - lr • gh), hfac (Kernel4.flatten W₈)]
-  exact cnn_conv2_sgd_descends W₈ b₈ x₁ W₉ b₉ Wa ba Wb bb label gh hc4 hh hw
+  exact cnn_conv2_sgd_descends W₈ b₈ x₁ W₉ b₉ Wa ba Wb bb label gh
     ha hx hw₉ hW₉ hwa hWa hwb hWb hlr hη hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
 end Proofs

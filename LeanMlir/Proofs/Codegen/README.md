@@ -12,7 +12,7 @@ theorems about what a term *means* are stated about `den`, mostly in `Nets/`.
 | `StableHLO/Pretty.lean` | the printer (`skel` → `Tok` → `emitTok` → `pretty`). Every renderer imports it |
 | `ChapterGraphs.lean` | the chapter 1–4 nets' whole-net graphs and the `*ModuleV` printers that write their committed forwards |
 | `FwdGraphTextTies.lean` | `#guard`s that each net's rendered forward blocks print exactly `pretty` of its T2 block graphs (ResNet-34/50, MobileNetV2/V4, EfficientNet-B0; ConvNeXt and ViT have per-example T2 graphs) |
-| `StableHLO/Parse.lean`, `StableHLO/Lex.lean` | the token round trip `parse (toToks (skel g)) = some (skel g)`, and the decimal `Nat ⟷ String` round trip a lexer would need; no lexer is built, so the text ↔ token step is trusted |
+| `StableHLO/Parse.lean` | the token round trip `parse (toToks (skel g)) = some (skel g)`; no lexer is built, so the text ↔ token step is trusted |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |

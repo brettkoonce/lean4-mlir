@@ -1,16 +1,18 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
 
-/-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-S AdamW trainer on XLA/PJRT
+/-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-M AdamW trainer on XLA/PJRT
 
-Shared body in `apps/imagenette/MobilenetV4AdamCommon.lean`, linked against `ffi/libpjrt_ffi.so`.
+The body is `runMobilenetV4Adam` below, linked against `ffi/libpjrt_ffi.so`.
 
 80 epochs, bs32, AdamW; the target is the JAX-baseline path's number for this block table. The
 forward and the gradient are both tied against that reference, so the two paths are the same net and
 the number is a reproduction rather than a fresh measurement.
 
-**This does not move the verification tier.** Every op the render composes carries a proven `den`,
-but MNv4 has no composed-backward theorem yet — see `MobilenetV4AdamCommon`'s header.
+Every op the render composes carries a proven `den`, and the train step is tied:
+`Mnv4TieB.mnv4_net_tiedB` states every parameter gradient of `mnv4_adam_train_step` at the
+chain cotangent, and `mnv4_lossCot_is_smoothedCE_grad` fixes that cotangent to the label-smoothed
+loss the render emits.
 
 ```
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so

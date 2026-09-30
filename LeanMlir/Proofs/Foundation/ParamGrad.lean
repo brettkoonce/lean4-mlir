@@ -35,10 +35,6 @@ noncomputable def addConstHasVJPAt {m n : Nat} (f : Vec m → Vec n) (c : Vec n)
     refine Finset.sum_congr rfl fun j _ => ?_
     rw [pdiv_add f (fun _ => c) x hf (differentiableAt_const c) i j, pdiv_const, add_zero]
 
-theorem addConstHasVJPAt_backward {m n : Nat} (f : Vec m → Vec n) (c : Vec n) (x : Vec m)
-    (hf : DifferentiableAt ℝ f x) (hv : HasVJPAt f x) (dy : Vec n) :
-    (addConstHasVJPAt f c x hf hv).backward dy = hv.backward dy := rfl
-
 /-- `addConstHasVJPAt` with the constant on the left: `u ↦ c + f u`. -/
 noncomputable def constAddHasVJPAt {m n : Nat} (c : Vec n) (f : Vec m → Vec n) (x : Vec m)
     (hf : DifferentiableAt ℝ f x) (hv : HasVJPAt f x) :

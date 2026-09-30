@@ -17,7 +17,6 @@ import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 import LeanMlir.Proofs.Codegen.StableHLO.Parse
-import LeanMlir.Proofs.Codegen.StableHLO.Lex
 import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
@@ -241,7 +240,6 @@ open Proofs
 
 -- Depthwise
 #print axioms depthwiseHasVJP3_correct
-#print axioms depthwiseStride2FlatHasVJP_correct
 
 -- BatchNorm
 #print axioms pdiv_bnAffine
@@ -260,7 +258,6 @@ open Proofs
 -- LayerNorm / GELU / Swish
 #print axioms pdiv_gelu
 #print axioms geluHasVJP_correct
-#print axioms swishHasVJP_correct
 -- closed form the emitted swishBack text computes (no Lean consumer; keep pinned)
 #print axioms swishScalarDeriv_eq
 #print axioms layerNormHasVJP_correct
@@ -301,13 +298,11 @@ open Proofs
 -- Whole-network VJPs for the depthwise/SE/LN-based architectures
 #print axioms relu6HasVJPAt
 #print axioms mobilenetv2HasVJPAt_correct
-#print axioms layerScaleHasVJP_correct
 #print axioms convnextHasVJPAt_correct
 -- ConvNeXt promoted to an UNCONDITIONAL global VJP (all-smooth ops)
 #print axioms convnextHasVJP
 #print axioms convnextHasVJP_correct
 #print axioms sigmoidHasVJP
-#print axioms sigmoidHasVJP_correct
 -- closed form the emitted sigmoidBack text computes (no Lean consumer; keep pinned)
 #print axioms sigmoidScalarDeriv_eq
 #print axioms efficientnetHasVJPAt_correct
@@ -329,8 +324,7 @@ open Proofs
 #print axioms IR.dense_back_bridge
 #print axioms IR.relu_back_bridge
 -- The emitted transposed-convolution graph denotes the proven conv input-VJP
-#print axioms IR.conv_back_bridge_1to2
-#print axioms IR.conv_back_bridge_2to2
+#print axioms IR.conv_back_bridge
 -- The GENERAL conv-adjoint reindex (all dims, odd kernels)
 #print axioms IR.convBackDenote_eq_input_grad_formula
 -- The emitted tile-compare-select graph denotes the canonical maxpool backward
@@ -349,11 +343,11 @@ open Proofs
 -- Tensor3 IR: conv/maxpool lifted into a composable backward graph + chain rule.
 #print axioms IR.denote_subst3
 #print axioms IR.maxpool3_node_bridge
-#print axioms IR.conv3_node_bridge_1to2
+#print axioms IR.conv3_node_bridge
 #print axioms IR.conv_compose3
 -- Flatten bridge: flattened Back3 graph denotes the proven flattened-layer Vec backward.
 #print axioms IR.maxpool_flatten_bridge
-#print axioms IR.conv_flatten_bridge_1to2
+#print axioms IR.conv_flatten_bridge
 -- HasVJPAt smooth-point variants + a real dense→relu block via vjpCompAt.
 #print axioms IR.relu_at_bridge
 #print axioms IR.dense_at_bridge
@@ -565,7 +559,6 @@ open Proofs
 #print axioms StableHLO.cifar8BnFwdGraph_faithful
 
 -- Chapter-6 ResNet **Milestone B** (toward real ResNet-34)
-#print axioms flatConvStride2HasVJP_correct
 -- ...and its weight-VJP (the kernel grad for training a strided block)
 #print axioms flatConvStride2WeightGradHasVJP_correct
 -- ResNet-34's non-degeneracy, ON THE NET THE ARTIFACTS RUN (ResNet34FullBSeal.lean): both
@@ -655,8 +648,6 @@ open Proofs
 #print axioms StableHLO.bnPerChannelBack_faithful
 -- Syntactic core
 #print axioms StableHLO.roundtrip
--- Syntactic LEXER numeric keystone
-#print axioms StableHLO.parseNat_toString
 -- CIFAR-BN render CLOSE
 #print axioms bnPerChannelGradGamma_correct
 #print axioms bnPerChannelGradBeta_correct
@@ -668,7 +659,6 @@ open Proofs
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
 -- MobileNetV2 CLOSE
-#print axioms depthwise_bias_grad_bridge
 #print axioms depthwise_bias_sgd_certified
 #print axioms convStride2_weight_sgd_certified
 #print axioms convStride2_bias_sgd_certified
@@ -804,11 +794,9 @@ open Proofs
 #print axioms convPad_close
 #print axioms FloatModel.convF
 #print axioms FloatModel.convF_close
--- Whole-net capstone (SgdDescent/Cnn.lean)
+-- The flat conv's float forward (ConvFloat.lean)
 #print axioms FloatModel.flatConvF
 #print axioms FloatModel.flatConvF_close
-#print axioms FloatModel.mnistCnnNoBnForwardF
-#print axioms FloatModel.cnn_float_close
 -- Chapter-5 no-BN CIFAR CNN (CifarFloatBridge.lean)
 #print axioms rsqrt_lipschitz
 #print axioms bnVar_nonneg
@@ -1026,16 +1014,8 @@ open Proofs
 #print axioms Proofs.vitInputGradKB_correct
 #print axioms Proofs.vitTinyInputGradB_eq_vitTiny_vjp
 -- ViT TRANSFORMER-BLOCK FOLD
-#print axioms FloatModel.dotSgd_step_close
-#print axioms FloatModel.sumSgd_step_close
 #print axioms convWeightGrad_eq_dot
 #print axioms convBiasGrad_eq_sum
-#print axioms FloatModel.cnn_convW_step_float_close
-#print axioms FloatModel.cnn_convb_step_float_close
--- The numeric conv-weight-step capstone (SgdDescent/Cnn.lean)
-#print axioms FloatModel.mnist_cnn_convW_step_float_budget
--- Bias peer (SgdDescent/Cnn.lean)
-#print axioms FloatModel.mnist_cnn_convb_step_float_budget
 -- CIFAR-8 last-conv SGD descent (SgdDescent/Cifar.lean)
 #print axioms Proofs.cifarCnn8Forward_factor
 #print axioms Proofs.cifar8_lastConv_sgd_descends
@@ -2243,10 +2223,9 @@ open Proofs
 #print axioms Proofs.den_convStridedWeightGradBBf16_global_split
 #print axioms Proofs.den_allReduceMeanF_convStridedWeightGradBBf16_sub_global
 -- the divisor step through rnd: rndP commutes with powers of two (R = 4 on every ImageNet run)
-#print axioms Proofs.int_log_two_pow_mul
-#print axioms Proofs.int_log_abs_two_pow_mul
-#print axioms Proofs.rndP_two_pow_mul
-#print axioms Proofs.rndP_mul_four
+#print axioms Proofs.int_log_zpow_mul
+#print axioms Proofs.int_log_abs_zpow_mul
+#print axioms Proofs.rndP_zpow_mul
 #print axioms Proofs.convBackBatchedBf16_smul
 #print axioms Proofs.convStridedBackBatchedBf16_smul
 #print axioms Proofs.convWeightGradBBf16_smul
