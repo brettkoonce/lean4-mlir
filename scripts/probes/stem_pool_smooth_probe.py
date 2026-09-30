@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """Does the ResNet stem's smooth-point hypothesis hold on a real training batch?
 
-`R34SmoothAtB` / `R50SmoothAtB` carry the stem pool's condition `StemPoolSmoothAt`
-(LeanMlir/Proofs/Foundation/HeadLayers.lean): every 3x3/s2 window of the post-ReLU stem
-activation has its maximum at one position, or is entirely zero. This script evaluates it on real
+`R34SmoothAtB` / `R50SmoothAtB` (the input VJPs) carry the stem pool's condition
+`StemPoolSmoothAt` (LeanMlir/Proofs/Foundation/HeadLayers.lean): every 3x3/s2 window of the
+post-ReLU stem activation has its maximum at one position, or is entirely zero.
+`R34LossSmoothAtB` / `R50LossSmoothAtB` (the loss gradients) carry the weaker `StemPoolTwinAt`,
+which also allows ties between cells that read identical input patches. This script evaluates it on real
 ImageNet validation images at trained weights, with train-mode (batch) BatchNorm as a training
 step sees it, and counts three kinds of window per channel and example:
 
   dead        every cell zero. Allowed now; the old condition (`MaxPool3s2Smooth` on the
               post-ReLU activation) rejected these.
-  pos-tie     a positive maximum at two or more positions. Still excluded. Each is classified
-              by whether the tied cells read IDENTICAL 7x7x3 input patches (flat image regions):
-              then the cells are the same function of the stem's weights, so the loss stays
-              differentiable in the parameters even though the net is not differentiable in the
-              image there.
+  pos-tie     a positive maximum at two or more positions. Excluded by the input-VJP condition.
+              Each is classified by whether the tied cells read IDENTICAL zero-padded 7x7x3 input
+              patches (flat image regions), which is `StemConvTwin`: then the cells are the same
+              function of the stem's weights, and the loss-gradient condition `StemPoolTwinAt`
+              allows the tie.
   zero-pre    a pre-ReLU value exactly 0 (the stem ReLU's own clause, `R34StemSmoothAt`).
 
 Arithmetic is float64, standing in for the reals the Lean statement is about. The stem's
@@ -110,6 +112,12 @@ def main():
           f" {tot['pos_tie_same_patch']} of them identical input patches;"
           f" in {tot['batches_with_pos_tie']} of {a.batches} batches")
     print(f"  pre-ReLU exactly zero:                             {tot['zero_pre']}")
+    bad_vjp = tot['pos_tie'] + tot['zero_pre']
+    bad_loss = tot['pos_tie'] - tot['pos_tie_same_patch'] + tot['zero_pre']
+    print(f"\n  input-VJP stem clauses (R34StemSmoothAt + StemPoolSmoothAt):        "
+          f"{'hold' if bad_vjp == 0 else f'fail at {bad_vjp} windows/cells'}")
+    print(f"  loss-gradient stem clauses (R34StemSmoothAt + StemPoolTwinAt at StemConvTwin): "
+          f"{'hold' if bad_loss == 0 else f'fail at {bad_loss} windows/cells'}")
 
 
 if __name__ == '__main__':

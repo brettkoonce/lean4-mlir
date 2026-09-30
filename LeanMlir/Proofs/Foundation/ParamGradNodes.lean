@@ -364,12 +364,12 @@ theorem bnBatchLA_apply_perm (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : V
       = bnPerChannelFlat oc (N * (h * w)) ε γ β (bnchwFwd N oc h w (reassocB N oc h w v))
           (bnLAPerm N oc h w J) := rfl
 
-private theorem bnPerChannelFlat_gamma_differentiable (oc m : Nat) (ε : ℝ) (β : Vec oc)
+theorem bnPerChannelFlat_gamma_differentiable (oc m : Nat) (ε : ℝ) (β : Vec oc)
     (v : Vec (oc * m)) : Differentiable ℝ (fun γ' : Vec oc => bnPerChannelFlat oc m ε γ' β v) := by
   unfold bnPerChannelFlat bnPerChannelMat Mat.flatten bnForward
   fun_prop
 
-private theorem bnPerChannelFlat_beta_differentiable (oc m : Nat) (ε : ℝ) (γ : Vec oc)
+theorem bnPerChannelFlat_beta_differentiable (oc m : Nat) (ε : ℝ) (γ : Vec oc)
     (v : Vec (oc * m)) : Differentiable ℝ (fun β' : Vec oc => bnPerChannelFlat oc m ε γ β' v) := by
   unfold bnPerChannelFlat bnPerChannelMat Mat.flatten bnForward
   fun_prop

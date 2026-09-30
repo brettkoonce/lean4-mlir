@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Foundation.ParamGradNodes
+import LeanMlir.Proofs.Training.BatchSealKit
 
 /-! # ResNet-34 — every parameter gradient node IS the loss's derivative in that parameter
 
@@ -26,17 +27,18 @@ minimises.
   whole net at updated weights (`r34_factor_*`) — each a standalone `rfl`; inside the capstone the
   same identity is a kernel deep recursion at the literal widths.
 
-**Hypotheses.** `R34PosB` (every BN `ε > 0`), `R34SmoothAtB` (every relu off its kink and every
-stem-pool window smooth or dead, its maximum at one position or all zero, at the real
-activations), every example's target summing to one, `0 < nCls`.
+**Hypotheses.** `R34PosB` (every BN `ε > 0`), `R34LossSmoothAtB` (every relu off its kink and every
+stem-pool window dead, or its maximum at one position up to cells reading identical input
+patches, at the real activations), every example's target summing to one, `0 < nCls`.
 
-**Where the stem pool's clause fails.** A real batch meets every clause but one: some stem-pool
-windows have a positive maximum at two positions, because two cells read identical input patches
-(flat image regions). The loss is still differentiable in the parameters there (the tied cells are
-the same function of the stem's weights), but `StemPoolSmoothAt` is stated on activations and
-rejects them, so as stated this theorem does not reach a real step. Admitting them needs the
-clause restated on the parameters rather than the activations. The probe script
-scripts/probes/stem_pool_smooth_probe.py measures them on real batches.
+**The stem pool's clause is stated for the parameters, not the image.** Real batches have stem-pool
+windows whose positive maximum sits at two positions, because two cells read identical input
+patches (flat image regions). There the net has no derivative in the image, so the input VJP's
+`R34SmoothAtB` rejects them, but the tied cells are the same function of the stem's weights, so the
+loss IS differentiable in the parameters. `R34LossSmoothAtB` allows exactly those ties
+(`StemPoolTwinAt` at `StemConvTwin`), and the stem's parameter nodes are proved through the argmax
+gather they reduce to (`r34StemPool_param_germ`). The probe script
+scripts/probes/stem_pool_smooth_probe.py checks the stem's clauses on real batches.
 -/
 
 open Proofs Proofs.StableHLO
@@ -403,46 +405,92 @@ end DownBlock
 section StemHead
 variable (N h w : Nat) {ic oc : Nat}
 
-/-- The loss at the stem relu's output (the pool's input). -/
-noncomputable def r34StemGP (Gn : Vec (N * (oc * h * w)) → Vec 1) :
-    Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
-  fun u => Gn (batchMap N (maxPool3s2Flat oc h w) u)
+/-- **Two cells of example `r`'s stem grid read identical input patches**: every kernel and bias
+    give them the same conv output, in every channel. A flat image region does this, and at such
+    a pair the stem pool can tie at a positive maximum. The tie is then the same at every stem
+    weight (`r34StemZ_twin`), which is why the parameter gradient survives it. -/
+def StemConvTwin (N h w : Nat) {ic : Nat} (oc : Nat)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (r : Fin N)
+    (p q : Fin (2 * h) × Fin (2 * w)) : Prop :=
+  ∀ (W : Kernel4 oc ic 7 7) (b : Vec oc) (ci : Fin oc),
+    batchMap N (flatConvStride2 W b) x (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2)))
+      = batchMap N (flatConvStride2 W b) x (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2)))
 
-/-- The loss at the stem BN's output. -/
-noncomputable def r34StemGN (Gn : Vec (N * (oc * h * w)) → Vec 1) :
-    Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
-  fun u => r34StemGP N h w Gn (relu (N * (oc * (2 * h) * (2 * w))) u)
-
-/-- The loss at the stem conv's output. -/
-noncomputable def r34StemGC (Gn : Vec (N * (oc * h * w)) → Vec 1) (εs : ℝ) (γs βs : Vec oc) :
-    Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
-  fun z => r34StemGN N h w Gn (bnBatchLA N oc (2 * h) (2 * w) εs γs βs z)
+/-- Twinned stem cells stay equal through batch BN, at every stem parameter. -/
+theorem r34StemZ_twin (N h w : Nat) {ic oc : Nat} (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (εs : ℝ) (W : Kernel4 oc ic 7 7) (b γ β : Vec oc) (r : Fin N) (ci : Fin oc)
+    (p q : Fin (2 * h) × Fin (2 * w)) (hT : StemConvTwin N h w oc x r p q) :
+    bnBatchLA N oc (2 * h) (2 * w) εs γ β (batchMap N (flatConvStride2 W b) x)
+        (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2)))
+      = bnBatchLA N oc (2 * h) (2 * w) εs γ β (batchMap N (flatConvStride2 W b) x)
+        (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2))) :=
+  BatchSeal.bnBatchLA_bcell_eq_of_eq εs γ β _ r ci p.1 q.1 p.2 q.2 (hT W b ci)
 
 variable {N h w}
 
-theorem r34StemGC_hasGradAt (Ws : Kernel4 oc ic 7 7)
-    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
-    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+/-- **Along any family of stem parameters, the pooled stem is the argmax gather.** The family
+    passes through the stem's own parameters at `θ₀`; there the pre-ReLU has no zero entry and
+    every pool window is smooth up to input-patch twins. Then the pooled stem agrees near `θ₀`
+    with the gather, whose argmax is fixed at `θ₀`. -/
+theorem r34StemPool_param_germ {P : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
-    (hpool : StemPoolSmoothAt N h w
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
       (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    (Wf : Vec P → Kernel4 oc ic 7 7) (bf γf βf : Vec P → Vec oc) (θ₀ : Vec P)
+    (h0 : bnBatchLA N oc (2 * h) (2 * w) εs (γf θ₀) (βf θ₀) (batchMap N (flatConvStride2 (Wf θ₀) (bf θ₀)) x)
+      = bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+    (hc : ContinuousAt (fun θ => bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ)
+      (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x)) θ₀) :
+    (fun θ => r34StemB N h w (Wf θ) (bf θ) εs (γf θ) (βf θ) x) =ᶠ[nhds θ₀]
+      (fun θ k => relu _ (bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ)
+          (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x))
+        (maxPool3s2LocalReindexB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) k)) := by
+  have hg := stemPoolRelu_param_eventuallyEq
+    (fun θ => bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ) (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x))
+    θ₀ hc (by rw [h0]; exact hstem) (StemConvTwin N h w oc x) (by rw [h0]; exact hpool)
+    (fun θ r ci p q hT => r34StemZ_twin N h w x εs (Wf θ) (bf θ) (γf θ) (βf θ) r ci p q hT)
+  rw [h0] at hg
+  exact hg
+
+/-- The stem's loss as the gather model sees it, at the BN output: the pool replaced by the fixed
+    argmax gather `σ`. -/
+noncomputable def r34StemGNg (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (Gn : Vec (N * (oc * h * w)) → Vec 1) : Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
+  fun u => Gn (fun k => relu _ u (σ k))
+
+/-- …and at the conv output. -/
+noncomputable def r34StemGCg (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (Gn : Vec (N * (oc * h * w)) → Vec 1) (εs : ℝ) (γs βs : Vec oc) :
+    Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
+  fun z => r34StemGNg σ Gn (bnBatchLA N oc (2 * h) (2 * w) εs γs βs z)
+
+/-- **The gather model's gradients are the render's stem cotangents.** No pool hypothesis: the
+    gather is linear after the ReLU. The loss's gradient at the pooled stem output transfers
+    because at the stem's own parameters the pool IS the gather (`hpt`). -/
+theorem r34StemGCg_hasGradAt (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpt : r34StemB N h w Ws bs εs γs βs x = fun k => relu _
+      (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+      (maxPool3s2LocalReindexB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) k))
     {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
     (hGn : HasGradAt Gn (r34StemB N h w Ws bs εs γs βs x) dy) :
-    HasGradAt (r34StemGN N h w Gn)
+    HasGradAt (r34StemGNg (maxPool3s2LocalReindexB N oc h w
+          (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Gn)
         (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
         (r34StemCotN N h w Ws bs εs γs βs x dy)
-      ∧ HasGradAt (r34StemGC N h w Gn εs γs βs) (batchMap N (flatConvStride2 Ws bs) x)
-        (r34StemCotC N h w Ws bs εs γs βs x dy) := by
-  -- ReLU and the pool in one step: a window of dead ReLUs has no pool derivative on its own
-  have hN : HasGradAt (r34StemGN N h w Gn)
+      ∧ HasGradAt (r34StemGCg (maxPool3s2LocalReindexB N oc h w
+          (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Gn εs γs βs)
+        (batchMap N (flatConvStride2 Ws bs) x) (r34StemCotC N h w Ws bs εs γs βs x dy) := by
+  have hN : HasGradAt (r34StemGNg (maxPool3s2LocalReindexB N oc h w
+        (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Gn)
       (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
       (r34StemCotN N h w Ws bs εs γs βs x dy) :=
-    (HasGradAt.comp
-      (f := fun v => batchMap N (maxPool3s2Flat oc h w) (relu (N * (oc * (2 * h) * (2 * w))) v))
-      (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x)) hGn
-      (batchMap_maxPool3s2Flat_relu_differentiableAt N _ hstem hpool)
-      (batchMapMaxPool3s2FlatReluHasVJPAt N _ hstem hpool)).of_eq
-      ((batchMapMaxPool3s2FlatReluHasVJPAt_backward N _ hstem hpool dy).trans
+    (HasGradAt.comp (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+      (hGn.congr_point hpt) (gatherRelu_differentiableAt _ _ hstem)
+      (gatherReluHasVJPAt _ _ hstem)).of_eq
+      ((gatherReluHasVJPAt_stem_backward N _ hstem dy).trans
         (congrArg _ ((den_maxPool3s2BackB_eq_flatBackB "" _ (.operand "" dy)).symm.trans rfl)))
   exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc (2 * h) (2 * w) εs hεs γs βs) _)
     ((bnBatchLAHasVJP N oc (2 * h) (2 * w) εs hεs γs βs).toHasVJPAt _)).of_eq
@@ -472,7 +520,7 @@ theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
-    (hpool : StemPoolSmoothAt N h w
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
       (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
     {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
     (hGn : HasGradAt Gn (r34StemB N h w Ws bs εs γs βs x) dy)
@@ -481,11 +529,46 @@ theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
     r34StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy := by
   rw [show Φ = fun W b γ β => Gn (r34StemB N h w W b εs γ β x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
-  obtain ⟨hN, hC⟩ := r34StemGC_hasGradAt Ws bs εs hεs γs βs x hstem hpool hGn
-  exact ⟨fun idx => GradNodeB.convStridedW_eq_pdiv (h := 2 * h) (w := 2 * w) xN cotN bs x Ws hC idx,
-    fun o => GradNodeB.convStridedB_eq_pdiv (h := 2 * h) (w := 2 * w) cotN Ws x bs hC o,
-    fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εs γs βs _ hN k,
-    fun k => GradNodeB.bnBeta_eq_pdiv cotN εs γs βs _ hN k⟩
+  have hbn := bnBatchLA_continuous N oc (2 * h) (2 * w) εs hεs
+  -- the four one-slot parameter families, each through the stem's own parameters
+  have gW := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+    Kernel4.unflatten (fun _ => bs) (fun _ => γs) (fun _ => βs) (Kernel4.flatten Ws)
+    (by rw [Kernel4.unflatten_flatten])
+    ((hbn γs βs).continuousAt.comp (batchMap_param_differentiableAt
+      (fun θ y => flatConvStride2 (Kernel4.unflatten θ) bs y) x _
+      (fun y => (GradNodeB.flatConvStride2_weight_differentiable bs y) _)).continuousAt)
+  have gb := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+    (fun _ => Ws) id (fun _ => γs) (fun _ => βs) bs rfl
+    ((hbn γs βs).continuousAt.comp (batchMap_param_differentiableAt
+      (fun θ y => flatConvStride2 Ws θ y) x _
+      (fun y => (GradNodeB.flatConvStride2_bias_differentiable Ws y) _)).continuousAt)
+  have hγc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs θ βs
+      (batchMap N (flatConvStride2 Ws bs) x)) := by
+    -- `bnBatchLA` is the per-channel core read at a permuted cell (`bnBatchLA_apply_perm`, `rfl`)
+    exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
+      (GradNodeB.bnPerChannelFlat_gamma_differentiable oc (N * (2 * h * (2 * w))) εs βs
+        (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
+          (batchMap N (flatConvStride2 Ws bs) x)))).continuous
+  have hβc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs γs θ
+      (batchMap N (flatConvStride2 Ws bs) x)) := by
+    -- `bnBatchLA` is the per-channel core read at a permuted cell (`bnBatchLA_apply_perm`, `rfl`)
+    exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
+      (GradNodeB.bnPerChannelFlat_beta_differentiable oc (N * (2 * h * (2 * w))) εs γs
+        (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
+          (batchMap N (flatConvStride2 Ws bs) x)))).continuous
+  have gγ := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+    (fun _ => Ws) (fun _ => bs) id (fun _ => βs) γs rfl hγc.continuousAt
+  have gβ := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+    (fun _ => Ws) (fun _ => bs) (fun _ => γs) id βs rfl hβc.continuousAt
+  obtain ⟨hN, hC⟩ := r34StemGCg_hasGradAt Ws bs εs hεs γs βs x hstem gb.self_of_nhds hGn
+  exact ⟨fun idx => (GradNodeB.convStridedW_eq_pdiv (h := 2 * h) (w := 2 * w) xN cotN bs x Ws hC
+      idx).trans (pdiv_congr_of_eventuallyEq (gW.fun_comp Gn).symm idx 0),
+    fun o => (GradNodeB.convStridedB_eq_pdiv (h := 2 * h) (w := 2 * w) cotN Ws x bs hC o).trans
+      (pdiv_congr_of_eventuallyEq (gb.fun_comp Gn).symm o 0),
+    fun k => (GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εs γs βs _ hN k).trans
+      (pdiv_congr_of_eventuallyEq (gγ.fun_comp Gn).symm k 0),
+    fun k => (GradNodeB.bnBeta_eq_pdiv cotN εs γs βs _ hN k).trans
+      (pdiv_congr_of_eventuallyEq (gβ.fun_comp Gn).symm k 0)⟩
 
 /-- **Head, both parameter nodes loss derivatives** — the classifier weight and bias nodes
     `r34HeadTiedB` ties, `Φ` the loss as a function of `(Wd, bd)`. -/
@@ -727,6 +810,40 @@ theorem r34_factor_head (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
 
 section Net
 
+/-- **The smooth-point bundle a loss gradient needs** — `R34SmoothAtB` with the stem pool's clause
+    weakened to allow ties between cells that read identical input patches (`StemPoolTwinAt` at
+    `StemConvTwin`). Those ties exclude an input VJP (the net has no derivative in the image there)
+    but not a parameter gradient (the tied cells are the same function of the stem's weights), and
+    real batches have them. Every relu clause is `R34SmoothAtB`'s. -/
+structure R34LossSmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Prop where
+  stem : R34StemSmoothAt N 56 56 w.sW w.sb w.sε w.sγ w.sβ x
+  pool : StemPoolTwinAt N 56 56 (StemConvTwin N 56 56 64 x)
+    (cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x)
+  a0 : R34IdSmoothAt N 56 56 w.a0 (r34Pre0 N w x)
+  a1 : R34IdSmoothAt N 56 56 w.a1 (r34Pre1 N w x)
+  a2 : R34IdSmoothAt N 56 56 w.a2 (r34Pre2 N w x)
+  d2 : R34DownSmoothAt N 28 28 w.d2 (r34Pre3 N w x)
+  b0 : R34IdSmoothAt N 28 28 w.b0 (r34Pre4 N w x)
+  b1 : R34IdSmoothAt N 28 28 w.b1 (r34Pre5 N w x)
+  b2 : R34IdSmoothAt N 28 28 w.b2 (r34Pre6 N w x)
+  d3 : R34DownSmoothAt N 14 14 w.d3 (r34Pre7 N w x)
+  c0 : R34IdSmoothAt N 14 14 w.c0 (r34Pre8 N w x)
+  c1 : R34IdSmoothAt N 14 14 w.c1 (r34Pre9 N w x)
+  c2 : R34IdSmoothAt N 14 14 w.c2 (r34Pre10 N w x)
+  c3 : R34IdSmoothAt N 14 14 w.c3 (r34Pre11 N w x)
+  c4 : R34IdSmoothAt N 14 14 w.c4 (r34Pre12 N w x)
+  d4 : R34DownSmoothAt N 7 7 w.d4 (r34Pre13 N w x)
+  e0 : R34IdSmoothAt N 7 7 w.e0 (r34Pre14 N w x)
+  e1 : R34IdSmoothAt N 7 7 w.e1 (r34Pre15 N w x)
+
+/-- The input-VJP bundle implies the loss-gradient one. -/
+theorem r34LossSmoothAtB_of_smoothAtB {N nCls : Nat} {w : R34BWeights nCls}
+    {x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))} (hx : R34SmoothAtB N w x) :
+    R34LossSmoothAtB N w x :=
+  ⟨hx.stem, stemPoolTwinAt_of_smoothAt _ _ _ _ hx.pool, hx.a0, hx.a1, hx.a2, hx.d2, hx.b0, hx.b1, hx.b2, hx.d3, hx.c0, hx.c1, hx.c2, hx.c3, hx.c4, hx.d4, hx.e0, hx.e1⟩
+
+
 /-- Pull the loss gradient back through an identity block: the certified block VJP, read at the
     chain's own fan-in (`r34IdCotIn_eq_vjp`). -/
 theorem r34IdB_hasGradAt_comp {N h w c : Nat} (p : R34IdW c) (hq : R34IdPos p) (v : Vec (N * (c * h * w)))
@@ -758,12 +875,13 @@ theorem r34DownB_hasGradAt_comp {N h w ic oc : Nat} (p : R34DownW ic oc) (hq : R
     with that one parameter varied (a stem field, a block's weight record `w.blk := p` with one
     slot changed, or the classifier).
 
-    Hypotheses: every BN `ε` positive (`R34PosB`), every relu off its kink and the stem pool
-    tie-free at the real activations (`R34SmoothAtB`), every example's target summing to one, and
-    at least one class. -/
+    Hypotheses: every BN `ε` positive (`R34PosB`), every relu off its kink and every stem-pool
+    window dead or tied only between cells reading identical input patches, at the real
+    activations (`R34LossSmoothAtB`), every example's target summing to one, and at least one
+    class. -/
 theorem r34_net_lossGrad (N : Nat) {nCls : Nat} (hK : 0 < nCls) (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls) (hq : R34PosB w)
-    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x)
+    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34LossSmoothAtB N w x)
     (t : Vec (N * (1 * nCls))) (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
     let L := smoothedBatchLoss N nCls α B t
     let g : Vec (N * nCls) :=

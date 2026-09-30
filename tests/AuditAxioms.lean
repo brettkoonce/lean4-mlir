@@ -1944,6 +1944,13 @@ open Proofs
 #print axioms Proofs.stemReluPoolLayer
 #print axioms Proofs.maxPool3s2Flat_relu_eventuallyEq
 #print axioms Proofs.maxPool3s2FlatBackB_eq_reindex
+#print axioms Proofs.stemPoolRelu_param_eventuallyEq
+#print axioms Proofs.gatherReluHasVJPAt
+#print axioms Proofs.ResNet34TieB.r34StemPool_param_germ
+#print axioms Proofs.ResNet34TieB.r34StemGCg_hasGradAt
+#print axioms Proofs.ResNet34TieB.r34LossSmoothAtB_of_smoothAtB
+#print axioms Proofs.ResNet50TieB.r50LossSmoothAtB_of_smoothAtB
+#print axioms Proofs.BatchSeal.bnBatchLA_bcell_eq_of_eq
 #print axioms Proofs.r34StemLayer
 #print axioms Proofs.r34HeadLayer
 #print axioms Proofs.r34HeadBHasVJP

@@ -5322,9 +5322,11 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
       thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
       thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{R34PosB}); every ReLU
-  off its kink and every stem-pool window's maximum attained at one position
-  or the window entirely zero, at the activations the batch produces
-  (\texttt{R34SmoothAtB}); each example's
+  off its kink and every stem-pool window entirely zero or its maximum
+  attained at one position, ties allowed only between cells that read
+  identical input patches, at the activations the batch produces
+  (\texttt{R34LossSmoothAtB}; real batches meet this stem clause, the
+  input-gradient one they do not); each example's
   target summing to one; at least one class. \Prove{} for each of the 146
   parameter slots of Theorem~\ref{thm:resnet34_step_tie} (the 110 the
   artifacts emit among them), the node at the chain cotangent is
@@ -5374,9 +5376,10 @@ See \leandocref{Proofs.ResNet50TieB.r50\_net\_tiedB}.
       thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
       thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{R50PosB});
-  every ReLU off its kink and every stem-pool window's maximum attained at one
-  position or the window entirely zero, at the batch's activations
-  (\texttt{R50SmoothAtB}); and any loss
+  every ReLU off its kink and every stem-pool window entirely zero or its
+  maximum attained at one position, ties allowed only between cells that read
+  identical input patches, at the batch's activations
+  (\texttt{R50LossSmoothAtB}); and any loss
   \(L\) of the logits with gradient \(g\) at the network's output. \Prove{}
   each of the 161 nodes of Theorem~\ref{thm:resnet50_step_tie}, at the chain
   cotangent from \(g\), is \(\partial L/\partial\theta\) of the whole network,
@@ -18084,8 +18087,12 @@ $3 \times 3$/s2 stem pool is certified together with the ReLU before it
 (\texttt{stemReluPoolLayer}), which admits the all-zero windows too: there
 every pre-activation is negative, so the pair is locally constant. What the
 stem still excludes is a window whose positive maximum sits at two positions
-(\texttt{StemPoolSmoothAt}). That set is the boundary the smooth-point caveats
-in the chapter sections refer to.
+(\texttt{StemPoolSmoothAt}). Real batches have such windows, from two cells
+reading identical input patches in a flat image region; there the network has
+no derivative in the image, so an input-gradient statement cannot hold, but the
+tied cells are the same function of the stem's weights and the loss gradients
+in the parameters allow them (\texttt{StemPoolTwinAt}). That set is the
+boundary the smooth-point caveats in the chapter sections refer to.
 
 \subsection{Inside a bridge theorem}
 \label{sec:inside_bridge}

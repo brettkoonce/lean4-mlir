@@ -172,6 +172,20 @@ private theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v 
       simp only [bnchwBackIdx, Equiv.symm_apply_apply]]
   simp only [bnPerChannelFlat, Mat.flatten, bnPerChannelMat, Equiv.symm_apply_apply, bnRowLA]
 
+/-- **Batch BN keeps equal cells equal** within one example and channel: the per-channel affine
+    map reads nothing of a cell but its value. What lets a tie between two stem cells that read
+    identical input patches survive every BN parameter (`StemConvTwin` in ResNet34ParamGrad). -/
+theorem bnBatchLA_bcell_eq_of_eq {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
+    (v : Vec (N * (oc * h * w))) (n : Fin N) (c : Fin oc) (i j : Fin h) (i' j' : Fin w)
+    (heq : bcell v n c i i' = bcell v n c j j') :
+    bcell (StableHLO.bnBatchLA N oc h w ε γ β v) n c i i'
+      = bcell (StableHLO.bnBatchLA N oc h w ε γ β v) n c j j' := by
+  have key := bnForward_chan_diff_γ ε (γ c) (β c) (bnRowLA N oc h w v c)
+    (finProdFinEquiv (n, finProdFinEquiv (i, i'))) (finProdFinEquiv (n, finProdFinEquiv (j, j')))
+  rw [bnRowLA_apply, bnRowLA_apply, heq, sub_self, mul_zero, zero_mul, sub_eq_zero] at key
+  rw [bnBatchLA_bcell, bnBatchLA_bcell]
+  exact key
+
 /-- **The workhorse.** A property of every cell of a `bnBatchLA` output, reduced to the scalar
     `bnForward` on each channel's row — no index decomposition at the call site. Every clause of
     the shape "this BN output is off the kink / inside a window" goes through here. -/

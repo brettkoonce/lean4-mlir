@@ -232,6 +232,34 @@ theorem maxPool3s2SmoothOrDead_of_smooth {c h w : Nat} {x : Tensor3 c (2 * h) (2
     (hx : MaxPool3s2Smooth x) : MaxPool3s2SmoothOrDead x :=
   fun ci ho wo => Or.inr (fun ab ab' => hx ci ho wo ab ab')
 
+/-- **Smooth, dead, or tied only between twins**: every 3×3 window is entirely `≤ 0`, or its
+    maximum is strictly above every cell at another position except positions `T` relates to the
+    maximum's. With `T` empty this is `MaxPool3s2SmoothOrDead`.
+
+    The twins a parameter gradient can afford are cells that are the SAME function of the moving
+    parameter, so a tie between them persists along the parameter and the pool picks either: the
+    ResNet stem's cells reading identical input patches (`StemPoolTwinAt`). -/
+def MaxPool3s2SmoothUpTo {c h w : Nat} (T : Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
+  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
+    (∀ cd : Fin 3 × Fin 3, x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤ 0) ∨
+    ∀ ab ab' : Fin 3 × Fin 3,
+      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
+        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
+      (∀ cd : Fin 3 × Fin 3,
+        x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
+        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
+      x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
+          x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ∨
+        T (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2)
+          (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2)
+
+/-- A smooth-or-dead pool input is smooth up to any twin relation. -/
+theorem maxPool3s2SmoothUpTo_of_smoothOrDead {c h w : Nat}
+    (T : Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    {x : Tensor3 c (2 * h) (2 * w)} (hx : MaxPool3s2SmoothOrDead x) : MaxPool3s2SmoothUpTo T x :=
+  fun ci ho wo => (hx ci ho wo).imp id fun h ab ab' hne hd => Or.inl (h ab ab' hne hd)
+
 /-- **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
     `p/2` and `(p+1)/2`. With symmetric padding the shared cell is at ODD `p` (window `(p−1)/2`
     takes it at offset 2, window `(p+1)/2` at offset 0); even `p` lies in exactly one. So an input

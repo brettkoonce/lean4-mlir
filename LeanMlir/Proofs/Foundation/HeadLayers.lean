@@ -134,8 +134,8 @@ theorem maxPool3s2Flat_relu_eventuallyEq {c h w : Nat} (z : Vec (c * (2 * h) * (
     from two cells reading IDENTICAL input patches (flat image regions); there the stem has no
     derivative in the image, so an input-gradient statement must exclude them, but the two cells
     are the same function of the stem's weights, so the loss is still differentiable in the
-    parameters. The probe script scripts/probes/stem_pool_smooth_probe.py counts all three kinds of
-    window. -/
+    parameters; the loss-gradient statements take the weaker `StemPoolTwinAt`, which allows them.
+    The probe script scripts/probes/stem_pool_smooth_probe.py counts all three kinds of window. -/
 def StemPoolSmoothAt (N h w : Nat) {oc : Nat} (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
   ∀ r : Fin N,
     MaxPool3s2SmoothOrDead (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 oc (2 * h) (2 * w))
@@ -210,6 +210,120 @@ theorem batchMapMaxPool3s2FlatReluHasVJPAt_backward (N : Nat) {c h w : Nat}
     (Z : Vec (N * (c * (2 * h) * (2 * w)))) (hz : ∀ k, Z k ≠ 0)
     (hs : StemPoolSmoothAt N h w (relu _ Z)) (dy : Vec (N * (c * h * w))) :
     (batchMapMaxPool3s2FlatReluHasVJPAt N Z hz hs).backward dy =
+      (reluHasVJPAt _ Z hz).backward (maxPool3s2FlatBackB N c h w (relu _ Z) dy) := by
+  rw [maxPool3s2FlatBackB_eq_reindex _ _ _ _ _ Z]; rfl
+
+/-- **`pdiv` reads only the germ.** Maps that agree near `x` have the same partials there. -/
+theorem pdiv_congr_of_eventuallyEq {m n : Nat} {f g : Vec m → Vec n} {x : Vec m}
+    (h : f =ᶠ[nhds x] g) (i : Fin m) (j : Fin n) : pdiv f x i j = pdiv g x i j := by
+  unfold pdiv
+  rw [h.fderiv_eq]
+
+/-- **The stem pool's condition along a parameter**, per example: every window of the post-ReLU
+    stem activation is dead, or has its maximum strictly above every cell at another position
+    except the positions `T r` twins with it (`MaxPool3s2SmoothUpTo`). Weaker than
+    `StemPoolSmoothAt` (`stemPoolTwinAt_of_smoothAt`). It is what a parameter gradient needs:
+    twinned cells tie at every parameter value, so the pool's choice between them does not move
+    (`stemPoolRelu_param_eventuallyEq`). -/
+def StemPoolTwinAt (N h w : Nat) {oc : Nat}
+    (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
+  ∀ r : Fin N,
+    MaxPool3s2SmoothUpTo (T r) (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 oc (2 * h) (2 * w))
+
+theorem stemPoolTwinAt_of_smoothAt (N h w : Nat) {oc : Nat}
+    (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    {v : Vec (N * (oc * (2 * h) * (2 * w)))} (hv : StemPoolSmoothAt N h w v) :
+    StemPoolTwinAt N h w T v :=
+  fun r => maxPool3s2SmoothUpTo_of_smoothOrDead (T r) (hv r)
+
+/-- **Along a parameter, ReLU then the pool is the argmax gather.** `Z θ` is the pre-ReLU stem
+    activation as the parameter moves; at `θ₀` it has no zero entry, every window of its ReLU is
+    smooth up to twins, and twinned cells are equal at EVERY `θ`. Then near `θ₀` the pooled ReLU
+    reads each output from the cell `maxPool3s2LocalReindexB` names at `θ₀`: a dead window stays
+    negative, a strict maximum stays strict, and a twin stays tied with the chosen cell. -/
+theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
+    (Z : Vec k → Vec (N * (c * (2 * h) * (2 * w)))) (θ₀ : Vec k) (hZ : ContinuousAt Z θ₀)
+    (hz : ∀ i, Z θ₀ i ≠ 0)
+    (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    (hs : StemPoolTwinAt N h w T (relu _ (Z θ₀)))
+    (htwin : ∀ θ (r : Fin N) (ci : Fin c) (p q : Fin (2 * h) × Fin (2 * w)), T r p q →
+      Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2))) =
+        Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2)))) :
+    (fun θ => StableHLO.batchMap N (maxPool3s2Flat c h w) (relu _ (Z θ))) =ᶠ[nhds θ₀]
+      (fun θ k => relu _ (Z θ) (maxPool3s2LocalReindexB N c h w (relu _ (Z θ₀)) k)) := by
+  have hcoord : ∀ i, ContinuousAt (fun θ => Z θ i) θ₀ :=
+    fun i => (continuous_apply i).continuousAt.comp hZ
+  have hrelu : ∀ i, ContinuousAt (fun θ => relu _ (Z θ) i) θ₀ := by
+    intro i
+    have : (fun θ => relu _ (Z θ) i) = fun θ => max (Z θ i) 0 := by
+      funext θ; exact relu_apply_eq_max _ i
+    rw [this]; exact (hcoord i).max continuousAt_const
+  -- every window cell stays at or below the cell chosen at `θ₀`
+  have hmax : ∀ᶠ θ in nhds θ₀, ∀ (r : Fin N) (co : Fin c) (ho : Fin h) (wo : Fin w) (a' b' : Fin 3),
+      (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) r) : Tensor3 c (2 * h) (2 * w)) co
+          (win3RowInv ho a') (win3ColInv wo b') ≤
+        (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) r) : Tensor3 c (2 * h) (2 * w)) co
+          (win3RowInv ho (maxPool3s2Argmax
+            (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r) : Tensor3 c (2 * h) (2 * w))
+            co ho wo).1)
+          (win3ColInv wo (maxPool3s2Argmax
+            (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r) : Tensor3 c (2 * h) (2 * w))
+            co ho wo).2) := by
+    simp only [Filter.eventually_all]
+    intro r co ho wo a' b'
+    set y : Tensor3 c (2 * h) (2 * w) := Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r)
+    set σ := maxPool3s2Argmax y co ho wo
+    by_cases hab : (win3RowInv ho a', win3ColInv wo b') = (win3RowInv ho σ.1, win3ColInv wo σ.2)
+    · obtain ⟨hr, hs'⟩ := Prod.mk.inj hab
+      exact Filter.Eventually.of_forall fun _ => by rw [hr, hs']
+    · set i' := finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho a'),
+        win3ColInv wo b'))
+      set iσ := finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho σ.1),
+        win3ColInv wo σ.2))
+      show ∀ᶠ θ in nhds θ₀, relu _ (Z θ) i' ≤ relu _ (Z θ) iσ
+      rcases hs r co ho wo with hdead | hsm
+      · -- dead window: the pre-activation is strictly negative, so it stays negative nearby
+        have hyk : relu _ (Z θ₀) i' ≤ 0 := hdead (a', b')
+        have hzk : Z θ₀ i' < 0 := by
+          rcases lt_or_gt_of_ne (hz i') with hlt | hgt
+          · exact hlt
+          · exfalso
+            have : relu _ (Z θ₀) i' = Z θ₀ i' := by simp [relu, hgt]
+            linarith
+        refine ((hcoord i').eventually (gt_mem_nhds hzk)).mono fun θ hθ => ?_
+        have h0 : relu _ (Z θ) i' = 0 := by simp [relu, not_lt.mpr hθ.le]
+        rw [h0]; exact relu_nonneg _ _ _
+      · rcases hsm σ (a', b') (Ne.symm hab) (maxPool3s2Argmax_max y co ho wo) with hlt | htw
+        · exact ((hrelu i').eventually_lt (hrelu iσ) hlt).mono fun _ => le_of_lt
+        · -- twins: equal at every parameter value
+          refine Filter.Eventually.of_forall fun θ => le_of_eq ?_
+          have he := htwin θ r co _ _ htw
+          simp only [relu] at he ⊢
+          rw [he]
+  filter_upwards [hmax] with θ hθ
+  funext idx
+  exact maxPool3s2_eq_at_max
+    (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) (finProdFinEquiv.symm idx).1)) _ _ _ _ _
+    (hθ _ _ _ _)
+
+/-- The gather model `v ↦ relu v ∘ σ`: linear after the ReLU, so differentiable at any point with
+    no zero entry, whatever `σ`. -/
+theorem gatherRelu_differentiableAt {m n : Nat} (σ : Fin n → Fin m) (Z : Vec m)
+    (hz : ∀ k, Z k ≠ 0) : DifferentiableAt ℝ (fun v k => relu m v (σ k)) Z :=
+  ((reindexCLM σ).differentiableAt).comp Z (relu_differentiableAt_of_smooth m Z hz)
+
+/-- The gather model's VJP: scatter along `σ`, then the ReLU mask. -/
+noncomputable def gatherReluHasVJPAt {m n : Nat} (σ : Fin n → Fin m) (Z : Vec m)
+    (hz : ∀ k, Z k ≠ 0) : HasVJPAt (fun v k => relu m v (σ k)) Z :=
+  vjpCompAt (relu m) (fun y k => y (σ k)) Z (relu_differentiableAt_of_smooth m Z hz)
+    (reindexCLM σ).differentiableAt (reluHasVJPAt m Z hz) ((reindexVJP σ).toHasVJPAt _)
+
+/-- At the stem's argmax gather, the model's VJP is the render's pool scatter, then the ReLU
+    mask. -/
+theorem gatherReluHasVJPAt_stem_backward (N : Nat) {c h w : Nat}
+    (Z : Vec (N * (c * (2 * h) * (2 * w)))) (hz : ∀ k, Z k ≠ 0) (dy : Vec (N * (c * h * w))) :
+    (gatherReluHasVJPAt (maxPool3s2LocalReindexB N c h w (relu _ Z)) Z hz).backward dy =
       (reluHasVJPAt _ Z hz).backward (maxPool3s2FlatBackB N c h w (relu _ Z) dy) := by
   rw [maxPool3s2FlatBackB_eq_reindex _ _ _ _ _ Z]; rfl
 

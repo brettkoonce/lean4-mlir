@@ -163,7 +163,28 @@ Findings: **P-C-1** ✔, **A-corr-1** ✔ (a)+(b), P-D-1 (the interim prose), pl
     weights, so the loss IS differentiable in θ. The capstones still don't reach a real step,
     because `StemPoolSmoothAt` is stated on activations. The R34/R50 ParamGrad module docs now say
     so, and name the probe.
-- **Part 2 (next).** One notion serves both remaining cases: cells equal *as functions of the
+- **Part 2A done (ResNet loss gradients).**
+  - The pool condition is now stated on the parameters:
+    - `MaxPool3s2SmoothUpTo T` allows ties only between T-related positions.
+    - `StemPoolTwinAt` is its per-example version, used at `StemConvTwin` (two cells read
+      identical zero-padded 7×7×3 patches, stated as equal conv output for every kernel).
+    - `BatchSeal.bnBatchLA_bcell_eq_of_eq` shows BN keeps such cells equal.
+  - The proof works in θ, not in activations:
+    - `stemPoolRelu_param_eventuallyEq`: along any parameter family keeping twins equal, the
+      pooled ReLU is the fixed argmax gather near θ₀.
+    - `pdiv_congr_of_eventuallyEq` moves each stem node's `pdiv` onto the gather model.
+    - The gather model's VJP (`gatherReluHasVJPAt`) needs no pool hypothesis and is the render's
+      scatter.
+  - `r34_net_lossGrad`, `r50_net_lossGrad` and their corollaries take `R34LossSmoothAtB` /
+    `R50LossSmoothAtB`: the same relu clauses with the twin pool clause, implied by the
+    input-VJP bundles.
+  - The probe's loss-gradient stem clauses **hold** on every real batch tried: 160 px ×4 and
+    224 px ×2. The 224 px batches have 13.87% dead windows and 1.37% twin ties, all identical
+    patches. The input-VJP clauses still fail there, correctly.
+  - **Not yet checked on data:** the block bundles' relu clauses (`≠ 0` at BN outputs and residual
+    sums: generically true, not measured) and R50's zero-init bn3 γ at step 0. That needs a
+    whole-net float64 forward.
+- **Part 2B (next).** One notion serves both remaining cases: cells equal *as functions of the
   moving parameter* on a neighbourhood. This covers:
   - the ResNet stem's identical-patch ties, for the θ-gradients: restate the stem-parameter pull-back
     as a germ in θ, not an activation-level `HasGradAt`;
@@ -172,6 +193,30 @@ Findings: **P-C-1** ✔, **A-corr-1** ✔ (a)+(b), P-D-1 (the interim prose), pl
   Check the render's scatter first: it picks one of the tied cells, and routing to either gives
   the same θ-gradient, because identical patches make the conv weight-grad and BN γ/β terms
   agree. That needs a lemma.
+- **Part 2B design (MNIST descent rungs; not started).**
+  - **Twins.** A conv2 output pair is twinned when their conv2 input patches (3×3×c of `x₁`) are
+    identical, so they are equal at every `W₂, b₂`. For the conv1 rungs the pair needs identical
+    6×6 patches of `x₀`, the two-layer receptive field. That is what a constant background patch
+    gives, and it is the 99.5% failure.
+  - **Predicate.** `MaxPool2MarginQUpTo δ T`: each window is either all negative (`hm2`'s margin
+    then keeps it dead along the step), or its max beats every non-twin cell by `2δ`.
+  - **The obstacle.** `SgdDescent/Cnn.lean` gets the loss gradient at *every point of the step
+    segment* through the pool's activation-space VJP (`smooth_of_close` →
+    `maxPoolFlat_differentiableAt`, `poolBack_close`). With twins that VJP does not exist, so
+    part 2A's germ-at-θ₀ trick is not enough.
+  - **The route:**
+    1. Prove `L θ = L_gather θ` on the WHOLE segment. Twins are equal everywhere; strict margins
+       hold on the segment by the existing closeness lemmas; dead windows stay dead.
+    2. Run the descent argument on `L_gather`, the chain with the pool replaced by the fixed
+       gather: linear, norm ≤ 1, each input read by at most one output for disjoint 2×2
+       windows, so the backward bounds carry over.
+    3. Transfer: the endpoints and the gradient at θ₀ agree.
+  - **Cost.** Step 2 re-plumbs the pool-specific drift and backward bounds through a
+    6,283-line file. Do it together with A-pq-1 (`Conv{1,2}Slot.sgd_descends`), which rewrites the
+    same proofs; one slot-level lemma over a generic "pool-or-gather" stage is the natural shape.
+    Size L.
+  - **Acceptance.** A concrete satisfiable MNIST instance through a generator, plus a probe like
+    the stem's on the MNIST test set.
 - **Deliberately not done:** A-corr-1(a) for the 2×2 pool. `cnnHasVJPAt` / `mnistCnnNoBnHasVJPAt`
   state `HasVJPAt` existence plus its `.correct` field, which a canonical witness satisfies at
   every point (the 09-24 "`_correct` says nothing" item, WP6). Weakening their `h_mp` changes
