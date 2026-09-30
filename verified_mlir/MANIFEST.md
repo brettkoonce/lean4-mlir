@@ -120,8 +120,8 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 44 |
-| `cnn_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 42 |
+| `cnn_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 45 |
+| `cnn_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/CnnArtifacts.lean` | 43 |
 
 ## `convnext` — 11 artifacts, 9.2 MB
 
@@ -238,15 +238,15 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `linear_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 41 |
-| `linear_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 41 |
+| `linear_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 42 |
+| `linear_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 42 |
 
 ## `mlp` — 2 artifacts, 0.0 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mlp_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 41 |
-| `mlp_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/MlpArtifacts.lean` | 41 |
+| `mlp_fwd.mlir` | fwd | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/ChapterArtifacts.lean` | 42 |
+| `mlp_train_step.mlir` | train_step | `—` | — | 0.0 | `LeanMlir/Proofs/Codegen/MlpArtifacts.lean` | 42 |
 
 ## `mnv4` — 3 artifacts, 1.9 MB
 
