@@ -5,115 +5,130 @@ import LeanMlir.Verified.PgdGen
 
 Each attack trains a verified net on its proof-rendered train step (`Verified.Train`'s driver),
 then runs PGD through the runtime with a `Verified.PgdGen` kernel, and reports clean vs
-adversarial accuracy over an ε sweep next to the Lipschitz bound (the product of the layers'
-spectral norms). The `Spectral` variants project each weight onto a spectral-norm ball after
-every step (`projectSpectral`, power iteration in `specNorm*`). -/
+adversarial accuracy over an ε sweep next to the Lipschitz-margin certificate: the radius
+`m/(√2·L)` of `lipschitz_margin_certified_radius`, at `L` the product of per-layer upper bounds
+(`denseLip`, `convLip`; ReLU and the disjoint 2×2 max-pools are 1-Lipschitz). The `Spectral`
+variants rescale the weights toward a norm ball every few steps (`projectSpectral`).
 
-/-- Build a one-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F). -/
-private def oneHotBatch (labels : ByteArray) (start bs d1 : Nat) : IO ByteArray := do
-  let mut oh ← F32.const (bs * d1).toUSize 0.0
-  for j in [0:bs] do
-    let lbl := (labels.get! (4 * (start + j))).toNat
-    let fi := j * d1 + lbl
-    oh := (((oh.set! (4*fi) 0).set! (4*fi+1) 0).set! (4*fi+2) 0x80).set! (4*fi+3) 0x3F
-  return oh
+The certificate is for the real-arithmetic net at the margin the float forward prints; the f32
+evaluation error of the logits is not accounted for (`LipschitzCert.Float` does that for its
+reduced model only). -/
 
-/-- `oneHotBatch` for a possibly-partial final batch: rows past `total` records get an
-    all-zero row (their padded images are never scored, so the gradient they induce is
-    irrelevant — the row just has to exist because the batch dim is baked into the compiled module). -/
+/-- One-hot `[bs, d1]` f32 batch from int32-LE labels (1.0 = bytes 00 00 80 3F), for a possibly
+    partial final batch: rows past `total` records get an all-zero row (their padded images are
+    never scored, so the gradient they induce is irrelevant — the row just has to exist because
+    the batch dim is baked into the compiled module). -/
 private def oneHotBatchPad (labels : ByteArray) (start bs d1 total : Nat) : IO ByteArray := do
   let mut oh ← F32.const (bs * d1).toUSize 0.0
   for j in [0:min bs (total - start)] do
-    let lbl := (labels.get! (4 * (start + j))).toNat
-    let fi := j * d1 + lbl
+    let fi := j * d1 + F32.readLabel labels (start + j)
     oh := (((oh.set! (4*fi) 0).set! (4*fi+1) 0).set! (4*fi+2) 0x80).set! (4*fi+3) 0x3F
   return oh
 
-/-- Spectral norm `‖W‖₂` of `W : [d0,d1]` (row-major) by power iteration on the small
-    `WᵀW : [d1,d1]` Gram matrix. For the linear net this IS the global Lipschitz constant
-    of the logit map (`logits = xW+b`, Jacobian `Wᵀ`). Host-side, pure. -/
-private def specNormW (W : ByteArray) (d0 d1 : Nat) : Float := Id.run do
-  let g := fun (i j : Nat) => Id.run do      -- WᵀW[i,j] = Σ_k W[k,i]·W[k,j]
-    let mut s := 0.0
-    for k in [0:d0] do
-      s := s + (F32.read W (k*d1+i).toUSize) * (F32.read W (k*d1+j).toUSize)
-    pure s
-  let mut wtw : Array Float := Array.replicate (d1*d1) 0.0
-  for i in [0:d1] do
-    for j in [0:d1] do
-      wtw := wtw.set! (i*d1+j) (g i j)
-  let mv := fun (v : Array Float) => Id.run do  -- WᵀW · v
-    let mut u : Array Float := Array.replicate d1 0.0
-    for i in [0:d1] do
-      let mut s := 0.0
-      for j in [0:d1] do s := s + wtw[i*d1+j]! * v[j]!
-      u := u.set! i s
-    pure u
-  let mut v : Array Float := Array.replicate d1 1.0
-  for _ in [0:60] do
-    let u := mv v
-    let mut nrm := 0.0
-    for i in [0:d1] do nrm := nrm + u[i]!*u[i]!
-    nrm := Float.sqrt nrm
-    if nrm > 1e-20 then
-      for i in [0:d1] do v := v.set! i (u[i]!/nrm)
-  let u := mv v
-  let mut lam := 0.0
-  for i in [0:d1] do lam := lam + v[i]! * u[i]!   -- Rayleigh quotient (‖v‖=1)
-  pure (Float.sqrt lam)
+/-! ## The certificate's Lipschitz constants
 
-/-- Spectral norm `‖M‖₂` of a `[rows, cols]` matrix given by an index function `get i j`
-    (the same power iteration on the `cols×cols` Gram as `specNormW`, but reading via `get`
-    so it works on strided sub-tensors — e.g. one tap-plane of a conv kernel). -/
-private def specNormGet (get : Nat → Nat → Float) (rows cols : Nat) : Float := Id.run do
-  let gram := fun (i j : Nat) => Id.run do        -- (MᵀM)[i,j] = Σ_k M[k,i]·M[k,j]
-    let mut s := 0.0
-    for k in [0:rows] do s := s + (get k i) * (get k j)
-    pure s
-  let mut wtw : Array Float := Array.replicate (cols*cols) 0.0
-  for i in [0:cols] do
-    for j in [0:cols] do
-      wtw := wtw.set! (i*cols+j) (gram i j)
-  let mv := fun (v : Array Float) => Id.run do
-    let mut u : Array Float := Array.replicate cols 0.0
-    for i in [0:cols] do
-      let mut s := 0.0
-      for j in [0:cols] do s := s + wtw[i*cols+j]! * v[j]!
-      u := u.set! i s
-    pure u
-  let mut v : Array Float := Array.replicate cols 1.0
-  for _ in [0:60] do
-    let u := mv v
-    let mut nrm := 0.0
-    for i in [0:cols] do nrm := nrm + u[i]!*u[i]!
-    nrm := Float.sqrt nrm
-    if nrm > 1e-20 then
-      for i in [0:cols] do v := v.set! i (u[i]!/nrm)
-  let u := mv v
-  let mut lam := 0.0
-  for i in [0:cols] do lam := lam + v[i]! * u[i]!
-  pure (Float.sqrt lam)
+The printed certified radius is `lipschitz_margin_certified_radius` at `L = ∏ᵢ Lᵢ`, so each
+layer's `Lᵢ` has to be an UPPER bound on its L2 Lipschitz constant. Power iteration cannot give
+one: its Rayleigh quotient approaches `‖W‖₂` from below. The bound used here is the one
+`denseE_lipschitzL2_gram2` proves: with `G = M·Mᵀ` and `H = Gᵀ·G`, `B = ‖H‖_F^{1/4}
+= (Σσᵢ⁸)^{1/8} ≥ σ₁`. The power-iteration value is still computed from the same Gram and
+printed beside it as the estimate, so the gap between the bound and the true norm stays
+visible. -/
 
-/-- A **sound** (loose) upper bound on the L2 operator norm of a zero-padded 2-D
-    convolution with kernel `W : [outC, inC, kh, kw]` (row-major). Writing the conv as a
-    sum over spatial taps `T = Σ_{ky,kx} S_{ky,kx} ∘ M_{ky,kx}` — each `S` a (norm ≤ 1)
-    shift and each `M` the pointwise `[outC,inC]` channel-mixing matrix at that tap — the
-    triangle inequality gives `‖T‖₂ ≤ Σ_{ky,kx} ‖W[:,:,ky,kx]‖₂`. Each tap-plane's spectral
-    norm is the same power iteration as `specNormW`. Loose by up to `√(kh·kw)` vs the exact
-    (Sedghi–Gupta–Long) value — which only sharpens the "depth ⇒ vacuous product" message. -/
-private def specNormConvTapSum (W : ByteArray) (outC inC kh kw : Nat) : Float := Id.run do
+/-- A layer's two L2 numbers: `bound`, a Lipschitz constant a certificate-tier theorem gives,
+    and `est`, the power-iteration estimate (≤ the true norm; never used as a constant). -/
+private structure LipPair where
+  bound : Float
+  est   : Float
+
+/-- Relative slack on every host-computed bound. The Gram sums are evaluated in `Float` (f64)
+    from f32 weights, so the computed `‖H‖_F` carries accumulation error far below this factor at
+    these layer sizes; the slack is the soundness margin for that rounding, not a proved one. -/
+private def roundingSlack : Float := 1.000001
+
+/-- The output-side Gram `G a b = Σⱼ M a j · M b j` (`k×k`, row-major) of the `k×n` matrix
+    `M a j = get a j`, row `a` being output `a` — the orientation of `denseE`, so `G` is the
+    `hG` data of `denseE_lipschitzL2_gram2`. `M` is copied into a contiguous buffer first. -/
+private def gramOut (get : Nat → Nat → Float) (k n : Nat) : FloatArray := Id.run do
+  let mut m : FloatArray := FloatArray.mk (Array.replicate (k*n) 0.0)
+  for a in [0:k] do
+    for j in [0:n] do m := m.set! (a*n+j) (get a j)
+  let mut g : FloatArray := FloatArray.mk (Array.replicate (k*k) 0.0)
+  for a in [0:k] do
+    for b in [a:k] do
+      let mut s := 0.0
+      for j in [0:n] do s := s + m[a*n+j]! * m[b*n+j]!
+      g := (g.set! (a*k+b) s).set! (b*k+a) s
+  pure g
+
+/-- The Schatten-8 bound from the Gram: `H = Gᵀ·G`, then `B = (Σ H²)^{1/8}` times
+    `roundingSlack` — the `B` of `denseE_lipschitzL2_gram2`'s `hHF : Σ H² ≤ B⁸`. -/
+private def schatten8OfGram (g : FloatArray) (k : Nat) : Float := Id.run do
   let mut s := 0.0
+  for a in [0:k] do
+    for b in [0:k] do
+      let mut h := 0.0                       -- G is symmetric, so (GᵀG)[a,b] = Σ_c G[a,c]·G[b,c]
+      for c in [0:k] do h := h + g[a*k+c]! * g[b*k+c]!
+      s := s + h*h
+  pure (Float.pow s 0.125 * roundingSlack)
+
+/-- Power-iteration estimate of `σ₁ = √λ_max(G)` (a lower bound, up to convergence). -/
+private def powerIterOfGram (g : FloatArray) (k : Nat) : Float := Id.run do
+  let mv := fun (v : Array Float) => Id.run do
+    let mut u : Array Float := Array.replicate k 0.0
+    for i in [0:k] do
+      let mut s := 0.0
+      for j in [0:k] do s := s + g[i*k+j]! * v[j]!
+      u := u.set! i s
+    pure u
+  let mut v : Array Float := Array.replicate k 1.0
+  for _ in [0:60] do
+    let u := mv v
+    let mut nrm := 0.0
+    for i in [0:k] do nrm := nrm + u[i]!*u[i]!
+    nrm := Float.sqrt nrm
+    if nrm > 1e-20 then
+      for i in [0:k] do v := v.set! i (u[i]!/nrm)
+  let u := mv v
+  let mut lam := 0.0
+  for i in [0:k] do lam := lam + v[i]! * u[i]!   -- Rayleigh quotient (‖v‖=1)
+  pure (Float.sqrt lam)
+
+/-- Both numbers for the `k×n` matrix `get` (row = output). -/
+private def lipOfGet (get : Nat → Nat → Float) (k n : Nat) : LipPair :=
+  let g := gramOut get k n
+  { bound := schatten8OfGram g k, est := powerIterOfGram g k }
+
+/-- A dense layer `W : [d0,d1]` (row-major, `logits = x·W + b`). Its `denseE` matrix is `Wᵀ`
+    (`d1` outputs), so the Gram is the `d1×d1` `WᵀW`. The bias is a translation and leaves the
+    Lipschitz constant unchanged. -/
+private def denseLip (W : ByteArray) (d0 d1 : Nat) : LipPair :=
+  lipOfGet (fun a j => F32.read W (j*d1+a).toUSize) d1 d0
+
+/-- A zero-padded 2-D convolution with kernel `W : [outC, inC, kh, kw]` (row-major). Writing the
+    conv as a sum over spatial taps `T = Σ_{ky,kx} S_{ky,kx} ∘ M_{ky,kx}`, each `S` a zero-filled
+    shift (norm ≤ 1, at any stride) and each `M` the `[outC,inC]` channel-mixing matrix at that
+    tap, the triangle inequality gives `‖T‖₂ ≤ Σ_tap ‖M_tap‖₂`; each tap's `‖M_tap‖₂` is bounded
+    by its Schatten-8 bound. The per-tap bound is `denseE_lipschitzL2_gram2`; the tap-sum step
+    has no Lean theorem. Both steps are loose against the exact (Sedghi–Gupta–Long) conv norm.
+    `est` sums the taps' power-iteration values: the tap-sum at the true per-tap norms, not an
+    estimate of `‖T‖₂`. -/
+private def convLip (W : ByteArray) (outC inC kh kw : Nat) : LipPair := Id.run do
+  let mut b := 0.0
+  let mut e := 0.0
   for ky in [0:kh] do
     for kx in [0:kw] do
-      s := s + specNormGet
-        (fun o i => F32.read W (((o*inC+i)*kh+ky)*kw+kx).toUSize) outC inC
-  pure s
+      let p := lipOfGet (fun o i => F32.read W (((o*inC+i)*kh+ky)*kw+kx).toUSize) outC inC
+      b := b + p.bound
+      e := e + p.est
+  pure { bound := b, est := e }
 
 /-- **Matrix-free** spectral norm `‖W‖₂` of `W : [d0,d1]` (row-major) — power iteration that
     applies `W` and `Wᵀ` as mat-vecs (`σ = ‖W v‖`, `v` the top right singular vector) instead
-    of forming the `d1×d1` Gram. ~`2·d0·d1` per iteration vs `d0·d1²` for `specNormW`, so it's
+    of forming the `d1×d1` Gram. ~`2·d0·d1` per iteration vs `d0·d1²` for the Gram (`gramOut`), so it's
     cheap enough to call **during** training (the spectral-norm projection below). Fewer iters
-    (`iters`) trade a little precision for speed; `specNormW` stays the high-precision cert path. -/
+    (`iters`) trade a little precision for speed. An estimate from below, so never a
+    certificate constant (`denseLip` is). -/
 private def specNormMV (W : ByteArray) (d0 d1 : Nat) (iters : Nat := 15) : Float := Id.run do
   let norm := fun (a : Array Float) (n : Nat) => Id.run do
     let mut s := 0.0
@@ -143,12 +158,13 @@ private def specNormMV (W : ByteArray) (d0 d1 : Nat) (iters : Nat := 15) : Float
     v := normalize w d1
   pure σ
 
-/-- **Spectral-norm projection** (projected SGD onto the spectral ball): rescale every weight
-    whose L2-Lipschitz bound exceeds `c` down to `c`, leaving biases untouched. Dense `[d0,d1]`:
-    cap the spectral norm `‖W‖₂` (`specNormMV`). Conv `[o,i,kh,kw]`: cap the **same** tap-sum
-    operator bound the CNN certificate uses (`specNormConvTapSum`, `‖T‖₂ ≤ Σ_tap‖W[:,:,ky,kx]‖₂`)
-    by scaling the whole kernel — so the projection and the cert control the identical quantity.
-    Caps each layer's Lipschitz constant at `c`, so the global `L = ∏ᵢ ≤ cᵏ` — the lever that
+/-- **Spectral-norm projection** (projected SGD toward the spectral ball): rescale every weight
+    whose L2 norm exceeds `c` down to `c`, leaving biases untouched. Conv `[o,i,kh,kw]`: cap the
+    **same** tap-sum bound the certificate uses (`convLip`) by scaling the whole kernel, so for
+    the convs the projection and the certificate control the identical quantity. Dense `[d0,d1]`:
+    cap the matrix-free power-iteration estimate of `‖W‖₂` (`specNormMV`) — the certificate's
+    Schatten-8 bound costs a full Gram, too much to recompute every few steps — so a projected
+    dense layer's certified `Lᵢ` (`denseLip`) sits somewhat above `c`. This is the lever that
     turns the (vacuous) product certificate non-vacuous. `F32.scaleShift` does the rescale. -/
 private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat)) (c : Float)
     : IO ByteArray := do
@@ -162,7 +178,7 @@ private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat
         let σ := specNormMV slice dims[0]! dims[1]!
         if σ > c then F32.scaleShift slice (c/σ) 0.0 else pure slice
       else if dims.size == 4 then do
-        let s := specNormConvTapSum slice dims[0]! dims[1]! dims[2]! dims[3]!
+        let s := (convLip slice dims[0]! dims[1]! dims[2]! dims[3]!).bound
         if s > c then F32.scaleShift slice (c/s) 0.0 else pure slice
       else pure slice
     parts := parts.push slice'
@@ -235,12 +251,13 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
       let lbl := if linf then "L∞" else "L2"
       IO.println s!"{lbl} PGD eps={eps}: adv acc = {correct.toFloat/nEval.toFloat*100.0}%"
   runSweep true [0.1, 0.2, 0.3]
-  -- certificate: product of the three layers' spectral norms (ReLU is 1-Lipschitz)
-  let L0 := specNormW W0 d0 hN
-  let L1 := specNormW W1 hN hN
-  let L2 := specNormW W2 hN d1
-  let L := L0 * L1 * L2
-  IO.println s!"\nspectral norms ‖W₀‖={L0}, ‖W₁‖={L1}, ‖W₂‖={L2}  →  global L = {L}  (PRODUCT over 3 layers — loose)"
+  -- certificate: product of the three layers' Schatten-8 bounds (ReLU is 1-Lipschitz)
+  let L0 := denseLip W0 d0 hN
+  let L1 := denseLip W1 hN hN
+  let L2 := denseLip W2 hN d1
+  let L := L0.bound * L1.bound * L2.bound
+  IO.println s!"\nlayer bounds ‖W₀‖≤{L0.bound}, ‖W₁‖≤{L1.bound}, ‖W₂‖≤{L2.bound}  →  global L = {L}  (PRODUCT over 3 layers — loose)"
+  IO.println s!"  (power-iteration estimates {L0.est}, {L1.est}, {L2.est}  →  product {L0.est * L1.est * L2.est}; not a bound)"
   let tot := nEval.toFloat
   let mut cert05 := 0
   let mut cert10 := 0
@@ -270,10 +287,11 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   IO.println "done (MLP PGD: input gradient from the hand-typed PgdGen kernel, the mlpInputGrad formula)."
 
 /-- **Spectral-norm-constrained training of the verified MNIST MLP.** Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
-    — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
-    `‖Wᵢ‖₂ ≤ c` (`projectSpectral`) — then runs the *same* `cert ≤ TRUE ≤ PGD` sandwich. Sweeps a
-    few caps `c` (plus an unconstrained baseline) so the table shows the trade: shrinking `c` pulls
-    the global `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the **vacuous** product certificate
+    — after every `projEvery` proof-rendered steps (and once at the end) each weight `Wᵢ` is
+    rescaled so its power-iteration `‖Wᵢ‖₂` estimate is `≤ c` (`projectSpectral`) — then runs the
+    *same* `cert ≤ TRUE ≤ PGD` sandwich. Sweeps a few caps `c` (plus an unconstrained baseline) so
+    the table shows the trade: shrinking `c` pulls the certified `L = ∏ᵢ Lᵢ` (the Schatten-8
+    bounds, each somewhat above `c`) down, turning the **vacuous** product certificate
     **non-vacuous** — at the cost of clean accuracy. The empirical face of
     `lipschitz_margin_certified_radius` ([`LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean)): smaller `L` ⇒ larger
     certified radius `m/(√2·L)`. The training gradient comes from the proof-rendered train step;
@@ -342,10 +360,10 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
     let W0 := theta.extract 0 (d0*hN*4)
     let W1 := theta.extract ((d0*hN + hN)*4) ((d0*hN + hN + hN*hN)*4)
     let W2 := theta.extract ((d0*hN + hN + hN*hN + hN)*4) ((d0*hN + hN + hN*hN + hN + hN*d1)*4)
-    let L0 := specNormW W0 d0 hN
-    let L1 := specNormW W1 hN hN
-    let L2 := specNormW W2 hN d1
-    let L := L0 * L1 * L2
+    let L0 := denseLip W0 d0 hN
+    let L1 := denseLip W1 hN hN
+    let L2 := denseLip W2 hN d1
+    let L := L0.bound * L1.bound * L2.bound
     -- clean accuracy + certified-robust accuracy at L2 {0.25, 0.5, 1.0}
     let mut clean := 0
     let mut c025 := 0
@@ -369,7 +387,7 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
           if r ≥ 0.5 then c05 := c05 + 1
           if r ≥ 1.0 then c10 := c10 + 1
     let cleanPct := clean.toFloat/tot*100.0
-    IO.println s!"  ‖W₀‖={L0}  ‖W₁‖={L1}  ‖W₂‖={L2}  →  L = {L}"
+    IO.println s!"  ‖W₀‖≤{L0.bound}  ‖W₁‖≤{L1.bound}  ‖W₂‖≤{L2.bound}  →  L = {L}   (estimates {L0.est} / {L1.est} / {L2.est})"
     IO.println s!"  clean = {cleanPct}%   cert@L2 0.25/0.5/1.0 = {c025.toFloat/tot*100.0}% / {c05.toFloat/tot*100.0}% / {c10.toFloat/tot*100.0}%"
     let pinf ← pgdAcc theta true 0.1
     let pl2 ← pgdAcc theta false 0.5
@@ -382,12 +400,37 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
+/-- The conv-aware certificate product over a packed parameter list: `convLip` for each
+    `[o,i,kh,kw]` kernel, `denseLip` for each `[d0,d1]` weight, biases skipped. Returns the
+    product of the bounds (the certificate's `L`), the product of the estimates, and a per-layer
+    `bound (estimate)` line. -/
+private def certProduct (theta : ByteArray) (specs : Array (Array Nat × Nat)) :
+    Float × Float × String := Id.run do
+  let mut L := 1.0
+  let mut Lest := 1.0
+  let mut msg := ""
+  let mut off := 0
+  for spec in specs do
+    let dims := spec.1
+    let len := dims.foldl (·*·) 1
+    let wslice := theta.extract (off*4) ((off+len)*4)
+    if dims.size == 4 then
+      let p := convLip wslice dims[0]! dims[1]! dims[2]! dims[3]!
+      L := L * p.bound; Lest := Lest * p.est
+      msg := msg ++ s!"conv{dims[1]!}→{dims[0]!} {p.bound} ({p.est})  "
+    else if dims.size == 2 then
+      let p := denseLip wslice dims[0]! dims[1]!
+      L := L * p.bound; Lest := Lest * p.est
+      msg := msg ++ s!"dense{dims[0]!}→{dims[1]!} {p.bound} ({p.est})  "
+    off := off + len
+  pure (L, Lest, msg)
+
 /-- **Generic conv-net PGD attack.** Trains any packed conv net on its proof-rendered SGD step,
     then runs PGD with `genKernel`: a hand-typed StableHLO kernel that computes the
     input gradient `dx` (conv input-VJPs and maxpool `select_and_scatter` backs, following the
     backward ops of the net's `<slug>_train_step.mlir`); no theorem ties the kernel's text.
-    Certificate = the conv-aware spectral-norm **product** (`specNormConvTapSum` for convs ×
-    `specNormW` for denses; ReLU/maxpool are 1-Lipschitz) —
+    Certificate = the conv-aware **product** of per-layer upper bounds (`convLip` for convs ×
+    `denseLip` for denses; ReLU and the disjoint 2×2 max-pools are 1-Lipschitz) —
     astronomically loose, the depth-cliff. `genKernel` and `net.slug` select the architecture
     (`genCnnPgdStep`/MNIST-CNN, `genCifarPgdStep`/CIFAR-CNN). -/
 def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
@@ -460,25 +503,10 @@ def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dat
       IO.println s!"{lbl} PGD eps={eps}: adv acc = {correct.toFloat/nEval.toFloat*100.0}%"
       (← IO.getStdout).flush
   runSweep true [0.1, 0.2, 0.3]
-  -- ── certificate: conv-aware spectral-norm PRODUCT (ReLU/maxpool are 1-Lipschitz) ──
-  let mut L := 1.0
-  let mut off := 0
-  let mut msg := ""
-  for spec in net.specs do
-    let dims := spec.1
-    let len := dims.foldl (·*·) 1
-    let wslice := theta.extract (off*4) ((off+len)*4)
-    if dims.size == 4 then
-      let n := specNormConvTapSum wslice dims[0]! dims[1]! dims[2]! dims[3]!
-      L := L * n
-      msg := msg ++ s!"conv{dims[1]!}→{dims[0]!} Σtap‖·‖₂={n}  "
-    else if dims.size == 2 then
-      let n := specNormW wslice dims[0]! dims[1]!
-      L := L * n
-      msg := msg ++ s!"dense{dims[0]!}→{dims[1]!} ‖·‖₂={n}  "
-    off := off + len
-  IO.println s!"\nlayer norms: {msg}"
-  IO.println s!"  →  global L = {L}  (PRODUCT over conv+dense layers — astronomically loose)"
+  -- ── certificate: conv-aware PRODUCT of per-layer bounds (ReLU/maxpool are 1-Lipschitz) ──
+  let (L, Lest, msg) := certProduct theta net.specs
+  IO.println s!"\nlayer bounds (estimate): {msg}"
+  IO.println s!"  →  global L = {L}  (PRODUCT over conv+dense layers — astronomically loose; estimates' product {Lest}, not a bound)"
   let tot := nEval.toFloat
   let mut cert05 := 0
   let mut cert10 := 0
@@ -516,10 +544,10 @@ def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   net.attackPgdConvNet cfg dataDir genCifarPgdStep
 
 /-- **Spectral-norm-constrained training of the verified MNIST CNN.** The CNN sibling of `attackPgdSpectralMlp`:
-    projected SGD onto the spectral ball — every `K` proof-rendered steps (and once at the end)
-    `projectSpectral` caps **both** the dense `‖Wᵢ‖₂` and the conv tap-sum bound at `c` — then the
-    `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genKernel`, cert = the conv-aware product). Harder than
-    the MLP: it's a `k`-layer product (`L ≤ cᵏ`) and the conv tap-sum is a *loose* bound, so
+    projected SGD toward the spectral ball — every `projEvery` proof-rendered steps (and once at
+    the end) `projectSpectral` caps the dense `‖Wᵢ‖₂` estimate and the conv tap-sum bound at `c` —
+    then the `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genKernel`, cert = the conv-aware product).
+    Harder than the MLP: it's a `k`-layer product and the conv tap-sum is a *loose* bound, so
     projection over-penalizes the convs — the cert needs a tighter `c` (and pays more clean accuracy)
     than the MLP did, and certifies only at *smaller* radii. The honest "depth + loose conv-norm ⇒
     certifying the conv net is harder." Generic over `genKernel`/`net.slug` (MNIST-CNN, CIFAR-CNN). -/
@@ -592,21 +620,7 @@ def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConf
       if acc > bestAcc then bestAcc := acc; bestTheta := theta
     theta := bestTheta
     if cap < 1.0e8 then theta ← projectSpectral theta net.specs cap
-    -- conv-aware certificate product (specNormConvTapSum convs × specNormW denses)
-    let mut L := 1.0
-    let mut off := 0
-    let mut msg := ""
-    for spec in net.specs do
-      let dims := spec.1
-      let len := dims.foldl (·*·) 1
-      let wslice := theta.extract (off*4) ((off+len)*4)
-      if dims.size == 4 then
-        let n := specNormConvTapSum wslice dims[0]! dims[1]! dims[2]! dims[3]!
-        L := L * n; msg := msg ++ s!"cv={n} "
-      else if dims.size == 2 then
-        let n := specNormW wslice dims[0]! dims[1]!
-        L := L * n; msg := msg ++ s!"de={n} "
-      off := off + len
+    let (L, _, msg) := certProduct theta net.specs
     let mut clean := 0
     let mut cR1 := 0      -- certified @ L2 0.1
     let mut cR2 := 0      -- certified @ L2 0.25  (the CNN's visible band — it certifies at small radii)
@@ -710,8 +724,9 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
           correct := correct + 1
     IO.println s!"L∞ PGD eps={eps}: adv acc = {correct}/{nEval} = {correct.toFloat/nEval.toFloat*100.0}%"
   -- ── L2 sandwich: Lipschitz certificate (lower bound) vs L2 PGD (upper bound) ──
-  let L := specNormW W0 d0 d1
-  IO.println s!"\nglobal Lipschitz ‖W‖₂ = {L}  (linear: the logit map's exact L2 Lipschitz)"
+  let Lp := denseLip W0 d0 d1
+  let L := Lp.bound
+  IO.println s!"\nglobal Lipschitz bound ‖W‖₂ ≤ {L}  (Schatten-8; power-iteration estimate of the exact ‖W‖₂ = {Lp.est})"
   let tot := nEval.toFloat
   let mut cert05 := 0
   let mut cert10 := 0

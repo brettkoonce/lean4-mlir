@@ -1611,9 +1611,9 @@ open Proofs
 #print axioms Proofs.binomTail_le_of_kernel_check
 
 -- ...and the SCORECARD (Smoothing/CPScorecard.lean, generated)
-#print axioms Proofs.smoothCpMlp_certified
-#print axioms Proofs.smoothCpCnn_certified
-#print axioms Proofs.smoothCpCifar_certified
+#print axioms Proofs.smoothCpMlp_tail_le
+#print axioms Proofs.smoothCpCnn_tail_le
+#print axioms Proofs.smoothCpCifar_tail_le
 
 -- ...and certified DECIMAL quantile bounds (Smoothing/PhiBounds.lean)
 #print axioms Proofs.stdNormalCDF_panel
@@ -1625,9 +1625,9 @@ open Proofs
 #print axioms Proofs.phiScanRevFrom_append
 #print axioms Proofs.le_stdNormalQuantile_of_scan
 #print axioms Proofs.smooth_radius_dec
-#print axioms Proofs.smoothDecMlp_certified
-#print axioms Proofs.smoothDecCnn_certified
-#print axioms Proofs.smoothDecCifar_certified
+#print axioms Proofs.smoothDecMlp_radius_le
+#print axioms Proofs.smoothDecCnn_radius_le
+#print axioms Proofs.smoothDecCifar_radius_le
 
 -- ...and the NET-SEMANTICS closure (Smoothing/NetSemantics.lean)
 #print axioms Proofs.measurable_argmaxNet

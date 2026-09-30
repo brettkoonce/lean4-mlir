@@ -37,6 +37,18 @@ before this plan was written (marked ✔).
 - **The rest** is doc overclaim residue, reuse and factoring in the unaudited `*ParamGrad` cluster
   (~−1k lines), placement, and naming.
 
+## ▶ Start here (next session)
+
+**State at 2026-09-30.** Branch `rubric-review`, three commits on `main@42de93de`, none pushed:
+- `5ff18875`: this plan.
+- `0069e30d`: WP1 part 1.
+- `9bebaed8`: WP1 part 2A.
+
+WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) is done and **staged, not
+committed**; its status is under WP3 below. WP1 part 2B (MNIST descent) is **parked**; its design
+is under WP1 below, and it should be done together with A-pq-1. The next package is the user's
+pick. WP2 continues the WP1 thread; WP4 and WP5 touch disjoint files.
+
 ## Decisions (user, 2026-09-30)
 
 1. **WP3: make the demo's radius a real upper bound**, not a relabel.
@@ -252,6 +264,46 @@ Frobenius/Gram upper bound, or power iteration × proven slack.
     gap. The tighter per-layer bound can be a follow-up.
   - Gate: the `mnist-*-pgd` smokes. The certified accuracy may drop; say so in the demo README and
     the book.
+
+**Status 2026-09-30: done (staged).**
+- `Verified/Attack.lean`: `specNormW` / `specNormGet` / `specNormConvTapSum` are gone.
+  - `denseLip` / `convLip` return a `LipPair`:
+    - `bound` is `denseE_lipschitzL2_gram2`'s Schatten-8 `B = (Σ H²)^{1/8}` over the output-side
+      Gram, times `roundingSlack`;
+    - `est` is the power-iteration value, from the same Gram.
+  - The conv factor is a tap-sum of per-tap Schatten-8 bounds. The tap-sum step is stated in the
+    docstring and has no Lean theorem.
+  - Every certified print uses `bound`, with `est` printed beside it. `certProduct` is shared by
+    the two conv drivers.
+  - Checked against numpy SVD on random matrices: bound = the Schatten-8 norm × 1.000001, and est
+    ≤ σ₁.
+- `projectSpectral`:
+  - convs are capped on `convLip.bound`, the certificate's own quantity;
+  - denses stay on the matrix-free estimate, since a full Gram every few steps costs too much. So
+    a projected dense layer's certified `Lᵢ` sits above `c`. The spectral docstrings (Attack and
+    the three apps) say so, and the false `L ≤ cᵏ` is gone.
+- X-cor-2: `oneHotBatchPad` reads the label through `F32.readLabel`. The unused `oneHotBatch` is
+  deleted.
+- Prose:
+  - `LipschitzCert/Basic.lean`'s module doc and `clm_lipschitzL2`, and `DenseEuclid`'s
+    `denseE_lipschitzL2` docstring.
+  - Attack's module doc, which now states the remaining gap: the certificate is for the
+    real-arithmetic net at the float-printed margin, and logit rounding is not budgeted.
+  - The CNN / CIFAR / MLP app headers. The stale `IREE_BACKEND=rocm` run lines in the two
+    spectral apps are gone too.
+- C-doc-1/3: measured counts are out of `formalization.yaml`, the CertsHeavy lakefile docstring,
+  `certs-heavy.yml` (header + step summary) and `tests/AuditAxiomsHeavy.lean`; each names its
+  source instead. The CertsHeavy description now lists its real roots.
+- C-doc-2 + C-nam-1: in both smoothing generators the header says "side-condition checks, not
+  certificates of the driver nets", and the banners say "with a kernel-checked tail bound".
+  - Renames: `smoothCp<Net>_certified` → `smoothCp<Net>_tail_le` and `smoothDec<Net>_certified` →
+    `smoothDec<Net>_radius_le`.
+  - Regenerated from the archived CSVs; AuditAxioms repointed.
+- Quoted numbers: the book and READMEs never quote the PGD demos' certified accuracies. Only the
+  tracked pre-fix logs do (`runs/pgd_*_phase3.log`, `runs/spectral_*_phase3.log`), and they are
+  left as records of the old code.
+- Follow-up (not done): a general Schatten-2^m theorem, the iterated Gram, would tighten the bound
+  toward σ₁, which matters most for the single-layer linear demo.
 
 ### WP4 — Codegen: no silent wrong function, `den` = text · M · 1 agent
 Findings: **X-cor-1** ✔ (`unsupported` must refuse every layer with no emitter; +25 lines),

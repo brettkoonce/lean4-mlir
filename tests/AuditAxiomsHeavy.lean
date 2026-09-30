@@ -11,8 +11,9 @@ import LeanMlir.Proofs.Certificates.IbpConvScorecard.Basic
 
 /-! # Axiom audit — the HEAVY generated certificate corpus (`CertsHeavy`)
 
-The full-input (784-dim) scorecard instances: L2 Tsuzuku + per-pair LipSDP + IBP
-L∞, ~90k generated lines of weight/image data and per-image theorems. Split out
+The full-input (784-dim) scorecard instances: L2 Tsuzuku, dense IBP L∞, CROWN and the conv
+IBP net (the per-pair LipSDP files are in no lib; their lines below are commented out), generated
+weight/image data and per-image theorems. Split out
 of `tests/AuditAxioms.lean` together with the `Certs`→`CertsHeavy` lakefile
 split: the long-running data-heavy corpus gets its own workflow
 (.github/workflows/certs-heavy.yml) so it cannot take certs.yml/blueprint.yml
@@ -23,9 +24,8 @@ audit. -/
 
 -- FULL-INPUT scorecard (LipschitzCert/ScorecardFull*.lean): the pooled 49-dim reduction
 -- lifted to the genuine 784-dim input (exact k/255 pixels), per-image certificates at
--- pixel-L2 ε = 1/10 AND 3/10 on two 784→16→10 nets — capped σ≤2: 92/100 @0.1 (PGD bracket
--- 93 — within ONE image of the attack bound) + 72/100 @0.3; unconstrained: 76/100 @0.1 →
--- 2/100 @0.3 (the σ-projection is what survives the bigger radius). Engine: ListDot.lean
+-- pixel-L2 ε = 1/10 AND 3/10 on two 784→16→10 nets, capped σ≤2 and unconstrained (the
+-- measured counts are in the generated header). Engine: ListDot.lean
 -- — every 784-term dot is one kernel `dotZ` evaluation (`decide +kernel`, GMP,
 -- propext-only; NOT native_decide) transported to the `Fin 784` sums by the once-proved
 -- `sum_getD_div` bridge; the pooled recipe's simp sum walk is quadratic in input dim and
@@ -67,10 +67,8 @@ audit. -/
 #print axioms Proofs.LipschitzCertDemo.scorecardFull
 
 -- Per-pair LipSDP on the FULL-INPUT nets (LipschitzCertScorecardSDPFull{,Uncon}.lean):
--- the tighter-constant pass at 784-dim input, both radii. Capped σ≤2:
--- 92→93/100 @ ε=0.1 — EQUAL to the L2-PGD attack bound, the cert ≤ TRUE ≤ PGD sandwich
--- CLOSED — and 72→91/100 @ ε=0.3 (PGD 92); unconstrained: 76→91 @0.1 (PGD 94), 2→77 @0.3
--- (PGD 86). PSD witnesses: exact rational LDLᵀ column squares, one linarith goal per pair
+-- the tighter-constant pass at 784-dim input, both radii (measured counts against the PGD
+-- bracket: the generated header). PSD witnesses: exact rational LDLᵀ column squares, one linarith goal per pair
 -- (the pooled files' recipe — MEASURED faster than an entrywise norm_num check at both
 -- widths; the exact-LDL fractions hurt 512 separate norm_num goals far more than one
 -- linarith call). Those counts are exact-rational MEASUREMENTS; the first 8 certifying
@@ -95,9 +93,8 @@ audit. -/
 
 -- IBP L∞ scorecard (IntervalBound.lean + LipschitzCertScorecardIBP{,Uncon}.lean):
 -- the third certificate axis — exact interval bound propagation, pixel-L∞
--- ε ∈ {1,2,4,8}/255, same full-input nets. Capped σ≤2: 92/88/69/24 per 100
--- (PGD-L∞ 93/93/92/88; the L2 Lipschitz cert via ‖δ‖₂ ≤ √784·ε∞ manages only
--- 92/85/49/2 — the box beats the ball); uncon 87/42/2/0. Sign-split dense
+-- ε ∈ {1,2,4,8}/255, same full-input nets (measured counts against the PGD-L∞ bracket and
+-- the L2 cert via ‖δ‖₂ ≤ √784·ε∞: the generated header). Sign-split dense
 -- boxes + endpoint-max ReLU, LINEAR in width; layer 1 = uniform box, reusing
 -- the dotZ hpre facts + one absSumZ kernel fact per row (ListDot.lean).
 -- Spot-check: the core soundness chain, the ℓ1 bridge, one absSumZ row fact +
@@ -126,8 +123,7 @@ audit. -/
 #print axioms Proofs.LipschitzCertDemo.ibpUnconCertse1_certified
 
 -- CROWN, the SAME nets/subset/ε grid as the IBP tier above — a new COLUMN in
--- that table: 93/93/92/81 (capped) and 94/92/76/15 (unconstrained) per 100,
--- against IBP's 92/88/69/24 and 87/42/2/0. Each emitted image is proved at the
+-- that table (measured counts: the generated header). Each emitted image is proved at the
 -- LARGEST radius it is emitted at and carried down the grid by
 -- `CertifiedAtLinf.mono`, so the spot-checks below cover both a directly-proved
 -- certificate (e8/e4) and a mono-derived one (e1). The `nrm*` raw
@@ -156,7 +152,8 @@ audit. -/
 -- Proofs.Foundation.IntervalBoundConv): the first certificate in the repo covering a
 -- convolution, a max-pool, and more than two layers — `conv2d(1→4, 3×3 SAME) → reluT
 -- → maxPool2 → denseT(64→10)` at trained k/256 weights, on 8×8 4×4-pooled MNIST,
--- pixel-L∞ ε ∈ {1,2,4,8}/255 → 35/33/23/5 of the first 40 test images. Per image the
+-- pixel-L∞ ε ∈ {1,2,4,8}/255 (the proved images are the aggregates' witness lists; the
+-- measured count comes from `scripts/certs/ibp_conv_scorecard.py`). Per image the
 -- box is checked ONCE, at the largest certifying radius, by a `decide +kernel` of the
 -- exact-ℚ checker (Proofs.Foundation.IntervalBoundConvQ); the smaller radii are
 -- `CertifiedAtLinf3.mono` corollaries. Spot-check: the net's box-soundness chain, the

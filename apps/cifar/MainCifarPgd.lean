@@ -9,8 +9,8 @@ proof-rendered SGD step, then runs L∞/L2 PGD with `genCifarPgdStep` — the fu
 input-VJP to `dx` (4 conv input-VJPs + 2 maxpool `select_and_scatter`-backs + the final conv1 VJP
 the train step omits), mirroring `verified_mlir/cifar_train_step.mlir`.
 
-The conv-aware Lipschitz certificate is a **7-layer** product (4 conv tap-sums × 3 dense spectral
-norms) — even more astronomically vacuous than the 5-layer MNIST CNN. The depth-cliff, one rung
+The conv-aware Lipschitz certificate is a **7-layer** product (4 conv tap-sum bounds × 3 dense
+Schatten-8 bounds) — even more astronomically vacuous than the 5-layer MNIST CNN. The depth-cliff, one rung
 deeper. Reuses the generic `attackPgdConvNet` driver.
 
 Run (GPU): `.lake/build/bin/cifar-pgd data`

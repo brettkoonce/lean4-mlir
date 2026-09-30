@@ -9,8 +9,9 @@ The first **conv rung** of the robustness ladder. Trains the
 input-VJPs (transpose-`o,i` + spatial-`reverse` kernel) and the maxpool `select_and_scatter`-back,
 mirroring `verified_mlir/cnn_train_step.mlir` — plus the final conv1 input-VJP the train step omits.
 
-The Lipschitz certificate is the conv-aware spectral-norm **product** (`specNormConvTapSum` for the
-convs × `specNormW` for the denses; ReLU/maxpool are 1-Lipschitz). Over ~5 layers it is even looser
+The Lipschitz certificate is the conv-aware **product** of per-layer upper bounds (`convLip`, a
+tap-sum of Schatten-8 bounds, for the convs × `denseLip` for the denses; ReLU and the disjoint
+2×2 max-pool are 1-Lipschitz). Over ~5 layers it is even looser
 than the MLP's three-layer product — the linear-tight → MLP-vacuous → CNN-more-vacuous depth-cliff.
 
 Run (GPU): `.lake/build/bin/mnist-cnn-pgd data`

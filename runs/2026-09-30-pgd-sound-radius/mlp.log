@@ -1,0 +1,84 @@
+I0930 17:24:21.985177 2145864 service.cc:154] XLA service 0x78ae880091f0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0930 17:24:21.985234 2145864 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0930 17:24:21.986813 2145864 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0930 17:24:21.986849 2145864 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0930 17:24:21.993433 2145864 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I0930 17:24:22.568297 2145880 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 364 bytes spill stores, 364 bytes spill loads
+
+I0930 17:24:22.674498 2145888 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 272 bytes spill stores, 272 bytes spill loads
+
+I0930 17:24:22.699742 2145895 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 72 bytes spill stores, 72 bytes spill loads
+
+I0930 17:24:22.739088 2145896 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 240 bytes spill stores, 240 bytes spill loads
+
+I0930 17:24:22.790059 2145902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 712 bytes spill stores, 712 bytes spill loads
+
+I0930 17:24:22.880667 2145884 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 296 bytes spill stores, 296 bytes spill loads
+
+I0930 17:24:23.010044 2145889 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 428 bytes spill stores, 428 bytes spill loads
+
+I0930 17:24:23.035515 2145891 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 628 bytes spill stores, 628 bytes spill loads
+
+I0930 17:24:23.121679 2145904 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 464 bytes spill stores, 464 bytes spill loads
+
+I0930 17:24:23.129910 2145897 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0930 17:24:23.144630 2145884 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 32 bytes spill stores, 32 bytes spill loads
+
+I0930 17:24:23.177418 2145895 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 360 bytes spill stores, 360 bytes spill loads
+
+I0930 17:24:23.195048 2145879 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0930 17:24:23.237490 2145894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 492 bytes spill stores, 492 bytes spill loads
+
+I0930 17:24:23.277264 2145885 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 468 bytes spill stores, 468 bytes spill loads
+
+I0930 17:24:23.307274 2145888 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 224 bytes spill stores, 224 bytes spill loads
+
+I0930 17:24:23.323939 2145896 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 60 bytes spill stores, 60 bytes spill loads
+
+I0930 17:24:23.538891 2145877 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 208 bytes spill stores, 208 bytes spill loads
+
+I0930 17:24:23.783070 2145894 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 448 bytes spill stores, 448 bytes spill loads
+
+I0930 17:24:23.899486 2145905 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_15', 44 bytes spill stores, 44 bytes spill loads
+
+I0930 17:24:24.227228 2145900 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 72 bytes spill stores, 72 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/mlp_train_step.mlir (@mlp_train_step, 7 outputs, 1 replica) in 2576 ms
+[pjrt_ffi] compiled verified_mlir/mlp_fwd.mlir (@mlp_fwd, 1 outputs, 1 replica) in 177 ms
+I0930 17:24:33.968576 2145891 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 56 bytes spill stores, 56 bytes spill loads
+
+I0930 17:24:34.110022 2145879 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 724 bytes spill stores, 724 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 607 ms
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 212 ms
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 210 ms
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 237 ms
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 239 ms
+[pjrt_ffi] compiled .lake/build/mlp_pgd_step.mlir (@mlp_pgd_step, 1 outputs, 1 replica) in 235 ms
+Phase-3 PGD attack on MNIST-MLP (verified codegen → GPU)
+  xla/pjrt verified_mlir/mlp_train_step.mlir
+  xla/pjrt verified_mlir/mlp_fwd.mlir
+  training MNIST-MLP (12 epochs, bs 128) ...
+clean test acc = 9781/10000 = 97.810000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L∞ PGD eps=0.100000: adv acc = 9.660000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L∞ PGD eps=0.200000: adv acc = 0.020000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L∞ PGD eps=0.300000: adv acc = 0.000000%
+
+layer bounds ‖W₀‖≤3.629232, ‖W₁‖≤3.957693, ‖W₂‖≤3.955664  →  global L = 56.816721  (PRODUCT over 3 layers — loose)
+  (power-iteration estimates 2.907826, 3.391022, 3.454438  →  product 34.062497; not a bound)
+certified-robust acc (L2): ε=0.5 → 0.000000%, ε=1.0 → 0.000000%, ε=1.5 → 0.000000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L2 PGD eps=0.500000: adv acc = 87.670000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L2 PGD eps=1.000000: adv acc = 52.240000%
+  xla/pjrt .lake/build/mlp_pgd_step.mlir
+L2 PGD eps=1.500000: adv acc = 15.330000%
+done (MLP PGD: input gradient from the hand-typed PgdGen kernel, the mlpInputGrad formula).

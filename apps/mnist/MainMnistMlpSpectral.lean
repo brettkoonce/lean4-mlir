@@ -4,11 +4,12 @@ import LeanMlir.Verified.Attack
 /-! # `mnist-mlp-spectral` — spectral-norm-constrained training (the gap-shrinking lever)
 
 The research lever of the robustness ladder. Trains the verified 784→512→512→10 MLP with **projected
-SGD onto the spectral ball** — after every few proof-rendered steps each weight `Wᵢ` is rescaled to
-`‖Wᵢ‖₂ ≤ c` — then runs the `cert ≤ TRUE ≤ PGD` sandwich at a sweep of caps `c` (plus an
-unconstrained baseline).
+SGD toward the spectral ball** — after every few proof-rendered steps each weight `Wᵢ` is rescaled
+so its power-iteration `‖Wᵢ‖₂` estimate is `≤ c` — then runs the `cert ≤ TRUE ≤ PGD` sandwich at a
+sweep of caps `c` (plus an unconstrained baseline).
 
-Shrinking `c` pulls the global Lipschitz `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the
+Shrinking `c` pulls the certified global Lipschitz constant `L` (the product of the layers'
+Schatten-8 upper bounds, each somewhat above `c`) down, turning the
 **vacuous** product certificate **non-vacuous** — the empirical face of
 `lipschitz_margin_certified_radius` (`LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean`: smaller `L` ⇒ larger
 certified radius `m/(√2·L)`) — at the cost of clean accuracy. The verified cross-entropy

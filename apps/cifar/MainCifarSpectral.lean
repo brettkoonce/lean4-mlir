@@ -4,15 +4,15 @@ import LeanMlir.Verified.Attack
 /-! # `cifar-spectral` — spectral-norm-constrained CIFAR-10 CNN training
 
 The CIFAR rung of the gap-shrinking lever. Trains the verified
-CIFAR-10 CNN with **projected SGD onto the spectral ball** — every few proof-rendered steps each
-weight is rescaled so the dense `‖Wᵢ‖₂` and the conv tap-sum bound stay `≤ c` — then runs the
+CIFAR-10 CNN with **projected SGD toward the spectral ball** — every few proof-rendered steps each
+weight is rescaled so the dense `‖Wᵢ‖₂` estimate and the conv tap-sum bound stay `≤ c` — then runs the
 `cert ≤ TRUE ≤ PGD` sandwich (`genCifarPgdStep` attack, conv-aware product cert) across a cap sweep.
 
-Hardest yet: a **7-layer** product (`L ≤ c⁷`) over 4 convs (loose tap-sum bound) + 3 denses, so the
+Hardest yet: a **7-layer** product over 4 convs (loose tap-sum bound) + 3 denses, so the
 caps must be tighter than the MNIST CNN's and certify at smaller radii still. The depth-cliff from
 the training side, one rung deeper. Reuses the generic `attackPgdSpectralConvNet` driver.
 
-Run (GPU): `PATH=$PWD/.venv/bin:$PATH IREE_BACKEND=rocm .lake/build/bin/cifar-spectral data`
+Run (GPU): `.lake/build/bin/cifar-spectral data`
 -/
 
 def cifarSpectralConfig : VerifiedConfig where

@@ -1,12 +1,12 @@
 name: Certify Heavy Corpus
 
 # The GENERATED full-input certificate instances (`lake build CertsHeavy`:
-# 784-dim scorecard + per-pair LipSDP + IBP L∞ — ~90k lines of weight/image
-# data across 8 files) + their three-axiom audit (tests/AuditAxiomsHeavy.lean).
+# the 784-dim L2 scorecard, dense IBP L∞, CROWN and the conv IBP net; the
+# lakefile's CertsHeavy docstring lists the roots) + their three-axiom audit
+# (tests/AuditAxiomsHeavy.lean).
 #
 # Split out of certs.yml 2026-07-12: these are long-running, data-heavy tails
-# (the linarith PSD goals carry ~230-digit LDLᵀ fractions; peak elaboration
-# memory took down the shared 4-core/16GB runners, and blueprint.yml builds
+# (peak elaboration memory took down the shared runners, and blueprint.yml builds
 # `Certs` too, so ONE heavy module broke three workflows). Long-running corpus
 # work gets its own workflow so it can never break the core: this runs on
 # pushes that actually touch the heavy files, weekly (drift), and on demand.
@@ -250,4 +250,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ **All ${total} heavy-corpus theorems closed under [\`propext\`, \`Classical.choice\`, \`Quot.sound\`]**" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Full-input scorecard (L2 Tsuzuku + IBP L∞): capped σ≤2 92/100 @ L2 ε=0.1; IBP 92/88/69/24 per 100 @ L∞ ε=1/2/4/8 per 255. (Per-pair LipSDP instances kernel-verified locally but CI-disabled — memory; see planning/archive/certs_heavy_psd_memory.md.)" >> $GITHUB_STEP_SUMMARY
+          echo "Full-input scorecards (L2 Tsuzuku, IBP L∞, CROWN, conv IBP): the aggregates state their proved per-image certificates; the measured per-100 counts are in each generated file's header. (Per-pair LipSDP instances kernel-verified locally but CI-disabled — memory; see planning/archive/certs_heavy_psd_memory.md.)" >> $GITHUB_STEP_SUMMARY

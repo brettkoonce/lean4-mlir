@@ -11,10 +11,12 @@ margin is `m = f(x)_{top} − f(x)_{runner-up}`. The theorem: **every perturbati
 *all* attacks (vs PGD, which only finds one). The `√2` is the L2 distance `‖eᵢ − eⱼ‖₂`
 between two one-hot class directions: a pairwise logit gap is `(√2·L)`-Lipschitz.
 
-The `L` is supplied numerically by `specNormW` / `specNormConvTapSum`
-([`LeanMlir/Verified/Attack.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Verified/Attack.lean)); `LipschitzL2.comp` + `clm_lipschitzL2` show *why* the naive
-per-layer **product** `L = ∏ᵢ ‖Wᵢ‖₂` is a sound (if loose) global constant — the looseness
-the demos make visual (linear tight → MLP/CNN vacuous).
+The demos supply `L` numerically as a product of per-layer upper bounds, `denseLip` / `convLip`
+([`LeanMlir/Verified/Attack.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Verified/Attack.lean)): each dense factor is the Schatten-8 bound
+`denseE_lipschitzL2_gram2` proves, computed in the host with a rounding slack, and each conv
+factor is a sum of such bounds over the kernel's taps (the tap-sum step itself is not formalized).
+`LipschitzL2.comp` + `clm_lipschitzL2` show *why* the per-layer **product** is a sound (if loose)
+global constant — the looseness the demos make visual (linear tight → MLP/CNN vacuous).
 
 The second half of the file formalizes the *other* certificate — **randomized smoothing**
 (Cohen–Rosenfeld–Kolter 2019, the `*-smooth` demos): `smoothing_certified_radius_probit` gives the
@@ -65,9 +67,9 @@ theorem LipschitzL2.comp {α β γ : Type*} [NormedAddCommGroup α] [NormedAddCo
     _ = (Lg * Lh) * ‖u - w‖ := by ring
 
 /-- A continuous linear map `A` (a net's affine layer, bias dropped) is `‖A‖`-Lipschitz —
-    and for a weight matrix the operator norm `‖A‖` **is** the spectral norm `‖W‖₂` that
-    `specNormW` estimates by power iteration. So each linear layer contributes its spectral
-    norm to the product. -/
+    and for a weight matrix the operator norm `‖A‖` **is** the spectral norm `‖W‖₂`. So each
+    linear layer contributes its spectral norm, or any upper bound on it
+    (`LipschitzL2.mono`), to the product. -/
 theorem clm_lipschitzL2 {α β : Type*} [NormedAddCommGroup α] [NormedSpace ℝ α]
     [NormedAddCommGroup β] [NormedSpace ℝ β] (A : α →L[ℝ] β) :
     LipschitzL2 ‖A‖ A := by

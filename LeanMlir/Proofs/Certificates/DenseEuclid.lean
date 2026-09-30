@@ -51,9 +51,9 @@ private theorem denseE_lipschitzL2_of_sq {n k : ℕ} (W : Fin k → Fin n → �
   exact (abs_le_of_sq_le_sq' hsq (mul_nonneg hB (norm_nonneg _))).2
 
 /-- **Frobenius bound, proved.** If the entrywise square sum of `W` is at
-    most `C²`, the dense layer is `C`-Lipschitz in L2. This is the certified
-    replacement for the power-iteration estimate `specNormW`: `‖W‖₂ ≤ ‖W‖_F`,
-    so any rational `C ≥ ‖W‖_F` is a sound Lipschitz constant. -/
+    most `C²`, the dense layer is `C`-Lipschitz in L2. Power iteration only
+    estimates `‖W‖₂` from below; `‖W‖₂ ≤ ‖W‖_F` makes any rational `C ≥ ‖W‖_F`
+    a sound Lipschitz constant. -/
 theorem denseE_lipschitzL2 {n k : ℕ} (W : Fin k → Fin n → ℝ) {C : ℝ}
     (hC : 0 ≤ C) (hW : ∑ i, ∑ j, W i j ^ 2 ≤ C ^ 2) :
     LipschitzL2 C (denseE W) :=

@@ -275,19 +275,17 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.MobileNetV4RenderB]
 
 /-- **`lake build CertsHeavy`** — the GENERATED full-input certificate
-    instances (784-dim scorecard + per-pair LipSDP + IBP L∞: ~90k lines of
-    weight/image data and per-image theorems across 8 files). Split out of
-    `Certs`: these are data-heavy tails (the linarith PSD goals carry ~230-digit
-    LDLᵀ fractions) that OOM the shared 4-core runners — long-running corpus work
-    gets its OWN workflow (.github/workflows/certs-heavy.yml: weekly cron +
-    on-demand + pushes touching these files) so it can never break the core.
-    Results (all 3-axiom, audited by tests/AuditAxiomsHeavy.lean): L2 capped
-    σ≤2 92/100 @ ε=0.1; IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255
-    (PGD 93/93/92/88). The full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`,
-    93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners,
-    so no lib builds them and their audit lines
-    are commented out. Re-check them locally with `scripts/certs/check_sdpfull.sh` (~3 min and
-    ~15 GB each). -/
+    instances: the 784-dim L2 scorecard (`ScorecardFull`), dense IBP L∞
+    (`ScorecardIBP{,Uncon}`), CROWN (`ScorecardCrown{,Uncon}`) and the conv IBP net
+    (`IbpConvScorecard`), weight/image data plus per-image theorems. Split out of `Certs` for
+    per-module peak elaboration memory, which took down the shared runners — long-running
+    corpus work gets its OWN workflow (.github/workflows/certs-heavy.yml: weekly cron +
+    on-demand + pushes touching these files) so it can never break the core. Every theorem is
+    audited by tests/AuditAxiomsHeavy.lean; the measured per-100 counts are in each generated
+    file's header, the proved ones are the aggregates' lengths. The pooled LipSDP files are in
+    `Certs`; the full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`) are in NO
+    lib: their linarith PSD witnesses OOM the runners, so their audit lines are commented out.
+    Re-check them locally with `scripts/certs/check_sdpfull.sh`. -/
 lean_lib «CertsHeavy» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull,

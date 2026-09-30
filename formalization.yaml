@@ -216,7 +216,7 @@ status:
     # --- Certificates and optimizer geometry ---
     # Tsuzuku 2018 certified radius
     - {declaration: "Proofs.lipschitz_margin_certified_radius", file: "LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "Lipschitz-margin certified radius", source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"}]}
-    # mechanized 100-image LipSDP scorecard at trained weights (69/100)
+    # LipSDP scorecard at trained weights: 8 proved witnesses; the per-100 count is measured (generated header)
     - {declaration: "Proofs.LipschitzCertDemo.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
     # Cohen 2019 smoothing radius END-TO-END (the Gaussian Neyman-Pearson core is proved)
     - {declaration: "Proofs.smoothing_certified_radius_classifier", file: "LeanMlir/Proofs/Certificates/Smoothing/Gaussian.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)", source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"}]}
@@ -319,8 +319,9 @@ fidelity:
        instantiated at the trained pooled `mlpT` (`smoothing_cp_certified_mlpT`). Still informal:
        the 784-dim driver checkpoints are not themselves tied (the witness file runs at the
        49-dim net), and the driver's float forward against the real-semantics net is the float
-       tier's story. The LipSDP scorecards certify a FIXED 100-image subset at a FIXED epsilon --
-       an honest lower bound, not a dataset-wide claim.
+       tier's story. The LipSDP scorecards prove 8 per-image certificates at a FIXED epsilon; their
+       count over a fixed 100-image subset is an exact-rational measurement (generated headers), not
+       a theorem and not a dataset-wide claim.
 
     4c. NO ADJOINT-CHAIN TIER: no theorem bounds a whole-net float error against a logit margin
        (4d states no whole-net budget).
@@ -494,7 +495,7 @@ alignment:
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
       module: "LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean, LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard*.lean"
       status: "proved"
-      note: "fixed 100-image subset at fixed epsilon -- honest lower bound (69/100 vs 72/100 PGD bracket)"
+      note: "8 proved per-image certificates at fixed epsilon; the count over a fixed 100-image subset is measured by exact rational arithmetic (generated headers), not proved"
     - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman-Pearson core)"
       lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift; smoothing_cp_certified; smoothing_cp_certified_net"
       module: "LeanMlir/Proofs/Certificates/Smoothing/Gaussian.lean, LeanMlir/Proofs/Certificates/Smoothing/CP.lean, LeanMlir/Proofs/Certificates/Smoothing/NetSemantics.lean"
