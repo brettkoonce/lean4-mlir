@@ -1,0 +1,31 @@
+alphazero ttt 5x5: 83486 params, 4 in a row, 2 iterations of 256 games at 200 sims, batch 64 × 5 epochs over the last 20 iterations, lr 0.001000, cpuct 1.500000, Dir(1.000000) at 0.250000, seed 1
+  no table: on-demand solver, the empty board a draw, 20000 random-play decision positions as the sweep (58 ms)
+I0930 04:58:31.075161 1953912 service.cc:154] XLA service 0x7aee54033920 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0930 04:58:31.075212 1953912 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0930 04:58:31.076723 1953912 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0930 04:58:31.076766 1953912 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0930 04:58:31.083519 1953912 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I0930 04:58:31.573378 1954074 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 16 bytes spill stores, 12 bytes spill loads
+
+I0930 04:58:31.910279 1954085 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_5x5_probe_train_step.mlir (@main, 37 outputs, 1 replica) in 1089 ms
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_5x5_probe_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 434 ms
+[pjrt_ffi] compiled .lake/build/alphazero_ttt_5x5_probe_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 73 ms
+  sessions loaded
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 0: sweep agree 42.43% value mse 0.6957 sign 33.07%  net alone vs perfect X 0/0/256 O 0/0/256  +MCTS X 0/0/256 O 0/0/256  root value 0.000
+  first step: alphazero loss 4.2509, block loss 6.3031
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 1: sweep agree 54.77% value mse 0.7629 sign 36.22%  net alone vs perfect X 0/0/256 O 0/0/256  +MCTS X 0/0/256 O 0/0/256  root value 0.096
+    self-play 3590 positions (X 149 / draw 15 / O 92), 280 steps over 3590 samples, loss 4.0002  (play 2305 train 954 score 26022 ms)
+[pjrt_ffi] RESIDENT: @forward_eval holds 12 parameter tensors (0.3 MB) on 1 device; they stop crossing PCIe from here
+  iter 2: sweep agree 65.74% value mse 0.5243 sign 49.83%  net alone vs perfect X 0/0/256 O 0/0/256  +MCTS X 0/0/256 O 0/29/227  root value 0.209
+    self-play 3334 positions (X 138 / draw 8 / O 110), 540 steps over 6924 samples, loss 3.7497  (play 2172 train 1525 score 15622 ms)
+trained: 2 iterations, 820 steps, 340660 ms
+self-play stood at 5557 distinct decision positions
+solver cache saved to .lake/build/ttt_solver_5x5_k4.bin (251827816 entries after 805231469 nodes, 73868438 replaced)
+wrote .lake/build/alphazero_ttt_5x5_probe_curve.csv, .lake/build/alphazero_ttt_5x5_probe_sweep.csv, .lake/build/alphazero_ttt_5x5_probe_policy.csv, .lake/build/alphazero_ttt_5x5_probe_params.bin

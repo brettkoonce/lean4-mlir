@@ -10,6 +10,10 @@ Import-free, so the pure-data `ParamLayouts` can use them. -/
   ((acc.push (u &&& 0xff).toUInt8).push ((u >>> 8) &&& 0xff).toUInt8).push
     ((u >>> 16) &&& 0xff).toUInt8 |>.push ((u >>> 24) &&& 0xff).toUInt8
 
+/-- Append `v mod 2⁶⁴` as 8 little-endian bytes (a uint64 record). -/
+@[inline] def pushU64LE (acc : ByteArray) (v : Nat) : ByteArray :=
+  pushU32LE (pushU32LE acc (v % 4294967296)) (v / 4294967296)
+
 /-- Append `x` as 4 little-endian f32 bytes (narrowing f64 → `Float32`). -/
 @[inline] def pushF32LE (acc : ByteArray) (x : Float) : ByteArray :=
   let u : UInt32 := x.toFloat32.toBits

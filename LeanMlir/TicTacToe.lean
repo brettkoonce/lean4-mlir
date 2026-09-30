@@ -10,7 +10,13 @@ import LeanMlir.FloatFmt
     A position is a base-3 number over the cells in row-major order, digit 0 empty,
     1 X, 2 O, cell `c` weighted `3^c`; X moves first, so the side to move is the stone
     count's parity. Table entries are from the SIDE TO MOVE's view: bits 0–1 the value
-    (0 loss, 1 draw, 2 win), bit 2 terminal, 255 unreached. -/
+    (0 loss, 1 draw, 2 win), bit 2 terminal, 255 unreached. Index lists between Lean
+    and C are u64 LE (3²⁵ > 2³²).
+
+    The table exists at n ≤ 4 (3¹⁶ bytes). Above that the instrument is the on-demand
+    solver (`lean_ttt_solver_*`): negamax with a symmetry-canonical transposition
+    table, exact values only, gated against the dense table wherever both exist
+    (`Table.check`). -/
 
 namespace TTT
 
@@ -92,17 +98,22 @@ def Pos.render (p : Pos) : String := Id.run do
     s := s ++ "\n"
   return s
 
+def readU64 (ba : ByteArray) (i : Nat) : Nat := Id.run do
+  let mut v := 0
+  for j in [0:8] do v := v ||| (ba[8 * i + j]!.toNat <<< (8 * j))
+  return v
+
 -- ── The solved game ──
 
 @[extern "lean_ttt_solve"]
 opaque solveTable (n k : USize) : IO ByteArray
 
-/-- Reachable indices as u32 LE; decision positions only unless `includeTerminal = 1`. -/
+/-- Reachable indices as u64 LE; decision positions only unless `includeTerminal = 1`. -/
 @[extern "lean_ttt_reachable"]
 opaque reachableIdx (tbl : @& ByteArray) (n : USize) (includeTerminal : UInt8) : IO ByteArray
 
-/-- Canonical planes for an index list: f32 `[count, 2, n, n]`, plane 0 the mover's
-    stones, plane 1 the opponent's. -/
+/-- Canonical planes for an index list (u64 LE): f32 `[count, 2, n, n]`, plane 0 the
+    mover's stones, plane 1 the opponent's. -/
 @[extern "lean_ttt_planes"]
 opaque planesOf (idx : @& ByteArray) (count n : USize) : IO ByteArray
 
@@ -117,17 +128,81 @@ opaque scoreLogits (tbl : @& ByteArray) (idx : @& ByteArray) (count n : USize)
 @[extern "lean_ttt_scripted_agreement"]
 opaque scriptedAgreement (tbl : @& ByteArray) (n k : USize) : IO ByteArray
 
+-- ── The on-demand solver ──
+
+/-- The solver's arena: board `n`, `k` in a row, `2^log2cap` transposition slots
+    (10 bytes each). A file, when saved: `IO.FS.writeBinFile`. -/
+@[extern "lean_ttt_solver_alloc"]
+opaque solverAlloc (n k log2cap : USize) : IO ByteArray
+
+/-- A position's table-style entry, solved on demand. Pure to Lean — the value of a
+    position is a function of the position; the cache the call fills is invisible. -/
+@[extern "lean_ttt_solver_entry_at"]
+opaque solverEntry (arena : @& ByteArray) (idx : UInt64) : UInt8
+
+/-- The principal move of a position whose entry is exact, in the position's own
+    coordinates; 63 when the entry is missing or only a bound. Pure like `solverEntry`. -/
+@[extern "lean_ttt_solver_best_at"]
+opaque solverBest (arena : @& ByteArray) (idx : UInt64) : UInt8
+
+/-- `[entries, nodes visited, entries replaced, capacity]` as u64. -/
+@[extern "lean_ttt_solver_stats"]
+opaque solverStats (arena : @& ByteArray) : IO ByteArray
+
+/-- The gate: the solver against the dense table on every reachable position, and its
+    principal move against the table's optimal set on every decision position —
+    `[checked, value mismatches, bad principal moves]` as u64. -/
+@[extern "lean_ttt_solver_check"]
+opaque solverCheck (arena tbl : @& ByteArray) : IO ByteArray
+
+/-- `count` decision positions with at least `minStones` stones, by random play from
+    `seed`: u64 LE. -/
+@[extern "lean_ttt_sample_positions"]
+opaque samplePositions (n k count : USize) (seed : UInt64) (minStones : USize) : IO ByteArray
+
+/-- Every decision position with at most `maxStones` stones (≤ 6), sorted and distinct:
+    u64 LE. The exhaustive opening, where a sample would miss lines. -/
+@[extern "lean_ttt_enumerate"]
+opaque enumeratePositions (n k maxStones : USize) : IO ByteArray
+
+/-- `scoreLogits` through the solver, over a position list. -/
+@[extern "lean_ttt_solver_score"]
+opaque solverScore (arena idx : @& ByteArray) (count : USize) (out : @& ByteArray) (nOut : USize) : IO ByteArray
+
+/-- `scriptedAgreement` through the solver, over a position list. -/
+@[extern "lean_ttt_solver_agreement"]
+opaque solverAgreement (arena idx : @& ByteArray) (count : USize) : IO ByteArray
+
+/-- The instrument: the dense table at n ≤ 4 (`tbl`, empty above), and the on-demand
+    solver at every size. `entry` reads the table where it exists. -/
 structure Table where
   n : Nat
   k : Nat
   tbl : ByteArray
+  solver : ByteArray
 
-def Table.build (n k : Nat) : IO Table := do
-  return { n, k, tbl := ← solveTable n.toUSize k.toUSize }
+/-- `log2cap` sizes the solver's transposition table (2²² slots = 42 MB). -/
+def Table.build (n k : Nat) (log2cap : Nat := 22) : IO Table := do
+  let tbl ← if n <= 4 then solveTable n.toUSize k.toUSize else pure ByteArray.empty
+  let solver ← solverAlloc n.toUSize k.toUSize log2cap.toUSize
+  return { n, k, tbl, solver }
 
-def Table.entry (t : Table) (p : Pos) : UInt8 := t.tbl.get! p.index
+def Table.dense (t : Table) : Bool := t.tbl.size > 0
+def Table.entry (t : Table) (p : Pos) : UInt8 :=
+  if t.dense then t.tbl.get! p.index else solverEntry t.solver p.index.toUInt64
 def Table.reachable (t : Table) (p : Pos) : Bool := t.entry p != 255
 def Table.isTerminal (t : Table) (p : Pos) : Bool := (t.entry p &&& 4) != 0
+
+/-- The solver against the dense table on every reachable position:
+    (checked, value mismatches, bad principal moves). -/
+def Table.check (t : Table) : IO (Nat × Nat × Nat) := do
+  let r ← solverCheck t.solver t.tbl
+  return (readU64 r 0, readU64 r 1, readU64 r 2)
+
+/-- Score a logits block over a position list through whichever instrument exists. -/
+def Table.score (t : Table) (idx : ByteArray) (count : Nat) (out : ByteArray) (nOut : Nat) : IO ByteArray :=
+  if t.dense then scoreLogits t.tbl idx count.toUSize t.n.toUSize out nOut.toUSize
+  else solverScore t.solver idx count.toUSize out nOut.toUSize
 
 /-- The exact value from the mover's view: −1 loss, 0 draw, 1 win. -/
 def Table.value (t : Table) (p : Pos) : Int := ((t.entry p &&& 3).toNat : Int) - 1
@@ -140,7 +215,7 @@ def Table.optimal (t : Table) (p : Pos) : Array Nat :=
 def Table.counts (t : Table) : IO (Nat × Nat) := do
   let all ← reachableIdx t.tbl t.n.toUSize 1
   let dec ← reachableIdx t.tbl t.n.toUSize 0
-  return (all.size / 4, dec.size / 4)
+  return (all.size / 8, dec.size / 8)
 
 -- ── Players ──
 
@@ -153,8 +228,28 @@ def pick (xs : Array Nat) (g : StdGen) : Nat × StdGen :=
 
 def randomPlayer : Player := fun p g => pick p.legal g
 
-/-- Uniform over the optimal set, so a perfect opponent still varies its lines. -/
-def perfectPlayer (t : Table) : Player := fun p g => pick (t.optimal p) g
+/-- Uniform over the optimal set, so a perfect opponent still varies its lines — drawn as
+    the first optimal move of a uniformly random order of the legal moves, which is the
+    same distribution and values about two children a move instead of every one. On the
+    solver path that is still a full solve per child, so from the third stone on the
+    player takes the search's own principal move — one solve, the position's — and keeps
+    the uniform draw for each side's first move, where the cached opening book makes it
+    free and where the variety between games comes from. Exact either way. -/
+def perfectPlayer (t : Table) : Player := fun p g => Id.run do
+  let v := t.value p
+  if !t.dense && p.stones >= 2 then
+    let m := (solverBest t.solver p.index.toUInt64).toNat
+    if m < p.n * p.n && p.cells[m]! == 0 then return (m, g)
+  let mut legal := p.legal
+  let mut g := g
+  for i in [0:legal.size] do
+    let (j, g') := randNat g i (legal.size - 1)
+    g := g'
+    let tmp := legal[i]!
+    legal := (legal.set! i legal[j]!).set! j tmp
+  for c in legal do
+    if -(t.value (p.play c)) == v then return (c, g)
+  return (legal[0]!, g)
 
 /-- Win now if a move wins, else block an opponent's immediate win, else random. -/
 def heuristicPlayer : Player := fun p g =>

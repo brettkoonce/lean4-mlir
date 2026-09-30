@@ -325,8 +325,10 @@ a \texttt{NetSpec} in about fifteen lines of Lean and led by how many new
 primitives it asks for beyond Part 1's toolbox: none for VGG or
 AlphaZero, one for Mamba, never more than three. The entries are grouped
 by what they are for --- vision classifiers, detection, segmentation,
-language, generation, physics, signal processing --- and twelve of the
-groups carry a demo trained on a dataset from that field.
+language, generation, physics, signal processing --- and eleven of the
+groups carry a demo trained on a dataset from that field; a closing section on
+game theory trains three games --- blackjack, Pong, tic-tac-toe --- against their
+exact solutions, with the AlphaGo family as its catalogue.
 
 \textbf{Appendices.} Data availability (A), toolchain setup (B), and
 the complete proof framework as a reference (C).
@@ -13433,7 +13435,8 @@ real problems --- classification backbones first, where every layer is one
 Part 1 proved, then detection, inspection, sign language, leaves and
 tumours, each with a dataset, the field's own baseline to beat, and beside
 the demo the architectures that field uses. The second half
-(\S~\ref{sec:bestiary_beyond_recognition}) leaves recognition behind.
+(\S~\ref{sec:bestiary_beyond_recognition}) leaves recognition behind, and a last
+section (\S~\ref{sec:bestiary_game_theory}) plays games against their exact solutions.
 
 \subsection{Vision classifiers}
 
@@ -15071,385 +15074,14 @@ def samEncoderH : NetSpec where
 \section{Bestiary entries: beyond recognition}
 \label{sec:bestiary_beyond_recognition}
 
-The training signal stops being a label. It is a reward, the next token,
-the noise added to an image, a density, a chirp buried in detector noise,
-an energy --- and where the field has an exact answer, value iteration,
-quadrature, the matched filter's closed form, a solved spin chain, the demo
-is scored against it rather than against a held-out set. The networks are
-the same kit; what changes is the outer loop, and the catalogue beside each
-demo is that domain's architectures.
-
-\subsection{Reinforcement learning --- demos: DQN on blackjack, AlphaZero on tic-tac-toe}
-\label{sec:bestiary_rl}
-
-Networks that learn from the rewards of their own actions rather than from a
-labelled set. The architectural side is small --- an MLP for blackjack, a plain
-convolution stack for tic-tac-toe, residual towers in the AlphaGo family below ---
-and the complexity lives in the outer loop: how experience is gathered, what the
-target is, and how you would ever know the policy is good.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.8\textwidth]{demos/blackjack_chart.png}
-\caption{The exact hit/stick policy for blackjack under the Sutton \& Barto
-rules, player total against the dealer's showing card, hard hands and soft.
-Rings mark the twelve cells where the trained DQN disagrees with the theorem,
-dots the eight where tabular Q does. Both learners miss on the knife edges:
-hard 12 against a 4, where hitting and sticking differ by a quarter of a cent
-a hand, and the soft-18 row, where the casino card is wrong too.}
-\label{fig:blackjack_chart}
-\end{figure}
-
-\paragraph{DQN on blackjack.} The \texttt{demos/MainBlackjackDqn.lean} trainer
-is Mnih et al.'s DQN (2015,
-\href{https://www.nature.com/articles/nature14236}{Nature}) on the blackjack of
-Sutton \& Barto's Example~5.1, the game written in Lean
-(\texttt{LeanMlir/Blackjack.lean}) with its RNG threaded through so every hand
-replays from a seed. The Q-function is a three-layer \texttt{.dense} net on a
-29-float one-hot of the observation (player total, dealer's card, usable ace),
-$6{,}210$ parameters. Three things change relative to everything trained so far:
-
-\begin{itemize}
-  \item \textbf{There is no dataset.} Transitions come from playing the game
-    $\varepsilon$-greedily against the current network and are kept in a
-    replay ring of 20k; each gradient step samples 128 of them. The book's
-    other demos read their data from disk; this one manufactures it.
-  \item \textbf{The target is the model's own prediction, one step later.}
-    $y_a = r + \gamma \max_{a'} Q_{\text{target}}(s', a')$, with the target
-    network a copy of the online parameters refreshed every 500 updates. The
-    loss is the squared-error block the DDPM demo trains with
-    (\S~\ref{sec:bestiary_diffusion}): the host runs the eval graph on the
-    batch, writes $y = Q(s,\cdot)$, overwrites the taken action's slot with the
-    Bellman target, and hands $y$ in. The gradient is then zero on the untaken
-    slot and a per-sample TD error on the taken one. Zero new codegen.
-  \item \textbf{The instrument is a solved game.} Blackjack under these rules is
-    a 200-state, two-action MDP with known odds, so value iteration gives the
-    optimal policy and the exact mean reward of any policy, in
-    milliseconds. Every thousand updates the greedy policy is read off the
-    network over all 280 observations in one batched forward and scored
-    exactly. The ceiling of the training curve is a theorem about the rules,
-    not a number somebody measured.
-\end{itemize}
-
-\paragraph{Every arm scored against the theorem.} Mean reward per hand; exact
-by value iteration, Monte Carlo over $10^6$ hands with its standard error,
-and agreement with the optimum over the 200 decision states. The two value
-columns agree within two standard errors on every row, which is the check that
-the simulator and the DP describe the same game:
-
-\begin{center}
-\begin{tabular}{@{}l r r r@{}}
-\hline
-policy & exact & Monte Carlo, $10^6$ hands & agrees / 200 \\
-\hline
-random                                   & $-0.3942$ & $-0.3956 \pm 0.0009$ & 110 \\
-threshold heuristic (hit below 18, $p=0.8$) & $-0.2403$ & $-0.2395 \pm 0.0009$ & 164 \\
-published casino table                   & $-0.0967$ & $-0.0962 \pm 0.0010$ & 162 \\
-tabular Q, $10^6$ hands                  & $-0.0440$ & $-0.0425 \pm 0.0010$ & 192 \\
-DQN, Double, 200k updates                & $-0.0476$ & $-0.0471 \pm 0.0010$ & 188 \\
-exact optimum                            & $-0.0431$ & $-0.0419 \pm 0.0010$ & 200 \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent The published table is the strategy card the first book shipped as
-its ceiling. It sits four cents a hand below the optimum
-because it is for a different game --- doubling, splitting and a dealer who
-plays differently --- and it ignores the usable ace entirely. Tabular Q needs
-a visit-count step size to get past $177/200$; a constant one chases the
-moving bootstrap target forever. Figure~\ref{fig:blackjack_chart} is the
-policy itself, cell by cell.
-
-
-\paragraph{The DQN's own table.} One seed per arm, exact value at the end of
-training; the gate is the DQN within $0.01$ of tabular Q's exact value, which
-every 200k-update arm passes:
-
-\begin{center}
-\begin{tabular}{@{}l r r r r@{}}
-\hline
-arm & updates & hands & exact & agrees / 200 \\
-\hline
-plain                          &  50k &  34k & $-0.0578$ & 175 \\
-plain                          & 200k & 133k & $-0.0503$ & 185 \\
-Double DQN                     & 200k & 132k & $-0.0476$ & 188 \\
-plain, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0530$ & 178 \\
-Double, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0503$ & 187 \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent Double DQN (van Hasselt et al.\ 2016,
-\href{https://arxiv.org/abs/1509.06461}{arXiv:1509.06461}: argmax from the
-online net, value from the target) is the best of the four, and the
-learning-rate decay does nothing, because the late-training jitter is not in
-the step size: it is the greedy readout flipping knife-edge cells whose two
-actions are worth the same to three decimals. The 1000-update readouts move by
-$\pm 0.005$ late in every arm, so the gap between the first two 200k rows is
-inside that. Ten minutes on one card at 6\% utilisation, each.
-
-\paragraph{AlphaZero on tic-tac-toe.} The \texttt{demos/MainAlphaZeroTtt.lean}
-trainer is Silver et al.'s self-play loop (AlphaGo Zero, 2017,
-\href{https://www.nature.com/articles/nature24270}{Nature}; AlphaZero, 2018,
-\href{https://www.science.org/doi/10.1126/science.aar6404}{Science}) on tic-tac-toe
-written in Lean (\texttt{LeanMlir/TicTacToe.lean}), $n \times n$ with $k$ in a row,
-$n$ the one knob. Each iteration plays 256 games in lockstep: at every move a PUCT
-search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations over the network's
-priors and value --- the trees are flat per-game arrays in C, the lockstep stays in
-Lean --- one batched forward over the games' pending leaves per simulation,
-Dirichlet noise at the root, the move drawn from the visit counts; the visit
-distribution $\pi$ and the outcome $z$ are the targets, and the next iteration plays
-with the new network. The network is AlphaGo's plain convolution + ReLU stack
-(\texttt{Bestiary/AlphaGo.lean}) at tic-tac-toe width --- three $3 \times 3$
-convolutions at 64 channels, a $1 \times 1$ at 4, a dense 64 --- with the policy and
-value heads merged into one dense output of $n^2 + 1$ slots, 78k parameters at
-$3 \times 3$ and 155k at $4 \times 4$. Three things change relative to the DQN:
-
-\begin{itemize}
-  \item \textbf{The loss has two heads and the codegen has one.} The paper's
-    $(z - v)^2 - \pi^{\top} \log p$ goes through the squared-error block blackjack's
-    Bellman target went through: the host runs the eval graph on the batch and writes
-    $y = \mathrm{out} - \tfrac{n_{\mathrm{out}}}{2}\, g$, with
-    $g = \mathrm{softmax}(p) - \pi$ on the $n^2$ policy slots and
-    $(\tanh v - z)(1 - \tanh^2 v)$ on the value slot, so the block's gradient is
-    $g / B$ exactly --- the gradient of the batch-mean AlphaZero loss. It is the move
-    the neural-quantum-state demo (\S~\ref{sec:bestiary_beyond}) makes with its energy
-    gradient. Zero new codegen; the block's own printed loss means nothing.
-  \item \textbf{Not the bestiary's tower.} The first run used the
-    convolution--BatchNorm--residual body of \texttt{Bestiary/AlphaZero.lean}, was
-    unbeaten by the perfect player from iteration 4, and diverged at iteration 11, the
-    loss going $1.26 \to 10.8$ in three iterations. BatchNorm's batch statistics over
-    nine binary cells are a liability --- a channel whose batch variance vanishes is
-    divided by $\sqrt{10^{-5}}$ --- and with BatchNorm the eval forward the loss reads
-    and the train step's forward are different functions. Blackjack and Pong made the
-    same choice for the same reason.
-  \item \textbf{The instrument is the solved game.} A position is a base-3 number
-    over the cells, so a memoised minimax fills one byte per index --- 5,478 reachable
-    positions at $3 \times 3$, 9,722,011 at $4 \times 4$ in 0.6 seconds of C --- with
-    the exact value and the optimal-move set of every position. The network alone is
-    scored by the argmax of its masked logits over \emph{every} reachable decision
-    position (4,520 and 9,062,619), its value head against the exact value, and its
-    match play against a perfect player that draws uniformly from the optimal set.
-    Nothing in the table is sampled but the games.
-\end{itemize}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{demos/alphazero_ttt.png}
-\caption{Left: X in the centre, O to move --- the trained $3 \times 3$ network's move
-probabilities over the empty cells, with the solved game's optimal moves ringed: the
-corners draw, the edges lose, and the network puts 81\% on the corners. Middle:
-agreement of the network alone with the solved game over every reachable decision
-position, against iteration, for both boards, with the draw rate of network + search
-against the perfect player dashed; unbeaten with search from iteration 5 and 4. Right: the value head against the exact value of all 4,520 $3 \times 3$
-decision positions, one dot per position, medians as bars.}
-\label{fig:alphazero_ttt}
-\end{figure}
-
-\paragraph{Every arm against the solved game.} Agreement of the arm's move with the
-optimal set over every decision position (the scripted players' is their expected
-agreement), and W/D/L against the perfect player as X and as O --- 1,000 games each
-way for the scripted rows, 256 for the network's:
-
-\begin{center}
-\begin{tabular}{@{}l r l r l@{}}
-\hline
- & \multicolumn{2}{c}{$3 \times 3$} & \multicolumn{2}{c}{$4 \times 4$} \\
-arm & agrees & vs perfect, X $\cdot$ O & agrees & vs perfect, X $\cdot$ O \\
-\hline
-random           & 58.0\% & 0/207/793 $\cdot$ 0/33/967   & 60.4\% & 0/487/513 $\cdot$ 0/341/659 \\
-win-or-block     & 94.0\% & 0/831/169 $\cdot$ 0/215/785  & 95.6\% & 0/930/70 $\cdot$ 0/840/160 \\
-network alone    & $\mathbf{97.3\%}$ & 0/256/0 $\cdot$ 0/256/0 & $\mathbf{99.4\%}$ & 0/256/0 $\cdot$ 0/256/0 \\
-network + search & ---    & 0/256/0 $\cdot$ 0/256/0      & ---    & 0/256/0 $\cdot$ 0/256/0 \\
-perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\cdot$ 0/1000/0 \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent Twenty iterations and 2.5 minutes on one card at $3 \times 3$; forty
-iterations and 10.0 minutes at $4 \times 4$, the same binary with \texttt{n=4} ---
-the Python implementation this loop follows was expected to take a day on that
-board. (With the trees in Lean rather than C the same runs took 4.8 and 34.9
-minutes: the search was the wall clock, 18.5 seconds of self-play and 17.8 of matches
-per $4 \times 4$ iteration against 0.7 and 0.8 now, and the train step is what is
-left.) The untrained network's sweep, 57.9\% and 60.3\%, is the random player's.
-Self-play stood at 2,035 of the 4,520 $3 \times 3$ decision positions and at 108,483
-of the 9,062,619 at $4 \times 4$ --- 1.2\% --- and the sweep scores all of them.
-One $4 \times 4$ miss in a 50,000-position subsample lies inside the visited set,
-and 289 of the 308 are forced wins not taken, at 7--14 stones, in positions a
-competent opponent never produces; the 122 misses at $3 \times 3$ are the same kind,
-98 missed wins and 24 losing moves at 3--6 stones. The search closes them: with 25
-or 100 simulations the network is unbeaten from iteration 5 and 4, before the network
-alone is (iterations 11 and 10). The value head estimates self-play rather than the
-theorem: its sign agrees with the exact value on 90\% and 96\% of positions, worst
-at $4 \times 4$ on lost ones (59\%), which its self-play almost never produces (242
-of the last iteration's 256 games drew), and the root ends at $+0.32$ at
-$3 \times 3$ against the theorem's 0, because self-play under root noise stays
-X-favoured there.
-
-The entries below are the same loop at the scale that made it famous: the network is
-a residual tower, the game is Go or chess, and the target is still the model's own
-later estimate.
-
-\subsubsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
-\emph{Zero} new primitives. The original 2016 Lee Sedol system
-(Silver et al.\ 2016,
-\href{https://www.nature.com/articles/nature16961}{Nature}).
-Three separate networks: a 13-layer conv \emph{policy} network
-($\sim$3.9M) trained first on 30M human games then fine-tuned via
-self-play, a 13-layer conv + FC-head \emph{value} network
-($\sim$4M), and a shallow linear \emph{rollout} policy used inside
-MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
-planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
-etc.). AlphaGo Zero (next entry) throws all of this out --- raw
-board only, one two-headed net, self-play only --- and plays better
-(5185 Elo vs 3140). The one-sentence lesson is written into every
-follow-up paper: features the network can learn on its own, it will.
-
-\begin{verbatim}
-def alphaGoPolicyNet : NetSpec where
-  name   := "AlphaGo policy network"
-  imageH := 19
-  imageW := 19
-  layers := [
-    -- 13 conv layers: one 5×5 stem + eleven 3×3 at 192 channels.
-    -- Plain conv+ReLU, no BatchNorm: 2016 AlphaGo predates both BN and
-    -- residual blocks in this lineage (AlphaGo Zero added them).
-    .conv2d 48 192 5 .same .relu,                 -- 48 hand-crafted planes in
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
-    .conv2d 192 192 3 .same .relu,
-    -- 1×1 conv to per-position move logit (reshape + pass scalar downstream)
-    .conv2d 192 1 1 .same .identity
-  ]
-\end{verbatim}
-
-\subsubsection*{AlphaZero (\texttt{Bestiary/AlphaZero.lean})}
-\phantomsection\label{bestiary:alphagozero}
-\emph{Zero} new primitives --- \texttt{convBn} + \texttt{residualBlock}
-+ \texttt{dense}. Two-headed (policy + value) network
-(Silver et al.\ 2018,
-\href{https://arxiv.org/abs/1712.01815}{arXiv:1712.01815}),
-expressed as two separate \texttt{NetSpec} values sharing the body in
-prose. Variants: AlphaGo Zero (Go; Silver et al.\ 2017,
-\href{https://www.nature.com/articles/nature24270}{Nature}),
-AlphaZero chess, tiny fixture.
-
-\begin{verbatim}
-def alphaGoZeroPolicy : NetSpec where
-  name   := "AlphaGo Zero (policy head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 17 256 3 1 .same,                     -- 17 raw-history planes → 256
-    .residualBlock 256 256 19 1,                  -- 19 residual blocks (shared body)
-    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU (2 filters)
-    .flatten,
-    .dense (2 * 19 * 19) 362 .identity            -- 361 board moves + pass
-  ]
-\end{verbatim}
-
-The value head shares the first two layers (body) and diverges at
-the head — one filter, two-layer MLP down to a single scalar
-(\texttt{tanh} is applied downstream; \texttt{Activation} doesn't
-include it):
-
-\begin{verbatim}
-def alphaGoZeroValue : NetSpec where
-  name   := "AlphaGo Zero (value head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 17 256 3 1 .same,                     -- shared body
-    .residualBlock 256 256 19 1,                  -- shared body
-    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
-    .flatten,
-    .dense (1 * 19 * 19) 256 .relu,
-    .dense 256 1 .identity                        -- → scalar (tanh applied downstream)
-  ]
-\end{verbatim}
-
-The chess and tiny variants follow the same shape with different
-\texttt{(planes, blocks, board)} parameters --- 119/40/8 for chess,
-17/3/9 for the tiny fixture.
-
-\subsubsection*{MuZero (\texttt{Bestiary/MuZero.lean})}
-\emph{Zero} new primitives --- three ResNet-style networks (representation,
-dynamics, prediction) reusing \texttt{convBn} + \texttt{residualBlock}
-+ \texttt{dense}. The architectural novelty is the three-network
-factoring, not any single layer type (Schrittwieser et al.\ 2020,
-\href{https://arxiv.org/abs/1911.08265}{arXiv:1911.08265}). Five \texttt{NetSpec} values per
-variant (rep, dyn body, dyn reward head, pred policy, pred value).
-Variants: Go, Atari (representation only), tiny.
-
-\begin{verbatim}
-def muZeroGoRepresentation : NetSpec where
-  name   := "MuZero Go — representation h"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 17 256 3 1 .same,                     -- observation → hidden
-    .residualBlock 256 256 16 1                   -- 16 ResBlocks (AlphaZero-shaped body)
-  ]
-\end{verbatim}
-
-The dynamics network $g$ takes the hidden state plus a one-channel
-action plane and predicts the next hidden state. A separate reward
-head branches off the same trunk and emits a scalar:
-
-\begin{verbatim}
-def muZeroGoDynamics : NetSpec where
-  name   := "MuZero Go — dynamics g (next-state path)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 257 256 3 1 .same,                    -- 256 hidden + 1 action plane
-    .residualBlock 256 256 16 1                   -- → next hidden (256, 19, 19)
-  ]
-
-def muZeroGoDynamicsReward : NetSpec where
-  name   := "MuZero Go — dynamics g (reward head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .convBn 256 1 1 1 .same,                      -- 1×1 conv→BN→ReLU to 1 channel
-    .flatten,
-    .dense (1 * 19 * 19) 128 .relu,
-    .dense 128 1 .identity                        -- scalar reward
-  ]
-\end{verbatim}
-
-The prediction network $f$ is a small two-headed body --- same shape
-as AlphaZero's policy/value heads, with two fewer ResBlocks because
-the trunk has already done most of the work in $h$:
-
-\begin{verbatim}
-def muZeroGoPredictionPolicy : NetSpec where
-  name   := "MuZero Go — prediction f (policy head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .residualBlock 256 256 2 1,                   -- small head body
-    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU (2 filters)
-    .flatten,
-    .dense (2 * 19 * 19) 362 .identity            -- 361 moves + pass
-  ]
-
-def muZeroGoPredictionValue : NetSpec where
-  name   := "MuZero Go — prediction f (value head)"
-  imageH := 19
-  imageW := 19
-  layers := [
-    .residualBlock 256 256 2 1,
-    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
-    .flatten,
-    .dense (1 * 19 * 19) 256 .relu,
-    .dense 256 1 .identity                        -- scalar value
-  ]
-\end{verbatim}
+The training signal stops being a label. It is the next token, the noise
+added to an image, a density, a chirp buried in detector noise, an energy
+--- and where the field has an exact answer, quadrature, the matched
+filter's closed form, a solved spin chain, the demo is scored against it
+rather than against a held-out set. The networks are the same kit; what
+changes is the outer loop, and the catalogue beside each demo is that
+domain's architectures. The games, whose signal is a reward and whose
+answers are theorems about the rules, are \S~\ref{sec:bestiary_game_theory}.
 
 \subsection{Natural language processing --- demo: TinyGPT on Shakespeare}
 \label{sec:bestiary_nlp}
@@ -16799,7 +16431,6 @@ doesn't fit a linear \texttt{NetSpec} cleanly; the bestiary shows the
 two bundled primitives and notes the limitation (Jumper et al.\ 2021,
 \href{https://www.nature.com/articles/s41586-021-03819-2}{Nature}). Variants: full (76M), mini, tiny.
 
-\appendix
 
 \begin{verbatim}
 def alphaFold2 : NetSpec where
@@ -16848,8 +16479,463 @@ with two layers; the actual graph is a much larger DAG with the dual
 representation and the cross-stage handoff. \S~\ref{layer:evoformerBlock}
 and \S~\ref{layer:structureModule} document the bundling explicitly.
 
+
+\section{Bestiary entries: game theory}
+\label{sec:bestiary_game_theory}
+
+Three games written in Lean, each with its own exact instrument, on one loop: the
+reward is the game's, the data is manufactured by playing it, the target is the model's
+own later estimate, and the ceiling is exact where the game allows it --- blackjack's
+by value iteration over its 200 states, tic-tac-toe's by the solved game --- and, for
+Pong, a twin fed the six numbers the renderer draws from. The ladder runs tabular Q,
+then a DQN on a table's worth of states, then the same DQN from pixels, then self-play
+and tree search; every trained rung goes through the squared-error block of the
+diffusion demo with a host-built target, and none of it is new codegen. The catalogue
+beside the demos is the AlphaGo family, the same loop at the scale that made it famous.
+
+\subsection{Blackjack --- DQN against value iteration}
+\label{sec:bestiary_rl}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{demos/blackjack_chart.png}
+\caption{The exact hit/stick policy for blackjack under the Sutton \& Barto
+rules, player total against the dealer's showing card, hard hands and soft.
+Rings mark the twelve cells where the trained DQN disagrees with the theorem,
+dots the eight where tabular Q does. Both learners miss on the knife edges:
+hard 12 against a 4, where hitting and sticking differ by a quarter of a cent
+a hand, and the soft-18 row, where the casino card is wrong too.}
+\label{fig:blackjack_chart}
+\end{figure}
+
+\paragraph{DQN on blackjack.} The \texttt{demos/MainBlackjackDqn.lean} trainer
+is Mnih et al.'s DQN (2015,
+\href{https://www.nature.com/articles/nature14236}{Nature}) on the blackjack of
+Sutton \& Barto's Example~5.1, the game written in Lean
+(\texttt{LeanMlir/Blackjack.lean}) with its RNG threaded through so every hand
+replays from a seed. The Q-function is a three-layer \texttt{.dense} net on a
+29-float one-hot of the observation (player total, dealer's card, usable ace),
+$6{,}210$ parameters. Three things change relative to everything trained so far:
+
+\begin{itemize}
+  \item \textbf{There is no dataset.} Transitions come from playing the game
+    $\varepsilon$-greedily against the current network and are kept in a
+    replay ring of 20k; each gradient step samples 128 of them. The book's
+    other demos read their data from disk; this one manufactures it.
+  \item \textbf{The target is the model's own prediction, one step later.}
+    $y_a = r + \gamma \max_{a'} Q_{\text{target}}(s', a')$, with the target
+    network a copy of the online parameters refreshed every 500 updates. The
+    loss is the squared-error block the DDPM demo trains with
+    (\S~\ref{sec:bestiary_diffusion}): the host runs the eval graph on the
+    batch, writes $y = Q(s,\cdot)$, overwrites the taken action's slot with the
+    Bellman target, and hands $y$ in. The gradient is then zero on the untaken
+    slot and a per-sample TD error on the taken one. Zero new codegen.
+  \item \textbf{The instrument is a solved game.} Blackjack under these rules is
+    a 200-state, two-action MDP with known odds, so value iteration gives the
+    optimal policy and the exact mean reward of any policy, in
+    milliseconds. Every thousand updates the greedy policy is read off the
+    network over all 280 observations in one batched forward and scored
+    exactly. The ceiling of the training curve is a theorem about the rules,
+    not a number somebody measured.
+\end{itemize}
+
+\paragraph{Every arm scored against the theorem.} Mean reward per hand; exact
+by value iteration, Monte Carlo over $10^6$ hands with its standard error,
+and agreement with the optimum over the 200 decision states. The two value
+columns agree within two standard errors on every row, which is the check that
+the simulator and the DP describe the same game:
+
+\begin{center}
+\begin{tabular}{@{}l r r r@{}}
+\hline
+policy & exact & Monte Carlo, $10^6$ hands & agrees / 200 \\
+\hline
+random                                   & $-0.3942$ & $-0.3956 \pm 0.0009$ & 110 \\
+threshold heuristic (hit below 18, $p=0.8$) & $-0.2403$ & $-0.2395 \pm 0.0009$ & 164 \\
+published casino table                   & $-0.0967$ & $-0.0962 \pm 0.0010$ & 162 \\
+tabular Q, $10^6$ hands                  & $-0.0440$ & $-0.0425 \pm 0.0010$ & 192 \\
+DQN, Double, 200k updates                & $-0.0476$ & $-0.0471 \pm 0.0010$ & 188 \\
+exact optimum                            & $-0.0431$ & $-0.0419 \pm 0.0010$ & 200 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The published table is the strategy card the first book shipped as
+its ceiling. It sits four cents a hand below the optimum
+because it is for a different game --- doubling, splitting and a dealer who
+plays differently --- and it ignores the usable ace entirely. Tabular Q needs
+a visit-count step size to get past $177/200$; a constant one chases the
+moving bootstrap target forever. Figure~\ref{fig:blackjack_chart} is the
+policy itself, cell by cell.
+
+
+\paragraph{The DQN's own table.} One seed per arm, exact value at the end of
+training; the gate is the DQN within $0.01$ of tabular Q's exact value, which
+every 200k-update arm passes:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r@{}}
+\hline
+arm & updates & hands & exact & agrees / 200 \\
+\hline
+plain                          &  50k &  34k & $-0.0578$ & 175 \\
+plain                          & 200k & 133k & $-0.0503$ & 185 \\
+Double DQN                     & 200k & 132k & $-0.0476$ & 188 \\
+plain, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0530$ & 178 \\
+Double, lr $10^{-3} \to 10^{-4}$ & 200k & 132k & $-0.0503$ & 187 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Double DQN (van Hasselt et al.\ 2016,
+\href{https://arxiv.org/abs/1509.06461}{arXiv:1509.06461}: argmax from the
+online net, value from the target) is the best of the four, and the
+learning-rate decay does nothing, because the late-training jitter is not in
+the step size: it is the greedy readout flipping knife-edge cells whose two
+actions are worth the same to three decimals. The 1000-update readouts move by
+$\pm 0.005$ late in every arm, so the gap between the first two 200k rows is
+inside that. Ten minutes on one card at 6\% utilisation, each.
+
+\subsection{Pong --- DQN from pixels against the six-number state}
+\label{sec:game_pong}
+
+\texttt{demos/MainPongDqn.lean} is the same loop on a Pong written in Lean
+(\texttt{LeanMlir/Pong.lean}: an $84 \times 84$ field, two-pixel paddles, frame skip 4,
+a scripted opponent that tracks the ball at 1.5 pixels a frame after a four-frame
+delay, a game to 21, deterministic from a seed, five million raw frames a second with
+no emulator and no ROM), under Mnih et al.'s 2015 recipe: a replay of 100k
+transitions, $\varepsilon$ from 1 to 0.1 over the first 100k agent steps, a target
+network copied every 1,000 updates, one gradient step per four agent steps, batch 32,
+Adam at $10^{-4}$, $\gamma = 0.99$, 500k agent steps --- two million frames. The
+Bellman target goes into the taken action's slot of the squared-error block exactly as
+in blackjack. Two things change: the observation is an image, so the Q-function is
+Chapter~3's CNN kit at $84 \times 84$ (three convolutions with pooling standing in for
+the paper's strides, a dense 512, three outputs; 1.7M parameters), and one frame does
+not contain the ball's velocity, so the input is a stack of the last four. The bracket
+is built into the game: the same DQN on the six numbers the renderer draws from ---
+ball position and velocity, the two paddles --- is a twin that is handed everything
+the pixels could carry, the scripted opponent is the bar, and a one-frame input is the
+ablation.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/pong_dqn.png}
+\caption{Left: one input of the pixel network --- the four stacked $84 \times 84$
+frames as the network saw them at an evaluation, the ball crossing toward the right
+paddle. Right: points per game (own minus the opponent's, twenty games at
+$\varepsilon = 0.05$) against agent steps, for the six-number state twin (three
+seeds), the four-frame pixel network (three seeds) and the one-frame ablation, with
+the random and scripted-tracker baselines as lines.}
+\label{fig:pong_dqn}
+\end{figure}
+
+\paragraph{Every arm against the scripted opponent.} Mean points per game over twenty
+fresh games after training, with the standard error; the baselines over a hundred
+games (\texttt{lake exe pong-env 100}):
+
+\begin{center}
+\begin{tabular}{@{}l l l@{}}
+\hline
+arm & points per game & first positive evaluation \\
+\hline
+random                           & $-17.88 \pm 0.20$ & --- \\
+scripted tracker                 & $+11.18 \pm 0.37$ & --- \\
+pixels, one frame                & $+4.60 \pm 1.48$ & 100k steps \\
+state, six numbers, seeds 1--3   & $+14.15$, $+12.70$, $+13.50$ & 100--125k \\
+pixels, four frames, seeds 1--3  & $+15.60$, $+15.90$, $+14.90$ & 75--100k \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent One frame cannot see velocity, and the row says by how much: $+4.6$ against
+$+15.5$, the gap between a paddle that reaches the ball and one that guesses. The
+state twin was meant to be the ceiling and is not: the pixel network sits above it on
+every seed ($+15.47$ against $+13.45$ on average) and at every opponent speed (1.0 /
+1.5 / 2.0 pixels a frame: state $+14.45$ / $+13.45$ / $+9.80$, pixels $+17.75$ /
+$+15.60$ / $+14.45$). The six numbers are all the pixels could carry, so the gap is
+in what each network learns from its input, and it is not dissected here. An update
+was 24 milliseconds, twenty of them the shim re-pushing 20~MB of parameters and Adam
+moments every step; with that state resident on the device
+(\texttt{trainStepAdamF32DdpmR}) it is 14.6, and a pixel run 27 minutes on one card.
+
+\subsection{Tic-tac-toe --- AlphaZero against the solved game}
+\label{sec:game_ttt}
+
+The \texttt{demos/MainAlphaZeroTtt.lean}
+trainer is Silver et al.'s self-play loop (AlphaGo Zero, 2017,
+\href{https://www.nature.com/articles/nature24270}{Nature}; AlphaZero, 2018,
+\href{https://www.science.org/doi/10.1126/science.aar6404}{Science}) on tic-tac-toe
+written in Lean (\texttt{LeanMlir/TicTacToe.lean}), $n \times n$ with $k$ in a row,
+$n$ the one knob. Each iteration plays 256 games in lockstep: at every move a PUCT
+search of 25 ($3 \times 3$) or 100 ($4 \times 4$) simulations over the network's
+priors and value, one batched forward over the games' pending leaves per simulation,
+Dirichlet noise at the root, the move drawn from the visit counts; the visit
+distribution $\pi$ and the outcome $z$ are the targets, and the next iteration plays
+with the new network. The network is AlphaGo's plain convolution + ReLU stack
+(\texttt{Bestiary/AlphaGo.lean}) at tic-tac-toe width, with the policy and value
+heads merged into one dense output of $n^2 + 1$ slots: 78k parameters at
+$3 \times 3$, 155k at $4 \times 4$. Three things change relative to the two DQNs:
+
+\begin{itemize}
+  \item \textbf{The loss has two heads and the codegen has one.} The paper's
+    $(z - v)^2 - \pi^{\top} \log p$ goes through the squared-error block blackjack's
+    Bellman target went through: the host runs the eval graph on the batch and writes
+    $y = \mathrm{out} - \tfrac{n_{\mathrm{out}}}{2}\, g$, with
+    $g = \mathrm{softmax}(p) - \pi$ on the $n^2$ policy slots and
+    $(\tanh v - z)(1 - \tanh^2 v)$ on the value slot, so the block's gradient is
+    $g / B$ exactly --- the gradient of the batch-mean AlphaZero loss. Zero new
+    codegen, the move the neural-quantum-state demo (\S~\ref{sec:bestiary_beyond})
+    makes with its energy gradient.
+  \item \textbf{Not the bestiary's tower.} The first run used
+    \texttt{Bestiary/AlphaZero.lean}'s convolution--BatchNorm--residual body and
+    diverged at iteration 11. BatchNorm's batch statistics over nine binary cells
+    are a liability, and with BatchNorm the eval forward the loss reads and the
+    train step's forward are different functions. Blackjack and Pong made the same
+    choice for the same reason.
+  \item \textbf{The instrument is the solved game.} A position is a base-3 number
+    over the cells, so a memoised minimax fills one byte per index with the exact
+    value and the optimal-move set of every reachable position --- 5,478 at
+    $3 \times 3$, 9,722,011 at $4 \times 4$. The network alone is scored by the
+    argmax of its masked logits over \emph{every} reachable decision position (4,520
+    and 9,062,619), its value head against the exact value, and its match play
+    against a perfect player that draws uniformly from the optimal set. Nothing in
+    the table is sampled but the games.
+\end{itemize}
+
+\paragraph{Five by five, four in a row.} No table exists there ($3^{25}$ bytes), so the
+instrument becomes an exact solver --- alpha-beta with a transposition table over
+symmetry-canonical positions --- checked against the dense table on every reachable
+$3 \times 3$ and $4 \times 4$ position before it is trusted where no table exists. It
+establishes that $(5, 5, 4)$ is a draw, and something a reader can check on the
+figure: after X takes the centre, O's only drawing replies are the four diagonal
+neighbours. Two things change in what the table can say: the sweep is a fixed sample
+of 20,000 random-play decision positions with at least six stones, exact per position
+but not exhaustive; and the perfect player draws its first move uniformly from the
+optimal set and plays the solver's principal move from there.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/alphazero_ttt.png}
+\caption{Left, above: X in the centre, O to move --- the trained $3 \times 3$
+network's move probabilities over the empty cells, with the solved game's optimal moves
+ringed: the corners draw, the edges lose, and the network puts 81\% on the corners.
+Left, below: the same position at $5 \times 5$, four in a row, where the solver says
+O's only drawing replies are the four diagonal neighbours, and the trained network puts
+24\% on each. Middle: agreement of the network alone with the solved game --- over
+every reachable decision position at $3 \times 3$ and $4 \times 4$, over a 20,000-position
+sample at $5 \times 5$ --- against iteration, with the draw rate of network + search
+against the perfect player dashed; unbeaten with search from iteration 5 and 4. Right: the value head against the exact value of all 4,520 $3 \times 3$
+decision positions, one dot per position, medians as bars.}
+\label{fig:alphazero_ttt}
+\end{figure}
+
+\paragraph{Every arm against the solved game.} Agreement of the arm's move with the
+optimal set --- over every decision position at $3 \times 3$ and $4 \times 4$, over the
+20,000-position sample at $5 \times 5$; the scripted players' is their expected
+agreement --- and W/D/L against the perfect player as X and as O: 1,000 games each way
+for the scripted rows (200 at $5 \times 5$), and for the network's rows three
+independent evaluations of the saved network, 256 games each, pooled:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l r l r l r l@{}}
+\hline
+ & \multicolumn{2}{c}{$3 \times 3$} & \multicolumn{2}{c}{$4 \times 4$} & \multicolumn{2}{c}{$5 \times 5$, four in a row} \\
+arm & agrees & vs perfect, X $\cdot$ O & agrees & vs perfect, X $\cdot$ O & agrees & vs perfect, X $\cdot$ O \\
+\hline
+random           & 58.0\% & 0/207/793 $\cdot$ 0/33/967   & 60.4\% & 0/487/513 $\cdot$ 0/341/659 & 45.0\% & 0/0/200 $\cdot$ 0/0/200 \\
+win-or-block     & 94.0\% & 0/831/169 $\cdot$ 0/215/785  & 95.6\% & 0/930/70 $\cdot$ 0/840/160  & 77.0\% & 0/7/193 $\cdot$ 0/1/199 \\
+network alone    & $\mathbf{97.3\%}$ & 0/768/0 $\cdot$ 0/768/0 & $\mathbf{99.4\%}$ & 0/768/0 $\cdot$ 0/768/0 & $\mathbf{87.4\%}$ & 0/768/0 $\cdot$ 0/708/60 \\
+network + search & ---    & 0/768/0 $\cdot$ 0/768/0      & ---    & 0/768/0 $\cdot$ 0/768/0      & ---    & 0/768/0 $\cdot$ 0/745/23 \\
+perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/200/0 $\cdot$ 0/200/0 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Twenty iterations and 2.5 minutes on one card at $3 \times 3$; forty
+iterations and 10.0 minutes at $4 \times 4$, the same binary with \texttt{n=4} ---
+the Python implementation this loop follows was expected to take a day on that
+board. The untrained network's sweep is the random player's. Self-play visits 1.2\%
+of the $4 \times 4$ decision positions and the sweep scores all of them; the misses
+are mostly forced wins not taken, late in games a competent opponent never produces,
+and the search closes them --- with 25 or 100 simulations the network is unbeaten
+from iteration 5 and 4, before the network alone is. The value head estimates
+self-play rather than the theorem (the figure's right panel): the root ends
+X-favoured at $3 \times 3$ because self-play under root noise is. At $5 \times 5$
+the same binary with \texttt{n=5 k=4} runs a hundred iterations at 400 simulations
+in 64 minutes. As X the network never loses, alone or with search; as O it still
+does --- 60 games in 768 alone, 23 with search --- and its 87.4\% on the random-play
+sample is 92.1\% over the exhaustive opening, every position with at most three
+stones: it is best where the theory is. On this board the search is what closes the
+second player's games, and it has not closed them yet.
+
+The entries below are the same loop at the scale that made it famous: the network is
+a residual tower, the game is Go or chess, and the target is still the model's own
+later estimate.
+
+\subsubsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
+\emph{Zero} new primitives. The original 2016 Lee Sedol system
+(Silver et al.\ 2016,
+\href{https://www.nature.com/articles/nature16961}{Nature}).
+Three separate networks: a 13-layer conv \emph{policy} network
+($\sim$3.9M) trained first on 30M human games then fine-tuned via
+self-play, a 13-layer conv + FC-head \emph{value} network
+($\sim$4M), and a shallow linear \emph{rollout} policy used inside
+MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
+planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
+etc.). AlphaGo Zero (next entry) throws all of this out --- raw
+board only, one two-headed net, self-play only --- and plays better
+(5185 Elo vs 3140). The one-sentence lesson is written into every
+follow-up paper: features the network can learn on its own, it will.
+
+\begin{verbatim}
+def alphaGoPolicyNet : NetSpec where
+  name   := "AlphaGo policy network"
+  imageH := 19
+  imageW := 19
+  layers := [
+    -- 13 conv layers: one 5×5 stem + eleven 3×3 at 192 channels.
+    -- Plain conv+ReLU, no BatchNorm: 2016 AlphaGo predates both BN and
+    -- residual blocks in this lineage (AlphaGo Zero added them).
+    .conv2d 48 192 5 .same .relu,                 -- 48 hand-crafted planes in
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu, .conv2d 192 192 3 .same .relu,
+    .conv2d 192 192 3 .same .relu,
+    -- 1×1 conv to per-position move logit (reshape + pass scalar downstream)
+    .conv2d 192 1 1 .same .identity
+  ]
+\end{verbatim}
+
+\subsubsection*{AlphaZero (\texttt{Bestiary/AlphaZero.lean})}
+\phantomsection\label{bestiary:alphagozero}
+\emph{Zero} new primitives --- \texttt{convBn} + \texttt{residualBlock}
++ \texttt{dense}. Two-headed (policy + value) network
+(Silver et al.\ 2018,
+\href{https://arxiv.org/abs/1712.01815}{arXiv:1712.01815}),
+expressed as two separate \texttt{NetSpec} values sharing the body in
+prose. Variants: AlphaGo Zero (Go; Silver et al.\ 2017,
+\href{https://www.nature.com/articles/nature24270}{Nature}),
+AlphaZero chess, tiny fixture.
+
+\begin{verbatim}
+def alphaGoZeroPolicy : NetSpec where
+  name   := "AlphaGo Zero (policy head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 17 256 3 1 .same,                     -- 17 raw-history planes → 256
+    .residualBlock 256 256 19 1,                  -- 19 residual blocks (shared body)
+    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU (2 filters)
+    .flatten,
+    .dense (2 * 19 * 19) 362 .identity            -- 361 board moves + pass
+  ]
+\end{verbatim}
+
+The value head shares the first two layers (body) and diverges at
+the head — one filter, two-layer MLP down to a single scalar
+(\texttt{tanh} is applied downstream; \texttt{Activation} doesn't
+include it):
+
+\begin{verbatim}
+def alphaGoZeroValue : NetSpec where
+  name   := "AlphaGo Zero (value head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 17 256 3 1 .same,                     -- shared body
+    .residualBlock 256 256 19 1,                  -- shared body
+    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
+    .flatten,
+    .dense (1 * 19 * 19) 256 .relu,
+    .dense 256 1 .identity                        -- → scalar (tanh applied downstream)
+  ]
+\end{verbatim}
+
+The chess and tiny variants follow the same shape with different
+\texttt{(planes, blocks, board)} parameters --- 119/40/8 for chess,
+17/3/9 for the tiny fixture.
+
+\subsubsection*{MuZero (\texttt{Bestiary/MuZero.lean})}
+\emph{Zero} new primitives --- three ResNet-style networks (representation,
+dynamics, prediction) reusing \texttt{convBn} + \texttt{residualBlock}
++ \texttt{dense}. The architectural novelty is the three-network
+factoring, not any single layer type (Schrittwieser et al.\ 2020,
+\href{https://arxiv.org/abs/1911.08265}{arXiv:1911.08265}). Five \texttt{NetSpec} values per
+variant (rep, dyn body, dyn reward head, pred policy, pred value).
+Variants: Go, Atari (representation only), tiny.
+
+\begin{verbatim}
+def muZeroGoRepresentation : NetSpec where
+  name   := "MuZero Go — representation h"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 17 256 3 1 .same,                     -- observation → hidden
+    .residualBlock 256 256 16 1                   -- 16 ResBlocks (AlphaZero-shaped body)
+  ]
+\end{verbatim}
+
+The dynamics network $g$ takes the hidden state plus a one-channel
+action plane and predicts the next hidden state. A separate reward
+head branches off the same trunk and emits a scalar:
+
+\begin{verbatim}
+def muZeroGoDynamics : NetSpec where
+  name   := "MuZero Go — dynamics g (next-state path)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 257 256 3 1 .same,                    -- 256 hidden + 1 action plane
+    .residualBlock 256 256 16 1                   -- → next hidden (256, 19, 19)
+  ]
+
+def muZeroGoDynamicsReward : NetSpec where
+  name   := "MuZero Go — dynamics g (reward head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .convBn 256 1 1 1 .same,                      -- 1×1 conv→BN→ReLU to 1 channel
+    .flatten,
+    .dense (1 * 19 * 19) 128 .relu,
+    .dense 128 1 .identity                        -- scalar reward
+  ]
+\end{verbatim}
+
+The prediction network $f$ is a small two-headed body --- same shape
+as AlphaZero's policy/value heads, with two fewer ResBlocks because
+the trunk has already done most of the work in $h$:
+
+\begin{verbatim}
+def muZeroGoPredictionPolicy : NetSpec where
+  name   := "MuZero Go — prediction f (policy head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .residualBlock 256 256 2 1,                   -- small head body
+    .convBn 256 2 1 1 .same,                      -- policy head: conv→BN→ReLU (2 filters)
+    .flatten,
+    .dense (2 * 19 * 19) 362 .identity            -- 361 moves + pass
+  ]
+
+def muZeroGoPredictionValue : NetSpec where
+  name   := "MuZero Go — prediction f (value head)"
+  imageH := 19
+  imageW := 19
+  layers := [
+    .residualBlock 256 256 2 1,
+    .convBn 256 1 1 1 .same,                      -- value head: conv→BN→ReLU (1 filter)
+    .flatten,
+    .dense (1 * 19 * 19) 256 .relu,
+    .dense 256 1 .identity                        -- scalar value
+  ]
+\end{verbatim}
+
 \addtocontents{toc}{\protect\setcounter{tocdepth}{1}}
 \hypersetup{bookmarksdepth=1}
+\appendix
 
 \chapter{Data availability}
 \label{app:data}

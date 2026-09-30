@@ -1,5 +1,6 @@
 import LeanMlir.Train
 import LeanMlir.TicTacToe
+import Std.Data.HashSet
 
 /-! AlphaZero on the Lean tic-tac-toe, scored against the solved game.
 
@@ -30,9 +31,16 @@ import LeanMlir.TicTacToe
     with the net on one side; the sweep over the reachable decision positions runs `bf`
     positions per forward.
 
+    Above 4×4 there is no table: the instrument is the on-demand solver (its cache
+    saved under `.lake/build/` and reloaded), the sweep is `sweep` random-play decision
+    positions with at least `sweepMin` stones (each exact, not exhaustive: a fresh
+    3-stone subtree costs seconds to solve, a 6-stone one milliseconds), and self-play
+    coverage is a hash set.
+
     `lake exe alphazero-ttt [n=3] [k=n] [iters=20] [sims=25] [bf=256] [batch=64]
      [epochs=10] [lr=1e-3] [window=20] [cpuct=1.5] [alpha=1.0] [noise=0.25]
-     [tempPlies=n²] [sweep=0 (all)] [probe=0,81] [seed=1] [tag=<name>]`;
+     [tempPlies=n²] [sweep=0 (all; 20000 above 4×4)] [sweepMin=6] [opening=3 above 4×4]
+     [cap=22] [probe=0,81] [seed=1] [tag=<name>] [params=<file>]`;
     writes `<prefix>_curve.csv`, `<prefix>_sweep.csv`, `<prefix>_policy.csv` and
     `<prefix>_params.bin` under `.lake/build/`. XLA only. -/
 
@@ -176,9 +184,6 @@ structure Ctx where
 
 def Ctx.nc (ctx : Ctx) : Nat := ctx.n * ctx.n
 
-def pushU64LE (acc : ByteArray) (v : Nat) : ByteArray :=
-  pushU32LE (pushU32LE acc (v % 4294967296)) (v / 4294967296)
-
 def rootsOf (pos : Array Pos) : ByteArray :=
   pos.foldl (fun acc p => pushU64LE acc p.index) ByteArray.empty
 
@@ -203,7 +208,7 @@ def search (ctx : Ctx) (roots : Array Pos) (live : Array Bool) (sims : Nat) (noi
     let mut nPend := 0
     for i in [0:roots.size] do
       if readU32 sel (4 * i) == 1 then
-        pend := pushU32LE pend (readU32 sel (4 * i + 2))   -- the leaf index, below 2³² at n ≤ 4
+        pend := pushU64LE pend (readU64 sel (2 * i + 1))   -- the record's leaf index
         nPend := nPend + 1
     let logits ← if nPend == 0 then pure ByteArray.empty else ctx.forward pend nPend
     let (sd, g') := seed64 g
@@ -288,7 +293,7 @@ def matchVsPerfect (ctx : Ctx) (t : Table) (root : Pos) (netIsX : Bool) (sims : 
     if netTurn then
       if sims == 0 then
         let mut idx := ByteArray.empty
-        for i in [0:G] do idx := pushU32LE idx pos[i]!.index
+        for i in [0:G] do idx := pushU64LE idx pos[i]!.index
         let logits ← ctx.forward idx G
         for i in [0:G] do
           moves := moves.set! i (argmaxLegal (fun c => F32.read logits (i * ctx.nOut + c).toUSize) pos[i]!)
@@ -326,9 +331,9 @@ def sweep (ctx : Ctx) (t : Table) (idx : ByteArray) (count : Nat) :
   let mut off := 0
   while off < count do
     let m := min ctx.bf (count - off)
-    let chunk := idx.extract (4 * off) (4 * (off + m))
+    let chunk := idx.extract (8 * off) (8 * (off + m))
     let logits ← ctx.forward chunk m
-    let r ← scoreLogits t.tbl chunk m.toUSize ctx.n.toUSize logits ctx.nOut.toUSize
+    let r ← t.score chunk m logits ctx.nOut
     agree := agree + F32.read r 0
     mse := mse + F32.read r 1
     sign := sign + F32.read r 2
@@ -339,23 +344,25 @@ def sweep (ctx : Ctx) (t : Table) (idx : ByteArray) (count : Nat) :
 
 /-- One CSV row per position: index, exact value, the net's value, its move, whether
     that move is optimal, and its softmax over the cells. -/
-def dumpSweep (ctx : Ctx) (t : Table) (idx : ByteArray) (count : Nat) (seen : ByteArray)
+def dumpSweep (ctx : Ctx) (t : Table) (idx : ByteArray) (count : Nat) (seen : Std.HashSet Nat)
     (path : String) : IO Unit := do
   let mut rows := "index,exact,value,move,optimal,mover,seen" ++
     String.join ((List.range ctx.nc).map fun c => s!",p{c}") ++ "\n"
   let mut off := 0
   while off < count do
     let m := min ctx.bf (count - off)
-    let chunk := idx.extract (4 * off) (4 * (off + m))
+    let chunk := idx.extract (8 * off) (8 * (off + m))
     let logits ← ctx.forward chunk m
     for i in [0:m] do
-      let ix := readU32 chunk i
+      let ix := readU64 chunk i
       let p := posOfIndex t ix
       let P := priors logits i ctx.nOut p
       let a := argmaxLegal (fun c => P[c]!) p
       let v := Float.tanh (F32.read logits (i * ctx.nOut + ctx.nc).toUSize)
-      rows := rows ++ s!"{ix},{t.value p},{fmt v 4},{a},{if (t.optimal p).contains a then 1 else 0},\
-{if p.mover == 1 then "X" else "O"},{seen[ix]!}" ++
+      -- optimal iff the move keeps the exact value: two solves, not one per child
+      let opt := -(t.value (p.play a)) == t.value p
+      rows := rows ++ s!"{ix},{t.value p},{fmt v 4},{a},{if opt then 1 else 0},\
+{if p.mover == 1 then "X" else "O"},{if seen.contains ix then 1 else 0}" ++
         String.join ((List.range ctx.nc).map fun c => s!",{fmt P[c]! 4}") ++ "\n"
     off := off + m
   IO.FS.writeFile path rows
@@ -390,7 +397,9 @@ def main (args : List String) : IO Unit := do
   let alpha := floatArg "alpha" 1.0
   let eps := floatArg "noise" 0.25
   let tempPlies := natArg "tempPlies" (n * n)
-  let sweepN := natArg "sweep" 0
+  let sweepN := natArg "sweep" (if n <= 4 then 0 else 20000)
+  let sweepMin := natArg "sweepMin" 6    -- above 4×4: the sample's shallowest positions
+  let opening := natArg "opening" (if n <= 4 then 0 else 3)   -- above 4×4: the exhaustive opening, ≤ this many stones
   let seed := natArg "seed" 1
   let tag := kv "tag"
   let centre := (n / 2) * n + n / 2
@@ -404,19 +413,42 @@ lr {lr}, cpuct {cpuct}, Dir({alpha}) at {eps}, seed {seed}"
   unless (← LowererSession.backendName) == "xla" do
     throw <| IO.userError "alphazero-ttt runs on the XLA backend only"
   let t0 ← IO.monoMsNow
-  let table ← Table.build n k
-  let decIdx ← reachableIdx table.tbl n.toUSize 0
-  let nDec := decIdx.size / 4
+  let cachePath := s!".lake/build/ttt_solver_{n}x{n}_k{k}.bin"
+  let mut table ← Table.build n k (natArg "cap" 22)
+  if !table.dense && (← System.FilePath.pathExists cachePath) then
+    table := { table with solver := ← IO.FS.readBinFile cachePath }
+    IO.eprintln s!"  solver cache loaded from {cachePath}"
   let root := Pos.empty n k
-  IO.eprintln s!"  table {table.tbl.size} bytes, {nDec} decision positions ({(← IO.monoMsNow) - t0} ms)"
-  -- the sweep set: every decision position, or a fixed random subsample of `sweep`
+  -- the sweep set: every decision position, a fixed random subsample of `sweep` of them,
+  -- or — with no table — `sweep` random-play decision positions, each solved on demand
+  let (decIdx, nDec) ← if table.dense then do
+      let d ← reachableIdx table.tbl n.toUSize 0
+      pure (d, d.size / 8)
+    else do
+      let d ← samplePositions n.toUSize k.toUSize sweepN.toUSize 4242 sweepMin.toUSize
+      pure (d, sweepN)
+  -- above 4×4 the root is the max over its openings, each solved full-window and cached
+  let rootEntry := table.entry root
+  let tInst := (← IO.monoMsNow) - t0
+  let rootWord := if rootEntry &&& 3 == 1 then "a draw" else
+    if rootEntry &&& 3 == 2 then "a first-player win" else "a second-player win"
+  IO.eprintln (if table.dense
+    then s!"  table {table.tbl.size} bytes, {nDec} decision positions, the empty board {rootWord} ({tInst} ms)"
+    else s!"  no table: on-demand solver, the empty board {rootWord}, \
+{nDec} random-play decision positions as the sweep ({tInst} ms)")
+  -- the exhaustive opening above 4×4: every decision position with at most `opening`
+  -- stones, scored as a second line (two solves a position; the sample misses these lines)
+  let (openIdx, nOpen) ← if table.dense || opening == 0 then pure (ByteArray.empty, 0) else do
+    let o ← enumeratePositions n.toUSize k.toUSize opening.toUSize
+    pure (o, o.size / 8)
+  if nOpen > 0 then IO.eprintln s!"  the exhaustive opening: {nOpen} decision positions with at most {opening} stones"
   let (sweepIdx, nSweep) ← if sweepN == 0 || sweepN >= nDec then pure (decIdx, nDec) else do
     let mut g := mkStdGen 4242
     let mut out := ByteArray.empty
     for _ in [0:sweepN] do
       let (i, g') := randNat g 0 (nDec - 1)
       g := g'
-      out := pushU32LE out (readU32 decIdx i)
+      out := pushU64LE out (readU64 decIdx i)
     pure (out, sweepN)
 
   -- ── graphs: the train step at B, one eval forward at bf ──
@@ -441,7 +473,16 @@ lr {lr}, cpuct {cpuct}, Dir({alpha}) at {eps}, seed {seed}"
   let nRes : USize := spec.evalShapes.size.toUSize
   let xShB := spec.xShape B
   let xShF := spec.xShape bf
-  let mut p ← spec.heInitParams
+  -- `params=<file>`: start from a saved net (`<prefix>_params.bin`); with `iters=0` the
+  -- run is the instrument alone, scoring that net
+  let mut p ← match kv "params" with
+    | some f => do
+      let b ← IO.FS.readBinFile f
+      unless b.size == nP * 4 do
+        throw <| IO.userError s!"{f}: {b.size} bytes, expected {nP * 4} for {nP} params"
+      IO.eprintln s!"  parameters loaded from {f}"
+      pure b
+    | none => spec.heInitParams
   let mut m ← F32.const nP.toUSize 0.0
   let mut v ← F32.const nP.toUSize 0.0
   let mut evalParams := p
@@ -450,7 +491,7 @@ lr {lr}, cpuct {cpuct}, Dir({alpha}) at {eps}, seed {seed}"
   let genRef ← IO.mkRef gen
   let forward (idx : ByteArray) (count : Nat) : IO ByteArray := do
     let mut idxF := idx
-    for _ in [count:bf] do idxF := pushU32LE idxF 0   -- pad with the empty board
+    for _ in [count:bf] do idxF := pushU64LE idxF 0   -- pad with the empty board
     let x ← planesOf idxF bf.toUSize n.toUSize
     LowererSession.forwardF32 evalSess spec.evalFnName (← evalParamsRef.get) evalShapes x xShF
       bf.toUSize nOut.toUSize nRes (← genRef.get).toUSize
@@ -458,28 +499,30 @@ lr {lr}, cpuct {cpuct}, Dir({alpha}) at {eps}, seed {seed}"
   let arena ← mctsAlloc bf.toUSize n.toUSize k.toUSize (nc * sims + 16).toUSize
   let ctx : Ctx := { n, nOut, bf, cpuct, alpha, eps, arena, forward }
   -- a shape check before anything trains: bf boards in, bf × nOut logits out
-  let probeOut ← forward (pushU32LE ByteArray.empty 0) 1
+  let probeOut ← forward (pushU64LE ByteArray.empty 0) 1
   unless probeOut.size == bf * nOut * 4 do
     throw <| IO.userError s!"eval forward returned {probeOut.size} bytes, expected {bf * nOut * 4}"
 
   let instrument (iter : Nat) (g : StdGen) : IO (String × StdGen) := do
     let (agree, mse, sign, mae) ← sweep ctx table sweepIdx nSweep
+    let (agreeOpen, _, signOpen, _) ← if nOpen > 0 then sweep ctx table openIdx nOpen else pure (0.0, 0.0, 0.0, 0.0)
     let (aX, g) ← matchVsPerfect ctx table root true 0 g
     let (aO, g) ← matchVsPerfect ctx table root false 0 g
     let (mX, g) ← matchVsPerfect ctx table root true sims g
     let (mO, g) ← matchVsPerfect ctx table root false sims g
-    let rootOut ← forward (pushU32LE ByteArray.empty 0) 1
+    let rootOut ← forward (pushU64LE ByteArray.empty 0) 1
     let rootV := Float.tanh (F32.read rootOut nc.toUSize)
     IO.eprintln s!"  iter {iter}: sweep agree {fmt (100.0 * agree) 2}% value mse {fmt mse 4} \
-sign {fmt (100.0 * sign) 2}%  net alone vs perfect X {aX.str} O {aO.str}  +MCTS X {mX.str} O {mO.str}  \
-root value {fmt rootV 3}"
+sign {fmt (100.0 * sign) 2}%\
+{if nOpen > 0 then s!"  opening agree {fmt (100.0 * agreeOpen) 2}% sign {fmt (100.0 * signOpen) 2}%" else ""}  \
+net alone vs perfect X {aX.str} O {aO.str}  +MCTS X {mX.str} O {mO.str}  root value {fmt rootV 3}"
     let row := s!"{fmt agree 4},{fmt mse 4},{fmt sign 4},{fmt mae 4},{aX.w},{aX.d},{aX.l},\
-{aO.w},{aO.d},{aO.l},{mX.w},{mX.d},{mX.l},{mO.w},{mO.d},{mO.l},{fmt rootV 4}"
+{aO.w},{aO.d},{aO.l},{mX.w},{mX.d},{mX.l},{mO.w},{mO.d},{mO.l},{fmt rootV 4},{fmt agreeOpen 4},{fmt signOpen 4}"
     return (row, g)
 
   let mut curve := "iter,samples,steps,loss,agree,value_mse,sign_agree,value_mae,\
 alone_x_w,alone_x_d,alone_x_l,alone_o_w,alone_o_d,alone_o_l,mcts_x_w,mcts_x_d,mcts_x_l,\
-mcts_o_w,mcts_o_d,mcts_o_l,root_value,seen,ms\n"
+mcts_o_w,mcts_o_d,mcts_o_l,root_value,open_agree,open_sign,seen,ms\n"
   let mut g := mkStdGen seed
   let (row0, g0) ← instrument 0 g
   g := g0
@@ -489,7 +532,7 @@ mcts_o_w,mcts_o_d,mcts_o_l,root_value,seen,ms\n"
   let mut steps := 0
   -- which decision positions self-play ever stood at: the instrument for the gap
   -- between the match record and the sweep
-  let mut seen : ByteArray := ByteArray.mk (Array.replicate table.tbl.size 0)
+  let mut seen : Std.HashSet Nat := {}
   let mut nSeen := 0
   for iter in [1:iters + 1] do
     let tI ← IO.monoMsNow
@@ -497,9 +540,9 @@ mcts_o_w,mcts_o_d,mcts_o_l,root_value,seen,ms\n"
     g := g1
     let mut idxBA := ByteArray.empty
     for i in idx do
-      idxBA := pushU32LE idxBA i
-      if seen[i]! == 0 then
-        seen := seen.set! i 1
+      idxBA := pushU64LE idxBA i
+      if !seen.contains i then
+        seen := seen.insert i
         nSeen := nSeen + 1
     let planes ← planesOf idxBA idx.size.toUSize n.toUSize
     let mut piBA := ByteArray.emptyWithCapacity (idx.size * nc * 4)
@@ -573,10 +616,16 @@ block loss {fmt (F32.extractLoss res nT) 4}"
       s!"positions,agree,value_mse,sign_agree,value_mae\n{nDec},{fmt agree 4},{fmt mse 4},{fmt sign 4},{fmt mae 4}\n"
   -- the figure's inputs: the full sweep when it is small enough to plot, and the
   -- probe positions' policies
-  IO.eprintln s!"self-play stood at {nSeen} of the {nDec} decision positions"
+  IO.eprintln (if table.dense then s!"self-play stood at {nSeen} of the {nDec} decision positions"
+               else s!"self-play stood at {nSeen} distinct decision positions")
+  if !table.dense then
+    IO.FS.writeBinFile cachePath table.solver
+    let st ← solverStats table.solver
+    IO.eprintln s!"solver cache saved to {cachePath} ({readU64 st 0} entries after {readU64 st 1} nodes\
+, {readU64 st 2} replaced)"
   if nSweep <= 100000 then dumpSweep ctx table sweepIdx nSweep seen s!"{pfx}_sweep.csv"
   let mut probeBA := ByteArray.empty
-  for ix in probe do probeBA := pushU32LE probeBA ix
+  for ix in probe do probeBA := pushU64LE probeBA ix
   dumpSweep ctx table probeBA probe.length seen s!"{pfx}_policy.csv"
   IO.FS.writeBinFile s!"{pfx}_params.bin" evalParams
   IO.eprintln s!"wrote {pfx}_curve.csv, {pfx}_sweep.csv, {pfx}_policy.csv, {pfx}_params.bin"

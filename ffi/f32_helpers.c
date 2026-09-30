@@ -3359,7 +3359,9 @@ LEAN_EXPORT lean_obj_res lean_f32_dihedral_gather(
 // of positions.
 // ═══════════════════════════════════════════════════════════════════════
 
-#define TTT_MAXN 4
+#define TTT_MAXN 4                  // the dense table: 3^16 bytes
+#define TTT_SMAXN 6                 // the search and the on-demand solver: 3^36 < 2^64
+#define TTT_SCELLS (TTT_SMAXN * TTT_SMAXN)
 #define TTT_UNREACHED 255
 #define TTT_TERMINAL 4
 
@@ -3421,6 +3423,18 @@ static int ttt_decode(uint32_t idx, int nc, uint8_t* cells) {
     for (int c = 0; c < nc; c++) { cells[c] = (uint8_t)(idx % 3); idx /= 3; stones += cells[c] != 0; }
     return stones;
 }
+static int ttt_decode64(uint64_t idx, int nc, uint8_t* cells) {
+    int stones = 0;
+    for (int c = 0; c < nc; c++) { cells[c] = (uint8_t)(idx % 3); idx /= 3; stones += cells[c] != 0; }
+    return stones;
+}
+
+// Any k in a row for `who` anywhere: the check where the last move is unknown.
+static int ttt_any_win(const uint8_t* cells, int n, int k, uint8_t who) {
+    for (int c = 0; c < n * n; c++)
+        if (cells[c] == who && ttt_wins_through(cells, n, k, c, who)) return 1;
+    return 0;
+}
 
 // ---- The table: 3^(n²) bytes, filled from the empty board ----
 LEAN_EXPORT lean_obj_res lean_ttt_solve(size_t n, size_t k) {
@@ -3436,33 +3450,33 @@ LEAN_EXPORT lean_obj_res lean_ttt_solve(size_t n, size_t k) {
     return lean_io_result_mk_ok(ba);
 }
 
-// ---- Reachable indices as u32 LE, decision positions only unless `include_terminal` ----
+// ---- Reachable indices as u64 LE, decision positions only unless `include_terminal` ----
 LEAN_EXPORT lean_obj_res lean_ttt_reachable(b_lean_obj_arg tbl_ba, size_t n, uint8_t include_terminal) {
     const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
     const size_t size = lean_sarray_size(tbl_ba);
     size_t count = 0;
     for (size_t i = 0; i < size; i++)
         if (tbl[i] != TTT_UNREACHED && (include_terminal || !(tbl[i] & TTT_TERMINAL))) count++;
-    lean_object* ba = lean_alloc_sarray(1, count * 4, count * 4);
-    uint32_t* out = (uint32_t*)lean_sarray_cptr(ba);
+    lean_object* ba = lean_alloc_sarray(1, count * 8, count * 8);
+    uint64_t* out = (uint64_t*)lean_sarray_cptr(ba);
     size_t j = 0;
     for (size_t i = 0; i < size; i++)
-        if (tbl[i] != TTT_UNREACHED && (include_terminal || !(tbl[i] & TTT_TERMINAL))) out[j++] = (uint32_t)i;
+        if (tbl[i] != TTT_UNREACHED && (include_terminal || !(tbl[i] & TTT_TERMINAL))) out[j++] = (uint64_t)i;
     (void)n;
     return lean_io_result_mk_ok(ba);
 }
 
-// ---- Canonical planes for an index list: f32 [count, 2, n, n], plane 0 the mover's
-// stones, plane 1 the opponent's ----
+// ---- Canonical planes for an index list (u64 LE): f32 [count, 2, n, n], plane 0 the
+// mover's stones, plane 1 the opponent's ----
 LEAN_EXPORT lean_obj_res lean_ttt_planes(b_lean_obj_arg idx_ba, size_t count, size_t n) {
-    const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+    const uint64_t* idx = (const uint64_t*)lean_sarray_cptr(idx_ba);
     const int nc = (int)(n * n);
     size_t nbytes = count * 2 * nc * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
     float* out = (float*)lean_sarray_cptr(ba);
-    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    uint8_t cells[36];
     for (size_t i = 0; i < count; i++) {
-        int stones = ttt_decode(idx[i], nc, cells);
+        int stones = ttt_decode64(idx[i], nc, cells);
         uint8_t mover = (uint8_t)(stones % 2 + 1);
         float* dst = out + i * 2 * nc;
         for (int c = 0; c < nc; c++) {
@@ -3479,7 +3493,7 @@ LEAN_EXPORT lean_obj_res lean_ttt_planes(b_lean_obj_arg idx_ba, size_t count, si
 LEAN_EXPORT lean_obj_res lean_ttt_score(b_lean_obj_arg tbl_ba, b_lean_obj_arg idx_ba, size_t count, size_t n,
                                         b_lean_obj_arg out_ba, size_t n_out) {
     const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
-    const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+    const uint64_t* idx = (const uint64_t*)lean_sarray_cptr(idx_ba);
     const float* out = (const float*)lean_sarray_cptr(out_ba);
     const int nc = (int)(n * n);
     if (n_out < (size_t)nc + 1 || lean_sarray_size(out_ba) < count * n_out * 4)
@@ -3490,7 +3504,7 @@ LEAN_EXPORT lean_obj_res lean_ttt_score(b_lean_obj_arg tbl_ba, b_lean_obj_arg id
     uint8_t cells[TTT_MAXN * TTT_MAXN];
     double agree = 0, mse = 0, sign = 0, mae = 0;
     for (size_t i = 0; i < count; i++) {
-        int stones = ttt_decode(idx[i], nc, cells);
+        int stones = ttt_decode64(idx[i], nc, cells);
         uint8_t mover = (uint8_t)(stones % 2 + 1);
         int v = tbl[idx[i]] & 3;
         const float* row = out + i * n_out;
@@ -3707,18 +3721,6 @@ static int32_t mcts_insert(const mcts_hdr* h, mcts_game* p, uint64_t key, const 
     return nd;
 }
 
-static int ttt_decode64(uint64_t idx, int nc, uint8_t* cells) {
-    int stones = 0;
-    for (int c = 0; c < nc; c++) { cells[c] = (uint8_t)(idx % 3); idx /= 3; stones += cells[c] != 0; }
-    return stones;
-}
-
-// Any k in a row for `who` anywhere: the root check, where the last move is unknown.
-static int ttt_any_win(const uint8_t* cells, int n, int k, uint8_t who) {
-    for (int c = 0; c < n * n; c++)
-        if (cells[c] == who && ttt_wins_through(cells, n, k, c, who)) return 1;
-    return 0;
-}
 
 // xorshift64* uniform in (0, 1), a normal by Box–Muller, Gamma(α, 1) by Marsaglia–Tsang.
 static double mcts_uniform(uint64_t* s) {
@@ -3743,7 +3745,7 @@ static double mcts_gamma(double alpha, uint64_t* s) {
 
 // (1 − ε)·P + ε·Dir(α) over the empty cells.
 static void mcts_dirichlet(float* P, const uint8_t* cells, int nc, double alpha, double eps, uint64_t* s) {
-    double noise[TTT_MAXN * TTT_MAXN], tot = 0;
+    double noise[TTT_SCELLS], tot = 0;
     for (int c = 0; c < nc; c++) { noise[c] = cells[c] ? 0 : mcts_gamma(alpha, s); tot += noise[c]; }
     if (tot <= 0) return;
     for (int c = 0; c < nc; c++)
@@ -3754,7 +3756,7 @@ static const mcts_hdr* mcts_header(b_lean_obj_arg arena) { return (const mcts_hd
 
 // ---- The arena: G games at board n, k in a row, `cap` nodes each ----
 LEAN_EXPORT lean_obj_res lean_mcts_alloc(size_t G, size_t n, size_t k, size_t cap) {
-    if (n < 1 || n > TTT_MAXN || k < 1 || k > n || cap < 1 || G < 1)
+    if (n < 1 || n > TTT_SMAXN || k < 1 || k > n || cap < 1 || G < 1)
         return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_alloc: bad arguments")));
     uint32_t hcap = 1;
     while (hcap < 2 * cap) hcap <<= 1;
@@ -3796,12 +3798,12 @@ LEAN_EXPORT lean_obj_res lean_mcts_select(b_lean_obj_arg arena, b_lean_obj_arg r
     if (lean_sarray_size(roots_ba) < (size_t)h->G * 8 || lean_sarray_size(live_ba) < h->G)
         return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("mcts_select: roots/live too short")));
     const int n = (int)h->n, k = (int)h->k, nc = (int)h->nc;
-    uint64_t pow3[TTT_MAXN * TTT_MAXN + 1];
+    uint64_t pow3[TTT_SCELLS + 1];
     pow3[0] = 1;
     for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
     lean_object* out = lean_alloc_sarray(1, (size_t)h->G * 16, (size_t)h->G * 16);
     uint8_t* rec = lean_sarray_cptr(out);
-    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    uint8_t cells[TTT_SCELLS];
     for (uint32_t g = 0; g < h->G; g++) {
         mcts_game p; mcts_game_ptrs(h, base, g, &p);
         uint32_t kind = 0; float val = 0; uint64_t idx = roots[g];
@@ -3851,8 +3853,8 @@ LEAN_EXPORT lean_obj_res lean_mcts_expand_backup(b_lean_obj_arg arena, b_lean_ob
     const size_t rows = lean_sarray_size(logits_ba) / (n_out * 4);
     const int nc = (int)h->nc;
     uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
-    uint8_t cells[TTT_MAXN * TTT_MAXN];
-    float P[TTT_MAXN * TTT_MAXN];
+    uint8_t cells[TTT_SCELLS];
+    float P[TTT_SCELLS];
     size_t r = 0;
     for (uint32_t g = 0; g < h->G; g++) {
         mcts_game p; mcts_game_ptrs(h, base, g, &p);
@@ -3898,7 +3900,7 @@ LEAN_EXPORT lean_obj_res lean_mcts_root_noise(b_lean_obj_arg arena, b_lean_obj_a
     const uint8_t* live = lean_sarray_cptr(live_ba);
     const int nc = (int)h->nc;
     uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
-    uint8_t cells[TTT_MAXN * TTT_MAXN];
+    uint8_t cells[TTT_SCELLS];
     for (uint32_t g = 0; g < h->G; g++) {
         if (!live[g]) continue;
         mcts_game p; mcts_game_ptrs(h, base, g, &p);
@@ -3927,4 +3929,466 @@ LEAN_EXPORT lean_obj_res lean_mcts_root_visits(b_lean_obj_arg arena, b_lean_obj_
         for (int c = 0; c < nc; c++) o[(size_t)g * nc + c] = (float)p.N[(size_t)nd * nc + c] / (float)p.nsum[nd];
     }
     return lean_io_result_mk_ok(out);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// The on-demand exact solver: the instrument for boards too big for the table.
+//
+// Alpha-beta negamax to the end of the game over the values {0 loss, 1 draw, 2 win}
+// with a transposition table keyed by the symmetry-canonical index (the minimum over
+// the eight dihedral views). Entries carry a value and a flag — exact, a lower bound
+// (the search cut off), an upper bound (nothing beat alpha) — and a query for a
+// position's exact value searches it with the full window, so what the table hands
+// back is exact whatever the cache holds. Before recursing: an immediate win is a win,
+// two opponent threats are a loss, one threat forces the block. Centre-out move order.
+// The arena is a Lean ByteArray (header, keys u64[cap], values u8[cap] with 255 empty),
+// so a solved cache is a file. `lean_ttt_solver_check` compares the solver against the
+// dense table on every reachable position where the table exists.
+// ═══════════════════════════════════════════════════════════════════════
+
+#define TTT_SLINES 128
+#define TTT_SPROBES 8
+#define TTT_SEMPTY 0xFFFF
+#define TTT_SNOMOVE 63
+
+// Entry (u16): bits 0–1 a lower bound on the value, 2–3 an upper bound (equal = exact),
+// 4–9 the principal move in the CANONICAL orientation (63 = none); a store merges bounds
+// with what the slot holds, so two one-sided searches add up to an exact entry and a
+// position never flips between "≥ 1" and "≤ 1". Winning lines are bitmasks over the
+// cells, so a side's stones as a bitboard answer "an immediate win?" and "how many
+// threats?" with one popcount a line.
+typedef struct {
+    uint32_t n, k, nc, nlines;
+    uint64_t cap, entries, nodes, replaced;
+    uint64_t pow3[TTT_SCELLS + 1];
+    uint64_t lines[TTT_SLINES];
+    uint8_t order[TTT_SCELLS];
+    uint8_t killer[TTT_SCELLS][2];
+    uint8_t pad[4];
+} ttt_solver_hdr;
+
+static ttt_solver_hdr* ttt_solver_of(b_lean_obj_arg arena) { return (ttt_solver_hdr*)lean_sarray_cptr(arena); }
+static uint64_t* ttt_solver_keys(ttt_solver_hdr* h) { return (uint64_t*)((uint8_t*)h + sizeof(ttt_solver_hdr)); }
+static uint16_t* ttt_solver_vals(ttt_solver_hdr* h) { return (uint16_t*)(ttt_solver_keys(h) + h->cap); }
+
+// Canonical cell (y, x) under transform t reads the original's cell ttt_src(t, y, x).
+static inline int ttt_src(int t, int y, int x, int n) {
+    int yy = (t & 2) ? n - 1 - y : y, xx = (t & 1) ? n - 1 - x : x;
+    return (t & 4) ? xx * n + yy : yy * n + xx;
+}
+static uint64_t ttt_canonical(const uint8_t* cells, int n, const uint64_t* pow3, int* tbest) {
+    uint64_t best = UINT64_MAX;
+    for (int t = 0; t < 8; t++) {
+        uint64_t idx = 0;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                idx += pow3[y * n + x] * cells[ttt_src(t, y, x, n)];
+        if (idx < best) { best = idx; *tbest = t; }
+    }
+    return best;
+}
+// An original cell in canonical coordinates, and back.
+static int ttt_to_canon(int t, int c, int n) {
+    for (int d = 0; d < n * n; d++) if (ttt_src(t, d / n, d % n, n) == c) return d;
+    return TTT_SNOMOVE;
+}
+static int ttt_from_canon(int t, int d, int n) { return d >= n * n ? TTT_SNOMOVE : ttt_src(t, d / n, d % n, n); }
+
+static int ttt_solver_lookup(ttt_solver_hdr* h, uint64_t key, uint16_t* out) {
+    uint64_t* keys = ttt_solver_keys(h); uint16_t* vals = ttt_solver_vals(h);
+    uint64_t mask = h->cap - 1, start = mcts_mix64(key) & mask;
+    for (int p = 0; p < TTT_SPROBES; p++) {
+        uint64_t s = (start + p) & mask;
+        if (vals[s] == TTT_SEMPTY) return 0;
+        if (keys[s] == key) { *out = vals[s]; return 1; }
+    }
+    return 0;
+}
+
+// Store bounds [lo, hi] and a principal move (canonical coordinates; 63 = none): merged
+// with the slot's bounds when the key is present, the move kept when the new result is
+// exact or raised the lower bound; a full probe run evicts its first slot.
+static void ttt_solver_store(ttt_solver_hdr* h, uint64_t key, int lo, int hi, int move) {
+    uint64_t* keys = ttt_solver_keys(h); uint16_t* vals = ttt_solver_vals(h);
+    uint64_t mask = h->cap - 1, start = mcts_mix64(key) & mask;
+    uint16_t val = (uint16_t)(lo | (hi << 2) | (move << 4));
+    for (int p = 0; p < TTT_SPROBES; p++) {
+        uint64_t s = (start + p) & mask;
+        if (vals[s] == TTT_SEMPTY) { keys[s] = key; vals[s] = val; h->entries++; return; }
+        if (keys[s] == key) {
+            int olo = vals[s] & 3, ohi = (vals[s] >> 2) & 3, omove = (vals[s] >> 4) & 63;
+            int nlo = lo > olo ? lo : olo, nhi = hi < ohi ? hi : ohi;
+            int nmove = (lo == hi || lo > olo) && move != TTT_SNOMOVE ? move : omove;
+            vals[s] = (uint16_t)(nlo | (nhi << 2) | (nmove << 4));
+            return;
+        }
+    }
+    keys[start] = key; vals[start] = val; h->replaced++;
+}
+
+// The cell that completes k for `who` given the other side's stones, or -1; and the
+// number of such cells (threats).
+static int ttt_bb_wins(const ttt_solver_hdr* h, uint64_t mine, uint64_t theirs, int* count) {
+    int cnt = 0, cell = -1;
+    for (uint32_t i = 0; i < h->nlines; i++) {
+        uint64_t L = h->lines[i];
+        if (theirs & L) continue;
+        if (__builtin_popcountll(mine & L) == (int)h->k - 1) {
+            uint64_t e = L & ~mine;
+            int c = __builtin_ctzll(e);
+            if (!(cnt && c == cell)) cnt++;   // two lines through one empty cell are one threat
+            cell = c;
+        }
+    }
+    *count = cnt;
+    return cell;
+}
+
+// Move ordering: the table's move, the killers, then by how many lines through the cell
+// the mover owns without opposition (a threat-maker scores highest), centre-out on ties.
+static int ttt_move_score(const ttt_solver_hdr* h, uint64_t mine, uint64_t theirs, int c) {
+    int score = 0;
+    uint64_t bit = (uint64_t)1 << c;
+    for (uint32_t i = 0; i < h->nlines; i++) {
+        uint64_t L = h->lines[i];
+        if (!(L & bit) || (theirs & L)) continue;
+        int m = __builtin_popcountll(mine & L);
+        score += m == (int)h->k - 2 ? 64 : (m == (int)h->k - 3 ? 8 : 1);
+    }
+    return score;
+}
+
+// The value of a non-terminal position from its mover's view within the window
+// (alpha, beta) ⊆ {0, 1, 2}: exact when it lies strictly inside, else a bound.
+static int ttt_solve(ttt_solver_hdr* h, uint8_t* cells, uint64_t bbX, uint64_t bbO, int stones,
+                     int alpha, int beta, int depth) {
+    const int n = (int)h->n, nc = (int)h->nc;
+    const uint8_t mover = (uint8_t)(stones % 2 + 1);
+    const uint64_t mine = mover == 1 ? bbX : bbO, theirs = mover == 1 ? bbO : bbX;
+    h->nodes++;
+    int tr = 0;
+    uint64_t key = ttt_canonical(cells, n, h->pow3, &tr);
+    uint16_t hit; int ttMove = TTT_SNOMOVE;
+    if (ttt_solver_lookup(h, key, &hit)) {
+        int lo = hit & 3, hi = (hit >> 2) & 3;
+        ttMove = ttt_from_canon(tr, (hit >> 4) & 63, n);
+        if (lo == hi) return lo;
+        if (lo >= beta) return lo;
+        if (hi <= alpha) return hi;
+        if (lo > alpha) alpha = lo;
+        if (hi < beta) beta = hi;
+    }
+    const int alpha0 = alpha;
+    int cnt, wc = ttt_bb_wins(h, mine, theirs, &cnt);
+    if (wc >= 0) { ttt_solver_store(h, key, 2, 2, ttt_to_canon(tr, wc, n)); return 2; }
+    int nb, block = ttt_bb_wins(h, theirs, mine, &nb);
+    if (nb >= 2) { ttt_solver_store(h, key, 0, 0, ttt_to_canon(tr, block, n)); return 0; }   // lost: any move
+    // the candidate list
+    int moves[TTT_SCELLS], nm = 0;
+    if (nb == 1) moves[nm++] = block;
+    else {
+        int score[TTT_SCELLS];
+        for (int i = 0; i < nc; i++) {
+            int c = h->order[i];
+            if (cells[c]) continue;
+            int sc = ttt_move_score(h, mine, theirs, c) * 4 + (nc - i);
+            if (c == ttMove) sc += 1 << 20;
+            else if (c == h->killer[depth][0]) sc += 1 << 18;
+            else if (c == h->killer[depth][1]) sc += 1 << 17;
+            // insertion into the sorted list
+            int j = nm++;
+            while (j > 0 && score[j - 1] < sc) { moves[j] = moves[j - 1]; score[j] = score[j - 1]; j--; }
+            moves[j] = c; score[j] = sc;
+        }
+    }
+    int val = 0, best = TTT_SNOMOVE;
+    for (int i = 0; i < nm; i++) {
+        int c = moves[i];
+        cells[c] = mover;
+        uint64_t bit = (uint64_t)1 << c;
+        int v = (stones + 1 == nc) ? 1
+              : 2 - ttt_solve(h, cells, mover == 1 ? bbX | bit : bbX, mover == 2 ? bbO | bit : bbO,
+                              stones + 1, 2 - beta, 2 - alpha, depth + 1);
+        cells[c] = 0;
+        if (v > val || best == TTT_SNOMOVE) { val = v; best = c; }   // a lost position keeps its first move
+        if (val > alpha) alpha = val;
+        if (alpha >= beta) {
+            if (h->killer[depth][0] != c) { h->killer[depth][1] = h->killer[depth][0]; h->killer[depth][0] = (uint8_t)c; }
+            break;
+        }
+    }
+    int lo = val <= alpha0 ? 0 : val, hi = val >= beta ? 2 : val;   // fail-low: ≤ val; fail-high: ≥ val
+    ttt_solver_store(h, key, lo, hi, ttt_to_canon(tr, best, n));
+    return val;
+}
+
+// The table-style entry of any position: value | terminal bit. The empty board is the
+// max over its children, each solved with the full window: one null-window search from
+// the root churns the table's bounded entries on transpositions and ran an hour without
+// returning on (5, 5, 4), where the 25 openings solved one at a time take 3.5 minutes.
+static uint8_t ttt_solver_entry(ttt_solver_hdr* h, uint64_t idx) {
+    uint8_t cells[TTT_SCELLS];
+    int stones = ttt_decode64(idx, (int)h->nc, cells);
+    uint8_t mover = (uint8_t)(stones % 2 + 1);
+    uint64_t bbX = 0, bbO = 0;
+    for (int c = 0; c < (int)h->nc; c++) {
+        if (cells[c] == 1) bbX |= (uint64_t)1 << c; else if (cells[c] == 2) bbO |= (uint64_t)1 << c;
+    }
+    if (ttt_any_win(cells, (int)h->n, (int)h->k, (uint8_t)(3 - mover))) return TTT_TERMINAL | 0;
+    if (stones == (int)h->nc) return TTT_TERMINAL | 1;
+    if (stones == 0) {
+        uint16_t hit;
+        if (ttt_solver_lookup(h, 0, &hit) && (hit & 3) == ((hit >> 2) & 3)) return (uint8_t)(hit & 3);
+        int best = 0, bestc = TTT_SNOMOVE;
+        for (int c = 0; c < (int)h->nc; c++) {
+            int v = 2 - (ttt_solver_entry(h, h->pow3[c] * mover) & 3);
+            if (v > best || bestc == TTT_SNOMOVE) { best = v; bestc = c; }
+        }
+        ttt_solver_store(h, 0, best, best, bestc);   // the empty board is its own canonical form
+        return (uint8_t)best;
+    }
+    return (uint8_t)ttt_solve(h, cells, bbX, bbO, stones, 0, 2, 0);
+}
+
+// ---- The arena: board n, k in a row, 2^log2cap slots ----
+LEAN_EXPORT lean_obj_res lean_ttt_solver_alloc(size_t n, size_t k, size_t log2cap) {
+    if (n < 1 || n > TTT_SMAXN || k < 1 || k > n || log2cap < 10 || log2cap > 34)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_solver_alloc: bad arguments")));
+    ttt_solver_hdr h; memset(&h, 0, sizeof h);
+    h.n = (uint32_t)n; h.k = (uint32_t)k; h.nc = (uint32_t)(n * n); h.cap = (uint64_t)1 << log2cap;
+    h.pow3[0] = 1;
+    for (uint32_t c = 1; c <= h.nc; c++) h.pow3[c] = h.pow3[c - 1] * 3;
+    // every winning line as a bitmask: four directions from every cell that fits
+    static const int dr[4] = {0, 1, 1, 1}, dc[4] = {1, 0, 1, -1};
+    for (int r = 0; r < (int)n; r++)
+        for (int c = 0; c < (int)n; c++)
+            for (int d = 0; d < 4; d++) {
+                int re = r + ((int)k - 1) * dr[d], ce = c + ((int)k - 1) * dc[d];
+                if (re < 0 || re >= (int)n || ce < 0 || ce >= (int)n) continue;
+                uint64_t L = 0;
+                for (int s = 0; s < (int)k; s++) L |= (uint64_t)1 << ((r + s * dr[d]) * (int)n + c + s * dc[d]);
+                if (h.nlines < TTT_SLINES) h.lines[h.nlines++] = L;
+            }
+    // centre-out move order: by squared distance from the board's centre, then index
+    for (uint32_t c = 0; c < h.nc; c++) h.order[c] = (uint8_t)c;
+    for (uint32_t i = 1; i < h.nc; i++)
+        for (uint32_t j = i; j > 0; j--) {
+            int a = h.order[j - 1], b = h.order[j];
+            int da = (2 * (a / (int)n) - (int)n + 1) * (2 * (a / (int)n) - (int)n + 1) + (2 * (a % (int)n) - (int)n + 1) * (2 * (a % (int)n) - (int)n + 1);
+            int db = (2 * (b / (int)n) - (int)n + 1) * (2 * (b / (int)n) - (int)n + 1) + (2 * (b % (int)n) - (int)n + 1) * (2 * (b % (int)n) - (int)n + 1);
+            if (db < da) { h.order[j - 1] = (uint8_t)b; h.order[j] = (uint8_t)a; } else break;
+        }
+    memset(h.killer, TTT_SNOMOVE, sizeof h.killer);
+    size_t nbytes = sizeof(ttt_solver_hdr) + (size_t)h.cap * 10;
+    lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
+    uint8_t* base = lean_sarray_cptr(ba);
+    memcpy(base, &h, sizeof h);
+    memset(ttt_solver_vals((ttt_solver_hdr*)base), 0xFF, (size_t)h.cap * 2);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- One position's entry, solved on demand. Pure to Lean: the value of a position is
+// a function of the position; the cache it fills is invisible. ----
+LEAN_EXPORT uint8_t lean_ttt_solver_entry_at(b_lean_obj_arg arena, uint64_t idx) {
+    return ttt_solver_entry(ttt_solver_of(arena), idx);
+}
+
+// ---- The principal move of a position whose entry is exact, in the position's own
+// coordinates (63 when the entry is missing or a bound). Pure to Lean like the entry. ----
+LEAN_EXPORT uint8_t lean_ttt_solver_best_at(b_lean_obj_arg arena, uint64_t idx) {
+    ttt_solver_hdr* h = ttt_solver_of(arena);
+    uint8_t cells[TTT_SCELLS];
+    ttt_decode64(idx, (int)h->nc, cells);
+    int tr = 0;
+    uint64_t key = ttt_canonical(cells, (int)h->n, h->pow3, &tr);
+    uint16_t hit;
+    if (!ttt_solver_lookup(h, key, &hit) || (hit & 3) != ((hit >> 2) & 3)) return TTT_SNOMOVE;
+    return (uint8_t)ttt_from_canon(tr, (hit >> 4) & 63, (int)h->n);
+}
+
+// ---- [entries, nodes, replaced, cap] as u64 ----
+LEAN_EXPORT lean_obj_res lean_ttt_solver_stats(b_lean_obj_arg arena) {
+    ttt_solver_hdr* h = ttt_solver_of(arena);
+    lean_object* ba = lean_alloc_sarray(1, 32, 32);
+    uint64_t* o = (uint64_t*)lean_sarray_cptr(ba);
+    o[0] = h->entries; o[1] = h->nodes; o[2] = h->replaced; o[3] = h->cap;
+    return lean_io_result_mk_ok(ba);
+}
+
+LEAN_EXPORT uint8_t lean_ttt_solver_best_at(b_lean_obj_arg arena, uint64_t idx);
+
+// ---- The gate: the solver against the dense table on every reachable position, and
+// its principal move against the table's optimal set on every decision position.
+// Returns [checked, value mismatches, bad principal moves] as u64. ----
+LEAN_EXPORT lean_obj_res lean_ttt_solver_check(b_lean_obj_arg arena, b_lean_obj_arg tbl_ba) {
+    ttt_solver_hdr* h = ttt_solver_of(arena);
+    const uint8_t* tbl = lean_sarray_cptr(tbl_ba);
+    const size_t size = lean_sarray_size(tbl_ba);
+    const int nc = (int)h->nc;
+    uint8_t cells[TTT_SCELLS];
+    uint64_t checked = 0, bad = 0, badmove = 0;
+    for (size_t i = 0; i < size; i++) {
+        if (tbl[i] == TTT_UNREACHED) continue;
+        checked++;
+        uint8_t e = ttt_solver_entry(h, (uint64_t)i);
+        if (e != tbl[i]) bad++;
+        if (e & TTT_TERMINAL) continue;
+        int stones = ttt_decode64((uint64_t)i, nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1);
+        int m = lean_ttt_solver_best_at(arena, (uint64_t)i);
+        if (m >= nc || cells[m] || (2 - (tbl[i + h->pow3[m] * mover] & 3)) != (tbl[i] & 3)) {
+            if (badmove < 4 && getenv("TTT_DEBUG")) {
+                fprintf(stderr, "bad principal move at %zu: value %d, move %d, cells", i, tbl[i] & 3, m);
+                for (int c = 0; c < nc; c++) fprintf(stderr, "%c", ".XO"[cells[c]]);
+                fprintf(stderr, ", child values");
+                for (int c = 0; c < nc; c++) if (!cells[c]) fprintf(stderr, " %d:%d", c, 2 - (tbl[i + h->pow3[c] * mover] & 3));
+                fprintf(stderr, "\n");
+            }
+            badmove++;
+        }
+    }
+    lean_object* ba = lean_alloc_sarray(1, 24, 24);
+    uint64_t* o = (uint64_t*)lean_sarray_cptr(ba);
+    o[0] = checked; o[1] = bad; o[2] = badmove;
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Decision positions by random play: `count` non-terminal positions with at least
+// `min_stones` stones, every position of every random game until the count is met. ----
+LEAN_EXPORT lean_obj_res lean_ttt_sample_positions(size_t n, size_t k, size_t count, uint64_t seed, size_t min_stones) {
+    const int nc = (int)(n * n);
+    uint64_t pow3[TTT_SCELLS + 1];
+    pow3[0] = 1;
+    for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
+    lean_object* ba = lean_alloc_sarray(1, count * 8, count * 8);
+    uint64_t* out = (uint64_t*)lean_sarray_cptr(ba);
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    uint8_t cells[TTT_SCELLS];
+    size_t got = 0;
+    while (got < count) {
+        memset(cells, 0, nc);
+        uint64_t idx = 0;
+        for (int stones = 0; stones < nc && got < count; stones++) {
+            if (stones >= (int)min_stones) out[got++] = idx;
+            uint8_t mover = (uint8_t)(stones % 2 + 1);
+            int empties = nc - stones, pick = (int)(mcts_uniform(&s) * empties), c = 0;
+            for (int e = 0;; c++) if (!cells[c] && e++ == pick) break;
+            cells[c] = mover;
+            idx += pow3[c] * mover;
+            if (ttt_wins_through(cells, (int)n, (int)k, c, mover)) break;
+        }
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- The scorer over a position list, through the solver: f32 [agree, Σ(tanh v − z)²,
+// sign agree, Σ|tanh v − z|] as `lean_ttt_score`. ----
+LEAN_EXPORT lean_obj_res lean_ttt_solver_score(b_lean_obj_arg arena, b_lean_obj_arg idx_ba, size_t count,
+                                               b_lean_obj_arg out_ba, size_t n_out) {
+    ttt_solver_hdr* h = ttt_solver_of(arena);
+    const uint64_t* idx = (const uint64_t*)lean_sarray_cptr(idx_ba);
+    const float* out = (const float*)lean_sarray_cptr(out_ba);
+    const int nc = (int)h->nc;
+    if (n_out < (size_t)nc + 1 || lean_sarray_size(out_ba) < count * n_out * 4)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_solver_score: logits block too small")));
+    uint8_t cells[TTT_SCELLS];
+    double agree = 0, mse = 0, sign = 0, mae = 0;
+    for (size_t i = 0; i < count; i++) {
+        int stones = ttt_decode64(idx[i], nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1);
+        int v = ttt_solver_entry(h, idx[i]) & 3;
+        const float* row = out + i * n_out;
+        int best = -1;
+        for (int c = 0; c < nc; c++)
+            if (!cells[c] && (best < 0 || row[c] > row[best])) best = c;
+        if (best >= 0 && (2 - (ttt_solver_entry(h, idx[i] + h->pow3[best] * mover) & 3)) == v) agree += 1;
+        double t = tanh((double)row[nc]), z = (double)(v - 1);
+        mse += (t - z) * (t - z);
+        mae += fabs(t - z);
+        int ts = t > 0.5 ? 1 : (t < -0.5 ? -1 : 0);
+        if (ts == v - 1) sign += 1;
+    }
+    lean_object* ba = lean_alloc_sarray(1, 16, 16);
+    float* r = (float*)lean_sarray_cptr(ba);
+    r[0] = (float)agree; r[1] = (float)mse; r[2] = (float)sign; r[3] = (float)mae;
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- The scripted players' expected agreement over a position list, through the
+// solver: f32 [count, random, win-or-block] as `lean_ttt_scripted_agreement`. ----
+LEAN_EXPORT lean_obj_res lean_ttt_solver_agreement(b_lean_obj_arg arena, b_lean_obj_arg idx_ba, size_t count) {
+    ttt_solver_hdr* h = ttt_solver_of(arena);
+    const uint64_t* idx = (const uint64_t*)lean_sarray_cptr(idx_ba);
+    const int n = (int)h->n, k = (int)h->k, nc = (int)h->nc;
+    uint8_t cells[TTT_SCELLS];
+    double rnd = 0, wob = 0;
+    for (size_t i = 0; i < count; i++) {
+        int stones = ttt_decode64(idx[i], nc, cells);
+        uint8_t mover = (uint8_t)(stones % 2 + 1), other = (uint8_t)(3 - mover);
+        int v = ttt_solver_entry(h, idx[i]) & 3;
+        int legal = 0, opt = 0, wins = 0, winsOpt = 0, blocks = 0, blocksOpt = 0;
+        for (int c = 0; c < nc; c++) {
+            if (cells[c]) continue;
+            legal++;
+            int isOpt = (2 - (ttt_solver_entry(h, idx[i] + h->pow3[c] * mover) & 3)) == v;
+            opt += isOpt;
+            cells[c] = mover;
+            int w = ttt_wins_through(cells, n, k, c, mover);
+            cells[c] = other;
+            int b = ttt_wins_through(cells, n, k, c, other);
+            cells[c] = 0;
+            if (w) { wins++; winsOpt += isOpt; }
+            if (b) { blocks++; blocksOpt += isOpt; }
+        }
+        rnd += (double)opt / legal;
+        if (wins) wob += (double)winsOpt / wins;
+        else if (blocks) wob += (double)blocksOpt / blocks;
+        else wob += (double)opt / legal;
+    }
+    lean_object* ba = lean_alloc_sarray(1, 12, 12);
+    float* r = (float*)lean_sarray_cptr(ba);
+    r[0] = (float)count; r[1] = (float)(count ? rnd / count : 0); r[2] = (float)(count ? wob / count : 0);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Every decision position with at most `max_stones` stones, by DFS from the empty
+// board: u64 LE, sorted, distinct (move-order transpositions collapse). 25·24·23·22 =
+// 303,600 sequences at four stones on 5×5, 6.4M at five; capped at six. ----
+static int ttt_u64_cmp(const void* a, const void* b) {
+    uint64_t x = *(const uint64_t*)a, y = *(const uint64_t*)b;
+    return x < y ? -1 : x > y;
+}
+static void ttt_enum_dfs(uint8_t* cells, uint64_t idx, int stones, int max_stones, int n, int k, int nc,
+                         const uint64_t* pow3, uint64_t** out, size_t* got, size_t* cap) {
+    if (*got == *cap) { *cap *= 2; *out = realloc(*out, *cap * sizeof(uint64_t)); }
+    (*out)[(*got)++] = idx;
+    if (stones == max_stones) return;
+    uint8_t mover = (uint8_t)(stones % 2 + 1);
+    for (int c = 0; c < nc; c++) {
+        if (cells[c]) continue;
+        cells[c] = mover;
+        if (!ttt_wins_through(cells, n, k, c, mover) && stones + 1 < nc)   // only decision positions
+            ttt_enum_dfs(cells, idx + pow3[c] * mover, stones + 1, max_stones, n, k, nc, pow3, out, got, cap);
+        cells[c] = 0;
+    }
+}
+LEAN_EXPORT lean_obj_res lean_ttt_enumerate(size_t n, size_t k, size_t max_stones) {
+    if (n < 1 || n > TTT_SMAXN || k < 1 || k > n || max_stones > 6)
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("ttt_enumerate: bad arguments (max_stones <= 6)")));
+    const int nc = (int)(n * n);
+    uint64_t pow3[TTT_SCELLS + 1];
+    pow3[0] = 1;
+    for (int c = 1; c <= nc; c++) pow3[c] = pow3[c - 1] * 3;
+    size_t cap = 1 << 16, got = 0;
+    uint64_t* buf = malloc(cap * sizeof(uint64_t));
+    uint8_t cells[TTT_SCELLS];
+    memset(cells, 0, sizeof cells);
+    ttt_enum_dfs(cells, 0, 0, (int)max_stones, (int)n, (int)k, nc, pow3, &buf, &got, &cap);
+    qsort(buf, got, sizeof(uint64_t), ttt_u64_cmp);
+    size_t m = 0;
+    for (size_t i = 0; i < got; i++) if (i == 0 || buf[i] != buf[i - 1]) buf[m++] = buf[i];
+    lean_object* ba = lean_alloc_sarray(1, m * 8, m * 8);
+    memcpy(lean_sarray_cptr(ba), buf, m * 8);
+    free(buf);
+    return lean_io_result_mk_ok(ba);
 }

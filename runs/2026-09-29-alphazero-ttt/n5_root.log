@@ -1,0 +1,11 @@
+5×5, 4 in a row: no table (3^25 entries); the on-demand solver says a draw in 33169 ms (43705561 entries after 99013465 nodes, 15962 replaced)
+expected agreement with the optimal set over 0 random-play decision positions: random 0.00%, win-or-block 0.00% (0 ms; 43705561 entries after 99013465 nodes, 15962 replaced)
+0 games each way, W/D/L for the first-named player:
+  arm                        as X            as O
+  random vs random           0/0/0           0/0/0           0 ms
+  random vs perfect          0/0/0           0/0/0           0 ms
+  win-or-block vs perfect    0/0/0           0/0/0           0 ms
+  win-or-block vs random     0/0/0           0/0/0           0 ms
+  perfect vs perfect         0/0/0           0/0/0           0 ms
+gates: perfect never loses, and draws itself when the root is a draw
+solver cache saved to .lake/build/ttt_solver_5x5_k4.bin (43705561 entries, 1280 MB)

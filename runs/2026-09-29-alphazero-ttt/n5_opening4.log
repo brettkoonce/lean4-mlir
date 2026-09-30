@@ -1,0 +1,5 @@
+solver cache loaded from .lake/build/ttt_solver_5x5_k4.bin
+5×5, 4 in a row: no table (3^25 entries); the on-demand solver says a draw in 0 ms (268426670 entries after 2259391618 nodes, 657841768 replaced)
+expected agreement with the optimal set over 0 random-play decision positions with at least 6 stones: random 0.00%, win-or-block 0.00% (0 ms; 268426670 entries after 2259391618 nodes, 657841768 replaced)
+Command terminated by signal 15
+wall 38.62s rss 3160640KB

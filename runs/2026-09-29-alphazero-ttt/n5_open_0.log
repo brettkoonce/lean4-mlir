@@ -1,0 +1,31 @@
+index 1, O to move, exact value 0 for the mover
+X . . . .
+. . . . .
+. . . . .
+. . . . .
+. . . . .
+  cell 1 (r0 c1): 0  optimal
+  cell 2 (r0 c2): 0  optimal
+  cell 3 (r0 c3): 0  optimal
+  cell 4 (r0 c4): 0  optimal
+  cell 5 (r1 c0): 0  optimal
+  cell 6 (r1 c1): 0  optimal
+  cell 7 (r1 c2): 0  optimal
+  cell 8 (r1 c3): 0  optimal
+  cell 9 (r1 c4): 0  optimal
+  cell 10 (r2 c0): 0  optimal
+  cell 11 (r2 c1): 0  optimal
+  cell 12 (r2 c2): 0  optimal
+  cell 13 (r2 c3): 0  optimal
+  cell 14 (r2 c4): 0  optimal
+  cell 15 (r3 c0): 0  optimal
+  cell 16 (r3 c1): 0  optimal
+  cell 17 (r3 c2): 0  optimal
+  cell 18 (r3 c3): 0  optimal
+  cell 19 (r3 c4): 0  optimal
+  cell 20 (r4 c0): 0  optimal
+  cell 21 (r4 c1): 0  optimal
+  cell 22 (r4 c2): 0  optimal
+  cell 23 (r4 c3): 0  optimal
+  cell 24 (r4 c4): 0  optimal
+cell 0: 76.17s 666180KB

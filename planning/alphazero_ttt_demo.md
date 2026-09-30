@@ -177,3 +177,129 @@ Go, Othello, Connect-Four; MuZero's learned model; a boards-larger-than-4 solver
   MCTS from 4, self-play stood at 108,483 positions. Per 4×4 iteration: self-play 18.5 →
   0.7 s, matches 17.8 → 0.8 s, training 18–20 s at the full window (the remainder).
   The Lean-tree runs stay in the run directory as the before-row.
+
+## 11. 5×5 — the instrument without the table
+
+The dense table ends at 4×4 (3²⁵ bytes = 847 GB). Three things replace it, and each
+is gated against the table where the table exists:
+
+- **An on-demand exact solver** (`lean_ttt_solver_*`): negamax to the end of the game
+  with a transposition table keyed by the symmetry-canonical index (min over the eight
+  dihedral views), exact values only — the sole cut-offs are the ones that keep the
+  value exact: an immediate win is +1 without recursion, two opponent threats are −1,
+  one threat forces the block, and the child loop stops at the first win. Centre-out
+  move order. The arena is a Lean ByteArray (keys u64 + values u8, open addressing,
+  capacity a knob), so a solved cache is saved and loaded with plain file IO. `Table`
+  dispatches: the dense table at n ≤ 4, the solver above — and `ttt-env` checks the
+  solver against the table on every reachable 3×3 and 4×4 position before anything
+  trusts it at 5×5.
+- **A sampled sweep**: `sweep` positions drawn by random play (fixed seed), each solved
+  exactly; the scorer and the scripted players' expected agreement run over that set.
+  "Agree" at 5×5 is therefore exact per position but not exhaustive, and the table
+  says so. Self-play coverage moves from a byte per index to a hash set.
+- **64-bit indices** through the plane builder, the scorers, the search's leaf records
+  and the Lean pushes (`pushU64LE` / `readU64`), since 3²⁵ > 2³².
+
+Board: (5, 5, 4), the interesting one (the literature says draw; the solver decides —
+the root's solve time is the unknown, cached to disk once found). (5, 5, 5) is a
+trivial draw. The MCTS arena's node budget n²·sims a game holds.
+
+Phases: 5a u64 + solver + the cross-check gate + the (5,5,4) root timed; 5b the
+sampled sweep and the trainer's n ≥ 5 path; 5c a one-iteration timing probe, then the
+run (ask first).
+- 2026-09-30, §11 5a: u64 index lists end to end; `Table` dispatches dense / solver;
+  `lean_ttt_solver_check` gates the solver against the table on every reachable position.
+  Solver v1 (plain negamax, first-win cut, memo, no pruning) passed the gate — 3×3 0
+  mismatches, 4×4 0 mismatches in 3.0 s (1.14M canonical entries) — but the (5,5,4) root
+  did not finish in 12 min. v2 (alpha-beta with bounded entries) first failed the gate:
+  40 mismatches at 3×3, 16,512 at 4×4, from one line that promoted an upper bound to
+  exact on a forced block; removed, 0 mismatches. Its root solve ran 51 min without
+  finishing: the transposition table stopped caching at 80% of 2²⁴ slots, so past ~13M
+  entries the search ran memo-less (calibration was misleading too — the 2-stone position
+  timed at 11 s was an X win, cheap to prove; a draw at the root is the expensive proof).
+  v3: replace-always caching with 8-slot probe runs, u16 entries carrying the best move,
+  winning lines as bitmasks (one popcount a line for "immediate win?" and "threats?"),
+  move order = table move, killers, then lines the mover owns unopposed (threat-makers
+  first), centre-out on ties. Gate: 0 mismatches on both boards (4×4 in 16.8 s, 80M
+  nodes — bound re-searches cost more than the plain memo on an exhaustive check, which
+  is not the workload). Timing the root with 2²⁷ slots (`n5_solver_probe2.log`).
+- v3's null-window search from the root ran 16 min without returning on (5,5,4) while the
+  25 openings solved one at a time with full windows take 3.5 min in all (centre 2.7 s
+  with four drawing replies — the diagonal neighbours; mid-adjacent 12 s, four; inner
+  corner 6.8 s, ONE drawing reply; edge-middle 51 s, seventeen; edge-off-middle 61 s,
+  thirteen; corner 76 s, all twenty-four): every opening draws, so (5,5,4) is a draw and
+  every first move keeps it. The empty board's entry is therefore the max over its
+  children, each solved full-window and cached (`ttt_solver_entry`), and the perfect
+  player's opening set is exact; the centre-only fallback that was wired for an hour is
+  gone. Gate still 0 mismatches on both boards.
+- The hour of "root won't solve" was a log artefact: `ttt-env` printed with `IO.println`,
+  which is block-buffered under redirection, so the log stayed empty while the process was
+  past the root and inside the 20k-position sampled agreement. With flushing prints: the
+  (5,5,4) root (max over its 25 full-window-solved openings) is **33.2 s**, 43.7M entries,
+  99M nodes, a draw; the cache is 1.3 GB at 2²⁷. The sampled agreement is the cost: with
+  every child valued, 2-stone positions cost seconds each (a fresh 3-stone subtree), so the
+  sweep sample now starts at six stones (`sweepMin` / `sampleMin`, default 6): 2,000
+  positions with all children in 65 s (32 ms each); the trainer's scorer needs two solves a
+  position. Baselines at ≥ 6 stones: random 43.1%, win-or-block 75.4%. Runs use 2²⁸ slots
+  (the 2²⁷ table reached 105M of 134M).
+- The match play was the next wall: the perfect player valued EVERY child exactly to draw
+  uniformly from the optimal set, and at 5×5 a fresh child is a full solve — the trainer's
+  iteration 0 and `ttt-env`'s random-vs-perfect both sat 50 min without a line. Now it
+  shuffles the legal moves and takes the first whose value matches the position's — the
+  first optimal move of a uniform permutation is a uniform draw from the optimal set, so
+  the distribution is unchanged and the cost is about two child solves a move. Gates
+  unchanged on both boards.
+- Solver v4: entries carry both bounds (lo, hi; merged on store, exact when equal), which
+  ends the ≥1 / ≤1 re-search churn — the exhaustive 4×4 check drops 80M → 13.3M nodes
+  (16.8 → 3.8 s) — and the principal move in canonical coordinates. The perfect player
+  takes that move from the third stone on (one solve, the position's) and keeps the
+  uniform draw over the optimal set for each side's first move, where the opening book
+  makes it free. A second gate checks the principal move against the table's optimal set
+  on every decision position: it caught two cases that stored no move — lost positions
+  (no child ever beats 0) and the double-threat shortcut — both now store a legal move
+  (any move is optimal in a lost position). 0 / 0 on both boards.
+- 5×5 probe (`n5_probe.log`, 200 sims, 256 games, 20k sweep at ≥ 6 stones): iteration 0
+  ~4 min (first-time solves); iteration 1 self-play 2.3 s, train 0.95 s, score 26 s; the
+  untrained net loses all 512 games and self-play is decisive (X 149 / draw 15 / O 92 —
+  (5,5,4) punishes bad play). Root 36.6 s in the same table. Run launched:
+  `n=5 k=4 iters=60 sims=200 sweep=20000 sweepMin=6 epochs=5 cap=28 tag=run1`, card 1.
+- `ttt-env n=5 k=4 games=200 samples=20000 sampleMin=6 cap=28` (`n5_env.log`, 12.7 min,
+  2.6 GB RSS): root a draw in 36.6 s; expected agreement over the 20k sample (≥ 6 stones)
+  random 45.04%, win-or-block 77.03% (6.9 min); random vs perfect 0/0/200 both ways (perfect
+  wins every game — (5,5,4) punishes bad play), win-or-block vs perfect 0/7/193 as X and
+  0/1/199 as O, perfect vs perfect 200/200 draws both ways; random vs random X 113/10/77.
+  The 2²⁸ table saturated (268.4M of 268.4M slots, replace-always from there); cache file
+  2.56 GB. cap=29 (5 GB) if a run's table thrashes.
+- 5×5 run1 (`n5_run1.log`, 60 × 200 sims, 25.4 min): sample 42.4 → 85.9%, sign 64.7%; net +
+  search unbeaten as X from iteration 5, 243/13 as O at 60; net alone 198/58 X, 256/0 O at 60
+  — the O side not closed at 200 sims. Misses 14.1%: 2,070 missed forced wins + 758 losing
+  moves, flat over 6–23 stones; self-play stood at 3 of the 20k sample. Opening policy: 76%
+  centre from the empty board; 24/24/24/23% on the four diagonal replies after X centre —
+  the solver's optimal set. run2 (100 × 400 sims, card 0) launched as the quoted row: at
+  iteration 34 unbeaten both sides alone and with search, 86.0%.
+- 5×5 run2 (`n5_run2.log`, 100 × 400 sims, 63.8 min): sample 87.38%, MSE 0.334, sign
+  70.7%; net + search unbeaten from 59 to 100; net alone clean for 24 iterations from 68,
+  237/19 as O at 100; root +0.04; misses 12.6% (1,849 missed wins, 676 losing moves);
+  self-play 304,169 distinct positions, 4 in the sample; opening 26% centre, 27/24/23/22%
+  on the four diagonals. Table, README, book, figure (stacked 3×3 / 5×5 boards, three
+  curves) updated. Phase 5 done.
+- Book: §10.4 Player of games first rendered as ".1 Game theory" — the section had been inserted
+  after the `\appendix` switch (and the TOC-depth restores) that precede the Data-availability
+  chapter, so the appendix counter printed blank. The three lines now sit after the MuZero
+  entry, just before `\chapter{Data availability}`; preview: 10.4 / 10.4.1–3 / Appendix A.
+- Independent evaluations (`alphazero-ttt … iters=0 params=<file>`, a new knob: with no
+  iterations the run is the instrument alone on a saved net): 3×3 and 4×4 nets, seeds 2–4,
+  three readings each — every cell 0/256/0, alone and with search, both sides (768 games per
+  cell); the sweeps reproduce the runs' last readings to the digit (97.30 / 99.42). The 5×5
+  net on the exhaustive opening (`opening=3`: 7,526 decision positions with ≤ 3 stones,
+  two solves each): **92.11%**, value sign 82.8% — five points above the ≥ 6-stone sample's
+  87.38% — and on a fresh evaluation alone X 256/0 · O 224/32, with search X 256/0 · O
+  241/15: the run's own last reading (256/0 with search) was one draw of the perfect
+  player's random lines; three more seeds pooled for the table.
+- The scripted players' expected agreement over the exhaustive opening needs every child of
+  every position (a fresh 4-stone subtree each, ~0.5 s): `ttt-env … opening=3` ran 40 min
+  and was stopped; `opening=4` (76k positions) is out of reach. The opening line is the
+  net's alone; the baselines stay on the ≥ 6-stone sample.
+- Pooled 5×5 evaluations (seeds 2–4, 768 games a cell): alone X 0/768/0 · O 0/708/60,
+  with search X 0/768/0 · O 0/745/23. Table, book, README, run README carry these; the
+  "unbeaten from 59" sentence is now the run's reading against the evaluations' truth.

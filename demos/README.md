@@ -4,8 +4,9 @@ Trainers and inference exes that ride on the chapter nets. The top-level `Main*T
 are the chapters themselves (MLP, CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT); these
 extend the same codegen path into the domains Chapter 10 of the book walks — recognition first
 (detection, industrial inspection, people, agriculture, segmentation), then beyond it
-(reinforcement learning, language, diffusion, physics, signal processing, a quantum ground state)
-— in the chapter's order, each under the chapter's figure. Nothing here changes the codegen: every
+(language, diffusion, physics, signal processing, a quantum ground state), and last the games
+(blackjack, Pong, tic-tac-toe, the book's closing section) — in the chapter's order, each under
+the chapter's figure. Nothing here changes the codegen: every
 demo is the ordinary train step on a new input, loss or host loop.
 
 Build any of these with `lake exe <name>`; the ImageNet-bootstrapped ones need the relevant
@@ -482,150 +483,6 @@ byte-equal to the checkpoint and the stem must be untouched, or it throws.
 
 ---
 
-## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, and AlphaZero on tic-tac-toe
-
-Three games written in Lean, each with its own exact instrument. They are the
-reinforcement-learning ladder of `planning/blackjack_dqn_demo.md`,
-`planning/pong_dqn_demo.md` and `planning/alphazero_ttt_demo.md`: rung 1 tabular Q on
-blackjack, rung 2 the blackjack DQN, rung 3 DQN from pixels on Pong, rung 4 self-play
-and tree search on tic-tac-toe — every trained rung through the stack on the rank-2
-DDPM MSE block, zero new codegen.
-
-```bash
-lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
-lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
-lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
-lake exe pong-env 100                     # games per baseline arm
-lake exe pong-dqn mode=pixels k=4         # DQN from frames; mode=state is the ceiling row
-lake exe ttt-env n=4                      # the solved game: counts, scripted pairings, the solver's gates
-lake exe alphazero-ttt n=3                # 20 iterations, 2.5 min on one card
-lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, 10 min
-```
-
-The environment, the DP instrument and tabular Q live in
-`LeanMlir/Blackjack.lean`, shared by both blackjack exes. It follows
-Gymnasium's Blackjack-v1 with `sab=True` (the Sutton & Barto rules). A value iteration over the 200 decision states gives the
-exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
-every arm is scored without sampling error; the Monte Carlo column is the
-cross-check that the environment and the DP describe the same game.
-
-| arm | exact value / hand | agrees with optimum |
-|---|---|---|
-| random | −0.394 | 110 / 200 |
-| threshold heuristic | −0.240 | 164 / 200 |
-| the old demo's published table | −0.097 | 162 / 200 |
-| tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
-| DQN, Double, 200k updates (`blackjack-dqn`) | −0.048 | 188 / 200 |
-| exact optimum | −0.043 | 200 / 200 |
-
-`MainBlackjackDqn.lean` is the 6,210-parameter dense net on a 29-float one-hot,
-XLA backend, one GPU, about ten minutes for 200k updates. The host writes the
-Bellman target into the taken action's slot of the net's own prediction and
-hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
-the greedy policy is read off the net every 50 updates for acting and scored
-exactly every 1000. Run logs, curves and the figure script's inputs are in
-`runs/2026-09-11-blackjack-dqn/`; `scripts/demos/blackjack_figure.py` draws the
-book's chart.
-
-![The exact hit/stick policy for blackjack, and where the learners disagree](figures/blackjack_chart.png)
-
-The exact hit/stick policy under the Sutton & Barto rules, player total against the dealer's
-showing card, hard hands and soft. Rings mark the twelve cells where the trained DQN disagrees
-with the theorem, dots the eight where tabular Q does. Both learners miss on the knife edges:
-hard 12 against a 4, where hitting and sticking differ by a quarter of a cent a hand, and the
-soft-18 row, where the casino card is wrong too.
-
-The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
-from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
-doubling table transcribed as "stand"; the instrument found that on its first
-run.
-
-`MainPongEnv.lean` is Pong in ~150 lines: 84×84 render, frame skip 4, a scripted
-opponent with a speed and a reaction-delay knob, deterministic from a seed, five
-million raw frames per second single-threaded. Random scores −17.9 per game, a
-reactive tracker +11.2 against the default opponent; the frame strip the
-network will see is written to `.lake/build/pong_stack.pgm`.
-
-### AlphaZero on tic-tac-toe, scored against the solved game
-
-`MainAlphaZeroTtt.lean` is Silver et al.'s self-play loop on tic-tac-toe written in
-Lean (`LeanMlir/TicTacToe.lean`), n×n with k in a row, `n=` the one knob. Each
-iteration plays 256 games in lockstep: at every move a PUCT search of 25 (3×3) or 100
-(4×4) simulations over the net's priors and value — the trees are flat per-game arrays
-in C (`lean_mcts_*`), the lockstep stays in Lean — one batched forward over the games'
-pending leaves per simulation, Dirichlet noise at the root, the move drawn from the
-visit counts; the visit distribution π and the outcome z are the targets, and the next
-iteration plays with the new net. The net is AlphaGo's plain conv + ReLU stack
-(`Bestiary/AlphaGo.lean`) at tic-tac-toe width — three 3×3 convs at 64, a 1×1 at 4, a
-dense 64 — with the policy and value heads merged into one dense output of n² + 1
-slots: 78k params at 3×3, 155k at 4×4. The loss `(z − v)² − πᵀ log p` goes through the
-DDPM MSE block as a host-built target (`lean_ttt_targets` in `ffi/f32_helpers.c`): the
-host asks for the output cotangent it wants, the NQS demo's move.
-
-The instrument is the solved game. A position is a base-3 number over the cells, so a
-memoised minimax in C fills one byte per index — 5,478 reachable positions at 3×3,
-9,722,011 at 4×4 (43 MB, 0.6 s) — with the exact value and the optimal-move set of
-every position. `ttt-env` runs the solver's gates before anything trains (perfect
-draws itself 1000/1000, loses to nobody), and the trainer scores every iteration three
-ways: the argmax of the net's masked logits against the optimal set over **every**
-reachable decision position (4,520 and 9,062,619), the value head against the exact
-value, and 256 games each side against a perfect player that draws uniformly from the
-optimal set. Run logs, curves, sweeps and the figure's inputs are in
-`runs/2026-09-29-alphazero-ttt/`; `scripts/demos/ttt_figure.py` draws the figure and
-`scripts/demos/ttt_sweep_stats.py` the miss breakdown.
-
-![AlphaZero on tic-tac-toe: the policy at X-centre, the curves for both boards, the value head against the theorem](figures/alphazero_ttt.png)
-
-Left: X in the centre, O to move — the trained 3×3 net's move probabilities over the
-empty cells with the solved game's optimal moves ringed (the corners draw, the edges
-lose; the net puts 81% on the corners). Middle: the net alone's agreement with the
-solved game over every decision position against iteration, both boards, with the draw
-rate of net + search against the perfect player dashed. Right: the value head against
-the exact value of all 4,520 3×3 decision positions.
-
-| arm | 3×3 agree | vs perfect as X · as O (W/D/L) | 4×4 agree | vs perfect as X · as O |
-|---|---|---|---|---|
-| random | 58.0% | 0/207/793 · 0/33/967 | 60.4% | 0/487/513 · 0/341/659 |
-| win-or-block | 94.0% | 0/831/169 · 0/215/785 | 95.6% | 0/930/70 · 0/840/160 |
-| **net alone** | **97.3%** | 0/256/0 · 0/256/0 | **99.4%** | 0/256/0 · 0/256/0 |
-| net + search | — | 0/256/0 · 0/256/0 | — | 0/256/0 · 0/256/0 |
-| perfect | 100% | 0/1000/0 · 0/1000/0 | 100% | 0/1000/0 · 0/1000/0 |
-
-Scripted rows play 1,000 games each way and "agree" is their expected agreement over
-the same positions; net rows play 256. 3×3: 20 iterations, **2.5 min** on one 4060 Ti;
-4×4: 40 iterations, **10.0 min** — the Python implementation this loop follows
-(alpha-zero-general) was expected to take a day on that board. The untrained net's
-sweep, 57.9% and 60.3%, is the random player's 58.0% and 60.4%.
-
-⭐ **99.4% of 9.06 million positions from 1.2% of them.** Self-play stood at 108,483 of
-the 4×4 decision positions and at 2,035 of the 4,520 at 3×3 (45.0%); the sweep scores
-all of them. One 4×4 miss in the 50,000-position subsample lies inside the visited set,
-and 289 of the 308 are forced wins not taken — positions at 7–14 stones a competent
-opponent never produces; the 3×3 misses (122) are the same kind, 98 missed wins and 24
-losing moves, at 3–6 stones. The search closes them: with 25 or 100 simulations the net
-is unbeaten from iteration 5 (3×3) and 4 (4×4), before the net alone is (11 and 10).
-
-⭐ **The value head estimates self-play, not the theorem.** Its sign agrees with the
-exact value on 90% (3×3) and 96% (4×4) of positions, worst at 4×4 on lost ones (59%),
-which 4×4 self-play almost never produces (242 of the last iteration's 256 games drew).
-The root ends at +0.32 at 3×3 and +0.03 at 4×4 against the theorem's 0: 3×3 self-play
-under root noise stays X-favoured (99 X wins / 141 draws / 16 O wins in the last
-iteration).
-
-⭐ **The search was the wall clock, and it was Lean.** With the tree in Lean (a
-`HashMap` of nodes per game, ~90 µs a descent) the same 4×4 run took 34.9 min: 18.5 s of
-self-play and 17.8 s of matches per iteration. Flat per-game arrays in C take 0.7 and
-0.8 s, the run 10.0 min, and what is left is the train step — 18–20 s of every 4×4
-iteration at the full replay window. The Lean-tree runs are kept beside the C-tree
-ones (`n3_run2.log`, `n4_run1.log`: 97.9% / 99.2%, unbeaten alone from 14 / 38).
-
-⚠ **Not the bestiary's tower.** The first run used the conv-BN-residual body of
-`Bestiary/AlphaZero.lean`, was unbeaten from iteration 4 and diverged at iteration 11
-(loss 1.26 → 10.8 in three iterations, `n3_convbn_collapse.txt`). BatchNorm's batch
-statistics over nine binary cells are a liability — a channel whose batch variance
-vanishes is divided by √1e-5 — and with BN the eval forward the loss trick reads and the
-train step's forward are different functions. Blackjack and Pong made the same call.
-
 ## Natural language processing — TinyGPT on Shakespeare
 
 Char-level transformer on Karpathy's tinyshakespeare. Three new
@@ -999,6 +856,204 @@ draw. Numbers, gates, every arm's log and the h = 0.8 investigation are in
 `runs/2026-09-11-nqs-ising/`.
 
 ---
+
+## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, and AlphaZero on tic-tac-toe
+
+Three games written in Lean, each with its own exact instrument — the book's closing
+section, Bestiary entries: game theory. They are the reinforcement-learning
+ladder of `planning/blackjack_dqn_demo.md`,
+`planning/pong_dqn_demo.md` and `planning/alphazero_ttt_demo.md`: rung 1 tabular Q on
+blackjack, rung 2 the blackjack DQN, rung 3 DQN from pixels on Pong, rung 4 self-play
+and tree search on tic-tac-toe — every trained rung through the stack on the rank-2
+DDPM MSE block, zero new codegen.
+
+```bash
+lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
+lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
+lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
+lake exe pong-env 100                     # games per baseline arm
+lake exe pong-dqn mode=pixels k=4         # DQN from frames; mode=state is the ceiling row
+lake exe ttt-env n=4                      # the solved game: counts, scripted pairings, the solver's gates
+lake exe alphazero-ttt n=3                # 20 iterations, 2.5 min on one card
+lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, 10 min
+```
+
+The environment, the DP instrument and tabular Q live in
+`LeanMlir/Blackjack.lean`, shared by both blackjack exes. It follows
+Gymnasium's Blackjack-v1 with `sab=True` (the Sutton & Barto rules). A value iteration over the 200 decision states gives the
+exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
+every arm is scored without sampling error; the Monte Carlo column is the
+cross-check that the environment and the DP describe the same game.
+
+| arm | exact value / hand | agrees with optimum |
+|---|---|---|
+| random | −0.394 | 110 / 200 |
+| threshold heuristic | −0.240 | 164 / 200 |
+| the old demo's published table | −0.097 | 162 / 200 |
+| tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
+| DQN, Double, 200k updates (`blackjack-dqn`) | −0.048 | 188 / 200 |
+| exact optimum | −0.043 | 200 / 200 |
+
+`MainBlackjackDqn.lean` is the 6,210-parameter dense net on a 29-float one-hot,
+XLA backend, one GPU, about ten minutes for 200k updates. The host writes the
+Bellman target into the taken action's slot of the net's own prediction and
+hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
+the greedy policy is read off the net every 50 updates for acting and scored
+exactly every 1000. Run logs, curves and the figure script's inputs are in
+`runs/2026-09-11-blackjack-dqn/`; `scripts/demos/blackjack_figure.py` draws the
+book's chart.
+
+![The exact hit/stick policy for blackjack, and where the learners disagree](figures/blackjack_chart.png)
+
+The exact hit/stick policy under the Sutton & Barto rules, player total against the dealer's
+showing card, hard hands and soft. Rings mark the twelve cells where the trained DQN disagrees
+with the theorem, dots the eight where tabular Q does. Both learners miss on the knife edges:
+hard 12 against a 4, where hitting and sticking differ by a quarter of a cent a hand, and the
+soft-18 row, where the casino card is wrong too.
+
+The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
+from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
+doubling table transcribed as "stand"; the instrument found that on its first
+run.
+
+`MainPongEnv.lean` is Pong in ~150 lines: 84×84 render, frame skip 4, a scripted
+opponent with a speed and a reaction-delay knob, deterministic from a seed, five
+million raw frames per second single-threaded. Random scores −17.9 per game, a
+reactive tracker +11.2 against the default opponent; the frame strip the
+network will see is written to `.lake/build/pong_stack.pgm`.
+
+`MainPongDqn.lean` is Mnih et al.'s loop on that Pong: replay 100k, ε 1 → 0.1 over 100k
+agent steps, target copy every 1,000 updates, one update per four agent steps, batch 32,
+Adam 1e-4, 500k agent steps (2M frames); `mode=state` is the six-number twin (the
+blackjack MLP with six inputs), `mode=pixels k=4` chapter 3's CNN kit at 84×84 on a stack
+of four frames, `k=1` the ablation. Runs in `runs/2026-09-25-pong-dqn/`.
+
+![Pong: one four-frame input as the net saw it, and the learning curves](figures/pong_dqn.png)
+
+| arm | points per game (20 games, ε 0.05) | first positive eval |
+|---|---|---|
+| random (`pong-env 100`) | −17.88 ± 0.20 | — |
+| scripted tracker (`pong-env 100`) | +11.18 ± 0.37 | — |
+| pixels, 1 frame | +4.60 ± 1.48 | 100k |
+| state, 6 numbers, seeds 1–3 | +14.15 / +12.70 / +13.50 | 100–125k |
+| pixels, 4 frames, seeds 1–3 | +15.60 / +15.90 / +14.90 | 75–100k |
+
+⭐ **Pixels beat the state twin on every seed** (+15.47 vs +13.45) and at every opponent
+speed (1.0 / 1.5 / 2.0 px per frame: state +14.45 / +13.45 / +9.80, pixels +17.75 /
++15.60 / +14.45); the twin was meant to be the ceiling. One frame cannot see velocity:
++4.6. A pixel run is 27 min on one card with [θ|m|v] resident on the device
+(`trainStepAdamF32DdpmR`, 24 → 14.6 ms per update).
+
+### AlphaZero on tic-tac-toe, scored against the solved game
+
+`MainAlphaZeroTtt.lean` is Silver et al.'s self-play loop on tic-tac-toe written in
+Lean (`LeanMlir/TicTacToe.lean`), n×n with k in a row, `n=` the one knob. Each
+iteration plays 256 games in lockstep: at every move a PUCT search of 25 (3×3) or 100
+(4×4) simulations over the net's priors and value — the trees are flat per-game arrays
+in C (`lean_mcts_*`), the lockstep stays in Lean — one batched forward over the games'
+pending leaves per simulation, Dirichlet noise at the root, the move drawn from the
+visit counts; the visit distribution π and the outcome z are the targets, and the next
+iteration plays with the new net. The net is AlphaGo's plain conv + ReLU stack
+(`Bestiary/AlphaGo.lean`) at tic-tac-toe width — three 3×3 convs at 64, a 1×1 at 4, a
+dense 64 — with the policy and value heads merged into one dense output of n² + 1
+slots: 78k params at 3×3, 155k at 4×4. The loss `(z − v)² − πᵀ log p` goes through the
+DDPM MSE block as a host-built target (`lean_ttt_targets` in `ffi/f32_helpers.c`): the
+host asks for the output cotangent it wants, the NQS demo's move.
+
+The instrument is the solved game. A position is a base-3 number over the cells, so a
+memoised minimax in C fills one byte per index — 5,478 reachable positions at 3×3,
+9,722,011 at 4×4 (43 MB, 0.6 s) — with the exact value and the optimal-move set of
+every position. `ttt-env` runs the solver's gates before anything trains (perfect
+draws itself 1000/1000, loses to nobody), and the trainer scores every iteration three
+ways: the argmax of the net's masked logits against the optimal set over **every**
+reachable decision position (4,520 and 9,062,619), the value head against the exact
+value, and 256 games each side against a perfect player that draws uniformly from the
+optimal set. Run logs, curves, sweeps and the figure's inputs are in
+`runs/2026-09-29-alphazero-ttt/`; `scripts/demos/ttt_figure.py` draws the figure and
+`scripts/demos/ttt_sweep_stats.py` the miss breakdown.
+
+At **5×5, four in a row** there is no table (3²⁵ bytes): the instrument is an on-demand
+exact solver (`lean_ttt_solver_*`, alpha-beta with a symmetry-canonical transposition table
+whose entries carry both bounds and the principal move), gated against the dense table on
+every reachable 3×3 and 4×4 position — 0 value mismatches, 0 principal moves outside the
+optimal set. It says (5,5,4) is a draw (the root as the max over its 25 openings, 33 s;
+2.6 GB cache under `.lake/build/`, reloaded by later runs), that after X centre O's only
+drawing replies are the four diagonal neighbours, and that an inner-corner opening leaves O
+one. The sweep there is a fixed random-play sample of 20,000 decision positions with at
+least six stones (`sweepMin=6`; a fresh 3-stone subtree costs seconds, a 6-stone one
+milliseconds) — exact per position, not exhaustive, and off the self-play distribution —
+and the perfect player takes the search's principal move from the third stone on (one solve
+a move; valuing every child was 40 min an iteration). `ttt-env n=5 k=4`: random loses all
+400 games to perfect, win-or-block draws 8, perfect draws itself 400/400.
+
+![AlphaZero on tic-tac-toe: the policy at X-centre on both boards, the curves for three boards, the value head against the theorem](figures/alphazero_ttt.png)
+
+Left: X in the centre, O to move — the trained 3×3 net's move probabilities over the
+empty cells with the solved game's optimal moves ringed (the corners draw, the edges
+lose; the net puts 81% on the corners), and the same position at 5×5 below it, where O's
+only drawing replies are the four diagonal neighbours and the net puts 24% on each.
+Middle: the net alone's agreement with the solved game against iteration — every decision
+position at 3×3 and 4×4, a 20k sample at 5×5 — with the draw rate of net + search against
+the perfect player dashed. Right: the value head against the exact value of all 4,520 3×3
+decision positions.
+
+| arm | 3×3 agree | vs perfect X · O (W/D/L) | 4×4 agree | vs perfect X · O | 5×5 (k=4) agree | vs perfect X · O |
+|---|---|---|---|---|---|---|
+| random | 58.0% | 0/207/793 · 0/33/967 | 60.4% | 0/487/513 · 0/341/659 | 45.0% | 0/0/200 · 0/0/200 |
+| win-or-block | 94.0% | 0/831/169 · 0/215/785 | 95.6% | 0/930/70 · 0/840/160 | 77.0% | 0/7/193 · 0/1/199 |
+| **net alone** | **97.3%** | 0/768/0 · 0/768/0 | **99.4%** | 0/768/0 · 0/768/0 | **87.4%** | 0/768/0 · 0/708/60 |
+| net + search | — | 0/768/0 · 0/768/0 | — | 0/768/0 · 0/768/0 | — | 0/768/0 · 0/745/23 |
+| perfect | 100% | 0/1000/0 · 0/1000/0 | 100% | 0/1000/0 · 0/1000/0 | 100% | 0/200/0 · 0/200/0 |
+
+Scripted rows play 1,000 games each way (200 at 5×5) and "agree" is their expected
+agreement over the same positions (every decision position at 3×3 and 4×4, the 20k
+sample at 5×5); net rows pool three independent evaluations of the saved net
+(`alphazero-ttt … iters=0 params=<file>`, seeds 2–4, 256 games each). 3×3: 20 iterations, **2.5 min** on one 4060 Ti;
+4×4: 40 iterations, **10.0 min** — the Python implementation this loop follows
+(alpha-zero-general) was expected to take a day on that board; 5×5: 100 iterations at
+400 sims, **64 min**. The untrained net's sweep, 57.9% and 60.3%, is the random
+player's 58.0% and 60.4%.
+
+⭐ **99.4% of 9.06 million positions from 1.2% of them.** Self-play stood at 108,483 of
+the 4×4 decision positions and at 2,035 of the 4,520 at 3×3 (45.0%); the sweep scores
+all of them. One 4×4 miss in the 50,000-position subsample lies inside the visited set,
+and 289 of the 308 are forced wins not taken — positions at 7–14 stones a competent
+opponent never produces; the 3×3 misses (122) are the same kind, 98 missed wins and 24
+losing moves, at 3–6 stones. The search closes them: with 25 or 100 simulations the net
+is unbeaten from iteration 5 (3×3) and 4 (4×4), before the net alone is (11 and 10).
+
+⭐ **The value head estimates self-play, not the theorem.** Its sign agrees with the
+exact value on 90% (3×3) and 96% (4×4) of positions, worst at 4×4 on lost ones (59%),
+which 4×4 self-play almost never produces (242 of the last iteration's 256 games drew).
+The root ends at +0.32 at 3×3 and +0.03 at 4×4 against the theorem's 0: 3×3 self-play
+under root noise stays X-favoured (99 X wins / 141 draws / 16 O wins in the last
+iteration).
+
+⭐ **At 5×5 the net never loses as X and still loses as O: 60 of 768 alone, 23 with
+search.** The run's own readings had net + search unbeaten from iteration 59 to 100; three
+independent evaluations of the saved net say otherwise, because the perfect player draws
+different optimal lines each time. The 60-iteration run at 200 sims (`n5_run1.log`) reached
+the same 86% on the sample and lost far more as O (243/13 with search at its last reading):
+the search closes the second player's games and has not closed them yet. Sample agreement
+plateaus at 87.4% — the sample is random play, which self-play never visits (4 of the 20k),
+and 1,849 of the 2,525 misses are forced wins not taken — while over the **exhaustive
+opening** (`opening=3`: every decision position with at most three stones, 7,526 of them)
+the net alone agrees with the solved game on **92.1%**, value sign 82.8%: best where the
+theory is. The root's value settles at +0.04.
+
+⭐ **The search was the wall clock, and it was Lean.** With the tree in Lean (a
+`HashMap` of nodes per game, ~90 µs a descent) the same 4×4 run took 34.9 min: 18.5 s of
+self-play and 17.8 s of matches per iteration. Flat per-game arrays in C take 0.7 and
+0.8 s, the run 10.0 min, and what is left is the train step — 18–20 s of every 4×4
+iteration at the full replay window. The Lean-tree runs are kept beside the C-tree
+ones (`n3_run2.log`, `n4_run1.log`: 97.9% / 99.2%, unbeaten alone from 14 / 38).
+
+⚠ **Not the bestiary's tower.** The first run used the conv-BN-residual body of
+`Bestiary/AlphaZero.lean`, was unbeaten from iteration 4 and diverged at iteration 11
+(loss 1.26 → 10.8 in three iterations, `n3_convbn_collapse.txt`). BatchNorm's batch
+statistics over nine binary cells are a liability — a channel whose batch variance
+vanishes is divided by √1e-5 — and with BN the eval forward the loss trick reads and the
+train step's forward are different functions. Blackjack and Pong made the same call.
 
 ## Layout
 

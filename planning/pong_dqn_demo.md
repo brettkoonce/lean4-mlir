@@ -151,3 +151,13 @@ Phase 3 (½ session):          one-frame ablation, the opponent-speed sweep, fig
 
 Real Atari through ALE; Double, Dueling and Rainbow beyond a flag;
 policy-gradient methods; any game other than this one.
+
+## 10. Log
+
+- 2026-09-30: the book section landed as `\subsection{Pong --- DQN from pixels against the
+  six-number state}` in the new closing section 10.4 Bestiary entries: game theory (with blackjack and the
+  AlphaZero tic-tac-toe demo), one figure (`pong_dqn.png`, the four-frame input and the
+  curves) and one table (Table 1 of `runs/2026-09-25-pong-dqn/RESULTS.md`; Table 2 as a
+  sentence). §5's Q-value strip and Grad-CAM panels were not drawn; the figure is the
+  input and the curves. The pixels-above-state result is stated as measured and not
+  dissected.
