@@ -3,7 +3,7 @@ import LeanMlir
 /-! **Gradient bisection probe**: which layer type makes the analytic gradient
     disagree with the loss surface?
 
-    Probing `r34UnetBrats` turned up a systematic ~15% gap between the analytic
+    Probing `r34UnetBrats` turned up a systematic gap between the analytic
     gradient (what backprop emits) and finite differences of the loss (ground
     truth). It is flat in ε from 1e-3 down to 3e-5, so it is not truncation
     error, and it appears in the skipless net too, so it predates the skip work.
@@ -23,7 +23,7 @@ import LeanMlir
       gap      conv2d + globalAvgPool + dense
 
     **`mlp` is the control on the harness itself.** Its backward is the
-    best-established path in the repo; if `mlp` shows a 15% gap then the probe
+    best-established path in the repo; if `mlp` shows the same gap then the probe
     methodology is what is broken, not the codegen, and everything downstream of
     that conclusion changes. Run it first and believe nothing until it passes.
 

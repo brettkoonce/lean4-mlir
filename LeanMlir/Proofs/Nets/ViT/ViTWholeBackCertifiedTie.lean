@@ -209,8 +209,7 @@ theorem vitInputGradK_correct
     ImageNet).
 
     So the hand-written input-gradient chain IS the certified gradient of the committed depth-12
-    forward, at every image.
-    The backward peer of `vitTinyHasVJP_correct`, beside
+    forward, at every image. `vitTinyHasVJP_correct` reads it as the Jacobian. The peer of
     `convnextInputGrad_eq_convNextForwardTCh_vjp` and
     `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`. -/
 theorem vitTinyInputGrad_eq_vitTiny_vjp {nCls : Nat}
@@ -224,5 +223,26 @@ theorem vitTinyInputGrad_eq_vitTiny_vjp {nCls : Nat}
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x :=
   vitInputGradK_eq_vitForwardKV_vjp (βF := βF) (bcls := bcls) 3 224 224 16 196 768 3 64 nCls 12
     W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
+
+/-- **ViT-Tiny's whole-net backward, read as the Jacobian.** `vitInputGradK_correct` at the
+    ViT-Tiny spec of `vitTinyInputGrad_eq_vitTiny_vjp`: the hand-written input-gradient chain
+    `vitInputGradK`, every slot the certified per-op backward at its own saved activation, is the
+    `pdiv`-contracted Jacobian transpose of the committed depth-12 forward `vitForwardKV`, at every
+    image, every cotangent and every class count `nCls`. The only hypothesis is `0 < ε`: softmax,
+    GELU and vector LayerNorm are smooth, so no smoothness witness is needed, and the weights are
+    free. The peer of `efficientnetInputGradBFull_correct`. -/
+theorem vitTinyHasVJP_correct {nCls : Nat}
+    (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
+    (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
+    (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
+    (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls)
+    (x : Vec (3 * 224 * 224)) (dy : Vec nCls) (i : Fin (3 * 224 * 224)) :
+    vitInputGradK 3 224 224 16 196 768 3 64 nCls 12
+        W_conv b_conv cls_token pos_embed ε ps γF Wcls x dy i
+      = ∑ j : Fin nCls,
+          pdiv (vitForwardKV 3 224 224 16 196 768 3 64 nCls 12
+            W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
+  vitInputGradK_correct 3 224 224 16 196 768 3 64 nCls 12
+    W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x dy i
 
 end Proofs

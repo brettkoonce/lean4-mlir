@@ -10,17 +10,17 @@ a PROVED decimal lower bound: `m/2000 ≤ σ·Φ⁻¹(a/10000)` via `smooth_radi
 That bounds the radius formula at the reported q₀; it certifies no classifier.
 
 The trick that makes 279 images affordable: `phiScanLit_eq` kernel-evaluates the
-ENTIRE `h = 1/1000` upper-Riemann grid (`phiScanRev`, 3300 panels, descending,
-~2 min total); each per-image check is then a single O(index) list lookup —
+ENTIRE `h = 1/1000` upper-Riemann grid (`phiScanRev`, 3300 panels, descending)
+once; each per-image check is then a single O(index) list lookup —
 into the SMALLEST verified prefix covering its m, so a `decide +kernel` walks
-one 551-entry chunk, never the whole grid (milliseconds each, and the module
-stays ~2 GB where full-literal lookups accumulated 11.3 GB — kernel memory is
-not reclaimed between declarations). The grid is verified in CHUNKS of 550 panels,
+one 551-entry chunk, never the whole grid (a full-literal lookup per image
+would accumulate in the module's kernel memory, which is not reclaimed
+between declarations). The grid is verified in CHUNKS of 550 panels,
 one MODULE each (SmoothingDecChunk1–6: `phiScanRevFrom` continued from literal
 checkpoints, glued by `phiScanRevFrom_append`): one whole-grid declaration
-retains ~15 GB of kernel-cache bignums and OOMs 16 GB CI runners, and memory
-is not reclaimed between declarations within a lean process — per-module
-processes cap the worst chunk at ~5 GB. Per image, m is the LARGEST grid index with
+retains its kernel-cache bignums across the whole evaluation and OOMs 16 GB CI
+runners, and memory is not reclaimed between declarations within a lean process —
+per-module processes hold one chunk each. Per image, m is the LARGEST grid index with
 `phiGridUB (1/1000) m ≤ q₀`, so the bound is grid-optimal; the intrinsic
 upper-sum slack costs ~0.003–0.036 vs the driver's float printout (largest at
 the q₀ = 0.9993 unanimous-count images).

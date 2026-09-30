@@ -5,8 +5,9 @@ import LeanMlir
 The archived VisDrone rung `demos/archive/MainYolov1VisDrone448.lean` — ResNet-34
 backbone, deep conv head, one 14×14 grid at 448 input, the YOLOv1 masked loss —
 with two edits: the name (so its checkpoints never collide with the VisDrone
-arm's) and an epoch override. It scored mAP 0.0000 on VisDrone: seventy 20-px
-objects per frame cannot share 196 cells. NEU-DET has 2.3 defects per crop, most
+arm's) and an epoch override. It scored next to nothing on VisDrone
+(`runs/2026-09-17-visdrone-grid448-remeasure/`): seventy 20-px objects per frame cannot
+share 196 cells. NEU-DET has 2.3 defects per crop, most
 of them larger than a cell, so the same head is expected to be a wash here, and
 that pair of numbers is what the section is about.
 

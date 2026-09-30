@@ -18,8 +18,8 @@ bestiary-alphago:
 bestiary-alphazero:
   "AlphaGo Zero (policy head)": 22734690
   "AlphaGo Zero (value head)": 22565635
-  "AlphaZero chess (policy head)": 69352658
-  "AlphaZero chess (value head)": 47518723
+  "AlphaZero chess (policy head)": 23316553
+  "AlphaZero chess (value head)": 22724611
   "Tiny AlphaZero (policy head)": 245370
   "Tiny AlphaZero (value head)": 237251
 bestiary-bert:

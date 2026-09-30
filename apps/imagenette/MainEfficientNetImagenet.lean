@@ -22,7 +22,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
     replicas its global batch of 256. `batchSize` is PER DEVICE and must match the batch the
     variant was rendered at.
 
-    The JAX reference the chapter prints is the 350-epoch RMSProp `full` run (77.15% / 93.30%,
+    The JAX reference the chapter prints is the 350-epoch RMSProp `full` run (`jax/runs/enet_b0_imagenet_bf16_350ep/`,
     against B0's paper 77.1 / 93.3). A config must carry the epoch count of the tier whose number its chapter prints, because
     `totalSteps := cfg.epochs * nb / accK` is what the schedule anneals over — 80 vs 350 is a
     different LR curve end to end, not a prefix of one, so the two results would not be comparable.

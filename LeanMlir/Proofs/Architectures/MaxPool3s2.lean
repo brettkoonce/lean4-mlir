@@ -448,6 +448,8 @@ theorem maxPool3s2Flat_differentiableAt {c h w : Nat}
     DifferentiableAt ℝ (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
   (maxPool3s2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
 
+/-- The VJP of `maxPool3s2Flat` at a flattened input satisfying `MaxPool3s2Smooth`:
+    `maxPool3s2HasVJPAt3` moved to `Vec` form. -/
 noncomputable def maxPool3s2FlatHasVJPAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     HasVJPAt (maxPool3s2Flat c h w) (Tensor3.flatten x) :=

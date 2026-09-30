@@ -176,12 +176,15 @@ open Finset BigOperators
 -- § Sigmoid activation (smooth, logistic)
 -- ════════════════════════════════════════════════════════════════
 
+/-- The logistic function `1 / (1 + e^{−x})` on one real. -/
 noncomputable def sigmoidScalar (x : ℝ) : ℝ :=
   1 / (1 + Real.exp (-x))
 
+/-- `sigmoidScalar` applied to each entry of a vector. -/
 noncomputable def sigmoid (n : Nat) (x : Vec n) : Vec n :=
   fun i => sigmoidScalar (x i)
 
+/-- The derivative of `sigmoidScalar` at `x`, as Mathlib's `deriv`. -/
 noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
   deriv sigmoidScalar x
 
@@ -208,6 +211,7 @@ theorem pdiv_sigmoid (n : Nat) (x : Vec n) (i j : Fin n) :
     if i = j then sigmoidScalarDeriv (x i) else 0 :=
   pdiv_elementwise sigmoidScalar x (fun _ => sigmoidScalar_differentiable _) i j
 
+/-- The VJP of elementwise `sigmoid`: `dy ⊙ σ'(x)`. -/
 noncomputable def sigmoidHasVJP (n : Nat) : HasVJP (sigmoid n) where
   backward := fun x dy i => dy i * sigmoidScalarDeriv (x i)
   correct := by
@@ -276,6 +280,7 @@ theorem seGate_differentiable {c h w r : Nat}
     Differentiable ℝ (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) := by
   unfold seGate broadcastFlat sigmoid swish; fun_prop
 
+/-- The VJP of the SE gate, `vjpComp` down GAP → dense → swish → dense → sigmoid → broadcast. -/
 noncomputable def seGateHasVJP {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
     HasVJP (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) :=
@@ -317,6 +322,7 @@ noncomputable def seBlockFull {c h w r : Nat}
     Vec (c * h * w) → Vec (c * h * w) :=
   seBlock (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
 
+/-- The VJP of `seBlockFull`: `seBlockHasVJP` at the concrete gate `seGate`. -/
 noncomputable def seBlockFullHasVJP {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
     HasVJP (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂) :=

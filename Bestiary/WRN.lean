@@ -6,10 +6,10 @@ WRN (Zagoruyko & Komodakis 2016,
 [arXiv:1605.07146](https://arxiv.org/abs/1605.07146)) is the
 "don't go deeper, go wider" answer to ResNet. Same residual block,
 same chain rule, multiply every channel count by a widening factor
-`k` and trim the depth. The paper's headline finding: WRN-28-10
-(28 layers, k=10) **matches** ResNet-1001 (1001 layers, no
-widening) on CIFAR-10/100 at half the training time and a quarter
-the parameters. Width turned out to be a more efficient axis to
+`k` and trim the depth. The paper's headline findings: WRN-40-4, with
+fewer parameters than the 1001-layer pre-activation ResNet, **matches** it
+on CIFAR-10/100 and trains several times faster, and WRN-28-10 (28 layers,
+k=10, 36.5M parameters by the paper's count) beats it. Width turned out to be a more efficient axis to
 scale than depth for the ResNet family.
 
 The architecture is exactly Chapter 5's ResNet-34 with two knobs
@@ -35,11 +35,11 @@ For CIFAR (32×32 input):
 
 ## Variants
 
-| Name      | Depth | k  | Params  | CIFAR-10 |
-|-----------|-------|----|---------|----------|
-| WRN-28-10 | 28    | 10 | 36.5M   | 96.0%    |
-| WRN-40-2  | 40    | 2  |  2.2M   | 95.4%    |
-| WRN-22-8  | 22    | 8  | 17.2M   | 95.7%    |
+| Name      | Depth | k  | Params  | CIFAR-10 (paper) |
+|-----------|-------|----|---------|------------------|
+| WRN-28-10 | 28    | 10 | 36.5M   | 96.0%            |
+| WRN-40-2  | 40    | 2  |  2.2M   | 95.4%            |
+| WRN-22-8  | 22    | 8  | 17.2M   | 95.7%            |
 
 We pack the canonical CIFAR variants here plus a fixture. ImageNet-
 style WRN (WRN-50-2, WRN-101-2) uses bottleneck blocks instead;
@@ -72,7 +72,7 @@ def wrn28_10 : NetSpec where
 -- ════════════════════════════════════════════════════════════════
 
 /-- WRN-40-2 on CIFAR. Depth 40 = 6 blocks per stage; k=2 widens
-    to 32-64-128 channels. ~2.2M params, 95.4% on CIFAR-10. -/
+    to 32-64-128 channels. ~2.2M params, 95.4% on CIFAR-10 in the paper. -/
 def wrn40_2 : NetSpec where
   name := "WRN-40-2"
   imageH := 32

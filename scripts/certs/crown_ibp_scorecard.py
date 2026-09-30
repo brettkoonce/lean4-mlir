@@ -196,14 +196,10 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
     A(f"/-! # CROWN-IBP L∞ scorecard, full 784-dim input — {netdesc}")
     A("")
     A("Pixel-L∞ certificates by CROWN linear relaxation over the SAME first-100")
-    A("MNIST test subset, nets and ε grid as the IBP tier — a new COLUMN in that")
-    A("table, not a new experiment:")
-    A("")
-    A("| ε | 1/255 | 2/255 | 4/255 | 8/255 |")
-    A("|---|---|---|---|---|")
-    A("| IBP (box) | " + " | ".join(str(counts_ibp[en]) for _, en in EPS_GRID) + " |")
-    A("| **CROWN** | " + " | ".join(f"**{len(certs[en])}**" for _, en in EPS_GRID) + " |")
-    A("| PGD-L∞ (upper bracket) | " + " | ".join(str(pgd[en]) for _, en in EPS_GRID) + " |")
+    A("MNIST test subset, nets and ε grid as the IBP tier — a new row beside its")
+    A("counts, not a new experiment. The counts CROWN certifies at ε = 1, 2, 4, 8/255,")
+    A("beside the IBP box's and the PGD-L∞ upper bracket, are the")
+    A(f"`[{tag}] {out_path.name}:` line `scripts/certs/crown_ibp_scorecard.py` prints.")
     A("")
     A("IBP concretizes to an interval after every layer, so the box grows")
     A("multiplicatively with depth. CROWN never concretizes in the middle: each")
@@ -424,10 +420,12 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
         A("")
         parts.append((lname, eps, len(emit_set[en])))
 
-    A(f"/-- **The CROWN-IBP L∞ scorecard, {netdesc}** — MEASURED "
-      + ", ".join(f"{len(certs[en])}/{N_IMG} @ {num}/255" for num, en in EPS_GRID)
-      + " (IBP box: " + "/".join(str(counts_ibp[en]) for _, en in EPS_GRID)
-      + "; PGD-L∞ bracket " + "/".join(str(pgd[en]) for _, en in EPS_GRID) + "). -/")
+    A(f"/-- **The CROWN-IBP L∞ scorecard, {netdesc}** — the counts MEASURED over the")
+    A(f"    first {N_IMG} images at ε = " + ", ".join(f"{num}/255" for num, _ in EPS_GRID)
+      + f" are the `[{tag}] {out_path.name}:` line")
+    A("    `scripts/certs/crown_ibp_scorecard.py` prints (with the IBP box and the PGD-L∞")
+    A("    bracket); the lists below are the emitted witnesses carrying `CertifiedAtLinf`")
+    A("    proofs. -/")
     A(f"theorem scorecard_crown{'' if tag == 'SF' else '_uncon'} :")
     A("    " + " ∧\n    ".join(
         f"({ln}.length = {cnt} ∧ ∀ p ∈ {ln}, CertifiedAtLinf mlp{tag} {ep} p.2.1 p.2.2)"
@@ -439,7 +437,8 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
     out_path.write_text("\n".join(L) + "\n")
     print(f"[{tag}] {out_path.name}: {len(L)} lines, "
           f"certified " + "/".join(str(len(certs[en])) for _, en in EPS_GRID)
-          + f" (IBP " + "/".join(str(counts_ibp[en]) for _, en in EPS_GRID) + ")"
+          + f" (IBP " + "/".join(str(counts_ibp[en]) for _, en in EPS_GRID)
+          + f"; PGD-Linf " + "/".join(str(pgd[en]) for _, en in EPS_GRID) + ")"
           + f", {len(proved)} images proved, "
           + f"{sum(K - 1 for _ in proved)} kernel facts")
     return certs

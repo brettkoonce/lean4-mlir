@@ -203,16 +203,13 @@ def emit_net(tag, r, out_path):
     A("")
     A(f"Pixel-L∞ certificates by exact interval bound propagation over the SAME")
     A(f"first-{N_IMG} MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,")
-    A(f"4/255, 8/255 the box certificate certifies (measured by exact rational interval")
-    A("propagation)")
-    cline = ", ".join(f"**{measured[en]}/{N_IMG}**" for _, en in EPS_GRID)
-    A(f"{cline} predictions robust (PGD-L∞ bracket: "
-      + ", ".join(str(pgd[en]) for _, en in EPS_GRID) + ").")
-    A("*Theorem vs. measurement* below says which of these carry Lean proofs.")
-    A("For comparison, pushing the L2 Lipschitz certificate through")
-    A(f"`‖δ‖₂ ≤ √784·ε∞` certifies only "
-      + ", ".join(str(l2impl[en]) for _, en in EPS_GRID)
-      + " — at small L∞ radii the box beats the ball.")
+    A(f"4/255, 8/255 the box certificate certifies a count of predictions robust")
+    A("(measured by exact rational interval propagation) that")
+    A(f"`scripts/certs/lipschitz_cert_scorecard_ibp.py` prints on its `[{tag}] IBP certified:`")
+    A("line, beside the PGD-L∞ bracket and the counts the L2 Lipschitz certificate")
+    A("certifies when pushed through `‖δ‖₂ ≤ √784·ε∞` — at small L∞ radii the box")
+    A("beats the ball. *Theorem vs. measurement* below says which of these carry Lean")
+    A("proofs.")
     A("")
     A("")
     A("**Theorem vs. measurement.** Soundness is in the ENGINE")
@@ -312,9 +309,11 @@ def emit_net(tag, r, out_path):
         A("    ⟨" + ", ".join(f"certIBP{tag}{en}_{i}" for i in certs[en]) + "⟩")
         A("")
         parts.append((lname, en, eps, len(certs[en])))
-    A(f"/-- **The IBP L∞ scorecard, {netdesc}** — MEASURED "
-      + ", ".join(f"{measured[en]}/{N_IMG} @ {num}/255" for num, en in EPS_GRID)
-      + f" (PGD-L∞ bracket " + "/".join(str(pgd[en]) for _, en in EPS_GRID) + "). -/")
+    A(f"/-- **The IBP L∞ scorecard, {netdesc}** — the counts MEASURED over the first")
+    A(f"    {N_IMG} images at ε = " + ", ".join(f"{num}/255" for num, _ in EPS_GRID)
+      + f" are the `[{tag}] IBP certified:` line")
+    A("    `scripts/certs/lipschitz_cert_scorecard_ibp.py` prints (with the PGD-L∞ bracket);")
+    A("    the lists below are the emitted witnesses carrying `CertifiedAtLinf` proofs. -/")
     A(f"theorem scorecard_ibp{'' if tag == 'SF' else '_uncon'} :")
     A("    " + " ∧\n    ".join(
         f"({ln}.length = {cnt} ∧ ∀ p ∈ {ln}, CertifiedAtLinf mlp{tag} {ep} p.2.1 p.2.2)"

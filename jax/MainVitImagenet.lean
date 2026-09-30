@@ -26,8 +26,9 @@ def vitTinyImagenet : NetSpec where
     stochastic depth 0.1, model EMA, bf16 matmuls. Peak LR 5e-4 at batch 512.
     Grad clipping is the unlock: 5e-4/2e-4 collapsed to chance the moment
     warmup ramped LR past ~1.6e-4 (train loss pinned at ln(1000)) without it.
-    The 80-epoch grad-clip-only ancestor of this recipe reached 65.6% top-1;
-    the additions here (geometric RA, stochastic depth, EMA, 300ep) target the
+    The 80-epoch grad-clip-only ancestor of this recipe is
+    `jax/runs/vit_tiny_imagenet_bf16_80ep/`; the additions here (geometric RA,
+    stochastic depth, EMA, 300ep) target the
     ~72% DeiT-Ti headline (no distillation). -/
 def vitTinyImagenetConfig : TrainConfig where
   vitInit        := true            -- timm/DeiT trunc_normal(0.02) init, not the emitter's Xavier-uniform
@@ -74,12 +75,11 @@ def vitTinyImagenetConfig : TrainConfig where
     (it divides by the output fan `dim*p*p` instead of the input fan `ic*p*p`).
     The CLS token and positional embedding are at 0.02 in both arms.
 
-    Measured at init (ViT-B, batch 32, pre-clip global grad norm): Xavier 44.09
-    at loss 7.4637, timm 14.28 at loss 7.1597 — 3.1x better conditioned, and a
-    starting loss much nearer ln(1000)=6.908. That supports over-wide init as a
-    real contributor to the documented LR-5e-4 collapse, but does NOT show
-    `gradClipNorm := 1.0` becomes unnecessary: both norms still exceed the
-    threshold by 10x+. Settling that needs a clip-off training arm. -/
+    Measured once at init (ViT-B, batch 32, pre-clip global grad norm): timm's init
+    starts with a grad norm about a third of Xavier's and a loss much nearer
+    ln(1000)=6.908. That supports over-wide init as a real contributor to the
+    documented LR-5e-4 collapse, but does NOT show `gradClipNorm := 1.0` becomes
+    unnecessary: both norms still exceed the threshold by an order of magnitude. Settling that needs a clip-off training arm. -/
 def vitTinyImagenetConfigXavier : TrainConfig :=
   { vitTinyImagenetConfig with vitInit := false }
 

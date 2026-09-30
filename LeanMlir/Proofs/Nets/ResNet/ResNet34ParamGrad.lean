@@ -11,7 +11,13 @@ Jacobian contracted with the cotangent the emitted backward chain threads to it;
 composes them: at the same cotangents, the loss of the WHOLE net with that one parameter varied is
 differentiable in it and every node is its gradient (`HasGradAt`), for any loss `L` of the logits
 with gradient `g` there; `r34_net_lossGrad_smoothedCE` instantiates it at the batched
-label-smoothed cross-entropy (`smoothedBatchLoss`) the trainer minimises.
+label-smoothed cross-entropy (`smoothedBatchLoss`) the renders emit.
+
+**Scope.** Every node here is an f32 `*GradB` node on one replica. The bf16 nodes (`*GradBBf16`)
+that `resnet34in_momdp64bf16`, the book's ImageNet run, emits are outside this statement. Sync-BN
+data parallelism is reached by composition: `r34_net_syncTiedB` says each all-reduced gradient is
+this net's tied node at `N := R·N`, which this file's capstone makes the loss's gradient at the
+global batch.
 
 **How.** Three layers, each generic where it can be:
 
@@ -934,7 +940,8 @@ def R34NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : R34
 
     Hypotheses: every BN `ε` positive (`R34PosB`), every relu off its kink and every stem-pool
     window dead or tied only between cells reading identical input patches, at the real
-    activations (`R34LossSmoothAtB`), and `hL`. -/
+    activations (`R34LossSmoothAtB`), and `hL`.
+    The nodes are the f32 ones on one replica (the module's Scope). -/
 theorem r34_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R34BWeights nCls) (hq : R34PosB w)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34LossSmoothAtB N w x)

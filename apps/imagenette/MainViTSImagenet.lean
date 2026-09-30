@@ -22,8 +22,7 @@ ViT has no BatchNorm, so there is no running-stats eval forward. `vitsin_drop_fw
 train step is the complete artifact set for this net.
 
 **Nothing has been trained**, and no accuracy has been measured. The wall clock HAS been
-probed (40 steps on real ImageNet, four cards): **531 ms/step fp32, 323 bf16**, i.e.
-113 h and 71 h for the 300-epoch schedule. `runs/2026-08-27-vitb-global512/`.
+probed on real ImageNet on four cards, fp32 and bf16: `runs/2026-08-27-vitb-global512/`.
 
 **Run it through the job config**, which owns the device list, the epoch budget and the restart
 policy:
@@ -43,11 +42,11 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   .lake/build/bin/vit-s-imagenet-verified data
 ```
 **DO NOT SET `LEAN_MLIR_MEM_FRACTION` FOR THIS NET.** S's graph
-peaks at **10.27 GiB**, which fits the plugin's default 11.68 arena at 88 %; ViT-B's is 13.99 and
-does not, which is why B's driver refuses without the option. Setting it here looks like free
-headroom (88 % → 68 %). It is not free: on ConvNeXt-S and -B the same 0.97 makes both bf16 arms die
+fits the plugin's default arena; ViT-B's does not, which is why B's driver refuses
+without the option. Setting it here looks like free headroom. It is not free: on ConvNeXt-S
+and -B the same 0.97 makes both bf16 arms die
 `CUDA_ERROR_OUT_OF_MEMORY` in `d2h(res)` — B with a core dump — where the identical runs complete
-at the default, because a 97 % BFC pool starves what lives OUTSIDE it (device-to-host staging, NCCL,
+at the default, because a BFC pool at fraction 0.97 starves what lives OUTSIDE it (device-to-host staging, NCCL,
 workspaces). Probed both ways, this net reads 528 → 319 with the option and **531 → 323 without**:
 it buys nothing. The rule: raise the fraction for a graph that does not otherwise fit, and
 leave it alone for one that does. `runs/2026-08-28-convnext-sb-jobs/`.

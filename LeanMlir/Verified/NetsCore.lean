@@ -397,7 +397,8 @@ def resnet34Verified : VerifiedNetSpec where
     .dense 512 10 ]
   blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
-  -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
+  -- running-stats layout for trainAdamSched + @resnet34_fwd_eval, read off `layers` by
+  -- `VerifiedNetSpec.bnChannels`.
   runningBN  := true
 
 -- Derived layout (110 params) == the audited hand-list ResNet34Layout.specs. This `#guard` is
@@ -710,7 +711,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
   blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN,
   -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
-  -- trainAdamSched + @mobilenetv2_fwd_eval. Matches TestMobilenetV2TrainPC.bnLayers. True batch-norm
+  -- trainAdamSched + @mobilenetv2_fwd_eval, read off `layers` by `VerifiedNetSpec.bnChannels`. True batch-norm
   -- (reduce [0,2,3]) → batch-BN eval degenerate on sorted val, so the adam trainer evals through running stats.
   runningBN  := true
 
@@ -1472,10 +1473,10 @@ def mobilenetv4Verified : VerifiedNetSpec where
     `mobilenetv4Verified`, only the head moves (1280→1000). `#guard`ed at 9,715,512 parameters,
     the ~9.7M Conv-M is quoted at.
 
-    At 100 epochs this spec reaches 76.68% top-1 on the verified path against 76.57% for the JAX
-    reference behind
+    Its 100-epoch results, on the verified path and for the JAX reference behind
     [`jax/MainMobilenetV4Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4Imagenet.lean)
-    (`runs/2026-09-26-mnv4-verified-bf16-100ep/`, `runs/2026-09-26-mnv4-jax-bf16-100ep/`).
+    (`runs/2026-09-26-mnv4-verified-bf16-100ep/`, `runs/2026-09-26-mnv4-jax-bf16-100ep/`),
+    are in those run directories' `RESULTS.md`.
 
     What is proved about it: the train-step capstone `Proofs.Mnv4TieB.mnv4_net_tiedB` binds the
     class count, so it covers this 1000-class head, at one replica, f32 and batch BatchNorm; the

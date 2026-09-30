@@ -40,8 +40,8 @@ def resnet50Imagenet : NetSpec where
     BCE over the mixup/cutmix soft targets subsumes it (the RSB recipe).
 
     Conv dtype: `bf16Conv := true` — R50 is conv-bound and its real home is the
-    CUDA box (ares), where bf16 conv on cuDNN tensor cores is ~1.6× faster
-    (measured: 458→ vs 737 ms/step on 4× 4060 Ti, A2@224). On ROCm/MIOpen bf16
+    CUDA box (ares), where bf16 conv on cuDNN tensor cores is markedly faster
+    (measured on 4× 4060 Ti, A2@224). On ROCm/MIOpen bf16
     conv is slower but still correct, so this stays on for both. RandAugment +
     3× repeated-aug are CPU-side tf.data — watch input throughput (the warmup
     ETA check confirms it's not input-bound). -/
@@ -71,7 +71,7 @@ def resnet50ImagenetConfig : TrainConfig where
   useEMA         := true     -- model EMA; eval + checkpoints use the shadow
   emaDecay       := 0.9999
   bf16           := true
-  bf16Conv       := true     -- CUDA/cuDNN: bf16 conv ~1.6× faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
+  bf16Conv       := true     -- CUDA/cuDNN: bf16 conv markedly faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
   runningBN      := true     -- paper-faithful eval + bottleneck running-BN
   -- **0.9, NOT the emitter's 0.99 default, and it applies to the WHOLE FAMILY.**
   -- `Jax/Codegen.lean`'s `_bn` defaults to 0.99 for every net. That is TF's EfficientNet value; the
@@ -117,8 +117,9 @@ def resnet50ImagenetConfig : TrainConfig where
 /-- The short / validation tier is the **literal RSB-A3** (timm "ResNet Strikes
     Back" A3, the 100-epoch tier) → **78.1% top-1** — a faithful, far cheaper
     validation than truncating A2. Same LAMB + BCE core, but: 100 epochs, **train
-    @160 / test @224 (crop 0.95)** — the resolution split is ~2× faster/step, so A3
-    is ~6× cheaper than the 300-ep A2 (~10-11 hr on ares vs ~60-65 hr).
+    @160 / test @224 (crop 0.95)** — the resolution split cuts the pixels per image by
+    (224/160)² ≈ 2, so A3 (a third of A2's 300 epochs, each about half the cost) is several
+    times cheaper than A2.
 
     Deltas vs A2 (decoded from timm's a3 args
     `lamb-cosine-lr0.008-wd0.02-n0-rand-m6-mstd0.5-inc1-m0.1-sd0.0-d0.0-ls0.0-100`):
@@ -150,7 +151,7 @@ def resnet50ImagenetConfigShort : TrainConfig :=
     no repeated aug, no stochastic depth, no EMA, and train/eval both at 224 (not 160/224).
 
     **The 224 train resolution is the wall-clock story.** A3 trains at 160, so it is
-    ~2x cheaper per step (FixRes); this recipe pays that back. Do not read a 2018-vs-A3
+    cheaper per step by about the pixel ratio (224/160)² (FixRes); this recipe pays that back. Do not read a 2018-vs-A3
     per-epoch difference as an optimizer result. -/
 def resnet50ImagenetConfig2018 : TrainConfig :=
   { resnet50ImagenetConfig with
@@ -175,8 +176,8 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
       trainRes       := 224      -- no FixRes split: train and eval both at 224
       testCropRatio  := 0.875 }
 
-/-- Optimizer-regime probe (diagnosing the ~41% RSB-A3 result). Same A3 recipe
-    but swaps LAMB→AdamW (LAMB is a large-batch optimizer; we run bs512) and adds
+/-- Optimizer-regime probe (diagnosing why RSB-A3 at bs512 fell far short of the
+    paper). Same A3 recipe but swaps LAMB→AdamW (LAMB is a large-batch optimizer; we run bs512) and adds
     the timm no_weight_decay skip-list (BN γ/β + biases excluded from wd).
     Keeps epochs=100 so the cosine LR schedule matches the baseline — the probe
     only RUNS the first ~10 epochs, so val@ep10 is comparable to the LAMB run. -/
@@ -188,10 +189,10 @@ def resnet50ImagenetConfigAdamProbe : TrainConfig :=
 /-- **RSB-faithful A3** — reproduces timm's LAMB @ **bs2048** on this 4×16 GB box via
     gradient accumulation (512 micro × 4 = effective 2048), so LAMB gets the
     large batch it was designed for. At bs512 LAMB, a large-batch optimizer, runs
-    at 1/4 its intended batch (40.8% on A3). BN stats are per-micro-batch
-    (**Ghost-BN**, Hoffer et al. 2017 — benign at micro=512). LR is restored to the
-    paper's **8e-3 @ bs2048** (NOT the 512-scaled 2e-3), and the timm no_weight_decay
-    skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
+    at 1/4 its intended batch, and A3 there fell far short of the paper's 78.1%.
+    BN stats are per-micro-batch (**Ghost-BN**, Hoffer et al. 2017 — benign at
+    micro=512). LR is restored to the paper's **8e-3 @ bs2048** (NOT the
+    512-scaled 2e-3), and the timm no_weight_decay skip-list (BN γ/β + biases) — the other faithful-reproduction lever — is on.
     Grad-accum mechanics are GPU-validated; this config is the accuracy run. The `rsb-faithful` recipe arg; writes a
     separate `_rsbfaithful.py`. -/
 def resnet50ImagenetConfigRSBFaithful : TrainConfig :=
@@ -229,7 +230,7 @@ def resnet50ImagenetConfigTrue2048 : TrainConfig :=
     over, fall back to `gradAccumSteps := 2` (2×1024, Ghost-BN halved). Same clean-BN
     caveat as `true-2048`: one device normalizes over the full 2048, a LARGER BN batch
     than timm's per-GPU BN — deliberate, documented trade. Suspend/resume via
-    `LEAN_MLIR_RESUME` (per-N-epoch `.state.npz`) makes the ~24 h run spot-safe.
+    `LEAN_MLIR_RESUME` (per-N-epoch `.state.npz`) makes the long run spot-safe.
     Selected with recipe arg `a2-true-2048`. -/
 def resnet50ImagenetConfigA2True2048 : TrainConfig :=
   { resnet50ImagenetConfig with
@@ -241,15 +242,14 @@ def resnet50ImagenetConfigA2True2048 : TrainConfig :=
 /-- **RSB-A2 at effective bs2048 via grad-accum** — A2's counterpart to
     `rsb-faithful`, and the recipe to actually run A2 on a 4-GPU box. The `default`
     A2 above is bs512 with a linearly-scaled LR, which is precisely the regime that
-    gave A3 **40.8%** instead of 78.1%: LAMB is a large-batch optimizer and bs512
-    starves it. Giving A3 its design batch through accumulation recovered
-    **76.66%**, so A2 should be run the same way.
+    left A3 far short of the paper's 78.1%: LAMB is a large-batch optimizer and bs512
+    starves it. Giving A3 its design batch through accumulation recovered it (the
+    book's bestiary ResNet entry prints the run), so A2 should be run the same way.
 
     Deltas vs `default`: 512 micro × 4 = effective 2048, LR restored to the paper's
     **5e-3 @ bs2048** (not the 512-scaled 1.25e-3), and the timm no_weight_decay
     skip-list on. BN is per-micro-batch (Ghost-BN, benign at micro=512). Unlike
-    `a2-true-2048` this needs no 160 GB card — peak is the same as bs512
-    (measured 7.41 GiB on 4× 16 GB @224). -/
+    `a2-true-2048` this needs no 160 GB card — peak is the same as bs512. -/
 def resnet50ImagenetConfigA2Accum : TrainConfig :=
   { resnet50ImagenetConfig with
       learningRate      := 0.005   -- RSB-A2 lr @ bs2048 (native, not 512-scaled)

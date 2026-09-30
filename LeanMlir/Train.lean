@@ -466,9 +466,9 @@ private def datasetIO : DatasetKind → DatasetIO
   | .imagenet   =>
     -- This path doesn't support full 1000-class ImageNet — the 1.28M
     -- training set needs a C-side streaming reader, not the
-    -- read-everything-into-a-ByteArray pattern. The JAX path (jax/) wires it
-    -- through tfds, so this kind is JAX-only.
-    panic! "DatasetKind.imagenet not supported by phase 3; use phase 2 (jax/) for now"
+    -- read-everything-into-a-ByteArray pattern. The verified driver
+    -- (`Verified.Train`) and the JAX reference (jax/) both stream it.
+    panic! "DatasetKind.imagenet is not supported by the reference trainer; use the verified path (Verified.Train) or the JAX reference (jax/)"
 
 -- `DatasetKind.pixelLabels` (which `TrainConfig.lossKindFor` reads) names exactly the datasets whose
 -- label record is not a 4-byte class, detection aside (it resolves first; `.imagenet` panics here).

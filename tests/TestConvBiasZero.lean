@@ -526,7 +526,7 @@ NOT \"BN swallows the conv bias\"."
 
   -- MEASURED: the argument quoted in the header is WRONG. The gradient is NOT exactly zero:
   -- `(x+b) − mean(x+b) = x − mean(x)` is exact in ℝ, but the BN mean is a ROUNDED f32 sum, so the
-  -- cancellation leaves a residue on ~93% of coordinates. Two runs disagree on which coordinates,
+  -- cancellation leaves a residue on most coordinates. Two runs disagree on which coordinates,
   -- which is what identifies it as rounding noise rather than signal. So the gate is a RATIO, not
   -- an equality: the residue must be orders below every real gradient in the same step.
   let relB := maxBySlot[Slot.convB.idx]! / maxBySlot[Slot.convW.idx]!

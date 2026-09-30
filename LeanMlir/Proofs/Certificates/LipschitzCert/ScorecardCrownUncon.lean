@@ -4,14 +4,10 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPData
 /-! # CROWN-IBP L∞ scorecard, full 784-dim input — unconstrained net (`mlpTF`)
 
 Pixel-L∞ certificates by CROWN linear relaxation over the SAME first-100
-MNIST test subset, nets and ε grid as the IBP tier — a new COLUMN in that
-table, not a new experiment:
-
-| ε | 1/255 | 2/255 | 4/255 | 8/255 |
-|---|---|---|---|---|
-| IBP (box) | 87 | 42 | 2 | 0 |
-| **CROWN** | **94** | **92** | **76** | **15** |
-| PGD-L∞ (upper bracket) | 95 | 92 | 85 | 36 |
+MNIST test subset, nets and ε grid as the IBP tier — a new row beside its
+counts, not a new experiment. The counts CROWN certifies at ε = 1, 2, 4, 8/255,
+beside the IBP box's and the PGD-L∞ upper bracket, are the
+`[TF] ScorecardCrownUncon.lean:` line `scripts/certs/crown_ibp_scorecard.py` prints.
 
 IBP concretizes to an interval after every layer, so the box grows
 multiplicatively with depth. CROWN never concretizes in the middle: each
@@ -3681,7 +3677,11 @@ theorem crownUnconCertse8_certified :
   List.forall_iff_forall_mem.mp
     ⟨certCRTFe8_3, certCRTFe8_25, certCRTFe8_71⟩
 
-/-- **The CROWN-IBP L∞ scorecard, unconstrained net (`mlpTF`)** — MEASURED 94/100 @ 1/255, 92/100 @ 2/255, 76/100 @ 4/255, 15/100 @ 8/255 (IBP box: 87/42/2/0; PGD-L∞ bracket 95/92/85/36). -/
+/-- **The CROWN-IBP L∞ scorecard, unconstrained net (`mlpTF`)** — the counts MEASURED over the
+    first 100 images at ε = 1/255, 2/255, 4/255, 8/255 are the `[TF] ScorecardCrownUncon.lean:` line
+    `scripts/certs/crown_ibp_scorecard.py` prints (with the IBP box and the PGD-L∞
+    bracket); the lists below are the emitted witnesses carrying `CertifiedAtLinf`
+    proofs. -/
 theorem scorecard_crown_uncon :
     (crownUnconCertse1.length = 8 ∧ ∀ p ∈ crownUnconCertse1, CertifiedAtLinf mlpTF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
     (crownUnconCertse2.length = 8 ∧ ∀ p ∈ crownUnconCertse2, CertifiedAtLinf mlpTF ((2 : ℝ)/255) p.2.1 p.2.2) ∧

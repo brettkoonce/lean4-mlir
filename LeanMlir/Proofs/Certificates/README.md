@@ -10,7 +10,10 @@ weight instance: `LipschitzCert/Basic.lean`, `DenseEuclid.lean` (the dense / ReL
 bounds and `CertifiedAt`), `IntervalBound.lean`, `CrownBound.lean`,
 `LipschitzCert/Instance.lean`, `LipschitzCert/PairSDP.lean`,
 `GaussianQuantile.lean` (Φ, Φ⁻¹, full support), `Smoothing/CP.lean`, `Smoothing/Gaussian.lean`,
-`Smoothing/MC.lean`, `Smoothing/NetSemantics.lean` and `Smoothing/PhiBounds.lean`.
+`Smoothing/MC.lean`, `Smoothing/NetSemantics.lean` and `Smoothing/PhiBounds.lean`. The float
+tier is the exception: its engine (`FloatModel.mlp2F`, `mlp2_float_close_uniform`,
+`certified_at_eps_close`) is emitted by `lipschitz_cert_float.py` into the generated
+`LipschitzCert/Float.lean`.
 
 That provenance explains their shape: thousands of short, structurally
 identical theorem statements (one per network / image / radius row of a
@@ -25,14 +28,19 @@ rebuild `lake build CertsHeavy` (the heavy scorecards) or `Certs` (the
 rest). Don't hand-edit a generated file — edits will be clobbered by the next
 generator run.
 
+The Lean files state only the per-image certificates they emit. The dataset-level counts (how
+many of the first 100 test images each method certifies, and the PGD bracket) are what the
+generators print; the latest run's tables and logs are in `runs/2026-09-30-cert-scorecards/`.
+
 ## The families, and where each piece lives
 
 Every family has the same shape: the data is ℚ/ℤ/ℕ, the ℝ object is *defined* as its cast, one
 computable check runs in the kernel, and one soundness lemma turns the check into an ℝ theorem.
 The engines — the ℝ theorems and checkers — are hand-written; the data files are generated. Some
 engines are here (`IntervalBound`, `CrownBound`, `DenseEuclid`, `GaussianQuantile`, `LipschitzCert/Basic`);
-the ones with no certificate vocabulary live in `Foundation/` (`IntervalBoundConv`,
-`IntervalBoundConvQ`, `GramQ`, `ListDot`).
+the conv interval engine lives in `Foundation/` (`IntervalBoundConv`, which also states the
+certificate `CertifiedAtLinf3` / `ibp3_certified_of_boxSound`, and `IntervalBoundConvQ`), beside
+the kits `GramQ` and `ListDot`.
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|

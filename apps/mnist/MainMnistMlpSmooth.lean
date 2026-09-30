@@ -8,7 +8,7 @@ The MLP rung of the depth-independent certificate (Cohen–Rosenfeld–Kolter
 on the 784→512→512→10 MLP: noise-augmented training, then certify radius `σ·Φ⁻¹(p_A)` with
 `p_A` a Clopper–Pearson lower bound on the top class's noise probability.
 
-Where the MLP's three-layer spectral-norm product gave a *vacuous* cert (L = 39, 0% certified),
+Where the MLP's three-layer spectral-norm product gave a *vacuous* cert (`runs/spectral_mlp_phase3.log`),
 randomized smoothing certifies a non-vacuous radius on the same net — the contrast that motivates
 the smoothing rung.
 

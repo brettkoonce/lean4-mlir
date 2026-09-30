@@ -10,7 +10,7 @@ filtering. Depthwise conv **drops the cross-channel mixing**: each
 input channel gets its own 2D filter and produces its own output channel.
 
 Math-wise it's "regular conv with a constraint." Practical-wise it's
-~10× cheaper because you avoid the `O(ic · oc)` cross-channel sum.
+much cheaper because you avoid the `O(ic · oc)` cross-channel sum.
 
 Architecturally, depthwise is always paired with a 1×1 "pointwise" conv
 that does the cross-channel mixing separately. Together they form the

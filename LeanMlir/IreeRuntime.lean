@@ -10,11 +10,11 @@ instance : Nonempty LowererSession := LowererSessionPointed.property
 
 namespace LowererSession
 
-/-- Load a `.vmfb` bytecode module onto the default CUDA device.
+/-- Load a module onto the default device of whichever lowerer shim is loaded.
 
-    On the **XLA backend** (`libpjrt_ffi.so`) the argument is instead the
-    `.mlir` source — XLA compiles the StableHLO in-process, so there is no
-    separate `iree-compile` step. Use `mkSession` (`Verified.Train`) rather than
+    On the **XLA backend** (`libpjrt_ffi.so`, the default) the argument is the
+    `.mlir` source, which XLA compiles in-process. On the **IREE backend** it is a
+    `.vmfb` bytecode module produced by `iree-compile`. Use `mkSession` (`Verified.Train`) rather than
     calling this directly; it picks the right path per `backendName`. -/
 @[extern "lean_iree_session_create"]
 opaque create (path : @& String) : IO LowererSession
@@ -33,9 +33,10 @@ opaque create (path : @& String) : IO LowererSession
 @[extern "lean_iree_session_create_dp"]
 opaque createDp (path : @& String) (replicas : USize) : IO LowererSession
 
-/-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
-    probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
-    with the linked library. -/
+/-- `"iree"` or `"xla"` — which shim the runtime loaded. The shim is opened by `dlopen`
+    on first use (`$LEAN_MLIR_LOWERER` or `$LEAN_MLIR_LOWERER_SO` choose it; XLA is the
+    default), and the answer comes from probing the loaded library for a symbol only
+    `libpjrt_ffi.so` defines, so it cannot disagree with what is running. -/
 @[extern "lean_iree_backend_name"]
 opaque backendName : IO String
 
@@ -135,8 +136,8 @@ opaque trainStepAdamF32Yolov1
     different mechanism from the train step's. This graph returns *logits*, not
     parameters, so there is nothing to retain from the output; instead the whole
     parameter set is seeded once and reused across every eval batch, rather than
-    pushed 79-123 times per epoch. Measured on the MNIST MLP, **73% of an eval
-    step was the parameter push** (0.6 ms of 0.8 — compute is 0.1).
+    pushed 79-123 times per epoch. On the MNIST MLP the parameter push, not the
+    compute, is most of an eval step.
 
     `gen` is what makes holding safe, and it must change whenever `params`
     does: pass the epoch number. A held set that went stale would score the
@@ -175,7 +176,7 @@ opaque forwardF32Dp
   (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@linear_train_step`
-    (`StableHLO.linTrainStepFaithfulV`) through the generic IREE invoke.
+    (`StableHLO.linTrainStepFaithfulV`) through the loaded shim's generic invoke.
     Inputs are raw f32 ByteArrays: `x` is `batch×d₀`, `W0` is `d₀×d₁`, `b0`
     is `d₁`; `y` is int32 `[batch]` (the one-hot is built in the C shim).
     Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`.
@@ -221,7 +222,7 @@ opaque mlpTrainStepVDP
   (nResident : USize := 0) (nShardTail : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@mlp_train_step`
-    (`StableHLO.mlpTrainStepFaithfulV`) through the generic IREE invoke. `params` is
+    (`StableHLO.mlpTrainStepFaithfulV`) through the loaded shim's generic invoke. `params` is
     the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
     `x` is `batch×d₀`; `y` is int32 `[batch]` (one-hot built in the C shim with
     `d₃` classes). Returns the updated params, packed in the same layout.

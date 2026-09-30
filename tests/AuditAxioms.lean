@@ -761,8 +761,6 @@ open Proofs
 #print axioms vitBodyKVFlatHasVJP
 #print axioms vitForwardKVHasVJP
 #print axioms vitForwardKVHasVJP_correct
--- Production capstone
-#print axioms vitTinyHasVJP_correct
 #print axioms StableHLO.vitBodyGraphKMHV_den
 #print axioms StableHLO.vitFwdGraphKMHV_faithful
 
@@ -1015,6 +1013,7 @@ open Proofs
 #print axioms Proofs.vitInputGradK_eq_vitForwardKV_vjp
 #print axioms Proofs.vitInputGradK_correct
 #print axioms Proofs.vitTinyInputGrad_eq_vitTiny_vjp
+#print axioms Proofs.vitTinyHasVJP_correct
 -- ViT WHOLE-NET BACKWARD AT A BATCH — T6 at the shipped index (ViTWholeBackCertifiedTieB.lean)
 #print axioms Proofs.vitTowerBackB_eq_vjp
 #print axioms Proofs.vitLNBackB_eq_vjp

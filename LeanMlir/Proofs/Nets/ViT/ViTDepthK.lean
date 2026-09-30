@@ -21,8 +21,8 @@ file builds the net with distinct per-block params at every depth, at the produc
    `vitBlockGraphMHV_den_aux` + `vitBlockSpelledMHV_eq` per block (the
    per-block den_aux was designed for exactly this).
 
-The ViT-Tiny instantiation (depth 12, P=16, D=192, heads=3) is
-`vitTinyHasVJP_correct`.
+The ViT-Tiny instantiation (depth 12, P=16, D=192, heads=3) of the whole-net backward is
+`vitTinyHasVJP_correct`, in `ViTWholeBackCertifiedTie`.
 
 ## References
 
@@ -218,8 +218,9 @@ noncomputable def vitForwardKVHasVJP
     s2_diff (classifierFlat_differentiable N (heads * d_head) nClasses Wcls bcls)
     s2_vjp (classifierFlatHasVJP N (heads * d_head) nClasses Wcls bcls)
 
-/-- **Public correctness theorem for `vitForwardKVHasVJP`** — the depth-`k`
-    ViT's backward equals the `pdiv`-contracted Jacobian at every input. -/
+/-- The `.correct` field of `vitForwardKVHasVJP`, restated: the depth-`k` ViT's backward is the
+    `pdiv`-contracted Jacobian of `vitForwardKV` at every input. The tie of the hand-written
+    input-gradient chain to this backward is `vitInputGradK_correct`. -/
 theorem vitForwardKVHasVJP_correct
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -238,44 +239,6 @@ theorem vitForwardKVHasVJP_correct
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
   (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).correct x dy i
-
--- ════════════════════════════════════════════════════════════════
--- § 3. The production capstone — ViT-Tiny at its real dimensions
--- ════════════════════════════════════════════════════════════════
-
-/-- **ViT-Tiny whole-network VJP — the production capstone.**
-
-    `vitForwardKVHasVJP_correct` instantiated at the exact ViT-Tiny
-    spec: a `3×224×224` image, `16×16` patches (`N = 196` patch tokens
-    + the CLS token), embedding dim `D = 192 = 3 heads × 64`, MLP dim `768`,
-    **12 transformer blocks with DISTINCT per-block parameters**
-    (`ps : Fin 12 → BlockParamsV 192 768`), and any class count `nCls` (Imagenette's 10,
-    ImageNet's 1000).
-
-    The full 12-block / 3-head ViT-Tiny's backward pass equals its Mathlib-`fderiv`
-    Jacobian-transpose contracted with the cotangent, at **every** input image —
-    UNCONDITIONAL except `0 < ε` (softmax / GELU / vector-LN are kink-free, so no
-    smoothness witness is needed, and the statement is generic in the weights, so
-    it is non-degenerate by construction). The ViT peer of `convNextForwardTChHasVJP`
-    (18-block ConvNeXt-T) and `efficientnetForwardBFullHasVJP` (16-block
-    EfficientNet-B0): a full-spec, real-architecture whole-network backward. -/
-theorem vitTinyHasVJP_correct {nCls : Nat}
-    (W_conv : Kernel4 (3 * 64) 3 16 16)
-    (b_conv : Vec (3 * 64))
-    (cls_token : Vec (3 * 64))
-    (pos_embed : Mat (196 + 1) (3 * 64))
-    (ε : ℝ) (hε : 0 < ε)
-    (ps : Fin 12 → BlockParamsV (3 * 64) 768)
-    (γF βF : Vec (3 * 64))
-    (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls)
-    (x : Vec (3 * 224 * 224)) (dy : Vec nCls) (i : Fin (3 * 224 * 224)) :
-    (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 nCls 12
-      W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x dy i =
-      ∑ j : Fin nCls,
-        pdiv (vitForwardKV 3 224 224 16 196 768 3 64 nCls 12
-          W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
-  vitForwardKVHasVJP_correct 3 224 224 16 196 768 3 64 nCls 12
-    W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x dy i
 
 end Proofs
 

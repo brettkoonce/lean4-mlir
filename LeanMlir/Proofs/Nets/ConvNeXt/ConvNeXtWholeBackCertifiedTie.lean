@@ -58,8 +58,8 @@ already has, so the existing odd-kernel leaf tie applies.
 --   applied `cnxSavedA k w x` — it costs 2 s at depth one and does not finish at depth two.
 -- * The closing step is `rw [cnxV0]` and `rw [Function.comp_apply]`, not `rfl` and not
 --   `simp only [Function.comp_apply, cnxV0]`: both lemmas are definitional, so simp records no
---   step and the kernel re-derives the whole chain by unfolding (17 s / 6 GB on Lean 4.32.2,
---   6 min / 48 GB on 4.34.0). The `rw`s hand it syntactic rewrites: 3 s / 3 GB on 4.34.0.
+--   step and the kernel re-derives the whole chain by unfolding (slow on Lean 4.32.2, minutes and
+--   tens of gigabytes on 4.34.0). The `rw`s hand it syntactic rewrites, which check in seconds.
 -- * The trap is invisible in an unapplied position: `convNextForwardTChVjpChain`'s ascription
 --   compares the whole twelve-factor composition against the committed one and is free.
 -- * `convNextForwardTChHasVJP` is a tactic proof, so its `have`s are `letFun` and its `.backward`

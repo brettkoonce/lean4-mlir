@@ -32,8 +32,8 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 -/
 
 /-- **90 epochs at batch 256 — He et al.'s own schedule.** The paper tier is the default and the
-    30-epoch validation subrun is the opt-in (`LEAN_MLIR_EPOCHS`). ~27.9 h on four CUDA cards at
-    the measured 18.6 min/epoch. 5-epoch warmup matches the reference; cosine as everywhere here.
+    30-epoch validation subrun is the opt-in (`LEAN_MLIR_EPOCHS`); the full schedule is about a day
+    on four CUDA cards. 5-epoch warmup matches the reference; cosine as everywhere here.
 
     **`epochs` is the SCHEDULE, not just the loop bound.** `totalSteps := cfg.epochs * nb / accK`
     is what the cosine anneals over, so this number changes the learning-rate curve and not only

@@ -13,7 +13,7 @@ logit map and discharges both:
   boolean combinations of `{f·j ≤ f·c}` sets);
 * `isOpen_strictRegion` — strict decision regions of continuous logits are
   open;
-* full support of `stdGaussian` (the `IsOpenPosMeasure` instances of
+* full support of `stdGaussian` (the `IsOpenPosMeasure` instance of
   `GaussianQuantile.lean`) gives the witness regions positive mass;
 * `argmaxNet_smoothProb_mem_Ioo` — **the `hp` discharge**: ONE strict-argmax
   witness per class ⇒ every smoothed class probability at every point is in

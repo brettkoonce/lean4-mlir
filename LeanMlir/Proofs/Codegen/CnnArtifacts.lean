@@ -113,7 +113,7 @@ it. -/
 --
 -- FORWARD ONLY: cifar8's backward is on the PER-EXAMPLE `convBack`/`dotOut` and the 27 bf16
 -- ops were built for ImageNet's BATCHED family, so `convBackBf16`/`dotOutBf16` do not exist.
--- NO SPEEDUP, by design — bf16 measures 0.87× across cifar8's conv stack. These
+-- NO SPEEDUP, by design — at cifar8's conv shapes bf16 is slower than f32, not faster. These
 -- artifacts demonstrate that the MATH scales across precision, never the throughput.
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_train_step.mlir"
   ((Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
@@ -225,7 +225,7 @@ it. -/
 -- semantics-preserving reorder control (the reference render vs itself on the reversed batch):
 --   bn_adam  gradient norm-rel 1.0e-6, spread 8/38 — the control's own 8, the SAME param indices
 --   bn_mom   gradient norm-rel 1.0e-6, spread 8/38 = the control's 8; `m` passthrough bit-exact
---   bn_sgd   gradient norm-rel 3.8e-5 vs the control's 1.9e-5 (2.0×), spread 11/38 ⊂ the control's 12
+--   bn_sgd   gradient norm-rel 3.8e-5 vs the control's 1.9e-5, spread 11/38 ⊂ the control's 12
 -- The 8 are the CONV BIASES, whose gradient `Σ_{b,h,w} dy` is a cancelling reduce over 128·H·W
 -- terms — the reason the spread gate is control-relative and not absolute (an absolute 1e-4
 -- per-param bound FAILS the real tie here).
@@ -260,9 +260,9 @@ private def c8bnPacked (opt : Proofs.StableHLO.CifarOpt) : String :=
 -- 71/69 and 119/117, arg + return types AND names positionally identical, 0 MALFORMED.
 --
 -- These back the Chapter-5 "bridge" table (`runs/ablation_cifar8w/README.md`): the wide-vs-narrow
--- comparison behind *"head width barely matters — 7.1× the params, accuracy within a point; the
--- depth, not the head, is the lever."* All six cells are load-bearing, and the `cifar8_bn_{d}` width
--- sweep is adam-only so it covers just one of them.
+-- comparison behind its finding that head width barely matters and depth is the lever. The
+-- comparison needs all six cells, and the `cifar8_bn_{d}` width sweep is adam-only so it covers
+-- just one of them.
 --
 -- All six are tied (no-BN three BIT-EXACT; BN three at 1e-6/3.4e-5 against a reorder control they
 -- match or beat) and each `#eval` is its artifact's ONLY writer. The entry is renamed because both

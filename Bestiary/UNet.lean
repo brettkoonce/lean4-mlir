@@ -43,8 +43,8 @@ Why bilinear instead of the original Ronneberger transposed-conv:
 saves a primitive (no fresh forward + VJP + FD-verify), avoids the
 checkerboard artifacts transposed conv is known for, and matches what
 most modern UNets ship with (Stable Diffusion, segmentation libraries,
-etc.). The skip-state plumbing is the same either way — that's the
-load-bearing piece of the codegen.
+etc.). The skip-state plumbing is the same either way, and it is the
+hard part of the codegen.
 
 The crucial thing about the NetSpec: it's **still a linear list**. The
 skip connections are implicit — the codegen matches the `i`-th `unetUp`
@@ -180,11 +180,10 @@ def main : IO Unit := do
   IO.println "────────────────────────────────────────────────────────────────"
   IO.println "  Notes"
   IO.println "────────────────────────────────────────────────────────────────"
-  IO.println "  • `.unetDown` and `.unetUp` are shape-only Layer constructors"
-  IO.println "    added for this bestiary. Codegen emits UNSUPPORTED; a real"
-  IO.println "    UNet trainer needs the new `.bilinearUpsample` primitive"
-  IO.println "    (registered, codegen pending) + a concat kernel + skip-"
-  IO.println "    connection threading across the encoder/decoder pair."
+  IO.println "  • `.unetDown` and `.unetUp` have codegen: the reference path"
+  IO.println "    emits them, skip concat and its split backward included,"
+  IO.println "    and `ReferenceNets.unetBrats` (above) is the UNet the BraTS"
+  IO.println "    demo trains."
   IO.println "  • Skip pairing is implicit: the i-th `unetUp` from the bottom"
   IO.println "    receives the skip from the i-th `unetDown` from the top. A"
   IO.println "    NetSpec with mismatched counts would validate (channel"
@@ -193,5 +192,4 @@ def main : IO Unit := do
   IO.println "    primitive needed."
   IO.println "  • Stable Diffusion's UNet adds self- and cross-attention at"
   IO.println "    the lower-resolution stages + time/text conditioning. Those"
-  IO.println "    would be two more bestiary primitives (`.attnResBlock`,"
-  IO.println "    `.crossAttnBlock`) — left for a follow-up entry."
+  IO.println "    have their own entry: `bestiary-stable-diffusion`."

@@ -94,7 +94,9 @@ def main() -> int:
         print("Create a venv with `torch torchvision timm`, pass its bin/python as argv[1].", file=sys.stderr)
         return 2
 
-    from tests.bestiary_timm_mapping import MAPPING
+    # A sibling import (python puts this script's directory first on sys.path): `tests` is not a
+    # package here, and an installed package of that name would shadow `tests.bestiary_timm_mapping`.
+    from bestiary_timm_mapping import MAPPING
 
     golden = load_golden(GOLDEN)
 

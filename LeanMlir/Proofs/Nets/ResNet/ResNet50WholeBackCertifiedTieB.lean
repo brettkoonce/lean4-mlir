@@ -36,9 +36,15 @@ A smooth-point statement: the tie assumes `0 < εs`, the stem relu clause (`h_st
 the stem pool's per-example condition (`h_pool`), and takes each of the sixteen bottlenecks as an
 opaque `HasVJPDiffAt` witness at its running activation (a bottleneck's three relu clauses — the
 two interior ones and the post-residual outer one — are the caller's, inside that witness).
-`resnet50in160_lambaccdp8x64bce` all-reduces every gradient (`allReduceMeanF`), and this is at the
-per-replica gradient before it. It is about the INPUT gradient; the 161 parameter gradients are
+One device: every ResNet-50 data-parallel render synchronises BatchNorm, and its step is
+`ResNet50SyncStepTieB`'s. It is about the INPUT gradient; the 161 parameter gradients are
 `ResNet50StepTieB.lean`'s tie.
+
+**bf16 is outside this statement.** The ImageNet runs the book reports train from
+`resnet50in_momdp64bf16` and `resnet50in160_lambaccdp4x128wxclipbcebf16`, which swap the conv
+nodes for bf16 kinds ([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among
+them). What those kinds do under sharding is `DataParallel.SyncBf16`; no whole-net statement
+covers that step.
 -/
 
 -- Build note: the blocks stay opaque and there is no `backward_unique` step, for the reason

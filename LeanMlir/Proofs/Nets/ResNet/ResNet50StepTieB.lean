@@ -19,7 +19,7 @@ a re-derivation — as in `ResNet34StepTieB` and MobileNetV2's step tie.
 **THE LOSS COTANGENT IS A BINDER, and for this net it had to be.** ResNet-34's and
 MobileNetV2's capstones compute `g` internally from `smoothedLossCotGraph`. ResNet-50 ships BOTH
 losses: `bce := false` artifacts carry the six-op label-smoothed softmax chain and `bce := true`
-ones — including `resnet50in160_lambaccdp8x64bce` — carry
+ones — including `resnet50in160_lambaccdp8x64wxclipbce` — carry
 BCE-with-logits' three-op chain. So `r50_net_tiedB` takes `g` as a binder and the two loss
 corollaries instantiate it: `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad`.
 
@@ -54,12 +54,18 @@ fan-in is `addVB(%dc1, %dcp)` — both branches nontrivial.
 `residualProj proj body` adds `proj + body`, so `r50{Proj,Down}CotIn_eq_vjp` carry a commutation.
 The identity block needs none. Same seam `resnet50FwdGraphBFull_faithful` has, for the same reason.
 
-**ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
-`allReduceMeanF` — the collective as an AST node — so every statement here is at the per-replica
-gradient node and
-[`Foundation/DataParallel/Node.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel/Node.lean) composes it with the replica mean. The 8× accumulation sits between the gradient
-and the optimizer as `momVNextF` at `(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` —
-both certified, neither part of this file.
+**ONE REPLICA.** Every statement here is at one replica's gradient node. Every ResNet-50
+data-parallel render (`resnet50in160_lambaccdp8x64wxclipbce` among them) synchronises BatchNorm;
+its all-reduced gradients are `ResNet50SyncStepTieB`'s `r50_net_syncTiedB`: this file's node at
+`N := R·N`. The 8× accumulation sits between the gradient and the optimizer as `momVNextF` at
+`(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` — both certified, neither part of this
+file.
+
+**bf16 is outside this statement.** The ImageNet runs the book reports train from
+`resnet50in_momdp64bf16` and `resnet50in160_lambaccdp4x128wxclipbcebf16`, which swap the conv
+nodes for bf16 kinds ([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among
+them). What those kinds do under sharding is `DataParallel.SyncBf16`; no whole-net statement
+covers that step.
 
 **No smoothness hypothesis in the capstone**, exactly as r34's and mnv2's: the folds are `∀ cot`
 statements instantiated at explicitly constructed cotangents. The relu-kink and positivity
@@ -493,7 +499,7 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
 
     **`g` IS A BINDER, and for this net it had to be.** ResNet-50 ships both losses — the
     label-smoothed softmax chain on the `bce := false` artifacts and BCE-with-logits' three-op
-    chain on the `bce := true` ones, including `resnet50in160_lambaccdp8x64bce`.
+    chain on the `bce := true` ones, including `resnet50in160_lambaccdp8x64wxclipbce`.
     `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad` instantiate
     it; neither is privileged.
 
@@ -503,9 +509,11 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     whole-net backward — the two halves of the tie, kept apart because they have different
     hypotheses.
 
-    **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
-    `allReduceMeanF`, an AST node (`DataParallel.Node`), and the 8×
-    accumulation and the LAMB tail sit downstream of every node named here. -/
+    **One replica.** In `resnet50in160_lambaccdp8x64wxclipbce` every gradient node feeds
+    `allReduceMeanF`; `ResNet50SyncTieB.r50_net_syncTiedB` is the data-parallel step, its
+    right-hand sides this theorem's nodes at `N := R·N`, and the 8× accumulation and the LAMB tail
+    sit downstream of every node named here. The nodes are f32: the bf16 artifacts emit the
+    `*GradBBf16` kinds and are outside this statement. -/
 theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (g : Vec (N * nCls)) :
     let dy16 := r34HeadCotBlk N q q w.Wd w.bd (r50Pre16 N q w x) g
@@ -588,7 +596,7 @@ theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 /-- **The BCE-with-logits cotangent, for every `bce := true` artifact — including
-    `resnet50in160_lambaccdp8x64bce`.** Row by row, the three-op chain `sigmoidB → subB → divConstB` is
+    `resnet50in160_lambaccdp8x64wxclipbce`.** Row by row, the three-op chain `sigmoidB → subB → divConstB` is
     `∂/∂logits` of `Σ_k (softplus(z_k) − t_k·z_k)` at that example's real logits, over the baked
     `N·K`. The divisor is `N·K`, not `N`: timm's `BinaryCrossEntropy` is `reduction='mean'` over
     `B×C`, and at `K = 1000` the two differ by 1000× on the effective step. NO hypothesis on the

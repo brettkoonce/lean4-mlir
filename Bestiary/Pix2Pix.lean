@@ -72,8 +72,8 @@ image-translation literature.
 
 ## Variants
 
-- `pix2pixGenerator`      --- 8-level UNet generator ($\sim$70M in our
-                              approximation, paper reports $\sim$54M --- see
+- `pix2pixGenerator`      --- 8-level UNet generator (the paper's is
+                              $\sim$54M; ours counts more --- see
                               NetSpec simplifications below)
 - `pix2pixDiscriminator`  --- PatchGAN discriminator (same as
                               \texttt{cycleganDiscriminator})
@@ -83,7 +83,7 @@ image-translation literature.
 
 - Our \texttt{.unetDown} / \texttt{.unetUp} primitives use 2 convs
   per level (Ronneberger style); Pix2Pix uses 1 strided conv per
-  level. Our approximation over-counts by $\sim$30\%. Architecture
+  level, so our approximation over-counts. Architecture
   shape (8 levels, channel progression, skip connections) is correct.
 - Transposed convs in the decoder are bundled inside \texttt{.unetUp}
   (upsample + concat-skip + 2 convs). Param accounting matches paper
@@ -197,8 +197,8 @@ def main : IO Unit := do
   IO.println "  • ZERO new Layer primitives. Generator is an 8-level UNet"
   IO.println "    via existing .unetDown / .unetUp; discriminator is"
   IO.println "    identical to CycleGAN's PatchGAN."
-  IO.println "  • Our 8-level UNet overcounts vs paper (paper ~54M, ours"
-  IO.println "    ~70M) because .unetDown / .unetUp use 2 convs per level"
+  IO.println "  • Our 8-level UNet overcounts vs the paper's ~54M because"
+  IO.println "    .unetDown / .unetUp use 2 convs per level"
   IO.println "    (Ronneberger) while Pix2Pix uses 1 strided conv per level."
   IO.println "    Architectural shape — 8 levels, 64→128→256→512→512×5,"
   IO.println "    skip connections — is faithful."

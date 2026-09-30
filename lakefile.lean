@@ -23,8 +23,8 @@ require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "v4.34.0"
 
 -- The umbrella root: codegen + runtime FFI + trainers' shared modules + the part of the
--- proof suite `LeanMlir.lean` imports (the per-chapter headline modules — ~90 of the 261
--- `LeanMlir/` modules). NOT the whole repo: `Certs` below is the full proof corpus, `Apps`
+-- proof suite `LeanMlir.lean` imports (the per-chapter headline modules, a minority of
+-- `LeanMlir/`). NOT the whole repo: `Certs` below is the full proof corpus, `Apps`
 -- the entry points.
 lean_lib «LeanMlir» where
   roots := #[`LeanMlir]
@@ -38,7 +38,7 @@ lean_lib «LeanMlir» where
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net
     op/VJP modules the proven renderers are built on) plus every renderer the
-    CI drift guard re-elaborates. 23 roots, builds in minutes. The
+    CI drift guard re-elaborates. Builds in minutes. The
     certificate corpus lives in `Certs` below and is checked by its own
     workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
     so demo/book/engine pushes stop paying the multi-hour corpus tail. -/
@@ -70,8 +70,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (185 roots reaching 235 proof modules,
-    ~120k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -311,7 +310,8 @@ lean_lib «ProofsMinimal» where
 /-- **`lake build Reference`** — the REFERENCE path's codegen + spec core, no proofs:
     `MlirCodegen` (NetSpec → MLIR at run time, unverified) and the modules around it. It does
     not build the verified path (`Verified.Spec`/`Verified.NetsCore`/`Verified.Train`, which load
-    `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
+    `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`. The blueprint workflow builds it,
+    because checkdecls imports its roots. -/
 lean_lib «Reference» where
   srcDir := "."
   roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec, `LeanMlir.ReferenceNets,
@@ -322,11 +322,11 @@ lean_lib «Reference» where
 
     Without it nothing in CI builds an `apps/` or `demos/` exe, and `lake build` builds
     `Proofs` alone, so an entry point could keep a stale call for weeks and be found only
-    when someone ran it. Linking is what makes the exes expensive (~149 MB
-    each, and there are 227 of them); elaborating their modules is not, which is the whole
+    when someone ran it. Linking is what makes the exes expensive (each is a large static
+    binary, and there are hundreds of them); elaborating their modules is not, which is the whole
     reason this is a `lean_lib` over the same sources rather than a `lake build <exe>` loop.
 
-    Covers `apps/` and `demos/` — 111 modules — and NOT `tests/`, which holds
+    Covers `apps/` and `demos/`, and NOT `tests/`, which holds
     `tests/comparator/`, a nested Lake package with its own toolchain whose modules a
     `.submodules` glob would try to elaborate here. The test exes CI already names
     (`argmax-check`, `label-check`, `opt-step-fixtures`, `bestiary-*`) keep their own
@@ -452,7 +452,7 @@ lean_exe «mnist-cnn-verified» where
   root := `apps.mnist.MainMnistCnnVerified
   moreLinkArgs := lowererLink
 
--- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's ~1%-of-peak
+-- The first CONVOLUTIONAL graph on the XLA ladder — where IREE's slow
 -- conv codegen actually bites, unlike the dense-only rungs 0-1.
 -- The conv rung of the XLA ladder is a RUN-TIME choice:
 -- `mnist-cnn-verified` serves both lowerers via $LEAN_MLIR_LOWERER.
@@ -489,7 +489,7 @@ lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam
   moreLinkArgs := lowererLink
 
-/-- 80ep, bs32, AdamW, target 84.58%. XLA/PJRT only — no
+/-- 80ep, bs32, AdamW; the target is `historical/RESULTS.md`'s MobileNetV4 row. XLA/PJRT only — no
     IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
 lean_exe «mobilenetv4-verified-adam» where
   root := `apps.imagenette.MainMobilenetV4VerifiedAdam
@@ -629,8 +629,8 @@ lean_exe «vit-imagenet-verified» where
     FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
     `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
     device that is DeiT's global 512, so the recipe's LR is the rate this batch was set for.
-    `scripts/supervise.sh vits-default-g512-4gpu` is the job: 528 → 319 ms/step measured,
-    113 → 71 h for 300 epochs. Renders, ties and STEPS; NOTHING has been trained on it. -/
+    `scripts/supervise.sh vits-default-g512-4gpu` is the job. Renders, ties and STEPS; NOTHING
+    has been trained on it. -/
 lean_exe «vit-s-imagenet-verified» where
   root := `apps.imagenette.MainViTSImagenet
   moreLinkArgs := lowererLink
@@ -727,8 +727,8 @@ lean_exe «pong-dqn» where
 lean_exe «ttt-env» where
   root := `demos.MainTttEnv
 
--- AlphaZero on the Lean tic-tac-toe: self-play + PUCT on the bestiary's tinyAlphaZero
--- body, the two-headed loss through the rank-2 DDPM MSE block (zero new codegen),
+-- AlphaZero on the Lean tic-tac-toe: self-play + PUCT on AlphaGo's plain conv + ReLU
+-- stack from the bestiary, the two-headed loss through the rank-2 DDPM MSE block (zero new codegen),
 -- every arm scored against the solved game. `n=` is the board.
 lean_exe «alphazero-ttt» where
   root := `demos.MainAlphaZeroTtt
@@ -783,7 +783,7 @@ lean_exe «blueprint-checkdecls» where
     every `\lean{}` the blueprint cites; this one resolves every `` `Ident` `` a DOCSTRING
     cites, against the same environment.
     Resolution is `Environment.find?`, not a regex — see the file header for why a regex
-    falls short (an 8.7% false-positive floor). It also checks
+    falls short (it has a false-positive floor). It also checks
     that every `` `dir/File.lean` `` a `LeanMlir/` docstring cites is a markdown link into the
     repo with a live target, because doc-gen4 renders the bare form as a module link that
     404s for anything outside the LeanMlir doc build. -/
@@ -807,7 +807,7 @@ lean_exe «ablation» where
 -- One net (the one Levers 1-2 measure), three optimizers, three precisions, three binaries.
 -- f32 and bf16 come from ONE renderer (`c8wbPacked`) differing only in the emit; fp8 is
 -- host-side E4M3 and rides the f32 graph, which is why it needs no artifact of its own.
--- FORWARD-only bf16, and NO speedup by design (§5.3: 0.87× at cifar8's shapes) — the arms
+-- FORWARD-only bf16, and NO speedup by design (bf16 does not pay at cifar8's shapes) — the arms
 -- exist to show the optimizer ORDERING is invariant under precision, which is the CIFAR
 -- chapter's claim, not to go faster. Each binary runs its three optimizers in sequence, so
 -- the nine cells of the lever are three invocations: `runs/2026-09-01-cifar8w-6arm-constlr/`.
@@ -926,7 +926,7 @@ lean_exe «cifar-spectral» where
   moreLinkArgs := lowererLink
 
 -- The deep-net payoff: smoothing certifies a non-vacuous L2 radius on the 7-layer CIFAR CNN where
--- the conv-aware spectral product is 942K-loose (cert 0%). Same forward-only procedure, any depth.
+-- the conv-aware spectral product is too loose to certify anything. Same forward-only procedure, any depth.
 lean_exe «cifar-smooth» where
   root := `apps.cifar.MainCifarSmooth
   moreLinkArgs := lowererLink
@@ -1576,7 +1576,7 @@ lean_exe «efficientnet-syncbn-check» where
 /-- `imagenet-syncbn-check <resnet34|mobilenetv2|efficientnet|resnet50|resnet50bce|mnv4> [f32]` —
     the same runner on the artifacts the ImageNet pairs train from: the committed 4×64 bf16 sync-BN
     DP step against a 1×256 single-device step rendered at run time. ResNet-50 runs 4×32 against
-    1×128 with its DP step rendered at run time too (the 1×256 reference peaks at 94–95 % of the
+    1×128 with its DP step rendered at run time too (the 1×256 reference nearly fills the
     raised arena). Four GPUs, XLA. -/
 lean_exe «imagenet-syncbn-check» where
   root := `tests.TestImagenetSyncBnCheck
@@ -1588,7 +1588,7 @@ lean_exe «imagenet-syncbn-check» where
 
     A scorer that scans a LITERAL 10 entries is correct on every 10-class net
     (Imagenette/CIFAR/MNIST) and silently wrong on the 1000-class ImageNet tier — it reports
-    0.94% for a net really at ~4.4%, because it can only ever be right on labels 0..9. The file
+    a number far below the net's real top-1, because it can only ever be right on labels 0..9. The file
     ships its own CONTROL: a 10-wide window re-run on the same data, required to MISS. -/
 lean_exe «argmax-check» where
   root := `tests.TestArgmaxN
@@ -1737,7 +1737,7 @@ lean_exe «cifar8-dp-check» where
   moreLinkArgs := lowererLink
 
 /-- Step-time bench for the same two renders the tie compares. The batched render is
-    1.68× the emitted ops (10014 vs 5971) because `pretty` has no CSE and the batched backward ops
+    far more emitted ops because `pretty` has no CSE and the batched backward ops
     are self-contained recomputes; the open question is whether XLA's own CSE collapses that. Both
     are compiled in one process and their steps interleaved, so the comparison is drift-free. -/
 lean_exe «resnet34-adam-bench» where
@@ -1747,7 +1747,7 @@ lean_exe «resnet34-adam-bench» where
 -- Pins the image/label pairing invariant of `F32.shuffle` on a synthetic
 -- dataset where label k is derivable from image k. A shuffle that swaps a
 -- hardcoded 4 bytes of label per record silently mispairs every detection and
--- segmentation batch (mAP@0.5 0.0001 vs 0.1167).
+-- segmentation batch (the detector's mAP collapsed to near zero).
 -- Hermetic — no data files, no GPU.
 lean_exe «test-shuffle-pairing» where
   root := `tests.TestShufflePairing
@@ -1987,7 +1987,7 @@ require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- Demo groups: one command that builds + runs a curated chunk of trainers,
--- tiered by time budget. `lake run mnist` (~30 min) / `lake run cifar` (~1 hr);
+-- tiered by time budget. `lake run mnist` (the short tier) / `lake run cifar` (the longer one);
 -- anything bigger is a deliberate single-model run (see run.sh). Backend
 -- auto-detects (cuda if `nvidia-smi` is present, else rocm) but `IREE_BACKEND`
 -- overrides; GPU honors `LEAN_DEMO_GPU` (default 0). Each trainer streams live
@@ -2096,7 +2096,7 @@ private def runDemoGroup (names : List String) (xla : Bool := false) : IO UInt32
   return 1
 
 /-- `lake run mnist-iree` — the same three binaries as `lake run mnist`, with the
-    IREE lowerer selected instead of XLA. ~30 min (XLA is 2.3-4.3x faster here). -/
+    IREE lowerer selected instead of XLA, which is slower here. -/
 script «mnist-iree» do
   runDemoGroup ["mnist-linear-verified", "mnist-mlp-verified", "mnist-cnn-verified"]
 
@@ -2114,15 +2114,14 @@ script «cifar-iree» do
 
 /-- `lake run imagenette-iree` — the Part-I verified Imagenette trainers (the rest of
     the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
-    80-epoch AdamW at 224². **~37 h end-to-end** (9.5 + 5.4 + 6.2 + 13.3 + 2.3,
-    single 7900 XTX — per the ViT-chapter results table) — a real time
-    investment, not a quick demo.
+    80-epoch AdamW at 224². Many hours end-to-end on one card (the ViT chapter's results table
+    has the per-net wall clocks) — a real time investment, not a quick demo.
 
     **This is FIVE nets, not the seven of `imagenette`.** MobileNetV4 and ResNet-50 are
     XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
     `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
-    an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes
-    (86.24% / 89.71%, medians of five), both off the XLA path. **`imagenette` is the official set**; this
+    an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes,
+    both off the XLA path. **`imagenette` is the official set**; this
     group is the IREE half of the cross-backend comparison. -/
 script «imagenette-iree» do
   runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
@@ -2132,17 +2131,17 @@ script «imagenette-iree» do
 -- ═══════════════════════════════════════════════════════════════════════
 -- THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
 --
--- XLA is the default because it is where every quoted number comes from, it is ~4.6×
+-- XLA is the default because it is where every quoted number comes from, it is much faster than
 -- IREE on EfficientNet, and it is the only path with MobileNetV4 and ResNet-50 at all.
 --
 -- Same nets, same certified artifacts, same schedules and seeds as the `-iree` group — the
 -- ONLY difference is which trusted lowerer consumes the emitted StableHLO, which is the whole
 -- point of the second backend.
 --
--- Why you'd reach for these: XLA is **4.6× IREE** on EfficientNet — 80 epochs in
--- 1 h 35 m against 7 h 50 m — and multi-GPU is reachable ONLY
+-- Why you'd reach for these: XLA trains EfficientNet's 80 epochs several times faster than
+-- IREE, and multi-GPU is reachable ONLY
 -- here, since collectives exist on the PJRT path and the IREE shim refuses a DP
--- entry point outright. Re-measure per net rather than assuming 4.6×; it is one
+-- entry point outright. Re-measure per net rather than assuming that ratio; it is one
 -- net's number, on a depthwise-convolution-heavy net.
 --
 -- Two coverage gaps, both named rather than papered over — see each docstring.
@@ -2164,8 +2163,8 @@ script mnist do
     differing only in the lowerer `runDemoGroup` selects. Both sides run the WIDE-head pair so that
     the demo trains the net Chapter 4 reports on; each ablation binary runs its three optimizers in
     sequence on one controlled pipeline (shuffle + hflip + cosine-warmup), so the six arms are two
-    binaries rather than six. Wide costs about 1.6x the wall-clock per epoch over the narrow pair
-    (~6.3s vs ~3.9s on a 4060 Ti) and buys no accuracy — §4.3's head-width sweep is exactly that
+    binaries rather than six. Wide costs noticeably more wall-clock per epoch than the narrow pair
+    and buys no accuracy — §4.3's head-width sweep is exactly that
     finding — but matching the chapter is worth the minutes. -/
 script cifar do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"] (xla := true)
@@ -2178,21 +2177,14 @@ script cifar do
     ResNet-50 are here and **only** here, because neither has an IREE driver (see
     `lake run imagenette-iree`'s note).
 
-    The latest 80-epoch numbers on the certified bytes, wall clock on one RTX 4060 Ti — about
-    5½ h for the group:
+    The latest 80-epoch top-1 and wall clock on the certified bytes live in each net's chapter
+    and run directory: ResNet-34 in `runs/2026-09-12-r34-ablation-fp32-seeds/`, ResNet-50 and
+    MobileNetV4-Conv-M in `runs/2026-08-31-imagenette-n3/`, ConvNeXt-T in
+    `runs/2026-09-13-convnext-imagenette-ls1e-6-resident/`, and MobileNetV2, EfficientNet-B0 and
+    ViT-Tiny in chapters 6, 7 and 9.
 
-    | net | top-1 | wall clock | run |
-    |---|---|---|---|
-    | ResNet-34 | 89.99 (mean of five seeds) | 45 min | `runs/2026-09-12-r34-ablation-fp32-seeds/` |
-    | ResNet-50 | 89.71 (median of five) | 74 min | `runs/2026-08-31-imagenette-n3/` |
-    | MobileNetV2 | 89.25 | 36 min | ch 6 |
-    | MobileNetV4-Conv-M | 86.24 (median of five) | 33 min | `runs/2026-08-31-imagenette-n3/` |
-    | EfficientNet-B0 | 89.96 | 39 min | ch 7 |
-    | ConvNeXt-T | 82.27 | 75 min | `runs/2026-09-13-convnext-imagenette-ls1e-6-resident/` |
-    | ViT-Tiny | 68.74 | 24 min | ch 9 |
-
-    ConvNeXt's row is the paper's 1e-6 layer-scale init; the 85.07 it used to quote was the old
-    init of 1.0 (`runs/2026-09-13-convnext-imagenette-ls1e-6/README.md` has both). A second
+    ConvNeXt's run is the paper's 1e-6 layer-scale init; `runs/2026-09-13-convnext-imagenette-ls1e-6/README.md`
+    compares it with the old init of 1.0. A second
     `lake run imagenette` scores each finished checkpoint instead of training it again; set
     `LEAN_MLIR_CKPT_TAG` for a fresh run beside it. -/
 script imagenette do
@@ -2400,9 +2392,9 @@ script download do
 --
 -- **EACH LOWERER HAS ITS OWN REFERENCE COLUMN, AND THAT IS NOT OPTIONAL.**
 -- The two backends are not within noise of each other on the same card: measured
--- on the reference 7900 XTX, XLA is 2.2× IREE on the conv anchor, 4.7× on the dense one and **8.6×
--- on the attn one** (and 4.6× on EfficientNet). A single blended factor would be wrong in both
--- directions by nearly 4×, which is why the split is per family AND per lowerer. So dividing an XLA
+-- on the reference 7900 XTX, XLA beats IREE by a different factor on each of the conv, dense and
+-- attn anchors, the attn gap by far the largest. A single blended factor would be badly wrong in
+-- both directions, which is why the split is per family AND per lowerer. So dividing an XLA
 -- probe by an IREE anchor conflates *your GPU vs a 7900 XTX* with *XLA vs IREE*, and reports a
 -- training estimate several times too fast with no warning. That is why `BenchItem` carries
 -- `refSecXla` and why there are `probe*RefMsXla` constants: a `BenchRef` bundles one lowerer's
@@ -2413,24 +2405,27 @@ script download do
 -- anchors (dense/conv/attn) were MEASURED directly from these verified trainers
 -- (steady-state ms/{epoch,step} × the trainer's epoch/step count); the
 -- R34/MNv2/ENet/ConvNeXt IREE Imagenette rows are the verified-adam tier runs
--- (9.5h / 5.4h / 6.2h / 13.3h) and the IREE ViT row is measured here (7.8h warm —
--- the 2.3h figure elsewhere is the JAX bf16 path, not this verified trainer). The
--- IREE rows EXCLUDE the one-time IREE compile (~10–15 min/arch, CPU-bound,
+-- and the IREE ViT row is measured here, warm (the shorter ViT figure elsewhere is the
+-- JAX bf16 path, not this verified trainer). The
+-- IREE rows EXCLUDE the one-time IREE compile (minutes per arch, CPU-bound,
 -- ~hardware-independent); the XLA rows need no such carve-out, since XLA compiles
 -- in-process in seconds. Re-running either benchmark on a 7900 XTX reproduces its
--- own anchors (every factor reads ~1.0×).
+-- own anchors (every factor reads about one).
+--
+-- Each row's derivation (steady-state ms/epoch or ms/step × the trainer's count, per lowerer)
+-- and the re-measurements behind the caveats below were measured once and are archived in
+-- historical/comment_measurements.md.
 --
 -- Known staleness caveats in the IREE column, left as-is rather than silently changed:
---   * ch3 (MNIST CNN) reads 23764 ms/epoch; re-measured on the same card, same
---     basis (real data + eval, steady state) it is **17659** — the row is ~1.35×
---     pessimistic. ch1/ch2/ch4 reproduce (535→539, 3200→3032, 8490→8782).
+--   * ch3 (MNIST CNN) reads pessimistic: re-measured on the same card, same
+--     basis (real data + eval, steady state) it is markedly faster. ch1/ch2/ch4 reproduce.
 --   * the IREE Imagenette rows were measured on hand-written renders, not the
 --     certified bytes. The XLA Imagenette rows are the current certified bytes.
---   * the IREE DENSE anchor (3030) also reads high: measured 2485 / 2815 / 2819 in
---     one session on the reference card, i.e. 0.82-0.93×. Unlike the XLA anchors,
---     which are medians of 8-10 samples, the IREE ones are single historical
---     samples. So on IREE read a low dense factor as anchor noise, not as your
---     card being slow; the conv (1.01-1.02×) and attn (1.01×) anchors reproduce.
+--   * the IREE DENSE anchor also reads high: repeated measurements in one session on the
+--     reference card all came in below it. Unlike the XLA anchors, which are medians of
+--     several samples, the IREE ones are single historical samples. So on IREE read a low
+--     dense factor as anchor noise, not as your card being slow; the conv and attn anchors
+--     reproduce.
 -- Correcting any of these means re-anchoring the IREE column from medians, which is
 -- a deliberate separate change — it moves published per-chapter estimates.
 -- ═══════════════════════════════════════════════════════════════════════
@@ -2451,26 +2446,23 @@ structure BenchItem where
 
       The `family` axis says which *ops* a chapter runs. It does not say what the chapter is
       *limited by*, and on this path most of them are limited by the parameter round trip, not by
-      arithmetic: the param share of a step measures **33.5%** for the conv probe
-      (`cifar8-bn`, 32²) against **59.4%** for ResNet-34, **46.7%** for EfficientNet and **84.6%**
-      for the MNIST CNN. A card whose transport:compute ratio differs from the reference's — e.g.
+      arithmetic: on the reference card the param share of a step is smaller for the conv probe
+      (`cifar8-bn`, 32²) than for ResNet-34, EfficientNet or the MNIST CNN. A card whose transport:compute ratio differs from the reference's — e.g.
       PCIe Gen3 x8 against a 7900 XTX — therefore gets a *different* factor for each, and scaling a
       transport-bound chapter by a compute-bound probe is the mismatched-baseline trap one axis
       over: same lowerer, same card, wrong bottleneck.
 
-      **MEASURED on ares (RTX 4060 Ti, PCIe Gen3 x8):** the probes read conv
-      **0.56×** and dense **1.33×** (idle card) — a 2.4× spread that is not noise but two different
-      bottlenecks. A single number predicts ch5 at **35m**; the real 80-epoch run came in at
-      **89m** (66.7 s marginal epoch × 80, `runs/r34_pool3s2_80ep_aug04.log`), i.e. **2.5×
-      optimistic**. The bracket's transport end predicts **84m** — 1.06× low.
+      **MEASURED on ares (RTX 4060 Ti, PCIe Gen3 x8):** the conv and dense probes read factors on
+      opposite sides of one (idle card) — a spread that is not noise but two different
+      bottlenecks. A single number predicted ch5 at well under half of what the real 80-epoch run
+      took (`runs/r34_pool3s2_80ep_aug04.log`); the bracket's transport end came in slightly low.
 
       **SO THE BRACKET DOES NOT CONTAIN THE TRUTH, AND MUST NOT BE SOLD AS A BOUND.** R34's real
-      like-for-like ratio is **5333/3780 = 1.41×**, above *both* probe factors. The cause is
+      like-for-like ratio (its `refSecCuda` over its `refSecXla`) is above *both* probe factors. The cause is
       structural and known: the probes run `LEAN_MLIR_BENCH_SYNTH=1`, so they exclude the data
-      loader **by design**, and per-epoch host overhead measures **6.3%** of a 1-GPU
-      epoch — the size of the miss. A bracket over two synthetic probes cannot reach a real run's
+      loader **by design**, and per-epoch host overhead is about the size of the miss. A bracket over two synthetic probes cannot reach a real run's
       loader term. Read it as *"the compute/transport estimate spans this"*, not as an interval the
-      answer lies in. It takes ch5 from 2.5× wrong to 1.06× wrong; that is the whole claim.
+      answer lies in. It takes ch5 from badly optimistic to nearly right; that is the whole claim.
 
       On the reference card both factors read ~1.0, the range collapses, and nothing about the
       published column changes.
@@ -2509,34 +2501,33 @@ structure BenchItem where
     certified bytes** — ch5-8 `runs/<net>_xla_80ep_jul29.log` and ch9
     `runs/vit_xla_80ep_jul30.log` (wall **3491 s**, epoch marker 80).
 
-    ch9 is also the **validation of the marginal-epoch method** the other rows lean on: a 43.5 s
-    `(T₃−T₁)/2` measurement × 80 extrapolates to 3480 s against the real wall's 3491 s —
-    **0.3% out**. So `scripts/sweeps/marginal_epoch.sh` × epochs is trustworthy at
+    ch9 is also the **validation of the marginal-epoch method** the other rows lean on: its
+    `(T₃−T₁)/2` measurement × 80 extrapolates to the real 80-epoch wall within a fraction of a
+    percent. So `scripts/sweeps/marginal_epoch.sh` × epochs is trustworthy at
     this scale, which is worth knowing because it is far cheaper than an 80-epoch run.
     ch4 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even
     though the 3 no-BN arms are cheaper.
 
     The XLA MNIST/CIFAR rows are each a SINGLE steady-state sample, so they inherit the
-    ±6% per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch3, ch4)
-    are the affected pair. Treat them as ±6%, not as exact. -/
+    per-run spread documented on `probeConvRefMsXla`; the conv-family ones (ch3, ch4)
+    are the affected pair. Treat them as that band, not as exact. -/
 def benchTable : List BenchItem :=
   [ { chapter := "1  MNIST linear", family := "dense", refSec := 6,     refSecXla := some 3,    tier := "mnist",
-      refSecCuda := some 3, probeXla := "mnist-linear-verified", epochs := 12 },      -- IREE 535ms × 12   | XLA 239ms × 12
+      refSecCuda := some 3, probeXla := "mnist-linear-verified", epochs := 12 },
     { chapter := "2  MNIST MLP",    family := "dense", refSec := 38,    refSecXla := some 8,    tier := "mnist",
-      refSecCuda := some 11, probeXla := "mnist-mlp-verified", epochs := 12 },      -- IREE 3200ms × 12  | XLA 676ms × 12
+      refSecCuda := some 11, probeXla := "mnist-mlp-verified", epochs := 12 },
     { chapter := "3  MNIST CNN",    family := "conv",  refSec := 238,   refSecXla := some 41,   tier := "mnist",
-      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },                                                                     -- IREE 23764ms × 10 | XLA 4103ms × 10  84.6% param round trip
+      transportSensitive := true, refSecCuda := some 49, probeXla := "mnist-cnn-verified", epochs := 10 },
     { chapter := "4  CIFAR x6",     family := "conv",  refSec := 2038,  refSecXla := some 888,  tier := "cifar",
-      refSecCuda := some 1514, probeXla := "cifar8w-bn-ablation", epochs := 240 },   -- 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable      -- IREE 8490ms×40×6  | XLA 3698ms×40×6
+      refSecCuda := some 1514, probeXla := "cifar8w-bn-ablation", epochs := 240 },   -- 40 ep × 6 ARMS, approximated as the BN arm ×6 (the 3 no-BN arms are cheaper) — the same approximation the ref column makes, kept so the two stay comparable
     -- **WIDE-head**, because that is what `lake run cifar` and ch.4 are. refSecCuda is
-    -- 6.31 s/epoch × 240 = 1514 on `cifar8w-bn-ablation`, which
+    -- the BN arm's steady-state s/epoch × 240 on `cifar8w-bn-ablation`, which
     -- keeps this field's stated meaning ("3 steady-state epochs × their own epoch counts") and
     -- matches what direct mode computes from the same probe.
-    -- The TRUE 6-arm wall, measured end-to-end on one 4060 Ti, is **1131 s**
-    -- (`runs/2026-08-26-cifar8w-6arm-timing/`: 374 s for the 3 no-BN arms at 3.12 s/epoch + 757 s
-    -- for the 3 BN arms at 6.31). So the BN-arm×6 approximation OVERSHOOTS by 34% here — the
-    -- no-BN arms are half the cost, not "cheaper" by a little. The approximation is kept anyway
+    -- The TRUE 6-arm wall, measured end-to-end on one 4060 Ti
+    -- (`runs/2026-08-26-cifar8w-6arm-timing/`), is well below that: the BN-arm×6 approximation
+    -- OVERSHOOTS here — the no-BN arms are half the cost, not "cheaper" by a little. The approximation is kept anyway
     -- because direct mode can only ever read ONE ms/epoch and the IREE/XLA ref columns make the
     -- same one; a row that mixed a true wall against two extrapolated ones would be the
     -- mismatched-baseline trap. `refSec` (IREE 2038) and `refSecXla` (888) are the narrow-head 7900
@@ -2544,19 +2535,19 @@ def benchTable : List BenchItem :=
     -- a factor is exactly what this table exists to avoid. Re-measure on the ROCm box, or read them
     -- as narrow.
     { chapter := "5  ResNet-34",    family := "conv",  refSec := 34200, refSecXla := some 3780, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 9.5h  | XLA 1h03m (the PAPER net). 59.4% param round trip
+      transportSensitive := true, refSecCuda := some 5333, probeXla := "resnet34-verified-adam-xla", epochs := 80, stepsPerEpoch := 295 },  -- the PAPER net
     { chapter := "6  MobileNetV2",  family := "conv",  refSec := 19440, refSecXla := some 5100, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 5.4h  | XLA 1h25m measured on the net with its 52 conv biases
+      transportSensitive := true, refSecCuda := some 2986, probeXla := "mobilenetv2-verified-adam", epochs := 80, stepsPerEpoch := 295 },  -- XLA measured on the net with its 52 conv biases
     { chapter := "7  EfficientNet", family := "conv",  refSec := 22320, refSecXla := some 5640, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 6.2h  | XLA 1h34m  46.7% param round trip
+      transportSensitive := true, refSecCuda := some 3760, probeXla := "efficientnet-verified-adam", epochs := 80, stepsPerEpoch := 295 },
     { chapter := "8  ConvNeXt",     family := "conv",  refSec := 47880, refSecXla := some 6841, tier := "imagenette",
-      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam", epochs := 80, stepsPerEpoch := 295 },                                                                     -- IREE 13.3h | XLA 1h54m01s (the channel-LN net, 6841s)
+      transportSensitive := true, refSecCuda := some 8080, probeXla := "convnext-verified-adam", epochs := 80, stepsPerEpoch := 295 },  -- the channel-LN net
     { chapter := "9  ViT",          family := "attn",  refSec := 27966, refSecXla := some 3491, tier := "imagenette",
-      refSecCuda := some 2560, probeXla := "vit-verified-adam", epochs := 80, stepsPerEpoch := 295 } ]-- IREE 7.8h (1185ms/step × 295 × 80, warm steady-state) | XLA 0.97h = MEASURED 80-epoch wall 3491s
+      refSecCuda := some 2560, probeXla := "vit-verified-adam", epochs := 80, stepsPerEpoch := 295 } ]  -- IREE warm steady-state ms/step × 295 × 80 | XLA the measured 80-epoch wall
 
 /-- **This chapter's reference wall-clock, for the column in play.** Three columns, not two:
     IREE, XLA-on-ROCm (7900 XTX) and XLA-on-CUDA (4060 Ti). The vendor split exists because the
-    per-chapter cross-vendor ratio spans 2.4× and no single probe factor fits it — see
+    per-chapter cross-vendor ratio spans a wide range and no single probe factor fits it — see
     `probeDenseRefMsCuda`. -/
 def BenchItem.refFor (it : BenchItem) (col : String) : Option Nat :=
   if col == "iree" then some it.refSec
@@ -2565,24 +2556,24 @@ def BenchItem.refFor (it : BenchItem) (col : String) : Option Nat :=
 
 /-- Steady-state ms/epoch on the reference 7900 XTX for the two anchors, measured by
     the synthetic-input probe (`LEAN_MLIR_BENCH_SYNTH`): one constant batch reused at
-    the dataset's real step count, eval skipped — so the on-reference factor reads ~1.0×
+    the dataset's real step count, eval skipped — so the on-reference factor reads about one
     and no dataset download is needed. -/
 def probeDenseRefMs : Nat := 3030   -- mnist-mlp-verified  (784→512→512→10)
 def probeConvRefMs  : Nat := 8020   -- cifar8-bn-verified  (8-conv + BN, 512 head)
 /-- ms/STEP on the reference 7900 XTX for the `attn` anchor — synthetic-input probe of
     vit-verified-adam, reported as the median of a 100-step window (robust to the
-    cold-cache / GC-blip outliers that make a 40-step mean swing ±10%+).
+    cold-cache / GC-blip outliers that make a 40-step mean swing).
     Step-based, not per-epoch: a ViT epoch is too slow to probe, and ViT's
     matmul/attention cost scales unlike conv across GPUs — so transformers get their
-    own factor. (The 2.3h ViT figure elsewhere is the JAX bf16 path, not this
-    verified-IREE trainer, which is ~7.8h here.) -/
+    own factor. (The shorter ViT figure elsewhere is the JAX bf16 path, not this
+    verified-IREE trainer.) -/
 def probeAttnRefMs : Nat := 1173
 
 /-- The XLA/PJRT anchors, measured on the same reference 7900 XTX, with the
     same synthetic-input probe and the same "last of 3 epochs" steady-state rule as the
     IREE ones above — the only difference is which `.so` the probe binary linked. Against
-    the IREE anchors these read 4.66× (dense) and 2.19× (conv), which is the whole reason
-    a shared reference column would be wrong.
+    the IREE anchors the dense and conv probes read very different ratios, which is the whole
+    reason a shared reference column would be wrong.
 
     **The attn anchor: `vit-verified-adam` runs on this box, and at bs32 it needs no
     workaround.** The graph can die at *execution* in the patch-embed weight-gradient convolution
@@ -2593,8 +2584,8 @@ def probeAttnRefMs : Nat := 1173
     **It is BATCH-DEPENDENT, and this anchor is the bs32 number.** Measured:
     * **bs32** — the fault fired on the session's FIRST ViT/XLA execution and then never again
       across 11 runs, *including the byte-identical invocation that had just failed*. So here
-      `MIOPEN_DEBUG_CONV_GEMM=0` is **not needed**, and setting it costs ~7% (attn probe 136 vs
-      128 ms/step median; marginal epoch 46.5 s vs 43.5 s). Why it fired once is unexplained —
+      `MIOPEN_DEBUG_CONV_GEMM=0` is **not needed**, and setting it makes the attn probe slower.
+      Why it fired once is unexplained —
       the MIOpen on-disk cache shows no writes in that window, so cache population is not it.
     * **bs64** — the fault fires **reliably** and the variable is **REQUIRED** (see
       `vit_adamdp64_train_step` in `ViTRender.lean`).
@@ -2616,30 +2607,27 @@ def probeAttnRefMs : Nat := 1173
     on all 16,579,041 floats against a control that fires at 0.996.
 
     All three are **medians over repeated runs, not single samples**, because the conv probe has
-    real run-to-run spread on this card: ten runs of the same binary gave 3449 / 3473 / 3482
-    / 3528 / 3565 / 3733 / 3774 / 3778 / 3792 / 3865 ms/epoch — a ±6% band with no pattern.
-    So a single sample can read 0.94× against its own anchor and look
-    like a regression when nothing changed. The dense probe is stable to ±1.5% (601 / 605 /
-    607 / 610 / 610 / 610 / 615 / 619). Read an on-reference factor of 0.94-1.06× as
-    agreement, not as signal — and if you re-anchor, use a median of several runs, not the
+    real run-to-run spread on this card: repeated runs of the same binary scatter over a band
+    with no pattern, so a single sample can read below one against its own anchor and look
+    like a regression when nothing changed. The dense probe is much steadier. Read an
+    on-reference factor near one as agreement, not as signal — and if you re-anchor, use a median of several runs, not the
     one number in front of you. -/
 def probeDenseRefMsXla : Nat := 610    -- mnist-mlp-verified (XLA) (vs 3030 on IREE); median of 8
 def probeConvRefMsXla  : Nat := 3650   -- cifar8-bn-verified (XLA) (vs 8020 on IREE); median of 10
 /-- ms/STEP, `vit-verified-adam`, median of 8 in the DEFAULT configuration, i.e. with no
-    MIOpen override (123/125/126/127/128/129/132/137 — ±5%). Against IREE's 1173 that is
-    **9.2×**, the largest cross-lowerer gap of the three families and the reason ViT cannot
-    share the conv factor. (With `MIOPEN_DEBUG_CONV_GEMM=0` the median is 136 — that variable
-    is a ~7% regression, not a fix; see the note above.) -/
+    MIOpen override. Against `probeAttnRefMs` that is the largest cross-lowerer gap of the three
+    families and the reason ViT cannot share the conv factor. (`MIOPEN_DEBUG_CONV_GEMM=0` is a
+    regression here, not a fix; see the note above.) -/
 def probeAttnRefMsXla : Nat := 128
 
 -- ═══ THE CUDA REFERENCE COLUMN — RTX 4060 Ti, measured on an idle ares ═══
 --
 -- WHY A SECOND COLUMN RATHER THAN A BETTER FACTOR. The per-chapter 4060Ti/7900XTX ratio,
--- measured directly on all five Imagenette nets, spans **0.585 → 1.411 — a 2.4× range**:
---   ch5 R34 1.411 · ch6 mnv2 0.585 · ch7 enet 0.667 · ch8 ConvNeXt 1.181 · ch9 ViT 0.733
--- against probe factors of conv 0.56, dense 1.33, attn 0.74. **No single factor fits them**, so
+-- measured directly on all five Imagenette nets (each row's `refSecCuda` over its `refSecXla`),
+-- ranges from well below one (MobileNetV2, EfficientNet, ViT) to well above it (ResNet-34,
+-- ConvNeXt), and the three probe factors fall inside that range. **No single factor fits them**, so
 -- cross-vendor scaling cannot be made accurate at any coefficient — the nets differ in how much of
--- a step is parameter transport (33.5% for the conv probe against 59.4% for R34), and the
+-- a step is parameter transport (less for the conv probe than for R34), and the
 -- two vendors differ in exactly that ratio. Measuring each vendor is the fix; scaling is the
 -- fallback for a box with no datasets, not the answer.
 def probeDenseRefMsCuda : Nat := 814    -- mnist-mlp-verified (XLA), idle, 3 real epochs
@@ -2682,7 +2670,7 @@ def xlaRefRocm : BenchRef :=
 
 /-- XLA on CUDA — the 4060 Ti column, measured rather than scaled. On that card every factor reads
     ~1.00, so the estimate is the measurement; on another NVIDIA card it scales from a same-vendor
-    baseline, which the 2.4× cross-vendor spread (see `probeDenseRefMsCuda`) says is the best a
+    baseline, which the wide cross-vendor spread (see `probeDenseRefMsCuda`) says is the best a
     scaled number can do. -/
 def xlaRefCuda : BenchRef :=
   { lowerer := "XLA/PJRT", xla := true, col := "cuda", card := "RTX 4060 Ti"
@@ -2696,24 +2684,22 @@ def xlaRefCuda : BenchRef :=
     failed → attn falls back to the conv factor). `none` when this chapter has no reference
     on `ref`'s lowerer.
 
-    **The conv proxy for a transformer measured ~3.5× LOW**, which is why the attn family
-    exists at all: on a 4060 Ti the three factors came out dense 4.82× / conv
-    3.54× / **attn 11.98×**, so scaling ViT as conv estimated 7.9 h against a measured ~28 h.
+    **The conv proxy for a transformer measured several times LOW**, which is why the attn family
+    exists at all: on a 4060 Ti under IREE the attn factor came out far above the dense and conv
+    ones, so scaling ViT as conv badly underestimated a measured ViT run.
     That is the 7900 XTX → 4060 Ti (ROCm → CUDA) divergence specifically, not a constant —
-    on the reference card the proxy is harmless because every factor reads ~1.0. An independent
-    instance of the same principle, measured on one card across lowerers: XLA-vs-IREE is **2.24× for
-    conv but 9.2× for attn**. Attention and convolution do not track each other, whether you change
-    the GPU or the lowerer.
+    on the reference card the proxy is harmless because every factor reads about one. An
+    independent instance of the same principle, measured on one card across lowerers: XLA-vs-IREE
+    is a far larger gap for attn than for conv. Attention and convolution do not track each other,
+    whether you change the GPU or the lowerer.
 
-    **The 3.5×-low proxy figure is an IREE fact, not a 4060 Ti fact.** Measured on
-    ares (6× 4060 Ti, CUDA 12.9, jax 0.10.2 CUDA PJRT plugin), the SAME card on the XLA path
-    reads dense **1.29×** / conv **0.54×** / attn **0.70×** — i.e. it BEATS the reference 7900
-    XTX on both conv and attn, and the conv proxy for attn would have been off by only 1.3×
-    rather than 3.5×. Against the IREE column's 4.82/3.54/11.98 for this same card that is a
-    3.7× / 6.6× / **17×** improvement, which is a statement about IREE's CUDA backend rather
-    than about the GPU. Consequence for anyone re-anchoring: the attn family is still worth
-    keeping (it costs one probe and it is what makes ViT honest on IREE), but on XLA/CUDA a
-    `*proxy` row is a mild approximation, not the 3.5× trap it is on IREE. -/
+    **The low proxy is an IREE fact, not a 4060 Ti fact.** Measured on
+    ares (CUDA 12.9, jax 0.10.2 CUDA PJRT plugin), the SAME card on the XLA path BEATS the
+    reference 7900 XTX on both conv and attn, and the conv proxy for attn would have been only
+    mildly off — a statement about IREE's CUDA backend rather than about the GPU. Consequence for
+    anyone re-anchoring: the attn family is still worth keeping (it costs one probe and it is what
+    makes ViT honest on IREE), but on XLA/CUDA a `*proxy` row is a mild approximation, not the trap
+    it is on IREE. -/
 def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
   (it.refFor ref.col).map fun refSec =>
     if it.family == "dense" then refSec * dMs / ref.denseRefMs
@@ -2731,7 +2717,7 @@ def yourSecOf (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat
     **On the reference card the two factors both read ~1.0, so they coincide and the published
     column is unchanged.** They separate only on a card whose transport:compute ratio differs from
     the reference's. The low end is optimistic when they do: measured on ares, ch5's
-    two factors were 40m and 91m, and the real run landed at **89m** — i.e. near the HIGH one.
+    real run landed near the HIGH one (`runs/r34_pool3s2_80ep_aug04.log`).
 
     The single printed number is deliberate (see the note at the print site). -/
 def yourSecLo (ref : BenchRef) (it : BenchItem) (dMs cMs aMs : Nat) : Option Nat :=
@@ -2805,13 +2791,12 @@ def gpuBusyPct (backend : String) : IO (Option Nat) := do
     ch9 the attn one) and an extrapolation for every other. This answers the other question
     directly: run the chapter's real trainer and
     multiply by its own epoch count. No reference card, no hardware factor, no bottleneck
-    assumption. The method is validated at **0.3%** (ch9's wall extrapolates to 3480 s from a
-    marginal-epoch measurement; the real 80-epoch run landed at 3491 s).
+    assumption. The method is validated on ch9, whose marginal-epoch extrapolation lands within a
+    fraction of a percent of its real 80-epoch wall (see `benchTable`).
 
     **REAL data, not `LEAN_MLIR_BENCH_SYNTH`** — deliberately. The synthetic path exists to take
-    the loader out of a *comparison*; here the loader is part of the answer, and it measures
-    ~6.3% of a 1-GPU epoch. Excluding it is most of why the transport-bound estimate came in 6% low
-    against the measured ResNet-34 run.
+    the loader out of a *comparison*; here the loader is part of the answer. Excluding it is most
+    of why the transport-bound estimate came in low against the measured ResNet-34 run.
 
     **AND IT MUST NOT TOUCH A CHECKPOINT**, in either direction. `trainAdamSched` checkpoints per
     epoch, so a naive 3-epoch probe would (a) RESUME an existing checkpoint — measuring a warm
@@ -2903,7 +2888,7 @@ def runBenchmark (ref : BenchRef) : IO UInt32 := do
   let cmdName := if ref.xla then "benchmark-xla" else "benchmark"
   -- DIRECT MODE: measure every chapter's own trainer here instead of scaling a foreign
   --   reference. See `runDirectProbe`. XLA only — the IREE path has no in-process compile, so a
-  --   3-epoch probe would pay ~10-15 min of iree-compile per net.
+  --   3-epoch probe would pay minutes of iree-compile per net.
   let direct := ref.xla && ((← IO.getEnv "BENCH_DIRECT").getD "" != "")
   IO.println s!"━━━ lake run {cmdName} ━━━ verified-NN training throughput on your GPU"
   IO.println s!"  lowerer: {ref.lowerer}   backend: {backend}   gpu: {gpu}   (synthetic-input probes — no dataset needed)"
@@ -3052,8 +3037,8 @@ script benchmark do
     `probeAttnRefMsXla`. The `n/a` machinery is retained on purpose: it is what would keep an
     unmeasured row honest.
 
-    All nine XLA references are measured; ch.9's is a real 80-epoch run (3491 s, val 71.31%),
-    which confirms the marginal-epoch extrapolation to within 0.3%. See `benchTable`.
+    All nine XLA references are measured; ch.9's is a real 80-epoch run, which confirms the
+    marginal-epoch extrapolation. See `benchTable`.
 
     Needs no venv: the XLA binaries compile in-process rather than shelling out to
     `iree-compile`. It does build `ffi/libpjrt_ffi.so` if missing/stale and report whether

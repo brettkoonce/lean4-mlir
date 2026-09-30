@@ -23,8 +23,8 @@ baked lr of 0.05, an effective lr of 0.05 × 32 = **1.6** on the MEAN loss. The 
 (`resnet34_train_step`, `vit_train_step`) is sum-CE with the mean folded into lr, lr = 0.003125 =
 0.1/32, and `convnext_train_step` reaches the same effective 0.1 by spelling the mean explicitly.
 The EfficientNet SGD render's effective **1.6** is a *tuned* value, not a slip:
-`runs/efficientnet_verified_crop_gpu1.log` descends 40.6% → **87.81%** over 80 epochs, matching
-README's 87.58%. Leave the number alone. A `tests/` writer that re-rendered it as **mean**-CE at
+`runs/efficientnet_verified_crop_gpu1.log` descends over 80 epochs to the accuracy the README
+reports. Leave the number alone. A `tests/` writer that re-rendered it as **mean**-CE at
 lr 0.1 would, on elaboration, silently replace a committed certified artifact with **different
 hyperparameters** (a 16× smaller effective step); `sgd-render-tie` reads that split as every
 parameter disagreeing at norm-relative **0.96875 = 31/32**, the signature of `g = g_committed / 32`.

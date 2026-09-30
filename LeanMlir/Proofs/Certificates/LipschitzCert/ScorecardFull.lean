@@ -4,16 +4,17 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsB
 /-! # Full-input certified-accuracy scorecard (4/4): the certificates
 
 The pooled 49-dim scorecard, lifted to FULL 784-dim input: pixel-L2
-ε = 1/10 and 3/10, two 784→16→10 nets. Counts below are
-MEASURED over the first 100 MNIST test images by exact rational arithmetic:
+ε = 1/10 and 3/10, two 784→16→10 nets. The certified counts are
+MEASURED over the first 100 MNIST test images by exact rational arithmetic;
+`scripts/certs/lipschitz_cert_scorecard_full.py` prints them on its `SF:` / `TF:`
+lines (`cert@0.1`, `cert@0.3`), beside the L2-PGD bracket (`PGD@0.1`, `PGD@0.3`)
+and each net's quantized test accuracy (`qacc`):
 
-* **spectrally capped** (σ ≤ 2 projected SGD, q-acc 0.924, Schatten-8
-  L = 4.95): **92/100 certified at ε = 0.1** (L2-PGD leaves 93/100
-  robust — the certificate is within 1 image(s) of the attack bound), and
-  **72/100 at ε = 0.3** (PGD: 92/100);
-* **unconstrained** (q-acc 0.951, L = 29.85): 76/100 at ε = 0.1
-  (PGD: 94/100), collapsing to **2/100 at ε = 0.3** (PGD: 86/100) —
-  at the larger radius the σ-projection is what keeps the certificate alive.
+* **spectrally capped** (`SF`: σ ≤ 2 projected SGD, Schatten-8
+  L = 4.95);
+* **unconstrained** (`TF`: L = 29.85), whose certified
+  count collapses at ε = 0.3 while the capped net's holds up — at the larger
+  radius the σ-projection is what keeps the certificate alive.
 
 ε here is FULL-pixel-space L2 (pixels in [0,1]), the perturbation model the
 literature reports. It is not the pooled-feature L2 of `LipschitzCert.Scorecard`:

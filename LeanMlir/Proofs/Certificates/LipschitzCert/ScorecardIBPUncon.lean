@@ -4,12 +4,13 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPData
 
 Pixel-L∞ certificates by exact interval bound propagation over the SAME
 first-100 MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,
-4/255, 8/255 the box certificate certifies (measured by exact rational interval
-propagation)
-**87/100**, **42/100**, **2/100**, **0/100** predictions robust (PGD-L∞ bracket: 95, 92, 85, 36).
-*Theorem vs. measurement* below says which of these carry Lean proofs.
-For comparison, pushing the L2 Lipschitz certificate through
-`‖δ‖₂ ≤ √784·ε∞` certifies only 71, 14, 0, 0 — at small L∞ radii the box beats the ball.
+4/255, 8/255 the box certificate certifies a count of predictions robust
+(measured by exact rational interval propagation) that
+`scripts/certs/lipschitz_cert_scorecard_ibp.py` prints on its `[TF] IBP certified:`
+line, beside the PGD-L∞ bracket and the counts the L2 Lipschitz certificate
+certifies when pushed through `‖δ‖₂ ≤ √784·ε∞` — at small L∞ radii the box
+beats the ball. *Theorem vs. measurement* below says which of these carry Lean
+proofs.
 
 
 **Theorem vs. measurement.** Soundness is in the ENGINE
@@ -1499,7 +1500,10 @@ theorem ibpUnconCertse4_certified :
   List.forall_iff_forall_mem.mp
     ⟨certIBPTFe4_25, certIBPTFe4_71⟩
 
-/-- **The IBP L∞ scorecard, unconstrained net (`mlpTF`)** — MEASURED 87/100 @ 1/255, 42/100 @ 2/255, 2/100 @ 4/255, 0/100 @ 8/255 (PGD-L∞ bracket 95/92/85/36). -/
+/-- **The IBP L∞ scorecard, unconstrained net (`mlpTF`)** — the counts MEASURED over the first
+    100 images at ε = 1/255, 2/255, 4/255, 8/255 are the `[TF] IBP certified:` line
+    `scripts/certs/lipschitz_cert_scorecard_ibp.py` prints (with the PGD-L∞ bracket);
+    the lists below are the emitted witnesses carrying `CertifiedAtLinf` proofs. -/
 theorem scorecard_ibp_uncon :
     (ibpUnconCertse1.length = 8 ∧ ∀ p ∈ ibpUnconCertse1, CertifiedAtLinf mlpTF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
     (ibpUnconCertse2.length = 8 ∧ ∀ p ∈ ibpUnconCertse2, CertifiedAtLinf mlpTF ((2 : ℝ)/255) p.2.1 p.2.2) ∧

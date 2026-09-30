@@ -13,7 +13,7 @@ open ReferenceNets (r34UnetBratsOf)
     `MainYolov1VisdroneFpn`) and now medical image segmentation.
 
     The backbone is `.lake/build/jax_r34_imagenet.bin` — 21,284,672 floats,
-    72% top-1, trained by this stack on ImageNet. Nothing here is downloaded.
+    trained by this stack on ImageNet (`jax/runs/r34_imagenet_bf16_90ep/`). Nothing here is downloaded.
 
     ## What is measured, and against what
 
@@ -24,7 +24,7 @@ open ReferenceNets (r34UnetBratsOf)
     that comparison confounds the initialization with a different architecture,
     and could not tell you which one moved the number.
 
-    The from-scratch `unetBrats` result (mIoU 0.736, 3 epochs) is a
+    The from-scratch `unetBrats` result (`unet-brats-train`, 3 epochs) is a
     separate reference point — "is this architecture competitive at all" — not
     the transfer measurement.
 
@@ -117,8 +117,8 @@ private def r34BackboneFloats : Nat := 21284672
     updated parameters must agree bit-for-bit. That is a known-answer test for
     the tap wiring which does NOT depend on the absolute accuracy of the
     gradient — which matters here, because this architecture family carries
-    a ~15% analytic-vs-finite-difference gap (measured by the FD probe) that
-    swamps any skip-specific error.
+    an analytic-vs-finite-difference gap (measured by the FD probe,
+    `demos/probes/MainGradFdProbe.lean`) that swamps any skip-specific error.
 
     It exercises the maxPool→`addSkipGrad` half of the tap path directly. The
     residual-stage half differs only in which field carries the gradient

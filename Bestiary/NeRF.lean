@@ -68,8 +68,8 @@ use case.
 ## Variants
 
 - `nerf` — canonical paper architecture (L_pos=10, L_dir=4, 8×256 hidden).
-  Params: ~528K per network. Full NeRF trains two such networks
-  (coarse + fine) for hierarchical sampling.
+  Full NeRF trains two such networks (coarse + fine) for hierarchical
+  sampling.
 - `nerfFast` — smaller hidden dim (128) for faster training.
 - `tinyNeRF` — minimalist fixture.
 -/
@@ -79,7 +79,7 @@ use case.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Canonical NeRF: positional encoding of (x, y, z) with L=10, plus
-    the dual-conditioned MLP. 256 hidden units, 8 layers, ~528K params.
+    the dual-conditioned MLP. 256 hidden units, 8 layers.
 
     NOTE: our linear NetSpec can't express the direction-input branch
     (which enters the MLP after the density head); the `.nerfMLP`
@@ -153,9 +153,8 @@ def main : IO Unit := do
   IO.println "    the paper's specific 8-layer MLP with mid-skip at layer 5"
   IO.println "    and dual density + RGB heads. The direction input branch"
   IO.println "    enters internally — NetSpec's linear shape doesn't see it."
-  IO.println "  • Total params ≈ 528K at canonical config. Full NeRF pipelines"
-  IO.println "    train TWO of these (coarse + fine) for hierarchical sampling,"
-  IO.println "    so ~1M trainable params total."
+  IO.println "  • Full NeRF pipelines train TWO of these (coarse + fine) for"
+  IO.println "    hierarchical sampling, so twice the count printed above."
   IO.println "  • What NeRF the PAPER is really about: volumetric rendering"
   IO.println "    (alpha-composite samples along rays) + positional encoding."
   IO.println "    Both sit OUTSIDE the network — inputs and loss, not layers."

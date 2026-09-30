@@ -51,6 +51,11 @@ LRN (Local Response Normalization) is a relic — subsequent architectures
 dropped it once BatchNorm (2015) appeared. Dropout is training-time,
 not a layer in the shape sense.
 
+The spec below does not reproduce the diagram's spatial sizes: its stem is
+`.same`-padded (227 → 57, not 55) and its pools are 2×2 stride 2, so the body
+ends at 7×7, not 6×6. The first dense layer's fan-in is pinned to the paper's
+`6·6·256`, so the printed count is the paper's classifier on this body.
+
 The two FC-4096 layers dominate the parameter count — ~58M of the 62M
 total are in those three denses. This is *the same reason* YOLOv1's
 50176→4096 FC dominated its budget, and it's why every post-2015 CNN
@@ -86,7 +91,7 @@ def alexNet : NetSpec where
     -- Classifier: flatten + 3 dense. The 9216 → 4096 and 4096² dense
     -- layers are where ~95% of the parameter budget lives.
     .flatten,
-    .dense (6 * 6 * 256) 4096 .relu,
+    .dense (6 * 6 * 256) 4096 .relu,           -- fan-in pinned to the paper's 6×6; this body ends at 7×7
     .dense 4096 4096 .relu,
     .dense 4096 1000 .identity
   ]
@@ -124,7 +129,7 @@ def main : IO Unit := do
   IO.println "  Bestiary — AlexNet"
   IO.println "════════════════════════════════════════════════════════════════"
   IO.println "  The 2012 ImageNet winner. Restarted modern deep learning."
-  IO.println "  60M params, two GPUs, a decade of compounding since."
+  IO.println "  The paper's 60M params, two GPUs, a decade of compounding since."
 
   alexNet.summarize
   tinyAlexNet.summarize

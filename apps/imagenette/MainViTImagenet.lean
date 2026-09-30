@@ -64,7 +64,8 @@ def runViTImagenet (argv : List String) : IO Unit := do
   -- `emaDecay` IS NAMED, and it has to be. `trainAdamSched`'s default is **0.9999**, while
   -- `vitTinyImagenetConfig.emaDecay` — the DeiT default the reference run used — is **0.99996**.
   -- Positional args stop at `variant`, so an EMA variant launched without this line trains against
-  -- a shadow that averages ~4× faster than its reference's and reports it as the pair.
+  -- a shadow that averages 2.5× faster than its reference's (a 1/(1−d) horizon of 10⁴ steps
+  -- against 2.5·10⁴) and reports it as the pair.
   -- Inert unless the variant selects EMA (`VerifiedVariant.emaOn`, i.e. a name starting "ema"),
   -- so it costs the non-EMA renders nothing.
   vitImagenetVerified.toNet.trainAdamSched

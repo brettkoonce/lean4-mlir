@@ -8,7 +8,7 @@ sections reuse that file's existing opens (`open MeasureTheory Measure Set Filte
 and `Mathlib.Topology.Order.LeftRightLim` are already transitive). Add `Brett Koonce` to the
 file's `Authors:` line.
 
-Verified to compile against the pinned Mathlib by `LeanMlir/Proofs/UpstreamDraft.lean`
+Verified to compile against the pinned Mathlib by `LeanMlir/Proofs/Foundation/UpstreamDraft.lean`
 (namespace `MathlibUpstream`); keep the two in sync.
 
 Also update the module docstring's "Main statements" with:

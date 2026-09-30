@@ -7,11 +7,11 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.Instance
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
+arithmetic in-kernel. Canonical surface: [`Proofs/Nets/Small/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 A trained-weight witness at the MLP rung (the full-width seals use synthetic weights):
 the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified in
-`LipschitzCert.Instance` (test acc 89.8%) instantiates the conditional VJP
+`LipschitzCert.Instance` instantiates the conditional VJP
 framework at a REAL input — test digit #1895 — with every ReLU smoothness
 hypothesis discharged from the exact rational pre-activations (7 units strictly
 on, 1 strictly off; nothing sits on a kink), rather than engineered by synthetic

@@ -11,7 +11,7 @@ This file is the fix, in three parts:
 
 * certificate data lives in `List ℤ` (weights `k/2⁸`, pixels `k/255` — store
   the integer numerators; negatives as `Int.negSucc` literals, which dodges a
-  ~15 ms/element `Neg`-elaboration tax);
+  per-element `Neg`-elaboration cost);
 * the 784-term arithmetic is ONE kernel evaluation per dot:
   `dotZ xs ys = v := by decide +kernel` — the kernel folds `zipWith (·*·)`
   with GMP integer ops, ~0.1 s per dot, `propext`-only (no `ofReduceBool`:

@@ -241,11 +241,11 @@ jobs:
         # trainer could keep calling a driver that had been renamed out from under it
         # and only a human running that one binary would find out.
         #
-        # `Apps` is a lean_lib over the same sources, so this type-checks all 111 entry
-        # points WITHOUT linking 111 × ~149 MB of binary. Measured: 3393 jobs against
-        # `Proofs`' 2403 — 59 extra LeanMlir modules (the Float bridges, the ViT and
-        # MobileNet full-net chains, LipschitzCert, SmoothingGaussian, the codegen half)
-        # plus the 111 modules themselves. That delta is why it lives HERE and not in the
+        # `Apps` is a lean_lib over the same sources, so this type-checks every entry
+        # point WITHOUT linking a ~149 MB binary per exe. It reaches LeanMlir modules
+        # `Proofs` does not (the Float bridges, the ViT and MobileNet full-net chains,
+        # LipschitzCert, SmoothingGaussian, the codegen half) plus the entry-point
+        # modules themselves. That delta is why it lives HERE and not in the
         # per-push proofs workflow, whose whole point is to skip the corpus tail.
         #
         # ⚠ KNOWN GAP, named rather than papered over: this workflow does not trigger on
@@ -256,7 +256,7 @@ jobs:
         run: |
           set -e
           lake build Apps
-          echo "✅ **All 113 apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **All apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
 
       - name: No implied imports (import_audit.py implied)
         # An import another import of the same file already reaches: removing it changes no

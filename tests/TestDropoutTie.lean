@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 /-! # Classifier dropout — the two gates its own identity checks cannot make
 
-EfficientNet-B0's reference sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`).
+EfficientNet-B0's reference sets `dropout := 0.2` (its config in `jax/MainEfficientNetImagenet.lean`).
 
 The feature ships with the usual endpoint gates — `verified_mlir/` re-renders byte-identically with
 dropout off, the forward is a byte-prefix of the train step, `Proofs.dropout_ones_id` says a ones

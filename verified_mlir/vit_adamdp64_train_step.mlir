@@ -5,6 +5,7 @@ module @m {
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<64x150528xf32>) -> tensor<64x3x224x224xf32>
     // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over 2 replicas ──
+    // every op is pretty(verified AST node) except the constants, the input reshape %ximg, the input passthroughs and the marked report-only %loss.
     // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW
     // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is
     // the replica MEAN of the per-replica gradient nodes.

@@ -1,0 +1,243 @@
+# path<TAB>match<TAB>reason — see scripts/gates/comment_numbers.py for the rule and the reasons.
+apps/ablation/MainAblation.lean	78%	citation
+apps/ablation/MainAblation.lean	79.8%	citation
+apps/imagenette/MainConvNeXtImagenet.lean	10.2x	spec
+apps/imagenette/MainConvNeXtImagenet.lean	2.6x	spec
+apps/imagenette/MainViTBImagenet.lean	16 GB	spec
+apps/imagenette/MainViTImagenet.lean	1.7x	example
+apps/imagenette/MainViTImagenet.lean	2.5×	example
+apps/imagenette/MainViTImagenet.lean	3.6×	example
+Bestiary/AlexNet.lean	95%	example
+Bestiary/BERT.lean	1.5%	citation
+Bestiary/BERT.lean	1%	example
+Bestiary/BERT.lean	1%	example
+Bestiary/FNO.lean	99.5 %	example
+Bestiary/GPT.lean	300 lines	citation
+Bestiary/Inception.lean	12× fewer	citation
+Bestiary/LeNet.lean	1.5%	citation
+Bestiary/LeNet.lean	99%	citation
+Bestiary/LLaVA.lean	23%	example
+Bestiary/Pix2Pix.lean	12GB	spec
+Bestiary/Pix2Pix.lean	24GB	spec
+Bestiary/QANet.lean	4x speedup	citation
+Bestiary/ShuffleNet.lean	0.5×	spec
+Bestiary/ShuffleNet.lean	0.5×	spec
+Bestiary/ShuffleNet.lean	0.5×	spec
+Bestiary/ShuffleNet.lean	1.0×	spec
+Bestiary/ShuffleNet.lean	1.0×	spec
+Bestiary/ShuffleNet.lean	1.0×	spec
+Bestiary/ShuffleNet.lean	1.5×	spec
+Bestiary/ShuffleNet.lean	1.5×	spec
+Bestiary/ShuffleNet.lean	2.0×	spec
+Bestiary/ShuffleNet.lean	2.0×	spec
+Bestiary/ShuffleNet.lean	2.0×	spec
+Bestiary/ShuffleNet.lean	29.1%	citation
+Bestiary/ShuffleNet.lean	31.3%	citation
+Bestiary/ShuffleNet.lean	32.6%	citation
+Bestiary/ShuffleNet.lean	43.2%	citation
+Bestiary/ShuffleNetV2.lean	0.5×	spec
+Bestiary/ShuffleNetV2.lean	0.5×	spec
+Bestiary/ShuffleNetV2.lean	1.0×	spec
+Bestiary/ShuffleNetV2.lean	1.0×	spec
+Bestiary/ShuffleNetV2.lean	1.5×	spec
+Bestiary/ShuffleNetV2.lean	1.5×	spec
+Bestiary/ShuffleNetV2.lean	2.0×	spec
+Bestiary/ShuffleNetV2.lean	2.0×	spec
+Bestiary/ShuffleNetV2.lean	2.0×	spec
+Bestiary/SqueezeNet.lean	0.5MB	citation
+Bestiary/SqueezeNet.lean	50× smaller	citation
+Bestiary/SqueezeNet.lean	50x fewer	citation
+Bestiary/SqueezeNet.lean	9× cheaper	example
+Bestiary/StableDiffusion.lean	40× cheaper	citation
+Bestiary/VGG.lean	80%	example
+Bestiary/VGG.lean	80%	example
+Bestiary/Whisper.lean	000 hours	citation
+Bestiary/WRN.lean	10/100	citation
+Bestiary/WRN.lean	95.4%	citation
+Bestiary/WRN.lean	95.4%	citation
+Bestiary/WRN.lean	95.7%	citation
+Bestiary/WRN.lean	96.0%	citation
+demos/MainAraslSigns.lean	80 %	spec
+demos/MainAraslSigns.lean	90 %	spec
+demos/MainNqsIsing.lean	5%	spec
+demos/MainPlantLeaf.lean	34 GB	example
+demos/MainTinyGptShakespeare.lean	10%	spec
+demos/MainUnetBratsR34.lean	0.06%	example
+demos/MainUnetBratsTrain.lean	0.44%	spec
+demos/MainUnetBratsTrain.lean	0.50%	spec
+demos/MainUnetBratsTrain.lean	0.50%	spec
+demos/MainUnetBratsTrain.lean	1.60%	spec
+demos/MainUnetBratsTrain.lean	21%	example
+demos/MainUnetBratsTrain.lean	25%	example
+demos/MainUnetBratsTrain.lean	25%	example
+demos/MainUnetBratsTrain.lean	75%	example
+demos/MainUnetBratsTrain.lean	97.46%	spec
+demos/MainYolov1VisdroneFpn.lean	44.7×	spec
+demos/MainYolov1VisdroneFpn.lean	6.7×	spec
+demos/MainYolov1VisdroneFpn.lean	6.7×	spec
+demos/probes/MainMnistDdpmScore.lean	10 %	spec
+demos/probes/MainMnistDdpmScore.lean	1 %	spec
+jax/Jax/Codegen.lean	100%	spec
+jax/Jax/Codegen.lean	154 MB	example
+jax/Jax/Codegen.lean	195 %	example
+jax/Jax/Codegen.lean	4× cheaper	example
+jax/MainConvNeXtBImagenet.lean	16 GB	spec
+jax/MainConvNeXtBImagenet.lean	16 GB	spec
+jax/MainConvNeXtImagenet.lean	5.9×	spec
+jax/MainConvNeXtImagenet.lean	82%	citation
+jax/MainConvNeXtSImagenet.lean	16 GB	spec
+jax/MainConvNeXtSImagenet.lean	16 GB	spec
+jax/MainMobilenetV4Imagenet.lean	79.9%	citation
+jax/MainResnet50Imagenet.lean	160 GB	example
+jax/MainResnet50Imagenet.lean	160 GB	example
+jax/MainResnet50Imagenet.lean	160 GB	example
+jax/MainResnet50Imagenet.lean	16 GB	spec
+jax/MainResnet50Imagenet.lean	16GB	spec
+jax/MainResnet50Imagenet.lean	192 GB	spec
+jax/MainResnet50Imagenet.lean	48 GB	spec
+jax/MainResnet50Imagenet.lean	78.1%	citation
+jax/MainResnet50Imagenet.lean	78.1%	citation
+jax/MainResnet50Imagenet.lean	78.1%	citation
+jax/MainResnet50Imagenet.lean	79.8%	citation
+jax/MainResnet50Imagenet.lean	79.8%	citation
+jax/MainResnet50Imagenet.lean	79.8%	citation
+jax/MainResnet50Imagenet.lean	80.4%	citation
+jax/MainResnet50Imagenet.lean	80 GB	spec
+jax/MainResnet50Imagenet.lean	80 GB	spec
+jax/MainResnet50Imagenet.lean	80 GB	spec
+jax/MainResnet50Imagenet.lean	8%	example
+jax/MainVitBImagenet.lean	16 GB	spec
+jax/MainVitBImagenet.lean	16 GB	spec
+jax/MainVitBImagenet.lean	1.9 MB	example
+jax/MainVitBImagenet.lean	22 MB	example
+jax/MainVitBImagenet.lean	2.4 MB	example
+jax/MainVitImagenet.lean	3.6x	example
+jax/MainVitImagenet.lean	72%	citation
+jax/MainVitSImagenet.lean	16 GB	spec
+lakefile.lean	16 GB	spec
+lakefile.lean	1.9×	example
+lakefile.lean	1%	spec
+lakefile.lean	43 MB	spec
+lakefile.lean	9.5h	example
+LeanMlir/F32Array.lean	196 KB	example
+LeanMlir/F32Array.lean	20%	spec
+LeanMlir/F32Array.lean	33%	spec
+LeanMlir/F32Array.lean	50%	spec
+LeanMlir/F32Array.lean	786 KB	example
+LeanMlir/Proofs/Architectures/LayerNorm.lean	0.044715 x	spec
+LeanMlir/Proofs/Architectures/LayerNorm.lean	0.5 x	spec
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	11.2%	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	1.235×	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	1.4×	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	2.4×	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	2.4×	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	24%	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	26%	statement
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	3.3×	statement
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk1.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk2.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk3.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk4.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk5.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecChunk6.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/DecScorecard.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/PhiBounds.lean	16 GB	spec
+LeanMlir/Proofs/Certificates/Smoothing/PhiBounds.lean	16 GB	spec
+LeanMlir/Proofs/Codegen/CnnRender.lean	16h	spec
+LeanMlir/Proofs/Codegen/CnnRender.lean	16h	spec
+LeanMlir/Proofs/Codegen/CnnRender.lean	16h	spec
+LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean	31.6×	example
+LeanMlir/Proofs/Codegen/IRPrint.lean	0.5x	spec
+LeanMlir/Proofs/Codegen/IRPrint.lean	0.5x	spec
+LeanMlir/Proofs/Codegen/RenderKit.lean	31.6×	statement
+LeanMlir/Proofs/Codegen/ResNet34RenderB.lean	0.8%	example
+LeanMlir/Proofs/Codegen/ResNet34RenderB.lean	24 GB	spec
+LeanMlir/Proofs/Codegen/ResNet50RenderB.lean	16 GB	spec
+LeanMlir/Proofs/Codegen/ResNet50RenderB.lean	16 GB	spec
+LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean	0.8%	example
+LeanMlir/Proofs/Codegen/ViTRenderB.lean	16 GB	spec
+LeanMlir/Proofs/Float/Binary32Instance.lean	1/100	spec
+LeanMlir/Proofs/Float/ConvMixedComposeBridge.lean	1.52×	example
+LeanMlir/Proofs/Float/ConvMixedComposeBridge.lean	1.86×	example
+LeanMlir/Proofs/Float/ConvMixedFloatBridge.lean	1%	example
+LeanMlir/Proofs/Float/DepthwiseMixedFloatBridge.lean	0.8%	example
+LeanMlir/Proofs/Float/DepthwiseMixedFloatBridge.lean	3.5%	example
+LeanMlir/Proofs/Float/FloatBridge.lean	0.8%	example
+LeanMlir/Proofs/Float/FloatBridge.lean	6.25%	example
+LeanMlir/Proofs/Float/MlpFloatBridge.lean	1/100	spec
+LeanMlir/Proofs/Float/MlpFloatBridge.lean	1/100	spec
+LeanMlir/Proofs/Float/MlpFloatBridge.lean	1/100	spec
+LeanMlir/Proofs/Float/MlpFloatBridge.lean	12.5%	example
+LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean	76 minutes	citation
+LeanMlir/Proofs/Training/Optim/RmsPropStep.lean	31.6×	example
+LeanMlir/Proofs/Training/SgdDescent/Cnn.lean	0.4%	statement
+LeanMlir/TicTacToe.lean	42 MB	spec
+LeanMlir/TicTacToe.lean	43 MB	spec
+LeanMlir/Train.lean	mAP@0.5	spec
+LeanMlir/Types.lean	0.5%	example
+LeanMlir/Types.lean	0.5%	example
+LeanMlir/Types.lean	0.75 ×	spec
+LeanMlir/Types.lean	10× noisier	example
+LeanMlir/Types.lean	10× smaller	example
+LeanMlir/Types.lean	16GB	spec
+LeanMlir/Types.lean	1.8×	example
+LeanMlir/Types.lean	2.6×	example
+LeanMlir/Types.lean	3.6×	example
+LeanMlir/Types.lean	5.9×	example
+LeanMlir/Verified/NetsCore.lean	11.68 GiB	spec
+LeanMlir/Verified/NetsCore.lean	15.11 GiB	spec
+LeanMlir/Verified/Spec.lean	938 GiB	example
+LeanMlir/Verified/Train.lean	0.000000%	example
+LeanMlir/Verified/Train.lean	0%	example
+LeanMlir/Verified/Train.lean	100%	example
+LeanMlir/Verified/Train.lean	10× noisier	example
+LeanMlir/Verified/Train.lean	10× noisier	example
+LeanMlir/Verified/Train.lean	154 MB	example
+LeanMlir/Verified/Train.lean	154 MB	example
+LeanMlir/Verified/Train.lean	154 MB	example
+LeanMlir/Verified/Train.lean	16 GB	spec
+LeanMlir/Verified/Train.lean	1 MB	spec
+LeanMlir/Verified/Train.lean	260 MB	example
+LeanMlir/Verified/Train.lean	308 MB	example
+LeanMlir/Verified/Train.lean	308 MB	example
+LeanMlir/Verified/Train.lean	30 GB	example
+LeanMlir/Verified/Train.lean	30 GB	example
+LeanMlir/Verified/Train.lean	31 KB	example
+LeanMlir/Verified/Train.lean	3.6×	example
+LeanMlir/Verified/Train.lean	4%	example
+LeanMlir/Verified/Train.lean	4 MB	example
+LeanMlir/Verified/Train.lean	50 KB	example
+LeanMlir/Verified/Train.lean	616 MB	example
+LeanMlir/Verified/Train.lean	61%	example
+LeanMlir/Verified/Train.lean	64 KB	spec
+LeanMlir/Verified/Train.lean	64 KB	spec
+LeanMlir/Verified/Train.lean	7.4 GB	example
+LeanMlir/Verified/Train.lean	7.4 GB	example
+LeanMlir/Verified/Train.lean	94%	example
+LeanMlir/Verified/Train.lean	95%	spec
+LeanMlir/Verified/Train.lean	95%	spec
+runs/2026-09-11-vit-leak-ab/repro/Main.lean	0 ms	spec
+runs/2026-09-11-vit-leak-ab/repro/Main.lean	200 ms	spec
+tests/AuditAxioms.lean	1 artifacts	spec
+tests/TestArgmaxN.lean	1/100	example
+tests/TestCifar8OptTie.lean	100× larger	example
+tests/TestDropPathTie.lean	1%	spec
+tests/TestEfficientNetDpBench.lean	100%	example
+tests/TestEfficientNetDpBench.lean	100%	example
+tests/TestEfficientNetDpBench.lean	2.00×	example
+tests/TestEfficientNetDpBench.lean	48.2 MB	example
+tests/TestEfficientNetFwd.lean	17413f0	spec
+tests/TestEfficientNetFwd.lean	17413f0	spec
+tests/TestEfficientNetFwd.lean	17413f0	spec
+tests/TestEfficientNetTrain.lean	16× smaller	example
+tests/TestGradClipTie.lean	5.3×	example
+tests/TestGradClipTie.lean	9.1×	example
+tests/TestMomTie.lean	1.9×	example
+tests/TestR50AccumShardTie.lean	160 artifacts	spec
+tests/TestR50AccumTie.lean	160 artifacts	spec
+tests/TestResnet34AdamBench.lean	b856deb	spec
+tests/TestResnet34AdamTie.lean	b856deb	spec
+tests/TestResnet34BatchCheck.lean	11.68 GiB	spec
+tests/TestResnet34BatchCheck.lean	15.11 GiB	spec
+tests/TestRmsPropOpTie.lean	31.6×	example
+tests/TestRmsTie.lean	31.6×	example

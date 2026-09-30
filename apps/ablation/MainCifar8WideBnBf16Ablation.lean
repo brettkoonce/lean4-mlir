@@ -15,7 +15,7 @@ actually uses.
 Same hyperparameters as `cifar8w-bn-ablation`: SGD lr 0.1, Nesterov μ0.9 lr 0.02, AdamW lr 1e-3,
 **constant** learning rate (`warmupEpochs = 0`, `expDecayRate = 1.0`), 40 epochs, bs 128.
 
-Expect no speedup — bf16 measures 0.87× at cifar8's conv shapes. This is a stability and
+Expect no speedup — bf16 is slower than f32 at cifar8's conv shapes. This is a stability and
 accuracy result, never a throughput one.
 
 Run: `LEAN_MLIR_LOWERER=xla .lake/build/bin/cifar8wb-bn-ablation data`

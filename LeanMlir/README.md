@@ -13,7 +13,7 @@ end to end in about 650 lines.
 | `IreeRuntime`, `F32Array`, `LEBytes` | the runtime: bindings to [`ffi/`](../ffi/) (XLA/PJRT by default, IREE optionally) and host-side buffers |
 | `SyncBnCheck`, `GradcheckHelpers`, `VjpOracleNets` | support for the gates in [`tests/`](../tests/) |
 | `Verified/Attack`, `Verified/PgdGen`, `Verified/Smoothing`, `E4M3Quant` | the robustness and fp8 studies |
-| `Blackjack`, `Pong`, `FloatFmt`, `Cam`, `Ddpm` | support for the Chapter 10 demos (`FloatFmt` prints the RL demos' tables) |
+| `Blackjack`, `Pong`, `TicTacToe`, `FloatFmt`, `Cam`, `Ddpm` | support for the Chapter 10 demos (`FloatFmt` prints the RL demos' tables) |
 
 ```bash
 lake build LeanMlir    # the library

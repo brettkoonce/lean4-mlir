@@ -54,7 +54,7 @@ def main : IO Unit := do
     bad := bad + 1
 
   -- ══ Gates C/D: `rankOf`, the top-5 metric ══
-  -- The reference's headline is quoted as "72.02% top-1 / 90.62% top-5". `rankOf` counts strictly-greater logits, so the label is in
+  -- The reference's headline quotes top-1 and top-5. `rankOf` counts strictly-greater logits, so the label is in
   -- the top-k iff rank < k — the same construction the reference uses (it avoids `top_k`, whose
   -- indices it records as broken on ROCm/gfx1100). Matching the formulation makes the two sides'
   -- top-5 comparable by construction, ties and all.

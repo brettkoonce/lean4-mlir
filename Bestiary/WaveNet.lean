@@ -63,11 +63,13 @@ categorical distribution over the next mu-law-quantized sample.
 
 The paper uses 3 stacks of 10 layers (dilations $1, 2, 4, \ldots, 512$
 per stack), so 30 total dilated blocks. Residual channels = 32, skip
-channels = 512 for the canonical speech model (~4.5M params). Higher-
-quality music models use larger residual channels (256).
+channels = 512 for the canonical speech model. Higher-quality music
+models use larger residual channels (256).
 
-- `waveNet` — canonical speech, 3 × 10 layers, res=32, skip=512.
-- `waveNetMusic` — music generation, 3 × 10, res=256, skip=256.
+- `waveNet` — canonical speech, one stack of 10 layers, res=32, skip=512.
+- `waveNet3Stack` — three stacks of 10, architecturally simplified (the
+  stacks after the first run at res = skip = 512; see its docstring).
+- `waveNetMusic` — music generation, one stack of 10, res=256, skip=256.
 - `tinyWaveNet` — 1 × 8 layers, res=16, skip=64. Fixture.
 -/
 
@@ -75,7 +77,7 @@ quality music models use larger residual channels (256).
 -- § WaveNet (canonical speech model, paper Table 2)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Speech-synthesis WaveNet, ~4.5M params. Bestiary-single-stack
+/-- Speech-synthesis WaveNet. Bestiary-single-stack
     simplification: 10 dilated residual blocks (dilations 1, 2, ..., 512),
     32 residual channels, 512 skip channels, 256 mu-law output classes.
 

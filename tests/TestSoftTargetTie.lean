@@ -8,7 +8,7 @@ path, and this harness is what proves it. Every render already takes the target 
 `[batch, nClasses]` FLOAT tensor `%onehot`, and the emitted cotangent is
 
 ```
-dy = ((softmax − onehot) + α·onehot − α/K) / B      -- ViTRender.lean:312, and the peer renders
+dy = ((softmax − onehot) + α·onehot − α/K) / B      -- ViTRender's `vitBackAll`, and the peer renders
    = (softmax − (1−α)·onehot − α/K) / B
 ```
 
@@ -131,7 +131,7 @@ def main (args : List String) : IO Unit := do
   -- The FLOOR for that comparison: the identical hard target, run again through the identical
   -- construction. Each `run` builds a fresh session and recompiles, and "bit-identical within
   -- a process" does NOT survive that on every net — ConvNeXt disagrees with itself on
-  -- ~0.15% of coordinates by sub-print-precision amounts, which is its documented ill-conditioned
+  -- a small fraction of coordinates by sub-print-precision amounts, which is its documented ill-conditioned
   -- layer-scale reduce ("does not reproduce to 1e-4 against ANY reordering"). Without
   -- this run the PATH check would read that as a broken soft path. Measure the floor; never assume
   -- it.

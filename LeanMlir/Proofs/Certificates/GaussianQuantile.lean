@@ -6,8 +6,9 @@ import LeanMlir.Proofs.Foundation.UpstreamDraft
 `stdNormalCDF` (Mathlib's `cdf` of `gaussianReal 0 1`) and `stdNormalQuantile` (`sSup {t | Φ t < p}`,
 the honest inverse on `(0,1)`), with the facts every smoothing certificate uses: `Φ` is strictly
 monotone and symmetric; on `(0,1)` the quantile is monotone, odd about `½`, continuous and inverts
-`Φ` both ways; below `0` it takes the junk value `0`. The `IsOpenPosMeasure` instances say the
-1-D and the multivariate standard Gaussian charge every nonempty open set. Mathlib has none of
+`Φ` both ways; below `0` it takes the junk value `0`. The `IsOpenPosMeasure` instance says the
+multivariate standard Gaussian charges every nonempty open set; the 1-D instance is
+`MathlibUpstream.instIsOpenPosMeasureGaussianReal`. Mathlib has none of
 this for the Gaussian quantile.
 -/
 

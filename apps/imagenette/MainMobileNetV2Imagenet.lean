@@ -23,7 +23,8 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
     `batchSize` is PER DEVICE and must match the batch the variant was rendered at.
 
     350, not 300, because **this trainer's job is to match the JAX reference run**, and the
-    reference number this net is measured against (**71.90% / 90.41%**, §6.5, `85daffbc`) is the
+    reference number this net is measured against (§6.5; the reference row of
+    `runs/2026-09-10-mnv2-verified-350ep/RESULTS.md`) is the
     paper-faithful **350-epoch** exponential-decay tier — `blueprint`'s "The paper-faithful tier:
     350 epochs". A 300-epoch verified run would not be comparable to it:
     `totalSteps := cfg.epochs * nb / accK` is what the schedule anneals over, so 300 vs 350 is a

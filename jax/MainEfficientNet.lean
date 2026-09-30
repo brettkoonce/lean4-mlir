@@ -9,8 +9,8 @@ def efficientNetB0 : NetSpec where
   imageH := 224
   imageW := 224
   -- EfficientNet-B0 is SiLU/swish throughout, stem and head included. The verified render is
-  -- swish there too; without this line the reference is not, a deviation worth 51% of logit range —
-  -- five times the padding deviation.
+  -- swish there too; without this line the reference is not, a deviation several times the
+  -- padding deviation.
   convBnAct := .swish
   layers := [
     .convBn 3 32 3 2 .same,                          -- 224→112

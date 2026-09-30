@@ -561,7 +561,8 @@ private def gradPrefixCases : List (String × String × String) :=
 
     A `tensor<B×n>` mask input in place of `tensor<B>` + `broadcast_in_dim dims = [0]` typechecks,
     compiles, runs, descends, and is **per-element dropout** — a different regulariser entirely. The
-    reference's mask is `(B, 1, …, 1)` (`jax/Jax/Codegen.lean:1037`), and `dims = [0]` is the whole
+    reference's mask is `(B, 1, …, 1)` (`_drop_branch`, emitted by `emitHelpers` in
+    `jax/Jax/Codegen.lean`), and `dims = [0]` is the whole
     of that claim in the emitted text.
 
     Also checked: the `1/keep` literal is BAKED (so a wrong ramp is visible in the text rather than
@@ -586,7 +587,8 @@ private def dropPathBackEmit : String :=
 
     > **the mask is per-ELEMENT, not per-sample.**
 
-    The reference draws `bernoulli(key, keep, x.shape)` (`jax/Jax/Codegen.lean:1971`) — the full
+    The reference draws `bernoulli(key, keep, x.shape)` (`emitForward`'s `.dense` arm in
+    `jax/Jax/Codegen.lean`) — the full
     `(B, 1280)` shape, not `(B, 1, …, 1)`. So a `tensor<B>` input plus `broadcast_in_dim dims = [0]`
     here typechecks, compiles, runs, descends, and is **stochastic depth on the classifier** — a
     different regulariser, exactly as the reverse substitution is on a residual branch.

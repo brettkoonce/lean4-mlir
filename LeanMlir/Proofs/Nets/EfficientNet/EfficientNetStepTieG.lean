@@ -41,12 +41,9 @@ the capstone differ.
 at the 3x3/s2 stem and symmetric at the strided depthwises, swish (no kink, so no smoothness
 hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs.
 
-**One replica.** In a data-parallel artifact such as `efficientnetin_emarmsdp64` every
-gradient node feeds `allReduceMeanF`. Every statement here is at the per-replica node;
-`DataParallel.Node` composes it with the replica mean and the tail
-(`adamW_at_allReduceMeanF`). For the sync-BN data-parallel render, `EfficientNetSyncStepTieG.lean`
-states the whole step: its `efficientnet_net_syncTiedG` says each all-reduced gradient is this
-file's node at `N := R·N` (without drop-path and dropout).
+**One replica.** Every statement here is at one replica's node. Every B0 data-parallel render
+synchronises BatchNorm; its all-reduced gradients are `efficientnet_net_syncTiedG`
+(`EfficientNetSyncStepTieG.lean`): this file's node at `N := R·N`, without drop-path and dropout.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

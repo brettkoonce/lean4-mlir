@@ -3,8 +3,8 @@ import LeanMlir.Verified.Train
 
 /-! # `@resnet34_adam_train_step` step-time bench — hand-written vs `pretty(provenGraph)`
 
-The batched render (the committed `verified_mlir/resnet34_adam_train_step.mlir`) is **1.68× the
-ops** of the hand-written render (10014 vs 5971): `pretty` has no CSE, the batched
+The batched render (the committed `verified_mlir/resnet34_adam_train_step.mlir`) has **far more
+ops** than the hand-written render: `pretty` has no CSE, the batched
 backward ops are self-contained recomputes (`bnBatchF`, `bnBatchBack`, `bnGammaGradB` each rebuild
 x̂ from the saved BN input, so `rsqrt` is 108 = 36 × 3 where the hand-written render saves `%{p}xh`
 once), and the `[B,c·h·w] ↔ [B,c,h,w]` round-trips add ~621 reshapes.
@@ -19,7 +19,7 @@ which is the robust one for a bench (noise only ever adds time). Inputs are byte
 `tests/TestResnet34AdamTie.lean` so the two harnesses measure the same two executables.
 
 **What the ratio does and does not mean.** Each step round-trips the whole packed `[θ|m|v]` buffer
-(~272 MB each way) over PCIe because parameters are host-resident. That cost is
+(each way) over PCIe because parameters are host-resident. That cost is
 identical for both renders, so the honest comparison is the **absolute delta** `T_B − T_A`, which is
 the compute difference in ms; the *ratio* of totals is diluted by the shared transfer and will
 understate a real compute regression. Both are reported.
@@ -119,7 +119,7 @@ backend {← LowererSession.backendName}"
   let (xA, yA) ← mkXY bsA
   let (xB, yB) ← mkXY bsB
 
-  -- ── compile both (timed — B is 1.68× the ops, so this is a dev-loop cost worth naming) ────
+  -- ── compile both (timed — B has far more ops, so this is a dev-loop cost worth naming) ────
   IO.println "  compiling A…"; (← IO.getStdout).flush
   let ca0 ← IO.monoMsNow
   let sessA ← mkSession pathA

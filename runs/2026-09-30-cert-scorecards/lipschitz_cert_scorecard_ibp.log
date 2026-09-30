@@ -1,0 +1,31 @@
+SF: qacc=0.9238 B1=2.227 B2=2.224 L=4.953 cert@0.1=92 cert@0.3=72 PGD@0.1=93 PGD@0.3=92
+TF: qacc=0.9508 B1=5.641 B2=5.291 L=29.847 cert@0.1=76 cert@0.3=2 PGD@0.1=94 PGD@0.3=86
+[SF] IBP certified: {'e1': 92, 'e2': 88, 'e4': 69, 'e8': 24} PGD-Linf: {'e1': 93, 'e2': 93, 'e4': 92, 'e8': 88} L2-Lipschitz-implied: {'e1': 92, 'e2': 85, 'e4': 49, 'e8': 2}
+[TF] IBP certified: {'e1': 87, 'e2': 42, 'e4': 2, 'e8': 0} PGD-Linf: {'e1': 95, 'e2': 92, 'e4': 85, 'e8': 36} L2-Lipschitz-implied: {'e1': 71, 'e2': 14, 'e4': 0, 'e8': 0}
+[data] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardIBPData.lean: 366 lines
+[SF] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardIBP.lean: 1652 lines
+[TF] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardIBPUncon.lean: 1493 lines
+	Command being timed: "python3 scripts/certs/lipschitz_cert_scorecard_ibp.py"
+	User time (seconds): 6.61
+	System time (seconds): 0.16
+	Percent of CPU this job got: 904%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.74
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 534872
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 39022
+	Voluntary context switches: 78
+	Involuntary context switches: 746
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 448
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0

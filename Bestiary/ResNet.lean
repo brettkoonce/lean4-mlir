@@ -40,12 +40,12 @@ different depths — same chain rule, same fan-in.
 | ResNet-152  | bottleneck | (3, 8, 36, 3)      | 60.2M  | 78.3          |
 
 **Reproduced here.** ResNet-50 trains from scratch through the
-Lean → StableHLO → JAX pipeline to **76.66 % top-1 / 93.03 % top-5** on
-ImageNet-1k — the timm *ResNet Strikes Back* **A3** recipe (LAMB at effective
-batch 2048 via gradient accumulation, BCE + mixup/cutmix + RandAugment, 100
-epochs, train @160 / eval @224). That matches the classic torchvision
-reference (76.0) and lands ~1.4 pt under the RSB-A3 paper's 78.1 — the residual
-is running-BN / RandAugment reimplementation slop. Config
+Lean → StableHLO → JAX pipeline on ImageNet-1k with the timm *ResNet Strikes
+Back* **A3** recipe (LAMB at effective batch 2048 via gradient accumulation,
+BCE + mixup/cutmix + RandAugment, 100 epochs, train @160 / eval @224; the
+RSB-A3 paper reports 78.1 top-1). The run's top-1 / top-5, against the
+torchvision and RSB-A3 figures, is in the book's bestiary chapter (section
+"Bestiary entries: the chapter nets at work", the ResNet entry). Config
 `resnet50ImagenetConfigRSBFaithful` in `jax/MainResnet50Imagenet.lean`
 (recipe: `resnet50-imagenet rsb-faithful`).
 
@@ -181,5 +181,5 @@ def main : IO Unit := do
   IO.println "    vs 512 in ResNet-34. The '4× channel growth across stages'"
   IO.println "    trick is bottleneck-specific."
   IO.println "  • Modern variants (ResNeXt, ResNeSt, RegNet) all preserve the"
-  IO.println "    bottleneck residual structure; that's the load-bearing"
+  IO.println "    bottleneck residual structure; it is the core"
   IO.println "    architectural primitive of post-2015 vision."

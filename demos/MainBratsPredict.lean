@@ -89,10 +89,10 @@ private def backdropGray (xba : ByteArray) (b h w H W channels centre0 : Nat) : 
   -- Brain mask: background is exact 0 in a skull-stripped volume and
   -- `znorm_brain` preserves that (it writes z only at nonzero voxels), so
   -- "0 in all four modalities" is background. Testing a single modality
-  -- would instead punch black speckle through the brain: ~1.6% of brain
-  -- voxels have a z within half a quantization step of 0 and dequantize to
-  -- exactly 0. Agreeing across four independent modalities makes that
-  -- coincidence vanish.
+  -- would instead punch black speckle through the brain: brain voxels
+  -- whose z lies within half a quantization step of 0 dequantize to
+  -- exactly 0 in that one modality. Agreeing across four independent
+  -- modalities makes that coincidence vanish.
   let isBrain := (List.range numModalities).any fun c =>
     F32.read xba (imgOff + c * stride + pix).toUSize != 0.0
   if !isBrain then 0

@@ -25,8 +25,8 @@ schedule (measured on the JAX side).
 
 **Batch is 64 per device** for the pair, ConvNeXt-T's rescope: global 256, the batch the LR is
 scaled to. The pair variant is `emadpwxclipdropbf16` (EMA shadow, bf16), `emawxclipdropbf16` its
-single-device peer and the default here; it peaks at 9.53 GiB of the plugin's 11.68 default arena
-(compile probe, 2026-09-29), so no accumulation render and no `LEAN_MLIR_MEM_FRACTION`. The
+single-device peer and the default here; it fits the plugin's default arena (compile probe,
+2026-09-29), so no accumulation render and no `LEAN_MLIR_MEM_FRACTION`. The
 `adam*wxclipdrop{,bf16}` siblings are rendered at 32 and need `LEAN_MLIR_BATCH=32`.
 
 ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_fwd.mlir` (at

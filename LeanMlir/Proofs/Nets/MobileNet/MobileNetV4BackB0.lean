@@ -421,7 +421,18 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 -- input and gate nothing at all. Every one was extracted from **timm 1.0.28**, the pinned spec, by
 -- instantiating `mobilenetv4_conv_medium` and walking `model.blocks[1:4]`, reading `dw_start` /
 -- `pw_exp` / `dw_mid` / `pw_proj` off each `UniversalInvertedResidual`. All 21 rows agree with timm
--- exactly on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. Note the naming: our `postDWk` is timm's `dw_mid`, not a third convolution.
+-- exactly on `(ic, oc, expand, preDWk, postDWk, h, stride2)`, and the first guard pins all 21
+-- tuples as timm prints them (`expand` = `pw_exp`'s out / in channels, `h` the block's output
+-- side at a 224-px input). Note the naming: our `postDWk` is timm's `dw_mid`, not a third
+-- convolution.
+#guard mnv4Blocks.map (fun s => (s.ic, s.oc, s.expand, s.preDWk, s.postDWk, s.h, s.stride2)) ==
+  [(48, 80, 4, 3, 5, 28, true), (80, 80, 2, 3, 3, 28, false), (80, 160, 6, 3, 5, 14, true),
+   (160, 160, 4, 3, 3, 14, false), (160, 160, 4, 3, 3, 14, false), (160, 160, 4, 3, 5, 14, false),
+   (160, 160, 4, 3, 3, 14, false), (160, 160, 4, 3, 0, 14, false), (160, 160, 2, 0, 0, 14, false),
+   (160, 160, 4, 3, 0, 14, false), (160, 256, 6, 5, 5, 7, true), (256, 256, 4, 5, 5, 7, false),
+   (256, 256, 4, 3, 5, 7, false), (256, 256, 4, 3, 5, 7, false), (256, 256, 4, 0, 0, 7, false),
+   (256, 256, 4, 3, 0, 7, false), (256, 256, 2, 3, 5, 7, false), (256, 256, 4, 5, 5, 7, false),
+   (256, 256, 4, 0, 0, 7, false), (256, 256, 4, 0, 0, 7, false), (256, 256, 2, 5, 0, 7, false)]
 #guard mnv4Blocks.map (·.family) =
   [.extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .extraDW, .convNeXtLike, .ffn,
    .convNeXtLike, .extraDW, .extraDW, .extraDW, .extraDW, .ffn, .convNeXtLike, .extraDW,

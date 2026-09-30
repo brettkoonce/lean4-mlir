@@ -56,13 +56,17 @@ DenseNet families differ only in `(L, growth_rate, block_counts)`.
 The four ImageNet-class variants from the paper:
 
 - `denseNet121` — 121 weight layers, blocks (6, 12, 24, 16),
-  growth_rate=32, ~7.0M params (paper-exact: 6.8M).
+  growth_rate=32.
 - `denseNet169` — 169 weight layers, blocks (6, 12, 32, 32),
-  growth_rate=32, ~12.5M params (paper: 12.5M).
+  growth_rate=32.
 - `denseNet201` — 201 weight layers, blocks (6, 12, 48, 32),
-  growth_rate=32, ~18.6M params (paper: 18.6M).
+  growth_rate=32.
 - `tinyDenseNet` — small fixture for testing: blocks (2, 2),
   growth_rate=8.
+
+The three paper variants here end in a 10-class (Imagenette) classifier, so
+their printed counts sit below the paper's 1000-class models by the
+difference in that last dense layer.
 
 The pattern: stem (7×7 stride-2 conv + 3×3 maxpool), four dense
 blocks separated by transition layers (each halving channels and

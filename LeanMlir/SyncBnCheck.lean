@@ -45,8 +45,8 @@ structure Cfg where
   dpPath    : String                       -- committed sync-BN DP step at `replicas × bs`; "" renders it
   render    : (B : Nat) → (forceSync : Bool) → String   -- single-device train step at batch `B`
   /-- The sync-BN DP step at per-replica batch `B` over `R` replicas, for `dpPath := ""` — a net
-      whose committed DP shape is too large to gate (ResNet-50's 1×256 reference peaks at 94–95 %
-      of the raised arena) is gated at a smaller `bs` by the same renderer. -/
+      whose committed DP shape is too large to gate (ResNet-50's 1×256 reference nearly fills the
+      raised arena) is gated at a smaller `bs` by the same renderer. -/
   renderDp  : (B R : Nat) → String := fun _ _ => ""
   entry     : (B replicas : Nat) → String  -- its entry name, `m.<slug>_<variant>_train_step`
   /-- The split identity's bound on the handed-back statistics. `resnet34-syncbn-check` set 1e-3

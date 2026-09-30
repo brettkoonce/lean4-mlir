@@ -1301,9 +1301,9 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in")
 
 -- **The SINGLE-DEVICE bf16 peer**, and it exists to answer one question the 4-replica numbers
--- cannot: **how much of the bf16 win does the f32 all-reduce eat?** `adamdp64bf16` measured 1.37×
--- at 4 replicas while MNv4 — which renders no DP variant at all — measured 1.88× at 1. Those two
--- differ in BOTH architecture and replica count, so neither explains the other. This render holds
+-- cannot: **how much of the bf16 win does the f32 all-reduce eat?** `adamdp64bf16`'s bf16 gain at
+-- 4 replicas was well below MNv4's at 1 — MNv4 renders no DP variant at all
+-- (planning/archive/bf16_renderer.md). Those two differ in BOTH architecture and replica count, so neither explains the other. This render holds
 -- the architecture fixed and moves only the replica count. Not a recipe; a control.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 false "mobilenetv2in"
@@ -1323,9 +1323,10 @@ end Proofs.StableHLO
 -- `feature_group_count` buys no exemption. Check with `scripts/probes/bf16_gate2.py`, never by grepping
 -- the op line, which shows only the result type.
 --
--- The depthwise convs are ~13% of MNv2's step and bf16 is a mild LOSS on them in isolation
--- (0.86× at MNv2's own layers — cuDNN has a better f32 depthwise kernel on Ada). The win comes
--- from the 1×1 expand/project convs, which is why the reference sets `bf16Conv := true` here.
+-- The depthwise convs are a small share of MNv2's step and bf16 is a mild LOSS on them in
+-- isolation (cuDNN has a better f32 depthwise kernel on Ada; `planning/archive/bf16_renderer.md`).
+-- The win comes from the 1×1 expand/project convs, which is why the reference sets
+-- `bf16Conv := true` here.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.adamw true)
@@ -1342,7 +1343,7 @@ end Proofs.StableHLO
 #guard !"adamdp64bf16".startsWith "ema"
 
 -- ── RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ────────────────────────────
--- RMSProp is the ONLY gap between this net and the JAX reference's **68.33%** (everything else —
+-- RMSProp is the ONLY gap between this net and the JAX reference run (everything else —
 -- batch 256, 90 epochs, 5-epoch warmup, no label smoothing — matches). It is **one** op of its
 -- own: `momVNextF` spells the coupled L2 and `adamVNextF` at `β₂ := ρ` IS the running mean-square
 -- (`Proofs.rmsPropStep`'s `s'` is `adamVNext ρ`), so only the ε-inside-the-root normalise is new.
@@ -1435,7 +1436,7 @@ end Proofs.StableHLO
 
 -- ── MobileNetV2 on FULL 1000-class ImageNet, slug `mobilenetv2in` ───────────────────────────────────
 -- The forward pair for the ImageNet scale-tier trainer. `B`/`nClasses` are parameters; the `slug`
--- is what stops these overwriting the 10-class pair the 86.73% Imagenette run and the prefix check
+-- is what stops these overwriting the 10-class pair the Imagenette runs and the prefix check
 -- depend on. A forward that does not match its train step's BN world is a different net.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd_eval.mlir"
   (Proofs.StableHLO.mnv2FwdEvalFaithfulV 64 1000 "1.0e-5" false "mobilenetv2in")

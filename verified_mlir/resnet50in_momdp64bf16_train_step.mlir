@@ -16,7 +16,7 @@ module @m {
     // still shard exactly; each conv weight gradient rounds its replica's partial sum
     // before the all-reduce, where one device rounds the whole sum once. That is the
     // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided
-    // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)
+    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)
     // The conv biases are not in the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.

@@ -40,7 +40,8 @@ The paper's title is a pun: "Extreme Inception."
 
 The key building block is just `.separableConv`, which we already have
 in `Types.lean`. Every block has:
-- 3 depthwise-separable convs in series
+- depthwise-separable convs in series (2 per entry- and exit-flow block,
+  3 per middle-flow block)
 - Residual skip around them
 - Max-pool for downsampling (entry/exit flows only)
 
@@ -52,7 +53,7 @@ hypothesis beats Inception's hand-designed parallel branches.
 
 Xception is the link between Inception (2014–16) and MobileNet v1
 (2017). MobileNet basically said "separable convs + stride for
-downsampling + linear bottlenecks" and got to 4M params for mobile
+downsampling" and got to 4M params for mobile
 deployment. Xception had already proven the separable-conv thesis
 worked at server scale.
 -/

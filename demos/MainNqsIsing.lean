@@ -186,7 +186,7 @@ def Cfg.mode (c : Cfg) : Nat := if c.arch == "mlp" then 0 else if c.arch == "vit
     are `ffi/f32_helpers.c` helpers keyed by a `flipMode`: 0 the rows as given,
     1 row r with site `sites[r]` flipped (a Metropolis proposal per chain), 2 every
     row expanded into its N single-flip neighbours (the E_loc batch). In Lean the
-    same loops cost ~1.5 µs per pushed float: 11 s per step for the MLP at N = 64. -/
+    same loops cost seconds per step for the MLP at N = 64, all of it in per-float pushes. -/
 
 @[inline] def pushU64 (acc : ByteArray) (c : UInt64) : ByteArray := Id.run do
   let mut acc := acc

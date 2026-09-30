@@ -10,7 +10,9 @@ import LeanMlir.Proofs.Training.JacobianSeal
 bundles** — the stem's relu, the fused stage's, one per resolution group and the head's, **38**
 relu sites in all (the `#guard` below counts them off the block table). That statement is
 pointwise, so it could in principle be vacuous. This file exhibits a `(w, x)` that discharges
-every clause with genuinely nonzero weights, shows the forward is not constant there, and seals
+every clause — centre-tap kernels on the stem, the fused stage, the three channel-changing rows and
+the head; the eighteen skip rows zeroed, each block then the exact identity — shows the forward is
+not constant there, and seals
 the Jacobian nonzero — hence, through
 [`Training/JacobianSeal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/JacobianSeal.lean),
 the proven backward is not the zero map at that point.

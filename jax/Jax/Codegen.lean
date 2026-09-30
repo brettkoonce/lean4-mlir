@@ -463,7 +463,7 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- eval alone would be worse than matching neither — the network partly fits the aliasing of
     -- the resampler it trained under, so the two sides have to move together.
     -- Note this only bites on crops that DOWNSCALE to the train resolution. `antialias` is a
-    -- no-op when upsampling (measured: 0.3106 vs 0.3107 at 0.70×), and RandomResizedCrop's area
+    -- no-op when upsampling (measured, `planning/archive/resize_eval_reconciliation.md`), and RandomResizedCrop's area
     -- range reaches down to 0.08, so a fair share of draws are upsamples where nothing changes.
     "    img = tf.image.resize([img], " ++
       (if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]") ++ ",\n" ++
@@ -488,13 +488,13 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     -- **timm's VALIDATION PROTOCOL, not the Google/TPU "Inception" one.** timm resizes the WHOLE
     -- image so its shorter side is `img_size / crop_pct`, then centre-crops `img_size`; the
     -- Inception form crops a centred square straight out of the JPEG and resizes that. The field of
-    -- view is identical either way, so the ordering is worth 0.02–0.04 pt — but `antialias=True`
+    -- view is identical either way, so the ordering is worth next to nothing — but `antialias=True`
     -- is not: PIL antialiases when downscaling and TF's default does not, and on RSB-A3 that gap
-    -- measured **0.90 pt** (77.15 → 76.25 on the same weights).
+    -- measured close to a point of top-1 on the same weights.
     -- `antialias=True` is what makes this PIL rather than merely PIL-shaped, and it is measured
-    -- rather than asserted: TF bicubic with antialias tracks PIL bicubic at mean |Δ| ≈ 0.30/255,
-    -- FLAT from 0.7× to 11.7× downscale. Without it the error grows with the ratio — 0.31 at 1.0×,
-    -- 2.54 at 3.9×, 13.73 at 11.7× — i.e. it concentrates on the biggest images in the set.
+    -- rather than asserted: TF bicubic with antialias tracks PIL bicubic at a small, FLAT error
+    -- across downscale ratios. Without it the error grows with the ratio, i.e. it concentrates on
+    -- the biggest images in the set. Both measurements: `planning/archive/resize_eval_reconciliation.md`.
     -- It costs a full `decode_jpeg` where the Inception form could `decode_and_crop_jpeg`, because
     -- the resize precedes the crop. Eval only, and eval is a small share of a run.
     "def _imagenet_decode_center_crop(image_bytes):\n" ++
@@ -2897,8 +2897,8 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   --
   -- (1) THE VAL SET IS SORTED BY CLASS. With BATCH-norm eval (`runningBN := false`) each 512-image
   --     batch then sees only 2-3 classes, so BN normalises with near-single-class statistics and
-  --     the discriminative signal is destroyed. Measured on Imagenette: mnv2 epoch-10 val goes
-  --     29.91% sorted -> 70.15% shuffled, same weights and recipe.
+  --     the discriminative signal is destroyed. Measured on Imagenette: mnv2's epoch-10 val
+  --     collapses sorted and recovers shuffled, same weights and recipe.
   --     The permutation is SEEDED, so eval stays deterministic and run-to-run comparable.
   --
   -- (2) THE REMAINDER MUST NOT BE DROPPED (`len(images) - batch_size + 1`). Not a rounding detail
@@ -3548,8 +3548,8 @@ def generate (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (dataDir : 
     **f32 on the wire, deliberately.** The pipeline already normalizes and flattens to
     `(B, 3·224·224)` f32 — precisely the train step's `%x`. Sending uint8 would be 4× cheaper but
     would put normalization on the Lean side, i.e. a second writer for part of the transform. At
-    bs256 this is ~154 MB/batch against a ~670 ms step = ~230 MB/s, and a pipe does GB/s, so the
-    bandwidth is not worth the seam.
+    bs256 this is ~154 MB/batch, a few hundred MB/s at the trainer's step times, and a pipe does
+    GB/s, so the bandwidth is not worth the seam.
 
     **Determinism.** `tf.random.set_seed` fixes the unseeded crop/flip ops; the shuffle is already
     `seed=42`, and `tf.data`'s `deterministic` option defaults to true, so a fixed seed should give a
@@ -3622,17 +3622,17 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        tf.config.experimental.enable_op_determinism()\n" ++
   "    tf.random.set_seed(seed)\n" ++
   -- SHIM_SHARD='i/N' streams only shard i of N. The transform is untouched; only which examples
-  -- this process emits changes. Measured (bs128, marginal): 1 process 1,527 img/s,
-  -- 2 processes 1.71x, 4 processes 2.36x on a 32-core box — so two clear the ~1,940 img/s a
-  -- 4-replica ViT step wants, and no C loader is needed.
+  -- this process emits changes. Measured on a 32-core box, throughput scales sublinearly but well
+  -- with the process count, so two producers clear what a 4-replica ViT step wants and no C
+  -- loader is needed (`planning/archive/next_session_pipeline_then_r50.md`).
   --
-  -- **DO NOT SIZE `SHIM_WORKERS` OFF THIS ROW — OR OFF ANY ISOLATED PRODUCER NUMBER.** Measured on
-  -- the same box, same units (bs128, marginal, SHIM_HASH): the generated ViT shim produces
-  -- **120 img/s**, 13x under this row, because `enable_op_determinism` above serializes the map;
-  -- with it off, **639 img/s**. Neither number predicts the step time. A consumer that drains one
-  -- handle at a time holds the ViT job at 567 ms/step against a 249 ms floor at BOTH producer
-  -- speeds, the rest sleeping in `write()`; depth-n prefetch in `LeanMlir/Verified/Train.lean`
-  -- takes it to 287 ms/step (1.98x) — a consumer change, with the producers untouched.
+  -- **DO NOT SIZE `SHIM_WORKERS` OFF THIS ROW — OR OFF ANY ISOLATED PRODUCER NUMBER.** The
+  -- generated ViT shim produces an order of magnitude less than this row, because
+  -- `enable_op_determinism` above serializes the map, and several times more with it off. Neither
+  -- number predicts the step time. A consumer that drains one handle at a time holds the ViT job
+  -- at about twice its floor at BOTH producer speeds, the rest sleeping in `write()`; depth-n
+  -- prefetch in `LeanMlir/Verified/Train.lean` brings it close to the floor — a consumer change,
+  -- with the producers untouched.
   -- This row measures CAPACITY. The step is set by whether the consumer lets that capacity run.
   "    shard = None\n" ++
   "    _sh = os.environ.get('SHIM_SHARD')\n" ++
@@ -3648,7 +3648,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- order. So on the validation split a sharded producer walks the split in the order tfds yields
   -- it and keeps only the batch BLOCKS k, k+N, k+2N, … of `batch` records: global batch b read from
   -- producer b % N is then the one-producer drain's batch b, the 80-row tail included (block 195
-  -- lands on producer 195 % N). Every producer reads all 6.3 GiB of raw records (cheap from cache)
+  -- lands on producer 195 % N). Every producer reads all of the raw records (cheap from cache)
   -- and decodes only its 1/N, since the filter sits before `_pp`.
   --
   -- NOT absolute-index slices (`validation[0:256]+validation[512:768]+…`):

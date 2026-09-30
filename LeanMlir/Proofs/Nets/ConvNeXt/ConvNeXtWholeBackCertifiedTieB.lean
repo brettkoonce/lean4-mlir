@@ -50,7 +50,7 @@ condition.
 --   witness point spelled as the composed chain applied to `x` (what `_` elaborates to), or a peel
 --   by `simp only` (the peel lemma is `rfl`, so simp records no step), makes the kernel unfold
 --   saved activations against the chain underneath the witnesses' `.backward`s. Spelled that way
---   this module took ~18 min on Lean 4.32.2 and did not check on 4.34.0 (kernel timeout). As
+--   this module took many minutes on Lean 4.32.2 and did not check on 4.34.0 (kernel timeout). As
 --   written it checks in seconds.
 
 namespace Proofs

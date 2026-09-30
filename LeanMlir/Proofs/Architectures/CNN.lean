@@ -1433,7 +1433,7 @@ theorem globalAvgPoolFlatHasVJP_correct (c h w : Nat)
       ∑ j : Fin c, pdiv (globalAvgPoolFlat c h w) x i j * dy j :=
   (globalAvgPoolFlatHasVJP c h w).correct x dy i
 
--- maxpool flat helper
+/-- The 2×2/s2 max pool `maxPool2` on the flattened `Vec` form (unflatten, pool, flatten). -/
 noncomputable def maxPoolFlat (c h w : Nat) :
     Vec (c * (2*h) * (2*w)) → Vec (c * h * w) :=
   fun v => Tensor3.flatten (maxPool2 (Tensor3.unflatten v))
@@ -1444,6 +1444,8 @@ theorem maxPoolFlat_differentiableAt {c h w : Nat}
     DifferentiableAt ℝ (maxPoolFlat c h w) (Tensor3.flatten x) :=
   (maxPool2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
 
+/-- The VJP of `maxPoolFlat` at a flattened input whose 2×2 windows each have a unique max
+    (`MaxPool2Smooth`): `maxPool2HasVJPAt3` moved to `Vec` form. -/
 noncomputable def maxPoolFlatHasVJPAt {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x) :
     HasVJPAt (maxPoolFlat c h w) (Tensor3.flatten x) :=
@@ -1601,6 +1603,11 @@ noncomputable def cnnForward
   (maxPoolFlat c h w) ∘
   (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs)
 
+/-- The whole-net VJP of `cnnForward` at `x`, folded by `vjpCompAt`, given positive BN `ε`s and
+    dimensions and six smoothness binders: `h_stem` (stem BN output nonzero), `h_mp` (unique
+    window maxima of the post-ReLU stem output the pool reads), `h_rb1` / `h_rb1o` (the identity
+    block's inner BN output and pre-ReLU residual sum nonzero) and `h_rb2` / `h_rb2o` (the same
+    two for the projection block). -/
 noncomputable def cnnHasVJPAt
     {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
     (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)

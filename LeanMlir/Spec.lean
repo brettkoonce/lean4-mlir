@@ -333,7 +333,8 @@ def Layer.nParamsUntrained : Layer → Nat
       splitPart + bottleneckPart + outPart
   | .inceptionModule ic b1 b2r b2 b3r b3 b4 =>
       -- Four parallel branches. BN terms (2·c) included since Inception-v2+
-      -- uses BN; original GoogLeNet predates BN but the delta is ~1%.
+      -- uses BN; original GoogLeNet predates BN, and the BN terms are a small
+      -- share of the count.
       --   b1: 1×1 ic → b1 + BN
       --   b2: 1×1 ic → b2r + BN + 3×3 b2r → b2 + BN
       --   b3: 1×1 ic → b3r + BN + 5×5 b3r → b3 + BN

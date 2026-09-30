@@ -6,9 +6,9 @@ import Jax
     bottleneck + GELU + LayerScale blocks, dedicated 2×2 stride-2 downsamples.
     ~28.6M params at 224×224, 1000 classes.
 
-    bf16 incl. bf16 conv: the depthwise-7×7 is 2.32× faster in bf16 and the
-    1×1 expand/project are GEMM-like (big bf16 win) — see
-    reference_bf16_depthwise_4060ti. Channel-LN / GELU stay fp32.
+    bf16 incl. bf16 conv: the depthwise-7×7 is markedly faster in bf16 and the
+    1×1 expand/project are GEMM-like (big bf16 win) — see the per-op
+    microbench in `planning/archive/imagenet_sweep.md`. Channel-LN / GELU stay fp32.
 
     Architecture is canonical ConvNeXt-T with a faithful patchify stem (4×4 s4
     conv → channel-LN, no BN/ReLU — see the NetSpec below); EMA + stochastic depth
@@ -54,7 +54,7 @@ def convNeXtTinyImagenet : NetSpec where
     + CutMix α1.0 + Random Erasing p0.25 on — the full DeiT-style pack.
 
     TODO(geo-ra): recipe CHANGE — adds geometric RandAugment vs the prior
-    no-RandAugment 80ep run that hit 75.93%. The blueprint named this as the
+    no-RandAugment 80ep run (`jax/runs/convnext_tiny_imagenet_bf16_80ep/`). The blueprint named this as the
     remaining gap to ConvNeXt-T's ~82% (with the 300ep schedule). Re-run +
     re-eval (eval_convnext_full50k.py, supervise script unchanged) for fresh
     numbers; RandAugment is CPU-side tf.data — watch input throughput. -/

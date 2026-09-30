@@ -66,7 +66,7 @@ def vitSImagenetConfig : TrainConfig where
 
 #eval vitSImagenet.validate!
 
-/-- 80-epoch validation tier — the schedule ViT-Ti was actually run at (65.6%),
+/-- 80-epoch validation tier — the schedule ViT-Ti was actually run at (`jax/runs/vit_tiny_imagenet_bf16_80ep/`),
     so it is the apples-to-apples comparison point before committing to 300ep. -/
 def vitSImagenetConfigShort : TrainConfig :=
   { vitSImagenetConfig with epochs := 80, repeatedAug := 1 }

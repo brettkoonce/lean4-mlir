@@ -7,7 +7,7 @@ lake build yolov1-visdrone-fpn
 CUDA_VISIBLE_DEVICES=0 .lake/build/bin/yolov1-visdrone-fpn data/visdrone_fpn
 ```
 
-Two backbones, selected by `FPN_BACKBONE`: `r50` (default, RSB-A3 77.2% top-1)
+Two backbones, selected by `FPN_BACKBONE`: `r50` (default, the RSB-A3 ImageNet checkpoint)
 and `r34`. They carry different names, so their checkpoints and compiled graphs
 cannot collide. The other knobs are `FPN_TOWER`, `FPN_TAG`, `FPN_AUG`,
 `FPN_EPOCHS`, `FPN_CKPT_EVERY`, `FPN_LR_MULT` and `FPN_CLIP`.
@@ -52,7 +52,7 @@ def fpnNtot : Nat :=
     `Σ_c f_c·w_c = 1` — a pure redistribution that leaves the class term's total
     magnitude (and so its balance against box/objectness) unchanged. Counts from
     `scripts/probes/fpn_class_freq.py` over data/visdrone_fpn:
-    car 44.1% and pedestrian 21.2% of positives, and the unweighted e12 head
+    car and pedestrian are the two largest classes of positives, and the unweighted e12 head
     predicted ONLY those two (5/10 classes never emitted). Full inverse frequency
     spans 45× and is needlessly violent; sqrt spans 6.7×. -/
 def fpnClsWeights : List Float :=
@@ -65,13 +65,10 @@ def fpnClsWeights : List Float :=
 
     Motivated by a direct measurement of the head rather than by theory. Probing
     the class logits at every TARGET-assigned slot on val, with objectness, NMS
-    and box matching all removed, from the mAP peak (e10) to a 30-epoch run:
-
-      top-1 overall  67.58% → 67.32%     top-3 overall  92.88% → 92.78%
-
-    Flat. But per class it is not flat at all — it REDISTRIBUTES toward the
-    priors: car 85.4→87.7, pedestrian 72.1→73.7, while tricycle 47.3→**35.4**,
-    awning-tricycle 28.9→**17.2** (and its top-3 collapses 70.1→47.4, so the
+    and box matching all removed, from the mAP peak (e10) to a 30-epoch run,
+    top-1 and top-3 overall are flat. But per class it is not flat at all — it
+    REDISTRIBUTES toward the priors: car 85.4→87.7, pedestrian 72.1→73.7, while
+    tricycle 47.3→**35.4**, awning-tricycle 28.9→**17.2** (and its top-3 collapses 70.1→47.4, so the
     whole distribution abandons the class, not just the argmax). Predicted-as
     counts move the same way: car +328, pedestrian +286, tricycle −246,
     awning-tricycle −217.
@@ -151,8 +148,9 @@ def r50FpnDetT (tower : Nat) : NetSpec where
     .convBn 3 64 7 2 .same,
     -- DELIBERATELY 2×2, where `resnet50Imagenet` has `.maxPool 3 2`.
     -- The train-step emitter's max-pool backward is a tile-compare-select that
-    -- is correct ONLY for non-overlapping windows (MlirCodegen.lean:7698 says so
-    -- outright), and size 3 > stride 2 overlaps: one input can be the max of
+    -- is correct ONLY for non-overlapping windows (`emitTrainBackward` in
+    -- `LeanMlir/MlirCodegen.lean` says so outright), and size 3 > stride 2
+    -- overlaps: one input can be the max of
     -- several windows, so its gradient is a SUM the tiling never forms. It also
     -- happens to fail loudly first — the forward pads 224→225 but the backward
     -- reads `inShape` (224) against the padded SSA, so the graph does not even
@@ -188,8 +186,8 @@ def r34FpnDetConfig : TrainConfig where
   yoloClsWeights := fpnClsWeights       -- free, and better class spread
   -- The detector head HAS a bias, initialized to the RetinaNet prior. A zero-init
   -- bias reproduces the biasless head exactly, so no separate bias-off arm is
-  -- needed. Targets the measured failure: objectness had AUC 0.742 but every
-  -- logit squeezed into [−2.7, −1.2], because a bias-free 1×1 conv must
+  -- needed. Targets the measured failure: objectness ranked positives well but every
+  -- logit squeezed into a narrow negative band, because a bias-free 1×1 conv must
   -- synthesize the background offset from its weights.
   detPriorPi   := 0.01
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
@@ -206,8 +204,8 @@ def r34FpnDetConfig : TrainConfig where
     perfect — std 0.17, every segment matching `ckpt_e100.state.npz` — but its
     per-channel BN values run to **5.2e6**, against R34's γ∈[0,0.60] / β∈[−0.68,0.77].
     Bootstrapped raw it starts at loss 5.8e8 where R34 starts at 717.7. Those values
-    are presumably meaningful to the render that wrote them (that run really did
-    score 77.2%), most likely a scale folded against running statistics kept in the
+    are presumably meaningful to the render that wrote them (that run's own
+    evaluation is sound), most likely a scale folded against running statistics kept in the
     `.state.npz` — which the generic bootstrap loads as zeros, so nothing cancels.
 
     So we transfer what is portable: **conv weights from A3, BN reset to γ=1, β=0**
@@ -226,8 +224,8 @@ def r50FpnDetConfig : TrainConfig :=
 
 /-- Backbone selector (`FPN_BACKBONE`), `r50` (default) or `r34`.
 
-    R50 is the default because it is both the better base — RSB-A3, 77.2% top-1
-    against R34's ~74% — and the only one that still has a loadable checkpoint:
+    R50 is the default because it is both the better ImageNet base (RSB-A3
+    against R34's 90-epoch recipe; the book's ResNet-34 chapter prints both) — and the only one that still has a loadable checkpoint:
     `jax_r34_imagenet.bin` is absent and can only be regenerated by a full
     ImageNet run, whereas the A3 weights are a plain float32 parameter file.
     `r34` is kept selectable so the 0.1386 arm can be reproduced if that file
@@ -265,8 +263,8 @@ def epochsFromEnv (dflt : Nat) : IO Nat := do
   | some v => return (v.trimAscii.toNat?).getD dflt
 
 /-- Checkpoint interval override (`FPN_CKPT_EVERY`). The overfit probe runs
-    hundreds of epochs and wants the loss trajectory, not 100 × 86 MB of
-    snapshots. Defaults to the arm's configured 2. -/
+    hundreds of epochs and wants the loss trajectory, not a full-size checkpoint
+    every other epoch. Defaults to the arm's configured 2. -/
 def ckptEveryFromEnv (dflt : Nat) : IO Nat := do
   match (← IO.getEnv "FPN_CKPT_EVERY") with
   | none => return dflt

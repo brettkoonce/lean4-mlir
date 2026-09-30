@@ -262,7 +262,7 @@ private def benchMode : IO Unit := do
       let params := if routeA then F32.concat #[g, bt] else F32.concat #[g0, bt0]
       let shapes := if routeA then packShapes #[#[C'], #[C']] else packShapes #[#[], #[]]
       -- `IO.monoMsNow` is INTEGER milliseconds, and one invoke of the small stages lands at
-      -- 1-3 ms — a resolution comparable to the quantity being measured. Time `inner` invokes per
+      -- a few ms — a resolution comparable to the quantity being measured. Time `inner` invokes per
       -- sample and divide, so the tick is 1/inner ms.
       let inner := 20
       let one : IO Float := do

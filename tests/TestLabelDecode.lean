@@ -11,8 +11,7 @@ only** of a little-endian int32 — i.e. `label % 256`. On ImageNet that silentl
 byte of every label from class 256 upward, and since a correct prediction can then only ever match
 on classes 0..255, it caps reported top-1 at roughly a quarter of the truth.
 
-**Measured off the real val wire**: the first validation batch carries labels
-**1..988**, with **193 of 256 (75.4%) above 255**.
+**Measured off the real val wire**: most labels in the first validation batch are above 255.
 
 Gate A pins the decode. Gate B is the CONTROL — the byte-0 read, required to be WRONG on a
 label above 255, so a regression cannot pass this file quietly.

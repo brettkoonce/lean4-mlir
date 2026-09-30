@@ -8,7 +8,7 @@ Runs SGD / Nesterov / AdamW in sequence on the wide-head (d1=512) net that Lever
 measure, so the new lever is read against the existing table rather than a different network.
 
 Same hyperparameters as `cifar8w-ablation` (SGD lr 0.1, momentum μ0.9 lr 0.02, AdamW lr 1e-3,
-3-epoch warmup + cosine, 40 epochs, bs 128). bf16 reaches the FORWARD, the input-VJP and the weight gradients — 23/23 convolutions — because the batched family is the one the 27 bf16 ops were built for. Expect no speedup (0.87× at these shapes); this is a numerics result.
+3-epoch warmup + cosine, 40 epochs, bs 128). bf16 reaches the FORWARD, the input-VJP and the weight gradients — 23/23 convolutions — because the batched family is the one the 27 bf16 ops were built for. Expect no speedup: bf16 is slower than f32 at these shapes, so this is a numerics result.
 
 Run: `LEAN_MLIR_LOWERER=xla .lake/build/bin/cifar8wb-bf16-ablation data`
 -/

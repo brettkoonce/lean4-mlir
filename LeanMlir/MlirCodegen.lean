@@ -3070,7 +3070,7 @@ def preGAPShape (spec : NetSpec) : Option (Nat × Nat × Nat) := Id.run do
     the logits `[batch, NC]`. -/
 private def emitForwardCamSig (spec : NetSpec) (batchSize : Nat) : String := Id.run do
   -- Reuse eval-sig generation, then rewrite the function name and the
-  -- return type. Cheaper than duplicating ~250 lines of param emission.
+  -- return type. Cheaper than duplicating the param emission.
   let evalSig := emitForwardEvalSig spec batchSize
   let (c, h, w) := (preGAPShape spec).getD (0, 0, 0)
   let flat := c * h * w
@@ -4792,9 +4792,9 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
       s := s ++ s!"    %{pa}_cf_t3 = stablehlo.multiply %{pa}_cf_gam, %{pa}_cf_t2 : {clsRed}\n"
       s := s ++ s!"    %{pa}_cf_F = stablehlo.subtract %{pa}_cf_ug, %{pa}_cf_t3 : {clsRed}\n"
     -- ── (T1b) per-cell class weight w_{c(cell)} = Σ_c onehot_c·weights[c] ──
-    -- VisDrone is ~44% car / ~21% pedestrian, and the unweighted head collapses
-    -- its argmax onto exactly those two (measured: 5/10 classes never predicted,
-    -- scripts/probes/fpn_obj_separation.py). Weights are inverse-frequency and depend
+    -- VisDrone's positives are mostly car and pedestrian, and the unweighted head
+    -- collapses its argmax onto exactly those two, leaving classes never predicted
+    -- (scripts/probes/fpn_obj_separation.py measures it). Weights are inverse-frequency and depend
     -- only on the TARGET, so they are an exact constant w.r.t. the logits — the
     -- gradient below carries the same factor and stays FD-checkable.
     --
@@ -7176,7 +7176,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         let bTy    := tensorTy bShape
         match aShape, bShape, r.outShape with
         | [n, ca, h, w], [_, cb, _, _], [_, _, _, _] =>
-          code := code ++ s!"    // ─── UNet concat-split backward (channelSplitHasVJP ↔ channelConcat) ───\n"
+          code := code ++ s!"    // ─── UNet concat-split backward (a channel concat's VJP is the channel split) ───\n"
           code := code ++ s!"    //     dConcat[:, :ca]  → upsampled-half (decoder, flows to bilinearUpsample backward)\n"
           code := code ++ s!"    //     dConcat[:, ca:]  → skip-half (saved as %unet_skip_g{e}, accumulated at unetDown maxPool)\n"
           code := code ++ s!"    %uut_a{r.pos} = \"stablehlo.slice\"({gradSSA}) " ++ "{" ++
@@ -7544,7 +7544,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           code := code ++ s!"    // ConvNeXt block backward — see LeanMlir/Proofs/:\n"
           code := code ++ s!"    //   Residual fan-in            Residual.lean: residualHasVJP\n"
-          code := code ++ s!"    //   LayerScale (per-channel γ) Pointwise.lean: elemwiseProductHasVJP\n"
+          code := code ++ s!"    //   LayerScale (per-channel γ) Tensor.lean: elemwiseProductHasVJP\n"
           code := code ++ s!"    //   1×1 project / expand convs CNN.lean: conv2dHasVJP3 / conv2dWeightGradHasVJP\n"
           code := code ++ s!"    //   GELU                       LayerNorm.lean: pdiv_gelu (tanh-form diagonal)\n"
           code := code ++ s!"    //   LN over channel axis       LayerNorm.lean: layerNormHasVJP (axis-relabeled)\n"

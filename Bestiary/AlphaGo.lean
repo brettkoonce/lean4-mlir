@@ -19,10 +19,9 @@ was \emph{three separate networks}:
    net trained first on $\sim$30M human-expert Go positions
    (supervised $p_\sigma$) then further refined via self-play RL
    ($p_\rho$). Predicts probability of each move given the board.
-   $\sim$4.5M params.
 2. **Value network** ($v_\theta$). A 13-layer conv net followed by
    fully-connected heads, predicting win probability from the
-   current position. $\sim$5M params.
+   current position.
 3. **Rollout policy** ($p_\pi$). A \emph{shallow} linear softmax
    over $\sim$$10^5$ hand-crafted binary features (3$\times$3
    stone patterns, liberties, responses to previous move, etc.).
@@ -129,7 +128,7 @@ def alphaGoValueNet : NetSpec where
 -- ════════════════════════════════════════════════════════════════
 -- In the real AlphaGo the rollout policy is a linear softmax over
 -- ~10^5 binary hand-crafted features. No convs, no hidden layers —
--- just a sparse linear model with ~1M params by weight count, but
+-- just a sparse linear model with one weight per feature, and
 -- almost all features zero at any given board so the forward pass
 -- is ~microseconds. Fast enough for MCTS rollouts at thousands of
 -- simulations per move.
@@ -140,8 +139,8 @@ def alphaGoRollout : NetSpec where
   imageW := 19
   layers := [
     -- Stand-in: flatten the 19×19 board + dense to 362 moves. Real
-    -- AlphaGo's rollout has ~1M params as a feature-hashed sparse
-    -- linear model; our dense stand-in is about right for shape.
+    -- AlphaGo's rollout is a sparse linear model over hand-crafted
+    -- features; this dense stand-in keeps only its shape.
     .flatten,
     .dense 361 362 .identity
   ]

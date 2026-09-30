@@ -8,9 +8,9 @@ import Jax
     expand/project 1x1s and the depthwise through `convdt`, so `bf16Conv`
     reaches the 17 inverted-residual blocks as well as the stem + final 1x1.
     The block-level
-    win is ~2x on the 4060 Ti — the 1x1 expand/project (GEMM-like) love
-    bf16; the 3x3 depthwise is a wash but harmless. See
-    reference_bf16_depthwise_4060ti. -/
+    win on the 4060 Ti comes from the 1x1 expand/project (GEMM-like), which
+    love bf16; the 3x3 depthwise is a wash but harmless. See the per-op
+    microbench in `planning/archive/imagenet_sweep.md`. -/
 
 def mobilenetV2Imagenet : NetSpec where
   name := "MobileNetV2 (ImageNet, bf16)"
@@ -18,7 +18,7 @@ def mobilenetV2Imagenet : NetSpec where
   imageW := 224
   -- The same override EfficientNet-B0 needs (`MainEfficientNetImagenet.lean`).
   -- `NetSpec.convBnAct` defaults to `.relu`
-  -- (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers below — the stem and
+  -- (`LeanMlir/Types.lean`), so without this line the two `.convBn` layers below — the stem and
   -- the 1×1 head — emit `jax.nn.relu` while every inverted-residual interior emits ReLU6.
   -- MobileNetV2 is ReLU6 throughout, as the Imagenette twin (`MainMobilenetV2.lean`) says.
   -- The VERIFIED render is ReLU6 (35 `stablehlo.maximum` paired with 35

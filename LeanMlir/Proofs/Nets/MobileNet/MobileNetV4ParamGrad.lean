@@ -10,6 +10,12 @@ certified backward. `mnv4_net_lossGrad` composes them: for any loss `L` of the l
 at the net's output is `g`, every node is `∂L/∂θ` of the WHOLE net with that one parameter varied.
 `mnv4_net_lossGrad_smoothedCE` discharges `hL` for the label-smoothed loss the artifacts ship.
 
+**Scope.** Every node here is an f32 `*GradB` node on one replica. The bf16 nodes (`*GradBBf16`) of
+the `mnv4in_*bf16` artifacts are outside this statement, and so are drop-path and classifier
+dropout (`*drop*`, `*do*`). Sync-BN data parallelism is reached by composition:
+`mnv4_net_syncTiedB` says each all-reduced gradient is this net's tied node at `N := R·N`, which
+this file's capstone makes the loss's gradient at the global batch.
+
 **How.** `ResNet50ParamGrad`'s shape, with two things MNv4 adds:
 
 * **The depthwise slots.** A UIB body's pre- and post-depthwise are `if k = 0 then id' else …`
@@ -1181,7 +1187,8 @@ def Mnv4NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : Mn
 
     The only hypothesis is `Mnv4SmoothAt` (the stem's relu clause and each group's `.ok`); the BN
     `ε > 0` facts are fields of the weights. The loss enters only through `hL`;
-    `mnv4_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
+    `mnv4_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship.
+    The nodes are the f32 ones on one replica (the module's Scope). -/
 theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}

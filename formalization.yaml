@@ -181,8 +181,8 @@ status:
     # --- Whole nets: forward + VJP at the net the artifact runs (T1), the typed graph (T2) ---
     # a kinked net at batch BN: ResNet-50's [3,4,6,3] bottlenecks, 48 relu clauses, q a binder (224 and 160 px)
     - {declaration: "Proofs.resnet50ForwardBFullHasVJPAt_correct", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # a smooth net: ViT-Tiny at its real dimensions -- depth 12 with distinct per-block parameters, 3 heads, vector LayerNorm; HasVJP at every input (0 < eps)
-    - {declaration: "Proofs.vitTinyHasVJP_correct", file: "LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # a smooth net: ViT-Tiny at its real dimensions -- depth 12 with distinct per-block parameters, 3 heads, vector LayerNorm; the hand-written input gradient is the Jacobian at every input (0 < eps)
+    - {declaration: "Proofs.vitTinyHasVJP_correct", file: "LeanMlir/Proofs/Nets/ViT/ViTWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
     - {declaration: "Proofs.StableHLO.mnv4FwdGraphBFull_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
@@ -507,7 +507,7 @@ alignment:
       note: ""
     - source: "Multi-head self-attention backward (Q/K/V) + full ViT body"
       lean: "mhsaHasVJPMat_correct / vitFullHasVJP_correct (the weight-shared scalar-LN tower) / vitTinyHasVJP_correct (depth 12, distinct blocks, vector LN)"
-      module: "LeanMlir/Proofs/Architectures/Attention.lean, LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean"
+      module: "LeanMlir/Proofs/Architectures/Attention.lean, LeanMlir/Proofs/Nets/ViT/ViTWholeBackCertifiedTie.lean"
       status: "proved"
       note: ""
     - source: "ReLU / max-pool backward at non-smooth points"
@@ -529,7 +529,7 @@ alignment:
       lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
       module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"
       status: "proved"
-      note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); committed-spec ties for the 5 ImageNet nets in SpecVJP"
+      note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); Imagenette-spec ties in SpecVJP; the ImageNet specs are not tied"
     - source: "Binary32 rounding model + certified backward ties"
       lean: "rndP_err; the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks"
       module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/{Architectures,Nets/*}/*CertifiedTie*.lean"

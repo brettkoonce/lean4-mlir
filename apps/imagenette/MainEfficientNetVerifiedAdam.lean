@@ -78,8 +78,8 @@ def runEfficientNetAdam (argv : List String) : IO Unit := do
     | some u => u.toFloat * 1e-6
     | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001
   -- `ema*` variants carry the 4th `[θ|m|v|ema]` blob region. `emarms` is RMSProp + EMA, which is
-  -- this net's REFERENCE recipe (`efficientNetB0ImagenetConfig`) — and its 72.31% is the shadow's
-  -- number, not the live weights'. On this net EMA also shadows the BN running buffers
+  -- this net's REFERENCE recipe (`efficientNetB0ImagenetConfig`) — and the accuracy it reports is the
+  -- shadow's, not the live weights'. On this net EMA also shadows the BN running buffers
   -- (driver-side, `ema_bn`), because eval must pair EMA weights with EMA-lagged statistics.
   -- `LEAN_MLIR_EMA_DECAY_U` is micro-units (`999900` = 0.9999, the reference's value); `0` is
   -- meaningful and is the gate — at decay 0 the shadow must be BIT-IDENTICAL to the live weights.

@@ -13,13 +13,13 @@ bit-identically, (b) only `propext, Quot.sound, Classical.choice` appear in
 each Solution-side proof's transitive axiom closure, and (c) the Solution
 typechecks against Lean's kernel independently of the elaborator.
 
-The 13 theorems here are the calculus layer — chapter 1's `pdiv` rules and
+The theorems here are the calculus layer — chapter 1's `pdiv` rules and
 chapter 9's matrix-level rules. **None of them mentions a neural network**,
 which is exactly why this file can stand alone over Mathlib: the only
 objects in scope are Mathlib's `fderiv` and a handful of type
 abbreviations over it.
 
-`ChallengeArch.lean` holds the other 39, the ones that state properties of
+`ChallengeArch.lean` holds the rest, the ones that state properties of
 specific architectures. Those cannot be made Mathlib-only without copying
 every network definition into the challenge file, which would put a second
 writer on every architecture — a worse trust story than an import, not a

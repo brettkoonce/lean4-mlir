@@ -34,9 +34,9 @@ calculus is needed.
         y = T·H + (1−T)·x          ← carry path bypasses x verbatim
 ```
 
-ResNet (Chapter 5) is the special case where `T ≡ 1` on the
-transform side and the carry path becomes a constant identity skip
-— same calculus, fewer parameters, marginally better training.
+ResNet (Chapter 5) drops the gate altogether: it sums both paths,
+`y = H(x) + x`, where a highway layer blends them — same calculus,
+fewer parameters, marginally better training.
 Highway showed in 2015 that *some kind of bypass* made very deep
 networks trainable; ResNet showed half a year later that the gate
 could be a constant.
@@ -48,10 +48,11 @@ is the architectural story; the calculus is in the book.
 
 ## Variants
 
-- `highway50Main` / `highway50Gate` — canonical Highway-MLP from the
-  paper, 50-dim hidden width, used for the 50-layer experiments.
-- `highway100Main` / `highway100Gate` — same shape, 100-dim variant
-  used for the deeper 100-layer experiments.
+- `highway50Main` / `highway50Gate` — one highway layer at the paper's
+  width of 50 units. The 50 is the width, not the depth: the paper
+  stacks such layers 10 to 100 deep, and each spec here is one layer.
+- `highway100Main` / `highway100Gate` — the same single layer at width
+  100.
 - `tinyHighwayMain` / `tinyHighwayGate` — 8-dim fixture, useful for
   quick architectural inspection / testing.
 
@@ -84,7 +85,7 @@ def highway50Gate : NetSpec where
   ]
 
 -- ════════════════════════════════════════════════════════════════
--- § Highway-MLP, 100-dim hidden (deeper experiments)
+-- § Highway-MLP, 100-dim hidden
 -- ════════════════════════════════════════════════════════════════
 
 def highway100Main : NetSpec where

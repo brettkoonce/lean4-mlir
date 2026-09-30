@@ -18,7 +18,7 @@ codegen artifact, so a verified "model definition" is just:
   * `data`   — which dataset/loader to feed it.
 
 The architecture itself lives in the renderer + the audited VJP theorems; it is
-deliberately NOT re-expressed here. This file factors the ~100 lines of identical
+deliberately NOT re-expressed here. This file factors the identical
 boilerplate (compile → sessions → load → init → train/eval loop) shared by every trainer.
 A trainer is a `VerifiedNet` value + a `VerifiedConfig` + a one-line `main`, the same shape
 as a `NetSpec` trainer.
@@ -497,8 +497,7 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
       -- gate uses the fan-OUT default. The single holdout is `tests/TestRmsTie.lean`:
       -- its coupled-L2 control asks whether `wd·θ` is present, `wd = 4e-5` is baked into the
       -- committed `mobilenetv2_rms_train_step.mlir`, and the fan-OUT default makes mnv2's
-      -- gradients 5.8× larger (|g|max 0.85 → 4.94), which drops `wd·θ/g` to ~2e-6 and below f32
-      -- separability. The gate detects this itself and throws CONTROL DEAD rather than passing
+      -- gradients several times larger, which drops `wd·θ/g` below f32 separability. The gate detects this itself and throws CONTROL DEAD rather than passing
       -- vacuously. Retiring this flag means re-rendering that artifact at a larger `wd`.
       else if heFanIn then
         (if dims.size == 4 then 2.0 / (dims[1]! * dims[2]! * dims[3]!).toFloat
@@ -1200,9 +1199,10 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- entire tensor list, and `@<slug>_train_step` returns exactly those tensors in exactly that
   -- order (the packed-output walk in the shim already assumes it).
   --
-  -- The demo nets are the MOST transfer-bound in the set (the dense probe at **75%**, against R34's
-  -- 55%), and residency measured **3.1×** on cifar8-bn. These loops are what a reader sits and
-  -- watches, so this is an interactivity win rather than a throughput one.
+  -- The demo nets are the MOST transfer-bound in the set (parameter transport is a larger share of
+  -- their step than of R34's; `planning/archive/xla_pjrt_handoff.md` §2d.3 measures it), so
+  -- residency pays most on them. These loops are what a reader
+  -- sits and watches, so this is an interactivity win rather than a throughput one.
   --
   -- A REQUEST, not a mode: honoured on the XLA build unless `$PJRT_FFI_RESIDENT=0`,
   -- and the copying path stays byte-identical.
@@ -1722,7 +1722,7 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
   -- THE EVAL IS SHARDED OVER THE SAME DEVICES AS THE TRAIN STEP. `grep -c all_reduce` is 0 on every
   -- `_fwd`/`_fwd_eval`, and the same artifacts serve sharded and single-device eval. On replica 0
-  -- alone a ConvNeXt eval measured ~100 s/epoch at 91% util on GPU 0 while GPUs 1-3 sat at 0%. The
+  -- alone a ConvNeXt eval kept one GPU busy while the other replicas' GPUs sat idle. The
   -- gate is `scripts/gates/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N
   -- replicas, with a control that must fail.
   let fwdSess ← mkSessionDp fwdPath replicas
@@ -1931,8 +1931,8 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- below, the host touches the tail (`write3` the three scalars, `blit` the BN stats) and reads
   -- the tail (`read` the loss, `extract` the batch stats) — never the prefix, which is why
   -- `pbuf := out` is already a no-copy handover. So that prefix can live on the device across
-  -- steps, and at R34 that is 260 MB each way per step that stops crossing PCIe (55% of a bs32
-  -- step, measured).
+  -- steps, and at R34 that is 260 MB each way per step that stops crossing PCIe, most of a
+  -- bs32 step (`planning/archive/xla_pjrt_handoff.md` §2d.3).
   --
   -- This is a REQUEST, and nothing here selects a transport. The C boundary honours it on the
   -- XLA build (off under `$PJRT_FFI_RESIDENT=0`), so IREE and XLA still run this identical body — the
@@ -2069,7 +2069,7 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- (rc 1) so F32.shuffle mutates it rather than allocating a fresh full-dataset
   -- copy each epoch. Shuffling `trainImg` directly would keep the pristine trainImg
   -- alive (rc≥2), forcing the copy path every epoch and leaking ~one training
-  -- set (5.3 GiB) per epoch → OOM after ~30 epochs on a 188 GB box.
+  -- set per epoch → host OOM partway through a run.
   let mut curImg := trainImg
   let mut curLbl := trainLbl
   -- The ImageNet train stream: spawned ONCE, not per epoch. The shim's train iterator is
@@ -2144,10 +2144,10 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- `LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E` (default 0 = off): every E epochs ONE producer is killed
   -- and replaced, cycling through the slots, so no loader lives past `E × n` epochs and at most one
   -- is ever cold. It exists because a single tf.data loader degrades after hours of uptime and the
-  -- round-robin read then runs the whole job at its pace — 690 → 1,250 s/epoch on the 350-epoch
-  -- EfficientNet run, cleared instantly by a restart.
+  -- round-robin read then runs the whole job at its pace — the epoch time nearly doubled on the
+  -- 350-epoch EfficientNet run, cleared instantly by a restart.
   -- This is the BLOCKING form: the replacement is spawned at the epoch boundary and the trainer
-  -- waits out its startup (~30 s, i.e. ~0.4% at E=10). A zero-downtime variant — spawn in the
+  -- waits out its startup, which is small against an epoch. A zero-downtime variant — spawn in the
   -- background, swap when its preamble lands — is worth building only if this proves too coarse.
   -- ANNOUNCED, like every other knob here: a run whose producers are being replaced under it and
   -- says so nowhere is indistinguishable in the log from one that is not.
@@ -2185,8 +2185,8 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- read in flight PER HANDLE (depth = SHIM_WORKERS = 8), and the producers fill those while
   -- the graph compiles — so the first ~8-16 steps are served from a queue nobody had to wait for. They measure BURST rate, not production rate. A window
   -- starting at 8 with `LEAN_MLIR_MAX_STEPS=40` is 32 samples of which ~16 are burst, which puts
-  -- the median exactly on the boundary: that is how §9.6's ViT row got 159 ms/step where the
-  -- steady state is 375 (2.4×). Benchmarks want PROBE_WARM=200 with MAX_STEPS=600.
+  -- the median exactly on the boundary: that is how a ViT benchmark once read well under half its
+  -- steady-state step time. Benchmarks want PROBE_WARM=200 with MAX_STEPS=600.
   let probeWarm := ((← IO.getEnv "LEAN_MLIR_PROBE_WARM").bind (·.toNat?)).getD 8
   let mut probePrev := 0
   -- LEAN_MLIR_PROBE_DUMP also turns on a per-read trace to stderr (`READ h= step= issued= start=
@@ -2209,8 +2209,7 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   -- `thetamv`. The scalar slots are filled per step; the BN region per step too.
   let scalarSlots ← F32.const nScalars.toUSize 0.0
   -- The drop-scale slots are reserved here and refilled per step, exactly like the scalar and BN
-  -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys (272 MB/step
-  -- on R34, measured).
+  -- regions — a fresh `F32.concat` per step would cost two whole-blob host memcpys, every step.
   -- Sized for BOTH families. The `1.0` fill is load-bearing and not a placeholder: a mask slot
   -- that is never refilled must be the exact identity, which `1.0` is and `0.0` emphatically is not
   -- (it would zero the classifier's input and train nothing).
@@ -2222,31 +2221,30 @@ This measures t_rest (compute + params + host blob patching), NOT a full step."
   --
   -- Without it the step is two blocking calls back to back: `readShimBatchRR` (154 MB off a pipe)
   -- and then the invoke, with NOTHING draining the pipe during compute. A batch is 154 MB and a
-  -- pipe's buffer is 64 KB (this box caps `pipe-max-size` at 1 MB, still 0.6% of a batch), so the
-  -- producer fills its buffer, blocks in `write()`, and sleeps through the entire compute — 258%
-  -- CPU on a 32-core box: not slow, throttled. Which is why "one producer does ~1,530 img/s and
+  -- pipe's buffer is 64 KB (this box caps `pipe-max-size` at 1 MB, still a sliver of a batch), so
+  -- the producer fills its buffer, blocks in `write()`, and sleeps through the entire compute:
+  -- not slow, throttled. Which is why "one producer does ~1,530 img/s and
   -- R34 needs ~380" is not the relevant comparison — capacity is irrelevant when the consumer
   -- pulls one batch and walks away.
   --
-  -- MEASURED, `LEAN_MLIR_BENCH_SYNTH` real-vs-synth at 4×bs64 resident fp32: unprefetched, the
-  -- step is **377 ms = 158 read + 219 rest**, so `max(158, 219)` = **219** and the read hides
-  -- COMPLETELY behind compute. Prefetched: **224 ms/step, 1.68×** (30 epochs 15.7 h → 9.3 h),
-  -- 5 ms off that ceiling. Bit-identity gated by `tests/prefetch_tie.sh`.
+  -- Measured with `LEAN_MLIR_BENCH_SYNTH` (real vs synthetic batches) at 4×bs64 resident fp32:
+  -- unprefetched, the step is the read plus the rest back to back; the read is shorter than the
+  -- rest, so prefetched it hides COMPLETELY behind compute and the step lands at the ceiling
+  -- `max(read, rest)`. Bit-identity gated by `tests/prefetch_tie.sh`.
   --
   -- **DEPTH n, ONE READ IN FLIGHT PER HANDLE.** The correctness condition is not "one read
   -- outstanding" — it is **one read outstanding PER HANDLE**, because the hazard is two concurrent
   -- reads interleaving on ONE pipe (a pipe is a stream, not a message queue). One outstanding read
   -- globally is sufficient and, at `SHIM_WORKERS=n`, far stronger than necessary: it drains ONE
-  -- producer while the other n−1 sit blocked in `write()` with 64 KB buffered — 0.08% of a batch —
+  -- producer while the other n−1 sit blocked in `write()` with 64 KB buffered, a sliver of a batch,
   -- sleeping through the compute the prefetch exists to hide.
   --
-  -- MEASURED at global depth 1, ViT/ImageNet 4×bs128, `SHIM_WORKERS=8`: the box ran **70% IDLE**
-  -- (22 of 32 cores) at 783 ms/step against a 249 ms synthetic floor, with the eight producers
-  -- drawing ~10 cores between them. Not slow, not contended — **throttled**, the same signature
-  -- as R34 without prefetch ("258% CPU on a 32-core box"). A zero-cost producer through the SAME
-  -- pipes at the SAME depth ran 248 ms, so the plumbing and the 308 MB of transport are not the
-  -- problem: 5 ms of the step. Capacity is not the problem either — making each producer 5.3×
-  -- faster (`SHIM_DETERMINISM=0`) moved the step 0%.
+  -- Measured at global depth 1, ViT/ImageNet 4×bs128, `SHIM_WORKERS=8`: the box sat mostly IDLE
+  -- with the step far above its synthetic floor. Not slow, not contended — **throttled**, the
+  -- same signature as R34 without prefetch. A zero-cost producer through the SAME pipes at the
+  -- SAME depth ran at the synthetic floor, so the plumbing and the transport are not the
+  -- problem. Capacity is not the problem either: making each producer much faster
+  -- (`SHIM_DETERMINISM=0`) did not move the step.
   --
   -- So depth n is the fix, and it is the ONLY lever the evidence points at. Step s reads handle
   -- `s % n`; the next step on that handle is `s + n`, so the refill is issued into the slot the
@@ -2352,8 +2350,8 @@ gate's control, not a configuration.")
       -- is [theta|m|v | lr,bc1,bc2 | bn stats] and the train step returns that
       -- exact layout, so the previous output IS the next input once the 3
       -- scalars and the BN region are refreshed. Rebuilding it with F32.concat
-      -- (and slicing [theta|m|v] back out afterwards) would cost two 272 MB host
-      -- memcpys per step at R34 scale.
+      -- (and slicing [theta|m|v] back out afterwards) would cost two whole-blob host
+      -- memcpys per step.
       -- `lr = 0` ON AN ACCUMULATE MICRO-BATCH IS WHAT FREEZES θ, and it freezes it COMPLETELY:
       -- AdamW's decay is DECOUPLED (`θ' = θ − lr·m̂/(√v̂+ε) − lr·wd·θ`), so both terms vanish. A
       -- COUPLED-L2 optimizer would keep decaying k times per update and this would be wrong.
@@ -2366,8 +2364,9 @@ gate's control, not a configuration.")
       -- THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
       -- `d = min(decay, (1+t)/(10+t))` is TF's `ExponentialMovingAverage(decay, num_updates)`, the
       -- form the reference emits (`ema_update` in `jax/Jax/Codegen.lean`). Without it the shadow decays its own
-      -- init away only as `decay^t`: the reference MEASURED a shadow still holding 12.8% init at
-      -- 3.1 tau, scoring 0.00% top-1 while the live weights scored 70.48%. An 80-epoch Imagenette
+      -- init away only as `decay^t`: the reference measured a shadow still holding enough init at
+      -- 3.1 tau to score nothing while the live weights trained normally (`planning/archive/ema.md`).
+      -- An 80-epoch Imagenette
       -- run is 23,600 steps = 2.4 tau at decay 0.9999 — squarely inside that regime.
       -- `t` is the reference's 0-BASED `_global_step`, i.e. `gstep - 1` here.
       let emaD := min emaDecay ((gstep - 1.0 + 1.0) / (gstep - 1.0 + 10.0))
@@ -2444,13 +2443,13 @@ gate's control, not a configuration.")
           -- round-robin needs: the train iterator `.repeat()`s inside the shim and never ends, so
           -- there is no per-epoch restart to resynchronise against.
           --
-          -- `Task.Priority.default` (the pool), NOT `.dedicated`, and it is worth **12 ms/step**
-          -- — measured, R34/ImageNet 4×bs64: **236 dedicated vs 224 pooled**. The usual
+          -- `Task.Priority.default` (the pool), NOT `.dedicated`, and pooled is measurably faster
+          -- (R34/ImageNet 4×bs64). The usual
           -- advice for a blocking read is `.dedicated`, so that a long `read()` does not occupy a
           -- pool worker and starve other tasks. That reasoning does not apply here and its cost
           -- does: depth 1 means there is **exactly one outstanding task by construction**, so
           -- there is nothing to starve, while `.dedicated` spawns a fresh OS thread **every step**
-          -- — 150,120 of them over a 30-epoch run. Pooled lands 5 ms above the 219 ms synth floor.
+          -- — 150,120 of them over a 30-epoch run. Pooled lands just above the synthetic-data floor.
           -- Both numbers were taken with the leak below in place. `.dedicated` would also have
           -- hidden it by accident — a thread that exits abandons its heap, which the next free
           -- reclaims — at the price of refaulting the whole buffer every step (standalone repro).
@@ -2466,13 +2465,13 @@ gate's control, not a configuration.")
           -- which is what `Handle.read` does — makes a pool thread the owner of a 308 MB block the
           -- main thread then frees, and the runtime's allocator (mimalloc) answers a cross-thread
           -- free of a huge block with `madvise(MADV_FREE)`, not a release: the pages stay in RSS
-          -- until the kernel is under pressure — 79–136 MB/step, the box full inside one epoch,
-          -- then continuous direct reclaim and a mean step 2.5× the median
+          -- until the kernel is under pressure — RSS grows every step, the box fills inside one epoch,
+          -- then continuous direct reclaim and a mean step far above the median
           -- (runs/2026-09-11-vit-leak-ab). Allocated and freed by the same thread, the block is
           -- recycled in place: no growth, and no fresh page faults after the first step.
           -- None of the allocator's environment knobs reach this: `MALLOC_*` is glibc, which is
           -- not the allocator, and `MIMALLOC_PURGE_DELAY=0` only helps while the owning thread
-          -- keeps allocating — at a 220 ms step cadence it changes nothing (measured).
+          -- keeps allocating — at the trainer's step cadence it changes nothing (measured).
           let issueRead (sj : Nat) : BaseIO (Task (Except IO.Error (ByteArray × ByteArray))) := do
             let buf ← IO.mkRef (ByteArray.emptyWithCapacity (4 * gbs * flat))
             let tIssue ← IO.monoMsNow
@@ -2599,7 +2598,7 @@ gate's control, not a configuration.")
         -- it mid-run — the reported eval shifts, so a curve spanning the change develops a
         -- discontinuity that belongs to the metric rather than to the model.
         -- Direction: this delta plausibly made our reported top-1 UNDERSTATED, which matters
-        -- because the A3 result (77.43%) is quoted as beating its JAX reference.
+        -- because the A3 result is quoted as beating its JAX reference.
         --
         -- **AND THE DECAY IS `cfg.bnMomentum`, NOT A LITERAL 0.99.** 0.99 is
         -- TF's EfficientNet value; timm's PyTorch BN default gives R50/R34 a decay of 0.9, a
@@ -2666,7 +2665,7 @@ gate's control, not a configuration.")
             return ()
       | none => pure ()
     IO.println s!"Epoch {ep + 1}/{cfg.epochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
-    -- One 272 MB copy per EPOCH (for eval + checkpoint), not per step. Under
+    -- One whole-blob copy per EPOCH (for eval + checkpoint), not per step. Under
     -- device residency this is also the one d2h of `[θ|m|v]` that still
     -- happens at all — `readParams` is `pbuf.extract 0 mvBytes` whenever the
     -- parameters are host-resident, and the read-back otherwise, so the
@@ -2674,7 +2673,7 @@ gate's control, not a configuration.")
     thetamv ← LowererSession.readParams tsSess pbuf mvBytes.toUSize
     -- EVAL AND THE CHECKPOINT SCORE THE SHADOW, not the live weights — which is what the
     -- reference does (`evalArgs`/`params_to_file` read `ema_params`) and the whole point of the
-    -- feature: ConvNeXt's 75.93% IS the shadow's number. The shadow is region 4, so it starts at
+    -- feature: ConvNeXt's reported accuracy IS the shadow's number. The shadow is region 4, so it starts at
     -- `3 * pBytes`.
     -- Nothing in the `[θ|m|v]` residency gate can see this slice — eval-only state is
     -- structurally invisible to it, exactly as hold-mode is. Its gate is the accuracy

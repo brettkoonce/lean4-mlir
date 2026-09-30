@@ -10,7 +10,7 @@ the expected game outcome (value).
 
 The body is "just a ResNet." The novelty is the self-play training loop,
 not the architecture. From a `NetSpec` perspective, AlphaZero is exactly
-the ResNet body from Chapter-N, forked at the end into two tiny heads.
+a ResNet body (`Bestiary/ResNet.lean`), forked at the end into two tiny heads.
 
 ```
            Input planes (board state encoding)
@@ -19,21 +19,19 @@ the ResNet body from Chapter-N, forked at the end into two tiny heads.
           ┌─────────────────────────┐
           │  convBn: ic → 256, 3×3  │
           │                         │
-          │    residualBlock × N    │   ← "tower"
-          │      256 → 256, s=1     │      (N = 19 for original AlphaGo Zero,
-          │                         │       40 for AlphaZero chess/shogi)
+          │    residualBlock × 19   │   ← "tower"
+          │      256 → 256, s=1     │      (AlphaGo Zero's larger
+          │                         │       net has 39; not specced here)
           └──────────┬──────────────┘
                      │
           ┌──────────┴──────────────┐
           ▼                         ▼
-  Policy head (convBn→2)     Value head (convBn→1)
-   → flatten                  → flatten
-   → dense(2·H·W → nMoves)    → dense(H·W → 256, ReLU)
-                              → dense(256 → 1)
-                              → tanh   (not in Activation enum yet;
-                                        identity here + externally
-                                        applied, same as the book's LN
-                                        γ/β scalar simplification)
+  Policy head                Value head (convBn→1)
+   Go: convBn→2, flatten,     → flatten
+       dense(2·H·W → nMoves)  → dense(H·W → 256, ReLU)
+   chess: convBn 256→256,     → dense(256 → 1)
+       conv 1×1 → 73 planes,  → tanh   (not in the Activation enum;
+       flatten (the logits)             identity here, applied downstream)
 ```
 
 Our `NetSpec` is a linear list of layers, so we represent the two heads
@@ -46,10 +44,12 @@ specs below.
 
 ## Variants
 
-- `alphaGoZeroPolicy` / `alphaGoZeroValue` — the original 19-block /
-  256-channel / 19×19 board / 17-plane Go network (~23M params).
-- `alphaZeroChessPolicy` / `alphaZeroChessValue` — the 40-block /
-  256-channel / 8×8 board / 119-plane chess network (~46M params).
+- `alphaGoZeroPolicy` / `alphaGoZeroValue` — the 19-block / 256-channel /
+  19×19 board / 17-plane Go network.
+- `alphaZeroChessPolicy` / `alphaZeroChessValue` — AlphaZero's chess network:
+  the same 19-block / 256-channel tower on the 8×8 board with 119 input planes,
+  and a convolutional policy head whose 73 output planes are the 73 × 8 × 8 = 4672
+  move logits.
 - `tinyAlphaZeroPolicy` / `tinyAlphaZeroValue` — a scale-model with 3
   blocks for quick inspection / testing. Useful as a fixture.
 
@@ -62,7 +62,7 @@ statistics over nine binary cells diverged (see that file's docstring).
 
 ## References
 
-- Silver et al. 2017, *Mastering the game of Go without human knowledge* (AlphaGo Zero; PUCT, the 40-block net). <https://doi.org/10.1038/nature24270>
+- Silver et al. 2017, *Mastering the game of Go without human knowledge* (AlphaGo Zero; PUCT, the 20- and 40-block nets). <https://doi.org/10.1038/nature24270>
 - Silver et al. 2018, *A general reinforcement learning algorithm that masters chess, shogi, and Go through self-play* (AlphaZero). <https://doi.org/10.1126/science.aar6404>
 -/
 
@@ -99,20 +99,22 @@ def alphaGoZeroValue : NetSpec where
   ]
 
 -- ════════════════════════════════════════════════════════════════
--- § AlphaZero chess (8×8 board, 119 input planes, 40 blocks)
+-- § AlphaZero chess (8×8 board, 119 input planes, 19 blocks)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Policy: 73 × 8 × 8 = 4672 move encodings (AlphaZero's dense move rep). -/
+/-- Policy: 73 × 8 × 8 = 4672 move logits (AlphaZero's move encoding). The head is
+    convolutional, as in the paper: a rectified, batch-normalised 3×3 conv, then a
+    1×1 conv to 73 planes whose flattened output is the logit vector. -/
 def alphaZeroChessPolicy : NetSpec where
   name := "AlphaZero chess (policy head)"
   imageH := 8
   imageW := 8
   layers := [
     .convBn 119 256 3 1 .same,
-    .residualBlock 256 256 40 1,
-    .convBn 256 73 1 1 .same,
-    .flatten,
-    .dense (73 * 8 * 8) (73 * 8 * 8) .identity
+    .residualBlock 256 256 19 1,
+    .convBn 256 256 3 1 .same,                       -- policy head: conv→BN→ReLU
+    .conv2d 256 73 1 .same .identity,                -- 73 move planes
+    .flatten
   ]
 
 def alphaZeroChessValue : NetSpec where
@@ -121,7 +123,7 @@ def alphaZeroChessValue : NetSpec where
   imageW := 8
   layers := [
     .convBn 119 256 3 1 .same,
-    .residualBlock 256 256 40 1,
+    .residualBlock 256 256 19 1,
     .convBn 256 1 1 1 .same,
     .flatten,
     .dense (1 * 8 * 8) 256 .relu,
@@ -186,8 +188,8 @@ def main : IO Unit := do
   IO.println "    as a linear list can't express that sharing; we show the"
   IO.println "    two forks as separate specs."
   IO.println "  • Value head ends with dense(→1, identity). The original paper"
-  IO.println "    applies tanh afterwards; `Activation` doesn't include tanh"
-  IO.println "    yet — same book-simplification stance as LN's scalar γ/β."
-  IO.println "  • Chess policy dense is `73·8·8 → 73·8·8 = identity` — the"
-  IO.println "    network's output channels already encode every move class"
-  IO.println "    directly (no further projection needed)."
+  IO.println "    applies tanh afterwards; `Activation` has no tanh, so it is"
+  IO.println "    applied downstream."
+  IO.println "  • The chess policy head is convolutional: its 73 output planes"
+  IO.println "    over the 8×8 board are the 4672 move logits, flattened, with"
+  IO.println "    no dense layer."

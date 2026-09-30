@@ -54,7 +54,13 @@ WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) and WP2 are co
 item is parked for the CPU box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
 design is under WP1 below, and it should be done together with A-pq-1. WP7 (the attribution
 links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 is committed and pushed
-(`dc9fe1ea`). WP5 is **staged, not committed** (status under WP5). Next: not yet chosen; WP6 is open.
+(`dc9fe1ea`). WP5 is committed as `bee5ab0d` and **not pushed**; its status (four done, three
+parked) is under WP5.
+
+**WP6 is staged, not committed** (status under WP6). Housekeeping done: the
+`foundations-intro` worktree and branch are removed, and the 33 local branches already merged
+into `origin/main` are deleted. Still owed (ask first): push `bee5ab0d` and WP6 once committed.
+Next: not yet chosen; the open items WP6 turned up are listed under it.
 
 ## Decisions (user, 2026-09-30)
 
@@ -474,6 +480,83 @@ The book and docstrings still claim more than the statements (grouped; the IDs c
   Then add a lint (`scripts/gates/comment_numbers.py`) with an allowlist for spec constants and
   statement-backed counts, and wire it into proofs.yml. This subsumes X-doc-1 and C-doc-1, and
   generated banners are fixed in their generators.
+
+**Status 2026-09-30: done (staged).** Every WP6 finding was re-checked against HEAD. N1-doc-2
+was already fixed by WP5; the rest are done.
+- **HasVJP `_correct` as content.**
+  - `vitTinyHasVJP_correct` is now the ViT-Tiny instance of `vitInputGradK_correct`: the
+    hand-written chain equals the `pdiv` contraction. It moved to `ViTWholeBackCertifiedTie`,
+    since keeping it in ViTDepthK would be an import cycle; yaml, AuditAxioms and the comparator
+    tier are repointed.
+  - The B0/MNv2/ViT-KV `_correct` docstrings take MNv4's form.
+  - In the book, `def:hasvjp` now says a witness exists for every `f`, so its content is what `B`
+    is. The R34/R50/MNv2/MNv4/B0/ViT-KV whole-net blocks now say "the backward composed from the
+    per-layer backwards (`…HasVJPAt`)", as the MLP/CNN blocks already did.
+  - `mlpVerifiedHasVJP` (the canonical witness) is deleted; the book prints `mlpVerifiedHasVJPAt`.
+- **Scope sentences.**
+  - R34/R50 tie files and the four ParamGrad files say the nodes are f32 on one replica and that
+    the bf16 renders behind the book's numbers are outside the statement.
+  - R50 anchors on `resnet50in160_lambaccdp8x64wxclipbce`, not the retired 76.66% run.
+  - B0/R34/R50 "one replica" paragraphs point at the sync-BN tie; every DP artifact of those nets
+    was checked to be sync-BN.
+  - MNv2 sync names its four f32 DP artifacts; `mnv4_net_syncTiedB` names `mnv4in_adamdp64`.
+- **Book drift.**
+  - `thm:resnet50_whole_back` states its hypotheses and the opaque-block fold, and cites
+    `resnet50ForwardBFull_eq_slots`.
+  - The parse-back paragraph says `roundtrip` is about tokens, and the "single printer" sentence
+    adds the declared hand-written lines.
+  - SpecVJP says nine Imagenette-and-smaller specs are tied; yaml and Proofs/README agree.
+- **Artifacts (approved comment-only re-renders).**
+  - G-doc-2 was 34 files, not 31: 18 single-replica plus 16 DP ConvNeXt train steps carry
+    `%dgapf`. The audit's 31 counted 13 EfficientNet files, which have no GAP-backward block.
+  - `trainStepHandNote` gains a `hand` argument, and ConvNeXt's banners (both branches) name the
+    GAP-backward block.
+  - G-doc-3's 8 bf16 DP artifacts cite `Foundation/DataParallel/SyncBf16.lean`.
+  - Diff: 41 files, comment lines only.
+- **N2-doc-4.** A literal `#guard` over all 21 `(ic, oc, expand, preDWk, postDWk, h, stride2)`
+  tuples, re-extracted from timm 1.0.28. It is not vacuous: a flipped kernel fails it.
+- **Bestiary.**
+  - AlphaZero chess is now Silver 2018's net: 19 blocks and a conv policy head (golden count
+    69.4M → 23.3M).
+  - The GPT decoders and CLIP text encoders set `causalMask`.
+  - AlexNet/YOLOv1 say their FC fan-in is pinned to the paper's.
+  - The README's new-entry recipe calls `summarize` (what the golden test parses).
+  - `tests/bestiary_timm_report.md` is regenerated, and `verify_bestiary_timm.py`'s `tests`
+    package import is fixed.
+- **WP6c.**
+  - `scripts/gates/comment_numbers.py` scans Lean comments and docstrings, the yaml's comments
+    and the workflows' step summaries for N/100, %, codebase counts, `file:line` and hashes.
+  - Allowed occurrences sit in `comment_numbers_allow.tsv`, 93 rows, each with a reason (spec,
+    statement, citation, example).
+  - The sweep went from 401 hits to 0.
+  - It is wired into `targets.yml`, not `proofs.yml`: proofs.yml is path-filtered, and this scan
+    covers apps/, demos/, jax/, the yaml and the workflows.
+  - Generated scorecards were fixed in their generators and regenerated, comment lines only; the
+    counts now say which generator prints them.
+- **Follow-ups decided by the user (2026-09-30), done:**
+  - *Numbers with no home.* The certificate scorecard generators were re-run into
+    `runs/2026-09-30-cert-scorecards/`; its README tables every dataset count, and every emitted
+    file came back byte-identical. The Certificates README points there.
+    `historical/comment_measurements.md`, generated from `git diff bee5ab0d`, keeps verbatim every
+    other comment line the sweep removed.
+  - *Lint extended.* `comment_numbers.py` also matches timings (ms, s/epoch, min, h), memory
+    sizes (GiB, MB), decimal speedups and metrics (mIoU / IoU / Dice / mAP / top-1 / acc). A
+    second four-agent sweep cleared the new hits; the allowlist has 242 rows.
+  - *B0 / ViT banners.* Both AdamW train-step banners (single-replica and DP) use
+    `trainStepHandNote`. ViT names its `%ximg` input reshape (`vitInputReshapeNote`). Every B0 and
+    ViT AdamW train step was re-rendered, comment lines only.
+  - *Stale Imagenette numbers in comments.* The user's call: they were out of date; the
+    comments point at the logs, and nothing more is needed.
+- **Open (found by WP6, not done):**
+  - `scripts/certs/ibp_conv_scorecard.py` crashes on `OUT.with_name(...)` and its paths predate
+    the 9e84e41b layout. `IbpConvScorecard/*` was hand-matched.
+  - The lakefile benchTable cited `runs/<net>_xla_80ep_jul29.log` / `vit_xla_80ep_jul30.log`,
+    which were never tracked.
+  - `tests/TestDropPathRamp.lean`'s `refKeep` divides by `totalDrop − 1`, while the reference's
+    `dropPathOverN` divides by `totalDrop`; check which one the runs used.
+  - `historical/lipschitz_cert_rationalize.py` still prints the old accuracy lines into its
+    snippets. Harmless, because `Instance.lean` is hand-merged.
+  - `convnext_train_step.mlir` (SGD) has no train-step banner.
 
 ### WP7 — Attribution pass · S · 1 agent; applies `rubric_review/citations.md`
 No earlier audit covered this. **First pass (decided): a web link only.** Add a `## References`

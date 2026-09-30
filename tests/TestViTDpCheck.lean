@@ -45,7 +45,7 @@ confines MIOpen to no-workspace solvers; it lands on `GemmFwdRest`, whose `MIOpe
 fails to build under HIPRTC because it uses the OpenCL builtin `get_global_id`. The im2col
 workspace it wants is **linear in batch** (6,422,528 bytes at bs32, exactly 2× at bs64), so at bs64
 the fault is RELIABLE and the variable is required; at bs32 it fired once in 12 runs and the
-variable costs ~7%. Diagnosis and a 20-line JAX reproducer:
+variable makes the step slower. Diagnosis and a 20-line JAX reproducer:
 `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/README.md`.
 
 **This gate reports BIT-EXACT, so it MUST be run against a control** — a tie that is bit-exact

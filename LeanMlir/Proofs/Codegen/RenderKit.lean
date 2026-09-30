@@ -162,8 +162,8 @@ def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
     does not apply to a net with no positional parameter. ResNet has none either. -/
 -- Why it matters: decay on pre-BN conv weights is renormalised away by BN and acts only as an
 -- effective-LR control; decay on γ/β is not, because γ directly scales the layer's output. The
--- effect concentrates at low LR, i.e. in the cosine endgame. The first RSB-A3 R50 run (77.43%)
--- used a non-`wx` artifact, so it decayed BN γ/β and every bias at wd = 0.02 where its reference
+-- effect concentrates at low LR, i.e. in the cosine endgame. The first RSB-A3 R50 run used
+-- a non-`wx` artifact, so it decayed BN γ/β and every bias at wd = 0.02 where its reference
 -- (`resnet50ImagenetConfigRSBFaithful`, `wdExcludeNormBias := true`) did not.
 def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
 
@@ -185,11 +185,12 @@ def bnEpsMarker (epsStr : String) : String :=
 def fwdEvalEntry (slug epsStr : String) : String :=
   match bnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
 
-/-- The banner clause of a batch-BN train step: which of its lines are not `pretty` of a node.
-    `acc` adds the accumulation β scalars, which the render computes from `%aup` by hand. -/
-def trainStepHandNote (acc : Bool := false) : String :=
+/-- The banner clause of a train step: which of its lines are not `pretty` of a node.
+    `acc` adds the accumulation β scalars, which the render computes from `%aup` by hand; `hand`
+    names any further hand-written block, followed by `", "` (ConvNeXt's GAP backward). -/
+def trainStepHandNote (acc : Bool := false) (hand : String := "") : String :=
   "every op is pretty(verified AST node) except the constants, " ++
-    (if acc then "the β scalars computed from %aup, " else "") ++
+    (if acc then "the β scalars computed from %aup, " else "") ++ hand ++
     "the input passthroughs and the marked report-only %loss"
 
 /-- The `%wdz` declaration an excluding render needs. Emitted only when the flag is on, so at

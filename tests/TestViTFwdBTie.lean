@@ -19,7 +19,7 @@ committed bytes — `convnext-fwd-b-tie`'s arrangement. The backward check compa
 traversals directly.
 
 **WHY THE BYTE TIE IS THE RIGHT BAR HERE, AND SHARPER ON ViT THAN ON ConvNeXt.** ConvNeXt's
-batched chain differs from its per-example one on 78 lines (two conv-VJP emitters that were never
+batched chain differs from its per-example one on a block of lines (two conv-VJP emitters that were never
 tied to each other), so its train-step tie has to carry an allowance. ViT uses ONE emitter per op —
 every batched form aliases or reproduces its per-example peer's text — so the bar here is exact
 byte-identity with no allowance at all, and anything else is a defect rather than a known
@@ -99,7 +99,7 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
           IO.println s!"  L{i+1} per-ex   : {(wl[i]!).take 160}"
           shown := shown + 1
     -- NO ALLOWANCE, unlike ConvNeXt's tie. ConvNeXt has two independent emitters for the conv
-    -- input-VJP that were never tied to each other (78 lines of commuting transpose/reverse); ViT
+    -- input-VJP that were never tied to each other (lines of commuting transpose/reverse); ViT
     -- has one emitter per op, so any differing line here is a defect.
     IO.println s!"  ✗ code: {diffs} differing line(s); ViT's tie carries NO allowance"
     bad := bad + diffs

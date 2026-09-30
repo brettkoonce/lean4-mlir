@@ -14,8 +14,8 @@ FFI never sees), so both take the same `[θ|m|v | lr,bc1,bc2 | bn stats]` blob `
 builds.
 
 **Why a numeric tie and not a text diff.** Same function, different graph: SSA naming differs, and
-the certified render emits 17,545 ops against 10,421 because `pretty` has no CSE (the identical
-1.68× on R34 costs nothing after XLA optimisation). The cotangents are also composed differently —
+the certified render emits 17,545 ops against 10,421 because `pretty` has no CSE (the same
+inflation on R34 costs nothing after XLA optimisation). The cotangents are also composed differently —
 the hand-written render fuses label smoothing into one `[B,10]` block while the kit composes
 `softmaxRow → subB → scaleB → addVB → shiftB → divConstB`. Only running both and comparing every
 returned float settles it.

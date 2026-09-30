@@ -512,12 +512,12 @@ theorem mobilenetv2ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeight
   rw [mobilenetv2ForwardBFull, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]
 
 
-/-- **Public correctness theorem**: for weights with `MNV2PosB` and an input with
-    `MNV2SmoothAtB`, the seventeen-bottleneck batch-BN backward equals the
-    `pdiv`-contracted Jacobian of `mobilenetv2ForwardBFull` itself — the committed
-    nested-application forward `MobileNetV2FullB.lean` defines and
-    `mobilenetv2FwdGraphBFull_faithful` proves the typed graph denotes — not of the layered chain
-    the VJP is assembled on. Tied back through `mobilenetv2ForwardBFull_eq_chain`. -/
+/-- The `.correct` field of `mobilenetv2ForwardBFullHasVJPAt`, restated at the nested forward
+    `mobilenetv2ForwardBFull` (the one `mobilenetv2FwdGraphBFull_faithful` proves the typed graph
+    denotes) through `mobilenetv2ForwardBFull_eq_chain`: for weights with `MNV2PosB` and an input
+    with `MNV2SmoothAtB`, its backward is the `pdiv`-contracted Jacobian. The tie of the
+    hand-written input-gradient chain to this backward is
+    `mnv2InputGradB_eq_mobilenetv2B_full_vjp`. -/
 theorem mobilenetv2ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat}
     (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (hx : MNV2SmoothAtB N w x) (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :

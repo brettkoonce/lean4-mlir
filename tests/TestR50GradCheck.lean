@@ -72,8 +72,8 @@ slower than `h²`. Measured at `h = 6e-5`, one run, the residual falls monotonic
 
     stem 0.17 · s1b0 0.12 · s1b1 0.089 · s2b0 0.041 · s3b0 0.019 · s4b0 0.0027 · head 0.00097
 
-So the honest sentence is: **tier 2 pins the gradient's magnitude to ~0.1% at the head and stage
-4, loosening to ~17% at the stem**, and tier 1 pins its structure to ~6e-5 everywhere including the
+So the honest sentence is: **tier 2 pins the gradient's magnitude to the residuals above, tight at
+the head and stage 4 and loosening toward the stem**, and tier 1 pins its structure to ~6e-5 everywhere including the
 stem. The two cover each other's blind spots — that is the design, not an apology for the tolerance.
 
 A whole-net RANDOM-SIGN direction is not used: at `n = 25.5M` its `⟨g,δ⟩` is 2e-4 against
@@ -95,10 +95,10 @@ component along `θ` and are not along `g` at all.
 * **The four projection shortcuts are their own groups.** `sXb0.proj` carries only `Wp/gp/btp`, so
   its adjoint probe measures the shortcut branch's gradient and nothing else. (Predicting `sXb0`
   with the shortcut's terms DROPPED and requiring the fit to break is a control too weak to fire:
-  the shortcut is only ~4% of `‖m'‖²` at s1b0.)
+  the shortcut is a small share of `‖m'‖²` at s1b0.)
 * **Scale control.** Each group's finite difference is re-checked against `2·⟨g,δ⟩`. A harness that
   cannot tell a gradient from twice a gradient is measuring nothing; required to miss by ≥3× the
-  tie, which at the stem is 6.9× and at stage 4 is ~700×.
+  tie, which it clears narrowly at the stem and by orders of magnitude at stage 4.
 
 ## This gates `adam64`; the driver defaults to `adamdp64`
 
@@ -355,13 +355,13 @@ BNs + the head)"
   --
   -- Not `bC` — the MINIMUM over the 21 control sites, the order statistic the comment at the
   -- verdict says not to use. `scripts/probes/r50_gradcheck_stability.py` measures it: over three
-  -- runs on the SAME seeded base point, `bC` spreads **2.75× under CE and 10.5× under BCE**, so
-  -- under BCE a verdict on it depends on which run you happen to do (2 of 3 reps clear the
-  -- separation and 1 does not). The base point is fixed; the GPU execution is not, and
+  -- runs on the SAME seeded base point, `bC` spreads **several-fold under CE and by an order of
+  -- magnitude under BCE**, so under BCE a verdict on it depends on which run you happen to do
+  -- (2 of 3 reps clear the separation and 1 does not). The base point is fixed; the GPU execution is not, and
   -- `--xla_gpu_deterministic_ops=true` does not fix it.
   --
   -- This quantile is the same statement made robustly: at `size/10` (index 2 of 21) it spreads
-  -- **1.1×** across the same three runs, because it takes one site's collapse to move the minimum
+  -- **barely at all** across the same three runs, because it takes one site's collapse to move the minimum
   -- and three simultaneous collapses to move this. It is deliberately NOT the median — the median
   -- already has its own, much stronger check below, and a separation claim wants the WEAK end of
   -- the violating population, just not its single weakest member.
@@ -488,8 +488,9 @@ convolution differentiates wrongly"
   -- an order below its peers. What has to hold is that the two POPULATIONS do not overlap —
   -- every non-homogeneous site above every homogeneous one, with the tolerance between them —
   -- and that the typical violation is large enough that the separation is not one lucky site.
-  -- The check below therefore reads the 10th-percentile control, not `bC`: `bC` spreads 2.75× (CE)
-  -- and 10.5× (BCE) over three runs on the same seeded base point, the quantile 1.1×.
+  -- The check below therefore reads the 10th-percentile control, not `bC`: over three runs on the
+  -- same seeded base point `bC` spreads widely and the quantile barely moves
+  -- (`scripts/probes/r50_gradcheck_stability.py`).
   if ctlQ10 <= 5.0 * max wA wB then
     throw <| IO.userError s!"CONTROL DEAD: the two populations overlap — the 10th-percentile \
 non-homogeneous site sits at {ctlQ10} against a homogeneous worst of {max wA wB}, so the cosine is \

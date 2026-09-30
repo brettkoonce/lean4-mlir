@@ -333,9 +333,9 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     -- bf16 TRAILING. It reaches the six input-VJPs, the six WEIGHT gradients and the four SDPA
     -- backward matmuls. Every BIAS gradient beside them stays f32, in this net as in all six:
     -- `Σ dy` is a reduction, not a contraction, and there is nothing for a tensor core to do.
-    -- And the backward is where the money is — it measures at ~60 % of a conv step and the
-    -- forward-only arm at 1.09×. A render that flipped only `vBlockFwdB` would look wired and buy
-    -- almost nothing.
+    -- And the backward is where the money is — it is the larger share of a conv step, and a
+    -- forward-only arm measured close to no gain. A render that flipped only `vBlockFwdB` would
+    -- look wired and buy almost nothing.
     (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let vbTok := V.tok
   let vbD := V.d
@@ -479,10 +479,11 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     (bf16 : Bool := false)
     -- **ViT'S TWO CONVOLUTIONS GET THEIR OWN FLAG AND IT DEFAULTS TO `false`. MEASURED.**
     -- Turning the stem and its weight gradient bf16 alongside the dots makes the whole step
-    -- **0.52×** — nearly twice as SLOW as f32 — and an `nsys` profile says why in one line: the
+    -- nearly twice as SLOW as f32, and an `nsys` profile says why in one line: the
     -- bf16 arm's `__cudnn$convBackwardFilter` lowers to
-    -- `sm80_xmma_wgrad_implicit_gemm_indexed_bf16bf16_bf16f32_f32_nhwckrsc_nhwc_*` at ~30 ms,
-    -- where the f32 arm's same op lowers to `conv2d_grouped_direct_kernel<float>` at ~5.8 ms.
+    -- `sm80_xmma_wgrad_implicit_gemm_indexed_bf16bf16_bf16f32_f32_nhwckrsc_nhwc_*`, several times
+    -- slower than the f32 arm's same op, which lowers to `conv2d_grouped_direct_kernel<float>`
+    -- (planning/archive/bf16_renderer.md §19).
     --
     -- The shape is why. This wgrad is the transpose trick — `[3,B,224,224] × [192,B,209,209]`
     -- with the DILATED cotangent as the filter — so cuDNN sees a 209×209 window. It has a direct
@@ -637,11 +638,13 @@ end Proofs.StableHLO
 -- § THE bf16 ARM
 -- ════════════════════════════════════════════════════════════════════════════════════════
 --
--- **THE ISOLATED-MATMUL MEASUREMENT PREDICTS 1.03×.** ViT-Tiny's own 387 matmuls, timed three ways
--- at B = 32: f32 26.9 ms, bf16 in THIS emit shape 26.2 ms (1.03×), bf16 with activations staying
--- bf16 BETWEEN ops 15.7 ms (1.71×). ViT's matmuls are skinny (contracting dim 192, or 768 at the
--- MLP) and bandwidth-bound on the activations, so the f32→bf16→f32 round trip at every op costs
--- about what the tensor cores save. That is NOT true of the convnets — ConvNeXt keeps 64 % of its
+-- **THE ISOLATED-MATMUL MEASUREMENT PREDICTS ALMOST NOTHING.** ViT-Tiny's own matmuls, timed at
+-- B = 32 in f32, in bf16 in THIS emit shape, and in bf16 with activations staying bf16 BETWEEN
+-- ops (`planning/archive/bf16_dtype_ir.md`, which also records that the committed artifact did
+-- better than the isolated stack): this emit shape barely beats f32, and only the
+-- bf16-between-ops arm pays. ViT's matmuls are skinny (contracting dim 192, or 768 at the MLP)
+-- and bandwidth-bound on the activations, so the f32→bf16→f32 round trip at every op costs about
+-- what the tensor cores save. That is NOT true of the convnets — ConvNeXt keeps most of its
 -- saving through the same boundary, because a convolution reuses each loaded input across many
 -- output positions.
 --
@@ -664,15 +667,10 @@ end Proofs.StableHLO
 -- peer (bare device, B = 32, median of 25). They are NOT committed: a probe under `verified_mlir/`
 -- is what the driver loads, and one living there is the silent-hyperparameter hazard this file
 -- warns about above.
---
---     (bf16Conv := false) (bf16ConvW := false)   24.39 ms   1.23x   ← what is rendered above
---     (bf16Conv := true)  (bf16ConvW := false)   24.64 ms   1.21x   ← stem forward: ~free, no gain
---     (bf16Conv := false) (bf16ConvW := true)    57.22 ms   0.52x   ← THE WEIGHT GRADIENT ALONE
---     (bf16Conv := true)  (bf16ConvW := true)    57.29 ms   0.52x
---                              f32 control       29.89 ms
+-- The four-arm timing table is in planning/archive/bf16_renderer.md §19.
 --
 -- **One op, one site, and it costs more than every dot in the net gains.** The stem forward is
--- within noise either way; the weight gradient is +32.8 ms on a 29.89 ms step.
+-- within noise either way; the bf16 weight gradient alone makes the step slower than f32.
 
 -- ── The entry-name guards, route (c). ────────────────────────────────────────────────────────
 -- The bf16 slug is the f32 one with `bf16` APPENDED, so every committed spelling is untouched.
@@ -705,11 +703,11 @@ end Proofs.StableHLO
 
 -- **The 4-replica bf16 peer of the shipping DP render**, at the same 128×4 = global 512 geometry.
 -- A 4-replica ms/step is a SYSTEM result — shim feed and f32 all-reduce included. ViT's
--- RENDERER number is the single-device bare-device **1.46×**, and that is what the emit is
--- worth. This artifact exists so the net can be scheduled and costed at the geometry an ImageNet
+-- RENDERER number is the single-device bare-device one (planning/archive/bf16_renderer.md §20),
+-- and that is what the emit is worth. This artifact exists so the net can be scheduled and costed at the geometry an ImageNet
 -- run actually uses, not to restate the speedup.
 -- `bf16Conv`/`bf16ConvW` stay at their measured defaults (both false) — the stem weight
--- gradient is 0.19× its f32 peer and the replica axis does not change that.
+-- gradient is several times slower than its f32 peer and the replica axis does not change that.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdropbf16_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
@@ -793,8 +791,8 @@ end Proofs.StableHLO
 
 -- **S's bf16 peer.** One `(bf16 := true)`, no new operator: S is Tiny WIDENED, so every bf16 op it
 -- needs is one Tiny already instantiates, at a wider shape.
--- `bf16Conv`/`bf16ConvW` STAY FALSE, as in Tiny's bf16 render, and load-bearing:
--- this net's stem weight gradient measures **0.19×** its f32 peer — a 209×209 window
+-- `bf16Conv`/`bf16ConvW` STAY FALSE, as in Tiny's bf16 render, and for a reason:
+-- this net's stem weight gradient is several times slower in bf16 than f32 — a 209×209 window
 -- with no bf16 cuDNN kernel — and the width axis does not touch the stem. So the one op where
 -- bf16 is a LOSS on this architecture stays out of the emit at every size, which is why a green
 -- gate here is allowed to mean what it usually means.
@@ -828,8 +826,8 @@ end Proofs.StableHLO
 -- **NO `32×4` ViT-B PAIR**: it has no axis to win on. The 128×4 pair below fits and runs once
 -- the CUDA plugin's `memory_fraction` is 0.97 rather than its 0.75 default. Against it, `32×4` is
 -- global 128 where DeiT's recipe is **512**, it applies the reference's batch-512 LR to a batch
--- four times too small, and it is **slower** per epoch (322 h against 270 fp32, 228 against 155
--- bf16, device-only over 300 epochs) because a quarter of the per-device batch pays the
+-- four times too small, and it is **slower** per epoch, in both precisions, because a quarter of
+-- the per-device batch pays the
 -- per-invoke overhead four times as often. The measurements are kept in
 -- `runs/2026-08-27-vitb-global512/`.
 
@@ -838,39 +836,39 @@ end Proofs.StableHLO
 --     is needed at all
 -- ════════════════════════════════════════════════════════════════════════════════════════
 --
--- **The memory budget is the plugin's, not the card's.** ViT-B OOMs at 4×128 against
--- **11.68 GiB**, which is the CUDA plugin's BFC `memory_fraction = 0.75` DEFAULT and not the
--- card. `ffi/pjrt_ffi.c` passes the option and `LEAN_MLIR_MEM_FRACTION=0.97` yields
--- **15.11 GiB** (XLA's own log line).
+-- **The memory budget is the plugin's, not the card's.** ViT-B OOMs at 4×128 against the arena
+-- the CUDA plugin's BFC `memory_fraction = 0.75` DEFAULT reserves, not against the card.
+-- `ffi/pjrt_ffi.c` passes the option and `LEAN_MLIR_MEM_FRACTION=0.97` raises the arena (XLA's
+-- own log line, quoted in the run README below).
 --
 -- **Why this matters beyond a batch size.** DeiT's recipe is global **512**. At 32×4 this net
 -- renders at global 128, which is a RECIPE deviation rather than a hardware footnote — a ViT-B
--- number produced at global 128 is not comparable to DeiT-B's 81.8% even in principle. 128×4 is
+-- number produced at global 128 is not comparable to DeiT-B's published result even in principle. 128×4 is
 -- 512 in one shot, and one shot is what removes the need for `ViTRenderB` to grow an accumulation
 -- loop it does not have.
 --
 -- **IT FITS, AND IT EXECUTES** (`runs/2026-08-27-vitb-global512/`). Not a compile
 -- figure: four 4060 Ti, ten steps each, `scripts/probes/bf16_device_step.py --replicas 4`.
 --
---   | render                    | peak    | of 15.11 | device ms/step | at the 11.68 default |
---   |---------------------------|---------|----------|----------------|----------------------|
---   | `adamdp128x4wxclipdrop`   | 13.99 G |   93 %   |   1298.92      | `RESOURCE_EXHAUSTED` |
---   | `…dropbf16`               | 12.61 G |   83 %   |    746.25      | ✅ runs (10.88 G there) |
+-- That README has each render's peak, budget share and device ms/step: at 0.97 both
+-- `adamdp128x4wxclipdrop` and its `…dropbf16` twin fit and run; at the default the fp32
+-- one dies `RESOURCE_EXHAUSTED` and the bf16 one runs.
 --
 -- **The control is the finding.** The fp32 artifact above is ONE ENVIRONMENT VARIABLE from
 -- failing: unset, the same bytes on the same four cards die *"Out of memory while trying to
--- allocate 11.96GiB"*. So an accumulation loop is not a ViT-B fact; the limit is an unset
+-- allocate …"* (the run README has the line). So an accumulation loop is not a ViT-B fact; the limit is an unset
 -- `memory_fraction`.
 --
--- **And the un-rematerialised graph really is 20.39 GiB** — XLA says so in its own words when
--- compiled against the default budget (*"Can't reduce memory use below 10.16GiB … down from
--- 20.39GiB originally"*). 13.99 is what rematerialisation buys, which is why a peak must be quoted
--- with the budget it was taken against: this pair reads 13.97/10.88 at 11.68 and 13.99/12.61 at
--- 15.11, because XLA rematerialises less when it has room (R50 shows the same).
+-- **And the un-rematerialised graph really is larger than the card** — XLA says so in its own
+-- words when compiled against the default budget (*"Can't reduce memory use below … by
+-- rematerialization"*, quoted in the run README). The measured peak is what rematerialisation
+-- buys, which is why a peak must be quoted with the budget it was taken against: this pair reads
+-- lower at the default than at 0.97, because XLA rematerialises less when it has room (R50 shows
+-- the same).
 --
 -- **The all-reduce costs nothing measurable in the peak**, which is what the 1-replica peers
 -- below were rendered to establish — priced by DIFFERENCE rather than assumed absent. A graph
--- with no collective in it at all reads the same 13.99 / 12.61.
+-- with no collective in it at all reads the same peaks.
 --
 -- **The 128×4 shape is not new to this renderer**, which is why this is four `#eval`s and not a
 -- feature: `vitsin_adamdp128x4wxclipdrop` and `vitin_adamdp128x4wxclipdrop` both ship.
@@ -889,8 +887,8 @@ end Proofs.StableHLO
   "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16" ++ "_train_step"
 
 -- B's pair render, the same one call at `vitBDims`. The EMA shadow is a fourth parameter-sized
--- region (86.6 M floats, ~0.35 GB per replica) on top of the bf16 twin's 12.61 GiB peak at
--- 15.11, so it runs under `LEAN_MLIR_MEM_FRACTION=0.97`; probe the peak before a launch.
+-- region (86.6 M floats per replica) on top of the bf16 twin's peak at 0.97
+-- (`runs/2026-08-27-vitb-global512/`), so it runs under `LEAN_MLIR_MEM_FRACTION=0.97`; probe the peak before a launch.
 #eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropbf16_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
@@ -1010,7 +1008,7 @@ end Proofs.StableHLO
 -- builtins `get_global_id`/`get_global_size` but is JIT-compiled through HIPRTC, where they do not
 -- exist. That im2col workspace is LINEAR IN BATCH — MIOpen asks for 6,422,528 bytes at bs32 and
 -- exactly 2× that, 12,845,056, at bs64 — so the larger batch pushes solver selection onto the
--- broken kernel deterministically. The variable drops that solver family, at ~7% throughput.
+-- broken kernel deterministically. The variable drops that solver family, at a small throughput cost.
 -- Diagnosis + a 20-line JAX reproducer: `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`.
 -- The eval forwards stay at bs 32 and that is fine: `trainAdamSched` reads the width off the
 -- forward artifact (`evalBs`), so eval runs at 32 while training runs at 64.
@@ -1043,7 +1041,7 @@ end Proofs.StableHLO
 
 -- ── bs128, single-device and 4-replica ────────────────────────────────────────────────────────
 -- Rendered to answer "do these 16 GB cards hold bs128, i.e. global 512 on four?" — they do, with
--- room (3.2 GiB peak per device at bs128×4, 20% of the card).
+-- room to spare.
 --
 -- The single-device `adam128` is NOT optional scaffolding: `vit-dp-check` gates a DP render against
 -- the single-device render AT THE SAME PER-DEVICE BATCH, so without this the 4-replica one could
@@ -1054,9 +1052,8 @@ end Proofs.StableHLO
 -- gradient would be 4× and nothing but a numeric gate would say so.
 --
 -- **Global 512 is a THROUGHPUT config, not a training one.** Imagenette is 9,469 images, so
--- global 512 is **18 steps/epoch** — 1,480 updates over 80 epochs against the 23,600 the 71.31%
--- run took. Accuracy tracks step count at ~1 point per halving, accelerating at
--- the bottom (R34 lost 3.4 points going 295 → 36). Use it to measure scaling; do not read an
+-- global 512 is **18 steps/epoch** — 1,480 updates over 80 epochs against the 23,600 the bs32
+-- run took. Accuracy falls with step count, faster at the bottom. Use it to measure scaling; do not read an
 -- accuracy off it and compare.
 #eval IO.FS.writeFile "verified_mlir/vit_adam128_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam128_train_step" "128.0" 1 10 (vbB := 128))
@@ -1070,7 +1067,7 @@ end Proofs.StableHLO
 -- **THE SLUG IS LOAD-BEARING AND IT IS THE ONE TRAP THAT MATTERS HERE.** Forward artifacts
 -- carry no variant in their path (`<slug>_fwd.mlir`), so rendering a 1000-class ViT forward under
 -- the `vit` slug would silently OVERWRITE `verified_mlir/vit_fwd.mlir` — the 10-class Imagenette
--- forward that the 71.31% run, the prefix audit and every `fwd-tie vit` invocation depend on.
+-- forward that the Imagenette runs, the prefix audit and every `fwd-tie vit` invocation depend on.
 -- R34 has the same hazard and it is why `slug` exists there. Distinct paths, distinct entries.
 --
 -- Batch: **128 per device × 4 replicas = global 512**, which is `jax/MainVitImagenet.lean`'s
@@ -1195,19 +1192,19 @@ end Proofs.StableHLO
 -- THE BLOB GAINS A FOURTH REGION: `[θ|m|v|ema]`, 807 in / 805 out, and the scalar tail goes
 -- 3 → 5 (`%emad`, `%oemad`). That is why it renders to its OWN slug — a 4-region graph fed a
 -- 3-region blob is not a subtle numeric wrong answer, it is every parameter misaligned, and
--- `vit_adam_train_step.mlir` (which the 71.31% 80-epoch run, `vit-adam-tie` and `vit-dp-check` all
+-- `vit_adam_train_step.mlir` (which the 80-epoch Imagenette runs, `vit-adam-tie` and `vit-dp-check` all
 -- depend on) must stay exactly what it is. `trainAdamSched`'s checkpoint SIZE GUARD is the other
 -- half of that: checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
 --
 -- `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
 -- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. That
 -- correction is REQUIRED at our scale, not optional: the reference's own measurement of dropping
--- it shows a shadow still holding 12.8% of the random init at 3.1 τ, scoring **0.00% top-1**
--- while the live weights scored 70.48%, and an 80-epoch Imagenette run is 23,600
--- steps = 2.4 τ at decay 0.9999 — squarely inside that regime.
+-- it shows a shadow still carrying a visible share of the random init at 3.1 τ and scoring no
+-- top-1 at all while the live weights trained (`planning/archive/ema.md`), and an 80-epoch
+-- Imagenette run is 23,600 steps = 2.4 τ at decay 0.9999 — squarely inside that regime.
 --
--- Read this net's smoke as a DELTA, never an absolute. ViT's 80-epoch Imagenette result (71.31%)
--- is the weakest of the five by a wide margin — the expected outcome for a ViT with no pretraining
+-- Read this net's smoke as a DELTA, never an absolute. ViT's 80-epoch Imagenette result
+-- (`runs/2026-08-31-imagenette-n3/`) is the weakest of the five by a wide margin — the expected outcome for a ViT with no pretraining
 -- on 9,469 images, not a defect — so the gate is "the shadow tracks then exceeds the live
 -- weights", which is a comparison within one run.
 #eval IO.FS.writeFile "verified_mlir/vit_ema_train_step.mlir"

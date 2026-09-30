@@ -1012,7 +1012,7 @@ theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < 
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 /-- **The sync-BN DP step at BCE-with-logits, at the COMMITTED divisors** — every `bce := true`
-    DP artifact, including `resnet50in160_lambaccdp8x64bce` (per micro-step). A replica's chain
+    DP artifact, including `resnet50in160_lambaccdp8x64wxclipbce` (per micro-step). A replica's chain
     divides by `N·K` (its own batch × the class count, what the render bakes at `B := N`); the
     single-device step at the global batch by `(R·N)·K` — `r50_lossCot_is_bce_grad`'s divisor at
     `N := R·N`. `replicaBceLossCot_eq` discharges `hgs` once `(R·N)·K = R·(N·K)`. -/

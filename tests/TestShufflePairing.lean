@@ -9,8 +9,8 @@ f32 classification scalar. Detection and segmentation labels are whole tensors
 (the FPN detector's record is 185,220 floats = 740,880 bytes; BraTS masks are
 240²), so every epoch permuted the images and left the targets
 where they were. The trainer then saw mismatched image/target pairs for its
-entire existence and could only learn the marginal target distribution: mAP@0.5
-0.0001, an 8-image probe that refused to memorize, and nine investigations that
+entire existence and could only learn the marginal target distribution: an mAP
+near zero, an 8-image probe that refused to memorize, and nine investigations that
 all came back refuted.
 
 Nothing downstream could see it. Shapes, parameter counts, the loss and its VJP

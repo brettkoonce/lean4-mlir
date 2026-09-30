@@ -7,8 +7,9 @@ import LeanMlir
     report cell recall and an energy distance instead of "does that look right
     to you". On MNIST the ground truth is a **classifier that already knows what
     a digit looks like** — and this repo has one whose math VJP is proven:
-    Chapter 3's `cnnVerified` (`LeanMlir/Verified/NetsCore.lean`), 98.75 % at ten
-    epochs, running from the committed `verified_mlir/cnn_fwd.mlir`.
+    Chapter 3's `cnnVerified` (`LeanMlir/Verified/NetsCore.lean`), trained for ten
+    epochs (`runs/2026-08-28-mnist-ddpm-verified-score/cnn_verified_train.log`),
+    running from the committed `verified_mlir/cnn_fwd.mlir`.
 
     Push the generated samples through it and every metric of the 2-D demo comes back:
 

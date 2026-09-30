@@ -88,7 +88,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   randAugmentM         := 9.0      -- reduced from paper 15 for the short schedule
   useEMA               := true
   emaDecay             := 0.9999
-  valEveryEpochs       := 5        -- eval every 5 ep (per-epoch 50k-img val wastes ~1.75h over 100ep)
+  valEveryEpochs       := 5        -- eval every 5 ep (per-epoch 50k-img val wastes hours over 100ep)
   bf16                 := true
   bf16Conv             := true
   runningBN            := true     -- paper-faithful eval: running BN stats (UIB + fusedMbConv wired)

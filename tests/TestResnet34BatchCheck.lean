@@ -4,7 +4,7 @@ import LeanMlir.Verified.Train
 /-! # bs256 re-render gate — the duplicated-batch exact check
 
 `verified_mlir/resnet34_adam256_train_step.mlir` is the same `pretty(provenGraph)` as the bs32
-artifact with `B := 256`; the two are structurally identical (10014 ops, 9838 lines, same op
+artifact with `B := 256`; the two are structurally identical (same op count, line count and op
 profile) and differ only in tensor dimensions and one constant. That is *exactly* the kind of change
 that looks obviously right and can still be silently wrong — a re-instantiation at a new batch index
 can inflate pointwise trailing dims without changing the graph structure at all. So it gets a
@@ -42,8 +42,8 @@ identical) is what covers the rest, and it is cheap to re-run.
 
 **Both extra knobs are REQUIRED, and each fails in its own misleading way.**
 
-* `LEAN_MLIR_MEM_FRACTION=0.97` — the bs256 step wants one 11.50 GiB allocation and the plugin's
-  default BFC pool is 11.68 GiB, already part-consumed by the two bs32 runs, so the gate dies with
+* `LEAN_MLIR_MEM_FRACTION=0.97` — the bs256 step wants one allocation nearly the size of the
+  plugin's default BFC pool (11.68 GiB), already part-consumed by the two bs32 runs, so the gate dies with
   a bare `mlp train step failed` before reaching any comparison. 0.97 gives a 15.11 GiB pool and it
   fits. (Do NOT adopt 0.97 as a default — it crashes ConvNeXt's bf16 arms; it is for graphs that do
   not otherwise fit.)

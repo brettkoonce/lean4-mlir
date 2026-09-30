@@ -24,8 +24,7 @@ Two corollaries about the named models:
 
 What stays trusted: the kernel↔model boundary — FMA contraction, reduction reassociation,
 "the GPU behaves like round-to-nearest on this grid". True binary32 also has overflow and a
-subnormal floor that `rndP` idealizes away (`FloatSubnormalBridge` states a model with the
-latter, hypothesis-style). The file declares no `axiom` and sits inside the ordinary
+subnormal floor that `rndP` idealizes away; no subnormal-aware model is stated. The file declares no `axiom` and sits inside the ordinary
 `Proofs`/`AuditAxioms` 3-axiom closure.
 -/
 

@@ -54,8 +54,9 @@ own network.
 
 - `ddpmCifar`     — CIFAR config: 32×32, base 128, mult [1,2,2,2]
                     (paper: 35.7M; our simplified UNet backbone undershoots).
-- `ddpmHires`     — 256×256 LSUN/ImageNet config, base 128, depth 5
-                    (paper: ~550M for ImageNet-256; same undershoot caveat).
+- `ddpmHires`     — 256×256 LSUN / CelebA-HQ config, base 128, depth 5
+                    (paper: 114M for those models; same undershoot caveat).
+                    DDPM has no ImageNet model.
 - `tinyDdpm`      — 32×32 fixture, small enough to read in one pass.
 - `ddpmTimeEmbed` — standalone timestep-embedding MLP
                     (sinusoidal → dense → SiLU → dense).
@@ -97,7 +98,7 @@ def ddpmCifar : NetSpec where
   ]
 
 -- ════════════════════════════════════════════════════════════════
--- § DDPM Hi-res (256×256 ImageNet / LSUN, paper target ~550M)
+-- § DDPM Hi-res (256×256 LSUN / CelebA-HQ, paper target 114M)
 -- ════════════════════════════════════════════════════════════════
 -- 5-level UNet: 256 → 128 → 64 → 32 → 16, base 128, mult [1,1,2,2,4,4].
 -- Same simplifications apply as ddpmCifar (no time cond, no attention).
@@ -195,7 +196,7 @@ def main : IO Unit := do
   IO.println "    .unetDown / .unetUp exactly as UNet.lean does; the timestep"
   IO.println "    MLP reuses .positionalEncoding (from NeRF) + .dense."
   IO.println "  • Our simplified backbone undercounts vs the real DDPM UNet."
-  IO.println "    Paper targets: ~35.7M (CIFAR) and ~550M (ImageNet-256);"
+  IO.println "    Paper targets: 35.7M (CIFAR) and 114M (256×256 LSUN);"
   IO.println "    our approximation is the Ronneberger-style backbone without"
   IO.println "    residual blocks, group norm, attention-at-low-res, or the"
   IO.println "    per-block time-embedding projection. All real, all small"

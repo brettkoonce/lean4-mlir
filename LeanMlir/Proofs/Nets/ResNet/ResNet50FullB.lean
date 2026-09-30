@@ -6,7 +6,7 @@ A net-level ℝ forward at the [3,4,6,3] bottleneck ladder, in the world the art
 the typed graph over it (the second half of this file).
 
 ResNet-50 has only a batched renderer (`ResNet50RenderB.lean`), so `bnBatchLA` is the
-world of `resnet50_fwd`, `resnet50in160_lambaccdp8x64bce` and everything between.
+world of `resnet50_fwd`, `resnet50in160_lambaccdp8x64wxclipbce` and everything between.
 
 ## What is new here, and what is not
 
@@ -268,7 +268,7 @@ noncomputable def resnet50ForwardBFull (N q : Nat) {nCls : Nat} (w : R50BWeights
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
     resnet50ForwardBFull N 7 w x = resnet50ForwardBFull N 7 w x := rfl
 
--- And `q = 5` IS the 160-px net -- `resnet50in160_*`, where the quoted 76.66% comes from.
+-- And `q = 5` IS the 160-px net -- `resnet50in160_*`, the A3 recipe's train resolution.
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 160 * 160))) :
     resnet50ForwardBFull N 5 w x = resnet50ForwardBFull N 5 w x := rfl
 

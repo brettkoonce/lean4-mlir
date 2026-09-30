@@ -1436,7 +1436,7 @@ here first"
     -- Getting this wrong is invisible to every proof in the repo — `%loss` is report-only and on
     -- no gradient path — but the driver logs it and the epoch curve is how a run is judged against
     -- the reference. PLAIN CE here (dropping the (1−α) factor and the α/K term) shows up only in
-    -- the numeric tie, as a 0.28% loss disagreement against an otherwise bit-identical forward.
+    -- the numeric tie, as a loss disagreement against an otherwise bit-identical forward.
     -- Hand-written emit is not verified emit.
     let lossCode :=
       "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
@@ -1486,7 +1486,7 @@ here first"
           "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
           "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
           "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
-          "    // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)\n"
+          "    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)\n"
          else "")) ++
       zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
@@ -1521,7 +1521,7 @@ end Proofs.StableHLO
 -- The gates on this render:
 --
 --   * the numeric tie (`resnet34-adam-tie`) — forward bit-exact, backward norm-rel ≤ 2e-6;
---   * the step bench (`resnet34-adam-bench`) — no cost, despite 1.68× the emitted ops, because
+--   * the step bench (`resnet34-adam-bench`) — no cost, despite the extra emitted ops, because
 --     XLA's CSE collapses the recomputes.
 --
 -- To run the tie against another render of this step, pass that render as the first argument.
@@ -1633,7 +1633,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet34AdamTrainStepFaithfulB 32 10 "1.0e-05" 2)
 
 -- The **bs256** render, selected at run time by `LEAN_MLIR_VARIANT=adam256` with
--- `cfg.batchSize := 256`. Batch is worth ~1.8× img/s on this net and bs256 fits on a 7900 XTX;
+-- `cfg.batchSize := 256`. bs256 is much faster per image on this net and fits on a 7900 XTX;
 -- it is also the batch ImageNet wants. `B` is a true parameter of the renderer, so this is the
 -- whole change — the graph structure is identical and only the tensor dimensions move.
 --
@@ -1651,8 +1651,8 @@ end Proofs.StableHLO
 -- `adamdp128` shape brought to R34. `B` and `replicas` are both true parameters, so
 -- this composes the two `#eval`s above with no new renderer code.
 --
--- Why this batch: bs256 measures **1.78× img/s** over bs32 single-device, most of it
--- amortising the ~272 MB `[θ|m|v]` host↔device round trip over 8× the images — and that transfer is
+-- Why this batch: bs256 is much faster per image than bs32 single-device, most of it from
+-- amortising the `[θ|m|v]` host↔device round trip over 8× the images — and that transfer is
 -- exactly what the DP path pays per replica per step. So 2×128 is where the batch win and the
 -- replica win stack rather than fight.
 --

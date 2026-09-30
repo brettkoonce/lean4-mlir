@@ -26,12 +26,14 @@ is that cotangent's lemma; the head fold below is stated at it, not at `softmax 
 the artifacts at 32 (`resnet34_sgd/adam_train_step`) or 64 (`resnet34in_momdp64`) are instances.
 The batch size is never pinned (the 224-px resolution and the 64…512 widths are literals).
 
-**The all-reduce.** In `resnet34in_momdp64` each `*GradB` node
-feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
-per-replica gradient nodes. Every statement below is at the PER-REPLICA gradient node;
-`DataParallel.Node` composes it with the mean and the tail. For the sync-BN data-parallel
-render `ResNet34SyncStepTieB.lean` is the whole step: its `r34_net_syncTiedB` says
-each all-reduced gradient IS this file's node at `N := R·N`.
+**The all-reduce.** Every statement below is at one replica's gradient node. Every ResNet-34
+data-parallel render (`resnet34in_momdp64` among them) synchronises BatchNorm; its all-reduced
+gradients are `ResNet34SyncStepTieB`'s `r34_net_syncTiedB`: this file's node at `N := R·N`.
+
+**bf16 is outside this statement.** The ImageNet run the book reports trains from
+`resnet34in_momdp64bf16`, which swaps the conv nodes for bf16 kinds
+([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among them). What those kinds
+do under sharding is `DataParallel.SyncBf16`; no whole-net statement covers that step.
 
 ## The parameter census is 110, not 146
 
@@ -418,7 +420,8 @@ theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat
 
     One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
     node; `ResNet34SyncTieB.r34_net_syncTiedB` is the data-parallel step, and
-    its right-hand sides are this theorem's nodes at `N := R·N`. -/
+    its right-hand sides are this theorem's nodes at `N := R·N`. The nodes are f32:
+    `resnet34in_momdp64bf16` emits the `*GradBBf16` kinds and is outside this statement. -/
 theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls))) :

@@ -1036,8 +1036,8 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     The cotangent is plain `softmax − onehot` with the batch mean folded into `lrStr` — so the
     committed `lrStr = 0.05` is an effective **1.6** on the mean loss. That is a tuned value, not a
     slip; the AdamW render below spells the mean explicitly instead. -/
--- Evidence for the tuned lr: runs/efficientnet_verified_crop_gpu1.log, val accuracy 40.63% after
--- epoch 1, 87.65% after epoch 80, peak 87.81% at epoch 79.
+-- Evidence for the tuned lr: runs/efficientnet_verified_crop_gpu1.log, the per-epoch val accuracy
+-- of an 80-epoch Imagenette run at this lr.
 def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "efficientnet_train_step") (convBias : Bool := false) : String :=
   let go : StateM Proofs.StableHLO.EmitS String := do
@@ -1274,9 +1274,10 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let retTys := packedTrainRetTys pTy (ema := ema) ++ statTypes ++ dpTys
     pure (
       (if replicas ≤ 1 then
-        "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
+        s!"    // ── EfficientNet-B0 AdamW train step: {trainStepHandNote} ──\n"
        else
         s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        s!"    // {trainStepHandNote}.\n" ++
         "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
@@ -1385,7 +1386,7 @@ end Proofs.StableHLO
 
 -- The **Imagenette bf16 twin** of the row above — same 32/10/α/−α÷K literals, only the cast
 -- differs. It exists as the cheap END-TO-END sanity check on the bf16 + 4-D-pointwise path:
--- Imagenette trains to a known 87.58% in 80 epochs (`RESULTS.md`), with a per-epoch trajectory to
+-- Imagenette has a known 80-epoch result (`historical/RESULTS.md`), with a per-epoch trajectory to
 -- compare against, where an ImageNet run costs days.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adambf16_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
@@ -1432,7 +1433,7 @@ end Proofs.StableHLO
 -- **The slug is load-bearing and EfficientNet is the case where it bites hardest**: it is the
 -- only net here with BOTH a `_fwd` and a `_fwd_eval` artifact, and neither carries a variant in its
 -- path. A 1000-class forward emitted under the `efficientnet` slug would silently overwrite the
--- 10-class pair that the 88.20% Imagenette run, the prefix audit and `fwd-tie efficientnet
+-- 10-class pair that the Imagenette runs (`runs/2026-08-31-imagenette-n3/`), the prefix audit and `fwd-tie efficientnet
 -- --eval` all depend on.
 --
 -- Batch **64 per device × 4 replicas = global 256**, which is
@@ -1454,13 +1455,13 @@ end Proofs.StableHLO
     "0.100000" "" "64.0" 4 false "efficientnetin")
 
 -- ── RMSProp: the optimizer the EfficientNet reference ACTUALLY USES ─────────────────────────
--- The EfficientNet reference's **72.31%** is an RMSProp number. ρ = μ = 0.9,
+-- The EfficientNet reference's top-1 (`planning/imagenet_parity.md`) is an RMSProp number. ρ = μ = 0.9,
 -- **ε = 1e-3**, wd = 1e-5 — `Proofs.StableHLO.enetRmsHyper`.
 --
 -- **ε = 1e-3 is the SENSITIVE end of the ε-placement difference**, unlike MobileNetV2's ε = 1.0.
 -- At a collapsed mean-square the textbook spelling steps 31.6× larger, which is exactly what the
 -- reference config means by *"vanilla diverges/erodes at the paper LR, the TF form trains stably"*
--- and why its `gradClipNorm` is 0. So this net is where the placement is load-bearing, and it gets
+-- and why its `gradClipNorm` is 0. So this net is where the placement decides the outcome, and it gets
 -- its own numeric gate — `rms-tie efficientnet` — rather than inheriting mnv2's.
 --
 -- The Imagenette-shape render below differs from `efficientnet_adam_train_step` in EXACTLY ONE
@@ -1472,7 +1473,7 @@ end Proofs.StableHLO
 
 -- ── RMSProp **+ EMA** — this net's ACTUAL reference recipe ────────────────
 -- `efficientNetB0ImagenetConfig` is RMSProp + exp-decay + **EMA (decay 0.9999)** + dropPath, and
--- its 72.31% is the EMA shadow's number.
+-- its reference top-1 is the EMA shadow's number.
 --
 -- The variant is `emarms`, not `ema`: optimizer and EMA are INDEPENDENT axes on this net (unlike
 -- ConvNeXt, which has only AdamW), so the name carries both — and the `ema` marker LEADS because
@@ -1500,8 +1501,9 @@ end Proofs.StableHLO
 
 -- **The bf16 peer** — `rms64bf16`. RMSProp is EfficientNet's own optimizer, and this is the
 -- SINGLE-DEVICE render, deliberately: a 4-replica bf16 number on this box is a SYSTEM result (shim
--- feed + f32 all-reduce), not a statement about the emit — MobileNetV2 is 1.92× on one GPU and
--- 1.37× on four, same graph. A 1-GPU pair is the measurement that isolates the renderer.
+-- feed + f32 all-reduce), not a statement about the emit — MobileNetV2's bf16 gain shrinks sharply
+-- from one GPU to four on the same graph (planning/archive/bf16_renderer.md). A 1-GPU pair is the
+-- measurement that isolates the renderer.
 --
 -- **EfficientNet needs ZERO new ops.** Every conv and depthwise kind on its AdamW/RMSProp path
 -- has a bf16 twin shared with MobileNetV2 (8 ops) and MobileNetV4 (3 ops) — 23 call
@@ -1531,8 +1533,8 @@ end Proofs.StableHLO
 -- **The 4-replica bf16 peer** — the DP arm of `rms64bf16`, so B0 can be probed at the same 4×bs64
 -- geometry as R34/R50/MNv2 rather than only single-device. Read its ms/step as a SYSTEM number, not
 -- a renderer one: a 4-replica figure carries the shim feed and the f32 all-reduce. B0's RENDERER
--- number is the single-device 1.09× (1.10× on the bare device), and that is the one that says what
--- the emit is worth.
+-- number is the single-device one (planning/archive/bf16_renderer.md), and that is the one that
+-- says what the emit is worth.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64bf16_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (bf16 := true))
@@ -1684,7 +1686,7 @@ end Proofs.StableHLO
 -- **THE FULL REFERENCE RECIPE AT IMAGENET SCALE — `efficientNetB0ImagenetConfig` entire on the
 -- regulariser axis**: RMSProp (TF flavour, ε inside the sqrt, ms-init 1.0) + EMA 0.9999 +
 -- stochastic depth 0.1 + classifier dropout 0.2. The peer of ConvNeXt's
--- `convnextin_adamdpwxclipdrop`, and what the 72.31% reference pair needs to be reachable through
+-- `convnextin_adamdpwxclipdrop`, and what the reference pair needs to be reachable through
 -- the verified path.
 --
 -- NOTE THE PATH: `efficientnetin_emarms64dropdo`, batch suffix BEFORE the two regulariser markers,
@@ -1721,7 +1723,7 @@ end Proofs.StableHLO
 -- The **bf16 twin of the production job's artifact** (`scripts/jobs/enet-default-4gpu.conf`). Same
 -- geometry and the same three regularisers as the f32 row above — only the cast differs — so the
 -- two are a like-for-like pair the job can be flipped between.
--- With flat-activation NHWC↔NCHW relayouts in the graph B0's bf16 ratio is 1.10×, because that
+-- With flat-activation NHWC↔NCHW relayouts in the graph B0's bf16 gain nearly vanishes, because that
 -- traffic is f32 and sits BEFORE the cast; with the pointwise ops emitted 4-D (`liftPointwise`) the cast
 -- pays.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir"

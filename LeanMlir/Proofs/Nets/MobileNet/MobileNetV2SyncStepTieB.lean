@@ -52,8 +52,11 @@ are not tied here (`mnv2_net_tiedB` keeps them for the flag).
 The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv2PreB{k} (R*N) w X)`); that the sync forward graph computes exactly those is
 `StableHLO.mobilenetv2FwdGraphSyncFull_shard`, the forward half. That the replicas' inputs are
-the shards of one batch is the driver's. The lowerer's `all_reduce` is trusted as every other
-op's lowering is.
+the shards of one batch is the driver's. The statement is at the f32 nodes, so it covers the four
+f32 DP artifacts (`mobilenetv2_adamdp`, `mobilenetv2in_adamdp64`, `mobilenetv2in_rmsdp64`,
+`mobilenetv2in_rmsdp128`). The four `*bf16` DP artifacts emit bf16 nodes, whose weight gradients
+are rounded per replica and are not sharding-invariant (`DataParallel.SyncBf16`); they are outside
+it. The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -963,8 +966,9 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
     The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per
     BN layer), per-example conv / depthwise / relu6 / GAP / dense links. The right-hand chain is
     `mnv2_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone ties to the certified
-    gradient at its chain cotangent — so this and it together say every all-reduced gradient the
-    DP render emits is the global-batch step's gradient node. The optimizer update that follows
+    gradient at its chain cotangent — so this and it together say every all-reduced gradient an
+    f32 DP render emits is the global-batch step's gradient node (the `*bf16` renders are
+    outside). The optimizer update that follows
     (RMSProp/AdamW) is not stated here. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
     label-smoothed chain the artifacts emit.
 
@@ -1064,7 +1068,7 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
-    gradient the DP render emits is the single-device node at batch `R·N`, loss divided by `R·B`. -/
+    gradient an f32 DP render emits is the single-device node at batch `R·N`, loss divided by `R·B`. -/
 theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))

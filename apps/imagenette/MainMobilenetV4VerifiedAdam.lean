@@ -5,7 +5,7 @@ import LeanMlir.Verified.Train
 
 Shared body in `apps/imagenette/MobilenetV4AdamCommon.lean`, linked against `ffi/libpjrt_ffi.so`.
 
-80 epochs, bs32, AdamW, target **84.58%** — the JAX-baseline path's number for this block table. The
+80 epochs, bs32, AdamW; the target is the JAX-baseline path's number for this block table. The
 forward and the gradient are both tied against that reference, so the two paths are the same net and
 the number is a reproduction rather than a fresh measurement.
 
@@ -34,8 +34,8 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
     the Imagenette tier is read against the other nets at the same schedule and any difference is
     the architecture rather than the recipe.
 
-    The target is `RESULTS.md`'s **84.58%**, which is the JAX-baseline path's number for this
-    exact block table. Unlike MobileNetV2's, that number does **not** move when this render changes:
+    The target is the JAX-baseline path's number for this exact block table (the MobileNetV4-Conv-S
+    row of `historical/RESULTS.md`). Unlike MobileNetV2's, that number does **not** move when this render changes:
     the stem was built as `convStridedXla` precisely so the verified render and the baseline are the
     same net. -/
 def mobilenetv4AdamConfig : VerifiedConfig where

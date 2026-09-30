@@ -15,11 +15,11 @@ def efficientNetB0Imagenet : NetSpec where
   imageH := 224
   imageW := 224
   -- ITS ABSENCE IS SILENT. `NetSpec.convBnAct`
-  -- defaults to `.relu` (`LeanMlir/Types.lean:378`), so without this line the two `.convBn` layers
+  -- defaults to `.relu` (`LeanMlir/Types.lean`), so without this line the two `.convBn` layers
   -- below — the stem and the 1×1 head — emit `jax.nn.relu` while every MBConv interior emits
   -- `swish`. EfficientNet-B0 is SiLU/swish THROUGHOUT, stem and head included.
-  -- The Imagenette twin carries this line too; the deviation measures at 51% of logit range — five
-  -- times the padding deviation.
+  -- The Imagenette twin carries this line too; the deviation it prevents is several times the
+  -- padding deviation.
   -- The VERIFIED render is swish (194 `stablehlo.logistic`, zero `stablehlo.maximum`), so without
   -- this line the port is MORE paper-faithful than the reference it is scored against, and the
   -- reference ↔ verified accuracy comparison is not like-for-like.

@@ -36,14 +36,15 @@ Co-DETR) inherited the clean set-prediction formulation.
 
 ## Variants
 
-| Model    | Backbone  | Encoder | Decoder | Params | COCO AP |
-|----------|-----------|---------|---------|--------|---------|
-| DETR-R50 | ResNet-50 | 6 × 8h  | 6 × 8h  | 41M    | 42.0    |
-| DETR-R101| ResNet-101| 6 × 8h  | 6 × 8h  | 61M    | 43.5    |
-| tinyDETR | 2-stage miniRN | 2 × 4h | 2 × 4h | ~3M | n/a   |
+| Model    | Backbone  | Encoder | Decoder | Params (paper) | COCO AP |
+|----------|-----------|---------|---------|----------------|---------|
+| DETR-R50 | ResNet-50 | 6 × 8h  | 6 × 8h  | 41M            | 42.0    |
+| DETR-R101| ResNet-101| 6 × 8h  | 6 × 8h  | 61M            | 43.5    |
+| tinyDETR | 2-stage miniRN | 2 × 4h | 2 × 4h | n/a         | n/a     |
 
-All use dim = 256, mlp_dim = 2048, 100 object queries, 91 COCO classes
-(+ 1 "no object" slot = 92 output classes on the class head).
+The two paper models use dim = 256, mlp_dim = 2048, 100 object queries, 91
+COCO classes (+ 1 "no object" slot = 92 output classes on the class head).
+`tinyDETR` is a toy: dim 64, mlp_dim 256, 20 queries, 20 classes.
 -/
 
 -- ════════════════════════════════════════════════════════════════

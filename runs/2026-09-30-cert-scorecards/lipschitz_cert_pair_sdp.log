@@ -1,0 +1,33 @@
+base scorecard provides 34 img defs, 8 hpreC, 1 hpreU
+[C] certified (measured) 69/100; emitting 8 theorems: [0, 2, 3, 4, 5, 6, 7, 9]
+[C] classes [0, 1, 4, 7, 9], 35 unordered pairs, 45 ordered
+[C] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean: 1850 lines
+[U] certified (measured) 63/100; emitting 8 theorems: [0, 2, 3, 4, 5, 6, 10, 11]
+[U] classes [0, 1, 4, 6, 7], 35 unordered pairs, 45 ordered
+[U] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDPUncon.lean: 1858 lines
+
+DONE: capped 8/100, uncon 8/100
+	Command being timed: "python3 scripts/certs/lipschitz_cert_pair_sdp.py"
+	User time (seconds): 904.52
+	System time (seconds): 0.27
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 15:01.06
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 517500
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 42565
+	Voluntary context switches: 86
+	Involuntary context switches: 2830
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 856
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0

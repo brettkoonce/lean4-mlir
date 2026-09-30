@@ -44,7 +44,7 @@ point it moves the two-pass graph's OWN `m'` by ~0.2, so the gradient can only e
 ~1e-3 of that, while the statistics are compared tightly.
 
 A one-round exchange of `[μ ‖ E[x²]]`, with every consumer forming `σ² = E[x²] − μ²`, measures
-2e-4 off in the statistics after 36 layers and 15 % off in `m'` on this gate, with the sensitivity
+2e-4 off in the statistics after 36 layers and far off in `m'` on this gate, with the sensitivity
 probe at 0.22 — i.e. the ops are right and the f32 arithmetic is not (`ε·E[x²]/σ²` per layer,
 compounding). Hence Chan's two-round exchange.
 

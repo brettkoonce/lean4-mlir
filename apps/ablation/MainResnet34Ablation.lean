@@ -11,8 +11,9 @@ contribution *given everything else is present* — not the order-dependent stor
 ladder gives.
 
 **One arm per invocation, deliberately.** The Chapter 4 ablation binaries run their arms in
-sequence, which is right at 40 epochs on CIFAR; here an arm is ~80 minutes, so eight of them in
-series is a working day and in parallel across four cards it is under three hours.
+sequence, which is right at 40 epochs on CIFAR; here an arm is long enough that eight of them in
+series is a working day, and in parallel across four cards they finish in an afternoon
+(`runs/2026-09-01-r34-ablation/`).
 
 **Three arms are RENDERS, not flags, and the reason is where the constant lives.** Warmup, the
 schedule and augmentation are host-side, so they are arguments here. Weight decay and label
@@ -65,8 +66,8 @@ def main (argv : List String) : IO Unit := do
   -- `bare02` — Chapter 4's momentum settings, transplanted VERBATIM: μ 0.9, lr **0.02**,
   -- no warmup, constant rate (`MainCifar8WideBnAblation.lean`'s middle arm, argument for
   -- argument). It differs from `bare` in the learning rate ALONE, which is what makes the pair a
-  -- measurement of the rate rather than of the recipe — and what says whether `bare`'s 84.43%
-  -- is the optimizer's ceiling here or just an under-stepped one. A momentum rate that suits a
+  -- measurement of the rate rather than of the recipe — and what says whether `bare`'s result
+  -- (`runs/2026-09-01-r34-ablation/RESULTS.md`) is the optimizer's ceiling here or just an under-stepped one. A momentum rate that suits a
   -- 9-layer CIFAR net at 32² need not suit a 34-layer ResNet at 224².
   | "bare02"  => resnet34Verified.toNet.trainAdamSched cfg d 0.02 0.9 0.999 0 s!"mom{p}" 1.0 1.0
   -- `baresgd10` — the bare configuration under PLAIN SGD at the step-matched rate. `bare` is

@@ -1226,7 +1226,7 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 32 10 "1.0e-5")
 
 -- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
--- Target: `historical/RESULTS.md`'s 84.58%, the baseline path's number for this block table.
+-- Target: the baseline path's number for this block table in `historical/RESULTS.md`.
 -- Unlike MobileNetV2's, that number belongs to the JAX baseline and does NOT move when this
 -- render changes.
 #eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"
@@ -1277,7 +1277,7 @@ end Proofs.StableHLO
 --
 -- MNv4 is the first net to use the SYMMETRIC-pad `depthwiseStrided` family in bf16 (MNv2 used
 -- the XLA-`SAME` one). Its three twins are the only ops this net needed that MobileNetV2 did not
--- already build — 47 call sites, 3 new ops.
+-- already build.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64bf16_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in" true)
 

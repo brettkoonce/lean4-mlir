@@ -20,7 +20,7 @@ hypotheses: a `FloatModel` is any rounding operator `rnd` with relative error
 `u` (`|rnd x − x| ≤ u·|x|`). No project axioms — IEEE-754 binary32
 round-to-nearest satisfies the interface with `u = 2⁻²⁴` **in the normal
 range** (Higham, *Accuracy and Stability*, §2.2; the standard model without
-underflow — the subnormal absolute-error term is `FloatSubnormalBridge`'s). `exactModel` (`rnd = id`, `u = 0`) shows the interface is
+underflow — the subnormal floor is outside the model; no subnormal-aware model is stated). `exactModel` (`rnd = id`, `u = 0`) shows the interface is
 inhabited and collapses every bound to `0`.
 
 Design notes, in suite style:

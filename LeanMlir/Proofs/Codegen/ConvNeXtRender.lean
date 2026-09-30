@@ -251,7 +251,7 @@ example as `[c, s]` with `s = h·w`, transpose to `[s, c]`, and each row is one 
 holding its `c` channels, which is exactly what `rowLNFlat` normalises. Checked on device
 (`lake build channel-ln`): forward and all three backward pieces tie the closed form at rel 0, the
 `.bnF` control fires at rel 0.82, and the transposes measure
-**free** (Δ 0.00 ms on 16.1 ms of whole-net LN — XLA folds a transpose into the consumer's layout).
+**free** against the whole-net LN (XLA folds a transpose into the consumer's layout).
 
 **`Nat` multiplication is not definitionally associative**, and the ambient index here is
 `c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` (`IndexCast`) are
@@ -868,6 +868,11 @@ private def convnextAdamConsts (nClasses : Nat) (V : CnxDims) (wdExclude : Bool 
   let (d, z) := cnxWdCounts nClasses V
   wdzConst wdExclude s!"{z} of {d + z} params" ++ adamWConsts wdStr
 
+/-- The hand-written block the AdamW train-step banners name beside `trainStepHandNote`'s list:
+    the GAP backward (`%dgi` … `%dgapf`) on the gradient path. -/
+private def cnxGapBackNote : String :=
+  "the hand-written GAP-backward block (%dgi…%dgapf), "
+
 /-- **ConvNeXt AdamW train step rendered from the verified AST** — the wrapper `ConvNeXtRenderB`
     calls (with `traversal` set to its batched chain) to write `convnext_adam_train_step.mlir` and
     the other ConvNeXt AdamW/EMA artifacts.
@@ -1044,12 +1049,13 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let retTys := packedTrainRetTys pTy (ema := ema) ++ dpTys
     pure <|
       (if replicas ≤ 1 then
-        s!"    // ── {cnxModelName V} AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
+        s!"    // ── {cnxModelName V} AdamW train step: {trainStepHandNote (hand := cnxGapBackNote)} ──\n" ++
         s!"    // All {(allParams nClasses V).length} params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
         "    // WEIGHT GRADIENTS (flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).\n"
        else
         s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        s!"    // {trainStepHandNote (hand := cnxGapBackNote)}.\n" ++
+        "    // Every other gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes. Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++
@@ -1074,8 +1080,9 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (packedTrainRetTys pTy (ema := ema)
        ++ (if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []))
   -- The slug matters exactly as it does on R34 and ViT: a 1000-class render
-  -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,
-  -- the prefix audit and every `convnext-adam-tie` invocation depend on.
+  -- emitted under the `convnext` slug would collide with the artifacts the Imagenette runs
+  -- (`runs/2026-08-31-imagenette-n3/`), the prefix audit and every `convnext-adam-tie`
+  -- invocation depend on.
   -- `wdExclude` MUST reach the variant here. ConvNeXt DERIVES its entry name from the variant
   -- where ViT takes `funcName` explicitly, so omitting it renders `@convnext_adam_train_step`
   -- into `convnext_adamwx_train_step.mlir` — an artifact whose entry disagrees with its path.

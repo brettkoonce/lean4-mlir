@@ -157,9 +157,8 @@ def main() -> None:
     L.append("")
     for slug, name in NETS:
         entries, nimg, sigma = per_net[slug]
-        ncorrect = sum(1 for e in entries if e[7])
-        L.append(f"-- ── {name}: {len(entries)}/{nimg} with a kernel-checked tail bound (σ={sigma}, "
-                 f"of which {ncorrect} correctly classified) ──")
+        L.append(f"-- ── {name}: the {len(entries)} of the first {nimg} images with a kernel-checked "
+                 f"tail bound (σ={sigma}; misclassified ones are marked) ──")
         L.append("")
         for (idx, label, pred, k, n, a, radius, correct) in entries:
             tag = "" if correct else "  (misclassified)"

@@ -25,7 +25,7 @@ namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
 -- § Parser for the postorder token serialization (`Raw`/`Tok`/`toToks`/`skel`
---   live in StableHLO/Basic.lean — the emitter shares them).
+--   live in StableHLO/Pretty.lean — the emitter shares them).
 -- ════════════════════════════════════════════════════════════════
 
 /-- Stack reconstructor: fold the token stream, pushing operands and applying

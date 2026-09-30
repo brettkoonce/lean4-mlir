@@ -16,7 +16,8 @@ open ReferenceNets (unetBrats)
       multi-modal rather than three correlated views of one thing.
 
     * **4 output classes, and they are brutally imbalanced.** Enhancing
-      tumour is on the order of 1% of pixels, and the thin classes *are* the
+      tumour is a sliver of the pixels (`unetBratsClassWeights` gives the
+      histogram), and the thin classes *are* the
       task, so a collapse would be
       unignorable — which is why medical segmentation invented Dice.
 
@@ -39,8 +40,7 @@ open ReferenceNets (unetBrats)
       lake exe unet-brats-train
 
     That trains 3 epochs of `dicece` on data/brats and prints mIoU + per-class
-    IoU + region Dice (WT/TC/ET) every epoch. Expect val mIoU ≈ 0.73,
-    WT Dice ≈ 0.90 at 3 epochs.
+    IoU + region Dice (WT/TC/ET) every epoch.
 
     Everything else is optional and order-free — a data dir, an epoch count,
     and an arm can appear in any order:
@@ -65,9 +65,9 @@ open ReferenceNets (unetBrats)
     Inverse frequency makes every class contribute **exactly 25%** of the
     loss; under plain CE the shares are instead 97.46 / 1.60 / 0.44 / 0.50.
 
-    Measured, `dice` and `dicece` are the two BEST arms (mIoU 0.736 / 0.734)
-    and this inverse-frequency `wce` is the WORST and the only unstable one
-    (0.640, and it over-paints 1.5–2.4×). Equalizing the loss shares is an
+    Measured, `dice` and `dicece` are the two BEST arms and this
+    inverse-frequency `wce` is the WORST and the only unstable one (it
+    over-paints). Equalizing the loss shares is an
     over-correction here, not the fix. Kept as a selectable arm and as the
     β = 1 endpoint of `unetBratsClassWeightsBeta`; not the default.
 
@@ -108,12 +108,12 @@ def unetBratsClassPriors : List Float :=
     unifies every weighted-CE arm into one axis**, which is what the ablation
     turned the discrete arms into:
 
-      β = 0    → all ones = plain CE            (mIoU 0.728)
-      β = 0.5  → `unetBratsClassWeightsSqrt`    (mIoU 0.709)
-      β = 1    → `unetBratsClassWeights`        (mIoU 0.640, over-paints)
+      β = 0    → all ones = plain CE
+      β = 0.5  → `unetBratsClassWeightsSqrt`
+      β = 1    → `unetBratsClassWeights`        (over-paints)
 
     β = 0 is the *best* of the three and increasing β monotonically hurts.
-    Focal does not collapse either — `focal g=2` scores 0.719. The axis is
+    Focal does not collapse either. The axis is
     real and worth sweeping. -/
 def unetBratsClassWeightsBeta (beta : Float) : List Float :=
   let w0 := Float.exp (-beta * Float.log unetBratsClassPriors.head!)
@@ -129,8 +129,8 @@ def unetBratsConfig : TrainConfig where
   warmupEpochs := 0
   augment      := false
   -- Eval EVERY epoch, against the framework default of 10. An epoch here is
-  -- ~3.5 min on one 4060 Ti and the eval is a forward pass over 2,569 val
-  -- slices — well under a minute. That is cheap insurance for the thing this
+  -- minutes on one 4060 Ti and the eval is a forward pass over 2,569 val
+  -- slices, a small fraction of that. That is cheap insurance for the thing this
   -- demo exists to measure: the per-class IoU is the ONLY instrument that can
   -- see a collapsed class (the loss curve provably cannot), so
   -- at the default cadence a 10-epoch arm reports nothing until it is over and
@@ -172,16 +172,14 @@ def main (args : List String) : IO Unit := do
       (fun a => (a.drop 2).toNat?)).map Nat.toFloat |>.getD 70.0) / 100.0
   -- The loss arg picks the arm — the demo's ablation axis.
   --
-  -- Measured, 3 epochs each, best val mIoU:
-  --
-  --   dice 0.736 · dicece 0.734 · ce 0.728 · focal 0.719 · wcesqrt 0.709
-  --   wce 0.640
+  -- Measured, 3 epochs each, by best val mIoU: dice, dicece, ce, focal,
+  -- wcesqrt, wce.
   --
   -- Five of the six land in a tight band; only `wce` (β=1) separates, and it
-  -- is also the only arm with an unstable trajectory (0.640 → 0.494 → 0.611,
-  -- where every other arm is monotone). It over-paints by 1.5–2.4×.
+  -- is also the only arm with an unstable trajectory (its mIoU drops and
+  -- recovers, where every other arm is monotone). It over-paints.
   --
-  -- `dicece` is the default: joint-best WT Dice (0.903), best endpoint mIoU,
+  -- `dicece` is the default: joint-best WT Dice, best endpoint mIoU,
   -- the most monotone trajectory, and Dice+CE is the standard compound loss in
   -- medical segmentation. `ce` and `dice` are within noise of it — this is a
   -- single-seed 3-epoch sweep, not a tuned comparison, so treat the ordering

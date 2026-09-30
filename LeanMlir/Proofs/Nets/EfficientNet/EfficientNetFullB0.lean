@@ -20,6 +20,10 @@ Per-block (ic, mid=t·ic, oc, r=⌈ic/4⌉, k, spatial, kind):
   b7  80→80   mid480 r20 k3 @14    resid            b15 192→192 mid1152 r48 k5 @7   resid
   b8  80→80   mid480 r20 k3 @14    resid            b16 192→320 mid1152 r48 k3 @7   exp(no-resid)
 
+Padding: the 3×3/s2 stem pads at the XLA-`SAME` phase; the four strided depthwises (b2, b4, b6,
+b12) pad symmetrically, not TF `SAME`. So the spec is neither timm's `efficientnet_b0` nor
+`tf_efficientnet_b0` at those four layers.
+
 ## References
 
 - Hu, Shen, Sun 2018, *Squeeze-and-Excitation Networks*. <https://arxiv.org/abs/1709.01507>
@@ -241,6 +245,10 @@ noncomputable def mbExpWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW 
 --   → b12(14→7) → b13,b14,b15,b16@7 → head@7 → GAP → dense
 -- ════════════════════════════════════════════════════════════════
 
+/-- The B0 forward every B0 capstone is stated against: the stem 3×3/s2 at the XLA-`SAME` phase,
+    the sixteen MBConv blocks with symmetrically padded strided depthwises (not TF `SAME`), SE
+    width `ic/4`, batch BatchNorm, then the head. No drop-path or dropout; the drop-carrying
+    forward is `EfficientNetFullB0Drop`'s. -/
 noncomputable def efficientnetForwardBFull (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
   headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
@@ -452,10 +460,10 @@ theorem efficientnetForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : B0Weights 
       Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply]
 
-/-- **Public correctness theorem for `efficientnetForwardBFullHasVJP`** — the full
-    B0's backward equals the `pdiv`-contracted Jacobian of `efficientnetForwardBFull`
-    itself at every input, tying the chain-stated VJP back to the nested forward via
-    `efficientnetForwardBFull_eq_chain`. -/
+/-- The `.correct` field of `efficientnetForwardBFullHasVJP`, restated at the nested forward
+    `efficientnetForwardBFull` through `efficientnetForwardBFull_eq_chain`: its backward is the
+    `pdiv`-contracted Jacobian at every input. The tie of the hand-written input-gradient chain to
+    this backward is `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`. -/
 theorem efficientnetForwardBFullHasVJP_correct (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
     (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :

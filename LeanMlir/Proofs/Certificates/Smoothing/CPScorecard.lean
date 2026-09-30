@@ -20,7 +20,7 @@ are not tied to them. -/
 
 namespace Proofs
 
--- ── MNIST-MLP: 99/100 with a kernel-checked tail bound (σ=0.5, of which 99 correctly classified) ──
+-- ── MNIST-MLP: the 99 of the first 100 images with a kernel-checked tail bound (σ=0.5; misclassified ones are marked) ──
 
 /-- img 0: label 7, pred 7, count 10112/10112 → q₀ = 9993/10000, radius ≈ 1.597 -/
 lemma smooth_cp_mlp_i0 :
@@ -645,7 +645,7 @@ theorem smoothCpMlp_tail_le :
      smooth_cp_mlp_i91, smooth_cp_mlp_i92, smooth_cp_mlp_i93, smooth_cp_mlp_i94, smooth_cp_mlp_i95,
      smooth_cp_mlp_i96, smooth_cp_mlp_i97, smooth_cp_mlp_i98, smooth_cp_mlp_i99⟩
 
--- ── MNIST-CNN: 100/100 with a kernel-checked tail bound (σ=0.5, of which 100 correctly classified) ──
+-- ── MNIST-CNN: the 100 of the first 100 images with a kernel-checked tail bound (σ=0.5; misclassified ones are marked) ──
 
 /-- img 0: label 7, pred 7, count 10112/10112 → q₀ = 9993/10000, radius ≈ 1.597 -/
 lemma smooth_cp_cnn_i0 :
@@ -1276,7 +1276,7 @@ theorem smoothCpCnn_tail_le :
      smooth_cp_cnn_i90, smooth_cp_cnn_i91, smooth_cp_cnn_i92, smooth_cp_cnn_i93, smooth_cp_cnn_i94,
      smooth_cp_cnn_i95, smooth_cp_cnn_i96, smooth_cp_cnn_i97, smooth_cp_cnn_i98, smooth_cp_cnn_i99⟩
 
--- ── CIFAR-CNN: 80/100 with a kernel-checked tail bound (σ=0.5, of which 60 correctly classified) ──
+-- ── CIFAR-CNN: the 80 of the first 100 images with a kernel-checked tail bound (σ=0.5; misclassified ones are marked) ──
 
 /-- img 0: label 3, pred 3, count 7450/10112 → q₀ = 7230/10000, radius ≈ 0.296 -/
 lemma smooth_cp_cifar_i0 :

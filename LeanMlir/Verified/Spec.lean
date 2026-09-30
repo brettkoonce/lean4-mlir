@@ -36,7 +36,7 @@ inductive VerifiedData where
       1,281,167 train / 50,000 val at 224².
 
       Unlike every case above, this one is NOT preloaded: at f32 the train split is ~938 GiB of host
-      RAM against a 188 GB box, so it cannot be. Batches arrive over a pipe from **that net's own**
+      RAM, several times what the box holds, so it cannot be. Batches arrive over a pipe from **that net's own**
       `jax/.lake/build/generated_*_imagenet_shim.py` (`VerifiedNet.shimScript`), already
       augmented, mean/std-normalized and flattened to `(B, 3·224·224)` — **so the Lean side does no
       augmentation at all** for this dataset, which is the point: there is exactly one definition of

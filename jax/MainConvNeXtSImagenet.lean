@@ -86,11 +86,11 @@ def convNeXtSImagenetConfigAccum : TrainConfig :=
 /-- Effective batch 512 instead of 256, as 2×256 grad-accum. LR doubles with the
     batch under the paper's linear rule (4e-3 @ bs4096 → 5e-4 @ bs512).
 
-    Measured on 4× 16 GB: bs512 in one shot fits at 11.26 of 11.68 GiB (481
-    ms/step) but leaves only 0.42 GiB — and the probe does not model the tf.data
-    prefetch buffers that also live on device. The 2×256 accumulation costs 8%
-    (521 ms/step) and drops peak to 6.91 GiB, which is the version to actually
-    run. Larger batch is a win per epoch either way: 21.7 min vs 21.9 at bs256. -/
+    Measured on 4× 16 GB: bs512 in one shot fits the default arena
+    with almost nothing to spare — and the probe does not model the tf.data
+    prefetch buffers that also live on device. The 2×256 accumulation is a
+    little slower per step and has a far lower peak, which is the version to
+    actually run. The larger batch is a win per epoch either way. -/
 def convNeXtSImagenetConfigBs512 : TrainConfig :=
   { convNeXtSImagenetConfig with
       batchSize := 256, gradAccumSteps := 2, learningRate := 5.0e-4 }

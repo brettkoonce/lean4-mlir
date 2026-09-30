@@ -4,7 +4,7 @@ import LeanMlir.Verified.Smoothing
 /-! # `cifar-smooth` — randomized-smoothing certificate on the verified CIFAR-10 CNN
 
 The deep-net payoff (Cohen–Rosenfeld–Kolter 2019): the 7-layer conv-aware spectral-norm product
-is astronomically loose (global L = 942K, cert 0% at every radius). Randomized smoothing is
+is astronomically loose and certifies nothing at any radius (`runs/pgd_cifar_phase3.log`). Randomized smoothing is
 **depth-independent** — the exact same forward-only procedure that runs on the MLP/CNN certifies
 a *non-vacuous* L2 radius here, where the Lipschitz product is hopeless. No new kernel: sample
 noisy copies, run the proof-rendered `cifar_fwd`, Clopper–Pearson lower-bound `p_A`, report

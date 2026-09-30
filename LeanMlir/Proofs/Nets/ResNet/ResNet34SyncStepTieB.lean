@@ -47,6 +47,11 @@ The replicas' saved forward activations enter as the shards of the single-device
 the shards of one batch is the driver's. The emitted artifacts run `convBias := false`, so the
 conv-bias nodes are not emitted and are not tied here (`r34_net_tiedB` keeps them for the flag).
 The lowerer's `all_reduce` is trusted as every other op's lowering is.
+
+**bf16 is outside this statement.** The ImageNet run the book reports trains from
+`resnet34in_momdp64bf16`, which swaps the conv nodes for bf16 kinds
+([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among them). What those kinds
+do under sharding is `DataParallel.SyncBf16`; no whole-net statement covers that step.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

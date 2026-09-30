@@ -159,8 +159,8 @@ def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
 
     This is the classifier trick of `applyHeadPriorBias` transposed to a
     sigmoid/one-vs-all head, and it is aimed at a measured failure rather than a
-    guess. On a 12-epoch run every objectness logit sat in ≈[−2.7, −1.2] (p5..p95)
-    with pos/neg means −1.549/−1.803: the head had real signal (AUC 0.742) but
+    guess. On a 12-epoch run every objectness logit sat in a narrow negative band,
+    positives barely above negatives: the head had real signal but
     almost no dynamic range, because a bias-free 1×1 conv has to synthesize the
     constant background offset out of weights that also have to discriminate. The
     bias hands it that constant for free, which is the whole point — and per-class

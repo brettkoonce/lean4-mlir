@@ -6,7 +6,7 @@ import LeanMlir
     succeeds or fails by "does that look like a digit to you"; on a 2-D
     target the ground truth is a second point cloud, so correctness is a
     number (cell recall and energy distance) instead of a judgement, and it
-    trains in seconds on 18,178 params rather than 7 h on 3M.
+    trains in seconds on 18,178 params rather than hours on 3M.
 
     No new codegen primitives. The denoiser is `.dense`/`.relu`, which
     Chapters 1-2 already prove, and the time conditioning reuses
@@ -248,8 +248,9 @@ net predicts a velocity, not ε — use fm-euler or fm-heun"
   -- amplification factor in the Euler update `x ← x(1 - hβ/2) + ε̂(hβ/2σ)`.
   -- `logsnr` is the WRONG control: it concentrates steps at
   -- small σ and takes one enormous step across the region where β diverges,
-  -- which made Euler 20× worse rather than better (25.1 against 1.25 at NFE 10,
-  -- 100 % off-support). Kept because that measurement is the evidence.
+  -- which made Euler worse rather than better at NFE 10
+  -- (`runs/2026-08-28-toy2d-strip-and-targets/sampler_spacing_logsnr.log` against
+  -- `sampler_spacing_logabar.log`). Kept because that measurement is the evidence.
   let logabar := args.any (· == "logabar")
   if isFm && (logsnr || logabar) then
     throw <| IO.userError "logsnr / logabar are VP-schedule grids; the linear path has no σ \

@@ -27,8 +27,9 @@ in the ENGINE, which is proved once; kernel-checking the 57th image buys nothing
 the 56th didn't. So this file separates the two:
 
 * **measured** (exact rational interval propagation, no Lean in the loop) over
-  the fixed first 100 test images: 79/100, 73/100,
-  47/100, 13/100 at ε = 1, 2, 4, 8/255;
+  the fixed first 100 test images: the count certified at each of
+  ε = 1, 2, 4, 8/255 is what `scripts/certs/ibp_conv_scorecard.py` prints on its
+  `[measure]` lines;
 * **proved** — the first 8 of those certifying images (test-set order, an
   unbiased rule) each carry a `CertifiedAtLinf3 net ε x y` THEOREM, i.e.
   `∀ δ, (∀ a b d, |δ| ≤ ε) → ∀ j ≠ y, net (x+δ) j < net (x+δ) y`.

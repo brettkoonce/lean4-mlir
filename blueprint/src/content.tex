@@ -1078,7 +1078,12 @@ inductive step.}
     B(x, dy)_i = \sum_j \pdiv f\, x\, i\, j \cdot dy_j.
   \]
   Exhibiting a \(\HasVJP\, f\) is exactly the statement ``this backward
-  function computes the vector--Jacobian product of \(f\).''
+  function computes the vector--Jacobian product of \(f\).'' Some witness
+  exists for every \(f\): take \(B\) to be the contraction itself
+  (\texttt{HasVJP.canonical}). So a witness says something only through
+  what its \(B\) is: a formula such as a layer's closed-form backward, the
+  per-layer backwards composed in reverse order, or a rendered chain proved
+  equal to one of those.
 \end{definition}
 
 \begin{theorem}[VJP chain rule]
@@ -2581,17 +2586,20 @@ six tensors --- three weight matrices and three biases, the
 is still a layer: it holds a position in the list because the
 render needs it in order, not because the optimizer does.
 
-The tie back to the proofs has the same shape as before. In
-\texttt{LeanMlir/Proofs/SpecVJP.lean}:
+The tie back to the proofs has the same shape as before, now at a point,
+because ReLU has a kink. In \texttt{LeanMlir/Proofs/SpecVJP.lean}:
 
 \begin{verbatim}
-noncomputable def mlpVerifiedHasVJP (W0 b0 W1 b1 W2 b2) :
-    HasVJP (denoteMLP mlpVerified.layers W0 b0 W1 b1 W2 b2) := ...
+noncomputable def mlpVerifiedHasVJPAt (W0 b0 W1 b1 W2 b2) (x)
+    (h0 : ∀ k, dense W0 b0 x k ≠ 0)
+    (h1 : ∀ k, dense W1 b1 (relu 512 (dense W0 b0 x)) k ≠ 0) :
+    HasVJPAt (denoteMLP mlpVerified.layers W0 b0 W1 b1 W2 b2) x := ...
 \end{verbatim}
 
-Again the VJP is proved for the denotation of the spec's own
-\texttt{layers} field, and that is the field the trainer reads to build
-its graph. The whole program is short enough to print:
+Again the backward --- the five per-layer backwards composed, at an input
+where neither ReLU sits on its kink --- is proved for the denotation of the
+spec's own \texttt{layers} field, and that is the field the trainer reads
+to build its graph. The whole program is short enough to print:
 
 \begin{verbatim}
 import LeanMlir.Verified.NetsCore
@@ -5291,11 +5299,12 @@ fan-in pattern, persist.
   \Assume{} the eighteen smooth-point bundles: no ReLU pre-activation of the
   stem, of any residual block, or of the pooled features sits at zero for the
   batch, and every stem-pool window has its maximum at one position or is
-  entirely zero. \Prove{} the backward of the full-width ResNet-34 at training
-  BatchNorm and batch \(N\) (\texttt{resnet34ForwardBFull}, \(3 \times 224
-  \times 224\)) equals the \(\pdiv\)-contracted Jacobian of the forward at
-  every input, cotangent and index. The statement is generic in \(N\) and in
-  the weights.
+  entirely zero. \Prove{} the backward composed from the eighteen stages'
+  backwards in reverse order (\texttt{resnet34ForwardBFullHasVJPAt}) for the
+  full-width ResNet-34 at training BatchNorm and batch \(N\)
+  (\texttt{resnet34ForwardBFull}, \(3 \times 224 \times 224\)) equals the
+  \(\pdiv\)-contracted Jacobian of the forward at every input, cotangent and
+  index. The statement is generic in \(N\) and in the weights.
 \end{theorem}
 
 \begin{proof}
@@ -5313,7 +5322,8 @@ See \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
       thm:rowwiseHasVJPMat, thm:vjpComp}
   The same for ResNet-50, at every resolution \(q\) --- the image side is \(32q\), so
   \(q = 7\) is the 224-pixel net and \(q = 5\) the 160-pixel one --- and the
-  eighteen bottleneck bundles, \Prove{} the backward of
+  eighteen bottleneck bundles, \Prove{} the backward composed from the stages'
+  backwards (\texttt{resnet50ForwardBFullHasVJPAt}) for
   \texttt{resnet50ForwardBFull} at batch \(N\) equals its \(\pdiv\)
   Jacobian at every input, cotangent and index.
 \end{theorem}
@@ -5325,20 +5335,35 @@ See \leandocref{Proofs.resnet50ForwardBFullHasVJPAt\_correct}.
 
 \begin{theorem}[The rendered ResNet-50 backward is the VJP]
   \label{thm:resnet50_whole_back}
-  \lean{Proofs.r50InputGradB_eq_r34B_full_vjp, Proofs.r50InputGradB_correct}
+  \lean{Proofs.r50InputGradB_eq_r34B_full_vjp, Proofs.r50InputGradB_correct,
+        Proofs.resnet50ForwardBFull_eq_slots}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv, ax:pdiv_comp,
       ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat,
       thm:bnHasVJP, thm:denseHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \Assume{}
+  \begin{enumerate}
+    \item \(\varepsilon_s > 0\), the stem ReLU off its kink and the stem pool's
+          per-example condition \hfill[\texttt{h\(\varepsilon\)s}, \texttt{h\_stem}, \texttt{h\_pool}]
+    \item sixteen block maps \(b_1, \dots, b_{16}\), each with a VJP and
+          differentiable at its running activation
+          \hfill[\texttt{hb1} \dots\ \texttt{hb16}]
+  \end{enumerate}
   \Prove{} the committed ResNet-50 input-gradient chain
   \texttt{r50InputGradB} --- the hand-written eighteen-stage reverse pass every
-  \texttt{resnet50in\_*} artifact renders --- is the backward of the VJP above,
-  and so equals
+  \texttt{resnet50in\_*} artifact renders --- with its blocks' backwards
+  filled by those witnesses, is the backward of the eighteen-stage fold
+  \(\mathrm{head} \circ b_{16} \circ \dots \circ b_1 \circ \mathrm{stem}\)
+  (\texttt{r34BFullHasVJPAt}, the apex both ResNets share), and so equals
   \[
-    \sum_j \pdiv(\texttt{resnet50ForwardBFull})\, x\, i\, j
+    \sum_j \pdiv(\mathrm{head} \circ b_{16} \circ \dots \circ b_1 \circ \mathrm{stem})\, x\, i\, j
   \cdot dy_j
   \]
-  for every batch, cotangent and pixel.
+  for every batch, cotangent and pixel. The blocks stay opaque: a
+  separate shape check (\texttt{resnet50ForwardBFull\_eq\_slots}) shows
+  \texttt{resnet50ForwardBFull} is that composition at the sixteen
+  bottlenecks, and the two are not composed into one statement, because
+  instantiating the tie at the concrete blocks times out the kernel.
 \end{theorem}
 
 \begin{proof}
@@ -7136,8 +7161,9 @@ The same argument as the conv2d bias VJP
       thm:identityHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{} the nineteen ReLU6 bundles --- an expand clause and a depthwise
   clause per block, none after the residual add --- and the BatchNorm
-  positivity conditions. \Prove{} the backward of the full-width MobileNetV2
-  at training BatchNorm and batch \(N\) (\texttt{mobilenetv2ForwardBFull},
+  positivity conditions. \Prove{} the backward composed from the per-block
+  backwards (\texttt{mobilenetv2ForwardBFullHasVJPAt}) for the full-width
+  MobileNetV2 at training BatchNorm and batch \(N\) (\texttt{mobilenetv2ForwardBFull},
   seventeen blocks, \(3 \times 224 \times 224\)) equals the
   \(\pdiv\)-contracted Jacobian of the forward at every input, cotangent and
   index; generic in \(N\) and in the weights.
@@ -7158,9 +7184,10 @@ See \leandocref{Proofs.mobilenetv2ForwardBFullHasVJPAt\_correct}.
       thm:denseHasVJP, thm:identityHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
   The same for MobileNetV4-Conv-M (\texttt{mobilenetv4ForwardBFull}: the
   fused-IB stage and the universal inverted bottlenecks of
-  \S~\ref{sec:mnv4_side_quest}) under one smooth-point bundle: \Prove{} its
-  backward at batch \(N\) equals the \(\pdiv\) Jacobian at every input,
-  cotangent and index.
+  \S~\ref{sec:mnv4_side_quest}) under one smooth-point bundle: \Prove{} the
+  backward composed from its stages' backwards
+  (\texttt{mobilenetv4ForwardBFullHasVJPAt}) at batch \(N\) equals the
+  \(\pdiv\) Jacobian at every input, cotangent and index.
 \end{theorem}
 
 \begin{proof}
@@ -8706,8 +8733,9 @@ return-on-scaling to show up.
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Assume{} the forty-nine BatchNorm positivities. \Prove{} the batched
   EfficientNet-B0 --- all sixteen MBConv blocks with squeeze-and-excitation
-  and swish, at training BatchNorm and batch \(N\) --- has the VJP: its
-  backward equals the \(\pdiv\)-contracted Jacobian of
+  and swish, at training BatchNorm and batch \(N\): the backward composed
+  from the per-block backwards (\texttt{efficientnetForwardBFullHasVJP})
+  equals the \(\pdiv\)-contracted Jacobian of
   \texttt{efficientnetForwardBFull} at every input, cotangent and pixel;
   and the emitted forward graph denotes exactly that forward
   (\texttt{efficientnetFwdGraphBFull\_faithful}). With stochastic depth on
@@ -10923,10 +10951,12 @@ proved so far into one machine-checked backward pass over a
 complete state-of-the-art image classifier.
 
 The destination is Theorem~\ref{thm:vitTinyHasVJP_correct} at the
-end of the chapter. It says: the whole ViT-Tiny --- patch embedding,
-twelve transformer blocks with their own parameters, final LayerNorm
-and head --- has a backward that equals its Jacobian transpose at every
-input, assuming only \(\varepsilon > 0\) at the LayerNorms. The proof
+end of the chapter. It says: the whole ViT-Tiny's hand-written
+input-gradient chain --- through the patch embedding, twelve transformer
+blocks with their own parameters, final LayerNorm and head, each slot the
+certified backward of its op at its own saved activation --- equals the
+network's Jacobian transpose at every input, assuming only
+\(\varepsilon > 0\) at the LayerNorms. The proof
 composes everything this chapter introduces, plus most of what the
 previous chapters introduced, into a tower of \texttt{vjpMatComp}
 applications with \texttt{vjpComp} at the joins. Read the proof's
@@ -11024,9 +11054,9 @@ Theorem~\ref{thm:biPathMatHasVJP}.
 \texttt{vitForwardKVHasVJP} chains the patch embedding, $k$
 transformer blocks with their own parameters, the final LayerNorm and
 the head through \texttt{vjpComp} for every $k$, and
-\texttt{vitTinyHasVJP\_correct} is its instance at this network's
-shape --- twelve blocks, $224/16$, any number of classes --- carried back to the
-forward the spec denotes. Its only hypothesis is $\varepsilon > 0$ at
+\texttt{vitTinyHasVJP\_correct} says the hand-written chain
+\texttt{vitInputGradK} is that fold's Jacobian transpose at this network's
+shape --- twelve blocks, $224/16$, any number of classes. Its only hypothesis is $\varepsilon > 0$ at
 the LayerNorms. It is a single global
 \texttt{HasVJP} over the entire network for the same reason
 Chapter~\ref{chap:layernorm}'s is --- softmax, GELU and LayerNorm are all
@@ -11112,10 +11142,11 @@ that started at \texttt{vjpComp} (Theorem~\ref{thm:vjpComp}) reaches all the way
 
 That's the framework-side payoff of this chapter: \textbf{every
 architectural piece used by any Part-1 network has a machine-checked
-backward}. Once we land Theorem~\ref{thm:vitTinyHasVJP_correct}, the
-sentence ``the gradient computed by this trainer is the
-mathematically correct one'' is no longer a hope or a folklore
-result. It is a theorem the Lean kernel verifies on every
+backward}. With Theorem~\ref{thm:vitTinyHasVJP_correct} for the input
+gradient and Theorem~\ref{thm:vit_loss_grad} for the parameter gradients
+the trainer steps on, the sentence ``the gradient computed by this
+trainer is the mathematically correct one'' is no longer a hope or a
+folklore result. It is a theorem the Lean kernel verifies on every
 build.
 
 The empirical-side payoff comes after the theorems, in the Example
@@ -12099,9 +12130,12 @@ Theorem~\ref{thm:vitForwardKVHasVJP}, next. \Qed{}
   \Assume{} \(\varepsilon > 0\). \Prove{} the depth-\(k\) transformer tower
   with distinct parameters per block --- patch embedding, CLS and position
   tables, \(k\) blocks of multi-head self-attention and MLP sublayers under
-  vector LayerNorm, the classifier head --- has a global VJP, and its backward
-  equals the \(\pdiv\)-contracted Jacobian of \texttt{vitForwardKV} at every
-  input, cotangent and index, for every \(k\).
+  vector LayerNorm, the classifier head: the backward composed from the
+  patch embedding's, the \(k\) blocks' (by induction on \(k\)), the final
+  LayerNorm's and the head's backwards (\texttt{vitForwardKVHasVJP}) equals
+  the \(\pdiv\)-contracted Jacobian of \texttt{vitForwardKV} at every input,
+  cotangent and index, for every \(k\). The hand-written chain is tied to
+  this backward in Theorem~\ref{thm:vitTinyHasVJP_correct}.
 \end{theorem}
 
 \begin{proof}
@@ -12129,17 +12163,19 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
   \label{thm:vitTinyHasVJP_correct}
   \lean{Proofs.vitTinyHasVJP_correct}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
-      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
-      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
-      def:hasvjpmat, thm:biPathMatHasVJP, thm:denseHasVJP, thm:identityHasVJP,
-      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:transformerMlpHasVJPMat,
-      thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
+      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex,
+      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
+      thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
+      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
+      thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
+      thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
   \end{enumerate}
-  \Prove{} the backward of \texttt{vitForwardKVHasVJP} at ViT-Tiny's
+  \Prove{} the input-gradient chain \texttt{vitInputGradK} at ViT-Tiny's
   shape --- a \(3 \times 224 \times 224\) image, \(16 \times 16\) patches
   (\(N = 196\) plus the CLS token), \(d = 192 = 3 \times 64\), MLP
   \(768\), twelve blocks with distinct parameters, any number of classes ---
@@ -12167,8 +12203,11 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
     differentiability side conditions need only assumption 1.}
   \item \texttt{vitForwardKVHasVJP\_correct}: the composed
     backward's \texttt{correct} field, read out at any depth.
+  \item \texttt{vitInputGradK\_eq\_vitForwardKV\_vjp}: the chain is that
+    backward --- the tower fold \texttt{vitTowerBackK\_eq\_vjp} plus the
+    head, final-LayerNorm and patch-embedding endpoint ties.
   \item \Qed{}
-    \pf{Instantiate 2 at \(k = 12\) and the dimensions above.}
+    \pf{Rewrite by 3, then 2, at \(k = 12\) and the dimensions above.}
 \end{enumerate}
 \end{proof}
 
@@ -13547,7 +13586,8 @@ def leNet5 : NetSpec where
 \emph{Zero} new primitives --- five convs, three FCs, pools. The 2012
 ImageNet winner that restarted modern deep learning (Krizhevsky et al.\ 2012,
 \href{https://papers.nips.cc/paper_files/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html}{NeurIPS 2012}). Variants:
-AlexNet (62M, paper-exact at 60M) + tiny CIFAR fixture. $\sim$58M of
+AlexNet (62M, paper-exact at 60M; the first FC's fan-in is pinned to the
+paper's $6 \cdot 6 \cdot 256$, while the spec's own body ends at $7 \times 7$) + tiny CIFAR fixture. $\sim$58M of
 the 62M live in the three FC layers, which is precisely why every
 post-2015 CNN dropped FC stacks for \texttt{globalAvgPool} + one final
 dense. LRN is omitted (replaced in the field by BatchNorm in 2015);
@@ -13643,7 +13683,8 @@ toolkit) applied to two parallel dense / conv paths, and \emph{zero}
 new primitives: the two paths are two \texttt{NetSpec}s below and the
 gate-blend is prose (Srivastava, Greff, Schmidhuber 2015,
 \href{https://arxiv.org/abs/1505.00387}{arXiv:1505.00387}). Variants:
-canonical 50-layer Highway-MLP, deeper 100-layer fixture, tiny.
+one highway layer at the paper's width of 50 units, the same layer at
+width 100, tiny.
 
 A two-headed network: a \emph{main path} $H(x)$ (any transformation,
 typically dense $+$ ReLU) and a \emph{transform gate} $T(x)$ (its own
@@ -13675,9 +13716,8 @@ def highway50Gate : NetSpec where
   ]
 \end{verbatim}
 
-The pedagogical hook: ResNet (Chapter~\ref{chap:residual}) is the
-special case where $T$ is fixed at $1$ on the transform side and the
-carry path becomes a constant identity. Highway showed in 2015 that
+The pedagogical hook: ResNet (Chapter~\ref{chap:residual}) drops the
+gate altogether and sums both paths, \(y = H(x) + x\). Highway showed in 2015 that
 some kind of bypass made very deep networks trainable; ResNet showed
 six months later that the gate could be a constant and you'd save the
 parameters. ResNet won by simplifying away $T$, but the underlying
@@ -13755,9 +13795,9 @@ Chapter~\ref{chap:residual}, just widened. Zagoruyko \& Komodakis
 2016 (\href{https://arxiv.org/abs/1605.07146}{arXiv:1605.07146})
 take the ResNet block and turn the depth knob in (40 layers down
 from 1000+) and the width knob out (multiply every channel count
-by $k$, typically 2--10). Result: WRN-28-10 matches ResNet-1001 on
-CIFAR-10/100 with $\sim$25\% the params and half the training
-time. Width turned out to be a more efficient axis to scale than
+by $k$, typically 2--10). Result: WRN-40-4 matches the 1001-layer ResNet on CIFAR-10/100 with
+fewer parameters and several times faster training, and WRN-28-10
+(36.5M in the paper) beats it. Width turned out to be a more efficient axis to scale than
 depth.
 
 \begin{center}
@@ -13992,14 +14032,16 @@ small while feature reuse compounds.
 \hline
 Name          & Block counts        & Params              \\
 \hline
-DenseNet-121  & (6, 12, 24, 16)     &  7.0M (paper 6.8M)  \\
-DenseNet-169  & (6, 12, 32, 32)     & 12.5M (paper 12.5M) \\
-DenseNet-201  & (6, 12, 48, 32)     & 18.1M (paper 18.6M) \\
+DenseNet-121  & (6, 12, 24, 16)     &  7.0M  \\
+DenseNet-169  & (6, 12, 32, 32)     & 12.5M  \\
+DenseNet-201  & (6, 12, 48, 32)     & 18.1M  \\
 \hline
 \end{tabular}
 \end{center}
 
-All within $\sim$3\% of the paper. Plus a tiny fixture for testing.
+These specs end in a 10-class (Imagenette) classifier, so they sit below
+the paper's 1000-class models by that layer. Plus a tiny fixture for
+testing.
 
 The dense connectivity pattern doesn't fit a linear NetSpec at the
 sub-layer granularity (each sub-layer reads a growing concatenation of
@@ -14248,7 +14290,8 @@ v1 (Redmon et al.\ 2016,
 \texttt{flatten} + \texttt{dense}; the YOLO-ness lives in the loss and
 output reshape, not the architecture). v3 adds \S~\ref{layer:darknetBlock}
 for the Darknet-53 body. v5/v8/v11 use \S~\ref{layer:cspBlock} for
-their CSPDarknet backbones. Variants: YOLOv1 (271M, paper-exact), fast,
+their CSPDarknet backbones. Variants: YOLOv1 (271M, paper-exact; the first FC's fan-in is pinned to the
+paper's $7 \cdot 7 \cdot 1024$, while the spec's own body ends at $28 \times 28$), fast,
 tiny, YOLOv3 (40M backbone), YOLOv5s/m (3M/8M single-scale), YOLOv8n/s
 (0.7M/2.9M single-scale), YOLOv11n/m (backbone only). Multi-scale FPN
 detection heads don't linearize --- same skip-connection problem as
@@ -15088,7 +15131,8 @@ transformer feature pyramid makes the segmentation head cheap.
 Variants: MiT-B0 encoder (2.6M, paper 3.7M), B2 (19M, paper 25M),
 B5 (61M, paper 82M), shared MLP decoder (1M single-scale approx),
 tiny fixture. Uniform $\sim$25\% undercount across all encoder sizes
-because real MiT uses depthwise convs inside the FFN and overlapping
+because real MiT uses depthwise convs inside the FFN, a strided
+convolution and norm for spatial-reduction attention, and overlapping
 patch embeddings at inter-stage transitions; our
 \texttt{.transformerEncoder} and \texttt{.patchMerging} approximate
 the shape without those details. Comparison to DeepLab v3+: SegFormer's
@@ -15415,7 +15459,7 @@ prose-level: most of the 2020--2022 efficient-attention literature
 (Linformer, Performer, Longformer, BigBird, Reformer,
 FlashAttention) is parameter-identical to vanilla attention, and the
 bestiary can't differentiate them at the layer level. Nyströmformer
-is worth highlighting because the specific trick --- a 1928 result
+is worth highlighting because the specific trick --- a 1930 result
 from numerical linear algebra, routed through kernel-method
 literature in the early 2000s, finally surfacing in transformers ---
 is a genuinely long arc for one math idea.
@@ -16927,9 +16971,11 @@ def alphaGoZeroValue : NetSpec where
   ]
 \end{verbatim}
 
-The chess and tiny variants follow the same shape with different
-\texttt{(planes, blocks, board)} parameters --- 119/40/8 for chess,
-17/3/9 for the tiny fixture.
+The chess variant keeps the 19-block tower on 119 input planes over an
+\(8 \times 8\) board, and its policy head is convolutional as in Silver et
+al.\ 2018: a convolution to 73 move planes, flattened into the 4672
+logits, with no dense layer. The tiny fixture is 17 planes, 3 blocks, a
+\(9 \times 9\) board.
 
 \subsubsection*{MuZero (\texttt{Bestiary/MuZero.lean})}
 \emph{Zero} new primitives --- three ResNet-style networks (representation,
@@ -18060,9 +18106,8 @@ built from three components:
     \texttt{compare GT 0} plus \texttt{select}, and so on. That the mirror
     is built node for node from the bridged graph is a reading of two
     definitions, not a theorem. The tier where the printed text is the
-    denoted graph's own printout, with the parse-back proved
-    (\texttt{StableHLO.roundtrip}), is the verified trainers' StableHLO
-    tier, below.
+    denoted graph's own printout is the verified trainers' StableHLO tier,
+    below.
   \item \textbf{An execution oracle.} A Python harness
     (\texttt{LeanMlir/Proofs/check\_ir\_codegen.py}) regenerates the
     \texttt{.mlir} from the printer, compiles it with IREE, runs it, and
@@ -18080,10 +18125,12 @@ and bounded:
   \item \emph{Read, not proved}: that the printed mirror is, node for node,
     the bridged IR.
   \item \emph{Trusted} (validated numerically, not proven): that the
-    StableHLO text faithfully denotes $[\![\cdot]\!]$. Its
-    syntactic half is now partly closed, because the emitted text lexes
-    and parses back to the proven op-graph (\texttt{StableHLO/Lex.lean},
-    \texttt{StableHLO/Parse.lean}). That leaves three things trusted: a formal
+    StableHLO text faithfully denotes $[\![\cdot]\!]$. One piece of
+    its syntactic half is proved: the postorder token encoding the printer
+    works from is invertible (\texttt{StableHLO.roundtrip}). That is a
+    statement about tokens, not text; how each token becomes a line of text
+    (\texttt{emitTok}) is trusted, and checked by parsing and running the
+    committed artifacts. Beyond it, three things are trusted: a formal
     StableHLO semantics, which does not yet exist, that the lowerer
     compiles the text correctly, and that the hardware's rounding
     approximates $\mathbb{R}$ within the modelled unit roundoff. The last of those is now a conditional theorem validated on
@@ -18095,7 +18142,9 @@ point, at one replica, in f32, on the chain without drop-path --- up to one
 printer, one lowerer, the StableHLO semantics the denotation assumes, and
 floating point. Where a conventional generator leaves
 thousands of lines of string-building linked to the proof by nothing at all,
-the unproven surface here is a single printer, tested end to end.
+the unproven surface here is a single printer, tested end to end, plus
+the hand-written lines each render declares in its own comments (the
+report-only \texttt{\%loss}, for one, and ConvNeXt's GAP-backward block).
 
 \medskip\noindent\textbf{Why it is tractable.} The reason a deep ResNet or a
 transformer block comes under this scheme as a focused engineering build,

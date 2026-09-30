@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Codegen.ConvNeXtRender
 /-! # Global-norm gradient clipping, numerically certified
 
 `verified_mlir/<net>_adamclip_train_step.mlir` is `<net>_adam` with the reference's two extra lines
-in front of the optimizer (`jax/Jax/Codegen.lean:2262`):
+in front of the optimizer (`clipLine` in `emitLossAndTraining`, `jax/Jax/Codegen.lean`):
 
     gn    = jnp.sqrt(sum(jnp.sum(g * g) for g in jax.tree.leaves(grads)))
     grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, CLIP / (gn + 1e-6)), grads)

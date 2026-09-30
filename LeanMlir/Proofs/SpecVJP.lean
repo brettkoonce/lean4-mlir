@@ -6,12 +6,14 @@ import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 
-/-! # Spec → math: each committed `VerifiedNetSpec` denotes its proven forward
+/-! # Spec → math: nine committed `VerifiedNetSpec`s denote their proven forwards
 
 The shape `#guard` beside `resnet34Verified` in `Verified.NetsCore` only checks the
-*parameter interface* (typechecking). This file ties each committed spec's layer list —
-the linear classifier, MLP, MNIST CNN, CIFAR CNN, MobileNetV2, ResNet-34, EfficientNet-B0,
-ConvNeXt-T and ViT-Tiny — to the math the proofs are about. Per net, up to three pieces:
+*parameter interface* (typechecking). This file ties nine committed specs' layer lists —
+the linear classifier, MLP, MNIST CNN, CIFAR CNN, and the 10-class Imagenette MobileNetV2,
+ResNet-34, EfficientNet-B0, ConvNeXt-T and ViT-Tiny — to the math the proofs are about. The
+other specs (the ImageNet ones, ResNet-50, MobileNetV4, the `cifar8*` family) are not tied
+here. Per net, up to three pieces:
 
   1. a denotation `denote*` mapping the spec's layer list to the proven forward function, and
      a `*_denote_eq` lemma equating the two by `rfl` (drift-sensitive: any other layer list
@@ -75,14 +77,6 @@ noncomputable def denoteMLP (layers : List VLayer)
 theorem mlpVerified_denote_eq (W₀ : Mat 784 512) (b₀ : Vec 512)
     (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
     denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂ = mlpForward W₀ b₀ W₁ b₁ W₂ b₂ := rfl
-
-/-- **The canonical witness at the MLP spec's denotation.** `mlpHasVJP` is
-    `HasVJP.canonical`, which exists for every function and adds no content; the folded VJP
-    is `mlpVerifiedHasVJPAt`. -/
-noncomputable def mlpVerifiedHasVJP (W₀ : Mat 784 512) (b₀ : Vec 512)
-    (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
-    HasVJP (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) :=
-  mlpHasVJP W₀ b₀ W₁ b₁ W₂ b₂
 
 /-- **The folded VJP at a smooth input.** When the two ReLU pre-activations avoid zero
     (`h0`, `h1`), the MLP spec's denotation has a VJP built by folding `vjpCompAt` through
@@ -255,8 +249,8 @@ re-elaborates it on every spec push. -/
 -- ── MobileNetV2 (FULL, BATCHED): the same 21-entry spec ↔ mobilenetv2ForwardBFull ──
 
 /-- Math denotation of the committed MobileNetV2 spec at batch BN: the 21-entry full-paper
-    layer list denotes to `mobilenetv2ForwardBFull` — the batch-statistics net every shipped
-    MobileNetV2 artifact runs (`MobileNetV2FullB.lean`), at every batch size `N`. Any other
+    layer list denotes to `mobilenetv2ForwardBFull` — the batch-statistics net the 10-class
+    Imagenette MobileNetV2 artifact runs (`MobileNetV2FullB.lean`), at every batch size `N`. Any other
     list is not the net (`0`), so the tie below is drift-sensitive. -/
 noncomputable def denoteMobilenetB (N : Nat) (layers : List VLayer) (w : MNV2BWeights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
@@ -280,8 +274,8 @@ theorem mobilenetv2VerifiedB_denote_eq (N : Nat) (w : MNV2BWeights 10) :
     denoteMobilenetB N mobilenetv2Verified.layers w = mobilenetv2ForwardBFull N w := rfl
 
 open Proofs.StableHLO in
-/-- **Forward graph ↔ the committed spec, batched.** The typed graph the shipped MobileNetV2
-    artifacts are printed from denotes the committed spec's function at batch BN:
+/-- **Forward graph ↔ the committed spec, batched.** The typed graph the Imagenette MobileNetV2
+    artifact is printed from denotes the committed spec's function at batch BN:
     `mobilenetv2FwdGraphBFull_faithful` composed with the tie. -/
 theorem mobilenetv2VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : MNV2BWeights 10)
     (e : SHlo (N * (3 * 224 * 224))) :
@@ -306,8 +300,8 @@ spec: all-smooth, so it is the whole-net VJP `vitForwardKVHasVJP` (only `0 < ε`
 -- ── ResNet-34 (FULL, batched): the committed 8-entry spec ↔ resnet34ForwardBFull ──
 
 /-- Math denotation of the committed ResNet-34 spec at batch BN: the 8-entry stage-level list
-    denotes to `resnet34ForwardBFull` — the batch-statistics net every shipped ResNet-34
-    artifact runs (`ResNet34FullB.lean`), at every batch size `N`. Any other list is not the net
+    denotes to `resnet34ForwardBFull` — the batch-statistics net the 10-class Imagenette
+    ResNet-34 artifact runs (`ResNet34FullB.lean`), at every batch size `N`. Any other list is not the net
     (`0`), so the tie below is drift-sensitive. -/
 noncomputable def denoteR34FullB (N : Nat) (layers : List VLayer) (w : R34BWeights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
@@ -324,8 +318,8 @@ theorem resnet34VerifiedB_denote_eq (N : Nat) (w : R34BWeights 10) :
     denoteR34FullB N resnet34Verified.layers w = resnet34ForwardBFull N w := rfl
 
 open Proofs.StableHLO in
-/-- **Forward graph ↔ the committed spec, batched.** The typed graph the shipped ResNet-34 artifacts
-    are printed from denotes the committed spec's function at batch BN:
+/-- **Forward graph ↔ the committed spec, batched.** The typed graph the Imagenette ResNet-34 artifact
+    is printed from denotes the committed spec's function at batch BN:
     `resnet34FwdGraphBFull_faithful` composed with the tie. -/
 theorem resnet34VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : R34BWeights 10)
     (e : SHlo (N * (3 * 224 * 224))) :

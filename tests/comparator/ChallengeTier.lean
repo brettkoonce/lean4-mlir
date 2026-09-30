@@ -30,7 +30,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
 import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
-import LeanMlir.Proofs.Nets.ViT.ViTDepthK
+import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.Trained.LinearDescent
 import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
@@ -100,19 +100,20 @@ theorem chk_resnet50ForwardBFullHasVJPAt_correct :
 theorem chk_vitTinyHasVJP_correct :
     ∀ {nCls : ℕ} (W_conv : Proofs.Kernel4 ((3 : ℕ) * (64 : ℕ)) (3 : ℕ) (16 : ℕ) (16 : ℕ))
       (b_conv cls_token : Proofs.Vec ((3 : ℕ) * (64 : ℕ)))
-      (pos_embed : Proofs.Mat ((196 : ℕ) + (1 : ℕ)) ((3 : ℕ) * (64 : ℕ))) (ε : ℝ) (hε : (0 : ℝ) < ε)
-      (ps : Fin (12 : ℕ) → Proofs.BlockParamsV ((3 : ℕ) * (64 : ℕ)) (768 : ℕ)) (γF βF : Proofs.Vec ((3 : ℕ) * (64 : ℕ)))
-      (Wcls : Proofs.Mat ((3 : ℕ) * (64 : ℕ)) nCls) (bcls : Proofs.Vec nCls)
-      (x : Proofs.Vec ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))) (dy : Proofs.Vec nCls) (i : Fin ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))),
-      (Proofs.vitForwardKVHasVJP (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) nCls (12 : ℕ)
-              W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward
-          x dy i =
-        ∑ j : Fin nCls,
-          Proofs.pdiv
-              (Proofs.vitForwardKV (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) nCls (12 : ℕ)
-                W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-              x i j *
-            dy j := by sorry
+      (pos_embed : Proofs.Mat ((196 : ℕ) + (1 : ℕ)) ((3 : ℕ) * (64 : ℕ))) (ε : ℝ),
+      (0 : ℝ) < ε →
+        ∀ (ps : Fin (12 : ℕ) → Proofs.BlockParamsV ((3 : ℕ) * (64 : ℕ)) (768 : ℕ)) (γF βF : Proofs.Vec ((3 : ℕ) * (64 : ℕ)))
+          (Wcls : Proofs.Mat ((3 : ℕ) * (64 : ℕ)) nCls) (bcls : Proofs.Vec nCls)
+          (x : Proofs.Vec ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))) (dy : Proofs.Vec nCls)
+          (i : Fin ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))),
+          Proofs.vitInputGradK (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) nCls (12 : ℕ)
+              W_conv b_conv cls_token pos_embed ε ps γF Wcls x dy i =
+            ∑ j : Fin nCls,
+              Proofs.pdiv
+                  (Proofs.vitForwardKV (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) nCls
+                    (12 : ℕ) W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
+                  x i j *
+                dy j := by sorry
 
 /-- `Proofs.StableHLO.mnv4FwdGraphBFull_faithful` -/
 theorem chk_mnv4FwdGraphBFull_faithful :

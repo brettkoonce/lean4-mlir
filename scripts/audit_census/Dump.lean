@@ -2,7 +2,7 @@ import Lean
 open Lean
 
 /-! Dump every project constant: kind, name, module, declaration range, project constants used.
-    `lake env lean --run scripts/audit_census/Dump.lean <modules.txt> <decls.tsv>` (~2 min, ~7 GB).
+    `lake env lean --run scripts/audit_census/Dump.lean <modules.txt> <decls.tsv>`.
     Driven by `scripts/audit_census/run.sh`. -/
 
 def kindOf : ConstantInfo → String

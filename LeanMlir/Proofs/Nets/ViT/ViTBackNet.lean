@@ -25,9 +25,9 @@ not block composition.
 ViT's stem is an affine patchify conv and its head is a CLS slice plus a dense — both linear, so
 both backward graphs are activation-independent. So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head`
 is one `CertLayer`, assembled by `comp` alone, and `vitNetBackGraph_faithful` (the whole-net
-capstone) follows from it — including that the fold's VJP is the shipped `vitForwardKVHasVJP`,
-not merely another VJP of the same map. That last step is `HasVJPAt.backward_unique_of_eq` along
-the forward equation `vitNetLayer_fwd`.
+capstone) follows from it: the hand-written `vitNetBackGraph` denotes
+`(vitForwardKVHasVJP …).backward`. VJP witnesses of one map have one backward, so the last step
+is `HasVJPAt.backward_unique_of_eq` along the forward equation `vitNetLayer_fwd`.
 
 ## `ok = True`
 

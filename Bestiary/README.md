@@ -87,7 +87,7 @@ in the outer loop.
 | File | Architecture | Variants | Notes |
 |------|--------------|----------|-------|
 | `AlphaGo.lean`   | AlphaGo (2016)            | policy + value + rollout + tiny | Three separate nets, 48 hand-crafted features; the pre-Zero original |
-| `AlphaZero.lean` | AlphaZero / AlphaGo Zero  | original Go, chess, tiny | Two-headed (policy + value); the self-play loop is trained on tic-tac-toe in `demos/MainAlphaZeroTtt.lean` |
+| `AlphaZero.lean` | AlphaZero / AlphaGo Zero  | original Go, chess, tiny | Two-headed (policy + value); the self-play loop is trained on tic-tac-toe in `demos/MainAlphaZeroTtt.lean`, with `AlphaGo.lean`'s plain conv stack rather than this tower |
 | `MuZero.lean`    | MuZero                    | Go / Atari / tiny | AlphaZero + learned dynamics; three networks (rep + dyn + pred) |
 
 ## Beyond vision
@@ -103,7 +103,7 @@ procedure, and the bestiary entry exists to make that point.
 | `Mamba.lean`     | Mamba (selective SSM)     | 130M / 370M / 790M / tiny | Language model, linear-time alternative to attention |
 | `BERT.lean`      | BERT / RoBERTa            | base / large × 2 + tiny | Encoder-only transformer; RoBERTa = BERT architecturally |
 | `GPT.lean`       | GPT-1 / GPT-2             | GPT-1 + GPT-2 small/med/large/XL + tiny | Decoder-only transformer; BERT with a causal mask and tied LM head |
-| `Nystromformer.lean` | Nyströmformer         | base / large + tiny | O(n) attention via 1928 Nyström trick; same params as BERT, different compute |
+| `Nystromformer.lean` | Nyströmformer         | base / large + tiny | O(n) attention via 1930 Nyström trick; same params as BERT, different compute |
 | `QANet.lean`     | QANet                     | encoder block / 7-block stack / tiny | SQuAD-era reading comp; conv + attention hybrid 4 years before MobileViT |
 | `WaveNet.lean`   | WaveNet                   | speech / 3-stack / music / tiny | Dilated causal convs for audio; exponential receptive field |
 | `Whisper.lean`   | Whisper                   | tiny / base / small / medium / large + decoder + tiny | Audio → text encoder-decoder transformer; multitask via token prefix |
@@ -133,22 +133,27 @@ spell, and the entries say exactly what is counted and what is prose.
 1. Create `Bestiary/YourModel.lean`.
 2. Declare the architecture as one or more `NetSpec` values (no
    `TrainConfig`, no `main` train loop).
-3. Write a print-only `main` that walks through each spec and calls
-   `archStr`, `totalParams`, `validate` — the pattern in `AlphaZero.lean`.
+3. Write a print-only `main` that calls `NetSpec.summarize` on each spec —
+   the pattern in `AlphaZero.lean`. `summarize` prints the `── name ──` and
+   `params :` lines the param-count test below parses; a `main` that prints
+   the counts some other way escapes that test.
 4. Register the executable in `lakefile.lean`:
    ```lean
    lean_exe «bestiary-yourmodel» where
      root := `Bestiary.YourModel
    ```
 5. Run: `lake build bestiary-yourmodel && .lake/build/bin/bestiary-yourmodel`.
+6. Add the binary's rows to `tests/bestiary_params.yml` (below).
 
 ## Why print-only
 
 The bestiary is for showing architecture at the conceptual level. Training
 introduces dataset / loss / optimizer / GPU concerns that distract from
-"here's the layer layout." A reader can always take any spec and pair it
-with a `TrainConfig` to run a real training job — that's one line of code
-away, the same machinery the `apps/` trainers use.
+"here's the layer layout." A spec whose layers all have an emitter can be
+paired with a `TrainConfig` to run a real training job — one line of code
+away, the same machinery the `apps/` trainers use. Many bestiary layers have
+none (`MlirCodegen.noEmitter` names them), and the reference codegen refuses
+a spec that contains one.
 
 ## Limitations acknowledged
 
@@ -168,7 +173,7 @@ might obscure how simple AlphaZero really is.
 
 `tests/test_bestiary_params.py` runs every `bestiary-*` binary and
 compares its reported `NetSpec.totalParams` against the golden table
-in `tests/bestiary_params.yml` — 41 binaries, 189 variants. Intended
+in `tests/bestiary_params.yml`, one row per variant. Intended
 as a regression guard: if anyone tweaks a layer def and a param count
 shifts (even by one), the test flags it with `CHANGED old → new` so
 you can decide whether the change was intentional.
@@ -176,7 +181,7 @@ you can decide whether the change was intentional.
 ```bash
 # Run the suite
 tests/test_bestiary_params.py
-# → PASS  41 binaries, 189 variants, all counts match
+# → PASS  <binaries> binaries, <variants> variants, all counts match
 
 # Regenerate golden after a deliberate architectural change
 tests/test_bestiary_params.py --update-golden

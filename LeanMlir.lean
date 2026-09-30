@@ -74,7 +74,7 @@ above finds any declaration by name.
 
 ## Start here
 
-The linear classifier shows the two kinds of result in about 650 lines:
+The linear classifier shows the two kinds of result on the smallest net:
 
 1. **Faithfulness** — the *emitted* StableHLO train step denotes the *certified* forward,
    gradient and SGD math. [`LinearTrainStep`](LeanMlir/Proofs/Nets/Small/LinearTrainStep.html)
@@ -191,8 +191,8 @@ the standard subgradient convention the codegen emits. The book's appendix takes
 ## Build
 
 ```
-lake exe cache get          # Mathlib oleans, ~30 s
-lake build ProofsMinimal    # the linear on-ramp above, ~1 min
+lake exe cache get          # Mathlib oleans
+lake build ProofsMinimal    # the linear on-ramp above
 lake build Proofs           # the engine slice the trainers import
 lake build Certs            # the certificate corpus CI checks; tests/AuditAxioms.lean is its axiom audit
 ```

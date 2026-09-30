@@ -566,6 +566,7 @@ the chain: K ↦ K^T, then follow the Q chain (but with the matmul being
 "left factor constant" this time because Q is fixed and K^T is on the
 right). -/
 
+/-- Attention as a function of `K` alone: transpose, `Q · Kᵀ`, scale, row softmax, `· V`. -/
 noncomputable def sdpaKChain (n d : Nat) (Q V : Mat n d) : Mat n d → Mat n d :=
   (fun w : Mat n n => Mat.mul w V) ∘
   (@rowSoftmax n n) ∘
@@ -578,6 +579,7 @@ private theorem sdpaKChain_eq (n d : Nat) (Q K V : Mat n d) :
   unfold sdpaKChain sdpa sdpaScale
   rfl
 
+/-- The VJP of `sdpaKChain`, `vjpMatComp` down its five steps. -/
 noncomputable def sdpaKChainHasVJP (n d : Nat) (Q V : Mat n d) :
     HasVJPMat (sdpaKChain n d Q V) :=
   -- Innermost (transpose → matmul Q · Kt):
@@ -1060,6 +1062,7 @@ noncomputable def mhsaQkvW (heads d_head : Nat)
     else if q.1 = (1 : Fin 3) then Wk k (finProdFinEquiv (p.1, q.2))
     else Wv k (finProdFinEquiv (p.1, q.2))
 
+/-- Combined Q/K/V bias vector: `bq | bk | bv` in `mhsaQkvW`'s per-head interleave layout. -/
 noncomputable def mhsaQkvB (heads d_head : Nat)
     (bq bk bv : Vec (heads * d_head)) :
     Vec (heads * (3 * d_head)) :=

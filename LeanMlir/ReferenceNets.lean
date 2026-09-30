@@ -98,7 +98,7 @@ def unetBrats : NetSpec where
 
     **`skips := false`.** The skipless decoder, kept reproducible. It has to rebuild every
     boundary from the 7×7 bottleneck alone, and its masks are visibly blobbier for it
-    (mIoU 0.633 against 0.741 with skips, same schedule).
+    (lower mIoU than with skips at the same schedule).
 
     Either way the transfer A/B is internally controlled: both arms of a given variant differ
     only in initialization. -/

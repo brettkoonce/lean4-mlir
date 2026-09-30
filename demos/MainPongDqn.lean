@@ -26,8 +26,8 @@ import LeanMlir.Pong
      `<prefix>_params.bin` under `.lake/build/`.
 
     Residency is the shim's default: [θ|m|v] stays on the card across train
-    steps and the forwards hold their parameters, 24 → 14.6 ms per pixel update on
-    one 4060 Ti. Bit-identical to the copying path on the deterministic shim
+    steps and the forwards hold their parameters, which makes a pixel update markedly
+    cheaper (`runs/2026-09-25-pong-dqn/RESULTS.md`). Bit-identical to the copying path on the deterministic shim
     (`scripts/det_shim.sh`); on the shipping shim the two differ in the last bits
     from update 2 on, as autotuned kernels do across buffer origins.
 

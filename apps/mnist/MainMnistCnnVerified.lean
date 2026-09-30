@@ -26,7 +26,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects — XLA/PJRT by default, IREE with
 peer and no shared-body file; the backend is a run-time choice about *transport*,
 not a different program. This is the first CONVOLUTIONAL rung, and the one where
 that distinction is most visible: it is `transportSensitive` in the benchmark
-table (84.6% of wall clock is parameter round-trip), so the two lowerers
+table (the lakefile's `BenchItem` row records its parameter round-trip share), so the two lowerers
 differ here far more in how they move bytes than in what they compute.
 
 Run:

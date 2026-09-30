@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 `verified_mlir/{mobilenetv2,efficientnet}_rms_train_step.mlir` render RMSProp-with-momentum, the
 optimizer both nets' ImageNet references actually use — the **only** gap between MobileNetV2 and
-JAX's 68.33%, and one of two for EfficientNet's 72.31%. This is their numeric gate, built the
+its JAX reference's accuracy, and one of two for EfficientNet's. This is their numeric gate, built the
 way `r34-mom-tie` is: a **cross-render known answer**, not a tolerance argument.
 
 **How the gradient is recovered.** Run the committed **AdamW** render on `(θ, x, onehot)` from

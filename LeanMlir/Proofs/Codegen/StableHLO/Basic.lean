@@ -92,8 +92,8 @@ inductive BatchableOp : Nat → Nat → Type where
   -- **fp8 (E4M3) peer of `convBf16`** — identical shape, identical denotation, one different
   -- type string. Measured to lower at cifar8's own conv shapes: every layer reaches
   -- `__cudnn$convForwardGraph` with f8 values surviving into the optimized HLO. f8 operands,
-  -- **f8-TYPED result**, convert back — an f32 result is 1.17× where the f8 result is 3.43×, the
-  -- same result-type rule as bf16 at a third precision. UNSCALED: E4M3's max is 448, so this is
+  -- **f8-TYPED result**, convert back — an f32 result gives up most of the f8 speedup
+  -- (planning/archive/fp8_lowering.md), the same result-type rule as bf16 at a third precision. UNSCALED: E4M3's max is 448, so this is
   -- only sound where the operands are known to fit. `e4m3_render_faithful` covers the scaled form
   -- for any `q`/`sx`/`sW`.
   | convF8 {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wName bName : String)
@@ -210,9 +210,9 @@ inductive BatchableOp : Nat → Nat → Type where
   -- bf16 peer of `denseRowBack` — ViT's input-VJP through Q/K/V/O/fc1/fc2.
   -- **bf16 operands, bf16-TYPED RESULT, convert back — the CONV shape.**
   -- `dot_general` reaches the tensor cores with EITHER result type, so the result type is inert
-  -- for CORRECTNESS but **not for SPEED**: on ViT's own MLP chain the f32-result shape is 1.18×
-  -- over f32 and the bf16-result shape is **1.60×**. The f32 result makes the gemm write twice the
-  -- bytes and takes a worse epilogue.
+  -- for CORRECTNESS but **not for SPEED**: on ViT's own MLP chain the bf16-result shape is much
+  -- faster than the f32-result shape (planning/archive/bf16_renderer.md). The f32 result makes the
+  -- gemm write twice the bytes and takes a worse epilogue.
   -- Consequence for `den`: a bf16-typed result means the hardware DOES round the output, so
   -- there is an outer `rnd` here exactly as in `convBf16`. Omitting it would claim precision the
   -- hardware does not deliver — the unsound direction.
@@ -280,7 +280,7 @@ inductive BatchableOp : Nat → Nat → Type where
   --    take their own constructors, exactly as ConvNeXt's did.
   | denseRow {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c)
       : BatchableOp (N*a) (N*c)
-  -- bf16 peer of `denseRow` — the six per-block matmuls (Q/K/V/O/fc1/fc2) that are 90 % of a
+  -- bf16 peer of `denseRow` — the six per-block matmuls (Q/K/V/O/fc1/fc2) that are most of a
   -- ViT step. bf16 operands, **bf16-typed result**, convert back, then the bias in f32.
   -- The outer `rnd` in `den` is the bf16 STORE and the bias is added AFTER it, at the accumulate
   -- precision, exactly as emitted — `convBf16`'s shape. See `denseRowBackBf16` for why the result
@@ -334,7 +334,7 @@ inductive SHlo : Nat → Type where
   -- **ITS f32-TYPED RESULT IS A PoC ARTEFACT, NOT A RECOMMENDATION.** `dotInBf16` is the
   -- depth-1 dense proof-of-concept and is rendered by NO net. `dot_general` reaches the tensor
   -- cores with either result type, so the result type is inert for CORRECTNESS but not for SPEED
-  -- (an f32 result makes the gemm write twice the bytes, worth ~1.2× on a real chain). ViT's dot ops take the **bf16-typed
+  -- (an f32 result makes the gemm write twice the bytes, a real cost on a real chain). ViT's dot ops take the **bf16-typed
   -- result** shape for that reason. Do not copy this constructor's shape into a new op.
   | dotInBf16  {m n : Nat} (rnd : ℝ → ℝ) (wName : String) (W : Mat m n) : SHlo m → SHlo n
   | dotOut     {m n : Nat} (wName : String) (W : Mat m n)       : SHlo n → SHlo m
@@ -967,8 +967,8 @@ inductive SHlo : Nat → Type where
   | convStridedBackBatched {N ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * (2 * h) * (2 * w)))
-  -- The **bf16** input-VJP peers. These are where the money is: the backward is ~60% of the conv
-  -- step (measured on R34's own layer shapes), and unlike JAX — which autodiffs the backward FROM
+  -- The **bf16** input-VJP peers. These are where the money is: the backward is the larger share
+  -- of the conv step (measured on R34's own layer shapes), and unlike JAX — which autodiffs the backward FROM
   -- the cast forward and so inherits bf16 for free — every hand-written VJP here needs its own bf16
   -- twin. dgrad is itself a convolution, so it takes the same emit shape and the same `den`
   -- discipline as the forward.
@@ -1120,8 +1120,7 @@ inductive SHlo : Nat → Type where
   -- ══ BN running statistics: the batch μ and var a batch-BN train step must hand back so the
   --    host can EMA them into the eval forward's frozen stats. `bnBatchF` is ONE node and does
   --    not surface its internal μ/var — a hand-written emitter can reach into its own fragment
-  --    for them (that is what `tests/TestResnet34Train.lean` does with `%{p}smr`/`%{p}vsr`), but
-  --    `pretty`'s intermediates are counter-named and not addressable. So they are their own ops,
+  --    for them, but `pretty`'s intermediates are counter-named and not addressable. So they are their own ops,
   --    self-contained recomputes from the BN input, like every batched backward here.
   --    `den` is the SAME `bnMean`/`bnVar` that `bnBatchTensor4` normalises by — via `bnchwFwd`,
   --    the `[N,C,H,W] → [C, N·H·W]` reindex — so the returned stats are by construction the
@@ -1399,7 +1398,7 @@ inductive SHlo : Nat → Type where
   --    shape). As a child its `den` is exactly `factor · g` with no ℝ of its own to disagree with
   --    the norm. It costs nothing in the emit because the renderer hands it an `.operand` leaf at
   --    the norm tree's SSA name — `pretty` prints nothing for a leaf. Handing it the norm
-  --    SUBTREE instead would emit ~80,000 lines: `pretty` has no CSE, so the
+  --    SUBTREE instead would emit the norm tree once per site: `pretty` has no CSE, so the
   --    tree would be duplicated at all 200 sites. Emit once, thread the name.
   --
   --    TWO ops, and no scalar-only split (a separate `addScalarF : SHlo 1 → SHlo 1 → SHlo 1` and
@@ -1687,7 +1686,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .softmaxRow (m := m) (n := n) => rowSoftmaxFlat m n
   | _, _, .denseRowBack (rows := rows) (a := a) (c := c) _ W => rowDenseBackFlat rows a c W
   -- THREE roundings: the two operand casts and the **bf16 STORE**. The emit gives this
-  -- `dot_general` a bf16-TYPED result (worth 1.18× → 1.60×), so the hardware rounds the output
+  -- `dot_general` a bf16-TYPED result (most of the bf16 win on a dot), so the hardware rounds the output
   -- too.
   | _, _, .denseRowBackBf16 (rows := rows) (a := a) (c := c) rnd _ W =>
       fun dy i => rnd (rowDenseBackFlat rows a c (fun p q => rnd (W p q)) (fun j => rnd (dy j)) i)
@@ -1705,10 +1704,10 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
                  + Tensor3.flatten (fun o _ _ => bias o) i
   | _, _, .layerScaleCh (c := c) (h := h) (w := w) _ γ =>
       fun v => layerScale (fun k => γ (chanIdx c h w k)) v
-  -- Per-EXAMPLE softmax: the denominator is that example's own sum, which is the whole point of
-  -- giving `softmaxDiv` a descriptor (see the constructor's note).
   | _, _, .dotOut _ W => fun v i => ∑ j, W i j * v j
   | _, _, .expe => fun v j => Real.exp (v j)
+  -- Per-EXAMPLE softmax: the denominator is that example's own sum, which is the whole point of
+  -- giving `softmaxDiv` a descriptor (see the constructor's note).
   | _, _, .softmaxDiv => fun v j => v j / ∑ k, v k
   | _, _, .lnRow (m := m) (n := n) _ _ _ ε γ β => rowLNFlat m n ε γ β
   | _, _, .rowScale (m := m) (n := n) _ γ => rowScaleFlat m n γ

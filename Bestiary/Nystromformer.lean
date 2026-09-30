@@ -8,7 +8,7 @@ Self-Attention") is one of the strangest entries in the efficient-
 attention literature. Most efficient-attention papers come from ML
 methodology: Linformer uses learned low-rank projections, Performer
 uses random features, Longformer uses sparse patterns. Nyströmformer
-reaches back to \textbf{numerical linear algebra from 1928}: the
+reaches back to \textbf{numerical linear algebra from 1930}: the
 Nyström approximation of a Gram matrix via landmark points.
 
 The idea in one paragraph: given a softmax-attention matrix
@@ -19,7 +19,7 @@ $(n \times m)$, landmark-to-landmark $(m \times m)$, and
 landmark-to-key $(m \times n)$ --- and approximate the full
 attention as $A \approx A_{QL} \cdot A_{LL}^{+} \cdot A_{LK}$,
 where $A_{LL}^{+}$ is the Moore--Penrose pseudoinverse. That's the
-Nyström method from 1928, lifted from kernel methods into attention.
+Nyström method from 1930, lifted from kernel methods into attention.
 Cost: $O(n m + m^3)$, which is $O(n)$ when $m$ is fixed.
 
 ## The pedagogical point: same params, different compute
@@ -125,7 +125,7 @@ def main : IO Unit := do
   IO.println "════════════════════════════════════════════════════════════════"
   IO.println "  Bestiary — Nyströmformer"
   IO.println "════════════════════════════════════════════════════════════════"
-  IO.println "  1928 numerical-linear-algebra trick meets 2017 transformer."
+  IO.println "  1930 numerical-linear-algebra trick meets 2017 transformer."
   IO.println "  O(n²) softmax attention → O(n) via landmark approximation."
 
   nystromformerBase.summarize (size := .tokens)
@@ -140,7 +140,7 @@ def main : IO Unit := do
   IO.println "    BERT at each scale (base 110M, large 340M). The entire"
   IO.println "    Nyström contribution lives in how attention is computed,"
   IO.println "    not in what layers the network has."
-  IO.println "  • The Nyström approximation is a 1928 result from integral"
+  IO.println "  • The Nyström approximation is a 1930 result from integral"
   IO.println "    equations — it came to ML via kernel methods in the early"
   IO.println "    2000s (Williams & Seeger 2001 for Gaussian process"
   IO.println "    speedups), then got lifted into transformer attention in"

@@ -6,8 +6,10 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsB
 
 A tighter Lipschitz constant over the SAME first-100 MNIST test
 subset as `LipschitzCert.ScorecardFull`, at BOTH ε = 1/10 and 3/10:
-per-pair LipSDP constants lift the counts from **92→93/100 @ ε=0.1**
-(PGD bracket 93) and **72→91/100 @ ε=0.3** (PGD 92) — no
+per-pair LipSDP constants lift the certified counts at both radii — from the
+`SF:` line `scripts/certs/lipschitz_cert_scorecard_full.py` prints (with the
+PGD bracket) to the `[SF] SDP certified (measured)` line
+`scripts/certs/lipschitz_cert_pair_sdp_full.py` prints — no
 retraining, no new data, a less lossy constant per pairwise logit gap.
 
 Everything pair-level is hidden-width-sized (16×16, Schur — the 784-dim
@@ -2931,9 +2933,11 @@ theorem sdpCappedFullCerts30_certified :
   List.forall_iff_forall_mem.mp
     ⟨certifiedSSF30_0, certifiedSSF30_1, certifiedSSF30_2, certifiedSSF30_3, certifiedSSF30_4, certifiedSSF30_5, certifiedSSF30_6, certifiedSSF30_7⟩
 
-/-- **The LipSDP full-input scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — MEASURED
-    92→93/100 @ ε=0.1 (PGD 93) and 72→91/100 @ ε=0.3
-    (PGD 92): same net, same images, the constant was the bottleneck rather
+/-- **The LipSDP full-input scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — the counts MEASURED over
+    the first 100 images at ε = 0.1 and 0.3 are the `[SF] SDP certified (measured)`
+    line `scripts/certs/lipschitz_cert_pair_sdp_full.py` prints, against the `SF:` line
+    of `scripts/certs/lipschitz_cert_scorecard_full.py` (global constant, PGD bracket):
+    same net, same images, the constant was the bottleneck rather
     than the network. The counts BELOW are the 8-per-radius emitted witnesses
     that carry `CertifiedAt` proofs, not those measurements. Lower bounds only. -/
 theorem scorecard_sdp_full :

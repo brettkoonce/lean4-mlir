@@ -27,10 +27,11 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 -/
 
 /-- 100 epochs — RSB-A3's own reference schedule at effective batch 2048, the length the
-    composed A3 artifact (`lambaccdp8x64bce`) is specified for; the 4-GPU@160 probe measured 240 ms/step, so 100 epochs is ~33 h.
+    composed A3 artifact (`lambaccdp8x64bce`) is specified for; on four cards at 160 px that is more
+    than a day of wall clock.
 
     **THIS FIELD IS THE LR SCHEDULE, NOT JUST A LOOP BOUND.**
-    `totalSteps := cfg.epochs * nb / accK` (`Verified.Train` 1166) — the cosine anneals over
+    `totalSteps := cfg.epochs * nb / accK` (`Verified.Train`) — the cosine anneals over
     exactly this many epochs. `LEAN_MLIR_MAX_EPOCHS` caps the LOOP (`min n cfg.epochs`) and does
     NOT touch the schedule, which is precisely what makes a capped run a resumable PREFIX of the
     full one rather than its own shorter experiment:
@@ -38,7 +39,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
       LEAN_MLIR_MAX_EPOCHS=30   → epochs 0..29 of the 100-epoch cosine, checkpointed at 30.
       (then, unset)             → resumes at 30 and runs 30..99 on the SAME schedule.
 
-    That is the intended way to take a look before committing the full ~33 h. It is NOT the same
+    That is the intended way to take a look before committing the full run. It is NOT the same
     as `epochs := 30`, which anneals fully by epoch 30 and is a complete experiment.
 
     This is the config for EVERY variant of this driver, not just A3 — `adamdp64` and friends

@@ -131,8 +131,8 @@ private theorem mnist_E1_nonneg : (0:ℝ) ≤ layerBudget M.u 512 (3/5) 1 (2357/
 
 /-- **Numeric capstone at the committed MNIST-MLP dims and TRAINED
     magnitudes** (the `MainMnistMlpVerified.lean` net: 784→512→512→10;
-    `|W| ≤ 3/5` covers the measured `max|W| = 0.52` of a real 12-epoch
-    97.8% run — He init already exceeds the prettier `1/32` in its tails).
+    `|W| ≤ 3/5` covers the measured `max|W|` of a real 12-epoch run — He
+    init already exceeds the prettier `1/32` in its tails).
     For any rounding model at binary32 accuracy (`u ≤ 2⁻²⁴`), every rounded
     logit is within **5100** of the exact-real logit — the worst-case logit
     magnitude at these bounds is ≈4.5·10⁷, so ≈10⁻⁴ *relative*, the same
@@ -544,8 +544,8 @@ theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
     forward logit budget (≈5100 at trained magnitudes) makes `e^(2δ) − 1`
     vacuous, so a useful head budget needs the measured logit error —
     exactly the hand-off point from worst-case to a-posteriori analysis.
-    Empirically validated (`scripts/certs/margin_probe.py`): measured drift on a
-    real 12-epoch run is ≤ 1.6·10⁻⁵, 600× inside the `1/100` hypothesis. -/
+    Empirically validated (`scripts/certs/margin_probe.py`): the measured drift on
+    a real 12-epoch run sits orders of magnitude inside the `1/100` hypothesis. -/
 theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
     (heexp0 : 0 ≤ eexp) (heexp : eexp ≤ 1/1000000)
     (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
@@ -637,8 +637,8 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
     the single-matmul bound the end-to-end bound, so this is the one realistic
     fp8 case with an honest accuracy guarantee (no vacuous depth compounding).
     The 122 is the worst-case threshold; with the demo's measured `B = 0.38`
-    the same `argmax_preserved` covers the `>0.76`-margin inputs — empirically
-    92.89% of the MNIST test set (`scripts/demos/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
+    the same `argmax_preserved` covers the `>0.76`-margin inputs, which the demo
+    counts over the MNIST test set (`scripts/demos/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
     (within `u_acc`), so the demo's fp32 margins are the relevant quantity. -/
 theorem linear_e4m3_argmax_preserved (L : FloatModel) (hMu : M.u ≤ u32)
     (hLu : L.u ≤ uE4M3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}

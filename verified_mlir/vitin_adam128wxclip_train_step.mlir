@@ -4,7 +4,7 @@ module @m {
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<128x150528xf32>) -> tensor<128x3x224x224xf32>
-    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──
+    // ── ViT-Tiny depth-12 AdamW train step: every op is pretty(verified AST node) except the constants, the input reshape %ximg, the input passthroughs and the marked report-only %loss ──
     %v0 = stablehlo.reshape %x : (tensor<128x150528xf32>) -> tensor<128x3x224x224xf32>
     %v1 = stablehlo.convolution(%v0, %wConv)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

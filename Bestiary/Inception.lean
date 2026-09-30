@@ -11,7 +11,8 @@ Three papers, three iterations of the same idea:
 
 - **v1 / GoogLeNet** (Szegedy et al. 2014) — 9 inception modules, two
   auxiliary classifiers to keep gradients flowing through a 22-layer
-  network, 5M params. Won ILSVRC 2014.
+  network, about 5M params by the paper's count (12× fewer than AlexNet).
+  Won ILSVRC 2014.
 - **v3** (Szegedy et al. 2015, "Rethinking the Inception Architecture")
   — introduced factorized convolutions (7×7 → 1×7 then 7×1 — asymmetric,
   cheaper), label smoothing, and RMSProp. ~23M params.
@@ -58,8 +59,9 @@ different widths.
 
 For bestiary purposes, we **approximate v3 and v4 with the v1-style
 `.inceptionModule`** at appropriate channel counts. The shape / flow
-is the same; the total param count lands within ~20% of the paper's
-numbers. Honest limitation, worth the simplification.
+is the same; the total param count does not match the papers' (v4 comes
+out well under timm's `inception_v4`; the timm cross-check report in tests/ has
+the comparison). Honest limitation, worth the simplification.
 
 ## References
 
@@ -217,8 +219,8 @@ def main : IO Unit := do
   IO.println "    asymmetric 7×1+1×7 factorizations and different reduction"
   IO.println "    geometries. Each paper specifies them in tables; our"
   IO.println "    bestiary spec uses the unified v1-style module at the right"
-  IO.println "    channel counts. Param totals are ~20% off from paper but"
-  IO.println "    structural flow is correct."
+  IO.println "    channel counts. Param totals differ from the papers' (v4"
+  IO.println "    comes out well under), but the structural flow is correct."
   IO.println "  • GoogLeNet's auxiliary classifiers (two side heads during"
   IO.println "    training) are omitted — they're a training-time gradient-"
   IO.println "    flow trick, not an inference-time architectural feature."

@@ -1,0 +1,30 @@
+SF: qacc=0.9238 B1=2.227 B2=2.224 L=4.953 cert@0.1=92 cert@0.3=72 PGD@0.1=93 PGD@0.3=92
+TF: qacc=0.9508 B1=5.641 B2=5.291 L=29.847 cert@0.1=76 cert@0.3=2 PGD@0.1=94 PGD@0.3=86
+[SF] SDP certified (measured) @0.1: 93/100, @0.3: 91/100; emitting 8/8 theorems over 39 unordered pairs
+[SF] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDPFull.lean: 2348 lines
+[TF] SDP certified (measured) @0.1: 91/100, @0.3: 77/100; emitting 8/8 theorems over 39 unordered pairs
+[TF] wrote /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDPFullUncon.lean: 2484 lines
+	Command being timed: "python3 scripts/certs/lipschitz_cert_pair_sdp_full.py"
+	User time (seconds): 997.15
+	System time (seconds): 0.17
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 16:29.66
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 587208
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 47507
+	Voluntary context switches: 111
+	Involuntary context switches: 3932
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 4304
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+exit 0

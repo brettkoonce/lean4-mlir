@@ -111,7 +111,7 @@ MODULES = [
     "LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG",
     "LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB",
     "LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB",
-    "LeanMlir.Proofs.Nets.ViT.ViTDepthK",
+    "LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie",
     "LeanMlir.Proofs.Nets.ViT.ViTStepTie",
     "LeanMlir.Proofs.Training.Trained.LinearDescent",
     "LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad",

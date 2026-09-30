@@ -6,19 +6,21 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
+arithmetic in-kernel. Canonical surface: [`Proofs/Nets/Small/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 A tighter Lipschitz constant over the SAME first-100 MNIST test
 subset and SAME ε = 1/10 as `LipschitzCert.Scorecard`: replacing the
 global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the
-count from **1/100 to 63/100** — no retraining, no new data, just a
+certified count (the `certMarginU` lines of `LipschitzCert.Scorecard` before,
+the `[U] certified (measured)` line `scripts/certs/lipschitz_cert_pair_sdp.py`
+prints after) — no retraining, no new data, just a
 less lossy constant on each pairwise logit gap. Each class pair carries
 a PSD witness checked by `linarith` from the 8 LDLᵀ column squares
 (`hS*` — the exact sum-of-squares certificate, `d ≥ 0` weights found by
 `linarith` itself), turned into the squared gap bound by `pair_sq_bound`;
 each image evaluates its logits once (`logit*_eval`) and then needs only
 9 rational margin checks against `Lp·ε` (`certifiedSU<i>`). PGD bracket:
-69/100 — the cert ≤ TRUE ≤ PGD sandwich is nearly closed.
+the `PGD-robust` line of `scripts/certs/lipschitz_cert_scorecard.py` — cert ≤ TRUE ≤ PGD.
 
 **Theorem vs. measurement — read this before quoting a number.** Soundness
 lives in the ENGINE (`LipschitzCert.PairSDP`), proved once — kernel-
@@ -1462,7 +1464,7 @@ theorem pairSqU_7_6 : ∀ u u' : EuclideanSpace ℝ (Fin 49),
   pair_sq_symm pairSqU_6_7
 
 -- ════════════════════════════════════════════════════════════
--- § Per-image certificates (8/100 at ε = 1/10)
+-- § Per-image certificates (the 8 emitted witnesses at ε = 1/10)
 -- ════════════════════════════════════════════════════════════
 
 noncomputable def hpreSU0 : Fin 8 → ℝ :=
@@ -2086,7 +2088,9 @@ theorem sdpUnconCerts_certified :
   List.forall_iff_forall_mem.mp
     ⟨certifiedSU0, certifiedSU2, certifiedSU3, certifiedSU4, certifiedSU5, certifiedSU6, certifiedSU10, certifiedSU11⟩
 
-/-- **The LipSDP scorecard** — MEASURED 63/100, vs 1/100 under the
+/-- **The LipSDP scorecard** — the count MEASURED over the first 100 images is the
+    `[U] certified (measured)` line `scripts/certs/lipschitz_cert_pair_sdp.py` prints,
+    against the `certMarginU` lines of `LipschitzCert.Scorecard` under the
     global √2·∏-norm criterion, same net, same ε, same images; the constant
     was the bottleneck, not the network. The 8 below are the emitted
     witnesses carrying `CertifiedAt` proofs, not that measurement. -/

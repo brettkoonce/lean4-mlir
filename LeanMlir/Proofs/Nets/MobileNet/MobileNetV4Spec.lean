@@ -40,8 +40,9 @@ deriving Inhabited, DecidableEq
 
     Checked against timm 1.0.28 (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
     all 21 rows agree on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. The `#guard`s in
-    [`Proofs/Nets/MobileNet/MobileNetV4BackB0.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4BackB0.lean) pin that reading; they are derived from timm rather
-    than re-read off this table, or they would gate nothing. What the table cannot say — which
+    [`Proofs/Nets/MobileNet/MobileNetV4BackB0.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4BackB0.lean) pin that reading, one of them all 21 tuples written
+    out literally; they are derived from timm rather than re-read off this table, or they would
+    gate nothing. What the table cannot say — which
     depthwise carries a stride (the post-DW when both exist; every strided row has both, and a
     `#guard` in the renderer holds that), and that the pre-DW is BN only — is the renderer's, and
     `scripts/parity/mnv4_timm_parity.py` pins it against timm on shared weights. -/

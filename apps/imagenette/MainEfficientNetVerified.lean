@@ -21,9 +21,8 @@ the whole-net VJP `efficientnetHasVJP` is a representative witness (full B/C def
 Run (GPU): `.lake/build/bin/efficientnet-verified data`
 
 **THIS DRIVER CANNOT PRODUCE A MEANINGFUL ACCURACY ON THIS NET.** Measured
-on XLA/CUDA: `387/3925 = 9.859873%` on every epoch, byte identical, which is
-chance on Imagenette's ten classes. It is a constant predictor, not a slow
-curve.
+on XLA/CUDA, it reports the same chance-level accuracy on every epoch, byte
+identical: a constant predictor, not a slow curve.
 
 `efficientnetVerified` carries BatchNorm, and **running-statistic threading lives only in
 `VerifiedNet.trainAdamSched`**, not in `VerifiedNet.train`. This driver trains

@@ -4,7 +4,7 @@ module @m {
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
-    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──
+    // ── ViT-Tiny depth-12 AdamW train step: every op is pretty(verified AST node) except the constants, the input reshape %ximg, the input passthroughs and the marked report-only %loss ──
     // ── EMA WEIGHT SHADOW: a 4th [θ|m|v|ema] region, one adamMNextF
     // per parameter at (β₁ := %emad) on the UPDATED weight. It is pretty(verified AST)
     // like the rest of the optimizer — NOT a carve-out. EVAL AND CHECKPOINTS SCORE IT.

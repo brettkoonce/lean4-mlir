@@ -33,7 +33,7 @@ def resnet34Imagenet : NetSpec where
 def resnet34ImagenetConfig : TrainConfig where
   learningRate   := 0.1
   batchSize      := 256
-  epochs         := 90      -- full paper recipe (4-GPU bf16 run, ~18 hr clean)
+  epochs         := 90      -- full paper recipe (4-GPU bf16 run)
 
   optimizer      := .sgd
   momentum       := 0.9
@@ -42,10 +42,11 @@ def resnet34ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true
   labelSmoothing := 0.1
-  -- bf16 mixed precision (incl. bf16 conv): a CUDA/cuDNN recipe — 1.60x faster
-  -- than fp32 on the 4060 Ti box, reaching 74.16% top-1 / 91.92% top-5 over the
-  -- full 50k val (the 72.0% in jax/runs/r34_imagenet_bf16_90ep/RESULTS.md is the
-  -- SAME recipe without timm's val protocol + the symmetric-padding fix). On AMD/MIOpen
+  -- bf16 mixed precision (incl. bf16 conv): a CUDA/cuDNN recipe, faster than fp32
+  -- on the 4060 Ti box. Its full-50k-val result is the note heading
+  -- jax/runs/r34_imagenet_bf16_90ep/RESULTS.md and the book's ResNet-34 chapter;
+  -- that file's own table is the SAME recipe without timm's val protocol + the
+  -- symmetric-padding fix. On AMD/MIOpen
   -- set bf16Conv := false (bf16 conv is slower there); see reference_ares_pcie_aer.
   bf16           := true
   bf16Conv       := true

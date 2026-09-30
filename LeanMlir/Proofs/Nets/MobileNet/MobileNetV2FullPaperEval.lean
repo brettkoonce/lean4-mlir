@@ -35,10 +35,16 @@ the one reduction is the GAP over `[2, 3]`, which `FwdGraphTextTies` also checks
 rendered module. So the artifact computes this forward at every example of its batch.
 
 **What it is tied to.** `mobilenetv2_fwd_eval.mlir`: 263 inputs — `%x`, 158 parameter tensors
-(`paperSig` at `convBias := false`, so no bias slot has an argument: the render folds each conv
-bias into the BatchNorm that follows it) and 104 statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` and
+(`paperSig` at `convBias := false`, so no bias slot has an argument: the render binds each conv
+bias to the `%zb{c}` zero constant) and 104 statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` and
 `mobilenetv2in_fwd_eval_eps0001.mlir` its 1000-class twins. The classifier here is generic in
 `nCls` and `ε` is a binder, so one theorem covers all three.
+
+**The artifacts are the zero-bias instance.** `IVWEval` / `IVWNoExpEval` and the stem and head
+carry a conv-bias field per conv site, which `den` reads, while the graph spells each one as
+`%zb{c}`. So the three artifacts are the instance with every conv bias `0`. At inference
+BatchNorm a conv bias does not cancel as it does under batch BN, so this is a restriction, not a
+reparametrisation.
 
 Paper `[t,c,n,s]` spec (stem 3×3-s2 3→32 at the XLA-`SAME` phase; head 1×1 320→1280 → GAP → dense):
   (1, 16,1,1) (6, 24,2,2) (6, 32,3,2) (6, 64,4,2) (6, 96,3,1) (6,160,3,2) (6,320,1,1)
@@ -52,7 +58,9 @@ namespace Proofs
 
 /-- Weights and running statistics of one MobileNetV2 bottleneck at inference. No per-site `ε`:
     the eval forward takes ONE shared `ε`, as the
-    render emits (a single `eps` constant), where the training bundle `IVW` carries one per site. -/
+    render emits (a single `eps` constant), where the training bundle `IVW` carries one per site.
+    The conv biases `eb`, `db`, `pb` are fields, but the graph binds them to `%zb{c}`, so the
+    committed evals are the instance with all three `0`. -/
 structure IVWEval (ic mid oc : Nat) where
   eW : Kernel4 mid ic 1 1
   eb : Vec mid
@@ -73,7 +81,8 @@ structure IVWEval (ic mid oc : Nat) where
   pμ : Vec oc
   pv : Vec oc
 
-/-- Weights and running statistics of the t=1 first bottleneck (no expand conv) at inference. -/
+/-- Weights and running statistics of the t=1 first bottleneck (no expand conv) at inference.
+    As in `IVWEval`, the committed evals are the instance with the conv biases `0`. -/
 structure IVWNoExpEval (ic oc : Nat) where
   dW : DepthwiseKernel ic 3 3
   db : Vec ic

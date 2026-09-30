@@ -4,12 +4,13 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPData
 
 Pixel-L∞ certificates by exact interval bound propagation over the SAME
 first-100 MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,
-4/255, 8/255 the box certificate certifies (measured by exact rational interval
-propagation)
-**92/100**, **88/100**, **69/100**, **24/100** predictions robust (PGD-L∞ bracket: 93, 93, 92, 88).
-*Theorem vs. measurement* below says which of these carry Lean proofs.
-For comparison, pushing the L2 Lipschitz certificate through
-`‖δ‖₂ ≤ √784·ε∞` certifies only 92, 85, 49, 2 — at small L∞ radii the box beats the ball.
+4/255, 8/255 the box certificate certifies a count of predictions robust
+(measured by exact rational interval propagation) that
+`scripts/certs/lipschitz_cert_scorecard_ibp.py` prints on its `[SF] IBP certified:`
+line, beside the PGD-L∞ bracket and the counts the L2 Lipschitz certificate
+certifies when pushed through `‖δ‖₂ ≤ √784·ε∞` — at small L∞ radii the box
+beats the ball. *Theorem vs. measurement* below says which of these carry Lean
+proofs.
 
 
 **Theorem vs. measurement.** Soundness is in the ENGINE
@@ -1671,7 +1672,10 @@ theorem ibpCappedCertse8_certified :
   List.forall_iff_forall_mem.mp
     ⟨certIBPSFe8_0, certIBPSFe8_3, certIBPSFe8_13, certIBPSFe8_14, certIBPSFe8_17, certIBPSFe8_21, certIBPSFe8_25, certIBPSFe8_28⟩
 
-/-- **The IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — MEASURED 92/100 @ 1/255, 88/100 @ 2/255, 69/100 @ 4/255, 24/100 @ 8/255 (PGD-L∞ bracket 93/93/92/88). -/
+/-- **The IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — the counts MEASURED over the first
+    100 images at ε = 1/255, 2/255, 4/255, 8/255 are the `[SF] IBP certified:` line
+    `scripts/certs/lipschitz_cert_scorecard_ibp.py` prints (with the PGD-L∞ bracket);
+    the lists below are the emitted witnesses carrying `CertifiedAtLinf` proofs. -/
 theorem scorecard_ibp :
     (ibpCappedCertse1.length = 8 ∧ ∀ p ∈ ibpCappedCertse1, CertifiedAtLinf mlpSF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
     (ibpCappedCertse2.length = 8 ∧ ∀ p ∈ ibpCappedCertse2, CertifiedAtLinf mlpSF ((2 : ℝ)/255) p.2.1 p.2.2) ∧

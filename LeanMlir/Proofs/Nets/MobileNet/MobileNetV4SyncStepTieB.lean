@@ -1297,9 +1297,10 @@ def mnv4NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
     layer), per-example conv / depthwise / strided / relu / GAP / relabel / dense links. The
     right-hand chain is `mnv4_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone
     ties to the certified gradient at its chain cotangent — so this and it together say every
-    all-reduced gradient the DP render emits is the global-batch step's gradient node. The AdamW
-    update that follows (and, in `mnv4in_emaaccdp8x128wxdowd005bf16`, the EMA and gradient
-    accumulation) is not stated here. `mnv4_net_syncTiedB_smoothedCE` discharges the
+    all-reduced gradient an f32 DP render (`mnv4in_adamdp64`) emits is the global-batch step's
+    gradient node. The AdamW update that follows is not stated here, and neither are the bf16
+    nodes, classifier dropout (`%do`), EMA and gradient accumulation of
+    `mnv4in_emaaccdp8x128wxdowd005bf16`. `mnv4_net_syncTiedB_smoothedCE` discharges the
     hypothesis for the label-smoothed chain the artifacts emit.
 
     With per-replica BatchNorm the corresponding statement is false in general;

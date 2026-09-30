@@ -11,6 +11,12 @@ of the logits whose gradient at the net's output is `g`, every node is `∂L/∂
 that one parameter varied. `mnv2_net_lossGrad_smoothedCE` discharges `hL` for the label-smoothed
 loss the artifacts ship.
 
+**Scope.** Every node here is an f32 `*GradB` node on one replica. The bf16 nodes (`*GradBBf16`) of
+the `mobilenetv2*bf16` artifacts are outside this statement, and so is classifier dropout (`*do*`).
+Sync-BN data parallelism is reached by composition: `mnv2_net_syncTiedB` says each all-reduced
+gradient is this net's tied node at `N := R·N`, which this file's capstone makes the loss's
+gradient at the global batch.
+
 **How.** `ResNet50ParamGrad`'s shape:
 
 * **Per stage** (at variable widths): the loss read at each internal activation of the stem, the
@@ -1029,7 +1035,8 @@ def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MN
 
     Hypotheses: every BN `ε` positive (`MNV2PosB`) and all 35 relu6 sites off both kinks at the real
     activations (`MNV2SmoothAtB`). The loss enters only through `hL`;
-    `mnv2_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
+    `mnv2_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship.
+    The nodes are the f32 ones on one replica (the module's Scope). -/
 theorem mnv2_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}

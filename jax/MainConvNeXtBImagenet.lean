@@ -81,10 +81,10 @@ def convNeXtBImagenetConfigAccum : TrainConfig :=
     batch under the paper's linear rule (4e-3 @ bs4096 → 5e-4 @ bs512).
 
     Accumulation here is not a concession — it is strictly better. Measured on
-    4× 16 GB: one-shot bs512 peaks at 11.52 of 11.68 GiB and runs 747 ms/step;
-    4×128 peaks at 6.19 GiB and runs **681 ms/step**. Under memory pressure XLA
-    rematerializes, and that recompute costs more than the accumulation loop.
-    Also beats bs256 per epoch (28.4 min vs 32.9). -/
+    4× 16 GB: one-shot bs512 fills the default arena almost to the brim and is
+    slower per step than 4×128, which peaks at about half of it. Under memory
+    pressure XLA rematerializes, and that recompute costs more than the
+    accumulation loop. Also beats bs256 per epoch. -/
 def convNeXtBImagenetConfigBs512 : TrainConfig :=
   { convNeXtBImagenetConfig with
       batchSize := 128, gradAccumSteps := 4, learningRate := 5.0e-4 }

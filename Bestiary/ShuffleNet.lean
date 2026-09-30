@@ -52,12 +52,14 @@ projection on the skip path.
 The paper's canonical setting is `g = 3`. The per-stage channel counts
 scale with a width multiplier:
 
-| Variant                | Stage 2 / 3 / 4 channels | Params | Top-1 err |
-|------------------------|---------------------------|--------|-----------|
-| ShuffleNet 0.5× (g=3) | 120 / 240 / 480          | ~1.0M  | 43.2%     |
-| ShuffleNet 1.0× (g=3) | 240 / 480 / 960          | ~2.4M  | 32.6%     |
-| ShuffleNet 1.5× (g=3) | 360 / 720 / 1440         | ~3.4M  | 31.3%     |
-| ShuffleNet 2.0× (g=3) | 480 / 960 / 1920         | ~5.4M  | 29.1%     |
+| Variant                | Stage 2 / 3 / 4 channels | Top-1 err (paper) |
+|------------------------|---------------------------|-------------------|
+| ShuffleNet 0.5× (g=3) | 120 / 240 / 480          | 43.2%             |
+| ShuffleNet 1.0× (g=3) | 240 / 480 / 960          | 32.6%             |
+| ShuffleNet 1.5× (g=3) | 360 / 720 / 1440         | 31.3%             |
+| ShuffleNet 2.0× (g=3) | 480 / 960 / 1920         | 29.1%             |
+
+The 0.5×, 1.0× and 2.0× rows have specs below; 1.5× does not.
 
 Per-stage unit counts are `[4, 8, 4]` across the three shuffle stages,
 matching the paper's Table 1 (a total of 16 shuffle units plus the
@@ -172,4 +174,4 @@ def main : IO Unit := do
   IO.println "    oc/g × g = ic·oc/g). Formula reflects this."
   IO.println "  • ShuffleNet v2 (Ma et al. 2018) replaces grouping with a"
   IO.println "    channel split per unit, trading FLOPs for hardware-friendliness."
-  IO.println "    Worth its own bestiary entry if anyone wants it."
+  IO.println "    It has its own entry: `bestiary-shufflenetv2`."

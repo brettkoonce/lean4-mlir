@@ -29,8 +29,8 @@ $\sim$15M parameters and has to be hand-tuned per receptive field.
 
 ## MiT variants
 
-| Variant | Stages (ch)       | Blocks        | Heads        | Params |
-|---------|-------------------|---------------|--------------|--------|
+| Variant | Stages (ch)       | Blocks        | Heads        | Params (paper) |
+|---------|-------------------|---------------|--------------|----------------|
 | MiT-B0  | 32 / 64 / 160 / 256  | 2 / 2 / 2 / 2   | 1 / 2 / 5 / 8  | 3.7M   |
 | MiT-B2  | 64 / 128 / 320 / 512 | 3 / 4 / 6 / 3   | 1 / 2 / 5 / 8  | 25.4M  |
 | MiT-B5  | 64 / 128 / 320 / 512 | 3 / 6 / 40 / 3  | 1 / 2 / 5 / 8  | 82M    |
@@ -44,13 +44,18 @@ with decoder is a couple M over the encoder at each size.
 - **Efficient self-attention.** Real MiT compresses the key/value
   sequence by 8$\times$ / 4$\times$ / 2$\times$ / 1$\times$ at the four
   stages (``spatial reduction'' to control compute at high res). Our
-  \texttt{.transformerEncoder} uses full attention; param count is
-  unaffected but compute per forward pass is higher.
+  \texttt{.transformerEncoder} uses full attention, so it omits the
+  reduction's strided conv and norm (parameters), and its compute per
+  forward pass is higher.
 - **Overlapping patch embeddings.** MiT's inter-stage transitions use
   overlapping strided convs (stride 4 then stride 2's) rather than
   non-overlapping patch merging. We use \texttt{.patchEmbed} for the
-  initial stem and \texttt{.patchMerging} for stages 2--4; the
-  resulting param counts are close enough for shape purposes.
+  initial stem and \texttt{.patchMerging} for stages 2--4, which have
+  fewer parameters than the overlapping convs.
+
+Between these and the Mix-FFN's depthwise conv, which the spec also
+leaves out, the encoder counts printed below come out well under the
+paper's table: the specs match its shape, not its parameter budget.
 - **Decoder upsample.** Bilinear upsample is parameter-free; we show
   the decoder as a chain of \texttt{.dense} projections and a final
   1$\times$1 output conv.
@@ -188,10 +193,11 @@ def main : IO Unit := do
   IO.println "  • ZERO new Layer primitives. Encoder is 4 × (.patchMerging +"
   IO.println "    .transformerEncoder); decoder is a handful of .dense calls."
   IO.println "  • Real MiT uses 'efficient self-attention' — KV-sequence"
-  IO.println "    reduction at each stage (8x/4x/2x/1x). Param count is"
-  IO.println "    unchanged; compute per forward pass is lower. Our spec"
-  IO.println "    uses standard attention, which is the right param budget"
-  IO.println "    even if it's not the compute-optimal implementation."
+  IO.println "    reduction at each stage (8x/4x/2x/1x), a strided conv +"
+  IO.println "    norm that adds parameters and cuts compute. Our spec uses"
+  IO.println "    standard attention and omits those, the Mix-FFN depthwise"
+  IO.println "    conv and the overlapping patch embeds, so its counts come"
+  IO.println "    out under the paper's."
   IO.println "  • Decoder is trivially small — a few .dense calls aligning"
   IO.println "    4 feature scales to a common dim, then a fusion dense and"
   IO.println "    a class projection. Bilinear upsample in between is"

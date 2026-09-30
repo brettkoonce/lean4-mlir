@@ -467,7 +467,8 @@ def enetB0Config : TrainConfig where
 -- 79.8% on ImageNet-1K from scratch. We ship the dataloader-only
 -- subset (Mixup, CutMix, Random Erasing) — the truly cheap subset of
 -- the recipe — to test whether the recipe gap explains why our
--- bare-recipe ViT-Tiny lands at ~72% Imagenette while CNNs hit ~88%.
+-- bare-recipe ViT-Tiny trails the CNNs on Imagenette (historical/RESULTS.md,
+-- Imagenette table).
 -- ═══════════════════════════════════════════════════════════════════
 
 def vitTinyAblationSpec : NetSpec where
@@ -511,8 +512,8 @@ def vitTinyCutmixConfig : TrainConfig :=
   { vitTinyBareConfig with useCutmix := true, cutmixAlpha := 1.0 }
 
 -- CutMix + heavy WD (0.05). The DeiT/ConvNeXt paper recommended WD;
--- cutmix already wins (77.1%), this tests whether the WD bump that
--- the paper says matters actually lifts at our scale.
+-- cutmix was already the strongest arm, and this tests whether the WD bump
+-- that the paper says matters actually lifts at our scale.
 def vitTinyCutmixWd05Config : TrainConfig :=
   { vitTinyCutmixConfig with weightDecay := 0.05 }
 

@@ -6,7 +6,7 @@ module @m {
     // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.
     %one = stablehlo.constant dense<1.0> : tensor<f32>
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
-    // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──
+    // ── ConvNeXt-T AdamW train step: every op is pretty(verified AST node) except the constants, the hand-written GAP-backward block (%dgi…%dgapf), the input passthroughs and the marked report-only %loss ──
     // All 182 params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample
     // WEIGHT GRADIENTS (flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).
     %v0 = stablehlo.reshape %x : (tensor<64x150528xf32>) -> tensor<64x3x224x224xf32>

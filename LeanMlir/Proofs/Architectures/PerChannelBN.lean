@@ -271,6 +271,7 @@ noncomputable def reassocFwdHasVJP (oc h w : Nat) :
     HasVJP (reassocFwd oc h w) :=
   reindexVJP (reassocFwdIdx oc h w)
 
+/-- VJP of the inverse reindex `reassocBack`, by `reindexVJP`. -/
 noncomputable def reassocBackHasVJP (oc h w : Nat) :
     HasVJP (reassocBack oc h w) :=
   reindexVJP (reassocBackIdx oc h w)
@@ -441,10 +442,12 @@ theorem bnchwBack_differentiable (N oc h w : Nat) :
     Differentiable ℝ (bnchwBack N oc h w) :=
   (reindexCLM (bnchwBackIdx N oc h w)).differentiable
 
+/-- VJP of the `[N,C,H,W] → [C,N·H·W]` reindex `bnchwFwd`, by `reindexVJP`. -/
 noncomputable def bnchwFwdHasVJP (N oc h w : Nat) :
     HasVJP (bnchwFwd N oc h w) :=
   reindexVJP (bnchwFwdIdx N oc h w)
 
+/-- VJP of the `[C,N·H·W] → [N,C,H,W]` reindex `bnchwBack`, by `reindexVJP`. -/
 noncomputable def bnchwBackHasVJP (N oc h w : Nat) :
     HasVJP (bnchwBack N oc h w) :=
   reindexVJP (bnchwBackIdx N oc h w)

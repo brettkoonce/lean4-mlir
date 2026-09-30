@@ -67,8 +67,8 @@ def main (args : List String) : IO Unit := do
     return
   | _ => pure ()
   let root := Pos.empty n k
-  -- above 4×4 the root is the max over its openings, each solved full-window (3.5 min
-  -- at (5,5,4) the first time; the cache remembers)
+  -- above 4×4 the root is the max over its openings, each solved full-window (minutes at
+  -- (5,5,4) the first time, `runs/2026-09-29-alphazero-ttt/n5_root.log`; the cache remembers)
   let rootV := t.value root
   let verdict := if rootV > 0 then "a first-player win" else if rootV < 0 then "a second-player win" else "a draw"
   let mut ok := true

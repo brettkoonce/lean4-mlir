@@ -618,7 +618,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- the `bce` marker, so the entry point, the path and `LEAN_MLIR_VARIANT` stay ONE string
     -- derived from ONE flag.
     -- The marker is DERIVED from this flag, never spelled by the caller: a hand-spelled `"bce"`
-    -- suffix beside this `Bool` would be two writers for one fact on the artifact the 77.43% run
+    -- suffix beside this `Bool` would be two writers for one fact on the artifact the RSB-A3 run
     -- depends on — the name and the loss could disagree and nothing would notice. Read
     -- `r34AdamVariant`'s `bce` note (12 sites, 12 suffixes, no other value).
     (bce : Bool := false)
@@ -645,8 +645,8 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- BN β, every bias — from decay, decaying only ≥2-D weights.
     --
     -- THE A3 RUN DID NOT HAVE IT. Its reference (`resnet50ImagenetConfigRSBFaithful`) sets
-    -- `wdExcludeNormBias := true`; the live artifact has zero `%wdz`. So 77.43% was reached while
-    -- decaying BN γ/β at wd = 0.02. Decay on a pre-BN conv weight is renormalised away by BN and
+    -- `wdExcludeNormBias := true`; the live artifact has zero `%wdz`. So the A3 result was reached
+    -- while decaying BN γ/β at wd = 0.02. Decay on a pre-BN conv weight is renormalised away by BN and
     -- acts only as an effective-LR control; decay on γ is not, because γ scales the layer's output
     -- directly — and the effect concentrates at low LR, i.e. in the cosine endgame.
     --
@@ -999,7 +999,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
           "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
           "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
           "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
-          "    // peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)\n"
+          "    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)\n"
          else "")) ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
@@ -1238,10 +1238,10 @@ end Proofs.StableHLO
 -- **The bf16 peer of the render above** — `momdp64bf16`, the same graph with every one of its
 -- 53 convolutions replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** convolution result,
 -- then a convert back to f32. Deliberately the same config R34's bf16 arm uses (heavy-ball, 4×64,
--- global batch 256), so the two nets differ by the ARCHITECTURE and nothing else and the R34
--- 1.41× is a comparable number rather than a differently-configured one.
+-- global batch 256), so the two nets differ by the ARCHITECTURE and nothing else and R34's bf16
+-- speedup is a comparable number rather than a differently-configured one.
 --
--- The bf16-typed RESULT is load-bearing and is not cosmetic. A convolution with bf16 operands
+-- The bf16-typed RESULT is not cosmetic. A convolution with bf16 operands
 -- and an f32 result has its converts folded away by XLA under excess precision — cuDNN then gets
 -- f32 parameters and the graph runs entirely in fp32 while still *reading* as mixed precision.
 -- Measured, not feared; `BatchableOp.convBf16` carries the note. Check it with
@@ -1319,8 +1319,8 @@ end Proofs.StableHLO
 -- `lamb64` — the only per-net fact is which file it opens.
 --
 -- THIS IS LAMB, NOT `rsb-faithful`. That recipe is LAMB **at effective batch 2048** with
--- BCE-with-logits and a 160/224 resolution split; LAMB at bs512 gives 40.8% against 78.1%, so the
--- batch is not a detail. Its composition with the accumulation render is `.lambAccum`, below.
+-- BCE-with-logits and a 160/224 resolution split; LAMB at bs512 falls far short of A3's target
+-- (`planning/archive/grad_accum.md`), so the batch is not a detail. Its composition with the accumulation render is `.lambAccum`, below.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
     Proofs.StableHLO.R34Opt.lamb "resnet50in")
@@ -1376,7 +1376,7 @@ end Proofs.StableHLO
 --
 -- `lambaccdp8x64bce` = LAMB, BCE-with-logits, k = 8 accumulated micro-batches, 4 replicas × bs64 ⇒
 -- effective batch **2048** — RSB-A3's design batch and the one LAMB was built for (LAMB at bs512
--- gives **40.8% against 78.1%**, so the batch is not a detail). At `q = 5`, i.e. A3's 160² train
+-- falls far short of A3's target, `planning/archive/grad_accum.md`, so the batch is not a detail). At `q = 5`, i.e. A3's 160² train
 -- resolution, scoring through `resnet50in160_fwd_eval` at 224².
 --
 -- **WHAT THIS IS NOT.** `wdExcludeNormBias` is absent, so BN γ/β and biases are decayed where timm
@@ -1398,10 +1398,10 @@ end Proofs.StableHLO
 -- ── `wx` — timm `no_weight_decay` ──────────────────────────────────────────────────────────────
 -- The A3 recipe's LARGEST delta, and the one most likely to move the final number.
 -- `resnet50ImagenetConfigRSBFaithful` sets `wdExcludeNormBias := true`; the render above does not,
--- so the 77.43% run decayed all 161 parameters — BN γ, BN β and every bias included — at wd = 0.02.
+-- so the A3 run decayed all 161 parameters — BN γ, BN β and every bias included — at wd = 0.02.
 --
 -- **THIS IS A DIFFERENT FUNCTION, NOT A FIXED ONE, WHICH IS WHY IT GETS ITS OWN NAME.** The `wx`
--- renders are new artifacts beside the old ones rather than in place of them: the 77.43% result
+-- renders are new artifacts beside the old ones rather than in place of them: the A3 result
 -- belongs to the graph that produced it, and silently re-pointing that slug at a graph with
 -- different decay semantics would make an already-quoted number unreproducible: a last-writer-wins
 -- race whose loser would be a finished 34-hour run.
@@ -1431,7 +1431,7 @@ end Proofs.StableHLO
 -- `Lamb(max_grad_norm=None)` — a different optimizer.
 --
 -- **A NEW ARTIFACT BESIDE THE OLD ONES, NOT A FIX OF THEM** — the `wx` renders' own reason, one
--- delta on: the 77.43% result belongs to the graph that produced it, and re-pointing a slug at a
+-- delta on: the A3 result belongs to the graph that produced it, and re-pointing a slug at a
 -- graph with different gradient semantics makes an already-quoted number unreproducible.
 --
 -- **THE CLIP IS ON THE MEAN ACCUMULATED GRADIENT**, which is why the threshold this bakes is
@@ -1449,9 +1449,9 @@ end Proofs.StableHLO
 
 -- ── …and A3's bf16 twin, so the 160 tier has its precision peer like A2 and A1. A tier that
 -- ships without one leaves a gap that reads as a decision and is really an accident of ordering.
--- It does NOT restate the committed run: 77.91% is fp32 and stays fp32. This prices the tier's
--- other precision, and the pricing is what it is for — 191.6 → 121.6 ms/step on four cards,
--- `runs/2026-08-27-r50-a2-a1-verified-eta/`.
+-- It does NOT restate the committed run: that result is fp32 and stays fp32. This prices the tier's
+-- other precision, and the pricing is what it is for — the four-card ms/step of both precisions is
+-- in `runs/2026-08-27-r50-a2-a1-verified-eta/` (the A3 160 rows).
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbcebf16_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
     (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
@@ -1542,7 +1542,7 @@ end Proofs.StableHLO
 
 -- **The `bce` marker is DERIVED, and these are what make that mean something.** The flag that swaps
 -- the loss also produces the marker, so the name and the loss cannot be two writers for one fact on
--- the artifact the 77.43% run trained on.
+-- the artifact the RSB-A3 run trained on.
 -- The ONLY thing left to pin is the spelling.
 -- These are the full four-marker compositions, in order: optimizer, k, batch, `wx`, `clip`, `bce`.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
@@ -1550,7 +1550,7 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
          true true true == "lambacc8x64wxclipbce"
 -- The RSB-A3 run's own artifact, pinned character for character: no `wx`, no `clip`, `bce` only.
--- This is the name whose graph produced 77.43%, and it must not move.
+-- This is the name whose graph produced the A3 result, and it must not move.
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
          false false true == "lambaccdp8x64bce"
 #guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
@@ -1626,8 +1626,8 @@ end Proofs.StableHLO
 --      the `default` recipe. The shim's own comment calls it a stream-level APPROXIMATION.
 --
 -- **What these artifacts ARE good for**: they are A2's graph minus two regularisers, so they price
--- the tier honestly (the step cost is unaffected by EMA and by sd 0.05). What they are not is an
--- 79.8%-target run. Quote them the way A3's deltas are quoted, never as "RSB-A2 reproduced".
+-- the tier honestly (the step cost is unaffected by EMA and by sd 0.05). What they are not is a
+-- run at A2's published target. Quote them the way A3's deltas are quoted, never as "RSB-A2 reproduced".
 --
 -- **THE SHIM QUESTION, SETTLED BY MEASUREMENT AND NOT BY READING.** Generated and diffed:
 --   `generated_resnet50_imagenet_shim.py` (recipe `default`) and
@@ -1733,26 +1733,22 @@ end Proofs.StableHLO
 --
 -- **THEY NEED MORE OF THE CARD THAN THE PLUGIN HANDS OUT BY DEFAULT, AND THAT DEFAULT IS NOT A
 -- HARDWARE LIMIT.** `PJRT_Client_Create` with no create options takes the GPU plugin's BFC
--- default of `memory_fraction = 0.75`, which on a 16 GB 4060 Ti reserves **11.68 GiB** and leaves
--- ~4.3 GiB of the card unreachable. A "% of budget" figure taken against that number is against
+-- default of `memory_fraction = 0.75`, which on a 16 GB 4060 Ti reserves three quarters of the
+-- card and leaves the rest unreachable. A "% of budget" figure taken against that arena is against
 -- a DEFAULT, not the card.
 --
 -- `ffi/pjrt_ffi.c` passes `memory_fraction` as a create option (`LEAN_MLIR_MEM_FRACTION`), and
--- XLA's own log line is the measurement: *"XLA backend allocating 15.11GiB … for BFCAllocator"*
--- at 0.97 against 11.68 unset. `XLA_PYTHON_CLIENT_MEM_FRACTION` does not reach here — the plugin
+-- XLA's own "XLA backend allocating … for BFCAllocator" log line is the measurement, at 0.97 and
+-- unset (both quoted in `runs/2026-08-27-r50-a2-a1-ema-fifth-region/README.md`). `XLA_PYTHON_CLIENT_MEM_FRACTION` does not reach here — the plugin
 -- does not read it (the string is absent from `xla_cuda_plugin.so`); JAX's Python layer reads it
 -- and passes the same create option.
 --
---     render                        peak      of 11.68 (default)   of 15.11 (at 0.97)
---     8×64   fp32                   6.18 G      53 %                 41 %
---     8×64   fp32 + EMA + sd        6.42 G      55 %                 42 %
---     8×64   bf16                   4.32 G      37 %                 29 %
---     4×128  fp32                  11.33 G      97 %                 75 %
---     4×128  fp32 + EMA + sd       11.90 G     over                79 %
---     4×128  bf16 + EMA + sd        8.09 G      69 %                 54 %
+-- Each render's compile-time peak against both budgets is in
+-- `runs/2026-08-27-r50-a2-a1-ema-fifth-region/` (`peak_memory.log`, README): the `8×64` renders
+-- and the `4×128` bf16 one fit the default; the `4×128` fp32 ones sit at or over it and fit at 0.97.
 --
--- The fp32 peak MOVES with the budget — 11.52 G measured under the default and 11.90 G under
--- 0.97 — because XLA remateralises less aggressively when it has room. The compile-time number is
+-- The fp32 peak MOVES with the budget — higher under 0.97 than under the default (same README) —
+-- because XLA rematerialises less aggressively when it has room. The compile-time number is
 -- not independent of the allocator, which is worth knowing before quoting one.
 -- So the full (precision × factorisation) square exists: a tier ships with its precision peer.
 -- Running the `4×128` fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`, which is a job-config line

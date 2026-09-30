@@ -648,6 +648,11 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
 private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
   wdzConst wdExclude "126 of 200 params" ++ adamWConsts wdStr
 
+/-- The hand-written line the AdamW train-step banners name beside `trainStepHandNote`'s list:
+    the prelude's `%x → %ximg` reshape, which a `pretty` leaf reads on the gradient path. -/
+private def vitInputReshapeNote : String :=
+  "the input reshape %ximg, "
+
 /-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
     the hand-written `ViTRender.vitTrainStepModuleAdamSched`.
 
@@ -803,10 +808,11 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let retTys := packedTrainRetTys pTy (ema := ema) ++ dpTys
     pure <|
       (if replicas <= 1 then
-        "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n"
+        s!"    // ── ViT-Tiny depth-12 AdamW train step: {trainStepHandNote (hand := vitInputReshapeNote)} ──\n"
        else
         "    // ── ViT-Tiny depth-12 AdamW train step, DATA-PARALLEL over " ++ toString replicas ++
         " replicas ──\n" ++
+        s!"    // {trainStepHandNote (hand := vitInputReshapeNote)}.\n" ++
         "    // The gradients, the per-parameter all_reduce(add)/N between them and the AdamW\n" ++
         "    // triple are all pretty(verified AST): the collective is allReduceMeanF, whose den is\n" ++
         "    // the replica MEAN of the per-replica gradient nodes.\n") ++

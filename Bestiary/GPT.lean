@@ -73,7 +73,7 @@ def gpt1 : NetSpec where
     .dense 40478 768 .identity,
     -- 12 decoder blocks, post-norm (GPT-1 used post-norm before GPT-2
     -- switched to pre-norm). Same parameter count either way.
-    .transformerEncoder 768 12 3072 12
+    .transformerEncoder 768 12 3072 12 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -86,7 +86,7 @@ def gpt2Small : NetSpec where
   imageW := 1
   layers := [
     .dense 50257 768 .identity,
-    .transformerEncoder 768 12 3072 12
+    .transformerEncoder 768 12 3072 12 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -99,7 +99,7 @@ def gpt2Medium : NetSpec where
   imageW := 1
   layers := [
     .dense 50257 1024 .identity,
-    .transformerEncoder 1024 16 4096 24
+    .transformerEncoder 1024 16 4096 24 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -112,7 +112,7 @@ def gpt2Large : NetSpec where
   imageW := 1
   layers := [
     .dense 50257 1280 .identity,
-    .transformerEncoder 1280 20 5120 36
+    .transformerEncoder 1280 20 5120 36 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -125,7 +125,7 @@ def gpt2XL : NetSpec where
   imageW := 1
   layers := [
     .dense 50257 1600 .identity,
-    .transformerEncoder 1600 25 6400 48
+    .transformerEncoder 1600 25 6400 48 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -138,7 +138,7 @@ def tinyGPT : NetSpec where
   imageW := 1
   layers := [
     .dense 1000 128 .identity,
-    .transformerEncoder 128 2 512 4
+    .transformerEncoder 128 2 512 4 (causalMask := true)
   ]
 
 -- ════════════════════════════════════════════════════════════════
@@ -167,13 +167,14 @@ def main : IO Unit := do
   IO.println "  • Zero new Layer primitives. The encoder stack is the same"
   IO.println "    .transformerEncoder used by BERT, ViT, and DETR — the"
   IO.println "    differences between encoder-only and decoder-only models"
-  IO.println "    live in masking and training objective, not layer shapes."
+  IO.println "    live in masking (these specs set causalMask) and training"
+  IO.println "    objective, not layer shapes."
   IO.println "  • Weight tying: GPT's LM head reuses the token-embedding"
   IO.println "    matrix (transposed). Our .dense vocab→D stand-in counts"
   IO.println "    this once, matching the real tied-weights param budget."
-  IO.println "  • GPT-1 predates BPE; GPT-2 introduced the 50257-token BPE"
-  IO.println "    vocab reused by nanoGPT, GPT-3, and basically everything"
-  IO.println "    since."
+  IO.println "  • GPT-1 already used BPE (a 40478-token vocab); GPT-2"
+  IO.println "    introduced the byte-level 50257-token BPE vocab reused by"
+  IO.println "    nanoGPT, GPT-3, and basically everything since."
   IO.println "  • For Karpathy-style single-GPU training, start from GPT-2"
   IO.println "    small (124M). It's small enough to train from scratch on"
   IO.println "    a 24GB consumer card and large enough to produce coherent"

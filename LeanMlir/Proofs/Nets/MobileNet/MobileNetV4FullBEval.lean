@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 
-/-! # MobileNetV4-Conv-M at inference — eval forward + graph + faithfulness, at any resolution
+/-! # MobileNetV4-Conv-M at inference — eval forward + graph + faithfulness, at every input side 32·f
 
 The eval twin of `MobileNetV4FullB.lean`. That file states Conv-M at TRAINING BatchNorm
 (`bnBatchLA`) at 224×224; this one states the same 21-row table at INFERENCE BatchNorm — frozen
@@ -8,7 +8,7 @@ running statistics at all **77** sites, one shared `ε` — and proves its typed
 it (`mnv4FwdGraphBFullEval_faithful`). That is the graph of `mnv4_fwd_eval.mlir`,
 `mnv4in_fwd_eval.mlir` and `mnv4in_fwd_eval_s256.mlir`.
 
-**One statement, every input size.** The net is stated at a binder `f`, the final feature side:
+**One statement, every input side `32·f`.** The net is stated at a binder `f`, the final feature side:
 the input is `32f`, the stem out `16f`, the fused stage `8f`, and the three stride-2 rows take it to
 `4f`, `2f`, `f`. The committed evals are `f = 7` (224) and `f = 8` (256, timm's test size for
 `mobilenetv4_conv_medium.e500_r224_in1k`) — `mnv4FwdChainB`'s own `f`. The ladder is written as
@@ -29,6 +29,12 @@ are the eval render's: each BN's statistics are `%{site}mu` / `%{site}var` with 
 render's `mnv4Bn` `statP` (`stn`, `f0cn`, `u{p}qn`, …, `hn`). `FwdGraphTextTies` checks every
 block, the stem, the fused stage and the head against the render at `.eval`, at both `f = 7` and
 `f = 8`.
+
+**The artifacts are the zero-bias instance.** `Mnv4BWeightsEval` carries a conv-bias field at every
+conv site (`sb`, `be`, `bz`, the slots' `b`, …), which `den` reads, while the graph spells each one
+as the `%zb{c}` zero operand. So the committed evals are the instance with every conv bias `0`.
+At inference BatchNorm a conv bias does not cancel as it does under batch BN, so this is a
+restriction, not a reparametrisation.
 -/
 
 namespace Proofs.StableHLO
@@ -105,7 +111,7 @@ def Mnv4DWEvalSlot.params {c : Nat} : {k : Nat} → Mnv4DWEvalSlot c k → Mnv4D
 
 /-- **One UIB block's inference parameters, typed by its table row** — `UibParams`'s eval twin:
     each BN carries its frozen `μ, σ²` and no `ε` (the net shares one). The row's `h` appears in
-    no field, which is what lets one record serve every input size. -/
+    no field, which is what lets one record serve every input side `32·f`. -/
 structure UibEvalParams (s : UibSpec) where
   pre : Mnv4DWEvalSlot s.ic s.preDWk
   We : Kernel4 (s.ic * s.expand) s.ic 1 1
@@ -123,8 +129,10 @@ structure UibEvalParams (s : UibSpec) where
   vz : Vec s.oc
 
 /-- **Every MobileNetV4-Conv-M inference parameter**, generic in the class count: the 233
-    parameters of `Mnv4BWeights` without its per-site `ε`s, plus the 77 BN sites' `μ, σ²`. Field
-    names follow the render's SSA prefixes. -/
+    parameters of `Mnv4BWeights` without its per-site `ε`s, plus the 77 BN sites' `μ, σ²`, plus
+    a conv-bias vector per conv site. Field names follow the render's SSA prefixes. The graph
+    binds every conv bias to the `%zb{c}` zero operand, so the committed evals are the instance
+    with every conv-bias field `0`. -/
 structure Mnv4BWeightsEval (nCls : Nat) where
   sW : Kernel4 32 3 3 3
   sb : Vec 32

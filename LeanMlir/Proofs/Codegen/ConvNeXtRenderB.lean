@@ -545,7 +545,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- THE CALL ORDER IS THE EMIT ORDER, and it must match `ConvNeXtRender`'s exactly —
     -- `pretty` allocates fresh SSA names from the state monad as it is CALLED, so a renderer that
     -- calls the γ/β tails before `Wd`/`bd` numbers the same graph differently and
-    -- `convnext-fwd-b-tie` goes red on 24 lines that are otherwise character-for-character equal.
+    -- `convnext-fwd-b-tie` goes red on lines that are otherwise character-for-character equal.
     -- (It also puts the names out of order against the concatenation below, i.e. use-before-def.)
     -- Order here: dotOut → LN input-VJP → Wd → bd → LN γ → LN β.
     let (cHg, nHg) ← headLnGammaTailB bB "%hng" F.gap cot_hn V.dims[3]!
@@ -759,12 +759,12 @@ end Proofs.StableHLO
 -- What stays f32, here as in every other bf16 render: LayerNorm, GELU, LayerScale, the drop-path
 -- masks, every BIAS gradient (`Σ_{batch,spatial} dy` is a reduction, not a contraction — nothing
 -- for a tensor core to do), the classifier head, and the whole AdamW tail including the clip fold.
--- This carve-out is NOT a fixed tax: it cost MobileNetV2 nothing (1.92× verified
--- against a 1.94× JAX reference) and EfficientNet-B0 almost everything (1.09×). Which one ConvNeXt
--- resembles is a measurement, not a prediction.
+-- This carve-out is NOT a fixed tax: it cost MobileNetV2 nothing (verified matches the JAX
+-- reference) and EfficientNet-B0 almost all of its bf16 gain (planning/archive/bf16_renderer.md).
+-- Which one ConvNeXt resembles is a measurement, not a prediction.
 --
--- SINGLE-DEVICE IS THE ARM THAT MEANS ANYTHING. MobileNetV2 measures 1.92× on one GPU
--- and 1.37× on four from the SAME GRAPH — the loss is the shim feed first and the f32 all-reduce
+-- SINGLE-DEVICE IS THE ARM THAT MEANS ANYTHING. MobileNetV2's bf16 gain is much smaller on four
+-- GPUs than on one from the SAME GRAPH — the loss is the shim feed first and the f32 all-reduce
 -- second, neither of which is a statement about the renderer. Read any 4-replica number here as a
 -- SYSTEM result and check `SHIM_WORKERS` before ever blaming the emit.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdropbf16_train_step.mlir"
@@ -842,7 +842,8 @@ end Proofs.StableHLO
 -- recipe.
 --
 -- **DO NOT ASSUME THIS IS FASTER.** A bf16 op can be SLOWER than its f32 peer with every gate
--- green — ViT's stem wgrad runs 0.19× — so the render existing says nothing about the wall clock.
+-- green — ViT's bf16 stem wgrad is several times slower than f32 — so the render existing says
+-- nothing about the wall clock.
 -- Measure with `scripts/probes/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
 -- system number that also moves with `PJRT_FFI_RESIDENT` (on by default) and the shim feed.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir"
@@ -918,7 +919,7 @@ end Proofs.StableHLO
     (sd := true) (V := Proofs.StableHLO.cnxBase))
 -- **B's PAIR RENDERS, at T's batch**, as S's: 64 per replica × 4 = global 256, the EMA shadow, bf16.
 -- The size question the app docstring raised is answered by a compile probe (2026-09-29): the DP
--- render peaks at **9.53 GiB of the plugin's 11.68 default**, so B needs no accumulation render
+-- render's peak fits inside the plugin's default arena, so B needs no accumulation render
 -- and no `LEAN_MLIR_MEM_FRACTION` (0.97 OOMs ConvNeXt's bf16 arms outside the pool).
 -- `vit-ema-drop-render convnextbin` pins the arity.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_emawxclipdropbf16_train_step.mlir"
@@ -941,7 +942,7 @@ end Proofs.StableHLO
 -- Every ConvNeXt artifact but one renders from the batched traversal. The four forwards
 -- (`convnext_fwd`, `convnextin_fwd`, `convnextsin_fwd`, `convnextbin_fwd`) render BYTE-IDENTICALLY
 -- off this chain and the per-example one, and each of the thirteen AdamW/EMA train steps differs
--- from its per-example render on exactly 78 lines, every one the conv input-VJP's
+-- from its per-example render only on lines that are the conv input-VJP's
 -- `transpose`/`reverse` pair in the other order (commuting ops on disjoint axes;
 -- `tests/TestConvNeXtFwdBTie.lean` allows that pair and nothing else). The numeric licence is the
 -- keep = 1 gate, per-example against batched, 0 of 83,478,846 floats differing after three AdamW
@@ -976,7 +977,7 @@ end Proofs.StableHLO
 -- control rather than an absolute bound, and gates the SPREAD as well as the magnitude — a
 -- cotangent perturbation clears the magnitude gate while disturbing 178/180 params. To re-run:
 --
---   git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir > /tmp/retired.mlir
+--   git show "$(git log --format=%h --grep='ConvNeXt AdamW render — built and tied')":verified_mlir/convnext_adam_train_step.mlir > /tmp/retired.mlir
 --   IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie /tmp/retired.mlir \
 --     verified_mlir/convnext_adam_train_step.mlir
 #eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
@@ -994,10 +995,10 @@ end Proofs.StableHLO
 -- checkpoints carry no header, so a 3-region file read as 4 resumes silent garbage.
 --
 -- `%emad`/`%oemad` are ARGS rather than constants because the reference's decay is time-varying,
--- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. The
--- reference's own measurement of what dropping that correction costs: a shadow still
--- holding 12.8% of the random init at epoch 66, scoring **0.00% top-1** while the live weights
--- scored 70.48%. An 80-epoch Imagenette run is 2.4 τ, i.e. inside that regime.
+-- `d = min(decay, (1+t)/(10+t))` — TF's warmup-corrected `ExponentialMovingAverage`. Without
+-- that correction the shadow still carries a visible share of the random init after tens of
+-- epochs and scores no top-1 at all while the live weights train (`planning/archive/ema.md`); an
+-- 80-epoch Imagenette run is 2.4 τ, i.e. inside that regime.
 #eval IO.FS.writeFile "verified_mlir/convnext_ema_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "-0.010000" "32.0"
     (ema := true))
@@ -1118,8 +1119,8 @@ end Proofs.StableHLO
     (bB := cnxInBS))
 
 -- ── THE IMAGENET EMA PEER ──────────────────────────────────────────────────────────────────────
--- ConvNeXt's reference number IS the EMA shadow's — **75.93%**, against a live best of 76.28% — so
--- without this render the `convnextin` pair is not comparable at all, whatever else it carries.
+-- ConvNeXt's reference number IS the EMA shadow's top-1, not the live weights', so without this
+-- render the `convnextin` pair is not comparable at all, whatever else it carries.
 #eval IO.FS.writeFile "verified_mlir/convnextin_ema_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin" (ema := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"

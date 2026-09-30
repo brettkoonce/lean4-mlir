@@ -64,15 +64,20 @@ Input: 448 × 448 × 3
 ```
 
 The paper uses **Leaky ReLU** (slope 0.1) after every conv / FC except
-the final output. Our `Activation` enum has `{relu, relu6, identity}`
-only, so the bestiary spec below uses `relu` with a prose note. The
-architectural shape and param count are unchanged by that substitution.
+the final output. Our `Activation` enum has no leaky ReLU, so the
+bestiary spec below uses `relu` with a prose note. The architectural
+shape and param count are unchanged by that substitution.
+
+`conv2d` has no stride, so v1's two stride-2 convs (the 7×7 stem and the
+last conv of block 5) run at stride 1 here and the body ends at 28×28, not
+7×7. The head's fan-in is pinned to the paper's `7·7·1024`, so the printed
+count is the paper's head on this body.
 
 ## Variants
 
-- `yolo` — full YOLOv1, 24 conv layers + 2 FC. ~270M params total,
-  with ~205M in the first FC layer alone.
-- `fastYolo` — 9 conv + 2 FC, ~163M params. Faster, worse AP.
+- `yolo` — full YOLOv1, 24 conv layers + 2 FC. Most of its parameters
+  are the first FC layer's 50176 × 4096 weights.
+- `fastYolo` — 9 conv + 2 FC. Faster, worse AP.
 - `tinyYolo` — scale-model fixture: 6 conv + 2 FC at reduced width.
 
 Note: "tiny-YOLO" in the wild also refers to a specific published
@@ -132,7 +137,7 @@ def yolo : NetSpec where
     .conv2d 1024 512 1 .same .relu,
     .conv2d 512 1024 3 .same .relu,
     .conv2d 1024 1024 3 .same .relu,
-    .conv2d 1024 1024 3 .same .relu,    -- the stride-2 last conv (approximated with .same)
+    .conv2d 1024 1024 3 .same .relu,    -- the paper's stride-2 last conv, at stride 1 here
 
     -- Block 6: two 3×3 at 7×7 resolution
     .conv2d 1024 1024 3 .same .relu,
@@ -140,7 +145,7 @@ def yolo : NetSpec where
 
     -- Head: flatten + 2 FC → reshape to (7, 7, 2·5 + 20)
     .flatten,
-    .dense (7 * 7 * 1024) 4096 .relu,
+    .dense (7 * 7 * 1024) 4096 .relu,   -- fan-in pinned to the paper's 7×7; this body ends at 28×28
     .dense 4096 yoloHeadSize .identity
   ]
 
@@ -437,12 +442,13 @@ def main : IO Unit := do
   IO.println "    in a mainline YOLO — interesting inflection point. Still"
   IO.println "    lightweight (applied to smallest feature map only)."
   IO.println ""
-  IO.println "  • Paper uses LeakyReLU(0.1) throughout the YOLO family; our"
-  IO.println "    Activation enum has {.relu, .relu6, .identity}. Param"
-  IO.println "    count identical; bestiary simplification."
-  IO.println "  • v1's 50176 → 4096 FC alone takes ~205M of the ~270M total."
+  IO.println "  • v1–v3 use LeakyReLU(0.1), which our Activation enum lacks;"
+  IO.println "    their specs use .relu (param count identical). v5 onward"
+  IO.println "    use SiLU."
+  IO.println "  • v1's 50176 → 4096 FC holds most of its parameters."
   IO.println "    This is why v2+ dropped FCs for convolutional output heads"
   IO.println "    (first with anchors in v2-v7, then anchor-free from v8)."
-  IO.println "  • Stride-2 convs are approximated with conv+maxPool-2 since"
-  IO.println "    our conv2d is stride-1-only in v1; the convBn primitive"
-  IO.println "    (used from v3 onward) DOES have a stride param."
+  IO.println "  • conv2d is stride-1 only, so v1's two stride-2 convs run at"
+  IO.println "    stride 1 and its body ends at 28×28; the head's fan-in is"
+  IO.println "    pinned to the paper's 7·7·1024. The convBn primitive (used"
+  IO.println "    from v3 onward) DOES have a stride param."

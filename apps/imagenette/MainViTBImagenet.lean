@@ -20,22 +20,22 @@ inert.
 **GLOBAL 512 — DeiT's OWN BATCH — FITS ON FOUR CARDS WITHOUT GRADIENT ACCUMULATION**
 (`runs/2026-08-27-vitb-global512/`).
 
-11.68 GiB is NOT what "the BFC allocator gets on a 16 GB card" — it is what it gets at the CUDA
-plugin's `memory_fraction = 0.75` DEFAULT, which the verified path raises through the create options
-`ffi/pjrt_ffi.c` passes. `LEAN_MLIR_MEM_FRACTION=0.97` gives **15.11 GiB**, and
-`vitbin_adamdp128x4wxclipdrop` then executes on four cards at **13.99 GiB, 93 %** of it. The
-reproduction is one environment variable: unset, the same bytes on the same four devices die
-*"Out of memory while trying to allocate 11.96GiB"*.
+The default arena is NOT what "the BFC allocator gets on a 16 GB card" — it is what it gets at the
+CUDA plugin's `memory_fraction = 0.75` DEFAULT, which the verified path raises through the create
+options `ffi/pjrt_ffi.c` passes. At `LEAN_MLIR_MEM_FRACTION=0.97`, `vitbin_adamdp128x4wxclipdrop`
+executes on four cards (peaks: `runs/2026-08-27-vitb-global512/peak_memory.log`). The reproduction
+is one environment variable: unset, the same bytes on the same four devices die
+`RESOURCE_EXHAUSTED`.
 
-  | variant                        | per-dev | global | peak    | 11.68 GiB | 15.11 GiB |
-  |--------------------------------|---------|--------|---------|-----------|-----------|
-  | `adamdp128x4wxclipdrop`        |     128 |  **512** | 13.99 G | OOM      | ✅ 93 %   |
-  | `adamdp128x4wxclipdropbf16`    |     128 |  **512** | 12.61 G | ✅ 93 %   | ✅ 83 %   |
+  | variant                        | per-dev | global | fraction 0.75 | fraction 0.97 |
+  |--------------------------------|---------|--------|---------------|---------------|
+  | `adamdp128x4wxclipdrop`        |     128 |  **512** | OOM           | ✅            |
+  | `adamdp128x4wxclipdropbf16`    |     128 |  **512** | ✅            | ✅            |
 
-**And it is FASTER, not merely more faithful.** Trainer ms/step over 40 steps on four 4060 Ti,
-2,502 steps/epoch at global 512 against 10,009 at 128 — **291 h fp32 and 178 h bf16** for 300
-epochs, against 322 and 228 at global 128. Same per-invoke-overhead amortisation R50's `4×128`
-shows over `8×64`: a quarter of the steps, each less than four times the cost.
+**And it is FASTER, not merely more faithful.** Global 512 takes a quarter of global 128's steps
+per epoch, each less than four times the cost, so the 300-epoch schedule is shorter in both
+precisions (the trainer probes and wall-clock table are in the run's README). Same
+per-invoke-overhead amortisation R50's `4×128` shows over `8×64`.
 
 **The LR.** `baseLR = 5e-4` is DeiT's **batch-512** rate. At 128×4 it is simply correct, and
 nothing needs rescaling.
@@ -101,12 +101,12 @@ def vitBImagenetConfig : VerifiedConfig where
 
     **AND IT REFUSES WITHOUT `LEAN_MLIR_MEM_FRACTION`.** This is the only driver in the tree
     that does, because it is the only one whose sole fp32 render does not fit in the allocator's
-    DEFAULT arena: the graph peaks at 13.99 GiB and PJRT's CUDA plugin hands out 11.68 unless
-    asked. The refusal exists because the failure it replaces is *misleading*, not merely
-    unhelpful — `RESOURCE_EXHAUSTED: Out of memory while trying to allocate 11.96GiB` reads as
+    DEFAULT arena: the graph's peak exceeds what PJRT's CUDA plugin hands out unless asked
+    (`runs/2026-08-27-vitb-global512/peak_memory.log`). The refusal exists because the failure it
+    replaces is *misleading*, not merely unhelpful — `RESOURCE_EXHAUSTED: Out of memory` reads as
     "this card is too small for ViT-B", and that reading is wrong. A sentence naming the variable costs one `getEnv`.
 
-    The bf16 twin DOES fit at the default (10.88 GiB, measured), so the check exempts it rather
+    The bf16 twin DOES fit at the default (same log), so the check exempts it rather
     than refusing a run that would have worked. And the option only does anything if
     `ffi/libpjrt_ffi.so` is built with the allocator options — that shim is not a lake
     target, so `lake build` reports SUCCESS without recompiling it. This driver cannot see that

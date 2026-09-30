@@ -42,6 +42,11 @@ the sixteen blocks as an opaque `HasVJPDiffAt` witness at its running activation
 two relu clauses are the caller's, inside that witness). One device: the data-parallel step,
 collectives included, is `ResNet34SyncStepTieB`'s. It is about the INPUT gradient; the parameter
 gradients are `ResNet34StepTieB`'s tie.
+
+**bf16 is outside this statement.** The ImageNet run the book reports trains from
+`resnet34in_momdp64bf16`, which swaps the conv nodes for bf16 kinds
+([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among them). What those kinds
+do under sharding is `DataParallel.SyncBf16`; no whole-net statement covers that step.
 -/
 
 -- Build notes (two walls, both measured):
@@ -57,7 +62,7 @@ gradients are `ResNet34StepTieB`'s tie.
 --   sixteen defeq checks between two sixteen-deep nested applications spelled through different
 --   definition chains.
 -- * Not a closing `rfl` in the tie itself: written as seventeen `let`s and closed that way, the tie
---   cost ~45 s and 8 GB under `maxRecDepth 800000`.
+--   was slow and memory-hungry even under `maxRecDepth 800000`.
 
 namespace Proofs
 

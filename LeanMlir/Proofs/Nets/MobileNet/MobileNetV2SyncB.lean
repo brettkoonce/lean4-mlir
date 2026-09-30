@@ -42,8 +42,9 @@ statistics as `%arsum` / `%armean` of `b{k}dgmu` and `b{k}dgvar`, each over a `[
 ## What is NOT claimed here
 
 The backward and the parameter collectives are `MobileNetV2SyncStepTieB.lean`'s. That the `R`
-replicas' inputs are the shards of one batch is the driver's, as in `DataParallel.Sync`. The
-lowerer's `all_reduce` is trusted as every other op's lowering is.
+replicas' inputs are the shards of one batch is the driver's, as in `DataParallel.Sync`. The graph
+is the f32 one; the `*bf16` DP renders' bf16 conv twins are outside it. The lowerer's
+`all_reduce` is trusted as every other op's lowering is.
 -/
 
 namespace Proofs

@@ -395,9 +395,9 @@ inductive LossKind where
 
       This is the lever `perPixelDice` was supposed to be and isn't. Dice's
       gradient carries a factor of `p_i` from the softmax Jacobian, so it
-      vanishes exactly where a collapsed class needs rescuing — measured on
-      BraTS at 0.02% of CE's gradient once p₃ ≈ 2e-5
-      (`scripts/probes/seg_dice_vanishing_grad_probe.py`). CE's seed is `(p - y)/N`,
+      vanishes exactly where a collapsed class needs rescuing: on BraTS it falls
+      to a small fraction of CE's gradient once the collapsed class's `p` is tiny
+      (`scripts/probes/seg_dice_vanishing_grad_probe.py` measures it). CE's seed is `(p - y)/N`,
       which is `-1/N` at `p = 0`: **flat, and wholly indifferent to the
       collapse.** Scaling that by `w_c` therefore keeps a live signal all the
       way down, which Dice cannot do.
@@ -422,7 +422,7 @@ inductive LossKind where
       * **weighted CE amplifies the rare class.** A static, per-*class* factor
         from the label frequencies.
       * **focal suppresses the easy class.** A dynamic, per-*pixel* factor from
-        the current prediction. At `p_t → 1` (confident background — 97% of
+        the current prediction. At `p_t → 1` (confident background, most of
         BraTS) the `(1-p_t)^γ` factor crushes the gradient toward 0. At
         `p_t → 0` it tends to 1 and the gradient tends to CE's: focal does
         **not** amplify the collapsed class, it defunds the majority drowning
@@ -591,9 +591,9 @@ structure TrainConfig where
       byte-identical MLIR.
 
       Motivated by measurement, not folklore: on the unweighted e12 checkpoint
-      the class argmax collapsed onto the two most frequent classes (car 44% +
-      pedestrian 21% of encoded positives), leaving 5/10 classes never predicted
-      and per-class mAP pinned at ~0.0001 — see `scripts/probes/fpn_obj_separation.py`
+      the class argmax collapsed onto the two most frequent classes (car and
+      pedestrian), leaving classes never predicted and their per-class mAP near
+      zero — see `scripts/probes/fpn_obj_separation.py`
       and `scripts/probes/fpn_class_freq.py`. Weights depend only on the target, so
       they are exactly constant w.r.t. the logits and the weighted gradient
       stays finite-difference checkable.
@@ -711,7 +711,7 @@ structure TrainConfig where
       the spec's `imageH/imageW`. 0 = no split (train and eval same resolution). The
       generated `forward` infers the square resolution from the flat input length, so
       the conv stack + global-avg-pool run at either size (A3 trains @160, tests @224
-      → ~2× cheaper per step). imagenet (tfds) path only. -/
+      → about half the pixels per step). imagenet (tfds) path only. -/
   trainRes       : Nat   := 0
   /-- Explicit test-time center-crop ratio (RSB-A3 uses 0.95). 0 = the default
       `_IMG_SIZE/(_IMG_SIZE+32)` ≈ 0.875 ratio. imagenet (tfds) path only. -/
@@ -732,7 +732,7 @@ structure TrainConfig where
   /-- Validate every N epochs (plus always the final epoch) instead of every
       epoch. N ≤ 1 keeps every-epoch validation (byte-identical codegen).
       Cuts eval wall-time on large streaming datasets where the val pass is
-      data-loading-bound (e.g. ImageNet: ~75s/epoch rebuilding the tfds val
+      data-loading-bound (e.g. ImageNet, where every val pass rebuilds the tfds val
       pipeline). ImageNet-streaming main only. -/
   valEveryEpochs : Nat := 1
   /-- Gradient accumulation: run `gradAccumSteps` micro-batches of `batchSize`

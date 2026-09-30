@@ -45,7 +45,7 @@ def resnet34AdamConfig : VerifiedConfig where
     * **`adamdp`** — the DATA-PARALLEL render at bs32: the same graph plus one `all_reduce(add)/N`
       per parameter gradient before its AdamW triple, a **declared trusted carve-out** that the
       render announces in its own output banner.
-    * **`adam256`** — bs256, single device, worth **1.78×** img/s over bs32.
+    * **`adam256`** — bs256, single device, much faster per image than bs32.
     * **`adamdp128`** — bs128 × N replicas, i.e. global 256 data-parallel.
 
     `LEAN_MLIR_BATCH` overrides the batch and **must match the batch the selected variant was

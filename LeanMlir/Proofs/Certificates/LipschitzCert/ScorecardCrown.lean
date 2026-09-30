@@ -4,14 +4,10 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPData
 /-! # CROWN-IBP L∞ scorecard, full 784-dim input — spectrally-capped σ≤2 net (`mlpSF`)
 
 Pixel-L∞ certificates by CROWN linear relaxation over the SAME first-100
-MNIST test subset, nets and ε grid as the IBP tier — a new COLUMN in that
-table, not a new experiment:
-
-| ε | 1/255 | 2/255 | 4/255 | 8/255 |
-|---|---|---|---|---|
-| IBP (box) | 92 | 88 | 69 | 24 |
-| **CROWN** | **93** | **93** | **92** | **81** |
-| PGD-L∞ (upper bracket) | 93 | 93 | 92 | 88 |
+MNIST test subset, nets and ε grid as the IBP tier — a new row beside its
+counts, not a new experiment. The counts CROWN certifies at ε = 1, 2, 4, 8/255,
+beside the IBP box's and the PGD-L∞ upper bracket, are the
+`[SF] ScorecardCrown.lean:` line `scripts/certs/crown_ibp_scorecard.py` prints.
 
 IBP concretizes to an interval after every layer, so the box grows
 multiplicatively with depth. CROWN never concretizes in the middle: each
@@ -3016,7 +3012,11 @@ theorem crownCappedCertse8_certified :
   List.forall_iff_forall_mem.mp
     ⟨certCRSFe8_0, certCRSFe8_1, certCRSFe8_2, certCRSFe8_3, certCRSFe8_4, certCRSFe8_5, certCRSFe8_6, certCRSFe8_7⟩
 
-/-- **The CROWN-IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — MEASURED 93/100 @ 1/255, 93/100 @ 2/255, 92/100 @ 4/255, 81/100 @ 8/255 (IBP box: 92/88/69/24; PGD-L∞ bracket 93/93/92/88). -/
+/-- **The CROWN-IBP L∞ scorecard, spectrally-capped σ≤2 net (`mlpSF`)** — the counts MEASURED over the
+    first 100 images at ε = 1/255, 2/255, 4/255, 8/255 are the `[SF] ScorecardCrown.lean:` line
+    `scripts/certs/crown_ibp_scorecard.py` prints (with the IBP box and the PGD-L∞
+    bracket); the lists below are the emitted witnesses carrying `CertifiedAtLinf`
+    proofs. -/
 theorem scorecard_crown :
     (crownCappedCertse1.length = 8 ∧ ∀ p ∈ crownCappedCertse1, CertifiedAtLinf mlpSF ((1 : ℝ)/255) p.2.1 p.2.2) ∧
     (crownCappedCertse2.length = 8 ∧ ∀ p ∈ crownCappedCertse2, CertifiedAtLinf mlpSF ((2 : ℝ)/255) p.2.1 p.2.2) ∧

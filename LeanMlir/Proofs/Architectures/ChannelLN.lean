@@ -39,7 +39,7 @@ natural and is therefore exactly the type-level cast. `den_reassocS` lifts that 
 -/
 -- Device check (`lake build channel-ln`): the composition ties the closed form at rel 0 forward
 -- and on all three backward pieces, the whole-map `.bnF` control differs at rel 0.82, and the
--- transposes measure free (Δ 0.00 ms on 16.1 ms of whole-net LN).
+-- transposes add no measurable time to the whole-net LN.
 
 namespace Proofs
 

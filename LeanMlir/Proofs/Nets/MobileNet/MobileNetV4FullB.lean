@@ -821,7 +821,7 @@ theorem mnv4FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
     den (mnv4FwdGraphBFull N epsStr w e) = mobilenetv4ForwardBFull N w (den e) := by
   -- `rw`, NOT `simp only`, and the difference is not cosmetic: the `simp only` spelling of
-  -- this same chain elaborates for ~9 minutes and then dies in the KERNEL with a deterministic
+  -- this same chain elaborates for minutes and then dies in the KERNEL with a deterministic
   -- timeout. `simp only` traverses and rebuilds the whole term at each step, and at MNv4's literal
   -- resolutions that is enough for `den` to start unfolding into the graph itself. Outside-in
   -- `rw` never forms those terms.

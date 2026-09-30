@@ -15,8 +15,8 @@ imports every lib of the workspace, which over-imports twice over:
   them dies with `unknown module prefix 'apps'`.
 * **`demos.*` roots** — **the same failure, one prefix over.** A lib rooted
   under `demos` (e.g. `demos.Yolov1VisdroneFpnCommon`) makes `leanLibs` pick up
-  a `demos` root, and this dies with `unknown module prefix 'demos'` — after a
-  1 h 5 m build, since checkdecls runs last.
+  a `demos` root, and this dies with `unknown module prefix 'demos'` — after the
+  full build, since checkdecls runs last.
   The filter is a prefix test against known prefixes, not against "roots this
   workflow does not build", so it does not generalise: a third demo/trainer tree
   will fail the same way. The durable fix is to invert the rule (allow-list

@@ -24,10 +24,10 @@ Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
 
 **`det_shim.sh` is REQUIRED here, and the gate cannot tell you so.** This compares two
 DIFFERENT HLO programs (1×256 against 2×128), so XLA autotuning is free to pick different
-reduction kernels for each, and it does: without the shim the gated `m` region lands anywhere in
-0.0007–0.0034 across identical invocations — 7× to 34× over the 1e-4 threshold, and *red every
-time*, for a reason that has nothing to do with the collective. Under
-`--xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true` it is a reproducible **0.000003**.
+reduction kernels for each, and it does: without the shim the gated `m` region varies across
+identical invocations, always well over the 1e-4 threshold, and is *red every time*, for a reason
+that has nothing to do with the collective. Under
+`--xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true` it is reproducible and far inside it.
 The same requirement is documented on `tests/TestDropPathTie.lean`, whose gate B compares two
 different programs for the same reason.
 

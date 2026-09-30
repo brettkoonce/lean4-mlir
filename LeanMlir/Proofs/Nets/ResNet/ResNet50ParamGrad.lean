@@ -13,8 +13,15 @@ varied. The two losses the artifacts ship discharge `hL`:
 
 * `r50_net_lossGrad_smoothedCE` — the `bce := false` artifacts: `L = smoothedBatchLoss`, `g` the
   six-op label-smoothed chain (`smoothedBatchLoss_grad`).
-* `r50_net_lossGrad_bce` — the `bce := true` artifacts, `resnet50in160_lambaccdp8x64bce` among
+* `r50_net_lossGrad_bce` — the `bce := true` artifacts, `resnet50in160_lambaccdp8x64wxclipbce` among
   them: `L = bceBatchLoss`, the mean over `B×K`, `g` the three-op chain (`bceBatchLoss_grad`).
+
+**Scope.** Every node here is an f32 `*GradB` node on one replica. The bf16 nodes (`*GradBBf16`)
+that `resnet50in_momdp64bf16` and `resnet50in160_lambaccdp4x128wxclipbcebf16`, the book's ImageNet
+runs, emit are outside this statement, and so are the drop-path forwards (`*drop*`). Sync-BN data
+parallelism is reached by composition: `r50_net_syncTiedB` says each all-reduced gradient is this
+net's tied node at `N := R·N`, which this file's capstone makes the loss's gradient at the global
+batch.
 
 **How.** `ResNet34ParamGrad`'s three layers, with R34's stem and head bundles reused verbatim (the
 stem and head ARE R34's functions at R50's widths):
@@ -1071,7 +1078,8 @@ theorem r50LossSmoothAtB_of_smoothAtB {N q nCls : Nat} {w : R50BWeights nCls}
     window dead or tied only between cells reading identical input patches, at the real
     activations (`R50LossSmoothAtB`). The loss enters only through `hL`;
     `r50_net_lossGrad_smoothedCE` and `r50_net_lossGrad_bce` discharge it for the two losses the
-    artifacts ship. -/
+    artifacts ship.
+    The nodes are the f32 ones on one replica (the module's Scope). -/
 theorem r50_net_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (hx : R50LossSmoothAtB N q w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
@@ -1174,7 +1182,7 @@ theorem r50_net_lossGrad_smoothedCE (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
-/-- **The `bce := true` artifacts** (`resnet50in160_lambaccdp8x64bce` among them): every node is
+/-- **The `bce := true` artifacts** (`resnet50in160_lambaccdp8x64wxclipbce` among them): every node is
     the derivative of the batched BCE-with-logits `bceBatchLoss`, the mean over `B×K`, `g` the
     three-op cotangent at the committed divisor `N·K`. No hypothesis on the target. -/
 theorem r50_net_lossGrad_bce (N q : Nat) {nCls : Nat}

@@ -154,13 +154,10 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
 -- — transpose channels, flip the kernel spatially, convolve. Under
 -- `⟦conv⟧ := conv2d` (D3) that graph denotes a forward `conv2d` of the
 -- reversed-swapped kernel, so the backward bridge reduces to the
--- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean`
--- only *asserts* in prose (in `CNN.lean`, "Equivalent under the partial
--- bijection …") and never proves — the repo deliberately uses the
--- (co, ho, wo) form of `conv2dInputGradFormula` to avoid this bijection.
--- Here it is discharged by expansion at the concrete shapes the Spatial
--- instance uses (the partial-bijection-free route the repo wanted). The
--- general-shape proof is the remaining Phase-2 item.
+-- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))`.
+-- `convBackDenote_eq_input_grad_formula` proves it at every shape with odd
+-- `kH`, `kW`, against the (co, ho, wo) form `conv2dInputGradFormula`;
+-- `conv_back_bridge_1to2` / `_2to2` are its instances at two 3×3 shapes.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Spatial reversal of a kernel index: `k − 1 − i`. -/
@@ -275,8 +272,7 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
   simp only [conv2d, reverseSwap, zero_add, conv2dInputGradFormula]
   exact Finset.sum_congr rfl fun co _ => reverseSlab_eq_gradSlab hkH hkW (W co ci) (dy co) hi wi
 
-/-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
-    conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
+/-- **Conv backward bridge, 1→2 channels (`Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
     graph denotes the proven conv input-VJP `(conv2dHasVJP3 W b).backward`.
     An instance of the general `convBackDenote_eq_input_grad_formula` (3×3 is odd). -/
 theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
@@ -285,8 +281,7 @@ theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
   show conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy
   exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
-/-- **Conv backward bridge, 2→2 channels (the Spatial instance's second
-    conv: `Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape — also a
+/-- **Conv backward bridge, 2→2 channels (`Kernel4 2 2 3 3` at 4×4).** Same identity at the 2→2 shape — also a
     one-line instance of the general lemma. -/
 theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
     (x : Tensor3 2 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
@@ -340,10 +335,9 @@ theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
 -- multiply, so each bridge is definitional — the smooth-activation
 -- analogue of `dense_back_bridge`.
 --
--- (BN/LayerNorm's 3-term rank-1 backward and softmax's rank-1 backward
--- are closed forms too, but their emitted graphs are multi-op
--- reduce+elementwise — they need a `reduce`/`broadcast` IR extension, and
--- SE is compositional; those are the remaining smooth layers.)
+-- (BN/LayerNorm's and softmax's rank-1 backwards are multi-op
+-- reduce+broadcast+elementwise graphs; the `sumBroadcast` node carries them
+-- in the BN and softmax sections below, and SE's fan-in after that.)
 -- ════════════════════════════════════════════════════════════════
 
 /-- The emitted elementwise-activation backward graph: `stablehlo.multiply`
@@ -533,8 +527,8 @@ theorem maxpool3_node_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
   funext ci hi wi
   simp only [Back3.denote, maxPoolBackDenote, maxPool2HasVJPAt3]
 
-/-- The `Back3` conv node denotes the proven conv backward, at the Spatial
-    instance's `1→2` conv shape (via `conv_back_bridge_1to2`). -/
+/-- The `Back3` conv node denotes the proven conv backward, at the `1→2`
+    3×3 conv shape (via `conv_back_bridge_1to2`). -/
 theorem conv3_node_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
     (Back3.conv W Back3.cot).denote dy = (conv2dHasVJP3 W b).backward x dy := by
@@ -579,7 +573,7 @@ theorem maxpool_flatten_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
              HasVJPAt3.toHasVJPAt, maxPoolBackDenote, maxPool2HasVJPAt3,
              Tensor3.flatten]
 
-/-- **Flatten bridge, conv (Spatial `1→2` shape).** The flattened `Back3`
+/-- **Flatten bridge, conv (`1→2` 3×3 shape).** The flattened `Back3`
     conv graph denotes the proven flattened conv layer backward
     `HasVJP3.toHasVJP (conv2dHasVJP3 W b)` — chains `conv_back_bridge_1to2`
     (the reversed-kernel identity) with the `Tensor3.flatten` decode. -/

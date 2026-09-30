@@ -25,7 +25,6 @@ text" and "XLA ran that text correctly". One sentence, one row.
 | Smooth input: `R34SmoothAtB`, `R50SmoothAtB`, the MobileNetV2/V4 relu6/relu clauses | the whole-net VJPs at a point | at each net's seal witness (`seal_smooth`); MobileNetV2/V4's clauses are weight-only | at trained weights on real inputs; the kink convention is `fidelity` item 2 |
 | Positivity: `R34PosB`, `R50PosB`, `MNV2PosB`, `B0Weights.EpsPos` | the batched whole-net chains and step ties | at the seal weights (`seal_pos`) for ResNet-34/50 and MobileNetV2 | `B0Weights.EpsPos` at any concrete weights; no net at the shipped constants |
 | `FloatModel` (every theorem is `∀ M`) | the float bridges and the SGD-descent chain | `binary32`, `fp8E4M3`: round-to-nearest on a p-bit grid (`rndP_err`) | that the hardware rounds on that grid (Trusted) |
-| `FaithfulFloatModel` (subnormal floor) | `FloatSubnormalBridge.lean` only | `exactFaithful` (`rnd = id`) | a binary32 instance; nothing downstream consumes one |
 | `FloatClose` magnitude window `A → B` | per-operator closeness and its compositions | per operator, by the caller | a whole-net window (`fidelity` 4c/4d) |
 | Smoothed class probability in (0,1) | `smoothing_certified_radius_classifier` | `smoothing_cp_certified_net`, instantiated at the trained pooled `mlpT` (`smoothing_cp_certified_mlpT`) | the 784-dim driver checkpoints |
 

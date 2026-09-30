@@ -22,7 +22,7 @@ The raised arena is for f32 only: in bf16 it crowds out the host-transfer stagin
 `resnet50bce` (`CUDA_ERROR_OUT_OF_MEMORY` on a d2h, not a compile) where the default runs clean.
 
 **ResNet-50 is gated at 4×32 against 1×128**, not at its committed 4×64: XLA's peak for the 1×256
-reference is 14.14 / 14.35 GiB (bf16 / f32), 94–95 % of even the raised arena. Its DP step is
+reference (bf16 or f32) nearly fills even the raised arena. Its DP step is
 rendered at run time (`dpPath := ""`) by the same `resnet50TrainStepFaithfulB` that writes the
 committed `momdp64` / `lambdp64bce` bytes, and `regen_verified_mlir.sh check` pins those to it.
 `resnet50bce` is the LAMB + BCE-with-logits loss at 160² that the A3 renders take; the
@@ -33,8 +33,8 @@ The Imagenette gates (`resnet34-syncbn-check`, `mobilenetv2-syncbn-check`,
 `efficientnet-syncbn-check`) run f32 at 2×32. The artifacts the ImageNet pairs train from are
 bf16, 4-replica and 224²/1000-class, and this gate runs `LeanMlir.SyncBnCheck`'s columns on
 those: the committed 4×64 DP step against a 1×256 single-device step rendered at run time. XLA's
-compiled peak at 256 is 6.2 / 5.8 / 6.7 GiB for R34 / MNv2 / B0 in bf16, inside the default
-arena; R34's f32 step at 256 is not, hence the raised fraction on the f32 line.
+compiled peak at 256 fits the default arena for R34, MNv2 and B0 in bf16; R34's f32 step at 256
+does not, hence the raised fraction on the f32 line.
 
 The DP artifact per net is the one its book pair trained from: R34 `momdp64bf16`, MNv2
 `rmsdp64bf16`. B0's pair trained from `emarmsdp64dropdobf16`, which adds EMA and host-fed

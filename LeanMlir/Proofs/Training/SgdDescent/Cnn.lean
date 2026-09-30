@@ -5834,6 +5834,10 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
     hc hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
+/-- **The binary32 conv-1 bias gradient (FloatModel transcription of the
+    per-example gradient)** — the bias peer of `cnnConv1FloatGrad`: at output channel `o` it is
+    the float SUM `M.sum (cotWin …)` of the same float conv-1-output cotangent slab (the
+    conv-1 ReLU mask times the float conv-2 backward), with no `convPadWin` left operand. -/
 noncomputable def FloatModel.cnnConv1BiasFloatGrad {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)

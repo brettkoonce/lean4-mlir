@@ -108,9 +108,8 @@ def clipRN50ImageEncoder : NetSpec where
 
 /-- Text encoder for CLIP-ViT-B/32: 12-layer causal transformer
     at dim 512 with 8 heads, followed by a projection to the shared
-    512-dim embedding space. NetSpec treats the transformer as `.transformerEncoder`
-    (our primitive doesn't distinguish causal vs non-causal masking — same
-    params, same layer shape; mask is a training-time attention pattern). -/
+    512-dim embedding space. NetSpec states the transformer as `.transformerEncoder`
+    with `causalMask := true` (the mask changes no parameter or layer shape). -/
 def clipTextEncoder : NetSpec where
   name := "CLIP (text encoder)"
   imageH := 77                    -- context length (CLIP uses 77 tokens)
@@ -120,7 +119,7 @@ def clipTextEncoder : NetSpec where
     -- in practice this is an embedding lookup, but param count matches.
     .dense 49408 512 .identity,
     -- 12-layer transformer encoder, dim=512, 8 heads, mlp=2048
-    .transformerEncoder 512 8 2048 12,
+    .transformerEncoder 512 8 2048 12 (causalMask := true),
     -- [EOS]-token pooling + projection to shared embedding space.
     -- Paper uses the [EOS] position's output; we approximate with the
     -- first-token pool (flatten + dense does the rough shape).
@@ -136,7 +135,7 @@ def clipRN50TextEncoder : NetSpec where
   imageW := 1
   layers := [
     .dense 49408 512 .identity,
-    .transformerEncoder 512 8 2048 12,
+    .transformerEncoder 512 8 2048 12 (causalMask := true),
     .dense 512 1024 .identity      -- project to RN50's 1024-dim shared space
   ]
 
@@ -177,7 +176,7 @@ def clipViTL14TextEncoder : NetSpec where
   imageW := 1
   layers := [
     .dense 49408 768 .identity,
-    .transformerEncoder 768 12 3072 12,
+    .transformerEncoder 768 12 3072 12 (causalMask := true),
     .dense 768 768 .identity
   ]
 
@@ -202,7 +201,7 @@ def tinyCLIPTextEncoder : NetSpec where
   imageW := 1
   layers := [
     .dense 1000 64 .identity,            -- small vocab for demo
-    .transformerEncoder 64 4 256 4,
+    .transformerEncoder 64 4 256 4 (causalMask := true),
     .dense 64 128 .identity
   ]
 
@@ -247,10 +246,10 @@ def main : IO Unit := do
   IO.println "    contrastive loss. The paper's contribution is the training"
   IO.println "    pipeline, the 400M-pair dataset, and the observation that"
   IO.println "    the result zero-shot-transfers remarkably well."
-  IO.println "  • The text encoder is a CAUSAL transformer (GPT-style),"
-  IO.println "    but our `.transformerEncoder` doesn't distinguish causal"
-  IO.println "    vs non-causal masking. Params and layer shape are"
-  IO.println "    identical; the mask is an attention pattern, not a layer."
+  IO.println "  • The text encoder is a CAUSAL transformer (GPT-style): the"
+  IO.println "    text specs set `.transformerEncoder`'s causalMask. Params"
+  IO.println "    and layer shape are unchanged; the mask is an attention"
+  IO.println "    pattern, not a layer."
   IO.println "  • Token embedding is expressed as `.dense (vocab × dim)`."
   IO.println "    In practice it's an embedding lookup, but param count"
   IO.println "    matches exactly (a token-embedding table IS a dense layer"

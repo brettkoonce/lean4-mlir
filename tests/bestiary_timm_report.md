@@ -12,18 +12,38 @@ BN, classifier head choices) which are by design.
 | `bestiary-inception` | Inception-v3 (bestiary approximation) | `inception_v3` | 23,816,456 | 23,834,568 | -0.08% vs timm |
 | `bestiary-inception` | Inception-v4 (bestiary approximation) | `inception_v4` | 33,403,816 | 42,679,816 | -21.73% vs timm |
 | `bestiary-xception` | Xception | `xception` | 21,924,976 | 22,855,952 | -4.07% vs timm |
-| `bestiary-convnext` | ConvNeXt-T | `convnext_tiny` | 28,587,496 | 28,589,128 | -0.01% vs timm |
-| `bestiary-convnext` | ConvNeXt-S | `convnext_small` | 50,222,056 | 50,223,688 | -0.00% vs timm |
-| `bestiary-convnext` | ConvNeXt-B | `convnext_base` | 88,589,288 | 88,591,464 | -0.00% vs timm |
-| `bestiary-convnext` | ConvNeXt-L | `convnext_large` | 197,764,072 | 197,767,336 | -0.00% vs timm |
+| `bestiary-vgg` | VGG-11 | `vgg11` | 132,863,336 | 132,863,336 | +0.00% vs timm |
+| `bestiary-vgg` | VGG-13 | `vgg13` | 133,047,848 | 133,047,848 | +0.00% vs timm |
+| `bestiary-vgg` | VGG-16 | `vgg16` | 138,357,544 | 138,357,544 | +0.00% vs timm |
+| `bestiary-vgg` | VGG-19 | `vgg19` | 143,667,240 | 143,667,240 | +0.00% vs timm |
+| `bestiary-vgg` | tiny-VGG | `(no timm equivalent)` | 1,116,970 | — | no timm counterpart |
+| `bestiary-resnet` | ResNet-18 | `resnet18` | 11,689,512 | 11,689,512 | +0.00% vs timm |
+| `bestiary-resnet` | ResNet-50 | `resnet50` | 25,557,032 | 25,557,032 | +0.00% vs timm |
+| `bestiary-resnet` | ResNet-101 | `resnet101` | 44,549,160 | 44,549,160 | +0.00% vs timm |
+| `bestiary-resnet` | ResNet-152 | `resnet152` | 60,192,808 | 60,192,808 | +0.00% vs timm |
+| `bestiary-resnet` | tiny-ResNet (basic blocks) | `(no timm equivalent)` | 175,258 | — | no timm counterpart |
+| `bestiary-densenet` | DenseNet-121 | `densenet121` | 6,972,234 | 7,978,856 | -12.62% vs timm |
+| `bestiary-densenet` | DenseNet-169 | `densenet169` | 12,511,946 | 14,149,480 | -11.57% vs timm |
+| `bestiary-densenet` | DenseNet-201 | `densenet201` | 18,125,258 | 20,013,928 | -9.44% vs timm |
+| `bestiary-densenet` | tiny-DenseNet | `(no timm equivalent)` | 13,738 | — | no timm counterpart |
 | `bestiary-swin` | Swin-T | `swin_tiny_patch4_window7_224` | 28,589,218 | 28,288,354 | +1.06% vs timm |
 | `bestiary-swin` | Swin-S | `swin_small_patch4_window7_224` | 49,907,122 | 49,606,258 | +0.61% vs timm |
 | `bestiary-swin` | Swin-B | `swin_base_patch4_window7_224` | 88,169,376 | 87,768,224 | +0.46% vs timm |
-| `bestiary-mobilevit` | MobileViT-XXS | `mobilevit_xxs` | 1,272,920 | 1,272,024 | +0.07% vs timm |
-| `bestiary-mobilevit` | MobileViT-XS | `mobilevit_xs` | 2,319,288 | 2,317,848 | +0.06% vs timm |
-| `bestiary-mobilevit` | MobileViT-S | `mobilevit_s` | 5,580,920 | 5,578,632 | +0.04% vs timm |
+| `bestiary-mobilevit` | MobileViT-XXS | `mobilevit_xxs` | 1,273,240 | 1,272,024 | +0.10% vs timm |
+| `bestiary-mobilevit` | MobileViT-XS | `mobilevit_xs` | 2,319,672 | 2,317,848 | +0.08% vs timm |
+| `bestiary-mobilevit` | MobileViT-S | `mobilevit_s` | 5,581,560 | 5,578,632 | +0.05% vs timm |
 | `bestiary-squeezenet` | SqueezeNet 1.0 | `(no timm equivalent)` | 1,251,400 | — | no timm counterpart |
 | `bestiary-squeezenet` | SqueezeNet 1.1 | `(no timm equivalent)` | 1,238,440 | — | no timm counterpart |
 | `bestiary-shufflenet` | ShuffleNet 1.0× (g=3) | `(no timm equivalent)` | 1,914,736 | — | no timm counterpart |
-| `bestiary-shufflenetv2` | ShuffleNet v2 1.0× | `(no timm equivalent)` | 2,286,710 | — | no timm counterpart |
+| `bestiary-shufflenetv2` | ShuffleNet v2 1.0× | `(no timm equivalent)` | 2,287,734 | — | no timm counterpart |
 | `bestiary-lenet` | LeNet-5 | `(no timm equivalent)` | 61,706 | — | no timm counterpart |
+| `bestiary-highway` | Highway-50 — main path H(x) | `(no timm equivalent)` | 2,550 | — | no timm counterpart |
+| `bestiary-highway` | Highway-50 — transform gate T(x) | `(no timm equivalent)` | 2,550 | — | no timm counterpart |
+| `bestiary-highway` | Highway-100 — main path H(x) | `(no timm equivalent)` | 10,100 | — | no timm counterpart |
+| `bestiary-highway` | Highway-100 — transform gate T(x) | `(no timm equivalent)` | 10,100 | — | no timm counterpart |
+| `bestiary-highway` | tiny-Highway — main path H(x) | `(no timm equivalent)` | 72 | — | no timm counterpart |
+| `bestiary-highway` | tiny-Highway — transform gate T(x) | `(no timm equivalent)` | 72 | — | no timm counterpart |
+| `bestiary-wrn` | WRN-28-10 | `(no timm equivalent)` | 36,481,434 | — | no timm counterpart |
+| `bestiary-wrn` | WRN-40-2 | `(no timm equivalent)` | 2,243,994 | — | no timm counterpart |
+| `bestiary-wrn` | WRN-22-8 | `(no timm equivalent)` | 17,159,898 | — | no timm counterpart |
+| `bestiary-wrn` | tiny-WRN (10-2) | `(no timm equivalent)` | 304,154 | — | no timm counterpart |

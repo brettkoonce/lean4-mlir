@@ -48,11 +48,11 @@ new primitive** is the selective state-space scan; everything else is just
 orchestration around it. Following the same philosophy as our treatment of
 multi-head attention (one bundled `mhsaLayer`) and the transformer encoder
 (one bundled `transformerEncoder`), we expose the whole Mamba block as a
-single `Layer` constructor. The book's Chapter-N can unpack the innards
+single `Layer` constructor. A fuller treatment could unpack the innards
 when it matters; the `NetSpec` stays readable.
 
-For the proof side (Chapter-VJP), proving `mambaBlockHasVJPMat` would
-require an axiom for the selective-scan VJP plus composition with our
+On the proof side, a Mamba block VJP would need a proved VJP for the
+selective scan plus composition with our
 existing pieces (dense, SiLU via `pdiv_relu`-style swap, elementwise gate
 via `elemwiseProductHasVJP`, residual via `biPath`). Not done here —
 the bestiary is pure architecture, no VJP commitment.
@@ -159,4 +159,4 @@ def main : IO Unit := do
   IO.println "    per block. Matches Gu & Dao's reported counts within ~5%."
   IO.println "  • Input is treated as pre-embedded (L, D) tokens; token-"
   IO.println "    embedding layer not shown (same simplification as ViT's"
-  IO.println "    patch embedding being bundled into one axiom)."
+  IO.println "    patch embedding being bundled into one Layer constructor)."

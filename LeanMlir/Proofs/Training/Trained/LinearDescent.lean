@@ -5,13 +5,13 @@ import LeanMlir.Proofs.Float.Binary32Instance
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
-arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
+arithmetic in-kernel. Canonical surface: [`Proofs/Nets/Small/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
 `binary32_linear_sgd_descends_concrete` (Float/Binary32Instance.lean) holds only at
 the degenerate `W = 0` net — a satisfiability witness. This file gives a trained
 instance: **one SGD step with the FloatModel binary32 gradient on a TRAINED,
-/128-rationalized bias-free 49→10 pooled-MNIST linear classifier (test acc
-0.874) decreases the real cross-entropy loss of one example**, MNIST test
+/128-rationalized bias-free 49→10 pooled-MNIST linear classifier (the generator
+prints its test accuracy) decreases the real cross-entropy loss of one example**, MNIST test
 image #8, with learning rate 1/8192. The update is taken in ℝ and the
 `exp` is exact (`fexp := Real.exp`, `eexp := 0`); the rounding model is the
 CONSTRUCTED `rndP 23` grid (`binary32`), not an assumed one.
@@ -36,7 +36,7 @@ weights/input are DATA. -/
 namespace Proofs
 namespace TrainedLinearDescent
 
-/-- Trained linear weights (input×class, entries `k/128`), test acc 0.874. -/
+/-- Trained linear weights (input×class, entries `k/128`); the generator prints their test accuracy. -/
 noncomputable def Wd : Mat 49 10 :=
   ![![((2 : ℝ)/128), ((24 : ℝ)/128), ((-25 : ℝ)/128), ((-2 : ℝ)/128), ((-23 : ℝ)/128), ((4 : ℝ)/128), ((-17 : ℝ)/128), ((5 : ℝ)/128), ((-4 : ℝ)/128), ((19 : ℝ)/128)],
     ![((-4 : ℝ)/128), ((6 : ℝ)/128), ((-23 : ℝ)/128), ((-14 : ℝ)/128), ((-17 : ℝ)/128), ((-8 : ℝ)/128), ((19 : ℝ)/128), ((-5 : ℝ)/128), ((-12 : ℝ)/128), ((14 : ℝ)/128)],

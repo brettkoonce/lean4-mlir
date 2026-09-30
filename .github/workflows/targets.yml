@@ -77,6 +77,31 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
           exit $rc
 
+      - name: No unchecked numbers in comments (planning/rubric_review.md, decision 6)
+        # Measured results, codebase counts, file:line and commit hashes in comments go stale
+        # with nothing to re-check them. Spec constants and statement-backed counts are listed in
+        # scripts/gates/comment_numbers_allow.tsv. Here, not in the path-filtered proofs.yml,
+        # because the scan covers apps/, demos/, jax/, the lakefile, the yaml and the workflows.
+        run: |
+          set -o pipefail
+          rc=0
+          python3 scripts/gates/comment_numbers.py 2>&1 | tee /tmp/numbers.log || rc=$?
+          {
+            echo "## Comment numbers"
+            echo ""
+            if [ $rc -eq 0 ]; then
+              sed -n 's/^✓ /✅ /p' /tmp/numbers.log
+            else
+              echo "❌ **Unchecked numbers in comments** — name the source (run dir, theorem,"
+              echo "generator) instead, or allow a spec constant in \`comment_numbers_allow.tsv\`."
+              echo ""
+              echo '```'
+              grep '✗' /tmp/numbers.log
+              echo '```'
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+          exit $rc
+
       - name: verified_mlir/MANIFEST.md is current
         # The index of the committed artifacts (writer, variant decode, runs that compiled each).
         # Needs no Lean: `git grep` for the writers, tracked `runs/` logs for the counts. Moved

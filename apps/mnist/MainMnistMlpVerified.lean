@@ -12,7 +12,8 @@ proven faithful to the Mathlib `fderiv` math (`mlpFwdGraph_faithful`,
 
 The model is the `mlpVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`) — the same
 readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
-(`mlpVerifiedHasVJP` / `mlpVerifiedHasVJPAt`, the latter folded from `vjpCompAt`).
+(`mlpVerifiedHasVJPAt`, folded from `vjpCompAt` at an input where both ReLU
+pre-activations are nonzero).
 It trains through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init).
 The spec stays in `Verified.NetsCore` on purpose: the trainer and the theorem must name
 the *same* object, or the proof would be about a different network than the one

@@ -28,8 +28,8 @@ built from the same constants.
 
 open Proofs.StableHLO
 
-/-- The reference's ramp, restated here from `jax/Jax/Codegen.lean:2031-2040` rather than imported
-    from either side — so this is a third reading, not a copy of one of the two under test. -/
+/-- The reference's ramp, restated here from `emitForward`'s `.mbConv` arm in `jax/Jax/Codegen.lean`
+    rather than imported from either side — so this is a third reading, not a copy of one of the two under test. -/
 private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
   1.0 - dropRate * i.toFloat / (Nat.max 1 (totalDrop - 1)).toFloat
 

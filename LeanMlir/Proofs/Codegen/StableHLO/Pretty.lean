@@ -56,8 +56,9 @@ def tyF8 (dims : List Nat) : String :=
     stage-0 block is `96·56·56 = 301056`; stage 3's `3072·7·7` equals stage 1's `192·28·28`. First
     writer won, so 24 of ConvNeXt's pointwise blocks unflattened to a shape with the right element
     count and the wrong layout — which is not a wrong program (the bracket is still an inverse
-    reshape pair) but is exactly the relayout the bracket exists to remove. Measured: 2.434 GB of
-    transposes and 84.45 ms/step keyed by width, **0.122 GB and 68.28 ms** keyed by name.
+    reshape pair) but is exactly the relayout the bracket exists to remove. Keying by name cut
+    ConvNeXt-T's transpose traffic by an order of magnitude and shortened its step
+    (planning/archive/next_session_execution_and_parity.md).
 
     Newest entry first, and no dedup: `fresh` never reuses a name, so a lookup for a value the
     previous token produced hits the head of the list.
@@ -67,8 +68,8 @@ def tyF8 (dims : List Nat) : String :=
     transparent. That chain is `transpose → lnRow → rowScale → rowBias → transpose`, a layout ROUND
     TRIP whose two ends are the same `[c,h,w]` map; without the flag the closing transpose's result
     has no entry, the drop-path multiply that consumes it falls back to flat, and every pointwise op
-    after it on the residual chain goes with it — 0.223 GB of relayout against 0.122 (measured,
-    ConvNeXt-T bf16). And `liftPointwise` must NOT fire on a row view: `[h·w, c]` reshaped to
+    after it on the residual chain goes with it, which measurably grows ConvNeXt-T's relayout
+    traffic (the same plan doc). And `liftPointwise` must NOT fire on a row view: `[h·w, c]` reshaped to
     `[B,c,h,w]` is a DIFFERENT permutation, not an inverse pair, so that one would be a wrong
     program rather than a slow one. -/
 abbrev ShapeTbl := List (String × Nat × Nat × Nat × Bool)
@@ -1020,7 +1021,7 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- ════════════════════════════════════════════════════════════════
 -- § Pointwise ops at their 4-D shape — the NHWC↔NCHW relayout fix
 --
--- WHY THIS EXISTS, and why it is worth 2.3× on EfficientNet-B0.
+-- WHY THIS EXISTS, and why it is worth the most on EfficientNet-B0.
 --
 -- The proof IR carries activations as flat `[B, c*h*w]` vectors, so every 4-D op brackets
 -- itself with `reshape` glue and every pointwise op is emitted at the flat type. A flatten is
@@ -1028,10 +1029,10 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- tensor cores. So a pointwise op emitted flat pins its tensor to NCHW between two NHWC convs
 -- and XLA materialises a physical relayout going in and coming out.
 --
--- Measured on one 4060 Ti, node-granularity nsys: B0 bf16 @64 spent **72.61 ms/step,
--- 54.6% of all GPU time**, in those relayouts (10.486 GB) against its JAX reference's 0.75 ms.
--- ConvNeXt-T 53.2%. MobileNetV2 and ViT, which end up with no relayouts, are FASTER than their
--- references. f32 is immune: XLA keeps f32 convs in NCHW, so the effect cannot appear there
+-- Measured on one 4060 Ti with node-granularity nsys (`planning/archive/next_session_execution_and_parity.md`):
+-- before the fix, B0 bf16 and ConvNeXt-T spent about half of all GPU time in those relayouts,
+-- where their JAX references spend almost none. MobileNetV2 and ViT, which end up with no
+-- relayouts, are FASTER than their references. f32 is immune: XLA keeps f32 convs in NCHW, so the effect cannot appear there
 -- and an f32 A/B reads as a clean null.
 --
 -- The fix is to emit the pointwise ops at the 4-D shape. `liftPointwise` brackets a block with
@@ -1365,8 +1366,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .dotIn w m n, r :: st => do
       let (s, o) ← emitContract none r w [B,m] [m,n] [B,n] dotInOp
       pure (s, o :: st)
-  -- The ONLY emit shape that reaches tensor cores: both operands bf16, result f32.
-  -- The f32 result type IS the "fp32 accumulate" — it is not a convert of a bf16 product.
+  -- Both operands bf16, result f32. `dot_general` reaches the tensor cores with either result
+  -- type; the f32 result is chosen here because it is the accumulator `den` models (no outer
+  -- `rnd` on the sum) — it is not a convert of a bf16 product.
   | .dotInBf16 w m n, r :: st => do
       let (s, o) ← emitContract (some tyBf16) r w [B,m] [m,n] [B,n] dotInOp (lowResult := false)
       pure (s, o :: st)
@@ -1772,7 +1774,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- GAP backward (VJP): divide the per-channel cotangent by h·w, broadcast
       -- it back over the H×W spatial grid, reshape to flat. Reverse of `.gapF`.
       -- Denotes `globalAvgPoolFlat`'s VJP backward `dy[chan idx] / (h·w)`.
-      -- (Text emission best-effort/unverified-vs-IREE; the `den` is proven.)
+      -- No renderer prints this node; it occurs only in proof graphs (EfficientNetBackB0's SE
+      -- backward), so this text has never been compiled or run.
       let nf ← fresh; let dv ← fresh; let bb ← fresh; let o ← fresh
       pure (
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
@@ -1782,7 +1785,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .broadcastBack c h w, r :: st => do
       -- broadcast backward (VJP) = sum over H×W per channel (adjoint of broadcast):
       -- reshape to [B,c,h,w], reduce-add over spatial axes [2,3] → [B,c]. No divide.
-      -- (Text emission best-effort/unverified-vs-IREE; the `den` is proven.)
+      -- No renderer prints this node; it occurs only in proof graphs (EfficientNetBackB0's SE
+      -- backward), so this text has never been compiled or run.
       let xn ← fresh; let z ← fresh; let o ← fresh
       pure (
         s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
@@ -1859,7 +1863,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- strided (stride-2) conv weight grad then SGD: reshape x to the 2h×2w grid and dy
       -- to h×w, zero-upsample dy (interior+high=1 → 2h×2w, the decimate-backward), then the
       -- SAME transpose-trick stride-1 weight-grad conv as `convWeightSgd` on the 2h×2w grid →
-      -- [oc,ic,kH,kW], then θ' = θ − lr·dW. Same op text as `TestResnet34Train.convWGradStrided`.
+      -- [oc,ic,kH,kW], then θ' = θ − lr·dW.
       -- `sWGradGeom` is the odd/even split.
       let (upH, extH, loH, hiH) := sWGradGeom kH h
       let (upW, extW, loW, hiW) := sWGradGeom kW w
@@ -3354,8 +3358,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- bf16 operands, **bf16-TYPED result**, convert back — the CONV shape, applied to a dot.
       -- `dot_general` reaches the tensor cores with EITHER result type, so the result type is
       -- inert for CORRECTNESS; it is not inert for SPEED: an f32 result makes the gemm write twice
-      -- the bytes and take a worse epilogue. Measured on ViT's own MLP chain: f32-result 1.18×,
-      -- bf16-result **1.60×**.
+      -- the bytes and take a worse epilogue. Measured on ViT's own MLP chain, the bf16 result is
+      -- much faster than the f32 one (planning/archive/bf16_renderer.md).
       -- So the convert-back is not "a node that buys nothing" — it is most of the win.
       | "denseRowBackP", [wN], [_N, rows, a, c] | "denseRowBackPBf16", [wN], [_N, rows, a, c] => do
           -- byte-for-byte `.denseRowBack`'s emit; `rows` is per-example rows.

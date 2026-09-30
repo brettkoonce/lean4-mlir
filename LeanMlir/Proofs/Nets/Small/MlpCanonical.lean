@@ -15,7 +15,7 @@ Each declaration below IS the corresponding generic theorem at `(784, 512, 512, 
 `#check` shows the specialized statement; the 3-axiom audit covers them all. Nothing else
 in Lean consumes them: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)
 is this file's only importer, by design.
-The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifiedHasVJP` / `mlpVerifiedHasVJPAt`
+The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifiedHasVJPAt`
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances
@@ -24,7 +24,8 @@ The OTHER MNIST proof population — the trained-weight certificate instances
 /128–/256 rational weights): every margin, Schatten/Gram sum, and LDLᵀ SOS witness is
 exact rational arithmetic checked in-kernel, which is infeasible today at 512-wide
 fan-ins (and the unconstrained canonical net's spectral-product cert is MEASURED
-vacuous — L ≈ 39 ⇒ 0% certified — which is why randomized smoothing, which DOES run on
+vacuous — the uncapped row of `runs/spectral_mlp_phase3.log` certifies almost nothing —
+which is why randomized smoothing, which DOES run on
 the canonical net, exists). Those files carry a reduced-model banner pointing here. -/
 
 namespace Proofs

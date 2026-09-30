@@ -30,9 +30,9 @@ def convnextImagenetConfig : VerifiedConfig where
   epochs    := 300
   batchSize := 64
   -- **ConvNeXt `_init_weights`.** The JAX reference sets `cnxInit := true`
-  -- (`jax/MainConvNeXtImagenet.lean:65`); without it this side uses the He fan-in default, i.e.
-  -- **2.6x-10.2x wider** — 0.2041 vs 0.02 at the 4x4 stem, 0.2020 vs 0.02 at the 7x7 depthwise. Two
-  -- arms with different inits cannot isolate the lowerer, which is the ONE thing this
+  -- (`convNeXtTinyImagenetConfig` in `jax/MainConvNeXtImagenet.lean`); without it this side
+  -- uses the He fan-in default, i.e. **2.6x-10.2x wider** — 0.2041 vs 0.02 at the 4x4 stem,
+  -- 0.2020 vs 0.02 at the 7x7 depthwise. Two arms with different inits cannot isolate the lowerer, which is the ONE thing this
   -- BatchNorm-free net is in the book for.
   -- `runs/2026-09-17-cnx-verified-300ep/RESULTS.md` §7.0 has the per-layer table.
   -- Host-side: no committed artifact moves, and no re-render is needed.

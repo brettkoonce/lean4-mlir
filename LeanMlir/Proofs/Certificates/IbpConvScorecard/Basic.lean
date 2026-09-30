@@ -54,9 +54,10 @@ theorem certsE8_certified :
 
 /-- **The proved core of the scorecard.** Each count is tied to its per-image
     `CertifiedAtLinf3` proofs, not to a list length. These are the 8 images
-    that carry Lean certificates — NOT the measured dataset counts (see the header:
-    79/100, 73/100, 47/100, 13/100 at
-    ε = 1, 2, 4, 8/255), which are exact-rational measurements rather than theorems.
+    that carry Lean certificates — NOT the measured counts over the first 100
+    test images at ε = 1, 2, 4, 8/255 (the `[measure]` lines
+    `scripts/certs/ibp_conv_scorecard.py` prints), which are exact-rational
+    measurements rather than theorems.
     The engine is what makes them sound; the images only witness non-vacuity. -/
 theorem scorecard_ibp_conv :
 (certsE1.length = 8 ∧

@@ -14,8 +14,9 @@ namespace Proofs
 /-- **Round-to-nearest on the unbounded-exponent `p`-bit-significand grid.**
     For `x ≠ 0` with binade exponent `e = Int.log 2 |x|` (i.e. `2^e ≤ |x| < 2^(e+1)`),
     round `x` to the nearest multiple of `2^(e−p)` — a significand of `p` fractional
-    bits, every exponent available. This is IEEE round-to-nearest minus overflow and
-    subnormals, the standard-model idealization. -/
+    bits, every exponent available. Ties go toward +∞ (Mathlib's `round`); IEEE's
+    ties-to-even differs only at ties, where the error bound is the same. Overflow and
+    subnormals are idealized away, as in the standard model. -/
 noncomputable def rndP (p : ℕ) (x : ℝ) : ℝ :=
   if x = 0 then 0 else
     (round (x / (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ))) : ℝ) *

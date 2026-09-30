@@ -117,7 +117,7 @@ opaque dotSlice (a : @& ByteArray) (aOff : USize) (b : @& ByteArray)
     impossible or contingent on seeding an XLA RNG identically across two lowerers and two vendors.
 
     *Not in C either.* This is `keeps.size * bs` floats per step — 288 at EfficientNet's 9 sites and
-    batch 32, against a ~310 ms step — so the C round trip buys nothing measurable, and keeping the
+    batch 32, against a step of hundreds of milliseconds — so the C round trip buys nothing measurable, and keeping the
     draw in Lean keeps the one piece of genuine randomness in the training loop readable and seeded
     where it can be audited. `heInit` is extern because it fills millions of values; this does not.
 
@@ -180,9 +180,9 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
 def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
   -- Host cost: a Lean loop pushing `n` boxed Floats and tiling them out through `write3`
   -- is negligible at B = 32 × 1280, but at EfficientNet-B0's ImageNet job shape
-  -- (256 × 1280) it measured 150.07 ms of a 281 ms step (32×1280: 18.74 ms; `dropScales` at
-  -- 9 sites × 256: 1.83 ms; `F32.const` on the same 327,680 floats: 0.073 ms). A host-side
-  -- cost is a function of the batch, so cost it at the batch the job runs.
+  -- (256 × 1280) it measured over half the step, while `dropScales` at 9 sites × 256 and
+  -- `F32.const` on the same 327,680 floats stayed negligible. A host-side cost is a function of
+  -- the batch, so cost it at the batch the job runs.
   if keep ≥ 1.0 || n == 0 then
     return ← const n.toUSize 1.0
   -- REFUSE below 3 rather than return the all-ones buffer. `dropoutFill` tiles any `n`, but a
@@ -194,7 +194,7 @@ def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
     throw (IO.userError s!"dropoutMask: n = {n} < 3 is below the smallest real call site; a silent \
 all-ones return would be the identity, i.e. dropout switched off")
   -- xorshift64*, the same family `dropScales` and `heInit` use — transcribed into
-  -- `lean_f32_dropout_fill`, which is where the 150 ms above went.
+  -- `lean_f32_dropout_fill`, which is where that host time went.
   dropoutFill keep n.toUSize seed
 
 /-- Concatenate multiple ByteArrays. Fast (memcpy per chunk). -/

@@ -28,8 +28,10 @@ and `le_stdNormalQuantile_of_scan`/`smooth_radius_dec` turn one O(index)
 lookup against the one-shot literal into a certified decimal radius — see
 the generated `Smoothing.DecScorecard` (279 images). The literal is
 verified in CHUNKS (`phiScanRevFrom` + `phiScanRevFrom_append`): one
-whole-grid evaluation peaks at 15 GB of retained kernel-cache bignums (an
-OOM on 16 GB CI runners); per-declaration chunks are freed in between.
+whole-grid evaluation retains its kernel-cache bignums across the whole
+evaluation (an OOM on 16 GB CI runners), and kernel memory is not reclaimed
+between declarations within one lean process, so each chunk is its own
+module (`Smoothing.DecChunk1`–`Smoothing.DecChunk6`).
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -292,9 +294,10 @@ lemma le_stdNormalQuantile_of_scan {h : ℚ} (hh : 0 ≤ h) {n : ℕ} {L : List 
 /-- The scan CONTINUED from a checkpoint: given `v = phiGridUB h k`,
     `phiScanRevFrom h k v j = [phiGridUB h (k+j), …, phiGridUB h k]`
     (established by `phiScanRevFrom_append`). Lets the whole-grid kernel
-    evaluation — 15 GB peak at 3300 panels, an OOM on 16 GB CI runners — be
-    split into per-declaration chunks: the kernel's whnf cache (which retains
-    every intermediate bignum) is freed between declarations. -/
+    evaluation — whose whnf cache retains every intermediate bignum, an OOM on
+    16 GB CI runners at 3300 panels — be split into chunks, one module (one
+    lean process) each, since kernel memory is not reclaimed between
+    declarations within a process. -/
 def phiScanRevFrom (h : ℚ) (k : ℕ) (v : ℚ) : ℕ → List ℚ
   | 0 => [v]
   | j+1 =>
