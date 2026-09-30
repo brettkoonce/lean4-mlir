@@ -28,13 +28,12 @@ check `resnet50ForwardBFull_eq_slots`.
 **`q` is a BINDER.** One statement covers `resnet50in_fwd` (`q = 7`, 224 px) and
 `resnet50in160_fwd` (`q = 5`, 160 px). So every dimension is
 an explicit `2 * (…)` nest rather than `8 * q`: those are equal Nats and NOT definitionally equal
-terms at a variable `q`. And **`0 < q` is a real hypothesis** where ResNet-34 needed none — the
-stem pool's VJP needs its output grid nonempty, and at literal 56 that closed by `norm_num`.
+terms at a variable `q`.
 
 ## Scope
 
-A smooth-point statement: the tie assumes `0 < q`, `0 < εs`, the stem relu clause (`h_stem`) and
-the stem pool's per-example no-tie (`h_pool`), and takes each of the sixteen bottlenecks as an
+A smooth-point statement: the tie assumes `0 < εs`, the stem relu clause (`h_stem`) and
+the stem pool's per-example condition (`h_pool`), and takes each of the sixteen bottlenecks as an
 opaque `HasVJPDiffAt` witness at its running activation (a bottleneck's three relu clauses — the
 two interior ones and the post-residual outer one — are the caller's, inside that witness).
 `resnet50in160_lambaccdp8x64bce` all-reduces every gradient (`allReduceMeanF`), and this is at the
@@ -58,7 +57,7 @@ open scoped BigOperators
     backward of `r34BFullHasVJPAt` at those eighteen stages. `unfold`, two `rw`s, `rfl` — the
     pool needs no rewrite, being definitionally `batchMapHasVJPAt`'s backward. -/
 theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
-    (hq0 : 0 < q)
+   
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
     (Wd : Mat 2048 nCls) (bd : Vec nCls)
     (b1 : Vec (N * (64 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))) → Vec (N * (256 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))))
@@ -121,10 +120,8 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0)
       = (r34BFullHasVJPAt (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
           (r34HeadB N q q Wd bd) x
-          ⟨r34StemBHasVJPAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
-              (by norm_num) (by omega) (by omega) x h_stem h_pool,
-            r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
-              (by norm_num) (by omega) (by omega) x h_stem h_pool⟩
+          ⟨r34StemBHasVJPAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs x h_stem h_pool,
+            r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs x h_stem h_pool⟩
           hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
           ⟨(r34HeadBHasVJP N q q Wd bd).toHasVJPAt _,
             (r34HeadB_differentiable N q q Wd bd) _⟩).backward := by
@@ -137,14 +134,14 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
   rfl
 
 /-- **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch
-    size, resolution `q > 0` (`hq0`), loss cotangent and input pixel, at any input `x` where the
+    size, resolution `q`, loss cotangent and input pixel, at any input `x` where the
     stem relu is off its kink (`h_stem`) and no stem-pool window ties (`h_pool`), for any block maps
     `b1 … b16` carrying `HasVJPDiffAt` witnesses at their running activations (`hb1 … hb16`), with
     `0 < εs`. The tie above read through the apex's own `.correct`;
     `resnet50ForwardBFull_eq_slots` below identifies those eighteen stages with the committed
     forward. -/
 theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
-    (hq0 : 0 < q)
+   
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
     (Wd : Mat 2048 nCls) (bd : Vec nCls)
     (b1 : Vec (N * (64 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))) → Vec (N * (256 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))))
@@ -211,7 +208,7 @@ theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
           pdiv (r34HeadB N q q Wd bd
           ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
           ∘ r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) x i j * dy j := by
-  exact HasVJPAt.correct_of_backward_eq _ (r50InputGradB_eq_r34B_full_vjp N q hq0 Ws bs εs hεs γs βs Wd bd
+  exact HasVJPAt.correct_of_backward_eq _ (r50InputGradB_eq_r34B_full_vjp N q Ws bs εs hεs γs βs Wd bd
     b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy i
 
 /-- **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**

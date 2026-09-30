@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Training.JacobianSeal
 
 `ResNet34FullBVJP.lean` proves
 `resnet34ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` that satisfies 32 relu
-clauses, a stem clause and the stem pool's no-tie. A *conditional* theorem of that shape says
+clauses, a stem clause and the stem pool's condition. A *conditional* theorem of that shape says
 nothing unless its hypotheses are jointly satisfiable at a point with a nonzero Jacobian. This
 file exhibits such a point on `resnet34ForwardBFull` itself: 64→512 channels, `[3,4,6,3]`
 blocks, the 7×7/s2 stem, the 3×3/s2 pool, **batch** BatchNorm, at `224×224`.
@@ -337,7 +337,7 @@ private theorem seal_pool_smooth (t : ℝ) :
     StemPoolSmoothAt 2 56 56
       (StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t)) := by
   rw [Zs]
-  exact ctConv_pool_smooth 64 7 7 56 56 (by norm_num) (by norm_num) t
+  exact fun n => maxPool3s2SmoothOrDead_of_smooth (ctConv_pool_smooth 64 7 7 56 56 (by norm_num) (by norm_num) t n)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The running activations: nonnegative, and collapsed

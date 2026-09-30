@@ -26,14 +26,13 @@ carries **THREE** kink clauses, where ResNet-34's basic block carries two: the t
 and the post-residual OUTER relu. Sixteen blocks give 48 clauses, plus the stem's relu and the stem
 pool's no-tie condition — bundled per block into `R50IdSmoothAt` / `R50ProjSmoothAt` /
 `R50DownSmoothAt`, and those 18 bundles into one `R50SmoothAtB` (the positivity bundles into
-`R50PosB`), so the apex binds two hypotheses beside `0 < q`, as MobileNetV2's does.
+`R50PosB`), so the apex binds two hypotheses, as MobileNetV2's does.
 
 The pool's condition is **per example** (`StemPoolSmoothAt`, reused): a tie is a property of one
 image's 3×3 window, not of the batch.
 
-**`0 < q` is a real hypothesis here, where ResNet-34 needed none.** r34's ladder is at literals,
-so `0 < 56` closes by `norm_num`; R50's is at the binder `q`, and the stem pool's VJP needs its
-output grid nonempty. At `q = 0` the net is degenerate and the statement says so.
+No `0 < q` is needed: the stem is certified as one layer (`stemReluPoolLayer`), whose VJP holds on
+an empty output grid too.
 
 The running activations are named `r50Pre0 … r50Pre16` so each bundle can be STATED at the
 activation entering its block without a sixteen-deep nested application inline; `r50Pre16` doubles
@@ -247,7 +246,7 @@ structure R50PosB {nCls : Nat} (w : R50BWeights nCls) : Prop where
   s4b1 : R50IdPos w.s4b1
   s4b2 : R50IdPos w.s4b2
 
-/-- **Every relu is away from its kink and the stem pool has no tie, each at the activation
+/-- **Every relu is away from its kink and every stem-pool window is smooth or dead, each at the activation
     its block actually sees**: the stem's clauses at the image, block `k`'s at `r50Pre(k-1)`. The
     head has none (GAP and dense are smooth). -/
 structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : Prop where
@@ -348,10 +347,10 @@ theorem resnet50ForwardBFull_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights 
 
 /-- **ResNet-50 as one certified layer**, at every batch size and resolution. Its `.faithful`
     is a whole-net backward graph, stem pool included, proven to denote the VJP. -/
-noncomputable def r50NetLayer (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+noncomputable def r50NetLayer (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) :
     StableHLO.CertLayer (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))) (N * nCls) :=
-  (r34StemLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (by norm_num) (by omega) (by omega)
+  (r34StemLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
       w.sW w.sb w.sε hp.s w.sγ w.sβ).comp <|
   (r50ProjLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0).comp <|
   (r50IdLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1).comp <|
@@ -373,9 +372,9 @@ noncomputable def r50NetLayer (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWe
 
 /-- The composed layer's forward IS the committed nested-application forward: peeled one `comp`
     at a time, then each layer's forward by its `rfl` lemma. -/
-theorem r50NetLayer_fwd_apply (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+theorem r50NetLayer_fwd_apply (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    (r50NetLayer N q hq0 w hp).fwd x = resnet50ForwardBFull N q w x := by
+    (r50NetLayer N q w hp).fwd x = resnet50ForwardBFull N q w x := by
   rw [r50NetLayer]
   repeat rw [StableHLO.CertLayer.comp_fwd_apply]
   rw [r34StemLayer_fwd, r50ProjLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd,
@@ -385,9 +384,9 @@ theorem r50NetLayer_fwd_apply (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWe
 
 /-- `R50SmoothAtB` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
     input `r50PreK`, so every step is a one-level `rfl`. -/
-private theorem r50SmoothAtB_ok (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+private theorem r50SmoothAtB_ok (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
-    (hx : R50SmoothAtB N q w x) : (r50NetLayer N q hq0 w hp).ok x := by
+    (hx : R50SmoothAtB N q w x) : (r50NetLayer N q w hp).ok x := by
   refine StableHLO.CertLayer.comp_ok_of ⟨hx.stem, hx.pool⟩ (r50Pre0 N q w x) rfl ?_
   refine StableHLO.CertLayer.comp_ok_of ⟨⟨trivial, ⟨hx.s1b0.hm1, hx.s1b0.hm2⟩, trivial⟩, hx.s1b0.hout⟩ (r50Pre1 N q w x) rfl ?_
   refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s1b1.hm1, hx.s1b1.hm2⟩, trivial⟩, hx.s1b1.hout⟩ (r50Pre2 N q w x) rfl ?_
@@ -408,43 +407,43 @@ private theorem r50SmoothAtB_ok (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50B
   exact ⟨trivial, trivial⟩
 
 /-- **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
-    bottlenecks.** `r50NetLayer`'s `.vjp`, read at the layered chain, under two hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the pool's
-    no-tie, each at its block's own input), beside `0 < q`.
+    bottlenecks.** `r50NetLayer`'s `.vjp`, read at the layered chain, under two hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the stem
+    pool's smooth-or-dead condition, each at its block's own input).
 
     Pointwise, and necessarily: relu is kinked. Each block contributes THREE clauses — the
     two interior relus and the post-residual OUTER relu — where ResNet-34's basic block
     contributes two and EfficientNet's MBConv none.
 
     The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
-    224-px and 160-px artifacts at every batch size. `0 < q` is needed for the stem pool. -/
-noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    224-px and 160-px artifacts at every batch size. -/
+noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
     HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
-  ((r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)).congr
-    (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardBFull_eq_chain N q w v))
+  ((r50NetLayer N q w hp).vjp x (r50SmoothAtB_ok N q w hp x hx)).congr
+    (funext fun v => (r50NetLayer_fwd_apply N q w hp v).trans (resnet50ForwardBFull_eq_chain N q w v))
 
 /-- **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet50ForwardBFull` ITSELF — the committed
     nested-application forward `ResNet50FullB.lean` defines — not of the layered chain the VJP is
     assembled on. Tied back through `resnet50ForwardBFull_eq_chain`. -/
-theorem resnet50ForwardBFullHasVJPAt_correct (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+theorem resnet50ForwardBFullHasVJPAt_correct (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    (resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).backward dy i =
+    (resnet50ForwardBFullHasVJPAt N q w hp x hx).backward dy i =
       ∑ j : Fin (N * nCls), pdiv (resnet50ForwardBFull N q w) x i j * dy j := by
-  have h := (resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).correct dy i
+  have h := (resnet50ForwardBFullHasVJPAt N q w hp x hx).correct dy i
   rwa [show resnet50ForwardBFull N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
       from funext (resnet50ForwardBFull_eq_chain N q w)]
 
 /-- The committed forward is differentiable at every smooth point — the layer's `.diff`. What
     the seal's `seal_differentiableAt` needs. -/
-theorem resnet50ForwardBFull_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+theorem resnet50ForwardBFull_differentiableAt (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
     DifferentiableAt ℝ (resnet50ForwardBFull N q w) x := by
-  rw [← funext (r50NetLayer_fwd_apply N q hq0 w hp)]
-  exact (r50NetLayer N q hq0 w hp).diff x (r50SmoothAtB_ok N q hq0 w hp x hx)
+  rw [← funext (r50NetLayer_fwd_apply N q w hp)]
+  exact (r50NetLayer N q w hp).diff x (r50SmoothAtB_ok N q w hp x hx)
 
 end Proofs

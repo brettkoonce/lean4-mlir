@@ -36,7 +36,8 @@ checks with no budget raised.
 ## Scope
 
 A smooth-point statement: the tie assumes the stem relu clause (`h_stem : R34StemSmoothAt …`),
-the stem pool's per-example no-tie (`h_pool : StemPoolSmoothAt …`) and `0 < εs`, and takes each of
+the stem pool's per-example condition (`h_pool : StemPoolSmoothAt …`: each window's maximum at
+one position, or the window all zero) and `0 < εs`, and takes each of
 the sixteen blocks as an opaque `HasVJPDiffAt` witness at its running activation (a basic block's
 two relu clauses are the caller's, inside that witness). One device: the data-parallel step,
 collectives included, is `ResNet34SyncStepTieB`'s. It is about the INPUT gradient; the parameter
@@ -79,21 +80,21 @@ theorem r34HeadBBack_eq_vjp_backward {N c nCls h w : Nat}
   rw [dense_transpose_eq_vjp_backward Wd bd (fun _ => 0)]
   rfl
 
-/-- The stem's backward is the pool's, then the conv-BN-relu stage's. `rfl` at variable widths;
-    the tie rewrites with it rather than leaving this step to its closing `rfl`, which reaches
-    `maxRecDepth` at the net's numerals. -/
+/-- The stem's backward is the pool's scatter, then the conv-BN-relu stage's
+    (`stemReluPoolLayer_vjp_backward`). The tie rewrites with it rather than leaving this step to
+    its closing `rfl`, which reaches `maxRecDepth` at the net's numerals. -/
 theorem r34StemBHasVJPAt_backward (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
-    (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
     (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
     (v : Vec (N * (oc * h * w))) :
-    (r34StemBHasVJPAt N h w Ws bs εs hεs γs βs hc hh hw x hrelu hpool).backward v
+    (r34StemBHasVJPAt N h w Ws bs εs hεs γs βs x hrelu hpool).backward v
       = (StableHLO.cbReluStridedBHasVJPAt N Ws bs εs hεs γs βs x hrelu).backward
           (maxPool3s2FlatBackB N oc h w
-            (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) v) := rfl
+            (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) v) :=
+  stemReluPoolLayer_vjp_backward N Ws bs εs hεs γs βs x ⟨hrelu, hpool⟩ v
 
 -- The opaque running activations `opaqueA0 … opaqueA16` are `Foundation/OpaquePrefix.lean`'s.
 
@@ -320,10 +321,8 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0)
       = (r34BFullHasVJPAt (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
           (r34HeadB N 7 7 Wd bd) x
-          ⟨r34StemBHasVJPAt N 56 56 Ws bs εs hεs γs βs
-              (by norm_num) (by norm_num) (by norm_num) x h_stem h_pool,
-            r34StemB_differentiableAt N 56 56 Ws bs εs hεs γs βs
-              (by norm_num) (by norm_num) (by norm_num) x h_stem h_pool⟩
+          ⟨r34StemBHasVJPAt N 56 56 Ws bs εs hεs γs βs x h_stem h_pool,
+            r34StemB_differentiableAt N 56 56 Ws bs εs hεs γs βs x h_stem h_pool⟩
           hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
           ⟨(r34HeadBHasVJP N 7 7 Wd bd).toHasVJPAt _,
             (r34HeadB_differentiable N 7 7 Wd bd) _⟩).backward := by

@@ -279,14 +279,16 @@ fidelity:
 
     3. SMOOTH-INPUT CONDITIONING. The strongest backprop-correctness results are pointwise
        (`HasVJPAt`, `vjpCompAt`) under an explicit smooth-input hypothesis -- no ReLU input at 0,
-       every max-pool window's max attained at one cell -- so every kinked net's whole-net VJP carries those clauses in its statement
+       every max-pool window's max attained at one cell, or for the ResNets' ReLU-then-pool stem the window entirely zero --
+       so every kinked net's whole-net VJP carries those clauses in its statement
        (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, 38 for MobileNetV4). The
        global instances (`reluHasVJP`, `mlpHasVJP`, `maxPool2HasVJP3`) ARE the canonical `pdiv`
        backward (`HasVJP.canonical`, or the `pdiv3` sum for max-pool), so their `correct` holds by
        definition and says nothing about the emitted code; the emitted backward meets them only
        through the smooth-point bridges of (2). For pooling the non-smooth points are not a
        measure-zero corner: an all-zero post-ReLU window attains its max at all four cells, and
-       there `maxPool2` has no derivative.
+       there `maxPool2` has no derivative. The ResNet stem certifies ReLU and pool as one layer
+       (`stemReluPoolLayer`), where such a window is locally constant.
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
        non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero

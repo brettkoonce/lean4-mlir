@@ -25,7 +25,7 @@ at a `Vec` point (`maxPool3s2FlatHasVJPAtVec`), the batched pool is two lines.
 **two** kink clauses per block, not one: the body's mid-relu AND the post-residual outer relu.
 That outer relu is ResNet's structural difference from MobileNetV2/EfficientNet, whose residual
 add IS the block output. Sixteen blocks therefore carry 32 clauses, plus the stem's relu and the
-stem pool's no-tie condition — bundled per block into `R34IdSmoothAt` / `R34DownSmoothAt`, and
+stem pool's condition (every window's maximum at one position, or the window all zero) — bundled per block into `R34IdSmoothAt` / `R34DownSmoothAt`, and
 those 18 bundles into one `R34SmoothAtB` (the positivity bundles into `R34PosB`), so the apex
 binds two hypotheses, exactly as `MobileNetV2FullBVJP.lean`'s `MNV2SmoothAtB` / `MNV2PosB`.
 
@@ -108,36 +108,25 @@ noncomputable def r34DownBHasVJPAt (N h w : Nat) {ic oc : Nat} (p : R34DownW ic 
   StableHLO.r34DownBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hmid hs.hout
 
-/-- Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool. The pool half is lifted
-    over the batch by `batchMapHasVJPAt`. -/
+/-- Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool — `stemReluPoolLayer`'s,
+    certified as one layer so that a window of dead ReLUs is allowed. -/
 noncomputable def r34StemBHasVJPAt (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
-    (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
     (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) :
     HasVJPAt (r34StemB N h w Ws bs εs γs βs) x :=
-  vjpCompAt _ (StableHLO.batchMap N (maxPool3s2Flat oc h w)) x
-    (StableHLO.cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hrelu)
-    (batchMap_differentiableAt _ _
-      (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw))
-    (StableHLO.cbReluStridedBHasVJPAt N Ws bs εs hεs γs βs x hrelu)
-    (batchMapHasVJPAt _ _
-      (fun r => maxPool3s2FlatHasVJPAtVec _ (hpool r))
-      (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw))
+  (stemReluPoolLayer N (h := h) (w := w) Ws bs εs hεs γs βs).vjp x ⟨hrelu, hpool⟩
 
 theorem r34StemB_differentiableAt (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
-    (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
     (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) :
     DifferentiableAt ℝ (r34StemB N h w Ws bs εs γs βs) x :=
-  (batchMap_differentiableAt _ _
-      (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw)).comp x
-    (StableHLO.cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hrelu)
+  (stemReluPoolLayer N (h := h) (w := w) Ws bs εs hεs γs βs).diff x ⟨hrelu, hpool⟩
 
 /-- The head is GLOBAL — GAP and dense are both smooth everywhere, and each is `batchMap` of a
     per-example op, so `batchMapHasVJP` suffices and no smoothness hypothesis appears. -/
@@ -177,17 +166,16 @@ private theorem r34DownLayer_fwd (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc
 -- ════════════════════════════════════════════════════════════════
 
 
-/-- The stem, 7×7/s2 conv-bn-relu then the 3×3/s2 pool, as a `CertLayer`. Its `ok` is exactly
-    `R34StemSmoothAt ∧ StemPoolSmoothAt` at the conv's output. -/
-noncomputable def r34StemLayer (N h w : Nat) {ic oc : Nat} (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
+/-- The stem, 7×7/s2 conv-bn-relu then the 3×3/s2 pool, as a `CertLayer` (`stemReluPoolLayer`).
+    Its `ok` is `R34StemSmoothAt ∧ StemPoolSmoothAt` at the conv's output. -/
+noncomputable def r34StemLayer (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) :
     StableHLO.CertLayer (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))) (N * (oc * h * w)) :=
-  (StableHLO.cbReluStridedLayer N (h := 2 * h) (w := 2 * w) Ws bs εs hεs γs βs).comp
-    (stemPoolLayer N hc hh hw)
+  stemReluPoolLayer N Ws bs εs hεs γs βs
 
-theorem r34StemLayer_fwd (N h w : Nat) {ic oc : Nat} (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
+theorem r34StemLayer_fwd (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) :
-    (r34StemLayer N h w hc hh hw Ws bs εs hεs γs βs).fwd = r34StemB N h w Ws bs εs γs βs := rfl
+    (r34StemLayer N h w Ws bs εs hεs γs βs).fwd = r34StemB N h w Ws bs εs γs βs := rfl
 
 /-- GAP then the classifier, as a `CertLayer`. Globally certified. -/
 noncomputable def r34HeadLayer (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls) :
@@ -281,7 +269,7 @@ structure R34PosB {nCls : Nat} (w : R34BWeights nCls) : Prop where
   e0 : R34IdPos w.e0
   e1 : R34IdPos w.e1
 
-/-- **Every relu is away from its kink and the stem pool has no tie, each at the activation
+/-- **Every relu is away from its kink and every stem-pool window is smooth or dead, each at the activation
     its block actually sees**: the stem's clauses at the image, block `k`'s at `r34Pre(k-1)`. The
     head has none (GAP and dense are smooth). -/
 structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Prop where
@@ -402,7 +390,7 @@ theorem resnet34ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nC
     backward graph, stem pool included, proven to denote the VJP. -/
 noncomputable def r34NetLayer (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34PosB w) :
     StableHLO.CertLayer (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) (N * nCls) :=
-  (r34StemLayer N 56 56 (by norm_num) (by norm_num) (by norm_num)
+  (r34StemLayer N 56 56
       w.sW w.sb w.sε hq.s w.sγ w.sβ).comp <|
   (r34IdLayer N 56 56 w.a0 hq.a0).comp <|
   (r34IdLayer N 56 56 w.a1 hq.a1).comp <|

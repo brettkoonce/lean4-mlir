@@ -446,7 +446,7 @@ theorem seal_pool_clause (q : Nat) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
 
         (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ (sealX q t)) := by
   rw [stem_relu_off q hq, Zs]
-  exact ctConv_pool_smooth 64 7 7 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (by norm_num) (by norm_num) t
+  exact fun n => maxPool3s2SmoothOrDead_of_smooth (ctConv_pool_smooth 64 7 7 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (by norm_num) (by norm_num) t n)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The running activations: nonnegative, and collapsed
@@ -703,14 +703,14 @@ theorem seal_smooth (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ
     (transported through `resnet50ForwardBFull_eq_chain`), at BOTH shipped resolutions. -/
 noncomputable def sealVJP (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     HasVJPAt (resnet50ForwardBFull 2 q (sealW nCls)) (sealX q t) :=
-  (resnet50ForwardBFullHasVJPAt 2 q hq0 (sealW nCls) (seal_pos nCls) (sealX q t)
+  (resnet50ForwardBFullHasVJPAt 2 q (sealW nCls) (seal_pos nCls) (sealX q t)
     (seal_smooth q hq0 hq nCls t)).congr
     (funext (resnet50ForwardBFull_eq_chain 2 q (sealW nCls))).symm
 
 /-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
 theorem seal_differentiableAt (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     DifferentiableAt ℝ (resnet50ForwardBFull 2 q (sealW nCls)) (sealX q t) :=
-  resnet50ForwardBFull_differentiableAt 2 q hq0 (sealW nCls) (seal_pos nCls) (sealX q t)
+  resnet50ForwardBFull_differentiableAt 2 q (sealW nCls) (seal_pos nCls) (sealX q t)
     (seal_smooth q hq0 hq nCls t)
 
 -- ════════════════════════════════════════════════════════════════

@@ -73,7 +73,7 @@ theorem chk_bn_input_grad_correct :
 
 /-- `Proofs.resnet50ForwardBFullHasVJPAt_correct` -/
 theorem chk_resnet50ForwardBFullHasVJPAt_correct :
-    ∀ (N q : ℕ) (hq0 : (0 : ℕ) < q) {nCls : ℕ} (w : Proofs.R50BWeights nCls)
+    ∀ (N q : ℕ) {nCls : ℕ} (w : Proofs.R50BWeights nCls)
       (hp : Proofs.R50PosB w)
       (x :
         Proofs.Vec
@@ -86,7 +86,7 @@ theorem chk_resnet50ForwardBFullHasVJPAt_correct :
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
-      (Proofs.resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).backward dy i =
+      (Proofs.resnet50ForwardBFullHasVJPAt N q w hp x hx).backward dy i =
         ∑ j : Fin (N * nCls), Proofs.pdiv (Proofs.resnet50ForwardBFull N q w) x i j * dy j := by sorry
 
 /-- `Proofs.vitTinyHasVJP_correct` -/
@@ -962,22 +962,8 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
             (0 : ℝ)) =
         (Proofs.r34BFullHasVJPAt (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
             b13 b14 b15 b16 (Proofs.r34HeadB N (7 : ℕ) (7 : ℕ) Wd bd) x
-            ⟨Proofs.r34StemBHasVJPAt N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (64 : ℕ))) (Eq.refl false))
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (56 : ℕ))) (Eq.refl false))
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (56 : ℕ))) (Eq.refl false))
-                x h_stem h_pool,
-              Proofs.r34StemB_differentiableAt N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (64 : ℕ))) (Eq.refl false))
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (56 : ℕ))) (Eq.refl false))
-                (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
-                  (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (56 : ℕ))) (Eq.refl false))
-                x h_stem h_pool⟩
+            ⟨Proofs.r34StemBHasVJPAt N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs x h_stem h_pool,
+              Proofs.r34StemB_differentiableAt N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs x h_stem h_pool⟩
             hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
             ⟨(Proofs.r34HeadBHasVJP N (7 : ℕ) (7 : ℕ) Wd bd).toHasVJPAt
                 (Proofs.opaqueA16 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11

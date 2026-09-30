@@ -135,6 +135,48 @@ Findings: **P-C-1** ✔, **A-corr-1** ✔ (a)+(b), P-D-1 (the interim prose), pl
 - **Blocks.** WP2's R34/R50 edits and WP8a (same files). Do the P-D-1 prose caveat immediately
   if WP1 won't start soon.
 
+**Status 2026-09-30: part 1 done for the ResNet stem.**
+- **What landed:**
+  - `MaxPool3s2SmoothOrDead` is the new op-level predicate.
+  - `StemPoolSmoothAt` keeps its name and argument and gets the weaker body: every window smooth,
+    or entirely zero.
+  - `stemReluPoolLayer` replaces `stemPoolLayer`. It certifies conv-BN-ReLU and the pool as one
+    layer, via the germ lemma `maxPool3s2Flat_relu_eventuallyEq` (near a smooth-or-dead
+    pre-activation, `pool ∘ relu` is the argmax gather) and `maxPool3s2FlatBackB_eq_reindex` (the
+    render's scatter is the gather's adjoint).
+  - Unchanged: the forward and the backward graph. Every pinned name is kept.
+  - Also dropped:
+    - The positivity binders `0 < oc`, `0 < h`, `0 < w` on the stem declarations.
+    - `0 < q` on the whole R50 chain (`r50NetLayer` → `resnet50ForwardBFullHasVJPAt` →
+      `r50_net_lossGrad` → `r50InputGradB_eq_r34B_full_vjp`). It fed only those binders.
+  - Also fixed: the R34 whole-net VJP book block, which omitted the pool condition.
+- **Measured** by `scripts/probes/stem_pool_smooth_probe.py`, on the R50-A3 epoch-100 checkpoint,
+  four 128-image val batches at 160 px, float64:
+  - 13.58% of stem windows are dead. The old predicate rejected those, so P-C-1 was far worse
+    than the auditor's estimate; the new one allows them.
+  - 0.89% are positive ties, in 4 of 4 batches, and **every one** is two cells reading identical
+    7×7×3 input patches (flat image regions). No pre-ReLU value is exactly 0.
+- **What that means:**
+  - *Input VJP / input-grad ties:* at such a batch the net has no derivative in the image, so
+    those theorems' failure there is correct. Their hypothesis cannot be met on these batches.
+  - *Loss gradient in θ (`*_net_lossGrad`):* the tied cells are the same function of the stem's
+    weights, so the loss IS differentiable in θ. The capstones still don't reach a real step,
+    because `StemPoolSmoothAt` is stated on activations. The R34/R50 ParamGrad module docs now say
+    so, and name the probe.
+- **Part 2 (next).** One notion serves both remaining cases: cells equal *as functions of the
+  moving parameter* on a neighbourhood. This covers:
+  - the ResNet stem's identical-patch ties, for the θ-gradients: restate the stem-parameter pull-back
+    as a germ in θ, not an activation-level `HasGradAt`;
+  - A-corr-1(b), the MNIST descent rungs' constant-patch windows.
+
+  Check the render's scatter first: it picks one of the tied cells, and routing to either gives
+  the same θ-gradient, because identical patches make the conv weight-grad and BN γ/β terms
+  agree. That needs a lemma.
+- **Deliberately not done:** A-corr-1(a) for the 2×2 pool. `cnnHasVJPAt` / `mnistCnnNoBnHasVJPAt`
+  state `HasVJPAt` existence plus its `.correct` field, which a canonical witness satisfies at
+  every point (the 09-24 "`_correct` says nothing" item, WP6). Weakening their `h_mp` changes
+  nothing checkable; the MNIST work with content is part 2.
+
 ### WP2 — Loss-gradient capstones say what the book says · M–L · 1 agent, after WP1
 Findings: **P-C-2** (conclude `HasGradAt` in θ, not a `pdiv` equation that is junk off
 differentiability), **P-C-3** (`vitNetB = batchMap vitForwardKV`, `cnxNetB` batched bridge),
@@ -328,7 +370,9 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
 ## New gates the audit asks for (humans' call)
 
 1. **Hypothesis satisfiability on shipped data.** A probe that evaluates each capstone's smoothness
-   bundle on a real batch at trained weights. It would have caught WP1 twice.
+   bundle on a real batch at trained weights. It would have caught WP1 twice. The first one exists:
+   `scripts/probes/stem_pool_smooth_probe.py` (the ResNet stem). Still to cover: the MNIST CNN
+   pool, and every relu clause of the block bundles.
 2. **"Only AuditAxioms mentions it" report.** This is how A-scope-1 and A-reuse-1 hid.
 3. **A tie ↔ loss-gradient cotangent-chain equality check.** Moot if WP2's shared chain lands.
 4. **Prose "N/100 certified" lint** against the aggregate theorems' lengths (WP3).

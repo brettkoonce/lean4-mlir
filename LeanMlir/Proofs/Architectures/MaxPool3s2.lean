@@ -207,6 +207,31 @@ theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * 
   obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
   exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
 
+/-- **Smooth or dead**: every 3×3 window either has its maximum at one input position
+    (`MaxPool3s2Smooth`'s condition, per window), or has every cell `≤ 0`.
+
+    The second case is what a pool AFTER a ReLU needs. A window of dead ReLUs is all zeros: nine
+    cells tie at the maximum, so the pool alone has no derivative there, but `pool ∘ relu` is
+    locally the constant `0` at the pre-activation, where every cell is strictly negative. The
+    ResNet stems state their pool condition in this form (`StemPoolSmoothAt`), and
+    `maxPool3s2Flat_relu_eventuallyEq` is the lemma that uses it. -/
+def MaxPool3s2SmoothOrDead {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
+  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
+    (∀ cd : Fin 3 × Fin 3, x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤ 0) ∨
+    ∀ ab ab' : Fin 3 × Fin 3,
+      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
+        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
+      (∀ cd : Fin 3 × Fin 3,
+        x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
+        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
+      x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
+        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)
+
+/-- A smooth pool input is smooth-or-dead. -/
+theorem maxPool3s2SmoothOrDead_of_smooth {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)}
+    (hx : MaxPool3s2Smooth x) : MaxPool3s2SmoothOrDead x :=
+  fun ci ho wo => Or.inr (fun ab ab' => hx ci ho wo ab ab')
+
 /-- **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
     `p/2` and `(p+1)/2`. With symmetric padding the shared cell is at ODD `p` (window `(p−1)/2`
     takes it at offset 2, window `(p+1)/2` at offset 0); even `p` lies in exactly one. So an input

@@ -1941,7 +1941,9 @@ open Proofs
 #print axioms Proofs.r34IdBHasVJPAt
 #print axioms Proofs.r34DownBHasVJPAt
 #print axioms Proofs.r34StemBHasVJPAt
-#print axioms Proofs.stemPoolLayer
+#print axioms Proofs.stemReluPoolLayer
+#print axioms Proofs.maxPool3s2Flat_relu_eventuallyEq
+#print axioms Proofs.maxPool3s2FlatBackB_eq_reindex
 #print axioms Proofs.r34StemLayer
 #print axioms Proofs.r34HeadLayer
 #print axioms Proofs.r34HeadBHasVJP

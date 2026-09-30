@@ -29,9 +29,18 @@ stem and head ARE R34's functions at R50's widths):
   sixteen certified bottleneck VJPs, and `Φ` identified with the whole net at updated weights
   (`r50_factor_*`), each a standalone theorem.
 
-**Hypotheses.** `0 < q`, `R50PosB` (every BN `ε > 0`), `R50SmoothAtB` (every relu off its kink and
-the stem pool tie-free at the real activations); for the smoothed loss also every example's target
-summing to one and `0 < nCls`. The BCE corollary takes no hypothesis on the target.
+**Hypotheses.** `R50PosB` (every BN `ε > 0`), `R50SmoothAtB` (every relu off its kink and every
+stem-pool window smooth or dead, its maximum at one position or all zero, at the real
+activations); for the smoothed loss also every example's target summing to one and `0 < nCls`.
+The BCE corollary takes no hypothesis on the target.
+
+**Where the stem pool's clause fails.** A real batch meets every clause but one: some stem-pool
+windows have a positive maximum at two positions, because two cells read identical input patches
+(flat image regions). The loss is still differentiable in the parameters there (the tied cells are
+the same function of the stem's weights), but `StemPoolSmoothAt` is stated on activations and
+rejects them, so as stated this theorem does not reach a real step. Admitting them needs the
+clause restated on the parameters rather than the activations. The probe script
+scripts/probes/stem_pool_smooth_probe.py measures them on real batches.
 -/
 
 open Proofs Proofs.StableHLO Proofs.ResNet34TieB
@@ -1026,11 +1035,11 @@ def R50NetLossTiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : R
     with that one parameter varied (a stem field, a block's weight record `w.blk := p` with one slot
     changed, or the classifier).
 
-    Hypotheses: `0 < q`, every BN `ε` positive (`R50PosB`), every relu off its kink and the stem
-    pool tie-free at the real activations (`R50SmoothAtB`). The loss enters only through `hL`;
+    Hypotheses: every BN `ε` positive (`R50PosB`), every relu off its kink and every stem-pool
+    window smooth or dead, at the real activations (`R50SmoothAtB`). The loss enters only through `hL`;
     `r50_net_lossGrad_smoothedCE` and `r50_net_lossGrad_bce` discharge it for the two losses the
     artifacts ship. -/
-theorem r50_net_lossGrad (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (xN cotN vN epsStr : String)
+theorem r50_net_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (hx : R50SmoothAtB N q w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
     (hL : HasGradAt L (resnet50ForwardBFull N q w x) g) :
@@ -1076,7 +1085,7 @@ theorem r50_net_lossGrad (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (xN cotN vN epsS
     r50IdB_hasGradAt_comp w.s1b1 hp.s1b1 _ hx.s1b1 (h2.congr_point (r50Pre2_apply N q w x))
   have h0 : HasGradAt (fun y => L (r50SufStem N q w y)) (r50Pre0 N q w x) cotPool :=
     r50ProjB_hasGradAt_comp w.s1b0 hp.s1b0 _ hx.s1b0 (h1.congr_point (r50Pre1_apply N q w x))
-  refine ⟨r34_stem_lossTiedB (by norm_num) (by omega) (by omega) xN cotN vN epsStr
+  refine ⟨r34_stem_lossTiedB xN cotN vN epsStr
       w.sW w.sb w.sε hp.s w.sγ w.sβ x hx.stem hx.pool (h0.congr_point (r50Pre0_apply N q w x))
       (fun W b γ β => by rw [r50_factor_stem]), ?_⟩
   refine ⟨r50_projblock_lossTiedB xN cotN vN epsStr w.s1b0 hp.s1b0 _ hx.s1b0
@@ -1120,7 +1129,7 @@ theorem r50_net_lossGrad (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (xN cotN vN epsS
 
 /-- **The `bce := false` artifacts**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits. -/
-theorem r50_net_lossGrad_smoothedCE (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (hK : 0 < nCls)
+theorem r50_net_lossGrad_smoothedCE (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) (t : Vec (N * (1 * nCls)))
@@ -1128,21 +1137,21 @@ theorem r50_net_lossGrad_smoothedCE (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (hK :
     R50NetLossTiedB N q xN cotN vN epsStr w x (smoothedBatchLoss N nCls α B t)
       (unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (rowB N nCls (resnet50ForwardBFull N q w x)) t))) :=
-  r50_net_lossGrad N q hq0 xN cotN vN epsStr w hp x hx
+  r50_net_lossGrad N q xN cotN vN epsStr w hp x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The `bce := true` artifacts** (`resnet50in160_lambaccdp8x64bce` among them): every node is
     the derivative of the batched BCE-with-logits `bceBatchLoss`, the mean over `B×K`, `g` the
     three-op cotangent at the committed divisor `N·K`. No hypothesis on the target. -/
-theorem r50_net_lossGrad_bce (N q : Nat) (hq0 : 0 < q) {nCls : Nat}
+theorem r50_net_lossGrad_bce (N q : Nat) {nCls : Nat}
     (xN cotN vN epsStr bStr logN ohN : String) (w : R50BWeights nCls) (hp : R50PosB w)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) (t : Vec (N * (1 * nCls))) :
     R50NetLossTiedB N q xN cotN vN epsStr w x (bceBatchLoss N nCls t)
       (unrowB N nCls (den (bceLossCotGraph N nCls ((N : ℝ) * (nCls : ℝ)) bStr logN ohN
         (rowB N nCls (resnet50ForwardBFull N q w x)) t))) :=
-  r50_net_lossGrad N q hq0 xN cotN vN epsStr w hp x hx
+  r50_net_lossGrad N q xN cotN vN epsStr w hp x hx
     ⟨(bceBatchLoss_differentiable N nCls t) _,
       fun J => bceBatchLoss_grad N nCls bStr logN ohN t _ J⟩
 

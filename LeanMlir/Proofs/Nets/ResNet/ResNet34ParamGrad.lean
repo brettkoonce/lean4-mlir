@@ -26,8 +26,17 @@ minimises.
   whole net at updated weights (`r34_factor_*`) — each a standalone `rfl`; inside the capstone the
   same identity is a kernel deep recursion at the literal widths.
 
-**Hypotheses.** `R34PosB` (every BN `ε > 0`), `R34SmoothAtB` (every relu off its kink and the stem
-pool tie-free at the real activations), every example's target summing to one, `0 < nCls`.
+**Hypotheses.** `R34PosB` (every BN `ε > 0`), `R34SmoothAtB` (every relu off its kink and every
+stem-pool window smooth or dead, its maximum at one position or all zero, at the real
+activations), every example's target summing to one, `0 < nCls`.
+
+**Where the stem pool's clause fails.** A real batch meets every clause but one: some stem-pool
+windows have a positive maximum at two positions, because two cells read identical input patches
+(flat image regions). The loss is still differentiable in the parameters there (the tied cells are
+the same function of the stem's weights), but `StemPoolSmoothAt` is stated on activations and
+rejects them, so as stated this theorem does not reach a real step. Admitting them needs the
+clause restated on the parameters rather than the activations. The probe script
+scripts/probes/stem_pool_smooth_probe.py measures them on real batches.
 -/
 
 open Proofs Proofs.StableHLO
@@ -411,7 +420,7 @@ noncomputable def r34StemGC (Gn : Vec (N * (oc * h * w)) → Vec 1) (εs : ℝ) 
 
 variable {N h w}
 
-theorem r34StemGC_hasGradAt (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w) (Ws : Kernel4 oc ic 7 7)
+theorem r34StemGC_hasGradAt (Ws : Kernel4 oc ic 7 7)
     (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
@@ -424,19 +433,17 @@ theorem r34StemGC_hasGradAt (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w) (Ws : Kernel
         (r34StemCotN N h w Ws bs εs γs βs x dy)
       ∧ HasGradAt (r34StemGC N h w Gn εs γs βs) (batchMap N (flatConvStride2 Ws bs) x)
         (r34StemCotC N h w Ws bs εs γs βs x dy) := by
-  have hP : HasGradAt (r34StemGP N h w Gn)
-      (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)
-      (r34StemCotP N h w Ws bs εs γs βs x dy) :=
-    (HasGradAt.comp (f := batchMap N (maxPool3s2Flat oc h w))
-      (x := cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) hGn
-      ((stemPoolLayer N hc hh hw).diff _ hpool) ((stemPoolLayer N hc hh hw).vjp _ hpool)).of_eq
-      (((stemPoolLayer N hc hh hw).faithful _ hpool (.operand "" dy)).symm.trans rfl)
+  -- ReLU and the pool in one step: a window of dead ReLUs has no pool derivative on its own
   have hN : HasGradAt (r34StemGN N h w Gn)
       (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
       (r34StemCotN N h w Ws bs εs γs βs x dy) :=
-    HasGradAt.comp (f := relu (N * (oc * (2 * h) * (2 * w))))
-      (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
-      hP (relu_differentiableAt_of_smooth _ _ hstem) (reluHasVJPAt _ _ hstem)
+    (HasGradAt.comp
+      (f := fun v => batchMap N (maxPool3s2Flat oc h w) (relu (N * (oc * (2 * h) * (2 * w))) v))
+      (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x)) hGn
+      (batchMap_maxPool3s2Flat_relu_differentiableAt N _ hstem hpool)
+      (batchMapMaxPool3s2FlatReluHasVJPAt N _ hstem hpool)).of_eq
+      ((batchMapMaxPool3s2FlatReluHasVJPAt_backward N _ hstem hpool dy).trans
+        (congrArg _ ((den_maxPool3s2BackB_eq_flatBackB "" _ (.operand "" dy)).symm.trans rfl)))
   exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc (2 * h) (2 * w) εs hεs γs βs) _)
     ((bnBatchLAHasVJP N oc (2 * h) (2 * w) εs hεs γs βs).toHasVJPAt _)).of_eq
     (bnInB_eq_bnBackB N oc (2 * h) (2 * w) εs hεs γs βs _ _).symm⟩
@@ -461,7 +468,7 @@ def r34StemLossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic 7 7) (bs :
         (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotN N h w Ws bs εs γs βs x dy)))) k
       = pdiv (fun θ => Φ Ws bs γs θ) βs k 0)
 
-theorem r34_stem_lossTiedB (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr : String)
+theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
@@ -474,7 +481,7 @@ theorem r34_stem_lossTiedB (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w) (xN cotN vN e
     r34StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy := by
   rw [show Φ = fun W b γ β => Gn (r34StemB N h w W b εs γ β x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
-  obtain ⟨hN, hC⟩ := r34StemGC_hasGradAt hc hh hw Ws bs εs hεs γs βs x hstem hpool hGn
+  obtain ⟨hN, hC⟩ := r34StemGC_hasGradAt Ws bs εs hεs γs βs x hstem hpool hGn
   exact ⟨fun idx => GradNodeB.convStridedW_eq_pdiv (h := 2 * h) (w := 2 * w) xN cotN bs x Ws hC idx,
     fun o => GradNodeB.convStridedB_eq_pdiv (h := 2 * h) (w := 2 * w) cotN Ws x bs hC o,
     fun k => GradNodeB.bnGamma_eq_pdiv vN epsStr cotN εs γs βs _ hN k,
@@ -861,7 +868,7 @@ theorem r34_net_lossGrad (N : Nat) {nCls : Nat} (hK : 0 < nCls) (xN cotN vN epsS
   have hPool : HasGradAt (fun y => L (r34SufStem N w y)) (r34Pre0 N w x) cotPool :=
     r34IdB_hasGradAt_comp w.a0 hq.a0 _ hx.a0 (hA0.congr_point (r34Pre1_apply N w x))
   have hStem := hPool.congr_point (r34Pre0_apply N w x)
-  refine ⟨r34_stem_lossTiedB (by norm_num) (by norm_num) (by norm_num) xN cotN vN epsStr
+  refine ⟨r34_stem_lossTiedB xN cotN vN epsStr
       w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem hx.pool hStem
       (fun W b γ β => by rw [r34_factor_stem]), ?_⟩
   refine ⟨r34_idblock_lossTiedB xN cotN vN epsStr w.a0 hq.a0 _ hx.a0
