@@ -21,7 +21,11 @@ Last, the precision-switched constructors `XAt bf16 rnd …` (`convAt`, `convBac
 The loss cotangent's text comes from here too: `smoothedCotB` / `bceCotB` print the capstones'
 own cotangent graphs (`smoothedLossCotGraph`, `smoothedLossCotGraphDiv`, `bceLossCotGraph`) after
 their softmax or sigmoid head, which each render prints first because its `%loss` report reads
-that name.
+that name. The hand-written text every render shares is here once as well: the report-only
+`%loss` blocks (`reportSmoothedCeLoss`, `reportBceLoss`, `reportCeLossOfLogits`,
+`reportCeLossOfSm`), the weight-decay exclusion (`rankWdDecays`, `wdNameBy`) and the sync-BN
+banner (`syncBnBanner`). So is one shared `pretty` site, ViT's and ConvNeXt's vector LN
+(`vecLnSite` / `vecLnSiteB`).
 
 `ResNet34RenderB.optOne` is the multi-optimizer step (AdamW / LAMB / heavy-ball / accumulation /
 EMA) that ResNet-34 and ResNet-50 fold; it reads the same `PGrad`.
@@ -96,7 +100,7 @@ def adamOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
     momentum buffer and `v` the running mean-square**, the same slot reinterpretation the Nesterov
     render does for its velocity. That is why the driver and the interface do not move.
 
-    `wdName` is `"%wd"`, or `"%wdz"` for a parameter `r34WdName` excludes (`wx`). The coupled L2
+    `wdName` is `"%wd"`, or `"%wdz"` for a parameter `wdNameBy` excludes (`wx`). The coupled L2
     reads its coefficient as an operand name, so excluding a parameter binds it to the zero
     constant: `g + 0·θ = g` exactly. -/
 def rmsOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
@@ -155,21 +159,23 @@ def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
 
 /-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
     RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
-    The `wx` renders bind the excluded parameters' decay operand to `%wdz` (`r34WdName`).
+    The `wx` renders bind the excluded parameters' decay operand to `%wdz` (`wdNameBy`).
 
-    Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
-    not the net's, and ConvNeXt's own docstring records that its ViT-style `nm != "pos"` carve-out
-    does not apply to a net with no positional parameter. ResNet has none either. -/
+    Every net with no positional parameter uses it (ResNet, MobileNet, EfficientNet, ConvNeXt):
+    the rule is timm's, not the net's. ViT's `vitWdDecays` adds its `nm != "pos"` carve-out, which
+    is why the predicate takes the name it ignores here. -/
 -- Why it matters: decay on pre-BN conv weights is renormalised away by BN and acts only as an
 -- effective-LR control; decay on γ/β is not, because γ directly scales the layer's output. The
 -- effect concentrates at low LR, i.e. in the cosine endgame. The first RSB-A3 R50 run used
 -- a non-`wx` artifact, so it decayed BN γ/β and every bias at wd = 0.02 where its reference
 -- (`resnet50ImagenetConfigRSBFaithful`, `wdExcludeNormBias := true`) did not.
-def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
+def rankWdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
 
-/-- The decay operand for one parameter: the real `%wd`, or the zero constant when excluded. -/
-def r34WdName (wdExclude : Bool) (nm : String) (ds : List Nat) : String :=
-  if wdExclude && !r34WdDecays nm ds then "%wdz" else "%wd"
+/-- The decay operand for one parameter: the real `%wd`, or the zero constant when `wdExclude` is
+    on and `decays` excludes it. -/
+def wdNameBy (wdExclude : Bool) (nm : String) (ds : List Nat)
+    (decays : String → List Nat → Bool := rankWdDecays) : String :=
+  if wdExclude && !decays nm ds then "%wdz" else "%wd"
 
 /-- The variant marker for a BatchNorm ε other than the committed `1.0e-5`, in the `wd`/`ls` decimal
     grammar (first digit the integer part): `eps0001` is 1e-3, the TF papers' value (MobileNetV2 in
@@ -192,6 +198,41 @@ def trainStepHandNote (acc : Bool := false) (hand : String := "") : String :=
   "every op is pretty(verified AST node) except the constants, " ++
     (if acc then "the β scalars computed from %aup, " else "") ++ hand ++
     "the input passthroughs and the marked report-only %loss"
+
+/-- The banner of a **sync-BN data-parallel** train step, after its title line: every gradient and
+    update op is `pretty` of a node, the all-reduce blocks included; BN is synchronised; and the
+    step is the single-device step at the global batch, proved as `tieThm` (the all-reduced
+    gradients) and `fwdThm` (the forward), both in `LeanMlir/Proofs/Nets/<dir>/`. Scope notes the
+    statements leave out (drop-path masks, accumulation, bf16: `syncBnBf16WgradNote` /
+    `syncBnBf16TwinsNote`) follow it, from the caller. -/
+def syncBnBanner (tieThm fwdThm dir : String) : String :=
+  "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+  "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
+  "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
+  "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
+  "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
+  "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
+  "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
+  "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
+  s!"    // global batch N x b: proved as {tieThm} (every all-reduced\n" ++
+  s!"    // gradient) and {fwdThm} (the forward), both in\n" ++
+  s!"    // LeanMlir/Proofs/Nets/{dir}/.\n"
+
+/-- The sync-BN banner's bf16 note for the nets whose conv weight gradients have a sharded bf16
+    statement (ResNet, `Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global`): only the
+    weight gradient's rounding differs from one device's. -/
+def syncBnBf16WgradNote : String :=
+  "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++
+  "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
+  "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
+  "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
+  "    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)\n"
+
+/-- The sync-BN banner's bf16 note for the nets with no such peer (depthwise and XLA-strided convs:
+    MobileNetV2, MobileNetV4, EfficientNet): the bf16 twins are outside the statement. -/
+def syncBnBf16TwinsNote : String :=
+  "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
+  "    // their operands per element, are not in that statement.)\n"
 
 /-- The `%wdz` declaration an excluding render needs. Emitted only when the flag is on, so at
     `wdExclude := false` not one byte moves and every committed artifact is untouched. `params`
@@ -424,6 +465,30 @@ def bnEvalSite (B oc hh ww : Nat) (epsStr gName btName statP xin : String) :
   pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := ww)
     gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc (.operand xin zin))
 
+/-- **One vector-LN site at the per-example index**: `lnRowF` at the scalar identities
+    `%one`/`%zero` (γ = 1, β = 0), then the real `[n]` affine `rowScaleF gN` and `rowBiasF btN`, on
+    the `[m, n]` matrix `xin`, at ε `epsStr`. ViT's token LN (`m` tokens) and ConvNeXt's head LN
+    (`m = 1`, after GAP). Returns the LN-output SSA. The ℝ arguments do not print, so `0` and `1`
+    stand for them. -/
+def vecLnSite (B m n : Nat) (epsStr gN btN xin : String) : StateM EmitS (String × String) := do
+  let (c1, a) ← pretty B (.lnRowF (m := m) (n := n) "%one" "%zero" epsStr 0 1 0
+                            (.operand xin (0 : Vec (m*n))))
+  let (c2, b) ← pretty B (.rowScaleF (m := m) (n := n) gN (0 : Vec n) (.operand a (0 : Vec (m*n))))
+  let (c3, o) ← pretty B (.rowBiasF (m := m) (n := n) btN (0 : Vec n) (.operand b (0 : Vec (m*n))))
+  pure (c1 ++ c2 ++ c3, o)
+
+/-- **`vecLnSite` at the batched index**: the same three ops as `batchOp`s over `N` examples of
+    `[m, n]` each. `m` is the row count PER EXAMPLE; folding the batch into it is a different
+    graph. -/
+def vecLnSiteB (N m n : Nat) (epsStr gN btN xin : String) : StateM EmitS (String × String) := do
+  let (c1, a) ← pretty N (.batchOp (N := N) (.lnRow (m := m) (n := n) "%one" "%zero" epsStr 0 1 0)
+                            (.operand xin (0 : Vec (N*(m*n)))))
+  let (c2, b) ← pretty N (.batchOp (N := N) (.rowScale (m := m) (n := n) gN (0 : Vec n))
+                            (.operand a (0 : Vec (N*(m*n)))))
+  let (c3, o) ← pretty N (.batchOp (N := N) (.rowBias (m := m) (n := n) btN (0 : Vec n))
+                            (.operand b (0 : Vec (N*(m*n)))))
+  pure (c1 ++ c2 ++ c3, o)
+
 /-- The label-smoothed cotangent after a render's softmax: `pretty` of `smoothedCotTail` over the
     softmax's name `smN` and `%onehot`, at width `n` per example (`1 * K` under the row softmax,
     `K` under `softmaxDiv ∘ expe`). The ℝ arguments do not print, so `0` stands for them. With the
@@ -437,5 +502,99 @@ def smoothedCotB (B n : Nat) (aStr negAK bStr smN : String) : StateM EmitS (Stri
     `sgN` and `%onehot`; with the sigmoid printed first, the text is `pretty` of `bceLossCotGraph`. -/
 def bceCotB (B n : Nat) (bStr sgN : String) : StateM EmitS (String × String) :=
   pretty B (bceCotTail (N := B) (n := n) 0 bStr (.operand sgN 0) (.operand "%onehot" 0))
+
+-- ════════════════════════════════════════════════════════════════
+-- § The report-only `%loss` blocks
+-- ════════════════════════════════════════════════════════════════
+
+/-! The scalar `%loss` every train step returns is for logging: it is on no gradient path, and it
+is NOT `pretty` of an AST node, which the emitted text says. No theorem covers it, so a wrong loss
+here (plain CE against a smoothed cotangent, a K = 10 literal at K = 1000) shows only as a reported
+loss that disagrees with the reference's under an otherwise bit-identical forward — only the
+numeric tie catches it. That is why each block is written once, here, with its hyperparameters
+derived (`oneMinusAlpha`, `alphaOverK`) rather than spelled as literals. Each block introduces only
+`%l*` names and reads only the logits or softmax and `%onehot`, so it never shifts a proven
+output. -/
+
+/-- **Mean label-smoothed CE** over the softmax `nSm` (`[B, nClasses]`):
+    `loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm + (α/K)·Σ_k log sm ]`, the objective whose
+    cotangent `smoothedCotB` prints. Every batched CE render's `%loss`. -/
+def reportSmoothedCeLoss (B nClasses : Nat) (nSm : String) (alpha : Float := 0.1) : String :=
+  "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+  s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
+  s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
+  s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha alpha}> : {ty [B]}\n" ++
+  s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses alpha}> : {ty [B]}\n" ++
+  s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
+  s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
+  s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
+  s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+  s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
+  s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+
+/-- **Mean BCE-with-logits** over the logits `nLog` (`[B, nClasses]`), the `reportSmoothedCeLoss`
+    peer for the renders whose cotangent is `bceCotB`. It is the stable form `softplus(z) − t·z`:
+    expanding `t·softplus(−z) + (1−t)·softplus(z)` with `softplus(−x) = softplus(x) − x` collapses
+    the reference's two softplus calls to one, and `softplus(z) = max(z,0) + log(1 + exp(−|z|))`
+    never exponentiates a positive number. The mean is over all `B·K` entries, not of the
+    per-example sum. -/
+def reportBceLoss (B nClasses : Nat) (nLog : String) : String :=
+  "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+  "    // BCE-with-logits, mean over B x K: softplus(z) - t*z, softplus stable as\n" ++
+  "    // max(z,0) + log(1 + exp(-|z|)). Mean over B*K, NOT mean of the per-example sum.\n" ++
+  s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %lzb = stablehlo.constant dense<0.0> : {ty [B, nClasses]}\n" ++
+  s!"    %labs = stablehlo.abs {nLog} : {ty [B, nClasses]}\n" ++
+  s!"    %lneg = stablehlo.negate %labs : {ty [B, nClasses]}\n" ++
+  s!"    %lexp = stablehlo.exponential %lneg : {ty [B, nClasses]}\n" ++
+  s!"    %lone = stablehlo.constant dense<1.0> : {ty [B, nClasses]}\n" ++
+  s!"    %l1pe = stablehlo.add %lone, %lexp : {ty [B, nClasses]}\n" ++
+  s!"    %llg = stablehlo.log %l1pe : {ty [B, nClasses]}\n" ++
+  s!"    %lmax = stablehlo.maximum {nLog}, %lzb : {ty [B, nClasses]}\n" ++
+  s!"    %lsp = stablehlo.add %lmax, %llg : {ty [B, nClasses]}\n" ++
+  s!"    %ltz = stablehlo.multiply %onehot, {nLog} : {ty [B, nClasses]}\n" ++
+  s!"    %lbce = stablehlo.subtract %lsp, %ltz : {ty [B, nClasses]}\n" ++
+  s!"    %lsum2 = stablehlo.reduce(%lbce init: %lz) applies stablehlo.add across dimensions = [0, 1] : ({ty [B, nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    %lbfc = stablehlo.constant dense<{B * nClasses}.0> : tensor<f32>\n" ++
+  s!"    %loss = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
+
+/-- **Mean plain CE from the logits** `nLog` (`[B, nClasses]`): the block re-derives the softmax
+    itself, because the per-example SGD renders (MLP, MNIST CNN) never name theirs. -/
+def reportCeLossOfLogits (B nClasses : Nat) (nLog : String) : String :=
+  "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
+  s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %lex = stablehlo.exponential {nLog} : {ty [B,nClasses]}\n" ++
+  s!"    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,nClasses]}\n" ++
+  s!"    %lsm = stablehlo.divide %lex, %lsmb : {ty [B,nClasses]}\n" ++
+  s!"    %llog = stablehlo.log %lsm : {ty [B,nClasses]}\n" ++
+  s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
+  s!"    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
+  s!"    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+  s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
+  s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+
+/-- The banner `reportCeLossOfSm` opens with unless its caller passes its own. -/
+def reportCeLossBanner : String :=
+  "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
+  "    //    feeds no parameter, only the driver's progress line) ──\n"
+
+/-- **Mean plain CE from the softmax** `nSm` (`[B, nClasses]`), read from the same softmax the
+    cotangent uses: the packed-optimizer CIFAR renders. It reduces against `%lzero`, which those
+    renders' constants block declares. -/
+def reportCeLossOfSm (B nClasses : Nat) (nSm : String) (banner : String := reportCeLossBanner) :
+    String :=
+  banner ++
+  s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
+  s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
+  s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
+  s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
+  s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
+  s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n"
 
 end Proofs.StableHLO

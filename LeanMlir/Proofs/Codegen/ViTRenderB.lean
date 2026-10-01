@@ -70,26 +70,6 @@ MLP 768; depth 12. -/
 
 /-! ## The sites, one per per-example site in `ViTRender.lean` -/
 
-/-- One **vector-LN** site, batched: `lnRow(1,0) → rowScale γ → rowBias β` on the `[197,192]` token
-    matrix. Three `batchOp`s where the per-example peer has three bare nodes.
-
-    `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
-    into one index is exactly the defect this file exists to remove. -/
-private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
-    StateM Proofs.StableHLO.EmitS (String × String) := do
-  let vbTok := V.tok
-  let vbD := V.d
-  let (c1, a) ← pretty vbB (.batchOp (N := vbB)
-      (.lnRow (m := vbTok) (n := vbD) "%one" "%zero" vEPS 0 1 0)
-      (.operand xin (0 : Vec (vbB*(vbTok*vbD)))))
-  let (c2, b) ← pretty vbB (.batchOp (N := vbB)
-      (.rowScale (m := vbTok) (n := vbD) gName (0 : Vec vbD))
-      (.operand a (0 : Vec (vbB*(vbTok*vbD)))))
-  let (c3, o) ← pretty vbB (.batchOp (N := vbB)
-      (.rowBias (m := vbTok) (n := vbD) btName (0 : Vec vbD))
-      (.operand b (0 : Vec (vbB*(vbTok*vbD)))))
-  pure (c1 ++ c2 ++ c3, o)
-
 /-- One **transformer block** forward, batched: LN1 → Q/K/V dense → per-head SDPA
     (slice → QKᵀ → scale → softmax → ·V → pad, summed) → out dense → +res → LN2 → fc1 → GELU →
     fc2 → +res.
@@ -118,7 +98,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   -- halves the noise and no structural check sees it.
   let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
-  let (c1, ln1) ← vlnFwdB V vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
+  let (c1, ln1) ← vecLnSiteB vbB V.tok V.d vEPS s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbD) zrnd w b (0 : Mat vbD vbD)
           (0 : Vec vbD))
@@ -178,7 +158,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     | none   => pure ("", o)
   let (ch, hres) ← pretty vbB (.addVB (.operand xin (0 : Vec (vbB*(vbTok*vbD))))
       (.operand oD (0 : Vec (vbB*(vbTok*vbD)))))
-  let (c2, ln2) ← vlnFwdB V vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
+  let (c2, ln2) ← vecLnSiteB vbB V.tok V.d vEPS s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbM) zrnd s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
           (0 : Mat vbD vbM) (0 : Vec vbM))
@@ -238,7 +218,7 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
   for i in [0:vDEPTH] do
     let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none) bf16
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
-  let (cf, fl) ← vlnFwdB V vbB "%gF" "%btF" cur
+  let (cf, fl) ← vecLnSiteB vbB V.tok V.d vEPS "%gF" "%btF" cur
   -- `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
   -- one `[192]` row per example. Passing the batch here instead type-checks and keeps example 0.
   let (cs, sl) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))

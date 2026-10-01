@@ -26,7 +26,7 @@ That is not a stylistic preference: *a gate on a copy is not a gate on the thing
 
 | name | shape | what it exercises |
 |---|---|---|
-| `p0` | `[4,3,2,2]` | rank-4, DECAYS (`r34WdDecays`: rank ≥ 2), takes the real trust ratio |
+| `p0` | `[4,3,2,2]` | rank-4, DECAYS (`rankWdDecays`: rank ≥ 2), takes the real trust ratio |
 | `p1` | `[5]` | rank-1 — the `no_weight_decay` group: `%wdz`, and D2's `trust = 1` skip |
 | `p2` | `[6,4]` | rank-2, decays. A SECOND decaying parameter is not redundant |
 

@@ -47,7 +47,7 @@ That is why ① and ③ carry the weight: they are bit-exact and need no resolut
 **ONE harness, both nets**, for the reason `TestShardCheck.lean` and `rms-tie` are families: a
 second copy is the double-writer disease one level down, in code. Everything per-net comes from the
 selected net's own signature list and mask predicate — `vitParamSig`/`vitWdDecays` and
-`allParams`/`cnxWdDecays` — i.e. from the SAME sources the renderers choose `%wd`/`%wdz` from, so
+`allParams`/`rankWdDecays` — i.e. from the SAME sources the renderers choose `%wd`/`%wdz` from, so
 the gate cannot drift from the render it gates.
 
 **The two nets' rules are NOT the same, and that is the point of running both.** ViT excludes the
@@ -70,7 +70,7 @@ private def netBySlug (s : String) : IO WdNet :=
   match s with
   | "vit"      => pure { slug := "vit", sig := vitParamSig 10, mask := vitWdDecays,
                          spec := vitVerified }
-  | "convnext" => pure { slug := "convnext", sig := cnxAllParams 10, mask := cnxWdDecays,
+  | "convnext" => pure { slug := "convnext", sig := cnxAllParams 10, mask := rankWdDecays,
                          spec := convnextVerified }
   | _ => throw (IO.userError s!"unknown net '{s}' — expected vit | convnext")
 

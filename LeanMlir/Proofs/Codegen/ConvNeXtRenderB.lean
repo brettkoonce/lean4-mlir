@@ -128,31 +128,10 @@ private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
                                   (reassocB (.operand xin (0 : Vec (bB*(c*h*h))))))
-    let (k2, n)  ← pretty bB (.batchOp (N := bB)
-                                  (.lnRow (m := h*h) (n := c) "%one" "%zero" bEPS 0 1 0)
-                                  (.operand t (0 : Vec (bB*(h*h*c)))))
-    let (k3, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (0 : Vec c))
-                                  (.operand n (0 : Vec (bB*(h*h*c)))))
-    let (k4, bi) ← pretty bB (.batchOp (N := bB) (.rowBias (m := h*h) (n := c) btN (0 : Vec c))
-                                  (.operand sc (0 : Vec (bB*(h*h*c)))))
+    let (k2, bi) ← vecLnSiteB bB (h*h) c bEPS gN btN t
     let (k5, o)  ← pretty bB (.batchOp (N := bB) (.transpose (m := h*h) (n := c))
                                   (.operand bi (0 : Vec (bB*(h*h*c)))))
-    pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
-
-/-- **The HEAD LN, batched-index peer** — `lnFwdSiteB` with the transposes deleted, at `m = 1`:
-    after GAP the tensor is one `[d]` row per example. Must stay op-for-op with
-    `cnxHeadLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers emit the
-    same bytes. -/
-private def headLnFwdSiteB (bB : Nat) (gN btN xin : String) (d : Nat) :
-    StateM Proofs.StableHLO.EmitS (String × String) := do
-    let (k1, n)  ← pretty bB (.batchOp (N := bB)
-                                (.lnRow (m := 1) (n := d) "%one" "%zero" bEPS 0 1 0)
-                                (.operand xin (0 : Vec (bB*(1*d)))))
-    let (k2, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (0 : Vec d))
-                                (.operand n (0 : Vec (bB*(1*d)))))
-    let (k3, o)  ← pretty bB (.batchOp (N := bB) (.rowBias (m := 1) (n := d) btN (0 : Vec d))
-                                (.operand sc (0 : Vec (bB*(1*d)))))
-    pure (k1 ++ k2 ++ k3, o)
+    pure (k1 ++ k2 ++ k5, o)
 
 /-- The head LN's **input-VJP**, batched peer. -/
 private def headLnBackSiteB (bB : Nat) (gN xName cot : String) (d : Nat) :
@@ -287,8 +266,9 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := f) (w := f))
       (.operand cur 0))
-  -- head LN — the per-example peer of `ConvNeXtRender`'s.
-  let (cHn, hn) ← headLnFwdSiteB bB "%hng" "%hnbt" gap V.dims[3]!
+  -- head LN at one row per example: the batched peer of `cnxHeadLnFwdSite`, op for op, as
+  -- `convnext-fwd-b-tie` requires.
+  let (cHn, hn) ← vecLnSiteB bB 1 V.dims[3]! bEPS "%hng" "%hnbt" gap
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
       (.dense "%Wd" "%bd" (0 : Mat (V.dims[3]!) nClasses) 0) (.operand hn 0))
   pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,

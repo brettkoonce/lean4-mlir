@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MLP render half — the train-step text as `pretty` of proven graphs
 
@@ -66,20 +66,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   -- diffing the render.
   -- It must stay the LAST output: the driver keeps the leading parameter tensors
   -- device-resident and reads only the tail (`Verified.Train`).
-  let lossCode :=
-    "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-    s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %lex = stablehlo.exponential {nlog} : {ty [B,d₃]}\n" ++
-    s!"    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,d₃]}, tensor<f32>) -> {ty [B]}\n" ++
-    s!"    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,d₃]}\n" ++
-    s!"    %lsm = stablehlo.divide %lex, %lsmb : {ty [B,d₃]}\n" ++
-    s!"    %llog = stablehlo.log %lsm : {ty [B,d₃]}\n" ++
-    s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B,d₃]}\n" ++
-    s!"    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,d₃]}, tensor<f32>) -> {ty [B]}\n" ++
-    s!"    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-    s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-    s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
-    s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+  let lossCode := reportCeLossOfLogits B d₃ nlog
   "module @m {\n" ++
   -- `%lslot` is an UNUSED INPUT, and it is load-bearing for the ABI rather than the
   -- math. The shared C entry (`lean_iree_mlp_train_step_v`) reads ONE shape list and

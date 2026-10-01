@@ -1092,27 +1092,8 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ═══ assemble ═══
     let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh1 ++ cQh
     let statNames : List String := qs ++ q0c ++ q0p ++ qnames ++ qh1 ++ qh
-    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
-    -- `pretty` of an AST node and says so in the emitted text — the same carve-out
-    -- `resnet34`/`mobilenetv2`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
-    -- cotangent's soft target; plain CE against a smoothed cotangent passes every structural check
-    -- and only the numeric tie catches it.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`).
+    let lossCode := reportSmoothedCeLoss B nClasses nSm
     let body := fwd.code ++
       cSm ++ cDy ++
       cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++ cDgp ++
@@ -1138,21 +1119,9 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step: {trainStepHandNote accOn} ──\n"
        else
         s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
-        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
-        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
-        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
-        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
-        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
-        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b: proved as MobileNetV4SyncTieB.mnv4_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.mnv4FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/MobileNet/.\n" ++
-        (if bf16 then
-          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
-          "    // their operands per element, are not in that statement.)\n"
-         else "")) ++
+        syncBnBanner "MobileNetV4SyncTieB.mnv4_net_syncTiedB"
+          "StableHLO.mnv4FwdGraphSyncFull_shard" "MobileNet" ++
+        (if bf16 then syncBnBf16TwinsNote else "")) ++
       zeroBiasPrelude false mnv4ZbWidths ++ body ++
       (match opt with
        | none => adamWConsts

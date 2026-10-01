@@ -131,14 +131,6 @@ def vitDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd (List.range vi
 --    `.operand <prevSSA> <zero-placeholder>`, threading SSA name strings; `vitBlockGraphMHV` is the
 --    composed-graph reference) ──
 
-/-- One **vector-LN** site (`lnRow(1,0) → rowScale γ → rowBias β`) on the `[197,192]` token matrix,
-    with explicit γ/β param names. Returns the LN-output SSA. -/
-private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  let (c1, a) ← pretty bs (.lnRowF "%one" "%zero" vEPS 0 1 0 (.operand xin (0 : Vec (197*192))))
-  let (c2, b) ← pretty bs (.rowScaleF gName (0 : Vec 192) (.operand a (0 : Vec (197*192))))
-  let (c3, o) ← pretty bs (.rowBiasF btName (0 : Vec 192) (.operand b (0 : Vec (197*192))))
-  pure (c1 ++ c2 ++ c3, o)
-
 /-- The forward SSA names a block's backward + param-SGD reference (the ConvNeXt-`FNames` analogue).
     Per-head arrays hold the 3 heads' slices + pre-softmax + softmax-output. -/
 structure BSaves where
@@ -163,7 +155,7 @@ structure BSaves where
     Not text-guarded against the graph, unlike the other nets' blocks: the graph shares LN1, Q/K/V
     and the first residual, which `pretty` would print again at each use (`FwdGraphTextTies`). -/
 private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
-  let (c1, ln1) ← vlnFwd bs s!"%{pfx}g1" s!"%{pfx}bt1" xin
+  let (c1, ln1) ← vecLnSite bs 197 192 vEPS s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
   let (ck, k) ← pretty bs (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
   let (cv, v) ← pretty bs (.denseRowF s!"%{pfx}Wv" s!"%{pfx}bv" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
@@ -192,7 +184,7 @@ private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.Em
       code := code ++ cad; acc := s
   let (co, o) ← pretty bs (.denseRowF s!"%{pfx}Wo" s!"%{pfx}bo" (0 : Mat 192 192) 0 (.operand acc (0 : Vec (197*192))))
   let (ch, hres) ← pretty bs (.addV (.operand xin (0 : Vec (197*192))) (.operand o (0 : Vec (197*192))))
-  let (c2, ln2) ← vlnFwd bs s!"%{pfx}g2" s!"%{pfx}bt2" hres
+  let (c2, ln2) ← vecLnSite bs 197 192 vEPS s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty bs (.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" (0 : Mat 192 768) 0 (.operand ln2 (0 : Vec (197*192))))
   let (cg, g) ← pretty bs (.geluF (.operand f1 (0 : Vec (197*768))))
   let (cf2, f2) ← pretty bs (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (0 : Mat 768 192) 0 (.operand g (0 : Vec (197*768))))
@@ -219,7 +211,7 @@ private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS
   for i in [0:vDEPTH] do
     let (cb, sv) ← vBlockFwd bs s!"b{i}_" cur
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
-  let (cf, fl) ← vlnFwd bs "%gF" "%btF" cur
+  let (cf, fl) ← vecLnSite bs 197 192 vEPS "%gF" "%btF" cur
   let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (0 : Vec (197*192))))
   let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (0 : Mat 192 nClasses) 0 (.operand sl (0 : Vec 192)))
   pure (code ++ cf ++ cs ++ cl, { blocks, flnIn := cur, clsTok := sl, logits })
@@ -275,7 +267,7 @@ private def rdW (bs : Nat) (adam : Bool) (a c : Nat) (xSSA wN lrS dy : String) :
   else pretty bs (.rowDenseWeightSgd (N := 197) (a := a) (c := c) xSSA wN lrS
                     (0 : Vec (197*a)) (0 : Mat a c) 0 (.operand dy (0 : Vec (197*c))))
 
-/-- One **vector-LN backward** site (the reverse of `vlnFwd`): given the LN-output cotangent `dyOut`
+/-- One **vector-LN backward** site (the reverse of `vecLnSite`): given the LN-output cotangent `dyOut`
     on `[197,192]` and the saved LN INPUT `xin`, emit (a) the β tail (`rowDenseBias{Sgd,Grad}`,
     dβ=Σ dy), (b) the γ tail (`veclnGamma{Sgd,Grad}`, dγ=Σ dy⊙x̂ recomputed from `xin`), and (c) the
     input cotangent `dxin = lnRowBack(γ=1)(rowScale γ (dy))` (back through normalize after the
@@ -759,36 +751,14 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- The wd operand is chosen from the SAME `vitParamSig` entry that names the site, never a
       -- parallel list — the silent-slot rule: a misaligned mask would decay the wrong 126 params
       -- and nothing in the arity, the types or the prefix audit would notice.
-      let wdN := if wdExclude && !vitWdDecays nm ds then "%wdz" else "%wd"
+      let wdN := wdNameBy wdExclude nm ds vitWdDecays
       let gSSA := if clip then clipped[i]! else gradNames[i]!
       let (c, nT, nM, nV, nE) ← adamOneEma bs replicas ⟨nm, gSSA, ds⟩ ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
-    -- `%loss` is REPORT-ONLY and on no gradient path, so NO theorem covers it — plain CE here
-    -- against a smoothed-CE cotangent would be caught only by the numeric tie. It is therefore
-    -- built from the SAME smoothed recipe the cotangent implies, and declared as a carve-out.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [bs, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [bs, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [bs, nClasses]}, tensor<f32>) -> {ty [bs]}\n" ++
-      -- These constants are derived, never the literals `0.900000` / `0.010000` — (1−α) and α/K
-      -- baked at K = 10. The same hardcode on a COTANGENT makes the objective 100× wrong at
-      -- K = 1000. Here it would be confined to the report-only `%loss` (the ViT cotangent takes
-      -- its constant as an argument), so it would produce a WRONG LOSS NUMBER against a correct
-      -- gradient — the same trap read backwards, and harder to notice.
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha}> : {ty [bs]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [bs]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [bs]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [bs]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [bs]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [bs]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{bs}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`).
+    let lossCode := reportSmoothedCeLoss bs nClasses nSm
     let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)
     -- THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
     -- The driver does `pbuf := out` — each step's output IS the next step's input (the no-copy

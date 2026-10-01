@@ -646,7 +646,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- gate `mobilenetv2-syncbn-check`. Never a committed artifact.
     (forceSync : Bool := false)
     -- The recipe knobs, TRAILING and defaulted so every committed render is byte-identical:
-    --   `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `r34WdName`'s rule;
+    --   `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `wdNameBy`'s rule;
     --   `cd` — classifier dropout at the driver's `%do` mask (EfficientNet's and MNv4's slot);
     --   `alpha` — the label-smoothing mass. At α = 0 the smoothing ops are not emitted at all.
     (wdExclude : Bool := false) (cd : Bool := false) (alpha : Float := 0.1) : String :=
@@ -821,7 +821,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let wdN := r34WdName wdExclude g.nm g.ds
+      let wdN := wdNameBy wdExclude g.nm g.ds
       let (c, nT, nM, nV) ← match opt with
         | .adamw   => adamOne B replicas g wdN
         | .rmsprop => rmsOne  B replicas g wdN
@@ -835,29 +835,8 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let statNames : List String :=
       [m0, v0, m1d, v1d, m1p, v1p] ++ q2 ++ q3 ++ q4 ++ q5 ++ q6 ++ q7 ++ q8 ++ q9 ++ q10 ++
       q11 ++ q12 ++ q13 ++ q14 ++ q15 ++ q16 ++ q17 ++ [mh, vh]
-    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
-    -- `pretty` of an AST node and says so in the emitted text — the same carve-out
-    -- `resnet34`/`cifar8`'s `%loss` takes. The SMOOTHED cross-entropy, matching the
-    -- cotangent's soft target:
-    --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ].
-    -- Getting this wrong (plain CE against a smoothed cotangent) is invisible to every proof in the
-    -- repo — only the numeric tie catches it.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha alpha}> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses alpha}> : {ty [B]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE, at the cotangent's α (`reportSmoothedCeLoss`).
+    let lossCode := reportSmoothedCeLoss B nClasses nSm alpha
     let body := F.code ++ cSm ++ cDy ++
       cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHb ++ cHg ++ cHt ++
       b17.code ++ b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++
@@ -891,21 +870,9 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         s!"    // ── MobileNetV2 batch-BN {opt.label} train step: {trainStepHandNote} ──\n"
        else
         s!"    // ── MobileNetV2 batch-BN {opt.label} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
-        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
-        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
-        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
-        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
-        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
-        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b: proved as MobileNetV2SyncTieB.mnv2_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.mobilenetv2FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/MobileNet/.\n" ++
-        (if bf16 then
-          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
-          "    // their operands per element, are not in that statement.)\n"
-         else "")) ++
+        syncBnBanner "MobileNetV2SyncTieB.mnv2_net_syncTiedB"
+          "StableHLO.mobilenetv2FwdGraphSyncFull_shard" "MobileNet" ++
+        (if bf16 then syncBnBf16TwinsNote else "")) ++
       zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++
       (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock mnv2RmsHyper) ++
       wdzConst wdExclude ++ adamCode ++ lossCode ++

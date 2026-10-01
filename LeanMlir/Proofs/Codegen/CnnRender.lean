@@ -90,20 +90,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   -- only `%l*` names, so the ten proven parameter outputs are byte-identical and
   -- `CnnFold` is untouched. `%lslot` is the unused input that keeps the C
   -- entry's single shape list symmetric (see `MlpRender` for the full argument).
-  let lossCode :=
-    "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-    s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %lex = stablehlo.exponential {nLog} : {ty [B,nClasses]}\n" ++
-    s!"    %lsum = stablehlo.reduce(%lex init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-    s!"    %lsmb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [B]}) -> {ty [B,nClasses]}\n" ++
-    s!"    %lsm = stablehlo.divide %lex, %lsmb : {ty [B,nClasses]}\n" ++
-    s!"    %llog = stablehlo.log %lsm : {ty [B,nClasses]}\n" ++
-    s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
-    s!"    %lrow = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B,nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-    s!"    %lsum2 = stablehlo.reduce(%lrow init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-    s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-    s!"    %lossm = stablehlo.divide %lsum2, %lbf : tensor<f32>\n" ++
-    s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+  let lossCode := reportCeLossOfLogits B nClasses nLog
   "module @m {\n" ++
   s!"  func.func @cnn_train_step(%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %lslot: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}, tensor<f32>) " ++ "{\n" ++
   "    // ── cnn train step: every op is pretty(verified AST node) except the marked report-only %loss ──\n" ++
@@ -552,15 +539,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (gbb, sbb) ← pretty B (SHlo.biasGrad (n := nClasses) (.operand nDy zNC))
     let (abb, tbb, mbb, vbb) ← optTail opt B replicas nClasses "%bb" [nClasses] sbb
     -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
-    let lossCode :=
-      "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
-      "    //    feeds no parameter, only the driver's progress line) ──\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
-      s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
-      s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
-      s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n"
+    let lossCode := reportCeLossOfSm B nClasses nSm
     let body := cHc1 ++ cAc1 ++ cHc2 ++ cAc2 ++ cP1 ++ cHc3 ++ cAc3 ++ cHc4 ++ cAc4 ++ cP2 ++
       cHc5 ++ cAc5 ++ cHc6 ++ cAc6 ++ cP3 ++ cHc7 ++ cAc7 ++ cHc8 ++ cAc8 ++ cP4 ++
       cH9 ++ cA9 ++ cHa ++ cAa ++ cLog ++ cSm ++ cD0 ++ cDy ++ lossCode ++
@@ -810,15 +789,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (gbb, sbb) ← pretty B (.denseBiasGradB (N := B) (.operand nDy bNC))
     let (abb, tbb, mbb, vbb) ← optTail opt B replicas nClasses "%bb" [nClasses] sbb
     -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
-    let lossCode :=
-      "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
-      "    //    feeds no parameter, only the driver's progress line) ──\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
-      s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
-      s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
-      s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n"
+    let lossCode := reportCeLossOfSm B nClasses nSm
     let body := cHc1 ++ cAc1 ++ cHc2 ++ cAc2 ++ cP1 ++ cHc3 ++ cAc3 ++ cHc4 ++ cAc4 ++ cP2 ++
       cHc5 ++ cAc5 ++ cHc6 ++ cAc6 ++ cP3 ++ cHc7 ++ cAc7 ++ cHc8 ++ cAc8 ++ cP4 ++
       cH9 ++ cA9 ++ cHa ++ cAa ++ cLog ++ cSm ++ cD0 ++ cDy ++ lossCode ++
@@ -1023,14 +994,9 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
         -- CE against a smoothed-CE cotangent is caught only by a numeric tie, because no
         -- theorem covers a value on no gradient path.
         pure (cSm ++ cD0 ++ cSc, nSc,
-          "    // ── report-only scalar loss (NOT pretty(AST): no rank-0 loss op; feeds no\n" ++
-          "    //    parameter, only the driver's progress line) ──\n" ++
-          s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
-          s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
-          s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-          s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
-          s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-          s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n")
+          reportCeLossOfSm B nClasses nSm
+            ("    // ── report-only scalar loss (NOT pretty(AST): no rank-0 loss op; feeds no\n" ++
+             "    //    parameter, only the driver's progress line) ──\n"))
     -- ═══ backward: dense head → (scatter → relu-back → BN-back → conv-back) per block, 4 stages ═══
     let (cDyA, nDyA) ← pretty B (.selectPos nHa zD1 (.dotOut "%Wb" Wb (.operand nDy zNC)))
     let (cDy9, nDy9) ← pretty B (.selectPos nH9 zD1 (.dotOut "%Wa" Wa (.operand nDyA zD1)))
@@ -1520,15 +1486,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (gbb, sbb) ← pretty B (.denseBiasGradB (N := B) (.operand nDy bNC))
     let (abb, tbb, mbb, vbb) ← optTail opt B replicas nClasses "%bb" [nClasses] sbb
     -- ═══ report-only scalar loss — OUTSIDE the proven surface, does not feed the update ═══
-    let lossCode :=
-      "    // ── report-only scalar loss (NOT pretty(AST): the kit has no rank-0 loss op; it\n" ++
-      "    //    feeds no parameter, only the driver's progress line) ──\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B,nClasses]}\n" ++
-      s!"    %ohll = stablehlo.multiply %onehot, %llog : {ty [B,nClasses]}\n" ++
-      s!"    %csum = stablehlo.reduce(%ohll init: %lzero) applies stablehlo.add across dimensions = [0, 1] : ({ty [B,nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %cneg = stablehlo.negate %csum : tensor<f32>\n" ++
-      s!"    %lbf = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.divide %cneg, %lbf : tensor<f32>\n"
+    let lossCode := reportCeLossOfSm B nClasses nSm
     let body := cHc1 ++ cBn1 ++ cAc1 ++ cHc2 ++ cBn2 ++ cAc2 ++ cP1 ++
       cHc3 ++ cBn3 ++ cAc3 ++ cHc4 ++ cBn4 ++ cAc4 ++ cP2 ++
       cHc5 ++ cBn5 ++ cAc5 ++ cHc6 ++ cBn6 ++ cAc6 ++ cP3 ++

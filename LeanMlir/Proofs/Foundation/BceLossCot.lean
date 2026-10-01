@@ -42,7 +42,7 @@ Note: **No label smoothing on this path, and that is the recipe.** timm's a3 arg
 the soft targets reach `%onehot` from mixup/cutmix on the host, not from a smoothing constant.
 So `smoothTarget` does not appear here and the render emits three ops where CE emits five.
 
-Note: **`%loss` itself is report-only.** The renderer's `lossCodeBce` block is hand-written text, not
+Note: **`%loss` itself is report-only.** The renderer's `reportBceLoss` block is hand-written text, not
 `pretty` of an AST node, and nothing here is about those lines. What is proved
 is about the COTANGENT chain, which is on the gradient path and is `pretty(provenGraph)`.
 

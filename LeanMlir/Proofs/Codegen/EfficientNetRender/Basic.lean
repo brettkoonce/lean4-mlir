@@ -1162,7 +1162,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     -- `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate `efficientnet-syncbn-check`. Never a committed artifact.
     (forceSync : Bool := false)
-    -- `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `r34WdName`'s rule,
+    -- `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `wdNameBy`'s rule,
     -- the JAX `wdExcludeNormBias` mask. TRAILING and defaulted: every committed render is untouched.
     (wdExclude : Bool := false) : String :=
   let sync : Bool := replicas > 1 || forceSync
@@ -1208,7 +1208,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut eN : List String := []
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
-      let wdN := r34WdName wdExclude nm ds
+      let wdN := wdNameBy wdExclude nm ds
       let (c, nT, nM, nV) ← match opt with
         | .adamw   => adamOne B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
         | .rmsprop => rmsOne  B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
@@ -1232,33 +1232,8 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         let (cE, nE) ← pretty B (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
         adamCode := adamCode ++ cE
         eN := eN ++ [nE]
-    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
-    -- `pretty` of an AST node and says so in the emitted text — the carve-out `resnet34_`/
-    -- `cifar8_adam_train_step` also take.
-    --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ]
-    -- No theorem covers this, and nothing on a gradient path touches it, so a PLAIN CE here against
-    -- a smoothed-CE cotangent would be caught only by the numeric tie. It is therefore built from
-    -- the SAME smoothed recipe the cotangent implies, and gated.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      -- DERIVED, both of them. `%laKc` is α/K. A hardcoded K=10 value here would survive a grep
-      -- for the cotangent's `-0.010000` because this copy is positive-signed, and it is on no
-      -- gradient path, so nothing but an implausible reported loss would show it.
-      -- `%lomac` is (1−α), K-independent, derived anyway so α has one spelling here.
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`).
+    let lossCode := reportSmoothedCeLoss B nClasses nSm
     let pTy := sigList.map (fun p => ty p.2)
     -- THE RETURN LAYOUT MUST MIRROR THE INPUT LAYOUT, tensor for tensor. The driver does `pbuf :=
     -- out` — each step's output IS the next step's input (the no-copy handover) — and the shim's G4
@@ -1278,25 +1253,13 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
        else
         s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         s!"    // {trainStepHandNote}.\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
-        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
-        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
-        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
-        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
-        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
-        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b: proved as EnetSyncTieG.efficientnet_net_syncTiedG (every all-reduced\n" ++
-        "    // gradient) and StableHLO.efficientnetFwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/EfficientNet/.\n" ++
+        syncBnBanner "EnetSyncTieG.efficientnet_net_syncTiedG"
+          "StableHLO.efficientnetFwdGraphSyncFull_shard" "EfficientNet" ++
         (if sd || cd then
           "    // (Both are stated without drop-path and dropout; this artifact's per-example masks\n" ++
           "    // are not in that statement.)\n"
          else "") ++
-        (if bf16 then
-          "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
-          "    // their operands per element, are not in that statement.)\n"
-         else "")) ++
+        (if bf16 then syncBnBf16TwinsNote else "")) ++
       (match opt with
        | .adamw => ""
        | .rmsprop =>

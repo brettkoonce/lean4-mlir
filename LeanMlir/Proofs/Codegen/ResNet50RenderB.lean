@@ -893,50 +893,9 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
     let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++
       st9 ++ st10 ++ st11 ++ st12 ++ st13 ++ st14 ++ st15 ++ st16)
-    -- `%loss` is REPORT-ONLY (logging), on no gradient path, and NOT `pretty` of an AST node — the
-    -- same report-only carve-out R34's takes. SMOOTHED CE, matching the cotangent's soft target;
-    -- plain CE here would be wrong, and only a numeric tie catches it.
-    -- **BCE-with-logits, in the stable form `softplus(z) − t·z`.** Expanding `t·softplus(−z) +
-    -- (1−t)·softplus(z)` with the identity `softplus(−x) = softplus(x) − x` collapses the
-    -- reference's two softplus calls to ONE, and the result never exponentiates a positive number:
-    -- `softplus(z) = max(z,0) + log(1 + exp(−|z|))`. Report-only, like the CE loss beside it — but
-    -- the arithmetic still has to be right, because the epoch curve is how the run is judged
-    -- against the reference.
-    let lossCodeBce :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      "    // BCE-with-logits, mean over B x K: softplus(z) - t*z, softplus stable as\n" ++
-      "    // max(z,0) + log(1 + exp(-|z|)). Mean over B*K, NOT mean of the per-example sum.\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %lzb = stablehlo.constant dense<0.0> : {ty [B, nClasses]}\n" ++
-      s!"    %labs = stablehlo.abs {nLog} : {ty [B, nClasses]}\n" ++
-      s!"    %lneg = stablehlo.negate %labs : {ty [B, nClasses]}\n" ++
-      s!"    %lexp = stablehlo.exponential %lneg : {ty [B, nClasses]}\n" ++
-      s!"    %lone = stablehlo.constant dense<1.0> : {ty [B, nClasses]}\n" ++
-      s!"    %l1pe = stablehlo.add %lone, %lexp : {ty [B, nClasses]}\n" ++
-      s!"    %llg = stablehlo.log %l1pe : {ty [B, nClasses]}\n" ++
-      s!"    %lmax = stablehlo.maximum {nLog}, %lzb : {ty [B, nClasses]}\n" ++
-      s!"    %lsp = stablehlo.add %lmax, %llg : {ty [B, nClasses]}\n" ++
-      s!"    %ltz = stablehlo.multiply %onehot, {nLog} : {ty [B, nClasses]}\n" ++
-      s!"    %lbce = stablehlo.subtract %lsp, %ltz : {ty [B, nClasses]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%lbce init: %lz) applies stablehlo.add across dimensions = [0, 1] : ({ty [B, nClasses]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B * nClasses}.0> : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n"
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<0.900000> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses}> : {ty [B]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE, or under `bce` the BCE-with-logits on the logits
+    -- (`reportSmoothedCeLoss` / `reportBceLoss`).
+    let lossCode := if bce then reportBceLoss B nClasses nLog else reportSmoothedCeLoss B nClasses nSm
     let body := fw.code ++ cSm ++ cDy ++
       cDgi ++ cWd ++ cbd ++ cDgp ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
@@ -975,17 +934,8 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // of the per-replica gradient nodes. BatchNorm is PER REPLICA here.\n"
        else
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
-        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
-        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
-        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
-        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
-        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
-        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b: proved as ResNet50SyncTieB.r50_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.resnet50FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/ResNet/.\n" ++
+        syncBnBanner "ResNet50SyncTieB.r50_net_syncTiedB"
+          "StableHLO.resnet50FwdGraphSyncFull_shard" "ResNet" ++
         (if accOn then
           "    // Under accumulation that holds per MICRO-step: BN normalises over the replicas'\n" ++
           "    // micro-batches together, and the accumulator runs after the all-reduced gradient.\n"
@@ -994,16 +944,10 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
           "    // (Both are stated without drop-path; this artifact's per-example masks are not in\n" ++
           "    // that statement.)\n"
          else "") ++
-        (if bf16 then
-          "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++
-          "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
-          "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
-          "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
-          "    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)\n"
-         else "")) ++
+        (if bf16 then syncBnBf16WgradNote else "")) ++
       zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ body ++ optConstsB opt wdStr ++
       wdzConst wdExclude ++ clipZeroConst gradClip ++ adamCode ++
-      (if bce then lossCodeBce else lossCode) ++
+      lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
   -- `G` (`<p>a`) only under `.adamwAccum`, `E` only under `ema`, in `[θ|m|v|G|E]` order.
@@ -1303,7 +1247,7 @@ end Proofs.StableHLO
 -- Same three regions and the same signature as the CE renders: the loss is not state, so nothing
 -- in the driver moves. `adam64bce` exists so `lake build r50-bce-tie` can recover the cotangent
 -- from AdamW's `m' = 0.1·g` (LAMB's trust ratio is in the way); `lamb64bce` is the recipe-facing
--- pair. Both share ONE `lossCodeBce`, so a defect in the loss cannot be present in one and not the
+-- pair. Both share ONE `reportBceLoss`, so a defect in the loss cannot be present in one and not the
 -- other.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_adam64bce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
@@ -1345,11 +1289,11 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) false
          == "lambaccdp8x64"
 -- The rank test, spelled out on the shapes it actually decides.
-#guard Proofs.StableHLO.r34WdDecays "conv1w" [64,3,7,7] == true      -- conv weight: decayed
-#guard Proofs.StableHLO.r34WdDecays "bn1g" [64] == false             -- BN γ: excluded
-#guard Proofs.StableHLO.r34WdDecays "bn1b" [64] == false             -- BN β: excluded
-#guard Proofs.StableHLO.r34WdDecays "fcb" [1000] == false            -- dense bias: excluded
-#guard Proofs.StableHLO.r34WdDecays "fcw" [2048,1000] == true        -- dense weight: decayed
+#guard Proofs.StableHLO.rankWdDecays "conv1w" [64,3,7,7] == true      -- conv weight: decayed
+#guard Proofs.StableHLO.rankWdDecays "bn1g" [64] == false             -- BN γ: excluded
+#guard Proofs.StableHLO.rankWdDecays "bn1b" [64] == false             -- BN β: excluded
+#guard Proofs.StableHLO.rankWdDecays "fcb" [1000] == false            -- dense bias: excluded
+#guard Proofs.StableHLO.rankWdDecays "fcw" [2048,1000] == true        -- dense weight: decayed
 -- The driver reads `k` back OUT of this string (`Verified.Train`'s `accK`). Pin the round trip
 -- here, where the name is produced, rather than trusting two parsers to agree.
 #guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8)).drop 5
@@ -1406,7 +1350,7 @@ end Proofs.StableHLO
 -- different decay semantics would make an already-quoted number unreproducible: a last-writer-wins
 -- race whose loser would be a finished 34-hour run.
 --
--- The exclusion is the PLAIN RANK TEST (`r34WdDecays`, `ds.length ≥ 2`), so it needs no name
+-- The exclusion is the PLAIN RANK TEST (`rankWdDecays`, `ds.length ≥ 2`), so it needs no name
 -- carve-out: ResNet has no positional parameter for ViT's `pos` rule to apply to. What it excludes
 -- here is every BN γ/β and every conv/dense bias.
 --

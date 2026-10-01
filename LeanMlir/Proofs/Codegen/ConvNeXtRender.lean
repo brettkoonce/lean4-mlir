@@ -274,19 +274,14 @@ def chLnPrelude : String :=
 
 /-- One **LayerNorm forward** site — ConvNeXt's real channel-LN: transpose to `[h·w, c]`,
     normalise each spatial row over its channels at the scalar identities `%one`/`%zero`, apply
-    the real `[c]` affine, transpose back. -/
+    the real `[c]` affine (`vecLnSite` at `m = h·w`), transpose back. -/
 def cnxLnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty cBS (.transposeF (m := c) (n := h*h)
                                   (reassoc (.operand xin (0 : Vec (c*h*h)))))
-    let (k2, n)  ← pretty cBS (.lnRowF (m := h*h) (n := c) "%one" "%zero" cEPS 0 1 0
-                                  (.operand t (0 : Vec (h*h*c))))
-    let (k3, sc) ← pretty cBS (.rowScaleF (m := h*h) (n := c) gN (0 : Vec c)
-                                  (.operand n (0 : Vec (h*h*c))))
-    let (k4, bi) ← pretty cBS (.rowBiasF (m := h*h) (n := c) btN (0 : Vec c)
-                                  (.operand sc (0 : Vec (h*h*c))))
+    let (k2, bi) ← vecLnSite cBS (h*h) c cEPS gN btN t
     let (k5, o)  ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand bi (0 : Vec (h*h*c))))
-    pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
+    pure (k1 ++ k2 ++ k5, o)
 
 /-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`.
 
@@ -295,19 +290,13 @@ def cnxLnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     "normalise the feature vector" are the same function at `m = 1`. Mirrors
     `Proofs.StableHLO.headLNGraph` op for op.
 
-    Every operand is annotated `Vec (1 * d)`, never `Vec d`. `1 * d` does NOT reduce for a
-    VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d` here is `V.dims[3]!`, which
-    moves with the ConvNeXt size. It is the same annotation `convNextBackAll`'s smoothing chain
-    carries, for the same reason. -/
+    It is `vecLnSite` at `m = 1`, so every operand is annotated `Vec (1 * d)`, never `Vec d`.
+    `1 * d` does NOT reduce for a VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d`
+    here is `V.dims[3]!`, which moves with the ConvNeXt size. It is the same annotation
+    `convNextBackAll`'s smoothing chain carries, for the same reason. -/
 def cnxHeadLnFwdSite (cBS : Nat) (gN btN xin : String) (d : Nat) :
-    StateM Proofs.StableHLO.EmitS (String × String) := do
-    let (k1, n)  ← pretty cBS (.lnRowF (m := 1) (n := d) "%one" "%zero" cEPS 0 1 0
-                                  (.operand xin (0 : Vec (1*d))))
-    let (k2, sc) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (0 : Vec d)
-                                  (.operand n (0 : Vec (1*d))))
-    let (k3, o)  ← pretty cBS (.rowBiasF (m := 1) (n := d) btN (0 : Vec d)
-                                  (.operand sc (0 : Vec (1*d))))
-    pure (k1 ++ k2 ++ k3, o)
+    StateM Proofs.StableHLO.EmitS (String × String) :=
+  vecLnSite cBS 1 d cEPS gN btN xin
 
 /-- The head LN's **input-VJP**: `dx = lnRowBack γ=1 (rowScale γ dy)`. `xName` is the saved LN
     input — the GAP output — which `lnRowBack` re-normalises from rather than saving x̂/istd. -/
@@ -533,22 +522,21 @@ private def allParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
 -- a runtime OPERAND NAME, so excluding a param binds it to a zero constant — no new op, no
 -- interface change, no driver change.
 
-/-- **Does this parameter get weight decay?** ConvNeXt's half of the timm rule.
-
-    **It is the PLAIN RANK TEST, with no name carve-out, and that is the difference from ViT.**
-    The reference's `_wd_mask` also excludes anything matching `_WD_POS_SHAPE`, but ConvNeXt has no
-    patch-embedding *positional* parameter, so its generated reference sets `_WD_POS_SHAPE = None`
-    and that branch can never fire. Checked in the generated file rather than assumed — carrying
-    ViT's `nm != "pos"` over would have been a transcription of a rule this net does not have.
-
-    What that leaves excluded here: every LN γ/β (`[c]`), every conv bias, and **LayerScale γ**
-    (`lg`, `[c]`) — which is 1-D and therefore excluded for the same structural reason, not as a
-    special case. -/
-def cnxWdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
+-- **Does this parameter get weight decay?** ConvNeXt's half of the timm rule is `rankWdDecays`.
+--
+-- **It is the PLAIN RANK TEST, with no name carve-out, and that is the difference from ViT.**
+-- The reference's `_wd_mask` also excludes anything matching `_WD_POS_SHAPE`, but ConvNeXt has no
+-- patch-embedding *positional* parameter, so its generated reference sets `_WD_POS_SHAPE = None`
+-- and that branch can never fire. Checked in the generated file rather than assumed — carrying
+-- ViT's `nm != "pos"` over would have been a transcription of a rule this net does not have.
+--
+-- What that leaves excluded here: every LN γ/β (`[c]`), every conv bias, and **LayerScale γ**
+-- (`lg`, `[c]`) — which is 1-D and therefore excluded for the same structural reason, not as a
+-- special case.
 
 /-- The decayed / excluded split, as the renderer computes it. -/
 def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
-  let d := ((allParams nClasses V).filter (fun (nm, ds) => cnxWdDecays nm ds)).length
+  let d := ((allParams nClasses V).filter (fun (nm, ds) => rankWdDecays nm ds)).length
   (d, (allParams nClasses V).length - d)
 
 -- The reference's OWN `_wd_mask` over its OWN `init_params` for
@@ -566,10 +554,10 @@ def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
 #guard cnxWdCounts 1000 cnxSmall == (113, 231)
 -- 18 blocks × (dW, eW, pW decayed; db, ng, nbt, eb, pb, lg excluded) = 54/108, + stem 1/3,
 -- + 3 downsamples 1/3 each, + head LN 0/2, + head dense 1/1.
-#guard cnxWdDecays "s0b0dW" [96,1,7,7] == true    -- depthwise 7×7
-#guard cnxWdDecays "s0b0lg" [96] == false         -- LayerScale γ — 1-D, so excluded
-#guard cnxWdDecays "psng" [96] == false           -- stem LN γ
-#guard cnxWdDecays "d0W" [192,96,2,2] == true     -- downsample conv
+#guard rankWdDecays "s0b0dW" [96,1,7,7] == true    -- depthwise 7×7
+#guard rankWdDecays "s0b0lg" [96] == false         -- LayerScale γ — 1-D, so excluded
+#guard rankWdDecays "psng" [96] == false           -- stem LN γ
+#guard rankWdDecays "d0W" [192,96,2,2] == true     -- downsample conv
 
 /-- `allParams` is `private` (it is this file's internal signature source); this is the one thing
     outside it that legitimately needs the list — [`tests/TestWdExcludeTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestWdExcludeTie.lean), which must read
@@ -997,39 +985,14 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       let g0 := (gradMap.lookup nm).getD s!"%d{nm}"
       let g := if clip then (clipped.lookup nm).getD g0 else g0
       -- The wd operand comes from the SAME `allParams` entry that names the site (the slot rule).
-      let wdN := if wdExclude && !cnxWdDecays nm ds then "%wdz" else "%wd"
+      let wdN := wdNameBy wdExclude nm ds
       let (c, nT, nM, nV, nE) ← adamOneEma cBS replicas ⟨nm, g, ds⟩ ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]
-    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path, NOT `pretty` of an
-    -- AST node, and covered by no theorem — the configuration in which plain CE against a
-    -- smoothed-CE cotangent is visible only to the numeric tie. Built from the
-    -- SAME smoothed recipe the cotangent implies, and gated by `convnext-adam-tie`. ConvNeXt has no
-    -- BN, so — as with ViT — this is the ONLY output that reads the forward directly.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [cBS, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [cBS, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [cBS, nClasses]}, tensor<f32>) -> {ty [cBS]}\n" ++
-      -- BOTH constants are DERIVED. `%laKc` is α/K; hardcoded at the K=10 value (0.010000) the
-      -- ImageNet render reports a loss of ~101 where 1000-class CE at init must be
-      -- ≈ ln(1000) = 6.9. A check that greps for the NEGATIVE spelling `-0.010000` does not see
-      -- this copy, which is positive. `%lomac` is (1−α) and is K-independent, but it is derived
-      -- too so that α has one spelling here rather than two.
-      -- At K=10 both render byte-identically to the K=10 literals, so every committed Imagenette
-      -- artifact keeps its bytes — gated, not assumed.
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [cBS]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [cBS]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [cBS]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [cBS]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [cBS]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [cBS]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{cBS}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`), gated by `convnext-adam-tie`.
+    -- ConvNeXt has no BN, so — as with ViT — this is the ONLY output that reads the forward directly.
+    let lossCode := reportSmoothedCeLoss cBS nClasses nSm
     let pTy := (allParams nClasses V).map (fun p => ty p.2)
     -- THE RETURN LAYOUT MUST EQUAL THE INPUT LAYOUT, region for region and scalar for scalar.
     -- The driver does `pbuf := out` — each step's output IS the next step's input (the no-copy

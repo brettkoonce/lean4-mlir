@@ -470,7 +470,7 @@ def accumScalarConsts (k : Nat) : String :=
   "    %ob2 = stablehlo.multiply %aup, %aob2k : tensor<f32>\n"
 
 /-- **Is this parameter in timm's `no_weight_decay` group?**, recovered from the ONE name
-    `r34WdName` produces rather than passed alongside it.
+    `wdNameBy` produces rather than passed alongside it.
 
     Derived and not a second argument, on purpose. The skip-list controls TWO things —
     whether the decay term enters `r` (`%wdz`) and whether the trust ratio applies at all
@@ -940,7 +940,7 @@ def optAllParams (opt : R34Opt) (B replicas : Nat) (ps : List PGrad)
     -- cannot collapse into one.
     let gIn : PGrad :=
       if gradClip then { g with grad := (clipped.lookup g.nm).getD g.grad } else g
-    let (c, nT, nM, nV, nA, nE) ← optOne opt B replicas gIn (r34WdName wdExclude g.nm g.ds)
+    let (c, nT, nM, nV, nA, nE) ← optOne opt B replicas gIn (wdNameBy wdExclude g.nm g.ds)
                                 (preAvg := gradClip) (accIn := accRaw.lookup g.nm) (ema := ema)
     code := code ++ c
     thetaN := thetaN ++ [nT]
@@ -1428,32 +1428,8 @@ here first"
       cSt9 ++ cSt10 ++ cSt11 ++ cSt12 ++ cSt13 ++ cSt14 ++ cSt15 ++ cSt16
     let statNames := st0.1 :: st0.2 :: (st1 ++ st2 ++ st3 ++ st4 ++ st5 ++ st6 ++ st7 ++ st8 ++
       st9 ++ st10 ++ st11 ++ st12 ++ st13 ++ st14 ++ st15 ++ st16)
-    -- `%loss` is REPORT-ONLY: mean smoothed-CE for logging, on no gradient path. It is NOT
-    -- `pretty` of an AST node and says so in the emitted text — the same carve-out
-    -- `cifar8_adam_train_step`'s `%loss` takes.
-    -- The SMOOTHED cross-entropy, matching the cotangent's soft target:
-    --   loss = −(1/B)·Σ_b [ (1−α)·Σ_k onehot·log sm  +  (α/K)·Σ_k log sm ].
-    -- Getting this wrong is invisible to every proof in the repo — `%loss` is report-only and on
-    -- no gradient path — but the driver logs it and the epoch curve is how a run is judged against
-    -- the reference. PLAIN CE here (dropping the (1−α) factor and the α/K term) shows up only in
-    -- the numeric tie, as a loss disagreement against an otherwise bit-identical forward.
-    -- Hand-written emit is not verified emit.
-    let lossCode :=
-      "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
-      s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %llog = stablehlo.log {nSm} : {ty [B, nClasses]}\n" ++
-      s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
-      s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha alpha}> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses alpha}> : {ty [B]}\n" ++
-      s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
-      s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
-      s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
-      s!"    %lsum2 = stablehlo.reduce(%llpe init: %lz) applies stablehlo.add across dimensions = [0] : ({ty [B]}, tensor<f32>) -> tensor<f32>\n" ++
-      s!"    %lbfc = stablehlo.constant dense<{B}.0> : tensor<f32>\n" ++
-      s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
-      s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
+    -- `%loss`: the report-only smoothed CE, at the cotangent's α (`reportSmoothedCeLoss`).
+    let lossCode := reportSmoothedCeLoss B nClasses nSm alpha
     let body := F.code ++ cSm ++ cDy ++
       cDgi ++ cWd ++ cbd ++ cDgp ++
       b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++ b10.code ++ b9.code ++
@@ -1470,24 +1446,9 @@ here first"
         s!"    // ── ResNet-34 batch-BN {optLabel} train step: {trainStepHandNote} ──\n"
        else
         s!"    // ── ResNet-34 batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
-        "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
-        "    // the per-replica gradient nodes. BatchNorm is SYNCHRONISED: every BN\n" ++
-        "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
-        "    // variance), before normalising with the global [mu | var] (bnSyncF); its\n" ++
-        "    // backward all-reduces the two dy-reductions (bnSyncDyStatsB -> bnSyncBack), and the gamma\n" ++
-        "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
-        "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
-        "    // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.resnet34FwdGraphSyncFull_shard (the forward), both in\n" ++
-        "    // LeanMlir/Proofs/Nets/ResNet/.\n" ++
-        (if bf16 then
-          "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++
-          "    // still shard exactly; each conv weight gradient rounds its replica's partial sum\n" ++
-          "    // before the all-reduce, where one device rounds the whole sum once. That is the\n" ++
-          "    // one difference: den_allReduceMeanF_convWeightGradBBf16_sub_global and its strided\n" ++
-          "    // peer, in LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean.)\n"
-         else "")) ++
+        syncBnBanner "ResNet34SyncTieB.r34_net_syncTiedB"
+          "StableHLO.resnet34FwdGraphSyncFull_shard" "ResNet" ++
+        (if bf16 then syncBnBf16WgradNote else "")) ++
       zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses convBias
