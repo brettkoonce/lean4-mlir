@@ -8150,10 +8150,11 @@ def mobilenetV2ImagenetConfigFull : TrainConfig :=
   { mobilenetV2ImagenetConfig with epochs := 350 }
 \end{verbatim}
 
-\noindent The run reported below predates four of those lines ---
-\texttt{wdExcludeNormBias}, the staircase from step $0$ with no warmup,
-and the two BatchNorm constants --- and the ledger at the end of the
-section carries them.
+\noindent The run below is \texttt{mobilenetV2ImagenetConfigFull}, launched
+by \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}. One row of
+the paper's recipe is not reproduced: Sandler et al.\ trained
+asynchronously on sixteen workers of $96$ images each, and this run is four
+replicas of $64$, synchronous, at the paper's peak of $0.045$.
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
 convolutions cast to bfloat16 the instant the flag is on, but MobileNet's
@@ -8189,26 +8190,25 @@ version of the same one.
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & $6.6$ min & 350 & $38.4$ hr & $\mathbf{71.90\%}$ & $\mathbf{90.41\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & $6.7$ min & 350 & $38.8$ hr & $\mathbf{71.63\%}$ & $\mathbf{90.46\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Global batch 256 as $4 \times 64$ replicas, scored over all
-$50{,}000$ validation images; one attempt, no restarts, and $6.6$ minutes
-an epoch held to within a second across all $350$. The wall-clock win over
-the $9.5\times$-larger ResNet-34 is real but sub-proportional, as
+$50{,}000$ validation images every epoch. The wall-clock win over the
+$9.5\times$-larger ResNet-34 is real but sub-proportional, as
 \S\ref{sec:mnv2_runit} measured at small scale: depthwise convolution is
 memory-bound, so an order of magnitude fewer FLOPs buys a factor of two or
 three on this hardware rather than nine. The RMSProp peak of $0.045$ took
 off cleanly, because $\varepsilon=1.0$ keeps the adaptive step well damped
 --- in sharp contrast to EfficientNet's $\varepsilon=10^{-3}$ in
-Chapter~\ref{chap:se}. The best epoch, $331$, reaches $71.99\%$. The
-paper's figure is $72.0\%$, and at $n=50{,}000$ the Wilson 95\% interval
-on this run is $[71.50, 72.29]$: the paper's recipe, at a length the
-paper leaves open, is not distinguishable from the paper's number, which
-is the claim here and a weaker one than closing a gap by a measured
-amount.
+Chapter~\ref{chap:se}. The last $25$ epochs average $71.54\%$, within a
+tenth of a point of the endpoint. The paper's figure is $72.0\%$, and at
+$n=50{,}000$ the Wilson 95\% interval on this run is $[71.24, 72.03]$: the
+paper's recipe, at a length the paper leaves open, is not distinguishable
+from the paper's number, which is the claim here and a weaker one than
+closing a gap by a measured amount.
 
 \begin{center}
 \begin{tikzpicture}
@@ -8225,60 +8225,21 @@ amount.
     title={MobileNetV2 recipe, 350 epochs --- reference},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,2.75) (10,46.69) (20,56.27) (30,59.36) (40,60.53) (50,61.71) (60,64.28) (70,64.93) (80,65.86) (90,66.14) (100,67.40) (110,68.37) (120,68.76) (130,69.48) (140,69.94) (150,69.78) (160,69.93) (170,70.36) (180,70.31) (190,70.85) (200,71.23) (210,71.31) (220,71.46) (230,71.52) (240,71.69) (250,71.63) (260,71.75) (270,71.74) (280,71.80) (290,71.81) (300,71.85) (310,71.84) (320,71.85) (330,71.92) (340,71.91) (350,71.90)
+(1,12.52) (10,49.79) (20,55.57) (30,59.77) (40,61.64) (50,62.43) (60,64.07) (70,65.50) (80,66.50) (90,67.05) (100,67.32) (110,68.66) (120,68.95) (130,68.98) (140,69.50) (150,70.17) (160,70.26) (170,70.36) (180,70.46) (190,71.00) (200,70.98) (210,70.98) (220,71.20) (230,71.09) (240,71.39) (250,71.35) (260,71.50) (270,71.44) (280,71.36) (290,71.46) (300,71.49) (310,71.53) (320,71.57) (330,71.46) (340,71.55) (350,71.63)
 };
 \addlegendentry{top-1}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(1,8.75) (10,72.81) (20,80.58) (30,82.90) (40,83.60) (50,84.48) (60,86.09) (70,86.38) (80,87.16) (90,87.17) (100,87.85) (110,88.59) (120,88.95) (130,89.12) (140,89.39) (150,89.42) (160,89.50) (170,89.79) (180,89.63) (190,89.98) (200,90.06) (210,90.13) (220,90.18) (230,90.05) (240,90.33) (250,90.31) (260,90.30) (270,90.33) (280,90.35) (290,90.35) (300,90.35) (310,90.38) (320,90.40) (330,90.30) (340,90.42) (350,90.41)
+(1,29.91) (10,75.63) (20,79.87) (30,82.96) (40,84.35) (50,84.70) (60,85.96) (70,86.70) (80,87.35) (90,87.96) (100,87.99) (110,88.72) (120,88.82) (130,89.02) (140,89.27) (150,89.58) (160,89.78) (170,89.79) (180,89.79) (190,90.07) (200,90.20) (210,90.21) (220,90.17) (230,90.26) (240,90.34) (250,90.39) (260,90.32) (270,90.41) (280,90.37) (290,90.42) (300,90.36) (310,90.46) (320,90.43) (330,90.40) (340,90.44) (350,90.46)
 };
 \addlegendentry{top-5}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent The run, sampled every 10 epochs. Two thirds of the final
-accuracy is in place by epoch $50$, the run is still climbing at $150$, and
-it is flat from about epoch $250$ onward, so the last $100$ epochs are
-worth almost nothing and the schedule is genuinely exhausted rather than
-cut short.
-
-\medskip\noindent \textbf{[TODO: re-run.]} This result predates the fixes
-that landed while and after it trained, so it is a clean run of a recipe that
-is no longer the current one. What the run had, and what the code has since
-taken on, worst first:
-
-\begin{center}
-\begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
-\hline
-In & Since landed, unmeasured, worst first \\
-\hline
-Antialiased resize on train and eval, and \texttt{timm}'s $50{,}000$-image
-denominator --- both halves of that protocol
-  & \textbf{\texttt{convBnAct := .relu6}} --- the stem and the $1\times1$ head trained
-    plain \texttt{relu} while every inverted-residual interior used ReLU6. Landed
-    2026-08-30, one day after this run started, and it is a reference-only defect:
-    the verified render was always ReLU6 \\[2pt]
-RMSProp $\varepsilon$ inside the root, matching TensorFlow
-  & \textbf{Label smoothing} --- the shim this run streamed most likely smoothed
-    at $0.1$; the recipe says $0$, as Sandler et al.\ used, and the rerun trains
-    at $0$ \\[2pt]
-Exponential decay $\times0.98$/epoch over the full $350$, dropout $0.2$, running-BN eval
-  & \textbf{BN running-stat decay $0.997$ and $\varepsilon = 10^{-3}$}, TF-slim's
-    values, against this run's $0.99$ / $10^{-5}$; both paths carry them now \\[2pt]
-$38.4$ h, one attempt, zero restarts, zero thermal pauses
-  & \textbf{The staircase from step $0$, no warmup, and no decay on BN or biases}
-    (\texttt{wx}) --- the paper's schedule; this run warmed up for five epochs and
-    decayed everything \\[2pt]
-  & Nothing re-run: every line above is known, none is measured. The pair is
-    \texttt{mnv2-full-jax-4gpu} and \texttt{mnv2-default-4gpu} \\
-\hline
-\end{tabular}
-\end{center}
-
-\noindent The first row is the one to price. Two clamped activations are not
-obviously worth much, but this net carried the fleet's largest paper gap for
-months with the schedule as the only suspect, and the gap was never decomposed
-against a reference that had them.
+\noindent The run, sampled every 10 epochs. Epoch $100$ has $94\%$ of the
+final accuracy, the run is still climbing at $200$, and the last $50$
+epochs move top-1 by $0.14$, so the schedule is exhausted rather than cut
+short.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:mnv2_phase4}
@@ -8319,19 +8280,27 @@ net's, and a \texttt{\#guard} enforces it, because the running-stat region
 is positional and a drift there would misalign every frozen statistic at
 evaluation.
 
-\textbf{The variant selects the optimizer, and one of them is the
-paper's.} \texttt{rmsdp64bf16} is the artifact the run below used: RMSProp
-at $\rho = 0.9$, $\mu = 0.9$, $\varepsilon = 1.0$ and coupled weight decay
-$4 \times 10^{-5}$, at peak LR $0.045$ with a 5-epoch warmup and
-$\times 0.98$ per epoch after it, data-parallel over four replicas in
-bf16. Those constants live in \texttt{mnv2RmsSchedule} and
-\texttt{mnv2RmsHyper}, shared with the Imagenette peer so the two cannot
-carry different values. \texttt{adam64} is AdamW at $10^{-3}$ instead,
-the default because it matches the other ImageNet drivers. Since the run
-the job has moved on to \texttt{rmsdp64wxdols0eps0001bf16}: the same RMSProp
-with no decay on BN or biases, the staircase from step $0$ with no warmup,
-BatchNorm at TF-slim's $0.997$ / $10^{-3}$ and synchronised statistics ---
-the rerun's artifact, not this table's. It runs with:
+\textbf{The variant carries the recipe.}
+\texttt{rmsdp64wxdols0eps0001bf16} is the artifact the run below used, the
+reference's recipe row for row: RMSProp at $\rho = 0.9$, $\mu = 0.9$,
+$\varepsilon = 1.0$ with coupled weight decay $4 \times 10^{-5}$ off
+BatchNorm $\gamma/\beta$ and biases, peak LR $0.045$ with the
+$\times 0.98$ staircase from step $0$ and no warmup, classifier dropout
+$0.2$, no label smoothing, BatchNorm at TF-slim's $0.997$ / $10^{-3}$
+with the running statistics read at that $\varepsilon$ by its eval graph
+\texttt{mobilenetv2in\_fwd\_eval\_eps0001}, bf16 matmul and convolution,
+data-parallel over four replicas of $64$ with each of the $52$ BatchNorms
+all-reducing its mean and variance across them, so the statistic group is
+the global $256$. The peak and decay rate live in \texttt{mnv2RmsSchedule},
+shared with the Imagenette peer so the two cannot carry different values;
+\texttt{mnv2ImagenetRmsSchedule} adds the staircase and drops the warmup,
+and the optimizer constants are \texttt{mnv2RmsHyper}.
+Theorem~\ref{thm:mobilenetv2_sync_tie} ties the f32 data-parallel render
+(\texttt{mobilenetv2in\_rmsdp64}) to one device's step at the global batch;
+this render's gradient nodes are the bf16 \texttt{*GradBBf16} kinds, tied
+per operator, and its classifier dropout sits outside that statement.
+\texttt{adam64} is AdamW at $10^{-3}$ instead, the driver's default because
+it matches the other ImageNet drivers. It runs with:
 
 \begin{verbatim}
 lake run mnv2-default-4gpu
@@ -8342,13 +8311,13 @@ lake run mnv2-default-4gpu
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & $8.8$ min & 350 & $51.2$ hr & $\mathbf{71.91\%}$ & $\mathbf{90.52\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & $9.6$ min & 350 & $55.8$ hr & $\mathbf{71.12\%}$ & $\mathbf{90.04\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Global batch 256 as $4 \times 64$ replicas, scored over the same
-$50{,}000$ images.
+\noindent Global batch 256 as $4 \times 64$ replicas with synchronised
+BatchNorm statistics, scored over the same $50{,}000$ images every epoch.
 
 \prosesection{The two paths, side by side}
 
@@ -8359,62 +8328,49 @@ $50{,}000$ images.
 \hline
 lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step   & yes                      & none \\
-BN statistic group   & 256 (global)             & 64 (per replica) \\
-ms/step              & 79                       & 97 \\
-per epoch            & 6.6 min                  & 8.8 min \\
-total                & 38.4 hr                  & 51.2 hr \\
 \hline
-precision            & bf16                     & bf16 \\
+precision            & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
 global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
+BN statistic group   & 256 (global)             & 256 (global) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
 optimizer            & RMSProp, $\varepsilon=1.0$ & RMSProp, $\varepsilon=1.0$ \\
+schedule             & $\times0.98$/epoch staircase, no warmup & $\times0.98$/epoch staircase, no warmup \\
+weights scored       & raw, epoch 350           & raw, epoch 350 \\
 \hline
-\textbf{val top-1}   & $\mathbf{71.90\%}$       & $\mathbf{71.91\%}$ \\
-\textbf{val top-5}   & $\mathbf{90.41\%}$       & $\mathbf{90.52\%}$ \\
+\textbf{val top-1}   & $\mathbf{71.63\%}$       & $\mathbf{71.12\%}$ \\
+\textbf{val top-5}   & $\mathbf{90.46\%}$       & $\mathbf{90.04\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Both columns are MobileNetV2 on the paper's RMSProp recipe at
-350 epochs, on the same four RTX 3060 cards, scored over the same
-$50{,}000$ validation images. Rows above the first rule differ; rows
-between the rules are held equal by construction.
+\noindent Both columns are MobileNetV2 on the paper's recipe at 350
+epochs, on the same four RTX 3060 cards, scored over the same $50{,}000$
+validation images. Rows above the first rule differ; rows between the
+rules are held equal by construction, the BatchNorm group included: the
+reference normalizes over the global $256$ under its mesh, and the
+verified render all-reduces to the same $256$.
 
-\medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
-$0.11$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
-$72\%$ on $50{,}000$ images), at one seed each. Precision is held equal
-as on ResNet-34's pair, so the one asymmetry left above the
-rule is the BatchNorm group, and this is the pair that isolates it. The
-committed render has since moved to synchronised statistics
-(Theorem~\ref{thm:mobilenetv2_sync_tie}), so the rerun closes the row.
-
-\medskip\noindent\textbf{What the BatchNorm group is.} MobileNetV2 has
-BatchNorm in every block. The verified path runs four replicas of $64$ with
-no collective touching the batch statistics, so it normalizes over groups
-of $64$; the reference under a \texttt{NamedSharding} mesh reduces
-globally, so it normalizes over $256$. So the claim is that the two paths
-agree to within the BatchNorm-group effect --- not that the path has been
-shown neutral. Separating those takes a verified render that all-reduces
-the batch statistics, and when this pair trained none did: the only node
-in the graph language that saw across replicas was the gradient
-collective, and every BatchNorm node consumed a single expression.
-
-\globalbntodo
-
-\medskip\noindent\textbf{The curves converge; they do not merely end together.}
-The verified path runs ahead through warmup, is level by epoch~20, and from
-epoch~100 every sampled point sits within a third of a point. The $+2.11$ at
-epoch~50 is the reference's own slow stretch rather than a verified lead --- it
-gains $1.18$ points over epochs $40$--$50$ and then $2.57$ over $50$--$60$:
+\medskip\noindent\textbf{The two paths differ by $0.51$ points on top-1
+and $0.42$ on top-5}, outside the 95\% Wilson interval ($\pm0.40$ at
+$71\%$ on $50{,}000$ images) at one seed each, and the difference is made
+in training, not at evaluation: the verified path's training loss runs
+below the reference's for the first $25$ epochs and $0.02$ above it from
+epoch $26$ to the end, while the sampled accuracies stay level through
+epoch $100$ and part by half a point from $150$ on. Every row between the
+rules is held equal by construction, and the step is the same function on
+both paths. The one input the two do not share is the initialization:
+every depthwise kernel starts $\sqrt{C}$ narrower on the verified path,
+He fan-out over $C \cdot k^2$ against the reference's fan over $k^2$. That
+row is open; a run with the initializations matched is what closes it.
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
 \hline
 epoch & 10 & 50 & 100 & 150 & 200 & 300 & 350 \\
 \hline
-reference (JAX)       & 46.69 & 61.71 & 67.40 & 69.78 & 71.23 & 71.85 & 71.90 \\
-verified path (PJRT)  & 51.36 & 63.82 & 67.74 & 69.97 & 70.95 & 71.84 & 71.91 \\
-$\Delta$              & $+4.67$ & $+2.11$ & $+0.34$ & $+0.19$ & $-0.28$ & $-0.01$ & $+0.01$ \\
+reference (JAX)       & 49.79 & 62.43 & 67.32 & 70.17 & 70.98 & 71.49 & 71.63 \\
+verified path (PJRT)  & 50.05 & 63.19 & 67.55 & 69.48 & 70.36 & 71.05 & 71.12 \\
+$\Delta$              & $+0.26$ & $+0.76$ & $+0.23$ & $-0.69$ & $-0.62$ & $-0.43$ & $-0.51$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -8435,11 +8391,11 @@ $\Delta$              & $+4.67$ & $+2.11$ & $+0.34$ & $+0.19$ & $-0.28$ & $-0.01
     every axis plot/.append style={line width=1pt, mark size=0.8pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(1,2.75) (10,46.69) (20,56.27) (30,59.36) (40,60.53) (50,61.71) (60,64.28) (70,64.93) (80,65.86) (90,66.14) (100,67.40) (110,68.37) (120,68.76) (130,69.48) (140,69.94) (150,69.78) (160,69.93) (170,70.36) (180,70.31) (190,70.85) (200,71.23) (210,71.31) (220,71.46) (230,71.52) (240,71.69) (250,71.63) (260,71.75) (270,71.74) (280,71.80) (290,71.81) (300,71.85) (310,71.84) (320,71.85) (330,71.92) (340,71.91) (350,71.90)
+(1,12.52) (10,49.79) (20,55.57) (30,59.77) (40,61.64) (50,62.43) (60,64.07) (70,65.50) (80,66.50) (90,67.05) (100,67.32) (110,68.66) (120,68.95) (130,68.98) (140,69.50) (150,70.17) (160,70.26) (170,70.36) (180,70.46) (190,71.00) (200,70.98) (210,70.98) (220,71.20) (230,71.09) (240,71.39) (250,71.35) (260,71.50) (270,71.44) (280,71.36) (290,71.46) (300,71.49) (310,71.53) (320,71.57) (330,71.46) (340,71.55) (350,71.63)
 };
 \addlegendentry{reference (JAX)}
 \addplot[red, dashed, mark=o] coordinates {
-(1,3.16) (10,51.36) (20,56.47) (30,60.30) (40,61.43) (50,63.82) (60,64.51) (70,65.18) (80,66.37) (90,66.85) (100,67.74) (110,68.19) (120,68.53) (130,69.40) (140,69.74) (150,69.97) (160,70.44) (170,70.40) (180,70.48) (190,70.80) (200,70.95) (210,71.33) (220,71.43) (230,71.38) (240,71.67) (250,71.70) (260,71.67) (270,71.75) (280,71.77) (290,71.89) (300,71.84) (310,71.93) (320,71.94) (330,71.87) (340,71.93) (350,71.91)
+(1,8.13) (10,50.05) (20,55.81) (30,59.67) (40,60.91) (50,63.19) (60,63.58) (70,65.24) (80,65.61) (90,66.54) (100,67.55) (110,67.85) (120,68.55) (130,68.48) (140,69.28) (150,69.48) (160,69.75) (170,69.89) (180,69.84) (190,70.30) (200,70.36) (210,70.47) (220,70.72) (230,70.67) (240,70.89) (250,71.14) (260,70.94) (270,71.09) (280,70.91) (290,71.14) (300,71.05) (310,71.15) (320,71.06) (330,71.08) (340,71.08) (350,71.12)
 };
 \addlegendentry{verified path (PJRT)}
 \end{axis}
@@ -8448,17 +8404,6 @@ $\Delta$              & $+4.67$ & $+2.11$ & $+0.34$ & $+0.19$ & $-0.28$ & $-0.01
 
 \noindent One recipe, two paths to XLA, sampled every 10 epochs and scored
 over all $50{,}000$ validation images.
-
-\medskip\noindent\textbf{The remaining $51.2$ against $38.4$ hours is the
-data feed, not the renderer.} With the shim removed the verified step is
-$78$\,ms --- a $38$-hour schedule, level with the reference's $79$ --- and
-the fed step is $97$; the difference is host work the reference does
-in-process, and \S\ref{sec:vit_phase4} has the accounting. This is the net
-where it shows most plainly: the compute floor is already at the
-reference's wall clock, so every hour of the gap is pipeline.
-\textbf{[TODO: feed fixes --- mixing in place on the shim host, the uint8
-wire, PIL rotate --- measured at $+34$/$+22$/$+13\%$, none built; re-measure
-the gap when they land.]}
 
 \subsection*{What the MobileNetV2 recipe changes from the 2018 recipe}
 
@@ -8608,10 +8553,10 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \noindent Micro-batch $512$ as $4 \times 128$ replicas, accumulated
 $8\times$ to the effective $4096$; EMA weights scored over all
 $50{,}000$ validation images. Set against this chapter's other half
-that is the whole six-year argument in two rows: $\mathbf{+4.67}$
-points over MobileNetV2's paper-faithful $71.90\%$, from $2.8\times$
+that is the whole six-year argument in two rows: $\mathbf{+4.94}$
+points over MobileNetV2's paper-faithful $71.63\%$, from $2.8\times$
 the parameters and under a third of the epochs, $100$ against $350$
-and $16.2$ wall-clock hours against $38.4$ on the same four cards.
+and $16.2$ wall-clock hours against $38.8$ on the same four cards.
 By 2024 the mobile line is not trading accuracy for size so
 much as reaching the same accuracy with a block that happens to be
 cheap.

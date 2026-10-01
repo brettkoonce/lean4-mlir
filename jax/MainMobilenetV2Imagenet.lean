@@ -23,8 +23,8 @@ def mobilenetV2Imagenet : NetSpec where
   -- MobileNetV2 is ReLU6 throughout, as the Imagenette twin (`MainMobilenetV2.lean`) says.
   -- The VERIFIED render is ReLU6 (35 `stablehlo.maximum` paired with 35
   -- `stablehlo.minimum`, including at the 32×112×112 stem).
-  -- The published JAX reference (the 350-epoch `full` recipe, 71.90) trained a ReLU stem/head,
-  -- so it does not pair one-variable with the verified run.
+  -- The book's reference run (runs/2026-09-27-mnv2-jax-bf16-350ep/) trained with this line; its
+  -- predecessor trained a ReLU stem/head and was retired for it.
   convBnAct := .relu6
   layers := [
     .convBn 3 32 3 2 .same,                    -- 224→112
