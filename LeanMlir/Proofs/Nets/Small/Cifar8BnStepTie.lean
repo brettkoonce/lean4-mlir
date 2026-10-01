@@ -33,29 +33,6 @@ open Proofs.SgdNode (bnSgdPairTied_holds)
 
 namespace Proofs.Cifar8BnTie
 
-/-- **The emitted loss-cotangent graph denotes the softmax-CE gradient of the cifar8-bn forward.** -/
-theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (nlogN ohN : String)
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
-    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Vec c2)
-    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Vec c2)
-    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Vec c3)
-    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Vec c3)
-    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Vec c4)
-    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Vec c4)
-    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
-    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) (label : Fin nClasses) :
-    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN
-            (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄
-              W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x))))
-          (.operand ohN (oneHot nClasses label)))
-      = fun j => softmax nClasses (cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
-                    W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈
-                    W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
-  StableHLO.softmaxCELossCot_den nlogN ohN _ label
-
 /-- **Whole cifar8-bn train step, tied.** All 38 parameter tensors (8 conv `W`+`b`, 8 BN `γ`+`β`,
     3 dense `W`+`b`; 30 conjuncts, one `BnSgdPairTied` per γ/β pair), at the real cifar8-bn forward,
     denote `θ − lr·(certified per-layer Jacobian · c)` with `c` the rendered backward-chain

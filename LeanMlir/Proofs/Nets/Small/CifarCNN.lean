@@ -193,27 +193,6 @@ noncomputable def cifarCnnHasVJPAt
   exact vjpCompAt _ _ x s8d ((dense_differentiable W₇ b₇) _) s8
     ((denseHasVJP W₇ b₇).toHasVJPAt _)
 
-/-- **Public correctness theorem for `cifarCnnHasVJPAt`** — the Chapter-4
-    CIFAR CNN's backward equals the `pdiv`-contracted Jacobian. -/
-theorem cifarCnnHasVJPAt_correct
-    {ic c1 c2 h w d1 nClasses kH kW : Nat}
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
-    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2)
-    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
-    (W₅ : Mat (c2 * h * w) d1) (b₅ : Vec d1)
-    (W₆ : Mat d1 d1) (b₆ : Vec d1)
-    (W₇ : Mat d1 nClasses) (b₇ : Vec nClasses)
-    (x : Vec (ic * (2*(2*h)) * (2*(2*w))))
-    (h1 h2 h_mp1 h3 h4 h_mp2 h5 h6)
-    (dy : Vec nClasses) (i : Fin (ic * (2*(2*h)) * (2*(2*w)))) :
-    (cifarCnnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
-        x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).backward dy i =
-      ∑ j : Fin nClasses,
-        pdiv (cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇) x i j * dy j :=
-  (cifarCnnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
-      x h1 h2 h_mp1 h3 h4 h_mp2 h5 h6).correct dy i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Concrete tiny instance — every smoothness hypothesis DISCHARGED
 --
@@ -681,32 +660,6 @@ noncomputable def cifarCnn8HasVJPAt
   -- final dense
   exact vjpCompAt _ _ x s14d ((dense_differentiable Wb bb) _) s14
     ((denseHasVJP Wb bb).toHasVJPAt _)
-
-/-- **Public correctness theorem for `cifarCnn8HasVJPAt`** — backward equals the
-    `pdiv`-contracted Jacobian. -/
-theorem cifarCnn8HasVJPAt_correct
-    {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
-    (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2)
-    (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
-    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3)
-    (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
-    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4)
-    (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
-    (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1)
-    (Wa : Mat d1 d1) (ba : Vec d1)
-    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
-    (hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa)
-    (dy : Vec nClasses) (i : Fin (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))) :
-    (cifarCnn8HasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
-        x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).backward dy i =
-      ∑ j : Fin nClasses,
-        pdiv (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
-          W₉ b₉ Wa ba Wb bb) x i j * dy j :=
-  (cifarCnn8HasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb
-      x hf1 hf2 hp1 hf3 hf4 hp2 hf5 hf6 hp3 hf7 hf8 hp4 hf9 hfa).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter-4 BatchNorm block — conv→BN→relu

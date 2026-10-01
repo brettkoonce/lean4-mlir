@@ -1774,8 +1774,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- GAP backward (VJP): divide the per-channel cotangent by h·w, broadcast
       -- it back over the H×W spatial grid, reshape to flat. Reverse of `.gapF`.
       -- Denotes `globalAvgPoolFlat`'s VJP backward `dy[chan idx] / (h·w)`.
-      -- No renderer prints this node; it occurs only in proof graphs (EfficientNetBackB0's SE
-      -- backward), so this text has never been compiled or run.
+      -- No renderer prints this node and no proof graph builds it (the batched SE backward
+      -- uses its own node), so this text has never been compiled or run.
       let nf ← fresh; let dv ← fresh; let bb ← fresh; let o ← fresh
       pure (
         s!"    {nf} = stablehlo.constant dense<{h*w}.0> : {ty [B,c]}\n" ++
@@ -1785,8 +1785,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | .broadcastBack c h w, r :: st => do
       -- broadcast backward (VJP) = sum over H×W per channel (adjoint of broadcast):
       -- reshape to [B,c,h,w], reduce-add over spatial axes [2,3] → [B,c]. No divide.
-      -- No renderer prints this node; it occurs only in proof graphs (EfficientNetBackB0's SE
-      -- backward), so this text has never been compiled or run.
+      -- No renderer prints this node and no proof graph builds it (the batched SE backward
+      -- uses its own node), so this text has never been compiled or run.
       let xn ← fresh; let z ← fresh; let o ← fresh
       pure (
         s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++

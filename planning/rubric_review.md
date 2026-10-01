@@ -65,8 +65,9 @@ gradients, den = text, SgdDescent split), `a93e0701` PoC namespaces + the shared
 
 Still open:
 - User's calls: N1-reuse-2 (renaming `r34BFullHasVJPAt` changes the pinned capstone's comparator
-  text), X-bes-5 (Bestiary parameter counts), N1-gen-1 (ConvNeXt S/B), the
-  `audit_only_mentions.py` triage.
+  text), X-bes-5 (Bestiary parameter counts), N1-gen-1 (ConvNeXt S/B).
+- `audit_only_mentions.py` triage: first pass applied (every cite / delete / unpin row); the keep
+  and `?` rows to revisit are in planning/rubric_review/audit_only_triage.md.
 - Parked with recipes: F-pl-2 (root file `Tensor.lean`), N2-place-1, F-gen-4.
 - Owed (small): the backward through the ViT / MNv4 drop sites; H's items 3–5 under WP5;
   `MlirCodegen`'s emitted GELU comment strings name `LayerNorm.lean`; `CnnRender.CifarOpt` is not

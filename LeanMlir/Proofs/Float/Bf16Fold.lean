@@ -84,10 +84,6 @@ noncomputable def bf16LinearGraphEmit (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec
 theorem bf16_render_faithful_emit (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
     den (bf16LinearGraphEmit rnd W b x) = bf16Linear rnd W b x := rfl
 
-/-- Stated directly: the two graphs are denotationally interchangeable. -/
-theorem bf16_emit_eq_prerounded (rnd : ℝ → ℝ) (W : Mat m n) (b : Vec n) (x : Vec m) :
-    den (bf16LinearGraphEmit rnd W b x) = den (bf16LinearGraph rnd W b x) := rfl
-
 /-! ## Depth 2 — the `convertF` round node
 
 Rounding an intermediate activation uses the in-graph `convertF` round node

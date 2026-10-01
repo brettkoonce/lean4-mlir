@@ -42,56 +42,10 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.Cifar8Tie
 open Proofs.SgdNode
 
-/-- **The emitted loss-cotangent graph denotes the softmax-CE gradient of the cifar8 forward.** -/
-theorem cifar8LossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (nlogN ohN : String)
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
-    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
-    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
-    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
-    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) (label : Fin nClasses) :
-    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN
-            (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x))))
-          (.operand ohN (oneHot nClasses label)))
-      = fun j => softmax nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
-                    W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
-  StableHLO.softmaxCELossCot_den nlogN ohN _ label
-
-/-- **Dense output weight `Wb`, tied to the WHOLE softmax-CE loss through the cifar8 forward.** The
-    dense head is the standard 3-layer MLP; given the forward logits = `mnistLinear Wb bb a_head`
-    (true by `Function.comp_apply`, supplied as `hlog`), `Wb` folds to `∂CE/∂Wb`. -/
-theorem cifar8_Wb_tied_totalloss {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
-    (aN lrStr dyN : String)
-    (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
-    (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
-    (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
-    (W₇ : Kernel4 c4 c3 kH kW) (b₇ : Vec c4) (W₈ : Kernel4 c4 c4 kH kW) (b₈ : Vec c4)
-    (W₉ : Mat (c4*h*w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1) (ba : Vec d1)
-    (Wb : Mat d1 nClasses) (bb : Vec nClasses)
-    (x : Vec (ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w)))))) (a_head : Vec d1) (label : Fin nClasses)
-    (lr : ℝ) (i : Fin d1) (j : Fin nClasses)
-    (hlog : cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x
-              = mnistLinear Wb bb a_head) :
-    den (SHlo.weightSgd aN "%Wb" lrStr a_head Wb lr
-          (.operand dyN (fun k => softmax nClasses
-              (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x) k
-                - oneHot nClasses label k)))
-        (finProdFinEquiv (i, j))
-      = Wb i j - lr * pdiv (fun v : Vec (d1 * nClasses) => fun _ : Fin 1 =>
-            crossEntropy nClasses (dense (Mat.unflatten v) bb a_head) label)
-          (Mat.flatten Wb) (finProdFinEquiv (i, j)) 0 := by
-  rw [denseW_den aN "%Wb" lrStr dyN a_head Wb bb
-        (fun k => softmax nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
-            W₉ b₉ Wa ba Wb bb x) k - oneHot nClasses label k) lr i j,
-      StableHLO.lossWeightGrad_eq_sum Wb bb a_head label i j, hlog]
-
 /-- **Whole cifar8 train step, tied.** All 22 parameter ops (8 conv `W`+`b`, then the dense head
     `W₉,b₉,Wa,ba,Wb,bb`), at the real cifar8 forward, denote `θ − lr·(certified ∂layer/∂θ · c)` with
     `c` the rendered backward-chain cotangent driven by the composed softmax-CE cotangent `g` (the
-    loss-gradient form is `Cifar8TieG.cifar8_net_lossGrad`, see the module's Scope; at the output
-    layer `cifar8_Wb_tied_totalloss` folds `Wb` to `∂CE/∂Wb`). Each conv op is fed the cotangent the
+    loss-gradient form is `Cifar8TieG.cifar8_net_lossGrad`, see the module's Scope). Each conv op is fed the cotangent the
     4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄), `cnnChainCotW1`
     (conv₇/₅/₃/₁, the within-stage conv-back), `cifarChainCotW2` (conv₆/₄/₂, the cross-pool move);
     the dense head is fed `mlpCotOut0`, `mlpCotOut1` and `g`. -/

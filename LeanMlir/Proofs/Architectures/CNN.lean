@@ -1424,27 +1424,6 @@ noncomputable def maxPoolFlatHasVJPAt {c h w : Nat}
 -- § MaxPool is exact in floating point (the float-bridge pass-through)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Max is exact in floating point + 1-Lipschitz.** `max a b` is a
-    compare-and-select: it returns one of `a, b` verbatim, rounding nothing.
-    So a float `max` over operands within `e` of the reals stays within `e` —
-    the `max`-peer of `relu_close` (`FloatBridge.lean`), with no rounding term
-    and no amplification. The one genuinely-new fact the MNIST-CNN forward
-    rounding budget needs beyond the dense/relu machinery. -/
-theorem max_close {a b c d e : ℝ} (h1 : |a - c| ≤ e) (h2 : |b - d| ≤ e) :
-    |max a b - max c d| ≤ e :=
-  (abs_max_sub_max_le_max a b c d).trans (max_le h1 h2)
-
-/-- **MaxPool2 is exact in floating point + 1-Lipschitz.** Four window cells
-    through three `max`-selections, no arithmetic — inherited input error `e`
-    passes through with no rounding term and no amplification. -/
-theorem maxPool2_close {c h w : Nat} (xt xa : Tensor3 c (2*h) (2*w)) {e : ℝ}
-    (hx : ∀ ci hi wi, |xt ci hi wi - xa ci hi wi| ≤ e)
-    (ci : Fin c) (hi : Fin h) (wi : Fin w) :
-    |maxPool2 xt ci hi wi - maxPool2 xa ci hi wi| ≤ e := by
-  simp only [maxPool2]
-  exact max_close (max_close (hx _ _ _) (hx _ _ _))
-    (max_close (hx _ _ _) (hx _ _ _))
-
 /-- `maxPoolFlat` is the 2×2 `windowMaxFlat` (`maxPool2_eq_windowMax`, flattened). -/
 theorem maxPoolFlat_eq_windowMaxFlat (c h w : Nat) :
     maxPoolFlat c h w = windowMaxFlat (c := c) (winRowInv (h := h)) (winColInv (w := w)) := by

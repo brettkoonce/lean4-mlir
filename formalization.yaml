@@ -220,11 +220,15 @@ status:
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
     - {declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # ...but with no batch coupling it IS, at the contiguous split Verified.Train cuts
+    - {declaration: "Proofs.dpMeanGrad_eq_globalBatchGrad_contiguous", file: "LeanMlir/Proofs/Foundation/DataParallel/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and with SYNCHRONISED statistics it IS: the positive twin (replica r sums ITS examples' terms of the global gradient)
     - {declaration: "Proofs.dpSyncGrad_eq_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # P1: handed the all-reduced statistics, replica r's sync-BN forward is shard r of the batch-R*N forward
+    - {declaration: "Proofs.bnSyncTensor4_shard_eq_global", file: "LeanMlir/Proofs/Foundation/DataParallel/Sync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the sync-BN backward subgraph a DP render emits denotes the shard-r block of the batch-R*N input-VJP, at any R
     - {declaration: "Proofs.den_bnSyncBack_allReduce", file: "LeanMlir/Proofs/Foundation/DataParallel/Sync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # at bf16 the all-reduced conv weight gradient differs from the batch-R*N node only by rounding each replica's partial sum
+    # at bf16 the all-reduced conv weight gradient differs from the batch-R*N node only by rounding each replica's partial sum (strided peer: den_allReduceMeanF_convStridedWeightGradBBf16_sub_global)
     - {declaration: "Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global", file: "LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ResNet-34's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
     - {declaration: "Proofs.StableHLO.resnet34FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -562,7 +566,7 @@ alignment:
       status: "proved"
       note: "end-to-end: quantile inversion, Cameron-Martin shift, rotation-invariance dimension reduction all proved; the Monte-Carlo gap is closed (Hoeffding, then exact Clopper-Pearson at the driver's tail polynomial) and the (0,1) hypothesis is discharged for a net's argmax; the 784-dim driver checkpoints are not themselves tied (fidelity 4b)"
     - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton-Schulz)"
-      lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
+      lean: "steepest_l2_bound / steepest_l2_attained (SGD), steepest_linf_bound / steepest_linf_attained (sign), muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
       module: "LeanMlir/Proofs/Foundation/Muon/Geometry.lean, LeanMlir/Proofs/Foundation/Muon/NewtonSchulz.lean"
       status: "proved"
       note: "14 theorems; singular-G SVD completion + Newton-Schulz convergence dynamics left open"

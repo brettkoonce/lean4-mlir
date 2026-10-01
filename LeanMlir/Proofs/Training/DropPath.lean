@@ -35,7 +35,9 @@ IREE-vs-XLA agreement. A graph that draws its own randomness makes every one of 
 impossible or contingent on seeding an XLA RNG identically across two lowerers and two vendors.
 
 **Claim ceiling.** The verified target is **faithfulness** (the rendered op denotes `dropPath`) plus
-the exact identity at a ones mask. Stochastic depth is a *regulariser*; nothing here says it
+the exact identity at a ones mask, and the fed mask is the reference's inverted one
+(`dropPath_eq_reference`, and for classifier dropout `dropout_eq_reference`). Stochastic depth is a
+*regulariser*; nothing here says it
 improves generalisation, and no theorem in this repo could.
 
 ## References

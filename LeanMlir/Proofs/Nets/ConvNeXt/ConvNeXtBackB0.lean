@@ -9,8 +9,8 @@ a *backward* StableHLO graph that denotes the proven whole-block VJP.
 This file's graphs are per-example: ConvNeXt's channel LayerNorm (`chanLNTensor3`) is
 per-example separable, so no batch-coupled machinery (EfficientNet's `bnBatchLA`) is needed, and
 the batched ties (`ConvNeXtStepTieGB.lean`, `ConvNeXtWholeBackCertifiedTieB.lean`) are plain
-`batchMap`s of these per-example maps. The file is modelled on the per-example section of
-`EfficientNetBackB0.lean` (`residualBackGraph`, `convBnSwishBackGraph`).
+`batchMap`s of these per-example maps. The skip is spelled with `residualBackGraph`, as in
+EfficientNet's blocks.
 
 `chanLNBackGraph` and its faithfulness come first, then the block, residual-block and downsample
 capstones over it. `chanLNBackGraph_faithful` is the backward peer of `chanLNGraph_faithful`, and

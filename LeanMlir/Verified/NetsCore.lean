@@ -60,7 +60,10 @@ def enetImagenetRmsSchedule : RmsSchedule := { enetRmsSchedule with staircase :=
 
 /-- The Chapter-1 linear classifier: a single dense 784→10. Trained by
     `MainMnistLinearVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
-    (`linearVerifiedHasVJP`) — both over *this* object. -/
+    (`linearVerifiedHasVJP`) — both over *this* object. Its denotation is `mnistLinear`
+    (`linearVerified_denote_eq`); the rendered forward denotes it (`linearVerified_fwd_faithful`)
+    and the train step's loss cotangent is its softmax-CE gradient
+    (`linearVerified_lossCot_isCEgrad`). -/
 def linearVerified : VerifiedNetSpec where
   name     := "MNIST-Linear"
   slug     := "linear"
@@ -77,7 +80,8 @@ def linearVerified : VerifiedNetSpec where
 /-- The Chapter-2 MLP: dense 784→512 → relu → dense 512→512 → relu → dense 512→10.
     Trained by `MainMnistMlpVerified`; its folded VJP is `mlpVerifiedHasVJPAt` in
     [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean),
-    at an input where both ReLU pre-activations are nonzero — both over *this* object. -/
+    at an input where both ReLU pre-activations are nonzero — both over *this* object. The
+    rendered forward denotes it (`mlpVerified_fwd_faithful`). -/
 def mlpVerified : VerifiedNetSpec where
   name     := "MNIST-MLP"
   slug     := "mlp"
@@ -129,7 +133,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
     Trained by `MainMnistCnnVerified`; [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
     ties it to `Proofs.mnistCnnNoBnForward` (`cnnVerified_denote_eq`), whose VJP folded through
     conv/maxpool/dense is `Proofs.mnistCnnNoBnHasVJPAt`, at an input satisfying its ReLU and
-    max-pool hypotheses. -/
+    max-pool hypotheses. The rendered forward denotes it (`cnnVerified_fwd_faithful`). -/
 def cnnVerified : VerifiedNetSpec where
   name     := "MNIST-CNN"
   slug     := "cnn"
@@ -182,7 +186,8 @@ def cnnG (d : Nat) : VerifiedNetSpec where
 /-- The Chapter-4 CIFAR-10 CNN (no BN): conv 3→32 → relu → conv 32→32 → relu → maxpool
     → conv 32→64 → relu → conv 64→64 → relu → maxpool → flatten(4096) → dense 4096→512
     → relu → dense 512→512 → relu → dense 512→10. VJP: `Proofs.cifarCnnHasVJPAt` (at a smooth
-    point), tied to this spec by `cifarVerified_denote_eq` in `SpecVJP`. -/
+    point), tied to this spec by `cifarVerified_denote_eq` in `SpecVJP`; the rendered forward
+    denotes it (`cifarVerified_fwd_faithful`). -/
 def cifarVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN"
   slug     := "cifar"

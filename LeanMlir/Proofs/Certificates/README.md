@@ -49,11 +49,11 @@ and the conv interval engine `IntervalBoundConv/Basic` with its certificate `Cer
 | L2, full 784-d | same | `ListDot.dotZ` | `LipschitzCert/ScorecardFull{,Nets,ImgsA,ImgsB}` | `lipschitz_cert_scorecard_full.py` |
 | LipSDP | `pair_sq_bound`, `certified_at_eps_pair` | `linarith` over LDLᵀ column squares | `LipschitzCert/ScorecardSDP{,Uncon}`; `…SDPFull{,Uncon}` (built by no lib — OOM) | `lipschitz_cert_pair_sdp{,_full}.py` |
 | float tier | `FloatBridge` | — | `LipschitzCert/Float` | `lipschitz_cert_float.py` |
-| IBP L∞, dense | `ibp2_certified_at_eps` | `dotZ` / `absSumZ` | `LipschitzCert/ScorecardIBP{Data,,Uncon}` | `lipschitz_cert_scorecard_ibp.py` |
-| CROWN L∞ | `crown2_certified_at_eps` | `combZ` + per-entry `simp` | `LipschitzCert/ScorecardCrown{,Uncon}` | `crown_ibp_scorecard.py` |
+| IBP L∞, dense | `ibp2_certified_at_eps` | `dotZ` / `absSumZ` | `LipschitzCert/ScorecardIBP{Data,,Uncon}` (apexes `scorecard_ibp`, `scorecard_ibp_uncon`) | `lipschitz_cert_scorecard_ibp.py` |
+| CROWN L∞ | `crown2_certified_at_eps` | `combZ` + per-entry `simp` | `LipschitzCert/ScorecardCrown{,Uncon}` (apexes `scorecard_crown`, `scorecard_crown_uncon`) | `crown_ibp_scorecard.py` |
 | IBP L∞, conv | `ibp3_certified_of_boxSound` | ℚ checker `convNetCheckQ_sound` | `IbpConvScorecard/{Net,ImgsA–D,Basic}` | `ibp_conv_scorecard.py` |
-| smoothing, CP | `smoothing_cp_certified_solved` | ℕ binomial tail, `binomTail_le_of_kernel_check` | `Smoothing/CPScorecard` | `smooth_scorecard_gen.py` |
-| smoothing, decimal radii | `smooth_radius_dec` | ℚ Φ scan | `Smoothing/DecChunk1–6`, `Smoothing/DecScorecard` | `smooth_dec_scorecard_gen.py` |
+| smoothing, CP | `smoothing_cp_certified_solved` | ℕ binomial tail, `binomTail_le_of_kernel_check` | `Smoothing/CPScorecard` (per net: `smoothCpMlp_tail_le`, `smoothCpCnn_tail_le`, `smoothCpCifar_tail_le`) | `smooth_scorecard_gen.py` |
+| smoothing, decimal radii | `smooth_radius_dec` | ℚ Φ scan | `Smoothing/DecChunk1–6`, `Smoothing/DecScorecard` (per net: `smoothDecMlp_radius_le`, `smoothDecCnn_radius_le`, `smoothDecCifar_radius_le`) | `smooth_dec_scorecard_gen.py` |
 | smoothing ↔ net | `smoothing_cp_certified_mlpT` | per-witness `simp` | `Smoothing/NetWitness` | `smoothing_net_witness_gen.py` |
 
 ⚠ The Lipschitz / SDP / IBP / CROWN scorecards end in `CertifiedAt*` theorems about the net. The

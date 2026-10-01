@@ -15,7 +15,9 @@ batched index `N·(c·h·w)`. Each graph or cotangent here denotes the `.backwar
 | cotangent steps: BN, swish, sigmoid, conv / depthwise input-VJPs, GAP, SE, SE gate; the `c·h·w ↔ c·(h·w)` reindex | `bnBackB`, `swBackB`, `sigBackB`, `cInB`, `dInB`, `dStridedInB`, `gapInB`, `seInB`, `gateCotB`, `reassocB` | `BackLinks` |
 | cotangent steps: relu mask, strided conv input-VJP, BN as emitted, 3×3/s2 max-pool; the one-row head casts | `reluMaskB`, `cStridedInB`, `bnInB`, `mpInB`, `rowB` / `unrowB` | `BackLinks` |
 
-Every conv net's tie cites these names.
+Every conv net's tie cites these names. The ties thread `bnBackB`; `bnBackB_eq_den_bnBatchBack`
+says it is the emitted `.bnBatchBack` node's `den`, so the BN cotangent a tie certifies is the one
+the render computes.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

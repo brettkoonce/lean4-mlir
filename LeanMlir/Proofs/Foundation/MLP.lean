@@ -234,16 +234,6 @@ theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
   show ∑ j : Fin n, pdiv (relu n) x i j * dy j = _
   simp_rw [pdiv_relu n x h_smooth i]; simp
 
-/-- **Diagonal-indicator restatement of the smooth-point bridge.**
-    `reluHasVJP.backward x dy i = 1_{x i > 0} · dy i` at smooth
-    points — same content as `relu_codegen_matches_canonical`,
-    factored as ``(indicator) · dy i`` for downstream use. -/
-theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
-    (reluHasVJP n).backward x dy i =
-    (if x i > 0 then (1 : ℝ) else 0) * dy i := by
-  rw [relu_codegen_matches_canonical n x h_smooth dy i, ite_mul, one_mul, zero_mul]
-
 /-- **ReLU pointwise VJP — no canonical-witness escape.**
 
     Constructs `HasVJPAt (relu n) x` at a smooth point. The backward

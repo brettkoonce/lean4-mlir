@@ -3,9 +3,10 @@ import LeanMlir.Proofs.Architectures.CNN
 /-! # Conv and max-pool index facts — the flat ↔ tensor index vocabulary
 
 The flat-index plumbing every conv-net proof reads tensors through (`t3Idx` and its
-flat-sum `sum_t3`), and the 2×2 max-pool's window facts: the window max is Lipschitz in its cells,
-the pool is 1-Lipschitz per entry and ℓ1-contractive, and a selection margin beyond `2δ` freezes
-the argmax (`MaxPool2MarginQ`). The conv reads its input through the zero-padded window `convPad`
+flat-sum `sum_t3`), and the 2×2 max-pool's window facts: the pool with its routing frozen
+(`poolGatherFlat`, which agrees with the pool at its selection) is ℓ1-contractive
+(`poolGatherFlat_l1_contract`), and a selection margin beyond `2δ` freezes the argmax
+(`MaxPool2MarginQ`). The conv reads its input through the zero-padded window `convPad`
 and its kernel through the flat index `k4Idx`; cells with identical padded patches are twins
 (`ConvPatchEq`, and `ConvPatchEq2` two convs deep), equal under every kernel and bias
 (`conv2d_eq_of_convPatchEq`). The conv as a dense layer with weight sharing and its float forward
@@ -13,31 +14,6 @@ are in `ConvFloat`.
 -/
 
 namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § Max is Lipschitz: the 2×2 window max moves no more than its cells
--- ════════════════════════════════════════════════════════════════
-
-/-- A four-way max moves by at most the largest cell movement (`ℓ∞`). -/
-theorem max4_sub_abs_le {a b c d a' b' c' d' δ : ℝ}
-    (h1 : |a - a'| ≤ δ) (h2 : |b - b'| ≤ δ)
-    (h3 : |c - c'| ≤ δ) (h4 : |d - d'| ≤ δ) :
-    |max (max a b) (max c d) - max (max a' b') (max c' d')| ≤ δ := by
-  have hab : |max a b - max a' b'| ≤ δ :=
-    le_trans (abs_max_sub_max_le_max a b a' b') (max_le h1 h2)
-  have hcd : |max c d - max c' d'| ≤ δ :=
-    le_trans (abs_max_sub_max_le_max c d c' d') (max_le h3 h4)
-  exact le_trans (abs_max_sub_max_le_max _ _ _ _) (max_le hab hcd)
-
-/-- A four-way max moves by at most the *sum* of the cell movements
-    (`ℓ1`) — the per-window step of the pool's `ℓ1` contraction. -/
-theorem max4_sub_abs_le_sum {a b c d a' b' c' d' : ℝ} :
-    |max (max a b) (max c d) - max (max a' b') (max c' d')| ≤
-      |a - a'| + |b - b'| + |c - c'| + |d - d'| := by
-  refine max4_sub_abs_le (δ := |a - a'| + |b - b'| + |c - c'| + |d - d'|)
-    ?_ ?_ ?_ ?_ <;>
-    nlinarith [abs_nonneg (a - a'), abs_nonneg (b - b'),
-      abs_nonneg (c - c'), abs_nonneg (d - d')]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Index plumbing: window cells tile the input, flat sums = tensor sums
@@ -145,58 +121,6 @@ theorem sum_window_cells {h w : Nat} (g : Fin (2 * h) → Fin (2 * w) → ℝ) :
           hcol (fun wi => g (winRowInv ho a) wi)
     _ = ∑ hi : Fin (2 * h), ∑ wi : Fin (2 * w), g hi wi :=
         hrow (fun hi => ∑ wi : Fin (2 * w), g hi wi)
-
--- ════════════════════════════════════════════════════════════════
--- § The pool is 1-Lipschitz per entry and ℓ1-contractive across entries
--- ════════════════════════════════════════════════════════════════
-
-/-- The pooled entry at `(ci, ho, wo)` is the four-way max of its window
-    cells, in flat coordinates. -/
-theorem maxPoolFlat_apply {c h w : Nat} (u : Vec (c * (2*h) * (2*w)))
-    (ci : Fin c) (ho : Fin h) (wo : Fin w) :
-    maxPoolFlat c h w u (t3Idx ci ho wo) =
-      max (max (u (t3Idx ci (winRowInv ho 0) (winColInv wo 0)))
-               (u (t3Idx ci (winRowInv ho 1) (winColInv wo 0))))
-          (max (u (t3Idx ci (winRowInv ho 0) (winColInv wo 1)))
-               (u (t3Idx ci (winRowInv ho 1) (winColInv wo 1)))) := by
-  show Tensor3.flatten (maxPool2 (Tensor3.unflatten u)) (t3Idx ci ho wo) = _
-  rw [flatten_t3Idx, winRowInv_zero, winRowInv_one, winColInv_zero,
-    winColInv_one]
-  rfl
-
-/-- `ℓ1` contraction: the pooled drift, summed over all pooled entries, is
-    at most the input drift summed over all input entries (windows are
-    disjoint, max is 1-Lipschitz). The pool passes `ℓ1` budgets through
-    unamplified. -/
-theorem maxPoolFlat_l1_contract {c h w : Nat}
-    (u v : Vec (c * (2*h) * (2*w))) :
-    ∑ q, |maxPoolFlat c h w u q - maxPoolFlat c h w v q| ≤
-      ∑ k, |u k - v k| := by
-  rw [sum_t3 (fun q => |maxPoolFlat c h w u q - maxPoolFlat c h w v q|),
-    sum_t3 (fun k => |u k - v k|)]
-  refine Finset.sum_le_sum fun ci _ => ?_
-  calc ∑ ho : Fin h, ∑ wo : Fin w,
-        |maxPoolFlat c h w u (t3Idx ci ho wo) -
-          maxPoolFlat c h w v (t3Idx ci ho wo)|
-      ≤ ∑ ho : Fin h, ∑ wo : Fin w, ∑ ab : Fin 2 × Fin 2,
-          |u (t3Idx ci (winRowInv ho ab.1) (winColInv wo ab.2)) -
-            v (t3Idx ci (winRowInv ho ab.1) (winColInv wo ab.2))| := by
-        refine Finset.sum_le_sum fun ho _ => Finset.sum_le_sum fun wo _ => ?_
-        have hexp : ∑ ab : Fin 2 × Fin 2,
-            |u (t3Idx ci (winRowInv ho ab.1) (winColInv wo ab.2)) -
-              v (t3Idx ci (winRowInv ho ab.1) (winColInv wo ab.2))| =
-            ∑ a : Fin 2, ∑ b : Fin 2,
-              |u (t3Idx ci (winRowInv ho a) (winColInv wo b)) -
-                v (t3Idx ci (winRowInv ho a) (winColInv wo b))| :=
-          Fintype.sum_prod_type _
-        rw [maxPoolFlat_apply, maxPoolFlat_apply, hexp, Fin.sum_univ_two,
-          Fin.sum_univ_two, Fin.sum_univ_two]
-        refine le_trans max4_sub_abs_le_sum (le_of_eq ?_)
-        ring
-    _ = ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
-          |u (t3Idx ci hi wi) - v (t3Idx ci hi wi)| :=
-        sum_window_cells (fun hi wi =>
-          |u (t3Idx ci hi wi) - v (t3Idx ci hi wi)|)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 2×2 gather: the pool with its routing frozen

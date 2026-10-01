@@ -1607,8 +1607,10 @@ end Proofs.StableHLO
 -- `bernoulli(key, keep, x.shape)` — one Bernoulli per (example, feature) — where stochastic depth
 -- draws `(B, 1, …, 1)`. Same op (`layerScale`), different mask RANK, and each is what the other's
 -- comments have spent this file warning about. `Proofs.dropout_of_dropScale` states the
--- containment and `Proofs.dropPath_scales_uniformly` the gap; `tests/TestBatchedEmitTie.lean` pins
--- both directions in the emitted bytes.
+-- containment (`StableHLO.den_dropoutB_of_dropScale` at the node) and
+-- `Proofs.dropPath_scales_uniformly` the gap; `tests/TestBatchedEmitTie.lean` pins both directions
+-- in the emitted bytes. The site's node denotes `Proofs.dropout` forward and its VJP backward
+-- (`StableHLO.dropoutB_faithful`, `StableHLO.dropoutB_back_faithful`).
 --
 -- ONE site and NO ramp — so `enetDropIdxs`' expensive block-index/site-ordinal distinction has
 -- no analogue here, and no silent-constant ramp bug is spellable. What replaces it

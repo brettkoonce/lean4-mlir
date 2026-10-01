@@ -395,6 +395,8 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     let (ce, dvs) ← pretty vbB (.matmulFBAt bf16 (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
           zrnd
           (.operand smT zAtt) (.operand dpv zHd))
+    -- Each example's softmax backward reads its own saved scores
+    -- (`den_softmaxRowBackB_per_example`), as each `matmulFB` reads its own operands.
     let (cf, dsc) ← pretty vbB (.softmaxRowBackB (N := vbB) (m := vbTok) (n := vbTok)
         (sv.scs[hh]!) zAtt (.operand dsm zAtt))
     let (cg2, dqk) ← pretty vbB (.scaleB (N := vbB) (n := vbTok*vbTok) vSCALE 0
@@ -532,6 +534,8 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     -- cannot see this and `den_rowDenseBiasGradB_at_one`'s argument is why.
     let (cCl, ncls) ← pretty vbB (.denseBiasGradB (N := vbB) (c := vbD)
         (.operand dclsRow (0 : Vec (vbB*vbD))))
+    -- The positional table is shared too, so its gradient sums the batch; at `N = 1` that sum
+    -- has one term (`den_posEmbedGradB_at_one`), so only a gate at `N > 1` sees it.
     let (cPo, npos) ← pretty vbB (.posEmbedGradB (N := vbB) (tk := vbTk) (D := vbD)
         (.operand dcur zTok))
     let blkOutOrdered := (List.range vDEPTH).flatMap (fun i => blkNames[vDEPTH - 1 - i]!)

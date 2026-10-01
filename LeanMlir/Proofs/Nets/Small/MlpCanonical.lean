@@ -41,11 +41,6 @@ set_option linter.defProp false
 noncomputable def hasVJPAt :=
   mlpHasVJPAt (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
-/-- Canonical backward-correctness: the canonical witness's backward IS the
-    Jacobian-transpose contraction. -/
-noncomputable def hasVJP_correct :=
-  mlpHasVJP_correct (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
-
 /-- Canonical output-layer float-SGD descent (`mlp_output_float_sgd_descends`
     at the canonical dims): one binary32-model SGD step on W₂ decreases the
     real CE loss, margins carried. -/

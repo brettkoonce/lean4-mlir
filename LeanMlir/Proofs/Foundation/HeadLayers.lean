@@ -224,7 +224,7 @@ theorem pdiv_congr_of_eventuallyEq {m n : Nat} {f g : Vec m → Vec n} {x : Vec 
     except the positions `T r` twins with it (`MaxPool3s2SmoothUpTo`). Weaker than
     `StemPoolSmoothAt` (`stemPoolTwinAt_of_smoothAt`). It is what a parameter gradient needs:
     twinned cells tie at every parameter value, so the pool's choice between them does not move
-    (`stemPoolRelu_param_eventuallyEq`). -/
+    (`stemPoolRelu_param_eventuallyEq_select`). -/
 def StemPoolTwinAt (N h w : Nat) {oc : Nat}
     (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
     (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
@@ -341,21 +341,6 @@ theorem stemPoolRelu_param_eventuallyEq_select {k N c h w : Nat}
   exact maxPool3s2_eq_at_max
     (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) (finProdFinEquiv.symm idx).1)) _ _ _ _ _
     (hθ _ _ _ _)
-
-/-- **Along a parameter, ReLU then the pool is the argmax gather**: the selector
-    `maxPool3s2LocalReindexB` names at `θ₀` (`stemPoolRelu_param_eventuallyEq_select`). -/
-theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
-    (Z : Vec k → Vec (N * (c * (2 * h) * (2 * w)))) (θ₀ : Vec k) (hZ : ContinuousAt Z θ₀)
-    (hz : ∀ i, Z θ₀ i ≠ 0)
-    (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
-    (hs : StemPoolTwinAt N h w T (relu _ (Z θ₀)))
-    (htwin : ∀ θ (r : Fin N) (ci : Fin c) (p q : Fin (2 * h) × Fin (2 * w)), T r p q →
-      Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2))) =
-        Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2)))) :
-    (fun θ => StableHLO.batchMap N (maxPool3s2Flat c h w) (relu _ (Z θ))) =ᶠ[nhds θ₀]
-      (fun θ k => relu _ (Z θ) (maxPool3s2LocalReindexB N c h w (relu _ (Z θ₀)) k)) :=
-  stemPoolRelu_param_eventuallyEq_select Z θ₀ hZ hz T hs htwin _
-    (maxPool3s2LocalReindexB_isSelect N c h w _)
 
 /-- The gather model `v ↦ relu v ∘ σ`: linear after the ReLU, so differentiable at any point with
     no zero entry, whatever `σ`. -/

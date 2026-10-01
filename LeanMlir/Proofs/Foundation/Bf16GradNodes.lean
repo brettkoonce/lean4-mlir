@@ -15,17 +15,17 @@ certified `Σ_n` gradient at the ROUNDED operands, rounded. The proofs are the f
 peels the outer rounding, `Finset.sum_congr` the batch, and the inner equality is the per-example
 certificate at rounded slices.
 
-| kind | f32 peer | emitted by |
-|---|---|---|
-| `convWeightGradBBf16` | `GradNodeB.convWGradB_den` | every net |
-| `convStridedWeightGradBBf16` (symmetric) | `GradNodeB.convStridedWGradB_den` | ResNet-34/50, MobileNetV4's fused stage, ConvNeXt's downsamples |
-| `convStridedXlaWeightGradBBf16` (XLA-`SAME`) | `GradNodeB.convStridedXlaWGradB_den` | EfficientNet-B0's, MobileNetV2's and MobileNetV4's stems |
-| `convStride4WeightGradBBf16` | `GradNodeB.psWGradB_den` | ConvNeXt's patchify stem |
-| `depthwiseWeightGradBBf16` | `GradNodeB.depthwiseWGradB_den` | B0, MobileNetV2, MobileNetV4, ConvNeXt |
-| `depthwiseStridedWeightGradBBf16` (symmetric) | `GradNodeB.depthwiseStridedWGradB_den` | B0, MobileNetV4 |
-| `depthwiseStridedXlaWeightGradBBf16` (XLA-`SAME`) | `GradNodeB.depthwiseStridedXlaWGradB_den` | MobileNetV2 |
-| `rowDenseWeightGradBBf16` | `ViTFoldGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
-| `patchEmbedWeightGradBBf16` | `ViTFoldGB.patchEmbedWeightGradB_den` | ViT's patch embed |
+| kind | lemma | f32 peer | emitted by |
+|---|---|---|---|
+| `convWeightGradBBf16` | `convWGradBBf16_den` | `GradNodeB.convWGradB_den` | every net |
+| `convStridedWeightGradBBf16` (symmetric) | `convStridedWGradBBf16_den` | `GradNodeB.convStridedWGradB_den` | ResNet-34/50, MobileNetV4's fused stage, ConvNeXt's downsamples |
+| `convStridedXlaWeightGradBBf16` (XLA-`SAME`) | `convStridedXlaWGradBBf16_den` | `GradNodeB.convStridedXlaWGradB_den` | EfficientNet-B0's, MobileNetV2's and MobileNetV4's stems |
+| `convStride4WeightGradBBf16` | `convStride4WGradBBf16_den` | `GradNodeB.psWGradB_den` | ConvNeXt's patchify stem |
+| `depthwiseWeightGradBBf16` | `depthwiseWGradBBf16_den` | `GradNodeB.depthwiseWGradB_den` | B0, MobileNetV2, MobileNetV4, ConvNeXt |
+| `depthwiseStridedWeightGradBBf16` (symmetric) | `depthwiseStridedWGradBBf16_den` | `GradNodeB.depthwiseStridedWGradB_den` | B0, MobileNetV4 |
+| `depthwiseStridedXlaWeightGradBBf16` (XLA-`SAME`) | `depthwiseStridedXlaWGradBBf16_den` | `GradNodeB.depthwiseStridedXlaWGradB_den` | MobileNetV2 |
+| `rowDenseWeightGradBBf16` | `rowDenseWGradBBf16_den` | `ViTFoldGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
+| `patchEmbedWeightGradBBf16` | `patchEmbedWGradBBf16_den` | `ViTFoldGB.patchEmbedWeightGradB_den` | ViT's patch embed |
 
 Note: **`rowDenseWeightGradBBf16` has NO outer rounding**, and that is the measurement rather than
 an omission: its `dot_general` contracts batch and token in one op and keeps its f32-typed result

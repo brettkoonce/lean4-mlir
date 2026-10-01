@@ -810,6 +810,7 @@ def sigmoidBackM (m : Nat) : String :=
 def swishFwdM (m : Nat) : String :=
   actMod "swish_fwd" s!"%x: {tt [m]}" (tt [m])
     (s!"    %s = stablehlo.logistic %x : {tt [m]}\n    %y = stablehlo.multiply %x, %s : {tt [m]}\n    return %y : {tt [m]}\n")
+/-- swish backward `dy ⊙ swish'(x)`: the proven backward (`IR.swish_back_bridge`). -/
 def swishBackM (m : Nat) : String :=
   actMod "swish_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
     (s!"    %s = stablehlo.logistic %x : {tt [m]}\n" ++
@@ -853,6 +854,7 @@ def geluFwdM (m : Nat) : String :=
      s!"    %ot = stablehlo.add %one, %t : {tt [m]}\n" ++
      s!"    %hx = stablehlo.multiply %half, %x : {tt [m]}\n" ++
      s!"    %y = stablehlo.multiply %hx, %ot : {tt [m]}\n    return %y : {tt [m]}\n")
+/-- gelu backward `dy ⊙ gelu'(x)`: the proven backward (`IR.gelu_back_bridge`). -/
 def geluBackM (m : Nat) : String :=
   actMod "gelu_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
     (s!"    %a = stablehlo.constant dense<0.044715> : {tt [m]}\n" ++

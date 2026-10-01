@@ -26,10 +26,12 @@ file is what a per-net DP twin walks its chain with.
   `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4GradInput` at `N := R·N` (forward and
   input-VJP) and `1/R` of `bnPerChannelGradGamma` at `N := R·N` (the γ parameter gradient).
   These are the BN cases of the chain induction; `StableHLO.Basic`'s `*_allReduce_R1` anchors are
-  their `R := 1` instances.
+  their `R := 1` instances (`den_bnSyncF_allReduce_R1`, `den_bnSyncBack_allReduce_R1`,
+  `den_bnSyncGammaGradB_allReduce_R1`).
 * **The handed-back statistics are the global batch's own**: `den_bnStatsMeanB_allReduce` /
   `den_bnStatsVarB_allReduce` — what a sync render returns for the host's running-stat EMA is
-  `bnBatchMeanB` / `bnBatchVarB` at `N := R·N`, on every replica.
+  `bnBatchMeanB` / `bnBatchVarB` at `N := R·N`, on every replica (at `R := 1`,
+  `den_bnStatsMeanB_allReduce_R1` / `den_bnStatsVarB_allReduce_R1`).
 * **P4 — the parameter collective is the global-batch gradient.**
   `den_allReduceMeanF_convWeightGradB_shard`, `den_allReduceMeanF_bnBetaGradB_shard` and the
   γ statement above: the all-reduced mean of the `R` per-replica gradient nodes, each on its

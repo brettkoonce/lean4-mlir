@@ -10,7 +10,8 @@ arithmetic in-kernel. Canonical surface: [`Proofs/Nets/Small/MlpCanonical.lean`]
 
 Fixed-weight networks whose Lipschitz constant is proved in Lean (no power iteration, no
 hypothesis), whose margin at a concrete input is computed in-kernel, and whose certified radius
-is provably positive.
+is provably positive (`linear_radius_pos`, `mlp_radius_pos`, `trained_radius_pos`,
+`trained_radius_gram_pos`).
 
 Three instances:
 * `linear_demo_certified` — a 2×2 linear classifier, L = 5 (Frobenius),

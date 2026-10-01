@@ -13,7 +13,7 @@ is what those six kinds do under sharding.
 |---|---|---|
 | `convBf16`, `convStridedBf16` (forward, `.batchOp`) | exact | `den_convBf16_shard`, `den_convStridedBf16_shard` |
 | `convBackBatchedBf16`, `convStridedBackBatchedBf16` | exact | `den_convBackBatchedBf16_shard`, `den_convStridedBackBatchedBf16_shard` |
-| `convWeightGradBBf16`, `convStridedWeightGradBBf16`, all-reduced | rounded per replica | `den_allReduceMeanF_convWeightGradBBf16_sub_global` and its strided peer |
+| `convWeightGradBBf16`, `convStridedWeightGradBBf16`, all-reduced | rounded per replica | `den_allReduceMeanF_convWeightGradBBf16_sub_global`, `den_allReduceMeanF_convStridedWeightGradBBf16_sub_global` |
 
 The first four round per element of a per-example map, so replica `r`'s value is `batchShard r`
 of the same node at batch `R·N`, exactly as at f32.

@@ -31,7 +31,6 @@ LeanMlir/Proofs/Nets/Small/CifarCNN.lean	T0	def-case
 LeanMlir/Proofs/Nets/Small/CifarCNN.lean	T0_inj	theorem-case
 LeanMlir/Proofs/Nets/Small/CifarCNN.lean	T0_pos	theorem-case
 LeanMlir/Proofs/Nets/Small/CifarCNN.lean	X_pos	theorem-case
-LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	hasVJP_correct	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	hidden_float_sgd_descends	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	input_float_sgd_descends	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	output_float_sgd_descends	def-case

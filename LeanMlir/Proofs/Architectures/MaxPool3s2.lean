@@ -25,7 +25,8 @@ matters for the 3×3 pools (the ResNet-34 and ResNet-50 ImageNet stems).
 **for `max`, clamping the index is equivalent to `-∞` padding.** The only out-of-range read is
 `2i−1` at `i = 0`, and Nat's truncated subtraction clamps it to `0` — a cell the window already
 contains at offset `a = 1`. So `max` over the clamped triple equals `max` over the unpadded pair,
-which is exactly what `-∞` padding computes. `win3RowInv_first_dup` is that statement.
+which is exactly what `-∞` padding computes. `win3RowInv_first_dup` is that statement, and
+`win3ColInv_first_dup` its column half.
 
 The symmetric form needs **no `min`**: the upper end `2(h−1)+2−1 = 2h−1` is in range by
 construction, so truncated subtraction is the whole story.
@@ -89,15 +90,6 @@ noncomputable abbrev maxPool3s2 {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : 
     qualify. -/
 abbrev MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
   WindowSmooth win3RowInv win3ColInv x
-
-theorem maxPool3s2Smooth_of_pairwise {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (hd : ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
-      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
-        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
-      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
-        x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)) :
-    MaxPool3s2Smooth x :=
-  windowSmooth_of_pairwise _ _ x hd
 
 /-- **Positional injectivity ⇒ `MaxPool3s2Smooth`**, the discharge used by
     `BatchSeal.ctConv_pool_smooth` for the ResNet-34 and ResNet-50 full-width seals: one
@@ -171,41 +163,11 @@ theorem maxPool3s2_eq_at_max {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     maxPool3s2 x co ho wo = x co (win3RowInv ho a) (win3ColInv wo b) :=
   windowMax_eq_at_max _ _ x co ho wo (a, b) fun cd => h_max cd.1 cd.2
 
-theorem maxPool3s2_eq_argmax_value {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    maxPool3s2 x co ho wo =
-      x co (win3RowInv ho (maxPool3s2Argmax x co ho wo).1)
-            (win3ColInv wo (maxPool3s2Argmax x co ho wo).2) :=
-  windowMax_eq_argmax_value _ _ x co ho wo
-
 /-- For each output flat index, the flat index of its argmax's input position. Not injective:
     two overlapping windows may select the same input. -/
 noncomputable abbrev maxPool3s2LocalReindex {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (k_out : Fin (c * h * w)) : Fin (c * (2 * h) * (2 * w)) :=
   windowLocalReindex win3RowInv win3ColInv x k_out
-
-/-- **Smooth-point local linearisation**: near `flatten x` the flattened pool is the reindex
-    `y ↦ y ∘ σ`. -/
-theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (h_smooth : MaxPool3s2Smooth x) :
-    HasFDerivAt
-      (fun v : Vec (c * (2 * h) * (2 * w)) => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
-      (reindexCLM (maxPool3s2LocalReindex x)) (Tensor3.flatten x) :=
-  windowMax_flat_hasFDerivAt _ _ x h_smooth
-
-/-- **Smooth-point Jacobian**: the 0/1 indicator that the local reindex sends output
-    `(co, ho, wo)` to input `(ci, hi_in, wi_in)`. An input has up to two windows per axis, so
-    there is no single owning window to decode the condition into, unlike `pdiv3_maxPool2_smooth`;
-    the accumulation happens in the VJP's sum over outputs. -/
-theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x)
-    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w))
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    pdiv3 maxPool3s2 x ci hi_in wi_in co ho wo =
-      (if maxPool3s2LocalReindex x (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
-            = finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)
-        then (1 : ℝ) else 0) :=
-  pdiv3_windowMax_smooth _ _ x h_smooth ci hi_in wi_in co ho wo
 
 /-- **The VJP witness.** The backward accumulates `dy` over every output whose window selects
     this input, at most 4 of them (`win3Row_mem_le_two` squared). The backward is spelled out

@@ -112,15 +112,11 @@ audit. -/
 -- than the triple but they'd trip the exact-triple grep; audited transitively
 -- via absrowSF below.)
 #print axioms Proofs.Robustness.absrowSF
-#print axioms Proofs.Robustness.absrowTF
 #print axioms Proofs.Robustness.hbSFe1_0
 #print axioms Proofs.Robustness.certIBPSFe1_0
 #print axioms Proofs.Robustness.certIBPSFe8_0
-#print axioms Proofs.Robustness.certIBPTFe1_0
-#print axioms Proofs.Robustness.certIBPTFe2_4
 #print axioms Proofs.Robustness.ibpCappedCertse1_certified
 #print axioms Proofs.Robustness.ibpCappedCertse8_certified
-#print axioms Proofs.Robustness.ibpUnconCertse1_certified
 
 -- CROWN, the SAME nets/subset/ε grid as the IBP tier above — a new COLUMN in
 -- that table (measured counts: the generated header). Each emitted image is proved at the
@@ -131,18 +127,14 @@ audit. -/
 -- but they would trip the exact-triple grep); they are audited transitively via
 -- the `hl1*` wrappers and the certificates below.
 #print axioms Proofs.Robustness.hWSF
-#print axioms Proofs.Robustness.hWTF
 #print axioms Proofs.Robustness.hl1SFe8_0_0
 #print axioms Proofs.Robustness.hrelSFe8_0
 #print axioms Proofs.Robustness.hcertSFe8_0
 #print axioms Proofs.Robustness.certCRSFe8_0
 #print axioms Proofs.Robustness.certCRSFe1_0
 #print axioms Proofs.Robustness.certCRSFe8_7
-#print axioms Proofs.Robustness.certCRTFe8_3
-#print axioms Proofs.Robustness.certCRTFe4_0
 #print axioms Proofs.Robustness.crownCappedCertse1_certified
 #print axioms Proofs.Robustness.crownCappedCertse8_certified
-#print axioms Proofs.Robustness.crownUnconCertse1_certified
 #print axioms Proofs.Robustness.scorecard_crown
 #print axioms Proofs.Robustness.scorecard_crown_uncon
 #print axioms Proofs.Robustness.scorecard_ibp

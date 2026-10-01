@@ -252,22 +252,6 @@ noncomputable def convMixedGain (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) : ℝ :=
   (n : ℝ) * w * (1 + convBrR uacc uleaf n + uleaf * (1 + convBrR uacc uleaf n)
     + uacc * ((1 + uleaf) * (1 + convBrR uacc uleaf n)))
 
-/-- **`convMixedBudget` is affine in the inherited error**, with slope `convMixedGain`. So
-    composing `d` of these is `gain^d` on the input error plus a geometric sum of the additive
-    terms — the shape every composed forward-error bound has. -/
-theorem convMixedBudget_affine (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) :
-    convMixedBudget uacc uleaf n w β A E
-      = convMixedBudget uacc uleaf n w β A 0 + convMixedGain uacc uleaf n w * E := by
-  simp only [convMixedBudget, convMixedGain]; ring
-
-/-- **The f32 peer, for comparison.** `layerBudget` is affine in `E` too, with slope
-    `m·w·(1+u)^(m+2)`. Both slopes are `fan-in · weight-bound` times a factor that is
-    `1 + O(roundoff)` (`convMixedGain_factor`). -/
-theorem layerBudget_affine (u : ℝ) (m : ℕ) (w β A E : ℝ) :
-    layerBudget u m w β A E
-      = layerBudget u m w β A 0 + (m : ℝ) * w * (1 + u) ^ (m + 2) * E := by
-  simp only [layerBudget]; ring
-
 -- Illustration (arithmetic outside Lean): the f32 gain's `ε = (1+u_acc)^(n+2) − 1` is 2.7e-4 at
 -- `u_acc = 2⁻²⁴`, `n = 4608`; the bf16-mixed `ε` is 1.20e-2 at `u_leaf = 2⁻⁸`, dominated by
 -- `br`'s flat leaf term. `(1.012043/1.000275)^d` is 1.52× at d = 36 conv layers (R34) and 1.86×
@@ -278,7 +262,7 @@ theorem layerBudget_affine (u : ℝ) (m : ℕ) (w β A E : ℝ) :
 -- (probabilistic rounding, or a bound that uses BN's renormalisation at each layer).
 /-- **The per-layer gain factors as `n·w·(1+ε)`**, with
     `ε = br + u_leaf(1+br) + u_acc(1+u_leaf)(1+br)` (`br = convBrR u_acc u_leaf n`).
-    Relative to f32 (`layerBudget_affine`, `ε = (1+u)^(n+2) − 1`), bf16-mixed changes only the
+    Relative to f32 (`layerBudget`, whose slope in `E` is `n·w·(1+u)^(n+2)`, so `ε = (1+u)^(n+2) − 1`), bf16-mixed changes only the
     `1+ε` factor, not the `n·w` growth rate. Composed over depth, both bounds grow as
     `(n·w)^d` and are vacuous in absolute terms at real layer sizes. -/
 theorem convMixedGain_factor (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) :

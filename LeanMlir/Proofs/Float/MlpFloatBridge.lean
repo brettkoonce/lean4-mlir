@@ -366,7 +366,8 @@ theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
 
 /-- **Rounded hidden bias update (b₁)** — the gradient is the layer-1
     cotangent itself (`emitBiasGrad`), so this is the cotangent chain
-    followed by `sgd_step_close`. -/
+    followed by `sgd_step_close`. The real target is the certified layer-1
+    bias step (`mlp_layer1_bias_grad_bridge`). -/
 theorem mlp_b1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} (b₁ : Vec d₂)
     {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
@@ -472,7 +473,8 @@ theorem mlp_w0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     exact mul_le_mul (hx i) hc₀mag (abs_nonneg _) ha
   exact M.sgd_step_close (W₀ i j) hmul hac hlr
 
-/-- **Rounded input bias update (b₀)** — the layer-0 cotangent directly. -/
+/-- **Rounded input bias update (b₀)** — the layer-0 cotangent directly. The real
+    target is the certified layer-0 bias step (`mlp_layer0_bias_grad_bridge`). -/
 theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     {W₀ : Mat d₀ d₁} (b₀ : Vec d₁) {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
     {W₂ : Mat d₂ d₃} {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}

@@ -20,9 +20,10 @@ statement covers `efficientnet_drop_fwd` (`sd` only), `efficientnet_do_fwd` (`cd
 
 * `efficientnetFwdGraphBFullDrop_faithful` / `efficientnetFwdGraphBFullEvalDrop_faithful` — the
   graph denotes the forward, at every mask;
-* `efficientnetForwardBFullDrop_none` / `…_ones` — with no site, or at the all-ones masks the
-  driver passes at eval, the forward IS `efficientnetForwardBFull` (likewise the eval twins). The
-  identity is exact: the keep probability is folded into the mask (`Training/DropPath`).
+* `efficientnetForwardBFullDrop_none` / `efficientnetForwardBFullDrop_ones` — with no site, or at
+  the all-ones masks the driver passes at eval, the forward IS `efficientnetForwardBFull` (likewise
+  the eval twins, `efficientnetForwardBFullEvalDrop_none` / `efficientnetForwardBFullEvalDrop_ones`).
+  The identity is exact: the keep probability is folded into the mask (`Training/DropPath`).
 
 The residual-block-with-drop and the dropout head are text-guarded against the renderer in
 `Codegen/FwdGraphTextTies` at training BatchNorm; the eval graphs use the render's names too, and

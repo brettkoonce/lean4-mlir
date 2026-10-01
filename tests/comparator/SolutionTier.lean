@@ -918,6 +918,16 @@ theorem chk_dpMeanGrad_ne_globalBatchGrad :
         Proofs.lossGrad (Proofs.bnToyLoss Proofs.dpToyBatch) θ :=
   Proofs.dpMeanGrad_ne_globalBatchGrad
 
+/-- `Proofs.dpMeanGrad_eq_globalBatchGrad_contiguous` -/
+theorem chk_dpMeanGrad_eq_globalBatchGrad_contiguous :
+    ∀ {R N P : ℕ} (ℓ : Fin (R * N) → Proofs.Vec P → ℝ)
+      (θ : Proofs.Vec P),
+      (∀ (k : Fin (R * N)), Proofs.LossDifferentiableAt (ℓ k) θ) →
+        (Proofs.dpMean (R := R) fun (r : Fin R) =>
+            Proofs.lossGrad (Proofs.meanLoss (M := N) fun (n : Fin N) => ℓ (finProdFinEquiv (r, n))) θ) =
+          Proofs.lossGrad (Proofs.meanLoss ℓ) θ :=
+  Proofs.dpMeanGrad_eq_globalBatchGrad_contiguous
+
 /-- `Proofs.dpSyncGrad_eq_globalBatchGrad` -/
 theorem chk_dpSyncGrad_eq_globalBatchGrad :
     ∀ {R N P : ℕ} (e : Fin R × Fin N ≃ Fin (R * N))
@@ -926,6 +936,27 @@ theorem chk_dpSyncGrad_eq_globalBatchGrad :
         (Proofs.dpMean (R := R) fun (r : Fin R) (i : Fin P) => (1 : ℝ) / ↑N * ∑ n : Fin N, c (e (r, n)) i)
         fun (i : Fin P) => (1 : ℝ) / ↑(R * N) * ∑ m : Fin (R * N), c m i :=
   Proofs.dpSyncGrad_eq_globalBatchGrad
+
+/-- `Proofs.bnSyncTensor4_shard_eq_global` -/
+theorem chk_bnSyncTensor4_shard_eq_global :
+    ∀ (R N oc h w : ℕ),
+      R ≠ (0 : ℕ) →
+        N * (h * w) ≠ (0 : ℕ) →
+          ∀ (ε : ℝ) (γ β : Proofs.Vec oc) (X : Proofs.Vec (R * N * (oc * (h * w)))) (r : Fin R),
+            Proofs.bnSyncTensor4 N oc h w ε γ β
+                (fun (c : Fin oc) =>
+                  (1 : ℝ) / ↑R *
+                    ∑ r' : Fin R,
+                      Proofs.bnMean (N * (h * w))
+                        (Proofs.Mat.unflatten (Proofs.bnchwFwd N oc h w (Proofs.batchShard R N (oc * (h * w)) X r')) c))
+                (fun (c : Fin oc) =>
+                  (1 : ℝ) / ↑R *
+                    ∑ r' : Fin R,
+                      Proofs.bnMeanSq (N * (h * w))
+                        (Proofs.Mat.unflatten (Proofs.bnchwFwd N oc h w (Proofs.batchShard R N (oc * (h * w)) X r')) c))
+                (Proofs.batchShard R N (oc * (h * w)) X r) =
+              Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4 (R * N) oc h w ε γ β X) r :=
+  Proofs.bnSyncTensor4_shard_eq_global
 
 /-- `Proofs.den_bnSyncBack_allReduce` -/
 theorem chk_den_bnSyncBack_allReduce :

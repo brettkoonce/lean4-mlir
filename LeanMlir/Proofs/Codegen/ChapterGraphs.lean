@@ -8,7 +8,7 @@ book's small nets, and the `renderModule` printers that write the committed
 
 | net | graph | printer |
 |---|---|---|
-| linear (ch 1) | `fwdGraph`, `backGraph`, `lossCotGraph` (in `StableHLO`) | `linearFwdModuleV`, `linearBackModuleV`, `linearTrainStepModuleV` |
+| linear (ch 1) | `fwdGraph`, `lossCotGraph` (in `StableHLO`) | `linearFwdModuleV`, `linearTrainStepModuleV` |
 | MLP (ch 2) | `mlpFwdGraph`, `mlpBackGraph` | `mlpFwdModuleV` |
 | MNIST CNN (ch 3) | `cnnFwdGraph`, `cnnBackGraph` | `cnnFwdModuleV` |
 | CIFAR CNN (ch 4) | `cifarFwdGraph`, `cifar8FwdGraph`, `cifar8BnFwdGraph` | `cifarFwdModuleV`, `cifar8FwdModuleV`, `cifar8BnFwdModuleV` |
@@ -205,10 +205,6 @@ noncomputable def cnnBackGraph
 /-- `@linear_fwd` rendered **from the verified AST**. -/
 def linearFwdModuleV (B d₀ d₁ : Nat) (W : Mat d₀ d₁) (b : Vec d₁) (x : Vec d₀) : String :=
   renderModule "linear_fwd" s!"%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}" B d₁ (fwdGraph W b x)
-
-/-- `@linear_back` rendered **from the verified AST**. -/
-def linearBackModuleV (B d₀ d₁ : Nat) (W : Mat d₀ d₁) (dy : Vec d₁) : String :=
-  renderModule "linear_back" s!"%dy: {ty [B,d₁]}, %W0: {ty [d₀,d₁]}" B d₀ (backGraph W dy)
 
 /-- The full **`@linear_train_step`** rendered from the verified AST: forward +
     softmax-CE cotangent come from `pretty (lossCotGraph …)` (the `%onehot`

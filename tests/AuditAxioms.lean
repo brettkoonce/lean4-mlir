@@ -288,7 +288,6 @@ open Proofs
 
 -- Codegen smooth-point bridge theorems (MLP.lean)
 #print axioms relu_codegen_matches_canonical
-#print axioms relu_canonical_diagonal
 
 -- Codegen smooth-point bridge theorems (CNN.lean / MaxPool2)
 #print axioms pdiv3_maxPool2_smooth
@@ -327,9 +326,9 @@ open Proofs
 #print axioms maxPool2Smooth_of_injective
 #print axioms maxPool2Smooth_of_pairwise
 -- Chapter-3 MLP: concrete whole-network instance, every ReLU smoothness hypothesis discharged
-#print axioms MlpConcrete.mlpConcreteHasVJP_correct
+#print axioms MlpConcrete.mlpConcreteHasVJPAt
 -- ResNet-style CNN *with* BN
-#print axioms CnnConcrete.cnnConcreteHasVJP_correct
+#print axioms CnnConcrete.cnnConcreteHasVJPAt
 
 -- Denoted StableHLO-subset IR
 #print axioms IR.dense_back_bridge
@@ -381,8 +380,6 @@ open Proofs
 
 -- Printer-faithfulness (Chapter 2)
 #print axioms StableHLO.fwdGraph_faithful
-#print axioms StableHLO.backGraph_faithful
-#print axioms StableHLO.softmaxDiv_expe_faithful
 #print axioms StableHLO.lossCotGraph_faithful
 #print axioms StableHLO.lossCotGraph_isCEgrad
 #print axioms StableHLO.wGrad_isWeightJacobian
@@ -447,11 +444,8 @@ open Proofs
 #print axioms SgdNode.denseW_den
 #print axioms SgdNode.denseB_den
 -- ch5-cifar8 TIE
-#print axioms Cifar8Tie.cifar8LossCot_den
-#print axioms Cifar8Tie.cifar8_Wb_tied_totalloss
 #print axioms Cifar8Tie.cifar8_train_step_tied_certified
 -- ch5-cifar8-bn TIE
-#print axioms Cifar8BnTie.cifar8BnLossCot_den
 #print axioms Cifar8BnTie.cifar8Bn_train_step_tied_certified
 #print axioms Cifar8TieG.cifar8_train_step_tiedG
 #print axioms Cifar8BnTieG.cifar8Bn_train_step_tiedG
@@ -539,16 +533,12 @@ open Proofs
 #print axioms win3Row_mem_le_two
 -- the argmax: `Finset.sup'` over `Fin 3 × Fin 3`, which is why window size stopped mattering
 #print axioms maxPool3s2_eq_at_max
-#print axioms maxPool3s2_eq_argmax_value
 -- the local linearisation and the smooth-point VJP
-#print axioms maxPool3s2_flat_hasFDerivAt
-#print axioms pdiv3_maxPool3s2_smooth
 #print axioms maxPool3s2HasVJPAt3
 #print axioms maxPool3s2Flat_differentiableAt
 #print axioms maxPool3s2FlatHasVJPAt
 -- the DISCHARGE lemma for the smoothness hypothesis
 #print axioms maxPool3s2Smooth_of_injective
-#print axioms maxPool3s2Smooth_of_pairwise
 -- and the float side (`floatClose_maxPool`'s peer)
 #print axioms floatClose_maxPool3s2
 -- and the codegen that denotes it
@@ -558,7 +548,7 @@ open Proofs
 #print axioms StableHLO.cnnBackGraph_faithful
 
 -- Chapter-5 CIFAR-10 2D CNN (no BN)
-#print axioms cifarCnnHasVJPAt_correct
+#print axioms cifarCnnHasVJPAt
 #print axioms StableHLO.cifarFwdGraph_faithful
 -- Concrete tiny CIFAR instance
 #print axioms Tiny.cifarTinyCnnHasVJP_correct
@@ -567,7 +557,7 @@ open Proofs
 #print axioms StableHLO.bnBack_faithful
 
 -- Deeper 8-conv CIFAR (the pedagogical BN-acceleration demo)
-#print axioms cifarCnn8HasVJPAt_correct
+#print axioms cifarCnn8HasVJPAt
 #print axioms cifarCnnBn8HasVJPAt_correct
 -- ...and the rendered-FORWARD peer
 #print axioms StableHLO.cifar8FwdGraph_faithful
@@ -801,8 +791,6 @@ open Proofs
 #print axioms FloatModel.dense_close_fresh
 #print axioms FloatModel.relu_close
 -- MaxPool exact-in-float (CNN.lean)
-#print axioms max_close
-#print axioms maxPool2_close
 #print axioms maxPoolFlat_close
 -- Conv forward rounding budget (Float/ConvFloat.lean)
 #print axioms conv2d_eq_dense
@@ -1085,7 +1073,6 @@ open Proofs
 -- The bf16-mixed render-tie, its companion (Bf16Fold.lean)
 #print axioms Proofs.Bf16Fold.bf16_render_faithful
 #print axioms Proofs.Bf16Fold.bf16_render_faithful_emit
-#print axioms Proofs.Bf16Fold.bf16_emit_eq_prerounded
 #print axioms Proofs.Bf16Fold.bf16_render_faithful_depth2
 -- The loss gradient in a parameter, from the gradient at its op's output (ParamGrad.lean)
 #print axioms Proofs.addConstHasVJPAt
@@ -1320,13 +1307,9 @@ open Proofs
 #print axioms mlp_input_bias_loss_grad_lipschitz
 #print axioms mlp_input_bias_sgd_descends
 -- The descent program reaches the Chapter-4 CNN (SgdDescent/Cnn.lean)
-#print axioms max4_sub_abs_le
-#print axioms max4_sub_abs_le_sum
 #print axioms flatten_t3Idx
 #print axioms sum_t3
 #print axioms sum_window_cells
-#print axioms maxPoolFlat_apply
-#print axioms maxPoolFlat_l1_contract
 #print axioms lt_of_lt_gap_of_close
 #print axioms MaxPool2MarginQ.smooth_of_close
 #print axioms MaxPool2MarginQ.smooth
@@ -1449,14 +1432,7 @@ open Proofs
 -- EfficientNet backward-graph faithfulness (den-level)
 #print axioms StableHLO.residualBackGraph_faithful
 #print axioms StableHLO.seBlockBackGraph_faithful
-#print axioms StableHLO.seGate_backGraph_faithful
 #print axioms StableHLO.bnBack_faithful_fn
-#print axioms StableHLO.convBnSwishBackGraph_faithful
-#print axioms StableHLO.dwBnSwishBackGraph_faithful
-#print axioms StableHLO.convBnBackGraph_faithful
-#print axioms StableHLO.seGateBackGraphE_faithful
-#print axioms StableHLO.seBlockFullBackGraphE_faithful
-#print axioms StableHLO.mbconvBodyBackGraph_faithful
 -- The channel-LN backward graphs
 #print axioms Proofs.rowLNBack_affine_eq
 #print axioms StableHLO.chanLNBackGraph_faithful
@@ -1979,7 +1955,6 @@ open Proofs
 
 -- The CANONICAL MNIST MLP surface (MlpCanonical.lean)
 #print axioms Proofs.MlpCanonical.hasVJPAt
-#print axioms Proofs.MlpCanonical.hasVJP_correct
 #print axioms Proofs.MlpCanonical.output_float_sgd_descends
 #print axioms Proofs.MlpCanonical.hidden_float_sgd_descends
 #print axioms Proofs.MlpCanonical.input_float_sgd_descends
@@ -1992,8 +1967,6 @@ open Proofs
 #print axioms Proofs.conv2d_sub_abs_le
 #print axioms Proofs.FloatModel.convMixed_close_prop
 #print axioms Proofs.FloatModel.flatConvMixed_close
-#print axioms Proofs.convMixedBudget_affine
-#print axioms Proofs.layerBudget_affine
 
 -- The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean)
 #print axioms Proofs.depthwiseConv2d_eq_dw_dot
@@ -2024,7 +1997,6 @@ open Proofs
 #print axioms Proofs.stemReluPoolLayer
 #print axioms Proofs.maxPool3s2Flat_relu_eventuallyEq
 #print axioms Proofs.maxPool3s2FlatBackB_eq_reindex
-#print axioms Proofs.stemPoolRelu_param_eventuallyEq
 #print axioms Proofs.gatherReluHasVJPAt
 #print axioms Proofs.ResNet34TieB.r34StemPool_param_germ
 #print axioms Proofs.ResNet34TieB.r34StemGCg_hasGradAt

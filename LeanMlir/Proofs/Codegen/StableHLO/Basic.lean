@@ -2742,9 +2742,6 @@ variable {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
 /-- Forward logits graph `@linear_fwd`: `broadcast(b) + dot_general(x, W)`. -/
 def fwdGraph : SHlo n := .addBcast "%b0" b (.dotIn "%W0" W (.operand "%x" x))
 
-/-- Dense input-VJP graph (`@linear_back`): `dot_general(dy, W)`. -/
-def backGraph (dy : Vec n) : SHlo m := .dotOut "%W0" W (.operand "%dy" dy)
-
 /-- Softmax-CE loss-cotangent graph `softmax(logits) − onehot`. The one-hot is
     a parameter (a graph input `%onehot`); `den` reads it, `pretty` ignores it. -/
 def lossCotGraph (oh : Vec n) : SHlo n :=
@@ -2757,17 +2754,6 @@ def lossCotGraph (oh : Vec n) : SHlo n :=
 /-- **Forward faithfulness.** The forward graph denotes `mnistLinear W b`. -/
 theorem fwdGraph_faithful : den (fwdGraph W b x) = mnistLinear W b x := by
   funext j; simp only [fwdGraph, denStepApp, mnistLinear, dense]
-
-/-- **Dense input-VJP faithfulness.** The backward graph denotes the proven
-    dense VJP backward `(denseHasVJP W b).backward x = Mat.mulVec W`. -/
-theorem backGraph_faithful (dy : Vec n) :
-    den (backGraph W dy) = (denseHasVJP W b).backward x dy := by
-  funext i; simp only [backGraph, denStepApp, denseHasVJP, Mat.mulVec]
-
-/-- The softmax sub-graph denotes the proven `softmax`. -/
-theorem softmaxDiv_expe_faithful (z : Vec n) :
-    den (.softmaxDiv (.expe (.operand "%logits" z))) = softmax n z := by
-  funext j; simp only [denStepApp, softmax]
 
 /-- **Loss-cotangent faithfulness (spec level).** -/
 theorem lossCotGraph_faithful (label : Fin n) :

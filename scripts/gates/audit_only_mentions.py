@@ -18,9 +18,9 @@ cites it (a non-Lean file, the comparator's challenge files, a Lean module heade
 the body of a used declaration does; the report lists audited declarations nothing uses.
 
 What counts as a mention: the declaration's last name component as a whole identifier in any
-tracked `.lean`, `.tex`, `.yaml`/`.yml`, `.py`, `.sh` or `.md` file, except the defining file,
-the two AuditAxioms files, and the planning/, historical/ and runs/ trees (plans and records name
-things without consuming them). Matching on the last component over-counts when two
+tracked `.lean`, `.tex` (LaTeX's `\\_` read as `_`), `.yaml`/`.yml`, `.py`, `.sh` or `.md` file,
+except the defining file, the two AuditAxioms files, and the planning/, historical/ and runs/ trees
+(plans and records name things without consuming them). Matching on the last component over-counts when two
 declarations share it, so a colliding name can hide from the report; it never lists a
 declaration that has a real consumer.
 
@@ -93,6 +93,8 @@ def main() -> None:
             text = (ROOT / rel).read_text(errors="replace")
         except (FileNotFoundError, IsADirectoryError):
             continue
+        if rel.endswith(".tex"):
+            text = text.replace("\\_", "_")   # LaTeX escapes `_` in `\texttt{…}` names
         for comp in idents(text):
             mentions[comp].add(rel)
         if not rel.endswith(".lean") or rel.startswith(COMPARATOR):

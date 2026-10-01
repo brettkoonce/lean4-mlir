@@ -308,13 +308,6 @@ noncomputable def mlpConcreteHasVJPAt :
       exact ne_of_gt (dense_pos_of_nonneg (fun _ _ => by simp [W₁]) (fun _ => by simp [b₁])
         (fun i => le_of_lt (preact0_pos i)) k))
 
-/-- **Public unconditional correctness theorem** — the concrete MLP's
-    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem mlpConcreteHasVJP_correct (dy : Vec 2) (i : Fin 2) :
-    mlpConcreteHasVJPAt.backward dy i =
-      ∑ j : Fin 2, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
-  mlpConcreteHasVJPAt.correct dy i
-
 end MlpConcrete
 
 -- ════════════════════════════════════════════════════════════════
@@ -449,14 +442,6 @@ noncomputable def cnnConcreteHasVJPAt :
     (fun k => by
       simp only [Function.comp_apply]
       rw [bnForward_gamma_zero, bnForward_gamma_zero]; norm_num)
-
-/-- **Public unconditional correctness theorem** — the concrete CNN's
-    backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem cnnConcreteHasVJP_correct (dy : Vec 2) (i : Fin (1 * (2*1) * (2*1))) :
-    cnnConcreteHasVJPAt.backward dy i =
-      ∑ j : Fin 2, pdiv (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
-        W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X i j * dy j :=
-  cnnConcreteHasVJPAt.correct dy i
 
 end CnnConcrete
 

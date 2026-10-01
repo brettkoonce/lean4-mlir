@@ -4,9 +4,11 @@ import LeanMlir.Proofs.Foundation.UpstreamDraft
 
 `stdNormalCDF` (Mathlib's `cdf` of `gaussianReal 0 1`) and `stdNormalQuantile` (`sSup {t | Φ t < p}`,
 the honest inverse on `(0,1)`), with the facts every smoothing certificate uses: `Φ` is strictly
-monotone and symmetric; on `(0,1)` the quantile is monotone, odd about `½`, continuous and inverts
-`Φ` both ways; below `0` it takes the junk value `0`. Mathlib has none of this for the Gaussian quantile. The
-full-support instances (`MathlibUpstream.instIsOpenPosMeasureGaussianReal`, 1-D, and
+monotone and symmetric; on `(0,1)` the quantile is strictly monotone (`stdNormalQuantile_strictMonoOn`),
+odd about `½`, continuous (`stdNormalQuantile_continuousAt`, `stdNormalQuantile_continuousOn`) and
+inverts `Φ` both ways (`stdNormalCDF_quantile`, `stdNormalQuantile_cdf`; onto ℝ,
+`stdNormalQuantile_surjOn`); below `0` it takes the junk value `0`. Mathlib has none of this for
+the Gaussian quantile. The full-support instances (`MathlibUpstream.instIsOpenPosMeasureGaussianReal`, 1-D, and
 `MathlibUpstream.instIsOpenPosMeasureStdGaussian`, multivariate) come with the upstream drafts.
 -/
 

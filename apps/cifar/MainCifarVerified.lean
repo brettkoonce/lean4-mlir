@@ -7,8 +7,8 @@ Chapter 5 (no BatchNorm): `conv 3→32 → relu → conv 32→32 → relu → ma
 → conv 32→64 → relu → conv 64→64 → relu → maxpool 16→8 → flatten 4096 →
 dense 4096→512 → relu → dense 512→512 → relu → dense 512→10` + softmax-CE. Trains on
 `verified_mlir/cifar_train_step.mlir` (`Proofs.StableHLO.cifarTrainStepText`), whose ops
-are each proven faithful to the Mathlib `fderiv` math; the whole-network VJP is
-`cifarCnnHasVJPAt` — audited 3-axiom-clean.
+are each proven faithful to the Mathlib `fderiv` math (the forward graph:
+`cifarFwdGraph_faithful`); the whole-network VJP is `cifarCnnHasVJPAt` — audited 3-axiom-clean.
 
 The model is the `cifarVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`), the same
 layer list whose math VJP is tied in `LeanMlir/Proofs/SpecVJP.lean`. Trains through the

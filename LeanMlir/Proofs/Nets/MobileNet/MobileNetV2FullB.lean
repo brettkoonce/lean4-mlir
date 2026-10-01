@@ -39,7 +39,7 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPA
 | stride-2 padding | XLA-`SAME` at all five sites |
 | stem | 3x3/s2 conv-bn-relu6, 3 to 32, 224 to 112 (NO pool) |
 | head | 1x1 conv-bn-relu6 320 to 1280, then GAP and dense, generic in the class count |
-| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand; bf16, and their f32 form is `mobilenetv2FwdGraphBFullDo` below) |
+| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand; bf16, and their f32 form is `mobilenetv2FwdGraphBFullDo` below, which at the all-ones mask is this net's forward, `mobilenetv2ForwardBFullDo_ones`) |
 
 The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `mobilenetv2in` ones.

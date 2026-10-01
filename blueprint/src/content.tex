@@ -5539,15 +5539,16 @@ See \leandocref{Proofs.ResNet34TieB.r34\_net\_tiedB}.
 \begin{theorem}[Every ResNet-34 gradient node is the loss's derivative]
   \label{thm:resnet34_loss_grad}
   \lean{Proofs.ResNet34TieB.r34_net_lossGrad, Proofs.ResNet34TieB.r34_net_lossGrad_smoothedCE,
-    Proofs.ResNet34TieB.r34_net_lossGrad_stemSelect}
+    Proofs.ResNet34TieB.r34_net_lossGrad_stemSelect, Proofs.ResNet34TieB.r34_net_tied_lossGrad,
+    Proofs.ResNet34TieB.r34LossSmoothAtB_of_smoothAtB}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
       ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad,
       def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
       thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
-      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
-      thm:vjpComp}
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum,
+      thm:resnet34_step_tie, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{R34PosB}); every ReLU
   off its kink and every stem-pool window entirely zero or its maximum
   attained at one position, ties allowed only between cells that read
@@ -5600,15 +5601,16 @@ See \leandocref{Proofs.ResNet50TieB.r50\_net\_tiedB}.
 \begin{theorem}[Every ResNet-50 gradient node is the loss's derivative]
   \label{thm:resnet50_loss_grad}
   \lean{Proofs.ResNet50TieB.r50_net_lossGrad, Proofs.ResNet50TieB.r50_net_lossGrad_smoothedCE, Proofs.ResNet50TieB.r50_net_lossGrad_bce,
-    Proofs.ResNet50TieB.r50_net_lossGrad_stemSelect}
+    Proofs.ResNet50TieB.r50_net_lossGrad_stemSelect, Proofs.ResNet50TieB.r50_net_tied_lossGrad,
+    Proofs.ResNet50TieB.r50LossSmoothAtB_of_smoothAtB}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
       ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad,
       def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
       thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
-      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
-      thm:vjpComp}
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum,
+      thm:resnet50_step_tie, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{R50PosB});
   every ReLU off its kink and every stem-pool window entirely zero or its
   maximum attained at one position, ties allowed only between cells that read
@@ -7417,7 +7419,8 @@ See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_tiedB}.
 
 \begin{theorem}[Every MobileNetV2 gradient node is the loss's derivative]
   \label{thm:mobilenetv2_loss_grad}
-  \lean{Proofs.MobileNetV2TieB.mnv2_net_lossGrad, Proofs.MobileNetV2TieB.mnv2_net_lossGrad_smoothedCE}
+  \lean{Proofs.MobileNetV2TieB.mnv2_net_lossGrad, Proofs.MobileNetV2TieB.mnv2_net_lossGrad_smoothedCE,
+    Proofs.MobileNetV2TieB.mnv2_net_tied_lossGrad}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
@@ -7426,7 +7429,7 @@ See \leandocref{Proofs.MobileNetV2TieB.mnv2\_net\_tiedB}.
       ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjp3, def:hasvjpmat,
       thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
       thm:denseWeightGrad_correct, thm:hasGradAt_comp, thm:identityHasVJP,
-      thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
+      thm:mobilenetv2_step_tie, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{MNV2PosB}); all 35
   ReLU6 sites off both kinks at the batch's activations
   (\texttt{MNV2SmoothAtB}); and any loss \(L\) of the logits with gradient
@@ -7473,7 +7476,8 @@ See \leandocref{Proofs.Mnv4TieB.mnv4\_net\_tiedB}.
 
 \begin{theorem}[Every MobileNetV4 gradient node is the loss's derivative]
   \label{thm:mobilenetv4_loss_grad}
-  \lean{Proofs.Mnv4TieB.mnv4_net_lossGrad, Proofs.Mnv4TieB.mnv4_net_lossGrad_smoothedCE}
+  \lean{Proofs.Mnv4TieB.mnv4_net_lossGrad, Proofs.Mnv4TieB.mnv4_net_lossGrad_smoothedCE,
+    Proofs.Mnv4TieB.mnv4_net_tied_lossGrad}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
@@ -7481,7 +7485,8 @@ See \leandocref{Proofs.Mnv4TieB.mnv4\_net\_tiedB}.
       ax:pdiv_mul, ax:pdiv_reindex, ax:pdiv_relu, ax:softmaxCE_grad, def:hasgradat,
       def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
       thm:denseHasVJP, thm:denseWeightGrad_correct, thm:hasGradAt_comp,
-      thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
+      thm:identityHasVJP, thm:mobilenetv4_step_tie, thm:pdiv_finset_sum,
+      thm:rowwiseHasVJPMat, thm:vjpComp}
   \Assume{} every ReLU off its kink at the activation its stage sees
   (\texttt{Mnv4SmoothAt}; the BatchNorm positivities are fields of the
   weights) and any loss \(L\) of the logits with gradient \(g\). \Prove{}
@@ -8879,7 +8884,8 @@ return-on-scaling to show up.
 \begin{theorem}[EfficientNet-B0 at batch \(N\): VJP and graph]
   \label{thm:efficientnetFullHasVJP}
   \lean{Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful,
-        Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful, Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful}
+        Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful, Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful,
+        Proofs.StableHLO.efficientnetFwdGraphBFullEval_faithful}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:depthwiseConv2d,
       ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
@@ -8958,16 +8964,17 @@ See \leandocref{Proofs.EnetTieG.efficientnet\_net\_tiedG}.
 
 \begin{theorem}[Every EfficientNet-B0 gradient node is the loss's derivative]
   \label{thm:efficientnet_loss_grad}
-  \lean{Proofs.EnetTieG.enet_net_lossGrad, Proofs.EnetTieG.enet_net_lossGrad_smoothedCE}
+  \lean{Proofs.EnetTieG.enet_net_lossGrad, Proofs.EnetTieG.enet_net_lossGrad_smoothedCE,
+    Proofs.EnetTieG.enet_net_tied_lossGrad}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
       ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const,
       ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat, def:hasvjp,
       def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
-      thm:denseHasVJP, thm:denseWeightGrad_correct, thm:hasGradAt_comp,
-      thm:identityHasVJP, thm:pdiv_finset_sum, thm:residualHasVJP, thm:rowwiseHasVJPMat,
-      thm:seBlockHasVJP, thm:vjpComp}
+      thm:denseHasVJP, thm:denseWeightGrad_correct, thm:efficientnet_step_tie,
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:pdiv_finset_sum, thm:residualHasVJP,
+      thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Assume{} every BatchNorm \(\varepsilon > 0\) (\texttt{B0Weights.EpsPos})
   and any loss \(L\) of the logits with gradient \(g\); no smooth-point
   clause, the net having no kink. \Prove{} each of the 262 nodes of
@@ -10279,7 +10286,8 @@ See \leandocref{Proofs.CnxTieGB.cnx\_net\_tiedGB}.
 
 \begin{theorem}[Every ConvNeXt-T gradient node is the loss's derivative]
   \label{thm:convnext_loss_grad}
-  \lean{Proofs.CnxTieGB.cnx_net_lossGrad, Proofs.CnxTieGB.cnx_net_lossGrad_smoothedCE, Proofs.CnxTieGB.cnxNetB_eq_convNextForwardTCh}
+  \lean{Proofs.CnxTieGB.cnx_net_lossGrad, Proofs.CnxTieGB.cnx_net_lossGrad_smoothedCE, Proofs.CnxTieGB.cnxNetB_eq_convNextForwardTCh,
+    Proofs.CnxTieGB.cnx_net_tied_lossGrad}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
@@ -10287,9 +10295,10 @@ See \leandocref{Proofs.CnxTieGB.cnx\_net\_tiedGB}.
       ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
       ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat,
       def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
-      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
-      thm:geluHasVJP, thm:hasGradAt_comp, thm:identityHasVJP, thm:layerNormVecHasVJP,
-      thm:pdiv_finset_sum, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+      thm:convnext_step_tie, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:hasGradAt_comp,
+      thm:identityHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
+      thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
   \Assume{} \(\varepsilon > 0\) at the LayerNorms and any loss \(L\) of the
   logits with gradient \(g\). \Prove{} each of the 182 nodes of
   Theorem~\ref{thm:convnext_step_tie}, at the chain cotangent from \(g\), is
@@ -12323,7 +12332,7 @@ See \leandocref{Proofs.StableHLO.vitFwdGraphKMHV\_faithful}.
 
 \begin{theorem}[ViT-Tiny, the whole network]
   \label{thm:vitTinyHasVJP_correct}
-  \lean{Proofs.vitTinyHasVJP_correct}
+  \lean{Proofs.vitTinyHasVJP_correct, Proofs.vitTinyInputGrad_eq_vitTiny_vjp}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
       ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
@@ -12423,7 +12432,8 @@ See \leandocref{Proofs.ViTTieGB.vit\_net\_tiedGB}.
 
 \begin{theorem}[Every ViT-Tiny gradient node is the loss's derivative]
   \label{thm:vit_loss_grad}
-  \lean{Proofs.ViTTieGB.vit_net_lossGrad, Proofs.ViTTieGB.vit_net_lossGrad_smoothedCE, Proofs.ViTTieGB.vitNetB_eq_vitForwardKV}
+  \lean{Proofs.ViTTieGB.vit_net_lossGrad, Proofs.ViTTieGB.vit_net_lossGrad_smoothedCE, Proofs.ViTTieGB.vitNetB_eq_vitForwardKV,
+    Proofs.ViTTieGB.vit_net_tied_lossGrad}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
       ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add,
@@ -12434,7 +12444,8 @@ See \leandocref{Proofs.ViTTieGB.vit\_net\_tiedGB}.
       thm:geluHasVJP, thm:geluPerTokenHasVJPMat, thm:hasGradAt_comp, thm:identityHasVJP,
       thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
       thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
-      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
+      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vit_step_tie, thm:vjpComp,
+      thm:vjpMatComp}
   \Assume{} \(\varepsilon > 0\) at the LayerNorms and any loss \(L\) of the
   logits with gradient \(g\). \Prove{} each of the 200 nodes of
   Theorem~\ref{thm:vit_step_tie}, at the chain cotangent from \(g\), is
@@ -18693,7 +18704,9 @@ convolution in \texttt{ConvMixedFloatBridge.lean},
 \texttt{DepthwiseMixedFloatBridge.lean} and
 \texttt{ConvMixedComposeBridge.lean}. The emitted bf16 graphs are tied at
 their gradient nodes in \texttt{Bf16GradNodes.lean}; \texttt{Bf16Fold.lean}
-and \texttt{E4M3Fold.lean} prove, for the linear net, that the mixed-precision
+(\texttt{bf16\_render\_faithful}, its emittable form
+\texttt{bf16\_render\_faithful\_emit}, and \texttt{bf16\_render\_faithful\_depth2}
+at two layers) and \texttt{E4M3Fold.lean} prove, for the linear net, that the mixed-precision
 graph denotes the intended algorithm. The fp8 one is proved for a graph no
 backend here lowers, and the one committed fp8 artifact,
 \texttt{cifar8b\_fp8\_adam\_train\_step.mlir}, is a lowering probe with no
