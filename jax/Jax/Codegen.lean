@@ -1285,7 +1285,9 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "def layer_norm(x, gamma, beta):\n" ++
       "    mean = jnp.mean(x, axis=-1, keepdims=True)\n" ++
       "    var = jnp.var(x, axis=-1, keepdims=True)\n" ++
-      "    return (x - mean) / jnp.sqrt(var + 1e-5) * gamma + beta\n\n" ++
+      -- `lnEps`: DeiT's 1e-6 where a recipe asks for it; 1e-5 spells the old line byte for byte.
+      ("    return (x - mean) / jnp.sqrt(var + " ++
+        (if cfg.lnEps == 1e-5 then "1e-5" else pyFloat cfg.lnEps) ++ ") * gamma + beta\n\n") ++
       "def mhsa(x, wq, bq, wk, bk, wv, bv, wo, bo, n_heads):\n" ++
       "    B, N, D = x.shape\n" ++
       "    head_dim = D // n_heads\n" ++
@@ -2303,7 +2305,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           "        x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), " ++
           toString (1.0 - cfg.dropout) ++ ", x.shape).astype(x.dtype) / " ++
           toString (1.0 - cfg.dropout) ++ "\n"
-      code := code ++ "    x = mm(x, params[" ++ toString pidx ++ "][0].T) + params[" ++
+      -- `f32StemHead`: the verified renders' fp32 head (`TrainConfig.f32StemHead`).
+      let mmFn := if cfg.f32StemHead then "jnp.matmul" else "mm"
+      code := code ++ "    x = " ++ mmFn ++ "(x, params[" ++ toString pidx ++ "][0].T) + params[" ++
         toString pidx ++ "][1]\n"
       if act == .relu then code := code ++ "    x = jax.nn.relu(x)\n"
       if act == .relu6 then code := code ++ "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
@@ -2457,7 +2461,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         toString p ++ ", " ++ toString nhW ++ ", " ++ toString p ++
         ").transpose(0, 2, 4, 1, 3, 5).reshape(x.shape[0], " ++ toString nP ++ ", " ++
         toString (ic * p * p) ++ ")\n"
-      code := code ++ "    x = mm(x, params[" ++ toString pidx ++ "][0].reshape(" ++ toString dim ++
+      -- `f32StemHead`: the verified ViT render's fp32 patch embed (`TrainConfig.f32StemHead`).
+      let mmFn := if cfg.f32StemHead then "jnp.matmul" else "mm"
+      code := code ++ "    x = " ++ mmFn ++ "(x, params[" ++ toString pidx ++ "][0].reshape(" ++ toString dim ++
         ", -1).T) + params[" ++ toString pidx ++ "][1]\n"
       pidx := pidx + 1
       -- Prepend CLS token
@@ -3175,6 +3181,11 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    -- rate steps once per `decayEpochs` instead of sliding, and it counts the GLOBAL step: a warmup
    -- only overrides it while it runs (TF EfficientNet's `build_learning_rate`).
    let expo (e : String) := if cfg.expLRStaircase then "np.floor(" ++ e ++ ")" else "(" ++ e ++ ")"
+   -- `minLR`: timm's `lr_min` floor. At 0 the line is the old one byte for byte.
+   let cosLine (ind : String) := if cfg.minLR > 0.0 then
+       ind ++ "lr = jnp.float32(" ++ toString cfg.minLR ++ " + (LR - " ++ toString cfg.minLR ++
+         ") * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))   # timm lr_min floor\n"
+     else ind ++ "lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
    let decayWarmup := if hasExpLR then
        "                _ep = _global_step / steps_per_epoch\n" ++
        "                lr = jnp.float32(LR * (" ++ rate ++ " ** " ++
@@ -3182,13 +3193,13 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
           else expo ("(_ep - " ++ warmup ++ ") / " ++ dEp)) ++ "))\n"
      else
        "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
-       "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
+       cosLine "                "
    let decayNoWarmup := if hasExpLR then
        "            _ep = _global_step / steps_per_epoch\n" ++
        "            lr = jnp.float32(LR * (" ++ rate ++ " ** " ++ expo ("_ep / " ++ dEp) ++ "))\n"
      else
        "            prog = _global_step / max(total_steps, 1)\n" ++
-       "            lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
+       cosLine "            "
    if hasCosine || hasExpLR then
     "            # Per-step LR (warmup → " ++ (if hasExpLR then "exp-decay" else "cosine") ++ ")\n" ++
     (if cfg.warmupEpochs > 0 then

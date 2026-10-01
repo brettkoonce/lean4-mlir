@@ -41,6 +41,8 @@ def vitTinyImagenetConfig : TrainConfig where
   valEveryEpochs := 5                 -- ImageNet val is data-loading-bound (~75s/ep); every-5 saves ~5h over 300ep
   cosineDecay    := true
   warmupEpochs   := 5
+  minLR          := 0.00001         -- DeiT `--min-lr 1e-5` (its `--cooldown-epochs 10` is dead: DeiT's
+                                    -- main.py discards create_scheduler's epoch count and stops at 300)
   augment        := true
   labelSmoothing := 0.1
   gradClipNorm   := 1.0             -- DeiT default; the unlock for the 5e-4 LR
@@ -61,6 +63,9 @@ def vitTinyImagenetConfig : TrainConfig where
   useEMA         := true            -- DeiT model EMA; eval + checkpoints use the shadow weights
   emaDecay       := 0.99996         -- DeiT default
   bf16           := true            -- fp32 collapsed identically, so bf16 stays on for speed
+  lnEps          := 0.000001        -- DeiT `partial(nn.LayerNorm, eps=1e-6)` (the render's `eps0000001`)
+  f32StemHead    := true            -- patch embed + head in fp32: the verified render's carve-out,
+                                    -- so the pair differs in no precision site (2026-10-01)
   repeatedAug    := 3               -- DeiT Repeated Augmentation 3× (Hoffer et al. 2020 /
                                     -- timm RASampler). Closes the last DeiT faithfulness gap;
                                     -- steps_per_epoch is unchanged, so an epoch sees ~1/3 the

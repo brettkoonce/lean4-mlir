@@ -1186,8 +1186,8 @@ def vitVerified : VerifiedNetSpec where
   data     := .imagenette
   layers   := [
     .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
-    .param #[192] 2,              -- CLS token  [192] (1D — matches the proof-tied render's `cls : Vec 192`)
-    .param #[197, 192] 2,         -- positional embedding  [197,192]
+    .param #[192] 5,              -- CLS token  [192] (1D — matches the proof-tied render's `cls : Vec 192`)
+    .param #[197, 192] 5,         -- positional embedding  [197,192]
     .transformerBlock 192 768,    -- 12 pre-norm blocks @ dim 192, MLP 768
     .transformerBlock 192 768,
     .transformerBlock 192 768,
@@ -1253,8 +1253,8 @@ def vitImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
     .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
-    .param #[192] 2,              -- CLS token  [192]
-    .param #[197, 192] 2,         -- positional embedding  [197,192]
+    .param #[192] 5,              -- CLS token  [192]
+    .param #[197, 192] 5,         -- positional embedding  [197,192]
     .transformerBlock 192 768,    -- 12 pre-norm blocks @ dim 192, MLP 768
     .transformerBlock 192 768,
     .transformerBlock 192 768,
@@ -1302,8 +1302,8 @@ def vitSImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
     .conv 3 384 16 16,            -- patch embed 16×16/s16 (3→384)   224→14×14=196
-    .param #[384] 2,              -- CLS token  [384]
-    .param #[197, 384] 2,         -- positional embedding  [197,384]
+    .param #[384] 5,              -- CLS token  [384]
+    .param #[197, 384] 5,         -- positional embedding  [197,384]
     .transformerBlock 384 1536,
     .transformerBlock 384 1536,
     .transformerBlock 384 1536,
@@ -1353,8 +1353,8 @@ def vitBImagenetVerified : VerifiedNetSpec where
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
     .conv 3 768 16 16,
-    .param #[768] 2,
-    .param #[197, 768] 2,
+    .param #[768] 5,
+    .param #[197, 768] 5,
     .transformerBlock 768 3072,
     .transformerBlock 768 3072,
     .transformerBlock 768 3072,

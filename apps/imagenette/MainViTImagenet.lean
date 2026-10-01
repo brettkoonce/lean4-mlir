@@ -71,5 +71,7 @@ def runViTImagenet (argv : List String) : IO Unit := do
   vitImagenetVerified.toNet.trainAdamSched
     { vitImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant (emaDecay := 0.99996)
+    -- DeiT `--min-lr 1e-5`, the reference's `vitTinyImagenetConfig.minLR` (2026-10-01).
+    (minLR := 0.00001)
 
 def main (argv : List String) : IO Unit := runViTImagenet argv

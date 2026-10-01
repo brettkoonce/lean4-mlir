@@ -61,6 +61,8 @@ def verified_moments(dims, kind, flags):
         return 1e-6, 0.0
     if kind == 2:
         return 0.0, 0.0
+    if kind == 5:   # embedding (ViT CLS / pos): σ 0.02 under vitInit, zeros without it
+        return (0.0, 0.0004) if flags.get("vitInit") else (0.0, 0.0)
     if flags.get("cnxInit"):
         return 0.0, 0.0004
     if flags.get("vitInit"):

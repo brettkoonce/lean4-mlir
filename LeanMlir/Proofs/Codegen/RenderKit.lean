@@ -100,7 +100,10 @@ def wdNameBy (wdExclude : Bool) (nm : String) (ds : List Nat)
     the eval forward it scores through is `<slug>_fwd_eval_<marker>` (`VerifiedVariant.evalTag`
     reads it back). -/
 def bnEpsMarker (epsStr : String) : String :=
-  if epsStr == "1.0e-5" then "" else if epsStr == "1.0e-3" then "eps0001" else s!"eps({epsStr})"
+  if epsStr == "1.0e-5" then "" else if epsStr == "1.0e-3" then "eps0001"
+  -- 1e-6: DeiT's LayerNorm ε (`ViTRenderB`'s `eps`). The same decimal grammar names an LN ε;
+  -- only ViT, which has no BN, uses it, so the two readings never share a variant.
+  else if epsStr == "1.0e-6" then "eps0000001" else s!"eps({epsStr})"
 
 /-- `@<slug>_fwd_eval`, or `@<slug>_fwd_eval_<marker>` at a non-default ε (an artifact's entry is its
     file name). -/

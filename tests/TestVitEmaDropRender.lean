@@ -81,6 +81,10 @@ def main (args : List String) : IO Unit := do
     | "convnextsin" => pure ("convnextsin", cnxVariantUnderTest, convnextSImagenetVerified.toNet, "ConvNeXt-S")
     | "convnextbin" => pure ("convnextbin", cnxVariantUnderTest, convnextBImagenetVerified.toNet, "ConvNeXt-B")
     | other        => throw <| IO.userError s!"unknown net '{other}': vitin | vitsin | vitbin | convnextin | convnextsin | convnextbin"
+  -- An optional SECOND argument names the variant, for a sibling of the pair render that differs
+  -- in nothing the layout sees (`emadp128x4wxclipdropeps0000001bf16`: DeiT's LN ε). The conf that
+  -- launches it passes its own `LEAN_MLIR_VARIANT`, so the gate checks the artifact the run loads.
+  let variantUnderTest := (args.drop 1).headD variantUnderTest
   let path := s!"verified_mlir/{slug}_{variantUnderTest}_train_step.mlir"
   let src ← IO.FS.readFile path
   let names := operandNames src

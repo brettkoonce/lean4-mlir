@@ -67,7 +67,7 @@ seconds on CPU.
 | **MobileNetV4** (`mobilenet_v4_imagenet`) | **30 / 233** | every depthwise (3×3 and 5×5): **0.03–0.15×** |
 | **EfficientNet-B0** (`efficientnet_b0_imagenet_full`) | **33 / 213** | 16 depthwise **0.03–0.18×** · 16 SE-reduce FCs **~0.2×** · 1 SE-expand 0.91× |
 | ResNet-50, all recipes (`_2018`, `_rsbfaithful`) | 16 / 161 | last BN γ of every bottleneck: JAX **0** (zero-γ), verified **1** |
-| ViT-Ti (`vit_tiny_imagenet`, the `default` recipe = DeiT init, vitInit) | 2 / 200 | CLS token + position embedding: JAX σ 0.02, verified **0** |
+| ViT-Ti (`vit_tiny_imagenet`, the `default` recipe = DeiT init, vitInit) | 2 / 200 | CLS token + position embedding: JAX σ 0.02, verified **0** → ✅ **0 / 200** since init kind 5 (2026-10-01, `planning/vit_parity_todo.md` P3) |
 
 ## 2. The mismatches, one by one
 

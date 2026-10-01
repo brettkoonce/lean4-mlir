@@ -437,7 +437,7 @@ noncomputable def denoteVitTiny (layers : List VLayer) (w : ViTTinyWeights) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
   | [.conv 3 192 16 16,
-     .param #[192] 2, .param #[197, 192] 2,
+     .param #[192] 5, .param #[197, 192] 5,
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,

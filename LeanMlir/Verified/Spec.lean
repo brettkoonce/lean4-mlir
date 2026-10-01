@@ -163,7 +163,7 @@ inductive VLayer where
       LN2{γ,β}; {Wfc1[d,m],bfc1, Wfc2[m,d],bfc2} (per-channel `[d]` LN). -/
   | transformerBlock (d m : Nat)
   /-- A bare learned parameter tensor `(dims, initKind)` — e.g. ViT's CLS token / positional
-      embedding (not produced by any standard layer). -/
+      embedding (not produced by any standard layer; init kind 5, `mkParam`). -/
   | param (dims : Array Nat) (kind : Nat)
 deriving Repr
 
@@ -213,7 +213,8 @@ private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat ×
 /-- The `(dims, initKind)` params this layer contributes, in func-arg order
     (`initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot, with the ConvNeXt
     and ViT overrides), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ, the ConvNeXt
-    paper's value and the JAX reference's `emitLayerScaleInit`)). -/
+    paper's value and the JAX reference's `emitLayerScaleInit`), 5 = embedding (ViT CLS / pos:
+    σ = 0.02 under `vitInit`, else zeros; only `param` emits it)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
   | convBnNB ic oc k _      => convBnNBSpec ic oc k

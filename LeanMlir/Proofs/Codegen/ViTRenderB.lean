@@ -86,7 +86,14 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     -- It reaches the SIX matmuls and the TWO SDPA products only. LN, GELU, softmax, the
     -- transposes, the head slices/pads, the residual adds and the whole AdamW tail stay f32 —
     -- the same carve-out every bf16 render in this repo makes.
-    (bf16 : Bool := false) :
+    (bf16 : Bool := false)
+    -- **LayerNorm ε, as printed** — TRAILING and defaulted to `vEPS` (1e-5), so every committed
+    -- artifact re-renders byte-identically. DeiT builds its blocks at 1e-6
+    -- (`partial(nn.LayerNorm, eps=1e-6)`); the `eps0000001` variants pass `"1.0e-6"`. The
+    -- certificates are generic in ε (`vit_block_tiedGB`/`vit_finalLN_tiedGB` take `epsStr` and the
+    -- real ε separately, `ViTWholeBackCertifiedTieB` needs only `0 < ε`); as everywhere, nothing
+    -- proves the string spells the real — the literal is trusted, at 1e-5 as at 1e-6.
+    (eps : String := vEPS) :
     StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let vbTok := V.tok
   let vbD := V.d
@@ -98,7 +105,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   -- halves the noise and no structural check sees it.
   let dpA := drop.map (fun i => dpName (vitSiteIdx i 0))
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
-  let (c1, ln1) ← vecLnSiteB vbB V.tok V.d vEPS s!"%{pfx}g1" s!"%{pfx}bt1" xin
+  let (c1, ln1) ← vecLnSiteB vbB V.tok V.d eps s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbD) zrnd w b (0 : Mat vbD vbD)
           (0 : Vec vbD))
@@ -158,7 +165,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     | none   => pure ("", o)
   let (ch, hres) ← pretty vbB (.addVB (.operand xin (0 : Vec (vbB*(vbTok*vbD))))
       (.operand oD (0 : Vec (vbB*(vbTok*vbD)))))
-  let (c2, ln2) ← vecLnSiteB vbB V.tok V.d vEPS s!"%{pfx}g2" s!"%{pfx}bt2" hres
+  let (c2, ln2) ← vecLnSiteB vbB V.tok V.d eps s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbM) zrnd s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
           (0 : Mat vbD vbM) (0 : Vec vbM))
@@ -195,7 +202,9 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
     -- kernel at ViT's shape and costs more than every dot in the net gains. The name matches the
     -- JAX side's own per-net knob (`TrainConfig.bf16Conv`), which has always been separate from
     -- `bf16` for exactly this class of reason.
-    (bf16Conv : Bool := false) :
+    (bf16Conv : Bool := false)
+    -- LayerNorm ε, `vBlockFwdB`'s; it reaches all 25 LN sites (2 per block + the final one).
+    (eps : String := vEPS) :
     StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
   let vbTk := V.tk
   let vbTok := V.tok
@@ -216,9 +225,9 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none) bf16
+    let (cb, sv) ← vBlockFwdB V vbB s!"b{i}_" cur (if sd then some i else none) bf16 eps
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
-  let (cf, fl) ← vecLnSiteB vbB V.tok V.d vEPS "%gF" "%btF" cur
+  let (cf, fl) ← vecLnSiteB vbB V.tok V.d eps "%gF" "%btF" cur
   -- `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
   -- one `[192]` row per example. Passing the batch here instead type-checks and keeps example 0.
   let (cs, sl) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
@@ -243,10 +252,14 @@ def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     -- exists so this render can be tied against a bf16 train step if one ever
     -- needs a `forward ⊂ train-step` partner; writing an artifact nothing loads is the
     -- silent-hyperparameter hazard this file warns about two comments up.
-    (bf16 : Bool := false) (bf16Conv : Bool := false) : String :=
+    (bf16 : Bool := false) (bf16Conv : Bool := false)
+    -- LayerNorm ε (`vBlockFwdB`'s note). A train step at a non-default ε needs its OWN forward
+    -- at that ε (`<slug>_<variant>_fwd.mlir`), or the trainer scores a different net;
+    -- `checkLnEpsWorld` refuses that pairing.
+    (eps : String := vEPS) : String :=
   let vbTok := V.tok
   let vbD := V.d
-  let (body, sv) := (vitFwd12B V vbB nClasses sd bf16 bf16Conv).run' (0, [])
+  let (body, sv) := (vitFwd12B V vbB nClasses sd bf16 bf16Conv eps).run' (0, [])
   let res := sv.logits
   -- `fun i => blkArgSig i V`, NOT `.map blkArgSig`: the bare form passes only `i` and lets
   -- `V` fall back to its Tiny default, which renders a ViT-S body under a ViT-Tiny block
@@ -286,18 +299,19 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- One **vector-LN backward** site, batched. Returns `(code, dxin, dγ, dβ)`. -/
-private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String) :
+private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String)
+    (eps : String := vEPS) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let vbTok := V.tok
   let vbD := V.d
   let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
-  let (cg, ng) ← pretty vbB (.veclnGammaGradB (N := vbB) (R := vbTok) (D := vbD) xin vEPS 0
+  let (cg, ng) ← pretty vbB (.veclnGammaGradB (N := vbB) (R := vbTok) (D := vbD) xin eps 0
       (0 : Vec (vbB*(vbTok*vbD))) (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
   let (cs, da) ← pretty vbB (.batchOp (N := vbB)
       (.rowScale (m := vbTok) (n := vbD) gName (0 : Vec vbD))
       (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
-  let (cn, dx) ← pretty vbB (.lnRowBackB (N := vbB) (m := vbTok) (n := vbD) "%one" xin vEPS 0 1
+  let (cn, dx) ← pretty vbB (.lnRowBackB (N := vbB) (m := vbTok) (n := vbD) "%one" xin eps 0 1
       (0 : Vec (vbB*(vbTok*vbD))) (.operand da (0 : Vec (vbB*(vbTok*vbD)))))
   pure (cb ++ cg ++ cs ++ cn, dx, ng, nb)
 
@@ -316,7 +330,9 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     -- And the backward is where the money is — it is the larger share of a conv step, and a
     -- forward-only arm measured close to no gain. A render that flipped only `vBlockFwdB` would
     -- look wired and buy almost nothing.
-    (bf16 : Bool := false) : StateM Proofs.StableHLO.EmitS (String × String × List String) := do
+    (bf16 : Bool := false)
+    -- LayerNorm ε, the forward's (`vBlockFwdB`); both LN backward sites read it.
+    (eps : String := vEPS) : StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let vbTok := V.tok
   let vbD := V.d
   let vbH := V.heads
@@ -357,7 +373,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
         sv.ln2 zTok (.operand df1 (0 : Vec (vbB*(vbTok*vbM)))))
   let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
       (.operand df1 (0 : Vec (vbB*(vbTok*vbM)))))
-  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB V vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
+  let (c8, dhresLn2, ng2, nbt2) ← vlnBackB V vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2 eps
   let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
   -- ─ Attention sublayer back ─
   -- The ATTENTION branch's site, same shape: `hres = xin + s⊙o` ⇒ `do = s ⊙ dhres`, and the
@@ -440,7 +456,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
   let (cV, dln1v, nWv, nbv) ← qkvBack s!"%{p}Wv" dvAcc
   let (cs1, dln1a) ← pretty vbB (.addVB (.operand dln1q zTok) (.operand dln1k zTok))
   let (cs2, dln1) ← pretty vbB (.addVB (.operand dln1a zTok) (.operand dln1v zTok))
-  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB V vbB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1
+  let (cl1, dxinLn1, ng1, nbt1) ← vlnBackB V vbB s!"%{p}g1" s!"%{p}bt1" sv.xin dln1 eps
   let (cx, dxin) ← pretty vbB (.addVB (.operand dhres zTok) (.operand dxinLn1 zTok))
   let names := [ng1, nbt1, nWq, nbq, nWk, nbk, nWv, nbv, nWo, nbo, ng2, nbt2,
                 nWfc1, nbfc1, nWfc2, nbfc2]
@@ -477,12 +493,15 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     (bf16Conv : Bool := false)
     -- And the stem's FORWARD is split from its WEIGHT GRADIENT, because the two do not behave the
     -- same and lumping them would have hidden which one costs. See the probe numbers below.
-    (bf16ConvW : Bool := false) :
+    (bf16ConvW : Bool := false)
+    -- LayerNorm ε (`vBlockFwdB`'s note), one string for the forward AND the backward, so the two
+    -- halves of the step cannot disagree on it.
+    (eps : String := vEPS) :
     StateM Proofs.StableHLO.EmitS (String × List String × String) := do
     let vbTk := V.tk
     let vbTok := V.tok
     let vbD := V.d
-    let (fwd, sv) ← vitFwd12B V vbB nClasses sd bf16 bf16Conv
+    let (fwd, sv) ← vitFwd12B V vbB nClasses sd bf16 bf16Conv eps
     let zCls : Vec (vbB*nClasses) := fun _ => 0
     let (cSm, nSm) ← pretty vbB (.batchOp (N := vbB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := vbB) (.expe (n := nClasses)) (.operand sv.logits zCls)))
@@ -499,14 +518,14 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     let (cbc, nbc) ← pretty vbB (.biasGradB (N := vbB) (n := nClasses) (.operand nDy zCls))
     let (cPad, dfln) ← pretty vbB (.batchOp (N := vbB) (.clsPad (N := vbTk) (D := vbD))
         (.operand dcls (0 : Vec (vbB*vbD))))
-    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB V vbB "%gF" "%btF" sv.flnIn dfln
+    let (cFln, dflnIn, ngF, nbtF) ← vlnBackB V vbB "%gF" "%btF" sv.flnIn dfln eps
     let mut code := fwd ++ cDy ++ cDc ++ cWc ++ cbc ++ cPad ++ cFln
     let mut dcur := dflnIn
     let mut blkNames : Array (List String) := #[]
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
       let (cb, dx, names) ← vBlockBackB V vbB s!"b{i}_" (sv.blocks[i]!) dcur
-        (if sd then some i else none) bf16
+        (if sd then some i else none) bf16 eps
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- patch-embed params
     let zTok : Vec (vbB*(vbTok*vbD)) := fun _ => 0
@@ -574,7 +593,11 @@ def vitAdamTrainStepBText (funcName : String := "vit_adam_train_step_b")
     -- `bf16Conv`, defaulted `false`. It adds NO variant marker: it is not a recipe choice, it
     -- is a measured statement that this net's two convolutions have no usable bf16 kernel, and a
     -- marker would invite someone to flip it. `vitBackAllB` carries the measurement.
-    (bf16Conv : Bool := false) (bf16ConvW : Bool := false) : String :=
+    (bf16Conv : Bool := false) (bf16ConvW : Bool := false)
+    -- LayerNorm ε, TRAILING and defaulted (`vBlockFwdB`'s note). Its name marker is
+    -- `bnEpsMarker eps` (`eps0000001` at 1e-6), spelled into `funcName` by the caller — the
+    -- `#guard`s under each `#eval` pin the two.
+    (eps : String := vEPS) : String :=
   let alphaStr := fmt6 alpha
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   -- `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the 24
@@ -584,7 +607,7 @@ def vitAdamTrainStepBText (funcName : String := "vit_adam_train_step_b")
   vitAdamTrainStepText funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
     -- AND HERE. `bf16` reaching this traversal is what makes the graph bf16; nothing else in
     -- this function's body needs it, because the AdamW tail is parameter-space and stays f32.
-    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V bf16 bf16Conv bf16ConvW))
+    (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V bf16 bf16Conv bf16ConvW eps))
     (V := V)
     (sd := sd)
 
@@ -727,6 +750,34 @@ end Proofs.StableHLO
   "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
 #guard !(Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").contains "do"
 #guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "drop").length == 2
+
+-- ── THE SAME PAIR RENDER AT DeiT's LayerNorm ε (1e-6) ────────────────────────────────────────
+-- DeiT builds its blocks with `partial(nn.LayerNorm, eps=1e-6)`; every render above, and the JAX
+-- reference until 2026-10-01, ran PyTorch's default 1e-5. This is the artifact above with one
+-- string changed at all 25 LN sites (forward and backward from one `eps`), and its JAX partner is
+-- `vitTinyImagenetConfig.lnEps := 1e-6`. ε reaches no operand, no all-reduce and no mask, so
+-- the signature, the 831-operand layout and the driver's blob are the 72.35 run's.
+-- `eps0000001` sits before `bf16`, `wx`/`ls`-style (`bnEpsMarker`).
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_emadp128x4wxclipdropeps0000001bf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (bf16 := true) (eps := "1.0e-6"))
+#guard "vitin_emadp128x4wxclipdropeps0000001bf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "bf16" ++ "_train_step"
+-- The driver's predicates on the longer name: still EMA, still 24 drop masks, no `do`/`acc`.
+#guard "emadp128x4wxclipdropeps0000001bf16".startsWith "ema"
+#guard !"emadp128x4wxclipdropeps0000001bf16".contains "do"
+#guard !"emadp128x4wxclipdropeps0000001bf16".contains "acc"
+#guard ("emadp128x4wxclipdropeps0000001bf16".splitOn "drop").length == 2
+-- **ITS OWN EVAL FORWARD, and it is not optional.** ViT has no BN, so `evalTag` never fires and
+-- the trainer falls back to `vitin_fwd.mlir` (1e-5) when this file is absent: a run that TRAINS
+-- at 1e-6 and SCORES at 1e-5. `checkLnEpsWorld` (Verified/Train.lean) refuses that pairing; this
+-- is the file it wants. Entry = file name (the path == entry audit); the driver calls the entry
+-- its chosen forward declares. Batch 256 and f32, `vitin_fwd.mlir`'s geometry.
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitin_emadp128x4wxclipdropeps0000001bf16_fwd" 1000 (vbB := 256)
+    (eps := "1.0e-6"))
 
 -- The **2-GPU** peer: 256 per replica × 2 = the same global 512 the 128×4 render above trains at,
 -- so the recipe, the steps/epoch and the LR are unchanged and the two wall-clocks are comparable.

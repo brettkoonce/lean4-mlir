@@ -145,7 +145,8 @@ structure VerifiedConfig where
   valEveryEpochs : Nat := 1
   /-- timm/DeiT ViT weight init — the verified peer of `TrainConfig.vitInit`, i.e. of the
       `deit-init` recipe of the JAX reference. Every weight at
-      σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`. Init is host-side, so
+      σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`; the CLS token and
+      positional embedding (init kind 5) at σ = 0.02 too, where without the flag they are 0. Init is host-side, so
       the flag changes training with no re-render. Off by default — every other net keeps its seed reproducibility. -/
   vitInit   : Bool := false
   /-- **ConvNeXt `_init_weights` — the verified peer of `TrainConfig.cnxInit`.**
@@ -448,6 +449,8 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
       * rank-4 conv kernel `[oc, ic, kH, kW]` → He **fan-OUT**, variance `2/(oc·kH·kW)`
       * rank-2 dense matrix `[in, out]`       → **Glorot**, variance `2/(in + out)`
       * γ = 1 (kind 1), β / bias = 0 (kind 2), layer scale = 1e-6 (kind 3)
+      * embedding (kind 5: ViT's CLS token and positional embedding) → σ = 0.02 under `vitInit`,
+        0 otherwise (`planning/init_parity.md` §2d, §3a)
 
     The weight variances are those of
     [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean):
@@ -472,6 +475,14 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
   match kind with
   | 1 => F32.const n.toUSize 1.0
   | 3 => F32.const n.toUSize 1e-6
+  -- **Kind 5 = a learned embedding** (ViT's CLS token and positional embedding). timm/DeiT
+  -- `trunc_normal_(std=0.02)` both, as the JAX reference does (`random.normal · 0.02`); under the
+  -- old kind 2 they started at 0 here (`planning/init_parity.md` §2d, the audit's 2/200). Gated on
+  -- `vitInit` so that a run without the flag (the Imagenette ViT driver) stays byte-identical to
+  -- its kind-2 seed. `heInit` takes this param's own seed, so no other tensor's draw moves.
+  | 5 =>
+    if vitInit then F32.heInit seed.toUSize n.toUSize 0.02
+    else F32.const n.toUSize 0.0
   | 2 =>
     -- `biasSigma` is the gates' escape hatch, not a trainer knob: the weight-decay and grad-clip
     -- ties need a non-zero bias or their update is identically vacuous. `none` is the trainer's
@@ -485,8 +496,8 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     -- is byte-identical and every recorded accuracy still reproduces from its seed.
     --
     -- The rule is uniform because timm's is: `init_weights_vit_timm` gives EVERY `nn.Linear`
-    -- `trunc_normal_(std=0.02)`, and the CLS token and positional embedding are already 0.02 on the
-    -- JAX side. So every weight lands at σ = 0.02 except the patch-embed `nn.Conv2d`, which timm
+    -- `trunc_normal_(std=0.02)`. (The CLS token and positional embedding are 0.02 too, but they are
+    -- kind 5, above, not weights.) So every weight lands at σ = 0.02 except the patch-embed `nn.Conv2d`, which timm
     -- leaves on PyTorch's default `U(±1/√fan_in)` with `fan_in = ic·kh·kw` — σ = 1/√(3·fan_in) =
     -- **0.02083** at ViT-Ti, 4% off the Linears rather than equal to them. Emitted exactly, not
     -- rounded to 0.02, because the whole point of the flag is to stop approximating this.
@@ -1351,6 +1362,26 @@ private def fwdRenderedShape (path : String) : IO (Option (Nat × Nat)) := do
     | _, _ => return none
   | _ => return none
 
+/-- **The LayerNorm-ε world check** — the LN peer of the BN-world check in `trainAdamSched`.
+
+    A no-BN net evaluates through `<slug>_<variant>_fwd.mlir` when it exists and otherwise
+    falls back to `<slug>_fwd.mlir`. A train step rendered at a non-default LN ε (ViT's
+    `eps0000001` variants, DeiT's 1e-6) whose per-variant forward is missing would TRAIN at 1e-6
+    and SCORE at 1e-5 — a different net, and a plausible number. The ε prints as a `dense<…>`
+    literal, so compare the set of LN-ε spellings the two artifacts carry. `1.0e-6` is
+    unambiguous: across `verified_mlir/` only LayerNorm emits it (the clip's 1e-6 prints
+    `0.000001`), so ConvNeXt (1e-6 on both sides) and every 1e-5 net pass unchanged. -/
+def checkLnEpsWorld (tsPath fwdPath : String) : IO Unit := do
+  if !(← System.FilePath.pathExists tsPath) || !(← System.FilePath.pathExists fwdPath) then return
+  let has6 (t : String) : Bool := (t.splitOn "dense<1.0e-6>").length > 1
+  let ts ← IO.FS.readFile tsPath
+  let fw ← IO.FS.readFile fwdPath
+  if has6 ts != has6 fw then
+    throw <| IO.userError s!"LN-ε MISMATCH — refusing to score through a different net.\n\
+  train step {tsPath} : LayerNorm ε {if has6 ts then "1e-6" else "not 1e-6"}\n\
+  forward    {fwdPath} : LayerNorm ε {if has6 fw then "1e-6" else "not 1e-6"}\n\
+  Render the variant's own forward (`<slug>_<variant>_fwd.mlir`) at the train step's ε."
+
 /-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
     front of it. It scores any saved checkpoint, not only the weights live during training — the
     verified peer of the JAX side's `eval_*_full50k.py`. No new MLIR: every piece is the eval
@@ -1426,8 +1457,8 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
       | some i => pure i
     | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
   -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
-  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is `@<slug>_fwd` either way — the
-  -- variant artifact re-renders the same entry name.
+  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is the one the chosen file declares
+  -- (its stem: `@<slug>_<variant>_fwd` or `@<slug>_fwd`), as in `trainAdamSched`.
   -- A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
   -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
   let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
@@ -1446,6 +1477,8 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
       let w ← if (← System.FilePath.pathExists base) then
           pure ((← fwdRenderedShape base).map (·.2)) else pure none
       pure (if w == evalSize.map (fun s => 3 * s * s) then base else sized)
+  if !hasBn then
+    checkLnEpsWorld s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
   if !(← System.FilePath.pathExists fwdPath) then
     throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
 {fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
@@ -1518,7 +1551,7 @@ never written. Scoring the .bin alone would normalise by zeros."
   let sizedStem := (System.FilePath.mk fwdPath).fileStem.getD ""
   let evalFn := if !sizeSuf.isEmpty && sizedStem.endsWith sizeSuf then s!"m.{sizedStem}"
                 else if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
-                else s!"m.{net.slug}_fwd"
+                else s!"m.{sizedStem}"
   (← IO.getStdout).flush
   -- `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
   -- read exactly as the trainers read it. This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
@@ -1588,7 +1621,10 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     -- `expStaircase`: TF's `exponential_decay(staircase=True)` — the exponent floored and counted
     -- on the global step — the reference's `TrainConfig.expLRStaircase`. Off keeps the continuous
     -- form, counted from the end of warmup.
-    (expStaircase : Bool := false) : IO Unit := do
+    (expStaircase : Bool := false)
+    -- `minLR`: the cosine's floor, timm's `lr_min` — the reference's `TrainConfig.minLR`
+    -- (DeiT `--min-lr 1e-5`). `lr = minLR + (baseLR − minLR)·½(1 + cos …)`; 0 is the old curve.
+    (minLR : Float := 0.0) : IO Unit := do
   -- A FINISHED RUN, LAUNCHED AGAIN. The resume below picks a reaped run up where it stopped; once
   -- the `.epoch` marker has reached `cfg.epochs` there is nothing left to train, and resuming runs
   -- zero epochs and prints `done` with no accuracy — a second `lake run cifar` looked like a
@@ -1781,6 +1817,9 @@ running buffers — diagnostic only, transductive, not a reportable number."
   Render {net.mlirDir}/{net.slug}_{variant}_fwd.mlir from the chain the train step \
 differentiates (see r50FwdChainB for the pattern), or drop the env var and score through \
 @{net.slug}_fwd_eval."
+  -- The LN peer of the check above, on the path a no-BN net's eval actually reads.
+  if !hasBn then
+    checkLnEpsWorld s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
   -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
   -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
   -- agree with `(bs, d0)` — every 224 net — nothing below changes.
@@ -1836,7 +1875,7 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   let schedName := if expDecayRate == 1.0 then "constant lr"
     else if expDecayRate > 0.0 then
       s!"exp x{expDecayRate}/{expDecayEpochs}ep{if expStaircase then " staircase" else ""}"
-    else "cosine"
+    else if minLR > 0.0 then s!"cosine→{minLR}" else "cosine"
   let schedDesc := if expDecayRate == 1.0 then s!"constant lr {baseLR}"
     else s!"{schedName}+warmup {warmupEpochs}ep, baseLR {baseLR}"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} ({schedDesc}), He init"
@@ -1956,11 +1995,15 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
   let tsFn  := s!"m.{net.slug}_{variant}_train_step"
-  let fwdFn := s!"m.{net.slug}_fwd"
+  -- The entry the chosen forward DECLARES — an artifact's entry is its file name
+  -- (`regen_verified_mlir.sh`'s path == entry audit) — so a per-variant forward
+  -- (`<slug>_<variant>_fwd.mlir`, `@<slug>_<variant>_fwd`) is called by its own name. For the
+  -- `<slug>_fwd.mlir` fallback this is `@<slug>_fwd`, as it always was.
+  let fwdFn := s!"m.{(System.FilePath.mk fwdPath).fileStem.getD s!"{net.slug}_fwd"}"
   let mut parts : Array ByteArray := #[]
   let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
   if cfg.vitInit then
-    IO.println "  ▸ INIT: timm/DeiT (σ=0.02 weights, patch-embed on PyTorch Conv2d default)"
+    IO.println "  ▸ INIT: timm/DeiT (σ=0.02 weights + CLS/pos-embed, patch-embed on PyTorch Conv2d default)"
   -- ANNOUNCED, because an init is otherwise invisible in the log. The banner line further down
   -- says "He init" unconditionally, which is false whenever either flag is set, so each says so
   -- here.
@@ -2361,7 +2404,13 @@ gate's control, not a configuration.")
                    let k := if expStaircase then ((gstep - 1.0) / nb.toFloat / expDecayEpochs).floor
                      else ((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat) / expDecayEpochs
                    baseLR * Float.exp (k * Float.log expDecayRate)
-                 else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
+                 -- The cosine's progress is `(gstep − 1 − warmSteps)`, the reference's 0-BASED
+                 -- `prog = (_global_step - warmup_steps) / (total_steps - warmup_steps)`, for the
+                 -- same reason the exp branch reads `gstep − 1` above. It read `gstep − warmSteps`
+                 -- until 2026-10-01: one step ahead of the reference for the whole decay, ending
+                 -- at exactly the floor where the reference's last step sits a hair above it.
+                 else minLR + (baseLR - minLR) * 0.5 *
+                   (1.0 + Float.cos (3.14159265358979 * (gstep - 1.0 - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
       -- Patch the reusable step buffer in place instead of rebuilding it. `pbuf`

@@ -537,6 +537,10 @@ structure TrainConfig where
   weightDecay  : Float := 0.0
   cosineDecay  : Bool := false
   warmupEpochs : Nat := 0
+  /-- The cosine's floor, timm's `lr_min` (DeiT `--min-lr 1e-5`):
+      `lr = minLR + (LR − minLR)·½(1 + cos(π·prog))`. ImageNet streaming path only; 0 emits the
+      old formula byte for byte. The verified peer is `trainAdamSched`'s `minLR`. -/
+  minLR : Float := 0.0
   augment      : Bool := false
   labelSmoothing : Float := 0.0
   /-- Focal loss (Lin et al. 2017): replace CE loss with
@@ -834,6 +838,15 @@ structure TrainConfig where
       when `bf16 := true`. Depthwise/separable convs (MobileNet/EfficientNet)
       still stay fp32. -/
   bf16Conv : Bool := false
+  /-- Under `bf16`, keep the **patch embed and the top-level `.dense` layers** (on a ViT, the
+      classifier head alone: the block Linears live inside `transformerEncoder`) in fp32.
+      This is the verified renders' own carve-out, so the knob exists for a pair's ONE-variable
+      claim: `ViTRenderB` keeps the head f32 in every net and the patch-embed f32 on ViT
+      (`bf16Conv := false`, a measured cuDNN weight-grad limit), while this emitter's `mm` sent both
+      through bf16. A plain `@` at default precision, i.e. the same XLA dot the render's
+      `precision = [DEFAULT, DEFAULT]` f32 `dot_general` lowers to. Off by default, so every
+      other trainer is byte-identical. -/
+  f32StemHead : Bool := false
   /-- Running batch-norm statistics. When true, the JAX imagenet
       trainer tracks per-BN-layer running mean/var (EMA of batch stats,
       momentum `bnMomentum`) threaded through `forward` as `has_aux`, and EVAL
@@ -880,6 +893,11 @@ structure TrainConfig where
       The verified peer is the render's `epsStr`, a different artifact per ε (the `eps<d…>`
       variant marker and its own `_fwd_eval_eps<d…>` eval graph), not a host-side knob. -/
   bnEps : Float := 1e-5
+  /-- LayerNorm ε of the transformer `layer_norm` (ViT Ti/S/B; ConvNeXt's two LayerNorms are
+      separate helpers, already at 1e-6). 1e-5 is PyTorch's `nn.LayerNorm` default and every
+      existing trainer's; DeiT builds its blocks with `partial(nn.LayerNorm, eps=1e-6)`. The
+      verified peer is the render's `eps` (`ViTRenderB`, variant marker `eps0000001`). -/
+  lnEps : Float := 1e-5
   /-- Stochastic-depth ramp over `i/N` (TF EfficientNet's `drop_rate · idx / len(blocks)`) instead
       of `i/(N−1)` (timm's `linspace(0, rate, depth)`), on the MBConv path only. Off keeps every
       generated file byte-identical. -/

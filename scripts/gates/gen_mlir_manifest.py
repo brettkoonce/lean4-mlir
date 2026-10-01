@@ -116,6 +116,8 @@ def selftest() -> int:
         ("adamls0bf16", lambda v: decimal_marker(v, "ls"), "0", "`%lomac` = 1.0"),
         ("rmsdp64wxdols0eps0001bf16", lambda v: decimal_marker(v, "eps"), "0.001", "BN ε = 1e-3"),
         ("rmsdp64wxdols0eps0001bf16", batch_shape, "batch 64 per replica", "`eps0001` is not a batch"),
+        ("emadp128x4wxclipdropeps0000001bf16", lambda v: decimal_marker(v, "eps"), "0.000001", "LN ε = 1e-6"),
+        ("emadp128x4wxclipdropeps0000001bf16", ema_on, True, "`eps` after `drop` leaves `ema` the prefix"),
     ]
     bad = 0
     for v, pred, want, why in checks:
@@ -183,7 +185,9 @@ def decode(variant: str) -> str:
         bits.append(f"label smoothing {ls}")
     eps = decimal_marker(variant, "eps")
     if eps is not None:
-        bits.append(f"BN ε {eps}")
+        # BatchNorm ε on the conv nets (`eps0001`), LayerNorm ε on ViT (`eps0000001`, DeiT's 1e-6):
+        # one decimal grammar, `bnEpsMarker`, and no net has both norms.
+        bits.append(f"norm ε {eps}")
     shape = batch_shape(variant)
     if shape:
         bits.append(shape)
