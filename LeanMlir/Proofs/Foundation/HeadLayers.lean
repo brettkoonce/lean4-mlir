@@ -237,21 +237,50 @@ theorem stemPoolTwinAt_of_smoothAt (N h w : Nat) {oc : Nat}
     StemPoolTwinAt N h w T v :=
   fun r => maxPool3s2SmoothUpTo_of_smoothOrDead (T r) (hv r)
 
-/-- **Along a parameter, ReLU then the pool is the argmax gather.** `Z θ` is the pre-ReLU stem
-    activation as the parameter moves; at `θ₀` it has no zero entry, every window of its ReLU is
-    smooth up to twins, and twinned cells are equal at EVERY `θ`. Then near `θ₀` the pooled ReLU
-    reads each output from the cell `maxPool3s2LocalReindexB` names at `θ₀`: a dead window stays
-    negative, a strict maximum stays strict, and a twin stays tied with the chosen cell. -/
-theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
+/-- **A pool selector at `y`**: output `(r, co, ho, wo)` reads a cell of its own 3×3 window (example
+    `r`, channel `co`) that holds the window's maximum. Where a window's maximum is attained once,
+    every selector reads that cell; at a tie each picks one of the tied cells. The argmax gather
+    `maxPool3s2LocalReindexB` is one selector (`maxPool3s2LocalReindexB_isSelect`), and so is the
+    render's `select_and_scatter` with its `GE` select, which routes each window's cotangent to one
+    maximal cell (the first in window order). -/
+def IsMaxPool3s2SelectB (N c h w : Nat) (y : Vec (N * (c * (2 * h) * (2 * w))))
+    (σ : Fin (N * (c * h * w)) → Fin (N * (c * (2 * h) * (2 * w)))) : Prop :=
+  ∀ (r : Fin N) (co : Fin c) (ho : Fin h) (wo : Fin w), ∃ ab : Fin 3 × Fin 3,
+    σ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, ho), wo))) =
+        finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho ab.1),
+          win3ColInv wo ab.2)) ∧
+      ∀ cd : Fin 3 × Fin 3,
+        (Tensor3.unflatten (Mat.unflatten y r) : Tensor3 c (2 * h) (2 * w)) co (win3RowInv ho cd.1)
+            (win3ColInv wo cd.2) ≤
+          (Tensor3.unflatten (Mat.unflatten y r) : Tensor3 c (2 * h) (2 * w)) co (win3RowInv ho ab.1)
+            (win3ColInv wo ab.2)
+
+/-- The argmax gather is a pool selector. -/
+theorem maxPool3s2LocalReindexB_isSelect (N c h w : Nat) (y : Vec (N * (c * (2 * h) * (2 * w)))) :
+    IsMaxPool3s2SelectB N c h w y (maxPool3s2LocalReindexB N c h w y) := fun r co ho wo =>
+  ⟨maxPool3s2Argmax (Tensor3.unflatten (Mat.unflatten y r)) co ho wo,
+    by simp only [maxPool3s2LocalReindexB, windowLocalReindex, Equiv.symm_apply_apply]; rfl,
+    maxPool3s2Argmax_max _ co ho wo⟩
+
+/-- **Along a parameter, ReLU then the pool is a fixed gather**, for ANY pool selector `σ` at
+    `θ₀`. `Z θ` is the pre-ReLU stem activation as the parameter moves; at `θ₀` it has no zero
+    entry, every window of its ReLU is smooth up to twins, and twinned cells are equal at EVERY
+    `θ`. Then near `θ₀` the pooled ReLU reads each output from the cell `σ` names: a dead window
+    stays negative, a strict maximum stays strict, and a twin stays tied with the chosen cell.
+    Which of two tied twins `σ` picks does not matter, since they are equal near `θ₀`. -/
+theorem stemPoolRelu_param_eventuallyEq_select {k N c h w : Nat}
     (Z : Vec k → Vec (N * (c * (2 * h) * (2 * w)))) (θ₀ : Vec k) (hZ : ContinuousAt Z θ₀)
     (hz : ∀ i, Z θ₀ i ≠ 0)
     (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
     (hs : StemPoolTwinAt N h w T (relu _ (Z θ₀)))
     (htwin : ∀ θ (r : Fin N) (ci : Fin c) (p q : Fin (2 * h) × Fin (2 * w)), T r p q →
       Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2))) =
-        Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2)))) :
+        Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2))))
+    (σ : Fin (N * (c * h * w)) → Fin (N * (c * (2 * h) * (2 * w))))
+    (hσ : IsMaxPool3s2SelectB N c h w (relu _ (Z θ₀)) σ) :
     (fun θ => StableHLO.batchMap N (maxPool3s2Flat c h w) (relu _ (Z θ))) =ᶠ[nhds θ₀]
-      (fun θ k => relu _ (Z θ) (maxPool3s2LocalReindexB N c h w (relu _ (Z θ₀)) k)) := by
+      (fun θ k => relu _ (Z θ) (σ k)) := by
+  choose sel hsel hselmax using hσ
   have hcoord : ∀ i, ContinuousAt (fun θ => Z θ i) θ₀ :=
     fun i => (continuous_apply i).continuousAt.comp hZ
   have hrelu : ∀ i, ContinuousAt (fun θ => relu _ (Z θ) i) θ₀ := by
@@ -259,28 +288,22 @@ theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
     have : (fun θ => relu _ (Z θ) i) = fun θ => max (Z θ i) 0 := by
       funext θ; exact relu_apply_eq_max _ i
     rw [this]; exact (hcoord i).max continuousAt_const
-  -- every window cell stays at or below the cell chosen at `θ₀`
+  -- every window cell stays at or below the cell `σ` chose at `θ₀`
   have hmax : ∀ᶠ θ in nhds θ₀, ∀ (r : Fin N) (co : Fin c) (ho : Fin h) (wo : Fin w) (a' b' : Fin 3),
       (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) r) : Tensor3 c (2 * h) (2 * w)) co
           (win3RowInv ho a') (win3ColInv wo b') ≤
         (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) r) : Tensor3 c (2 * h) (2 * w)) co
-          (win3RowInv ho (maxPool3s2Argmax
-            (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r) : Tensor3 c (2 * h) (2 * w))
-            co ho wo).1)
-          (win3ColInv wo (maxPool3s2Argmax
-            (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r) : Tensor3 c (2 * h) (2 * w))
-            co ho wo).2) := by
+          (win3RowInv ho (sel r co ho wo).1) (win3ColInv wo (sel r co ho wo).2) := by
     simp only [Filter.eventually_all]
     intro r co ho wo a' b'
-    set y : Tensor3 c (2 * h) (2 * w) := Tensor3.unflatten (Mat.unflatten (relu _ (Z θ₀)) r)
-    set σ := maxPool3s2Argmax y co ho wo
-    by_cases hab : (win3RowInv ho a', win3ColInv wo b') = (win3RowInv ho σ.1, win3ColInv wo σ.2)
+    set σ' := sel r co ho wo
+    by_cases hab : (win3RowInv ho a', win3ColInv wo b') = (win3RowInv ho σ'.1, win3ColInv wo σ'.2)
     · obtain ⟨hr, hs'⟩ := Prod.mk.inj hab
       exact Filter.Eventually.of_forall fun _ => by rw [hr, hs']
     · set i' := finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho a'),
         win3ColInv wo b'))
-      set iσ := finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho σ.1),
-        win3ColInv wo σ.2))
+      set iσ := finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho σ'.1),
+        win3ColInv wo σ'.2))
       show ∀ᶠ θ in nhds θ₀, relu _ (Z θ) i' ≤ relu _ (Z θ) iσ
       rcases hs r co ho wo with hdead | hsm
       · -- dead window: the pre-activation is strictly negative, so it stays negative nearby
@@ -294,7 +317,7 @@ theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
         refine ((hcoord i').eventually (gt_mem_nhds hzk)).mono fun θ hθ => ?_
         have h0 : relu _ (Z θ) i' = 0 := by simp [relu, not_lt.mpr hθ.le]
         rw [h0]; exact relu_nonneg _ _ _
-      · rcases hsm σ (a', b') (Ne.symm hab) (maxPool3s2Argmax_max y co ho wo) with hlt | htw
+      · rcases hsm σ' (a', b') (Ne.symm hab) (hselmax r co ho wo) with hlt | htw
         · exact ((hrelu i').eventually_lt (hrelu iσ) hlt).mono fun _ => le_of_lt
         · -- twins: equal at every parameter value
           refine Filter.Eventually.of_forall fun θ => le_of_eq ?_
@@ -303,9 +326,36 @@ theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
           rw [he]
   filter_upwards [hmax] with θ hθ
   funext idx
+  have hidx : finProdFinEquiv ((finProdFinEquiv.symm idx).1, finProdFinEquiv
+      (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1).1,
+        (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1).2),
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2)) = idx := by
+    simp only [Prod.mk.eta, Equiv.apply_symm_apply]
+  have he := hsel (finProdFinEquiv.symm idx).1
+    (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1).1
+    (finProdFinEquiv.symm (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1).2
+    (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2
+  rw [hidx] at he
+  show _ = relu _ (Z θ) (σ idx)
+  rw [he]
   exact maxPool3s2_eq_at_max
     (Tensor3.unflatten (Mat.unflatten (relu _ (Z θ)) (finProdFinEquiv.symm idx).1)) _ _ _ _ _
     (hθ _ _ _ _)
+
+/-- **Along a parameter, ReLU then the pool is the argmax gather**: the selector
+    `maxPool3s2LocalReindexB` names at `θ₀` (`stemPoolRelu_param_eventuallyEq_select`). -/
+theorem stemPoolRelu_param_eventuallyEq {k N c h w : Nat}
+    (Z : Vec k → Vec (N * (c * (2 * h) * (2 * w)))) (θ₀ : Vec k) (hZ : ContinuousAt Z θ₀)
+    (hz : ∀ i, Z θ₀ i ≠ 0)
+    (T : Fin N → Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+    (hs : StemPoolTwinAt N h w T (relu _ (Z θ₀)))
+    (htwin : ∀ θ (r : Fin N) (ci : Fin c) (p q : Fin (2 * h) × Fin (2 * w)), T r p q →
+      Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, p.1), p.2))) =
+        Z θ (finProdFinEquiv (r, finProdFinEquiv (finProdFinEquiv (ci, q.1), q.2)))) :
+    (fun θ => StableHLO.batchMap N (maxPool3s2Flat c h w) (relu _ (Z θ))) =ᶠ[nhds θ₀]
+      (fun θ k => relu _ (Z θ) (maxPool3s2LocalReindexB N c h w (relu _ (Z θ₀)) k)) :=
+  stemPoolRelu_param_eventuallyEq_select Z θ₀ hZ hz T hs htwin _
+    (maxPool3s2LocalReindexB_isSelect N c h w _)
 
 /-- The gather model `v ↦ relu v ∘ σ`: linear after the ReLU, so differentiable at any point with
     no zero entry, whatever `σ`. -/

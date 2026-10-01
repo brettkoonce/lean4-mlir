@@ -50,7 +50,6 @@ namespace Proofs
 structure FloatModel where
   rnd : ℝ → ℝ
   u : ℝ
-  u_nonneg : 0 ≤ u
   err : ∀ x : ℝ, |rnd x - x| ≤ u * |x|
 
 /-- The unit roundoff of IEEE-754 binary32 (round-to-nearest-even). -/
@@ -65,6 +64,16 @@ noncomputable def uE4M3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
 namespace FloatModel
 
 variable (M : FloatModel)
+
+/-- The unit roundoff is nonnegative: `err 1` gives `|rnd 1 − 1| ≤ u`. -/
+theorem u_nonneg : 0 ≤ M.u :=
+  (abs_nonneg _).trans (by simpa using M.err 1)
+
+/-- The rounding of `0` is `0` (forced by the relative-error model at `x = 0`). -/
+@[simp] theorem rnd_zero : M.rnd 0 = 0 := by
+  have h := M.err 0
+  rw [sub_zero, abs_zero, mul_zero] at h
+  exact abs_nonpos_iff.mp h
 
 /-- Rounded addition: `fl(x + y)`. -/
 noncomputable def add (x y : ℝ) : ℝ := M.rnd (x + y)
@@ -86,6 +95,13 @@ theorem dot_succ {n : Nat} (x y : Vec (n + 1)) :
     M.dot x y =
       M.add (M.dot (fun i => x i.castSucc) (fun i => y i.castSucc))
             (M.mul (x (Fin.last n)) (y (Fin.last n))) := rfl
+
+/-- A rounded dot product against the all-zero vector is `0`. -/
+theorem dot_right_zero : ∀ {k : Nat} (x : Vec k), M.dot x (fun _ => (0 : ℝ)) = 0
+  | 0, _ => rfl
+  | _ + 1, x => by
+      rw [M.dot_succ, dot_right_zero (fun i => x i.castSucc)]
+      simp only [FloatModel.mul, mul_zero, FloatModel.add, add_zero, M.rnd_zero]
 
 /-- Rounded dense layer — the float peer of `Proofs.dense`
     (`fl(Σᵢ xᵢ·Wᵢⱼ) ⊕ bⱼ`, every `+`/`·` rounded). -/
@@ -1171,7 +1187,6 @@ theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : �
 def exactModel : FloatModel where
   rnd := id
   u := 0
-  u_nonneg := le_rfl
   err := fun x => by simp
 
 @[simp] theorem exactModel_dot : ∀ {n : ℕ} (x y : Vec n),
@@ -1200,5 +1215,80 @@ def exactModel : FloatModel where
   simp [FloatModel.dotMixed, exactModel]
 
 end FloatModel
+
+-- ════════════════════════════════════════════════════════════════
+-- § Float reductions against a perturbed operand
+-- ════════════════════════════════════════════════════════════════
+
+/-- `|a| ≤ C + e` from `|a − b| ≤ e` and `|b| ≤ C` — lifts a closeness + a
+    base magnitude to a float magnitude (the float cotangent bound from the
+    real bound plus the drift). -/
+theorem abs_le_of_close {a b e C : ℝ} (h1 : |a - b| ≤ e) (h2 : |b| ≤ C) :
+    |a| ≤ C + e := by
+  have := abs_sub_abs_le_abs_sub a b
+  linarith
+
+/-- **Float dot against a perturbed cotangent** — the conv-2 grad-close's final
+    contraction (the conv peer of the MLP's scalar `mul_close`: a dot, because
+    of weight sharing). `M.dot A B̃` (exact left operand `A`, float cotangent
+    `B̃`) vs the certified `∑ Aᵢ·Bᵢ` splits into the Higham dot rounding on `A·B̃`
+    (`dot_close`, fan-in `n`) plus the per-entry cotangent drift
+    `|B̃ᵢ − Bᵢ| ≤ eB`. With `|Aᵢ| ≤ a` and `|B̃ᵢ| ≤ Ct`, the bound is closed-form
+    and `norm_num`-evaluable. -/
+theorem FloatModel.dot_perturbed_close {n : ℕ} (M : FloatModel)
+    (A Bt B : Vec n) {a Ct eB : ℝ} (ha : 0 ≤ a)
+    (hA : ∀ i, |A i| ≤ a) (hBt : ∀ i, |Bt i| ≤ Ct)
+    (hB : ∀ i, |Bt i - B i| ≤ eB) :
+    |M.dot A Bt - ∑ i, A i * B i| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * (a * Ct)) + (n : ℝ) * (a * eB) := by
+  have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+  -- rounding term: ∑|A·B̃| ≤ n·a·Ct
+  have h2 : (∑ i, |A i * Bt i|) ≤ (n : ℝ) * (a * Ct) :=
+    (Finset.sum_le_card_nsmul _ _ _ fun i _ => (abs_mul _ _).trans_le
+      (mul_le_mul (hA i) (hBt i) (abs_nonneg _) ha)).trans_eq (by simp)
+  have h1' : |M.dot A Bt - ∑ i, A i * Bt i| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * (a * Ct)) :=
+    (M.dot_close A Bt).trans (mul_le_mul_of_nonneg_left h2 hγ0)
+  -- drift term: ∑|A|·|B̃ − B| ≤ n·a·eB
+  have h3 : |(∑ i, A i * Bt i) - ∑ i, A i * B i| ≤ (n : ℝ) * (a * eB) := by
+    rw [← Finset.sum_sub_distrib]
+    refine (Finset.abs_sum_le_sum_abs _ _).trans ?_
+    refine (Finset.sum_le_card_nsmul _ _ (a * eB) fun i _ => ?_).trans_eq (by simp)
+    rw [← mul_sub, abs_mul]
+    exact mul_le_mul (hA i) (hB i) (abs_nonneg _) ha
+  calc |M.dot A Bt - ∑ i, A i * B i|
+      ≤ |M.dot A Bt - ∑ i, A i * Bt i| +
+          |(∑ i, A i * Bt i) - ∑ i, A i * B i| := abs_sub_le _ _ _
+    _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * (a * Ct)) +
+          (n : ℝ) * (a * eB) := add_le_add h1' h3
+
+/-- **Float sum against a perturbed summand** — the conv-BIAS grad-close's
+    final reduction, the `M.sum` peer of `dot_perturbed_close` (no left
+    operand `A`: the bias Jacobian is the bare channel indicator, so the
+    contraction is a plain reduction, not a dot). `M.sum B̃` vs the certified
+    `∑ Bᵢ` splits into the Higham sum rounding on `B̃` (`sum_close`, fan-in `n`)
+    plus the per-entry drift `|B̃ᵢ − Bᵢ| ≤ eB`. With `|B̃ᵢ| ≤ Ct` the bound is
+    closed-form. -/
+theorem FloatModel.sum_perturbed_close {n : ℕ} (M : FloatModel)
+    (Bt B : Vec n) {Ct eB : ℝ}
+    (hBt : ∀ i, |Bt i| ≤ Ct) (hB : ∀ i, |Bt i - B i| ≤ eB) :
+    |M.sum Bt - ∑ i, B i| ≤
+      ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := by
+  have hγ0 : (0:ℝ) ≤ (1 + M.u) ^ (n + 1) - 1 :=
+    sub_nonneg.mpr (one_le_pow₀ (by linarith [M.u_nonneg]))
+  -- rounding term: ∑|B̃| ≤ n·Ct
+  have h2 : (∑ i, |Bt i|) ≤ (n : ℝ) * Ct :=
+    (Finset.sum_le_card_nsmul _ _ _ fun i _ => hBt i).trans_eq (by simp)
+  have h1' : |M.sum Bt - ∑ i, Bt i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) :=
+    (M.sum_close Bt).trans (mul_le_mul_of_nonneg_left h2 hγ0)
+  -- drift term: ∑|B̃ − B| ≤ n·eB
+  have h3 : |(∑ i, Bt i) - ∑ i, B i| ≤ (n : ℝ) * eB := by
+    rw [← Finset.sum_sub_distrib]
+    refine (Finset.abs_sum_le_sum_abs _ _).trans ?_
+    exact (Finset.sum_le_card_nsmul _ _ _ fun i _ => hB i).trans_eq (by simp)
+  calc |M.sum Bt - ∑ i, B i|
+      ≤ |M.sum Bt - ∑ i, Bt i| + |(∑ i, Bt i) - ∑ i, B i| := abs_sub_le _ _ _
+    _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := add_le_add h1' h3
 
 end Proofs

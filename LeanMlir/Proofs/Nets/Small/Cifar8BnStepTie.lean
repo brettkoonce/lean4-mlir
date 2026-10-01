@@ -1,8 +1,8 @@
 import LeanMlir.Proofs.Nets.Small.CifarFold
 
-/-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
+/-! # The cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
 
-cifar8's tie (`Cifar8PoC.cifar8_train_step_tied_certified`) + a BN-back at every conv. The backward
+cifar8's tie (`Cifar8Tie.cifar8_train_step_tied_certified`) + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
 cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
@@ -14,12 +14,16 @@ loss cotangent cifar8's. All 38 parameter tensors (8 conv W/b, 8 BN γ/β, 3 den
 
 **Not the trained artifact.** The committed `cifar8_bn_*` / `cifar8w_bn_*` arms are this
 renderer with a separate optimizer, feeding the same chain to `*Grad` nodes; they are tied in
-`Cifar8BnPoCG.cifar8Bn_train_step_tiedG`.
+`Cifar8BnTieG.cifar8Bn_train_step_tiedG`.
 
 ## Scope (same as the rest of the suite)
 * Below the output layer the cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
-  `cifar8Bn_train_step_tied_certified`, and `mlpCotOut1`/`mlpCotOut0` in the head); that they equal
-  the loss gradient at each layer output is not stated.
+  `cifar8Bn_train_step_tied_certified`, and `mlpCotOut1`/`mlpCotOut0` in the head). The
+  loss-gradient statement is `Cifar8BnTieG.cifar8Bn_net_lossGrad`, at the trained arms' `*Grad`
+  nodes and with each pool's cotangent routed to one maximal cell, as the rendered
+  `select_and_scatter` does; this chain routes it to the first maximal cell (`maxPool2Argmax`),
+  the op's own choice, so each pool step is the capstone's scatter at that selection
+  (`SmallParamGrad.maxpool_flatDenote_eq_selScatter`).
 * Conv/BN backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
@@ -27,7 +31,7 @@ renderer with a separate optimizer, feeding the same chain to `*Grad` nodes; the
 open Proofs Proofs.StableHLO Proofs.IR
 open Proofs.SgdNode (bnSgdPairTied_holds)
 
-namespace Proofs.Cifar8BnPoC
+namespace Proofs.Cifar8BnTie
 
 /-- **The emitted loss-cotangent graph denotes the softmax-CE gradient of the cifar8-bn forward.** -/
 theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
@@ -58,8 +62,8 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     cotangent driven by the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back
     cotangents `cotC1–8`; the BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered
     cifar8-bn backward chain (cifar8's chain + a BN-back at every conv). The dense head is fed
-    `mlpCotOut0`, `mlpCotOut1` and `g`. That `c` equals the loss gradient at a layer below the
-    output is not stated. -/
+    `mlpCotOut0`, `mlpCotOut1` and `g`. The loss-gradient form is
+    `Cifar8BnTieG.cifar8Bn_net_lossGrad` (see the module's Scope). -/
 theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
@@ -200,4 +204,4 @@ theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW
     denseWSgdTied_holds, denseBSgdTied_holds, denseWSgdTied_holds, denseBSgdTied_holds,
     denseWSgdTied_holds, denseBSgdTied_holds⟩
 
-end Proofs.Cifar8BnPoC
+end Proofs.Cifar8BnTie

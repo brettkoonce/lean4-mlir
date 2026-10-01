@@ -30,11 +30,6 @@ in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/mai
 namespace Proofs
 namespace IR
 
--- `MaxPool2IsArgmax` is a `∀`-quantified order Prop over `ℝ`; its `if`
--- needs the classical decidability instance `CNN.lean` uses (it `open`s
--- `Classical`). Low priority, so it doesn't disturb the `Nat`/`ℝ`-order
--- decidability the dense/relu/conv bridges already rely on.
-
 /-- A backward subgraph, rooted at the cotangent `dy : Vec inp`, producing
     a `Vec out`. Saved forward data (weights `A`, the ReLU pre-activation
     `x`) is baked into the constructors. Each constructor models the
@@ -285,28 +280,62 @@ theorem conv_back_bridge {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § Max-pool (the other kinked op)
 --
--- The pooling analogue of the ReLU bridge: the codegen emits
--- tile-compare-select (broadcast `dy` and the pooled output, `compare EQ`
--- to find the argmax cells, `select` `dy` through the mask). At a smooth
--- point (every 2×2 window has a unique strict argmax) that graph routes
--- `dy` to the argmax cell — the canonical pdiv-derived maxpool backward.
+-- The pooling analogue of the ReLU bridge: the emitted backward is
+-- `select_and_scatter` with a `GE` select, which routes each window's `dy`
+-- to ONE cell, the first maximum in the window's row-major order
+-- (`maxPool2Argmax`, `windowArgmax_first`). The denotation routes there too,
+-- at every point, ties included. At a smooth point (every 2×2 window has a
+-- unique strict argmax) that is the canonical pdiv-derived maxpool backward.
 -- Conditional on `MaxPool2Smooth`, reusing `maxPool2_codegen_matches_canonical`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Denotation of the emitted maxpool input-gradient graph** (StableHLO
-    tile-compare-select): at a smooth point, route `dy` to each window's
-    argmax input cell, zero elsewhere. -/
+    `select_and_scatter`, `GE` select): route each window's `dy` to its first
+    maximal cell in row-major order (`maxPool2Argmax`), zero elsewhere. At a
+    tie only that one cell receives `dy`, as in the printed op. -/
 noncomputable def maxPoolBackDenote {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
     Tensor3 c h w → Tensor3 c (2*h) (2*w) :=
   fun dy ci hi_in wi_in =>
-    if MaxPool2IsArgmax x ci hi_in wi_in then dy ci (winRow hi_in) (winCol wi_in) else 0
+    if maxPool2Argmax x ci (winRow hi_in) (winCol wi_in) = (winRowMod hi_in, winColMod wi_in)
+    then dy ci (winRow hi_in) (winCol wi_in) else 0
+
+/-- **Off a tie the first-argmax test is the argmax test.** A cell the first argmax names is
+    maximal at every point; under `MaxPool2Smooth` a maximal cell is the only one, hence the
+    first. -/
+theorem maxPool2Argmax_eq_iff_isArgmax {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) (ci : Fin c) (hi_in : Fin (2*h)) (wi_in : Fin (2*w)) :
+    maxPool2Argmax x ci (winRow hi_in) (winCol wi_in) = (winRowMod hi_in, winColMod wi_in)
+      ↔ MaxPool2IsArgmax x ci hi_in wi_in := by
+  have hcell : x ci (winRowInv (winRow hi_in) (winRowMod hi_in))
+      (winColInv (winCol wi_in) (winColMod wi_in)) = x ci hi_in wi_in := by
+    rw [winRowInv_winRow, winColInv_winCol]
+  constructor
+  · intro heq a b
+    have hm := maxPool2Argmax_max x ci (winRow hi_in) (winCol wi_in) (a, b)
+    rw [heq, hcell] at hm
+    exact hm
+  · intro harg
+    by_contra hne
+    have hlt := h_smooth ci (winRow hi_in) (winCol wi_in)
+      (maxPool2Argmax x ci (winRow hi_in) (winCol wi_in)) (winRowMod hi_in, winColMod wi_in) hne
+      (maxPool2Argmax_max x ci (winRow hi_in) (winCol wi_in))
+    rw [hcell] at hlt
+    exact absurd (harg _ _) (not_le.mpr hlt)
+
+/-- **The first-argmax routing at a smooth point** is `maxPool2HasVJPAt3`'s backward. -/
+theorem maxPoolBackDenote_eq_of_smooth {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
+    (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w) :
+    maxPoolBackDenote x dy = (maxPool2HasVJPAt3 x h_smooth).backward dy := by
+  funext ci hi_in wi_in
+  simp only [maxPoolBackDenote, maxPool2HasVJPAt3, maxPool2Argmax_eq_iff_isArgmax x h_smooth]
 
 /-- **MaxPool backward bridge (smooth point).** The emitted
-    tile-compare-select graph denotes the canonical pdiv-derived maxpool
+    `select_and_scatter` graph denotes the canonical pdiv-derived maxpool
     backward, *conditional on no argmax ties* (`MaxPool2Smooth`). The
     spatial-pooling analogue of `relu_back_bridge`; reuses
-    `maxPool2_codegen_matches_canonical`. The Lean-vs-codegen gap at
-    argmax-tie boundaries is exactly the codegen trust boundary. -/
+    `maxPool2_codegen_matches_canonical`. At a tie the denotation still
+    routes to the printed op's one cell; only the VJP claim needs
+    `MaxPool2Smooth`, since the pool has no derivative there. -/
 theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
     (ci : Fin c) (hi_in : Fin (2*h)) (wi_in : Fin (2*w)) :
@@ -314,8 +343,7 @@ theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
       = (maxPool2HasVJP3 :
           HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)).backward
           x dy ci hi_in wi_in := by
-  show (if MaxPool2IsArgmax x ci hi_in wi_in
-        then dy ci (winRow hi_in) (winCol wi_in) else 0) = _
+  rw [maxPoolBackDenote_eq_of_smooth x h_smooth]
   exact (maxPool2_codegen_matches_canonical x h_smooth dy ci hi_in wi_in).symm
 
 -- ════════════════════════════════════════════════════════════════
@@ -517,8 +545,8 @@ theorem denote_subst3 {c₁ h₁ w₁ c₀ h₀ w₀ c₂ h₂ w₂ : Nat}
 theorem maxpool3_node_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w) :
     (Back3.maxpool x Back3.cot).denote dy = (maxPool2HasVJPAt3 x h_smooth).backward dy := by
-  funext ci hi wi
-  simp only [Back3.denote, maxPoolBackDenote, maxPool2HasVJPAt3]
+  simp only [Back3.denote]
+  exact maxPoolBackDenote_eq_of_smooth x h_smooth dy
 
 /-- The `Back3` conv node denotes the proven conv backward, for odd `kH`, `kW`
     (via `conv_back_bridge`). -/
@@ -564,9 +592,9 @@ theorem maxpool_flatten_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (Back3.maxpool x Back3.cot).flatDenote dy
       = (maxPoolFlatHasVJPAt x h_smooth).backward dy := by
   funext idx
-  simp only [Back3.flatDenote, Back3.denote, maxPoolFlatHasVJPAt,
-             HasVJPAt3.toHasVJPAt, maxPoolBackDenote, maxPool2HasVJPAt3,
-             Tensor3.flatten]
+  simp only [Back3.flatDenote, Back3.denote, maxPoolBackDenote_eq_of_smooth x h_smooth,
+             maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt]
+  rfl
 
 /-- **Flatten bridge, conv (odd kernels).** The flattened `Back3`
     conv graph denotes the proven flattened conv layer backward

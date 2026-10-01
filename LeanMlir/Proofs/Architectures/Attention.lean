@@ -68,63 +68,56 @@ Multi-head attention applies the same per-head function to each of `heads`
 column slabs of width `d_in` from a `Mat n (heads * d_in)` input. The
 column-slab analog of `rowwiseHasVJPMat` factors that vmap-over-heads
 structure: each head's output depends only on its own slab of the input,
-so the matrix Jacobian is block-diagonal across the head axis. -/
+so the matrix Jacobian is block-diagonal across the head axis. The general form lets each slab
+have its own map (`colSlabApplyH`); the shared-map `colSlabApply` is its constant-family case. -/
 
-/-- Apply `g : Mat n d_in → Mat n d_out` to each of the `heads` column
-    slabs of width `d_in` in a `Mat n (heads * d_in)` input, producing
-    a `Mat n (heads * d_out)` output. Output column `(h, j_out)` is
-    column `j_out` of `g (slab h M)`, where `slab h M` extracts the
-    `d_in`-wide column block at head index `h`. -/
-noncomputable def colSlabApply {n heads d_in d_out : Nat}
-    (g : Mat n d_in → Mat n d_out) : Mat n (heads * d_in) → Mat n (heads * d_out) :=
+/-- `colSlabApply` with its own map on each head's slab: output column `(h, j)` is column `j` of
+    `g h` applied to input slab `h`. The attention core in one of `Q`, `K`, `V` is one, since head
+    `h` reads the other two projections' slab `h`. -/
+noncomputable def colSlabApplyH {n heads d_in d_out : Nat}
+    (g : Fin heads → Mat n d_in → Mat n d_out) : Mat n (heads * d_in) → Mat n (heads * d_out) :=
   fun M => fun r hj =>
-    g (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
+    g (finProdFinEquiv.symm hj).1
+      (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
       r (finProdFinEquiv.symm hj).2
 
-/-- **Column-slab independence Jacobian** — column-axis analog of
-    `pdivMat_rowIndep`. For a slab-applied function `colSlabApply g`,
-    the Jacobian is block-diagonal across the `heads` axis: zero unless
-    the input slab `h_j` matches the output slab `h_l`, otherwise equal
-    to `pdivMat g` on that slab.
-
-    Requires `Differentiable ℝ (flat g)` for the same reason as
-    `pdivMat_rowIndep`: the Pi-valued flat form must be differentiable
-    everywhere so `fderiv` doesn't fall back to junk-default 0. -/
-theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_out)
-    (h_g_diff : Differentiable ℝ
-                  (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v))))
+/-- **The Jacobian stays block-diagonal across heads** — `pdivMat_colIndep` with a per-slab map:
+    zero unless the input and output slabs agree, and `g h`'s own Jacobian on slab `h` if they do. -/
+theorem pdivMat_colIndepH {n heads d_in d_out : Nat} (g : Fin heads → Mat n d_in → Mat n d_out)
+    (h_g_diff : ∀ h, Differentiable ℝ
+                  (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v))))
     (A : Mat n (heads * d_in))
     (i : Fin n) (h_j : Fin heads) (j' : Fin d_in)
     (k : Fin n) (h_l : Fin heads) (j'' : Fin d_out) :
-    pdivMat (colSlabApply g) A
+    pdivMat (colSlabApplyH g) A
             i (finProdFinEquiv (h_j, j'))
             k (finProdFinEquiv (h_l, j'')) =
     (if h_j = h_l then
-      pdivMat g (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
+      pdivMat (g h_l) (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
      else 0) := by
   -- `slab h` reads head `h`'s columns out of the flat input; output coordinate `(r, (h, c))` is
-  -- `g`'s flat coordinate `(r, c)` read after `slab h`, whose derivative is `D r h c`.
+  -- `g h`'s flat coordinate `(r, c)` read after `slab h`, whose derivative is `D r h c`.
   let slab : Fin heads → (Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in)) := fun h =>
     reindexCLM fun idx => finProdFinEquiv ((finProdFinEquiv.symm idx).1,
       finProdFinEquiv (h, (finProdFinEquiv.symm idx).2))
-  let G := fun w : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten w))
+  let G := fun (h : Fin heads) (w : Vec (n * d_in)) => Mat.flatten (g h (Mat.unflatten w))
   let D : Fin n → Fin heads → Fin d_out → (Vec (n * (heads * d_in)) →L[ℝ] ℝ) := fun r h c =>
     (ContinuousLinearMap.proj (finProdFinEquiv (r, c)) : Vec (n * d_out) →L[ℝ] ℝ).comp
-      ((fderiv ℝ G (slab h (Mat.flatten A))).comp (slab h))
-  have hF : HasFDerivAt (fun v => Mat.flatten (colSlabApply g (Mat.unflatten v)))
+      ((fderiv ℝ (G h) (slab h (Mat.flatten A))).comp (slab h))
+  have hF : HasFDerivAt (fun v => Mat.flatten (colSlabApplyH g (Mat.unflatten v)))
       (ContinuousLinearMap.pi fun idx => D (finProdFinEquiv.symm idx).1
         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1
         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2) (Mat.flatten A) :=
     hasFDerivAt_pi.2 fun idx => by
       obtain ⟨⟨r, hc⟩, rfl⟩ := finProdFinEquiv.surjective idx
       obtain ⟨⟨h, c⟩, rfl⟩ := finProdFinEquiv.surjective hc
-      rw [show (fun v : Vec (n * (heads * d_in)) => Mat.flatten (colSlabApply g (Mat.unflatten v))
-          (finProdFinEquiv (r, finProdFinEquiv (h, c)))) = fun v => G (slab h v)
+      rw [show (fun v : Vec (n * (heads * d_in)) => Mat.flatten (colSlabApplyH g (Mat.unflatten v))
+          (finProdFinEquiv (r, finProdFinEquiv (h, c)))) = fun v => G h (slab h v)
           (finProdFinEquiv (r, c)) by
         funext v; simp only [G, slab, reindexCLM_apply]
-        unfold Mat.flatten Mat.unflatten colSlabApply; simp only [Equiv.symm_apply_apply]]
+        unfold Mat.flatten Mat.unflatten colSlabApplyH; simp only [Equiv.symm_apply_apply]]
       simp only [Equiv.symm_apply_apply]
-      exact hasFDerivAt_pi'.1 ((h_g_diff _).hasFDerivAt.comp _ (slab h).hasFDerivAt) _
+      exact hasFDerivAt_pi'.1 ((h_g_diff h _).hasFDerivAt.comp _ (slab h).hasFDerivAt) _
   have hslab : slab h_l (Mat.flatten A) =
       Mat.flatten (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) := by
     funext; simp only [slab, Mat.flatten, reindexCLM_apply, Equiv.symm_apply_apply]
@@ -141,11 +134,68 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
     ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply, hslab, hb]
   split_ifs <;> simp [G, pdivMat, pdiv]
 
+/-- Apply `g : Mat n d_in → Mat n d_out` to each of the `heads` column
+    slabs of width `d_in` in a `Mat n (heads * d_in)` input, producing
+    a `Mat n (heads * d_out)` output. Output column `(h, j_out)` is
+    column `j_out` of `g (slab h M)`, where `slab h M` extracts the
+    `d_in`-wide column block at head index `h`. Definitionally
+    `colSlabApplyH (fun _ => g)`. -/
+noncomputable def colSlabApply {n heads d_in d_out : Nat}
+    (g : Mat n d_in → Mat n d_out) : Mat n (heads * d_in) → Mat n (heads * d_out) :=
+  fun M => fun r hj =>
+    g (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
+      r (finProdFinEquiv.symm hj).2
+
+/-- **Column-slab independence Jacobian** — column-axis analog of
+    `pdivMat_rowIndep`. For a slab-applied function `colSlabApply g`,
+    the Jacobian is block-diagonal across the `heads` axis: zero unless
+    the input slab `h_j` matches the output slab `h_l`, otherwise equal
+    to `pdivMat g` on that slab.
+
+    Requires `Differentiable ℝ (flat g)` for the same reason as
+    `pdivMat_rowIndep`: the Pi-valued flat form must be differentiable
+    everywhere so `fderiv` doesn't fall back to junk-default 0. The
+    constant-family case of `pdivMat_colIndepH`. -/
+theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_out)
+    (h_g_diff : Differentiable ℝ
+                  (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v))))
+    (A : Mat n (heads * d_in))
+    (i : Fin n) (h_j : Fin heads) (j' : Fin d_in)
+    (k : Fin n) (h_l : Fin heads) (j'' : Fin d_out) :
+    pdivMat (colSlabApply g) A
+            i (finProdFinEquiv (h_j, j'))
+            k (finProdFinEquiv (h_l, j'')) =
+    (if h_j = h_l then
+      pdivMat g (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
+     else 0) :=
+  pdivMat_colIndepH (fun _ => g) (fun _ => h_g_diff) A i h_j j' k h_l j''
+
+/-- **Lift per-slab VJPs to `colSlabApplyH`** — `colSlabwiseHasVJPMat` with a per-slab map: the
+    backward runs slab `h`'s own backward on slab `h`. -/
+noncomputable def colSlabwiseHasVJPMatH {n heads d_in d_out : Nat}
+    {g : Fin heads → Mat n d_in → Mat n d_out}
+    (hg : ∀ h, HasVJPMat (g h))
+    (hg_diff : ∀ h, Differentiable ℝ
+                 (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v)))) :
+    HasVJPMat (colSlabApplyH g) where
+  backward := fun M dY r hj =>
+    (hg (finProdFinEquiv.symm hj).1).backward
+      (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
+      (fun r' j_out => dY r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_out)))
+      r (finProdFinEquiv.symm hj).2
+  correct := by
+    intro M dY i jj
+    obtain ⟨⟨h, j'⟩, rfl⟩ := finProdFinEquiv.surjective jj
+    rw [Equiv.symm_apply_apply]
+    simp only [sum_finProdFinEquiv (m := heads), pdivMat_colIndepH g hg_diff]
+    simp [(hg h).correct]
+
 /-- **Lift `HasVJPMat g` to column-slab vmap** — column-axis analog of
     `rowwiseHasVJPMat`. Given `g : Mat n d_in → Mat n d_out` with a
     matrix VJP, applying `g` independently to each of `heads`-many column
     slabs gives a `HasVJPMat` for `colSlabApply g`. The backward applies
-    `g.backward` per slab. -/
+    `g.backward` per slab; its correctness is `colSlabwiseHasVJPMatH`'s at
+    a constant family. -/
 noncomputable def colSlabwiseHasVJPMat {n heads d_in d_out : Nat}
     {g : Mat n d_in → Mat n d_out}
     (hg : HasVJPMat g)
@@ -156,12 +206,7 @@ noncomputable def colSlabwiseHasVJPMat {n heads d_in d_out : Nat}
     hg.backward (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
                 (fun r' j_out => dY r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_out)))
                 r (finProdFinEquiv.symm hj).2
-  correct := by
-    intro M dY i jj
-    obtain ⟨⟨h, j'⟩, rfl⟩ := finProdFinEquiv.surjective jj
-    simp only [Equiv.symm_apply_apply, sum_finProdFinEquiv (m := heads),
-      pdivMat_colIndep g hg_diff]
-    simp [hg.correct]
+  correct := (colSlabwiseHasVJPMatH (heads := heads) (fun _ => hg) (fun _ => hg_diff)).correct
 
 -- ════════════════════════════════════════════════════════════════
 -- § Ternary VJP for matrix functions (HasVJPMat3)
@@ -258,6 +303,18 @@ lemma dense_per_token_flat_differentiable {N inD outD : Nat}
       Mat.flatten ((fun X : Mat N inD => fun n => dense W b (X n))
                    (Mat.unflatten v))) := by
   unfold dense; fun_prop
+
+/-- The per-token dense is differentiable in its weight, flattened (input fixed). -/
+lemma rowDense_weight_differentiable {tk a c : Nat} (b : Vec c) (x : Vec (tk * a)) :
+    Differentiable ℝ (fun θ : Vec (a * c) =>
+      Mat.flatten (fun r => dense (Mat.unflatten θ) b (Mat.unflatten x r))) := by
+  unfold dense Mat.flatten; fun_prop
+
+/-- …in its bias. -/
+lemma rowDense_bias_differentiable {tk a c : Nat} (W : Mat a c) (x : Vec (tk * a)) :
+    Differentiable ℝ (fun θ : Vec c =>
+      Mat.flatten (fun r => dense W θ (Mat.unflatten x r))) := by
+  unfold dense Mat.flatten; fun_prop
 
 /-- Differentiability of the flattened per-token GELU map.
     `geluScalar = 0.5 · x · (1 + tanh(√(2/π)(x + 0.044715·x³)))`. With
@@ -1027,22 +1084,58 @@ noncomputable def mhsaGHasVJPMat (n d : Nat) :
     · subst hc1; simp only [hc0, ite_true, ite_false]; exact sdpaBackK_correct n d _ _ _ dY i j
     simp only [hc0, hc1, ite_false]; exact sdpaBackV_correct n d _ _ _ dY i j
 
-/-- Flat-diff for `colSlabApply g`: each output coord is `(g (slab h ·)) [n, j_out]`,
-    factoring through the linear slab projection and `g` (flat-diff) by `flat_differentiable_comp`. -/
+/-- `colSlabApplyH` is differentiable, flattened, when every slab's map is: each output coordinate
+    factors through the linear slab projection and `g h` by `flat_differentiable_comp`. -/
+theorem colSlabApplyH_flat_differentiable {n heads d_in d_out : Nat}
+    (g : Fin heads → Mat n d_in → Mat n d_out)
+    (hg_diff : ∀ h, Differentiable ℝ
+                 (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v)))) :
+    Differentiable ℝ (fun v : Vec (n * (heads * d_in)) =>
+      Mat.flatten (colSlabApplyH g (Mat.unflatten v) : Mat n (heads * d_out))) := by
+  rw [differentiable_pi]; intro idx
+  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
+  obtain ⟨⟨h, j⟩, rfl⟩ := finProdFinEquiv.surjective q
+  -- Coordinate `(r, (h, j))` is coordinate `(r, j)` of `g h` on the `h`-th column slab.
+  have hh := flat_differentiable_comp (G := g h) (F := fun M : Mat n (heads * d_in) =>
+    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by fun_prop) (hg_diff h)
+  simpa [Mat.flatten, colSlabApplyH] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
+
+/-- Single-head attention is differentiable in `Q`, flattened (`K`, `V` fixed). -/
+theorem sdpaQ_flat_differentiable (n d : Nat) (K V : Mat n d) :
+    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d (Mat.unflatten v) K V)) := by
+  have h1 : Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten
+      ((fun Q' : Mat n d => fun i j => sdpaScale d * Mat.mul Q' (Mat.transpose K) i j)
+        (Mat.unflatten v))) := by
+    unfold Mat.flatten Mat.unflatten Mat.mul Mat.transpose; fun_prop
+  exact flat_differentiable_comp (G := fun w : Mat n n => Mat.mul w V)
+    (flat_differentiable_comp (F := fun Q' : Mat n d => fun i j => sdpaScale d * Mat.mul Q' (Mat.transpose K) i j) h1 (rowSoftmax_flat_differentiable n n))
+    (matmul_right_const_flat_differentiable (m := n) V)
+
+/-- …in `K`. -/
+theorem sdpaK_flat_differentiable (n d : Nat) (Q V : Mat n d) :
+    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d Q (Mat.unflatten v) V)) := by
+  have h1 : Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten
+      ((fun K' : Mat n d => fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K') i j)
+        (Mat.unflatten v))) := by
+    unfold Mat.flatten Mat.unflatten Mat.mul Mat.transpose; fun_prop
+  exact flat_differentiable_comp (G := fun w : Mat n n => Mat.mul w V)
+    (flat_differentiable_comp (F := fun K' : Mat n d => fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K') i j) h1 (rowSoftmax_flat_differentiable n n))
+    (matmul_right_const_flat_differentiable (m := n) V)
+
+/-- …in `V` (the softmax weights are a constant). -/
+theorem sdpaV_flat_differentiable (n d : Nat) (Q K : Mat n d) :
+    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d Q K (Mat.unflatten v))) :=
+  matmul_left_const_flat_differentiable (sdpaWeights n d Q K)
+
+/-- Flat-diff for `colSlabApply g`: the constant-family case of
+    `colSlabApplyH_flat_differentiable`. -/
 theorem colSlabApply_flat_differentiable {n heads d_in d_out : Nat}
     (g : Mat n d_in → Mat n d_out)
     (hg_diff : Differentiable ℝ
                  (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v)))) :
     Differentiable ℝ (fun v : Vec (n * (heads * d_in)) =>
-      Mat.flatten (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out))) := by
-  rw [differentiable_pi]; intro idx
-  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
-  obtain ⟨⟨h, j⟩, rfl⟩ := finProdFinEquiv.surjective q
-  -- Coordinate `(r, (h, j))` is coordinate `(r, j)` of `g` on the `h`-th column slab.
-  have hh := flat_differentiable_comp (G := g) (F := fun M : Mat n (heads * d_in) =>
-    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by fun_prop)
-    hg_diff
-  simpa [Mat.flatten, colSlabApply] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
+      Mat.flatten (colSlabApply g (Mat.unflatten v) : Mat n (heads * d_out))) :=
+  colSlabApplyH_flat_differentiable (fun _ => g) (fun _ => hg_diff)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3.5 Multi-head composition, as theorems.
@@ -1706,7 +1799,7 @@ noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
 - Residual / biPath fan-in (`Residual.lean`)
 - Depthwise conv (`Depthwise.lean`)
 - Squeeze-and-Excitation / elementwise product VJP (`SE.lean`)
-- LayerNorm, GELU (`LayerNorm.lean`)
+- LayerNorm (`LayerNorm.lean`); GELU (`Activations.lean`)
 - Standalone softmax VJP (`softmaxHasVJP`, `Softmax.lean`)
 - Scaled dot-product attention backwards `sdpaBackQ`/`sdpaBackK`/`sdpaBackV`
   (`sdpaBackQ_correct` via `vjpMatComp` composition of four matrix-level

@@ -3,86 +3,13 @@ import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The conv forward in floating point — conv as a weight-shared dense layer, and its rounding budget
 
-The 2D conv read as a dense layer over the zero-padded window (`convPad`, `k4Idx`, `t3Idx`,
-`convWindow`), the kernel drift that makes it Lipschitz in the weights, and the float conv:
-`convF` / `flatConvF` and the `flatConvF_close` budget (used by `floatClose_flatConv` and
-`SgdDescent.Cnn`).
-The whole MNIST-CNN forward budget built from them is in `SgdDescent.Cnn`.
+The 2D conv read as a dense layer over the zero-padded window (`convWindow`, `convKernelMat`,
+over the `convPad` / `k4Idx` / `t3Idx` index vocabulary of `ConvIndex`), and the float conv:
+`convF` / `flatConvF` and their budgets `convF_close` (used by `SgdDescent.CnnFloat`) and
+`flatConvF_close` (used by `floatClose_flatConv`).
 -/
 
 namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § Conv-kernel drift: a dense layer with weight sharing
--- ════════════════════════════════════════════════════════════════
-
-/-- `conv2d` through `convPad`: bias plus the kernel-linear form. -/
-theorem conv2d_eq_convPad {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Tensor3 ic h w)
-    (o : Fin oc) (hi : Fin h) (wi : Fin w) :
-    conv2d W b x o hi wi =
-      b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        W o c kh kw * convPad kH kW x c kh kw hi wi := rfl
-
-/-- Padded reads are bounded by the input bound (out-of-bounds reads are
-    zero). -/
-theorem abs_convPad_le {ic h w kH kW : Nat} (x : Tensor3 ic h w) {a : ℝ}
-    (ha : 0 ≤ a) (hx : ∀ c i j, |x c i j| ≤ a)
-    (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hi : Fin h) (wi : Fin w) :
-    |convPad kH kW x c kh kw hi wi| ≤ a := by
-  unfold convPad
-  split_ifs with h
-  · exact hx _ _ _
-  · simpa using ha
-
-/-- Flat index of a `Kernel4` entry (the suite's row-major layout). -/
-def k4Idx {oc ic kH kW : Nat} (o : Fin oc) (c : Fin ic)
-    (kh : Fin kH) (kw : Fin kW) : Fin (oc * ic * kH * kW) :=
-  finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (o, c), kh), kw)
-
-/-- `k4Idx` reads back through `Kernel4.unflatten`. -/
-theorem unflatten_k4Idx {oc ic kH kW : Nat} (v : Vec (oc * ic * kH * kW))
-    (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    Kernel4.unflatten v o c kh kw = v (k4Idx o c kh kw) := rfl
-
-/-- `Kernel4.flatten` reads off at a `k4Idx` — the forward peer of
-    `unflatten_k4Idx`, lifting a per-entry kernel bound to the flattened vector. -/
-theorem flatten_k4Idx {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    Kernel4.flatten W (k4Idx o c kh kw) = W o c kh kw := by
-  simp only [Kernel4.flatten, k4Idx, Equiv.symm_apply_apply]
-
-/-- Every flat kernel index is a `k4Idx` — lets the abstract `∀ idx` gradient
-    accuracy be discharged per `(o,cc,kh,kw)` by `cnn_conv2_grad_close`. -/
-theorem k4Idx_surj {oc ic kH kW : Nat} (idx : Fin (oc * ic * kH * kW)) :
-    ∃ (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW),
-      idx = k4Idx o c kh kw := by
-  refine ⟨(finProdFinEquiv.symm
-      (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1).1,
-    (finProdFinEquiv.symm
-      (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1).2,
-    (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2,
-    (finProdFinEquiv.symm idx).2, ?_⟩
-  simp only [k4Idx, Prod.mk.eta, Equiv.apply_symm_apply]
-
-/-- The output-channel slabs tile the kernel: summing the slab masses over
-    the output channels recovers the total `ℓ1` mass. -/
-theorem sum_abs_k4 {oc ic kH kW : Nat} (e : Vec (oc * ic * kH * kW)) :
-    ∑ idx, |e idx| =
-      ∑ o : Fin oc, ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        |e (k4Idx o c kh kw)| := by
-  simp only [sum_finProdFinEquiv]; rfl
-
-/-- The `ℓ1` mass of one output-channel slab is at most the total `ℓ1`
-    mass — the conv analogue of a dense column being part of the flat
-    parameter vector. -/
-theorem sum_abs_kernel_slab_le {oc ic kH kW : Nat}
-    (e : Vec (oc * ic * kH * kW)) (o : Fin oc) :
-    ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, |e (k4Idx o c kh kw)| ≤
-      ∑ idx, |e idx| := by
-  rw [sum_abs_k4 e]
-  exact Finset.single_le_sum (f := fun o => ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-    |e (k4Idx o c kh kw)|) (fun _ _ => by positivity) (Finset.mem_univ o)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv forward rounding budget: conv = dense at the

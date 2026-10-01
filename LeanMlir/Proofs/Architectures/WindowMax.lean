@@ -23,8 +23,10 @@ offsets and positions coincide (`windowSmooth_of_maxPool2Smooth`).
 ## Why overlapping windows cost nothing extra
 
 At a smooth point the pool is locally the reindexing `y ↦ y ∘ σ` (`windowMax_flat_hasFDerivAt`),
-`σ` sending each output to its argmax's input position. Overlapping windows only make `σ`
-non-injective, and `reindexCLM`'s adjoint already sums over preimages, so the VJP
+`σ` sending each output to its argmax's input position. The argmax is the first maximal offset
+in row-major order (`windowArgmax`), the cell the emitted `select_and_scatter` (`GE` select)
+picks, so at a tie the gather and the printed scatter still name one cell. Overlapping windows
+only make `σ` non-injective, and `reindexCLM`'s adjoint already sums over preimages, so the VJP
 (`windowMaxHasVJPAt3`) accumulates over every output whose window selects an input: one term for
 tiling windows, up to four for the 3×3/s2 pool. -/
 
@@ -178,25 +180,124 @@ theorem windowSmoothUpTo_of_smoothOrDead (T : Fin H × Fin W → Fin H × Fin W 
     {x : Tensor3 c H W} (hx : WindowSmoothOrDead r s x) : WindowSmoothUpTo r s T x :=
   fun ci ho wo => (hx ci ho wo).imp id fun h ab ab' hne hd => Or.inl (h ab ab' hne hd)
 
+/-- **Margin up to twins**, the quantitative `WindowSmoothUpTo`: every window is entirely `≤ 0`,
+    or a cell dominating it is more than `2δ` above every cell at another position, except
+    positions `T` relates to its own. A perturbation of at most `δ` per entry then keeps every
+    such cell strictly below, so the dominating cell keeps dominating; the twins it ties with
+    must be the same function of whatever moves the input, and then they stay tied. Stated on the
+    pool's input before any ReLU: the descent rungs apply it to the pre-activation, where a dead
+    window is one whose cells are all `≤ 0`. -/
+def WindowMarginUpTo (δ : ℝ) (T : Fin H × Fin W → Fin H × Fin W → Prop) (x : Tensor3 c H W) :
+    Prop :=
+  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
+    (∀ cd : Fin k × Fin k, x ci (r hi_out cd.1) (s wi_out cd.2) ≤ 0) ∨
+    ∀ ab ab' : Fin k × Fin k,
+      (r hi_out ab.1, s wi_out ab.2) ≠ (r hi_out ab'.1, s wi_out ab'.2) →
+      (∀ cd : Fin k × Fin k,
+        x ci (r hi_out cd.1) (s wi_out cd.2) ≤ x ci (r hi_out ab.1) (s wi_out ab.2)) →
+      2 * δ < x ci (r hi_out ab.1) (s wi_out ab.2) - x ci (r hi_out ab'.1) (s wi_out ab'.2) ∨
+        T (r hi_out ab.1, s wi_out ab.2) (r hi_out ab'.1, s wi_out ab'.2)
+
+omit [NeZero k] in
+/-- A margin up to twins holds at every smaller margin. -/
+theorem WindowMarginUpTo.mono {δ δ' : ℝ} (hδ : δ' ≤ δ) {T : Fin H × Fin W → Fin H × Fin W → Prop}
+    {x : Tensor3 c H W} (hx : WindowMarginUpTo r s δ T x) : WindowMarginUpTo r s δ' T x :=
+  fun ci ho wo => (hx ci ho wo).imp id fun h ab ab' hne hd =>
+    (h ab ab' hne hd).imp (fun hlt => by linarith) id
+
+omit [NeZero k] in
+/-- **A margin up to twins from one designated cell per window.** If `T` is an equivalence and
+    every live window has a cell `m` with every other cell at `m`'s position, a twin of it, or
+    more than `2δ` below it, the margin holds: a cell dominating the window is `m` or a twin of
+    `m` (it cannot sit `2δ` below), and twins of `m` inherit `m`'s gaps. The form a concrete
+    instance discharges, one certificate per window. -/
+theorem windowMarginUpTo_of_cert {δ : ℝ} (hδ : 0 ≤ δ) (T : Fin H × Fin W → Fin H × Fin W → Prop)
+    (hsymm : ∀ p q, T p q → T q p) (htrans : ∀ p q u, T p q → T q u → T p u) {x : Tensor3 c H W}
+    (hx : ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
+      (∀ cd : Fin k × Fin k, x ci (r hi_out cd.1) (s wi_out cd.2) ≤ 0) ∨
+      ∃ m : Fin k × Fin k, ∀ cd : Fin k × Fin k,
+        (r hi_out m.1, s wi_out m.2) = (r hi_out cd.1, s wi_out cd.2) ∨
+        T (r hi_out m.1, s wi_out m.2) (r hi_out cd.1, s wi_out cd.2) ∨
+        x ci (r hi_out cd.1) (s wi_out cd.2) + 2 * δ < x ci (r hi_out m.1) (s wi_out m.2)) :
+    WindowMarginUpTo r s δ T x := by
+  intro ci ho wo
+  rcases hx ci ho wo with hdead | ⟨m, hm⟩
+  · exact Or.inl hdead
+  refine Or.inr fun ab ab' hne hdom => ?_
+  -- the dominating cell is at `m`'s position or a twin of `m`
+  have hab : (r ho m.1, s wo m.2) = (r ho ab.1, s wo ab.2) ∨
+      T (r ho m.1, s wo m.2) (r ho ab.1, s wo ab.2) := by
+    rcases hm ab with h | h | h
+    · exact Or.inl h
+    · exact Or.inr h
+    · have := hdom m; linarith
+  have hxm : x ci (r ho m.1) (s wo m.2) ≤ x ci (r ho ab.1) (s wo ab.2) := hdom m
+  rcases hm ab' with h' | h' | h'
+  · -- `ab'` sits at `m`'s position: `ab` is `m`'s twin
+    rcases hab with h | h
+    · exact absurd (h.symm.trans h') hne
+    · exact Or.inr (by rw [← h']; exact hsymm _ _ h)
+  · rcases hab with h | h
+    · exact Or.inr (by rw [← h]; exact h')
+    · exact Or.inr (htrans _ _ _ (hsymm _ _ h) h')
+  · exact Or.inl (by linarith)
+
+omit [NeZero k] in
+/-- At a nonnegative margin the margined input is smooth up to the same twins. -/
+theorem windowSmoothUpTo_of_margin {δ : ℝ} (hδ : 0 ≤ δ) (T : Fin H × Fin W → Fin H × Fin W → Prop)
+    {x : Tensor3 c H W} (hx : WindowMarginUpTo r s δ T x) : WindowSmoothUpTo r s T x :=
+  fun ci ho wo => (hx ci ho wo).imp id fun h ab ab' hne hd =>
+    (h ab ab' hne hd).imp (fun hlt => by linarith) id
+
 -- ════════════════════════════════════════════════════════════════
 -- § Argmax extractor and the window-max characterisation
 -- ════════════════════════════════════════════════════════════════
 
-/-- A (not necessarily unique) argmax of the window at output `(co, ho, wo)`, as an offset.
-    Unique under `WindowSmooth` up to position. -/
+/-- The offsets attaining the max of the window at output `(co, ho, wo)`, as row-major flat
+    indices `a·k + b` (`finProdFinEquiv`). -/
+noncomputable def windowMaxOffsets (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w) :
+    Finset (Fin (k * k)) :=
+  univ.filter fun j => ∀ cd : Fin k × Fin k,
+    x co (r ho cd.1) (s wo cd.2) ≤
+      x co (r ho (finProdFinEquiv.symm j).1) (s wo (finProdFinEquiv.symm j).2)
+
+theorem windowMaxOffsets_nonempty (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w) :
+    (windowMaxOffsets r s x co ho wo).Nonempty := by
+  obtain ⟨ab, -, hab⟩ := (univ : Finset (Fin k × Fin k)).exists_max_image
+    (fun ab => x co (r ho ab.1) (s wo ab.2)) univ_nonempty
+  exact ⟨finProdFinEquiv ab, mem_filter.mpr ⟨mem_univ _, fun cd => by
+    rw [Equiv.symm_apply_apply]; exact hab cd (mem_univ cd)⟩⟩
+
+/-- **The first argmax of the window** at output `(co, ho, wo)`, as an offset: the least maximal
+    offset in row-major order (`a` major, `windowArgmax_first`). That is the cell the emitted
+    `select_and_scatter` routes to: its `GE` select keeps the current pick while it is `≥` the
+    next cell, so it ends on the first maximum in window iteration order. Unique under
+    `WindowSmooth` up to position, and only `windowArgmax_max` is needed off a tie. -/
 noncomputable def windowArgmax (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w) :
     Fin k × Fin k :=
-  Classical.choose
-    ((Finset.univ : Finset (Fin k × Fin k)).exists_max_image
-      (fun ab => x co (r ho ab.1) (s wo ab.2)) Finset.univ_nonempty)
+  finProdFinEquiv.symm ((windowMaxOffsets r s x co ho wo).min' (windowMaxOffsets_nonempty r s x co ho wo))
 
 theorem windowArgmax_max (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w)
     (ab : Fin k × Fin k) :
     x co (r ho ab.1) (s wo ab.2) ≤
       x co (r ho (windowArgmax r s x co ho wo).1) (s wo (windowArgmax r s x co ho wo).2) :=
-  (Classical.choose_spec
-    ((Finset.univ : Finset (Fin k × Fin k)).exists_max_image
-      (fun ab' => x co (r ho ab'.1) (s wo ab'.2)) Finset.univ_nonempty)).2 ab (mem_univ ab)
+  (mem_filter.mp ((windowMaxOffsets r s x co ho wo).min'_mem
+    (windowMaxOffsets_nonempty r s x co ho wo))).2 ab
+
+/-- **No earlier offset attains the max.** Every offset before `windowArgmax` in row-major order
+    is strictly below the window max: the first-maximum half of the `select_and_scatter` reading. -/
+theorem windowArgmax_first (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w)
+    (cd : Fin k × Fin k) (hcd : finProdFinEquiv cd < finProdFinEquiv (windowArgmax r s x co ho wo)) :
+    x co (r ho cd.1) (s wo cd.2) <
+      x co (r ho (windowArgmax r s x co ho wo).1) (s wo (windowArgmax r s x co ho wo).2) := by
+  by_contra hle
+  push Not at hle
+  have hmem : finProdFinEquiv cd ∈ windowMaxOffsets r s x co ho wo :=
+    mem_filter.mpr ⟨mem_univ _, fun ab => by
+      rw [Equiv.symm_apply_apply]; exact (windowArgmax_max r s x co ho wo ab).trans hle⟩
+  have hmin := (windowMaxOffsets r s x co ho wo).min'_le _ hmem
+  rw [windowArgmax, Equiv.apply_symm_apply] at hcd
+  exact absurd hmin (not_le.mpr hcd)
 
 /-- If offset `ab` dominates every window cell, the pooled value is the value there. -/
 theorem windowMax_eq_at_max (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) (wo : Fin w)
@@ -209,6 +310,27 @@ theorem windowMax_eq_argmax_value (x : Tensor3 c H W) (co : Fin c) (ho : Fin h) 
     windowMax r s x co ho wo =
       x co (r ho (windowArgmax r s x co ho wo).1) (s wo (windowArgmax r s x co ho wo).2) :=
   windowMax_eq_at_max r s x co ho wo _ (windowArgmax_max r s x co ho wo)
+
+-- ════════════════════════════════════════════════════════════════
+-- § The fixed gather: the pool with its routing frozen
+-- ════════════════════════════════════════════════════════════════
+
+omit [NeZero k] in
+/-- **The window gather at a fixed selection** `σ`: output `(ch, hi, wi)` reads the window cell
+    at offset `σ ch hi wi`. Linear in `x`, with no argmax to decide. Wherever `σ` names a cell
+    dominating every window, it IS the pool (`windowMax_eq_windowGather`); that is how a pool
+    with tied windows is handled, the ties being routed to one fixed cell. -/
+noncomputable def windowGather (σ : Fin c → Fin h → Fin w → Fin k × Fin k) (x : Tensor3 c H W) :
+    Tensor3 c h w :=
+  fun ch hi wi => x ch (r hi (σ ch hi wi).1) (s wi (σ ch hi wi).2)
+
+/-- **The pool is the gather at a dominating selection.** -/
+theorem windowMax_eq_windowGather (σ : Fin c → Fin h → Fin w → Fin k × Fin k) (x : Tensor3 c H W)
+    (hdom : ∀ ch hi wi (cd : Fin k × Fin k),
+      x ch (r hi cd.1) (s wi cd.2) ≤ x ch (r hi (σ ch hi wi).1) (s wi (σ ch hi wi).2)) :
+    windowMax r s x = windowGather r s σ x :=
+  funext fun ch => funext fun hi => funext fun wi =>
+    windowMax_eq_at_max r s x ch hi wi _ (hdom ch hi wi)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Local linearisation, the smooth-point Jacobian and the VJP

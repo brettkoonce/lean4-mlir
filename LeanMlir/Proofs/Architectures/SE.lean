@@ -56,8 +56,8 @@ All foundational definitions and proofs live in `Tensor.lean`:
 This file specializes to the SE pattern: `f = identity`, `g = gate`.
 `seBlockHasVJP` takes the gate abstractly (it only needs `HasVJP gate`).
 The file then defines the concrete gate `seGate` (GAP → dense → swish →
-dense → sigmoid → broadcast) with its VJP `seGateHasVJP`, the pieces it
-needs (`sigmoidHasVJP`, `broadcastFlatHasVJP`), and the full block
+dense → sigmoid → broadcast) with its VJP `seGateHasVJP`, the broadcast it
+needs (`broadcastFlatHasVJP`; `sigmoidHasVJP` is in `Architectures.Activations`), and the full block
 `seBlockFull` / `seBlockFullHasVJP`.
 
 ## References
@@ -142,8 +142,8 @@ broadcasts the per-channel result back to spatial.
     gate = broadcast ∘ sigmoid ∘ dense_exp ∘ swish ∘ dense_red ∘ globalAvgPool
 
 and `seGateHasVJP` assembles its VJP with `vjpComp` from
-`globalAvgPoolFlatHasVJP` (CNN.lean), `denseHasVJP`, `swishHasVJP`
-(LayerNorm.lean), `sigmoidHasVJP` and `broadcastFlatHasVJP` (this file;
+`globalAvgPoolFlatHasVJP` (CNN.lean), `denseHasVJP`, `swishHasVJP` and
+`sigmoidHasVJP` (Activations.lean), and `broadcastFlatHasVJP` (this file;
 broadcast is the adjoint of GAP up to the `1/(h·w)` factor).
 
 ## Why this generalizes
@@ -171,52 +171,6 @@ theorem seBlockHasVJP_correct {n : Nat}
   (seBlockHasVJP gate hg_diff hg).correct x dy i
 
 open Finset BigOperators
-
--- ════════════════════════════════════════════════════════════════
--- § Sigmoid activation (smooth, logistic)
--- ════════════════════════════════════════════════════════════════
-
-/-- The logistic function `1 / (1 + e^{−x})` on one real. -/
-noncomputable def sigmoidScalar (x : ℝ) : ℝ :=
-  1 / (1 + Real.exp (-x))
-
-/-- `sigmoidScalar` applied to each entry of a vector. -/
-noncomputable def sigmoid (n : Nat) (x : Vec n) : Vec n :=
-  fun i => sigmoidScalar (x i)
-
-/-- The derivative of `sigmoidScalar` at `x`, as Mathlib's `deriv`. -/
-noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
-  deriv sigmoidScalar x
-
-/-- `sigmoidScalar` is Mathlib's logistic function `Real.sigmoid`. -/
-theorem sigmoidScalar_eq_sigmoid : sigmoidScalar = Real.sigmoid := by
-  funext x; simp [sigmoidScalar, Real.sigmoid]
-
-/-- The closed form σ' = σ·(1 − σ). `sigmoidHasVJP`'s backward is stated with `deriv`; the
-    emitted `sigmoidBack` text computes `σ(x)·(1 − σ(x))` — this is the equation between them,
-    so it stays pinned in the axiom audit although no Lean proof consumes it. -/
-theorem sigmoidScalarDeriv_eq (x : ℝ) :
-    sigmoidScalarDeriv x = sigmoidScalar x * (1 - sigmoidScalar x) := by
-  simp [sigmoidScalarDeriv, sigmoidScalar_eq_sigmoid, Real.deriv_sigmoid]
-
-@[fun_prop]
-lemma sigmoidScalar_differentiable : Differentiable ℝ sigmoidScalar := by
-  rw [sigmoidScalar_eq_sigmoid]; exact differentiable_sigmoid
-
-lemma sigmoid_differentiable (D : Nat) : Differentiable ℝ (sigmoid D) := by
-  unfold sigmoid; fun_prop
-
-theorem pdiv_sigmoid (n : Nat) (x : Vec n) (i j : Fin n) :
-    pdiv (sigmoid n) x i j =
-    if i = j then sigmoidScalarDeriv (x i) else 0 :=
-  pdiv_elementwise sigmoidScalar x (fun _ => sigmoidScalar_differentiable _) i j
-
-/-- The VJP of elementwise `sigmoid`: `dy ⊙ σ'(x)`. -/
-noncomputable def sigmoidHasVJP (n : Nat) : HasVJP (sigmoid n) where
-  backward := fun x dy i => dy i * sigmoidScalarDeriv (x i)
-  correct := by
-    intro x dy i
-    simp [pdiv_sigmoid, mul_comm]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Broadcast: per-channel scalar → spatial (adjoint of GAP)

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
+/-! # The CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
 
 The Chapter-4 peer of `CnnFold` — a deeper, two-spatial-scale conv net
 (`(conv→relu)×2 → pool → (conv→relu)×2 → pool → (dense→relu)×2 → dense`; 14 params:
@@ -30,17 +30,21 @@ only new content is the per-net `den = certified` capstones below.
 
 ## Scope (same boundary as cnn/mlp/linear)
 * Below the output layer the cotangents are the rendered chain (`mlpCotOut1`/`mlpCotOut0` in the
-  head; `cnnChainCotW1`, `cnnChainCotW2`, `cifarChainCotW2` below it); that they equal the loss
-  gradient at each layer's output is not stated.
+  head; `cnnChainCotW1`, `cnnChainCotW2`, `cifarChainCotW2` below it). The loss-gradient
+  statement is `cifar_net_lossGrad` (`CifarParamGrad`), at the un-fused `*Grad` nodes these ops
+  step by and with each pool's cotangent routed to one maximal cell, as the rendered
+  `select_and_scatter` does; this chain's `maxPoolBackDenote` routes it to the first maximal cell
+  (`maxPool2Argmax`), the op's own choice, so it is the capstone's chain at that selection
+  (`cifarChainCotW2_eq_sel`, `CnnFold.cnnChainCotW2_eq_sel`).
 * Per-op `pretty` lexing + ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CifarPoC
+namespace Proofs.CifarFold
 open Proofs.SgdNode
 
-/-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnPoC`
+/-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnFold`
 
 The head `pool2 → W₅→relu→W₆→relu→W₇` is a 3-layer MLP; per-layer cotangents are the
 IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). Every head op's
@@ -97,7 +101,7 @@ noncomputable def cifarChainCotW2 {c1 c2 h w kH kW : Nat}
 
 /-- **The emitted loss-cotangent graph denotes the composed softmax-CE gradient of the cifar forward**
     (`= softmax(cifarCnnForward … x) − onehot = ∂CE/∂logits` at the real forward logits). The cifar
-    peer of `CnnPoC.cnnLossCot_den` (same proof, `cifarCnnForward` for the logits operand). -/
+    peer of `CnnFold.cnnLossCot_den` (same proof, `cifarCnnForward` for the logits operand). -/
 theorem cifarLossCot_den {ic c1 c2 h w d1 nClasses kH kW : Nat}
     (nlogN ohN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
@@ -115,7 +119,7 @@ theorem cifarLossCot_den {ic c1 c2 h w d1 nClasses kH kW : Nat}
 /-- **Dense output weight `W₇`, tied to the WHOLE softmax-CE loss through the cifar forward.** With the
     dense-head input = the real cifar forward pool₂ output and the cotangent the emitted loss graph
     denotes (`cifarLossCot_den`), the `weightSgd` for `W₇` denotes `W₇ − lr·∂(crossEntropy ∘ forward)/∂W₇`.
-    The cifar peer of `CnnPoC.cnn_W5_tied_totalloss`. -/
+    The cifar peer of `CnnFold.cnn_W5_tied_totalloss`. -/
 theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
     (aN lrStr dyN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
@@ -170,8 +174,8 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
     `W₇,b₇,W₆,b₆,W₅,b₅` and the four conv kernels/biases — at the real cifar forward and the
     rendered backward-chain cotangents driven by the composed softmax-CE cotangent
     `g = softmax(cifarCnnForward … xv) − onehot` (`cifarLossCot_den`), denote
-    `θ − lr·(certified ∂layer/∂θ · c)`. That each `c` equals the loss gradient at a layer below the
-    output is not stated; at the output layer `cifar_W7_tied_totalloss` folds `W₇` to `∂CE/∂W₇`.
+    `θ − lr·(certified ∂layer/∂θ · c)`. The loss-gradient form is `cifar_net_lossGrad` (see the
+    module's Scope); at the output layer `cifar_W7_tied_totalloss` folds `W₇` to `∂CE/∂W₇`.
     The dense clauses are `SgdNode.denseW_den`/`denseB_den` at `g`, `mlpCotOut1` and `mlpCotOut0`;
     the conv clauses are `convW_den`/`convB_den` at the cotangent the backward chain delivers:
     `cnnChainCotW2` for conv₄ (relu mask on pool₂-back of the dense head), `cnnChainCotW1` for
@@ -239,4 +243,4 @@ theorem cifar_train_step_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
     convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     convWSgdTied_holds, convBSgdTied_holds⟩
 
-end Proofs.CifarPoC
+end Proofs.CifarFold

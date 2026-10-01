@@ -46,8 +46,13 @@ patches (flat image regions). There the net has no derivative in the image, so t
 `R34SmoothAtB` rejects them, but the tied cells are the same function of the stem's weights, so the
 loss IS differentiable in the parameters. `R34LossSmoothAtB` allows exactly those ties
 (`StemPoolTwinAt` at `StemConvTwin`), and the stem's parameter nodes are proved through the argmax
-gather they reduce to (`r34StemPool_param_germ`). The probe script
-scripts/probes/stem_pool_smooth_probe.py checks the stem's clauses on real batches.
+gather they reduce to (`r34StemPool_param_germ`). At a tied window the render's pool backward
+(`select_and_scatter` with a `GE` select) sends the cotangent to the window's first maximal cell, and
+so does the denotation `maxPool3s2BackB` (its reindex reads `windowArgmax`, the first maximum).
+Every pool selector (`IsMaxPool3s2SelectB`) gives the same four stem gradients
+(`r34Stem_select_grads_eq`): `r34_net_lossGrad_stemSelect` states the stem's nodes at any of them.
+The probe script scripts/probes/stem_pool_smooth_probe.py checks the stem's clauses on real
+batches.
 -/
 
 open Proofs Proofs.StableHLO
@@ -245,10 +250,34 @@ theorem r34StemZ_twin (N h w : Nat) {ic oc : Nat} (x : Vec (N * (ic * (2 * (2 * 
 
 variable {N h w}
 
-/-- **Along any family of stem parameters, the pooled stem is the argmax gather.** The family
-    passes through the stem's own parameters at `θ₀`; there the pre-ReLU has no zero entry and
-    every pool window is smooth up to input-patch twins. Then the pooled stem agrees near `θ₀`
-    with the gather, whose argmax is fixed at `θ₀`. -/
+/-- **Along any family of stem parameters, the pooled stem is a fixed gather**, for any pool
+    selector `σ` at the stem's post-ReLU activation (`IsMaxPool3s2SelectB`). The family passes
+    through the stem's own parameters at `θ₀`; there the pre-ReLU has no zero entry and every pool
+    window is smooth up to input-patch twins. Then the pooled stem agrees near `θ₀` with the gather
+    along `σ`, whichever tied twin `σ` picks. -/
+theorem r34StemPool_param_germ_select {P : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
+      (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (hσ : IsMaxPool3s2SelectB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) σ)
+    (Wf : Vec P → Kernel4 oc ic 7 7) (bf γf βf : Vec P → Vec oc) (θ₀ : Vec P)
+    (h0 : bnBatchLA N oc (2 * h) (2 * w) εs (γf θ₀) (βf θ₀) (batchMap N (flatConvStride2 (Wf θ₀) (bf θ₀)) x)
+      = bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+    (hc : ContinuousAt (fun θ => bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ)
+      (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x)) θ₀) :
+    (fun θ => r34StemB N h w (Wf θ) (bf θ) εs (γf θ) (βf θ) x) =ᶠ[nhds θ₀]
+      (fun θ k => relu _ (bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ)
+          (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x)) (σ k)) :=
+  stemPoolRelu_param_eventuallyEq_select
+    (fun θ => bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ) (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x))
+    θ₀ hc (by rw [h0]; exact hstem) (StemConvTwin N h w oc x) (by rw [h0]; exact hpool)
+    (fun θ r ci p q hT => r34StemZ_twin N h w x εs (Wf θ) (bf θ) (γf θ) (βf θ) r ci p q hT)
+    σ (by rw [h0]; exact hσ)
+
+/-- **Along any family of stem parameters, the pooled stem is the argmax gather**: the selector
+    `maxPool3s2LocalReindexB` names at the stem's own parameters (`r34StemPool_param_germ_select`). -/
 theorem r34StemPool_param_germ {P : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
@@ -262,16 +291,50 @@ theorem r34StemPool_param_germ {P : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) 
     (fun θ => r34StemB N h w (Wf θ) (bf θ) εs (γf θ) (βf θ) x) =ᶠ[nhds θ₀]
       (fun θ k => relu _ (bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ)
           (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x))
-        (maxPool3s2LocalReindexB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) k)) := by
-  have hg := stemPoolRelu_param_eventuallyEq
-    (fun θ => bnBatchLA N oc (2 * h) (2 * w) εs (γf θ) (βf θ) (batchMap N (flatConvStride2 (Wf θ) (bf θ)) x))
-    θ₀ hc (by rw [h0]; exact hstem) (StemConvTwin N h w oc x) (by rw [h0]; exact hpool)
-    (fun θ r ci p q hT => r34StemZ_twin N h w x εs (Wf θ) (bf θ) (γf θ) (βf θ) r ci p q hT)
-  rw [h0] at hg
-  exact hg
+        (maxPool3s2LocalReindexB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) k)) :=
+  r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool _
+    (maxPool3s2LocalReindexB_isSelect N oc h w _) Wf bf γf βf θ₀ h0 hc
+
+/-- The stem's cotangent at the BN output with the pool's cotangent routed along a selector `σ`:
+    the scatter along `σ`, then the stem relu's mask. At the argmax gather it is the render's
+    `r34StemCotN` (`r34StemCotN_eq_at`). -/
+noncomputable def r34StemCotNAt (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (cotPool : Vec (N * (oc * h * w))) :
+    Vec (N * (oc * (2 * h) * (2 * w))) :=
+  reluMaskB (N * (oc * (2 * h) * (2 * w)))
+    (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+    ((reindexVJP σ).backward 0 cotPool)
+
+/-- …and at the conv output, through the BN backward. -/
+noncomputable def r34StemCotCAt (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (cotPool : Vec (N * (oc * h * w))) :
+    Vec (N * (oc * (2 * h) * (2 * w))) :=
+  bnInB N oc (2 * h) (2 * w) εs γs (batchMap N (flatConvStride2 Ws bs) x)
+    (r34StemCotNAt σ Ws bs εs γs βs x cotPool)
+
+/-- The render's stem cotangents are the argmax gather's. -/
+theorem r34StemCotN_eq_at (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (cotPool : Vec (N * (oc * h * w))) :
+    r34StemCotN N h w Ws bs εs γs βs x cotPool =
+      r34StemCotNAt (maxPool3s2LocalReindexB N oc h w
+        (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Ws bs εs γs βs x cotPool := by
+  unfold r34StemCotN r34StemCotNAt r34StemCotP
+  rw [← maxPool3s2FlatBackB_eq_reindex]
+  exact congrArg _ (den_maxPool3s2BackB_eq_flatBackB (N := N) (c := oc) (h := h) (w := w) ""
+    (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) (.operand "" cotPool))
+
+theorem r34StemCotC_eq_at (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (cotPool : Vec (N * (oc * h * w))) :
+    r34StemCotC N h w Ws bs εs γs βs x cotPool =
+      r34StemCotCAt (maxPool3s2LocalReindexB N oc h w
+        (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Ws bs εs γs βs x cotPool := by
+  unfold r34StemCotC r34StemCotCAt
+  rw [r34StemCotN_eq_at]
 
 /-- The stem's loss as the gather model sees it, at the BN output: the pool replaced by the fixed
-    argmax gather `σ`. -/
+    gather `σ`. -/
 noncomputable def r34StemGNg (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
     (Gn : Vec (N * (oc * h * w)) → Vec 1) : Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
   fun u => Gn (fun k => relu _ u (σ k))
@@ -282,9 +345,34 @@ noncomputable def r34StemGCg (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 
     Vec (N * (oc * (2 * h) * (2 * w))) → Vec 1 :=
   fun z => r34StemGNg σ Gn (bnBatchLA N oc (2 * h) (2 * w) εs γs βs z)
 
-/-- **The gather model's gradients are the render's stem cotangents.** No pool hypothesis: the
-    gather is linear after the ReLU. The loss's gradient at the pooled stem output transfers
-    because at the stem's own parameters the pool IS the gather (`hpt`). -/
+/-- **The gather model's gradients are the stem cotangents routed along `σ`.** No pool
+    hypothesis: the gather is linear after the ReLU. The loss's gradient at the pooled stem output
+    transfers because at the stem's own parameters the pool IS the gather along `σ` (`hpt`). -/
+theorem r34StemGCg_hasGradAt_at (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpt : r34StemB N h w Ws bs εs γs βs x = fun k => relu _
+      (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x)) (σ k))
+    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
+    (hGn : HasGradAt Gn (r34StemB N h w Ws bs εs γs βs x) dy) :
+    HasGradAt (r34StemGNg σ Gn)
+        (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+        (r34StemCotNAt σ Ws bs εs γs βs x dy)
+      ∧ HasGradAt (r34StemGCg σ Gn εs γs βs)
+        (batchMap N (flatConvStride2 Ws bs) x) (r34StemCotCAt σ Ws bs εs γs βs x dy) := by
+  -- the gather model's backward is the ReLU mask after the scatter along `σ`, by definition
+  have hN : HasGradAt (r34StemGNg σ Gn)
+      (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+      (r34StemCotNAt σ Ws bs εs γs βs x dy) :=
+    HasGradAt.comp (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
+      (hGn.congr_point hpt) (gatherRelu_differentiableAt _ _ hstem) (gatherReluHasVJPAt _ _ hstem)
+  exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc (2 * h) (2 * w) εs hεs γs βs) _)
+    ((bnBatchLAHasVJP N oc (2 * h) (2 * w) εs hεs γs βs).toHasVJPAt _)).of_eq
+    (bnInB_eq_bnBackB N oc (2 * h) (2 * w) εs hεs γs βs _ _).symm⟩
+
+/-- **The gather model's gradients are the render's stem cotangents** (`r34StemGCg_hasGradAt_at`
+    at the argmax gather). -/
 theorem r34StemGCg_hasGradAt (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
@@ -300,61 +388,67 @@ theorem r34StemGCg_hasGradAt (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) 
       ∧ HasGradAt (r34StemGCg (maxPool3s2LocalReindexB N oc h w
           (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Gn εs γs βs)
         (batchMap N (flatConvStride2 Ws bs) x) (r34StemCotC N h w Ws bs εs γs βs x dy) := by
-  have hN : HasGradAt (r34StemGNg (maxPool3s2LocalReindexB N oc h w
-        (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) Gn)
-      (bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
-      (r34StemCotN N h w Ws bs εs γs βs x dy) :=
-    (HasGradAt.comp (x := bnBatchLA N oc (2 * h) (2 * w) εs γs βs (batchMap N (flatConvStride2 Ws bs) x))
-      (hGn.congr_point hpt) (gatherRelu_differentiableAt _ _ hstem)
-      (gatherReluHasVJPAt _ _ hstem)).of_eq
-      ((gatherReluHasVJPAt_stem_backward N _ hstem dy).trans
-        (congrArg _ ((den_maxPool3s2BackB_eq_flatBackB "" _ (.operand "" dy)).symm.trans rfl)))
-  exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc (2 * h) (2 * w) εs hεs γs βs) _)
-    ((bnBatchLAHasVJP N oc (2 * h) (2 * w) εs hεs γs βs).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc (2 * h) (2 * w) εs hεs γs βs _ _).symm⟩
+  rw [r34StemCotN_eq_at, r34StemCotC_eq_at]
+  exact r34StemGCg_hasGradAt_at _ Ws bs εs hεs γs βs x hstem hpt hGn
 
-/-- **Stem, every parameter node a loss derivative** — the four nodes `r34StemTiedB` ties, `Φ` the
-    loss as a function of the stem's `(W, b, γ, β)`. -/
+/-- **Stem, every parameter node a loss derivative, at given cotangents**: the four nodes
+    `r34StemTiedB` ties, read at the conv-output cotangent `cotC` and the BN-output cotangent
+    `cotN`, `Φ` the loss as a function of the stem's `(W, b, γ, β)`. -/
+def r34StemLossTiedAtB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (Φ : Kernel4 oc ic 7 7 → Vec oc → Vec oc → Vec oc → Vec 1)
+    (cotC cotNv : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
+  let sc := batchMap N (flatConvStride2 Ws bs) x
+  (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) bs γs βs) (Kernel4.flatten Ws)
+        (den (SHlo.convStridedWeightGradB xN bs x Ws (.operand cotN cotC))))
+  ∧ (HasGradAt (fun θ => Φ Ws θ γs βs) bs
+        (den (SHlo.convStridedBiasGradB (h := 2 * h) (w := 2 * w) Ws x bs (.operand cotN cotC))))
+  ∧ (HasGradAt (fun θ => Φ Ws bs θ βs) γs
+        (den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc (2 * h) (2 * w) sc)
+          (.operand cotN (reassocB N oc (2 * h) (2 * w) cotNv)))))
+  ∧ (HasGradAt (fun θ => Φ Ws bs γs θ) βs
+        (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 2 * h) (w := 2 * w)
+          (.operand cotN (reassocB N oc (2 * h) (2 * w) cotNv)))))
+
+/-- **Stem, every parameter node a loss derivative** — `r34StemLossTiedAtB` at the render's
+    cotangents `r34StemCotC` / `r34StemCotN`, the pool's cotangent `dy`. -/
 def r34StemLossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
     (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (Φ : Kernel4 oc ic 7 7 → Vec oc → Vec oc → Vec oc → Vec 1) (dy : Vec (N * (oc * h * w))) :
     Prop :=
-  let sc := batchMap N (flatConvStride2 Ws bs) x
-  (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) bs γs βs) (Kernel4.flatten Ws)
-        (den (SHlo.convStridedWeightGradB xN bs x Ws
-          (.operand cotN (r34StemCotC N h w Ws bs εs γs βs x dy)))))
-  ∧ (HasGradAt (fun θ => Φ Ws θ γs βs) bs
-        (den (SHlo.convStridedBiasGradB (h := 2 * h) (w := 2 * w) Ws x bs
-          (.operand cotN (r34StemCotC N h w Ws bs εs γs βs x dy)))))
-  ∧ (HasGradAt (fun θ => Φ Ws bs θ βs) γs
-        (den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc (2 * h) (2 * w) sc)
-          (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotN N h w Ws bs εs γs βs x dy))))))
-  ∧ (HasGradAt (fun θ => Φ Ws bs γs θ) βs
-        (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 2 * h) (w := 2 * w)
-          (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotN N h w Ws bs εs γs βs x dy))))))
+  r34StemLossTiedAtB xN cotN vN epsStr Ws bs εs γs βs x Φ
+    (r34StemCotC N h w Ws bs εs γs βs x dy) (r34StemCotN N h w Ws bs εs γs βs x dy)
 
-theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
+/-- **Stem, every parameter node a loss derivative, with the pool's cotangent routed by ANY
+    selector** `σ` at the stem's post-ReLU activation: each node read at the cotangents
+    `r34StemCotCAt σ` / `r34StemCotNAt σ` is the gradient of `Φ` in its slot. The loss is the
+    real pooled net's, not a gather model's: along each one-slot family the pooled stem IS the
+    gather along `σ` near the stem's parameters (`r34StemPool_param_germ_select`). -/
+theorem r34_stem_lossTiedB_select (xN cotN vN epsStr : String)
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
     (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
       (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (hσ : IsMaxPool3s2SelectB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) σ)
     {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
     (hGn : HasGradAt Gn (r34StemB N h w Ws bs εs γs βs x) dy)
     {Φ : Kernel4 oc ic 7 7 → Vec oc → Vec oc → Vec oc → Vec 1}
     (hΦ : ∀ W b γ β, Φ W b γ β = Gn (r34StemB N h w W b εs γ β x)) :
-    r34StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy := by
+    r34StemLossTiedAtB xN cotN vN epsStr Ws bs εs γs βs x Φ
+      (r34StemCotCAt σ Ws bs εs γs βs x dy) (r34StemCotNAt σ Ws bs εs γs βs x dy) := by
   rw [show Φ = fun W b γ β => Gn (r34StemB N h w W b εs γ β x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
   have hbn := bnBatchLA_continuous N oc (2 * h) (2 * w) εs hεs
   -- the four one-slot parameter families, each through the stem's own parameters
-  have gW := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+  have gW := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ
     Kernel4.unflatten (fun _ => bs) (fun _ => γs) (fun _ => βs) (Kernel4.flatten Ws)
     (by rw [Kernel4.unflatten_flatten])
     ((hbn γs βs).continuousAt.comp (batchMap_param_differentiableAt
       (fun θ y => flatConvStride2 (Kernel4.unflatten θ) bs y) x _
       (fun y => (GradNodeB.flatConvStride2_weight_differentiable bs y) _)).continuousAt)
-  have gb := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+  have gb := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ
     (fun _ => Ws) id (fun _ => γs) (fun _ => βs) bs rfl
     ((hbn γs βs).continuousAt.comp (batchMap_param_differentiableAt
       (fun θ y => flatConvStride2 Ws θ y) x _
@@ -373,11 +467,11 @@ theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
       (GradNodeB.bnPerChannelFlat_beta_differentiable oc (N * (2 * h * (2 * w))) εs γs
         (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
           (batchMap N (flatConvStride2 Ws bs) x)))).continuous
-  have gγ := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+  have gγ := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ
     (fun _ => Ws) (fun _ => bs) id (fun _ => βs) γs rfl hγc.continuousAt
-  have gβ := r34StemPool_param_germ Ws bs εs γs βs x hstem hpool
+  have gβ := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ
     (fun _ => Ws) (fun _ => bs) (fun _ => γs) id βs rfl hβc.continuousAt
-  obtain ⟨hN, hC⟩ := r34StemGCg_hasGradAt Ws bs εs hεs γs βs x hstem gb.self_of_nhds hGn
+  obtain ⟨hN, hC⟩ := r34StemGCg_hasGradAt_at σ Ws bs εs hεs γs βs x hstem gb.self_of_nhds hGn
   exact ⟨(GradNodeB.convStridedW_hasGradAt (h := 2 * h) (w := 2 * w) xN cotN bs x Ws
       hC).congr_of_eventuallyEq (gW.fun_comp Gn).symm,
     (GradNodeB.convStridedB_hasGradAt (h := 2 * h) (w := 2 * w) cotN Ws x bs
@@ -386,6 +480,86 @@ theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
       (gγ.fun_comp Gn).symm,
     (GradNodeB.bnBeta_hasGradAt cotN εs γs βs _ hN).congr_of_eventuallyEq
       (gβ.fun_comp Gn).symm⟩
+
+theorem r34_stem_lossTiedB (xN cotN vN epsStr : String)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
+      (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
+    (hGn : HasGradAt Gn (r34StemB N h w Ws bs εs γs βs x) dy)
+    {Φ : Kernel4 oc ic 7 7 → Vec oc → Vec oc → Vec oc → Vec 1}
+    (hΦ : ∀ W b γ β, Φ W b γ β = Gn (r34StemB N h w W b εs γ β x)) :
+    r34StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy := by
+  unfold r34StemLossTiedB
+  rw [r34StemCotC_eq_at, r34StemCotN_eq_at]
+  exact r34_stem_lossTiedB_select xN cotN vN epsStr Ws bs εs hεs γs βs x hstem hpool _
+    (maxPool3s2LocalReindexB_isSelect N oc h w _) hGn hΦ
+
+/-- **Routing a tied window's cotangent to either twin gives the same stem gradients.** For any
+    pool selector `σ` at the stem's post-ReLU activation and any pool cotangent `dy`, the four
+    stem parameter nodes read at the `σ`-routed cotangents denote what they denote at the
+    render's `r34StemCotC` / `r34StemCotN`. Tied twins read identical input patches and share a
+    BN output, so moving a cotangent between them leaves the conv weight and bias gradients and
+    BN's `γ`/`β` gradients unchanged. The proof does not compute this: both node sets are
+    gradients of one function, the linear loss `linLoss dy` after the pooled stem, at the same
+    point (`r34_stem_lossTiedB_select`, twice), and a gradient is unique. -/
+theorem r34Stem_select_grads_eq (xN cotN vN epsStr : String)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
+      (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (hσ : IsMaxPool3s2SelectB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) σ)
+    (dy : Vec (N * (oc * h * w))) :
+    den (SHlo.convStridedWeightGradB xN bs x Ws (.operand cotN (r34StemCotCAt σ Ws bs εs γs βs x dy)))
+        = den (SHlo.convStridedWeightGradB xN bs x Ws
+            (.operand cotN (r34StemCotC N h w Ws bs εs γs βs x dy)))
+      ∧ den (SHlo.convStridedBiasGradB (h := 2 * h) (w := 2 * w) Ws x bs
+          (.operand cotN (r34StemCotCAt σ Ws bs εs γs βs x dy)))
+        = den (SHlo.convStridedBiasGradB (h := 2 * h) (w := 2 * w) Ws x bs
+            (.operand cotN (r34StemCotC N h w Ws bs εs γs βs x dy)))
+      ∧ den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc (2 * h) (2 * w) (batchMap N (flatConvStride2 Ws bs) x))
+          (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotNAt σ Ws bs εs γs βs x dy))))
+        = den (SHlo.bnGammaGradB vN epsStr εs (reassocB N oc (2 * h) (2 * w) (batchMap N (flatConvStride2 Ws bs) x))
+            (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotN N h w Ws bs εs γs βs x dy))))
+      ∧ den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 2 * h) (w := 2 * w)
+          (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotNAt σ Ws bs εs γs βs x dy))))
+        = den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := 2 * h) (w := 2 * w)
+            (.operand cotN (reassocB N oc (2 * h) (2 * w) (r34StemCotN N h w Ws bs εs γs βs x dy)))) := by
+  obtain ⟨a1, a2, a3, a4⟩ := r34_stem_lossTiedB_select xN cotN vN epsStr Ws bs εs hεs γs βs x hstem
+    hpool σ hσ (hasGradAt_linLoss dy _) (Φ := fun W b γ β => linLoss dy (r34StemB N h w W b εs γ β x))
+    (fun _ _ _ _ => rfl)
+  obtain ⟨b1, b2, b3, b4⟩ := r34_stem_lossTiedB xN cotN vN epsStr Ws bs εs hεs γs βs x hstem
+    hpool (hasGradAt_linLoss dy _) (Φ := fun W b γ β => linLoss dy (r34StemB N h w W b εs γ β x))
+    (fun _ _ _ _ => rfl)
+  exact ⟨funext fun j => (a1.pdiv_eq j).symm.trans (b1.pdiv_eq j),
+    funext fun j => (a2.pdiv_eq j).symm.trans (b2.pdiv_eq j),
+    funext fun j => (a3.pdiv_eq j).symm.trans (b3.pdiv_eq j),
+    funext fun j => (a4.pdiv_eq j).symm.trans (b4.pdiv_eq j)⟩
+
+/-- **The stem bundle holds at any selector's routing.** `r34StemLossTiedB` (the render's
+    cotangents, as the R34 / R50 loss-gradient capstones state it) gives the same four gradients
+    read at the cotangents routed along any pool selector `σ` (`r34Stem_select_grads_eq`): in
+    particular along the render's `select_and_scatter`, which picks one maximal cell per window. -/
+theorem r34StemLossTiedB.select {xN cotN vN epsStr : String}
+    {Ws : Kernel4 oc ic 7 7} {bs : Vec oc} {εs : ℝ} (hεs : 0 < εs) {γs βs : Vec oc}
+    {x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))}
+    (hstem : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpool : StemPoolTwinAt N h w (StemConvTwin N h w oc x)
+      (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    {Φ : Kernel4 oc ic 7 7 → Vec oc → Vec oc → Vec oc → Vec 1} {dy : Vec (N * (oc * h * w))}
+    (hT : r34StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy)
+    (σ : Fin (N * (oc * h * w)) → Fin (N * (oc * (2 * h) * (2 * w))))
+    (hσ : IsMaxPool3s2SelectB N oc h w (cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) σ) :
+    r34StemLossTiedAtB xN cotN vN epsStr Ws bs εs γs βs x Φ
+      (r34StemCotCAt σ Ws bs εs γs βs x dy) (r34StemCotNAt σ Ws bs εs γs βs x dy) := by
+  obtain ⟨e1, e2, e3, e4⟩ := r34Stem_select_grads_eq xN cotN vN epsStr Ws bs εs hεs γs βs x hstem
+    hpool σ hσ dy
+  obtain ⟨t1, t2, t3, t4⟩ := hT
+  exact ⟨t1.of_eq e1.symm, t2.of_eq e2.symm, t3.of_eq e3.symm, t4.of_eq e4.symm⟩
 
 /-- **Head, both parameter nodes loss derivatives** — the classifier weight and bias nodes
     `r34HeadTiedB` ties, `Φ` the loss as a function of `(Wd, bd)`. -/
@@ -857,6 +1031,46 @@ theorem r34_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
   r34_net_lossGrad N xN cotN vN epsStr w hq x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+
+/-- **The stem's gradient nodes at the render's own pool routing.** The stem bundle of
+    `r34_net_lossGrad` reads the four stem nodes at the cotangent the pool backward
+    `maxPool3s2BackB` denotes, which routes each window to `maxPool3s2LocalReindexB`'s cell, the
+    window's first maximum, as the emitted `select_and_scatter` does. This corollary states the
+    nodes at any other routing too: for ANY pool selector `σ` at the stem's post-ReLU activation, the four nodes read at the cotangents routed along `σ` are the gradients
+    of `L` in the stem's parameters (`r34StemLossTiedB.select`). The tied windows real ImageNet
+    batches have are exactly the ones `R34LossSmoothAtB`'s pool clause allows. -/
+theorem r34_net_lossGrad_stemSelect (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
+    (w : R34BWeights nCls) (hq : R34PosB w)
+    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34LossSmoothAtB N w x)
+    {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
+    (hL : HasGradAt L (resnet34ForwardBFull N w x) g)
+    (σ : Fin (N * (64 * 56 * 56)) → Fin (N * (64 * (2 * 56) * (2 * 56))))
+    (hσ : IsMaxPool3s2SelectB N 64 56 56
+      (cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x) σ) :
+    let dyE1 := r34HeadCotBlk N 7 7 w.Wd w.bd (r34Pre16 N w x) g
+    let dyE0 := r34IdCotIn N 7 7 w.e1 (r34Pre15 N w x) dyE1
+    let dyD4 := r34IdCotIn N 7 7 w.e0 (r34Pre14 N w x) dyE0
+    let dyC4 := r34DownCotIn N 7 7 w.d4 (r34Pre13 N w x) dyD4
+    let dyC3 := r34IdCotIn N 14 14 w.c4 (r34Pre12 N w x) dyC4
+    let dyC2 := r34IdCotIn N 14 14 w.c3 (r34Pre11 N w x) dyC3
+    let dyC1 := r34IdCotIn N 14 14 w.c2 (r34Pre10 N w x) dyC2
+    let dyC0 := r34IdCotIn N 14 14 w.c1 (r34Pre9 N w x) dyC1
+    let dyD3 := r34IdCotIn N 14 14 w.c0 (r34Pre8 N w x) dyC0
+    let dyB2 := r34DownCotIn N 14 14 w.d3 (r34Pre7 N w x) dyD3
+    let dyB1 := r34IdCotIn N 28 28 w.b2 (r34Pre6 N w x) dyB2
+    let dyB0 := r34IdCotIn N 28 28 w.b1 (r34Pre5 N w x) dyB1
+    let dyD2 := r34IdCotIn N 28 28 w.b0 (r34Pre4 N w x) dyB0
+    let dyA2 := r34DownCotIn N 28 28 w.d2 (r34Pre3 N w x) dyD2
+    let dyA1 := r34IdCotIn N 56 56 w.a2 (r34Pre2 N w x) dyA2
+    let dyA0 := r34IdCotIn N 56 56 w.a1 (r34Pre1 N w x) dyA1
+    let cotPool := r34IdCotIn N 56 56 w.a0 (r34Pre0 N w x) dyA0
+    r34StemLossTiedAtB (N := N) (h := 56) (w := 56) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x
+      (fun W b γ β => L (resnet34ForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+      (r34StemCotCAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool)
+      (r34StemCotNAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool) := by
+  intro dyE1 dyE0 dyD4 dyC4 dyC3 dyC2 dyC1 dyC0 dyD3 dyB2 dyB1 dyB0 dyD2 dyA2 dyA1 dyA0 cotPool
+  obtain ⟨h0, -⟩ := r34_net_lossGrad N xN cotN vN epsStr w hq x hx hL
+  exact r34StemLossTiedB.select hq.s hx.stem hx.pool h0 σ hσ
 
 /-- **The emitted ResNet-34 step's gradient nodes ARE the loss's gradient, at one chain.** For each
     of the 146 parameter slots, at ONE cotangent chain (the tie's own, from the emitted

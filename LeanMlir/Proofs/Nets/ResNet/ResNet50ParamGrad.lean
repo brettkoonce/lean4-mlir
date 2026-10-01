@@ -47,8 +47,13 @@ patches (flat image regions). There the net has no derivative in the image, so t
 `R50SmoothAtB` rejects them, but the tied cells are the same function of the stem's weights, so the
 loss IS differentiable in the parameters. `R50LossSmoothAtB` allows exactly those ties
 (`StemPoolTwinAt` at `StemConvTwin`), and the stem's parameter nodes are proved through the argmax
-gather they reduce to (`r34StemPool_param_germ`). The probe script
-scripts/probes/stem_pool_smooth_probe.py checks the stem's clauses on real batches.
+gather they reduce to (`r34StemPool_param_germ`). At a tied window the render's pool backward
+(`select_and_scatter` with a `GE` select) sends the cotangent to the window's first maximal cell, and
+so does the denotation `maxPool3s2BackB` (its reindex reads `windowArgmax`, the first maximum).
+Every pool selector (`IsMaxPool3s2SelectB`) gives the same four stem gradients
+(`r34Stem_select_grads_eq`): `r50_net_lossGrad_stemSelect` states the stem's nodes at any of them.
+The probe script scripts/probes/stem_pool_smooth_probe.py checks the stem's clauses on real
+batches.
 -/
 
 open Proofs Proofs.StableHLO Proofs.ResNet34TieB
@@ -760,6 +765,45 @@ theorem r50_net_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       (h16.congr_point (r50Pre16_apply N q w x)) (fun p => by rw [r50_factor_s4b2]), ?_⟩
   exact r34_head_lossTiedB xN cotN w.Wd w.bd (r50Pre16 N q w x) hL'
     (fun W b => by rw [r50_factor_head])
+
+/-- **The stem's gradient nodes at the render's own pool routing** — `r50_net_lossGrad`'s stem
+    bundle read at the cotangents routed along ANY pool selector `σ` at the stem's post-ReLU
+    activation, the emitted `select_and_scatter` among them (`r34StemLossTiedB.select`; the R50
+    stem is R34's, see `ResNet34TieB.r34_net_lossGrad_stemSelect`). -/
+theorem r50_net_lossGrad_stemSelect (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
+    (w : R50BWeights nCls) (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50LossSmoothAtB N q w x) {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
+    (hL : HasGradAt L (resnet50ForwardBFull N q w x) g)
+    (σ : Fin (N * (64 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))) →
+      Fin (N * (64 * (2 * (2 * (2 * (2 * q)))) * (2 * (2 * (2 * (2 * q)))))))
+    (hσ : IsMaxPool3s2SelectB N 64 (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+      (cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q))))
+        w.sW w.sb w.sε w.sγ w.sβ x) σ) :
+    let dy16 := r34HeadCotBlk N q q w.Wd w.bd (r50Pre16 N q w x) g
+    let dy15 := r50IdCotIn N q q w.s4b2 (r50Pre15 N q w x) dy16
+    let dy14 := r50IdCotIn N q q w.s4b1 (r50Pre14 N q w x) dy15
+    let dy13 := r50DownCotIn N q q w.s4b0 (r50Pre13 N q w x) dy14
+    let dy12 := r50IdCotIn N (2 * q) (2 * q) w.s3b5 (r50Pre12 N q w x) dy13
+    let dy11 := r50IdCotIn N (2 * q) (2 * q) w.s3b4 (r50Pre11 N q w x) dy12
+    let dy10 := r50IdCotIn N (2 * q) (2 * q) w.s3b3 (r50Pre10 N q w x) dy11
+    let dy9 := r50IdCotIn N (2 * q) (2 * q) w.s3b2 (r50Pre9 N q w x) dy10
+    let dy8 := r50IdCotIn N (2 * q) (2 * q) w.s3b1 (r50Pre8 N q w x) dy9
+    let dy7 := r50DownCotIn N (2 * q) (2 * q) w.s3b0 (r50Pre7 N q w x) dy8
+    let dy6 := r50IdCotIn N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 (r50Pre6 N q w x) dy7
+    let dy5 := r50IdCotIn N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 (r50Pre5 N q w x) dy6
+    let dy4 := r50IdCotIn N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 (r50Pre4 N q w x) dy5
+    let dy3 := r50DownCotIn N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 (r50Pre3 N q w x) dy4
+    let dy2 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x) dy3
+    let dy1 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x) dy2
+    let cotPool := r50ProjCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x) dy1
+    r34StemLossTiedAtB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr
+      w.sW w.sb w.sε w.sγ w.sβ x
+      (fun W b γ β => L (resnet50ForwardBFull N q { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+      (r34StemCotCAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool)
+      (r34StemCotNAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool) := by
+  intro dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotPool
+  obtain ⟨h0, -⟩ := r50_net_lossGrad N q xN cotN vN epsStr w hp x hx hL
+  exact r34StemLossTiedB.select hp.s hx.stem hx.pool h0 σ hσ
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two losses the artifacts ship

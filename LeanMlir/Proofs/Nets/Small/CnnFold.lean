@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
+/-! # The MNIST-CNN train step, proof-tied to the certified SGD step
 
 The CNN analogue of `LinearFold` / `MlpFold`. `MainMnistCnnVerified`
 trains on `verified_mlir/cnn_train_step.mlir`; this file states what the *parameter
@@ -46,20 +46,25 @@ and false-fail the check.)
 
 * **Chain cotangent vs loss gradient.** Below the output layer the cotangents are the rendered
   chain (`mlpCotOut1`/`mlpCotOut0` in the head; `cnnChainCotW1`, `cnnChainCotW2`: relu masks,
-  select-and-scatter pool-back, conv-back). No theorem here states that they equal the loss
-  gradient at those layers' outputs.
+  select-and-scatter pool-back, conv-back). The loss-gradient statement is `cnn_net_lossGrad`
+  (`CnnParamGrad`), at the un-fused `*Grad` nodes these ops step by (`θ − lr·node`,
+  `SmallParamGrad.convWeightSgd_eq_grad`) and with the pool's cotangent routed to one maximal cell
+  of each window, as the rendered `select_and_scatter` does. `cnnChainCotW2` reads the pool
+  backward as `maxPoolBackDenote`, which routes to the first maximal cell (`maxPool2Argmax`), the
+  op's own choice, so it is the capstone's chain at that selection, ties included
+  (`cnnChainCotW2_eq_sel`).
 * **Cotangent subgraph ⇄ rendered SHlo.** The chain cotangents (`cnnChainCotW1/2`,
   `mlpCotOut0/1`) are proven = the rendered backward form in `CnnChainClose`
   (`cnnChainCotW1_eq`, `cnnChainCotW2_eq`) and `MlpTrainStep` (`mlpCotOut0_denote`,
   `mlpCotOut1_denote`); they are not pinned
   to the emitted `selectPos`/`dotOut`/`convBack`/`maxPoolBack` SHlo subgraph (as
-  `MlpPoC.cot0_den`/`MlpPoC.cot1_den` do for the MLP).
+  `MlpFold.cot0_den`/`MlpFold.cot1_den` do for the MLP).
 * **Per-op `pretty` lexing** (shared with the whole suite) + **ℝ → Float32**.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CnnPoC
+namespace Proofs.CnnFold
 
 /-! ## Convolution layers — the new `convWeightSgd`/`convBiasSgd` ops denote certified
 
@@ -67,7 +72,7 @@ namespace Proofs.CnnPoC
 `flatten W − lr·conv2dWeightGrad(b,x)·c` (and likewise for the bias); pinning
 `c` to the cotangent the chain delivers and applying the chain-certified conv
 bridge gives `θ − lr·(certified ∂conv/∂θ · the-chain-cotangent)`. (The `den`
-reduction is definitional — `rfl` — exactly as `LinPoC.poc_weightSgd_den_eq`.) -/
+reduction is definitional — `rfl` — exactly as `LinFold.poc_weightSgd_den_eq`.) -/
 
 /-- **Conv-2 weight op = certified.** The emitted `convWeightSgd` for `W₂`, fed the
     conv-2 chain cotangent, denotes `W₂ − lr·(certified ∂conv2/∂W₂ · chain cot)`. -/
@@ -214,8 +219,8 @@ pre-activations) and the chain cotangents driven by the composed top cotangent
 `g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`). Each of the ten parameter ops
 denotes `θ − lr·(certified ∂layer/∂θ · c)` with `c` the rendered backward-chain cotangent: `g` for
 `W₅`/`b₅`, `mlpCotOut1` for `W₄`/`b₄`, `mlpCotOut0` for `W₃`/`b₃`, `cnnChainCotW2` for conv₂ and
-`cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one more conv-back). No theorem here states
-that `c` equals the loss gradient at a layer below the output; at the output layer
+`cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one more conv-back). The loss-gradient form
+below the output is `cnn_net_lossGrad` (see the module's Scope); at the output layer
 `cnn_W5_tied_totalloss` folds `W₅` to `∂CE/∂W₅`. The correspondence between the hand-written
 conv-backward SSA values and `cnnChainCotW1`/`cnnChainCotW2` is the per-op trust the whole suite
 carries. -/
@@ -224,8 +229,8 @@ carries. -/
     the conv kernels/biases `W₂,b₂,W₁,b₁` — at the real forward denote
     `θ − lr·(certified ∂layer/∂θ · c)` with `c` the rendered backward-chain cotangent driven by the
     emitted softmax-CE cotangent `g` (`mlpCotOut1`/`mlpCotOut0` in the head; `cnnChainCotW2`,
-    `cnnChainCotW1` below it: relu masks, select-and-scatter pool-back, conv-back). That `c` equals
-    the loss gradient at a layer below the output is not stated. -/
+    `cnnChainCotW1` below it: relu masks, select-and-scatter pool-back, conv-back). The
+    loss-gradient form is `cnn_net_lossGrad` (see the module's Scope). -/
 theorem cnn_train_step_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -266,4 +271,4 @@ theorem cnn_train_step_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     denseWSgdTied_holds, denseBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     convWSgdTied_holds, convBSgdTied_holds⟩
 
-end Proofs.CnnPoC
+end Proofs.CnnFold

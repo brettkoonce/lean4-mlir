@@ -759,28 +759,28 @@ noncomputable def maxPool2 {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) : Tensor3 c
     specific input. So the Jacobian is a sparse 0/1 matrix and the VJP
     just routes the gradient to the chosen input.
 
-    MLIR uses **tile-compare-select** — `stablehlo.select_and_scatter`
-    is avoided because IREE does not support it (see `MlirCodegen.lean`'s
-    `maxPool` backward case for the full emitter):
+    The verified renders (the `maxPoolBack` node, printed by `Proofs.StableHLO.pretty`) emit
+    `stablehlo.select_and_scatter` over the 2×2 stride-2 windows:
 
-      // Broadcast dy and the pooled output back up to the input shape:
-      %dy_tiled  = stablehlo.broadcast_in_dim %d_pool
-      %out_tiled = stablehlo.broadcast_in_dim %pool
-      // Mask the input cells whose value matches the window max:
-      %mask = stablehlo.compare EQ, %out_tiled, %h1
-      // Route gradient through that mask (zeros elsewhere):
-      %d_h1 = stablehlo.select %mask, %dy_tiled, %zero
+      // select: keep the current cell unless a later one is strictly larger
+      %sge = stablehlo.compare GE, %sa, %sb
+      // scatter: add the routed cotangent into the chosen cell
+      %ss = stablehlo.add %sc, %sd
+
+    The `GE` select keeps the first window cell attaining the max, so each window's
+    cotangent lands in ONE cell, as PyTorch's and JAX's max-pool backwards do.
 
     **Canonical (junk-at-tie) witness.** `HasVJP3.correct` is
     satisfied by the canonical pdiv3-derived backward via `rfl`. At
     argmax-tie boundaries `maxPool2` is not differentiable, so `pdiv3`
     agrees with `fderiv`'s junk default of `0` and the canonical
-    witness is also `0` there. The codegen emits the tile-compare-
-    select formula above instead — at ties, the EQ-mask routes the
-    gradient to *every* tied input cell (PyTorch/JAX semantics), not
-    a single deterministic argmax. See `LeanMlir/Proofs/README.md` for
-    the trust-boundary discussion. Smooth-point agreement is formal:
-    see `maxPool2_codegen_matches_canonical` below. -/
+    witness is also `0` there, where the render routes the cotangent to
+    the first tied cell. Off ties the two agree: see
+    `maxPool2_codegen_matches_canonical` below. The generic `MlirCodegen`
+    walk still emits the older tile-compare-select (`compare EQ` of the
+    input against the tiled window max, then `select`), which routes the
+    cotangent to every tied cell. See `LeanMlir/Proofs/README.md`'s
+    trust-boundary section. -/
 noncomputable def maxPool2HasVJP3 {c h w : Nat} :
     HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) where
   backward x dy ci hi wi :=
@@ -789,8 +789,8 @@ noncomputable def maxPool2HasVJP3 {c h w : Nat} :
             x ci hi wi co ho wo * dy co ho wo
   correct _ _ _ _ _ := rfl
 
-/-- Named accessor for the maxPool2 input backward — aligns with the
-    codegen's tile-compare-select MLIR. -/
+/-- Named accessor for the maxPool2 input backward (the canonical witness of
+    `maxPool2HasVJP3`). -/
 noncomputable abbrev maxPool2InputGrad {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (dy : Tensor3 c h w) : Tensor3 c (2*h) (2*w) :=
   maxPool2HasVJP3.backward x dy
@@ -804,10 +804,8 @@ noncomputable abbrev maxPool2InputGrad {c h w : Nat}
 Closes the smooth-point half of the codegen trust boundary at MaxPool2.
 At points where every 2×2 window has a unique strict argmax, the
 canonical pdiv-derived backward in `maxPool2HasVJP3` collapses to
-"route `dy` to the argmax position, zero elsewhere" — the formula that
-`MlirCodegen.lean` emits via tile-compare-select (broadcast dy and the
-pooled output, `compare EQ` to find the argmax cells, `select` to
-route). Mirrors `relu_codegen_matches_canonical` in `MLP.lean`, but
+"route `dy` to the argmax position, zero elsewhere" — what the rendered
+`select_and_scatter` computes when every window has one argmax. Mirrors `relu_codegen_matches_canonical` in `MLP.lean`, but
 the local linearization is per-2×2-window rather than per-coordinate. -/
 
 -- Window-index helpers --------------------------------------------
@@ -1122,11 +1120,11 @@ theorem pdiv3_maxPool2_smooth {c h w : Nat}
 
     At points where every 2×2 window has a unique strict argmax, the
     canonical `pdiv3`-derived backward collapses to "`dy` at the
-    window's output position, but only at the argmax input cell" — the
-    tile-compare-select formula `MlirCodegen.lean` emits. Closes the
+    window's output position, but only at the argmax input cell" — what the
+    rendered `select_and_scatter` computes there. Closes the
     smooth-point half of the codegen trust boundary; what remains is
-    the kink convention at argmax-tie boundaries (EQ-mask routes the
-    gradient to every tied cell). -/
+    the kink convention at argmax ties (the render routes the
+    cotangent to the first tied cell, the canonical witness gives `0`). -/
 theorem maxPool2_codegen_matches_canonical {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
@@ -1144,8 +1142,8 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
 /-- **MaxPool2 pointwise VJP — no canonical-witness escape.**
 
     `HasVJPAt3 maxPool2 x` under `MaxPool2Smooth x`. The backward is
-    the codegen tile-compare-select formula directly (route `dy` to
-    the argmax cell, zero elsewhere); the `correct` field is
+    the argmax routing directly (route `dy` to the argmax cell, zero
+    elsewhere); the `correct` field is
     `maxPool2_codegen_matches_canonical` flipped, not `rfl`.
     Companion of `reluHasVJPAt` in MLP.lean: `mlpHasVJPAt` chains
     through `reluHasVJPAt`, and `cnnHasVJPAt` chains through both (this

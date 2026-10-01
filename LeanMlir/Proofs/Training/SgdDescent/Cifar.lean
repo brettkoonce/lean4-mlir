@@ -9,8 +9,8 @@ reach a CIFAR net? At the last conv layer, yes.
 CIFAR-8's *tail* — its last conv `W₈` (c4→c4) → relu → maxpool → three denses → CE — is
 **byte-for-byte** the program `cnn_conv2_sgd_descends` proves descent for. So descent at the LAST
 conv layer is an *instance* of the MNIST lemma at the frozen earlier-layer features, with the same
-hypotheses (oracle accuracy, the relu and post-ReLU pool margins, small-step and dominance
-conditions) stated at `x₁`. Made rigorous in two steps:
+hypotheses (oracle accuracy, the relu margins, the pool margin up to twins of `x₁`, small-step
+and dominance conditions) stated at `x₁`. Made rigorous in two steps:
 
 * `cifarCnn8Forward_factor` — the actual committed net factors as
   `head ∘ (relu ∘ flatConv W₈) ∘ prefix7` (pure `rfl`; `Function.comp` is definitionally associative).
@@ -97,7 +97,8 @@ noncomputable def cifar8LastConvLoss {c4 h w d1 nClasses kH kW : Nat} (b₈ : Ve
     CIFAR-8's tail (`W₈` → relu → maxpool → 3 denses) is byte-for-byte the architecture
     `cnn_conv2_sgd_descends` proves descent for, this is an INSTANCE of that lemma at the frozen
     features `x₁`, via `cifarCnn8Forward_factor`, with that lemma's hypotheses (oracle accuracy
-    `hgh`, the margins `hm2`/`hmq`/`hm3`/`hm4`, `hsmall`, `h1`, `h2`) stated at `x₁`. Descent through
+    `hgh`, the margins `hm2`/`hmq`/`hm3`/`hm4` with `hmq` up to the twins `T` of `x₁`, `hsmall`,
+    `h1`, `h2`) stated at `x₁`. Descent through
     the depth of all eight conv layers is not proved: each extra layer would multiply another
     operator-norm factor into `hsmall`'s admissible-`lr` product. -/
 theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
@@ -114,9 +115,11 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     (Wb : Mat d1 nClasses) (bb : Vec nClasses)
     (image : Vec (ic * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))))
     (x₁ : Tensor3 c4 (2*h) (2*w)) (label : Fin nClasses) (gh : Vec (c4 * c4 * kH * kW))
+    (T : Fin (2*h) × Fin (2*w) → Fin (2*h) × Fin (2*w) → Prop)
     (hx₁ : x₁ = Tensor3.unflatten
       (cifar8Prefix7 W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ image))
     {lr η a w₉ wa wb : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₁ cc i j| ≤ a)
+    (hT : ∀ p q, T p q → ConvPatchEq kH kW x₁ p q)
     (hw₉ : 0 ≤ w₉) (hW₉ : ∀ i j, |W₉ i j| ≤ w₉)
     (hwa : 0 ≤ wa) (hWa : ∀ i j, |Wa i j| ≤ wa)
     (hwb : 0 ≤ wb) (hWb : ∀ i j, |Wb i j| ≤ wb)
@@ -126,10 +129,8 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     (hm2 : ∀ k, a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
       (Kernel4.flatten W₈) lr η) <
       |Tensor3.flatten (conv2d W₈ b₈ x₁) k|)
-    (hmq : MaxPool2MarginQ (a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
-      (Kernel4.flatten W₈) lr η))
-      (Tensor3.unflatten (relu (c4 * (2*h) * (2*w))
-        (Tensor3.flatten (conv2d W₈ b₈ x₁)))))
+    (hmq : MaxPool2MarginQUpTo (a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
+      (Kernel4.flatten W₈) lr η)) T (conv2d W₈ b₈ x₁))
     (hm3 : ∀ l, w₉ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
       (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) lr η))) <
       |dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
@@ -176,7 +177,7 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     rw [cifarCnn8Forward_factor]
     simp only [Function.comp_apply, cifar8Head, flatConv, hx₁]
   rw [hfac (Kernel4.flatten W₈ - lr • gh), hfac (Kernel4.flatten W₈)]
-  exact cnn_conv2_sgd_descends W₈ b₈ x₁ W₉ b₉ Wa ba Wb bb label gh
-    ha hx hw₉ hW₉ hwa hWa hwb hWb hlr hη hgh hm2 hmq hm3 hm4 hsmall h1 h2
+  exact cnn_conv2_sgd_descends W₈ b₈ x₁ W₉ b₉ Wa ba Wb bb label gh T
+    ha hx hT hw₉ hW₉ hwa hWa hwb hWb hlr hη hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
 end Proofs
