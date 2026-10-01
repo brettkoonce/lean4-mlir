@@ -1,5 +1,6 @@
 import LeanMlir.TicTacToe
 import LeanMlir.F32Array
+import LeanMlir.CliArgs
 
 /-! Tic-tac-toe on an n × n board, k in a row: the solved-game instrument and the
     scripted players, no stack, no GPU. `lake exe ttt-env [n=3] [k=n] [games=1000]
@@ -41,9 +42,7 @@ def showPos (t : Table) (idx : Nat) : IO Unit := do
 {if opt.contains c then "  optimal" else ""}"
 
 def main (args : List String) : IO Unit := do
-  let kv (key : String) : Option String :=
-    (args.find? (·.startsWith (key ++ "="))).map (·.drop (key.length + 1) |>.toString)
-  let natArg (key : String) (d : Nat) : Nat := ((kv key) >>= String.toNat?).getD d
+  let natArg := CliArgs.natArg args
   let n := natArg "n" 3
   let k := natArg "k" n
   let games := natArg "games" 1000

@@ -13,6 +13,38 @@ a runtime session, and runs `runTraining`: init params → for each epoch { shuf
 Adding an architecture means defining the spec and a `TrainConfig` value. The per-dataset
 loading and augmentation live in the per-dataset records below. -/
 
+/-! ## Region Dice off a confusion matrix
+
+Shared by the trainer's per-epoch val line and `brats-eval`'s per-volume scorer, so the two
+score a region the same way. -/
+
+namespace SegMetrics
+
+/-- `(inter, |gt|, |pred|)` of the class-union region `cls`, read off an `nc × nc` confusion
+    matrix `conf[gt * nc + pred]`:
+    `inter = Σ_{g∈R} Σ_{p∈R} C[g][p]`, `|gt| = Σ_{g∈R} Σ_p C[g][p]`, `|pred| = Σ_{p∈R} Σ_g C[g][p]`.
+    Counts stay exact `Nat`. -/
+def regionCounts (conf : Array Nat) (nc : Nat) (cls : List Nat) : Nat × Nat × Nat := Id.run do
+  let inR : Nat → Bool := fun c => cls.contains c
+  let mut inter := 0
+  let mut gt := 0
+  let mut pr := 0
+  for g in [:nc] do
+    for p in [:nc] do
+      let c := conf[g * nc + p]!
+      if inR g && inR p then inter := inter + c
+      if inR g then gt := gt + c
+      if inR p then pr := pr + c
+  return (inter, gt, pr)
+
+/-- `2·inter / (|gt| + |pred|)`, with the BraTS convention for a region the ground truth lacks:
+    an empty prediction scores 1 and a non-empty one 0. -/
+def regionDice (inter gt pr : Nat) : Float :=
+  if gt == 0 then (if pr == 0 then 1.0 else 0.0)
+  else (2 * inter).toFloat / (gt + pr).toFloat
+
+end SegMetrics
+
 namespace NetSpec
 
 /-- File-path prefix for the generated MLIR / vmfb / saved-params files
@@ -71,6 +103,34 @@ def graphArtifact (pfx suffix : String) : IO String := do
   if (← LowererSession.backendName) == "xla"
   then return s!"{pfx}_{suffix}.mlir"
   else return s!"{pfx}_{suffix}.vmfb"
+
+/-- The eval forward of `spec` over the `n` images of a flat f32 set (`imgFloats` floats each) at
+    batch `batch`, the tail batch padded with the last real image: the `[n, nOut]` f32 logits of
+    the real rows. The detector demos' `infer` dumps. -/
+def evalLogits (spec : NetSpec) (sess : LowererSession) (evalParams img : ByteArray)
+    (n nOut batch imgFloats : Nat) : IO ByteArray := do
+  let xShape := spec.xShape batch
+  let evalShapesBA := spec.evalShapesBA
+  let mut logitsAll : ByteArray := ByteArray.empty
+  for b in [:(n + batch - 1) / batch] do
+    let start := b * batch
+    let real := min batch (n - start)
+    let mut imgs := F32.sliceImages img start real imgFloats
+    if real < batch then
+      let lastImg := F32.sliceImages img (start + real - 1) 1 imgFloats
+      for _ in [:batch - real] do imgs := imgs ++ lastImg
+    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
+                    evalParams evalShapesBA imgs xShape batch.toUSize nOut.toUSize
+    logitsAll := logitsAll ++ logitsB.extract 0 (real * nOut * 4)
+  return logitsAll
+
+/-- Compile one emitted graph to the artifact `graphArtifact` names: `iree-compile` on IREE; on
+    XLA nothing, since PJRT compiles the `.mlir` itself in-process. `false` on a failed compile
+    (the compiler's error is printed). Uncached; `compileVmfbs` keys its own compiles on the MLIR
+    text. -/
+def compileArtifact (mlirPath outPath : String) : IO Bool := do
+  if (← LowererSession.backendName) == "xla" then return true
+  runIree mlirPath outPath
 
 /-- Compile `mlirPath` to `outPath` via iree-compile, but skip the work
     if `outPath` exists and `outPath ++ ".hash"` matches the cache key
@@ -467,6 +527,10 @@ private def datasetIO : DatasetKind → DatasetIO
     -- read-everything-into-a-ByteArray pattern. The verified driver
     -- (`Verified.Train`) and the JAX reference (jax/) both stream it.
     panic! "DatasetKind.imagenet is not supported by the reference trainer; use the verified path (Verified.Train) or the JAX reference (jax/)"
+
+/-- The named class-unions `ds` reports Dice for (`DatasetIO.segRegions`; empty for most). -/
+def _root_.DatasetKind.segRegions (ds : DatasetKind) : List (String × List Nat) :=
+  (datasetIO ds).segRegions
 
 -- `DatasetKind.pixelLabels` (which `TrainConfig.lossKindFor` reads) names exactly the datasets whose
 -- label record is not a 4-byte class, detection aside (it resolves first; `.imagenet` panics here).
@@ -1022,11 +1086,6 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          let plane := H * W
          let NC := (spec.layers.getLast?.map (·.outChannels)).getD 3
          let outElems : USize := (NC * plane).toUSize
-         let readI64 : ByteArray → Nat → Nat := fun ba idx => Id.run do
-           let mut v : Nat := 0
-           for k in [:8] do
-             v := v + ba.data[idx * 8 + k]!.toNat * (2 ^ (8 * k))
-           return v
          let mut conf : Array Nat := Array.replicate (NC * NC) 0
          for bi in [:evalSteps] do
            let xba := F32.sliceImages valImg (bi * evalBatch) evalBatch dio.valPixels
@@ -1036,7 +1095,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
            let cb ← F32.segConfusion logits maskSlice
                        evalBatch.toUSize NC.toUSize H.toUSize W.toUSize
            for j in [:NC * NC] do
-             conf := conf.set! j (conf[j]! + readI64 cb j)
+             conf := conf.set! j (conf[j]! + readU64LE cb (8 * j))
          -- Per-class IoU + mean.
          let mut ious : Array Float := #[]
          for c in [:NC] do
@@ -1054,34 +1113,15 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          IO.eprintln s!"  val mIoU: {miou}  (per-class: {iouStr})"
          -- Dice on named class-unions.
          -- Falls straight out of the confusion matrix already accumulated
-         -- above — no new kernel, no second pass over val. For a region
-         -- R ⊆ classes, reading C[gt][pred]:
-         --   inter_R = Σ_{g∈R} Σ_{p∈R} C[g][p]
-         --   |gt_R|  = Σ_{g∈R} Σ_p C[g][p]
-         --   |pr_R|  = Σ_{p∈R} Σ_g C[g][p]
-         --   Dice_R  = 2·inter_R / (|gt_R| + |pr_R|)
-         -- Counts stay exact `Nat` until the final divide. IoU is kept
-         -- alongside rather than replaced; Dice is what makes it
-         -- comparable to the BraTS literature.
+         -- above — no new kernel, no second pass over val (`SegMetrics`). IoU is
+         -- kept alongside rather than replaced; Dice is what makes it
+         -- comparable to the BraTS literature. An absent region scores by the
+         -- field's convention; it does not arise on real BraTS val — a collapsed
+         -- model still has |gt_R| > 0 and so scores 0, which is the reading we want.
          let mut regionDices : Array Float := #[]
          for (name, cls) in dio.segRegions do
-           let inR : Nat → Bool := fun c => cls.contains c
-           let mut inter : Nat := 0
-           let mut gtR : Nat := 0
-           let mut prR : Nat := 0
-           for g in [:NC] do
-             for pd in [:NC] do
-               let cij := conf[g * NC + pd]!
-               if inR g && inR pd then inter := inter + cij
-               if inR g then gtR := gtR + cij
-               if inR pd then prR := prR + cij
-           let den := gtR + prR
-           -- den = 0 ⇒ the region is absent from ground truth *and* from the
-           -- prediction across the whole val set: vacuously perfect, which is
-           -- the field's convention. It does not arise on real BraTS val —
-           -- a collapsed model still has |gt_R| > 0 and so scores 0, which is
-           -- the reading we want.
-           let dice := if den == 0 then 1.0 else (2 * inter).toFloat / den.toFloat
+           let (inter, gtR, prR) := SegMetrics.regionCounts conf NC cls
+           let dice := SegMetrics.regionDice inter gtR prR
            regionDices := regionDices.push dice
            IO.eprintln s!"  val Dice {name}: {dice}  (inter={inter} gt={gtR} pred={prR})"
          -- Best-by-val checkpoint. Selection metric: mean region Dice when the

@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! # `yolov1-neudet-fpn` — the VisDrone detector, unchanged, on NEU-DET steel defects
 
@@ -80,44 +81,20 @@ def neuDetScales : List (Nat × List (Float × Float)) :=
 def neuNtot : Nat :=
   (neuDetScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
 
-/-- ResNet-34 + FPN detector, the VisDrone `r34FpnDetT` layer-for-layer; only the
-    name differs, so its build prefix and checkpoints never touch the VisDrone
-    arm's (which are live references for every number in the book). -/
-def r34NeuFpnDetT (tower : Nat) : NetSpec where
-  name := if tower == 0 then "ResNet-34 + FPN detector 448 (NEU-DET)"
-          else s!"ResNet-34 + FPN detector 448 tower{tower} (NEU-DET)"
-  imageH := 448
-  imageW := 448
-  detStride := 32
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,   -- stride 4
-    .residualBlock  64 128 4 2,   -- C3: 128ch, 56×56
-    .residualBlock 128 256 6 2,   -- C4: 256ch, 28×28
-    .residualBlock 256 512 3 2,   -- C5: 512ch, 14×14
-    .fpnDetect 256 128 256 512 14 3 tower
-  ]
+/-- ResNet-34 + FPN detector (`ReferenceNets.r34FpnDet`, as VisDrone trains it); only the
+    name differs, so its build prefix and checkpoints never touch the VisDrone arm's (which are
+    live references for every number in the book). -/
+def r34NeuFpnDetT (tower : Nat) : NetSpec :=
+  ReferenceNets.r34FpnDet
+    (if tower == 0 then "ResNet-34 + FPN detector 448 (NEU-DET)"
+     else s!"ResNet-34 + FPN detector 448 tower{tower} (NEU-DET)") tower
 
-/-- ResNet-50 variant, the VisDrone `r50FpnDetT` layer-for-layer (see that file for
-    why the pool is 2×2 and why the bootstrap is conv-only). Selectable with
-    `FPN_BACKBONE=r50`; the arm in the tables is R34. -/
-def r50NeuFpnDetT (tower : Nat) : NetSpec where
-  name := if tower == 0 then "ResNet-50 + FPN detector 448 (NEU-DET)"
-          else s!"ResNet-50 + FPN detector 448 tower{tower} (NEU-DET)"
-  convPadStyle := .symmetric
-  imageH := 448
-  imageW := 448
-  detStride := 32
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .bottleneckBlock   64  256 3 1,   -- C2: stride 4,  112×112
-    .bottleneckBlock  256  512 4 2,   -- C3: 512ch,      56×56
-    .bottleneckBlock  512 1024 6 2,   -- C4: 1024ch,     28×28
-    .bottleneckBlock 1024 2048 3 2,   -- C5: 2048ch,     14×14
-    .fpnDetect 256 512 1024 2048 14 3 tower
-  ]
+/-- ResNet-50 variant (`ReferenceNets.r50FpnDet`: why the pool is 2×2 and why the bootstrap is
+    conv-only). Selectable with `FPN_BACKBONE=r50`; the arm in the tables is R34. -/
+def r50NeuFpnDetT (tower : Nat) : NetSpec :=
+  ReferenceNets.r50FpnDet
+    (if tower == 0 then "ResNet-50 + FPN detector 448 (NEU-DET)"
+     else s!"ResNet-50 + FPN detector 448 tower{tower} (NEU-DET)") tower
 
 /-- The VisDrone `r34FpnDetConfig` with the measured recipe's env settings folded
     in as defaults (30 epochs, HSV+hflip, affine p=0.5, class focal γ=2, no class
@@ -236,23 +213,8 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
                              spec.imageH.toUSize flat.toUSize
   IO.println s!"  loaded {nVal} {split} records ({flat}-wide output); dumping logits"
   let batch : Nat := 8
-  let xShape := spec.xShape batch
-  let pixelsPerImage := 3 * spec.imageH * spec.imageW
-  let evalShapesBA := spec.evalShapesBA
-  let nOut : USize := flat.toUSize
-  let rowBytes : Nat := flat * 4
-  let nBatches := (nVal + batch - 1) / batch
-  let mut logitsAll : ByteArray := ByteArray.empty
-  for b in [:nBatches] do
-    let start := b * batch
-    let real  := min batch (nVal - start)
-    let mut imgs := F32.sliceImages valImg start real pixelsPerImage
-    if real < batch then
-      let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
-      for _ in [:batch - real] do imgs := imgs ++ lastImg
-    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
-                    evalParams evalShapesBA imgs xShape batch.toUSize nOut
-    logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
+  let logitsAll ← spec.evalLogits sess evalParams valImg nVal flat batch
+                      (3 * spec.imageH * spec.imageW)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
   IO.println s!"next: python3 scripts/demos/yolo_map_visdrone.py {outDir}/logits.bin data/neu_det448/{split}.bin --fpn data/neu_det --grid 14 --classes neu"

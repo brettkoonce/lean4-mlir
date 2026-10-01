@@ -88,15 +88,6 @@ private def offsetBefore (spec : NetSpec) (targetIdx : Nat) : Nat := Id.run do
     acc := acc + sz
   return acc
 
-/-- Argmax over `n` f32s starting at byte-offset 0 of `ba`. -/
-private def argmaxN (ba : ByteArray) (n : Nat) : Nat := Id.run do
-  let mut best : Nat := 0
-  let mut bestV : Float := F32.read ba 0
-  for i in [1:n] do
-    let v := F32.read ba i.toUSize
-    if v > bestV then bestV := v; best := i
-  return best
-
 /-- Compile (or fetch from cache) the `forward_cam` vmfb for `spec`.
     Mirrors the pattern in `Train.compileVmfbs`. -/
 private def compileCamVmfb (spec : NetSpec) (batchSize : Nat) : IO String := do
@@ -111,12 +102,7 @@ private def compileCamVmfb (spec : NetSpec) (batchSize : Nat) : IO String := do
     IO.eprintln s!"  cam vmfb cached: {vmfbPath}"
     return vmfbPath
   IO.eprintln s!"  compiling cam vmfb -> {vmfbPath}"
-  let compiler ← findIreeCompile
-  let args ← ireeCompileArgs mlirPath vmfbPath
-  let r ← IO.Process.output { cmd := compiler, args := args }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile failed: {r.stderr.take 3000}"
-    IO.Process.exit 1
+  unless (← NetSpec.compileArtifact mlirPath vmfbPath) do IO.Process.exit 1
   return vmfbPath
 
 def main (args : List String) : IO Unit := do
@@ -207,7 +193,7 @@ def main (args : List String) : IO Unit := do
   for i in [:nVis] do
     let logits ← F32.camLogits denseW denseB lastConv i.toUSize
                     lcC.toUSize lcH.toUSize lcW.toUSize fanOut.toUSize
-    let pred := argmaxN logits fanOut
+    let pred := (F32.argmaxN logits 0 fanOut.toUSize).toNat
     let label := valLbl.data[i * 4]!.toNat
     IO.eprintln s!"  img {i}: pred={pred} ({imagenetteClasses[pred]!}), label={label} ({imagenetteClasses[label]!})"
 

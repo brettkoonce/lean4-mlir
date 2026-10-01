@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.CliArgs
+import LeanMlir.ReferenceNets
+import LeanMlir.SmallClassifier
 
 /-! A CNN against the matched filter on LIGO strain.
 
@@ -17,6 +20,8 @@ import LeanMlir
     reloads `<out>/<prefix>_params.bin` + `_bn_stats.bin` and only writes the logits.
     Writes `<prefix>_curve.csv`, `_params.bin`, `_bn_stats.bin` and
     `_logits_{gauss,real}_val.bin` (f32 [N, 2]) under `out` (default `.lake/build`). -/
+
+open CliArgs SmallClassifier
 
 namespace GwDetect
 
@@ -116,88 +121,7 @@ def cifarbn4 : NetSpec where
 /-- Chapter 4's CIFAR-CNN8-wide-BN verbatim: eight convolutions in four conv-conv-pool
     stages at 16, 16, 32, 32 channels into the 2 × 512 head; only the stem's input
     channels and the output width change (flatten = 32 × 4 × 8 = 1024). -/
-def cifar8w : NetSpec where
-  name := "gw cifar8w"
-  imageH := H
-  imageW := W
-  layers := [
-    .convBn C 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .convBn 32 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .flatten,
-    .dense (32 * (H / 16) * (W / 16)) 512 .relu,
-    .dense 512 512 .relu,
-    .dense 512 2 .identity
-  ]
-
-def fmt (x : Float) (d : Nat) : String :=
-  let m := (10.0 : Float) ^ d.toFloat
-  let r := (x * m).round / m
-  let s := toString r
-  if s.length > 10 then (s.toRawSubstring.take 10).toString else s
-
-/-- xorshift64 step. -/
-@[inline] def xs (s : UInt64) : UInt64 :=
-  let s := s ^^^ (s <<< 13)
-  let s := s ^^^ (s >>> 7)
-  s ^^^ (s <<< 17)
-
-/-- Fisher–Yates permutation of `0..n-1` from a seed. -/
-def permutation (n : Nat) (seed : UInt64) : Array Nat := Id.run do
-  let mut a : Array Nat := Array.range n
-  let mut s := if seed == 0 then 0x9E3779B97F4A7C15 else seed
-  for i in [1:n] do
-    let j := n - i
-    s := xs s
-    let k := (s % (j + 1).toUInt64).toNat
-    let tmp := a[j]!
-    a := a.set! j a[k]!
-    a := a.set! k tmp
-  return a
-
-/-- Gather a batch of `B` windows by index from the flat f32 set, and their labels. -/
-def gather (img lbl : ByteArray) (idx : Array Nat) (start B : Nat) : ByteArray × ByteArray := Id.run do
-  let mut x := ByteArray.emptyWithCapacity (B * nPix * 4)
-  let mut y := ByteArray.emptyWithCapacity (B * 4)
-  for i in [:B] do
-    let k := idx[start + i]!
-    x := x ++ F32.sliceImages img k 1 nPix
-    y := y ++ F32.sliceLabels lbl k 1
-  return (x, y)
-
-/-- Run the eval graph over a whole set at batch `evalB` (tail zero-padded) and return
-    the logits as f32 `[n, 2]` plus the accuracy. -/
-def scoreSet (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh : ByteArray)
-    (img lbl : ByteArray) (n evalB : Nat) : IO (ByteArray × Float) := do
-  let nC := spec.numClasses
-  let mut logits := ByteArray.emptyWithCapacity (n * nC * 4)
-  let mut correct : Nat := 0
-  let nb := (n + evalB - 1) / evalB
-  for bi in [:nb] do
-    let xba := F32.sliceImagesPad img (bi * evalB) evalB nPix n
-    let out ← LowererSession.forwardF32 sess spec.evalFnName evalParams evalShapes xba xSh
-                evalB.toUSize nC.toUSize
-    let avail := min evalB (n - bi * evalB)
-    logits := logits ++ out.extract 0 (avail * nC * 4)
-    for i in [:avail] do
-      let pred := F32.argmaxN out (i * nC).toUSize nC.toUSize
-      let label := lbl.data[(bi * evalB + i) * 4]!.toNat
-      if pred.toNat == label then correct := correct + 1
-  return (logits, correct.toFloat / n.toFloat * 100.0)
-
-def parseArg (args : List String) (key : String) (dflt : String) : String :=
-  match args.find? (·.startsWith (key ++ "=")) with
-  | some a => (a.toRawSubstring.drop (key.length + 1)).toString
-  | none => dflt
+def cifar8w : NetSpec := ReferenceNets.cifar8wOf "gw cifar8w" C H W 2
 
 end GwDetect
 
@@ -207,14 +131,9 @@ def main (args : List String) : IO Unit := do
   let epochs := (parseArg args "epochs" "20").toNat!
   let netName := parseArg args "net" "cifar8w"
   let B := (parseArg args "batch" "64").toNat!
-  let lr : Float := (parseArg args "lr" "0.001").toNat?.map (·.toFloat) |>.getD
-    (match (parseArg args "lr" "0.001").splitOn "." with
-     | [a, b] => a.toNat!.toFloat + b.toNat!.toFloat / (10.0 : Float) ^ b.length.toFloat
-     | _ => 0.001)
+  let lr := floatArg args "lr" 0.001
   let seed := (parseArg args "seed" "1").toNat!
-  let ls : Float := match (parseArg args "ls" "0.0").splitOn "." with
-    | [a, b] => a.toNat!.toFloat + b.toNat!.toFloat / (10.0 : Float) ^ b.length.toFloat
-    | _ => 0.0
+  let ls := floatArg args "ls" 0.0
   let tag := parseArg args "tag" ""
   let outDir := parseArg args "out" ".lake/build"
   let evalOnly := args.contains "eval"
@@ -309,7 +228,7 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
         -- linear warmup over the first epoch, cosine to zero after
         let lrNow := if step <= warm then lr * step.toFloat / warm.toFloat
           else lr * 0.5 * (1.0 + Float.cos (3.14159265358979 * (step - warm).toFloat / (total - warm).toFloat))
-        let (xba, yb) := gather imgTr lblTr idx (bi * B) B
+        let (xba, yb) := gather imgTr lblTr idx (bi * B) B nPix
         let packed := (p.append m).append v
         let out ← LowererSession.trainStepAdamF32 sess spec.trainFnName
                     packed allShapes xba xSh yb lrNow step.toFloat bnShapes B.toUSize
@@ -317,9 +236,7 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
           unless out.size / 4 == nT + 1 + nBn do
             throw <| IO.userError s!"train step returned {out.size / 4} floats, expected 3*{nP} + 1 + {nBn} = {nT + 1 + nBn}: the packed layout does not match the graph"
         lossAcc := lossAcc + F32.read out nT.toUSize
-        p := F32.slice out 0 nP
-        m := F32.slice out nP nP
-        v := F32.slice out (2 * nP) nP
+        (p, m, v) := F32.unpackAdam out nP
         let batchBn := out.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
         bn ← F32.ema bn batchBn (if step == 1 then 1.0 else 0.1)
         if epoch == 0 && bi < 3 then
@@ -331,7 +248,7 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
       let evalParams := p.append bn
       let mut accs : Array (String × Float) := #[]
       for (nm, img) in valSets do
-        let (_, acc) ← scoreSet evalSess spec evalParams evalShapes xSh img lblVa nVa B
+        let (_, acc) ← scoreSet evalSess spec evalParams evalShapes xSh img lblVa nVa B nPix
         accs := accs.push (nm, acc)
       let tD ← IO.monoMsNow
       let trainLoss := lossAcc / bpE.toFloat
@@ -349,7 +266,7 @@ val acc gauss {fmt (accs[0]!).2 2}%  real {fmt (accs[1]!).2 2}%  \
   -- ── logits for the scorer, both val sets ──
   let evalParams := p.append bn
   for (nm, img) in valSets do
-    let (logits, acc) ← scoreSet evalSess spec evalParams evalShapes xSh img lblVa nVa B
+    let (logits, acc) ← scoreSet evalSess spec evalParams evalShapes xSh img lblVa nVa B nPix
     IO.FS.writeBinFile s!"{pfx}_logits_{nm}_val.bin" logits
     IO.println s!"{spec.name} trained on {arm}, scored on {nm} val: accuracy {fmt acc 2}%  \
 -> {pfx}_logits_{nm}_val.bin"

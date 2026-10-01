@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Sample digits from a trained tiny DDPM checkpoint.
 
@@ -22,32 +23,7 @@ Usage:
   lake exe mnist-ddpm-sample trajectory [data=<dir>] [img=<n>] [eta=<percent>]
 -/
 
-def tinyDdpmUnet (centred : Bool := true) : NetSpec where
-  name := if centred then "tiny DDPM UNet T-cond centered (MNIST 28x28x1)"
-                     else "tiny DDPM UNet T-cond (MNIST 28x28x1)"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .unetDown 2 16,
-    .unetDown 16 32,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .unetUp 64 32,
-    .unetUp 32 16,
-    .conv2d 16 1 1 .same .identity
-  ]
-
-private def runIree (mlirPath outPath : String) : IO Bool := do
-  -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact
-  -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
-  if (← LowererSession.backendName) == "xla" then return true
-  let args ← ireeCompileArgs mlirPath outPath
-  let compiler ← findIreeCompile
-  let r ← IO.Process.output { cmd := compiler, args := args }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile failed: {r.stderr.take 3000}"
-    return false
-  return true
+open ReferenceNets (tinyDdpmUnet)
 
 private def floatToU8 (v : Float) : UInt8 :=
   let p := if v < 0.0 then 0.0 else if v > 1.0 then 1.0 else v
@@ -92,7 +68,7 @@ def main (args : List String) : IO Unit := do
     let mlir := MlirCodegen.generateEval spec B
     IO.FS.writeFile evalMlirPath mlir
     IO.eprintln s!"  generated eval mlir ({mlir.length} chars), compiling..."
-    unless (← runIree evalMlirPath evalVmfb) do IO.Process.exit 1
+    unless (← NetSpec.compileArtifact evalMlirPath evalVmfb) do IO.Process.exit 1
     IO.eprintln "  eval forward compiled"
 
   -- ── Load checkpoint ──
@@ -201,8 +177,7 @@ def main (args : List String) : IO Unit := do
     let gap : Nat := 4
     let stripW := nFrames * W + (nFrames - 1) * gap
     let stripH := 2 * H + gap
-    let mut ppm : ByteArray := ByteArray.empty
-    ppm := ppm.append s!"P6\n{stripW} {stripH}\n255\n".toUTF8
+    let mut ppm : ByteArray := ByteArray.emptyWithCapacity (stripH * stripW * 3)
     for r in [:2] do
       let frames := rows[r]!
       let shown ← frames.mapM unc
@@ -217,7 +192,7 @@ def main (args : List String) : IO Unit := do
       if r == 0 then
         for _ in [:gap] do
           for _ in [:stripW] do ppm := ppm.push 24 |>.push 24 |>.push 28
-    IO.FS.writeBinFile outPath ppm
+    Cam.writePPM outPath stripH stripW ppm
     IO.eprintln s!"  wrote {outPath} ({stripW}x{stripH}, {fwdFrames.size} forward + {revFrames.size} reverse frames)"
     return
 
@@ -229,8 +204,7 @@ def main (args : List String) : IO Unit := do
   let H := spec.imageH; let W := spec.imageW
   let gridW := 4 * W
   let gridH := 4 * H
-  let mut ppm : ByteArray := ByteArray.empty
-  ppm := ppm.append s!"P6\n{gridW} {gridH}\n255\n".toUTF8
+  let mut ppm : ByteArray := ByteArray.emptyWithCapacity (gridH * gridW * 3)
   for gy in [:4] do
     for h in [:H] do
       for gx in [:4] do
@@ -239,5 +213,5 @@ def main (args : List String) : IO Unit := do
           let v := F32.read x (idx * nPix + h * W + w).toUSize
           let u := floatToU8 v
           ppm := ppm.push u |>.push u |>.push u
-  IO.FS.writeBinFile outPath ppm
-  IO.eprintln s!"  wrote {outPath} ({ppm.size} bytes)"
+  Cam.writePPM outPath gridH gridW ppm
+  IO.eprintln s!"  wrote {outPath} ({gridW}x{gridH})"

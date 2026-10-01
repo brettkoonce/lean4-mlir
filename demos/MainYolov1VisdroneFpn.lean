@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! # `yolov1-visdrone-fpn` — the multi-scale FPN detector
 
@@ -99,75 +100,23 @@ def clsWeightsFromEnv : IO (List Float) := do
     **0 = the minimal 1×1 head**; 4 is the RetinaNet default. Selected at run time by `FPN_TOWER` so the
     two arms are one binary, and folded into `name` so their checkpoints and vmfbs
     can never collide. -/
-def r34FpnDetT (tower : Nat) : NetSpec where
+def r34FpnDetT (tower : Nat) : NetSpec :=
   -- name is the on-disk checkpoint prefix: keep it DISTINCT from the anchor arm,
   -- from the unweighted FPN baseline, AND from the wcls arm — all of their
   -- e2..e12 checkpoints are live A/B references and must not be clobbered.
-  name := if tower == 0 then "ResNet-34 + FPN detector 448 wcls pb (VisDrone)"
-          else s!"ResNet-34 + FPN detector 448 wcls pb tower{tower} (VisDrone)"
-  imageH := 448
-  imageW := 448
-  detStride := 32
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,   -- stride 4
-    .residualBlock  64 128 4 2,   -- C3: 128ch, 56×56
-    .residualBlock 128 256 6 2,   -- C4: 256ch, 28×28
-    .residualBlock 256 512 3 2,   -- C5: 512ch, 14×14
-    .fpnDetect 256 128 256 512 14 3 tower
-  ]
+  ReferenceNets.r34FpnDet
+    (if tower == 0 then "ResNet-34 + FPN detector 448 wcls pb (VisDrone)"
+     else s!"ResNet-34 + FPN detector 448 wcls pb tower{tower} (VisDrone)") tower
 
 /-- The towerless arm. `tower = 0` emits ZERO tower ops. -/
 def r34FpnDet : NetSpec := r34FpnDetT 0
 
-/-- ResNet-50 backbone variant. The first six layers are copied VERBATIM from
-    `jax/MainResnet50Imagenet.lean`'s `resnet50Imagenet` — same order, same
-    channels, same `convPadStyle` — because `bootstrapBackbone` is a PREFIX copy:
-    it drops the checkpoint's leading floats onto the init's leading floats and
-    only verifies that the bytes landed, not that they mean the same thing. Any
-    divergence in these six lines silently loads a correct-sized, wrong-layout
-    backbone. The classifier (`.globalAvgPool` + `.dense 2048 1000`) is what we
-    drop, which is why the bootstrap count is 23,508,032 and not the file's full
-    25,557,032 floats.
-
-    At 448 input the stages land on 112 / 56 / 28 / 14, so C3/C4/C5 are 56/28/14
-    — the FPN scales already in `fpnDetScales`, unchanged. Only the tap WIDTHS
-    move (512/1024/2048 vs R34's 128/256/512), and `.fpnDetect` takes those as
-    arguments, so this is a spec change with no new codegen. -/
-def r50FpnDetT (tower : Nat) : NetSpec where
-  name := if tower == 0 then "ResNet-50 + FPN detector 448 wcls pb (VisDrone)"
-          else s!"ResNet-50 + FPN detector 448 wcls pb tower{tower} (VisDrone)"
-  -- torchvision's Conv2d(3,64,7,stride=2,padding=3), matching the ImageNet render
-  -- the A3 checkpoint was trained under. Omitting this mismatches the stem.
-  convPadStyle := .symmetric
-  imageH := 448
-  imageW := 448
-  detStride := 32
-  layers := [
-    .convBn 3 64 7 2 .same,
-    -- DELIBERATELY 2×2, where `resnet50Imagenet` has `.maxPool 3 2`.
-    -- The train-step emitter's max-pool backward is a tile-compare-select that
-    -- is correct ONLY for non-overlapping windows (`emitTrainBackward` in
-    -- `LeanMlir/MlirCodegen.lean` says so outright), and size 3 > stride 2
-    -- overlaps: one input can be the max of
-    -- several windows, so its gradient is a SUM the tiling never forms. It also
-    -- happens to fail loudly first — the forward pads 224→225 but the backward
-    -- reads `inShape` (224) against the padded SSA, so the graph does not even
-    -- parse. Fixing that type error alone would trade a compile failure for a
-    -- silently wrong gradient, which is worse.
-    -- Safe to change because pooling is PARAMETER-FREE: the bootstrap prefix is
-    -- untouched, and both windows take 224→112, so every downstream shape and
-    -- the C3/C4/C5 taps are identical. The cost is a one-layer distribution
-    -- shift — the backbone was pretrained under 3×3 pooling — which fine-tuning
-    -- absorbs. The R34 detector arm above does exactly this.
-    .maxPool 2 2,
-    .bottleneckBlock   64  256 3 1,   -- C2: stride 4,  112×112
-    .bottleneckBlock  256  512 4 2,   -- C3: 512ch,      56×56
-    .bottleneckBlock  512 1024 6 2,   -- C4: 1024ch,     28×28
-    .bottleneckBlock 1024 2048 3 2,   -- C5: 2048ch,     14×14
-    .fpnDetect 256 512 1024 2048 14 3 tower
-  ]
+/-- ResNet-50 backbone variant (`ReferenceNets.r50FpnDet`: why the pool is 2×2 and why the
+    bootstrap is a prefix copy). -/
+def r50FpnDetT (tower : Nat) : NetSpec :=
+  ReferenceNets.r50FpnDet
+    (if tower == 0 then "ResNet-50 + FPN detector 448 wcls pb (VisDrone)"
+     else s!"ResNet-50 + FPN detector 448 wcls pb tower{tower} (VisDrone)") tower
 
 def r34FpnDetConfig : TrainConfig where
   learningRate := 4.0e-4                -- below the anchor arm's 7e-4: the 3-scale
@@ -385,23 +334,8 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
                              spec.imageH.toUSize flat.toUSize
   IO.println s!"  loaded {nVal} val records ({flat}-wide output); dumping logits"
   let batch : Nat := 8
-  let xShape := spec.xShape batch
-  let pixelsPerImage := 3 * spec.imageH * spec.imageW
-  let evalShapesBA := spec.evalShapesBA
-  let nOut : USize := flat.toUSize
-  let rowBytes : Nat := flat * 4
-  let nBatches := (nVal + batch - 1) / batch
-  let mut logitsAll : ByteArray := ByteArray.empty
-  for b in [:nBatches] do
-    let start := b * batch
-    let real  := min batch (nVal - start)
-    let mut imgs := F32.sliceImages valImg start real pixelsPerImage
-    if real < batch then
-      let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
-      for _ in [:batch - real] do imgs := imgs ++ lastImg
-    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
-                    evalParams evalShapesBA imgs xShape batch.toUSize nOut
-    logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
+  let logitsAll ← spec.evalLogits sess evalParams valImg nVal flat batch
+                      (3 * spec.imageH * spec.imageW)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
 

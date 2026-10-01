@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.CliArgs
+import LeanMlir.ReferenceNets
+import LeanMlir.SmallClassifier
 
 /-! Which wavelengths travel: chapter 4's CNN on EuroSAT's thirteen Sentinel-2 bands.
 
@@ -33,6 +36,8 @@ import LeanMlir
     Writes `<prefix>_curve.csv`, `_params.bin`, `_bn_stats.bin` and `_logits_<part>.bin`
     (f32 `[N, classes]`) under `out` (default `.lake/build`). -/
 
+open CliArgs SmallClassifier
+
 namespace RsBands
 
 def H : Nat := 64
@@ -54,53 +59,8 @@ def planesOf (arm : String) : Option (Array Nat) :=
 /-- Chapter 4's CIFAR-CNN8-wide-BN verbatim: eight convolutions in four conv-conv-pool
     stages at 16, 16, 32, 32 channels into the 2 × 512 head; only the stem's input
     channels and the output width change (flatten = 32 × 4 × 4 = 512). -/
-def cifar8w (arm : String) (C nOut : Nat) : NetSpec where
-  name := s!"rs cifar8w {arm}"
-  imageH := H
-  imageW := W
-  layers := [
-    .convBn C 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .convBn 32 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .flatten,
-    .dense (32 * (H / 16) * (W / 16)) 512 .relu,
-    .dense 512 512 .relu,
-    .dense 512 nOut .identity
-  ]
-
-def fmt (x : Float) (d : Nat) : String :=
-  let m := (10.0 : Float) ^ d.toFloat
-  let r := (x * m).round / m
-  let s := toString r
-  if s.length > 10 then (s.toRawSubstring.take 10).toString else s
-
-/-- xorshift64 step. -/
-@[inline] def xs (s : UInt64) : UInt64 :=
-  let s := s ^^^ (s <<< 13)
-  let s := s ^^^ (s >>> 7)
-  s ^^^ (s <<< 17)
-
-/-- Fisher–Yates permutation of `0..n-1` from a seed. -/
-def permutation (n : Nat) (seed : UInt64) : Array Nat := Id.run do
-  let mut a : Array Nat := Array.range n
-  let mut s := if seed == 0 then 0x9E3779B97F4A7C15 else seed
-  for i in [1:n] do
-    let j := n - i
-    s := xs s
-    let k := (s % (j + 1).toUInt64).toNat
-    let tmp := a[j]!
-    a := a.set! j a[k]!
-    a := a.set! k tmp
-  return a
+def cifar8w (arm : String) (C nOut : Nat) : NetSpec :=
+  ReferenceNets.cifar8wOf s!"rs cifar8w {arm}" C H W nOut
 
 /-- Re-lay a 13-plane part as the arm's `C`-plane part: one memcpy per (chip, plane). -/
 def selectPlanes (src : ByteArray) (n : Nat) (planes : Array Nat) : ByteArray := Id.run do
@@ -114,52 +74,18 @@ def selectPlanes (src : ByteArray) (n : Nat) (planes : Array Nat) : ByteArray :=
 /-- Gather a batch of `B` chips by index from the arm-layout f32 part, and their labels;
     with `aug`, each chip under a random one of the eight symmetries of the square
     (`F32.dihedralGather`, seeded by the step). -/
-def gather (img lbl : ByteArray) (idx : Array Nat) (start B C : Nat) (aug : Bool) (seed : UInt64) :
+def gatherChips (img lbl : ByteArray) (idx : Array Nat) (start B C : Nat) (aug : Bool) (seed : UInt64) :
     IO (ByteArray × ByteArray) := do
-  let mut y := ByteArray.emptyWithCapacity (B * 4)
-  let mut ib := ByteArray.emptyWithCapacity (B * 4)
-  for i in [:B] do
-    let k := idx[start + i]!
-    y := y ++ F32.sliceLabels lbl k 1
-    ib := ib ++ ByteArray.mk #[(k % 256).toUInt8, (k / 256 % 256).toUInt8, (k / 65536 % 256).toUInt8, (k / 16777216).toUInt8]
   if aug then
+    let mut y := ByteArray.emptyWithCapacity (B * 4)
+    let mut ib := ByteArray.emptyWithCapacity (B * 4)
+    for i in [:B] do
+      let k := idx[start + i]!
+      y := y ++ F32.sliceLabels lbl k 1
+      ib := pushU32LE ib k
     return (← F32.dihedralGather img ib B.toUSize C.toUSize H.toUSize seed, y)
   else
-    let mut x := ByteArray.emptyWithCapacity (B * C * hw * 4)
-    for i in [:B] do
-      x := x ++ F32.sliceImages img idx[start + i]! 1 (C * hw)
-    return (x, y)
-
-/-- Run the eval graph over a whole part at batch `evalB` (tail zero-padded) and return
-    the logits as f32 `[n, classes]` plus the argmax accuracy against the part's labels. -/
-def scoreSet (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh : ByteArray)
-    (img lbl : ByteArray) (n evalB nPix : Nat) : IO (ByteArray × Float) := do
-  let nC := spec.numClasses
-  let mut logits := ByteArray.emptyWithCapacity (n * nC * 4)
-  let mut correct : Nat := 0
-  let nb := (n + evalB - 1) / evalB
-  for bi in [:nb] do
-    let xba := F32.sliceImagesPad img (bi * evalB) evalB nPix n
-    let out ← LowererSession.forwardF32 sess spec.evalFnName evalParams evalShapes xba xSh
-                evalB.toUSize nC.toUSize
-    let avail := min evalB (n - bi * evalB)
-    logits := logits ++ out.extract 0 (avail * nC * 4)
-    for i in [:avail] do
-      let pred := F32.argmaxN out (i * nC).toUSize nC.toUSize
-      let label := lbl.data[(bi * evalB + i) * 4]!.toNat
-      if pred.toNat == label then correct := correct + 1
-  return (logits, correct.toFloat / n.toFloat * 100.0)
-
-def parseArg (args : List String) (key : String) (dflt : String) : String :=
-  match args.find? (·.startsWith (key ++ "=")) with
-  | some a => (a.toRawSubstring.drop (key.length + 1)).toString
-  | none => dflt
-
-def parseFloat (s : String) (dflt : Float) : Float :=
-  match s.splitOn "." with
-  | [a] => a.toNat?.map (·.toFloat) |>.getD dflt
-  | [a, b] => a.toNat!.toFloat + b.toNat!.toFloat / (10.0 : Float) ^ b.length.toFloat
-  | _ => dflt
+    return gather img lbl idx start B (C * hw)
 
 /-- Which chips of a part a fold keeps: `fold=k` trains on `folds_<part>.bin ≠ k` and
     scores on `= k`; a part without a folds file is used whole. -/
@@ -224,8 +150,8 @@ def main (args : List String) : IO Unit := do
   let nOut := (parseArg args "classes" "10").toNat!
   let epochs := (parseArg args "epochs" "20").toNat!
   let B := (parseArg args "batch" "64").toNat!
-  let lr := parseFloat (parseArg args "lr" "0.001") 0.001
-  let ls := parseFloat (parseArg args "ls" "0.0") 0.0
+  let lr := floatArg args "lr" 0.001
+  let ls := floatArg args "ls" 0.0
   let seed := (parseArg args "seed" "1").toNat!
   let init := parseArg args "init" ""
   let fold : Option Nat := (parseArg args "fold" "").toNat?
@@ -311,7 +237,7 @@ train on {trainPart}{match fold with | some k => s!" fold {k}" | none => ""}{if 
         -- linear warmup over the first epoch, cosine to zero after
         let lrNow := if step <= warm then lr * step.toFloat / warm.toFloat
           else lr * 0.5 * (1.0 + Float.cos (3.14159265358979 * (step - warm).toFloat / (total - warm).toFloat))
-        let (xba, yb) ← gather imgTr lblTr idx (bi * B) B C aug (seed.toUInt64 * 7919 + step.toUInt64)
+        let (xba, yb) ← gatherChips imgTr lblTr idx (bi * B) B C aug (seed.toUInt64 * 7919 + step.toUInt64)
         let packed := (p.append m).append v
         let out ← LowererSession.trainStepAdamF32 sess spec.trainFnName
                     packed allShapes xba xSh yb lrNow step.toFloat bnShapes B.toUSize
@@ -319,9 +245,7 @@ train on {trainPart}{match fold with | some k => s!" fold {k}" | none => ""}{if 
           unless out.size / 4 == nT + 1 + nBn do
             throw <| IO.userError s!"train step returned {out.size / 4} floats, expected 3*{nP} + 1 + {nBn} = {nT + 1 + nBn}: the packed layout does not match the graph"
         lossAcc := lossAcc + F32.read out nT.toUSize
-        p := F32.slice out 0 nP
-        m := F32.slice out nP nP
-        v := F32.slice out (2 * nP) nP
+        (p, m, v) := F32.unpackAdam out nP
         let batchBn := out.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
         bn ← F32.ema bn batchBn (if step == 1 && init == "" then 1.0 else 0.1)
         if epoch == 0 && bi < 3 then

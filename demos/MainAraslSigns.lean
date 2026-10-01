@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.CliArgs
+import LeanMlir.ReferenceNets
+import LeanMlir.SmallClassifier
 
 /-! Chapter 4's CNN on Arabic sign-language letters, under two splits of the same
     images.
@@ -25,6 +28,8 @@ import LeanMlir
     logits. Writes `<prefix>_curve.csv`, `_params.bin`, `_bn_stats.bin` and
     `_logits_{val,test}.bin` (f32 [N, 32]) under `out` (default `.lake/build`). -/
 
+open CliArgs SmallClassifier
+
 namespace AraslSigns
 
 def nClasses : Nat := 32
@@ -34,28 +39,8 @@ def nClasses : Nat := 32
     channels (1) and the output width (32) change. On the 64 × 64 native input the four
     pools end at 4 × 4, so the flatten is 32 × 4 × 4 = 512; `size=32` is the chapter's
     own input and its own 128-wide flatten. -/
-def cifar8w (s : Nat) : NetSpec where
-  name := if s == 64 then "arasl cifar8w" else s!"arasl cifar8w {s}"
-  imageH := s
-  imageW := s
-  layers := [
-    .convBn 1 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 16 3 1 .same,
-    .convBn 16 16 3 1 .same,
-    .maxPool 2 2,
-    .convBn 16 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .convBn 32 32 3 1 .same,
-    .convBn 32 32 3 1 .same,
-    .maxPool 2 2,
-    .flatten,
-    .dense (32 * (s / 16) * (s / 16)) 512 .relu,
-    .dense 512 512 .relu,
-    .dense 512 nClasses .identity
-  ]
+def cifar8w (s : Nat) : NetSpec :=
+  ReferenceNets.cifar8wOf (if s == 64 then "arasl cifar8w" else s!"arasl cifar8w {s}") 1 s s nClasses
 
 /-- The chapter 2–3 MLP on the flat image: 4096 → 512 → 512 → 32. -/
 def mlp (s : Nat) : NetSpec where
@@ -70,66 +55,6 @@ def linear (s : Nat) : NetSpec where
   imageH := s
   imageW := s
   layers := [.dense (s * s) nClasses .identity]
-
-def fmt (x : Float) (d : Nat) : String :=
-  let m := (10.0 : Float) ^ d.toFloat
-  let r := (x * m).round / m
-  let s := toString r
-  if s.length > 10 then (s.toRawSubstring.take 10).toString else s
-
-/-- xorshift64 step. -/
-@[inline] def xs (s : UInt64) : UInt64 :=
-  let s := s ^^^ (s <<< 13)
-  let s := s ^^^ (s >>> 7)
-  s ^^^ (s <<< 17)
-
-/-- Fisher–Yates permutation of `0..n-1` from a seed. -/
-def permutation (n : Nat) (seed : UInt64) : Array Nat := Id.run do
-  let mut a : Array Nat := Array.range n
-  let mut s := if seed == 0 then 0x9E3779B97F4A7C15 else seed
-  for i in [1:n] do
-    let j := n - i
-    s := xs s
-    let k := (s % (j + 1).toUInt64).toNat
-    let tmp := a[j]!
-    a := a.set! j a[k]!
-    a := a.set! k tmp
-  return a
-
-/-- Gather a batch of `B` images by index from the flat f32 set, and their labels. -/
-def gather (img lbl : ByteArray) (idx : Array Nat) (start B nPix : Nat) : ByteArray × ByteArray := Id.run do
-  let mut x := ByteArray.emptyWithCapacity (B * nPix * 4)
-  let mut y := ByteArray.emptyWithCapacity (B * 4)
-  for i in [:B] do
-    let k := idx[start + i]!
-    x := x ++ F32.sliceImages img k 1 nPix
-    y := y ++ F32.sliceLabels lbl k 1
-  return (x, y)
-
-/-- Run the eval graph over a whole part at batch `evalB` (tail zero-padded) and return
-    the logits as f32 `[n, 32]` plus the accuracy. -/
-def scoreSet (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh : ByteArray)
-    (img lbl : ByteArray) (n evalB nPix : Nat) : IO (ByteArray × Float) := do
-  let nC := nClasses
-  let mut logits := ByteArray.emptyWithCapacity (n * nC * 4)
-  let mut correct : Nat := 0
-  let nb := (n + evalB - 1) / evalB
-  for bi in [:nb] do
-    let xba := F32.sliceImagesPad img (bi * evalB) evalB nPix n
-    let out ← LowererSession.forwardF32 sess spec.evalFnName evalParams evalShapes xba xSh
-                evalB.toUSize nC.toUSize
-    let avail := min evalB (n - bi * evalB)
-    logits := logits ++ out.extract 0 (avail * nC * 4)
-    for i in [:avail] do
-      let pred := F32.argmaxN out (i * nC).toUSize nC.toUSize
-      let label := lbl.data[(bi * evalB + i) * 4]!.toNat
-      if pred.toNat == label then correct := correct + 1
-  return (logits, correct.toFloat / n.toFloat * 100.0)
-
-def parseArg (args : List String) (key : String) (dflt : String) : String :=
-  match args.find? (·.startsWith (key ++ "=")) with
-  | some a => (a.toRawSubstring.drop (key.length + 1)).toString
-  | none => dflt
 
 /-- Read a part: images `[n, 1, s, s]` f32 and int32 labels, sizes cross-checked. -/
 def loadPart (dataDir split part sfx : String) (nPix : Nat) : IO (ByteArray × ByteArray × Nat) := do
@@ -153,7 +78,7 @@ def main (args : List String) : IO Unit := do
   let split := parseArg args "split" "blocked"
   let epochs := (parseArg args "epochs" "30").toNat!
   let B := (parseArg args "batch" "64").toNat!
-  let lr := (ViTGradcheck.parseFloat? (parseArg args "lr" "0.001")).getD 0.001
+  let lr := floatArg args "lr" 0.001
   let seed := (parseArg args "seed" "1").toNat!
   let size := (parseArg args "size" "64").toNat!
   let tag := parseArg args "tag" ""
@@ -259,9 +184,7 @@ labels 0..{lmax} ({t1 - t0} ms)"
           unless out.size / 4 == nT + 1 + nBn do
             throw <| IO.userError s!"train step returned {out.size / 4} floats, expected 3*{nP} + 1 + {nBn} = {nT + 1 + nBn}: the packed layout does not match the graph"
         lossAcc := lossAcc + F32.read out nT.toUSize
-        p := F32.slice out 0 nP
-        m := F32.slice out nP nP
-        v := F32.slice out (2 * nP) nP
+        (p, m, v) := F32.unpackAdam out nP
         if nBn > 0 then
           let batchBn := out.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
           bn ← F32.ema bn batchBn (if step == 1 then 1.0 else 0.1)

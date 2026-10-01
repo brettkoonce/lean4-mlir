@@ -1,5 +1,4 @@
 import LeanMlir.F32Array
-import LeanMlir.LEBytes
 
 /-! # Pure-Lean E4M3 (fp8) fake-quant over raw-f32 `ByteArray`s
 

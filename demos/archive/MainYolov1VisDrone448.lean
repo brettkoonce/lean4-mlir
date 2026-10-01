@@ -85,24 +85,8 @@ def inferDump (dataDir outDir : String) : IO Unit := do
                                   spec.imageH.toUSize gH.toUSize gW.toUSize
   IO.println s!"  loaded {nVal} val records ({flat}-wide output); dumping logits"
   let batch : Nat := 16
-  let xShape := spec.xShape batch
-  let pixelsPerImage := 3 * spec.imageH * spec.imageW
-  let evalShapesBA := spec.evalShapesBA
-  let nOut : USize := flat.toUSize
-  let rowBytes : Nat := flat * 4
-  let nBatches := (nVal + batch - 1) / batch
-  let mut logitsAll : ByteArray := ByteArray.empty
-  for b in [:nBatches] do
-    let start := b * batch
-    let real  := min batch (nVal - start)
-    let mut imgs := F32.sliceImages valImg start real pixelsPerImage
-    if real < batch then
-      let lastImg := F32.sliceImages valImg (start + real - 1) 1 pixelsPerImage
-      for _ in [:batch - real] do
-        imgs := imgs ++ lastImg
-    let logitsB ← LowererSession.forwardF32 sess spec.evalFnName
-                    evalParams evalShapesBA imgs xShape batch.toUSize nOut
-    logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
+  let logitsAll ← spec.evalLogits sess evalParams valImg nVal flat batch
+                      (3 * spec.imageH * spec.imageW)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
   IO.println s!"next: python3 scripts/demos/yolo_map_visdrone.py {outDir}/logits.bin {dataDir}/val.bin --grid {gH}"

@@ -1,3 +1,5 @@
+import LeanMlir.LEBytes
+
 /-! Float32-in-ByteArray utilities.
 
     All tensor data (params, images, gradients) stored as raw float32 bytes
@@ -207,6 +209,11 @@ def concat (arrays : Array ByteArray) : ByteArray := Id.run do
 def slice (ba : ByteArray) (start count : Nat) : ByteArray :=
   ba.extract (start * 4) ((start + count) * 4)
 
+/-- The `[θ | m | v]` prefix of a packed Adam train step's output, `nP` floats each: the state
+    the next step takes back as `(θ.append m).append v`. -/
+def unpackAdam (out : ByteArray) (nP : Nat) : ByteArray × ByteArray × ByteArray :=
+  (slice out 0 nP, slice out nP nP, slice out (2 * nP) nP)
+
 /-- Extract the loss (last float32) from a train_step output. -/
 def extractLoss (out : ByteArray) (lossIdx : Nat) : Float :=
   read out lossIdx.toUSize
@@ -216,11 +223,7 @@ def extractLoss (out : ByteArray) (lossIdx : Nat) : Float :=
     Reads all four bytes. Reading byte 0 alone (`lbl.get! (4 * i)`) is `label % 256`: invisible
     on the 10-class datasets, but on 1000-class ImageNet most labels exceed 255, and a correct
     prediction could then match only on classes 0..255. -/
-def readLabel (lbl : ByteArray) (i : Nat) : Nat :=
-  (lbl.get! (4 * i)).toNat
-    ||| ((lbl.get! (4 * i + 1)).toNat <<< 8)
-    ||| ((lbl.get! (4 * i + 2)).toNat <<< 16)
-    ||| ((lbl.get! (4 * i + 3)).toNat <<< 24)
+def readLabel (lbl : ByteArray) (i : Nat) : Nat := readU32LE lbl (4 * i)
 
 /-- Argmax over `n` float32 values starting at element offset `off`.
 

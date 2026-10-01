@@ -1,3 +1,5 @@
+import LeanMlir.LEBytes
+
 /-! # Lean4 numerical gradcheck harness (no numpy)
 
 Shells out to `iree-run-module` to execute compiled `@*_fwd`/`@*_back` `.vmfb`,
@@ -10,45 +12,16 @@ validate ALL input gradients at once — catching transpose/axis bugs that
 `iree-compile` (type-checking only) cannot.
 
 Used by the ViT gradcheck tests (tests/TestSDPA.lean, TestMHSA, TestViTBlock, TestViTTiny).
-The float-token parser (`ViTGradcheck.parseFloat?`, `ViTGradcheck.parseFloat`) is also used by
-TestSgdRenderTie and by three demos (MainAraslSigns, MainPlantLeaf, MainSegLossProbe) to read
-float arguments. All Lean4. -/
+All Lean4. -/
 
 namespace ViTGradcheck
-
-/-- Parse one iree-printed float token (`-0.00623606`, `1.3e-05`, `42`, `nan`, `-inf`); `none`
-    on anything else. Decimal and scientific forms go through the elaborator's own literal decoder
-    (`Lean.Syntax.decodeScientificLitVal?` + `Float.ofScientific`), so a token rounds exactly as the
-    same literal written in Lean source would; a bare integer, which that decoder rejects, falls
-    back to `String.toNat?`. `nan`/`inf` are kept as NaN/∞ so a non-finite output fails a gradcheck
-    rather than reading as a number. -/
-def parseFloat? (tok : String) : Option Float :=
-  let (neg, body) :=
-    if tok.startsWith "-" then (true, (tok.drop 1).toString)
-    else if tok.startsWith "+" then (false, (tok.drop 1).toString)
-    else (false, tok)
-  let v? : Option Float :=
-    if body == "nan" then some (0.0 / 0.0)
-    else if body == "inf" then some (1.0 / 0.0)
-    else match Lean.Syntax.decodeScientificLitVal? body with
-      | some (m, s, e) => some (Float.ofScientific m s e)
-      | none => body.toNat?.map Nat.toFloat
-  v?.map fun v => if neg then -v else v
-
-/-- `parseFloat?` with `0.0` for a token it cannot read. -/
-def parseFloat (tok : String) : Float := (parseFloat? tok).getD 0.0
 
 /-- Write a flat array as raw little-endian `f32`, for `iree-run-module --input=<shape>=@file`.
     Inputs and outputs go through files, not text: `Float.toString` keeps six decimals and IREE
     prints six significant digits, and either rounding alone puts a ~3e-4 floor under a
     finite-difference quotient at ε = 1e-3. Through files the floor is f32's own. -/
 private def writeBinF32 (path : String) (xs : Array Float) : IO Unit := do
-  let mut b := ByteArray.emptyWithCapacity (4 * xs.size)
-  for x in xs do
-    let u := x.toFloat32.toBits
-    b := b.push u.toUInt8 |>.push (u >>> 8).toUInt8 |>.push (u >>> 16).toUInt8
-      |>.push (u >>> 24).toUInt8
-  IO.FS.writeBinFile path b
+  IO.FS.writeBinFile path (xs.foldl pushF32LE (ByteArray.emptyWithCapacity (4 * xs.size)))
 
 /-- Read an `f32` `.npy` file (as `iree-run-module --output=@file.npy` writes it) into a flat
     array. -/
@@ -63,9 +36,7 @@ private def readNpyF32 (path : String) : IO (Array Float) := do
   let n := (b.size - 10 - hlen) / 4
   return (Array.range n).map fun i =>
     let o := 10 + hlen + 4 * i
-    let bits := b[o]!.toUInt32 ||| (b[o+1]!.toUInt32 <<< 8) |||
-      (b[o+2]!.toUInt32 <<< 16) ||| (b[o+3]!.toUInt32 <<< 24)
-    (Float32.ofBits bits).toFloat
+    (Float32.ofBits (readU32LE b o).toUInt32).toFloat
 
 /-- The `iree-run-module` device for the `IREE_BACKEND` the `.vmfb` was compiled for (default
     `cuda`, as in `ireeCompileArgs`): `rocm` runs on `hip`, `llvm-cpu` on `local-task`. -/

@@ -39,31 +39,52 @@ before this plan was written (marked ✔).
 
 ## ▶ Start here (next session)
 
-**State at 2026-09-30.** Branch `rubric-review`; everything through `994b1eb6` is pushed to `origin/main`:
+**State at 2026-10-01.** Everything through `1dcbcb58` is pushed to `origin/main`, and CI is
+green on all eight workflows. Work from a branch off `main` (the local `rubric-review` branch is
+at the same commit). Landed, in order:
 - `5ff18875`: this plan.
-- `0069e30d`: WP1 part 1.
-- `9bebaed8`: WP1 part 2A.
+- `0069e30d` / `9bebaed8`: WP1 parts 1 and 2A.
 - `5c0deb1a`: WP3.
 - `3f20d71d`: WP2.
 - `84ee2bd1`: WP7.
-- `d2d15b4e`: the MANIFEST regeneration CI asked for.
 - `dc9fe1ea`: WP4.
-- `994b1eb6`: the Foundations closing section (cherry-picked from `foundations-intro`).
+- `994b1eb6`: the Foundations closing section.
+- `bee5ab0d`: WP5.
+- `2e759820`: WP6 and WP6c (the `comment_numbers.py` lint).
+- `1dcbcb58`: the small tier (WP10, WP11, X-cor-3, the `module_refs.py` gate, the
+  `audit_only_mentions.py` report).
 
-WP3 (a sound PGD-demo radius, plus C-doc-1/2/3, C-nam-1, X-cor-2) and WP2 are committed. One WP2
-item is parked for the CPU box: the B0/ConvNeXt/ViT combined corollaries. WP1 part 2B (MNIST descent) is **parked**; its
-design is under WP1 below, and it should be done together with A-pq-1. WP7 (the attribution
-links, plus the TinyStories deletion) is committed and pushed (`84ee2bd1`). WP4 is committed and pushed
-(`dc9fe1ea`). WP5 is committed as `bee5ab0d` and **not pushed**; its status (four done, three
-parked) is under WP5.
+Parked:
+- WP1 part 2B, the MNIST descent rungs. Do it with WP8b/A-pq-1; the design is under WP1.
+- The B0/ConvNeXt/ViT combined corollaries (WP2) and the ViT/MNv4 drop-path forwards (WP5),
+  for the CPU box.
+- N1-gen-1 (ConvNeXt S/B), per the user.
 
-**WP6 is committed** (`2e759820`; status under WP6). Housekeeping done: the
-`foundations-intro` worktree and branch are removed, and the 33 local branches already merged
-into `origin/main` are deleted. Not pushed: `bee5ab0d`, `2e759820`.
+**Next (user, 2026-10-01): WP8f and WP8g, in parallel on separate agents** (§WP8 below; the
+detail is in `slice_G.md` and `slice_X.md`).
+- **WP8f, renderers.** G-reuse-1/3/4/5 go into RenderKit: the `%loss` block (×9), the wd rank
+  test, the vector-LN site (×4) and the sync-BN banner (×5).
+  - Gate: `git diff verified_mlir/` empty after the build. Every artifact must be byte-identical.
+- **WP8g, program code.**
+  - X-reu-1…6: the LE readers ×7, the dead `emitChannelSplitGrad`, the float parsers, BraTS
+    scoring, `NetSpec`s in Main files, and "compile if IREE" ×3.
+  - X-pla-4/5: the classifier kit copied ×4 and the LM kit ×3.
+  - X-bes-5.
+  - X-cor-3 is already done (`1dcbcb58`).
+  - Gate: `lake build Apps` plus the affected demos' smokes (ask before any GPU run over a
+    minute), and `check_target_names.sh`.
+- The two touch disjoint files. Re-check each finding against HEAD first: the audit ran at
+  `55ad3a5a`.
+- Standing rules and the standard gate are under "How to farm this". The gate now also
+  includes `scripts/gates/comment_numbers.py` and `scripts/gates/module_refs.py`.
 
-**Small tier done (staged):** see §Small tier below.
+After WP8f/g: WP8a (the ParamGrad cluster, about −1k lines), then WP1 part 2B together with WP8b.
 
-After that: WP8f/WP8g in parallel, then WP8a, then WP1 part 2B with WP8b.
+Also owed, from the user:
+- Triage the `audit_only_mentions.py` list (158 at first run; some are capstones that want a
+  yaml or book citation rather than deletion).
+- Eventually, re-run the B0 350-epoch ImageNet pair on the i/16 drop-path config. The book notes
+  the gap.
 
 ## Decisions (user, 2026-09-30)
 
@@ -686,12 +707,87 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **A-pq-3** (13 `show … decimate` → `HasVJP.decimate`; check the `rfl` ties).
 - **8f Renderers**: **G-reuse-1/3/4/5** (the `%loss` block ×9, wd rank test, vector-LN site ×4,
   sync-BN banner ×5 into RenderKit; byte-identical).
+  - **Status 2026-10-01: done (staged), except two lines outside Codegen; every artifact
+    byte-identical** (`regen_verified_mlir.sh proofs` then `check`, empty `git diff verified_mlir/`).
+    Codegen net about −200 lines.
+    - G-reuse-1, reshaped: the audit's nine copies are three blocks. Seven batched renders spell
+      the same smoothed CE, now `reportSmoothedCeLoss`; R50's BCE is `reportBceLoss`. The
+      per-example renders print plain CE, not smoothed CE: `reportCeLossOfLogits` (MLP, MNIST CNN;
+      MlpRender now imports RenderKit) and `reportCeLossOfSm` (the four CIFAR copies; one keeps
+      its own banner text through the `banner` argument).
+    - G-reuse-3: `r34WdDecays` → `rankWdDecays`, `r34WdName` → `wdNameBy (decays := rankWdDecays)`;
+      `cnxWdDecays` is deleted (its rationale is a `--` comment above `cnxWdCounts`), so ConvNeXt,
+      `cnxWdCounts`, its `#guard`s and `tests/TestWdExcludeTie.lean`'s mask use `rankWdDecays`;
+      ViT calls `wdNameBy … vitWdDecays`.
+    - G-reuse-4: `vecLnSite` / `vecLnSiteB` replace `vlnFwd`, `vlnFwdB` and `headLnFwdSiteB`;
+      `cnxHeadLnFwdSite` stays as the ε-fixed ConvNeXt site (FwdGraphTextTies and the ConvNeXt tie
+      docstrings cite it), and the channel-LN sites `cnxLnFwdSite` / `lnFwdSiteB` reuse the same
+      three ops between their transposes. The backward pairs are not one shape (ViT's `vlnBack`
+      carries the SGD/Adam update), so they stay.
+    - G-reuse-5: `syncBnBanner tieThm fwdThm dir` plus the two bf16 notes, `syncBnBf16WgradNote`
+      (R34, R50) and `syncBnBf16TwinsNote` (MNv2, MNv4, B0). The drop-path and accumulation notes
+      differ per net and stay with their callers.
 - **8g Program code**:
   - **X-reu-1…6** (LE readers ×7, a dead `emitChannelSplitGrad`, float parsers, BraTS scoring,
     `NetSpec`s in Main files, "compile if IREE" ×3).
   - **X-pla-4/5** (the classifier kit copied ×4, the LM kit ×3; −450).
-  - **X-cor-3** (`roundE4M3` ties away from zero vs the numpy oracle's ties-to-even).
+  - ~~X-cor-3~~ done in `1dcbcb58`.
   - **X-bes-5**.
+  - **Status 2026-10-01: done (staged) except the LM kit and X-bes-5; 0 `verified_mlir/`
+    changes.** Program code net about −400 lines, two new import-free modules
+    (`LeanMlir/CliArgs.lean`, `LeanMlir/SmallClassifier.lean`). Every finding was re-checked at
+    `1dcbcb58`.
+    - X-reu-1: `LEBytes` gains `readU32LE` / `readU64LE` (byte offset) and `pushF64LE`;
+      `F32.readLabel` and `TTT.readU64` are their record-index forms. The copies in the shim
+      preamble and row counts (`Verified/Train`), Bigram, BratsEval, AlphaZero, GradcheckHelpers'
+      `.npy` reader and `.bin` writer, NQS's `pushF64` and RsBands' packed index are gone. NQS's
+      `pushU64` stays: it is over `UInt64`, and `pushU64LE` takes `Nat`, which boxes a
+      configuration with the top bit set. Diffusion2d's `floatsToBytes` is already one `pushF32LE`
+      fold.
+    - X-reu-2: the helper is deleted, not called. The `.unetUp` arm needs other SSA names, and
+      the two `dwConvAttrBlock*` go too.
+    - X-reu-3 (with X-pla-2's module): `CliArgs.parseFloat?` / `parseFloat` / `kv` / `parseArg` /
+      `natArg` / `floatArg` replace `ViTGradcheck.parseFloat?` and the Pong, AlphaZero, NQS,
+      RsBands and GwDetect parsers, the four `parseArg`s and the three `kv`/`natArg` lambda sets.
+      A token now rounds as the Lean literal does. The old hand parsers could be 1 ulp off where
+      they multiplied by `10^e` (`3e-4`); every value the demos' docs show parses identically.
+      X-nam-1's namespace rename stays with WP9.
+    - X-reu-4: `SegMetrics.regionCounts` / `regionDice` in `Train.lean` serve the trainer's val
+      line and `brats-eval`, and `DatasetKind.segRegions` exposes the region table.
+      `ReferenceNets.bratsNetOf` resolves `net=` / `ctx=` for `brats-predict` and `brats-eval`.
+      The new helpers agree with the deleted ones on a set of hand confusion matrices (a scratch
+      `#guard`).
+    - X-reu-5: `ReferenceNets.cifar8wOf`, `tinyDdpmUnet`, `r34FpnDet` and `r50FpnDet` (which now
+      carries the R50 bootstrap and 2×2-pool rationale); PlantLeaf is `{ resnet34 with … }`. A
+      scratch file checked `reprStr` old = new on 23 instantiations (every name, tower and size
+      the demos use), so every `generate*` output is unchanged.
+    - X-reu-6: `NetSpec.compileArtifact` (iree-compile on IREE, a no-op on XLA) replaces the DDPM
+      trainer's and sampler's copies and GradCAM's shell-out. GradCAM uses `F32.argmaxN`, BratsPredict
+      and the DDPM sampler use `Cam.writePPM`, and NQS uses `FloatFmt.fmt` and `Ddpm.piF`. The four
+      classifier `fmt`s are not `FloatFmt.fmt`; they moved into `SmallClassifier` unchanged.
+    - X-pla-4: `SmallClassifier` (`fmt`, `xs`, `permutation`, `gather`, `scoreBatches`,
+      `scoreSet`) serves the four classifier demos. PlantLeaf scores through `scoreBatches` with its
+      own last-image-padded gather, and RsBands' augmenting gather is `gatherChips`. The detectors'
+      four `inferDump`s share `NetSpec.evalLogits`. The per-knob env readers and their checks
+      differ per demo, so they stay. **LM kit dropped:** TinyStories is gone (`84ee2bd1`), and the
+      only copies left are `loadVocab` / `reverseVocab`, twice. The two `sampleToken`s differ on
+      purpose (top-k/top-p), and `readFloats` takes different arguments in each.
+    - X-pla-5, reshaped: `F32.unpackAdam` replaces the three-slice unpack at all 10 sites. No
+      `AdamState` / `adamStep`: the sites call four different FFI step variants, and they read
+      `p` alone between steps. The two `lean_ttt_*` externs moved from the AlphaZero Main into
+      `TicTacToe.lean`; the six `lean_mcts_*` stay in the demo.
+    - **X-bes-5 parked (needs the user):** the token-embedding half changes six entries' modelled
+      parameter counts. That means the golden table, each entry's docstring and Notes printout,
+      and the book's bestiary prose. Each model also needs its own call (BERT's segment table,
+      LLaMA's RoPE `posEmb := false`, CLIP's 77 positions). The `resNetBody` half would replace
+      the per-entry layer lists the book prints, and DeepLab's last stage is stride 1 on purpose.
+    - Gates: `lake build Certs CertsHeavy LeanMlir Reference TestSupport Apps`, `lake build` of
+      the 31 touched exes, `check_target_names.sh`, `comment_numbers.py`, `module_refs.py`,
+      `import_audit.py implied` (dropped E4M3Quant's now-implied `LEBytes` import),
+      `docstring-checkrefs`, `name_lint.py`, empty `git diff verified_mlir/`. CPU smokes:
+      `label-check`, `argmax-check`, `test-dataset-record-sizes`, `ttt-env`, `fpn-train-emit`,
+      `seg-loss-probe` (`g=` / `w=` through `CliArgs`), `sgd-render-tie`'s bad-lr guard, and
+      `brats-eval` / `brats-predict`'s spec resolution. The GPU smokes are owed (user launches).
 
 ### WP9 — Placement, API and naming
 - **Kit homes:**

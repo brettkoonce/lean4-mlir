@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Emit-only harness for the FPN multi-scale detector train step. Constructs the
     `r34FpnDet` spec (R34-ImageNet backbone tapped at C3/C4/C5 → `.fpnDetect` →
@@ -17,20 +18,8 @@ def fpnAnchorsP5 : List (Float × Float) := [(0.124, 0.151), (0.200, 0.220), (0.
 def fpnDetScales : List (Nat × List (Float × Float)) :=
   [(56, fpnAnchorsP3), (28, fpnAnchorsP4), (14, fpnAnchorsP5)]
 
-def r34FpnDetT (tower : Nat) : NetSpec where
-  name := "ResNet-34 + FPN detector 448 (VisDrone)"
-  imageH := 448
-  imageW := 448
-  detStride := 32
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,   -- stride 4
-    .residualBlock  64 128 4 2,   -- C3: 128ch, 56×56 (stride 8)
-    .residualBlock 128 256 6 2,   -- C4: 256ch, 28×28 (stride 16)
-    .residualBlock 256 512 3 2,   -- C5: 512ch, 14×14 (stride 32)
-    .fpnDetect 256 128 256 512 14 3 tower
-  ]
+def r34FpnDetT (tower : Nat) : NetSpec :=
+  ReferenceNets.r34FpnDet "ResNet-34 + FPN detector 448 (VisDrone)" tower
 
 def main (args : List String) : IO Unit := do
   let outDir := args.head?.getD "/tmp"

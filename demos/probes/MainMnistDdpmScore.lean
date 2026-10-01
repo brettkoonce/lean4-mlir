@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! # `mnist-ddpm-score` — the image DDPM's first real number
 
@@ -49,25 +50,7 @@ import LeanMlir
     ```
 -/
 
-/-- The THIRD copy of this spec (`MainMnistDdpmTrain`, `MainMnistDdpmSample`
-    hold the other two). It is not shared because both of those are executables
-    with their own `main`. The guard against drift is downstream and loud: the
-    checkpoint is keyed by `spec.buildPrefix`, which is derived from `name`, and
-    this driver checks the blob is exactly `spec.totalParams` floats. -/
-def tinyDdpmUnet (centred : Bool := true) : NetSpec where
-  name := if centred then "tiny DDPM UNet T-cond centered (MNIST 28x28x1)"
-                     else "tiny DDPM UNet T-cond (MNIST 28x28x1)"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .unetDown 2 16,
-    .unetDown 16 32,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .unetUp 64 32,
-    .unetUp 32 16,
-    .conv2d 16 1 1 .same .identity
-  ]
+open ReferenceNets (tinyDdpmUnet)
 
 def main (args : List String) : IO Unit := do
   let nums   := args.filterMap String.toNat?
@@ -106,7 +89,7 @@ def main (args : List String) : IO Unit := do
   let dParams ← IO.FS.readBinFile paramsPath
   unless F32.size dParams == spec.totalParams do
     throw <| IO.userError s!"DDPM checkpoint is {F32.size dParams} floats but this spec wants \
-{spec.totalParams} — the three copies of `tinyDdpmUnet` have drifted"
+{spec.totalParams} — it was not trained on `ReferenceNets.tinyDdpmUnet`"
   let bnStats ← IO.FS.readBinFile bnPath
   let evalMlirPath := s!"{pfx}_fwd_eval.mlir"
   IO.FS.writeFile evalMlirPath (MlirCodegen.generateEval spec B)

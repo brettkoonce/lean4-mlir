@@ -1,6 +1,7 @@
 import LeanMlir.Train
 import LeanMlir.TicTacToe
 import Std.Data.HashSet
+import LeanMlir.CliArgs
 
 /-! AlphaZero on the Lean tic-tac-toe, scored against the solved game.
 
@@ -69,39 +70,6 @@ def net (n : Nat) : NetSpec where
     .dense (4 * n * n) 64 .relu,
     .dense 64 (n * n + 1) .identity
   ]
-
-/-- Replay gather with one random dihedral view per sample, applied alike to the
-    planes and the policy target: `(x [count, 2, n, n], π [count, n²])`. -/
-@[extern "lean_ttt_gather_aug"]
-opaque gatherAug (planes pi idx : @& ByteArray) (count n : USize) (seed : UInt64) :
-    IO (ByteArray × ByteArray)
-
-/-- The MSE block's target for `(z − tanh v)² − πᵀ log softmax(p)` on a logits block
-    `[count, nOut]`, and the batch's mean AlphaZero loss. -/
-@[extern "lean_ttt_targets"]
-opaque targets (out pi z : @& ByteArray) (count nOut : USize) (scale : Float) :
-    IO (ByteArray × ByteArray)
-
-def readU32 (ba : ByteArray) (i : Nat) : Nat :=
-  ba[4 * i]!.toNat ||| (ba[4 * i + 1]!.toNat <<< 8) ||| (ba[4 * i + 2]!.toNat <<< 16) |||
-    (ba[4 * i + 3]!.toNat <<< 24)
-
-/-- `1.5`, `0.001`, `1e-4`: enough of a decimal parser for the knobs. -/
-def parseFloat (s : String) : Option Float := do
-  let (mant, ex) ← match s.splitOn "e" with
-    | [m] => pure (m, 0)
-    | [m, e] =>
-      if e.startsWith "-" then ((e.drop 1).toString.toNat?).map fun n => (m, -(n : Int))
-      else e.toNat?.map fun n => (m, (n : Int))
-    | _ => none
-  let (ip, fp) := match mant.splitOn "." with
-    | [i] => (i, "")
-    | [i, f] => (i, f)
-    | _ => ("x", "")
-  let iv ← if ip.isEmpty then some 0 else ip.toNat?
-  let fv ← if fp.isEmpty then some 0 else fp.toNat?
-  let x := iv.toFloat + fv.toFloat / Float.pow 10.0 fp.length.toFloat
-  return x * Float.pow 10.0 (Float.ofInt ex)
 
 -- ── Random draws ──
 
@@ -211,7 +179,7 @@ def search (ctx : Ctx) (roots : Array Pos) (live : Array Bool) (sims : Nat) (noi
     let mut pend := ByteArray.empty
     let mut nPend := 0
     for i in [0:roots.size] do
-      if readU32 sel (4 * i) == 1 then
+      if readU32LE sel (16 * i) == 1 then
         pend := pushU64LE pend (readU64 sel (2 * i + 1))   -- the record's leaf index
         nPend := nPend + 1
     let logits ← if nPend == 0 then pure ByteArray.empty else ctx.forward pend nPend
@@ -384,10 +352,9 @@ end AlphaZeroTtt
 
 open AlphaZeroTtt in
 def main (args : List String) : IO Unit := do
-  let kv (key : String) : Option String :=
-    (args.find? (·.startsWith (key ++ "="))).map (·.drop (key.length + 1) |>.toString)
-  let natArg (key : String) (d : Nat) : Nat := ((kv key) >>= String.toNat?).getD d
-  let floatArg (key : String) (d : Float) : Float := ((kv key) >>= parseFloat).getD d
+  let kv := CliArgs.kv args
+  let natArg := CliArgs.natArg args
+  let floatArg := CliArgs.floatArg args
   let n := natArg "n" 3
   let k := natArg "k" n
   let iters := natArg "iters" 20
@@ -587,9 +554,7 @@ mcts_o_w,mcts_o_d,mcts_o_l,root_value,open_agree,open_sign,seen,ms\n"
       let packed := (p.append m).append v
       let res ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName packed allShapes x xShB y
         lr steps.toFloat bnShapes B.toUSize nOut.toUSize 1 1
-      p := F32.slice res 0 nP
-      m := F32.slice res nP nP
-      v := F32.slice res (2 * nP) nP
+      (p, m, v) := F32.unpackAdam res nP
       lossAcc := lossAcc + F32.read lossBA 0
       evalParams := p
       if s == 0 && iter == 1 then

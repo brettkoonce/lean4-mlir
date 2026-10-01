@@ -5,7 +5,8 @@ import LeanMlir.FloatFmt
     instrument and the scripted players. The game is pure Lean; the instrument is a
     minimax table over every reachable position, built in C (`ffi/f32_helpers.c`,
     `lean_ttt_*`) because it is 43 MB at 4×4. Shared by the `ttt-env` and
-    `alphazero-ttt` demos.
+    `alphazero-ttt` demos; the AlphaZero replay gather and loss targets (`gatherAug`,
+    `targets`) bind here too, beside every other `lean_ttt_*` extern.
 
     A position is a base-3 number over the cells in row-major order, digit 0 empty,
     1 X, 2 O, cell `c` weighted `3^c`; X moves first, so the side to move is the stone
@@ -98,10 +99,8 @@ def Pos.render (p : Pos) : String := Id.run do
     s := s ++ "\n"
   return s
 
-def readU64 (ba : ByteArray) (i : Nat) : Nat := Id.run do
-  let mut v := 0
-  for j in [0:8] do v := v ||| (ba[8 * i + j]!.toNat <<< (8 * j))
-  return v
+/-- The uint64 at RECORD `i` of a packed little-endian u64 buffer. -/
+def readU64 (ba : ByteArray) (i : Nat) : Nat := readU64LE ba (8 * i)
 
 -- ── The solved game ──
 
@@ -172,6 +171,18 @@ opaque solverScore (arena idx : @& ByteArray) (count : USize) (out : @& ByteArra
 /-- `scriptedAgreement` through the solver, over a position list. -/
 @[extern "lean_ttt_solver_agreement"]
 opaque solverAgreement (arena idx : @& ByteArray) (count : USize) : IO ByteArray
+
+/-- Replay gather with one random dihedral view per sample, applied alike to the
+    planes and the policy target: `(x [count, 2, n, n], π [count, n²])`. -/
+@[extern "lean_ttt_gather_aug"]
+opaque gatherAug (planes pi idx : @& ByteArray) (count n : USize) (seed : UInt64) :
+    IO (ByteArray × ByteArray)
+
+/-- The MSE block's target for `(z − tanh v)² − πᵀ log softmax(p)` on a logits block
+    `[count, nOut]`, and the batch's mean AlphaZero loss. -/
+@[extern "lean_ttt_targets"]
+opaque targets (out pi z : @& ByteArray) (count nOut : USize) (scale : Float) :
+    IO (ByteArray × ByteArray)
 
 /-- The instrument: the dense table at n ≤ 4 (`tbl`, empty above), and the on-demand
     solver at every size. `entry` reads the table where it exists. -/

@@ -65,10 +65,7 @@ def reverseVocab (vocab : Array UInt8) : Array Nat := Id.run do
 def decodeTokens (tokens : ByteArray) (count : Nat) (vocab : Array UInt8) : String := Id.run do
   let mut s : String := ""
   for i in [:count] do
-    let id := tokens.data[i * 4]!.toNat
-      ||| tokens.data[i * 4 + 1]!.toNat <<< 8
-      ||| tokens.data[i * 4 + 2]!.toNat <<< 16
-      ||| tokens.data[i * 4 + 3]!.toNat <<< 24
+    let id := F32.readLabel tokens i
     if id < vocab.size then
       s := s ++ (Char.ofNat vocab[id]!.toNat).toString
   return s

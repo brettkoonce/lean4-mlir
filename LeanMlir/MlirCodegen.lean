@@ -175,27 +175,6 @@ private def convAttrBlockFull (pH0 pH1 pW0 pW1 : Nat)
   s!"        rhs_dilation = array<i64: {rhsH}, {rhsW}>,\n" ++
   s!"        window_strides = array<i64: {sH}, {sW}>\n"
 
-/-- Depthwise conv attribute block: feature_group_count = channels. -/
-private def dwConvAttrBlock (pad : Nat) (channels : Nat) : String :=
-  "        batch_group_count = 1 : i64,\n" ++
-  convDimNumbers ++
-  s!"        feature_group_count = {channels} : i64,\n" ++
-  s!"        padding = dense<[[{pad}, {pad}], [{pad}, {pad}]]> : tensor<2x2xi64>,\n" ++
-  "        rhs_dilation = array<i64: 1, 1>,\n" ++
-  "        window_strides = array<i64: 1, 1>\n"
-
-/-- General depthwise conv attribute block with asymmetric padding, strides, dilations. -/
-private def dwConvAttrBlockFull (pH0 pH1 pW0 pW1 : Nat) (channels : Nat)
-    (sH sW : Nat := 1) (lhsH lhsW : Nat := 1) (rhsH rhsW : Nat := 1)
-    (batchGroupCount : Nat := 1) : String :=
-  s!"        batch_group_count = {batchGroupCount} : i64,\n" ++
-  convDimNumbers ++
-  s!"        feature_group_count = {channels} : i64,\n" ++
-  s!"        lhs_dilation = array<i64: {lhsH}, {lhsW}>,\n" ++
-  s!"        padding = dense<[[{pH0}, {pH1}], [{pW0}, {pW1}]]> : tensor<2x2xi64>,\n" ++
-  s!"        rhs_dilation = array<i64: {rhsH}, {rhsW}>,\n" ++
-  s!"        window_strides = array<i64: {sH}, {sW}>\n"
-
 /-- Emit an activation forward as inline StableHLO. Takes a uniqueness tag
     (e.g. `s!"_mb{p}"`), the input SSA, and the tensor shape. Returns
     (code, output_ssa). All five activation kinds handled inline so callers
@@ -905,27 +884,6 @@ private def emitChannelConcat (tag : String) (aSSA bSSA : String)
     let s := s!"    %cc_o{tag} = stablehlo.concatenate {aSSA}, {bSSA}, dim = 1 : ({tensorTy aShape}, {tensorTy bShape}) -> {tensorTy outShape}\n"
     return (s, s!"%cc_o{tag}", outShape)
   | _, _ => return ("    // channelConcat error: expected rank-4 NCHW inputs\n", aSSA, aShape)
-
-/-- VJP of channel-concat: split the gradient `(N, Ca + Cb, H, W)`
-    back into `dA : (N, Ca, H, W)` and `dB : (N, Cb, H, W)`. Returns
-    `(code, dA_SSA, dB_SSA)`. -/
-private def emitChannelSplitGrad (tag : String) (gSSA : String)
-    (aShape bShape : List Nat) : String × String × String := Id.run do
-  match aShape, bShape with
-  | [n, ca, h, w], [_, cb, _, _] =>
-    let gShape := [n, ca + cb, h, w]
-    let gTy := tensorTy gShape
-    let aTy := tensorTy aShape
-    let bTy := tensorTy bShape
-    let mut s := ""
-    s := s ++ s!"    %cs_a{tag} = \"stablehlo.slice\"({gSSA}) " ++ "{" ++
-      s!"start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {n}, {ca}, {h}, {w}>, strides = array<i64: 1, 1, 1, 1>" ++
-      "}" ++ s!" : ({gTy}) -> {aTy}\n"
-    s := s ++ s!"    %cs_b{tag} = \"stablehlo.slice\"({gSSA}) " ++ "{" ++
-      s!"start_indices = array<i64: 0, {ca}, 0, 0>, limit_indices = array<i64: {n}, {ca + cb}, {h}, {w}>, strides = array<i64: 1, 1, 1, 1>" ++
-      "}" ++ s!" : ({gTy}) -> {bTy}\n"
-    return (s, s!"%cs_a{tag}", s!"%cs_b{tag}")
-  | _, _ => return ("    // channelSplitGrad error: expected rank-4 NCHW shapes\n", gSSA, gSSA)
 
 /-- 1-D bilinear-resampling weight matrix `Wy : (outLen × inLen)` for
     integer upsampling factor `scale`, where `outLen = inLen * scale`.

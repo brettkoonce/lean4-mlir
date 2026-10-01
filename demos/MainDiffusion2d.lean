@@ -424,9 +424,7 @@ pairs; run `lake exe diffusion-2d {target} flow` first"
                   cfg.learningRate (gs+1).toFloat
                   bnShapes batch 2 1 1
       let loss := F32.extractLoss out nT
-      p := F32.slice out 0 nP
-      mm := F32.slice out nP nP
-      vv := F32.slice out (2 * nP) nP
+      (p, mm, vv) := F32.unpackAdam out nP
       if gs % 500 == 0 || gs + 1 == steps then
         IO.eprintln s!"  step {gs}/{steps}: loss={loss}"
     let t1 ← IO.monoMsNow

@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Tiny DDPM trainer on MNIST.
 
@@ -15,23 +16,7 @@ import LeanMlir
       lake exe mnist-ddpm-train data 50 raw      # the uncentred ablation arm
 -/
 
-/-- 2-channel input: image + a scalar t/T_max timestep encoding tiled
-    to the same spatial dims. The model output stays single-channel
-    (predicted ε for the image). -/
-def tinyDdpmUnet (centred : Bool := true) : NetSpec where
-  name := if centred then "tiny DDPM UNet T-cond centered (MNIST 28x28x1)"
-                     else "tiny DDPM UNet T-cond (MNIST 28x28x1)"
-  imageH := 28
-  imageW := 28
-  layers := [
-    .unetDown 2 16,
-    .unetDown 16 32,
-    .convBn 32 64 3 1 .same,
-    .convBn 64 64 3 1 .same,
-    .unetUp 64 32,
-    .unetUp 32 16,
-    .conv2d 16 1 1 .same .identity
-  ]
+open ReferenceNets (tinyDdpmUnet)
 
 def tinyDdpmConfig : TrainConfig where
   learningRate := 0.0005
@@ -83,19 +68,8 @@ def main (args : List String) : IO Unit := do
 
   -- iree-compile train step
   IO.eprintln "Compiling vmfb..."
-  let compileMlir : String → String → IO Bool := fun mlirPath outPath => do
-    -- XLA/PJRT has no ahead-of-time compile step: the `.mlir` IS the artifact
-    -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
-    if (← LowererSession.backendName) == "xla" then return true
-    let args ← ireeCompileArgs mlirPath outPath
-    let compiler ← findIreeCompile
-    let r ← IO.Process.output { cmd := compiler, args := args }
-    if r.exitCode != 0 then
-      IO.eprintln s!"iree-compile failed: {r.stderr.take 3000}"
-      return false
-    return true
   let vmfbPath ← NetSpec.graphArtifact pfx "train_step"
-  unless (← compileMlir s!"{pfx}_train_step.mlir" vmfbPath) do IO.Process.exit 1
+  unless (← NetSpec.compileArtifact s!"{pfx}_train_step.mlir" vmfbPath) do IO.Process.exit 1
   IO.eprintln "  train step compiled"
 
   -- ── Load MNIST (60K × 28×28 f32 in [0, 1]) ──
@@ -173,9 +147,7 @@ def main (args : List String) : IO Unit := do
       let ts1 ← IO.monoMsNow
       let loss := F32.extractLoss out nT
       epochLoss := epochLoss + loss
-      p := F32.slice out 0 nP
-      m := F32.slice out nP nP
-      v := F32.slice out (2 * nP) nP
+      (p, m, v) := F32.unpackAdam out nP
       let batchBnStats := out.extract ((nT + 1) * 4) ((nT + 1 + spec.nBnStats) * 4)
       let bnMom : Float := if globalStep == 1 then 1.0 else 0.1
       runningBnStats ← F32.ema runningBnStats batchBnStats bnMom

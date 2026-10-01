@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.CliArgs
+import LeanMlir.ReferenceNets
+import LeanMlir.SmallClassifier
 
 /-! Chapter 6's ResNet-34 from lab leaves to field leaves.
 
@@ -31,6 +34,8 @@ import LeanMlir
     `_logits_<part>.bin` for `pv{,g}_test`, `_test_seg`, `_test_bg`, `_test_leaf`, `_test_none`
     and `pd_all` (or `pd_fold<k>_test`) under `out` (default `.lake/build`). -/
 
+open CliArgs SmallClassifier
+
 namespace PlantLeaf
 
 def nClasses : Nat := 38
@@ -42,45 +47,12 @@ def nPixTrain : Nat := 3 * sTrain * sTrain
 def imagenetPrefix : String := ".lake/build/jax_r34_imagenet.bin"
 def imagenetPrefixFloats : Nat := 21284672
 
-/-- ResNet-34 as the chapter and the GradCAM probe spell it, with the 38-way head. -/
-def resnet34 : NetSpec where
-  name := "plant resnet34"
-  imageH := S
-  imageW := S
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,
-    .residualBlock  64 128 4 2,
-    .residualBlock 128 256 6 2,
-    .residualBlock 256 512 3 2,
-    .globalAvgPool,
-    .dense 512 nClasses .identity
-  ]
-
-def fmt (x : Float) (d : Nat) : String :=
-  let m := (10.0 : Float) ^ d.toFloat
-  let r := (x * m).round / m
-  let s := toString r
-  if s.length > 10 then (s.toRawSubstring.take 10).toString else s
-
-@[inline] def xs (s : UInt64) : UInt64 :=
-  let s := s ^^^ (s <<< 13)
-  let s := s ^^^ (s >>> 7)
-  s ^^^ (s <<< 17)
-
-/-- Fisher–Yates permutation of `0..n-1` from a seed. -/
-def permutation (n : Nat) (seed : UInt64) : Array Nat := Id.run do
-  let mut a : Array Nat := Array.range n
-  let mut s := if seed == 0 then 0x9E3779B97F4A7C15 else seed
-  for i in [1:n] do
-    let j := n - i
-    s := xs s
-    let k := (s % (j + 1).toUInt64).toNat
-    let tmp := a[j]!
-    a := a.set! j a[k]!
-    a := a.set! k tmp
-  return a
+/-- ResNet-34 as the chapter and the GradCAM probe spell it (`ReferenceNets.resnet34`), with the
+    38-way head. -/
+def resnet34 : NetSpec :=
+  { ReferenceNets.resnet34 with
+    name := "plant resnet34"
+    layers := ReferenceNets.resnet34.layers.dropLast ++ [.dense 512 nClasses .identity] }
 
 /-- A part: the raw Imagenette-format bytes, its int32 labels, its size, and its stored
     image side (256 for training parts, 224 for evaluation parts). -/
@@ -125,28 +97,15 @@ def gatherTrain (parts : Array Part) (idx : Array Nat) (start B : Nat) (seed : N
   let flipped ← F32.randomHFlip cropped B.toUSize 3 S.toUSize S.toUSize (seed + 7777).toUSize
   return (flipped, y)
 
-/-- Run the eval graph over a 224-side part at batch `evalB` (tail zero-padded) and return the
-    logits as f32 `[n, 38]` plus the accuracy. -/
-def scoreSet (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh : ByteArray)
-    (p : Part) (evalB : Nat) : IO (ByteArray × Float) := do
-  let nC := nClasses
-  let mut logits := ByteArray.emptyWithCapacity (p.n * nC * 4)
-  let mut correct : Nat := 0
-  let nb := (p.n + evalB - 1) / evalB
-  for bi in [:nb] do
+/-- `scoreBatches` over a 224-side part, the tail batch padded with the part's last image. -/
+def scorePart (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh : ByteArray)
+    (p : Part) (evalB : Nat) : IO (ByteArray × Float) :=
+  scoreBatches sess spec evalParams evalShapes xSh p.lbl p.n evalB fun bi => do
     let avail := min evalB (p.n - bi * evalB)
     let mut idx := ByteArray.emptyWithCapacity (evalB * 4)
     for i in [:evalB] do
       idx := pushU32LE idx (bi * evalB + (min i (avail - 1)))     -- pad with the last real image
-    let xba ← F32.imagenetteGather p.raw idx evalB.toUSize p.side.toUSize
-    let out ← LowererSession.forwardF32 sess spec.evalFnName evalParams evalShapes xba xSh
-                evalB.toUSize nC.toUSize
-    logits := logits ++ out.extract 0 (avail * nC * 4)
-    for i in [:avail] do
-      let pred := F32.argmaxN out (i * nC).toUSize nC.toUSize
-      let label := p.lbl.data[(bi * evalB + i) * 4]!.toNat
-      if pred.toNat == label then correct := correct + 1
-  return (logits, correct.toFloat / p.n.toFloat * 100.0)
+    F32.imagenetteGather p.raw idx evalB.toUSize p.side.toUSize
 
 /-- Elements of the packed params before shape slot `targetIdx` (the GradCAM probe's rule for
     finding the final dense W and b: a `.dense fi fo _` is the last two slots, `[fi, fo]`, `[fo]`). -/
@@ -205,11 +164,6 @@ def camDump (spec : NetSpec) (pfx : String) (params bn : ByteArray) (parts : Arr
     IO.FS.writeBinFile s!"{pfx}_campred_{p.name}.bin" preds
     IO.println s!"cam: {p.name} {p.n} images → {pfx}_cam_{p.name}.bin ([n, 2, {h}, {w}] f32) ({(t1 - t0) / 1000} s)"
 
-def parseArg (args : List String) (key : String) (dflt : String) : String :=
-  match args.find? (·.startsWith (key ++ "=")) with
-  | some a => (a.toRawSubstring.drop (key.length + 1)).toString
-  | none => dflt
-
 /-- `fieldn` images of a part, stratified by class in a seeded order — the "a few hundred
     field labels" arm. Returns indices into the part. -/
 def stratifiedSubset (p : Part) (want : Nat) (seed : Nat) : Array Nat := Id.run do
@@ -241,7 +195,7 @@ def main (args : List String) : IO Unit := do
   let fieldN := (parseArg args "fieldn" "0").toNat!
   let epochs := (parseArg args "epochs" "10").toNat!
   let B := (parseArg args "batch" "64").toNat!
-  let lr := (ViTGradcheck.parseFloat? (parseArg args "lr" (if field == "none" then "0.001" else "0.0001"))).getD 0.001
+  let lr := floatArg args "lr" (if field == "none" then 0.001 else 0.0001)
   let seed := (parseArg args "seed" "1").toNat!
   let tag := parseArg args "tag" ""
   let outDir := parseArg args "out" ".lake/build"
@@ -381,9 +335,7 @@ train {trainSel}, init {init}, field {field}{if fieldN > 0 then s!" (n={fieldN})
           unless out.size / 4 == nT + 1 + nBn do
             throw <| IO.userError s!"train step returned {out.size / 4} floats, expected 3*{nP} + 1 + {nBn}"
         lossAcc := lossAcc + F32.read out nT.toUSize
-        p := F32.slice out 0 nP
-        m := F32.slice out nP nP
-        v := F32.slice out (2 * nP) nP
+        (p, m, v) := F32.unpackAdam out nP
         let batchBn := out.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
         -- a bootstrapped backbone has no statistics of its own: take the first batch's whole
         bn ← F32.ema bn batchBn (if step == 1 && init != "ckpt" then 1.0 else 0.1)
@@ -394,8 +346,8 @@ train {trainSel}, init {init}, field {field}{if fieldN > 0 then s!" (n={fieldN})
           throw <| IO.userError s!"stopped after {step} steps (steps={maxSteps})"
       let tV ← IO.monoMsNow
       let evalParams := p.append bn
-      let (_, accVa) ← scoreSet evalSess spec evalParams evalShapes xSh valPart B
-      let (_, accField) ← scoreSet evalSess spec evalParams evalShapes xSh evalParts.back! B
+      let (_, accVa) ← scorePart evalSess spec evalParams evalShapes xSh valPart B
+      let (_, accField) ← scorePart evalSess spec evalParams evalShapes xSh evalParts.back! B
       let tD ← IO.monoMsNow
       let trainLoss := lossAcc / bpE.toFloat
       let better := select && accVa > bestVal
@@ -420,7 +372,7 @@ val acc {fmt accVa 2}%  {fieldPart} acc {fmt accField 2}%  \
   -- ── logits for the scorer, every evaluation part, from the chosen weights ──
   let evalParams := p.append bn
   for q in evalParts do
-    let (logits, acc) ← scoreSet evalSess spec evalParams evalShapes xSh q B
+    let (logits, acc) ← scorePart evalSess spec evalParams evalShapes xSh q B
     IO.FS.writeBinFile s!"{pfx}_logits_{q.name}.bin" logits
     IO.println s!"{spec.name} [{split}/{trainSel}/{initTag}{if field == "none" then "" else s!"/field{field}"}] \
 {q.name}: accuracy {fmt acc 2}%  -> {pfx}_logits_{q.name}.bin"

@@ -1,6 +1,6 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
-import LeanMlir.GradcheckHelpers
+import LeanMlir.CliArgs
 
 /-! # SGD `@<slug>_train_step` render tie — the `tests/` emitter vs `pretty(provenGraph)`
 
@@ -65,11 +65,11 @@ def main (args : List String) : IO Unit := do
         "usage: sgd-render-tie <slug> <pathA> <lrA> <pathB> <lrB>\n\
          both learning rates are REQUIRED and are not defaulted: the gradient is recovered as \
          (θ − θ')/lr, so a wrong lr silently rescales one side.")
-  -- `ViTGradcheck.parseFloat` yields 0.0 on anything it cannot read and NaN/∞ on `nan`/`inf`, which
+  -- `CliArgs.parseFloat` yields 0.0 on anything it cannot read and NaN/∞ on `nan`/`inf`, which
   -- the next guard catches: a mistyped lr is the one input error that would silently rescale one side
   -- of the comparison.
-  let lrA := ViTGradcheck.parseFloat lrAs
-  let lrB := ViTGradcheck.parseFloat lrBs
+  let lrA := CliArgs.parseFloat lrAs
+  let lrB := CliArgs.parseFloat lrBs
   if lrA == 0.0 || lrB == 0.0 || !lrA.isFinite || !lrB.isFinite then
     throw (IO.userError s!"lr must be a finite non-zero float (got '{lrAs}' → {lrA}, '{lrBs}' → {lrB}); \
 lr = 0 makes the gradient unrecoverable")

@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.ReferenceNets
 
-open ReferenceNets (unetBrats r34UnetBratsOf)
+open ReferenceNets (bratsNetOf)
 
 /-! Render predictions from a trained BraTS segmentation checkpoint.
 
@@ -167,9 +167,7 @@ def main (args : List String) : IO Unit := do
   if ctx > 0 && !useR34 then
     IO.eprintln "ctx= is the ResNet-34 UNet's 2.5D variant — pass net=r34 with it"
     IO.Process.exit 1
-  let spec := if useR34 then r34UnetBratsOf (!noSkip) ctx else unetBrats
-  let kind : DatasetKind :=
-    if !useR34 then .brats else if ctx == 0 then .brats224 else .brats224Ctx ctx
+  let (spec, kind) := bratsNetOf useR34 noSkip ctx
   let channels := kind.bratsChannels
   let centre0 := numModalities * ctx
   let positional := args.filter (fun a =>
@@ -296,8 +294,7 @@ def main (args : List String) : IO Unit := do
   let nPanels := 2 + arms.length
   let stripW := nPanels * W
   let stripH := nRender * H
-  let mut ppm : ByteArray := ByteArray.empty
-  ppm := ppm.append s!"P6\n{stripW} {stripH}\n255\n".toUTF8
+  let mut ppm : ByteArray := ByteArray.emptyWithCapacity (stripH * stripW * 3)
   for k in [:nRender] do
     let idx := chosen[k]!
     let mut gtPx : Nat := 0
@@ -327,8 +324,8 @@ def main (args : List String) : IO Unit := do
     let per := String.intercalate "  " (arms.zipIdx.map (fun (a, i) =>
       armLabel a ++ "=" ++ toString predPx[i]!))
     IO.eprintln s!"    slice {idx}: gt tumour px={gtPx}  predicted: {per}"
-  IO.FS.writeBinFile outPath ppm
-  IO.eprintln s!"  wrote {outPath} ({ppm.size} bytes)"
+  Cam.writePPM outPath stripH stripW ppm
+  IO.eprintln s!"  wrote {outPath} ({stripW}x{stripH})"
   let panelNames := String.intercalate " | " (arms.map (fun a => "+" ++ armLabel a))
   IO.eprintln s!"  panels: T1gd | +ground truth | {panelNames}"
   IO.eprintln s!"  colours: edema green, non-enhancing red, enhancing yellow"

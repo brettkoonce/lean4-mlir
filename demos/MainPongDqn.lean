@@ -1,5 +1,6 @@
 import LeanMlir.Train
 import LeanMlir.Pong
+import LeanMlir.CliArgs
 
 /-! DQN on the Lean Pong.
 
@@ -120,31 +121,13 @@ def Replay.valid (rb : Replay) (i k : Nat) : Bool :=
   else if rb.size < rb.cap then true
   else (i + rb.cap - rb.wr) % rb.cap + 1 >= k
 
-/-- `1.5`, `0.001`, `1e-4`, `2.5e-4`: enough of a decimal parser for the knobs. -/
-def parseFloat (s : String) : Option Float := do
-  let (mant, ex) ← match s.splitOn "e" with
-    | [m] => pure (m, 0)
-    | [m, e] =>
-      if e.startsWith "-" then ((e.drop 1).toString.toNat?).map fun n => (m, -(n : Int))
-      else e.toNat?.map fun n => (m, (n : Int))
-    | _ => none
-  let (ip, fp) := match mant.splitOn "." with
-    | [i] => (i, "")
-    | [i, f] => (i, f)
-    | _ => ("x", "")
-  let iv ← if ip.isEmpty then some 0 else ip.toNat?
-  let fv ← if fp.isEmpty then some 0 else fp.toNat?
-  let x := iv.toFloat + fv.toFloat / Float.pow 10.0 fp.length.toFloat
-  return x * Float.pow 10.0 (Float.ofInt ex)
-
 end PongDqn
 
 open PongDqn in
 def main (args : List String) : IO Unit := do
-  let kv (key : String) : Option String :=
-    (args.find? (·.startsWith (key ++ "="))).map (·.drop (key.length + 1) |>.toString)
-  let natArg (key : String) (d : Nat) : Nat := ((kv key) >>= String.toNat?).getD d
-  let floatArg (key : String) (d : Float) : Float := ((kv key) >>= parseFloat).getD d
+  let kv := CliArgs.kv args
+  let natArg := CliArgs.natArg args
+  let floatArg := CliArgs.floatArg args
   let mode := (kv "mode").getD "state"
   let steps := natArg "steps" 500000
   let seed := natArg "seed" 1

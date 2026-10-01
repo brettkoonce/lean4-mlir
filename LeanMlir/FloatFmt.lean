@@ -1,5 +1,6 @@
-/-! Fixed-point decimal for the RL demos' tables (`Float.toString` prints 17 digits).
-    Import-free, so the pure-Lean game modules `Blackjack` and `Pong` share it. -/
+/-! Fixed-point decimal for the Chapter 10 demos' tables (`Float.toString` prints 17 digits).
+    Import-free, so the pure-Lean game modules `Blackjack`, `Pong` and `TicTacToe` share it with
+    the demos that drive them and with `MainNqsIsing`. -/
 
 namespace FloatFmt
 

@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.CliArgs
 
 /-! Emit the standalone segmentation-loss module for FD validation.
     Writes `seg_loss_gen.mlir` for a
@@ -45,11 +46,11 @@ def main (args : List String) : IO Unit := do
   -- reaching for the String API.
   let cliWeights : Option (List Float) :=
     match (args.filter (·.startsWith "w=")).head? with
-    | some a => (((a.drop 2).toString).splitOn ":").mapM ViTGradcheck.parseFloat?
+    | some a => (((a.drop 2).toString).splitOn ":").mapM CliArgs.parseFloat?
     | none => none
   let gamma : Float :=
     match (args.filter (·.startsWith "g=")).head? with
-    | some a => (ViTGradcheck.parseFloat? (a.drop 2).toString).getD 2.0
+    | some a => (CliArgs.parseFloat? (a.drop 2).toString).getD 2.0
     | none => 2.0
   -- `wce1` and `focal0` are the degenerate-parameter twins of `ce`: an all-ones
   -- weight vector, and γ=0. Each must reproduce plain CE exactly — the cheapest

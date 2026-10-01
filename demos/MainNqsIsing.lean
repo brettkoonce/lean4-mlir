@@ -1,4 +1,6 @@
 import LeanMlir
+import LeanMlir.FloatFmt
+import LeanMlir.CliArgs
 
 /-! Neural quantum states on the transverse-field Ising chain.
 
@@ -48,21 +50,9 @@ import LeanMlir
 
     - Carleo & Troyer 2017, *Solving the quantum many-body problem with artificial neural networks*. <https://doi.org/10.1126/science.aag2302> -/
 
+open FloatFmt
+
 namespace NQS
-
-def piF : Float := 3.14159265358979323846
-
-/-- Fixed-point decimal; `Float.toString` prints 17 digits. -/
-def fmt (x : Float) (d : Nat) : String :=
-  let m := Float.pow 10.0 d.toFloat
-  let y := Float.round (x * m)
-  let neg := y < 0.0
-  let yi := (Float.abs y).toUInt64.toNat
-  let ip := yi / (10 ^ d)
-  let fp := yi % (10 ^ d)
-  let fs := toString fp
-  let fs := String.ofList (List.replicate (d - fs.length) '0') ++ fs
-  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
 
 /-- Scientific notation with three significant digits, for the variances. -/
 def sci (x : Float) : String :=
@@ -72,12 +62,6 @@ def sci (x : Float) : String :=
   let es := if e < 0.0 then "-" ++ toString (Float.abs e).toUInt64.toNat
             else "+" ++ toString e.toUInt64.toNat
   s!"{fmt m 2}e{es}"
-
-@[inline] def pushF64 (acc : ByteArray) (x : Float) : ByteArray := Id.run do
-  let u := x.toBits
-  let mut acc := acc
-  for j in [0:8] do acc := acc.push ((u >>> (8 * j).toUInt64) &&& 0xff).toUInt8
-  return acc
 
 structure Cfg where
   arch   : String := "mlp"
@@ -127,7 +111,7 @@ structure Ref where
   eSite : Float
 
 def mkRef (J h : Float) : Ref :=
-  let phi := if h < 2.0 * J then Float.asin (h / (2.0 * J)) else piF / 2.0
+  let phi := if h < 2.0 * J then Float.asin (h / (2.0 * J)) else Ddpm.piF / 2.0
   let c := Float.cos phi
   let s := Float.sin phi
   { phi, logUp := Float.log (Float.cos (phi / 2.0)), logDn := Float.log (Float.sin (phi / 2.0)),
@@ -473,7 +457,7 @@ J2 = {cfg.J2}, S_z = 0 sector of {M} configurations, {cfg.steps} steps, \
   for i in [0:cfg.N] do
     if i % 2 == 0 then maskA := maskA ||| ((1 : UInt64) <<< i.toUInt64)
   let phiRef : Array Float := cs.map fun c =>
-    if cfg.useRef && popcnt (c &&& maskA) cfg.N % 2 == 1 then piF else 0.0
+    if cfg.useRef && popcnt (c &&& maskA) cfg.N % 2 == 1 then Ddpm.piF else 0.0
 
   -- ── graphs ──
   IO.FS.createDirAll ".lake/build"
@@ -527,8 +511,8 @@ J2 = {cfg.J2}, S_z = 0 sector of {M} configurations, {cfg.steps} steps, \
       w := w.push e
       z := z + e
     w := w.map (· / z)
-    let aBA := a.foldl pushF64 (ByteArray.emptyWithCapacity (M * 8))
-    let phBA := ph.foldl pushF64 (ByteArray.emptyWithCapacity (M * 8))
+    let aBA := a.foldl pushF64LE (ByteArray.emptyWithCapacity (M * 8))
+    let phBA := ph.foldl pushF64LE (ByteArray.emptyWithCapacity (M * 8))
     let el ← nqsJ1J2Eloc cfgsAll aBA phBA M.toUSize cfg.N.toUSize cfg.J cfg.J2
     let re := (Array.range M).map fun s => F32.read el (2 * s).toUSize
     let im := (Array.range M).map fun s => F32.read el (2 * s + 1).toUSize
@@ -562,14 +546,12 @@ Im E = {sci ei}  Var(E_loc) = {sci var}  ({t1 - t0} ms)"
     let packed := (p.append m).append v
     let lrNow := if cfg.cosine then
         let lrMin := 0.05 * cfg.lr
-        lrMin + 0.5 * (1.0 + Float.cos (piF * step.toFloat / cfg.steps.toFloat)) * (cfg.lr - lrMin)
+        lrMin + 0.5 * (1.0 + Float.cos (Ddpm.piF * step.toFloat / cfg.steps.toFloat)) * (cfg.lr - lrMin)
       else cfg.lr
     let res ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
                 packed allShapes xAll xShM y lrNow (step + 1).toFloat bnShapes
                 M.toUSize nOut.toUSize 1 1
-    p := F32.slice res 0 nP
-    m := F32.slice res nP nP
-    v := F32.slice res (2 * nP) nP
+    (p, m, v) := F32.unpackAdam res nP
   let t1 ← IO.monoMsNow
   IO.eprintln s!"trained: {cfg.steps} steps, {t1 - t0} ms"
 
@@ -589,7 +571,7 @@ Im E = {sci ei}  Var(E_loc) = {sci var}  ({t1 - t0} ms)"
   let mut mc := 0.0
   let mut ms := 0.0
   for s in [0:M] do
-    let phM := if popcnt (cs[s]! &&& maskA) cfg.N % 2 == 1 then piF else 0.0
+    let phM := if popcnt (cs[s]! &&& maskA) cfg.N % 2 == 1 then Ddpm.piF else 0.0
     mc := mc + w[s]! * Float.cos (ph[s]! - phM)
     ms := ms + w[s]! * Float.sin (ph[s]! - phM)
   let marshall := Float.sqrt (mc * mc + ms * ms)
@@ -626,19 +608,6 @@ Im E = {sci ei}  Var(E_loc) = {sci var}  Marshall weight = {fmt marshall 5}  C(N
   IO.FS.writeBinFile s!"{opfx}_params.bin" p
   IO.eprintln s!"wrote {opfx}_metrics.json, _curve.csv, _psi.bin, _samples.bin, _params.bin"
 
-def parseFloat (s : String) : Option Float :=
-  let neg := s.startsWith "-"
-  let s : String := if neg then String.ofList (s.toList.drop 1) else s
-  match s.splitOn "." with
-  | [a] => a.toNat?.map fun n => (if neg then -1.0 else 1.0) * n.toFloat
-  | [a, b] =>
-    match a.toNat?, b.toNat? with
-    | some ia, some ib =>
-      let f := ia.toFloat + ib.toFloat / Float.pow 10.0 b.length.toFloat
-      some ((if neg then -1.0 else 1.0) * f)
-    | _, _ => none
-  | _ => none
-
 def parseArgs (args : List String) : Cfg := Id.run do
   let mut c : Cfg := {}
   match args with
@@ -652,7 +621,7 @@ def parseArgs (args : List String) : Cfg := Id.run do
     else match a.splitOn "=" with
     | [k, v] =>
       let n := v.toNat?
-      let f := parseFloat v
+      let f := CliArgs.parseFloat? v
       match k with
       | "N" => c := { c with N := n.getD c.N }
       | "h" => c := { c with h := f.getD c.h }
@@ -834,15 +803,13 @@ Var(E_loc) = {sci var}  ({t1 - t0} ms)"
     let packed := (p.append m).append v
     let lrNow := if cfg.cosine then
         let lrMin := 0.05 * cfg.lr
-        lrMin + 0.5 * (1.0 + Float.cos (piF * step.toFloat / cfg.steps.toFloat)) * (cfg.lr - lrMin)
+        lrMin + 0.5 * (1.0 + Float.cos (Ddpm.piF * step.toFloat / cfg.steps.toFloat)) * (cfg.lr - lrMin)
       else cfg.lr
     let res ← LowererSession.trainStepAdamF32Ddpm sess spec.trainFnName
                 packed allShapes x xShM y lrNow (step + 1).toFloat bnShapes
                 M.toUSize outShape[1]!.toUSize outShape[2]!.toUSize 1
     let _ := F32.extractLoss res nT
-    p := F32.slice res 0 nP
-    m := F32.slice res nP nP
-    v := F32.slice res (2 * nP) nP
+    (p, m, v) := F32.unpackAdam res nP
   let t1 ← IO.monoMsNow
   IO.eprintln s!"trained: {cfg.steps} steps, {t1 - t0} ms"
 

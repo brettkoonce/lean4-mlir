@@ -213,9 +213,7 @@ are loaded as .mlir; there is no iree-compile step here)"
                   packed allShapes xs xShB y lrNow updates.toFloat bnShapes B.toUSize 2 1 1
       lossAcc := lossAcc + F32.extractLoss out nT
       lossN := lossN + 1
-      p := F32.slice out 0 nP
-      m := F32.slice out nP nP
-      v := F32.slice out (2 * nP) nP
+      (p, m, v) := F32.unpackAdam out nP
       if updates % targetEvery == 0 then target := p
       if updates % refreshEvery == 0 then greedy ← readGreedy p
       if updates % logEvery == 0 then

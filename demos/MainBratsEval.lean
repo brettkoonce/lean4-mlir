@@ -1,7 +1,8 @@
 import LeanMlir
 import LeanMlir.ReferenceNets
 
-open ReferenceNets (unetBrats r34UnetBratsOf)
+open ReferenceNets (bratsNetOf)
+open SegMetrics (regionCounts regionDice)
 
 /-! Per-volume scoring of a trained BraTS checkpoint — the literature's number.
 
@@ -49,46 +50,6 @@ open ReferenceNets (unetBrats r34UnetBratsOf)
 
 private def numClasses : Nat := 4
 
-/-- The BraTS regions in MSD's label numbering — the same table
-    `DatasetIO.segRegions` carries for the trainer. WT = everything abnormal,
-    TC = the core (no edema), ET = enhancing only. -/
-private def regions : List (String × List Nat) :=
-  [("WT", [1, 2, 3]), ("TC", [2, 3]), ("ET", [3])]
-
-/-- Little-endian u32 at byte offset `off`. -/
-private def readU32 (ba : ByteArray) (off : Nat) : Nat :=
-  ba[off]!.toNat + ba[off + 1]!.toNat * 256 + ba[off + 2]!.toNat * 65536
-    + ba[off + 3]!.toNat * 16777216
-
-/-- Little-endian i64 count at index `i` of a `segConfusion` result. -/
-private def readI64 (ba : ByteArray) (i : Nat) : Nat := Id.run do
-  let mut v : Nat := 0
-  for k in [:8] do
-    v := v + ba[i * 8 + k]!.toNat * (2 ^ (8 * k))
-  return v
-
-/-- (intersection, |gt|, |pred|) of a class-union region, read off a confusion
-    matrix `conf[gt * NC + pred]`. -/
-private def regionCounts (conf : Array Nat) (cls : List Nat) : Nat × Nat × Nat := Id.run do
-  let NC := numClasses
-  let inR : Nat → Bool := fun c => cls.contains c
-  let mut inter := 0
-  let mut gt := 0
-  let mut pr := 0
-  for g in [:NC] do
-    for p in [:NC] do
-      let c := conf[g * NC + p]!
-      if inR g && inR p then inter := inter + c
-      if inR g then gt := gt + c
-      if inR p then pr := pr + c
-  return (inter, gt, pr)
-
-/-- Dice with the BraTS convention for an absent region: empty ground truth
-    scores 1 for an empty prediction and 0 for a non-empty one. -/
-private def diceOf (inter gt pr : Nat) : Float :=
-  if gt == 0 then (if pr == 0 then 1.0 else 0.0)
-  else (2 * inter).toFloat / (gt + pr).toFloat
-
 private def fmt (x : Float) : String :=
   let s := toString x
   if s.length > 6 then (s.take 6).toString else s
@@ -115,9 +76,7 @@ def main (args : List String) : IO Unit := do
   if ctx > 0 && !useR34 then
     IO.eprintln "ctx= is the ResNet-34 UNet's 2.5D variant — pass net=r34 with it"
     IO.Process.exit 1
-  let spec := if useR34 then r34UnetBratsOf (!noSkip) ctx else unetBrats
-  let kind : DatasetKind :=
-    if !useR34 then .brats else if ctx == 0 then .brats224 else .brats224Ctx ctx
+  let (spec, kind) := bratsNetOf useR34 noSkip ctx
   let channels := kind.bratsChannels
   let dataDir := kind.bratsDataDir
   let arm : String :=
@@ -147,10 +106,10 @@ def main (args : List String) : IO Unit := do
 
   -- The whole validation volumes, and where each one starts.
   let idx ← IO.FS.readBinFile s!"{dataDir}/val_full.idx"
-  let nVol := readU32 idx 0
+  let nVol := readU32LE idx 0
   let counts : Array Nat := Id.run do
     let mut a := #[]
-    for v in [:nVol] do a := a.push (readU32 idx (4 + 4 * v))
+    for v in [:nVol] do a := a.push (readU32LE idx (4 + 4 * v))
     return a
   IO.eprintln s!"  loading {dataDir}/val_full.bin at {spec.imageH}², {channels} channels ..."
   let (img, mask, nSlices) ←
@@ -200,7 +159,7 @@ def main (args : List String) : IO Unit := do
       let mut cv := conf[v]!
       let mut tumourPx := 0
       for j in [:NC * NC] do
-        let c := readI64 cb j
+        let c := readU64LE cb (8 * j)
         cv := cv.set! j (cv[j]! + c)
         pooledAll := pooledAll.set! j (pooledAll[j]! + c)
         if j / NC != 0 then tumourPx := tumourPx + c
@@ -208,7 +167,7 @@ def main (args : List String) : IO Unit := do
       if tumourPx > 0 then
         nTumourSlices := nTumourSlices + 1
         for j in [:NC * NC] do
-          pooledTumour := pooledTumour.set! j (pooledTumour[j]! + readI64 cb j)
+          pooledTumour := pooledTumour.set! j (pooledTumour[j]! + readU64LE cb (8 * j))
     if bi % 100 == 0 then
       IO.eprintln s!"    batch {bi}/{nBatches}"
   let t1 ← IO.monoMsNow
@@ -217,9 +176,9 @@ def main (args : List String) : IO Unit := do
   -- Pooled: the trainer's instrument, on all slices and on the tumour-bearing ones.
   let pooledLine := fun (label : String) (c : Array Nat) (n : Nat) => Id.run do
     let mut parts : List String := []
-    for (name, cls) in regions do
-      let (i, g, p) := regionCounts c cls
-      parts := parts ++ [s!"{name} {fmt (diceOf i g p)}"]
+    for (name, cls) in kind.segRegions do
+      let (i, g, p) := regionCounts c NC cls
+      parts := parts ++ [s!"{name} {fmt (regionDice i g p)}"]
     let mut ious : Float := 0.0
     for k in [:NC] do
       let tp := c[k * NC + k]!
@@ -237,19 +196,19 @@ def main (args : List String) : IO Unit := do
   -- Per volume: the literature's protocol.
   IO.println s!"  per-volume Dice over {nVol} patients (mean ± sd, median; mean over volumes with the region; volumes without it):"
   let mut csv := "volume,slices"
-  for (name, _) in regions do
+  for (name, _) in kind.segRegions do
     csv := csv ++ s!",{name}_inter,{name}_gt,{name}_pred,{name}_dice"
   csv := csv ++ "\n"
   let mut rows : Array String := Array.replicate nVol ""
   for v in [:nVol] do
     rows := rows.set! v s!"{v},{counts[v]!}"
-  for (name, cls) in regions do
+  for (name, cls) in kind.segRegions do
     let mut dices : Array Float := #[]
     let mut present : Array Float := #[]
     let mut absent := 0
     for v in [:nVol] do
-      let (i, g, p) := regionCounts conf[v]! cls
-      let d := diceOf i g p
+      let (i, g, p) := regionCounts conf[v]! NC cls
+      let d := regionDice i g p
       dices := dices.push d
       if g > 0 then present := present.push d else absent := absent + 1
       rows := rows.set! v (rows[v]! ++ s!",{i},{g},{p},{d}")

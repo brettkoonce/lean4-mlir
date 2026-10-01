@@ -706,10 +706,7 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
   if magic != "LMSH" then
     throw <| IO.userError s!"imagenet shim: bad preamble magic {magic.quote} (expected \"LMSH\")"
-  let rd32 (off : Nat) : Nat :=
-    (pre.get! off).toNat ||| ((pre.get! (off+1)).toNat <<< 8) |||
-    ((pre.get! (off+2)).toNat <<< 16) ||| ((pre.get! (off+3)).toNat <<< 24)
-  let ver := rd32 4; let sBatch := rd32 8; let sFlat := rd32 12
+  let ver := readU32LE pre 4; let sBatch := readU32LE pre 8; let sFlat := readU32LE pre 12
   -- v3/v4, not v1/v2: every batch carries an int32 ROW COUNT before its labels. v1/v2 had
   -- no way to express a short final batch — see `readShimBatchPartial`. Refusing an old shim here
   -- is the point: a v1 stream read as v3 would take the first four label bytes as a row count.
@@ -723,8 +720,7 @@ slides off by a factor of nClasses on every batch, so this refuses rather than r
   -- not at the first record: the alignment error a missed field causes is silent and cumulative.
   if ver == 4 then
     let pre2 ← readExact h 4
-    let sNC := (pre2.get! 0).toNat ||| ((pre2.get! 1).toNat <<< 8) |||
-               ((pre2.get! 2).toNat <<< 16) ||| ((pre2.get! 3).toNat <<< 24)
+    let sNC := readU32LE pre2 0
     if sNC != nclasses then
       throw <| IO.userError s!"imagenet shim MISMATCH: shim sends nclasses={sNC}, the render wants \
 {nclasses} — refusing rather than reading misaligned targets"
@@ -749,8 +745,7 @@ private def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat 
   -- train stream repeats forever, so a short one here is a torn write, not a tail. Checked rather
   -- than skipped: reading past a wrong count is the silent reframing v3 exists to prevent.
   let pre ← readExact h 4
-  let rows := (pre.get! 0).toNat ||| ((pre.get! 1).toNat <<< 8) |||
-              ((pre.get! 2).toNat <<< 16) ||| ((pre.get! 3).toNat <<< 24)
+  let rows := readU32LE pre 0
   if rows != batch then
     throw <| IO.userError s!"imagenet shim: batch declares {rows} rows, this reader wants {batch}. \
 A short batch on a repeating stream is a torn write; use `readShimBatchPartial` for a split that \
@@ -814,8 +809,7 @@ def readShimBatchPartial (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat :
     throw <| IO.userError s!"shim sent {pre.size} bytes of the 4-byte row count — the stream is \
 torn, not merely short"
   else
-    let rows := (pre.get! 0).toNat ||| ((pre.get! 1).toNat <<< 8) |||
-                ((pre.get! 2).toNat <<< 16) ||| ((pre.get! 3).toNat <<< 24)
+    let rows := readU32LE pre 0
     if rows == 0 || rows > batch then
       throw <| IO.userError s!"shim declared {rows} rows, outside 1…{batch} — refusing rather than \
 reading a misframed batch"
