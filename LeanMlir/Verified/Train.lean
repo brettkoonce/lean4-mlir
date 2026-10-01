@@ -171,7 +171,7 @@ structure VerifiedConfig where
       Like `vitInit`, NOT display-only and needs no re-render: init is host-side, so no committed
       artifact moves. Off by default — every other net keeps its seed reproducibility. -/
   cnxInit   : Bool := false
-  /-- **Depthwise fan = k², the JAX reference's rule** (`jax/Jax/Codegen.lean`'s depthwise
+  /-- **Depthwise fan = k², the JAX reference's rule** ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s depthwise
       emitters use fan `k·k`). The default rank-4 rule in `mkParam` is He fan-OUT
       `2/(dims[0]·k²)`, and for a depthwise kernel `(C, 1, k, k)` `dims[0]` is C, so without this
       flag every depthwise conv starts √C narrower than the reference's (6–31× on MobileNetV2).
