@@ -11,8 +11,9 @@ https://claude.ai/artifact/TFoTN9GQvcEHe5eBkwYBvK, panel g already real). This d
 plan after the feasibility pass against the repo, with the four changes of §1 and the scoring
 recipe of §5 validated.
 
-Status 2026-10-01: §5 scoring validated on nine field models (table in §5). Data build (§3
-steps 1–6), the Lean op (§4), training and the fold not started.
+Status 2026-10-01: §5 scoring validated on nine field models (table in §5); §3 steps 1 and 3
+done (26,228 train / 1,380 val chains, G1 passed). Steps 2, 4–6, the Lean op (§4), training and
+the fold not started.
 
 ## 0. The one-paragraph version
 
@@ -60,7 +61,13 @@ official table to the printed digit, so our model's dot goes on the same axis as
 7. One sentence the book owes: lDDT is a distance score and cannot see a mirror image;
    TM-score superposes with a proper rotation and can. A distance-geometry fold has that
    ambiguity, so the fold step scores both hands and keeps the right-handed one.
-8. Book shape: one figure of three panels (the object: the target's true contact map / fold;
+8. Headline on the date-cut-only list, purge as an ablation (decided 2026-10-01). The 82
+   chains the purge drops are templates the CASP16 field was allowed to use — the "easy" class
+   is defined by their existence — so the purged set is stricter than the field's conditions
+   on 15 targets, and the date-cut-only set (`train_full.csv`, 26,310 chains) is exactly the
+   information the field had. `train.csv` (26,228) becomes the "no templates" row of the
+   table; both share `val.csv`.
+9. Book shape: one figure of three panels (the object: the target's true contact map / fold;
    the check: predicted against true distogram for one target; the result: our dot on the
    CASP16 strip), one table (the ladder of §6). The seven-panel plate stays a design document.
 
@@ -76,6 +83,11 @@ official table to the printed digit, so our model's dot goes on the same axis as
 | `raw/predictions/T1235, T1267s1, T1226` | every group's five models for the featured targets | predictions/regular/ |
 | `tools/USalign`, `tools/mmseqs/` | scorers; OpenStructure is the docker image | pylelab/USalign, mmseqs.com, scicore registry |
 | `eu_list.csv`, `group_names.json` | derived by `casp16_score.py eus / groups` | |
+| `train/entities.txt`, `train/entities.jsonl` | 230,942 pre-cutoff protein entities; sequence, chains, resolution, method, release date | RCSB search + data API, `casp16_chain_list.py search / fetch` |
+| `train/clusters-by-entity-40.txt` | RCSB's 40 % identity clusters (324,163) | cdn.rcsb.org/resources/sequence/clusters |
+| `train/reps.csv`, `train/reps.fasta` | 27,690 cluster representatives | `casp16_chain_list.py cluster` |
+| `train/train_full.csv`, `train/train.csv`, `train/val.csv`, `train/target_hits.m8` | 26,310 date-cut-only (headline) / 26,228 purged (ablation) / 1,380 val; the MMseqs2 hits | `casp16_chain_list.py purge` |
+| `pdb/<entity>.cif.gz` | per-chain coordinates (step 2) | RCSB ModelServer, `casp16_fetch_chains.py` |
 
 `scripts/datasets/download_casp16.sh` fetches all of it (idempotent, ~60 MB). The Python side
 runs in `.venv-casp` (numpy, pandas, gemmi; torch-cpu + fair-esm to be added for step 5).
@@ -116,9 +128,16 @@ T1267s1-D1 medium 157 aa, median 0.65, MULTICOM best at 0.76; T1226-D1 hard 123 
                      the same way; join with the official LDDT column for the strip plot
 ```
 
-Sizes, to confirm in step 1: ~25–35k representative chains; per-chain coordinates ~50–150 KB
-→ 2–5 GB; labels < 2 GB; embeddings ~6 GB at f16. The box had 47 GB free on 2026-10-01 before
-cleanup (§8).
+Sizes (step 1 run 2026-10-01): 230,942 entities pass the search; 27,756 of RCSB's 40 % clusters
+contain one, 27,690 representatives survive the unknown-residue filter (median length 214,
+mean 233, 6.4 M residues; 90 % X-ray, median 1.9 Å; released 1979–2024-04-24). The purge
+(MMseqs2 `-s 7.5`, ≥ 30 % identity over ≥ 50 % of the *train* chain, `--cov-mode 1`) finds 84
+hits for 15 of the 62 targets — templates the field also had, e.g. 3BVF at 100 % over a third
+of T1295, 7L9U at 53 % over 97 % of T1243 — and drops 82 representatives with their clusters;
+5 % of the remaining clusters are val: 26,228 train / 1,380 val. G1: none of the 21 PDB entries
+behind the EU table's PDB ids was released before the cutoff, so the date cut alone excludes
+every target structure. Per-chain coordinates ~130 KB → ~3.6 GB; labels < 2 GB; embeddings
+~6 GB at f16. 80 GB free after the 2026-10-01 cleanup.
 
 ## 4. The net
 
@@ -137,7 +156,8 @@ the demo bar the other Chapter-10 demos meet. Everything downstream of the tile 
 proven. The gradient check for the new op goes through the existing vjp_oracle path.
 
 Ablation rows the table wants (each one run): ESM-2's own contact head (no training by us);
-one-hot input instead of ESM-2 (what the ResNet alone can do without an MSA); 128 ch / 32 units.
+one-hot input instead of ESM-2 (what the ResNet alone can do without an MSA); the purged
+training list (§1.8, no templates); 128 ch / 32 units.
 
 ## 5. Scoring (validated 2026-10-01)
 
@@ -208,4 +228,9 @@ Every launch is asked for first.
 ## 10. Work log
 
 - 2026-10-01: feasibility pass; data downloaded; US-align built, MMseqs2 unpacked, OST image
-  pulled; `casp16_score.py` + `download_casp16.sh` written; G0 passed (§5 table).
+  pulled; `casp16_score.py` + `download_casp16.sh` written; G0 passed (§5 table); committed
+  bc09c154.
+- 2026-10-01: `casp16_chain_list.py` search / fetch (230,942 entities, 18 min) / cluster /
+  purge → 26,228 / 1,380; G1 passed; `casp16_fetch_chains.py` rewritten CDN + gemmi (4/s per
+  core; ModelServer alone was 0.9/s), 200-chain smoke, label_seq alignment check 12 / 37,672;
+  decided headline = date cut only, purge = ablation; full fetch launched.
