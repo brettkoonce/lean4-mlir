@@ -742,6 +742,35 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
 - **8c MaxPool unification**, ~−400 (**A-gen-2**, L): one window-max over an index family, with
   2×2 and 3×3/s2 as instances. ⚠ Graph ties `rfl`-match `maxPoolBack` (the IR-spelled trap). Keep
   the instance names as `abbrev`s and check the T2 ties. Best done *with* WP1 part 1.
+  - **Status 2026-10-01: landed (staged) as structure, not as the line cut; 0 `verified_mlir/`
+    changes.** Re-checked at HEAD: the two developments were still parallel. Net about +65 lines
+    (new `Architectures/WindowMax.lean` +327, MaxPool3s2 −222, CNN −40), not −400.
+    - `windowMax r s` is the max over the product window `{(r hi a, s wi b)}`; one copy of the
+      positions-form predicates (`WindowSmooth`, `…OrDead`, `…UpTo`, the pairwise/injective
+      discharges), the argmax, the local linearisation, `pdiv3`, the sum-form VJP, the flat
+      bridge, closeness, magnitude, shift and nonnegativity.
+    - 3×3/s2: `maxPool3s2`, `MaxPool3s2Smooth{,OrDead,UpTo}`, `maxPool3s2Argmax` and
+      `maxPool3s2LocalReindex` are `abbrev`s of the generic; every pinned theorem keeps its name
+      and statement as a one-line instance. Three names stay `def`s with their old bodies, because
+      downstream proofs unfold them and the files are not ours: `maxPool3s2Flat` (BatchSealKit's
+      `simp only`), `maxPool3s2HasVJPAt3` / `maxPool3s2FlatHasVJPAt` (the simp sets in
+      BackwardMaps and `maxPool3s2Back_faithful`; the backward is spelled out, `correct` is the
+      generic's). `maxPool3s2Flat_continuous` stays: `fun_prop` in ResNet34FullBSeal needs it.
+      Unused instance lemmas deleted (`le_maxPool3s2`, `maxPool3s2_attained`, `…_abs_le`,
+      `…_close`).
+    - 2×2: `maxPool2` keeps its four-way `max` definition (the IR graph ties, `MaxPool2IsArgmax`'s
+      lookup backward and the generated CnnSeal/CnnWitness read it); `maxPool2_eq_windowMax` is
+      the bridge and `windowSmooth_of_maxPool2Smooth` turns the offsets form into the positions
+      form. `maxPool2Argmax` / `maxPool2LocalReindex` are `abbrev`s, `maxPool2_flat_hasFDerivAt`
+      and `maxPoolFlat_{close,abs_le}` come from the generic; `maxPool2_eq_at_max`,
+      `maxPool2_abs_le` and `abs_max_le` deleted. `MaxPool2Smooth`, `pdiv3_maxPool2_smooth`'s
+      decoded form and the codegen collapse stay 2×2-specific.
+    - Why not −400: the 3×3 file was already compact (`Finset.sup'`), the 2×2 spelling cannot move,
+      and the pinned instance names stay as shims. What it buys: one proof of the analytic core,
+      and a generic `WindowSmoothUpTo` that WP1 part 2B's 2×2 twin predicate can instantiate.
+    - `max_close` and `maxPool2_close` are now reached only from AuditAxioms
+      (`audit_only_mentions.py`): `maxPoolFlat_close` goes through the generic. They are pinned,
+      so they stay.
 - **8d Nets**: **N1-reuse-1/2**, **N2-reuse-1…4**, **N2-pq-1…4**, **N1-pq-1** (28 undocumented
   `show`/`change`; add `_def` lemmas).
 - **8e Foundation/Float/Certificates**:

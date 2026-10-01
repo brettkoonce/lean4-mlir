@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.Tensor
+import LeanMlir.Proofs.Architectures.WindowMax
 
 /-! # `maxPool3s2` — the 3×3 stride-2 max pool of He et al.'s ResNet stem
 
@@ -30,22 +30,15 @@ which is exactly what `-∞` padding computes. `win3RowInv_first_dup` is that st
 The symmetric form needs **no `min`**: the upper end `2(h−1)+2−1 = 2h−1` is in range by
 construction, so truncated subtraction is the whole story.
 
-## The shape of the VJP, and why overlap costs less than it looks
+## The pool is a `windowMax` instance
 
-`maxPool2`'s backward is a **lookup** (`dy` at `hi/2`), sound only because 2×2 windows are
-disjoint. Here windows overlap — odd input `p` lies in windows `(p−1)/2` and `(p+1)/2` — so an
-input feeds up to **4** outputs and the backward must **accumulate**.
-
-That needs no new analytic argument. `HasVJPAt3.correct` already states the backward as
-`∑ co ∑ ho ∑ wo, pdiv3 f x … * dy co ho wo` — a sum over *all* outputs;
-`maxPool2_codegen_matches_canonical` merely *collapses* it to one term using disjointness. Here it
-collapses to ≤4. The generic route (`maxPool2LocalReindex` → `reindexCLM` → `pdiv3`) is
-indifferent: at a smooth point the pool is locally a reindexing map, and overlap only makes that
-map non-injective, which `reindexCLM`'s adjoint already handles by summing over preimages.
-
-The witness is `maxPool3s2HasVJPAt3` (mirroring `maxPool2HasVJPAt3` in `CNN.lean`), with
-its flat form `maxPool3s2FlatHasVJPAt`; the ResNet-34/50 stems, their seals and the float
-stem bridge build on it. -/
+`maxPool3s2` is `windowMax win3RowInv win3ColInv` (WindowMax.lean), and every analytic fact here
+is that file's lemma at these window maps. What is particular to this pool is the window
+geometry: the clamped duplicate (`win3RowInv_first_dup`), which is why smoothness is stated over
+positions, and the overlap (`win3Row_mem_le_two`): an input lies in up to four windows, so where
+`maxPool2`'s backward is a lookup, this one accumulates. The witness is `maxPool3s2HasVJPAt3`, with
+its flat form `maxPool3s2FlatHasVJPAt`; the ResNet-34/50 stems, their seals and the float stem
+bridge build on it. -/
 
 namespace Proofs
 
@@ -82,94 +75,21 @@ theorem win3ColInv_first_dup {w : Nat} (wi_out : Fin w) (hfirst : wi_out.val = 0
   omega
 
 -- ════════════════════════════════════════════════════════════════
--- § The forward
+-- § The pool and its predicates, as `windowMax` instances
 -- ════════════════════════════════════════════════════════════════
 
 /-- **3×3 stride-2 symmetrically-padded max pool**, `[c, 2h, 2w] → [c, h, w]`: the max over the
     window `[2i−1, 2i+1] × [2j−1, 2j+1]`, clamped at the near edge (= `-∞` padded, header). -/
-noncomputable def maxPool3s2 {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Tensor3 c h w :=
-  fun ch hi wi =>
-    (univ : Finset (Fin 3 × Fin 3)).sup' univ_nonempty
-      (fun ab => x ch (win3RowInv hi ab.1) (win3ColInv wi ab.2))
+noncomputable abbrev maxPool3s2 {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Tensor3 c h w :=
+  windowMax win3RowInv win3ColInv x
 
-/-- Every window cell is ≤ the pooled value. -/
-theorem le_maxPool3s2 {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (ch : Fin c) (hi : Fin h) (wi : Fin w) (ab : Fin 3 × Fin 3) :
-    x ch (win3RowInv hi ab.1) (win3ColInv wi ab.2) ≤ maxPool3s2 x ch hi wi :=
-  le_sup' (f := fun ab : Fin 3 × Fin 3 =>
-    x ch (win3RowInv hi ab.1) (win3ColInv wi ab.2)) (mem_univ ab)
+/-- **Smoothness**: every 3×3 window attains its max at exactly one input position
+    (`WindowSmooth`). Stated over positions, so the clamped duplicate in the first window is not a
+    tie; a window whose max sits at two positions (an all-zero post-ReLU window) does not
+    qualify. -/
+abbrev MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
+  WindowSmooth win3RowInv win3ColInv x
 
-/-- The pooled value is attained by some window cell. -/
-theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (ch : Fin c) (hi : Fin h) (wi : Fin w) :
-    ∃ ab : Fin 3 × Fin 3,
-      maxPool3s2 x ch hi wi = x ch (win3RowInv hi ab.1) (win3ColInv wi ab.2) := by
-  obtain ⟨ab, _, hab⟩ := exists_mem_eq_sup' (univ_nonempty (α := Fin 3 × Fin 3))
-    (fun ab : Fin 3 × Fin 3 => x ch (win3RowInv hi ab.1) (win3ColInv wi ab.2))
-  exact ⟨ab, hab⟩
-
--- ════════════════════════════════════════════════════════════════
--- § Magnitude and closeness — what the float tier needs
--- ════════════════════════════════════════════════════════════════
---
--- The pool selects an existing cell, so it never grows a magnitude and passes an input error
--- through unchanged. The flat forms feed `FloatComposeBridge.floatClose_maxPool3s2`.
-
-/-- **The 3×3 pool never grows magnitudes** — it selects an existing window cell.
-    `Finset.sup'` again makes the window size stop mattering: `maxPool2_abs_le` needs a nested
-    `abs_max_le (abs_max_le _ _) (abs_max_le _ _)` for 4 cells, which at 9 would be worse; here it
-    is `sup'_le` plus one `le_sup'`, independent of the window. -/
-theorem maxPool3s2_abs_le {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)} {A : ℝ}
-    (hx : ∀ ci hi wi, |x ci hi wi| ≤ A) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
-    |maxPool3s2 x ci hi wi| ≤ A := by
-  obtain ⟨ab, hab⟩ := maxPool3s2_attained x ci hi wi
-  rw [hab]; exact hx _ _ _
-
-/-- **The 3×3 pool is 1-Lipschitz in the sup norm** — the peer of `maxPool2_close`. Standard
-    sup-vs-sup argument: each side is ≤ the other plus `e`, from `sup'_le` and `le_sup'`. -/
-theorem maxPool3s2_close {c h w : Nat} (xt xa : Tensor3 c (2 * h) (2 * w)) {e : ℝ}
-    (hx : ∀ ci hi wi, |xt ci hi wi - xa ci hi wi| ≤ e)
-    (ci : Fin c) (hi : Fin h) (wi : Fin w) :
-    |maxPool3s2 xt ci hi wi - maxPool3s2 xa ci hi wi| ≤ e := by
-  have key : ∀ (u v : Tensor3 c (2 * h) (2 * w)),
-      (∀ a b d, |u a b d - v a b d| ≤ e) →
-      maxPool3s2 u ci hi wi - maxPool3s2 v ci hi wi ≤ e := by
-    intro u v huv
-    obtain ⟨ab, hab⟩ := maxPool3s2_attained u ci hi wi
-    have hle : u ci (win3RowInv hi ab.1) (win3ColInv wi ab.2)
-        - v ci (win3RowInv hi ab.1) (win3ColInv wi ab.2) ≤ e :=
-      le_of_abs_le (huv _ _ _)
-    have hv := le_maxPool3s2 v ci hi wi ab
-    rw [hab]; linarith
-  have h1 := key xt xa hx
-  have h2 := key xa xt (fun a b d => by rw [abs_sub_comm]; exact hx a b d)
-  rw [abs_sub_le_iff]; exact ⟨h1, by linarith⟩
-
--- (the two flattened peers live at the end of the file, after `maxPool3s2Flat` is defined.)
-
--- ════════════════════════════════════════════════════════════════
--- § Smoothness and the argmax predicate
--- ════════════════════════════════════════════════════════════════
-
-/-- **Smoothness**: every 3×3 window attains its max at exactly one input POSITION — a cell that
-    dominates its window is strictly above every cell at another position. The other cells may
-    tie with each other (post-ReLU zeros below the max are allowed); a window whose max sits at
-    two positions (an all-zero post-ReLU window) does not qualify, and there the pool has no
-    derivative. Stated over positions, so the clamped duplicate in the first window (`a = 0` ≡
-    `a = 1`, one cell named twice) is not a tie. That carve-out is forced by the padding and has
-    no `maxPool2` analogue — there, distinct offsets always meant distinct positions. -/
-def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
-  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
-    (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
-      (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
-    (∀ cd : Fin 3 × Fin 3,
-      x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
-      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
-    x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
-      x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)
-
-/-- Windows whose cells at distinct positions have distinct values are smooth: a dominating cell
-    is `≥` every other cell and differs from it. -/
 theorem maxPool3s2Smooth_of_pairwise {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (hd : ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
       (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
@@ -177,88 +97,40 @@ theorem maxPool3s2Smooth_of_pairwise {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w
       x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
         x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)) :
     MaxPool3s2Smooth x :=
-  fun ci ho wo ab ab' hne hmax => lt_of_le_of_ne (hmax ab') (hd ci ho wo ab' ab (Ne.symm hne))
+  windowSmooth_of_pairwise _ _ x hd
 
-/-- **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
-    pool's smoothness hypothesis (`maxPool3s2FlatHasVJPAt`, the R34 back ties), the peer of
-    `MnistCNN`'s `maxPool2Smooth_of_injective`. Used by `BatchSeal.ctConv_pool_smooth` for the
-    ResNet-34 and ResNet-50 full-width seals. One injectivity
-    argument in place of `36·c·h·w` per-window `decide`s (9 offsets pairwise, against 2×2's 6), which
-    at ResNet-34's stem is why case-bashing is not an option.
-
-    It is shorter than its 2×2 peer, for the reason the padding forced.
-    `maxPool2Smooth_of_pairwise` is quantified over **offsets**, so its discharge has to get from
-    "the two input positions coincide" back to "the two offsets coincide" — two `Fin.mk.injEq` +
-    `omega` decodes, valid only because there distinct offsets always meant distinct positions.
-    `maxPool3s2Smooth_of_pairwise` is quantified over **positions** precisely because that is
-    false here (the clamped duplicate `a = 0 ≡ a = 1` in the first window,
-    `win3RowInv_first_dup`), so injectivity
-    lands directly on the hypothesis and the decode step does not exist. **The carve-out that made
-    the predicate awkward to state is what makes it cheap to discharge.**
-
-    The hypothesis is the same one the 2×2 sites already supply: on each channel the position map
-    `(r, s) ↦ x ci r s` is injective. -/
+/-- **Positional injectivity ⇒ `MaxPool3s2Smooth`**, the discharge used by
+    `BatchSeal.ctConv_pool_smooth` for the ResNet-34 and ResNet-50 full-width seals: one
+    injectivity argument in place of a per-window case split. -/
 theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (hinj : ∀ (ci : Fin c) (r r' : Fin (2 * h)) (s s' : Fin (2 * w)),
               x ci r s = x ci r' s' → r = r' ∧ s = s') :
-    MaxPool3s2Smooth x := by
-  refine maxPool3s2Smooth_of_pairwise x ?_
-  intro ci hi_out wi_out ab ab' hne hval
-  obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
-  exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
+    MaxPool3s2Smooth x :=
+  windowSmooth_of_injective _ _ x hinj
 
-/-- **Smooth or dead**: every 3×3 window either has its maximum at one input position
-    (`MaxPool3s2Smooth`'s condition, per window), or has every cell `≤ 0`.
-
-    The second case is what a pool AFTER a ReLU needs. A window of dead ReLUs is all zeros: nine
-    cells tie at the maximum, so the pool alone has no derivative there, but `pool ∘ relu` is
-    locally the constant `0` at the pre-activation, where every cell is strictly negative. The
-    ResNet stems state their pool condition in this form (`StemPoolSmoothAt`), and
-    `maxPool3s2Flat_relu_eventuallyEq` is the lemma that uses it. -/
-def MaxPool3s2SmoothOrDead {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
-  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
-    (∀ cd : Fin 3 × Fin 3, x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤ 0) ∨
-    ∀ ab ab' : Fin 3 × Fin 3,
-      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
-        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
-      (∀ cd : Fin 3 × Fin 3,
-        x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
-        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
-      x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
-        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)
+/-- **Smooth or dead** (`WindowSmoothOrDead`): every 3×3 window has its maximum at one position,
+    or every cell `≤ 0`. The ResNet stems state their pool condition in this form
+    (`StemPoolSmoothAt`), and `maxPool3s2Flat_relu_eventuallyEq` is the lemma that uses it. -/
+abbrev MaxPool3s2SmoothOrDead {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
+  WindowSmoothOrDead win3RowInv win3ColInv x
 
 /-- A smooth pool input is smooth-or-dead. -/
 theorem maxPool3s2SmoothOrDead_of_smooth {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)}
     (hx : MaxPool3s2Smooth x) : MaxPool3s2SmoothOrDead x :=
-  fun ci ho wo => Or.inr (fun ab ab' => hx ci ho wo ab ab')
+  windowSmoothOrDead_of_smooth _ _ hx
 
-/-- **Smooth, dead, or tied only between twins**: every 3×3 window is entirely `≤ 0`, or its
-    maximum is strictly above every cell at another position except positions `T` relates to the
-    maximum's. With `T` empty this is `MaxPool3s2SmoothOrDead`.
-
-    The twins a parameter gradient can afford are cells that are the SAME function of the moving
-    parameter, so a tie between them persists along the parameter and the pool picks either: the
-    ResNet stem's cells reading identical input patches (`StemPoolTwinAt`). -/
-def MaxPool3s2SmoothUpTo {c h w : Nat} (T : Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
+/-- **Smooth, dead, or tied only between twins** (`WindowSmoothUpTo`): the ResNet stem's twins are
+    cells reading identical input patches (`StemPoolTwinAt`). -/
+abbrev MaxPool3s2SmoothUpTo {c h w : Nat}
+    (T : Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
     (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
-  ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w),
-    (∀ cd : Fin 3 × Fin 3, x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤ 0) ∨
-    ∀ ab ab' : Fin 3 × Fin 3,
-      (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2) ≠
-        (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2) →
-      (∀ cd : Fin 3 × Fin 3,
-        x ci (win3RowInv hi_out cd.1) (win3ColInv wi_out cd.2) ≤
-        x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2)) →
-      x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2) <
-          x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ∨
-        T (win3RowInv hi_out ab.1, win3ColInv wi_out ab.2)
-          (win3RowInv hi_out ab'.1, win3ColInv wi_out ab'.2)
+  WindowSmoothUpTo win3RowInv win3ColInv T x
 
 /-- A smooth-or-dead pool input is smooth up to any twin relation. -/
 theorem maxPool3s2SmoothUpTo_of_smoothOrDead {c h w : Nat}
     (T : Fin (2 * h) × Fin (2 * w) → Fin (2 * h) × Fin (2 * w) → Prop)
     {x : Tensor3 c (2 * h) (2 * w)} (hx : MaxPool3s2SmoothOrDead x) : MaxPool3s2SmoothUpTo T x :=
-  fun ci ho wo => (hx ci ho wo).imp id fun h ab ab' hne hd => Or.inl (h ab ab' hne hd)
+  windowSmoothUpTo_of_smoothOrDead _ _ T hx
 
 /-- **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
     `p/2` and `(p+1)/2`. With symmetric padding the shared cell is at ODD `p` (window `(p−1)/2`
@@ -276,123 +148,55 @@ theorem win3Row_mem_le_two {h : Nat} (p : Fin (2 * h)) (hi_out : Fin h)
   omega
 
 -- ════════════════════════════════════════════════════════════════
--- § Argmax extractor and the window-max characterisation
+-- § Argmax, local reindex and the VJP witness
 -- ════════════════════════════════════════════════════════════════
 
-/-- A (not necessarily unique) argmax of the 3×3 window at output `(co, ho, wo)`.
-    Unique under `MaxPool3s2Smooth` *up to position* — the clamped duplicate in the first
-    window is two offsets naming one cell. -/
-noncomputable def maxPool3s2Argmax {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+/-- A (not necessarily unique) argmax of the 3×3 window at output `(co, ho, wo)`. -/
+noncomputable abbrev maxPool3s2Argmax {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (co : Fin c) (ho : Fin h) (wo : Fin w) : Fin 3 × Fin 3 :=
-  Classical.choose
-    ((univ : Finset (Fin 3 × Fin 3)).exists_max_image
-      (fun ab => x co (win3RowInv ho ab.1) (win3ColInv wo ab.2)) univ_nonempty)
+  windowArgmax win3RowInv win3ColInv x co ho wo
 
-theorem maxPool3s2Argmax_max {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+theorem maxPool3s2Argmax_max {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (co : Fin c) (ho : Fin h) (wo : Fin w) (ab : Fin 3 × Fin 3) :
     x co (win3RowInv ho ab.1) (win3ColInv wo ab.2) ≤
       x co (win3RowInv ho (maxPool3s2Argmax x co ho wo).1)
             (win3ColInv wo (maxPool3s2Argmax x co ho wo).2) :=
-  (Classical.choose_spec
-    ((univ : Finset (Fin 3 × Fin 3)).exists_max_image
-      (fun ab' => x co (win3RowInv ho ab'.1) (win3ColInv wo ab'.2))
-      univ_nonempty)).2 ab (mem_univ ab)
+  windowArgmax_max _ _ x co ho wo ab
 
-/-- If `(a, b)` dominates every window cell, the pooled value is the value there.
-    The `sup'` formulation makes this two lines where `maxPool2_eq_at_max` needs a
-    four-way `fin_cases` against an explicit `max (max _ _) (max _ _)` — and nine ways here. -/
-theorem maxPool3s2_eq_at_max {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+/-- If `(a, b)` dominates every window cell, the pooled value is the value there. -/
+theorem maxPool3s2_eq_at_max {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (co : Fin c) (ho : Fin h) (wo : Fin w) (a b : Fin 3)
     (h_max : ∀ a' b' : Fin 3,
-      x co (win3RowInv ho a') (win3ColInv wo b') ≤
-        x co (win3RowInv ho a) (win3ColInv wo b)) :
+      x co (win3RowInv ho a') (win3ColInv wo b') ≤ x co (win3RowInv ho a) (win3ColInv wo b)) :
     maxPool3s2 x co ho wo = x co (win3RowInv ho a) (win3ColInv wo b) :=
-  le_antisymm
-    (sup'_le _ _ (fun ab' _ => h_max ab'.1 ab'.2))
-    (le_sup' (f := fun ab : Fin 3 × Fin 3 =>
-      x co (win3RowInv ho ab.1) (win3ColInv wo ab.2)) (mem_univ (a, b)))
+  windowMax_eq_at_max _ _ x co ho wo (a, b) fun cd => h_max cd.1 cd.2
 
-theorem maxPool3s2_eq_argmax_value {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+theorem maxPool3s2_eq_argmax_value {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (co : Fin c) (ho : Fin h) (wo : Fin w) :
     maxPool3s2 x co ho wo =
       x co (win3RowInv ho (maxPool3s2Argmax x co ho wo).1)
             (win3ColInv wo (maxPool3s2Argmax x co ho wo).2) :=
-  maxPool3s2_eq_at_max x co ho wo _ _ (fun a' b' => maxPool3s2Argmax_max x co ho wo (a', b'))
+  windowMax_eq_argmax_value _ _ x co ho wo
 
--- ════════════════════════════════════════════════════════════════
--- § Local linearisation (the reindex σ)
--- ════════════════════════════════════════════════════════════════
-
-/-- For each output flat index, the flat index of its argmax's input position.
-    **Not injective** — two overlapping windows may select the same input. That is exactly
-    what makes the backward accumulate, and `reindexCLM`'s adjoint already sums over preimages,
-    so nothing here needs to change relative to `maxPool2LocalReindex`. -/
-noncomputable def maxPool3s2LocalReindex {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+/-- For each output flat index, the flat index of its argmax's input position. Not injective:
+    two overlapping windows may select the same input. -/
+noncomputable abbrev maxPool3s2LocalReindex {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (k_out : Fin (c * h * w)) : Fin (c * (2 * h) * (2 * w)) :=
-  let r1 := finProdFinEquiv.symm k_out
-  let wo : Fin w := r1.2
-  let r2 := finProdFinEquiv.symm r1.1
-  let co : Fin c := r2.1
-  let ho : Fin h := r2.2
-  let ab := maxPool3s2Argmax x co ho wo
-  finProdFinEquiv (finProdFinEquiv (co, win3RowInv ho ab.1), win3ColInv wo ab.2)
+  windowLocalReindex win3RowInv win3ColInv x k_out
 
-/-- **Smooth-point local linearisation.** Near `flatten x` the flattened pool agrees with the
-    reindex `y ↦ y ∘ σ`: every window keeps its argmax, since finitely many strict inequalities
-    persist on a neighbourhood (`Filter.eventually_all`). Mirrors `maxPool2_flat_hasFDerivAt`; the
-    one structural change is that the domination argument branches on whether an offset names the
-    argmax's own **position** (the clamped duplicate), not on whether the offsets are equal —
-    `MaxPool3s2Smooth` says nothing about coincident positions because there the values are
-    literally the same number. -/
-theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
+/-- **Smooth-point local linearisation**: near `flatten x` the flattened pool is the reindex
+    `y ↦ y ∘ σ`. -/
+theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (h_smooth : MaxPool3s2Smooth x) :
     HasFDerivAt
-      (fun v : Vec (c * (2 * h) * (2 * w)) =>
-        Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
-      (reindexCLM (maxPool3s2LocalReindex x))
-      (Tensor3.flatten x) := by
-  refine (reindexCLM (maxPool3s2LocalReindex x)).hasFDerivAt.congr_of_eventuallyEq ?_
-  -- An offset naming the argmax's own cell (the clamped duplicate) is equal, not below.
-  have hmax : ∀ᶠ y in nhds (Tensor3.flatten x), ∀ (co : Fin c) (ho : Fin h) (wo : Fin w)
-      (a' b' : Fin 3), Tensor3.unflatten y co (win3RowInv ho a') (win3ColInv wo b') ≤
-        Tensor3.unflatten y co (win3RowInv ho (maxPool3s2Argmax x co ho wo).1)
-          (win3ColInv wo (maxPool3s2Argmax x co ho wo).2) := by
-    have hcont : ∀ co hi wi, ContinuousAt
-        (fun y : Vec (c * (2 * h) * (2 * w)) => Tensor3.unflatten y co hi wi) (Tensor3.flatten x) :=
-      fun _ _ _ => (continuous_apply _).continuousAt
-    simp only [Filter.eventually_all]
-    intro co ho wo a' b'
-    by_cases hab : (win3RowInv ho a', win3ColInv wo b') =
-        (win3RowInv ho (maxPool3s2Argmax x co ho wo).1, win3ColInv wo (maxPool3s2Argmax x co ho wo).2)
-    · obtain ⟨hr, hs⟩ := Prod.mk.inj hab
-      exact Filter.Eventually.of_forall fun _ => by rw [hr, hs]
-    · refine ((hcont _ _ _).eventually_lt (hcont _ _ _) ?_).mono fun _ => le_of_lt
-      simpa [Tensor3.unflatten_flatten] using
-        h_smooth co ho wo _ (a', b') (Ne.symm hab) (maxPool3s2Argmax_max x co ho wo)
-  filter_upwards [hmax] with y hy
-  funext k_out
-  exact maxPool3s2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)
+      (fun v : Vec (c * (2 * h) * (2 * w)) => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)))
+      (reindexCLM (maxPool3s2LocalReindex x)) (Tensor3.flatten x) :=
+  windowMax_flat_hasFDerivAt _ _ x h_smooth
 
--- ════════════════════════════════════════════════════════════════
--- § The smooth-point Jacobian and the VJP witness
--- ════════════════════════════════════════════════════════════════
-
-/-- **Smooth-point Jacobian.** `pdiv3` is the 0/1 indicator that the local reindex sends output
-    `(co, ho, wo)` to input `(ci, hi_in, wi_in)`.
-
-    **This is where the overlapping case genuinely differs from `maxPool2`, and it differs by
-    being SIMPLER to state.** `pdiv3_maxPool2_smooth` decodes the condition into
-    `co = ci ∧ ho = winRow hi_in ∧ wo = winCol wi_in ∧ IsArgmax` — legitimate there because each
-    input has exactly ONE owning window, so `winRow`/`winCol` name it. Here an input has up to
-    two windows per axis and no such decoding exists. Leaving the condition as the reindex
-    equation is both correct and shorter; the accumulation then happens in `correct`'s sum over
-    outputs, with no extra argument. -/
+/-- **Smooth-point Jacobian**: the 0/1 indicator that the local reindex sends output
+    `(co, ho, wo)` to input `(ci, hi_in, wi_in)`. An input has up to two windows per axis, so
+    there is no single owning window to decode the condition into, unlike `pdiv3_maxPool2_smooth`;
+    the accumulation happens in the VJP's sum over outputs. -/
 theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x)
     (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w))
@@ -400,22 +204,13 @@ theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
     pdiv3 maxPool3s2 x ci hi_in wi_in co ho wo =
       (if maxPool3s2LocalReindex x (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
             = finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)
-        then (1 : ℝ) else 0) := by
-  have h_fderiv := maxPool3s2_flat_hasFDerivAt x h_smooth
-  unfold pdiv3
-  rw [pdiv_eq_of_hasFDerivAt h_fderiv]
-  show reindexCLM (maxPool3s2LocalReindex x)
-        (basisVec (finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)))
-        (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) = _
-  -- `rw` closes this by `rfl`: `basisVec j i` IS `if i = j then 1 else 0`, and the reindex
-  -- equation is exactly the condition. `maxPool2`'s peer needs a further `h_sigma` decoding step
-  -- to reach its `winRow`/`winCol` form; leaving the condition as the reindex equation (§ above)
-  -- means there is nothing left to decode.
-  rw [reindexCLM_apply]
+        then (1 : ℝ) else 0) :=
+  pdiv3_windowMax_smooth _ _ x h_smooth ci hi_in wi_in co ho wo
 
 /-- **The VJP witness.** The backward accumulates `dy` over every output whose window selects
-    this input — at most 4 of them (`win3Row_mem_le_two` squared). `maxPool2`'s peer is a single
-    lookup; this is the same statement without the disjointness collapse. -/
+    this input, at most 4 of them (`win3Row_mem_le_two` squared). The backward is spelled out
+    rather than taken from `windowMaxHasVJPAt3`, so that unfolding this name exposes the sum the
+    backward ties match. -/
 noncomputable def maxPool3s2HasVJPAt3 {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     HasVJPAt3 (maxPool3s2 : Tensor3 c (2 * h) (2 * w) → Tensor3 c h w) x where
@@ -424,16 +219,14 @@ noncomputable def maxPool3s2HasVJPAt3 {c h w : Nat}
       (if maxPool3s2LocalReindex x (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
             = finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)
         then (1 : ℝ) else 0) * dy co ho wo
-  correct dy ci hi_in wi_in := by
-    refine Finset.sum_congr rfl (fun co _ => Finset.sum_congr rfl
-      (fun ho _ => Finset.sum_congr rfl (fun wo _ => ?_)))
-    rw [pdiv3_maxPool3s2_smooth x h_smooth]
+  correct := (windowMaxHasVJPAt3 _ _ x h_smooth).correct
 
 -- ════════════════════════════════════════════════════════════════
--- § The flat bridge — what the `SHlo` op's `den` will name
+-- § The flat bridge — what the `SHlo` op's `den` names
 -- ════════════════════════════════════════════════════════════════
 
-/-- Flattened 3×3/s2 pool, the `Vec`-level form the codegen denotes. -/
+/-- Flattened 3×3/s2 pool, the `Vec`-level form the codegen denotes. Spelled through
+    `maxPool3s2`, which is `windowMaxFlat` at the 3×3/s2 maps by unfolding. -/
 noncomputable def maxPool3s2Flat (c h w : Nat) :
     Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w) :=
   fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v))
@@ -441,7 +234,7 @@ noncomputable def maxPool3s2Flat (c h w : Nat) :
 theorem maxPool3s2Flat_differentiableAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     DifferentiableAt ℝ (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
-  (maxPool3s2_flat_hasFDerivAt x h_smooth).differentiableAt
+  windowMaxFlat_differentiableAt _ _ x h_smooth
 
 /-- The VJP of `maxPool3s2Flat` at a flattened input satisfying `MaxPool3s2Smooth`:
     `maxPool3s2HasVJPAt3` moved to `Vec` form. -/
@@ -450,49 +243,34 @@ noncomputable def maxPool3s2FlatHasVJPAt {c h w : Nat}
     HasVJPAt (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
   HasVJPAt3.toHasVJPAt (maxPool3s2HasVJPAt3 x h_smooth)
 
-/-- Flattened magnitude bound — the form `floatClose_maxPool3s2` (`FloatComposeBridge.lean`)
-    threads (`maxPoolFlat_abs_le`'s peer). -/
+/-- Flattened magnitude bound, the form `floatClose_maxPool3s2` threads. -/
 theorem maxPool3s2Flat_abs_le {c h w : Nat} {v : Vec (c * (2 * h) * (2 * w))} {A : ℝ}
     (hv : ∀ k, |v k| ≤ A) (k : Fin (c * h * w)) :
-    |maxPool3s2Flat c h w v k| ≤ A := by
-  have huf : ∀ ci hi wi, |Tensor3.unflatten v ci hi wi| ≤ A := by
-    intro ci hi wi; simp only [Tensor3.unflatten]; exact hv _
-  simp only [maxPool3s2Flat, Tensor3.flatten]
-  exact maxPool3s2_abs_le huf _ _ _
+    |maxPool3s2Flat c h w v k| ≤ A :=
+  windowMaxFlat_abs_le _ _ hv k
 
-/-- Flattened closeness — `maxPoolFlat_close`'s peer. -/
+/-- Flattened closeness: the pool is 1-Lipschitz in the sup norm. -/
 theorem maxPool3s2Flat_close {c h w : Nat} (vt va : Vec (c * (2 * h) * (2 * w)))
     {e : ℝ} (hv : ∀ k, |vt k - va k| ≤ e) (k : Fin (c * h * w)) :
-    |maxPool3s2Flat c h w vt k - maxPool3s2Flat c h w va k| ≤ e := by
-  have huf : ∀ ci hi wi,
-      |Tensor3.unflatten vt ci hi wi - Tensor3.unflatten va ci hi wi| ≤ e := by
-    intro ci hi wi; simp only [Tensor3.unflatten]; exact hv _
-  simp only [maxPool3s2Flat, Tensor3.flatten]
-  exact maxPool3s2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
+    |maxPool3s2Flat c h w vt k - maxPool3s2Flat c h w va k| ≤ e :=
+  windowMaxFlat_close _ _ vt va hv k
 
 /-- `maxPool3s2Flat` is continuous (a `sup'` of coordinates). -/
 @[fun_prop]
-theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h w) := by
-  refine continuous_pi (fun k => ?_)
-  show Continuous (fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)) k)
-  simp only [Tensor3.flatten, maxPool3s2, Tensor3.unflatten]
-  exact Continuous.finset_sup'_apply Finset.univ_nonempty (fun ab _ => continuous_apply _)
+theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h w) :=
+  windowMaxFlat_continuous _ _
 
-/-- **The 3×3/s2 pool shifts with a uniform offset.** If one slab's channel is another's plus
-    the constant `δ`, so are their pooled values — `max` of a uniformly shifted family
-    (`Finset.apply_sup'_eq_sup'_comp` at `(· + δ)`). No argmax or eventually-argument: this holds at
-    every point of the ray, which is what lets the carrier cross the only real kink in the net. -/
+/-- **The 3×3/s2 pool shifts with a uniform offset**, at every point of the ray, which is what
+    lets the carrier cross the only real kink in the net. -/
 theorem maxPool3s2_shift {c h w : Nat} (x y : Tensor3 c (2 * h) (2 * w)) (δ : ℝ) (ci : Fin c)
     (hxy : ∀ r s, x ci r s = y ci r s + δ) (hi : Fin h) (wi : Fin w) :
-    maxPool3s2 x ci hi wi = maxPool3s2 y ci hi wi + δ := by
-  have hg : ∀ p q : ℝ, (p ⊔ q) + δ = (p + δ) ⊔ (q + δ) := fun p q => (max_add_add_right p q δ).symm
-  simp only [maxPool3s2, hxy]
-  exact (Finset.apply_sup'_eq_sup'_comp Finset.univ_nonempty (fun z : ℝ => z + δ) hg).symm
+    maxPool3s2 x ci hi wi = maxPool3s2 y ci hi wi + δ :=
+  windowMax_shift _ _ x y δ ci hxy hi wi
 
 /-- The pool keeps a nonnegative slab nonnegative (it selects a window cell). -/
 theorem maxPool3s2_nonneg {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     (hx : ∀ ci r s, 0 ≤ x ci r s) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     0 ≤ maxPool3s2 x ci hi wi :=
-  le_trans (hx _ _ _) (le_maxPool3s2 x ci hi wi (0, 0))
+  windowMax_nonneg _ _ x hx ci hi wi
 
 end Proofs
