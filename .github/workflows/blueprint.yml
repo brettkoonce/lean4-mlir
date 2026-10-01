@@ -548,6 +548,11 @@ jobs:
             # LaTeX wraps its log at 79 columns (the path splits mid-line), so join first.
             pages="$(cat blueprint/print/*.log 2>/dev/null | tr -d '\n' | grep -oE 'Output written on [^(]*\([0-9]+ pages' | grep -oE '[0-9]+ pages' | tail -1)"
             pdf="✅ ${pages:-built} ($(du -h public/blueprint.pdf | cut -f1))"
+          elif [ "${{ job.status }}" != "success" ]; then
+            # An earlier step failed, so the PDF step never ran AND nothing deploys: `Upload Pages
+            # artifact` has no always(), and `deploy_pages` needs this job. Saying "the web version
+            # still ships" here was false — the live site keeps the last GREEN run's build.
+            pdf="❌ not built — an earlier step failed, so this run deploys NOTHING (the live site is still the last green run's)"
           else
             pdf="⚠️ not built — the web version still ships; see \`public/build-logs/\`"
           fi
@@ -566,7 +571,11 @@ jobs:
             echo "| PDF | $pdf | |"
             echo "| Sitemap URLs | $sitemap | |"
             echo ""
-            echo "**Site:** ${SITE_BASE:-—} · deployed by the \`deploy_pages\` job below."
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "**Site:** ${SITE_BASE:-—} · deployed by the \`deploy_pages\` job below."
+            else
+              echo "**Site:** ${SITE_BASE:-—} · ❌ **NOT deployed by this run** — a step above failed, so \`deploy_pages\` is skipped and the site still serves the last green run."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ⭐ `upload-pages-artifact` above is NOT a normal artifact: it produces the special
