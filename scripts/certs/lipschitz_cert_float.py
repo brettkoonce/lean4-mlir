@@ -137,7 +137,7 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
 """)
 
 body = f'''import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard
-import LeanMlir.Proofs.Float.FloatBridge
+import LeanMlir.Proofs.Float.MlpFloatBridge
 
 /-! # The robustness certificate composed with the float bridge
 
@@ -167,8 +167,9 @@ perturbs each logit by at most `B`, so any margin clearing
 {"(all of them)" if not dropped else f"(dropped: {dropped})"}.
 
 **Theorem vs. measurement — read this before quoting a number.** Soundness lives
-in the ENGINE below (`certified_at_eps_close` + `certifiedFloat_of_margin`,
-proved once) — kernel-checking the 57th image buys nothing the 56th didn't. The
+in the ENGINE (`certified_at_eps_close` in `DenseEuclid`, the 2-layer float budget
+`FloatModel.mlp2_float_close_uniform` in `MlpFloatBridge`, and `certifiedFloat_of_margin`
+below, each proved once) — kernel-checking the 57th image buys nothing the 56th didn't. The
 {measured}/34 above is an exact-rational MEASUREMENT; the first {len(emitted)} surviving images
 (test-set order — an unbiased, reproducible rule) each carry a
 `certifiedC<i>_float` THEOREM.
@@ -184,98 +185,10 @@ data; weights/images/margins are DATA here. -/
 
 namespace Proofs
 
--- ════════════════════════════════════════════════════════════════
--- § The rounded two-layer MLP forward and its uniform budget
--- ════════════════════════════════════════════════════════════════
-
-namespace FloatModel
-
-variable (M : FloatModel)
-
-/-- The rounded 2-layer MLP forward: rounded dense, bare (exact) relu,
-    rounded dense — the 2-layer face of `mlpF`. -/
-noncomputable def mlp2F {{d₀ d₁ d₂ : Nat}}
-    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
-    (x : Vec d₀) : Vec d₂ :=
-  M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))
-
-/-- **2-layer MLP forward error, uniform budgets, quantized input.** If the
-    device input `y` is within `ein` of the real input `x` coordinatewise
-    (input quantization), every rounded logit is within the closed-form
-    2-layer `layerBudget` chain of the exact-ℝ logit. The 2-layer face of
-    `mlp_float_close_uniform`, with the fresh-input `e = 0` generalized to
-    `e = ein`. -/
-theorem mlp2_float_close_uniform {{d₀ d₁ d₂ : Nat}}
-    {{W₀ : Mat d₀ d₁}} {{b₀ : Vec d₁}} {{W₁ : Mat d₁ d₂}} {{b₁ : Vec d₂}}
-    {{x y : Vec d₀}} {{w₀ β₀ w₁ β₁ a ein : ℝ}}
-    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (ha : 0 ≤ a)
-    (hein : 0 ≤ ein)
-    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
-    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
-    (hx : ∀ i, |x i| ≤ a) (hy : ∀ i, |y i - x i| ≤ ein) (k : Fin d₂) :
-    |M.mlp2F W₀ b₀ W₁ b₁ y k -
-        Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) k| ≤
-      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
-        (layerBudget M.u d₀ w₀ β₀ a ein) := by
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a ein :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha hein
-  -- layer 0 at the quantized input, uniformized
-  have l0 : ∀ j, |M.dense W₀ b₀ y j - Proofs.dense W₀ b₀ x j| ≤
-      layerBudget M.u d₀ w₀ β₀ a ein :=
-    fun j => (M.dense_close W₀ b₀ y x ein hein hy j).trans
-      (M.denseErr_le_uniform hw₀ hein hW₀ hb₀ hx j)
-  -- relu: exact pass-through
-  have r0 : ∀ j, |relu d₁ (M.dense W₀ b₀ y) j -
-      relu d₁ (Proofs.dense W₀ b₀ x) j| ≤ layerBudget M.u d₀ w₀ β₀ a ein :=
-    fun j => relu_close _ _ _ l0 j
-  -- layer 1 with the inherited error; real hidden magnitude ≤ layerAct
-  have ha₁ : ∀ i, |relu d₁ (Proofs.dense W₀ b₀ x) i| ≤ layerAct d₀ w₀ β₀ a :=
-    fun i => (relu_abs_le _ i).trans (dense_abs_le ha hW₀ hb₀ hx i)
-  exact (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 k).trans
-    (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ k)
-
-end FloatModel
-
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 open FloatModel
-
--- ════════════════════════════════════════════════════════════════
--- § Generic piece: the certificate composed with an evaluation budget
--- ════════════════════════════════════════════════════════════════
-
-/-- **The certificate composed with a per-logit evaluation budget.** If the
-    ℝ logit map is `L`-Lipschitz with margin `m` at `x`, and the margin
-    clears the float-widened threshold `(14143/10000)·L·ε + 2·B`, then ANY
-    evaluation `z'` within `B` of the ℝ logits at `x + δ` keeps class `i`
-    the strict argmax — for every `‖δ‖ < ε`. Pure margin arithmetic; `z'`
-    is the deployed (rounded) forward. -/
-theorem certified_at_eps_close {{n k : ℕ}} {{L m ε B : ℝ}}
-    {{f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}}
-    (hf : LipschitzL2 L f) (hL : 0 < L)
-    {{x : EuclideanSpace ℝ (Fin n)}} {{i : Fin k}}
-    (hmargin : ∀ j, j ≠ i → m ≤ f x i - f x j)
-    (hclear : ((14143 : ℝ)/10000) * L * ε + 2 * B < m)
-    (hε0 : 0 ≤ ε) (_hB0 : 0 ≤ B)
-    (δ : EuclideanSpace ℝ (Fin n)) (hδ : ‖δ‖ < ε) (z' : Fin k → ℝ)
-    (hz' : ∀ j, |z' j - f (x + δ) j| ≤ B) :
-    ∀ j, j ≠ i → z' j < z' i := by
-  intro j hj
-  have hgap := logit_gap_stable hf x δ (Ne.symm hj)
-  have hmj := hmargin j hj
-  have hs2 : Real.sqrt 2 * L * ‖δ‖ ≤ ((14143 : ℝ)/10000) * L * ε := by
-    have h2 : (0:ℝ) ≤ Real.sqrt 2 * L :=
-      mul_nonneg (Real.sqrt_nonneg 2) hL.le
-    calc Real.sqrt 2 * L * ‖δ‖ ≤ Real.sqrt 2 * L * ε :=
-          mul_le_mul_of_nonneg_left hδ.le h2
-      _ ≤ ((14143 : ℝ)/10000) * L * ε := by
-          have h3 : Real.sqrt 2 * L ≤ ((14143 : ℝ)/10000) * L :=
-            mul_le_mul_of_nonneg_right sqrt_two_le_rat hL.le
-          exact mul_le_mul_of_nonneg_right h3 hε0
-  have hi := abs_le.mp (hz' i)
-  have hjj := abs_le.mp (hz' j)
-  linarith [hgap, hmj, hs2, hi.1, hjj.2]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The capped net in `Vec` space + the ℝ-side tie
@@ -397,7 +310,7 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
 -- ════════════════════════════════════════════════════════════════
 
 {"".join(img_blocks)}
-end LipschitzCertDemo
+end Robustness
 end Proofs
 '''
 

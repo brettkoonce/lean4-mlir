@@ -43,7 +43,6 @@ noncomputable def gridModel (p : ℕ) (u : ℝ) (hu : ((2 : ℝ) ^ (p + 1))⁻¹
     FloatModel where
   rnd := rndP p
   u := u
-  u_nonneg := le_trans (by positivity) hu
   err := fun x => (rndP_err p x).trans
     (mul_le_mul_of_nonneg_right hu (abs_nonneg x))
 
@@ -116,20 +115,6 @@ theorem binary32_e4m3_argmax_small {n : ℕ}
 -- ════════════════════════════════════════════════════════════════
 -- § One concrete binary32 SGD step, smallness conditions discharged
 -- ════════════════════════════════════════════════════════════════
-
-/-- The rounding of `0` is `0` (forced by the relative-error model at `x = 0`). -/
-theorem FloatModel.rnd_zero (M : FloatModel) : M.rnd 0 = 0 := by
-  have h := M.err 0
-  rw [sub_zero, abs_zero, mul_zero] at h
-  exact abs_nonpos_iff.mp h
-
-/-- A rounded dot product against the all-zero vector is `0`. -/
-theorem FloatModel.dot_right_zero (M : FloatModel) :
-    ∀ {k : Nat} (x : Vec k), M.dot x (fun _ => (0 : ℝ)) = 0
-  | 0, _ => rfl
-  | _ + 1, x => by
-      rw [FloatModel.dot_succ, M.dot_right_zero (fun i => x i.castSucc)]
-      simp only [FloatModel.mul, mul_zero, FloatModel.add, add_zero, M.rnd_zero]
 
 /-- A concrete minimal linear classifier: 2 inputs, 2 classes, all-zero weights,
     one-hot input, label 0. The all-zero weights make the exact and float forward both

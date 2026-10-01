@@ -239,7 +239,7 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
     A("`scripts/certs/crown_ibp_scorecard.py`; weights/images are DATA. -/")
     A("")
     A("namespace Proofs")
-    A("namespace LipschitzCertDemo")
+    A("namespace Robustness")
     A("")
     A("open scoped BigOperators")
     A("")
@@ -432,7 +432,7 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
         for ln, ep, cnt in parts) + " :=")
     A("  ⟨" + ", ".join(f"⟨rfl, {ln}_certified⟩" for ln, ep, cnt in parts) + "⟩")
     A("")
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     out_path.write_text("\n".join(L) + "\n")
     print(f"[{tag}] {out_path.name}: {len(L)} lines, "

@@ -1,4 +1,3 @@
-import Mathlib.Probability.Distributions.Gaussian.Multivariate
 import LeanMlir.Proofs.Foundation.UpstreamDraft
 
 /-! # The standard normal: `Φ`, its quantile `Φ⁻¹`, and full support
@@ -6,26 +5,15 @@ import LeanMlir.Proofs.Foundation.UpstreamDraft
 `stdNormalCDF` (Mathlib's `cdf` of `gaussianReal 0 1`) and `stdNormalQuantile` (`sSup {t | Φ t < p}`,
 the honest inverse on `(0,1)`), with the facts every smoothing certificate uses: `Φ` is strictly
 monotone and symmetric; on `(0,1)` the quantile is monotone, odd about `½`, continuous and inverts
-`Φ` both ways; below `0` it takes the junk value `0`. The `IsOpenPosMeasure` instance says the
-multivariate standard Gaussian charges every nonempty open set; the 1-D instance is
-`MathlibUpstream.instIsOpenPosMeasureGaussianReal`. Mathlib has none of
-this for the Gaussian quantile.
+`Φ` both ways; below `0` it takes the junk value `0`. Mathlib has none of this for the Gaussian quantile. The
+full-support instances (`MathlibUpstream.instIsOpenPosMeasureGaussianReal`, 1-D, and
+`MathlibUpstream.instIsOpenPosMeasureStdGaussian`, multivariate) come with the upstream drafts.
 -/
 
 namespace Proofs
 
 open MeasureTheory ProbabilityTheory Filter
 open scoped Topology
-
-/-- The standard Gaussian on a finite-dimensional inner-product space charges
-    every nonempty open set: it is the pushforward of the pi-Gaussian (open-pos
-    by `pi.isOpenPosMeasure`) under the surjective continuous basis sum. -/
-instance stdGaussian.instIsOpenPosMeasure {E : Type*} [NormedAddCommGroup E]
-    [InnerProductSpace ℝ E] [FiniteDimensional ℝ E] [MeasurableSpace E]
-    [BorelSpace E] : (stdGaussian E).IsOpenPosMeasure := by
-  refine Continuous.isOpenPosMeasure_map (by fun_prop) fun e => ?_
-  exact ⟨fun i => (stdOrthonormalBasis ℝ E).repr e i,
-    by simpa using (stdOrthonormalBasis ℝ E).sum_repr e⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § Φ: the standard-normal CDF, strictly monotone and symmetric

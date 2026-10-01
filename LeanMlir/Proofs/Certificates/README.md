@@ -4,15 +4,16 @@ The scorecard, instance and witness files in this directory are **generated**
 by a script in `scripts/certs/` (`lipschitz_cert_*.py`, `crown_ibp_scorecard.py`,
 `ibp_conv_scorecard.py`, `smooth_*scorecard*_gen.py`,
 `smoothing_net_witness_gen.py`) and then checked by Lean like any other
-proof: same kernel, zero `sorry`s, three-axiom audit. Twelve files are
+proof: same kernel, zero `sorry`s, three-axiom audit. Some files are
 hand-written — the engines the generated files instantiate and the trained
 weight instance: `LipschitzCert/Basic.lean`, `DenseEuclid.lean` (the dense / ReLU layers, their L2
 bounds and `CertifiedAt`), `IntervalBound.lean`, `CrownBound.lean`,
 `LipschitzCert/Instance.lean`, `LipschitzCert/PairSDP.lean`,
-`GaussianQuantile.lean` (Φ, Φ⁻¹, full support), `Smoothing/CP.lean`, `Smoothing/Gaussian.lean`,
+`GaussianQuantile.lean` (Φ, Φ⁻¹), `Smoothing/CP.lean`, `Smoothing/Gaussian.lean`,
 `Smoothing/MC.lean`, `Smoothing/NetSemantics.lean` and `Smoothing/PhiBounds.lean`. The float
-tier is the exception: its engine (`FloatModel.mlp2F`, `mlp2_float_close_uniform`,
-`certified_at_eps_close`) is emitted by `lipschitz_cert_float.py` into the generated
+tier's engine is hand-written too: `certified_at_eps_close` sits in `DenseEuclid.lean` and the
+2-layer float budget (`FloatModel.mlp2F`, `mlp2_float_close_uniform`) in
+`../Float/MlpFloatBridge.lean`; `lipschitz_cert_float.py` emits only the capped net's instance,
 `LipschitzCert/Float.lean`.
 
 That provenance explains their shape: thousands of short, structurally
@@ -37,10 +38,10 @@ generators print; the latest run's tables and logs are in `runs/2026-09-30-cert-
 Every family has the same shape: the data is ℚ/ℤ/ℕ, the ℝ object is *defined* as its cast, one
 computable check runs in the kernel, and one soundness lemma turns the check into an ℝ theorem.
 The engines — the ℝ theorems and checkers — are hand-written; the data files are generated. Some
-engines are here (`IntervalBound`, `CrownBound`, `DenseEuclid`, `GaussianQuantile`, `LipschitzCert/Basic`);
-the conv interval engine lives in `Foundation/` (`IntervalBoundConv`, which also states the
-certificate `CertifiedAtLinf3` / `ibp3_certified_of_boxSound`, and `IntervalBoundConvQ`), beside
-the kits `GramQ` and `ListDot`.
+engines are here (`IntervalBound`, `CrownBound`, `DenseEuclid`, `GaussianQuantile`, `LipschitzCert/Basic`,
+and the conv interval engine `IntervalBoundConv/Basic` with its certificate `CertifiedAtLinf3` /
+`ibp3_certified_of_boxSound`, and `IntervalBoundConv/Q`); the kits `GramQ` and `ListDot` live in
+`Foundation/`.
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|
@@ -59,7 +60,8 @@ the kits `GramQ` and `ListDot`.
 smoothing CP and decimal scorecards end in their side conditions (`binomTail … ≤ α`,
 `m/2000 ≤ σΦ⁻¹(q₀)`); only the pooled `mlpT` composes them with a net theorem.
 
-**Names.** `LipschitzCertDemo` (namespace) and the `LipschitzCert/` directory also cover the L∞
-IBP / CROWN scorecards. Capped vs unconstrained is `S`/`T` in net names (`mlpS`/`mlpT`), `C`/`U`
+**Names.** The `Proofs.Robustness` namespace holds the engines (`DenseEuclid`, `IntervalBound`,
+`CrownBound`, `LipschitzCert/PairSDP`) and every Lipschitz / IBP / CROWN / SDP scorecard; the
+`LipschitzCert/` directory also covers the L∞ IBP / CROWN scorecards. Capped vs unconstrained is `S`/`T` in net names (`mlpS`/`mlpT`), `C`/`U`
 in pooled theorems, `SC`/`SU` in SDP, and nothing / `Uncon` in file names. `F` = full 784-d input,
 `e8` = ε = 8/255, `ImgsA–D` = image chunks split for memory.

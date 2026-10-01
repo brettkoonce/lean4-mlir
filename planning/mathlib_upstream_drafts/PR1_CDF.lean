@@ -2,7 +2,7 @@
 PR 1 — feat(Probability/CDF): strict monotonicity and continuity of the cdf
 
 Content below is to be APPENDED to `Mathlib/Probability/CDF.lean`, inside the existing
-`namespace ProbabilityTheory` (i.e. insert before its `end ProbabilityTheory`). The two new
+`namespace ProbabilityTheory` (i.e. insert before its `end ProbabilityTheory`). The three new
 sections reuse that file's existing opens (`open MeasureTheory Measure Set Filter`,
 `open scoped Topology`); no new imports are needed (`Mathlib.MeasureTheory.Measure.OpenPos`
 and `Mathlib.Topology.Order.LeftRightLim` are already transitive). Add `Brett Koonce` to the
@@ -116,3 +116,13 @@ theorem continuous_cdf_iff : Continuous (cdf μ) ↔ NullSingletonClass μ :=
   ⟨nullSingletonClass_of_continuous_cdf μ, fun h => haveI := h; continuous_cdf μ⟩
 
 end Continuous
+
+section Integral
+
+/-- The integral of the indicator of `Iic t` against a probability measure on `ℝ` is its cdf
+at `t`. -/
+theorem integral_indicator_Iic_eq_cdf (μ : Measure ℝ) [IsProbabilityMeasure μ] (t : ℝ) :
+    ∫ z, (Iic t).indicator (1 : ℝ → ℝ) z ∂μ = cdf μ t := by
+  rw [integral_indicator_one measurableSet_Iic, cdf_eq_real]
+
+end Integral

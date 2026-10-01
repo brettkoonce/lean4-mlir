@@ -13,7 +13,7 @@ Layer-1 Gram entries are 784-term dots: one kernel `dotZ` evaluation each
 `scripts/certs/lipschitz_cert_scorecard_full.py`; weights are DATA. -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 
@@ -4809,5 +4809,5 @@ theorem mlpTF_lip : LipschitzL2 ((29846531 : ℝ)/1000000) mlpTF := by
   have e : ((5291 : ℝ)/1000) * (1 * ((5641 : ℝ)/1000)) = ((29846531 : ℝ)/1000000) := by norm_num
   rw [e] at h; exact h
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

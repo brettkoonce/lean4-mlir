@@ -259,7 +259,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("certificates are DATA (SDP solved off-line, verified exactly here). -/")
     A("")
     A("namespace Proofs")
-    A("namespace LipschitzCertDemo")
+    A("namespace Robustness")
     A("")
     A("open scoped BigOperators")
     A("")
@@ -410,7 +410,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A(f"      ∀ p ∈ {lname}, CertifiedAt {mlpname} ((1 : ℝ)/10) p.2.1 p.2.2 :=")
     A(f"  ⟨rfl, {lname}_certified⟩")
     A("")
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     with open(out_path, "w") as f:
         f.write("\n".join(L) + "\n")

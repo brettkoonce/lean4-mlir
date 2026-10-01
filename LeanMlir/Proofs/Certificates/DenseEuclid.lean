@@ -9,12 +9,14 @@ multiplies — Frobenius (`denseE_lipschitzL2`), the Gram / Schatten-4 bound
 witness vector gives (`lipschitzL2_lower_euclid`). The upper bounds share one tail
 (`denseE_lipschitzL2_of_sq`) and the Gram ones one Cauchy–Schwarz step (`sq_le_of_gram_quad`,
 `quad_le_of_frob`). `certified_at_eps` specialises the
-Tsuzuku certificate to a rational radius check. The trained instances are in
-`LipschitzCert.Instance`; the namespace is theirs, kept so every citation keeps its name.
+Tsuzuku certificate to a rational radius check, and `certified_at_eps_close` widens that check
+by a per-logit evaluation budget (the float tier's composition step). The trained instances are in
+`LipschitzCert.Instance`. The namespace `Proofs.Robustness` holds these engines, the IBP / CROWN /
+pair-SDP ones beside them, and every scorecard that instantiates them.
 -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 
@@ -102,6 +104,38 @@ theorem certified_at_eps {n k : ℕ} {L m ε : ℝ}
         exact mul_le_mul_of_nonneg_left this hε0
     _ = ((14143 : ℝ)/10000) * L * ε := by ring
     _ ≤ m := hε
+
+/-- **The certificate composed with a per-logit evaluation budget.** If the
+    ℝ logit map is `L`-Lipschitz with margin `m` at `x`, and the margin
+    clears the float-widened threshold `(14143/10000)·L·ε + 2·B`, then ANY
+    evaluation `z'` within `B` of the ℝ logits at `x + δ` keeps class `i`
+    the strict argmax — for every `‖δ‖ < ε`. Pure margin arithmetic; `z'`
+    is the deployed (rounded) forward. -/
+theorem certified_at_eps_close {n k : ℕ} {L m ε B : ℝ}
+    {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
+    (hf : LipschitzL2 L f) (hL : 0 < L)
+    {x : EuclideanSpace ℝ (Fin n)} {i : Fin k}
+    (hmargin : ∀ j, j ≠ i → m ≤ f x i - f x j)
+    (hclear : ((14143 : ℝ)/10000) * L * ε + 2 * B < m)
+    (hε0 : 0 ≤ ε) (_hB0 : 0 ≤ B)
+    (δ : EuclideanSpace ℝ (Fin n)) (hδ : ‖δ‖ < ε) (z' : Fin k → ℝ)
+    (hz' : ∀ j, |z' j - f (x + δ) j| ≤ B) :
+    ∀ j, j ≠ i → z' j < z' i := by
+  intro j hj
+  have hgap := logit_gap_stable hf x δ (Ne.symm hj)
+  have hmj := hmargin j hj
+  have hs2 : Real.sqrt 2 * L * ‖δ‖ ≤ ((14143 : ℝ)/10000) * L * ε := by
+    have h2 : (0:ℝ) ≤ Real.sqrt 2 * L :=
+      mul_nonneg (Real.sqrt_nonneg 2) hL.le
+    calc Real.sqrt 2 * L * ‖δ‖ ≤ Real.sqrt 2 * L * ε :=
+          mul_le_mul_of_nonneg_left hδ.le h2
+      _ ≤ ((14143 : ℝ)/10000) * L * ε := by
+          have h3 : Real.sqrt 2 * L ≤ ((14143 : ℝ)/10000) * L :=
+            mul_le_mul_of_nonneg_right sqrt_two_le_rat hL.le
+          exact mul_le_mul_of_nonneg_right h3 hε0
+  have hi := abs_le.mp (hz' i)
+  have hjj := abs_le.mp (hz' j)
+  linarith [hgap, hmj, hs2, hi.1, hjj.2]
 
 /-- **ReLU is 1-Lipschitz in L2** — coordinatewise `|max(a,0) − max(b,0)| ≤ |a − b|`
     summed. The activation contributes factor 1 to the product certificate. -/
@@ -274,5 +308,5 @@ theorem CertifiedAt.of_margin {n k : ℕ} {L m ε : ℝ}
     (hε : ((14143 : ℝ)/10000) * L * ε ≤ m) (hε0 : 0 ≤ ε) : CertifiedAt f ε x i :=
   fun δ hδ => certified_at_eps hf hL hmargin hε hε0 δ hδ
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

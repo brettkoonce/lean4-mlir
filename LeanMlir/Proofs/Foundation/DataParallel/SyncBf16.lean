@@ -31,7 +31,7 @@ the collective is `(1/R)·Σ_r rnd S_r` where the batch-`R·N` node is `rnd (Σ_
 A DP render divides its loss by the per-replica batch, so its cotangents are `R ×` the shard of
 the global ones (`DataParallel.Sync`, "The `1/R`"). At f32 linearity carries that factor
 through every backward; at bf16 it has to pass through `rnd` as well. The `*_smul` lemmas below
-take that as a hypothesis, `∀ x, rnd (s * x) = s * rnd x`, and `rndP_zpow_mul` proves it for
+take that as a hypothesis, `∀ x, rnd (s * x) = s * rnd x`, and `rndP_zpow_mul` (in `RndP.lean`) proves it for
 the repo's rounding model at every integer power of two — so for bf16 (`rndP 7`) at `s = R` and
 `s = 1/R` whenever `R` is a power of two, the ImageNet runs' `R = 4` among them.
 
@@ -263,55 +263,7 @@ theorem den_allReduceMeanF_convStridedWeightGradBBf16_sub_global {N ic oc h w kH
 -- § The divisor step at bf16 — scaling through `rnd`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **`Int.log b` shifts by `z` under scaling by `b^z`**, for any base `b > 1` and any integer
-    exponent. -/
-theorem int_log_zpow_mul {b : ℕ} (hb : 1 < b) (z : ℤ) {r : ℝ} (hr : 0 < r) :
-    Int.log b ((b : ℝ) ^ z * r) = z + Int.log b r := by
-  have hb0 : (0 : ℝ) < b := by exact_mod_cast zero_lt_one.trans hb
-  have hbz : (0 : ℝ) < (b : ℝ) ^ z := zpow_pos hb0 z
-  have hzr : 0 < (b : ℝ) ^ z * r := mul_pos hbz hr
-  have hpow : ∀ y : ℤ, (b : ℝ) ^ (z + y) = (b : ℝ) ^ z * (b : ℝ) ^ y :=
-    fun y => zpow_add₀ hb0.ne' z y
-  apply le_antisymm
-  · -- log (b^z r) < z + log r + 1, since b^z·r < b^(z + log r + 1)
-    have hlt : (b : ℝ) ^ z * r < (b : ℝ) ^ (z + (Int.log b r + 1)) := by
-      rw [hpow]
-      exact mul_lt_mul_of_pos_left (Int.lt_zpow_succ_log_self hb r) hbz
-    have := (Int.lt_zpow_iff_log_lt hb hzr).mp hlt
-    omega
-  · -- b^(z + log r) ≤ b^z·r
-    apply (Int.zpow_le_iff_le_log hb hzr).mp
-    rw [hpow]
-    exact mul_le_mul_of_nonneg_left (Int.zpow_log_le_self hb hr) hbz.le
-
-/-- **`Int.log` reads `|x|`, so the shift holds for either sign.** -/
-theorem int_log_abs_zpow_mul {b : ℕ} (hb : 1 < b) (z : ℤ) {x : ℝ} (hx : x ≠ 0) :
-    Int.log b |(b : ℝ) ^ z * x| = z + Int.log b |x| := by
-  have hb0 : (0 : ℝ) < b := by exact_mod_cast zero_lt_one.trans hb
-  rw [abs_mul, abs_of_pos (zpow_pos hb0 z)]
-  exact int_log_zpow_mul hb z (abs_pos.mpr hx)
-
-/-- **The repo's rounding model commutes with scaling by a power of two** — the grid at
-    `2^z·x` is the grid at `x` scaled by `2^z`, because the exponent is unbounded. The
-    exponent `z` is an integer, so this covers the multiplier `R = 2^k` and the divisor
-    `1/R = 2^(-k)` alike. -/
-theorem rndP_zpow_mul (p : ℕ) (z : ℤ) (x : ℝ) :
-    rndP p ((2 : ℝ) ^ z * x) = (2 : ℝ) ^ z * rndP p x := by
-  rcases eq_or_ne x 0 with hx | hx
-  · simp [hx]
-  have h2z : (2 : ℝ) ^ z ≠ 0 := zpow_ne_zero z two_ne_zero
-  have hzx : (2 : ℝ) ^ z * x ≠ 0 := mul_ne_zero h2z hx
-  have hlog : Int.log 2 |(2 : ℝ) ^ z * x| = z + Int.log 2 |x| := by
-    have := int_log_abs_zpow_mul (b := 2) (by norm_num) z hx
-    simpa using this
-  unfold rndP
-  rw [ite_eq_right hzx, ite_eq_right hx, hlog]
-  have hs : (2 : ℝ) ^ (z + Int.log 2 |x| - (p : ℤ))
-      = (2 : ℝ) ^ z * (2 : ℝ) ^ (Int.log 2 |x| - (p : ℤ)) := by
-    rw [show z + Int.log 2 |x| - (p : ℤ) = z + (Int.log 2 |x| - (p : ℤ)) by ring,
-        zpow_add₀ two_ne_zero]
-  rw [hs, mul_div_mul_left _ _ h2z]
-  ring
+/-! `rndP_zpow_mul` and the `Int.log` shift lemmas behind it live in `RndP.lean`. -/
 
 /-- **The bf16 conv input-VJP scales with its cotangent** when `rnd` commutes with the scale. -/
 theorem convBackBatchedBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (s : ℝ)

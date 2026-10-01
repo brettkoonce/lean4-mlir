@@ -19,7 +19,7 @@ pooled net of the Lipschitz certificates, not the 784-dim smoothing-driver
 checkpoint, and the driver's float forward is not tied to this real-semantics
 net. -/
 
-namespace Proofs.LipschitzCertDemo
+namespace Proofs.Robustness
 
 open MeasureTheory ProbabilityTheory
 
@@ -359,4 +359,4 @@ theorem smooth_cp_mlpT_demo {σ : ℝ} (hσ : 0 < σ)
     (binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)
       (by norm_num) (by decide +kernel))
 
-end Proofs.LipschitzCertDemo
+end Proofs.Robustness

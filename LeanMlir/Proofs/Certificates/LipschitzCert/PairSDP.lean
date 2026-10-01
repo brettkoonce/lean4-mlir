@@ -28,7 +28,7 @@ rationalized certificate `(ρ, T, L, d)` enters Lean as DATA, verified
 exactly. -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 
@@ -229,5 +229,5 @@ theorem certified_at_eps_pair {n k : ℕ}
   have h4 := neg_le_of_abs_le h2
   linarith [hmargin, h3, h4]
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

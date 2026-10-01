@@ -98,7 +98,7 @@ def main() -> None:
     A("checkpoint, and the driver's float forward is not tied to this real-semantics")
     A("net. -/")
     A("")
-    A("namespace Proofs.LipschitzCertDemo")
+    A("namespace Proofs.Robustness")
     A("")
     A("open MeasureTheory ProbabilityTheory")
     A("")
@@ -192,7 +192,7 @@ def main() -> None:
     A("    (binomTail_le_of_kernel_check (by norm_num) (by norm_num) (by norm_num)")
     A("      (by norm_num) (by decide +kernel))")
     A("")
-    A("end Proofs.LipschitzCertDemo")
+    A("end Proofs.Robustness")
     for c in range(K):
         margin, idx, _, _, _ = best[c]
         print(f"class {c}: test image #{idx}, margin {float(Fraction(margin, 66846720)):.4f}")

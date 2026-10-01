@@ -1,19 +1,22 @@
 import Mathlib.Probability.CDF
-import Mathlib.Probability.Distributions.Gaussian.Real
+import Mathlib.Probability.Distributions.Gaussian.Multivariate
 
 /-! # Mathlib upstreaming drafts — CI-guarded copies
 
 Compiles the contents of [`planning/mathlib_upstream_drafts/PR1_CDF.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR1_CDF.lean) (generic cdf
 lemmas, target `Mathlib/Probability/CDF.lean`) and
-[`planning/mathlib_upstream_drafts/PR2_GaussianReal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR2_GaussianReal.lean) (Gaussian cdf facts, target
-`Mathlib/Probability/Distributions/Gaussian/Real.lean`) against this repo's pinned Mathlib,
-inside the namespace `MathlibUpstream` so nothing clashes with Mathlib or with
-`LeanMlir.Proofs`. Keep in sync with those two files.
+[`planning/mathlib_upstream_drafts/PR2_GaussianReal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR2_GaussianReal.lean) (Gaussian cdf facts and the
+1-D Cameron–Martin formula, target `Mathlib/Probability/Distributions/Gaussian/Real.lean`) and
+[`planning/mathlib_upstream_drafts/PR3_GaussianMultivariate.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/mathlib_upstream_drafts/PR3_GaussianMultivariate.lean)
+(full support of `stdGaussian`, target `Mathlib/Probability/Distributions/Gaussian/Multivariate.lean`)
+against this repo's pinned Mathlib, inside the namespace `MathlibUpstream` so nothing clashes with
+Mathlib or with `LeanMlir.Proofs`. Keep in sync with those three files.
 
 A `Certs` root (audited in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)) so the drafts can't rot between
 Mathlib pin bumps while the PRs are in flight. `GaussianQuantile` derives its `Φ` facts from
-the PR2 lemmas. Once a PR merges and the pin catches up, delete the corresponding section here
-and repoint those uses at Mathlib.
+the PR2 lemmas, `Smoothing.Gaussian` its Neyman–Pearson shift from the Cameron–Martin one.
+Once a PR merges and the pin catches up, delete the corresponding section here and repoint those
+uses at Mathlib.
 
 Fast check: [`lake env lean LeanMlir/Proofs/Foundation/UpstreamDraft.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/UpstreamDraft.lean) -/
 
@@ -125,6 +128,16 @@ theorem continuous_cdf_iff : Continuous (cdf μ) ↔ NullSingletonClass μ :=
 
 end Continuous
 
+section Integral
+
+/-- The integral of the indicator of `Iic t` against a probability measure on `ℝ` is its cdf
+at `t`. -/
+theorem integral_indicator_Iic_eq_cdf (μ : Measure ℝ) [IsProbabilityMeasure μ] (t : ℝ) :
+    ∫ z, (Iic t).indicator (1 : ℝ → ℝ) z ∂μ = cdf μ t := by
+  rw [integral_indicator_one measurableSet_Iic, cdf_eq_real]
+
+end Integral
+
 -- ════════════════════════════════════════════════════════════════
 -- PR 2 — Gaussian cdf facts
 --   (append to Mathlib/Probability/Distributions/Gaussian/Real.lean)
@@ -199,6 +212,52 @@ lemma cdf_gaussianReal_sub_const (μ δ : ℝ) (v : ℝ≥0) (x : ℝ) :
   rw [cdf_eq_real, cdf_eq_real, ← gaussianReal_map_add_const δ, measureReal_def,
     Measure.map_apply (measurable_add_const δ) measurableSet_Iic, hpre, ← measureReal_def]
 
+/-- Shifting the mean of a Gaussian multiplies its density by an exponential likelihood ratio:
+`gaussianPDFReal (μ + δ) v x = exp ((δ (x - μ) - δ² / 2) / v) * gaussianPDFReal μ v x`. Holds
+for `v = 0` as well (both densities are `0`). -/
+lemma gaussianPDFReal_add_mean (μ δ : ℝ) (v : ℝ≥0) (x : ℝ) :
+    gaussianPDFReal (μ + δ) v x
+      = Real.exp ((δ * (x - μ) - δ ^ 2 / 2) / v) * gaussianPDFReal μ v x := by
+  simp only [gaussianPDFReal]
+  rw [mul_left_comm, ← Real.exp_add]
+  congr 2
+  ring
+
+/-- The one-dimensional Cameron–Martin formula: translating the argument of a function by `δ`
+under a Gaussian measure with nonzero variance is integrating it against the exponential
+likelihood ratio of `gaussianPDFReal_add_mean`. -/
+lemma integral_gaussianReal_comp_add_const (μ : ℝ) {v : ℝ≥0} (hv : v ≠ 0) (g : ℝ → ℝ)
+    (δ : ℝ) :
+    ∫ x, g (x + δ) ∂(gaussianReal μ v)
+      = ∫ x, Real.exp ((δ * (x - μ) - δ ^ 2 / 2) / v) * g x ∂(gaussianReal μ v) := by
+  have h1 : ∫ x, g (x + δ) ∂(gaussianReal μ v) = ∫ x, g x ∂(gaussianReal (μ + δ) v) := by
+    rw [← gaussianReal_map_add_const δ, (measurableEmbedding_addRight δ).integral_map]
+  rw [h1, integral_gaussianReal_eq_integral_smul hv, integral_gaussianReal_eq_integral_smul hv]
+  congr 1
+  funext x
+  rw [smul_eq_mul, smul_eq_mul, gaussianPDFReal_add_mean]
+  ring
+
 end GaussianCDF
+
+-- ════════════════════════════════════════════════════════════════
+-- PR 3 — full support of the standard Gaussian
+--   (append to Mathlib/Probability/Distributions/Gaussian/Multivariate.lean)
+-- ════════════════════════════════════════════════════════════════
+
+section StdGaussian
+
+/-- The standard Gaussian on a finite-dimensional inner-product space gives positive mass to
+every nonempty open set: it is the pushforward of the product of standard real Gaussians (open-pos
+by `instIsOpenPosMeasureGaussianReal` and `Measure.pi.isOpenPosMeasure`) under the surjective
+continuous basis sum. -/
+instance instIsOpenPosMeasureStdGaussian {E : Type*} [NormedAddCommGroup E]
+    [InnerProductSpace ℝ E] [FiniteDimensional ℝ E] [MeasurableSpace E] [BorelSpace E] :
+    (stdGaussian E).IsOpenPosMeasure := by
+  refine Continuous.isOpenPosMeasure_map (by fun_prop) fun e => ?_
+  exact ⟨fun i => (stdOrthonormalBasis ℝ E).repr e i,
+    by simpa using (stdOrthonormalBasis ℝ E).sum_repr e⟩
+
+end StdGaussian
 
 end MathlibUpstream

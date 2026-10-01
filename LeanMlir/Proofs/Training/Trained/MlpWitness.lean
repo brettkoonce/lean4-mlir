@@ -30,7 +30,7 @@ Weights/input are imported from `LipschitzCert.Instance` (generator:
 namespace Proofs
 namespace TrainedMlp
 
-open LipschitzCertDemo
+open Robustness
 
 /-- Hidden weights in the `Mat` (input×output) convention: `W1V i k = W1t k i`. -/
 noncomputable def W1V : Mat 49 8 := fun i k => W1t k i

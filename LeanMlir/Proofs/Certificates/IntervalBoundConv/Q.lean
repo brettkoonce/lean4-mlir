@@ -1,8 +1,8 @@
-import LeanMlir.Proofs.Foundation.IntervalBoundConv
+import LeanMlir.Proofs.Certificates.IntervalBoundConv.Basic
 
 /-! # The conv IBP box in exact rationals — one kernel check per image
 
-`IntervalBoundConv.lean` proves the box engine sound over `ℝ`. An instance still
+`IntervalBoundConv.Basic` proves the box engine sound over `ℝ`. An instance still
 has to evaluate the box on a concrete image, and over `ℝ` that is hundreds of
 `simp`/`norm_num` goals per image — the generated conv scorecard spent ~250 s an
 image doing it. Here the same layers are re-stated over `ℚ` as computable

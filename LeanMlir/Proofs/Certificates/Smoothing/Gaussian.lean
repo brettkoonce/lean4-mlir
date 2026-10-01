@@ -49,20 +49,10 @@ threshold `t` and `LR` the (monotone) Gaussian likelihood ratio, the pointwise i
 `(f − h)·(LR − LR(t)) ≥ 0` — sign-checked on each side of `t` — integrates against the
 base Gaussian into exactly the Neyman–Pearson optimality of the halfspace. -/
 
-/-- The Gaussian likelihood ratio: `pdf_{N(δ,1)}(z) = exp(δz − δ²/2) · pdf_{N(0,1)}(z)` —
-    monotone in `z` (for `δ ≥ 0`), which is all Neyman–Pearson needs. -/
-lemma gaussianPDFReal_shift (δ z : ℝ) :
-    gaussianPDFReal δ 1 z = Real.exp (δ * z - δ ^ 2 / 2) * gaussianPDFReal 0 1 z := by
-  simp only [gaussianPDFReal, NNReal.coe_one]
-  have harg : -(z - δ) ^ 2 / (2 * 1)
-      = δ * z - δ ^ 2 / 2 + -(z - 0) ^ 2 / (2 * 1) := by ring
-  rw [mul_left_comm, ← Real.exp_add, harg]
-
-/-- A halfspace indicator's mass under any probability measure on `ℝ` is the cdf at the
-    threshold. -/
-lemma integral_indicator_Iic_eq_cdf (μ : Measure ℝ) [IsProbabilityMeasure μ] (t : ℝ) :
-    ∫ z, (Set.Iic t).indicator (1 : ℝ → ℝ) z ∂μ = cdf μ t := by
-  rw [integral_indicator_one measurableSet_Iic, cdf_eq_real]
+/-! The likelihood ratio itself (`MathlibUpstream.gaussianPDFReal_add_mean`), the 1-D
+Cameron–Martin formula (`MathlibUpstream.integral_gaussianReal_comp_add_const`) and the
+halfspace mass (`MathlibUpstream.integral_indicator_Iic_eq_cdf`) are Mathlib-level and live in
+`UpstreamDraft`. -/
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstone: the Cohen radius at the REAL Gaussian quantile
@@ -103,22 +93,6 @@ the general shift onto coordinate 0. -/
 /-- The iid standard-Gaussian product measure on `Fin (n+1) → ℝ`. -/
 noncomputable abbrev stdGaussianPi (n : ℕ) : Measure (Fin (n + 1) → ℝ) :=
   Measure.pi fun _ => gaussianReal 0 1
-
--- ── the 1-D Cameron–Martin shift identity ──
-
-lemma integral_gaussianReal_shift_eq {g : ℝ → ℝ} (hgm : Measurable g) (d : ℝ) :
-    ∫ s, g (s + d) ∂(gaussianReal 0 1)
-      = ∫ s, Real.exp (d * s - d ^ 2 / 2) * g s ∂(gaussianReal 0 1) := by
-  have hmap : gaussianReal d 1 = (gaussianReal 0 1).map (· + d) := by
-    rw [gaussianReal_map_add_const]; norm_num
-  have h1 : ∫ s, g (s + d) ∂(gaussianReal 0 1) = ∫ s, g s ∂(gaussianReal d 1) := by
-    rw [hmap, integral_map (measurable_add_const d).aemeasurable hgm.aestronglyMeasurable]
-  rw [h1, integral_gaussianReal_eq_integral_smul one_ne_zero,
-    integral_gaussianReal_eq_integral_smul one_ne_zero]
-  congr 1
-  funext z
-  rw [smul_eq_mul, smul_eq_mul, gaussianPDFReal_shift]
-  ring
 
 /-- The exponential weight is Gaussian-integrable. -/
 lemma integrable_expWeight (d : ℝ) :
@@ -179,9 +153,8 @@ lemma pi_gaussian_shift_eq {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm : 
   rw [integral_prod_symm _ hprodF, integral_prod_symm _ hprodW]
   congr 1
   funext w
-  have hslice : Measurable fun s => F (e.symm (s, w)) :=
-    hFm.comp (e.symm.measurable.comp (measurable_id.prodMk measurable_const))
-  have := integral_gaussianReal_shift_eq (g := fun s => F (e.symm (s, w))) hslice d
+  have := MathlibUpstream.integral_gaussianReal_comp_add_const 0 one_ne_zero
+    (fun s => F (e.symm (s, w))) d
   simpa using this
 
 -- ── the pi-space Neyman–Pearson theorem ──
@@ -263,19 +236,23 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
   -- endpoints: ∫ h = Φ t and ∫ w·h = Φ (t − d)
   have hhval : ∫ z, h z ∂(stdGaussianPi n) = stdNormalCDF t := by
     simp only [hh]
-    rw [integral_comp_eval hh1d.aestronglyMeasurable, integral_indicator_Iic_eq_cdf]
+    rw [integral_comp_eval hh1d.aestronglyMeasurable, MathlibUpstream.integral_indicator_Iic_eq_cdf]
     rfl
   have hWhval : ∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * h z ∂(stdGaussianPi n)
       = stdNormalCDF (t - d) := by
     simp only [hh]
     rw [integral_comp_eval (μ := fun _ : Fin (n + 1) => gaussianReal 0 1) (i := 0)
       (f := fun s => Real.exp (d * s - d ^ 2 / 2) * (Set.Iic t).indicator (1 : ℝ → ℝ) s)
-      (hWm.mul hh1d).aestronglyMeasurable, ← integral_gaussianReal_shift_eq hh1d d]
+      (hWm.mul hh1d).aestronglyMeasurable]
+    have hcm := MathlibUpstream.integral_gaussianReal_comp_add_const 0 one_ne_zero
+      ((Set.Iic t).indicator (1 : ℝ → ℝ)) d
+    simp only [sub_zero, NNReal.coe_one, div_one] at hcm
+    rw [← hcm]
     have hind : ∀ s : ℝ, (Set.Iic t).indicator (1 : ℝ → ℝ) (s + d)
         = (Set.Iic (t - d)).indicator (1 : ℝ → ℝ) s := fun s => by
       simp only [Set.indicator_apply, Set.mem_Iic, Pi.one_apply, le_sub_iff_add_le]
     simp only [hind]
-    rw [integral_indicator_Iic_eq_cdf]
+    rw [MathlibUpstream.integral_indicator_Iic_eq_cdf]
     rfl
   rw [hhval] at hkey
   rw [hWhval] at hkey

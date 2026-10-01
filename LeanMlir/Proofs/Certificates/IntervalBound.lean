@@ -36,7 +36,7 @@ Everything is elementary and 3-axiom clean; instance files:
 - Gowal et al. 2018, *On the Effectiveness of Interval Bound Propagation for Training Verifiably Robust Models*. <https://arxiv.org/abs/1810.12715> -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 
@@ -176,7 +176,7 @@ theorem denseHi2_eval {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k �
 
 /-! The certificate below never inspects *how* the output box was computed — only
 that it brackets the net on `x ∓ ε`. Factoring that out as a hypothesis (the
-`IntervalBoundConv.lean` engine's own shape, `BoxSound3` /
+`IntervalBoundConv.Basic` engine's own shape, `BoxSound3` /
 `ibp3_certified_of_boxSound`) is what lets a *second*, tighter bracket reuse this
 tier instead of forking a parallel stack: anything that discharges `BoxSoundE`
 certifies. `ibp2_certified_at_eps` is then
@@ -273,5 +273,5 @@ theorem ibp2_certified_at_eps {n h k : ℕ}
         < (denseE W2 ∘ reluE ∘ denseE W1) (x + δ) y :=
   certified_of_boxSound (mlp2_boxSound W1 W2) hcmp δ hδ
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

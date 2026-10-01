@@ -272,7 +272,7 @@ theorem denseT_boxSound3V {c h w k : Nat} (W : Fin c → Fin h → Fin w → Fin
 
 /-- `f` is *certified at pixel `L∞` radius ε* on the image `x` with class `y`:
     every perturbation bounded by `ε` in EVERY pixel keeps `y` the strict argmax.
-    The image-shaped peer of `LipschitzCertDemo.CertifiedAtLinf`. -/
+    The image-shaped peer of `Robustness.CertifiedAtLinf`. -/
 def CertifiedAtLinf3 {c h w k : Nat} (f : Tensor3 c h w → Vec k) (ε : ℝ)
     (x : Tensor3 c h w) (y : Fin k) : Prop :=
   ∀ δ : Tensor3 c h w, (∀ a b d, |δ a b d| ≤ ε) →

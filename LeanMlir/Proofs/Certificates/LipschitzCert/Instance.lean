@@ -28,7 +28,7 @@ Three instances:
 -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
@@ -416,5 +416,5 @@ theorem mlpT_logit_continuous : ∀ j : Fin 10, Continuous fun x => mlpT x j := 
   exact continuous_finsetSum _ fun l _ =>
     continuous_const.mul (EuclideanSpace.proj l).continuous
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

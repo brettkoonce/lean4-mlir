@@ -167,7 +167,7 @@ for tag, (W1q, W2q) in nets.items():
 from _leanlit import frac, qmat, rrow, zlist  # noqa: E402  (rrow, zlist also read as base.*)
 
 HEADER_OPTS = """namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 """
@@ -379,7 +379,7 @@ def write_files():
     for tag in ("SF", "TF"):
         W1q, W2q = nets[tag]
         emit_net(A, tag, W1q, W2q, info[tag]["B1"], info[tag]["B2"], info[tag]["L"])
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     (OUTDIR / "LipschitzCert/ScorecardFullNets.lean").write_text("\n".join(L1) + "\n")
 
@@ -400,7 +400,7 @@ def write_files():
         for i in rng_:
             if i in need:
                 emit_image(A, i, need[i])
-        A("end LipschitzCertDemo")
+        A("end Robustness")
         A("end Proofs")
         (OUTDIR / f"LipschitzCert/ScorecardFullImgs{part}.lean").write_text("\n".join(L2) + "\n")
 
@@ -488,7 +488,7 @@ def write_files():
     A(f"  ⟨⟨rfl, {names[('SF','10')]}_certified⟩, ⟨rfl, {names[('SF','30')]}_certified⟩,")
     A(f"   ⟨rfl, {names[('TF','10')]}_certified⟩, ⟨rfl, {names[('TF','30')]}_certified⟩⟩")
     A("")
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     (OUTDIR / "LipschitzCert/ScorecardFull.lean").write_text("\n".join(L4) + "\n")
 

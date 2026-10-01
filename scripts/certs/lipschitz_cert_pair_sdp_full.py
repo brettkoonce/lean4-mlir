@@ -389,7 +389,7 @@ def emit_net(tag, W1q, W2q, out_path):
     A(f"      ∀ p ∈ {stem}Certs30, CertifiedAt mlp{tag} {frac(EPS30)} p.2.1 p.2.2) :=")
     A(f"  ⟨⟨rfl, {stem}Certs10_certified⟩, ⟨rfl, {stem}Certs30_certified⟩⟩")
     A("")
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     out_path.write_text("\n".join(L) + "\n")
     print(f"[{tag}] wrote {out_path}: {len(L)} lines")

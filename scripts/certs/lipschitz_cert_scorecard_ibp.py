@@ -182,7 +182,7 @@ def emit_data(results, out_path):
             if i not in r["base_imgs"] and i not in emitted:
                 base.emit_image(A, i, [])
                 emitted.add(i)
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     out_path.write_text("\n".join(Lb) + "\n")
     print(f"[data] wrote {out_path}: {len(Lb)} lines")
@@ -320,7 +320,7 @@ def emit_net(tag, r, out_path):
         for ln, en, ep, cnt in parts) + " :=")
     A("  ⟨" + ", ".join(f"⟨rfl, {ln}_certified⟩" for ln, en, ep, cnt in parts) + "⟩")
     A("")
-    A("end LipschitzCertDemo")
+    A("end Robustness")
     A("end Proofs")
     out_path.write_text("\n".join(Lb) + "\n")
     print(f"[{tag}] wrote {out_path}: {len(Lb)} lines")

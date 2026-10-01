@@ -1,5 +1,6 @@
 /-
-PR 2 — feat(Probability/Distributions/Gaussian/Real): cdf of the real Gaussian distribution
+PR 2 — feat(Probability/Distributions/Gaussian/Real): cdf of the real Gaussian distribution and
+the 1-D Cameron–Martin formula
 (depends on PR 1: `strictMono_cdf`, `continuous_cdf`, `cdf_pos`, `cdf_lt_one`)
 
 Content below is to be APPENDED to `Mathlib/Probability/Distributions/Gaussian/Real.lean`,
@@ -88,5 +89,31 @@ lemma cdf_gaussianReal_sub_const (μ δ : ℝ) (v : ℝ≥0) (x : ℝ) :
     ext y; simp [le_sub_iff_add_le]
   rw [cdf_eq_real, cdf_eq_real, ← gaussianReal_map_add_const δ, measureReal_def,
     Measure.map_apply (measurable_add_const δ) measurableSet_Iic, hpre, ← measureReal_def]
+
+/-- Shifting the mean of a Gaussian multiplies its density by an exponential likelihood ratio:
+`gaussianPDFReal (μ + δ) v x = exp ((δ (x - μ) - δ² / 2) / v) * gaussianPDFReal μ v x`. Holds
+for `v = 0` as well (both densities are `0`). -/
+lemma gaussianPDFReal_add_mean (μ δ : ℝ) (v : ℝ≥0) (x : ℝ) :
+    gaussianPDFReal (μ + δ) v x
+      = Real.exp ((δ * (x - μ) - δ ^ 2 / 2) / v) * gaussianPDFReal μ v x := by
+  simp only [gaussianPDFReal]
+  rw [mul_left_comm, ← Real.exp_add]
+  congr 2
+  ring
+
+/-- The one-dimensional Cameron–Martin formula: translating the argument of a function by `δ`
+under a Gaussian measure with nonzero variance is integrating it against the exponential
+likelihood ratio of `gaussianPDFReal_add_mean`. -/
+lemma integral_gaussianReal_comp_add_const (μ : ℝ) {v : ℝ≥0} (hv : v ≠ 0) (g : ℝ → ℝ)
+    (δ : ℝ) :
+    ∫ x, g (x + δ) ∂(gaussianReal μ v)
+      = ∫ x, Real.exp ((δ * (x - μ) - δ ^ 2 / 2) / v) * g x ∂(gaussianReal μ v) := by
+  have h1 : ∫ x, g (x + δ) ∂(gaussianReal μ v) = ∫ x, g x ∂(gaussianReal (μ + δ) v) := by
+    rw [← gaussianReal_map_add_const δ, (measurableEmbedding_addRight δ).integral_map]
+  rw [h1, integral_gaussianReal_eq_integral_smul hv, integral_gaussianReal_eq_integral_smul hv]
+  congr 1
+  funext x
+  rw [smul_eq_mul, smul_eq_mul, gaussianPDFReal_add_mean]
+  ring
 
 end GaussianCDF

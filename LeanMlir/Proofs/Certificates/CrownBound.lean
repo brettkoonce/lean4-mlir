@@ -67,7 +67,7 @@ Quot.sound`. Engine only; the generated instance is a separate file.
 - Zhang et al. 2020, *Towards Stable and Efficient Training of Verifiably Robust Neural Networks* (CROWN-IBP). <https://arxiv.org/abs/1906.06316> -/
 
 namespace Proofs
-namespace LipschitzCertDemo
+namespace Robustness
 
 open scoped BigOperators
 
@@ -401,5 +401,5 @@ theorem crownRow_l1 {n h : ℕ} (cs : List ℤ) (rows : List (List ℤ))
     congrArg abs (crownRow_comb cs rows W1 dc dw hW hcl hrl hrn i)]
   exact sum_getD_abs_div (length_combZ n cs rows hrn) hv hd
 
-end LipschitzCertDemo
+end Robustness
 end Proofs

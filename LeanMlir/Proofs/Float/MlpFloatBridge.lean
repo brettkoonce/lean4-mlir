@@ -3,7 +3,9 @@ import LeanMlir.Proofs.Float.FloatBridge
 /-! # The MNIST MLP and E4M3 linear-net float chains
 
 `FloatBridge`'s per-op bounds, assembled for two nets: the MNIST MLP (784→512→512→10), as
-the forward (`mlp_float_close`, `mlp_float_close_uniform`), its binary32 numeric instance
+the forward (`mlp_float_close`, `mlp_float_close_uniform`; the 2-layer face `mlp2F` /
+`mlp2_float_close_uniform` at a quantized input, which `LipschitzCert.Float` composes with the
+robustness certificate), its binary32 numeric instance
 (`mnist_mlp_float_budget`), the six float SGD steps (`mlp_{w,b}{0,1,2}_step_float_close`) with the
 `W₂` instance (`mnist_w2_step_float_budget`) and the loss-head instance (`mnist_cot_budget`); and
 the depth-1 fp8 linear net (`linear_e4m3_logit_budget`, `linear_e4m3_argmax_preserved`). Each
@@ -100,6 +102,48 @@ theorem mlp_float_close_uniform {d₀ d₁ d₂ d₃ : Nat}
     (fun j => M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx j)
     (fun j => M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ j) k).trans ?_
   exact M.denseErr_le_uniform hw₂ hE₁0 hW₂ hb₂ ha₂ k
+
+/-- The rounded 2-layer MLP forward: rounded dense, bare (exact) relu,
+    rounded dense — the 2-layer face of `mlpF`. -/
+noncomputable def mlp2F {d₀ d₁ d₂ : Nat}
+    (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (x : Vec d₀) : Vec d₂ :=
+  M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))
+
+/-- **2-layer MLP forward error, uniform budgets, quantized input.** If the
+    device input `y` is within `ein` of the real input `x` coordinatewise
+    (input quantization), every rounded logit is within the closed-form
+    2-layer `layerBudget` chain of the exact-ℝ logit. The 2-layer face of
+    `mlp_float_close_uniform`, with the fresh-input `e = 0` generalized to
+    `e = ein`. -/
+theorem mlp2_float_close_uniform {d₀ d₁ d₂ : Nat}
+    {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
+    {x y : Vec d₀} {w₀ β₀ w₁ β₁ a ein : ℝ}
+    (hw₀ : 0 ≤ w₀) (hβ₀ : 0 ≤ β₀) (hw₁ : 0 ≤ w₁) (ha : 0 ≤ a)
+    (hein : 0 ≤ ein)
+    (hW₀ : ∀ i j, |W₀ i j| ≤ w₀) (hb₀ : ∀ j, |b₀ j| ≤ β₀)
+    (hW₁ : ∀ i j, |W₁ i j| ≤ w₁) (hb₁ : ∀ j, |b₁ j| ≤ β₁)
+    (hx : ∀ i, |x i| ≤ a) (hy : ∀ i, |y i - x i| ≤ ein) (k : Fin d₂) :
+    |M.mlp2F W₀ b₀ W₁ b₁ y k -
+        Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) k| ≤
+      layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
+        (layerBudget M.u d₀ w₀ β₀ a ein) := by
+  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a ein :=
+    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha hein
+  -- layer 0 at the quantized input, uniformized
+  have l0 : ∀ j, |M.dense W₀ b₀ y j - Proofs.dense W₀ b₀ x j| ≤
+      layerBudget M.u d₀ w₀ β₀ a ein :=
+    fun j => (M.dense_close W₀ b₀ y x ein hein hy j).trans
+      (M.denseErr_le_uniform hw₀ hein hW₀ hb₀ hx j)
+  -- relu: exact pass-through
+  have r0 : ∀ j, |relu d₁ (M.dense W₀ b₀ y) j -
+      relu d₁ (Proofs.dense W₀ b₀ x) j| ≤ layerBudget M.u d₀ w₀ β₀ a ein :=
+    fun j => relu_close _ _ _ l0 j
+  -- layer 1 with the inherited error; real hidden magnitude ≤ layerAct
+  have ha₁ : ∀ i, |relu d₁ (Proofs.dense W₀ b₀ x) i| ≤ layerAct d₀ w₀ β₀ a :=
+    fun i => (relu_abs_le _ i).trans (dense_abs_le ha hW₀ hb₀ hx i)
+  exact (M.dense_close W₁ b₁ _ _ _ hE₀0 r0 k).trans
+    (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₁ k)
 
 /-- Layer-0 budget at the committed MNIST dims and *trained* magnitudes
     (`|W| ≤ 3/5`, covering the measured `max|W| = 0.52`): `E₀ ≤ 0.023`. -/
