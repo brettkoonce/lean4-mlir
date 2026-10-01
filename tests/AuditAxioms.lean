@@ -837,8 +837,6 @@ open Proofs
 #print axioms depthwiseConv2d_eq_dense
 #print axioms FloatModel.depthwiseConv2dF_close
 #print axioms FloatModel.depthwiseFlatF_close
--- The additive skip's closeness (FloatComposeBridge.lean)
-#print axioms floatClose_residual
 -- Strided-conv backward (r34 down-blocks + stem)
 #print axioms Proofs.decimateBack_eq_vjp
 -- BN mean at any reduction order (BnFloatBridge.lean)

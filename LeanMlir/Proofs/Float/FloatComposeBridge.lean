@@ -17,7 +17,7 @@ compose as `Lg ∘ Lf`, magnitudes thread `A → B → C`.
 
 Instances proved here: `floatClose_flatConv` (modulus = the conv-fan-in
 `layerBudget`), the pools (`floatClose_maxPool`, `floatClose_maxPool3s2`, `floatClose_gap`)
-and the skips (`floatClose_addResidual`, `floatClose_residualBlock`, `floatClose_residual`).
+and the skips (`floatClose_addResidual`, `floatClose_residualBlock`).
 A whole-net bound would be `.comp` of these; none is assembled in the repo.
 -/
 
@@ -97,7 +97,8 @@ theorem floatClose_gap {c h w : Nat} (M : FloatModel) {A : ℝ}
 /-- **Additive residual `F(x) + x` (no trailing activation) is `FloatClose`** — the
     MBConv / transformer skip, the skip of `floatClose_residualBlock` without its ReLU. The
     rounded skip-add `fl(FF(x) ⊕ x)` is within `add_close`'s budget of the real
-    `F(x) + x`; output magnitude `(1+u)(B+A)`. -/
+    `F(x) + x`; output magnitude `(1+u)(B+A)`. `fun v j => F v j + v j` is `residual F`
+    (`Residual.lean`) by definition, so this lemma serves that spelling too. -/
 theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
     {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
     FloatClose A (B + A + M.u * (B + A))
@@ -129,19 +130,5 @@ theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
       (fun v => relu m (fun j => M.add (FF v j) (v j)))
       (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
   (floatClose_addResidual M hF).comp (floatClose_relu _)
-
--- ═════════════════════════════════════════════════
--- § The additive skip
--- ═════════════════════════════════════════════════
-
-/-- **Additive residual `residual f = f(x) + x` is `FloatClose`** — the MBConv /
-    transformer skip in the `Residual.lean` API (`residual = biPath f id`, defeq to
-    `floatClose_addResidual`'s `fun v j => F v j + v j`). -/
-theorem floatClose_residual {m : Nat} (M : FloatModel) {A B : ℝ}
-    {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
-    FloatClose A (B + A + M.u * (B + A))
-      (residual F) (fun v j => M.add (FF v j) (v j))
-      (fun e => M.u * (B + LF e + A + e) + (LF e + e)) :=
-  floatClose_addResidual M hF
 
 end Proofs

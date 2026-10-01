@@ -408,6 +408,22 @@ noncomputable def dStridedInB (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel
     (dy : Vec (N * (c * h * w))) : Vec (N * (c * (2 * h) * (2 * w))) :=
   batchMap N (fun d => (depthwiseStride2FlatHasVJP W b).backward (fun _ => 0) d) dy
 
+/-- `cInB` is the `den` of the emitted `convBackBatched` node. -/
+theorem den_convBackBatched_eq_cInB {N ic oc h w kH kW : Nat} (wN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convBackBatched (N := N) wN W b e) = cInB N (h := h) (w := w) W b (den e) := rfl
+
+/-- `dInB` is the `den` of the emitted `depthwiseBackBatched` node. -/
+theorem den_depthwiseBackBatched_eq_dInB {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseBackBatched (N := N) wN W b e) = dInB N (h := h) (w := w) W b (den e) := rfl
+
+/-- `dStridedInB` is the `den` of the emitted `depthwiseStridedBackBatched` node. -/
+theorem den_depthwiseStridedBackBatched_eq_dStridedInB {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedBackBatched (N := N) wN W b e)
+      = dStridedInB N (h := h) (w := w) W b (den e) := rfl
+
 /-- Batched **GAP input-VJP** (= `den gapBackBatched`; the head's GAP backward, broadcast÷(h·w)). -/
 noncomputable def gapInB (N c h w : Nat) (dy : Vec (N * c)) : Vec (N * (c * h * w)) :=
   batchMap N (fun d => (globalAvgPoolFlatHasVJP c h w).backward (fun _ => 0) d) dy
@@ -510,12 +526,9 @@ noncomputable def rowB (N K : Nat) (v : Vec (N * K)) : Vec (N * (1 * K)) :=
 /-! ### The stage backwards, written out
 
 Each is a stage graph's faithfulness read at an `.operand` leaf: the graph's `den` IS the chain
-node for node, except the BatchNorm link, which `bnBatchLABack_faithful` turns into `bnBackB`. -/
-
-theorem den_bnBatchLABack_eq_bnBackB {N oc h w : Nat} (gN xN es : String) (ε : ℝ) (hε : 0 < ε)
-    (γ β : Vec oc) (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
-    den (SHlo.bnBatchLABack gN xN es ε γ x e) = bnBackB N oc h w ε hε γ β x (den e) :=
-  bnBatchLABack_faithful gN xN es ε γ β hε x e
+node for node (`den_convBackBatched_eq_cInB` and peers), except the BatchNorm link, which
+`bnBatchLABack_faithful` turns into the certified backward. The closing `rfl` only folds `bnBackB`
+and `swBackB`, which are those backwards by definition. -/
 
 theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
@@ -524,9 +537,7 @@ theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
           (swBackB (N * (oc * h * w)) (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) dy)) := by
   have hg := cbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
   rw [den_operand] at hg
-  rw [← hg]
-  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rw [← hg, cbsBackBatchedGraph, den_convBackBatched_eq_cInB, bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful, den_operand]
   rfl
 
 theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
@@ -536,9 +547,7 @@ theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW
           (swBackB (N * (c * h * w)) (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) dy)) := by
   have hg := dwbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
   rw [den_operand] at hg
-  rw [← hg]
-  show dInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rw [← hg, dwbsBackBatchedGraph, den_depthwiseBackBatched_eq_dInB, bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful, den_operand]
   rfl
 
 theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
@@ -550,9 +559,7 @@ theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH k
             (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) dy)) := by
   have hg := dwbsSBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
   rw [den_operand] at hg
-  rw [← hg]
-  show dStridedInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rw [← hg, dwbsSBackBatchedGraph, den_depthwiseStridedBackBatched_eq_dStridedInB, bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful, den_operand]
   rfl
 
 theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -561,9 +568,7 @@ theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW
       = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x) dy) := by
   have hg := projBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
   rw [den_operand] at hg
-  rw [← hg]
-  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rw [← hg, projBackBatchedGraph, den_convBackBatched_eq_cInB, bnBatchLABack_faithful (β := β) (hε := hε), den_operand]
   rfl
 
 /-- The fused SE input-VJP is the per-example `seBlockFull` VJP, lifted — `seBackBatched`'s `den`. -/

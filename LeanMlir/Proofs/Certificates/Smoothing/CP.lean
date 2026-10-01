@@ -423,24 +423,9 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
       (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω :=
     hitCount_setOf (fun v => C (x + σ • v) = y) N
   -- the coverage event implies the certificate
-  have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
-        cpLower α N (hitCount A N ω) ≤ γ.real A}
-      ⊆ {ω | ∀ δ : EuclideanSpace ℝ (Fin (n + 1)),
-            ‖δ‖ < σ * stdNormalQuantile
-              (cpLower α N (∑ i, if C (x + σ • ω i) = y then 1 else 0)) →
-            ∀ j, j ≠ y →
-              (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
-                < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
-    intro ω hω
-    simp only [Set.mem_ofPred_eq] at hω ⊢
-    intro δ hδ j hj
-    rw [hcount ω] at hδ
-    exact smoothing_certified_of_le hσ hC hp (hω.trans_eq hpA) hδ j hj
-  calc 1 - α
-      ≤ (Measure.pi fun _ : Fin N => γ).real
-          {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=
-        cp_coverage γ hA N hα
-    _ ≤ _ := measureReal_mono hsub
+  refine (cp_coverage γ hA N hα).trans (measureReal_mono fun ω hω δ hδ => ?_)
+  rw [hcount ω] at hδ
+  exact smoothing_certified_of_le hσ hC hp (hω.trans_eq hpA) hδ
 
 /-- **The driver tie, solved form.** For the OBSERVED count `k₀` and the
     driver's reported CP lower bound `q₀` (rationalized down), ONE in-kernel
@@ -476,27 +461,13 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
       (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω :=
     hitCount_setOf (fun v => C (x + σ • v) = y) N
-  have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
-        cpLower α N (hitCount A N ω) ≤ γ.real A}
-      ⊆ {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →
-            ∀ δ : EuclideanSpace ℝ (Fin (n + 1)),
-            ‖δ‖ < σ * stdNormalQuantile q₀ →
-            ∀ j, j ≠ y →
-              (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
-                < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
-    intro ω hω
-    simp only [Set.mem_ofPred_eq] at hω ⊢
-    intro hcnt δ hδ j hj
-    rw [hcount ω] at hcnt
-    have hqcp : q₀ ≤ cpLower α N (hitCount A N ω) := by
-      rw [hcnt]
-      exact le_cpLower_of_tail_le hα1 hk₀ (Set.Ioo_subset_Icc_self hq₀) htail
-    exact smoothing_certified_of_le hσ hC hp ((hqcp.trans hω).trans_eq hpA) hδ j hj
-  calc 1 - α
-      ≤ (Measure.pi fun _ : Fin N => γ).real
-          {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=
-        cp_coverage γ hA N hα
-    _ ≤ _ := measureReal_mono hsub
+  -- the coverage event implies the certificate at the observed count
+  refine (cp_coverage γ hA N hα).trans (measureReal_mono fun ω hω hcnt => ?_)
+  rw [hcount ω] at hcnt
+  have hqcp : q₀ ≤ cpLower α N (hitCount A N ω) := by
+    rw [hcnt]
+    exact le_cpLower_of_tail_le hα1 hk₀ (Set.Ioo_subset_Icc_self hq₀) htail
+  exact fun δ hδ => smoothing_certified_of_le hσ hC hp ((hqcp.trans hω).trans_eq hpA) hδ
 
 -- ════════════════════════════════════════════════════════════════
 -- § The kernel engine: driver-scale tail checks as ONE ℕ-inequality

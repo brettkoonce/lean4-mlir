@@ -248,16 +248,6 @@ theorem linf_lower_bound {n : ℕ} (A : Fin n → ℝ) (x : EuclideanSpace ℝ (
 -- § Assembly: per-neuron relaxations ⇒ a margin lower bound
 -- ════════════════════════════════════════════════════════════════
 
-/-- The two-layer net, evaluated one logit at a time — `denseE`/`reluE` peeled
-    exactly once, so the inner `denseE W1 x'` stays folded (unfolding it would
-    put a 784-term sum under every `max`). -/
-private theorem mlp2_apply {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k → Fin h → ℝ)
-    (x' : EuclideanSpace ℝ (Fin n)) (c : Fin k) :
-    (denseE W2 ∘ reluE ∘ denseE W1) x' c = ∑ t, W2 c t * max (denseE W1 x' t) 0 := by
-  show denseE W2 (reluE (denseE W1 x')) c = _
-  rw [denseE_apply]
-  exact Finset.sum_congr rfl fun t _ => by rw [reluE_apply]
-
 /-- **The margin bound.** Summing the per-neuron relaxations gives a linear
     lower bound on `f · y − f · j` in pre-activation space. `z` is abstract
     here: the bound is a statement about the relaxation, not about the net. -/
@@ -313,7 +303,7 @@ theorem crown2_certified_at_eps {n h k : ℕ}
   -- back-substitute, then concretize once
   rw [crownRow_dot] at hmar
   have hconc := linf_lower_bound (crownRow (a j) W1) x ε hbox
-  rw [mlp2_apply, mlp2_apply]
+  rw [mlp_out_eq W1 W2 (fun _ => rfl), mlp_out_eq W1 W2 (fun _ => rfl)]
   linarith [hcert j hj, hmar, hconc]
 
 -- ════════════════════════════════════════════════════════════════

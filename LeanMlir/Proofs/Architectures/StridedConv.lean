@@ -62,6 +62,13 @@ noncomputable def decimateFlatHasVJP (oc h w : Nat) :
     HasVJP (decimateFlat oc h w) :=
   reindexVJP (decimateIdx oc h w)
 
+/-- **Decimate after any VJP-carrying map**: `vjpComp` with `decimateFlatHasVJP`. Every strided op
+    below is `decimateFlat ∘ (its stride-1 op)`, so each strided VJP is this applied to the
+    stride-1 one; the expected type unfolds the strided op's definition. -/
+noncomputable def HasVJP.decimate {n oc h w : Nat} {f : Vec n → Vec (oc * (2 * h) * (2 * w))}
+    (hf : HasVJP f) (hd : Differentiable ℝ f) : HasVJP (decimateFlat oc h w ∘ f) :=
+  vjpComp f _ hd (decimateFlat_differentiable oc h w) hf (decimateFlatHasVJP oc h w)
+
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 SAME convolution = decimate ∘ (stride-1 SAME conv)
 -- ════════════════════════════════════════════════════════════════
@@ -99,8 +106,7 @@ noncomputable def flatConvStride2HasVJP {ic oc h w kH kW : Nat}
     flatConv_differentiable W b
   let hf_vjp : HasVJP (flatConv (h := 2 * h) (w := 2 * w) W b) :=
     HasVJP3.toHasVJP (conv2dHasVJP3 W b)
-  show HasVJP (decimateFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)) from
-  vjpComp _ _ hf_diff (decimateFlat_differentiable oc h w) hf_vjp (decimateFlatHasVJP oc h w)
+  hf_vjp.decimate hf_diff
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 conv weight-VJP (reuses the stride-1 weight-grad)
@@ -130,9 +136,7 @@ noncomputable def flatConvStride2WeightGradHasVJP {ic oc h w kH kW : Nat}
     conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
   let hf_vjp : HasVJP f :=
     conv2dWeightGradHasVJP (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
-  show HasVJP (decimateFlat oc h w ∘ f) from
-  vjpComp f (decimateFlat oc h w) hf_diff (decimateFlat_differentiable oc h w)
-    hf_vjp (decimateFlatHasVJP oc h w)
+  hf_vjp.decimate hf_diff
 
 /-- **Stride-2 conv weight-VJP correctness** (ℝ-headline): backward = the
     `pdiv`-Jacobian of the strided conv in its kernel. -/
@@ -171,9 +175,7 @@ noncomputable def flatConvStride2BiasGradHasVJP {ic oc h w kH kW : Nat}
     conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
   let hg_vjp : HasVJP g :=
     conv2dBiasGradHasVJP (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  show HasVJP (decimateFlat oc h w ∘ g) from
-  vjpComp g (decimateFlat oc h w) hg_diff (decimateFlat_differentiable oc h w)
-    hg_vjp (decimateFlatHasVJP oc h w)
+  hg_vjp.decimate hg_diff
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-4 patchify convolution = decimate ∘ decimateOdd ∘ (stride-1 SAME conv)
@@ -210,6 +212,11 @@ noncomputable def decimateOddFlatHasVJP (oc h w : Nat) :
     HasVJP (decimateOddFlat oc h w) :=
   reindexVJP (decimateOddIdx oc h w)
 
+/-- **Odd-decimate after any VJP-carrying map**: the odd-phase peer of `HasVJP.decimate`. -/
+noncomputable def HasVJP.decimateOdd {n oc h w : Nat} {f : Vec n → Vec (oc * (2 * h) * (2 * w))}
+    (hf : HasVJP f) (hd : Differentiable ℝ f) : HasVJP (decimateOddFlat oc h w ∘ f) :=
+  vjpComp f _ hd (decimateOddFlat_differentiable oc h w) hf (decimateOddFlatHasVJP oc h w)
+
 /-- **Stride-4 patchify convolution**, flattened: `Vec (ic·4h·4w) → Vec (oc·h·w)`.
     `decimateFlat ∘ decimateOddFlat ∘ (stride-1 SAME conv)` — reads the SAME conv
     (pad `(k-1)/2`) at positions `4i+1`, which for the 4×4 stem is the
@@ -241,13 +248,11 @@ noncomputable def flatConvStride4HasVJP {ic oc h w kH kW : Nat}
     HasVJP3.toHasVJP (conv2dHasVJP3 W b)
   have s1_vjp : HasVJP (decimateOddFlat oc (2 * h) (2 * w) ∘
       flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
-    vjpComp _ _ hf_diff (decimateOddFlat_differentiable oc (2 * h) (2 * w))
-      hf_vjp (decimateOddFlatHasVJP oc (2 * h) (2 * w))
+    hf_vjp.decimateOdd hf_diff
   have s1_diff : Differentiable ℝ (decimateOddFlat oc (2 * h) (2 * w) ∘
       flatConv (h := 2 * (2 * h)) (w := 2 * (2 * w)) W b) :=
     (decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
-  exact vjpComp _ _ s1_diff (decimateFlat_differentiable oc h w)
-    s1_vjp (decimateFlatHasVJP oc h w)
+  exact s1_vjp.decimate s1_diff
 
 /-- **Stride-4 conv weight-VJP.** The kernel-side peer of `flatConvStride4HasVJP`, and the
     stride-4 analogue of `flatConvStride2WeightGradHasVJP`: the same
@@ -270,13 +275,8 @@ noncomputable def flatConvStride4WeightGradHasVJP {ic oc h w kH kW : Nat}
     conv2dWeightGradHasVJP (h := 2 * (2 * h)) (w := 2 * (2 * w)) b (Tensor3.unflatten x)
   let s1_diff : Differentiable ℝ (decimateOddFlat oc (2 * h) (2 * w) ∘ f) :=
     (decimateOddFlat_differentiable oc (2 * h) (2 * w)).comp hf_diff
-  let s1_vjp : HasVJP (decimateOddFlat oc (2 * h) (2 * w) ∘ f) :=
-    vjpComp f (decimateOddFlat oc (2 * h) (2 * w)) hf_diff
-      (decimateOddFlat_differentiable oc (2 * h) (2 * w)) hf_vjp
-      (decimateOddFlatHasVJP oc (2 * h) (2 * w))
-  show HasVJP (decimateFlat oc h w ∘ (decimateOddFlat oc (2 * h) (2 * w) ∘ f)) from
-  vjpComp _ (decimateFlat oc h w) s1_diff (decimateFlat_differentiable oc h w)
-    s1_vjp (decimateFlatHasVJP oc h w)
+  let s1_vjp : HasVJP (decimateOddFlat oc (2 * h) (2 * w) ∘ f) := hf_vjp.decimateOdd hf_diff
+  s1_vjp.decimate s1_diff
 
 /-- **Stride-4 conv weight-VJP correctness** (ℝ-headline): backward = the `pdiv`-Jacobian of the
     stride-4 conv in its kernel. The peer of `flatConvStride2WeightGradHasVJP_correct`. -/
@@ -366,9 +366,7 @@ noncomputable def flatConvStride2XlaHasVJP {ic oc h w kH kW : Nat}
     flatConv_differentiable W b
   let hf_vjp : HasVJP (flatConv (h := 2 * h) (w := 2 * w) W b) :=
     HasVJP3.toHasVJP (conv2dHasVJP3 W b)
-  show HasVJP (decimateOddFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)) from
-  vjpComp _ _ hf_diff (decimateOddFlat_differentiable oc h w) hf_vjp
-    (decimateOddFlatHasVJP oc h w)
+  hf_vjp.decimateOdd hf_diff
 
 /-- **Stride-2 XLA-`SAME` weight-VJP.** The same composition viewed as a function of the *kernel*
     (input `x` fixed): `conv2dWeightGrad` run on the odd-zero-upsampled cotangent. -/
@@ -382,9 +380,7 @@ noncomputable def flatConvStride2XlaWeightGradHasVJP {ic oc h w kH kW : Nat}
     conv2d_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
   let hf_vjp : HasVJP f :=
     conv2dWeightGradHasVJP (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten x)
-  show HasVJP (decimateOddFlat oc h w ∘ f) from
-  vjpComp f (decimateOddFlat oc h w) hf_diff (decimateOddFlat_differentiable oc h w)
-    hf_vjp (decimateOddFlatHasVJP oc h w)
+  hf_vjp.decimateOdd hf_diff
 
 /-- **Stride-2 XLA-`SAME` bias-VJP.** `fun b => flatConvStride2Xla W b x` = the odd decimation of
     the stride-1 conv-in-`b`; by `vjpComp` of `conv2dBiasGradHasVJP` with the odd-decimation
@@ -399,8 +395,6 @@ noncomputable def flatConvStride2XlaBiasGradHasVJP {ic oc h w kH kW : Nat}
     conv2d_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
   let hg_vjp : HasVJP g :=
     conv2dBiasGradHasVJP (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  show HasVJP (decimateOddFlat oc h w ∘ g) from
-  vjpComp g (decimateOddFlat oc h w) hg_diff (decimateOddFlat_differentiable oc h w)
-    hg_vjp (decimateOddFlatHasVJP oc h w)
+  hg_vjp.decimateOdd hg_diff
 
 end Proofs

@@ -379,7 +379,7 @@ fidelity:
        grid with the standard model proved (`rndP_err`, `RndP.lean`) -- no hardware
        axiom. `FloatClose A B f fF L` is the one closeness form: a magnitude window `A -> B` with
        an input-error -> output-error modulus `L`, composing by `FloatClose.comp` and through the
-       additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas and the
+       additive skip by `floatClose_addResidual`; the per-operator `floatClose_*` lemmas and the
        residual-block chain are stated on it, and the bf16-mixed two-roundoff bounds
        (`ConvMixedComposeBridge.lean`) take the inherited input error as an explicit argument.
        The MNIST/CNN descent chain (`Training/SgdDescent/*.lean`) takes the model and

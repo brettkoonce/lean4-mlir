@@ -296,8 +296,7 @@ noncomputable def depthwiseStride2FlatHasVJP {c h w kH kW : Nat}
     depthwiseFlat_differentiable W b
   let hf_vjp : HasVJP (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
     depthwiseFlatHasVJP W b
-  show HasVJP (decimateFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
-  vjpComp _ _ hf_diff (decimateFlat_differentiable c h w) hf_vjp (decimateFlatHasVJP c h w)
+  hf_vjp.decimate hf_diff
 
 /-! ### Depthwise weight gradient (proved from foundation rules)
 
@@ -597,9 +596,7 @@ noncomputable def depthwiseStride2WeightGradHasVJP {c h w kH kW : Nat}
   let hf_vjp : HasVJP f :=
     HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 (h := 2 * h) (w := 2 * w) b
       (Tensor3.unflatten x))
-  show HasVJP (decimateFlat c h w ∘ f) from
-  vjpComp f (decimateFlat c h w) hf_diff (decimateFlat_differentiable c h w)
-    hf_vjp (decimateFlatHasVJP c h w)
+  hf_vjp.decimate hf_diff
 
 /-- **Stride-2 depthwise bias-VJP.** `fun b => depthwiseStride2Flat W b x = decimate ∘
     (depthwise-bias-in-b)`; by `vjpComp` of the proven stride-1 `depthwiseBiasGradHasVJP` with
@@ -614,9 +611,7 @@ noncomputable def depthwiseStride2BiasGradHasVJP {c h w kH kW : Nat}
     depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
   let hg_vjp : HasVJP g :=
     depthwiseBiasGradHasVJP (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  show HasVJP (decimateFlat c h w ∘ g) from
-  vjpComp g (decimateFlat c h w) hg_diff (decimateFlat_differentiable c h w)
-    hg_vjp (decimateFlatHasVJP c h w)
+  hg_vjp.decimate hg_diff
 
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 depthwise at XLA `SAME` = decimateODD ∘ (stride-1 depthwise)
@@ -671,9 +666,7 @@ noncomputable def depthwiseStride2FlatXlaHasVJP {c h w kH kW : Nat}
     depthwiseFlat_differentiable W b
   let hf_vjp : HasVJP (depthwiseFlat (h := 2 * h) (w := 2 * w) W b) :=
     depthwiseFlatHasVJP W b
-  show HasVJP (decimateOddFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
-  vjpComp _ _ hf_diff (decimateOddFlat_differentiable c h w) hf_vjp
-    (decimateOddFlatHasVJP c h w)
+  hf_vjp.decimateOdd hf_diff
 
 /-- **Stride-2 XLA-`SAME` depthwise weight-VJP.** The kernel-side peer, by `vjpComp` of the proven
     stride-1 `depthwiseWeightGradHasVJP3` with the odd-decimation VJP. -/
@@ -689,9 +682,7 @@ noncomputable def depthwiseStride2XlaWeightGradHasVJP {c h w kH kW : Nat}
   let hf_vjp : HasVJP f :=
     HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 (h := 2 * h) (w := 2 * w) b
       (Tensor3.unflatten x))
-  show HasVJP (decimateOddFlat c h w ∘ f) from
-  vjpComp f (decimateOddFlat c h w) hf_diff (decimateOddFlat_differentiable c h w)
-    hf_vjp (decimateOddFlatHasVJP c h w)
+  hf_vjp.decimateOdd hf_diff
 
 /-- **Stride-2 XLA-`SAME` depthwise bias-VJP.** -/
 noncomputable def depthwiseStride2XlaBiasGradHasVJP {c h w kH kW : Nat}
@@ -704,9 +695,7 @@ noncomputable def depthwiseStride2XlaBiasGradHasVJP {c h w kH kW : Nat}
     depthwise_bias_differentiable (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
   let hg_vjp : HasVJP g :=
     depthwiseBiasGradHasVJP (h := 2 * h) (w := 2 * w) W (Tensor3.unflatten x)
-  show HasVJP (decimateOddFlat c h w ∘ g) from
-  vjpComp g (decimateOddFlat c h w) hg_diff (decimateOddFlat_differentiable c h w)
-    hg_vjp (decimateOddFlatHasVJP c h w)
+  hg_vjp.decimateOdd hg_diff
 
 -- ════════════════════════════════════════════════════════════════
 -- § Depthwise SGD-tail denotations — non-reducing wrappers for the `SHlo`

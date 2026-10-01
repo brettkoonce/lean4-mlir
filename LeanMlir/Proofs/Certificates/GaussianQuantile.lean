@@ -62,7 +62,7 @@ lemma stdNormalCDF_neg (t : ℝ) : stdNormalCDF (-t) = 1 - stdNormalCDF t :=
   MathlibUpstream.cdf_gaussianReal_neg one_ne_zero t
 
 -- ════════════════════════════════════════════════════════════════
--- § Φ⁻¹ on (0,1): the defining sets behave, mono + odd-about-½
+-- § Φ⁻¹ on (0,1): the defining sets behave, mono
 -- ════════════════════════════════════════════════════════════════
 
 /-- `Φ → 0` at `−∞`, so for `p > 0` some `t` has `Φ t < p` — the quantile's set is
@@ -90,54 +90,8 @@ lemma stdNormalQuantile_monotoneOn :
   exact csSup_le_csSup (stdNormalCDF_sublevel_bddAbove hb.2)
     (stdNormalCDF_exists_lt ha.1) (fun t ht => lt_of_lt_of_le ht hab)
 
-/-- **No flat step at level `q`:** `sSup {Φ < q} = sInf {Φ > q}`. Any gap between them
-    would contain two points where `Φ = q` exactly — impossible for a strictly monotone
-    `Φ`. The bridge between the quantile's `sSup` form and its mirrored `sInf` form. -/
-private lemma stdNormalCDF_sSup_lt_eq_sInf_gt {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
-    sSup {t | stdNormalCDF t < q} = sInf {t | q < stdNormalCDF t} := by
-  have hAne : Set.Nonempty {t | stdNormalCDF t < q} := stdNormalCDF_exists_lt hq.1
-  have hBne : Set.Nonempty {t | q < stdNormalCDF t} := stdNormalCDF_exists_gt hq.2
-  have hAbdd : BddAbove {t | stdNormalCDF t < q} := stdNormalCDF_sublevel_bddAbove hq.2
-  have hBbdd : BddBelow {t | q < stdNormalCDF t} := by
-    obtain ⟨s, hs⟩ := hAne
-    exact ⟨s, fun t ht =>
-      (stdNormalCDF_strictMono.monotone.reflect_lt (lt_trans hs ht)).le⟩
-  have hle : sSup {t | stdNormalCDF t < q} ≤ sInf {t | q < stdNormalCDF t} :=
-    csSup_le hAne (fun a ha => le_csInf hBne (fun b hb =>
-      (stdNormalCDF_strictMono.monotone.reflect_lt (lt_trans ha hb)).le))
-  refine le_antisymm hle (le_of_not_gt fun hgap => ?_)
-  set sA := sSup {t | stdNormalCDF t < q}
-  set iB := sInf {t | q < stdNormalCDF t}
-  -- inside the (putative) gap the cdf is pinned to exactly q…
-  have hmid : ∀ m, sA < m → m < iB → stdNormalCDF m = q := by
-    intro m hm₁ hm₂
-    have hnotA : ¬ stdNormalCDF m < q := fun h => absurd (le_csSup hAbdd h) (not_le.mpr hm₁)
-    have hnotB : ¬ q < stdNormalCDF m := fun h => absurd (csInf_le hBbdd h) (not_le.mpr hm₂)
-    exact le_antisymm (not_lt.mp hnotB) (not_lt.mp hnotA)
-  -- …and a gap has room for two such points, killing strict monotonicity
-  have h₁ : stdNormalCDF (sA + (iB - sA) / 3) = q :=
-    hmid _ (by linarith) (by linarith)
-  have h₂ : stdNormalCDF (sA + 2 * (iB - sA) / 3) = q :=
-    hmid _ (by linarith) (by linarith)
-  have := stdNormalCDF_strictMono
-    (show sA + (iB - sA) / 3 < sA + 2 * (iB - sA) / 3 by linarith)
-  rw [h₁, h₂] at this
-  exact lt_irrefl q this
-
-/-- **`hanti` discharged:** the real quantile is odd about ½, `Φ⁻¹(1−q) = −Φ⁻¹(q)` on
-    `(0,1)`. Symmetry turns `{Φ < 1−q}` into the negation of `{Φ > q}`, `sSup ∘ neg`
-    into `−sInf`, and the no-flat-step lemma closes the `sInf`/`sSup` mismatch. -/
-lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
-    stdNormalQuantile (1 - q) = -stdNormalQuantile q := by
-  have hset : {t | stdNormalCDF t < 1 - q} = -{t | q < stdNormalCDF t} := by
-    ext t
-    simp only [Set.mem_ofPred_eq, Set.mem_neg, stdNormalCDF_neg]
-    constructor <;> intro h <;> linarith
-  rw [stdNormalQuantile, hset, Real.sSup_neg, stdNormalQuantile,
-    stdNormalCDF_sSup_lt_eq_sInf_gt hq]
-
 -- ════════════════════════════════════════════════════════════════
--- § Quantile inversion: Φ(Φ⁻¹ p) = p on (0,1)
+-- § Quantile inversion: Φ(Φ⁻¹ p) = p on (0,1), so Φ⁻¹ is odd about ½
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The quantile genuinely inverts Φ** on `(0,1)`: `Φ(Φ⁻¹ p) = p`. Right continuity of
@@ -173,6 +127,15 @@ lemma stdNormalCDF_quantile {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
     obtain ⟨a, ha, hua⟩ := exists_lt_of_lt_csSup hAne hu
     exact ((cdf (gaussianReal 0 1)).mono hua.le).trans (le_of_lt ha)
   linarith
+
+/-- **`hanti` discharged:** the real quantile is odd about ½, `Φ⁻¹(1−q) = −Φ⁻¹(q)` on
+    `(0,1)`. `Φ` is injective, and symmetry plus `stdNormalCDF_quantile` send both sides to
+    `1 − q`. -/
+lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
+    stdNormalQuantile (1 - q) = -stdNormalQuantile q := by
+  apply stdNormalCDF_strictMono.injective
+  rw [stdNormalCDF_neg, stdNormalCDF_quantile hq,
+    stdNormalCDF_quantile ⟨by linarith [hq.2], by linarith [hq.1]⟩]
 
 
 /-- `Φ⁻¹(Φ s) = s` — the quantile inverts the cdf everywhere (strict monotonicity makes

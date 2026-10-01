@@ -817,6 +817,40 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **C-reuse-1** ✔ (typechecked), **C-reuse-2** (−40), **C-pq-1**.
   - **A-reuse-1** (six `.correct` restatements with only an AA line).
   - **A-pq-3** (13 `show … decimate` → `HasVJP.decimate`; check the `rfl` ties).
+  - **Status 2026-10-01: done (staged); A-reuse-1 was already gone in `1dcbcb58`.** Every
+    finding was re-checked at HEAD. Net about −125 lines; no `verified_mlir/` changes.
+    - F-re-1: `sum_channel_fiber` is `rw [sum_finProdFinEquiv]; simp [Finset.sum_ite_irrel]`.
+      Tensor.lean is a root file, but StridedConv (A-pq-3) already rebuilds everything under
+      `StableHLO/Basic`, so it rode the same rebuild.
+    - F-re-2, reshaped: `bnBatchLABack_faithful` is an AuditAxioms pin, so its statement stays.
+      `den_bnBatchLABack_eq_bnBackB` is deleted and its five uses (four in BackLinks,
+      `hdCotIn_eq_vjp` in EfficientNetSyncStepTieG) rewrite with `bnBatchLABack_faithful`.
+      `bnInB_eq_bnBackB` stays: it is pinned, and it is the `.operand`-leaf form that the
+      ParamGrad files and SyncKit read.
+    - F-api-2 + F-pq-1: `den_convBackBatched_eq_cInB`, `den_depthwiseBackBatched_eq_dInB` and
+      `den_depthwiseStridedBackBatched_eq_dStridedInB` (all `rfl`) sit beside the defs. The four
+      `*_back_eq` and `hdCotIn_eq_vjp` lose their `show`, and each `rw`s through the graph node
+      by node. The closing `rfl` only folds `bnBackB` / `swBackB`, and the section docstring now
+      says so.
+    - F-re-3: `floatClose_residual` is deleted, and `floatClose_addResidual` (unchanged, used by
+      `floatClose_residualBlock`) says it serves the `residual F` spelling by definition. Its
+      AuditAxioms line is gone and the yaml's 4d sentence names `floatClose_addResidual`.
+    - C-reuse-1: `CrownBound.mlp2_apply` is deleted, and `crown2_certified_at_eps` uses
+      `mlp_out_eq W1 W2 (fun _ => rfl)`.
+    - C-reuse-2: `stdNormalQuantile_anti` moved below `stdNormalCDF_quantile` and is now the
+      3-line injectivity proof. `stdNormalCDF_sSup_lt_eq_sInf_gt` is deleted, and the name and
+      statement are unchanged.
+    - C-pq-1, reshaped: no shared Gaussian lemma. The set-level lemma the audit proposed
+      (`{ω | q ω ≤ p_y} ⊆ {certified}`) typechecks, but applying it in `smoothing_cp_certified`
+      times out in `whnf`, unifying the lemma's set with the goal's through the `set`
+      abbreviations. Instead the three capstones drop their spelled-out `hsub` set and the calc,
+      and compose as `(coverage bound).trans (measureReal_mono fun ω hω … => …)` over the
+      existing `smoothing_certified_of_le`. Statements are unchanged.
+    - A-pq-3: `HasVJP.decimate` / `HasVJP.decimateOdd` (vjpComp with the (odd) decimation VJP)
+      are in StridedConv. The 13 `show … from vjpComp …` sites are now `hf_vjp.decimate hf_diff`
+      (or `decimateOdd`), and so are the stride-4 input and weight VJPs' inner steps. The `rfl`
+      ties (`den_*` arms in `StableHLO/Basic`, ConvBack / DepthwiseBack / EvenKernel leaf ties)
+      still close with the one extra delta step.
 - **8f Renderers**: **G-reuse-1/3/4/5** (the `%loss` block ×9, wd rank test, vector-LN site ×4,
   sync-BN banner ×5 into RenderKit; byte-identical).
   - **Status 2026-10-01: done (staged), except two lines outside Codegen; every artifact

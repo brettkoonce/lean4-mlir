@@ -150,21 +150,7 @@ theorem smoothing_mc_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     intro v
     by_cases h : C (x + σ • v) = y <;> simp [hf, h]
   -- the Hoeffding event implies the certificate
-  have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
-        (∑ i, f (ω i)) / N - t ≤ ∫ z, f z ∂γ}
-      ⊆ {ω | ∀ δ : EuclideanSpace ℝ (Fin (n + 1)),
-            ‖δ‖ < σ * stdNormalQuantile ((∑ i, (if C (x + σ • ω i) = y then (1:ℝ) else 0)) / N - t) →
-            ∀ j, j ≠ y →
-              (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0) ∂γ)
-                < ∫ z, (if C (x + δ + σ • z) = y then (1:ℝ) else 0) ∂γ} := by
-    intro ω hω
-    simp only [Set.mem_ofPred_eq] at hω ⊢
-    intro δ hδ j hj
-    exact smoothing_certified_of_le hσ hC hp hω hδ j hj
-  calc 1 - Real.exp (-2 * N * t ^ 2)
-      ≤ (Measure.pi fun _ : Fin N => γ).real
-          {ω | (∑ i, f (ω i)) / N - t ≤ ∫ z, f z ∂γ} :=
-        mc_mean_lower_bound γ hfm hf01 N hN ht
-    _ ≤ _ := measureReal_mono hsub
+  exact (mc_mean_lower_bound γ hfm hf01 N hN ht).trans
+    (measureReal_mono fun ω hω δ hδ => smoothing_certified_of_le hσ hC hp hω hδ)
 
 end Proofs
