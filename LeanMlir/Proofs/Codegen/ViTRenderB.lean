@@ -19,7 +19,7 @@ the token axis takes `(N+1)*D → D` — it keeps ONE example and drops the rest
 type-checks *and agrees*. `den_batchOp_clsSlice_per_example` is what pins those apart.
 
 **What this file is: the writer of every ViT artifact but one.** The forward, the backward
-traversal `vitBackAllB` and, through `ViTRender.vitAdamTrainStepFaithful`, the AdamW/EMA train
+traversal `vitBackAllB` and, through `ViTRender.vitAdamTrainStepText`, the AdamW/EMA train
 steps.
 
 **The one exception is `vit_train_step.mlir`**, the SGD-inline step, which `ViTRender` writes:
@@ -29,10 +29,10 @@ steps.
 **The denotation differs from the per-example chain at the same bytes.** See the CLS-token
 emission below: this chain's `denseBiasGradB (N := vbB)` sums the batch inside `den` where the
 per-example one writes `(N := 1)` and lets `pretty B` lift outside the AST.
-`Proofs.ViTPoCGB.clsGrad_denB` (in `ViTFoldGB`) is the theorem stated at it.
+`Proofs.ViTFoldGB.clsGrad_denB` (in `ViTFoldGB`) is the theorem stated at it.
 
 **The gate** (`lake build vit-fwd-b-tie`): the committed artifacts are this chain's, so the gate
-renders the independent PER-EXAMPLE chain (`vitFwdRenderV`, `vitAdamTrainStepFaithful`) and
+renders the independent PER-EXAMPLE chain (`vitFwdRenderV`, `vitAdamTrainStepText`) and
 requires it to emit `verified_mlir/vit_fwd.mlir` and `vit_adam_train_step.mlir` **byte for byte**. That is available *because* every batched form was built to emit
 its per-example peer's text byte-for-byte and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins each
 batched form individually — so the whole-net claim is the per-form claim composed, and when it fails that file
@@ -543,7 +543,7 @@ end Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- **The ViT-Tiny AdamW train step at the batched index.** It is the SAME renderer the
-    per-example path uses — `vitAdamTrainStepFaithful` with `traversal` pointed at `vitBackAllB` —
+    per-example path uses — `vitAdamTrainStepText` with `traversal` pointed at `vitBackAllB` —
     not a copy.
 
     That is possible because the AdamW tail is entirely **parameter-space**: `adamMNextF`,
@@ -552,7 +552,7 @@ namespace Proofs.StableHLO
     batch is already factored out of it by the ops' own shapes, and the only thing that moves
     is which traversal produced the gradients. ConvNeXt's AdamW tail is the same, and it
     generalises: the optimizer is where the batch has already been summed away. -/
-def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
+def vitAdamTrainStepBText (funcName : String := "vit_adam_train_step_b")
     (bStr : String := "32.0") (replicas : Nat := 1) (nClasses : Nat := 10)
     (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
@@ -562,7 +562,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
     -- bf16, TRAILING and defaulted.
     -- **ViT's ENTRY-NAME ROUTE IS THE THIRD ONE, NOT THE FIRST TWO.** `cnxAdamVariant` DERIVES
     -- ConvNeXt's entry name from its variant, so a flag that misses that call writes a mismatched
-    -- artifact; `vitAdamTrainStepFaithful` takes `funcName` EXPLICITLY, so here the risk is route
+    -- artifact; `vitAdamTrainStepText` takes `funcName` EXPLICITLY, so here the risk is route
     -- (c) — the artifact PATH and the `#eval`'s `funcName` disagreeing. The `#guard`s under the
     -- bf16 `#eval` pin the two spellings against each other, which is the check that fits this
     -- route.
@@ -577,7 +577,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
   -- sites) and the wrapper (which declares the 24 inputs, the 24 pass-through outputs and the
   -- signature). Letting a caller set them independently is a recurring shape of defect; here there
   -- is nothing to keep in step.
-  vitAdamTrainStepFaithful funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
+  vitAdamTrainStepText funcName bStr replicas vbB nClasses alpha ema wdExclude wdStr clip clipStr
     -- AND HERE. `bf16` reaching this traversal is what makes the graph bf16; nothing else in
     -- this function's body needs it, because the AdamW tail is parameter-space and stays f32.
     (traversal := some (vitBackAllB vbB nClasses (some (alphaStr, negAlphaKStr, bStr)) sd V bf16 bf16Conv bf16ConvW))
@@ -595,7 +595,7 @@ end Proofs.StableHLO
 -- would halve the noise and pass every structural check.
 
 #eval IO.FS.writeFile "verified_mlir/vit_adamdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdrop_train_step" "32.0" 1 10 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdrop_train_step" "32.0" 1 10 0.1
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
     (sd := true))
 
@@ -610,7 +610,7 @@ end Proofs.StableHLO
 -- ImageNet run loads the DP render. `wx` ++ `clip` ++ `drop` at wd 0.05 is
 -- `vitTinyImagenetConfig`'s optimizer-and-regulariser set entire.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdrop_train_step" "32.0" 1 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamwxclipdrop_train_step" "32.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true))
 
@@ -637,7 +637,7 @@ end Proofs.StableHLO
 -- disagreeing — not (a)/(b), which are ConvNeXt's and EfficientNet's. The `#guard`s below pin the
 -- two spellings against each other and against the driver's three substring predicates.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamwxclipdropbf16_train_step" "32.0" 1 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamwxclipdropbf16_train_step" "32.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true))
 
@@ -677,7 +677,7 @@ end Proofs.StableHLO
 -- are comparable. At batch 32 the step count would be 4× the reference's, which is the axis
 -- accuracy actually tracks — a render nobody should pair-run.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128))
 
@@ -689,7 +689,7 @@ end Proofs.StableHLO
 -- `bf16Conv`/`bf16ConvW` stay at their measured defaults (both false) — the stem weight
 -- gradient is several times slower than its f32 peer and the replica axis does not change that.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (bf16 := true))
 #guard "vitin_adamdp128x4wxclipdropbf16_train_step" ==
@@ -702,7 +702,7 @@ end Proofs.StableHLO
 -- which blueprint §9.6 measures as load-bearing for this net: without it ViT-Ti collapses to
 -- chance the moment warmup ramps past ~1.6e-4 and never recovers.
 --
--- It is one call, not new machinery: `vitAdamTrainStepFaithfulB` already takes all four flags,
+-- It is one call, not new machinery: `vitAdamTrainStepBText` already takes all four flags,
 -- and `vitAdamVariant` already composes the name from all four (`ema` REPLACES the `adam` prefix,
 -- then `wx` ++ `clip` ++ `drop` append). The driver predicate already routes it —
 -- `VerifiedVariant.emaOn` is `startsWith "ema"`, and `emadp128x4wxclipdrop` does.
@@ -716,7 +716,7 @@ end Proofs.StableHLO
 -- would differ from it in PRECISION as well as in lowerer, and the comparison is about the lowerer.
 -- Same argument as the R50-2018 pair.
 #eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (bf16 := true))
 #guard "vitin_emadp128x4wxclipdropbf16_train_step" ==
@@ -732,7 +732,7 @@ end Proofs.StableHLO
 -- fourth and is easiest to miss: it must track the per-replica batch or the render disagrees with
 -- its own geometry.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp256x2wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp256x2wxclipdrop_train_step" "256.0" 2 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp256x2wxclipdrop_train_step" "256.0" 2 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 256))
 
@@ -743,7 +743,7 @@ end Proofs.StableHLO
 -- runnable on two cards while the 256 variant stays as the recipe-matched artifact for boxes whose
 -- MIOpen accepts it. The two differ ONLY in `B` (and `vbB`, which must track it).
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x2wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x2wxclipdrop_train_step" "128.0" 2 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp128x2wxclipdrop_train_step" "128.0" 2 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128))
 
@@ -765,7 +765,7 @@ end Proofs.StableHLO
 -- 10-class `vit_*` artifacts stay ViT-Tiny — they come from the per-example renderer, which is
 -- still pinned at Tiny by ~154 dim literals (`ViTRender.lean`). Widening THAT is a separate job.
 #eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitsin_adamdp128x4wxclipdrop_train_step" "128.0" 4 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims))
 
@@ -777,7 +777,7 @@ end Proofs.StableHLO
 -- bf16 is a LOSS on this architecture stays out of the emit at every size, which is why a green
 -- gate here is allowed to mean what it usually means.
 #eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitsin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
 #guard "vitsin_adamdp128x4wxclipdropbf16_train_step" ==
@@ -787,7 +787,7 @@ end Proofs.StableHLO
 -- drop, since the S reference (`vits-default-jax-4gpu`) trains with EMA and the non-EMA
 -- `adamdp` renders above would give it up. `vit-ema-drop-render vitsin` gates the layout.
 #eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitsin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitsin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
 #guard "vitsin_emadp128x4wxclipdropbf16_train_step" ==
@@ -853,14 +853,14 @@ end Proofs.StableHLO
 -- **The 128×4 shape is not new to this renderer**, which is why this is four `#eval`s and not a
 -- feature: `vitsin_adamdp128x4wxclipdrop` and `vitin_adamdp128x4wxclipdrop` both ship.
 #eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp128x4wxclipdrop_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_adamdp128x4wxclipdrop_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
 #guard "vitbin_adamdp128x4wxclipdrop_train_step" ==
   "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "_train_step"
 
 #eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_adamdp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
 #guard "vitbin_adamdp128x4wxclipdropbf16_train_step" ==
@@ -870,7 +870,7 @@ end Proofs.StableHLO
 -- region (86.6 M floats per replica) on top of the bf16 twin's peak at 0.97
 -- (`runs/2026-08-27-vitb-global512/`), so it runs under `LEAN_MLIR_MEM_FRACTION=0.97`; probe the peak before a launch.
 #eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_emadp128x4wxclipdropbf16_train_step" "128.0" 4
     1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
 #guard "vitbin_emadp128x4wxclipdropbf16_train_step" ==
@@ -882,14 +882,14 @@ end Proofs.StableHLO
 -- DIFFERENCE between two measurements rather than a correction someone estimates.
 -- They render at global 128, so they are not a DeiT recipe and must not be quoted as one.
 #eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adam128wxclipdrop_train_step" "128.0" 1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_adam128wxclipdrop_train_step" "128.0" 1
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
 #guard "vitbin_adam128wxclipdrop_train_step" ==
   "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 1 false true true true ++ "_train_step"
 
 #eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitbin_adam128wxclipdropbf16_train_step" "128.0" 1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_adam128wxclipdropbf16_train_step" "128.0" 1
     1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
 #guard "vitbin_adam128wxclipdropbf16_train_step" ==
@@ -903,7 +903,7 @@ end Proofs.StableHLO
 -- exact only at TWO (f32 addition is commutative; above two the collective is a tree and
 -- associativity does not hold).
 #eval IO.FS.writeFile "verified_mlir/vit_adamdpdrop_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdpdrop_train_step" "32.0" 2 10 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdpdrop_train_step" "32.0" 2 10 0.1
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
     (sd := true))
 
@@ -921,14 +921,14 @@ end Proofs.StableHLO
 --
 -- These nineteen writers call the batched wrapper, so every ViT artifact but one comes from
 -- `vitBackAllB`. All nineteen render BYTE-IDENTICALLY to the PER-EXAMPLE traversal
--- (`vitAdamTrainStepFaithful` / `vitFwdRenderV`), which is what `TestBatchedEmitTie.lean`'s
+-- (`vitAdamTrainStepText` / `vitFwdRenderV`), which is what `TestBatchedEmitTie.lean`'s
 -- per-form ties predict.
 --
 -- The bytes agree and the DENOTATION differs, on exactly one parameter. The CLS token is
 -- one shared `[192]` vector, so its gradient is the sum of every example's CLS-row cotangent —
 -- `denseBiasGradB (N := vbB)` here against `(N := 1)` there, where `pretty B` did the batch lift
--- outside the AST. `Proofs.ViTPoCGB.clsGrad_denB` is the statement at the batched index, and
--- `ViTPoCG.clsGrad_den` is the same theorem at `N = 1`. See the note on that emission above.
+-- outside the AST. `Proofs.ViTFoldGB.clsGrad_denB` is the statement at the batched index, and
+-- `ViTFoldG.clsGrad_den` is the same theorem at `N = 1`. See the note on that emission above.
 --
 -- `vit_train_step.mlir` is written by `ViTRender.lean`: `vitBackAllB` has no fused-SGD arm, and
 -- `ViTStepTie.lean`'s 200-parameter tie is stated at those bytes.
@@ -950,7 +950,7 @@ end Proofs.StableHLO
 -- α = 0.1 and K = nClasses are the knobs; −α/K is DERIVED, batch 32 —
 -- `vitTinyConfig`'s label smoothing + mean.
 #eval IO.FS.writeFile "verified_mlir/vit_adam_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam_train_step" "32.0")
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adam_train_step" "32.0")
 
 -- The DATA-PARALLEL render, the ViT peer of `resnet34_adamdp_train_step`: the same
 -- graph plus one `all_reduce(add)/N` per parameter gradient before its AdamW triple. Selected at
@@ -963,7 +963,7 @@ end Proofs.StableHLO
 -- 16,579,041 returned floats on a duplicated batch, against a sum-not-mean control that fires at
 -- 0.996.
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp_train_step" "32.0" 2)
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdp_train_step" "32.0" 2)
 
 -- ── The LARGER-BATCH pair (bs 64 per device) ───────────────────────────────────────────────────
 -- The number in a variant name is the PER-DEVICE batch, matching `adam128`/`adamdp128` on
@@ -993,9 +993,9 @@ end Proofs.StableHLO
 -- The eval forwards stay at bs 32 and that is fine: `trainAdamSched` reads the width off the
 -- forward artifact (`evalBs`), so eval runs at 32 while training runs at 64.
 #eval IO.FS.writeFile "verified_mlir/vit_adam64_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam64_train_step" "64.0" 1 10 (vbB := 64))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adam64_train_step" "64.0" 1 10 (vbB := 64))
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp64_train_step" "64.0" 2 10 (vbB := 64))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdp64_train_step" "64.0" 2 10 (vbB := 64))
 
 -- ── The FOUR-REPLICA render ────────────────────────────────────────────────────────────────────
 -- Same graph as `vit_adamdp_train_step` at the same per-device batch (32); only `replicas` moves,
@@ -1017,7 +1017,7 @@ end Proofs.StableHLO
 -- The `MIOPEN_DEBUG_CONV_GEMM=0` warnings on the bs64 pair above are **ROCm-only** — MIOpen is
 -- AMD's library and there is no analogue on the CUDA path this render was gated on.
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp32x4_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp32x4_train_step" "32.0" 4 10 (vbB := 32))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdp32x4_train_step" "32.0" 4 10 (vbB := 32))
 
 -- ── bs128, single-device and 4-replica ────────────────────────────────────────────────────────
 -- Rendered to answer "do these 16 GB cards hold bs128, i.e. global 512 on four?" — they do, with
@@ -1036,9 +1036,9 @@ end Proofs.StableHLO
 -- run took. Accuracy falls with step count, faster at the bottom. Use it to measure scaling; do not read an
 -- accuracy off it and compare.
 #eval IO.FS.writeFile "verified_mlir/vit_adam128_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adam128_train_step" "128.0" 1 10 (vbB := 128))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adam128_train_step" "128.0" 1 10 (vbB := 128))
 #eval IO.FS.writeFile "verified_mlir/vit_adamdp128x4_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamdp128x4_train_step" "128.0" 4 10 (vbB := 128))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamdp128x4_train_step" "128.0" 4 10 (vbB := 128))
 
 -- ── ViT-Tiny on FULL 1000-class ImageNet, slug `vitin` — the scale tier ───────────────────────
 -- The ViT peer of `resnet34in_*`. No renderer change: `nClasses`, `bs` and `replicas` are
@@ -1077,10 +1077,10 @@ end Proofs.StableHLO
 -- point.
 -- The variant that MATCHES the reference is `vitin_adamdp128x4wxclip` below.
 #eval IO.FS.writeFile "verified_mlir/vitin_adam128_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128_train_step" "128.0" 1 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adam128_train_step" "128.0" 1 1000
     (wdStr := "0.05") (vbB := 128))
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4_train_step" "128.0" 4 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp128x4_train_step" "128.0" 4 1000
     (wdStr := "0.05") (vbB := 128))
 #eval IO.FS.writeFile "verified_mlir/vitin_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitin_fwd" 1000 (vbB := 256))
@@ -1098,14 +1098,14 @@ end Proofs.StableHLO
 -- against `vit_adam` at bs32/K=10, where the two renders differ in EXACTLY the thing being gated
 -- and the compile is seconds rather than a minute.
 #eval IO.FS.writeFile "verified_mlir/vit_adamwx_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamwx_train_step" "32.0" 1 10 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamwx_train_step" "32.0" 1 10 0.1
     (ema := false) (wdExclude := true) (vbB := 32))
 -- wd = **0.05**, not the file's 1e-4 default: `vitTinyImagenetConfig.weightDecay := 0.05` (the
 -- DeiT value) where `vitTinyConfig` uses 1e-4. Both halves of the reference's decay recipe — the
 -- MAGNITUDE and the MASK — have to be right for this render to be the pair's. See
 -- `vitAdamConsts`.
 #eval IO.FS.writeFile "verified_mlir/vitin_adam128wx_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128wx_train_step" "128.0" 1 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adam128wx_train_step" "128.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (vbB := 128))
 
 -- ── GLOBAL-NORM GRADIENT CLIPPING ────────────────────────────────────────────────────────────
@@ -1134,14 +1134,14 @@ end Proofs.StableHLO
 --      disagreeing with its own path. ViT's explicit `funcName` hides it; ConvNeXt derives its
 --      name and does not.
 #eval IO.FS.writeFile "verified_mlir/vit_adamclip_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_adamclip_train_step" "32.0" 1 10 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_adamclip_train_step" "32.0" 1 10 0.1
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0")
     (vbB := 32))
 -- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`, because
 -- `vitTinyImagenetConfig` sets `wdExcludeNormBias := true` AND `gradClipNorm := 1.0`. wd = 0.05
 -- for the same 500× reason `vitin_adam128wx` carries it.
 #eval IO.FS.writeFile "verified_mlir/vitin_adam128wxclip_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adam128wxclip_train_step" "128.0" 1 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adam128wxclip_train_step" "128.0" 1 1000 0.1
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (vbB := 128))
 -- **THE DATA-PARALLEL PEER, AND IT IS THE ONE AN IMAGENET RUN ACTUALLY LOADS.** 128 per device ×
@@ -1150,11 +1150,11 @@ end Proofs.StableHLO
 --
 -- THE CLIP IS AFTER THE COLLECTIVE, and that is the whole DP question for this feature: the
 -- reference clips the already-combined gradient, so clipping per replica would clip 200 PARTIAL
--- gradients — a different function that trains and descends. `vitAdamTrainStepFaithful` hoists both
+-- gradients — a different function that trains and descends. `vitAdamTrainStepText` hoists both
 -- the collective and the clip above the optimizer loop at `clip := true` and passes `preAvg`, so
 -- this render emits **200 all_reduces, not 400**, all of them before the norm fold.
 #eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_adamdp128x4wxclip_train_step" "128.0" 4 1000
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_adamdp128x4wxclip_train_step" "128.0" 4 1000
     0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (vbB := 128))
 
@@ -1188,7 +1188,7 @@ end Proofs.StableHLO
 -- on 9,469 images, not a defect — so the gate is "the shadow tracks then exceeds the live
 -- weights", which is a comparison within one run.
 #eval IO.FS.writeFile "verified_mlir/vit_ema_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vit_ema_train_step" "32.0" 1 10 0.1 (ema := true) (vbB := 32))
+  (Proofs.StableHLO.vitAdamTrainStepBText "vit_ema_train_step" "32.0" 1 10 0.1 (ema := true) (vbB := 32))
 
 -- ── The naming contract, pinned ───────────────────────────────────────────────────────────────
 -- `vitAdamVariant` is the single description of ViT's variant spelling, and these `#guard`s are
@@ -1233,8 +1233,8 @@ end Proofs.StableHLO
 -- VEHICLE rather than a matched pair (`vitTinyConfig` sets no EMA at all). Batch 128 × 4 replicas
 -- = global 512, matching the reference, exactly as the `vitin_adam128` pair does.
 #eval IO.FS.writeFile "verified_mlir/vitin_ema128_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_ema128_train_step" "128.0" 1 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_ema128_train_step" "128.0" 1 1000 0.1
     (ema := true) (vbB := 128))
 #eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4_train_step.mlir"
-  (Proofs.StableHLO.vitAdamTrainStepFaithfulB "vitin_emadp128x4_train_step" "128.0" 4 1000 0.1
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitin_emadp128x4_train_step" "128.0" 4 1000 0.1
     (ema := true) (vbB := 128))

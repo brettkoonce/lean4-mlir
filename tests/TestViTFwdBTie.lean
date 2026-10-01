@@ -14,7 +14,7 @@ expressible at all; the claim this file gates is that it changed **nothing else*
 **The committed artifacts ARE the batched chain's** (`ViTRenderB.lean` writes `vit_fwd.mlir` and
 `vit_adam_train_step.mlir`), so comparing the batched chain against them would only catch
 non-determinism. This file renders the independent PER-EXAMPLE chain (`vitFwdRenderV`,
-`vitAdamTrainStepFaithful` over `vitBackAll`, both in `ViTRender.lean`) and checks it against the
+`vitAdamTrainStepText` over `vitBackAll`, both in `ViTRender.lean`) and checks it against the
 committed bytes — `convnext-fwd-b-tie`'s arrangement. The backward check compares the two
 traversals directly.
 
@@ -123,22 +123,22 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   IO.println "  ✅ the batched backward computes and routes what the per-example one does"
   IO.println "  ⭐ And the den side IS checked now (4c leg 4, 2026-09-07): the CLS-token gradient \
 changed from `denseBiasGradB (N := 1)` to `(N := vbB)` — sum-one-thing to sum-the-batch — with the \
-SAME emitted text, so this byte tie provably cannot see it. Proofs.ViTPoCGB.clsGrad_denB is the \
-theorem at the batched node, beside the other nine in ViTFoldGB.lean; ViTPoCG.clsGrad_den \
+SAME emitted text, so this byte tie provably cannot see it. Proofs.ViTFoldGB.clsGrad_denB is the \
+theorem at the batched node, beside the other nine in ViTFoldGB.lean; ViTFoldG.clsGrad_den \
 is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are two theorems."
 
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   --  The WHOLE TRAIN STEP, against the committed artifact — the bytes the trainer loads.
   --
-  --  The committed artifact is the batched chain's (`vitAdamTrainStepFaithfulB`), so this renders
-  --  the PER-EXAMPLE one (`vitAdamTrainStepFaithful` over `vitBackAll`). The AdamW tail is the same
+  --  The committed artifact is the batched chain's (`vitAdamTrainStepBText`), so this renders
+  --  the PER-EXAMPLE one (`vitAdamTrainStepText` over `vitBackAll`). The AdamW tail is the same
   --  function on both sides (`traversal` swapped), because it is parameter-space and never sees
   --  the batch. So any difference here that the backward check above did not already report is in
   --  the seam between the traversal and the tail — the fresh-name counter, or the gradient list the
   --  tail zips.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let wantTS ← IO.FS.readFile "verified_mlir/vit_adam_train_step.mlir"
-  let gotTS := vitAdamTrainStepFaithful "vit_adam_train_step"
+  let gotTS := vitAdamTrainStepText "vit_adam_train_step"
   IO.println "── ViT: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"

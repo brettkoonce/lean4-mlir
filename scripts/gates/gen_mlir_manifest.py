@@ -146,7 +146,7 @@ def decode(variant: str) -> str:
     elif "lamb" in variant:
         bits.append("LAMB")
     elif "adam" in variant or acc_k(variant):
-        # `acc…` without `lamb` is `R34Opt.adamwAccum`: AdamW over k micro-batches
+        # `acc…` without `lamb` is `OptRecipe.adamwAccum`: AdamW over k micro-batches
         bits.append("AdamW")
     elif "mom" in variant:
         bits.append("momentum")

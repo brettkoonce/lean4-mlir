@@ -68,7 +68,7 @@ def runResnet34Adam (argv : List String) : IO Unit := do
   -- (1e-9 there). The default is 0.001.
   --
   -- **Effectively REQUIRED for `LEAN_MLIR_VARIANT=mom`.** 0.001 is an *AdamW* rate; the
-  -- heavy-ball render (`R34Opt.heavyBall`) matches `jax/MainResnetImagenet.lean`, which uses
+  -- heavy-ball render (`OptRecipe.heavyBall`) matches `jax/MainResnetImagenet.lean`, which uses
   -- **0.1** at batch 256. Running `mom` at the default under-steps by ~100×, which looks exactly
   -- like a broken render rather than a wrong knob.
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with

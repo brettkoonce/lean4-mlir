@@ -9,7 +9,7 @@ stages, channels `[16,16,32,32]`, 32→16→8→4→2 spatial, then the reused 3
 **per-channel** normalization (`bnPerChannelTensor3`, `m=h·w`) inserted after each of the
 8 convs (γ=1/β=0 init, before relu). Per-channel BN is per-example ⇒ train=eval (no running
 stats). Trains on `verified_mlir/cifar8_bn_train_step.mlir`
-(`Proofs.StableHLO.cifar8BnTrainStepFaithfulV`); the whole-network VJP is
+(`Proofs.StableHLO.cifar8BnTrainStepText`); the whole-network VJP is
 `Proofs.cifarCnnBn8HasVJPAt` (folds `convBnReluPCHasVJPAt`) — audited 3-axiom-clean.
 
 The model is the `cifar8BnVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`); trains

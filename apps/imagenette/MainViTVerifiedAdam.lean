@@ -5,7 +5,7 @@ import LeanMlir.Verified.Train
 
 The SGD `vit-verified` with its optimizer swapped for AdamW. The packed train step
 `@vit_adam_train_step` is `pretty(provenGraph)` out of `LeanMlir/Proofs/Codegen/ViTRender.lean`'s
-`vitAdamTrainStepFaithful` — gradients un-fused and handed to the proven
+`vitAdamTrainStepText` — gradients un-fused and handed to the proven
 `adamMNextF`/`adamVNextF`/`adamWParamF` triple — then driven by `VerifiedNet.trainAdamSched`, which
 threads `[θ|m|v]` as a single packed param blob plus the runtime `lr`/`bc₁`/`bc₂` scalars through
 the generic FFI (`n_params = 3k`; the moments ride in the params slot, so the prebuilt `.so` is
@@ -63,7 +63,7 @@ def vitAdamConfig : VerifiedConfig where
       size guard makes a crossed one throw rather than resume misaligned garbage.
 
     This driver does not WRITE its artifact. The artifact comes
-    from `Proofs/Codegen/ViTRender.lean`'s `vitAdamTrainStepFaithful` and that `#eval` is its sole
+    from `Proofs/Codegen/ViTRender.lean`'s `vitAdamTrainStepText` and that `#eval` is its sole
     writer, so a missing artifact **throws** rather than being quietly recreated. -/
 def runViTAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"

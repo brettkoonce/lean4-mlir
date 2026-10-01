@@ -19,6 +19,6 @@ def main (_args : List String) : IO Unit :=
     { slug := "efficientnet", net := efficientnetVerified.toNet, bs := 32
       sgPath := "verified_mlir/efficientnet_adam_train_step.mlir"
       dpPath := "verified_mlir/efficientnet_adamdp_train_step.mlir"
-      render := fun B fs => Proofs.StableHLO.efficientnetAdamTrainStepFaithful B 10 "1.0e-5"
+      render := fun B fs => Proofs.StableHLO.efficientnetAdamTrainStepText B 10 "1.0e-5"
         "0.100000" "-0.010000" s!"{B}.0" (forceSync := fs)
       entry := fun B r => s!"m.efficientnet_{Proofs.StableHLO.enetAdamVariant B r}_train_step" }

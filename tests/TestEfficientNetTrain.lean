@@ -8,8 +8,8 @@ are their only writers:
 
 | artifact | renderer |
 |---|---|
-| `verified_mlir/efficientnet_train_step.mlir` (SGD) | `efficientnetTrainStepFaithfulV` |
-| `verified_mlir/efficientnet_adam_train_step.mlir` (AdamW) | `efficientnetAdamTrainStepFaithful` |
+| `verified_mlir/efficientnet_train_step.mlir` (SGD) | `efficientnetTrainStepText` |
+| `verified_mlir/efficientnet_adam_train_step.mlir` (AdamW) | `efficientnetAdamTrainStepText` |
 
 What remains here is the part `lake build` genuinely cannot do: **iree-compile the committed
 bytes**, which needs the compiler on PATH. It reads them and throws if they are missing, rather

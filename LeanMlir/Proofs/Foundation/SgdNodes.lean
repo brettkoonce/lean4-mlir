@@ -110,7 +110,7 @@ theorem bnBeta_den {oc h w : Nat}
 /-- The emitted `bnGammaSgd` and `bnBetaSgd` ops of one per-channel BN layer, fed its BN-output
     cotangent `c` at the saved conv output `v`, are the certified SGD steps on `γ` and `β` — the
     statements of `bnGamma_den` and `bnBeta_den` under `∀`. The per-example peer of
-    `EnetPoC.BnSgdPairTiedB`. -/
+    `EnetFold.BnSgdPairTiedB`. -/
 def BnSgdPairTied {oc h w : Nat} (gN vN bN epsStr lrStr cotN : String) (ε : ℝ) (γ β : Vec oc)
     (v c : Vec (oc*h*w)) (lr : ℝ) : Prop :=
   (∀ idx : Fin oc,
@@ -137,7 +137,7 @@ namespace Proofs
 (`SgdNode.convW_den` / `convB_den` / `denseW_den` / `denseB_den`) under `∀`, so a tie theorem
 states one line per parameter tensor and `intro` unfolds it back; each `…_holds` proves it with
 every argument implicit (read off the goal by a step tie's constructor). The batched peers are `GradNodeB.ConvWTiedB` and
-`EnetPoC.ConvWSgdTiedB`. -/
+`EnetFold.ConvWSgdTiedB`. -/
 
 /-- The emitted `convWeightSgd` op, fed the cotangent `c` at the conv output, is the certified SGD
     step on the kernel `W`. -/
@@ -329,7 +329,7 @@ end Proofs.SgdNode
 
 /-! ## The per-example UN-FUSED gradient nodes
 
-A renderer with a separate optimizer (`cifar8BnTrainStepFaithfulV` at `opt := some _`, the packed
+A renderer with a separate optimizer (`cifar8BnTrainStepText` at `opt := some _`, the packed
 `cifar8w{,_bn}_*` arms) emits `*Grad` ops where the SGD renders emit `*Sgd`: the same arm with
 `θ − lr·` stripped. Each lemma here says one such op, at an arbitrary cotangent, denotes the
 certified per-layer Jacobian contraction; the optimizer that consumes it is outside these lemmas.

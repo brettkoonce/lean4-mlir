@@ -28,13 +28,13 @@ open Proofs.StableHLO
 def main : IO Unit := do
   let B := 2
   let nClasses := 10
-  let m := mobilenetv4AdamTrainStepFaithfulB B nClasses "1.0e-05"
+  let m := mobilenetv4AdamTrainStepText B nClasses "1.0e-05"
   IO.FS.writeFile ".lake/build/mnv4_adam_train_step_b2.mlir" m
   -- `scripts/parity/grad_tie.py --net mnv4` reads a BATCH-8 copy: timm's `norm_head` normalises the pooled
   -- `[B, 1280]` over the batch alone, which at B = 2 maps every channel to ±1 and leaves the
   -- gradient tie nothing to measure.
   IO.FS.writeFile ".lake/build/mnv4_adam_train_step_b8.mlir"
-    (mobilenetv4AdamTrainStepFaithfulB 8 nClasses "1.0e-05")
+    (mobilenetv4AdamTrainStepText 8 nClasses "1.0e-05")
   let lines := m.splitOn "\n"
   IO.println s!"  rendered {lines.length} lines"
   let mut bad := 0
@@ -93,7 +93,7 @@ def main : IO Unit := do
     bad := bad + 1
 
   -- ── the eval forward must read the SAME stat slots the train step returns ──
-  let ev := mnv4FwdEvalFaithfulV B nClasses "1.0e-05"
+  let ev := mnv4FwdEvalText B nClasses "1.0e-05"
   let mut missing := 0
   for (n, _) in mnv4StatShapeList do
     if (ev.splitOn (n ++ ":")).length ≤ 1 then missing := missing + 1

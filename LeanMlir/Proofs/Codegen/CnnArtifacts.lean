@@ -13,7 +13,7 @@ it. -/
 -- Dims `128 1 32 14 14 512 10 3 3`: B=128, ic=1, c=32, h=w=14 (post-pool,
 -- image 28×28), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128 (mean-loss equiv).
 #eval IO.FS.writeFile "verified_mlir/cnn_train_step.mlir"
-  (Proofs.StableHLO.cnnTrainStepFaithfulV 128 1 32 14 14 512 10 3 3 "0.00078125"
+  (Proofs.StableHLO.cnnTrainStepText 128 1 32 14 14 512 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0))
@@ -23,7 +23,7 @@ it. -/
 -- Dims `128 3 32 64 8 8 512 10 3 3`: B=128, ic=3, c1=32, c2=64, h=w=8
 -- (final pooled, image 32×32), d1=512, nClasses=10, 3×3 kernels; lr = 0.1/128.
 #eval IO.FS.writeFile "verified_mlir/cifar_train_step.mlir"
-  (Proofs.StableHLO.cifarTrainStepFaithfulV 128 3 32 64 8 8 512 10 3 3 "0.00078125"
+  (Proofs.StableHLO.cifarTrainStepText 128 3 32 64 8 8 512 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
@@ -36,7 +36,7 @@ it. -/
 -- with the fused SGD tail replaced by un-fused gradients + the proven AdamW ops. Hyperparameters:
 -- β₁ 0.9, β₂ 0.999, ε 1e-8, wd 1e-4; 1/B = 1/128 = 0.0078125 (exact in binary32).
 #eval IO.FS.writeFile "verified_mlir/cifar8_adam_train_step.mlir"
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -59,9 +59,9 @@ it. -/
 -- the same way), where `emitMomentum` emits one fused block. XLA's CSE folds it, and that pattern
 -- costs nothing on R34. Hence the tie is NUMERIC.
 #eval IO.FS.writeFile "verified_mlir/cifar8_sgd_train_step.mlir"
-  (Proofs.StableHLO.cifar8SgdTrainStepFaithful)
+  (Proofs.StableHLO.cifar8SgdTrainStepText)
 #eval IO.FS.writeFile "verified_mlir/cifar8_mom_train_step.mlir"
-  (Proofs.StableHLO.cifar8MomTrainStepFaithful)
+  (Proofs.StableHLO.cifar8MomTrainStepText)
 
 -- ── the data-parallel exact gate ────────────────────────────────────────
 -- cifar8 has NO BatchNorm, so the batch decomposition is an identity and 2 replicas × B=128 with
@@ -72,7 +72,7 @@ it. -/
 -- 1/256 = 0.00390625 and 1/128 = 0.0078125 are both exact in binary32, so the loss scaling
 -- contributes no rounding of its own to the comparison.
 #eval IO.FS.writeFile "verified_mlir/cifar8_adam256_train_step.mlir"
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 256 3 16 16 32 32 2 2 64 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepText 256 3 16 16 32 32 2 2 64 10 3 3
     "0.00390625" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -82,7 +82,7 @@ it. -/
     (fun _ => 0))
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_adamdp_train_step.mlir"
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -92,7 +92,7 @@ it. -/
     (fun _ => 0) (replicas := 2))
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_train_step.mlir"
-  (Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
+  (Proofs.StableHLO.cifar8TrainStepText 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -116,7 +116,7 @@ it. -/
 -- NO SPEEDUP, by design — at cifar8's conv shapes bf16 is slower than f32, not faster. These
 -- artifacts demonstrate that the MATH scales across precision, never the throughput.
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_train_step.mlir"
-  ((Proofs.StableHLO.cifar8TrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
+  ((Proofs.StableHLO.cifar8TrainStepText 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -125,7 +125,7 @@ it. -/
     (fun _ => 0) (bf16 := true)).replace "@cifar8_train_step" "@cifar8_bf16_train_step")
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_mom_train_step.mlir"
-  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+  ((Proofs.StableHLO.cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -135,7 +135,7 @@ it. -/
     (fun _ => 0) 1 .nesterov (bf16 := true)).replace "@cifar8_adam_train_step" "@cifar8_bf16_mom_train_step")
 
 -- ═══ the BATCHED render (`…FaithfulB`) — the unification, and FULL bf16 ═══════════════════
--- Emitted from `cifar8AdamTrainStepFaithfulB`, which is on ImageNet's batched op family. Unlike
+-- Emitted from `cifar8AdamTrainStepBText`, which is on ImageNet's batched op family. Unlike
 -- the `…V` artifacts above (bf16 forward convs only), these carry bf16 through the BACKWARD as
 -- well — `convBackBatchedBf16` + `convWeightGradBBf16` — because those twins exist for the
 -- batched family and not for the per-example one. Zero new verified ops.
@@ -144,7 +144,7 @@ it. -/
 -- probe rather than a trainable arm: E4M3 maxes at 448 and XLA synthesises scale = 1.0 when given
 -- no scale operand.
 #eval IO.FS.writeFile "verified_mlir/cifar8b_fp8_adam_train_step.mlir"
-  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
+  ((Proofs.StableHLO.cifar8AdamTrainStepBText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -155,7 +155,7 @@ it. -/
       "@cifar8b_adam_train_step" "@cifar8b_fp8_adam_train_step")
 
 #eval IO.FS.writeFile "verified_mlir/cifar8b_adam_train_step.mlir"
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepBText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -168,7 +168,7 @@ it. -/
 -- artifact whose declared `@name` differs from its path, because the driver resolves the
 -- entry as `m.{slug}_{variant}_train_step` and so could never load it.
 #eval IO.FS.writeFile "verified_mlir/cifar8b_bf16_adam_train_step.mlir"
-  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 64 10 3 3
+  ((Proofs.StableHLO.cifar8AdamTrainStepBText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -187,7 +187,7 @@ it. -/
   IO.FS.writeFile "verified_mlir/cifar8b_fwd.mlir" (fwd.replace "@cifar8_fwd" "@cifar8b_fwd")
 
 #eval IO.FS.writeFile "verified_mlir/cifar8_bf16_adam_train_step.mlir"
-  ((Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+  ((Proofs.StableHLO.cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -205,10 +205,10 @@ it. -/
     (fwd.replace "@cifar8_fwd" "@cifar8_bf16_fwd")
 
 -- Regenerate `verified_mlir/cifar8_bn_train_step.mlir` (what MainCifar8BnVerified trains on)
--- from the faithful renderer; den-certified by the existing generics (CifarPoC.conv{W,B}_den,
--- CifarBnPoC.bn{Gamma,Beta}_den, Cifar8PoC.dense{W,B}_den).
+-- from the faithful renderer; den-certified by the existing generics (`SgdNode.conv{W,B}_den`,
+-- `SgdNode.bn{Gamma,Beta}_den`, `SgdNode.dense{W,B}_den`).
 #eval IO.FS.writeFile "verified_mlir/cifar8_bn_train_step.mlir"
-  (Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05" "0.00078125"
+  (Proofs.StableHLO.cifar8BnTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05" "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -240,7 +240,7 @@ it. -/
 -- and `momVNextF`/`momParamF` are separate SHlo nodes so `v'` is computed twice (SHlo is
 -- single-result). Hence the tie is NUMERIC — `cifar8-opt-tie bn_{adam,mom,sgd}`.
 private def c8bnPacked (opt : Proofs.StableHLO.CifarOpt) : String :=
-  Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05" "0.00078125"
+  Proofs.StableHLO.cifar8BnTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3 "1.0e-05" "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -268,7 +268,7 @@ private def c8bnPacked (opt : Proofs.StableHLO.CifarOpt) : String :=
 -- match or beat) and each `#eval` is its artifact's ONLY writer. The entry is renamed because both
 -- renderers emit the narrow slug, and the wide drivers ask for `m.cifar8w[_bn]_<opt>_train_step`.
 private def c8wPacked (opt : Proofs.StableHLO.CifarOpt) (entry : String) : String :=
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 512 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 512 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -286,7 +286,7 @@ private def c8wPacked (opt : Proofs.StableHLO.CifarOpt) (entry : String) : Strin
     Unlike the `…V` bf16 artifacts, bf16 here reaches the BACKWARD too (23/23 convolutions,
     vs 8/23), because the batched family is the one the bf16 ops were built for. -/
 private def c8wbPacked (opt : Proofs.StableHLO.CifarOpt) (bf16 : Bool) (entry : String) : String :=
-  (Proofs.StableHLO.cifar8AdamTrainStepFaithfulB 128 3 16 16 32 32 2 2 512 10 3 3
+  (Proofs.StableHLO.cifar8AdamTrainStepBText 128 3 16 16 32 32 2 2 512 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -310,7 +310,7 @@ private def c8wbPacked (opt : Proofs.StableHLO.CifarOpt) (bf16 : Bool) (entry : 
   IO.FS.writeFile "verified_mlir/cifar8wb_fwd.mlir" (fwd.replace "@cifar8w_fwd" "@cifar8wb_fwd")
 
 private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String) : String :=
-  (Proofs.StableHLO.cifar8BnTrainStepFaithfulV 128 3 16 16 32 32 2 2 512 10 3 3
+  (Proofs.StableHLO.cifar8BnTrainStepText 128 3 16 16 32 32 2 2 512 10 3 3
     "1.0e-05" "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -344,12 +344,12 @@ private def c8wBnPacked (opt : Proofs.StableHLO.CifarOpt) (from_ entry : String)
 -- BatchNorm stays f32 and PER-EXAMPLE in both arms, which is the point rather than an omission:
 -- it keeps the net identical to `cifar8w_bn_*`, it lets `cifar8w_bn_fwd.mlir` be reused verbatim
 -- (per-example BN needs no running statistics), and it is what every bf16 net in this repo does.
--- See the `cifar8BnTrainStepFaithfulB` docstring.
+-- See the `cifar8BnTrainStepBText` docstring.
 -- The entry symbol MUST match the file stem: `regen_verified_mlir.sh check` fails any artifact
 -- whose declared `@name` differs from its path, because the driver resolves the entry as
 -- `m.{slug}_{variant}_train_step` and so could never load it.
 private def c8wbBnPacked (opt : Proofs.StableHLO.CifarOpt) (bf16 : Bool) (entry : String) : String :=
-  (Proofs.StableHLO.cifar8BnTrainStepFaithfulB 128 3 16 16 32 32 2 2 512 10 3 3
+  (Proofs.StableHLO.cifar8BnTrainStepBText 128 3 16 16 32 32 2 2 512 10 3 3
     "1.0e-05" "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)

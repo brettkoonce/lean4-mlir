@@ -9,6 +9,6 @@ faithful renderer when this module is elaborated. Nothing imports this file: the
 -- Regenerate `verified_mlir/mlp_train_step.mlir` (what MainMnistMlpVerified trains on)
 -- from the faithful renderer; the den-certified proofs live in MlpFold.lean.
 #eval IO.FS.writeFile "verified_mlir/mlp_train_step.mlir"
-  (Proofs.StableHLO.mlpTrainStepFaithfulV 128 784 512 512 10 "0.00078125"
+  (Proofs.StableHLO.mlpTrainStepText 128 784 512 512 10 "0.00078125"
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
 

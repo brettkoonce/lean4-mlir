@@ -4,7 +4,7 @@ import LeanMlir.Verified.Train
 /-! # `cifar8wb-bn-ablation` — wide head, BATCHED render, BatchNorm, f32 and bf16
 
 Chapter 4's **Lever 3 on the normalized net**. The 27 bf16 ops are batched-only, and
-`cifar8BnTrainStepFaithfulB` renders the BN net in the batched family, so bf16 reaches all 23
+`cifar8BnTrainStepBText` renders the BN net in the batched family, so bf16 reaches all 23
 convolutions — forward, input-VJP and weight gradients.
 
 **Six arms, three optimizers × two precisions**, from ONE renderer: precision is the only thing

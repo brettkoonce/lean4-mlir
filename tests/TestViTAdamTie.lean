@@ -4,7 +4,7 @@ import LeanMlir.Verified.Train
 /-! # `@vit_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
 `Proofs/Codegen/ViTRender.lean`'s
-`vitAdamTrainStepFaithful` renders the same train step the hand-written
+`vitAdamTrainStepText` renders the same train step the hand-written
 `ViTRender.vitTrainStepModuleAdamSched` (tests/ViTRender.lean) does; this harness ties the two.
 
 The interface is positionally identical (605 in / 603 out, arg and return types equal in order —

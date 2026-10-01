@@ -23,7 +23,7 @@ The raised arena is for f32 only: in bf16 it crowds out the host-transfer stagin
 
 **ResNet-50 is gated at 4×32 against 1×128**, not at its committed 4×64: XLA's peak for the 1×256
 reference (bf16 or f32) nearly fills even the raised arena. Its DP step is
-rendered at run time (`dpPath := ""`) by the same `resnet50TrainStepFaithfulB` that writes the
+rendered at run time (`dpPath := ""`) by the same `resnet50TrainStepText` that writes the
 committed `momdp64` / `lambdp64bce` bytes, and `regen_verified_mlir.sh check` pins those to it.
 `resnet50bce` is the LAMB + BCE-with-logits loss at 160² that the A3 renders take; the
 accumulating (`acc`) renders add an accumulator after the collective, which the runner cannot feed
@@ -108,7 +108,7 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
     { slug := s!"resnet34in{p}", net := resnet34ImagenetVerified.toNet, bs := 64, replicas := 4
       sgPath := ""
       dpPath := s!"verified_mlir/resnet34in_momdp64{p}_train_step.mlir"
-      render := fun B fs => resnet34AdamTrainStepFaithfulB B 1000 "1.0e-05" 1 .heavyBall
+      render := fun B fs => resnet34AdamTrainStepText B 1000 "1.0e-05" 1 .heavyBall
         "resnet34in" false bf16 (forceSync := fs)
       entry := fun B r =>
         s!"m.resnet34in_{r34AdamVariant B r .heavyBall false false false "" bf16}_train_step"
@@ -119,7 +119,7 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
     { slug := s!"mobilenetv2in{p}", net := mobilenetv2ImagenetVerified.toNet, bs := 64
       replicas := 4, sgPath := ""
       dpPath := s!"verified_mlir/mobilenetv2in_rmsdp64{p}_train_step.mlir"
-      render := fun B fs => mobilenetv2AdamTrainStepFaithfulB B 1000 "1.0e-5" 1 false
+      render := fun B fs => mobilenetv2AdamTrainStepText B 1000 "1.0e-5" 1 false
         "mobilenetv2in" .rmsprop bf16 (forceSync := fs)
       entry := fun B r => s!"m.mobilenetv2in_{mnv2AdamVariant B r .rmsprop bf16}_train_step"
       gradLabel := "m' = g/√(s'+ε)", shardShift := 0.5
@@ -131,7 +131,7 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
       replicas := 4, sgPath := ""
       dpPath := s!"verified_mlir/efficientnetin_rmsdp64{p}_train_step.mlir"
       -- B0's loss divisor is a string: each run-time render passes its own batch
-      render := fun B fs => efficientnetAdamTrainStepFaithful B 1000 "1.0e-5" "0.100000" ""
+      render := fun B fs => efficientnetAdamTrainStepText B 1000 "1.0e-5" "0.100000" ""
         s!"{B}.0" 1 false "efficientnetin" .rmsprop (bf16 := bf16) (forceSync := fs)
       entry := fun B r =>
         s!"m.efficientnetin_{enetAdamVariant B r .rmsprop false false false bf16}_train_step"
@@ -141,9 +141,9 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
   | "resnet50" => some
     { slug := s!"resnet50in{p}", net := resnet50ImagenetVerified.toNet, bs := 32, replicas := 4
       sgPath := "", dpPath := ""
-      render := fun B fs => resnet50TrainStepFaithfulB B 1000 "1.0e-05" 1 .heavyBall
+      render := fun B fs => resnet50TrainStepText B 1000 "1.0e-05" 1 .heavyBall
         "resnet50in" (bf16 := bf16) (forceSync := fs)
-      renderDp := fun B R => resnet50TrainStepFaithfulB B 1000 "1.0e-05" R .heavyBall
+      renderDp := fun B R => resnet50TrainStepText B 1000 "1.0e-05" R .heavyBall
         "resnet50in" (bf16 := bf16)
       entry := fun B r =>
         s!"m.resnet50in_{r34AdamVariant B r .heavyBall false false false "" bf16}_train_step"
@@ -156,9 +156,9 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
   | "resnet50bce" => some
     { slug := s!"resnet50in160bce{p}", net := resnet50Imagenet160Verified.toNet, bs := 32
       replicas := 4, sgPath := "", dpPath := ""
-      render := fun B fs => resnet50TrainStepFaithfulB B 1000 "1.0e-05" 1 .lamb
+      render := fun B fs => resnet50TrainStepText B 1000 "1.0e-05" 1 .lamb
         "resnet50in160" (bce := true) (q := 5) (bf16 := bf16) (forceSync := fs)
-      renderDp := fun B R => resnet50TrainStepFaithfulB B 1000 "1.0e-05" R .lamb
+      renderDp := fun B R => resnet50TrainStepText B 1000 "1.0e-05" R .lamb
         "resnet50in160" (bce := true) (q := 5) (bf16 := bf16)
       entry := fun B r =>
         s!"m.resnet50in160_{r34AdamVariant B r .lamb false false true "" bf16}_train_step"
@@ -169,7 +169,7 @@ def imagenetCfg (net : String) (bf16 : Bool) : Option SyncBnCheck.Cfg :=
     { slug := s!"mnv4in{p}", net := mnv4ImagenetVerified.toNet, bs := 64, replicas := 4
       sgPath := ""
       dpPath := s!"verified_mlir/mnv4in_adamdp64{p}_train_step.mlir"
-      render := fun B fs => mobilenetv4AdamTrainStepFaithfulB B 1000 "1.0e-5" 1 "mnv4in" bf16
+      render := fun B fs => mobilenetv4AdamTrainStepText B 1000 "1.0e-5" 1 "mnv4in" bf16
         (forceSync := fs)
       entry := fun B r => s!"m.mnv4in_{mnv4AdamVariant B r bf16}_train_step"
       shardShift := 0.5

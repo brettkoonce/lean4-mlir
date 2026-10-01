@@ -27,7 +27,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
@@ -49,6 +49,7 @@ import LeanMlir.Proofs.Training.SgdDescent.Basic
 import LeanMlir.Proofs.Training.SgdDescent.Linear
 import LeanMlir.Proofs.Training.SgdDescent.Mlp
 import LeanMlir.Proofs.Training.SgdDescent.Cnn
+import LeanMlir.Proofs.Training.SgdDescent.CnnFloat
 -- Robustness certificate: the Lipschitz-margin certified radius (cert ≤ TRUE ≤ PGD).
 import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
 -- The real Gaussian probit: Φ/Φ⁻¹ facts + the smoothing radius at the true quantile.
@@ -79,7 +80,7 @@ The linear classifier shows the two kinds of result on the smallest net:
 1. **Faithfulness** — the *emitted* StableHLO train step denotes the *certified* forward,
    gradient and SGD math. [`LinearTrainStep`](LeanMlir/Proofs/Nets/Small/LinearTrainStep.html)
    is the spec and its ops; the capstone
-   [`poc_train_step_tail_certified`](find/#doc/Proofs.LinPoC.poc_train_step_tail_certified) in
+   [`poc_train_step_tail_certified`](find/#doc/Proofs.LinFold.poc_train_step_tail_certified) in
    [`LinearFold`](LeanMlir/Proofs/Nets/Small/LinearFold.html) is emitted step = certified math.
 2. **Descent** — one inexact SGD step on the weight matrix decreases one example's cross-entropy
    by at least `lr·‖∇L‖²/2`, given a step-size hypothesis and two dominance hypotheses:
@@ -106,7 +107,8 @@ it is the Jacobian-transpose of the forward, and every layer has one: convolutio
 `LeanMlir.Proofs.Architectures.CNN`; BatchNorm's three-term backward in
 `LeanMlir.Proofs.Architectures.BatchNorm`; `LeanMlir.Proofs.Architectures.Depthwise`,
 `LeanMlir.Proofs.Architectures.Residual`, `LeanMlir.Proofs.Architectures.SE`,
-`LeanMlir.Proofs.Architectures.LayerNorm` (with GELU); softmax, scaled-dot-product and multi-head
+`LeanMlir.Proofs.Architectures.LayerNorm`, the smooth activations (GELU, Swish, sigmoid) in
+`LeanMlir.Proofs.Architectures.Activations`; softmax, scaled-dot-product and multi-head
 attention up to the ViT body in `LeanMlir.Proofs.Architectures.Attention`. The emitted graph is the
 `SHlo` AST of [`StableHLO`](LeanMlir/Proofs/Codegen/StableHLO/Basic.html), and its `den` is the ℝ
 denotation every tie below is stated about. Zero project axioms: every theorem closes under
@@ -153,9 +155,9 @@ capstones do not name.
 * MobileNetV4-Conv-M — [`mnv4_net_tiedB`](find/#doc/Proofs.Mnv4TieB.mnv4_net_tiedB);
   [`MobileNetV4FullBSeal`](LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullBSeal.html)
 * EfficientNet-B0 (chapter 7) —
-  [`efficientnet_net_tiedG`](find/#doc/Proofs.EnetTiePoCG.efficientnet_net_tiedG)
-* ConvNeXt-T (chapter 8) — [`cnx_net_tiedGB`](find/#doc/Proofs.CnxTiePoCGB.cnx_net_tiedGB)
-* ViT-Tiny (chapter 9) — [`vit_net_tiedGB`](find/#doc/Proofs.ViTTiePoCGB.vit_net_tiedGB)
+  [`efficientnet_net_tiedG`](find/#doc/Proofs.EnetTieG.efficientnet_net_tiedG)
+* ConvNeXt-T (chapter 8) — [`cnx_net_tiedGB`](find/#doc/Proofs.CnxTieGB.cnx_net_tiedGB)
+* ViT-Tiny (chapter 9) — [`vit_net_tiedGB`](find/#doc/Proofs.ViTTieGB.vit_net_tiedGB)
 
 The per-net trees under `LeanMlir.Proofs.Nets` repeat the linear pattern. ResNet-34, ResNet-50,
 MobileNetV2 and MobileNetV4 share one file chain — `*BackB0` (block backward graphs) → `*FullB`

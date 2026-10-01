@@ -1,11 +1,11 @@
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 import LeanMlir.Proofs.Codegen.ChapterGraphs
 
-/-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
+/-! # The MNIST-linear train step, proof-tied to the certified SGD step
 
 `MainMnistLinearVerified`
 trains on `verified_mlir/linear_train_step.mlir`, which is written by
-`Proofs.StableHLO.linTrainStepFaithfulV` (the `#eval` writer at the end of
+`Proofs.StableHLO.linTrainStepText` (the `#eval` writer at the end of
 `StableHLO.Basic`). This file certifies *that* renderer for a single example `x`: the emitted
 weight output denotes `W − lr·∂(crossEntropy ∘ dense)/∂W` (Mathlib-`fderiv`-derived) and the bias
 output denotes `b − lr·(certified ∂dense/∂b · (softmax − onehot))`. The committed module
@@ -28,7 +28,7 @@ and false-fail the check. Keep future per-chapter capstone names short.)
   `lossCotGraph`). `_fwd` and `_train_step` share the same forward graph.
 
 The committed-bytes tie (`verified_mlir/linear_train_step.mlir ==
-linTrainStepFaithfulV(…)`) is enforced in CI (regenerate + `git diff`, the
+linTrainStepText(…)`) is enforced in CI (regenerate + `git diff`, the
 "Verified-render drift guard" step in `proofs.yml`), not here.
 
 ## Scope (the boundary shared with the forward `SHlo` `den`)
@@ -45,7 +45,7 @@ linTrainStepFaithfulV(…)`) is enforced in CI (regenerate + `git diff`, the
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.LinPoC
+namespace Proofs.LinFold
 
 variable {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
 
@@ -62,7 +62,7 @@ theorem poc_fwd_is_render (B : Nat) :
 
 /-! ## The tail fold (closed) — the emitted tail ops are `pretty(provenNode)`
 
-`StableHLO.linTrainStepFaithfulV` (what generates `verified_mlir/linear_train_step.mlir`)
+`StableHLO.linTrainStepText` (what generates `verified_mlir/linear_train_step.mlir`)
 renders the *whole* module as `pretty` of `SHlo` nodes, **fully tied**: each of
 `SHlo.weightSgd` / `SHlo.biasSgd` consumes the proven `lossCotGraph` node DIRECTLY
 (not a `.operand %dy <placeholder>` name-pin), so the forward = the proven `fwdGraph`
@@ -70,7 +70,7 @@ renders the *whole* module as `pretty` of `SHlo` nodes, **fully tied**: each of
 below — no trusted SSA-name linkage between the cotangent and the SGD ops. The shared
 cotangent is rendered once per output (2×); iree CSEs the duplicate. (`lr`/`W,b,x`
 *values* are `skel`-erased, so the render is value-independent — the placeholders
-`linTrainStepFaithfulV` passes print the same text as the live graph here.) -/
+`linTrainStepText` passes print the same text as the live graph here.) -/
 
 /-- The emitted `weightSgd` op — consuming the proven `lossCotGraph` node DIRECTLY (the
     fully-tied render) — denotes `linWeightDen` (the certified `sgdW` step). -/
@@ -85,7 +85,7 @@ theorem poc_biasSgd_den_eq (lrStr : String) (lr : ℝ) (label : Fin n) :
       = linBiasDen W b x lr label := rfl
 
 /-- **Tail fold.** For one example `x`, the two emitted tail ops `weightSgd`/`biasSgd` — the
-    actual `SHlo` nodes `linTrainStepFaithfulV` prints — denote, respectively,
+    actual `SHlo` nodes `linTrainStepText` prints — denote, respectively,
     `W − lr·∂(crossEntropy ∘ dense)/∂W` and `b − lr·(certified ∂dense/∂b · (softmax − onehot))`. -/
 theorem poc_train_step_tail_certified (lrStr : String) (lr : ℝ) (label : Fin n) :
     (∀ (i : Fin m) (j : Fin n),
@@ -109,4 +109,4 @@ theorem poc_train_step_tail_certified (lrStr : String) (lr : ℝ) (label : Fin n
     rw [poc_biasSgd_den_eq W b x lrStr lr label]
     exact linBiasDen_is_certified W b x lr label j
 
-end Proofs.LinPoC
+end Proofs.LinFold

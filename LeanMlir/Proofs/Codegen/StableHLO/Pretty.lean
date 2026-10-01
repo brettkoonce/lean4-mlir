@@ -14,8 +14,8 @@ graph's shape and names only.
 | `Tok`, `toToks` | the post-order token stream |
 | `emitContract`, `emitTok`, `serializeToks` | StableHLO text per token (f32 / bf16 / fp8) |
 | `pretty`, `prettyAdamW`, `prettyAllReduceMean`, `renderModule` | whole graphs and modules |
-| `fmt6` / `fmt12`, `OptKind`, `RmsHyper`, bias-slot helpers | the literal and constant blocks the renderers share |
-| `*ModuleV`, `linTrainStepFaithfulV` | the chapter 1–3 renderers |
+| `fmt6` / `fmt12`, `RmsHyper`, bias-slot helpers | the literal and constant blocks the renderers share |
+| `*ModuleV`, `linTrainStepText` | the chapter 1–3 renderers |
 
 A module that states `den` facts imports `StableHLO` alone; one that renders text imports this.
 Trusted: the text `emitTok` prints for each token (operand order and arity, types, the lexical
@@ -4617,24 +4617,6 @@ def oneMinusAlpha (alpha : Float := 0.1) : String := fmt6 (1.0 - alpha)
     gets left behind when the original moves. -/
 def oneMinusRho (rho : Float) : String := fmt6 (1.0 - rho)
 
-/-- Which optimizer tail a whole-net render emits. `.adamw` is every net's committed default and
-    reproduces the existing artifacts byte-identically; `.rmsprop` is what the MobileNetV2 and
-    EfficientNet ImageNet references actually use.
-
-    Lives here rather than in either renderer because **both** need it: a per-net copy of a
-    two-constructor choice is the double-writer disease one level down, in code — the same argument
-    `vitBackAll`/`enetBackAll` exist for. Each renderer threads it through ONE
-    traversal. -/
-inductive OptKind where
-  | adamw
-  | rmsprop
-deriving DecidableEq, Repr
-
-/-- The optimizer's name in an artifact's banner. -/
-def OptKind.label : OptKind → String
-  | .adamw   => "AdamW"
-  | .rmsprop => "RMSProp"
-
 /-- The RMSProp hyperparameters, as the JAX reference configs state them. `ρ`/`μ` are 0.9 on both
     nets that use this optimizer; **ε and wd are what differ**, and ε differs in the way that
     matters most (see `Proofs.rmsBufNext_eps_placement_at_zero`). -/
@@ -4770,7 +4752,7 @@ def renderModule (name argSig : String) (B retLen : Nat) (g : SHlo retLen) : Str
     SGD step. The `lr` ℝ / operand values are `skel`-erased (render is
     value-independent), so placeholders here render identically to the live graph
     the `den` theorems use. -/
-def linTrainStepFaithfulV (B m n : Nat) (lrStr : String)
+def linTrainStepText (B m n : Nat) (lrStr : String)
     (W : Mat m n) (b : Vec n) (x : Vec m) : String :=
   -- FULLY TIED: each SGD op consumes the proven `lossCotGraph` node DIRECTLY (not a
   -- name-pinned `.operand %dy <placeholder>`), so `den(output) = certified` is one composed

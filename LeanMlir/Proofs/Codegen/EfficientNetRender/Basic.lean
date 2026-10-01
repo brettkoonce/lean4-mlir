@@ -849,7 +849,7 @@ private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (con
     params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
     where the loss begins. -/
-def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+def efficientnetFwdText (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
@@ -868,7 +868,7 @@ def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bo
     This is the eval partner of `efficientnet_adam_train_step`, whose returned batch μ/var the
     driver EMAs into exactly these slots — and both sides of that contract come off one
     `bns` list rather than two independently-written ones. -/
-def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+def efficientnetFwdEvalText (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
@@ -1038,7 +1038,7 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     slip; the AdamW render below spells the mean explicitly instead. -/
 -- Evidence for the tuned lr: runs/efficientnet_verified_crop_gpu1.log, the per-epoch val accuracy
 -- of an 80-epoch Imagenette run at this lr.
-def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
+def efficientnetTrainStepText (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "efficientnet_train_step") (convBias : Bool := false) : String :=
   let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, outNames, _, _, _) ← enetBackAll B nClasses epsStr lrStr false none convBias
@@ -1072,7 +1072,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.
     Same convention as `r34AdamVariant`. -/
-def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := false)
+def enetAdamVariant (B replicas : Nat) (opt : OptRecipe := .adamw) (ema : Bool := false)
     (sd : Bool := false) (cd : Bool := false)
     -- `bf16` LAST — the newest axis, so appending leaves every committed spelling untouched.
     -- It MUST reach this function, not merely the block renderers: the entry NAME derives from
@@ -1102,9 +1102,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- Optimizer and EMA are independent axes here (unlike ConvNeXt, which has only AdamW), so the
   -- name carries both: `emarms` is RMSProp + EMA, which IS the EfficientNet reference's recipe.
   (if ema then "ema" else "") ++
-  (match opt with
-   | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
-   | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
+  opt.slug replicas ++
   (if B == 32 then "" else toString B) ++
   (if sd then "drop" else "") ++
   -- AND THE CLASSIFIER-DROPOUT MARKER IS `"do"`, WHICH IS A CHOICE, NOT A DEFAULT.
@@ -1147,10 +1145,11 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
 
     Unlike ViT's, this tie can pin the **forward bit-exactly**: EfficientNet has BatchNorm, so the
     returned batch statistics are a whole-net forward fingerprint no gradient touches. -/
-def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
+def efficientnetAdamTrainStepText (B nClasses : Nat) (epsStr : String)
     (alphaStr negAlphaKStr bStr : String) (replicas : Nat := 1)
     (convBias : Bool := false) (slug : String := "efficientnet")
-    (opt : OptKind := .adamw) (ema : Bool := false) (sd : Bool := false)
+    -- any recipe but the accumulating two, whose `G` region this signature does not build
+    (opt : OptRecipe := .adamw) (ema : Bool := false) (sd : Bool := false)
     (cd : Bool := false)
     -- **bf16**, TRAILING and defaulted so every existing render is byte-identical. EfficientNet
     -- needs **ZERO new ops** — every conv and depthwise kind it uses on the AdamW/RMSProp path has
@@ -1209,29 +1208,13 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
       let wdN := wdNameBy wdExclude nm ds
-      let (c, nT, nM, nV) ← match opt with
-        | .adamw   => adamOne B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
-        | .rmsprop => rmsOne  B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
+      -- The EMA shadow `%{nm}e` is `optOne`'s, after either tail: it reads `nT`, the UPDATED
+      -- parameter. `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update` at
+      -- `(β₁ := d, m := ema, g := θ')`, so it is **no new op**.
+      let (c, nT, nM, nV, _, nE) ← optOne opt B replicas ⟨nm, gradNames[i]!, ds⟩ wdN (ema := ema)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
-      -- THE EMA SHADOW, emitted HERE rather than inside the two `*One` helpers, because it reads
-      -- `nT` — the UPDATED parameter — and both tails produce one. A copy in each helper would be
-      -- the double-writer disease one level down, in code, and it would have to be kept in step
-      -- across an optimizer axis that already exists.
-      --
-      -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update` at
-      -- `(β₁ := d, m := ema, g := θ')`, so this is **no new op** — `adamMNextF_faithful` closes the
-      -- denotation side by `rfl`. `%emad`/`%oemad` are ARGS, not constants: the reference's decay is
-      -- time-varying, `d = min(decay, (1+t)/(10+t))`.
-      --
-      -- At `ema := false` no `pretty` call happens, so the fresh-name counter does not move and
-      -- every committed artifact re-renders byte-identically — the inertness gate, for free.
-      if ema then
-        let n := ds.foldl (· * ·) 1
-        let z : Vec n := fun _ => 0
-        let (cE, nE) ← pretty B (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
-        adamCode := adamCode ++ cE
-        eN := eN ++ [nE]
+      match nE with | some e => eN := eN ++ [e] | none => pure ()
     -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`).
     let lossCode := reportSmoothedCeLoss B nClasses nSm
     let pTy := sigList.map (fun p => ty p.2)
@@ -1261,7 +1244,6 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
          else "") ++
         (if bf16 then syncBnBf16TwinsNote else "")) ++
       (match opt with
-       | .adamw => ""
        | .rmsprop =>
          "    // ── OPTIMIZER: RMSProp + momentum, TENSORFLOW flavour (EfficientNet's own:\n" ++
          "    //    jax/MainEfficientNetImagenet.lean). Per parameter, in this order:\n" ++
@@ -1275,9 +1257,10 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
          "    //    paper LR\" and why it carries no gradient clipping.\n" ++
          "    //    Packed [θ|m|v] reused with m = momentum buffer, v = mean-square; %bc1/%bc2 are\n" ++
          "    //    Adam bias corrections, unread here and passed through unchanged.\n" ++
-         "    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
+         "    //    The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n"
+       | _ => "") ++
       zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++
-      (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
+      optConstsB opt (rms := some enetRmsHyper) ++
       wdzConst wdExclude ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))
@@ -1316,7 +1299,7 @@ end Proofs.StableHLO
 -- Regenerate `verified_mlir/efficientnet_train_step.mlir` (what MainEfficientNetVerified trains on)
 -- from the faithful renderer: the FULL 16-MBConv B0 net (262 params). B=32, nClasses=10, ε=1e-5.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_train_step.mlir"
-  (Proofs.StableHLO.efficientnetTrainStepFaithfulV 32 10 "1.0e-5" "0.05" "efficientnet_train_step")
+  (Proofs.StableHLO.efficientnetTrainStepText 32 10 "1.0e-5" "0.05" "efficientnet_train_step")
 
 -- Regenerate `verified_mlir/efficientnet_fwd.mlir` (the SGD driver's eval forward) and
 -- `verified_mlir/efficientnet_fwd_eval.mlir` (what the AdamW driver evals with, once the running
@@ -1327,10 +1310,10 @@ end Proofs.StableHLO
 -- per-example BN and scored with batch statistics. Both EfficientNet sides are batch-BN, and the
 -- prefix audit is what keeps it that way.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5")
+  (Proofs.StableHLO.efficientnetFwdText 32 10 "1.0e-5")
 
 #eval IO.FS.writeFile "verified_mlir/efficientnet_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5")
+  (Proofs.StableHLO.efficientnetFwdEvalText 32 10 "1.0e-5")
 
 -- The **AdamW** train step — **the artifact `efficientnet-verified-adam` trains on**, and this
 -- `#eval` is its ONLY writer; `tests/TestEfficientNetTrain.lean` only iree-compiles the committed
@@ -1344,7 +1327,7 @@ end Proofs.StableHLO
 -- Literals: α = 0.1, −α/K = −0.01 (K = 10), batch 32 — `efficientNetB0Config`'s label smoothing
 -- and explicit mean.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adam_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0")
 
 -- The **Imagenette bf16 twin** of the row above — same 32/10/α/−α÷K literals, only the cast
@@ -1352,7 +1335,7 @@ end Proofs.StableHLO
 -- Imagenette has a known 80-epoch result (`historical/RESULTS.md`), with a per-epoch trajectory to
 -- compare against, where an ImageNet run costs days.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adambf16_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (bf16 := true))
 #guard Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false false true == "adambf16"
 
@@ -1369,7 +1352,7 @@ end Proofs.StableHLO
 -- `PJRT_REPLICAS` at run time, because the graph bakes `replica_groups`. Re-render here to change
 -- it.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdp_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 2)
 
 -- The **bs128** pair, single-device and 2-replica. `B` is a true parameter of
@@ -1382,11 +1365,11 @@ end Proofs.StableHLO
 -- `LEAN_MLIR_BATCH=128`. **The eval forwards are still bs32**, so train with `LEAN_MLIR_SKIP_EVAL=1`
 -- or re-render them — the same caveat as R34's bs256.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adam128_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 128 10 "1.0e-5"
     "0.100000" "-0.010000" "128.0")
 
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdp128_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 128 10 "1.0e-5"
     "0.100000" "-0.010000" "128.0" 2)
 
 -- ── EfficientNet-B0 on FULL 1000-class ImageNet, slug `efficientnetin` ────────────────────
@@ -1407,14 +1390,14 @@ end Proofs.StableHLO
 -- `adamdp64` would name both a 2-replica and a 4-replica render at B=64. Only the 4-replica one is
 -- emitted here, so nothing collides; anyone adding the 2-replica peer must rename first.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin")
+  (Proofs.StableHLO.efficientnetFwdText 64 1000 "1.0e-5" false "efficientnetin")
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-5" false "efficientnetin")
+  (Proofs.StableHLO.efficientnetFwdEvalText 64 1000 "1.0e-5" false "efficientnetin")
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_adam64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin")
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin")
 
 -- ── RMSProp: the optimizer the EfficientNet reference ACTUALLY USES ─────────────────────────
@@ -1431,7 +1414,7 @@ end Proofs.StableHLO
 -- thing, the optimizer: same B, K, ε, α, −α/K and ÷B literals. That is what makes a tie against it
 -- attributable (a candidate that differs in two ways cannot license either).
 #eval IO.FS.writeFile "verified_mlir/efficientnet_rms_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop)
 
 -- ── RMSProp **+ EMA** — this net's ACTUAL reference recipe ────────────────
@@ -1449,7 +1432,7 @@ end Proofs.StableHLO
 -- there — so it is NOT in this render. Nothing here emits a BN shadow; the graph's stat slots are
 -- unchanged.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_emarms_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" 1 false "efficientnet" .rmsprop (ema := true))
 
 -- The ImageNet peers: batch 64 × 4 replicas = global 256 = `efficientNetB0ImagenetConfig.batchSize`,
@@ -1459,7 +1442,7 @@ end Proofs.StableHLO
 -- INITIALISED TO 1.0 (TF's convention — a zero init is not a crash, it is a different and much
 -- larger first step), and the LR schedule must be exponential 0.97/epoch rather than cosine.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rms64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop)
 
 -- **The bf16 peer** — `rms64bf16`. RMSProp is EfficientNet's own optimizer, and this is the
@@ -1477,7 +1460,7 @@ end Proofs.StableHLO
 -- ops and are simply never rewritten. The classifier dense, every BN, the loss and the optimizer
 -- stay f32 too — the same carve-out every other bf16 render in this repo makes.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rms64bf16_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (bf16 := true))
 
 -- The bf16 marker. This net has the repo's most crowded marker space — `ema`/`drop`/`do`/`dp`
@@ -1490,7 +1473,7 @@ end Proofs.StableHLO
 #guard !"rms64bf16".contains "sd"
 #guard !"rms64bf16".startsWith "ema"
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop)
 
 -- **The 4-replica bf16 peer** — the DP arm of `rms64bf16`, so B0 can be probed at the same 4×bs64
@@ -1499,7 +1482,7 @@ end Proofs.StableHLO
 -- number is the single-device one (planning/archive/bf16_renderer.md), and that is the one that
 -- says what the emit is worth.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64bf16_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (bf16 := true))
 
 -- Pin the two literal artifact paths above against the name the renderer actually emits. If a
@@ -1552,7 +1535,7 @@ end Proofs.StableHLO
 -- mask would then compute `x/keep_i` rather than `x`, and the reference is explicit that eval
 -- returns the branch untouched.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdrop_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (sd := true))
 
 -- **THE DATA-PARALLEL PEER — and it exists to be GATED.**
@@ -1570,7 +1553,7 @@ end Proofs.StableHLO
 -- under a permutation, and associativity does not hold — so the known answer is exact at 2 and
 -- only approximate above it.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdpdrop_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (replicas := 2) (sd := true))
 
 -- The forward peers. These exist so the SD variant has its OWN `forward ⊂ train-step` pair, because
@@ -1581,10 +1564,10 @@ end Proofs.StableHLO
 -- driver supplies an all-ones scale, so these compute the identity EXACTLY
 -- (`Proofs.dropPath_ones_id`, and `1 * x = x` is exact in IEEE).
 #eval IO.FS.writeFile "verified_mlir/efficientnet_drop_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
+  (Proofs.StableHLO.efficientnetFwdText 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
 
 #eval IO.FS.writeFile "verified_mlir/efficientnet_drop_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
+  (Proofs.StableHLO.efficientnetFwdEvalText 32 10 "1.0e-5" false "efficientnet_drop" (sd := true))
 
 -- ── THE IMAGENET PEERS of the EMA and stochastic-depth renders ────────────────────────
 -- A feature is not "done" when its Imagenette artifact renders. Both scales are one `#eval` apart
@@ -1595,10 +1578,10 @@ end Proofs.StableHLO
 -- EMA. The config also sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean`); the render
 -- that carries it too is `efficientnetin_emarms64dropdo` below.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true))
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true))
 
 -- Stochastic depth at ImageNet scale. Same 9 sites and the same block-index ramp — `enetDropIdxs`
@@ -1612,10 +1595,10 @@ end Proofs.StableHLO
 -- audit reads the file, and nothing loads it through the driver — so
 -- `scripts/regen_verified_mlir.sh check` audits basename == entry across all artifacts.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64drop_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_drop_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin_drop" (sd := true))
+  (Proofs.StableHLO.efficientnetFwdText 64 1000 "1.0e-5" false "efficientnetin_drop" (sd := true))
 
 -- ── CLASSIFIER DROPOUT ──────────────────────────────────
 -- `efficientNetB0ImagenetConfig` sets `dropout := 0.2`; these renders carry it.
@@ -1635,16 +1618,16 @@ end Proofs.StableHLO
 -- tie. That tie is this feature's floor measurement — at an all-ones mask the two renders must
 -- agree BIT-EXACTLY, because `1 * x = x` is exact in IEEE (`Proofs.dropout_ones_id`).
 #eval IO.FS.writeFile "verified_mlir/efficientnet_adamdo_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 32 10 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 32 10 "1.0e-5"
     "0.100000" "-0.010000" "32.0" (cd := true))
 
 -- The forward peers, for the same reason the SD ones exist: the dropout variant needs its OWN
 -- `forward ⊂ train-step` pair, or the prefix audit quietly stops covering it. The site is emitted
 -- here too and the driver supplies an all-ones mask at eval, so it is the exact identity.
 #eval IO.FS.writeFile "verified_mlir/efficientnet_do_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
+  (Proofs.StableHLO.efficientnetFwdText 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
 #eval IO.FS.writeFile "verified_mlir/efficientnet_do_fwd_eval.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
+  (Proofs.StableHLO.efficientnetFwdEvalText 32 10 "1.0e-5" false "efficientnet_do" (cd := true))
 
 -- **THE FULL REFERENCE RECIPE AT IMAGENET SCALE — `efficientNetB0ImagenetConfig` entire on the
 -- regulariser axis**: RMSProp (TF flavour, ε inside the sqrt, ms-init 1.0) + EMA 0.9999 +
@@ -1666,7 +1649,7 @@ end Proofs.StableHLO
 -- artifact in the repo where getting the mask rank wrong would be a type error rather than a silent
 -- regulariser swap — which is a property of this pairing, not something to rely on elsewhere.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarms64dropdo_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 1 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 -- **THE SHIPPING DATA-PARALLEL RENDER — and it exists because an ImageNet run loads the DP
 -- artifact, not the single-device one.** `efficientnetin_emarmsdp64` (214 all_reduce) carries
@@ -1680,7 +1663,7 @@ end Proofs.StableHLO
 -- 4 replicas × batch 64 = global 256 = `efficientNetB0ImagenetConfig.batchSize`, matching
 -- `efficientnetin_emarmsdp64`'s geometry exactly so the two are comparable.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdo_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 
 -- The **bf16 twin of the production job's artifact** (`scripts/jobs/enet-default-4gpu.conf`). Same
@@ -1690,7 +1673,7 @@ end Proofs.StableHLO
 -- traffic is f32 and sits BEFORE the cast; with the pointwise ops emitted 4-D (`liftPointwise`) the cast
 -- pays.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdobf16_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-5"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true)
     (bf16 := true))
 #guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true true == "emarmsdp64dropdobf16"
@@ -1700,11 +1683,11 @@ end Proofs.StableHLO
 -- (`enetImagenetRmsSchedule`, `efficientnetImagenetVerified.dropKeeps`). ε is baked, so the eval
 -- partner is its own artifact, `efficientnetin_fwd_eval_eps0001.mlir`.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdowxeps0001bf16_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-3"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 64 1000 "1.0e-3"
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true)
     (bf16 := true) (wdExclude := true))
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd_eval_eps0001.mlir"
-  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-3" false "efficientnetin")
+  (Proofs.StableHLO.efficientnetFwdEvalText 64 1000 "1.0e-3" false "efficientnetin")
 #guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true true (wx := true)
     (epsMarker := Proofs.StableHLO.bnEpsMarker "1.0e-3") == "emarmsdp64dropdowxeps0001bf16"
 
@@ -1715,11 +1698,11 @@ end Proofs.StableHLO
 -- peer, and the way to not repeat it is to copy the flag list, not to trust that a default matches.
 -- The batch is in the slug, so `emarmsdp128dropdo` cannot overwrite `emarmsdp64dropdo`.
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp128dropdo_train_step.mlir"
-  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 128 1000 "1.0e-5"
+  (Proofs.StableHLO.efficientnetAdamTrainStepText 128 1000 "1.0e-5"
     "0.100000" "" "128.0" 2 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true))
 
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_dropdo_fwd.mlir"
-  (Proofs.StableHLO.efficientnetFwdFaithfulV 64 1000 "1.0e-5" false "efficientnetin_dropdo"
+  (Proofs.StableHLO.efficientnetFwdText 64 1000 "1.0e-5" false "efficientnetin_dropdo"
     (sd := true) (cd := true))
 
 -- Pin the variant spellings the four paths above depend on, so a rename fails at `lake build`

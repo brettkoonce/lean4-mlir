@@ -4,8 +4,8 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 The bottleneck peer of `ResNet34RenderB`, block for block: batch BN (`bnBatchF`, reduced over `[0,2,3]`), the whole
 graph at `N := B`, the un-fused `*GradB` parameter gradients, and the proven AdamW /
-heavy-ball tail — `optOne`/`optConstsB` are **imported, not copied**, so the optimizer has one
-definition across both nets.
+heavy-ball tail — `optAllParams`/`optConstsB` come from `RenderKit`, **imported, not copied**, so
+the optimizer has one definition across the nets.
 
 ## The three block forms, and why the third exists
 
@@ -610,8 +610,8 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
 
     The block sequence is `[3,4,6,3]` with block 0 of every stage projecting. Stage 1's projects
     at **stride 1** (`bnkProjFwdB`); stages 2/3/4 project strided. -/
-def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
-    (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in")
+def resnet50TrainStepText (B nClasses : Nat) (epsStr : String)
+    (replicas : Nat := 1) (opt : OptRecipe := .adamw) (slug : String := "resnet50in")
     -- TRAILING: a parameter inserted mid-list captures an existing positional argument.
     -- `bce` swaps the LOSS (and therefore the cotangent) for BCE-with-logits — RSB-A2/A3's, and the
     -- reason the recipe's lr is what it is. It also names the artifact: `r34AdamVariant` appends
@@ -732,16 +732,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- artifact.
     (noSync : Bool := false) : String :=
   let sync : Bool := (replicas > 1 || forceSync) && !noSync
-  let optLabel : String := match opt with
-    | .adamw          => "AdamW"
-    | .heavyBall      => "heavy-ball momentum + coupled L2"
-    -- R50 renders no `.sgd` artifact — the case exists for ResNet-34's §5.6 optimizer ablation.
-    -- The label is here because the match is exhaustive by type (see the note below), not because
-    -- an R50 SGD render is expected; if one is ever wanted it needs its own `#eval`, not this line.
-    | .sgd            => "plain SGD + coupled L2 (no momentum)"
-    | .lamb           => "LAMB (per-tensor trust ratio)"
-    | .adamwAccum k   => s!"AdamW over {k} ACCUMULATED micro-batches"
-    | .lambAccum k    => s!"LAMB (per-tensor trust ratio) over {k} ACCUMULATED micro-batches"
+  let optLabel : String := opt.label
   -- TYPE-based, so unlike the driver's string predicate this one could not silently miss the new
   -- arm — adding a constructor without extending it is a non-exhaustive match, i.e. a build error.
   -- That asymmetry is exactly why the driver needs `TestVariantPredicates` and this line does not.
@@ -882,7 +873,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++
       b9.ps ++ b10.ps ++ b11.ps ++ b12.ps ++ b13.ps ++ b14.ps ++ b15.ps ++ b16.ps ++ headPs
     -- ═══ the optimizer stage: the hoisted global-norm clip, then one proven triple per parameter.
-    -- `optAllParams` is IMPORTED from `ResNet34RenderB`, not written here — read its docstring for
+    -- `optAllParams` is IMPORTED from `RenderKit`, not written here — read its docstring for
     -- the two orderings the clip has to respect (after the all_reduce AND after the accumulation),
     -- and for why it is a function at all: `tests/TestOptStepFixtures.lean` drives the SAME call
     -- for its one-step update gate, so the gate exercises this emission rather than a second copy
@@ -951,7 +942,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
   -- `G` (`<p>a`) only under `.adamwAccum`, `E` only under `ema`, in `[θ|m|v|G|E]` order.
-  -- `{n}ema`, not `{n}e` — see `optOne`'s note: `%sg` + `e` is `%sge`, the maxpool backward's
+  -- `{n}ema`, not `{n}e` — see `optOne`'s `emaSuf` note: `%sg` + `e` is `%sge`, the maxpool backward's
   -- own block-local name, and the artifact does not parse. The ARGUMENT and the produced value have
   -- to move together or the region has no input.
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
@@ -1118,7 +1109,7 @@ private def r50FwdChain (B nClasses : Nat) (epsStr : String)
 
     `r50FwdChain`'s `.train` branch is UNUSED by R50 and must stay that way; it survives only
     because `.eval` shares the function. Rendering a forward from it reopens the split. -/
-def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
+def resnet50FwdText (B nClasses : Nat) (epsStr : String)
     (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
@@ -1135,7 +1126,7 @@ def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
 /-- **`@resnet50in_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
     161 params + 106 stat inputs + `%x` = **268 inputs**. This is what the driver scores through,
     so its BN order must match `r50StatSigList`, which it does by sharing the chain. -/
-def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+def resnet50FwdEvalText (B nClasses : Nat) (epsStr : String)
     (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses ++ r50StatSigList
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
@@ -1154,14 +1145,14 @@ end Proofs.StableHLO
 -- the forwards carry no variant in their path, so a shared slug would silently overwrite a
 -- different-arity artifact.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_adam64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.adamw "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.adamw "resnet50in")
 
 -- The 4-GPU data-parallel peer at `B := 64` PER REPLICA ⇒ global batch 256, matching R34's
 -- ImageNet recipe and the reference's. One `#eval`: `optOne` already takes `replicas`.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    Proofs.StableHLO.R34Opt.adamw "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.OptRecipe.adamw "resnet50in")
 
 -- THE 2018 RECIPE, so R50 and R34 can be compared with ONLY the network swapped.
 -- Heavy-ball momentum + coupled L2 at global batch 256, which is exactly
@@ -1172,12 +1163,12 @@ end Proofs.StableHLO
 -- `mom256` is a SINGLE-device render at batch 256, matching R34's. The data-parallel peer is
 -- `momdp64` (4 replicas x 64) if a 4-GPU run is wanted; both are the same global batch.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_mom256_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 256 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.heavyBall "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 256 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.heavyBall "resnet50in")
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_momdp64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    Proofs.StableHLO.R34Opt.heavyBall "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.OptRecipe.heavyBall "resnet50in")
 
 -- **The bf16 peer of the render above** — `momdp64bf16`, the same graph with every one of its
 -- 53 convolutions replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** convolution result,
@@ -1196,17 +1187,17 @@ end Proofs.StableHLO
 -- sites (`convBf16` at `kH = kW = 1`, so `pad = 0`). R34's only 1×1s are its strided projections.
 -- That is the one genuinely new thing about this render and it is what gate 2 has to confirm.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_momdp64bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    Proofs.StableHLO.R34Opt.heavyBall "resnet50in" (bf16 := true))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.OptRecipe.heavyBall "resnet50in" (bf16 := true))
 
--- The variant spelling, and the wiring that actually breaks. `resnet50TrainStepFaithfulB`
+-- The variant spelling, and the wiring that actually breaks. `resnet50TrainStepText`
 -- derives its entry name from `r34AdamVariant`, so `bf16` has to reach THAT call and not merely
 -- the block renderers — otherwise the artifact lands at `…momdp64bf16_train_step.mlir` while
 -- declaring `@resnet50in_momdp64_train_step` inside and the driver refuses at load with an entry
 -- mismatch.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.heavyBall
+#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.OptRecipe.heavyBall
          false false false "" true == "momdp64bf16"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.heavyBall == "momdp64"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.OptRecipe.heavyBall == "momdp64"
 -- And the slug must not trip the DRIVER's variant predicates, which read the same string to size
 -- the checkpoint blob. `cdOn` is the dangerous one — a SUBSTRING test for "do", and a false
 -- positive would silently add a dropout region to the layout with no error anywhere.
@@ -1228,19 +1219,19 @@ end Proofs.StableHLO
 --     design batch and LAMB's. It is the batch, NOT the recipe: LAMB and BCE-with-logits are
 --     absent, so this is AdamW at bs2048 and must not be described as `rsb-faithful`.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_acc4x64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.adamwAccum 4) "resnet50in")
 
 -- `accdp4x64` exists for ONE reason: it is `acc4x64`'s data-parallel peer at the SAME k, which is
 -- what `tests/r50_dp_render_tie.py` needs to carry `r50-accum-tie`'s verdict onto the DP
 -- accumulation path. Without a matched-k pair that tie has nothing to diff. It is not a recipe.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_accdp4x64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.adamwAccum 4) "resnet50in")
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_accdp8x64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.adamwAccum 8) "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.adamwAccum 8) "resnet50in")
 
 -- BCE-WITH-LOGITS — RSB-A2/A3's loss.
 --
@@ -1250,12 +1241,12 @@ end Proofs.StableHLO
 -- pair. Both share ONE `reportBceLoss`, so a defect in the loss cannot be present in one and not the
 -- other.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_adam64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.adamw "resnet50in" (bce := true))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.adamw "resnet50in" (bce := true))
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.lamb "resnet50in" (bce := true))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.lamb "resnet50in" (bce := true))
 
 -- LAMB — RSB-A3's optimizer. THREE regions, same
 -- `[θ|m|v]` signature as `adam64`, because the trust ratio is computed inside the graph from θ and
@@ -1266,27 +1257,27 @@ end Proofs.StableHLO
 -- BCE-with-logits and a 160/224 resolution split; LAMB at bs512 falls far short of A3's target
 -- (`planning/archive/grad_accum.md`), so the batch is not a detail. Its composition with the accumulation render is `.lambAccum`, below.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lamb64_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.lamb "resnet50in")
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.lamb "resnet50in")
 
 -- Pin the literal artifact paths above against the name the renderer emits, so a rename fails at
 -- `lake build` rather than at run time as a shim "entry mismatch".
 #guard Proofs.StableHLO.r34AdamVariant 64 1 == "adam64"
 #guard Proofs.StableHLO.r34AdamVariant 64 4 == "adamdp64"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb == "lamb64"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.adamwAccum 4) == "acc4x64"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8) == "accdp8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.OptRecipe.lamb == "lamb64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.adamwAccum 4) == "acc4x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.adamwAccum 8) == "accdp8x64"
 -- the `wx` spellings. `wx` trails the BATCH and precedes the `bce` suffix the caller appends,
 -- so the shipping A3-fidelity name is `lambaccdp8x64wxbce`. Pinned because this net DERIVES its
 -- entry name from the variant: a marker that moved would produce an artifact whose declared entry
 -- disagrees with its own path, which the shim refuses outright rather than running the wrong graph.
-#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb true == "lamb64wx"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.OptRecipe.lamb true == "lamb64wx"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) true
          == "lambaccdp8x64wx"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) true
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8) true
          == "lambacc8x64wx"
 -- …and the flag OFF must still spell exactly what every committed artifact is named.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) false
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) false
          == "lambaccdp8x64"
 -- The rank test, spelled out on the shapes it actually decides.
 #guard Proofs.StableHLO.rankWdDecays "conv1w" [64,3,7,7] == true      -- conv weight: decayed
@@ -1296,7 +1287,7 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.rankWdDecays "fcw" [2048,1000] == true        -- dense weight: decayed
 -- The driver reads `k` back OUT of this string (`Verified.Train`'s `accK`). Pin the round trip
 -- here, where the name is produced, rather than trusting two parsers to agree.
-#guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8)).drop 5
+#guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.adamwAccum 8)).drop 5
           |>.takeWhile (· != 'x')) == "8"
 
 -- Batch 256 on the forwards, matching the shim's val batch: 195 × 256 = 49,920 after tfds
@@ -1312,8 +1303,8 @@ end Proofs.StableHLO
 -- Rendering at `q = 5` is what type-checks the resolution parameterisation — the part with
 -- the dependent-type risk.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lamb64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.lamb "resnet50in160" (bce := true) (q := 5))
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- **RSB-A3 ITSELF — LAMB × BCE × ACCUMULATION × 4 REPLICAS, AT 160.**
@@ -1332,12 +1323,12 @@ end Proofs.StableHLO
 -- `r50-accum-tie` and `r50-accum-shard-tie` compare against a SINGLE-DEVICE peer, so a DP-only
 -- render would be ungateable. Same k, same loss, same resolution; only `replicas` differs.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 -- ── `wx` — timm `no_weight_decay` ──────────────────────────────────────────────────────────────
 -- The A3 recipe's LARGEST delta, and the one most likely to move the final number.
@@ -1357,16 +1348,16 @@ end Proofs.StableHLO
 -- This changes the trajectory, so it can only be compared to A3 by a fresh run, never by resuming
 -- one.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true))
 -- Its single-device peer, for the same reason the non-`wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only `wx` would be
 -- ungateable — and `wx` is exactly the axis worth gating, since it changes 105 of 161 decay
 -- operands and nothing about the arity.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true))
 
 -- **`wx` PLUS THE GLOBAL-NORM GRADIENT CLIP**, and this pair is the R50 render that is the
@@ -1387,8 +1378,8 @@ end Proofs.StableHLO
 -- Like `wx`, this changes the trajectory, so it can only be compared to A3 by a fresh run, never by
 -- resuming one.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true))
 
 -- ── …and A3's bf16 twin, so the 160 tier has its precision peer like A2 and A1. A tier that
@@ -1397,12 +1388,12 @@ end Proofs.StableHLO
 -- other precision, and the pricing is what it is for — the four-card ms/step of both precisions is
 -- in `runs/2026-08-27-r50-a2-a1-verified-eta/` (the A3 160 rows).
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x64wxclipbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxclipbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true) (bf16 := true))
 -- A3 at the reference's OWN shape: 4 micro-steps of 4 × 128, not 8 of 4 × 64. Under sync-BN the
 -- BN group is `R × micro` per micro-step, so the render above normalises over 256 where the JAX
@@ -1411,8 +1402,8 @@ end Proofs.StableHLO
 -- `LEAN_MLIR_G2_STEPS=2500` (2,502 micro-batches/epoch at 512, cut to a multiple of 4), which
 -- keeps the cosine at 100 × 2500 / 4 = 62,500 updates, the 8×64 run's own count.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true) (bf16 := true))
 -- Its single-device peer, for the reason the `wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only clip would be
@@ -1420,8 +1411,8 @@ end Proofs.StableHLO
 -- distinguishes it from a per-parameter clip (`Proofs.clipFactor_shared`) is invisible to every
 -- check that only asks whether the gradients got smaller.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxclipbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
     (wdExclude := true) (gradClip := true))
 
 -- The **2-GPU** peer of the 4-replica render above: `B := 128` per replica at the same `k = 8`, so
@@ -1430,15 +1421,15 @@ end Proofs.StableHLO
 -- 256 above. (Per-replica BN would make this run's groups 128 against the 4×64 render's 64 — a
 -- different regime for any accuracy claim.)
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambaccdp8x128bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 2
-    (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 2
+    (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5))
 
 -- `k = 4` at ONE replica, the peer `r50-accum-tie` actually runs against (its gate is written at
 -- k = 4). Rendering only k = 8 would leave the composed optimizer's accumulation ungated at the k
 -- the gate uses.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc4x64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in160" (bce := true) (q := 5))
 
 -- `lambdp64bce` — LAMB + BCE at 4 replicas, NO accumulation. It exists for ONE reason: it is the
 -- peer `r50-accum-shard-tie` needs. That gate's identity is `acc(x1..xk) == DP([x1|..|xk])`, so the
@@ -1446,16 +1437,16 @@ end Proofs.StableHLO
 -- compare LAMB to AdamW and BCE to CE and fail for three reasons with one number to read.
 -- Rendered at the composition's resolution.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambdp64bce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 4
-    Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5))
+  (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
+    Proofs.StableHLO.OptRecipe.lamb "resnet50in160" (bce := true) (q := 5))
 
 -- THE NAME ROUND TRIP FOR THE COMPOSED VARIANT, pinned on the PRODUCING side — the driver reads `k`
 -- back out of this exact string with a substring parse, and a disagreement is silent (a wrong
 -- effective learning rate, no error anywhere). `tests/TestVariantPredicates.lean` pins the
 -- consuming side, including the counterfactual that a `startsWith "acc"` test MISSES this.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) == "lambaccdp8x64"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) == "lambacc8x64"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 4) == "lambacc4x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) == "lambaccdp8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8) == "lambacc8x64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 4) == "lambacc4x64"
 -- and the marker is NOT leading here, which is what a prefix test misses: pin that fact so the
 -- spelling cannot drift to something a prefix test would accept by accident.
 #guard ("lambaccdp8x64bce".startsWith "acc") == false
@@ -1465,18 +1456,18 @@ end Proofs.StableHLO
 -- `bce` the R50 caller appends — `lambaccdp8x64wxclipbce`. The order is a CHOICE (ConvNeXt's,
 -- reused rather than re-decided) and these are what make it a fixed one; a marker's POSITION
 -- matters as much as its presence (see `cnxAdamVariant`).
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true true
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) true true
          == "lambaccdp8x64wxclip"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8) true true
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8) true true
          == "lambacc8x64wxclip"
 -- The two flags are INDEPENDENT axes, so pin `clip` without `wx` too — otherwise nothing stops
 -- the spelling from becoming "wxclip" as a single fused marker that only ever appears together.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) false true
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) false true
          == "lambaccdp8x64clip"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb false true == "lamb64clip"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.OptRecipe.lamb false true == "lamb64clip"
 -- And the inertness of the flag on the NAME, which is the half that the entry point sees: clip off
 -- must reproduce the committed spelling exactly.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8) true false
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8) true false
          == "lambaccdp8x64wx"
 -- THE ROUND TRIP THE DRIVER ACTUALLY MAKES: it parses `k` back out of this string, and the trailing
 -- markers must not disturb that parse. `lambaccdp8x64wxclipbce` still splits on "acc" and still
@@ -1489,58 +1480,58 @@ end Proofs.StableHLO
 -- the artifact the RSB-A3 run trained on.
 -- The ONLY thing left to pin is the spelling.
 -- These are the full four-marker compositions, in order: optimizer, k, batch, `wx`, `clip`, `bce`.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true == "lambaccdp8x64wxclipbce"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true == "lambacc8x64wxclipbce"
 -- The RSB-A3 run's own artifact, pinned character for character: no `wx`, no `clip`, `bce` only.
 -- This is the name whose graph produced the A3 result, and it must not move.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          false false true == "lambaccdp8x64bce"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          false false true == "lambacc8x64bce"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          false false true == "lambacc4x64bce"
-#guard Proofs.StableHLO.r34AdamVariant 128 2 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 128 2 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          false false true == "lambaccdp8x128bce"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.R34Opt.lamb
+#guard Proofs.StableHLO.r34AdamVariant 64 4 Proofs.StableHLO.OptRecipe.lamb
          false false true == "lambdp64bce"
 -- And `bce` OFF must leave every non-BCE spelling untouched — the half that says the new parameter
 -- is inert, so it moves no committed byte.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          false false false == "lambaccdp8x64"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.R34Opt.lamb false false false == "lamb64"
+#guard Proofs.StableHLO.r34AdamVariant 64 1 Proofs.StableHLO.OptRecipe.lamb false false false == "lamb64"
 -- `bce` LAST, and this is the counterfactual: the marker must not land before `wx`/`clip`.
 -- `lambaccdp8x64bcewx` is what a wrong order produces, and the shim would refuse the call with
 -- nothing but "entry mismatch" to say why.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true != "lambaccdp8x64bcewxclip"
 
 -- **THE `wdStr` AXIS** (RSB-A1's 0.01 against A3's 0.02).
 -- `%wd` is a BAKED constant, so two renders differing only in it must not share an artifact path
 -- — `wdVariantMark` is what makes that collision unspellable rather than merely detectable by the
 -- writer audit. These pin the spelling and, more importantly, both directions of "default".
-#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.R34Opt.lamb == "0.02"
-#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.R34Opt.adamw == "0.0001"
-#guard Proofs.StableHLO.optWdStr (Proofs.StableHLO.R34Opt.lambAccum 8) "0.01" == "0.01"
+#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.OptRecipe.lamb == "0.02"
+#guard Proofs.StableHLO.optWdStr Proofs.StableHLO.OptRecipe.adamw == "0.0001"
+#guard Proofs.StableHLO.optWdStr (Proofs.StableHLO.OptRecipe.lambAccum 8) "0.01" == "0.01"
 -- The DEFAULT, whether reached by omission or by the caller spelling it out, must produce NO
 -- marker — otherwise `lambaccdp8x64bce` and `lambaccdp8x64bcewd002` would be the same graph under
 -- two names, which is the collision in the other direction.
-#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) == ""
-#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.02" == ""
-#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.adamw "0.0001" == ""
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.OptRecipe.lambAccum 8) == ""
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.OptRecipe.lambAccum 8) "0.02" == ""
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.OptRecipe.adamw "0.0001" == ""
 -- …and a non-default one must produce a marker that carries the VALUE, not merely a flag: the
 -- point is that 0.01 and 0.005 land on different paths, so `wd` alone would not do.
-#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.01" == "wd001"
-#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.R34Opt.lambAccum 8) "0.005" == "wd0005"
-#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.adamw "0.02" == "wd002"
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.OptRecipe.lambAccum 8) "0.01" == "wd001"
+#guard Proofs.StableHLO.wdVariantMark (Proofs.StableHLO.OptRecipe.lambAccum 8) "0.005" == "wd0005"
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.OptRecipe.adamw "0.02" == "wd002"
 -- AND THE SAME VALUE MEANS DIFFERENT THINGS TO THE TWO FAMILIES: 0.02 is LAMB's default (no
 -- marker) and a 200x override for AdamW (marker). The mark is per-optimizer for that reason.
-#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.R34Opt.lamb "0.02" == ""
+#guard Proofs.StableHLO.wdVariantMark Proofs.StableHLO.OptRecipe.lamb "0.02" == ""
 -- The full A1 spelling, end to end.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" == "lambaccdp8x64wxclipbcewd001"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.02" == "lambaccdp8x64wxclipbce"
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -1698,59 +1689,59 @@ end Proofs.StableHLO
 -- Running the `4×128` fp32 pair needs `LEAN_MLIR_MEM_FRACTION=0.97`, which is a job-config line
 -- rather than a missing artifact.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcewd001bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true) (bf16 := true))
 
 -- ── …and the fp32 peers of the same four. They need `LEAN_MLIR_MEM_FRACTION=0.97`; at the
 -- plugin's 0.75 default the complete render does not fit. See the table above. ─────────────────
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_emalambacc4x128wxclipdropbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 1
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (ema := true) (sd := true))
 
 -- `k` is FOUR here and the batch is 128, so the `accK` parse sees `acc4x128` / `accdp4x128` —
 -- a two-digit batch after a one-digit `k`, the reverse of `acc8x64`'s shape.
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "" true true true == "emalambaccdp4x128wxclipdropbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 128 1 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 1 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "" true true true == "emalambacc4x128wxclipdropbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "0.01" true true true == "emalambaccdp4x128wxclipdropbcewd001bf16"
 
 -- THE FOUR sd SPELLINGS. `drop` is the SIXTH marker on these names and it goes in the MIDDLE —
 -- between `clip` and `bce` — so unlike `ema` it has neighbours on both sides.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" false true true == "emalambaccdp8x64wxclipdropbce"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" false true true == "emalambacc8x64wxclipdropbce"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" false true true == "emalambaccdp8x64wxclipdropbcewd001"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" false true true == "emalambacc8x64wxclipdropbcewd001"
 -- **THE CONCATENATIONS, not the marker.** Collisions in this naming live in a PAIR of markers
 -- meeting, never in the new marker alone. `clip` ++ `drop` and `drop` ++ `bce` are the two
@@ -1768,13 +1759,13 @@ end Proofs.StableHLO
 -- THE FOUR EMA SPELLINGS, pinned on the PRODUCING side like every one below them. The `ema`
 -- prefix is the OUTERMOST marker any name in this file carries, and it goes in FRONT of a string
 -- that already holds five — so it is run rather than reasoned about.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" false true == "emalambaccdp8x64wxclipbce"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" false true == "emalambacc8x64wxclipbce"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" false true == "emalambaccdp8x64wxclipbcewd001"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" false true == "emalambacc8x64wxclipbcewd001"
 -- **AND THE MARKER MUST LEAD.** This is the counterfactual, and it is the one that is silent:
 -- a trailing `ema` produces a name the driver reads as four regions, so the graph gets a blob one
@@ -1794,21 +1785,21 @@ end Proofs.StableHLO
 -- (`lambaccdp8x64wxclipbce`, `lambacc8x64wxclipbce`) are already guarded further up — they are the
 -- 160 family's names, and the A2 pair reuses them at a DIFFERENT SLUG, which is exactly why the
 -- slug is part of the path and not part of the variant.
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" == "lambacc8x64wxclipbcewd001"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" true == "lambaccdp8x64wxclipbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "" true == "lambaccdp4x128wxclipbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "" true == "lambacc8x64wxclipbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" true == "lambaccdp8x64wxclipbcewd001bf16"
-#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 1 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" true == "lambacc8x64wxclipbcewd001bf16"
 -- `bf16` TRAILS the decay marker, and this is the counterfactual: `…bf16wd001` is what the
 -- wrong order produces and the shim would refuse it with nothing but "entry mismatch" to say why.
-#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.lambAccum 8)
+#guard Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.OptRecipe.lambAccum 8)
          true true true "0.01" true != "lambaccdp8x64wxclipbcebf16wd001"
 -- AND THE DRIVER'S PREDICATES MUST STILL READ THESE. `accOn` is a SUBSTRING test and `accK` is
 -- parsed from AFTER the marker, so the new trailing markers must not disturb either — and none of
@@ -1832,44 +1823,44 @@ end Proofs.StableHLO
 -- BCE render takes `%onehot` as given. bf16 for the runs (the A3 pair's precision), fp32 as the
 -- precision peer; `LEAN_MLIR_MEM_FRACTION=0.97` for fp32, as above.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcebf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbce_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (q := 7)
     (wdExclude := true) (gradClip := true) (sd := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (sd := true) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 128 1000 "1.0e-05" 4
-    (Proofs.StableHLO.R34Opt.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
+  (Proofs.StableHLO.resnet50TrainStepText 128 1000 "1.0e-05" 4
+    (Proofs.StableHLO.OptRecipe.lambAccum 4) "resnet50in" (bce := true) (wdStr := "0.01") (q := 7)
     (wdExclude := true) (gradClip := true) (sd := true))
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "" true false true == "lambaccdp4x128wxclipdropbcebf16"
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "" false false true == "lambaccdp4x128wxclipdropbce"
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "0.01" true false true == "lambaccdp4x128wxclipdropbcewd001bf16"
-#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.R34Opt.lambAccum 4)
+#guard Proofs.StableHLO.r34AdamVariant 128 4 (Proofs.StableHLO.OptRecipe.lambAccum 4)
          true true true "0.01" false false true == "lambaccdp4x128wxclipdropbcewd001"
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd.mlir"
-  (Proofs.StableHLO.resnet50FwdFaithfulV 64 1000 "1.0e-05" "resnet50in160" (q := 5))
+  (Proofs.StableHLO.resnet50FwdText 64 1000 "1.0e-05" "resnet50in160" (q := 5))
 
 -- eval at 224 (`q = 7`) and batch 256, exactly as the 224 net scores. This is A3's
 -- `train@160 / test@224 (crop 0.95)` split, and the only thing that makes it expressible is that
 -- BN in `.eval` mode reads FROZEN per-channel statistics — which are resolution-independent.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_fwd_eval.mlir"
-  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in160" (q := 7))
+  (Proofs.StableHLO.resnet50FwdEvalText 256 1000 "1.0e-05" "resnet50in160" (q := 7))
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd.mlir"
-  (Proofs.StableHLO.resnet50FwdFaithfulV 256 1000 "1.0e-05" "resnet50in")
+  (Proofs.StableHLO.resnet50FwdText 256 1000 "1.0e-05" "resnet50in")
 
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval.mlir"
-  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in")
+  (Proofs.StableHLO.resnet50FwdEvalText 256 1000 "1.0e-05" "resnet50in")
 
 -- timm's TEST protocol for RSB-A2/A1 (`resnet50.a{2,1}_in1k`: 288px, crop 1.0,
 -- jax/timm_eval_protocols.json): the same eval graph at a 288 input (`q = 9`), entry
@@ -1877,9 +1868,9 @@ end Proofs.StableHLO
 -- `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`; frozen BN statistics are
 -- resolution-independent, as for A3's 160/224 split.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_fwd_eval_s288.mlir"
-  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in" (q := 9) (vSuffix := "_s288"))
-#guard (Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in" (q := 7)) ==
-  Proofs.StableHLO.resnet50FwdEvalFaithfulV 256 1000 "1.0e-05" "resnet50in"
+  (Proofs.StableHLO.resnet50FwdEvalText 256 1000 "1.0e-05" "resnet50in" (q := 9) (vSuffix := "_s288"))
+#guard (Proofs.StableHLO.resnet50FwdEvalText 256 1000 "1.0e-05" "resnet50in" (q := 7)) ==
+  Proofs.StableHLO.resnet50FwdEvalText 256 1000 "1.0e-05" "resnet50in"
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- § `resnet50Verified` — the IMAGENETTE (10-class) renders.
@@ -1897,14 +1888,14 @@ end Proofs.StableHLO
 -- through them at the train batch. Any other batch needs re-rendered forwards or
 -- `LEAN_MLIR_SKIP_EVAL=1`, and would otherwise be a shape error at first invoke.
 #eval IO.FS.writeFile "verified_mlir/resnet50_adam_train_step.mlir"
-  (Proofs.StableHLO.resnet50TrainStepFaithfulB 32 10 "1.0e-05" 1
-    Proofs.StableHLO.R34Opt.adamw "resnet50")
+  (Proofs.StableHLO.resnet50TrainStepText 32 10 "1.0e-05" 1
+    Proofs.StableHLO.OptRecipe.adamw "resnet50")
 
 #eval IO.FS.writeFile "verified_mlir/resnet50_fwd.mlir"
-  (Proofs.StableHLO.resnet50FwdFaithfulV 32 10 "1.0e-05" "resnet50")
+  (Proofs.StableHLO.resnet50FwdText 32 10 "1.0e-05" "resnet50")
 
 #eval IO.FS.writeFile "verified_mlir/resnet50_fwd_eval.mlir"
-  (Proofs.StableHLO.resnet50FwdEvalFaithfulV 32 10 "1.0e-05" "resnet50")
+  (Proofs.StableHLO.resnet50FwdEvalText 32 10 "1.0e-05" "resnet50")
 
 -- ════════════════════════════════════════════════════════════════
 -- § Gate inputs, NOT artifacts — the one-replica SYNC-BN graphs (`forceSync`)
@@ -1921,20 +1912,20 @@ end Proofs.StableHLO
 #eval do
   IO.FS.createDirAll ".lake/build/r50sync"
   IO.FS.writeFile ".lake/build/r50sync/resnet50in_adam64_train_step.mlir"
-    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-      Proofs.StableHLO.R34Opt.adamw "resnet50in" (forceSync := true))
+    (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+      Proofs.StableHLO.OptRecipe.adamw "resnet50in" (forceSync := true))
   IO.FS.writeFile ".lake/build/r50sync/resnet50in_acc4x64_train_step.mlir"
-    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-      (Proofs.StableHLO.R34Opt.adamwAccum 4) "resnet50in" (forceSync := true))
+    (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.OptRecipe.adamwAccum 4) "resnet50in" (forceSync := true))
   IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64bce_train_step.mlir"
-    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+    (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
       (forceSync := true))
   IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64wxbce_train_step.mlir"
-    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+    (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
       (wdExclude := true) (forceSync := true))
   IO.FS.writeFile ".lake/build/r50sync/resnet50in160_lambacc8x64wxclipbce_train_step.mlir"
-    (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05" 1
-      (Proofs.StableHLO.R34Opt.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
+    (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
+      (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)
       (wdExclude := true) (gradClip := true) (forceSync := true))

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 /-! # The full-16 (262-param) EfficientNet-B0 train step, proof-tied (the fold, den)
 
 The fold for the batched 262-param EfficientNet-B0
-train step `efficientnetTrainStepFaithfulV` (`EfficientNetRender.Basic`). Every emitted param-SGD op
+train step `efficientnetTrainStepText` (`EfficientNetRender.Basic`). Every emitted param-SGD op
 `den`otes the certified loss-descent step — `θ − lr·(certified Jacobian · cotangent)`.
 
 **The batched wrinkle vs mnv2.** EfficientNet trains at the batched index `N·(c·h·w)` with the
@@ -20,7 +20,7 @@ stem, depthwise, the rectangular dense bias) — under that wrapper. -/
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.EnetPoC
+namespace Proofs.EnetFold
 
 open scoped BigOperators
 
@@ -170,7 +170,7 @@ theorem depthwiseStridedWB_den {N c h w kH kW : Nat}
   rw [depthwiseStridedWeightSgdB_eq_grad, GradNodeB.depthwiseStridedWGradB_den]
 
 -- ════════════════════════════════════════════════════════════════
--- § Tie clauses — one fused SGD node each (the `ResNet34PoCB.*TiedB` clauses under `θ − lr·`)
+-- § Tie clauses — one fused SGD node each (the `GradNodeB.*TiedB_holds` clauses under `θ − lr·`)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A stride-1 conv weight SGD node, tied (`convWB_den`). -/
@@ -236,4 +236,4 @@ theorem denseBSgdTiedB_holds {N c : Nat} {bN lrStr cotN : String} {W : Mat c c} 
     {b : Vec c} {cot : Vec (N * c)} {lr : ℝ} : DenseBSgdTiedB N bN lrStr cotN W x b cot lr :=
   fun j => denseBB_den bN lrStr cotN W x b cot lr j
 
-end Proofs.EnetPoC
+end Proofs.EnetFold

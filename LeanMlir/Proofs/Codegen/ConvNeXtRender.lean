@@ -4,10 +4,10 @@ import LeanMlir.Proofs.Codegen.RenderKit
 /-! # ConvNeXt-T train step rendered from the verified AST, with declared carve-outs
 
 The per-example ConvNeXt render. It writes one artifact, the SGD-inline
-`verified_mlir/convnext_train_step.mlir` (`convNextTrainStepFaithfulV`), and holds what
+`verified_mlir/convnext_train_step.mlir` (`convNextTrainStepText`), and holds what
 `ConvNeXtRenderB` reuses: the stage tables (`CnxDims`, `cnxTiny`/`cnxSmall`/`cnxBase`), the
-parameter list (`cnxAllParams`), the forward render `convNextFwdFaithfulV`, the shared traversal
-`convNextBackAll`, and the AdamW tail `convNextAdamTrainStepFaithful`. Every other ConvNeXt
+parameter list (`cnxAllParams`), the forward render `convNextFwdText`, the shared traversal
+`convNextBackAll`, and the AdamW tail `convNextAdamTrainStepText`. Every other ConvNeXt
 artifact is written by the batched chain in `ConvNeXtRenderB`, whose Proofs tier is
 `ConvNeXtFoldGB`. This chain stays because the batched traversal has no fused-SGD arm and
 `ConvNeXtStepTie` is stated at this file's bytes. `TestConvNeXtFwdBTie` checks the two chains
@@ -55,7 +55,7 @@ namespace Proofs.StableHLO
      helper that silently fell back to 32 inside a 64 graph is exactly the mixed-shape render that
      reads correct. No default ⇒ the compiler enumerates the sites instead of a reviewer.
    * **Public entry points take it LAST, defaulted to 32**, per the rule stated at
-     `convNextAdamTrainStepFaithful` below: a parameter inserted mid-list captures an existing
+     `convNextAdamTrainStepText` below: a parameter inserted mid-list captures an existing
      positional argument at every call site. Trailing + defaulted is what keeps every Imagenette
      render, every `tests/` caller and every ConvNeXt-S/B forward BYTE-IDENTICAL — the batch moves
      only where a `#eval` asks it to.
@@ -570,7 +570,7 @@ def cnxAllParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : List (String 
 -- § The shared forward chain (the forward render and both train steps emit this)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Every SSA name the ConvNeXt-T forward produces. `convNextFwdFaithfulV` returns just `logits`;
+/-- Every SSA name the ConvNeXt-T forward produces. `convNextFwdText` returns just `logits`;
     the train steps additionally consume the block records, the two downsample names and the
     head's `gap`/`hn` on the way back. -/
 structure CFwd where
@@ -634,7 +634,7 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     (`convNextFwdRenderB`); `TestConvNeXtFwdBTie` checks this render against it byte for byte, and
     `scripts/regen_verified_mlir.sh check` checks that its body is a prefix of
     `convnext_train_step.mlir`'s. -/
-def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
+def convNextFwdText (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
     (V : CnxDims := cnxTiny)
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
@@ -674,7 +674,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
-    -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
+    -- ═══ forward — the SAME chain `convNextFwdText` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions ═══
     let F : CFwd ← convNextFwdChain cBS nClasses V
     let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (0 : Vec nClasses))))
@@ -771,7 +771,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
     differently. -/
-def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
+def convNextTrainStepText (funcName : String := "convnext_train_step")
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
@@ -821,7 +821,7 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- BOTH — `wx` ++ `clip` is the shipping spelling.
     --
     -- THIS FUNCTION IS WHERE ConvNeXt DIFFERS FROM ViT: ConvNeXt DERIVES its entry name from the
-    -- variant (`{slug}_{cnxAdamVariant …}`) where `vitAdamTrainStepFaithful` takes `funcName`
+    -- variant (`{slug}_{cnxAdamVariant …}`) where `vitAdamTrainStepText` takes `funcName`
     -- explicitly. So a new flag that reaches the renderer but not this function produces an
     -- artifact whose declared entry disagrees with its own path, which only the shim's refusal of
     -- the call would catch. The `#guard`s below pin it.
@@ -883,9 +883,9 @@ private def cnxGapBackNote : String :=
     via `cnxAdamVariant`, so producing it can never clobber the one the trainer runs. The only
     difference is one `all_reduce(add)/N` per parameter gradient, between the certified gradient
     and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*.
-    See `adamOneEma` for the carve-out. -/
+    See `optOne` for the carve-out. -/
 -- Numeric tie: `convnext-adam-tie` (tests/TestConvNeXtAdamTie.lean).
-def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
+def convNextAdamTrainStepText (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)
     -- TRAILING: a parameter inserted mid-list captures an existing positional argument at every
@@ -900,7 +900,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (traversal : Option (StateM Proofs.StableHLO.EmitS (String × List (String × String) × String)) := none)
     -- STOCHASTIC DEPTH is a signature/variant flag HERE and a site-placement flag in the
     -- TRAVERSAL, and the two must agree. They are not independently settable in practice —
-    -- `convNextAdamTrainStepFaithfulB` is the only caller that sets either, and it spells `sd` once
+    -- `convNextAdamTrainStepBText` is the only caller that sets either, and it spells `sd` once
     -- and passes it to both. If they ever did disagree the failure is LOUD in both directions: sites
     -- without inputs emit an undeclared `%dp<i>` (the lowerer rejects it), inputs without sites
     -- leave an unused argument (an arity mismatch at the driver). Neither is silent.
@@ -909,7 +909,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- `[3,3,9,3]` is ConvNeXt-T; `cnxSmall` = `[3,3,27,3]` is ConvNeXt-S. It must reach the
     -- SIGNATURE (via `allParams`) as well as the traversal — the ViT-S trap — and when a caller
     -- passes `traversal`, `D` here governs the signature while the traversal carries its own copy.
-    -- `convNextAdamTrainStepFaithfulB` spells it ONCE and hands the same array to both, exactly as
+    -- `convNextAdamTrainStepBText` spells it ONCE and hands the same array to both, exactly as
     -- it does with `sd`; nothing else may set them independently.
     (V : CnxDims := cnxTiny)
     -- **`bf16` HERE IS NAME-ONLY.** This function renders the AdamW TAIL and the wrapper; it
@@ -917,7 +917,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- this flag exists to keep the entry NAME in step with a traversal the caller already chose.
     -- Setting it without passing a bf16 traversal produces an f32 graph under a `bf16` name, which
     -- nothing would catch. It is therefore governed by the same rule `sd` is: spelled ONCE, by
-    -- `convNextAdamTrainStepFaithfulB`, which hands the same Bool to both halves. Do not set it at
+    -- `convNextAdamTrainStepBText`, which hands the same Bool to both halves. Do not set it at
     -- a call site that does not also pass a bf16 traversal — and note this file's own per-example
     -- `convNextBackAll` has NO bf16 threading at all, deliberately (the batched render is
     -- the one an ImageNet run loads).
@@ -926,7 +926,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     -- it reaches TWO places a caller must never set independently: the WRAPPER here (`%x`'s shape,
     -- the `%bsc` loss divisor, the drop-path signature) and, when `traversal` is `none`, this
     -- file's own `convNextBackAll`. When a caller DOES pass `traversal`, that traversal carries
-    -- its own batch and the two must agree — `convNextAdamTrainStepFaithfulB` spells it ONCE and
+    -- its own batch and the two must agree — `convNextAdamTrainStepBText` spells it ONCE and
     -- hands the same Nat to both halves, exactly as it does with `sd`, `V` and `bf16`. A
     -- disagreement is not silent: the wrapper declares `tensor<B₁×…>` over a body computing at
     -- `N := B₂` and the lowerer rejects the module.
@@ -986,10 +986,11 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       let g := if clip then (clipped.lookup nm).getD g0 else g0
       -- The wd operand comes from the SAME `allParams` entry that names the site (the slot rule).
       let wdN := wdNameBy wdExclude nm ds
-      let (c, nT, nM, nV, nE) ← adamOneEma cBS replicas ⟨nm, g, ds⟩ ema wdN clip
+      let (c, nT, nM, nV, _, nE) ← optOne .adamw cBS replicas ⟨nm, g, ds⟩ wdN (preAvg := clip)
+                                      (ema := ema)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
-      if ema then eN := eN ++ [nE]
+      match nE with | some e => eN := eN ++ [e] | none => pure ()
     -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`), gated by `convnext-adam-tie`.
     -- ConvNeXt has no BN, so — as with ViT — this is the ONLY output that reads the forward directly.
     let lossCode := reportSmoothedCeLoss cBS nClasses nSm
@@ -1074,7 +1075,7 @@ end Proofs.StableHLO
 -- `convnext_fwd` (the batched chain's) with it, and the pairing holds because the two chains'
 -- forwards are byte-identical.
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
-  (Proofs.StableHLO.convNextTrainStepFaithfulV "convnext_train_step")
+  (Proofs.StableHLO.convNextTrainStepText "convnext_train_step")
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call
 -- ("entry mismatch"). These pin the literal paths the AdamW/EMA writers use — which live in

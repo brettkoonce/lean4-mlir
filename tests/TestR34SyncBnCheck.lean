@@ -61,6 +61,6 @@ def main (args : List String) : IO Unit :=
     { slug := "resnet34", net := resnet34Verified.toNet, bs := 32
       sgPath := "verified_mlir/resnet34_adam_train_step.mlir"
       dpPath := args[0]?.getD "verified_mlir/resnet34_adamdp_train_step.mlir"
-      render := fun B fs => Proofs.StableHLO.resnet34AdamTrainStepFaithfulB B 10 "1.0e-05"
+      render := fun B fs => Proofs.StableHLO.resnet34AdamTrainStepText B 10 "1.0e-05"
         (forceSync := fs)
       entry := fun B r => s!"m.resnet34_{Proofs.StableHLO.r34AdamVariant B r}_train_step" }

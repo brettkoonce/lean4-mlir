@@ -491,7 +491,7 @@ jobs:
           [ "$missing" -eq 0 ]
 
       - name: Emit the optimizer-stage fixtures
-        # ⚠ The body of these is `optAllParams`, the SAME call `resnet50TrainStepFaithfulB` makes,
+        # ⚠ The body of these is `optAllParams`, the SAME call `resnet50TrainStepText` makes,
         # so this gates the shipped emission rather than a copy of it.
         run: |
           set -e

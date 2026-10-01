@@ -176,7 +176,7 @@ opaque forwardF32Dp
   (nResident : USize := 0) (gen : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@linear_train_step`
-    (`StableHLO.linTrainStepFaithfulV`) through the loaded shim's generic invoke.
+    (`StableHLO.linTrainStepText`) through the loaded shim's generic invoke.
     Inputs are raw f32 ByteArrays: `x` is `batch×d₀`, `W0` is `d₀×d₁`, `b0`
     is `d₁`; `y` is int32 `[batch]` (the one-hot is built in the C shim).
     Returns `W0n (d₀·d₁ f32) ++ b0n (d₁ f32)`.
@@ -222,7 +222,7 @@ opaque mlpTrainStepVDP
   (nResident : USize := 0) (nShardTail : USize := 0) : IO ByteArray
 
 /-- Drive the **verified-renderer** `@mlp_train_step`
-    (`StableHLO.mlpTrainStepFaithfulV`) through the loaded shim's generic invoke. `params` is
+    (`StableHLO.mlpTrainStepText`) through the loaded shim's generic invoke. `params` is
     the packed f32 weights (sliced per `shapes`, same layout as `forwardF32`);
     `x` is `batch×d₀`; `y` is int32 `[batch]` (one-hot built in the C shim with
     `d₃` classes). Returns the updated params, packed in the same layout.

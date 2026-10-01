@@ -7,7 +7,7 @@ import LeanMlir.Types
 The Adam peer of `verified_mlir/cifar8_train_step.mlir` (no-BN) and
 `verified_mlir/cifar8_bn_train_step.mlir` (per-channel BN), at the canonical dense-head width
 `D1 = 64` (slug `cifar8`) and the wide `d1 = 512` (slug `cifar8w`). Same forward + backward +
-param-gradient body as the SGD render (`Proofs.StableHLO.cifar8{,Bn}TrainStepFaithfulV`), every
+param-gradient body as the SGD render (`Proofs.StableHLO.cifar8{,Bn}TrainStepText`), every
 `%dW*`/`%db*`/`%dg*`/`%db*` gradient a named SSA value, with the per-param SGD update `θ − lr·∇`
 swapped for `ViTRender.emitAdamV` (`θ' = θ − lr·(m̂/(√v̂+ε)) − lr·wd·θ`, op-for-op
 `Proofs.adamWParam`) and the `[θ|m|v]` + scalar-tail packed signature the generic

@@ -14,7 +14,7 @@ rounding. cifar8 has no BatchNorm, so this pins the collective alone; the BN net
 renders synchronise their statistics and have their own gates (`resnet34-syncbn-check` and peers).
 
 Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
-`cifar8AdamTrainStepFaithfulV` at `replicas := 1` (B=256) and `replicas := 2` (B=128). 1/256 and
+`cifar8AdamTrainStepText` at `replicas := 1` (B=256) and `replicas := 2` (B=128). 1/256 and
 1/128 are both exact in binary32, so the loss scaling contributes no rounding of its own.
 
     unset CUDA_VISIBLE_DEVICES

@@ -2,12 +2,12 @@ import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # CNN + CIFAR render half — conv train-step text as `pretty` of proven graphs
 
-The conv-net peers of `MlpRender.lean`: `cnnTrainStepFaithfulV` (Chapter-3 MNIST CNN),
-`cifarTrainStepFaithfulV` (Chapter-4 CIFAR CNN), the 8-conv `cifar8*` family (SGD /
+The conv-net peers of `MlpRender.lean`: `cnnTrainStepText` (Chapter-3 MNIST CNN),
+`cifarTrainStepText` (Chapter-4 CIFAR CNN), the 8-conv `cifar8*` family (SGD /
 Nesterov / AdamW tails, the batched `…FaithfulB` peers, bf16 / fp8) and `cifar8Bn*`. Every
 line that feeds a returned parameter is `pretty` of a denoted `SHlo` node, names threaded as in
 the MLP render. Hand-written text: the signatures and constants, the report-only `%loss` block
-appended by `cnnTrainStepFaithfulV` and by the packed-optimizer (`[θ|m|v]`) renders, and the
+appended by `cnnTrainStepText` and by the packed-optimizer (`[θ|m|v]`) renders, and the
 packed renders' `%bc1`/`%bc2` passthroughs; none of it feeds a parameter. The forward is rendered
 flat: each `.flatConvF`/`.maxPoolF` token reshapes flat→NCHW internally and back at its boundary
 (`emitTok`, in StableHLO/Pretty.lean), so the names `pretty` exposes are flat. The
@@ -22,19 +22,19 @@ namespace Proofs.StableHLO
 open Proofs
 
 /-- **MNIST-CNN train step rendered from the verified AST.** The peer of
-    `mlpTrainStepFaithfulV` for the conv net: the forward, the backward chain
+    `mlpTrainStepText` for the conv net: the forward, the backward chain
     (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`) and ALL ten parameter SGD updates are
     `pretty` of denoted `SHlo` nodes —
     the dense head via `weightSgd`/`biasSgd`, the conv layers via the
     `convWeightSgd`/`convBiasSgd` ops. So every line that feeds a returned parameter is
     `pretty` of a denoted node; the appended report-only `%loss` block is hand-written and feeds
-    nothing. `CnnPoC.cnn_train_step_tied_certified` states each output's `den` as the certified
+    nothing. `CnnFold.cnn_train_step_tied_certified` states each output's `den` as the certified
     SGD step at the rendered chain cotangent; `cnn_W5_tied_totalloss` folds `W₅` to `∂CE/∂W₅`.
     Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
     shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
     placeholders print identically to the live graphs the `den` theorems use. Dims: `h,w`
     are the post-pool spatial sizes, the image is `2h × 2w`. -/
-def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
+def cnnTrainStepText (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
     (W₅ : Mat d1 nClasses) (b₅ : Vec nClasses) (x : Vec (ic*(2*h)*(2*w))) : String :=
@@ -100,15 +100,15 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
   "  }\n}\n"
 
 /-- **CIFAR-CNN (Chapter 4, no-BN) train step rendered ENTIRELY from the verified AST.**
-    The deeper, two-spatial-scale peer of `cnnTrainStepFaithfulV`: the forward, the
+    The deeper, two-spatial-scale peer of `cnnTrainStepText`: the forward, the
     backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`, twice through) and all
     14 parameter SGD updates are `pretty` of denoted `SHlo` nodes — the dense head via
     `weightSgd`/`biasSgd`, the four conv layers via the `convWeightSgd`/`convBiasSgd`
     ops (reused from cnn, NO new ops). Every line that feeds a returned parameter is
-    `pretty(provenNode)`, and `CifarPoC.cifar_train_step_tied_certified` states each output's
+    `pretty(provenNode)`, and `CifarFold.cifar_train_step_tied_certified` states each output's
     `den` as the certified SGD step at the rendered chain cotangent.
     Dims: `h,w` are the final pooled spatial sizes; image `4h×4w`, stage-2 spatial `2h×2w`. -/
-def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : String)
+def cifarTrainStepText (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
     (W₅ : Mat (c2*h*w) d1) (b₅ : Vec d1) (W₆ : Mat d1 d1) (b₆ : Vec d1)
@@ -188,14 +188,14 @@ def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : St
 
 set_option maxRecDepth 4000 in
 /-- **Deeper 8-conv CIFAR (cifar8, no-BN) train step rendered ENTIRELY from the verified
-    AST.** The 4-stage peer of `cifarTrainStepFaithfulV` (`(conv→relu)×2→pool` ×4, 3 dense;
+    AST.** The 4-stage peer of `cifarTrainStepText` (`(conv→relu)×2→pool` ×4, 3 dense;
     22 params). Backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`, four stages)
     and all 22 param SGD ops are `pretty` of denoted nodes — conv via `convWeightSgd`/
     `convBiasSgd`, dense via `weightSgd`/`biasSgd` (NO new ops).
-    `Cifar8PoC.cifar8_train_step_tied_certified` states each output's `den` as the certified SGD
+    `Cifar8Tie.cifar8_train_step_tied_certified` states each output's `den` as the certified SGD
     step at the rendered chain cotangent. `h,w` are the final pooled sizes; stage spatials build
     up ×2 per pool (`s4=2h, s3=4h, s2=8h, s1=16h`; image `16h×16w`). -/
-def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrStr : String)
+def cifar8TrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
     (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
@@ -391,7 +391,7 @@ private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds :
 
 set_option maxRecDepth 8000 in
 /-- **cifar8 AdamW train step rendered from the verified AST.** Identical forward/backward to
-    `cifar8TrainStepFaithfulV`; the 22 fused SGD ops are replaced by 22 un-fused param
+    `cifar8TrainStepText`; the 22 fused SGD ops are replaced by 22 un-fused param
     gradients (`convWeightGrad`/`convBiasGrad`/`weightGrad`/`biasGrad`) each feeding the three
     proven AdamW ops (`adamWParamF`/`adamMNextF`/`adamVNextF`, denoting `Proofs.adamWStep`).
 
@@ -405,7 +405,7 @@ set_option maxRecDepth 8000 in
     the `%bc1`/`%bc2` passthroughs. The mean-loss `1/B` on the cotangent IS proven — it is
     `scaleF`, not hand-written text. Unlike the SGD render it cannot be folded into `lr`,
     because `lr` is a runtime scalar here. -/
-def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
+def cifar8AdamTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (invBStr b1Str ob1Str b2Str ob2Str epsStr wdStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -440,7 +440,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
+    -- ═══ forward — identical to cifar8TrainStepText, conv biases renamed %cb* ═══
     let (cHc1, nHc1) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
     let (cHc2, nHc2) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1))
@@ -606,7 +606,7 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
 -- ════════════════════════════════════════════════════════════════
 
 set_option maxRecDepth 8000 in
-/-- **`cifar8AdamTrainStepFaithfulB` — the batched peer of `cifar8AdamTrainStepFaithfulV`.**
+/-- **`cifar8AdamTrainStepBText` — the batched peer of `cifar8AdamTrainStepText`.**
 
     Same net, same three optimizers, same packed `[θ|m|v]` signature. The difference is the op
     FAMILY: this render carries the batch **in the Lean type** (`SHlo (B*(c*h*w))`) and uses the
@@ -636,7 +636,7 @@ set_option maxRecDepth 8000 in
 
     Parameters are NOT batched — only activations are. The optimizer tail (`optTail`) is
     therefore untouched and shared verbatim with `…V`. -/
-def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
+def cifar8AdamTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (invBStr b1Str ob1Str b2Str ob2Str epsStr wdStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -690,7 +690,7 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let _zTW7 : Tensor3 c3 s4h s4w := fun _ _ _ => 0
   let _zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
-    -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
+    -- ═══ forward — identical to cifar8TrainStepText, conv biases renamed %cb* ═══
     let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nHc1 bS1c1))
     let (cHc2, nHc2) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else .batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
@@ -853,16 +853,16 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
 
 set_option maxRecDepth 8000 in
 /-- **Deeper 8-conv CIFAR-BN (cifar8-bn) train step rendered ENTIRELY from the verified
-    AST.** The per-channel-BatchNorm peer of `cifar8TrainStepFaithfulV` (`(conv→BN→relu)×2→pool`
+    AST.** The per-channel-BatchNorm peer of `cifar8TrainStepText` (`(conv→BN→relu)×2→pool`
     ×4, 3 dense; 38 params). Pure reuse — NO new ops and NO new proof: conv via
     `convWeightSgd`/`convBiasSgd`, BN via `bnGammaSgd`/`bnBetaSgd`, dense via `weightSgd`/
-    `biasSgd`; `Cifar8BnPoC.cifar8Bn_train_step_tied_certified` states every output's `den` as
+    `biasSgd`; `Cifar8BnTie.cifar8Bn_train_step_tied_certified` states every output's `den` as
     the certified SGD step at the rendered chain cotangent, by the generic lemmas
     (`SgdNode.conv{W,B}_den`, `SgdNode.bn{Gamma,Beta}_den`, `SgdNode.dense{W,B}_den`) per layer. Forward + BN-back proof-rendered via `bnPerChannelF`/
     `bnPerChannelBack`. `h,w` final pooled; stage spatials `s4=2h…s1=16h`.
 
     **`opt` selects the optimizer tail, and it changes the INTERFACE**, unlike the
-    no-BN `cifar8AdamTrainStepFaithfulV` where all three variants share one packed signature:
+    no-BN `cifar8AdamTrainStepText` where all three variants share one packed signature:
 
     | `opt` | entry | interface | tail |
     |---|---|---|---|
@@ -875,7 +875,7 @@ set_option maxRecDepth 8000 in
     (`%b1..%b8` fused, but AdamW bakes β₁/β₂ as `%b1`/`%b2`, so packed renames to `%cb1..%cb8`),
     and the **signature/return**. Everything else — the whole forward, the whole backward, all 38
     gradients — is shared verbatim. -/
-def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr lrStr : String)
+def cifar8BnTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
     (W₅ : Kernel4 c3 c2 kH kW) (b₅ : Vec c3) (W₆ : Kernel4 c3 c3 kH kW) (b₆ : Vec c3)
@@ -979,7 +979,7 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
     -- (0.00078125 = 0.1/128). PACKED: `lr` is a RUNTIME arg, so the mean cannot hide inside it —
     -- the softmax is split out (so the report-only `%loss` can read it back by name) and the mean
     -- becomes an explicit `scaleF invB`, which IS proven text, not hand-written. Identical to what
-    -- `cifar8AdamTrainStepFaithfulV` does.
+    -- `cifar8AdamTrainStepText` does.
     let (cCot, nDy, lossCode) ← match opt with
       | none => do
         let (c, n) ← pretty B
@@ -1229,12 +1229,12 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
   "  }\n}\n"
 
 set_option maxRecDepth 8000 in
-/-- **`cifar8BnTrainStepFaithfulB` — the batched peer of `cifar8BnTrainStepFaithfulV`.**
+/-- **`cifar8BnTrainStepBText` — the batched peer of `cifar8BnTrainStepText`.**
 
     Same net, same three optimizers, same packed `[θ|m|v]` 38-parameter signature. What moves is
     the op FAMILY for the convolutions and the dense head: this render carries the batch **in the
     Lean type** (`SHlo (B*(c*h*w))`) and uses the batched constructors, where the `…V` render is
-    per-example with `pretty B` broadcasting. It is `cifar8AdamTrainStepFaithfulB` with BatchNorm
+    per-example with `pretty B` broadcasting. It is `cifar8AdamTrainStepBText` with BatchNorm
     spliced in, and it exists for one reason: **bf16 on the NORMALIZED net.**
 
     **Why the migration is what unlocks bf16.** The 27 bf16 ops were built for ImageNet, which
@@ -1262,7 +1262,7 @@ set_option maxRecDepth 8000 in
       Chapter 5 does not use.
 
     The BN nodes are per-example `SHlo` trees inside a `pretty B` render, exactly as the head's
-    `rows := 1` ops are in `cifar8AdamTrainStepFaithfulB`: each `pretty` node is an independent
+    `rows := 1` ops are in `cifar8AdamTrainStepBText`: each `pretty` node is an independent
     tree, linked to the next only by the SSA name, so a per-example BN node and a batched conv
     node compose in the emitted text without composing in the Lean types. The emitted BN fragment
     is byte-identical to the one `…V` emits.
@@ -1273,7 +1273,7 @@ set_option maxRecDepth 8000 in
 
     Parameters are NOT batched — only activations are — so the optimizer tail (`optTail`) is
     untouched and shared verbatim with both peers. Conv biases are `%cb1…%cb8`: `%b1` is β₁. -/
-def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
+def cifar8BnTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (bnEpsStr invBStr b1Str ob1Str b2Str ob2Str aEpsStr wdStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -1545,11 +1545,11 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {argSig}) -> ({retTy}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
-/-- The **plain-SGD** cifar8 render: `cifar8AdamTrainStepFaithfulV` with `opt := .sgd`, so the
+/-- The **plain-SGD** cifar8 render: `cifar8AdamTrainStepText` with `opt := .sgd`, so the
     forward, backward and all 22 un-fused gradients are shared verbatim with the AdamW render and
     only the tail differs. Entry `@cifar8_sgd_train_step`, 71 in / 69 out. -/
-def cifar8SgdTrainStepFaithful : String :=
-  cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+def cifar8SgdTrainStepText : String :=
+  cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
@@ -1561,8 +1561,8 @@ def cifar8SgdTrainStepFaithful : String :=
 
 /-- The **Nesterov** cifar8 render (`opt := .nesterov`), μ baked at 0.9.
     Entry `@cifar8_mom_train_step`, 71 in / 69 out. -/
-def cifar8MomTrainStepFaithful : String :=
-  cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3
+def cifar8MomTrainStepText : String :=
+  cifar8AdamTrainStepText 128 3 16 16 32 32 2 2 64 10 3 3
     "0.0078125" "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)

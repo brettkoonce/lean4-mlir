@@ -2,23 +2,27 @@ import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 
 /-! # The cifar8 step tie at its UN-FUSED gradient nodes — the packed `cifar8w_*` arms
 
-`Cifar8PoC.cifar8_train_step_tied_certified` ties the fused-SGD `cifar8_train_step.mlir`, which no
+`Cifar8Tie.cifar8_train_step_tied_certified` ties the fused-SGD `cifar8_train_step.mlir`, which no
 trainer runs. The packed wide no-BN arms (`cifar8w_{sgd,mom,adam}_train_step.mlir`, from
-`cifar8AdamTrainStepFaithfulV`) emit the same forward and backward chain feeding `*Grad` ops to a
+`cifar8AdamTrainStepText`) emit the same forward and backward chain feeding `*Grad` ops to a
 separate optimizer. This file states those nodes, each at the same chain cotangent: all 22
 parameter tensors, via `GradNode` (Foundation/SgdNodes.lean). The optimizer update is outside the
 statement.
 
 ## Scope (as the fused tie)
-* Below the output layer the cotangents are the rendered chain; that they equal the loss gradient
-  at each layer's output is not stated.
+* Below the output layer the cotangents are the rendered chain. `cifar8_net_lossGrad`
+  (`Cifar8ParamGrad`) states each node as the loss gradient in its parameter, with each pool's
+  cotangent routed to one maximal cell, as the rendered `select_and_scatter` does; this chain's
+  `maxPoolBackDenote` routes it to the first maximal cell (`maxPool2Argmax`), the op's own choice,
+  so it is the capstone's chain at that selection (`CnnFold.cnnChainCotW2_eq_sel`,
+  `CifarFold.cifarChainCotW2_eq_sel`).
 * Conv backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.Cifar8PoCG
+namespace Proofs.Cifar8TieG
 
 /-- **Whole cifar8 train step at its gradient nodes.** All 22 parameter tensors (8 conv `W`+`b`,
     the dense head `W₉,b₉,Wa,ba,Wb,bb`), at the real cifar8 forward: each emitted `*Grad` node
@@ -77,11 +81,11 @@ theorem cifar8_train_step_tiedG {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     -- the 8 conv chain cotangents (all reused constructors)
     let cotC8 : Vec (c4*(2*h)*(2*w)) := cnnChainCotW2 W₉ Wa Wb h9 ha r8t cc8 g
     let cotC7 : Vec (c4*(2*h)*(2*w)) := cnnChainCotW1 W₈ cc7 cotC8
-    let cotC6 : Vec (c3*(2*(2*h))*(2*(2*w))) := CifarPoC.cifarChainCotW2 W₇ r6t cc6 cotC7
+    let cotC6 : Vec (c3*(2*(2*h))*(2*(2*w))) := CifarFold.cifarChainCotW2 W₇ r6t cc6 cotC7
     let cotC5 : Vec (c3*(2*(2*h))*(2*(2*w))) := cnnChainCotW1 W₆ cc5 cotC6
-    let cotC4 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := CifarPoC.cifarChainCotW2 W₅ r4t cc4 cotC5
+    let cotC4 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := CifarFold.cifarChainCotW2 W₅ r4t cc4 cotC5
     let cotC3 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := cnnChainCotW1 W₄ cc3 cotC4
-    let cotC2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := CifarPoC.cifarChainCotW2 W₃ r2t cc2 cotC3
+    let cotC2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := CifarFold.cifarChainCotW2 W₃ r2t cc2 cotC3
     let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := cnnChainCotW1 W₂ cc1 cotC2
     -- conv₁
     GradNode.ConvWGradTied xN cotN b₁ x W₁ cotC1
@@ -122,4 +126,4 @@ theorem cifar8_train_step_tiedG {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     GradNode.denseWGradTied_holds, GradNode.denseBGradTied_holds⟩
 
 
-end Proofs.Cifar8PoCG
+end Proofs.Cifar8TieG

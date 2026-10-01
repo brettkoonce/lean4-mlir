@@ -8,8 +8,8 @@ their only writers:
 
 | artifact | renderer |
 |---|---|
-| `verified_mlir/convnext_train_step.mlir` (SGD) | `convNextTrainStepFaithfulV` |
-| `verified_mlir/convnext_adam_train_step.mlir` (AdamW) | `convNextAdamTrainStepFaithful` |
+| `verified_mlir/convnext_train_step.mlir` (SGD) | `convNextTrainStepText` |
+| `verified_mlir/convnext_adam_train_step.mlir` (AdamW) | `convNextAdamTrainStepText` |
 
 What remains is the part `lake build` cannot do: **iree-compile the committed bytes**, which needs
 the compiler on PATH. It reads them and throws if they are missing rather than quietly recreating

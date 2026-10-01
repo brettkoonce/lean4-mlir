@@ -1,8 +1,8 @@
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPC
 
 /-! # EfficientNet's per-block batched VJPs
 
-The batched block forwards of B0 at the index `N·(c·h·w)` the forward graph (`EfficientNetRender.PC`)
+The batched block forwards of B0 at the index `N·(c·h·w)` the forward graph (`EfficientNetStagesPC`)
 uses, each with a `HasVJP` composed by `vjpComp` from the batched stage VJPs (`Batched.Stages`:
 `cbsBHasVJP`, `dwbsBHasVJP`, `dwbsSBHasVJP`, `seBHasVJP`, `projBHasVJP`, and `batchMapHasVJP` for
 the per-example ops), and a `_differentiable` lemma for each:

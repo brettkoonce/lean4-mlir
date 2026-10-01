@@ -18,7 +18,7 @@ def main (_args : List String) : IO Unit :=
     { slug := "mobilenetv2", net := mobilenetv2Verified.toNet, bs := 32
       sgPath := "verified_mlir/mobilenetv2_adam_train_step.mlir"
       dpPath := "verified_mlir/mobilenetv2_adamdp_train_step.mlir"
-      render := fun B fs => Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB B 10 "1.0e-5"
+      render := fun B fs => Proofs.StableHLO.mobilenetv2AdamTrainStepText B 10 "1.0e-5"
         (forceSync := fs)
       entry := fun B r => s!"m.mobilenetv2_{Proofs.StableHLO.mnv2AdamVariant B r}_train_step"
       -- 3e-3, not R34's 1e-3. Measured: the whole-net split error on the statistics

@@ -9,7 +9,7 @@ The Chapter-3 CNN with the **conv feature extractor held fixed** (two 3×3 convs
 channels, maxpool 28→14, flatten 6272) and only the **dense classifier head swept**:
 `flatten(6272) → dense 6272→d → relu → dense d→d → relu → dense d→10`. Reads the FC width
 `d` from argv, renders `verified_mlir/cnn_{d}_{train_step,fwd}.mlir` from the **faithful**
-renderers (`cnnTrainStepFaithfulV` — every line is `pretty` of a den-certified verified AST
+renderers (`cnnTrainStepText` — every line is `pretty` of a den-certified verified AST
 node — and `cnnFwdModuleV`), then trains on that render (Lean → IREE FFI → GPU).
 
 The faithful CNN renderer takes a single dense width (both FC hidden layers share `d`), so
@@ -29,7 +29,7 @@ def renderCnnGrid (d : Nat) : IO Unit := do
   let dir := (cnnG d).mlirDir
   IO.FS.createDirAll dir
   let slug := s!"cnn_{d}"
-  let ts := (cnnTrainStepFaithfulV 128 1 32 14 14 d 10 3 3 "0.00078125"
+  let ts := (cnnTrainStepText 128 1 32 14 14 d 10 3 3 "0.00078125"
       (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0)).replace "@cnn_train_step" s!"@{slug}_train_step"

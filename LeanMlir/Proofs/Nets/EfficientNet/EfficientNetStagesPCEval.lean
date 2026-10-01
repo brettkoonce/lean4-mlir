@@ -1,8 +1,8 @@
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPC
 
 /-! # EfficientNet-B0 — the inference (frozen-statistics) stages and block graphs
 
-The eval twin of `EfficientNetRender.PC`: the batched stage abbreviations at frozen statistics
+The eval twin of `EfficientNetStagesPC`: the batched stage abbreviations at frozen statistics
 (`cbsBEval` / `stemBEval` / `dwbsBEval` / `dwbsSBEval`; `projBEval` is `Batched.Stages`', beside
 its training twin, and `seB` is unchanged, it has no BN) and five graphs with their faithfulness (`*GraphBEval_faithful`): stem, MBConv1, strided
 MBConv6, residual MBConv6, head. The stride-1 no-skip expand block is `mbExpGraphBEval_faithful`
@@ -32,7 +32,7 @@ namespace Proofs
     ∘ StableHLO.batchMap N (flatConv W b)
 
 /-- Batched strided (3×3 s2) stem conv → inference bn → swish (halves spatial). At the
-    XLA-`SAME` phase, as `stemB` (`EfficientNetRender.PC`) and the shipped
+    XLA-`SAME` phase, as `stemB` (`EfficientNetStagesPC`) and the shipped
     `efficientnet_fwd_eval`. -/
 noncomputable def stemBEval (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β μ v : Vec oc) :

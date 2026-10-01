@@ -331,7 +331,7 @@ inductive SHlo : Nat → Type where
   -- by WIDTH only and has no element type, so "the value is bf16 here" is unsayable. The
   -- op keeps its result f32 (the accumulate), so the index stays honest — the same
   -- bundling `flatConvF` already uses for conv+bias.
-  -- **ITS f32-TYPED RESULT IS A PoC ARTEFACT, NOT A RECOMMENDATION.** `dotInBf16` is the
+  -- **ITS f32-TYPED RESULT IS AN ARTEFACT OF THE DEPTH-1 PROOF, NOT A RECOMMENDATION.** `dotInBf16` is the
   -- depth-1 dense proof-of-concept and is rendered by NO net. `dot_general` reaches the tensor
   -- cores with either result type, so the result type is inert for CORRECTNESS but not for SPEED
   -- (an f32 result makes the gemm write twice the bytes, a real cost on a real chain). ViT's dot ops take the **bf16-typed
@@ -363,7 +363,7 @@ inductive SHlo : Nat → Type where
   -- `den`-faithful for ANY rounding — bf16 round-to-nearest being the instance we emit. This is the
   -- op `Proofs/Float/Bf16Fold.lean` names as the depth > 1 ingredient
   -- (`den (convertF rnd e) = rnd ∘ den e`), and it is ALSO what depth 1 needs on the emitter side:
-  -- the PoC folds the leaf cast into the operand *value*, which is right for the proof but would
+  -- the depth-1 proof folds the leaf cast into the operand *value*, which is right for the proof but would
   -- leave the emitted graph pure `f32` and therefore exactly as fast as fp32. One op serves both.
   --
   -- It emits a convert ROUND TRIP (`f32 → bf16 → f32`), which is the honest reading of a `ℝ → ℝ`
@@ -404,9 +404,10 @@ inductive SHlo : Nat → Type where
   -- the saved conv input. Conv is linear, so this is a global VJP.
   | convBack   {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*h*w)) : SHlo (oc*h*w) → SHlo (ic*h*w)
-  -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
-  -- `x` is the saved pre-pool input. Conditional (each window's max attained once,
-  -- `MaxPool2Smooth`), like the ReLU kink.
+  -- Max-pool backward (`select_and_scatter`, `GE` select: route dy to the window's first
+  -- maximal cell in row-major order, ties included); `x` is the saved pre-pool input. Its
+  -- VJP reading is conditional (each window's max attained once, `MaxPool2Smooth`), like
+  -- the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
   -- padding — and **nothing else changes**, because `select_and_scatter` scatters with an
@@ -480,7 +481,7 @@ inductive SHlo : Nat → Type where
   -- downsample/projection AND the 7×7 stem, kH/kW-generic). `convStridedBiasSgd`: the bias
   -- grad is stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so it emits the SAME `reduce` text
   -- as `convBiasSgd` (its `skel` aliases that op's Raw); only its `den` differs (the strided
-  -- VJP). `ResNet34PoC.convStrided{W,B}_den` (`SgdNodes`) prove both `den`s = the certified
+  -- VJP). `SgdNode.convStrided{W,B}_den` (`SgdNodes`) prove both `den`s = the certified
   -- loss-descent step.
   | convStridedWeightSgd {ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Vec (ic*(2*h)*(2*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
@@ -508,7 +509,7 @@ inductive SHlo : Nat → Type where
   -- zero-upsample dy (interior=1 → 2h×2w) then the SAME per-channel weight-grad on the 2h×2w grid;
   -- `den` = `W − lr·` `depthwiseStride2WeightGradHasVJP`'s backward. The depthwise bias grad is stride-INDEPENDENT
   -- (`Σ_{batch,spatial} dy`), so both bias ops emit the SAME `reduce` text as `convBiasSgd` (their
-  -- `skel` aliases that op's Raw); only their `den` differs. `Mnv2PoC.depthwise{W,B}_den` (`SgdNodes`)
+  -- `skel` aliases that op's Raw); only their `den` differs. `SgdNode.depthwise{W,B}_den` (`SgdNodes`)
   -- prove the stride-1 pair's `den`s = the certified loss-descent step.
   | depthwiseWeightSgd {c h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ)
@@ -625,14 +626,14 @@ inductive SHlo : Nat → Type where
   -- and its input-VJP (`dy · swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`).
   -- Swish is SMOOTH everywhere (no kink, NO smoothness hyp — unlike relu6); the
   -- VJP is the GLOBAL `swishHasVJP` (no `_at`). `swishBack`'s `xName`/`x` is the
-  -- saved pre-activation. `den` via the proven `swish` / `swishHasVJP` (LayerNorm.lean).
+  -- saved pre-activation. `den` via the proven `swish` / `swishHasVJP` (Activations.lean).
   | swishF     {n : Nat}                                        : SHlo n → SHlo n
   | swishBack  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 7 (EfficientNet): sigmoid forward (`σ(x) = stablehlo.logistic`, the SE
   -- gate's output nonlinearity) and its input-VJP (`dy · σ(x)·(1−σ(x))`). Like swish,
   -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoidHasVJP`, not `_at`).
   -- `sigmoidBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven
-  -- `sigmoid` / `sigmoidHasVJP` (SE.lean).
+  -- `sigmoid` / `sigmoidHasVJP` (Activations.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
   -- The BATCHED peers of `swishBack`/`sigmoidBack`. Identical `den` — the SAME
@@ -648,7 +649,8 @@ inductive SHlo : Nat → Type where
   -- `BatchableOp`: the mask is per-example data, so this cannot be a descriptor.
   -- Batched 2×2 max-pool BACKWARD. `x` is the WHOLE-BATCH saved pre-pool input; `den` is
   -- `batchMapAux`, which hands example `n` its OWN slice of `x` (a `batchMap` descriptor would
-  -- hand every example one example's input). Conditional (each window's max attained once), like the unbatched op.
+  -- hand every example one example's input). Same first-maximum routing and the same
+  -- conditional VJP reading as the unbatched op.
   | maxPoolBackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched **3×3/s2** max-pool backward — `maxPoolBackB`'s peer at the paper's stem pool.
@@ -835,7 +837,7 @@ inductive SHlo : Nat → Type where
   -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
   -- Like swish/sigmoid, SMOOTH everywhere (no kink, NO smoothness hyp — the VJP is
   -- the GLOBAL `geluHasVJP`, not `_at`). `geluBack`'s `xName`/`x` is the saved
-  -- pre-activation. `den` via the proven `gelu` / `geluHasVJP` (LayerNorm.lean).
+  -- pre-activation. `den` via the proven `gelu` / `geluHasVJP` (Activations.lean).
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 8 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
@@ -1430,15 +1432,17 @@ inductive SHlo : Nat → Type where
       (β₁ β₂ ε wd bc₁ bc₂ : ℝ) (θ m v : Vec n)                  : SHlo n → SHlo n
   | lambScaleF {n : Nat} (ds : List Nat)                        : SHlo 1 → SHlo n → SHlo n
 
--- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
--- matching `maxPool2HasVJPAt3.backward` lifted through the flatten bridge.
--- Total in the saved input `xv` (the no-ties proof lives only in `.correct`).
+-- Total max-pool backward, the `select_and_scatter` (`GE` select) formula: each window's
+-- cotangent lands on its FIRST maximal cell in row-major order (`maxPool2Argmax`), ties
+-- included, as the printed op routes it (`IR.maxPoolBackDenote` flattened). At a smooth point it
+-- is `maxPool2HasVJPAt3.backward` lifted through the flatten bridge (`maxPoolBack_faithful`).
 noncomputable def maxPoolBackFlat (c h w : Nat)
     (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
   fun idx =>
     let p := finProdFinEquiv.symm idx
     let q := finProdFinEquiv.symm p.1
-    if MaxPool2IsArgmax (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) q.1 q.2 p.2
+    if maxPool2Argmax (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) q.1 (winRow q.2) (winCol p.2)
+        = (winRowMod q.2, winColMod p.2)
     then (Tensor3.unflatten dyv : Tensor3 c h w) q.1 (winRow q.2) (winCol p.2) else 0
 
 /-- **3×3/s2 max-pool backward (flattened)** — the peer of `maxPoolBackFlat` at He et al.'s stem
@@ -1450,7 +1454,13 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     the backward can name it directly. 3×3/s2 windows OVERLAP, so an input can be the argmax of up
     to four outputs (`win3Row_mem_le_two` squared) and the cotangent must ACCUMULATE.
     `HasVJPAt3.correct` covers that as is — it states the backward as a sum over all
-    outputs, and `maxPool2`'s peer merely *collapses* it using disjointness. -/
+    outputs, and `maxPool2`'s peer merely *collapses* it using disjointness.
+
+    Each output routes to its window's first maximal position in row-major order
+    (`maxPool3s2LocalReindex`, through `windowArgmax`), the printed `GE` select's choice, ties
+    included. The clamped first-window offset repeats the real cell after it, so the first maximal
+    offset names the first maximal position the padded op visits (a pad cell never wins a `GE`
+    against a real one). -/
 noncomputable def maxPool3s2BackFlat (c h w : Nat)
     (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
   fun idx =>
@@ -2337,7 +2347,7 @@ dsimproc denStepApp (den _ _) := fun e => do
     den (.dotInBf16 rnd s W e) = fun j => ∑ i, rnd (den e i) * rnd (W i j) := rfl
 /-- **The bundling is inert.** `dotInBf16` on raw operands denotes exactly what `dotIn`
     denotes on PRE-rounded ones — so every tie already proven in the `dotIn` vocabulary
-    (e.g. `Bf16PoC.bf16_render_faithful`) transfers to the emittable node by rewriting
+    (e.g. `Bf16Fold.bf16_render_faithful`) transfers to the emittable node by rewriting
     with this, rather than being reproved. -/
 theorem dotInBf16_eq_dotIn_rounded {m n : Nat} (rnd : ℝ → ℝ) (s : String) (W : Mat m n)
     (e : SHlo m) :
@@ -3020,16 +3030,18 @@ theorem convBack_faithful {ic oc h w kH kW : Nat} (wN : String)
 
 /-- **Max-pool backward faithfulness (smooth point).** The emitted
     `select_and_scatter` graph denotes the proven `maxPoolFlatHasVJPAt`
-    backward — routing the cotangent to each window's argmax (the codegen's
-    no-ties convention), under the MaxPool smoothness hypothesis. -/
+    backward under the MaxPool smoothness hypothesis. The `den` routes each
+    window's cotangent to its first maximal cell at every point, as the printed
+    `GE` select does; smoothness makes that cell the only maximal one. -/
 theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)))
     (h_smooth : MaxPool2Smooth (Tensor3.unflatten x : Tensor3 c (2*h) (2*w)))
     (e : SHlo (c*h*w)) :
     den (.maxPoolBack xN x e)
       = (maxPoolFlatHasVJPAt (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [denStepApp, maxPoolBackFlat, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward,
-             Tensor3.flatten_apply, maxPool2HasVJPAt3]
+  simp only [denStepApp, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward, Tensor3.flatten_apply,
+    ← IR.maxPoolBackDenote_eq_of_smooth _ h_smooth]
+  rfl
 
 /-- **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
     graph at window 3 / stride 2 / symmetric padding 1 denotes the proven
@@ -3589,7 +3601,7 @@ theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
     den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2FlatHasVJP W b).backward v (den e) := rfl
 
 /-- **Swish forward faithfulness.** The `multiply(x, logistic(x))` graph denotes
-    the proven `swish` (= `x · σ(x)`, LayerNorm.lean). Smooth everywhere; no kink,
+    the proven `swish` (= `x · σ(x)`, Activations.lean). Smooth everywhere; no kink,
     no smoothness hypothesis. (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem swishF_faithful {n : Nat} (e : SHlo n) :
     den (.swishF e) = swish n (den e) := rfl
@@ -3602,7 +3614,7 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.swishBack xN x e) = (swishHasVJP n).backward x (den e) := rfl
 
 /-- **Sigmoid forward faithfulness.** The `stablehlo.logistic(x)` graph denotes the
-    proven `sigmoid` (= σ(x), SE.lean) — the SE gate's output nonlinearity.
+    proven `sigmoid` (= σ(x), Activations.lean) — the SE gate's output nonlinearity.
     Smooth everywhere. (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem sigmoidF_faithful {n : Nat} (e : SHlo n) :
     den (.sigmoidF e) = sigmoid n (den e) := rfl
@@ -3616,7 +3628,7 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 
 /-- **GELU forward faithfulness.** The tanh-approximation graph
     `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu`
-    (LayerNorm.lean). Smooth everywhere; no kink, no smoothness hypothesis.
+    (Activations.lean). Smooth everywhere; no kink, no smoothness hypothesis.
     (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem geluF_faithful {n : Nat} (e : SHlo n) :
     den (.geluF e) = gelu n (den e) := rfl

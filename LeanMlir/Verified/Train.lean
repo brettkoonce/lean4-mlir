@@ -283,7 +283,7 @@ def cdOn (v : String) : Bool := v.contains "do"
     `acc` puts the marker in the MIDDLE. -/
 def accOn (v : String) : Bool := v.contains "acc"
 
-/-- LAMB — the per-tensor trust ratio (`R34Opt.lambAccum`), RSB-A3's optimizer.
+/-- LAMB — the per-tensor trust ratio (`OptRecipe.lambAccum`), RSB-A3's optimizer.
     Substring, not prefix, for `accOn`'s reason one spelling over: the EMA form is `emalamb…`,
     which does not start with "lamb". -/
 def lambOn (v : String) : Bool := v.contains "lamb"
@@ -1850,7 +1850,7 @@ min({emaDecay}, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE
 the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on \
 micro-batches."
     -- CONDITIONAL on the loaded variant: it names only the absences that variant has.
-    -- `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB renders as `R34Opt.lambAccum 8` with
+    -- `lambaccdp8x64wxclipbcebf16`, which ResNet50RenderB renders as `OptRecipe.lambAccum 8` with
     -- `bce := true`, has neither, and an unconditional line would assert the exact opposite of the
     -- graph loaded on RSB-A3. A warning that is always printed carries no information; one that is
     -- always printed AND sometimes false is worse, because the run log then reads as evidence for

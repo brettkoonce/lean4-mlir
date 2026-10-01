@@ -19,7 +19,7 @@ The building blocks every batched conv-net forward is written in, at the flat ba
 
 The generic pieces they compose — `batchMapHasVJP` (block-diagonal VJP of a batch-separable op)
 and `bnBatchLAHasVJP` — are in `BatchMapVJPAt`. EfficientNet-B0, MobileNetV2/V4 and the ResNets
-build their blocks from these; the MBConv blocks themselves are in `EfficientNetRender.PC` and
+build their blocks from these; the MBConv blocks themselves are in `EfficientNetStagesPC` and
 `EfficientNetChainClose`.
 -/
 
@@ -83,7 +83,7 @@ noncomputable def stemB (N : Nat) {ic oc h w kH kW : Nat}
     ∘ StableHLO.batchMap N (flatConv W b)
 
 -- ════════════════════════════════════════════════════════════════
--- § Per-stage VJPs — the batched stage abbreviations (`EfficientNetRender.PC`) compose the
+-- § Per-stage VJPs — the batched stage abbreviations (`EfficientNetStagesPC`) compose the
 --   batched per-op VJPs (`batchMap`-lifted) + true-BN (`bnBatchLA`) + pointwise swish.
 -- ════════════════════════════════════════════════════════════════
 

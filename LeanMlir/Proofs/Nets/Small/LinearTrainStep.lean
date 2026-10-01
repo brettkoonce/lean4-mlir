@@ -20,7 +20,7 @@ The chain-rule fold is here too: by `pdiv_comp`, the two-factor sum is the singl
 gradient `∂/∂θ (crossEntropy ∘ mnistLinear)` (`lossWeightGrad_eq_sum`, in `SmoothedLossCot` with
 the other loss-cotangent lemmas), so the weight update is literally one step of gradient descent on
 the loss (`sgdW_descends_loss_gradient`, using `crossEntropy_differentiable`). The rendering half — that the emitted text is `pretty`
-of these graphs — is `linTrainStepFaithfulV` and `LinearFold`.
+of these graphs — is `linTrainStepText` and `LinearFold`.
 -/
 
 namespace Proofs.StableHLO
@@ -89,7 +89,7 @@ theorem sgdW_descends_loss_gradient (lr : ℝ) (label : Fin n) (i : Fin m) (j : 
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two outputs' denotations. The emitted linear train step
---   (`linTrainStepFaithfulV`, tied in `LinearFold`) has two updated-parameter outputs;
+--   (`linTrainStepText`, tied in `LinearFold`) has two updated-parameter outputs;
 --   these are their ℝ values, each the certified SGD step.
 -- ════════════════════════════════════════════════════════════════
 

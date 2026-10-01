@@ -4,7 +4,7 @@ import LeanMlir.Types
 /-! # ch9 N5 — ConvNeXt-T forward: the `iree-compile` smoke over the COMMITTED bytes
 
 `verified_mlir/convnext_fwd.mlir` is written by `LeanMlir/Proofs/Codegen/ConvNeXtRender.lean`'s
-`convNextFwdFaithfulV` — `pretty(provenGraph)`, sharing `convNextFwdChain` with both train steps —
+`convNextFwdText` — `pretty(provenGraph)`, sharing `convNextFwdChain` with both train steps —
 and that `#eval` is its only writer. This file keeps only the part `lake build` genuinely cannot do:
 running `iree-compile`, which needs the compiler on PATH.
 

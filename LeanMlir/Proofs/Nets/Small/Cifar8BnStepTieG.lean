@@ -2,8 +2,8 @@ import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 
 /-! # The cifar8-bn step tie at its UN-FUSED gradient nodes — the packed `cifar8w_bn_*` arms
 
-`Cifar8BnPoC.cifar8Bn_train_step_tied_certified` ties the fused-SGD render
-(`cifar8BnTrainStepFaithfulV` at `opt := none`). The artifacts the book's Chapter-4 runs train
+`Cifar8BnTie.cifar8Bn_train_step_tied_certified` ties the fused-SGD render
+(`cifar8BnTrainStepText` at `opt := none`). The artifacts the book's Chapter-4 runs train
 (`cifar8w_bn_{sgd,mom,adam}_train_step.mlir`, and the narrow `cifar8_bn_*` width sweep) are the same
 renderer at `opt := some _`: the same forward and backward chain, feeding `*Grad` ops (the `*Sgd`
 arms with `θ − lr·` stripped) to a separate optimizer. This file states those nodes, each at the
@@ -11,15 +11,19 @@ same chain cotangent: all 38 parameter tensors, via `GradNode` (Foundation/SgdNo
 optimizer update that consumes them (SGD, Nesterov, AdamW) is outside the statement.
 
 ## Scope (as the fused tie)
-* Below the output layer the cotangents are the rendered chain; that they equal the loss gradient
-  at each layer's output is not stated.
+* Below the output layer the cotangents are the rendered chain. `cifar8Bn_net_lossGrad`
+  (`Cifar8BnParamGrad`) states each node as the loss gradient in its parameter, with each pool's
+  cotangent routed to one maximal cell, as the rendered `select_and_scatter` does; this chain's
+  `Back3.maxpool` routes it to the first maximal cell (`maxPool2Argmax`), the op's own choice, so
+  each pool step is the capstone's scatter at that selection
+  (`SmallParamGrad.maxpool_flatDenote_eq_selScatter`).
 * Conv/BN backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.Cifar8BnPoCG
+namespace Proofs.Cifar8BnTieG
 
 /-- **Whole cifar8-bn train step at its gradient nodes.** All 38 parameter tensors (8 conv `W`+`b`,
     8 BN `γ`+`β`, 3 dense `W`+`b`), at the real cifar8-bn forward: each emitted `*Grad` node denotes
@@ -166,4 +170,4 @@ theorem cifar8Bn_train_step_tiedG {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     GradNode.denseWGradTied_holds, GradNode.denseBGradTied_holds⟩
 
 
-end Proofs.Cifar8BnPoCG
+end Proofs.Cifar8BnTieG

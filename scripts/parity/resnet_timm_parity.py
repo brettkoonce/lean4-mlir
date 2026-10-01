@@ -17,10 +17,10 @@ What it does, per net:
      from the function prefix on CPU at f32 in every mode. Its drop-path keeps are read off the
      emitted `forward` and compared with timm's.
   3. Verified: the renderer's forwards are rendered at the gate's batch into the scratch directory
-     and run through iree-compile on CPU — R50: `resnet50FwdFaithfulV` at 224 and 160,
-     `resnet50FwdEvalFaithfulV` at 224 and 288 (`resnet50in_fwd`, `resnet50in160_fwd`,
-     `resnet50in_fwd_eval`, `resnet50in_fwd_eval_s288`); R34: `resnet34FwdFaithfulB` and
-     `resnet34FwdEvalFaithfulV` at 224 (`resnet34in_fwd`, `resnet34in_fwd_eval`). The verified
+     and run through iree-compile on CPU — R50: `resnet50FwdText` at 224 and 160,
+     `resnet50FwdEvalText` at 224 and 288 (`resnet50in_fwd`, `resnet50in160_fwd`,
+     `resnet50in_fwd_eval`, `resnet50in_fwd_eval_s288`); R34: `resnet34FwdText` and
+     `resnet34FwdEvalText` at 224 (`resnet34in_fwd`, `resnet34in_fwd_eval`). The verified
      spec's drop keeps are compared with timm's too.
 
 Usage:
@@ -43,10 +43,10 @@ ARCHS = {
 """,
         verified="""import LeanMlir.Proofs.Codegen.ResNet50RenderB
 import LeanMlir.Verified.NetsCore
-#eval IO.FS.writeFile "{d}/train224.mlir" (Proofs.StableHLO.resnet50FwdFaithfulV {B} 1000 "1.0e-05" "resnet50in")
-#eval IO.FS.writeFile "{d}/train160.mlir" (Proofs.StableHLO.resnet50FwdFaithfulV {B} 1000 "1.0e-05" "resnet50in160" (q := 5))
-#eval IO.FS.writeFile "{d}/eval224.mlir" (Proofs.StableHLO.resnet50FwdEvalFaithfulV {B} 1000 "1.0e-05" "resnet50in")
-#eval IO.FS.writeFile "{d}/eval288.mlir" (Proofs.StableHLO.resnet50FwdEvalFaithfulV {B} 1000 "1.0e-05" "resnet50in" (q := 9) (vSuffix := "_s288"))
+#eval IO.FS.writeFile "{d}/train224.mlir" (Proofs.StableHLO.resnet50FwdText {B} 1000 "1.0e-05" "resnet50in")
+#eval IO.FS.writeFile "{d}/train160.mlir" (Proofs.StableHLO.resnet50FwdText {B} 1000 "1.0e-05" "resnet50in160" (q := 5))
+#eval IO.FS.writeFile "{d}/eval224.mlir" (Proofs.StableHLO.resnet50FwdEvalText {B} 1000 "1.0e-05" "resnet50in")
+#eval IO.FS.writeFile "{d}/eval288.mlir" (Proofs.StableHLO.resnet50FwdEvalText {B} 1000 "1.0e-05" "resnet50in" (q := 9) (vSuffix := "_s288"))
 #eval IO.FS.writeFile "{d}/keeps.txt" (String.intercalate " " (resnet50ImagenetVerified.dropKeeps.toList.map toString))
 """,
         spec="resnet50ImagenetVerified", drop=0.05,
@@ -63,8 +63,8 @@ import LeanMlir.Verified.NetsCore
 """,
         verified="""import LeanMlir.Proofs.Codegen.ResNet34RenderB
 import LeanMlir.Verified.NetsCore
-#eval IO.FS.writeFile "{d}/train224.mlir" (Proofs.StableHLO.resnet34FwdFaithfulB {B} 1000 "1.0e-05" "resnet34in")
-#eval IO.FS.writeFile "{d}/eval224.mlir" (Proofs.StableHLO.resnet34FwdEvalFaithfulV {B} 1000 "1.0e-05" "resnet34in")
+#eval IO.FS.writeFile "{d}/train224.mlir" (Proofs.StableHLO.resnet34FwdText {B} 1000 "1.0e-05" "resnet34in")
+#eval IO.FS.writeFile "{d}/eval224.mlir" (Proofs.StableHLO.resnet34FwdEvalText {B} 1000 "1.0e-05" "resnet34in")
 #eval IO.FS.writeFile "{d}/keeps.txt" (String.intercalate " " (resnet34ImagenetVerified.dropKeeps.toList.map toString))
 """,
         spec="resnet34ImagenetVerified", drop=0.0,

@@ -365,7 +365,7 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          ("efficientnet_fwd.mlir", "efficientnet_train_step.mlir"),
          # ⛔ MobileNetV2 has NO entry here since 2026-09-06 (4c leg 2). Its partner was the
          # per-example `mobilenetv2_train_step.mlir`, retired with its renderer, and unlike
-         # ResNet-34 this net ships no batched SGD step to re-pair with — `OptKind` is
+         # ResNet-34 this net ships no batched SGD step to re-pair with — it renders
          # AdamW/RMSProp only. The coverage is not lost: `check_adam_prefix` forms exactly the
          # pairing this one would, against `mobilenetv2_adam_train_step.mlir`.
          # Stochastic depth (planning/archive/stochastic_depth.md). The SD variant gets its OWN pair

@@ -28,7 +28,7 @@ normalises over its own b rows. So:
 **That DP graph is not the committed one, and is rendered at run time.** The committed
 `adamdp64` / `lambdp64bce` are synchronised — one BN group of `k·b` per step — so against them
 this identity is false by design, exactly as the naive one above is. The peer is therefore
-`resnet50TrainStepFaithfulB … (noSync := true)`, the same renderer with the BN collectives left
+`resnet50TrainStepText … (noSync := true)`, the same renderer with the BN collectives left
 out, written to `.lake/build/` and never committed. What this gate certifies: the accumulator
 combines different micro-batches the way a gradient collective does. That the committed DP step differs from the per-replica one only in its BatchNorm is
 `tests/r50_dp_render_tie.py`'s and `imagenet-syncbn-check resnet50`'s to show.
@@ -118,10 +118,10 @@ artifact to itself and pass unconditionally"
   -- guessed at, because a peer at the wrong optimizer or loss fails for reasons this gate is not
   -- about.
   let peerRender : Option String := match peer, net.slug with
-    | "adamdp64", "resnet50in" => some (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000 "1.0e-05"
-        k Proofs.StableHLO.R34Opt.adamw "resnet50in" (noSync := true))
-    | "lambdp64bce", "resnet50in160" => some (Proofs.StableHLO.resnet50TrainStepFaithfulB 64 1000
-        "1.0e-05" k Proofs.StableHLO.R34Opt.lamb "resnet50in160" (bce := true) (q := 5)
+    | "adamdp64", "resnet50in" => some (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05"
+        k Proofs.StableHLO.OptRecipe.adamw "resnet50in" (noSync := true))
+    | "lambdp64bce", "resnet50in160" => some (Proofs.StableHLO.resnet50TrainStepText 64 1000
+        "1.0e-05" k Proofs.StableHLO.OptRecipe.lamb "resnet50in160" (bce := true) (q := 5)
         (noSync := true))
     | _, _ => none
   let some peerText := peerRender

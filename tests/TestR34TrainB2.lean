@@ -35,7 +35,7 @@ open Proofs.StableHLO
 def main : IO Unit := do
   let B := 2
   let nClasses := 10
-  let m := resnet34AdamTrainStepFaithfulB B nClasses "1.0e-05"
+  let m := resnet34AdamTrainStepText B nClasses "1.0e-05"
   IO.FS.writeFile ".lake/build/resnet34_adam_train_step_b2.mlir" m
   IO.println s!"  wrote .lake/build/resnet34_adam_train_step_b2.mlir ({(m.splitOn "\n").length} lines)"
   let mut bad := 0

@@ -3,7 +3,7 @@ import LeanMlir.Verified.Train
 
 /-! # `@convnext_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
-`Proofs/Codegen/ConvNeXtRender.lean`'s `convNextAdamTrainStepFaithful` renders the same train step
+`Proofs/Codegen/ConvNeXtRender.lean`'s `convNextAdamTrainStepText` renders the same train step
 the hand-written emitter in `tests/TestConvNeXtTrain.lean` does — the one `convnext-verified-adam`
 trains on. This harness is what licenses swapping them; run it BEFORE retiring the hand-written
 emitter, because afterwards the comparison no longer exists.

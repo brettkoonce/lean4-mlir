@@ -4,8 +4,8 @@ import LeanMlir.Types
 /-! # MobileNetV2 forward: the `iree-compile` smoke over the COMMITTED bytes
 
 `verified_mlir/mobilenetv2_fwd.mlir` and `verified_mlir/mobilenetv2_fwd_eval.mlir` are
-written by `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean`'s `mobilenetv2FwdFaithfulB` and
-`mnv2FwdEvalFaithfulV` — `pretty(provenGraph)`, off the `mnv2FwdChainB` the train step
+written by `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean`'s `mobilenetv2FwdText` and
+`mnv2FwdEvalText` — `pretty(provenGraph)`, off the `mnv2FwdChainB` the train step
 differentiates — and those
 `#eval`s are their only writers. This file keeps only the part `lake build` genuinely cannot do:
 running `iree-compile`, which needs the compiler on PATH.

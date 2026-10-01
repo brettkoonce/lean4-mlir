@@ -156,7 +156,7 @@ Composed with `denoteMLP = mlpForward` and `mlpVerifiedHasVJPAt = mlpHasVJPAt`, 
 denote the spec: the rendered forward computes the spec's forward, and `mlpBackGraph`
 computes the spec's VJP backward (at a smooth input). `mlpBackGraph` is a spec-level graph
 no committed artifact prints: `mlp_train_step.mlir` is `MlpRender.lean`'s
-`mlpTrainStepFaithfulV`, whose parameter ops `MlpFold` ties to the certified step. -/
+`mlpTrainStepText`, whose parameter ops `MlpFold` ties to the certified step. -/
 
 open Proofs.StableHLO in
 /-- **Generated MLP forward MLIR ↔ spec.** The forward graph (→ `mlp_fwd.mlir`) denotes

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
-import LeanMlir.Proofs.Codegen.ResNet34RenderB
+import LeanMlir.Proofs.Codegen.SyncBnSites
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MobileNetV4 — the Universal Inverted Bottleneck render
 
@@ -571,7 +572,7 @@ def mnv4ZbWidths : List Nat :=
     SSA name. That is a link error at parse time rather than a wrong number, which is the good
     direction, but `mnv4-fwd-smoke` checks it anyway so the failure arrives at `lake build` and not
     at `iree-compile`. -/
-def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
+def mnv4FwdText (B nClasses : Nat) (epsStr : String)
     (slug : String := "mnv4") (vSuffix : String := "") : String :=
   let sigList := mnv4SigList nClasses
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
@@ -591,7 +592,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
     its BN order matches `mnv4StatSigList` by construction rather than by a second reading. Its
     typed graph is `mnv4FwdGraphBFullEval` at `f = s / 32` (`MobileNetV4FullBEval`). -/
-def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
+def mnv4FwdEvalText (B nClasses : Nat) (epsStr : String)
     (slug : String := "mnv4") (vSuffix : String := "")
     -- the input side (224, or timm's test size); must be a multiple of 32 (the final side is s/32)
     (s : Nat := 224) : String :=
@@ -861,29 +862,16 @@ def mnv4AdamVariant (B replicas : Nat)
   (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B) ++
   (if bf16 then "bf16" else "")
 
-/-- The optimizer's name in the train step's banner: `none` is the committed AdamW tail. -/
-def mnv4OptLabel : Option R34Opt → String
-  | none | some .adamw   => "AdamW"
-  | some .heavyBall     => "heavy-ball momentum + coupled L2"
-  | some .sgd           => "plain SGD + coupled L2 (no momentum)"
-  | some .lamb          => "LAMB (per-tensor trust ratio)"
-  | some (.adamwAccum k) => s!"AdamW over {k} ACCUMULATED micro-batches"
-  | some (.lambAccum k)  => s!"LAMB (per-tensor trust ratio) over {k} ACCUMULATED micro-batches"
-
 /-- **The variant slug of a recipe render** — the JAX reference's recipe renders. `opt = none` is `mnv4AdamVariant`, so every committed spelling
     is unchanged. Markers in the order the driver's predicates read them (`VerifiedVariant`):
     `ema` first (`emaOn` is a PREFIX test), then the optimizer with its `k` (`accK` parses it back
     out after `acc[dp]`), the per-replica batch, `wx`, `do`, the decay mark, `bf16`. -/
-def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (ema wdExclude : Bool)
+def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option OptRecipe) (ema wdExclude : Bool)
     (wdStr : String) (cd : Bool) (sd : Bool := false) : String :=
   match opt with
   | none => mnv4AdamVariant B replicas bf16
   | some o =>
-    let dp := if replicas ≤ 1 then "" else "dp"
-    let core := match o with
-      | .adamwAccum k => s!"acc{dp}{k}x"
-      | _ => s!"adam{dp}"
-    (if ema then "ema" else "") ++ core ++ toString B ++ (if wdExclude then "wx" else "") ++
+    (if ema then "ema" else "") ++ o.slug replicas ++ toString B ++ (if wdExclude then "wx" else "") ++
       (if sd then "drop" else "") ++ (if cd then "do" else "") ++ wdVariantMark o wdStr ++
       (if bf16 then "bf16" else "")
 
@@ -907,7 +895,7 @@ def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (em
     The cotangent is composed from kit ops (`softmaxRow → subB → scaleB → addVB → shiftB →
     divConstB`, α = 0.1, K = nClasses), and `%loss` is report-only and stays outside the AST — the
     same carve-out `resnet34`/`mobilenetv2` take. -/
-def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
+def mobilenetv4AdamTrainStepText (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (slug : String := "mnv4")
     -- **bf16**, TRAILING and defaulted so every existing render is byte-identical.
     -- MNv4's UIB blocks carry BOTH depthwise families: the stride-1 `depthwise` and the
@@ -918,11 +906,11 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- gate only (`imagenet-syncbn-check`'s FORMULATION column). Never a committed artifact.
     (forceSync : Bool := false)
     -- **THE RECIPE AXES**, all trailing and defaulted so every committed artifact re-renders
-    -- byte-identically. `opt = none` is the committed AdamW tail (`adamOne` + `adamWConsts`);
+    -- byte-identically. `opt = none` is the committed AdamW tail (`optAllParams .adamw` + `adamWConsts`);
     -- `some o` hands the 233 gradients to `optAllParams`, the optimizer stage ResNet-34/50 share
     -- (accumulation, EMA shadow, timm `no_weight_decay`), imported rather than copied. `cd` is
     -- classifier dropout at the driver's `%do` mask.
-    (opt : Option R34Opt := none) (ema : Bool := false) (wdExclude : Bool := false)
+    (opt : Option OptRecipe := none) (ema : Bool := false) (wdExclude : Bool := false)
     (wdStr : String := "") (cd : Bool := false)
     -- stochastic depth on the 18 skip blocks (`mnv4DropSites`), masks `%dp0 … %dp17` after the BN
     -- stats and before `%do` (EfficientNet's placement), handed back as passthroughs.
@@ -1076,18 +1064,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let allPs : List PGrad := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
     -- ═══ the optimizer: the committed AdamW tail, or the shared recipe stage ═══
     let (adamCode, thetaN, mNames, vNames, aNames, eNames) ← match opt with
-      | none => do
-        let mut adamCode := ""
-        let mut thetaN : List String := []
-        let mut mNames : List String := []
-        let mut vNames : List String := []
-        for g in allPs do
-          let (c, nT, nM, nV) ← adamOne B replicas g
-          adamCode := adamCode ++ c
-          thetaN := thetaN ++ [nT]
-          mNames := mNames ++ [nM]
-          vNames := vNames ++ [nV]
-        pure (adamCode, thetaN, mNames, vNames, ([] : List String), ([] : List String))
+      | none => optAllParams .adamw B replicas allPs
       | some o => optAllParams o B replicas allPs wdExclude (ema := ema)
     -- ═══ assemble ═══
     let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh1 ++ cQh
@@ -1116,9 +1093,9 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       dropNames.map (fun _ => ty [B]) ++ (if cd then [ty [B, 1280]] else [])
     pure <|
       (if replicas ≤ 1 then
-        s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step: {trainStepHandNote accOn} ──\n"
+        s!"    // ── MobileNetV4-Conv-M batch-BN {(opt.getD .adamw).label} train step: {trainStepHandNote accOn} ──\n"
        else
-        s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        s!"    // ── MobileNetV4-Conv-M batch-BN {(opt.getD .adamw).label} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         syncBnBanner "MobileNetV4SyncTieB.mnv4_net_syncTiedB"
           "StableHLO.mnv4FwdGraphSyncFull_shard" "MobileNet" ++
         (if bf16 then syncBnBf16TwinsNote else "")) ++
@@ -1189,17 +1166,17 @@ end Proofs.StableHLO
 -- has nowhere to live here.
 
 #eval IO.FS.writeFile "verified_mlir/mnv4_fwd.mlir"
-  (Proofs.StableHLO.mnv4FwdFaithfulV 32 10 "1.0e-5")
+  (Proofs.StableHLO.mnv4FwdText 32 10 "1.0e-5")
 
 #eval IO.FS.writeFile "verified_mlir/mnv4_fwd_eval.mlir"
-  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 32 10 "1.0e-5")
+  (Proofs.StableHLO.mnv4FwdEvalText 32 10 "1.0e-5")
 
 -- **This is the artifact the MNv4 Imagenette trainer runs**, and this `#eval` is its only writer.
 -- Target: the baseline path's number for this block table in `historical/RESULTS.md`.
 -- Unlike MobileNetV2's, that number belongs to the JAX baseline and does NOT move when this
 -- render changes.
 #eval IO.FS.writeFile "verified_mlir/mnv4_adam_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 32 10 "1.0e-5")
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 32 10 "1.0e-5")
 
 -- ── The 1000-class ImageNet artifacts, for `mnv4ImagenetVerified` (slug `mnv4in`). ─────────────
 -- Same renderer, same block table, same chain as the three above — the ONLY deltas are
@@ -1217,22 +1194,22 @@ end Proofs.StableHLO
 -- ✅ **THE DP PAIR IS RENDERED AND TIED** — see the block below. Both halves of that tie exist:
 -- `tests/TestMnv4DpCheck.lean` (duplicated batch) and `imagenet-syncbn-check mnv4` (split batch).
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd.mlir"
-  (Proofs.StableHLO.mnv4FwdFaithfulV 64 1000 "1.0e-5" "mnv4in")
+  (Proofs.StableHLO.mnv4FwdText 64 1000 "1.0e-5" "mnv4in")
 
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval.mlir"
-  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in")
+  (Proofs.StableHLO.mnv4FwdEvalText 64 1000 "1.0e-5" "mnv4in")
 -- timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
 -- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8, entry
 -- `@mnv4in_fwd_eval_s256` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
 -- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256`. Training
 -- stays at 224; the eval statement (`MobileNetV4FullBEval`) covers this size too.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval_s256.mlir"
-  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" "_s256" (s := 256))
-#guard (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 224)) ==
-  Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in"
+  (Proofs.StableHLO.mnv4FwdEvalText 64 1000 "1.0e-5" "mnv4in" "_s256" (s := 256))
+#guard (Proofs.StableHLO.mnv4FwdEvalText 64 1000 "1.0e-5" "mnv4in" (s := 224)) ==
+  Proofs.StableHLO.mnv4FwdEvalText 64 1000 "1.0e-5" "mnv4in"
 
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in")
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 64 1000 "1.0e-5" 1 "mnv4in")
 
 -- **The bf16 peer** — `adam64bf16`, the same graph with every convolution AND every depthwise
 -- replaced by its bf16 twin: bf16 operands, a **bf16-TYPED** result, then a convert back to f32.
@@ -1248,7 +1225,7 @@ end Proofs.StableHLO
 -- the XLA-`SAME` one). Its three twins are the only ops this net needed that MobileNetV2 did not
 -- already build.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in" true)
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 64 1000 "1.0e-5" 1 "mnv4in" true)
 
 -- ✅ **THE 4-REPLICA PAIR, TIED.** Both halves of MNv4's DP tie are green:
 --
@@ -1273,9 +1250,9 @@ end Proofs.StableHLO
 -- is 1e-2 / 5e-2 (sync-BN backward against the two-pass one). `runs/2026-09-21-syncbn-r50-mnv4/`
 -- has the logs.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in")
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 64 1000 "1.0e-5" 4 "mnv4in")
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adamdp64bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in" true)
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 64 1000 "1.0e-5" 4 "mnv4in" true)
 #guard Proofs.StableHLO.mnv4AdamVariant 64 4 == "adamdp64"
 #guard Proofs.StableHLO.mnv4AdamVariant 64 4 true == "adamdp64bf16"
 #guard !"adamdp64bf16".contains "do"
@@ -1293,11 +1270,11 @@ end Proofs.StableHLO
 -- (`momVNextF`, `adamMNextF`). The classifier dropout is NOT in their statement (stated at the
 -- dropout-free net), as for EfficientNet's `do` renders.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 4 "mnv4in" true
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 128 1000 "1.0e-5" 4 "mnv4in" true
     (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
 -- its single-device peer, `mnv4-dp-check`'s reference (duplicated batch, 4 × 128 against 1 × 128)
 #eval IO.FS.writeFile "verified_mlir/mnv4in_emaacc8x128wxdowd005bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 1 "mnv4in" true
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 128 1000 "1.0e-5" 1 "mnv4in" true
     (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
 #guard Proofs.StableHLO.mnv4RecipeVariant 128 4 true (some (.adamwAccum 8)) true true "0.05" true ==
   "emaaccdp8x128wxdowd005bf16"
@@ -1309,11 +1286,11 @@ end Proofs.StableHLO
 -- The drop masks are not in the tie statements (stated at the drop-free net), as for
 -- EfficientNet's and ResNet-50's `drop` renders.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 4 "mnv4in" true
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 128 1000 "1.0e-5" 4 "mnv4in" true
     (opt := some (.adamwAccum 8)) (wdExclude := true) (wdStr := "0.1") (cd := true) (sd := true))
 -- its single-device peer, for `mnv4-dp-check`
 #eval IO.FS.writeFile "verified_mlir/mnv4in_acc8x128wxdropdowd01bf16_train_step.mlir"
-  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 1 "mnv4in" true
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepText 128 1000 "1.0e-5" 1 "mnv4in" true
     (opt := some (.adamwAccum 8)) (wdExclude := true) (wdStr := "0.1") (cd := true) (sd := true))
 #guard Proofs.StableHLO.mnv4RecipeVariant 128 4 true (some (.adamwAccum 8)) false true "0.1" true true ==
   "accdp8x128wxdropdowd01bf16"

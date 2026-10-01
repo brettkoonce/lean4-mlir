@@ -87,7 +87,7 @@ def main : IO Unit := do
   if !(← chk "depthwise total" dwTot 30) then bad := bad + 1
 
   -- ── the module wrapper: self-containment and the layout tie ──
-  let m := mnv4FwdFaithfulV 2 10 "1.0e-05"
+  let m := mnv4FwdText 2 10 "1.0e-05"
   IO.FS.writeFile ".lake/build/mnv4_fwd.mlir" m
   let mlines := m.splitOn "\n"
   -- Every %zbN the body references must be bound by the prelude. An unbound one is an

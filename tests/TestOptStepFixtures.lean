@@ -1,5 +1,5 @@
 import LeanMlir
-import LeanMlir.Proofs.Codegen.ResNet34RenderB
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # The OPTIMIZER STAGE alone, as a runnable module — `scripts/parity/opt_step_tie.py`'s input
 
@@ -16,7 +16,7 @@ what `vjp_oracle` already covers. Taking `g` as an input is what isolates the up
 
 ## WHAT MAKES THIS A GATE RATHER THAN A SECOND IMPLEMENTATION
 
-The body is `Proofs.StableHLO.optAllParams`, **the same call `resnet50TrainStepFaithfulB` makes** —
+The body is `Proofs.StableHLO.optAllParams`, **the same call `resnet50TrainStepText` makes** —
 same clip hoist, same all-reduce placement, same accumulator handling, same `optOne`. Nothing about
 the optimizer is spelled here; this file supplies a signature, a parameter list and a `return`.
 
@@ -54,7 +54,7 @@ private def fixtureParams : List (String × List Nat) :=
     The gradient of `pI` arrives as `%dpI`, a function argument, and the parameter/moment/
     accumulator slots keep the `%pI` / `%pIm` / `%pIv` / `%pIa` spelling `optOne` emits against —
     those names are a CONTRACT with the optimizer, not a local choice. -/
-private def optStepModule (fname : String) (opt : R34Opt)
+private def optStepModule (fname : String) (opt : OptRecipe)
     (wdExclude : Bool := false) (gradClip : Bool := false) (clipNorm : Float := 1.0)
     -- `wdStr` reaches ONLY the constant block: the per-parameter ops name `%wd` as an operand, so
     -- overriding the decay changes one `stablehlo.constant` and nothing else. That is exactly the
@@ -117,7 +117,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
     No generated reference bakes R50's AdamW constants (`%eps = 1e-8`, `%wd = 1e-4`) — the
     Adam-family references in the tree are EfficientNet's and MNv2's TF-RMSProp recipes at
     `EPS = 1e-3`/`1.0`. -/
-private def variants : List (String × R34Opt × Bool × Bool × String × Bool) :=
+private def variants : List (String × OptRecipe × Bool × Bool × String × Bool) :=
   [ -- (slug, optimizer, wdExclude, gradClip, wdStr, ema)
     ("lambclip",       .lamb,        false, true,  "", false)   -- trust ratio + clip, NO wx mask
   , ("lambwxclip",     .lamb,        true,  true,  "", false)   -- + D2 mask + D1 clip, no accumulation

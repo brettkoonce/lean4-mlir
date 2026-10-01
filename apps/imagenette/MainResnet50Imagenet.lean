@@ -4,7 +4,7 @@ import LeanMlir.Verified.Train
 /-! # `resnet50-imagenet-verified` — ResNet-50 on full ImageNet-1k, verified renderer → XLA/PJRT
 
 The renderer needs nothing ImageNet-specific — `nClasses`, `B`, `replicas`, `opt` and `slug` are
-all parameters of `resnet50TrainStepFaithfulB`, so the four artifacts are four `#eval`s.
+all parameters of `resnet50TrainStepText`, so the four artifacts are four `#eval`s.
 
 Before quoting anything from this: it is NOT RSB-A3 (no LAMB, no bs2048, no gradient
 accumulation), and R50 has no incumbent render to tie against, so the swap license every other net

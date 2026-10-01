@@ -116,7 +116,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   data     := .mnist
   layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
   blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → %LOWERER% → GPU"
-  -- Same carve-out as `mlpVerified`: this renders through `mlpTrainStepFaithfulV`, which
+  -- Same carve-out as `mlpVerified`: this renders through `mlpTrainStepText`, which
   -- emits a trailing report-only `%loss`. Without it every `mnist-mlp-grid` invocation dies on
   -- `G4 VIOLATION: returns 7 outputs, caller supplied 6`.
   lossSlot := true
@@ -151,7 +151,7 @@ def cnnVerified : VerifiedNetSpec where
 /-- **FC-width-parametric MNIST CNN** — the Chapter-3 CNN with the two convs held at 32
     channels (so the feature extractor is fixed) and the **dense classifier head** swept:
     `…maxpool → flatten(6272) → dense 6272→d → relu → dense d→d → relu → dense d→10`. The
-    canonical `cnnVerified` is `cnnG 512`. The faithful CNN renderer (`cnnTrainStepFaithfulV`)
+    canonical `cnnVerified` is `cnnG 512`. The faithful CNN renderer (`cnnTrainStepText`)
     takes a single dense width `d1` (both hidden FC layers share it), so every width renders
     through that renderer; `mnist-cnn-grid d` renders `.lake/build/cnn_{d}_{train_step,fwd}.mlir`
     (`mlirDir`, a build product) and trains on it. Isolates the ROI of the classifier head with the conv stack fixed. -/
@@ -979,7 +979,7 @@ def convnextVerified : VerifiedNetSpec where
     committed data-parallel renders take 64 examples per replica (`%x : tensor<64x150528xf32>`),
     global 256 at four replicas, the reference's batch.
 
-    What is proved about it: the train-step capstone `Proofs.CnxTiePoCGB.cnx_net_tiedGB` binds the
+    What is proved about it: the train-step capstone `Proofs.CnxTieGB.cnx_net_tiedGB` binds the
     class count, so it covers this 1000-class head, at one replica, in f32, on the chain without
     drop-path. The `SpecVJP` ties are stated at 10 classes.
 
@@ -1222,7 +1222,7 @@ def vitVerified : VerifiedNetSpec where
     Data comes from the generated tfds shim (`VerifiedData.imagenet`), so this side does no
     augmentation at all — one definition of the transform, and it is the reference's.
 
-    What is proved about it: the train-step capstone `Proofs.ViTTiePoCGB.vit_net_tiedGB` binds the
+    What is proved about it: the train-step capstone `Proofs.ViTTieGB.vit_net_tiedGB` binds the
     class count, so it covers this 1000-class head, at one replica, in f32, on the chain without
     drop-path. `vitVerified_denote_eq`, `vitVerifiedHasVJP` and `vitVerified_fwd_faithful` are
     stated at 10 classes. The matched-pair reference is [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean).

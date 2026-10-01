@@ -14,11 +14,10 @@ theorems about what a term *means* are stated about `den`, mostly in `Nets/`.
 | `FwdGraphTextTies.lean` | `#guard`s that each net's rendered forward blocks print exactly `pretty` of its T2 block graphs (ResNet-34/50, MobileNetV2/V4, EfficientNet-B0; ConvNeXt and ViT have per-example T2 graphs) |
 | `StableHLO/Parse.lean` | the token round trip `parse (toToks (skel g)) = some (skel g)`; no lexer is built, so the text ↔ token step is trusted |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
-| `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |
+| `RenderKit.lean` | the renderers' shared optimizer stage — `PGrad`, the recipe type `OptRecipe`, the per-parameter step `optOne`, `optAllParams` and `optConstsB` — plus the packed train-step interface, the bf16-switched constructors and the report-only `%loss` blocks |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |
 | `ChapterArtifacts`, `MlpArtifacts`, `CnnArtifacts` | their `#eval` artifact writers — leaf modules, imported by nothing, so building a proof never rewrites `verified_mlir/` |
 | `ResNet34RenderB`, `ResNet50RenderB`, `MobileNetV2RenderB`, `MobileNetV4RenderB`, `EfficientNetRender/Basic`, `ConvNeXtRender(B)`, `ViTRender(B)` | per-net ImageNet/Imagenette train steps (batched index, batch BN) |
-| `EfficientNetRender/PC`, `EfficientNetRender/PCEval` | EfficientNet's batched block forwards + typed graphs, and their eval-mode twins — ⚠ they write no artifact (the batched stages other nets use, `cbsB`, `projB`, …, are in `Foundation/Batched/Stages`; MobileNetV2's per-channel stages are `Nets/MobileNet/MobileNetV2StagesPC`) |
 | `IRPrint.lean` | a scratch-only execution oracle for the small-net `IR`, not an artifact writer |
 | `LambTriple.lean` | the LAMB `(θ', m', v')` triple's faithfulness — the ℝ optimizer specs the optimizer ops denote are in `Training/Optim/` (`AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `GradClip`), drop-path in `Training/DropPath` |
 
@@ -41,6 +40,14 @@ ResNet-34/50, MobileNetV2/V4 and EfficientNet-B0; the chain's glue (block order,
 threading each output name into the next block) is read off the chain beside the T2 graph's
 nesting. The CI drift guard (`proofs.yml`) re-elaborates every renderer and byte-checks
 `verified_mlir/`.
+
+## Renderer names
+
+A function that returns an artifact's text is `<net><Kind>Text`: `resnet34AdamTrainStepText`,
+`mnv4FwdText`, `linTrainStepText`. A `B` before `Text` marks the batched-op peer of a per-example
+render of the same step (`cifar8AdamTrainStepBText`, `cifar8BnTrainStepBText`,
+`convNextAdamTrainStepBText`, `vitAdamTrainStepBText`); a net with one render has no suffix. What the
+printed graph means is stated by the `*_faithful` theorems, never by a renderer's name.
 
 ## `SHlo` constructor suffixes
 

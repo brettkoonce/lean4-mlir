@@ -6,7 +6,7 @@ The ViT peer of `ConvNeXtRender`. It holds the per-example ViT-Tiny forward chai
 `pretty` of the multi-head vector-LN graph (patch embed, `vDEPTH` = 12 `vitBlockGraphMHV` blocks,
 final vector-LN, CLS-slice dense head; `vitFwdRenderV`), whose graph denotes `vitForwardKV` at
 depth 12 (`vitFwdGraphKMHV_faithful`, stated for every depth); the shared backward traversal `vitBackAll`; the SGD-inline
-step `vitTrainStepRenderV`; the AdamW tail `vitAdamTrainStepFaithful`, which `ViTRenderB` reuses;
+step `vitTrainStepRenderV`; the AdamW tail `vitAdamTrainStepText`, which `ViTRenderB` reuses;
 and the parameter list `vitParamSig`. It writes one artifact, `verified_mlir/vit_train_step.mlir`,
 the step `ViTStepTie` is stated at; every other ViT artifact is written by `ViTRenderB`.
 
@@ -579,7 +579,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 
     This is the ViT peer of `cnxAdamVariant` / `r34AdamVariant` / `mnv2AdamVariant`, and unlike
     theirs it is **documentation plus a drift guard rather than the name's producer** —
-    `vitAdamTrainStepFaithful` takes `funcName` explicitly and the
+    `vitAdamTrainStepText` takes `funcName` explicitly and the
     `#eval` paths must stay string literals for `regen_verified_mlir.sh`'s writer audit to see them.
     So the `#guard`s at the bottom of this file are what tie the literals to this function; the
     contract is checked at `lake build` rather than merely described.
@@ -662,7 +662,7 @@ private def vitInputReshapeNote : String :=
     3 → 5, so the interface becomes **807 in / 805 out** = 605/603 + 200 (the shadow) + 2
     (`%emad`/`%oemad`). `ema` is LAST in this signature on purpose: inserted mid-list it would
     capture an existing positional argument at every call site. -/
-def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
+def vitAdamTrainStepText (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
@@ -697,7 +697,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- THE ORDER IS THE SEMANTICS, TWICE OVER:
     --   1. the norm is GLOBAL — one scalar folded from every parameter, so the fold must run to
     --      completion before any parameter is scaled. That is why it is hoisted out of the loop.
-    --   2. under DP the clip goes AFTER the `all_reduce`. `adamOneEma` normally emits the collective
+    --   2. under DP the clip goes AFTER the `all_reduce`. `optOne` normally emits the collective
     --      per parameter, which is downstream of where the clip has to be, so at `clip := true`
     --      the collective is hoisted here too and the loop is told (`preAvg`) not to repeat it.
     --
@@ -753,10 +753,11 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- and nothing in the arity, the types or the prefix audit would notice.
       let wdN := wdNameBy wdExclude nm ds vitWdDecays
       let gSSA := if clip then clipped[i]! else gradNames[i]!
-      let (c, nT, nM, nV, nE) ← adamOneEma bs replicas ⟨nm, gSSA, ds⟩ ema wdN clip
+      let (c, nT, nM, nV, _, nE) ← optOne .adamw bs replicas ⟨nm, gSSA, ds⟩ wdN (preAvg := clip)
+                                      (ema := ema)
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
-      if ema then eN := eN ++ [nE]
+      match nE with | some e => eN := eN ++ [e] | none => pure ()
     -- `%loss`: the report-only smoothed CE (`reportSmoothedCeLoss`).
     let lossCode := reportSmoothedCeLoss bs nClasses nSm
     let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)

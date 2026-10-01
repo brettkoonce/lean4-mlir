@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPCEval
 
 /-! # The full EfficientNet-B0 at inference — all 16 MBConv blocks, eval forward + graph +
 faithfulness
@@ -9,7 +9,7 @@ the same ladder at INFERENCE BatchNorm — frozen running statistics at all **49
 `ε`, as the shipped `efficientnet_fwd_eval` does — and proves its typed `SHlo` graph denotes
 it: the graph of `efficientnet_fwd_eval.mlir` and its 1000-class twin.
 
-Pure enumeration and chaining of `EfficientNetRender.PCEval`'s per-block machinery, at the
+Pure enumeration and chaining of `EfficientNetStagesPCEval`'s per-block machinery, at the
 batched index `N·(c·h·w)` and generic in the class count. The one block shape added here is
 the fourth at inference — `mbExpFwdBEval` / `mbExpGraphBEval`: expand, stride 1, no residual
 (`ic ≠ oc`; the stage-5 and stage-7 first blocks `b9`/`b16`) — the eval twin of

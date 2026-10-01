@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Codegen.MlpRender
 
 One parametric trainer for the whole `784→d₁→d₂→10` size grid. Reads the two hidden
 widths `d₁ d₂` from argv, renders `verified_mlir/mlp_{d₁}x{d₂}_{train_step,fwd}.mlir`
-from the **faithful** renderers (`mlpTrainStepFaithfulV` — every line is `pretty` of a
+from the **faithful** renderers (`mlpTrainStepText` — every line is `pretty` of a
 den-certified verified AST node — and `mlpFwdModuleV`, the forward AST), then trains on
 that render through the shared `VerifiedNet.train` driver (Lean → IREE FFI → GPU).
 
@@ -32,7 +32,7 @@ def renderGrid (d₁ d₂ : Nat) : IO Unit := do
   -- The renderers hardcode `@mlp_train_step` / `@mlp_fwd`; the driver invokes
   -- `m.{slug}_train_step`, so rename the exported func symbol to the slug (module
   -- stays `@m`; the rename touches only the `func.func @…` line + any self-reference).
-  let ts := (mlpTrainStepFaithfulV 128 784 d₁ d₂ 10 "0.00078125"
+  let ts := (mlpTrainStepText 128 784 d₁ d₂ 10 "0.00078125"
       (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
       (fun _ => 0)).replace "@mlp_train_step" s!"@{slug}_train_step"
   let fwd := (mlpFwdModuleV 128 784 d₁ d₂ 10

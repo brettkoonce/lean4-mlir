@@ -55,8 +55,8 @@ def main (argv : List String) : IO Unit := do
   | "nowd"    => resnet34Verified.toNet.trainAdamSched cfg d 0.001 0.9 0.999 3 s!"adamwd00{p}"
   | "nols"    => resnet34Verified.toNet.trainAdamSched cfg d 0.001 0.9 0.999 3 s!"adamls0{p}"
   -- Optimizer arms, both on the heavy-ball render (`resnet34_mom`).
-  -- `noadam` IS NOT "vanilla SGD". `R34Opt` has no plain-SGD case, so the leave-one-out arm
-  -- for the optimizer swaps AdamW for Nesterov momentum with the rest of the recipe intact.
+  -- `noadam` IS NOT "vanilla SGD" (that is `OptRecipe.sgd`, the `sgd` arm below): the leave-one-out
+  -- arm for the optimizer swaps AdamW for heavy-ball momentum with the rest of the recipe intact.
   -- Naming it for the render it loads is the only spelling that cannot drift from what ran.
   | "noadam"  => resnet34Verified.toNet.trainAdamSched cfg d 0.01 0.9 0.999 3 s!"mom{p}"
   -- `bare` is that SAME render with warmup and the schedule off too, so it differs from

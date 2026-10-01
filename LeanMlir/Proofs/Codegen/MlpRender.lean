@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MLP render half — the train-step text as `pretty` of proven graphs
 
-`mlpTrainStepFaithfulV` renders the MLP train step (`verified_mlir/mlp_train_step.mlir`).
+`mlpTrainStepText` renders the MLP train step (`verified_mlir/mlp_train_step.mlir`).
 Every line that feeds a returned parameter is `pretty` of a denoted `SHlo` node: the forward
 (`denseF`/`reluF`), the loss cotangent (`sub (softmaxDiv (expe …)) onehot`), the backward chain
 (`dotOut`/`selectPos`) and the six SGD updates (`weightSgd`/`biasSgd`). The appended report-only
@@ -28,7 +28,7 @@ open Proofs
     (`ndy`/`nc1`/`nc0`) are rendered once and shared (operand leaves); operand/`lr`/weight
     VALUES are `skel`-erased, so these placeholders print identically to the live graphs the
     `den` theorems use. -/
-def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
+def mlpTrainStepText (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) : String :=
   let z₀ : Vec d₀ := fun _ => 0

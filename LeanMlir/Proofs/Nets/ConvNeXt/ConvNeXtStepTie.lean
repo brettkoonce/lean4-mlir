@@ -10,7 +10,7 @@ import LeanMlir.Proofs.Foundation.ParamGradNodes
 The whole-net thread for the ConvNeXt-T schedule (the batched MobileNetV2 peer is
 `MobileNetV2TieB.mnv2_net_tiedB`). The folds (`ConvNeXtFold` and the MobileNetV2 / ResNet-34 / ViT
 folds it imports) make every rendered param op `den = certified ∀ cotangent`; this file feeds each
-consumer the forward activations of the `convNextTrainStepFaithfulV` render and the loss-driven
+consumer the forward activations of the `convNextTrainStepText` render and the loss-driven
 backward-chain cotangent that net delivers, so the 18-block train step is den-composed
 forward → loss → backward with no free activations and no symbolic cotangent. The statement is
 per example, at one image and a hard label; the artifact runs a batch of 32, and that batch and
@@ -33,7 +33,7 @@ its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean
 
 ## The channel-LN specifics
 
-* **channel-LN γ/β** (`Vec c`) at every spatial site, through `CnxPoC.chanLn{Gamma,Beta}Sgd_den`
+* **channel-LN γ/β** (`Vec c`) at every spatial site, through `CnxFold.chanLn{Gamma,Beta}Sgd_den`
   — the render re-emits the `[h·w, c]` transposes and runs ViT's `veclnGammaSgd` /
   `rowDenseBiasSgd` on that view, so the op operands here are `chanLNRows` of the saved LN input
   and of the chain cotangent, while the certified Jacobian is `chanLNTensor3`'s in the `c·h·w`
@@ -54,7 +54,7 @@ its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean
 
 All **182** parameters are tied. 181 of them at the fused step `θ − lr·(certified per-layer
 Jacobian · the chain cotangent)`, where each chain cotangent is the certified VJP backward of the
-stages above it (`CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp`, `cnxDownCotInChAt_eq_vjp`,
+stages above it (`CnxTieGB.cnxBlockCotInChAt_eq_vjp`, `cnxDownCotInChAt_eq_vjp`,
 `cnxHeadDyXheadChN_eq_vjp`); the stem weight `psW` at its **gradient**, because the render emits `convStride4WeightGrad` and wraps
 it in hand-written `sgd` text (there is no fused `convStride4WeightSgd` op to be the `den` of). What
 remains outside: the block backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
@@ -64,11 +64,11 @@ smoothness; ℝ → Float32 — the boundary every prior fold carries.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CnxTiePoC
+namespace Proofs.CnxTie
 
 open scoped BigOperators
 open Proofs.SgdNode (vecLNGammaSgdTied_holds)
-open Proofs.CnxPoC (chanLNBetaSgdTied_holds chanLNGammaSgdTied_holds)
+open Proofs.CnxFold (chanLNBetaSgdTied_holds chanLNGammaSgdTied_holds)
 
 /-! ## ConvNeXt block — all 9 params tied (depthwise → channel-LN → expand → GELU → project → layer-scale → +skip)
 
@@ -106,8 +106,8 @@ def cnxBlockChTied {c cExp h w : Nat}
           = bdw o - lr * ∑ j : Fin (c*h*w),
               pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d Wdw b' (Tensor3.unflatten xin))) bdw o j * cotD j)
     -- channel-LN γ/β  (cot = cotN', LN input = d; the op sees both as their [h·w, c] views)
-  ∧ CnxPoC.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε nbt d ng cotN' lr
-  ∧ CnxPoC.ChanLNBetaSgdTied h w bN lrStr cotN ε ng d nbt cotN' lr
+  ∧ CnxFold.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε nbt d ng cotN' lr
+  ∧ CnxFold.ChanLNBetaSgdTied h w bN lrStr cotN ε ng d nbt cotN' lr
     -- expand 1×1 conv (c → cExp) W/b  (cot = cotE, conv input = nl)
   ∧ (∀ idx : Fin (cExp*c*1*1),
         den (SHlo.convWeightSgd xN wN lrStr bex (Tensor3.unflatten nl) Wex lr (.operand cotN cotE)) idx
@@ -154,7 +154,7 @@ theorem cnx_block_ch_tied {c cExp h w : Nat}
   · exact convBSgdTied_holds
   · exact convWSgdTied_holds
   · exact convBSgdTied_holds
-  · intro cc;  exact CnxPoC.layerScaleChGammaSgd_den gN xN lrStr cotN p lg dyOut lr cc
+  · intro cc;  exact CnxFold.layerScaleChGammaSgd_den gN xN lrStr cotN p lg dyOut lr cc
 
 /-! ## Downsample — channel-LN → 2×2/s2 conv (all 4 params tied)
 
@@ -171,8 +171,8 @@ def cnxDownChTied {ci co h w : Nat}
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin n : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
     let cotN' : Vec (ci*(2*h)*(2*w)) := (flatConvStride2HasVJP Wd bd).backward n dyOut
-    CnxPoC.ChanLNGammaSgdTied (2 * h) (2 * w) gN xN epsStr lrStr cotN ε dnbt xin dng cotN' lr
-  ∧ CnxPoC.ChanLNBetaSgdTied (2 * h) (2 * w) bN lrStr cotN ε dng xin dnbt cotN' lr
+    CnxFold.ChanLNGammaSgdTied (2 * h) (2 * w) gN xN epsStr lrStr cotN ε dnbt xin dng cotN' lr
+  ∧ CnxFold.ChanLNBetaSgdTied (2 * h) (2 * w) bN lrStr cotN ε dng xin dnbt cotN' lr
   ∧ (∀ idx : Fin (co*ci*2*2),
         den (SHlo.convStridedWeightSgd xN wN lrStr bd n Wd lr (.operand cotN dyOut)) idx
           = Kernel4.flatten Wd idx - lr * ∑ j : Fin (co*h*w),
@@ -213,8 +213,8 @@ def cnxStemChTied {c h w : Nat}
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) (patch : Vec (c*h*w))
     (dyStem : Vec (c*h*w)) (lr : ℝ) : Prop :=
     let cotPatch : Vec (c*h*w) := chanLNTensor3Back c h w ε psng patch dyStem
-    CnxPoC.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε psnbt patch psng dyStem lr
-  ∧ CnxPoC.ChanLNBetaSgdTied h w bN lrStr cotN ε psng patch psnbt dyStem lr
+    CnxFold.ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε psnbt patch psng dyStem lr
+  ∧ CnxFold.ChanLNBetaSgdTied h w bN lrStr cotN ε psng patch psnbt dyStem lr
   ∧ (∀ o : Fin c,
         den (SHlo.convBiasSgd bN lrStr Wst (fun _ _ _ => 0) psb lr (.operand cotN cotPatch)) o
           = psb o - lr * ∑ j : Fin (c*h*w),
@@ -612,7 +612,7 @@ end CnxTieWeights
 
 /-! ## The whole-net capstone — all 182 params through the REAL forward + composed cotangent
 
-The `convNextTrainStepFaithfulV` forward threaded: block inputs are the forward prefixes
+The `convNextTrainStepText` forward threaded: block inputs are the forward prefixes
 (`cnxStemFwdO` / `cnxBlockFwdChO` / `cnxDownFwdChO`), and the backward cotangents are composed
 from the loss `g = softmax(logits) − onehot` down through dense (`denseHasVJP`) + the head LN +
 GAP (`globalAvgPoolFlatHasVJP`) + every block's backward, with the residual fan-in `+ dyOut` at
@@ -628,11 +628,11 @@ activations, no symbolic cotangent. -/
     stem), the 18 ConvNeXt blocks, the 3 downsamples, the 4×4/s4 stem with its LN, the
     GAP → LN → dense head, and the dense total-loss fold + loss-cotangent graph all denote
     `θ − lr·(certified per-layer Jacobian · the chain cotangent)`, each chain cotangent the
-    certified VJP backward of the stages above it (`CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp`,
+    certified VJP backward of the stages above it (`CnxTieGB.cnxBlockCotInChAt_eq_vjp`,
     `cnxDownCotInChAt_eq_vjp`, `cnxHeadDyXheadChN_eq_vjp`). All 182 parameters; `psW` at its gradient (its SGD wrap is
     hand-written text). The statement is per example, at one image `x` and a hard label `label`;
     the artifact's batch of 32 and its mean lie outside it (the batched form is
-    `CnxTiePoCGB.cnx_net_tiedGB`). -/
+    `CnxTieGB.cnx_net_tiedGB`). -/
 theorem cnx_net_tied_certified
     (xN wN bN gN epsStr lrStr cotN dN nlogN ohN : String) (ε : ℝ)
     (w : CnxTieWeights 10)
@@ -750,4 +750,4 @@ theorem cnx_net_tied_certified
   · exact fun i j => cnx_dense_tied_totalloss xN wN lrStr cotN w.Wfc w.bfc hn label lr i j
   · exact cnxLossCot_den nlogN ohN (mnistLinear w.Wfc w.bfc hn) label
 
-end Proofs.CnxTiePoC
+end Proofs.CnxTie
