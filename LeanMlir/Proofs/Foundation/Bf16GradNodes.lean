@@ -24,8 +24,8 @@ certificate at rounded slices.
 | `depthwiseWeightGradBBf16` | `GradNodeB.depthwiseWGradB_den` | B0, MobileNetV2, MobileNetV4, ConvNeXt |
 | `depthwiseStridedWeightGradBBf16` (symmetric) | `GradNodeB.depthwiseStridedWGradB_den` | B0, MobileNetV4 |
 | `depthwiseStridedXlaWeightGradBBf16` (XLA-`SAME`) | `GradNodeB.depthwiseStridedXlaWGradB_den` | MobileNetV2 |
-| `rowDenseWeightGradBBf16` | `ViTPoCGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
-| `patchEmbedWeightGradBBf16` | `ViTPoCGB.patchEmbedWeightGradB_den` | ViT's patch embed |
+| `rowDenseWeightGradBBf16` | `ViTFoldGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
+| `patchEmbedWeightGradBBf16` | `ViTFoldGB.patchEmbedWeightGradB_den` | ViT's patch embed |
 
 Note: **`rowDenseWeightGradBBf16` has NO outer rounding**, and that is the measurement rather than
 an omission: its `dot_general` contracts batch and token in one op and keeps its f32-typed result
@@ -39,7 +39,7 @@ suite keeps them in f32, so their γ/β and weight nodes are the f32 folds' in b
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.Bf16PoC
+namespace Proofs.Bf16Fold
 
 open scoped BigOperators
 
@@ -204,4 +204,4 @@ theorem patchEmbedWGradBBf16_den {ic H W P tk D N : Nat} (rnd : ℝ → ℝ) (xN
     (fun j => rnd (batchSlice N (ic * H * W) img n j))
     (fun j => rnd (batchSlice N ((tk + 1) * D) dy n j)) d c kh kw
 
-end Proofs.Bf16PoC
+end Proofs.Bf16Fold

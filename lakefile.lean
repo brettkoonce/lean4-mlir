@@ -108,6 +108,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ViT.ViTChainClose,
              `LeanMlir.Proofs.Nets.ViT.ViTVecLN,
              `LeanMlir.Proofs.Nets.ViT.ViTDepthK,
+             `LeanMlir.Proofs.Nets.ViT.ViTFwdDrop,
              `LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval,
@@ -120,6 +121,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Training.SgdDescent.Mlp,
              `LeanMlir.Proofs.Training.SgdDescent.MlpBias,
              `LeanMlir.Proofs.Training.SgdDescent.Cnn,
+             `LeanMlir.Proofs.Training.SgdDescent.CnnFloat,
              `LeanMlir.Proofs.Training.SgdDescent.Cifar,
              `LeanMlir.Proofs.Float.BnFloatBridge,
              `LeanMlir.Proofs.Float.ResNet34FloatBridge,
@@ -127,7 +129,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.FloatComposeBridge,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval,
-             `LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval,
+             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPCEval,
              `LeanMlir.Proofs.Foundation.BatchMapVJPAt,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP,
@@ -170,6 +172,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval,
+             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4WholeBackCertifiedTieB,
@@ -229,6 +232,13 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTieG,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTieG,
+             `LeanMlir.Proofs.Nets.Small.SmallParamGrad,
+             `LeanMlir.Proofs.Nets.Small.LinearParamGrad,
+             `LeanMlir.Proofs.Nets.Small.MlpParamGrad,
+             `LeanMlir.Proofs.Nets.Small.CnnParamGrad,
+             `LeanMlir.Proofs.Nets.Small.CifarParamGrad,
+             `LeanMlir.Proofs.Nets.Small.Cifar8ParamGrad,
+             `LeanMlir.Proofs.Nets.Small.Cifar8BnParamGrad,
              `LeanMlir.Proofs.Codegen.EfficientNetRender.Basic,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie,
@@ -260,12 +270,14 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPUncon,
              `LeanMlir.Proofs.Foundation.ListDot,
              `LeanMlir.Proofs.Certificates.IntervalBound,
-             `LeanMlir.Proofs.Foundation.IntervalBoundConv,
+             `LeanMlir.Proofs.Certificates.IntervalBoundConv.Basic,
              `LeanMlir.Proofs.Certificates.CrownBound,
              `LeanMlir.Proofs.Float.Binary32Instance,
              `LeanMlir.Proofs.Training.Trained.LinearDescent,
              `LeanMlir.Proofs.Training.Trained.CnnWitness,
              `LeanMlir.Proofs.Training.Trained.CnnSeal,
+             `LeanMlir.Proofs.Training.Trained.CnnDescent,
+             `LeanMlir.Proofs.Training.Trained.CnnDescentConv1,
              `LeanMlir.Proofs.Certificates.LipschitzCert.Float,
              `LeanMlir.Proofs.SpecVJP,
              `LeanMlir.Proofs.Nets.Small.MlpCanonical,
@@ -420,7 +432,7 @@ private def lowererLink : Array String := #["-ldl"]
 -- ─── Tier 1 — `lake run mnist`: MNIST linear / MLP / CNN on the verified renders (Chapters 1–3) ───
 
 -- Trains MNIST-linear on the VERIFIED-rendered StableHLO
--- (`verified_mlir/`, = Proofs.StableHLO.linTrainStepFaithfulV) through the
+-- (`verified_mlir/`, = Proofs.StableHLO.linTrainStepText) through the
 -- real Lean/IREE FFI. See MainMnistLinearVerified.lean.
 
 lean_exe «mnist-linear-verified» where
@@ -432,7 +444,7 @@ lean_exe «mnist-linear-verified» where
 -- SAME binary run twice, which is a stronger comparison than two binaries.
 
 -- Chapter 3: trains the MNIST MLP on the VERIFIED-rendered StableHLO
--- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepFaithfulV).
+-- (verified_mlir/mlp_train_step.mlir = Proofs.StableHLO.mlpTrainStepText).
 
 lean_exe «mnist-mlp-verified» where
   root := `apps.mnist.MainMnistMlpVerified
@@ -443,7 +455,7 @@ lean_exe «mnist-mlp-verified» where
 -- `mnist-mlp-verified` serves both lowerers via $LEAN_MLIR_LOWERER.
 
 -- Chapter 4: trains the MNIST CNN on the VERIFIED-rendered StableHLO
--- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepFaithfulV).
+-- (verified_mlir/cnn_train_step.mlir = Proofs.StableHLO.cnnTrainStepText).
 /-- The verified CNN trainer — one executable for both the IREE and XLA lowerers,
     so their config and He-init seed cannot drift. -/
 
@@ -471,7 +483,7 @@ lean_exe «cifar8w-bn-ablation» where
 -- ─── Tier 3 — `lake run imagenette`: the seven Part-1 nets at 224², book order (Chapters 5–9) ───
 
 -- The suite is one chain per net, the batched one. The batched SGD trainer is
--- `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`, which renders from `R34Opt.sgd`
+-- `LEAN_MLIR_VARIANT=sgd .lake/build/bin/resnet34-verified-adam`, which renders from `OptRecipe.sgd`
 -- and threads running stats (running-stat threading lives only in `trainAdamSched`).
 
 lean_exe «resnet34-verified-adam» where
@@ -938,7 +950,7 @@ lean_exe «cifar8-bn-grid» where
   moreLinkArgs := lowererLink
 
 -- Chapter 5: trains the CIFAR-10 CNN (no BN) on the VERIFIED-rendered StableHLO
--- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepFaithfulV).
+-- (verified_mlir/cifar_train_step.mlir = Proofs.StableHLO.cifarTrainStepText).
 lean_exe «cifar-verified» where
   root := `apps.cifar.MainCifarVerified
   moreLinkArgs := lowererLink
@@ -1099,7 +1111,7 @@ lean_exe «r34-train-b2» where
     seven variants, which is what `scripts/parity/opt_step_tie.py` diffs against the reference optimizer.
     `vjp_oracle` ties the two implementations at the GRADIENT; this ties them at the UPDATE.
 
-    The body is `optAllParams`, the same call `resnet50TrainStepFaithfulB` makes — so this gates
+    The body is `optAllParams`, the same call `resnet50TrainStepText` makes — so this gates
     the shipped emission and not a copy of it. Sole writer of `.lake/build/opt_step_*.mlir`. -/
 lean_exe «opt-step-fixtures» where
   root := `tests.TestOptStepFixtures

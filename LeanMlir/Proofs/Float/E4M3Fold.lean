@@ -33,7 +33,7 @@ All theorems kernel-close under `[propext, Classical.choice, Quot.sound]`
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.QuantPoC
+namespace Proofs.QuantFold
 
 variable {m n : Nat}
 
@@ -90,4 +90,4 @@ theorem e4m3_render_faithful (q : ℝ → ℝ) (sx : ℝ) (sW : Vec n)
     actCode, weightCode]
   rw [dequant_factors q sx sW W x j]
 
-end Proofs.QuantPoC
+end Proofs.QuantFold

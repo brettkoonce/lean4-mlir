@@ -18,7 +18,7 @@ The `layerScaleChGammaSgd` core `SHlo` op (the per-channel layer-scale param-SGD
 `lsGradCh` + the SGD wrap) `den`otes the LHS here, so `den = certified` is a one-line delegation to
 `cnx_render_lsgammaCh_certified` (`layerScaleChGammaSgd_den`). -/
 
-namespace Proofs.CnxPoC
+namespace Proofs.CnxFold
 
 open scoped BigOperators
 open Proofs Proofs.StableHLO
@@ -130,4 +130,4 @@ theorem chanLNBetaSgdTied_holds {h w c : Nat} {bN lrStr cotN : String} {ε : ℝ
     ChanLNBetaSgdTied h w bN lrStr cotN ε γ x β cot lr := fun k =>
   chanLnBetaSgd_den bN lrStr cotN ε γ x β cot lr k
 
-end Proofs.CnxPoC
+end Proofs.CnxFold

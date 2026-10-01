@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Foundation.BceLossCot
 
 /-! # ResNet-50's step TIE — the un-fused, batched whole-net thread
 
-`GradNodesB`'s op-kind folds (`ResNet34PoCB.*GradB_den`) make every parameter GRADIENT
+`GradNodesB`'s op-kind folds (`GradNodeB.*GradB_den`) make every parameter GRADIENT
 node of ResNet-50's batched train step `den`-faithful for an ARBITRARY cotangent. This removes the "arbitrary": each is pinned to the one
 the emitted backward chain delivers, so the whole train step is `den`-composed forward → loss →
 backward with no free activation and no symbolic cotangent.

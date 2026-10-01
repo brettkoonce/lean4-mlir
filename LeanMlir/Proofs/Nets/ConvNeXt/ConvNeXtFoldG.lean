@@ -13,7 +13,7 @@ its fold is `ConvNeXtFoldGB`.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CnxPoCG
+namespace Proofs.CnxFoldG
 
 open scoped BigOperators
 
@@ -29,7 +29,7 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
     den (SHlo.layerScaleChGammaGrad xN x (.operand cotN dy)) cc
       = ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  simp only [denStepApp, Proofs.CnxPoC.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
+  simp only [denStepApp, Proofs.CnxFold.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 22 spatial LayerNorm sites — the CHANNEL-LN form the render actually emits
@@ -64,4 +64,4 @@ theorem chanLnBetaGrad_den {c h w : Nat} (cotN : String)
   exact layerNormVec_beta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k
 
-end Proofs.CnxPoCG
+end Proofs.CnxFoldG

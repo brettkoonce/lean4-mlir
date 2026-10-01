@@ -6,14 +6,14 @@ import LeanMlir.Proofs.Codegen.StableHLO.Basic
 Two per-example lemmas that `ViTFoldGB` lifts over the batch: the positional-table gradient
 (`posEmbedGrad_den`) and the CLS-token gradient (`clsGrad_den`), each `den`-faithful at the RAW
 gradient node every optimizer tail consumes. The fusion is `rfl` (`StableHLO.Basic`'s
-`*Sgd_eq_grad` family), so each proof is its fused peer's (`ViTPoC.posEmbedSgd_den`,
-`ViTTiePoC.vit_cls_den`) with the `θ − lr·` wrapper dropped. Every Adam artifact of this net renders
+`*Sgd_eq_grad` family), so each proof is its fused peer's (`ViTFold.posEmbedSgd_den`,
+`ViTTie.vit_cls_den`) with the `θ − lr·` wrapper dropped. Every Adam artifact of this net renders
 from the batched chain; its fold is `ViTFoldGB`.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.ViTPoCG
+namespace Proofs.ViTFoldG
 
 open scoped BigOperators
 
@@ -36,7 +36,7 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is
     `denseBiasGradB` at `N = 1` and its `den` IS `clsTokenGrad`. Note: stated at the committed
-    ViT-Tiny dims rather than generically, for the reason `ViTTiePoC.vit_cls_den` is: the operand's
+    ViT-Tiny dims rather than generically, for the reason `ViTTie.vit_cls_den` is: the operand's
     type is `Vec (1 * D)`, which reduces to `Vec D` only at a literal `D`.
 
     The fused peer's proof ends in `clsToken_sgd_certified`, whose statement carries the
@@ -57,4 +57,4 @@ theorem clsGrad_den (cotN : String)
   have h := clsToken_sgd_certified Wc bc cls pos img dyEmbed 1 i
   linarith
 
-end Proofs.ViTPoCG
+end Proofs.ViTFoldG

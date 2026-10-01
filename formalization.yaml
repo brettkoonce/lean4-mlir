@@ -98,7 +98,7 @@ sources:
     type: "paper"
     location: "Section 3 (interval bound propagation)"
     relationship: "other"
-    note: "formalized: the L-infinity box pushed through dense and ReLU layers certifies the argmax (Certificates/IntervalBound.lean); conv peers in Foundation/IntervalBoundConv.lean"
+    note: "formalized: the L-infinity box pushed through dense and ReLU layers certifies the argmax (Certificates/IntervalBound.lean); conv peers in Certificates/IntervalBoundConv/Basic.lean"
     license: ""
     author_endorsement: "not-contacted"
   - title: "Efficient Neural Network Robustness Certification with General Activation Functions (CROWN)"
@@ -198,17 +198,24 @@ status:
     # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q and the LOSS (CE or BCE) binders; one replica
     - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
-    - {declaration: "Proofs.ViTTiePoC.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTiePoCGB.vit_net_tiedGB)
-    - {declaration: "Proofs.CnxTiePoCGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTie.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTieGB.vit_net_tiedGB)
+    - {declaration: "Proofs.CnxTieGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica, f32
     - {declaration: "Proofs.ResNet34TieB.r34_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.ResNet50TieB.r50_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.MobileNetV2TieB.mnv2_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.Mnv4TieB.mnv4_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    - {declaration: "Proofs.EnetTiePoCG.enet_net_lossGrad", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    - {declaration: "Proofs.CnxTiePoCGB.cnx_net_lossGrad", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    - {declaration: "Proofs.ViTTiePoCGB.vit_net_lossGrad", file: "LeanMlir/Proofs/Nets/ViT/ViTParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.EnetTieG.enet_net_lossGrad", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.CnxTieGB.cnx_net_lossGrad", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTieGB.vit_net_lossGrad", file: "LeanMlir/Proofs/Nets/ViT/ViTParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # the chapter nets, one example each; a pool window may tie between cells equal at every upstream weight
+    - {declaration: "Proofs.LinFold.linear_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/LinearParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.MlpFold.mlp_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/MlpParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.CnnFold.cnn_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/CnnParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.CifarFold.cifar_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/CifarParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.Cifar8TieG.cifar8_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/Cifar8ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.Cifar8BnTieG.cifar8Bn_net_lossGrad", file: "LeanMlir/Proofs/Nets/Small/Cifar8BnParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
@@ -256,12 +263,17 @@ status:
     - {declaration: "Proofs.FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/MlpFloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a binary32 SGD step provably decreases CE at TRAINED weights
     - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/Trained/LinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    # an exact-gradient SGD step on each CNN conv kernel / bias decreases CE at TRAINED weights and a real MNIST image, through twin-tied pool windows
+    - {declaration: "Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescentConv1.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_bias_sgd_descends_concrete", file: "LeanMlir/Proofs/Training/Trained/CnnDescentConv1.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Certificates and optimizer geometry ---
     # Tsuzuku 2018 certified radius
     - {declaration: "Proofs.lipschitz_margin_certified_radius", file: "LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "Lipschitz-margin certified radius", source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"}]}
     # LipSDP scorecard at trained weights: 8 proved witnesses; the per-100 count is measured (generated header)
-    - {declaration: "Proofs.LipschitzCertDemo.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
+    - {declaration: "Proofs.Robustness.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
     # Cohen 2019 smoothing radius END-TO-END (the Gaussian Neyman-Pearson core is proved)
     - {declaration: "Proofs.smoothing_certified_radius_classifier", file: "LeanMlir/Proofs/Certificates/Smoothing/Gaussian.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)", source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"}]}
     # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
@@ -332,7 +344,9 @@ fidelity:
        through the smooth-point bridges of (2). For pooling the non-smooth points are not a
        measure-zero corner: an all-zero post-ReLU window attains its max at all four cells, and
        there `maxPool2` has no derivative. The ResNet stem certifies ReLU and pool as one layer
-       (`stemReluPoolLayer`), where such a window is locally constant.
+       (`stemReluPoolLayer`), where such a window is locally constant. The CNN descent rungs
+       state the pool margin up to twins (`MaxPool2MarginQUpTo`): cells reading identical input
+       patches stay equal along any step, so near every point of it the pool is a fixed gather.
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
        non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero
@@ -352,7 +366,9 @@ fidelity:
        same reason, and its witness is grid-constant (one value per example and channel). With it
        every kinked net in the book is sealed on the forward its artifacts run. Plus trained-weight witnesses and a
        provable strict CE-descent step for the MLP/CNN/linear rungs (`Trained/MlpWitness`, `Trained/CnnSeal`,
-       `TrainedLinearDescent`).
+       `TrainedLinearDescent`), and an exact-gradient CE-descent step for each of the four CNN conv
+       rungs through twin-tied pool windows on a reduced 12x12 net (`TrainedCnnDescent`,
+       `TrainedCnnDescentConv1`).
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
        radius theorem `smoothing_certified_radius_classifier` speaks about TRUE smoothed class

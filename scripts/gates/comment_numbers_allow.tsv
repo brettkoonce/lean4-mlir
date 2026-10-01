@@ -124,8 +124,8 @@ LeanMlir/F32Array.lean	20%	spec
 LeanMlir/F32Array.lean	33%	spec
 LeanMlir/F32Array.lean	50%	spec
 LeanMlir/F32Array.lean	786 KB	example
-LeanMlir/Proofs/Architectures/LayerNorm.lean	0.044715 x	spec
-LeanMlir/Proofs/Architectures/LayerNorm.lean	0.5 x	spec
+LeanMlir/Proofs/Architectures/Activations.lean	0.044715 x	spec
+LeanMlir/Proofs/Architectures/Activations.lean	0.5 x	spec
 LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	11.2%	statement
 LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	1.235×	statement
 LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	1.4×	statement
@@ -150,7 +150,7 @@ LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean	31.6×	example
 LeanMlir/Proofs/Codegen/IRPrint.lean	0.5x	spec
 LeanMlir/Proofs/Codegen/IRPrint.lean	0.5x	spec
 LeanMlir/Proofs/Codegen/RenderKit.lean	31.6×	statement
-LeanMlir/Proofs/Codegen/ResNet34RenderB.lean	0.8%	example
+LeanMlir/Proofs/Codegen/RenderKit.lean	0.8%	example
 LeanMlir/Proofs/Codegen/ResNet34RenderB.lean	24 GB	spec
 LeanMlir/Proofs/Codegen/ResNet50RenderB.lean	16 GB	spec
 LeanMlir/Proofs/Codegen/ResNet50RenderB.lean	16 GB	spec

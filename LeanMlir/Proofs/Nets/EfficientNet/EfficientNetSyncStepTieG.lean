@@ -13,7 +13,7 @@ replicas at batch `N`, every one of the 49 BatchNorms synchronised (`bnFwdSite` 
     mean over the R replicas of replica r's gradient node, loss divided by B
       = the single-device gradient node at the global batch R·N, loss divided by R·B
 
-— the gradient node `EnetTiePoCG.efficientnet_net_tiedG` at `N := R·N` ties to the certified
+— the gradient node `EnetTieG.efficientnet_net_tiedG` at `N := R·N` ties to the certified
 gradient. The spec it is stated against has not moved: the right-hand side is the single-device
 tie's chain at `N := R·N` — its forward prefixes, loss cotangent and block `.backward`s verbatim,
 and its in-block cotangents as named definitions (`xCotEc`, `tCotDn`, …) that unfold to
@@ -1173,7 +1173,7 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
 
 /-- **The whole-net statement, named** — so the capstone (cotangents bound) and its smoothed-CE
     corollary (cotangents instantiated) state exactly one thing. The forward prefixes `a0 … a16`
-    and the block-output cotangents `dy16 … dy0` are `EnetTiePoCG.efficientnet_net_tiedG`'s chain at
+    and the block-output cotangents `dy16 … dy0` are `EnetTieG.efficientnet_net_tiedG`'s chain at
     `N := R·N`, driven by the global cotangent `g`; `e16 … e0` are the replicas' sync-BN chain,
     driven by the family `gs`; the 18 conjuncts are one per stage. -/
 def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : String)
@@ -1277,7 +1277,7 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
     213 the render emits at `convBias := false` — equals the single-device batch-BN gradient node at
     batch `R·N`, at the cotangent the single-device tie's chain delivers there from `g`.
 
-    The right-hand chain is `EnetTiePoCG.efficientnet_net_tiedG`'s at `N := R·N`: verbatim for the
+    The right-hand chain is `EnetTieG.efficientnet_net_tiedG`'s at `N := R·N`: verbatim for the
     forward prefixes `a0 … a16` and the block-output cotangents `dy16 … dy0` threaded by the
     certified block VJPs' `.backward`; by `rfl` for the in-block cotangents, which are this file's
     named chain. That capstone ties those nodes to the certified gradient, so the two together say

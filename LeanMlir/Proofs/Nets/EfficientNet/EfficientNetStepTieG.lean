@@ -48,7 +48,7 @@ synchronises BatchNorm; its all-reduced gradients are `efficientnet_net_syncTied
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.EnetTiePoCG
+namespace Proofs.EnetTieG
 
 open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
@@ -496,4 +496,4 @@ theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls :
   · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
   · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g
 
-end Proofs.EnetTiePoCG
+end Proofs.EnetTieG

@@ -43,7 +43,7 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched stride-1 conv weight GRADIENT denotes the certified `Σ_n` weight gradient.** The
-    un-fused peer of `EnetPoC.convWB_den`: same `Σ_n` of `conv_weight_grad_bridge`, with no
+    un-fused peer of `EnetFold.convWB_den`: same `Σ_n` of `conv_weight_grad_bridge`, with no
     `θ − lr·` wrapper because the batched r34 render hands this node to an optimizer tail. -/
 theorem convWGradB_den {N ic oc h w kH kW : Nat}
     (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * h * w)))

@@ -33,6 +33,8 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Training.Trained.LinearDescent
+import LeanMlir.Proofs.Training.Trained.CnnDescent
+import LeanMlir.Proofs.Training.Trained.CnnDescentConv1
 import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
 import LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad
@@ -40,6 +42,12 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTParamGrad
+import LeanMlir.Proofs.Nets.Small.LinearParamGrad
+import LeanMlir.Proofs.Nets.Small.MlpParamGrad
+import LeanMlir.Proofs.Nets.Small.CnnParamGrad
+import LeanMlir.Proofs.Nets.Small.CifarParamGrad
+import LeanMlir.Proofs.Nets.Small.Cifar8ParamGrad
+import LeanMlir.Proofs.Nets.Small.Cifar8BnParamGrad
 
 universe u_1
 
@@ -240,10 +248,10 @@ theorem chk_r50_net_tiedB :
                                         Proofs.ResNet34TieB.r34HeadTiedB N q q xN cotN w.Wd w.bd (Proofs.r50Pre16 N q w x) g :=
   Proofs.ResNet50TieB.r50_net_tiedB
 
-/-- `Proofs.ViTTiePoC.vit_net_tied_certified` -/
+/-- `Proofs.ViTTie.vit_net_tied_certified` -/
 theorem chk_vit_net_tied_certified :
     ∀ (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : Real)
-      (w : Proofs.ViTTiePoC.ViTTieWeights (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
+      (w : Proofs.ViTTie.ViTTieWeights (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
       (img :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat)
@@ -258,10 +266,10 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))
           (@OfNat.ofNat Nat (nat_lit 196) (instOfNatNat (nat_lit 196)))
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.Wc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-          (@Proofs.ViTTiePoC.ViTTieWeights.bc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-          (@Proofs.ViTTiePoC.ViTTieWeights.cls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-          (@Proofs.ViTTiePoC.ViTTieWeights.pos (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) img;
+          (@Proofs.ViTTie.ViTTieWeights.Wc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTie.ViTTieWeights.bc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTie.ViTTieWeights.cls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTie.ViTTieWeights.pos (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) img;
       have ib2 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -270,7 +278,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1;
+          (@Proofs.ViTTie.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1;
       have ib3 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -279,7 +287,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2;
+          (@Proofs.ViTTie.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2;
       have ib4 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -288,7 +296,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3;
+          (@Proofs.ViTTie.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3;
       have ib5 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -297,7 +305,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4;
+          (@Proofs.ViTTie.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4;
       have ib6 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -306,7 +314,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5;
+          (@Proofs.ViTTie.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5;
       have ib7 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -315,7 +323,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6;
+          (@Proofs.ViTTie.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6;
       have ib8 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -324,7 +332,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7;
+          (@Proofs.ViTTie.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7;
       have ib9 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -333,7 +341,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8;
+          (@Proofs.ViTTie.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8;
       have ib10 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -342,7 +350,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9;
+          (@Proofs.ViTTie.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9;
       have ib11 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -351,7 +359,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10;
+          (@Proofs.ViTTie.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10;
       have ib12 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -360,7 +368,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11;
+          (@Proofs.ViTTie.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11;
       have b12out :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -369,7 +377,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12;
+          (@Proofs.ViTTie.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12;
       have fl :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -378,8 +386,8 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
           fun (r : Fin (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))) =>
           Proofs.layerNormVec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) ε
-            (@Proofs.ViTTiePoC.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-            (@Proofs.ViTTiePoC.ViTTieWeights.βF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+            (@Proofs.ViTTie.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+            (@Proofs.ViTTie.ViTTieWeights.βF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
             (@Proofs.Mat.unflatten (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
               (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) b12out r);
       have hn :=
@@ -388,19 +396,19 @@ theorem chk_vit_net_tied_certified :
       have logits :=
         @Proofs.dense (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
           (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-          (@Proofs.ViTTiePoC.ViTTieWeights.bcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) hn;
+          (@Proofs.ViTTie.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTie.ViTTieWeights.bcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) hn;
       have g : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) :=
         fun (c : Fin (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))) =>
         @HSub.hSub Real Real Real (@instHSub Real Real.instSub)
           (Proofs.softmax (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) logits c)
           (Proofs.oneHot (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) label c);
       have dy12 :=
-        Proofs.vitCotB2outV (@OfNat.ofNat Nat (nat_lit 196) (instOfNatNat (nat_lit 196)))
+        Proofs.vitCotTowerOutV (@OfNat.ofNat Nat (nat_lit 196) (instOfNatNat (nat_lit 196)))
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
           (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) ε
-          (@Proofs.ViTTiePoC.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-          (@Proofs.ViTTiePoC.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) b12out g;
+          (@Proofs.ViTTie.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTie.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) b12out g;
       have dy11 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -409,7 +417,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12 dy12;
+          (@Proofs.ViTTie.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12 dy12;
       have dy10 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -418,7 +426,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11 dy11;
+          (@Proofs.ViTTie.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11 dy11;
       have dy9 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -427,7 +435,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10 dy10;
+          (@Proofs.ViTTie.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10 dy10;
       have dy8 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -436,7 +444,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9 dy9;
+          (@Proofs.ViTTie.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9 dy9;
       have dy7 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -445,7 +453,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8 dy8;
+          (@Proofs.ViTTie.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8 dy8;
       have dy6 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -454,7 +462,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7 dy7;
+          (@Proofs.ViTTie.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7 dy7;
       have dy5 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -463,7 +471,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6 dy6;
+          (@Proofs.ViTTie.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6 dy6;
       have dy4 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -472,7 +480,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5 dy5;
+          (@Proofs.ViTTie.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5 dy5;
       have dy3 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -481,7 +489,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4 dy4;
+          (@Proofs.ViTTie.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4 dy4;
       have dy2 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -490,7 +498,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3 dy3;
+          (@Proofs.ViTTie.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3 dy3;
       have dy1 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -499,7 +507,7 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2 dy2;
+          (@Proofs.ViTTie.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2 dy2;
       have dyEmbed :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -508,129 +516,128 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1 dy1;
+          (@Proofs.ViTTie.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1 dy1;
       And
         (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
-          epsStr lrStr cotN ε ib1 dy1 lr)
+          (@Proofs.ViTTie.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN epsStr
+          lrStr cotN ε ib1 dy1 lr)
         (And
           (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
             (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
             (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-            (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+            (@Proofs.ViTTie.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
             epsStr lrStr cotN ε ib2 dy2 lr)
           (And
             (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
               (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
               (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
               (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-              (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+              (@Proofs.ViTTie.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
               epsStr lrStr cotN ε ib3 dy3 lr)
             (And
               (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                 (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                 (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                 (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN
-                gN epsStr lrStr cotN ε ib4 dy4 lr)
+                (@Proofs.ViTTie.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+                epsStr lrStr cotN ε ib4 dy4 lr)
               (And
                 (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                   (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                   (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                   (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                  (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN
-                  bN gN epsStr lrStr cotN ε ib5 dy5 lr)
+                  (@Proofs.ViTTie.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN
+                  gN epsStr lrStr cotN ε ib5 dy5 lr)
                 (And
                   (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                     (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                     (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                     (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                    (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN
-                    bN gN epsStr lrStr cotN ε ib6 dy6 lr)
+                    (@Proofs.ViTTie.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN
+                    gN epsStr lrStr cotN ε ib6 dy6 lr)
                   (And
                     (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                       (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                       (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                       (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                      (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN
-                      wN bN gN epsStr lrStr cotN ε ib7 dy7 lr)
+                      (@Proofs.ViTTie.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN
+                      bN gN epsStr lrStr cotN ε ib7 dy7 lr)
                     (And
                       (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                         (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                         (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                         (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                        (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                        xN wN bN gN epsStr lrStr cotN ε ib8 dy8 lr)
+                        (@Proofs.ViTTie.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN
+                        wN bN gN epsStr lrStr cotN ε ib8 dy8 lr)
                       (And
                         (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                           (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                          xN wN bN gN epsStr lrStr cotN ε ib9 dy9 lr)
+                          (@Proofs.ViTTie.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN
+                          wN bN gN epsStr lrStr cotN ε ib9 dy9 lr)
                         (And
                           (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                             (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                             (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                             (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                            (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))
-                              w)
+                            (@Proofs.ViTTie.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                             xN wN bN gN epsStr lrStr cotN ε ib10 dy10 lr)
                           (And
                             (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                               (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                               (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                               (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                              (@Proofs.ViTTiePoC.ViTTieWeights.b11
-                                (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                              (@Proofs.ViTTie.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))
+                                w)
                               xN wN bN gN epsStr lrStr cotN ε ib11 dy11 lr)
                             (And
                               (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                                 (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                                 (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
                                 (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-                                (@Proofs.ViTTiePoC.ViTTieWeights.b12
+                                (@Proofs.ViTTie.ViTTieWeights.b12
                                   (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                                 xN wN bN gN epsStr lrStr cotN ε ib12 dy12 lr)
                               (And
-                                (Proofs.ViTTiePoC.vitFinalLNTied gN xN bN epsStr lrStr cotN ε
-                                  (@Proofs.ViTTiePoC.ViTTieWeights.γF
+                                (Proofs.ViTTie.vitFinalLNTied gN xN bN epsStr lrStr cotN ε
+                                  (@Proofs.ViTTie.ViTTieWeights.γF
                                     (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                  (@Proofs.ViTTiePoC.ViTTieWeights.βF
+                                  (@Proofs.ViTTie.ViTTieWeights.βF
                                     (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                  (@Proofs.ViTTiePoC.ViTTieWeights.Wcls
+                                  (@Proofs.ViTTie.ViTTieWeights.Wcls
                                     (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                                   b12out g lr)
                                 (And
-                                  (Proofs.ViTTiePoC.vitHeadTied aN wN bN lrStr cotN hn
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.Wcls
+                                  (Proofs.ViTTie.vitHeadTied aN wN bN lrStr cotN hn
+                                    (@Proofs.ViTTie.ViTTieWeights.Wcls
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.bcls
+                                    (@Proofs.ViTTie.ViTTieWeights.bcls
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                                     g lr)
-                                  (Proofs.ViTTiePoC.vitEmbedTied wN xN bN clsN pN lrStr cotN
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.Wc
+                                  (Proofs.ViTTie.vitEmbedTied wN xN bN clsN pN lrStr cotN
+                                    (@Proofs.ViTTie.ViTTieWeights.Wc
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.bc
+                                    (@Proofs.ViTTie.ViTTieWeights.bc
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.cls
+                                    (@Proofs.ViTTie.ViTTieWeights.cls
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
-                                    (@Proofs.ViTTiePoC.ViTTieWeights.pos
+                                    (@Proofs.ViTTie.ViTTieWeights.pos
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                                     img dyEmbed lr)))))))))))))) :=
-  Proofs.ViTTiePoC.vit_net_tied_certified
+  Proofs.ViTTie.vit_net_tied_certified
 
-/-- `Proofs.CnxTiePoCGB.cnx_net_tiedGB` -/
+/-- `Proofs.CnxTieGB.cnx_net_tiedGB` -/
 theorem chk_cnx_net_tiedGB :
     ∀ (N : ℕ) {nC : ℕ} (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-      (w : Proofs.CnxTiePoC.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+      (w : Proofs.CnxTie.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
       (t : Proofs.Vec (N * nC)),
       have ib1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
+        Proofs.StableHLO.batchMap N (Proofs.CnxTie.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
       have ib2 := Proofs.StableHLO.batchMap N (w.b1.fwdO ε) ib1;
       have ib3 := Proofs.StableHLO.batchMap N (w.b2.fwdO ε) ib2;
       have ibD0 := Proofs.StableHLO.batchMap N (w.b3.fwdO ε) ib3;
@@ -656,7 +663,7 @@ theorem chk_cnx_net_tiedGB :
       have hnB := Proofs.StableHLO.batchMap N (Proofs.rowLNVecFlat (1 : ℕ) (768 : ℕ) ε w.hG w.hT) gapB;
       have logitsB := Proofs.StableHLO.batchMap N (Proofs.dense w.Wfc w.bfc) hnB;
       have g := Proofs.StableHLO.den (Proofs.smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t);
-      have dyO18 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoCGB.cnxHeadDyXheadChN ε w.hG w.hT w.Wfc w.bfc) xhead g;
+      have dyO18 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTieGB.cnxHeadDyXheadChN ε w.hG w.hT w.Wfc w.bfc) xhead g;
       have dyO17 := Proofs.StableHLO.batchMapAux N (w.b18.cotIn ε) ib18 dyO18;
       have dyO16 := Proofs.StableHLO.batchMapAux N (w.b17.cotIn ε) ib17 dyO17;
       have dyD2 := Proofs.StableHLO.batchMapAux N (w.b16.cotIn ε) ib16 dyO16;
@@ -678,7 +685,7 @@ theorem chk_cnx_net_tiedGB :
       have dyO2 := Proofs.StableHLO.batchMapAux N (w.b3.cotIn ε) ib3 dyO3;
       have dyO1 := Proofs.StableHLO.batchMapAux N (w.b2.cotIn ε) ib2 dyO2;
       have dyStem := Proofs.StableHLO.batchMapAux N (w.b1.cotIn ε) ib1 dyO1;
-      Proofs.CnxTiePoCGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem ∧
+      Proofs.CnxTieGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem ∧
         w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1 ∧
           w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2 ∧
             w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3 ∧
@@ -700,9 +707,9 @@ theorem chk_cnx_net_tiedGB :
                                             w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16 ∧
                                               w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17 ∧
                                                 w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18 ∧
-                                                  Proofs.CnxTiePoCGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
+                                                  Proofs.CnxTieGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
                                                     w.bfc xhead g :=
-  Proofs.CnxTiePoCGB.cnx_net_tiedGB
+  Proofs.CnxTieGB.cnx_net_tiedGB
 
 /-- `Proofs.ResNet34TieB.r34_net_lossGrad` -/
 theorem chk_r34_net_lossGrad :
@@ -754,34 +761,155 @@ theorem chk_mnv4_net_lossGrad :
             Proofs.Mnv4TieB.Mnv4NetLossTiedB N xN cotN vN epsStr w x L g :=
   Proofs.Mnv4TieB.mnv4_net_lossGrad
 
-/-- `Proofs.EnetTiePoCG.enet_net_lossGrad` -/
+/-- `Proofs.EnetTieG.enet_net_lossGrad` -/
 theorem chk_enet_net_lossGrad :
     ∀ (xN vN epsStr cotN dN : String) (N : ℕ) {nCls : ℕ} (w : Proofs.B0Weights nCls)
       (hεw : w.EpsPos) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
       {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
       Proofs.HasGradAt L (Proofs.efficientnetForwardBFull N w x) g →
-        Proofs.EnetTiePoCG.EnetNetLossTiedG xN vN epsStr cotN dN N w hεw x L g :=
-  Proofs.EnetTiePoCG.enet_net_lossGrad
+        Proofs.EnetTieG.EnetNetLossTiedG xN vN epsStr cotN dN N w hεw x L g :=
+  Proofs.EnetTieG.enet_net_lossGrad
 
-/-- `Proofs.CnxTiePoCGB.cnx_net_lossGrad` -/
+/-- `Proofs.CnxTieGB.cnx_net_lossGrad` -/
 theorem chk_cnx_net_lossGrad :
     ∀ (xN epsStr cotN dN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.CnxTiePoC.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+        ∀ (w : Proofs.CnxTie.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
           {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
-          Proofs.HasGradAt L (Proofs.CnxTiePoCGB.cnxNetB N ε w x) g →
-            Proofs.CnxTiePoCGB.CnxNetLossTiedGB xN epsStr cotN dN N ε w x L g :=
-  Proofs.CnxTiePoCGB.cnx_net_lossGrad
+          Proofs.HasGradAt L (Proofs.CnxTieGB.cnxNetB N ε w x) g →
+            Proofs.CnxTieGB.CnxNetLossTiedGB xN epsStr cotN dN N ε w x L g :=
+  Proofs.CnxTieGB.cnx_net_lossGrad
 
-/-- `Proofs.ViTTiePoCGB.vit_net_lossGrad` -/
+/-- `Proofs.ViTTieGB.vit_net_lossGrad` -/
 theorem chk_vit_net_lossGrad :
     ∀ (xN aN epsStr cotN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.ViTTiePoC.ViTTieWeights nC) (img : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+        ∀ (w : Proofs.ViTTie.ViTTieWeights nC) (img : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
           {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
-          Proofs.HasGradAt L (Proofs.ViTTiePoCGB.vitNetB N ε w img) g →
-            Proofs.ViTTiePoCGB.ViTNetLossTiedGB xN aN epsStr cotN N ε w img L g :=
-  Proofs.ViTTiePoCGB.vit_net_lossGrad
+          Proofs.HasGradAt L (Proofs.ViTTieGB.vitNetB N ε w img) g →
+            Proofs.ViTTieGB.ViTNetLossTiedGB xN aN epsStr cotN N ε w img L g :=
+  Proofs.ViTTieGB.vit_net_lossGrad
+
+/-- `Proofs.LinFold.linear_net_lossGrad` -/
+theorem chk_linear_net_lossGrad :
+    ∀ {m n : ℕ} (aN cotN : String) (W : Proofs.Mat m n) (b : Proofs.Vec n)
+      (x : Proofs.Vec m) {L : Proofs.Vec n → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec n},
+      Proofs.HasGradAt L (Proofs.mnistLinear W b x) g → Proofs.LinFold.LinNetLossTied aN cotN W b x L g :=
+  Proofs.LinFold.linear_net_lossGrad
+
+/-- `Proofs.MlpFold.mlp_net_lossGrad` -/
+theorem chk_mlp_net_lossGrad :
+    ∀ {d₀ d₁ d₂ d₃ : ℕ} (aN cotN : String) (W₀ : Proofs.Mat d₀ d₁) (b₀ : Proofs.Vec d₁)
+      (W₁ : Proofs.Mat d₁ d₂) (b₁ : Proofs.Vec d₂) (W₂ : Proofs.Mat d₂ d₃) (b₂ : Proofs.Vec d₃) (x : Proofs.Vec d₀),
+      (∀ (k : Fin d₁), Proofs.dense W₀ b₀ x k ≠ (0 : ℝ)) →
+        (∀ (k : Fin d₂), Proofs.dense W₁ b₁ (Proofs.relu d₁ (Proofs.dense W₀ b₀ x)) k ≠ (0 : ℝ)) →
+          ∀ {L : Proofs.Vec d₃ → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec d₃},
+            Proofs.HasGradAt L (Proofs.mlpForward W₀ b₀ W₁ b₁ W₂ b₂ x) g →
+              Proofs.MlpFold.MlpNetLossTied aN cotN W₀ b₀ W₁ b₁ W₂ b₂ x L g :=
+  Proofs.MlpFold.mlp_net_lossGrad
+
+/-- `Proofs.CnnFold.cnn_net_lossGrad` -/
+theorem chk_cnn_net_lossGrad :
+    ∀ {ic c h w d1 nClasses kH kW : ℕ} (xN cotN : String),
+      (2 : ℕ) * ((kH - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kH →
+        (2 : ℕ) * ((kW - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kW →
+          ∀ (W₁ : Proofs.Kernel4 c ic kH kW) (b₁ : Proofs.Vec c) (W₂ : Proofs.Kernel4 c c kH kW) (b₂ : Proofs.Vec c)
+            (W₃ : Proofs.Mat (c * h * w) d1) (b₃ : Proofs.Vec d1) (W₄ : Proofs.Mat d1 d1) (b₄ : Proofs.Vec d1)
+            (W₅ : Proofs.Mat d1 nClasses) (b₅ : Proofs.Vec nClasses) (x : Proofs.Vec (ic * ((2 : ℕ) * h) * ((2 : ℕ) * w)))
+            (σ : Fin c → Fin h → Fin w → Fin (2 : ℕ) × Fin (2 : ℕ)),
+            Proofs.CnnFold.CnnLossSmoothAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ x σ →
+              ∀ {L : Proofs.Vec nClasses → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec nClasses},
+                Proofs.HasGradAt L (Proofs.mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) g →
+                  Proofs.CnnFold.CnnNetLossTied xN cotN W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x σ L g :=
+  Proofs.CnnFold.cnn_net_lossGrad
+
+/-- `Proofs.CifarFold.cifar_net_lossGrad` -/
+theorem chk_cifar_net_lossGrad :
+    ∀ {ic c1 c2 h w d1 nClasses kH kW : ℕ} (xN cotN : String),
+      (2 : ℕ) * ((kH - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kH →
+        (2 : ℕ) * ((kW - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kW →
+          ∀ (W₁ : Proofs.Kernel4 c1 ic kH kW) (b₁ : Proofs.Vec c1) (W₂ : Proofs.Kernel4 c1 c1 kH kW) (b₂ : Proofs.Vec c1)
+            (W₃ : Proofs.Kernel4 c2 c1 kH kW) (b₃ : Proofs.Vec c2) (W₄ : Proofs.Kernel4 c2 c2 kH kW) (b₄ : Proofs.Vec c2)
+            (W₅ : Proofs.Mat (c2 * h * w) d1) (b₅ : Proofs.Vec d1) (W₆ : Proofs.Mat d1 d1) (b₆ : Proofs.Vec d1)
+            (W₇ : Proofs.Mat d1 nClasses) (b₇ : Proofs.Vec nClasses)
+            (x : Proofs.Vec (ic * ((2 : ℕ) * ((2 : ℕ) * h)) * ((2 : ℕ) * ((2 : ℕ) * w))))
+            (σ₁ : Fin c1 → Fin ((2 : ℕ) * h) → Fin ((2 : ℕ) * w) → Fin (2 : ℕ) × Fin (2 : ℕ))
+            (σ₂ : Fin c2 → Fin h → Fin w → Fin (2 : ℕ) × Fin (2 : ℕ)),
+            Proofs.CifarFold.CifarLossSmoothAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ x σ₁ σ₂ →
+              ∀ {L : Proofs.Vec nClasses → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec nClasses},
+                Proofs.HasGradAt L (Proofs.cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x) g →
+                  Proofs.CifarFold.CifarNetLossTied xN cotN W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x σ₁ σ₂ L g :=
+  Proofs.CifarFold.cifar_net_lossGrad
+
+/-- `Proofs.Cifar8TieG.cifar8_net_lossGrad` -/
+theorem chk_cifar8_net_lossGrad :
+    ∀ {ic c1 c2 c3 c4 h w d1 nClasses kH kW : ℕ} (xN cotN : String),
+      (2 : ℕ) * ((kH - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kH →
+        (2 : ℕ) * ((kW - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kW →
+          ∀ (W₁ : Proofs.Kernel4 c1 ic kH kW) (b₁ : Proofs.Vec c1) (W₂ : Proofs.Kernel4 c1 c1 kH kW) (b₂ : Proofs.Vec c1)
+            (W₃ : Proofs.Kernel4 c2 c1 kH kW) (b₃ : Proofs.Vec c2) (W₄ : Proofs.Kernel4 c2 c2 kH kW) (b₄ : Proofs.Vec c2)
+            (W₅ : Proofs.Kernel4 c3 c2 kH kW) (b₅ : Proofs.Vec c3) (W₆ : Proofs.Kernel4 c3 c3 kH kW) (b₆ : Proofs.Vec c3)
+            (W₇ : Proofs.Kernel4 c4 c3 kH kW) (b₇ : Proofs.Vec c4) (W₈ : Proofs.Kernel4 c4 c4 kH kW) (b₈ : Proofs.Vec c4)
+            (W₉ : Proofs.Mat (c4 * h * w) d1) (b₉ : Proofs.Vec d1) (Wa : Proofs.Mat d1 d1) (ba : Proofs.Vec d1)
+            (Wb : Proofs.Mat d1 nClasses) (bb : Proofs.Vec nClasses)
+            (x :
+              Proofs.Vec
+                (ic * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * h)))) *
+                  ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * w))))))
+            (σ₁ :
+              Fin c1 →
+                Fin ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * h))) →
+                  Fin ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * w))) → Fin (2 : ℕ) × Fin (2 : ℕ))
+            (σ₂ : Fin c2 → Fin ((2 : ℕ) * ((2 : ℕ) * h)) → Fin ((2 : ℕ) * ((2 : ℕ) * w)) → Fin (2 : ℕ) × Fin (2 : ℕ))
+            (σ₃ : Fin c3 → Fin ((2 : ℕ) * h) → Fin ((2 : ℕ) * w) → Fin (2 : ℕ) × Fin (2 : ℕ))
+            (σ₄ : Fin c4 → Fin h → Fin w → Fin (2 : ℕ) × Fin (2 : ℕ)),
+            Proofs.Cifar8TieG.Cifar8LossSmoothAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba x σ₁ σ₂ σ₃ σ₄ →
+              ∀ {L : Proofs.Vec nClasses → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec nClasses},
+                Proofs.HasGradAt L
+                    (Proofs.cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x) g →
+                  Proofs.Cifar8TieG.Cifar8NetLossTied xN cotN W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb
+                    bb x σ₁ σ₂ σ₃ σ₄ L g :=
+  Proofs.Cifar8TieG.cifar8_net_lossGrad
+
+/-- `Proofs.Cifar8BnTieG.cifar8Bn_net_lossGrad` -/
+theorem chk_cifar8Bn_net_lossGrad :
+    ∀ {ic c1 c2 c3 c4 h w d1 nClasses kH kW : ℕ} (xN vN epsStr cotN : String),
+      (2 : ℕ) * ((kH - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kH →
+        (2 : ℕ) * ((kW - (1 : ℕ)) / (2 : ℕ)) + (1 : ℕ) = kW →
+          ∀ (W₁ : Proofs.Kernel4 c1 ic kH kW) (b₁ : Proofs.Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Proofs.Vec c1)
+            (W₂ : Proofs.Kernel4 c1 c1 kH kW) (b₂ : Proofs.Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Proofs.Vec c1)
+            (W₃ : Proofs.Kernel4 c2 c1 kH kW) (b₃ : Proofs.Vec c2) (ε₃ : ℝ) (γ₃ β₃ : Proofs.Vec c2)
+            (W₄ : Proofs.Kernel4 c2 c2 kH kW) (b₄ : Proofs.Vec c2) (ε₄ : ℝ) (γ₄ β₄ : Proofs.Vec c2)
+            (W₅ : Proofs.Kernel4 c3 c2 kH kW) (b₅ : Proofs.Vec c3) (ε₅ : ℝ) (γ₅ β₅ : Proofs.Vec c3)
+            (W₆ : Proofs.Kernel4 c3 c3 kH kW) (b₆ : Proofs.Vec c3) (ε₆ : ℝ) (γ₆ β₆ : Proofs.Vec c3)
+            (W₇ : Proofs.Kernel4 c4 c3 kH kW) (b₇ : Proofs.Vec c4) (ε₇ : ℝ) (γ₇ β₇ : Proofs.Vec c4)
+            (W₈ : Proofs.Kernel4 c4 c4 kH kW) (b₈ : Proofs.Vec c4) (ε₈ : ℝ) (γ₈ β₈ : Proofs.Vec c4)
+            (W₉ : Proofs.Mat (c4 * h * w) d1) (b₉ : Proofs.Vec d1) (Wa : Proofs.Mat d1 d1) (ba : Proofs.Vec d1)
+            (Wb : Proofs.Mat d1 nClasses) (bb : Proofs.Vec nClasses),
+            Proofs.Cifar8BnTieG.Cifar8BnPos ε₁ ε₂ ε₃ ε₄ ε₅ ε₆ ε₇ ε₈ →
+              ∀
+                (x :
+                  Proofs.Vec
+                    (ic * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * h)))) *
+                      ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * w))))))
+                (σ₁ :
+                  Fin c1 →
+                    Fin ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * h))) →
+                      Fin ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * w))) → Fin (2 : ℕ) × Fin (2 : ℕ))
+                (σ₂ : Fin c2 → Fin ((2 : ℕ) * ((2 : ℕ) * h)) → Fin ((2 : ℕ) * ((2 : ℕ) * w)) → Fin (2 : ℕ) × Fin (2 : ℕ))
+                (σ₃ : Fin c3 → Fin ((2 : ℕ) * h) → Fin ((2 : ℕ) * w) → Fin (2 : ℕ) × Fin (2 : ℕ))
+                (σ₄ : Fin c4 → Fin h → Fin w → Fin (2 : ℕ) × Fin (2 : ℕ)),
+                Proofs.Cifar8BnTieG.Cifar8BnLossSmoothAt W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅
+                    ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba x σ₁ σ₂ σ₃ σ₄ →
+                  ∀ {L : Proofs.Vec nClasses → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec nClasses},
+                    Proofs.HasGradAt L
+                        (Proofs.cifarCnnBn8Forward W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ ε₅ γ₅
+                          β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x)
+                        g →
+                      Proofs.Cifar8BnTieG.Cifar8BnNetLossTied xN vN epsStr cotN W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
+                        W₄ b₄ ε₄ γ₄ β₄ W₅ b₅ ε₅ γ₅ β₅ W₆ b₆ ε₆ γ₆ β₆ W₇ b₇ ε₇ γ₇ β₇ W₈ b₈ ε₈ γ₈ β₈ W₉ b₉ Wa ba Wb bb x σ₁ σ₂
+                        σ₃ σ₄ L g :=
+  Proofs.Cifar8BnTieG.cifar8Bn_net_lossGrad
 
 /-- `Proofs.dpMeanGrad_ne_globalBatchGrad` -/
 theorem chk_dpMeanGrad_ne_globalBatchGrad :
@@ -1278,6 +1406,126 @@ theorem chk_trained_linear_sgd_strictly_descends :
         Proofs.TrainedLinearDescent.lblD :=
   Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends
 
+/-- `Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete` -/
+theorem chk_trained_cnn_conv2_sgd_descends_concrete :
+    Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2
+        Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
+        Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl
+        (Proofs.TrainedCnnDescent.W2.flatten -
+          ((1 : ℝ) / (2 : ℝ) ^ (42 : ℕ)) •
+            Proofs.gradAt
+              (Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V
+                Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
+                Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5
+                Proofs.TrainedCnnDescent.lbl)
+              Proofs.TrainedCnnDescent.W2.flatten) ≤
+      Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
+          Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5
+          Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl Proofs.TrainedCnnDescent.W2.flatten -
+        ((1 : ℝ) / (2 : ℝ) ^ (42 : ℕ) *
+            ∑ idx : Fin ((2 : ℕ) * (2 : ℕ) * (3 : ℕ) * (3 : ℕ)),
+              Proofs.gradAt
+                  (Proofs.cnnConv2KernelLoss Proofs.TrainedCnnDescent.b2 Proofs.TrainedCnnDescent.x1V
+                    Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
+                    Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5
+                    Proofs.TrainedCnnDescent.lbl)
+                  Proofs.TrainedCnnDescent.W2.flatten idx ^
+                (2 : ℕ)) /
+          (2 : ℝ) :=
+  Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete
+
+/-- `Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete` -/
+theorem chk_trained_cnn_conv2_bias_sgd_descends_concrete :
+    Proofs.cnnConv2BiasLoss
+        Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3
+        Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5
+        Proofs.TrainedCnnDescent.lbl
+        (Proofs.TrainedCnnDescent.b2 -
+          ((1 : ℝ) / (2 : ℝ) ^ (36 : ℕ)) •
+            Proofs.gradAt
+              (Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
+                Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4
+                Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl)
+              Proofs.TrainedCnnDescent.b2) ≤
+      Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V Proofs.TrainedCnnDescent.W3
+          Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4 Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5
+          Proofs.TrainedCnnDescent.b5 Proofs.TrainedCnnDescent.lbl Proofs.TrainedCnnDescent.b2 -
+        ((1 : ℝ) / (2 : ℝ) ^ (36 : ℕ) *
+            ∑ o : Fin (2 : ℕ),
+              Proofs.gradAt
+                  (Proofs.cnnConv2BiasLoss Proofs.TrainedCnnDescent.W2 Proofs.TrainedCnnDescent.x1V
+                    Proofs.TrainedCnnDescent.W3 Proofs.TrainedCnnDescent.b3 Proofs.TrainedCnnDescent.W4
+                    Proofs.TrainedCnnDescent.b4 Proofs.TrainedCnnDescent.W5 Proofs.TrainedCnnDescent.b5
+                    Proofs.TrainedCnnDescent.lbl)
+                  Proofs.TrainedCnnDescent.b2 o ^
+                (2 : ℕ)) /
+          (2 : ℝ) :=
+  Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete
+
+/-- `Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete` -/
+theorem chk_trained_cnn_conv1_sgd_descends_concrete :
+    Proofs.cnnConv1KernelLoss
+        Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0 Proofs.TrainedCnnDescentConv1.W2
+        Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3 Proofs.TrainedCnnDescentConv1.b3
+        Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4 Proofs.TrainedCnnDescentConv1.W5
+        Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
+        (Proofs.TrainedCnnDescentConv1.W1.flatten -
+          ((1 : ℝ) / (2 : ℝ) ^ (48 : ℕ)) •
+            Proofs.gradAt
+              (Proofs.cnnConv1KernelLoss Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0
+                Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+                Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+                Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl)
+              Proofs.TrainedCnnDescentConv1.W1.flatten) ≤
+      Proofs.cnnConv1KernelLoss Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0
+          Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+          Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+          Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
+          Proofs.TrainedCnnDescentConv1.W1.flatten -
+        ((1 : ℝ) / (2 : ℝ) ^ (48 : ℕ) *
+            ∑ idx : Fin ((2 : ℕ) * (1 : ℕ) * (3 : ℕ) * (3 : ℕ)),
+              Proofs.gradAt
+                  (Proofs.cnnConv1KernelLoss Proofs.TrainedCnnDescentConv1.b1 Proofs.TrainedCnnDescentConv1.T0
+                    Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+                    Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+                    Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl)
+                  Proofs.TrainedCnnDescentConv1.W1.flatten idx ^
+                (2 : ℕ)) /
+          (2 : ℝ) :=
+  Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete
+
+/-- `Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_bias_sgd_descends_concrete` -/
+theorem chk_trained_cnn_conv1_bias_sgd_descends_concrete :
+    Proofs.cnnConv1BiasLoss
+        Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0 Proofs.TrainedCnnDescentConv1.W2
+        Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3 Proofs.TrainedCnnDescentConv1.b3
+        Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4 Proofs.TrainedCnnDescentConv1.W5
+        Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
+        (Proofs.TrainedCnnDescentConv1.b1 -
+          ((1 : ℝ) / (2 : ℝ) ^ (45 : ℕ)) •
+            Proofs.gradAt
+              (Proofs.cnnConv1BiasLoss Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0
+                Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+                Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+                Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl)
+              Proofs.TrainedCnnDescentConv1.b1) ≤
+      Proofs.cnnConv1BiasLoss Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0
+          Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+          Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+          Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl
+          Proofs.TrainedCnnDescentConv1.b1 -
+        ((1 : ℝ) / (2 : ℝ) ^ (45 : ℕ) *
+            ∑ o : Fin (2 : ℕ),
+              Proofs.gradAt
+                  (Proofs.cnnConv1BiasLoss Proofs.TrainedCnnDescentConv1.W1 Proofs.TrainedCnnDescentConv1.T0
+                    Proofs.TrainedCnnDescentConv1.W2 Proofs.TrainedCnnDescentConv1.b2 Proofs.TrainedCnnDescentConv1.W3
+                    Proofs.TrainedCnnDescentConv1.b3 Proofs.TrainedCnnDescentConv1.W4 Proofs.TrainedCnnDescentConv1.b4
+                    Proofs.TrainedCnnDescentConv1.W5 Proofs.TrainedCnnDescentConv1.b5 Proofs.TrainedCnnDescentConv1.lbl)
+                  Proofs.TrainedCnnDescentConv1.b1 o ^
+                (2 : ℕ)) /
+          (2 : ℝ) :=
+  Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_bias_sgd_descends_concrete
+
 /-- `Proofs.lipschitz_margin_certified_radius` -/
 theorem chk_lipschitz_margin_certified_radius :
     ∀ {k : ℕ} {E : Type u_1} [inst : NormedAddCommGroup E]
@@ -1289,12 +1537,11 @@ theorem chk_lipschitz_margin_certified_radius :
               ‖δ‖ < m / (√(2 : ℝ) * L) → ∀ (j : Fin k), j ≠ i → (f (x + δ)).ofLp j < (f (x + δ)).ofLp i :=
   Proofs.lipschitz_margin_certified_radius
 
-/-- `Proofs.LipschitzCertDemo.scorecard_sdp` -/
+/-- `Proofs.Robustness.scorecard_sdp` -/
 theorem chk_scorecard_sdp :
-    Proofs.LipschitzCertDemo.sdpCappedCerts.length = (8 : ℕ) ∧
-      ∀ p ∈ Proofs.LipschitzCertDemo.sdpCappedCerts,
-        Proofs.LipschitzCertDemo.CertifiedAt Proofs.LipschitzCertDemo.mlpS (1 / 10 : ℝ) p.2.1 p.2.2 :=
-  Proofs.LipschitzCertDemo.scorecard_sdp
+    Proofs.Robustness.sdpCappedCerts.length = (8 : ℕ) ∧
+      ∀ p ∈ Proofs.Robustness.sdpCappedCerts, Proofs.Robustness.CertifiedAt Proofs.Robustness.mlpS (1 / 10 : ℝ) p.2.1 p.2.2 :=
+  Proofs.Robustness.scorecard_sdp
 
 /-- `Proofs.smoothing_certified_radius_classifier` -/
 theorem chk_smoothing_certified_radius_classifier :

@@ -13,7 +13,7 @@ fp32 accumulate computes `dense` of the rounded operands".
 **Why it is simpler than the fp8 tie.** The deployed bf16-mixed kernel casts operands to bf16
 and multiply-accumulates in fp32. The fp32 accumulate makes the reduction the exact `∑` (in ℝ),
 so — as the fp8 tie treats the int accumulate — the only deviation from exact is in the
-operands. There is no block scale to factor through the sum (fp8's `QuantPoC.dequant_factors`),
+operands. There is no block scale to factor through the sum (fp8's `QuantFold.dequant_factors`),
 so the tie falls straight out of the `den`-faithful `operand`/`dotIn`/`addBcast` ops.
 
 **No `SHlo` surgery at depth 1.** The bf16 cast on the input activations is baked into the
@@ -31,7 +31,7 @@ The theorems here are `rfl`; tests/AuditAxioms.lean prints all four.
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.Bf16PoC
+namespace Proofs.Bf16Fold
 
 variable {m n : Nat}
 
@@ -128,4 +128,4 @@ theorem bf16_render_faithful_depth2 (rnd : ℝ → ℝ) {p : Nat}
 is the structural content of "bf16 has no block scale to factor through the sum". The round node in isolation is
 `Proofs.StableHLO.convertF_faithful`; it is not restated here. -/
 
-end Proofs.Bf16PoC
+end Proofs.Bf16Fold

@@ -7,7 +7,7 @@ import LeanMlir.Types
 **This file does not write `verified_mlir/vit_train_step.mlir`.** Its only writer is the `#eval`
 in `LeanMlir/Proofs/Codegen/ViTRender.lean`:
 `vitTrainStepRenderV "vit_train_step" "0.003125"` — the render
-`Proofs.ViTTiePoC.vit_net_tied_certified` is about (every param-SGD op `den`otes the certified
+`Proofs.ViTTie.vit_net_tied_certified` is about (every param-SGD op `den`otes the certified
 loss-descent step; whole module = `pretty(provenGraph)`). 1D CLS `tensor<192>` matching the proof's
 `cls : Vec 192` + `ViTLayout`; lr 0.003125 = 0.1/32 (mean folded into lr, r34 convention).
 200 params, BS=32. The bytes `MainViTVerified` trains on ARE that render.

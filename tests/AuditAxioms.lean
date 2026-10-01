@@ -29,12 +29,13 @@ import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
@@ -45,6 +46,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
+import LeanMlir.Proofs.Nets.ViT.ViTFwdDrop
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
@@ -52,6 +54,7 @@ import LeanMlir.Proofs.Float.MlpFloatBridge
 import LeanMlir.Proofs.Training.SgdDescent.Basic
 import LeanMlir.Proofs.Training.SgdDescent.Linear
 import LeanMlir.Proofs.Training.SgdDescent.Cnn
+import LeanMlir.Proofs.Training.SgdDescent.CnnFloat
 import LeanMlir.Proofs.Training.SgdDescent.Cifar
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Float.ResNet34FloatBridge
@@ -62,7 +65,7 @@ import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
-import LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStagesPCEval
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
@@ -154,6 +157,12 @@ import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8StepTieG
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTieG
+import LeanMlir.Proofs.Nets.Small.LinearParamGrad
+import LeanMlir.Proofs.Nets.Small.MlpParamGrad
+import LeanMlir.Proofs.Nets.Small.CnnParamGrad
+import LeanMlir.Proofs.Nets.Small.CifarParamGrad
+import LeanMlir.Proofs.Nets.Small.Cifar8ParamGrad
+import LeanMlir.Proofs.Nets.Small.Cifar8BnParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
@@ -162,6 +171,8 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.Instance
 import LeanMlir.Proofs.Training.Trained.MlpWitness
 import LeanMlir.Proofs.Training.Trained.CnnWitness
 import LeanMlir.Proofs.Training.Trained.CnnSeal
+import LeanMlir.Proofs.Training.Trained.CnnDescent
+import LeanMlir.Proofs.Training.Trained.CnnDescentConv1
 import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard
 import LeanMlir.Proofs.Certificates.LipschitzCert.PairSDP
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP
@@ -169,7 +180,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCert.Float
 import LeanMlir.Proofs.Foundation.ListDot
 import LeanMlir.Proofs.Certificates.IntervalBound
-import LeanMlir.Proofs.Foundation.IntervalBoundConv
+import LeanMlir.Proofs.Certificates.IntervalBoundConv.Basic
 import LeanMlir.Proofs.Certificates.CrownBound
 import LeanMlir.Proofs.Certificates.Smoothing.MC
 import LeanMlir.Proofs.Certificates.Smoothing.CP
@@ -327,8 +338,12 @@ open Proofs
 #print axioms IR.conv_back_bridge
 -- The GENERAL conv-adjoint reindex (all dims, odd kernels)
 #print axioms IR.convBackDenote_eq_input_grad_formula
--- The emitted tile-compare-select graph denotes the canonical maxpool backward
+-- The emitted select_and_scatter graph denotes the canonical maxpool backward;
+-- its den routes to the first argmax, which off a tie is the argmax
 #print axioms IR.maxpool_back_bridge
+#print axioms IR.maxPool2Argmax_eq_iff_isArgmax
+#print axioms IR.maxPoolBackDenote_eq_of_smooth
+#print axioms windowArgmax_first
 -- Smooth activations
 #print axioms IR.gelu_back_bridge
 #print axioms IR.swish_back_bridge
@@ -387,44 +402,44 @@ open Proofs
 -- Rendering half
 #print axioms StableHLO.linWeightDen_is_loss_descent
 #print axioms StableHLO.linBiasDen_is_certified
--- PoC capstones (LinearFold.lean)
-#print axioms LinPoC.poc_fwd_is_render
+-- MNIST-linear capstones (LinearFold.lean)
+#print axioms LinFold.poc_fwd_is_render
 -- Tail fold closed
-#print axioms LinPoC.poc_weightSgd_den_eq
-#print axioms LinPoC.poc_biasSgd_den_eq
-#print axioms LinPoC.poc_train_step_tail_certified
+#print axioms LinFold.poc_weightSgd_den_eq
+#print axioms LinFold.poc_biasSgd_den_eq
+#print axioms LinFold.poc_train_step_tail_certified
 -- mnist-MLP fully folded
-#print axioms MlpPoC.cot1_den
-#print axioms MlpPoC.cot0_den
-#print axioms MlpPoC.W2_den_certified
-#print axioms MlpPoC.W1_den_certified
-#print axioms MlpPoC.W0_den_certified
-#print axioms MlpPoC.b2_den_certified
-#print axioms MlpPoC.b1_den_certified
-#print axioms MlpPoC.b0_den_certified
+#print axioms MlpFold.cot1_den
+#print axioms MlpFold.cot0_den
+#print axioms MlpFold.W2_den_certified
+#print axioms MlpFold.W1_den_certified
+#print axioms MlpFold.W0_den_certified
+#print axioms MlpFold.b2_den_certified
+#print axioms MlpFold.b1_den_certified
+#print axioms MlpFold.b0_den_certified
 -- mnist-mlp FULLY TIED
-#print axioms MlpPoC.mlpLossCot_den
-#print axioms MlpPoC.mlp_W2_tied_totalloss
-#print axioms MlpPoC.mlp_train_step_tied_certified
+#print axioms MlpFold.mlpLossCot_den
+#print axioms MlpFold.mlp_W2_tied_totalloss
+#print axioms MlpFold.mlp_train_step_tied_certified
 -- mnist-CNN fully folded
-#print axioms CnnPoC.cW1_den
-#print axioms CnnPoC.cb1_den
-#print axioms CnnPoC.cW2_den
-#print axioms CnnPoC.cb2_den
-#print axioms CnnPoC.dW5_den
+#print axioms CnnFold.cW1_den
+#print axioms CnnFold.cb1_den
+#print axioms CnnFold.cW2_den
+#print axioms CnnFold.cb2_den
+#print axioms CnnFold.dW5_den
 -- mnist-cnn dense-head TIE
-#print axioms CnnPoC.cnnLossCot_den
-#print axioms CnnPoC.cnn_W5_tied_totalloss
+#print axioms CnnFold.cnnLossCot_den
+#print axioms CnnFold.cnn_W5_tied_totalloss
 -- mnist-cnn CONV fold
-#print axioms CnnPoC.cnn_train_step_tied_certified
+#print axioms CnnFold.cnn_train_step_tied_certified
 -- ch5-CIFAR fully folded (no-BN, 2-scale)
 #print axioms SgdNode.convW_den
 #print axioms SgdNode.convB_den
-#print axioms CifarPoC.dW7_den
+#print axioms CifarFold.dW7_den
 -- ch5-CIFAR TIE
-#print axioms CifarPoC.cifarLossCot_den
-#print axioms CifarPoC.cifar_W7_tied_totalloss
-#print axioms CifarPoC.cifar_train_step_tied_certified
+#print axioms CifarFold.cifarLossCot_den
+#print axioms CifarFold.cifar_W7_tied_totalloss
+#print axioms CifarFold.cifar_train_step_tied_certified
 -- ch5-CIFAR-BN fully folded
 #print axioms SgdNode.bnGamma_den
 #print axioms SgdNode.bnBeta_den
@@ -432,14 +447,14 @@ open Proofs
 #print axioms SgdNode.denseW_den
 #print axioms SgdNode.denseB_den
 -- ch5-cifar8 TIE
-#print axioms Cifar8PoC.cifar8LossCot_den
-#print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
-#print axioms Cifar8PoC.cifar8_train_step_tied_certified
+#print axioms Cifar8Tie.cifar8LossCot_den
+#print axioms Cifar8Tie.cifar8_Wb_tied_totalloss
+#print axioms Cifar8Tie.cifar8_train_step_tied_certified
 -- ch5-cifar8-bn TIE
-#print axioms Cifar8BnPoC.cifar8BnLossCot_den
-#print axioms Cifar8BnPoC.cifar8Bn_train_step_tied_certified
-#print axioms Cifar8PoCG.cifar8_train_step_tiedG
-#print axioms Cifar8BnPoCG.cifar8Bn_train_step_tiedG
+#print axioms Cifar8BnTie.cifar8BnLossCot_den
+#print axioms Cifar8BnTie.cifar8Bn_train_step_tied_certified
+#print axioms Cifar8TieG.cifar8_train_step_tiedG
+#print axioms Cifar8BnTieG.cifar8Bn_train_step_tiedG
 #print axioms GradNode.convWGrad_den
 #print axioms GradNode.convBGrad_den
 #print axioms GradNode.bnGammaGrad_den
@@ -453,21 +468,21 @@ open Proofs
 #print axioms SgdNode.depthwiseW_den
 #print axioms SgdNode.depthwiseB_den
 -- ch8-EfficientNet-B0 fold (den)
-#print axioms EnetPoC.convWB_den
-#print axioms EnetPoC.convStridedWB_den
-#print axioms EnetPoC.denseWB_den
-#print axioms EnetPoC.denseBB_den
-#print axioms EnetPoC.bnGammaB_den
-#print axioms EnetPoC.bnBetaB_den
-#print axioms EnetPoC.depthwiseWB_den
-#print axioms EnetPoC.depthwiseStridedWB_den
+#print axioms EnetFold.convWB_den
+#print axioms EnetFold.convStridedWB_den
+#print axioms EnetFold.denseWB_den
+#print axioms EnetFold.denseBB_den
+#print axioms EnetFold.bnGammaB_den
+#print axioms EnetFold.bnBetaB_den
+#print axioms EnetFold.depthwiseWB_den
+#print axioms EnetFold.depthwiseStridedWB_den
 -- ch8-EfficientNet-B0 TIE
-#print axioms EnetTiePoC.enet_exp_tied
-#print axioms EnetTiePoC.enet_strided_tied
-#print axioms EnetTiePoC.enet_noexp_tied
-#print axioms EnetTiePoC.enet_stem_tied
-#print axioms EnetTiePoC.enet_head_tied
-#print axioms EnetTiePoC.efficientnet_net_tied
+#print axioms EnetTie.enet_exp_tied
+#print axioms EnetTie.enet_strided_tied
+#print axioms EnetTie.enet_noexp_tied
+#print axioms EnetTie.enet_stem_tied
+#print axioms EnetTie.enet_head_tied
+#print axioms EnetTie.efficientnet_net_tied
 -- The MLP per-layer parameter-gradient assembly
 #print axioms IR.mlp_layer0_weight_grad_bridge
 #print axioms IR.mlp_layer0_bias_grad_bridge
@@ -687,10 +702,10 @@ open Proofs
 #print axioms efficientnetForwardBFull_eq_chain
 #print axioms efficientnetForwardBFullHasVJP_correct
 -- ConvNeXt fold
-#print axioms Proofs.CnxPoC.pdiv_layerScaleCh_gamma
-#print axioms Proofs.CnxPoC.cnx_render_lsgammaCh_certified
+#print axioms Proofs.CnxFold.pdiv_layerScaleCh_gamma
+#print axioms Proofs.CnxFold.cnx_render_lsgammaCh_certified
 -- ConvNeXt fold (cont.)
-#print axioms Proofs.CnxPoC.layerScaleChGammaSgd_den
+#print axioms Proofs.CnxFold.layerScaleChGammaSgd_den
 -- The CHANNEL-LN γ/β param certs (ConvNeXtChannelLN)
 #print axioms Proofs.chanRowsIdxInv_chanRowsIdx
 #print axioms Proofs.chanRowsIdx_chanRowsIdxInv
@@ -699,15 +714,15 @@ open Proofs
 #print axioms Proofs.chanLN_beta_contract
 #print axioms Proofs.cnx_render_chlngamma_certified
 #print axioms Proofs.cnx_render_chlnbeta_certified
-#print axioms Proofs.CnxPoC.chanLnGammaSgd_den
-#print axioms Proofs.CnxPoC.chanLnBetaSgd_den
+#print axioms Proofs.CnxFold.chanLnGammaSgd_den
+#print axioms Proofs.CnxFold.chanLnBetaSgd_den
 -- ch9-ConvNeXt-T FULL [3,3,9,3] TIE
-#print axioms Proofs.CnxTiePoC.cnx_block_ch_tied
-#print axioms Proofs.CnxTiePoC.cnx_down_ch_tied
-#print axioms Proofs.CnxTiePoC.cnx_stem_ch_tied
-#print axioms Proofs.CnxTiePoC.cnx_head_ch_tied
-#print axioms Proofs.CnxTiePoC.cnxLossCot_den
-#print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
+#print axioms Proofs.CnxTie.cnx_block_ch_tied
+#print axioms Proofs.CnxTie.cnx_down_ch_tied
+#print axioms Proofs.CnxTie.cnx_stem_ch_tied
+#print axioms Proofs.CnxTie.cnx_head_ch_tied
+#print axioms Proofs.CnxTie.cnxLossCot_den
+#print axioms Proofs.CnxTie.cnx_net_tied_certified
 -- ViT CLOSE
 #print axioms pdiv_rowDense_W
 #print axioms rowDense_weight_grad_bridge
@@ -789,7 +804,7 @@ open Proofs
 #print axioms max_close
 #print axioms maxPool2_close
 #print axioms maxPoolFlat_close
--- Conv forward rounding budget (SgdDescent/Cnn.lean)
+-- Conv forward rounding budget (Float/ConvFloat.lean)
 #print axioms conv2d_eq_dense
 #print axioms convPad_close
 #print axioms FloatModel.convF
@@ -884,6 +899,19 @@ open Proofs
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphBFullDo_faithful
 #print axioms Proofs.StableHLO.mobilenetv4ForwardBFullDo_ones
 #print axioms Proofs.StableHLO.mnv4FwdGraphBFullDo_faithful
+-- Stochastic depth (the `%dp` sites) on MobileNetV4 (MobileNetV4FullBDrop.lean) and ViT (ViTFwdDrop.lean)
+#print axioms Proofs.StableHLO.mnv4SkipDropGraphB_faithful
+#print axioms Proofs.StableHLO.mobilenetv4ForwardBFullDrop_sdOnes
+#print axioms Proofs.StableHLO.mobilenetv4ForwardBFullDrop_ones
+#print axioms Proofs.StableHLO.mnv4FwdGraphBFullDrop_faithful
+#print axioms Proofs.blockVDrop_one
+#print axioms Proofs.vitBlockSpelledMHVDrop_eq
+#print axioms Proofs.vitForwardKVDrop_ones
+#print axioms Proofs.vitForwardKVDropB_ones
+#print axioms Proofs.StableHLO.vitBlockGraphBDrop_slice
+#print axioms Proofs.StableHLO.vitBodyGraphBDrop_slice
+#print axioms Proofs.StableHLO.vitFwdGraphBDrop_slice
+#print axioms Proofs.StableHLO.vitFwdGraphBDrop_faithful
 -- Integrity tie (the r34 identity block)
 #print axioms Proofs.convFlatBack_eq_vjp_backward
 -- Integrity tie (the r34 DOWNSAMPLE block)
@@ -1052,13 +1080,13 @@ open Proofs
 #print axioms FloatModel.linear_e4m3_logit_budget
 #print axioms FloatModel.linear_e4m3_argmax_preserved
 -- floatbridge quantization (cont.)
-#print axioms QuantPoC.dequant_factors
-#print axioms QuantPoC.e4m3_render_faithful
+#print axioms QuantFold.dequant_factors
+#print axioms QuantFold.e4m3_render_faithful
 -- The bf16-mixed render-tie, its companion (Bf16Fold.lean)
-#print axioms Proofs.Bf16PoC.bf16_render_faithful
-#print axioms Proofs.Bf16PoC.bf16_render_faithful_emit
-#print axioms Proofs.Bf16PoC.bf16_emit_eq_prerounded
-#print axioms Proofs.Bf16PoC.bf16_render_faithful_depth2
+#print axioms Proofs.Bf16Fold.bf16_render_faithful
+#print axioms Proofs.Bf16Fold.bf16_render_faithful_emit
+#print axioms Proofs.Bf16Fold.bf16_emit_eq_prerounded
+#print axioms Proofs.Bf16Fold.bf16_render_faithful_depth2
 -- The loss gradient in a parameter, from the gradient at its op's output (ParamGrad.lean)
 #print axioms Proofs.addConstHasVJPAt
 #print axioms Proofs.constAddHasVJPAt
@@ -1146,55 +1174,90 @@ open Proofs
 #print axioms Proofs.GradNodeB.biasBeta_hasGradAt
 #print axioms Proofs.GradNodeB.hasGradAt_swish
 #print axioms Proofs.GradNodeB.hasGradAt_bnBackB
-#print axioms Proofs.EnetTiePoCG.seGateMulBHasVJP
-#print axioms Proofs.EnetTiePoCG.seB_eq_gateMul
-#print axioms Proofs.EnetTiePoCG.enet_se_lossTiedB
-#print axioms Proofs.EnetTiePoCG.enet_exp_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_resid_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_strided_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_noexp_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_stem_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_head_lossTiedG
-#print axioms Proofs.EnetTiePoCG.enet_factor_b1
-#print axioms Proofs.EnetTiePoCG.enet_net_lossGrad
-#print axioms Proofs.EnetTiePoCG.enet_net_lossGrad_smoothedCE
+#print axioms Proofs.BackLinks.seGateMulBHasVJP
+#print axioms Proofs.EnetTieG.seB_eq_gateMul
+#print axioms Proofs.EnetTieG.enet_se_lossTiedB
+#print axioms Proofs.EnetTieG.enet_exp_lossTiedG
+#print axioms Proofs.EnetTieG.enet_resid_lossTiedG
+#print axioms Proofs.EnetTieG.enet_strided_lossTiedG
+#print axioms Proofs.EnetTieG.enet_noexp_lossTiedG
+#print axioms Proofs.EnetTieG.enet_stem_lossTiedG
+#print axioms Proofs.EnetTieG.enet_head_lossTiedG
+#print axioms Proofs.EnetTieG.enet_factor_b1
+#print axioms Proofs.EnetTieG.enet_net_lossGrad
+#print axioms Proofs.EnetTieG.enet_net_lossGrad_smoothedCE
+#print axioms Proofs.EnetTieG.enet_net_tied_lossGrad
 -- ConvNeXt-T: every parameter gradient node IS the loss's derivative (ConvNeXtParamGrad.lean)
 #print axioms Proofs.hasGradAt_linLoss
 #print axioms Proofs.HasGradAt.param_batchMap_through
 #print axioms Proofs.smoothedBatchLossDiv_grad
 #print axioms Proofs.GradNodeB.pdiv_bias_of_split
-#print axioms Proofs.CnxTiePoCGB.cnxBlk_hasGradAt
-#print axioms Proofs.CnxTiePoCGB.cnx_block_lossTiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_down_lossTiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_stem_lossTiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_head_lossTiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_factor_b1
-#print axioms Proofs.CnxTiePoCGB.cnx_logitsB_eq
-#print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad
-#print axioms Proofs.CnxTiePoCGB.cnxNetB_eq_convNextForwardTCh
-#print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE
+#print axioms Proofs.CnxTieGB.cnxBlk_hasGradAt
+#print axioms Proofs.CnxTieGB.cnx_block_lossTiedGB
+#print axioms Proofs.CnxTieGB.cnx_down_lossTiedGB
+#print axioms Proofs.CnxTieGB.cnx_stem_lossTiedGB
+#print axioms Proofs.CnxTieGB.cnx_head_lossTiedGB
+#print axioms Proofs.CnxTieGB.cnx_factor_b1
+#print axioms Proofs.CnxTieGB.cnx_logitsB_eq
+#print axioms Proofs.CnxTieGB.cnx_net_lossGrad
+#print axioms Proofs.CnxTieGB.cnxNetB_eq_convNextForwardTCh
+#print axioms Proofs.CnxTieGB.cnx_net_lossGrad_smoothedCE
+#print axioms Proofs.CnxTieGB.cnx_net_tied_lossGrad
 -- ViT-Tiny: every parameter gradient node IS the loss's derivative (ViTParamGrad.lean)
-#print axioms Proofs.ViTTiePoCGB.pdivMat_colIndepH
-#print axioms Proofs.ViTTiePoCGB.colSlabwiseHasVJPMatH
-#print axioms Proofs.ViTTiePoCGB.attnCoreQHasVJPMat
-#print axioms Proofs.ViTTiePoCGB.attnCoreKHasVJPMat
-#print axioms Proofs.ViTTiePoCGB.attnCoreVHasVJPMat
-#print axioms Proofs.ViTTiePoCGB.attnCoreQ_backward
-#print axioms Proofs.ViTTiePoCGB.vitMlpSub_hasGradAt
-#print axioms Proofs.ViTTiePoCGB.vitPostQ_hasGradAt
-#print axioms Proofs.ViTTiePoCGB.vitPostL1_hasGradAt
-#print axioms Proofs.ViTTiePoCGB.vitPostL2_hasGradAt
-#print axioms Proofs.ViTTiePoCGB.vitPostF1_hasGradAt
-#print axioms Proofs.ViTTiePoCGB.vit_fwd_Wq
-#print axioms Proofs.ViTTiePoCGB.vit_block_lossTiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_head_lossTiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_embed_lossTiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_factor_b1
-#print axioms Proofs.ViTTiePoCGB.vit_logitsB_eq
-#print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad
-#print axioms Proofs.ViTTiePoCGB.fwdO_eq_blockVFlat
-#print axioms Proofs.ViTTiePoCGB.vitNetB_eq_vitForwardKV
-#print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE
+#print axioms Proofs.pdivMat_colIndepH
+#print axioms Proofs.colSlabwiseHasVJPMatH
+#print axioms Proofs.ViTTieGB.attnCoreQHasVJPMat
+#print axioms Proofs.ViTTieGB.attnCoreKHasVJPMat
+#print axioms Proofs.ViTTieGB.attnCoreVHasVJPMat
+#print axioms Proofs.ViTTieGB.attnCoreQ_backward
+#print axioms Proofs.ViTTieGB.vitMlpSub_hasGradAt
+#print axioms Proofs.ViTTieGB.vitPostQ_hasGradAt
+#print axioms Proofs.ViTTieGB.vitPostL1_hasGradAt
+#print axioms Proofs.ViTTieGB.vitPostL2_hasGradAt
+#print axioms Proofs.ViTTieGB.vitPostF1_hasGradAt
+#print axioms Proofs.ViTTieGB.vit_fwd_Wq
+#print axioms Proofs.ViTTieGB.vit_block_lossTiedGB
+#print axioms Proofs.ViTTieGB.vit_head_lossTiedGB
+#print axioms Proofs.ViTTieGB.vit_embed_lossTiedGB
+#print axioms Proofs.ViTTieGB.vit_factor_b1
+#print axioms Proofs.ViTTieGB.vit_logitsB_eq
+#print axioms Proofs.ViTTieGB.vit_net_lossGrad
+#print axioms Proofs.ViTTieGB.fwdO_eq_blockVFlat
+#print axioms Proofs.ViTTieGB.vitNetB_eq_vitForwardKV
+#print axioms Proofs.ViTTieGB.vit_net_lossGrad_smoothedCE
+#print axioms Proofs.ViTTieGB.vit_net_tied_lossGrad
+-- The chapter nets: every parameter gradient node IS the loss's derivative, pools up to twins
+-- (SmallParamGrad.lean and the Nets/Small *ParamGrad files)
+#print axioms Proofs.SmallParamGrad.hasGradAt_crossEntropy
+#print axioms Proofs.SmallParamGrad.convW_hasGradAt
+#print axioms Proofs.SmallParamGrad.convB_hasGradAt
+#print axioms Proofs.SmallParamGrad.denseW_hasGradAt
+#print axioms Proofs.SmallParamGrad.denseB_hasGradAt
+#print axioms Proofs.SmallParamGrad.convWeightSgd_eq_grad
+#print axioms Proofs.SmallParamGrad.weightSgd_eq_grad
+#print axioms Proofs.SmallParamGrad.hasGradAt_conv
+#print axioms Proofs.SmallParamGrad.poolGatherFlat_eq_sel
+#print axioms Proofs.SmallParamGrad.hasGradAt_gatherRelu
+#print axioms Proofs.SmallParamGrad.maxPool_relu_eventuallyEq_sel
+#print axioms Proofs.SmallParamGrad.maxpool_flatDenote_eq_selScatter
+#print axioms Proofs.LinFold.linear_net_lossGrad
+#print axioms Proofs.LinFold.linear_net_lossGrad_CE
+#print axioms Proofs.MlpFold.mlp_net_lossGrad
+#print axioms Proofs.MlpFold.mlp_net_lossGrad_CE
+#print axioms Proofs.CnnFold.cnnPoolTwin_of_convPatchEq2
+#print axioms Proofs.CnnFold.cnn_net_lossGrad
+#print axioms Proofs.CnnFold.cnn_net_lossGrad_CE
+#print axioms Proofs.CnnFold.cnnChainCotW2_eq_sel
+#print axioms Proofs.CifarFold.cifar_net_lossGrad
+#print axioms Proofs.CifarFold.cifar_net_lossGrad_CE
+#print axioms Proofs.CifarFold.cifarChainCotW2_eq_sel
+#print axioms Proofs.Cifar8TieG.cifar8_net_lossGrad
+#print axioms Proofs.Cifar8TieG.cifar8_net_lossGrad_CE
+#print axioms Proofs.Cifar8BnTieG.bnGamma_hasGradAt
+#print axioms Proofs.Cifar8BnTieG.bnBeta_hasGradAt
+#print axioms Proofs.Cifar8BnTieG.hasGradAt_bnPC
+#print axioms Proofs.Cifar8BnTieG.cifar8Bn_net_lossGrad
+#print axioms Proofs.Cifar8BnTieG.cifar8Bn_net_lossGrad_CE
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment
@@ -1270,6 +1333,16 @@ open Proofs
 #print axioms MaxPool2MarginQ.isArgmax_iff
 -- Float-bridge CNN descent keystone: the pool selector is an indicator pass-through in float
 #print axioms MaxPool2MarginQ.poolBack_close
+-- The pool margin up to twins, and the pool as a fixed gather at a twin tie (ConvIndex, WindowMax)
+#print axioms windowSmoothUpTo_of_margin
+#print axioms WindowMarginUpTo.mono
+#print axioms windowMarginUpTo_of_cert
+#print axioms windowMax_eq_windowGather
+#print axioms poolGatherFlat_l1_contract
+#print axioms pdiv_poolGatherFlat
+#print axioms maxPoolFlat_eq_poolGatherFlat
+#print axioms MaxPool2MarginQ.to_marginQUpTo
+#print axioms MaxPool2MarginQ.to_marginQUpTo_flat
 #print axioms conv2d_eq_convPad
 #print axioms abs_convPad_le
 #print axioms sum_abs_kernel_slab_le
@@ -1282,7 +1355,6 @@ open Proofs
 #print axioms ce_head3_input_grad
 #print axioms pool_relu_input_grad
 #print axioms conv2d_weight_pdiv
-#print axioms cnn_conv2_loss_differentiableAt
 #print axioms cnn_conv2_loss_gradAt
 -- Float-bridge CNN descent keystone: the certified conv-2 gradient in dense/reluMask form
 #print axioms dense_transpose_eq
@@ -1296,12 +1368,18 @@ open Proofs
 #print axioms FloatModel.cnnConv2FloatGrad_apply
 #print axioms FloatModel.cnnConv2GradBudget
 #print axioms cnn_conv2_grad_close
-#print axioms cnn_margin2_keeps_offkink
-#print axioms cnn_margin3_keeps_offkink
-#print axioms cnn_margin4_keeps_offkink
 #print axioms head3_sum_drift
-#print axioms cnn_conv2_loss_grad_lipschitz
+#print axioms conv2d_eq_of_convPatchEq
+#print axioms convPatchEq_relu_conv
+#print axioms gather_relu_input_grad
+#print axioms Conv2Slot.maxPool_relu_eventuallyEq_gather
+#print axioms Conv2Slot.marginUpTo_seg
+#print axioms Conv2Slot.gather_grad_lipschitz
+#print axioms Conv2Slot.sgd_descends
+#print axioms Conv2Slot.marginUpTo_strict
+#print axioms Conv2Slot.gradAt_abs_le
 #print axioms cnn_conv2_sgd_descends
+#print axioms cnn_conv2_exact_sgd_descends
 -- Float-bridge CNN descent (cont.)
 #print axioms flatten_k4Idx
 #print axioms k4Idx_surj
@@ -1313,17 +1391,16 @@ open Proofs
 #print axioms conv2d_flat_input_pdiv
 #print axioms conv2d_input_entry_drift
 #print axioms conv2d_input_l1_drift
-#print axioms cnn1_margin1_keeps_offkink
-#print axioms cnn1_margin2_keeps_offkink
-#print axioms cnn1_margin3_keeps_offkink
-#print axioms cnn1_margin4_keeps_offkink
 #print axioms cnn1_pool_head_input_grad
-#print axioms cnn_conv1_loss_differentiableAt
 #print axioms cnn_conv1_loss_gradAt
 -- Float-bridge CNN descent keystone
 #print axioms cnn_conv1_loss_gradAt_reluMask
-#print axioms cnn_conv1_loss_grad_lipschitz
+#print axioms Conv1Slot.sgd_descends
+#print axioms Conv1Slot.gradAt_abs_le
 #print axioms cnn_conv1_sgd_descends
+#print axioms ConvPatchEq2.symm
+#print axioms ConvPatchEq2.trans
+#print axioms cnn_conv1_exact_sgd_descends
 -- Float-bridge CNN descent (cont.)
 #print axioms convTap_abs_le
 #print axioms FloatModel.cnnConv2CotBudget
@@ -1333,6 +1410,10 @@ open Proofs
 #print axioms abs_le_of_close
 #print axioms convTap_back_close
 #print axioms convTap_back_abs_le
+#print axioms FloatModel.cnnConv1CotF
+#print axioms cnnConv1CotR
+#print axioms FloatModel.cnnConv1CotBudget
+#print axioms cnn_conv1_cot_close
 #print axioms FloatModel.cnnConv1FloatGrad
 #print axioms FloatModel.cnnConv1FloatGrad_apply
 #print axioms FloatModel.cnnConv1GradBudget
@@ -1343,21 +1424,12 @@ open Proofs
 #print axioms conv2d_flat_bias_drift_total
 #print axioms conv2d_flat_bias_drift_sum
 #print axioms conv2d_bias_pdiv
-#print axioms cnnb2_margin2_keeps_offkink
-#print axioms cnnb2_margin3_keeps_offkink
-#print axioms cnnb2_margin4_keeps_offkink
-#print axioms cnn_conv2_bias_loss_differentiableAt
 #print axioms cnn_conv2_bias_loss_gradAt
-#print axioms cnn_conv2_bias_loss_grad_lipschitz
 #print axioms cnn_conv2_bias_sgd_descends
-#print axioms cnnb1_margin1_keeps_offkink
-#print axioms cnnb1_margin2_keeps_offkink
-#print axioms cnnb1_margin3_keeps_offkink
-#print axioms cnnb1_margin4_keeps_offkink
-#print axioms cnn_conv1_bias_loss_differentiableAt
+#print axioms cnn_conv2_bias_exact_sgd_descends
 #print axioms cnn_conv1_bias_loss_gradAt
-#print axioms cnn_conv1_bias_loss_grad_lipschitz
 #print axioms cnn_conv1_bias_sgd_descends
+#print axioms cnn_conv1_bias_exact_sgd_descends
 -- Float-bridge CNN descent (cont.)
 #print axioms FloatModel.sum_perturbed_close
 #print axioms FloatModel.cnnConv2BiasFloatGrad
@@ -1529,25 +1601,25 @@ open Proofs
 #print axioms StableHLO.headBackBatchedGraph_faithful
 -- ViT-Tiny FOLD (ViTFold)
 #print axioms Proofs.SgdNode.veclnGammaSgd_den
-#print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
-#print axioms Proofs.ViTPoC.rowDenseBiasSgd_den
+#print axioms Proofs.ViTFold.rowDenseWeightSgd_den
+#print axioms Proofs.ViTFold.rowDenseBiasSgd_den
 #print axioms Proofs.SgdNode.rowDenseBiasSgd_den_lnbeta
-#print axioms Proofs.ViTPoC.patchEmbedWeightSgd_den
-#print axioms Proofs.ViTPoC.patchEmbedBiasSgd_den
-#print axioms Proofs.ViTPoC.posEmbedSgd_den
+#print axioms Proofs.ViTFold.patchEmbedWeightSgd_den
+#print axioms Proofs.ViTFold.patchEmbedBiasSgd_den
+#print axioms Proofs.ViTFold.posEmbedSgd_den
 -- ViT-Tiny TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq
 #print axioms Proofs.vitCotDVmh_eq
 -- The multi-head per-block tie (vit_block_tiedMHV)
-#print axioms Proofs.ViTTiePoC.vit_block_tiedMHV
-#print axioms Proofs.ViTTiePoC.vit_block_tiedAtMHV
+#print axioms Proofs.ViTTie.vit_block_tiedMHV
+#print axioms Proofs.ViTTie.vit_block_tiedAtMHV
 -- ViT-Tiny TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified)
-#print axioms Proofs.ViTTiePoC.vit_cls_den
-#print axioms Proofs.ViTTiePoC.vit_finalLN_tied
-#print axioms Proofs.ViTTiePoC.vit_head_tied
-#print axioms Proofs.ViTTiePoC.vit_embed_tied
-#print axioms Proofs.ViTTiePoC.vit_net_tied_certified
+#print axioms Proofs.ViTTie.vit_cls_den
+#print axioms Proofs.ViTTie.vit_finalLN_tied
+#print axioms Proofs.ViTTie.vit_head_tied
+#print axioms Proofs.ViTTie.vit_embed_tied
+#print axioms Proofs.ViTTie.vit_net_tied_certified
 
 -- Robustness certificate (the cert side of cert ≤ TRUE ≤ PGD)
 #print axioms Proofs.lipschitz_margin_certified_radius
@@ -1573,7 +1645,7 @@ open Proofs
 #print axioms Proofs.stdNormalCDF_quantile
 
 -- Dimension reduction
-#print axioms Proofs.integral_gaussianReal_shift_eq
+#print axioms MathlibUpstream.integral_gaussianReal_comp_add_const
 #print axioms Proofs.pi_gaussian_shift_eq
 #print axioms Proofs.pi_gaussian_np_shift
 #print axioms Proofs.stdGaussian_np_shift
@@ -1631,10 +1703,10 @@ open Proofs
 #print axioms Proofs.measurable_argmaxNet
 #print axioms Proofs.argmaxNet_smoothProb_mem_Ioo
 #print axioms Proofs.smoothing_cp_certified_net
-#print axioms Proofs.LipschitzCertDemo.mlpT_logit_continuous
-#print axioms Proofs.LipschitzCertDemo.netW_strict
-#print axioms Proofs.LipschitzCertDemo.smoothing_cp_certified_mlpT
-#print axioms Proofs.LipschitzCertDemo.smooth_cp_mlpT_demo
+#print axioms Proofs.Robustness.mlpT_logit_continuous
+#print axioms Proofs.Robustness.netW_strict
+#print axioms Proofs.Robustness.smoothing_cp_certified_mlpT
+#print axioms Proofs.Robustness.smooth_cp_mlpT_demo
 
 -- ...and the two-sided quantile packaging (Smoothing/Gaussian.lean)
 #print axioms Proofs.stdNormalQuantile_strictMonoOn
@@ -1651,95 +1723,95 @@ open Proofs
 #print axioms MathlibUpstream.cdf_gaussianReal_sub_const
 
 -- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCert/Instance.lean)
-#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2
-#print axioms Proofs.LipschitzCertDemo.reluE_lipschitzL2
-#print axioms Proofs.LipschitzCertDemo.linear_demo_certified
-#print axioms Proofs.LipschitzCertDemo.linear_radius_pos
-#print axioms Proofs.LipschitzCertDemo.mlp_lip
-#print axioms Proofs.LipschitzCertDemo.mlp_demo_certified
-#print axioms Proofs.LipschitzCertDemo.mlp_radius_pos
-#print axioms Proofs.LipschitzCertDemo.W1t_lip
-#print axioms Proofs.LipschitzCertDemo.W2t_lip
-#print axioms Proofs.LipschitzCertDemo.mlpT_lip
-#print axioms Proofs.LipschitzCertDemo.xt_margin
-#print axioms Proofs.LipschitzCertDemo.trained_radius_pos
-#print axioms Proofs.LipschitzCertDemo.trained_demo_certified
+#print axioms Proofs.Robustness.denseE_lipschitzL2
+#print axioms Proofs.Robustness.reluE_lipschitzL2
+#print axioms Proofs.Robustness.linear_demo_certified
+#print axioms Proofs.Robustness.linear_radius_pos
+#print axioms Proofs.Robustness.mlp_lip
+#print axioms Proofs.Robustness.mlp_demo_certified
+#print axioms Proofs.Robustness.mlp_radius_pos
+#print axioms Proofs.Robustness.W1t_lip
+#print axioms Proofs.Robustness.W2t_lip
+#print axioms Proofs.Robustness.mlpT_lip
+#print axioms Proofs.Robustness.xt_margin
+#print axioms Proofs.Robustness.trained_radius_pos
+#print axioms Proofs.Robustness.trained_demo_certified
 -- ...tightened by the power-iteration certificate (certified two-sided spectral sandwich)
-#print axioms Proofs.LipschitzCertDemo.sum_sq_matvec_le
-#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2_gram
-#print axioms Proofs.LipschitzCertDemo.lipschitzL2_lower_euclid
-#print axioms Proofs.LipschitzCertDemo.G1t_eq
-#print axioms Proofs.LipschitzCertDemo.G2t_eq
-#print axioms Proofs.LipschitzCertDemo.W1t_lip_gram
-#print axioms Proofs.LipschitzCertDemo.W2t_lip_gram
-#print axioms Proofs.LipschitzCertDemo.mlpT_lip_gram
-#print axioms Proofs.LipschitzCertDemo.trained_radius_gram_pos
-#print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram
-#print axioms Proofs.LipschitzCertDemo.W1t_lip_lower
-#print axioms Proofs.LipschitzCertDemo.W2t_lip_lower
+#print axioms Proofs.Robustness.sum_sq_matvec_le
+#print axioms Proofs.Robustness.denseE_lipschitzL2_gram
+#print axioms Proofs.Robustness.lipschitzL2_lower_euclid
+#print axioms Proofs.Robustness.G1t_eq
+#print axioms Proofs.Robustness.G2t_eq
+#print axioms Proofs.Robustness.W1t_lip_gram
+#print axioms Proofs.Robustness.W2t_lip_gram
+#print axioms Proofs.Robustness.mlpT_lip_gram
+#print axioms Proofs.Robustness.trained_radius_gram_pos
+#print axioms Proofs.Robustness.trained_demo_certified_gram
+#print axioms Proofs.Robustness.W1t_lip_lower
+#print axioms Proofs.Robustness.W2t_lip_lower
 -- ...iterated once more (Schatten-8)
-#print axioms Proofs.LipschitzCertDemo.sum_sq_matTvec_eq
-#print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2_gram2
-#print axioms Proofs.LipschitzCertDemo.H1t_eq
-#print axioms Proofs.LipschitzCertDemo.H2t_eq
-#print axioms Proofs.LipschitzCertDemo.W1t_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.W2t_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.mlpT_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.trained_radius_gram2_pos
-#print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram2
+#print axioms Proofs.Robustness.sum_sq_matTvec_eq
+#print axioms Proofs.Robustness.denseE_lipschitzL2_gram2
+#print axioms Proofs.Robustness.H1t_eq
+#print axioms Proofs.Robustness.H2t_eq
+#print axioms Proofs.Robustness.W1t_lip_gram2
+#print axioms Proofs.Robustness.W2t_lip_gram2
+#print axioms Proofs.Robustness.mlpT_lip_gram2
+#print axioms Proofs.Robustness.trained_radius_gram2_pos
+#print axioms Proofs.Robustness.trained_demo_certified_gram2
 
 -- CERTIFIED-ACCURACY SCORECARD (LipschitzCert/Scorecard.lean)
-#print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
-#print axioms Proofs.LipschitzCertDemo.certified_at_eps
-#print axioms Proofs.LipschitzCertDemo.G1s_eq
-#print axioms Proofs.LipschitzCertDemo.G2s_eq
-#print axioms Proofs.LipschitzCertDemo.H1s_eq
-#print axioms Proofs.LipschitzCertDemo.H2s_eq
-#print axioms Proofs.LipschitzCertDemo.W1s_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.W2s_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.mlpS_lip_gram2
-#print axioms Proofs.LipschitzCertDemo.marginC0
-#print axioms Proofs.LipschitzCertDemo.certifiedC0
-#print axioms Proofs.LipschitzCertDemo.certifiedC3
-#print axioms Proofs.LipschitzCertDemo.certifiedC10
-#print axioms Proofs.LipschitzCertDemo.certifiedC13
-#print axioms Proofs.LipschitzCertDemo.certifiedC14
-#print axioms Proofs.LipschitzCertDemo.certifiedC17
-#print axioms Proofs.LipschitzCertDemo.certifiedC25
-#print axioms Proofs.LipschitzCertDemo.marginU82
-#print axioms Proofs.LipschitzCertDemo.certifiedU82
+#print axioms Proofs.Robustness.sqrt_two_le_rat
+#print axioms Proofs.Robustness.certified_at_eps
+#print axioms Proofs.Robustness.G1s_eq
+#print axioms Proofs.Robustness.G2s_eq
+#print axioms Proofs.Robustness.H1s_eq
+#print axioms Proofs.Robustness.H2s_eq
+#print axioms Proofs.Robustness.W1s_lip_gram2
+#print axioms Proofs.Robustness.W2s_lip_gram2
+#print axioms Proofs.Robustness.mlpS_lip_gram2
+#print axioms Proofs.Robustness.marginC0
+#print axioms Proofs.Robustness.certifiedC0
+#print axioms Proofs.Robustness.certifiedC3
+#print axioms Proofs.Robustness.certifiedC10
+#print axioms Proofs.Robustness.certifiedC13
+#print axioms Proofs.Robustness.certifiedC14
+#print axioms Proofs.Robustness.certifiedC17
+#print axioms Proofs.Robustness.certifiedC25
+#print axioms Proofs.Robustness.marginU82
+#print axioms Proofs.Robustness.certifiedU82
 -- the mechanized aggregate
-#print axioms Proofs.LipschitzCertDemo.cappedCerts_certified
-#print axioms Proofs.LipschitzCertDemo.unconCerts_certified
-#print axioms Proofs.LipschitzCertDemo.scorecard
+#print axioms Proofs.Robustness.cappedCerts_certified
+#print axioms Proofs.Robustness.unconCerts_certified
+#print axioms Proofs.Robustness.scorecard
 
 -- Per-pair LipSDP tightening (LipschitzCert/PairSDP.lean + the generated instances)
-#print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
-#print axioms Proofs.LipschitzCertDemo.pair_sq_bound
-#print axioms Proofs.LipschitzCertDemo.mlp_gap_eq
-#print axioms Proofs.LipschitzCertDemo.certified_at_eps_pair
-#print axioms Proofs.LipschitzCertDemo.hS01C
-#print axioms Proofs.LipschitzCertDemo.pairSqC_0_1
-#print axioms Proofs.LipschitzCertDemo.pairSqC_7_0
-#print axioms Proofs.LipschitzCertDemo.pairSqU_0_1
-#print axioms Proofs.LipschitzCertDemo.certifiedSC0
-#print axioms Proofs.LipschitzCertDemo.certifiedSC4
-#print axioms Proofs.LipschitzCertDemo.certifiedSC9
-#print axioms Proofs.LipschitzCertDemo.certifiedSU0
-#print axioms Proofs.LipschitzCertDemo.certifiedSU4
-#print axioms Proofs.LipschitzCertDemo.certifiedSU11
-#print axioms Proofs.LipschitzCertDemo.sdpCappedCerts_certified
-#print axioms Proofs.LipschitzCertDemo.sdpUnconCerts_certified
-#print axioms Proofs.LipschitzCertDemo.scorecard_sdp
-#print axioms Proofs.LipschitzCertDemo.scorecard_sdp_uncon
+#print axioms Proofs.Robustness.relu_slope_restricted
+#print axioms Proofs.Robustness.pair_sq_bound
+#print axioms Proofs.Robustness.mlp_gap_eq
+#print axioms Proofs.Robustness.certified_at_eps_pair
+#print axioms Proofs.Robustness.hS01C
+#print axioms Proofs.Robustness.pairSqC_0_1
+#print axioms Proofs.Robustness.pairSqC_7_0
+#print axioms Proofs.Robustness.pairSqU_0_1
+#print axioms Proofs.Robustness.certifiedSC0
+#print axioms Proofs.Robustness.certifiedSC4
+#print axioms Proofs.Robustness.certifiedSC9
+#print axioms Proofs.Robustness.certifiedSU0
+#print axioms Proofs.Robustness.certifiedSU4
+#print axioms Proofs.Robustness.certifiedSU11
+#print axioms Proofs.Robustness.sdpCappedCerts_certified
+#print axioms Proofs.Robustness.sdpUnconCerts_certified
+#print axioms Proofs.Robustness.scorecard_sdp
+#print axioms Proofs.Robustness.scorecard_sdp_uncon
 
 -- The certificate × float bridge (LipschitzCert/Float.lean)
 #print axioms Proofs.FloatModel.mlp2_float_close_uniform
-#print axioms Proofs.LipschitzCertDemo.certified_at_eps_close
-#print axioms Proofs.LipschitzCertDemo.capped_B_le
-#print axioms Proofs.LipschitzCertDemo.real_tie
-#print axioms Proofs.LipschitzCertDemo.certifiedFloat_of_margin
-#print axioms Proofs.LipschitzCertDemo.certifiedC0_float
+#print axioms Proofs.Robustness.certified_at_eps_close
+#print axioms Proofs.Robustness.capped_B_le
+#print axioms Proofs.Robustness.real_tie
+#print axioms Proofs.Robustness.certifiedFloat_of_margin
+#print axioms Proofs.Robustness.certifiedC0_float
 
 -- The kernel-dotZ list engine (ListDot.lean)
 #print axioms Proofs.dotZ_comm
@@ -1747,34 +1819,34 @@ open Proofs
 #print axioms Proofs.sum_getD_div
 #print axioms Proofs.sum_getD_abs
 #print axioms Proofs.sum_getD_abs_div
-#print axioms Proofs.LipschitzCertDemo.denseLo_le
-#print axioms Proofs.LipschitzCertDemo.le_denseHi
-#print axioms Proofs.LipschitzCertDemo.relu_box
-#print axioms Proofs.LipschitzCertDemo.denseLo_uniform
-#print axioms Proofs.LipschitzCertDemo.denseLo2_eval
-#print axioms Proofs.LipschitzCertDemo.denseHi2_eval
+#print axioms Proofs.Robustness.denseLo_le
+#print axioms Proofs.Robustness.le_denseHi
+#print axioms Proofs.Robustness.relu_box
+#print axioms Proofs.Robustness.denseLo_uniform
+#print axioms Proofs.Robustness.denseLo2_eval
+#print axioms Proofs.Robustness.denseHi2_eval
 -- The dense tier's certificate is stated on a BRACKET, not on interval arithmetic
-#print axioms Proofs.LipschitzCertDemo.BoxSoundE.comp
-#print axioms Proofs.LipschitzCertDemo.denseE_boxSound
-#print axioms Proofs.LipschitzCertDemo.reluE_boxSound
-#print axioms Proofs.LipschitzCertDemo.certified_of_boxSound
-#print axioms Proofs.LipschitzCertDemo.mlp2_boxSound
-#print axioms Proofs.LipschitzCertDemo.ibp2_certified_at_eps
+#print axioms Proofs.Robustness.BoxSoundE.comp
+#print axioms Proofs.Robustness.denseE_boxSound
+#print axioms Proofs.Robustness.reluE_boxSound
+#print axioms Proofs.Robustness.certified_of_boxSound
+#print axioms Proofs.Robustness.mlp2_boxSound
+#print axioms Proofs.Robustness.ibp2_certified_at_eps
 
 -- CROWN (Certificates/CrownBound.lean)
-#print axioms Proofs.LipschitzCertDemo.certified_of_marginPos
-#print axioms Proofs.LipschitzCertDemo.relu_lower_envelope
-#print axioms Proofs.LipschitzCertDemo.relu_upper_envelope
-#print axioms Proofs.LipschitzCertDemo.reluLB_dead
-#print axioms Proofs.LipschitzCertDemo.reluLB_active
-#print axioms Proofs.LipschitzCertDemo.reluLB_unstable_pos
-#print axioms Proofs.LipschitzCertDemo.reluLB_unstable_neg
-#print axioms Proofs.LipschitzCertDemo.crownRow_dot
-#print axioms Proofs.LipschitzCertDemo.linf_lower_bound
-#print axioms Proofs.LipschitzCertDemo.crown_margin_ge
-#print axioms Proofs.LipschitzCertDemo.crown2_certified_at_eps
+#print axioms Proofs.Robustness.certified_of_marginPos
+#print axioms Proofs.Robustness.relu_lower_envelope
+#print axioms Proofs.Robustness.relu_upper_envelope
+#print axioms Proofs.Robustness.reluLB_dead
+#print axioms Proofs.Robustness.reluLB_active
+#print axioms Proofs.Robustness.reluLB_unstable_pos
+#print axioms Proofs.Robustness.reluLB_unstable_neg
+#print axioms Proofs.Robustness.crownRow_dot
+#print axioms Proofs.Robustness.linf_lower_bound
+#print axioms Proofs.Robustness.crown_margin_ge
+#print axioms Proofs.Robustness.crown2_certified_at_eps
 
--- IBP PAST THE TWO-LAYER DENSE WALL (Foundation/IntervalBoundConv.lean)
+-- IBP PAST THE TWO-LAYER DENSE WALL (Certificates/IntervalBoundConv/Basic.lean)
 #print axioms Proofs.IBP.BoxSound3.comp
 #print axioms Proofs.IBP.BoxSound3V.comp3
 #print axioms Proofs.IBP.denseT_boxSound3V
@@ -1824,6 +1896,16 @@ open Proofs
 #print axioms Proofs.TrainedCnn.d4_ne
 #print axioms Proofs.TrainedCnn.trainedCnnHasVJP_correct
 
+-- CNN descent at trained weights through tied pool windows (Trained/CnnDescent.lean)
+#print axioms Proofs.TrainedCnnDescent.pool_margin
+#print axioms Proofs.TrainedCnnDescent.x1_eq
+#print axioms Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete
+#print axioms Proofs.TrainedCnnDescent.trained_cnn_conv2_bias_sgd_descends_concrete
+-- CNN conv1 descent at trained weights through two-layer twins (Trained/CnnDescentConv1.lean)
+#print axioms Proofs.TrainedCnnDescentConv1.pool_margin
+#print axioms Proofs.TrainedCnnDescentConv1.x1_fun
+#print axioms Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_sgd_descends_concrete
+#print axioms Proofs.TrainedCnnDescentConv1.trained_cnn_conv1_bias_sgd_descends_concrete
 -- Level-3 seal for the CNN witness (Trained/CnnSeal.lean)
 #print axioms Proofs.TrainedCnn.S2
 #print axioms Proofs.TrainedCnn.S1
@@ -1946,6 +2028,15 @@ open Proofs
 #print axioms Proofs.gatherReluHasVJPAt
 #print axioms Proofs.ResNet34TieB.r34StemPool_param_germ
 #print axioms Proofs.ResNet34TieB.r34StemGCg_hasGradAt
+#print axioms Proofs.stemPoolRelu_param_eventuallyEq_select
+#print axioms Proofs.maxPool3s2LocalReindexB_isSelect
+#print axioms Proofs.ResNet34TieB.r34StemPool_param_germ_select
+#print axioms Proofs.ResNet34TieB.r34StemGCg_hasGradAt_at
+#print axioms Proofs.ResNet34TieB.r34_stem_lossTiedB_select
+#print axioms Proofs.ResNet34TieB.r34Stem_select_grads_eq
+#print axioms Proofs.ResNet34TieB.r34StemLossTiedB.select
+#print axioms Proofs.ResNet34TieB.r34_net_lossGrad_stemSelect
+#print axioms Proofs.ResNet50TieB.r50_net_lossGrad_stemSelect
 #print axioms Proofs.ResNet34TieB.r34LossSmoothAtB_of_smoothAtB
 #print axioms Proofs.ResNet50TieB.r50LossSmoothAtB_of_smoothAtB
 #print axioms Proofs.BatchSeal.bnBatchLA_bcell_eq_of_eq
@@ -1977,41 +2068,41 @@ open Proofs
 #print axioms Proofs.GradNodeB.depthwiseStridedWGradB_den
 
 -- ConvNeXt-T
-#print axioms Proofs.CnxPoCG.layerScaleChGammaGrad_den
-#print axioms Proofs.CnxPoCG.chanLnGammaGrad_den
-#print axioms Proofs.CnxPoCG.chanLnBetaGrad_den
+#print axioms Proofs.CnxFoldG.layerScaleChGammaGrad_den
+#print axioms Proofs.CnxFoldG.chanLnGammaGrad_den
+#print axioms Proofs.CnxFoldG.chanLnBetaGrad_den
 
 -- ViT-Tiny — vit_adam_train_step and vitin_adamdp128x4wxclipdrop
-#print axioms Proofs.ViTPoCG.posEmbedGrad_den
-#print axioms Proofs.ViTPoCG.clsGrad_den
+#print axioms Proofs.ViTFoldG.posEmbedGrad_den
+#print axioms Proofs.ViTFoldG.clsGrad_den
 
 -- ViT-Tiny
 #print axioms Proofs.GradNodeB.veclnGammaGradB_den
 #print axioms Proofs.GradNodeB.rowDenseBiasGradB_den_lnbeta
-#print axioms Proofs.ViTPoCGB.rowDenseWeightGradB_den
-#print axioms Proofs.ViTPoCGB.rowDenseBiasGradB_den
-#print axioms Proofs.ViTPoCGB.patchEmbedWeightGradB_den
-#print axioms Proofs.ViTPoCGB.patchEmbedBiasGradB_den
-#print axioms Proofs.ViTPoCGB.posEmbedGradB_den
-#print axioms Proofs.ViTPoCGB.clsGrad_denB
+#print axioms Proofs.ViTFoldGB.rowDenseWeightGradB_den
+#print axioms Proofs.ViTFoldGB.rowDenseBiasGradB_den
+#print axioms Proofs.ViTFoldGB.patchEmbedWeightGradB_den
+#print axioms Proofs.ViTFoldGB.patchEmbedBiasGradB_den
+#print axioms Proofs.ViTFoldGB.posEmbedGradB_den
+#print axioms Proofs.ViTFoldGB.clsGrad_denB
 #print axioms Proofs.GradNodeB.headWGradB_den
 #print axioms Proofs.GradNodeB.headBGradB_den
 
 -- ConvNeXt-T
-#print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
+#print axioms Proofs.CnxFoldGB.layerScaleChGammaGradB_den
 #print axioms Proofs.GradNodeB.psWGradB_den
-#print axioms Proofs.CnxPoCGB.chanLnGammaGradB_den
-#print axioms Proofs.CnxPoCGB.chanLnBetaGradB_den
+#print axioms Proofs.CnxFoldGB.chanLnGammaGradB_den
+#print axioms Proofs.CnxFoldGB.chanLnBetaGradB_den
 -- The bf16 gradient nodes, folded ONCE for every net (Bf16GradNodes.lean)
-#print axioms Proofs.Bf16PoC.convWGradBBf16_den
-#print axioms Proofs.Bf16PoC.convStridedWGradBBf16_den
-#print axioms Proofs.Bf16PoC.convStridedXlaWGradBBf16_den
-#print axioms Proofs.Bf16PoC.convStride4WGradBBf16_den
-#print axioms Proofs.Bf16PoC.depthwiseWGradBBf16_den
-#print axioms Proofs.Bf16PoC.depthwiseStridedWGradBBf16_den
-#print axioms Proofs.Bf16PoC.depthwiseStridedXlaWGradBBf16_den
-#print axioms Proofs.Bf16PoC.rowDenseWGradBBf16_den
-#print axioms Proofs.Bf16PoC.patchEmbedWGradBBf16_den
+#print axioms Proofs.Bf16Fold.convWGradBBf16_den
+#print axioms Proofs.Bf16Fold.convStridedWGradBBf16_den
+#print axioms Proofs.Bf16Fold.convStridedXlaWGradBBf16_den
+#print axioms Proofs.Bf16Fold.convStride4WGradBBf16_den
+#print axioms Proofs.Bf16Fold.depthwiseWGradBBf16_den
+#print axioms Proofs.Bf16Fold.depthwiseStridedWGradBBf16_den
+#print axioms Proofs.Bf16Fold.depthwiseStridedXlaWGradBBf16_den
+#print axioms Proofs.Bf16Fold.rowDenseWGradBBf16_den
+#print axioms Proofs.Bf16Fold.patchEmbedWGradBBf16_den
 
 -- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den
@@ -2077,7 +2168,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad
 
 -- CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean)
-#print axioms Proofs.EnetTiePoCG.convBBetaTiedB_holds
+#print axioms Proofs.EnetTieG.convBBetaTiedB_holds
 #print axioms Proofs.GradNodeB.convWTiedB_holds
 #print axioms Proofs.GradNodeB.convBTiedB_holds
 #print axioms Proofs.GradNodeB.convStridedWTiedB_holds
@@ -2088,67 +2179,68 @@ open Proofs
 #print axioms Proofs.GradNodeB.depthwiseStridedWTiedB_holds
 #print axioms Proofs.GradNodeB.denseWTiedB_holds
 #print axioms Proofs.GradNodeB.denseBTiedB_holds
-#print axioms Proofs.ViTPoCGB.rowDenseWTiedB_holds
-#print axioms Proofs.ViTPoCGB.rowDenseBTiedB_holds
+#print axioms Proofs.ViTFoldGB.rowDenseWTiedB_holds
+#print axioms Proofs.ViTFoldGB.rowDenseBTiedB_holds
 #print axioms Proofs.GradNodeB.vecLNGammaTiedB_holds
 #print axioms Proofs.GradNodeB.vecLNBetaTiedB_holds
-#print axioms Proofs.CnxPoCGB.chanLNGammaTiedB_holds
-#print axioms Proofs.CnxPoCGB.chanLNBetaTiedB_holds
-#print axioms Proofs.EnetPoC.convWSgdTiedB_holds
-#print axioms Proofs.EnetPoC.depthwiseWSgdTiedB_holds
-#print axioms Proofs.EnetPoC.denseWSgdTiedB_holds
-#print axioms Proofs.EnetPoC.denseBSgdTiedB_holds
-#print axioms Proofs.ViTPoC.rowDenseWSgdTied_holds
-#print axioms Proofs.ViTPoC.rowDenseBSgdTied_holds
+#print axioms Proofs.CnxFoldGB.chanLNGammaTiedB_holds
+#print axioms Proofs.CnxFoldGB.chanLNBetaTiedB_holds
+#print axioms Proofs.EnetFold.convWSgdTiedB_holds
+#print axioms Proofs.EnetFold.depthwiseWSgdTiedB_holds
+#print axioms Proofs.EnetFold.denseWSgdTiedB_holds
+#print axioms Proofs.EnetFold.denseBSgdTiedB_holds
+#print axioms Proofs.ViTFold.rowDenseWSgdTied_holds
+#print axioms Proofs.ViTFold.rowDenseBSgdTied_holds
 #print axioms Proofs.SgdNode.vecLNGammaSgdTied_holds
 #print axioms Proofs.SgdNode.vecLNBetaSgdTied_holds
-#print axioms Proofs.CnxPoC.chanLNGammaSgdTied_holds
-#print axioms Proofs.CnxPoC.chanLNBetaSgdTied_holds
+#print axioms Proofs.CnxFold.chanLNGammaSgdTied_holds
+#print axioms Proofs.CnxFold.chanLNBetaSgdTied_holds
 #print axioms Proofs.convWSgdTied_holds
 #print axioms Proofs.convBSgdTied_holds
 #print axioms Proofs.denseWSgdTied_holds
 #print axioms Proofs.denseBSgdTied_holds
-#print axioms Proofs.EnetTiePoC.convBBetaSgdTied_holds
-#print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
-#print axioms Proofs.EnetTiePoCG.enet_strided_tiedG
-#print axioms Proofs.EnetTiePoCG.enet_noexp_tiedG
-#print axioms Proofs.EnetTiePoCG.enet_stem_tiedG
-#print axioms Proofs.EnetTiePoCG.enet_head_tiedG
-#print axioms Proofs.EnetTiePoCG.efficientnet_net_tiedG
+#print axioms Proofs.EnetTie.convBBetaSgdTied_holds
+#print axioms Proofs.EnetTieG.enet_exp_tiedG
+#print axioms Proofs.EnetTieG.enet_strided_tiedG
+#print axioms Proofs.EnetTieG.enet_noexp_tiedG
+#print axioms Proofs.EnetTieG.enet_stem_tiedG
+#print axioms Proofs.EnetTieG.enet_head_tiedG
+#print axioms Proofs.EnetTieG.efficientnet_net_tiedG
 
 -- CAPSTONE RE-POINTING, CONVNEXT-T (ConvNeXtStepTieGB.lean)
 #print axioms Proofs.smoothedLossCotGraphDiv_den
 #print axioms Proofs.smoothedLossCotGraphDiv_row
-#print axioms Proofs.CnxTiePoCGB.cnx_block_ch_tiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_down_ch_tiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_stem_ch_tiedGB
-#print axioms Proofs.CnxTiePoCGB.cnx_head_ch_tiedGB
-#print axioms Proofs.CnxTiePoCGB.cnxBlockCotInChAt_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnxDownCotInChAt_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnxHeadHasVJP
-#print axioms Proofs.CnxTiePoCGB.cnxHeadDyXheadChN_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnxBlockCotInB_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnxDownCotInB_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnxHeadDyB_eq_vjp
-#print axioms Proofs.CnxTiePoCGB.cnx_net_tiedGB
+#print axioms Proofs.CnxTieGB.cnx_block_ch_tiedGB
+#print axioms Proofs.CnxTieGB.cnx_down_ch_tiedGB
+#print axioms Proofs.CnxTieGB.cnx_stem_ch_tiedGB
+#print axioms Proofs.CnxTieGB.cnx_head_ch_tiedGB
+#print axioms Proofs.CnxTieGB.cnxBlockCotInChAt_eq_vjp
+#print axioms Proofs.CnxTieGB.cnxDownCotInChAt_eq_vjp
+#print axioms Proofs.CnxTieGB.cnxHeadHasVJP
+#print axioms Proofs.CnxTieGB.cnxHeadDyXheadChN_eq_vjp
+#print axioms Proofs.CnxTieGB.cnxBlockCotInB_eq_vjp
+#print axioms Proofs.CnxTieGB.cnxDownCotInB_eq_vjp
+#print axioms Proofs.CnxTieGB.cnxHeadDyB_eq_vjp
+#print axioms Proofs.CnxTieGB.cnx_net_tiedGB
 
 -- CAPSTONE RE-POINTING, ViT-TINY (ViTStepTieGB.lean)
-#print axioms Proofs.ViTTiePoCGB.vit_block_tiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_finalLN_tiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_head_tiedGB
-#print axioms Proofs.ViTTiePoCGB.vit_embed_tiedGB
-#print axioms Proofs.ViTTiePoCGB.rowDenseBackFlat_eq_perRowFlat
-#print axioms Proofs.ViTTiePoCGB.vitCotDQmh_eq_core
-#print axioms Proofs.ViTTiePoCGB.vitCotDKmh_eq_core
-#print axioms Proofs.ViTTiePoCGB.vitCotDVmh_eq_core
-#print axioms Proofs.ViTTiePoCGB.vitCotLn2_eq_perRowFlatPR
-#print axioms Proofs.ViTTiePoCGB.vitCotXin_eq_blockBack
-#print axioms Proofs.ViTTiePoCGB.vitBlockCotInAtMHV_eq_vjp
-#print axioms Proofs.ViTTiePoCGB.vitHeadHasVJP
-#print axioms Proofs.ViTTiePoCGB.vitCotB2outV_eq_vjp
-#print axioms Proofs.ViTTiePoCGB.vitBlockCotInB_eq_vjp
-#print axioms Proofs.ViTTiePoCGB.vitCotB2outB_eq_vjp
-#print axioms Proofs.ViTTiePoCGB.vit_net_tiedGB
+#print axioms Proofs.ViTTieGB.vit_block_tiedGB
+#print axioms Proofs.ViTTieGB.vit_finalLN_tiedGB
+#print axioms Proofs.ViTTieGB.vit_head_tiedGB
+#print axioms Proofs.ViTTieGB.vit_embed_tiedGB
+-- per-example cotangent ties (ViTStepTie.lean)
+#print axioms Proofs.rowDenseBackFlat_eq_perRowFlat
+#print axioms Proofs.vitCotDQmh_eq_core
+#print axioms Proofs.vitCotDKmh_eq_core
+#print axioms Proofs.vitCotDVmh_eq_core
+#print axioms Proofs.vitCotLn2_eq_perRowFlatPR
+#print axioms Proofs.vitCotXin_eq_blockBack
+#print axioms Proofs.vitBlockCotInAtMHV_eq_vjp
+#print axioms Proofs.vitHeadHasVJP
+#print axioms Proofs.vitCotTowerOutV_eq_vjp
+#print axioms Proofs.ViTTieGB.vitBlockCotInB_eq_vjp
+#print axioms Proofs.ViTTieGB.vitCotTowerOutB_eq_vjp
+#print axioms Proofs.ViTTieGB.vit_net_tiedGB
 
 -- DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel/Basic.lean)
 #print axioms Proofs.pdiv_const_smul
@@ -2447,7 +2539,7 @@ open Proofs
 #print axioms Proofs.StableHLO.r50StemGraphB_faithful
 #print axioms Proofs.StableHLO.resnet50FwdGraphBFull_faithful
 
--- RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50{Faithful,Tie}PoCB.lean)
+-- RESNET-50's T3 -- THE FOLD AND THE TIE (ResNet50StepTieB.lean)
 #print axioms Proofs.ResNet50TieB.r50IdCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp
 #print axioms Proofs.ResNet50TieB.r50DownCotIn_eq_vjp

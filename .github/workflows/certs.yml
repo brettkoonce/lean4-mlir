@@ -225,7 +225,7 @@ jobs:
           # Durable per-run log of which chapters' committed
           # verified_mlir/<net>_train_step.mlir is render(provenGraph) with every
           # output's den proven = the certified fderiv-derived SGD step. A ✅ is
-          # data-driven: it only prints if the net's PoC capstone is in the
+          # data-driven: it only prints if the net's train-step capstone is in the
           # 3-axiom closure above (so this table can't drift from what's proven).
           # ⛔ A HERE-STRING, NOT `echo "$out" | grep -q`. This step runs under `pipefail` (above).
           # `grep -q` exits at its first match, and `echo` is still writing ~1 MB of audit output
@@ -242,17 +242,17 @@ jobs:
             echo ""
             echo "| Chapter / net | render(provenGraph) | den = certified | §1a tied (whole-net) | capstone |"
             echo "|---|---|---|---|---|"
-            echo "| mnist-linear   | $(faithful LinPoC.poc_fwd_is_render) | $(faithful LinPoC.poc_train_step_tail_certified) | $(faithful LinPoC.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
-            echo "| mnist-mlp (1d) | $(faithful MlpPoC.W0_den_certified) | $(faithful MlpPoC.b0_den_certified) | $(faithful MlpPoC.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
-            echo "| mnist-cnn (2d) | $(faithful CnnPoC.cW1_den) | $(faithful CnnPoC.cb1_den) | $(faithful CnnPoC.cnn_train_step_tied_certified) | \`cnn_train_step_tied_certified\` |"
-            echo "| cifar (ch5, no-BN) | $(faithful SgdNode.convW_den) | $(faithful SgdNode.convB_den) | $(faithful CifarPoC.cifar_train_step_tied_certified) | \`cifar_train_step_tied_certified\` |"
-            echo "| cifar8 (8-conv, no-BN) | $(faithful SgdNode.convW_den) | $(faithful SgdNode.denseB_den) | $(faithful Cifar8PoC.cifar8_train_step_tied_certified) | \`cifar8_train_step_tied_certified\` |"
-            echo "| cifar8-bn (8-conv) | $(faithful SgdNode.bnGamma_den) | $(faithful SgdNode.denseB_den) | $(faithful Cifar8BnPoC.cifar8Bn_train_step_tied_certified) | \`cifar8Bn_train_step_tied_certified\` |"
+            echo "| mnist-linear   | $(faithful LinFold.poc_fwd_is_render) | $(faithful LinFold.poc_train_step_tail_certified) | $(faithful LinFold.poc_train_step_tail_certified) | \`poc_train_step_tail_certified\` |"
+            echo "| mnist-mlp (1d) | $(faithful MlpFold.W0_den_certified) | $(faithful MlpFold.b0_den_certified) | $(faithful MlpFold.mlp_train_step_tied_certified) | \`mlp_train_step_tied_certified\` |"
+            echo "| mnist-cnn (2d) | $(faithful CnnFold.cW1_den) | $(faithful CnnFold.cb1_den) | $(faithful CnnFold.cnn_train_step_tied_certified) | \`cnn_train_step_tied_certified\` |"
+            echo "| cifar (ch5, no-BN) | $(faithful SgdNode.convW_den) | $(faithful SgdNode.convB_den) | $(faithful CifarFold.cifar_train_step_tied_certified) | \`cifar_train_step_tied_certified\` |"
+            echo "| cifar8 (8-conv, no-BN) | $(faithful SgdNode.convW_den) | $(faithful SgdNode.denseB_den) | $(faithful Cifar8Tie.cifar8_train_step_tied_certified) | \`cifar8_train_step_tied_certified\` |"
+            echo "| cifar8-bn (8-conv) | $(faithful SgdNode.bnGamma_den) | $(faithful SgdNode.denseB_den) | $(faithful Cifar8BnTie.cifar8Bn_train_step_tied_certified) | \`cifar8Bn_train_step_tied_certified\` |"
             echo "| r34 (ch6)          | $(faithful GradNodeB.convStridedWGradB_den) | $(faithful GradNodeB.convStridedBGradB_den) | $(faithful ResNet34TieB.r34_net_tiedB) | \`r34_net_tiedB\` (full [3,4,6,3], 110 params) |"
             echo "| mobilenetv2 (ch7)  | $(faithful GradNodeB.depthwiseStridedXlaWGradB_den) | $(faithful GradNodeB.depthwiseStridedXlaBGradB_den) | $(faithful MobileNetV2TieB.mnv2_net_tiedB) | \`mnv2_net_tiedB\` (full 17-block paper, 158 params) |"
-            echo "| efficientnet (ch8) | $(faithful EnetPoC.convWB_den) | $(faithful EnetPoC.bnGammaB_den) | $(faithful EnetTiePoC.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
-            echo "| convnext (ch9)     | $(faithful CnxPoCGB.chanLnGammaGradB_den) | $(faithful CnxPoCGB.chanLnBetaGradB_den) | $(faithful CnxTiePoCGB.cnx_net_tiedGB) | \`cnx_net_tiedGB\` (full [3,3,9,3], 182 params, batched at the gradient nodes and the smoothed loss — every shipped ConvNeXt artifact, the ImageNet AdamW ones included; \`cnx_net_tied_certified\` is its SGD-inline per-example form) |"
-            echo "| vit (ch10)         | $(faithful ViTPoCGB.rowDenseWeightGradB_den) | $(faithful GradNodeB.veclnGammaGradB_den) | $(faithful ViTTiePoCGB.vit_net_tiedGB) | \`vit_net_tiedGB\` (ViT-Tiny depth-12 multi-head, 200 params, batched at the gradient nodes and the smoothed loss — every shipped ViT artifact; \`vit_net_tied_certified\` is its SGD-inline per-example form) |"
+            echo "| efficientnet (ch8) | $(faithful EnetFold.convWB_den) | $(faithful EnetFold.bnGammaB_den) | $(faithful EnetTie.efficientnet_net_tied) | \`efficientnet_net_tied\` (full 16-MBConv B0, 262 params; batched true-BN + SE) |"
+            echo "| convnext (ch9)     | $(faithful CnxFoldGB.chanLnGammaGradB_den) | $(faithful CnxFoldGB.chanLnBetaGradB_den) | $(faithful CnxTieGB.cnx_net_tiedGB) | \`cnx_net_tiedGB\` (full [3,3,9,3], 182 params, batched at the gradient nodes and the smoothed loss — every shipped ConvNeXt artifact, the ImageNet AdamW ones included; \`cnx_net_tied_certified\` is its SGD-inline per-example form) |"
+            echo "| vit (ch10)         | $(faithful ViTFoldGB.rowDenseWeightGradB_den) | $(faithful GradNodeB.veclnGammaGradB_den) | $(faithful ViTTieGB.vit_net_tiedGB) | \`vit_net_tiedGB\` (ViT-Tiny depth-12 multi-head, 200 params, batched at the gradient nodes and the smoothed loss — every shipped ViT artifact; \`vit_net_tied_certified\` is its SGD-inline per-example form) |"
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Entry points elaborate (lake build Apps)

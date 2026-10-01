@@ -39,52 +39,68 @@ before this plan was written (marked ✔).
 
 ## ▶ Start here (next session)
 
-**State at 2026-10-01.** Everything through `1dcbcb58` is pushed to `origin/main`, and CI is
-green on all eight workflows. Work from a branch off `main` (the local `rubric-review` branch is
-at the same commit). Landed, in order:
-- `5ff18875`: this plan.
-- `0069e30d` / `9bebaed8`: WP1 parts 1 and 2A.
-- `5c0deb1a`: WP3.
-- `3f20d71d`: WP2.
-- `84ee2bd1`: WP7.
-- `dc9fe1ea`: WP4.
-- `994b1eb6`: the Foundations closing section.
-- `bee5ab0d`: WP5.
-- `2e759820`: WP6 and WP6c (the `comment_numbers.py` lint).
-- `1dcbcb58`: the small tier (WP10, WP11, X-cor-3, the `module_refs.py` gate, the
-  `audit_only_mentions.py` report).
+**State at 2026-10-02 (morning).** `origin/main` is at `1dcbcb58` (CI green). Local branch
+`wp8fg` carries eleven unpushed commits on top of it (the six below, then the overnight work as
+five commits: `bc5dbff9` WP9 codegen, `c4fdca7b` WP9 foundation/float/certificates, `8f4edf6e`
+capstones (WP2, WP5 drop, WP9 nets), `90cdc235` pool + descent (WP1-2B, WP8b, stem, small-net loss
+gradients, den = text, SgdDescent split), `a93e0701` PoC namespaces + the shared wiring):
+- Committed, unpushed: `bf067c5b` WP8f, `9eed9240` WP8g (GPU smokes passed, one card),
+  `27d4059a` WP8a, `494be406` WP8c, `ed34d90e` WP8d, `bb2d22a2` WP8e.
+- Overnight, by package (each has its status under its own WP; the claims files in the
+  session scratchpad map files to agents):
+  - WP1 part 2B + WP8b (agent A): twin-tolerant pool margin, slot lemmas, MNIST probe 10000/10000;
+    the ResNet-stem selector half (agent J); conv2-bias / conv1 / conv1-bias concrete instances
+    (agent K).
+  - WP2: `enet/cnx/vit_net_tied_lossGrad` (agent B).
+  - WP4 follow-up: `maxPoolBack`'s `den` routes to the first maximal cell, as the printed
+    `select_and_scatter` does (agent L).
+  - WP5: ViT / MNv4 drop-path forwards (agent C) and the MNv4 drop-row text guard (agent G); the
+    six small nets' loss gradients (agent H).
+  - WP9: codegen half (agent D: `*Text` renderer names, `OptRecipe`, PC files moved),
+    Foundation/Float/Certificates (agent E, incl. `LipschitzCertDemo` → `Robustness`), nets
+    placement + renames (agent F), SgdDescent split + Activations.lean + A-pq-2 (agent I), the
+    `*PoC` namespaces (agent M).
+  - Full gate green on the combined tree; 0 `verified_mlir/` changes.
+- Next: fast-forward `main` to `wp8fg` and push (the user's call).
 
-Parked:
-- WP1 part 2B, the MNIST descent rungs. Do it with WP8b/A-pq-1; the design is under WP1.
-- The B0/ConvNeXt/ViT combined corollaries (WP2) and the ViT/MNv4 drop-path forwards (WP5),
-  for the CPU box.
-- N1-gen-1 (ConvNeXt S/B), per the user.
+Still open:
+- User's calls: N1-reuse-2 (renaming `r34BFullHasVJPAt` changes the pinned capstone's comparator
+  text), X-bes-5 (Bestiary parameter counts), N1-gen-1 (ConvNeXt S/B), the
+  `audit_only_mentions.py` triage.
+- Parked with recipes: F-pl-2 (root file `Tensor.lean`), N2-place-1, F-gen-4.
+- Owed (small): the backward through the ViT / MNv4 drop sites; H's items 3–5 under WP5;
+  `MlirCodegen`'s emitted GELU comment strings name `LayerNorm.lean`; `CnnRender.CifarOpt` is not
+  folded into `OptRecipe`.
+- Runs: the B0 350-epoch pair on the i/16 drop-path config; plant-leaf and gradcam smokes need
+  data / checkpoints not on this box.
 
-**Next (user, 2026-10-01): WP8f and WP8g, in parallel on separate agents** (§WP8 below; the
-detail is in `slice_G.md` and `slice_X.md`).
-- **WP8f, renderers.** G-reuse-1/3/4/5 go into RenderKit: the `%loss` block (×9), the wd rank
-  test, the vector-LN site (×4) and the sync-BN banner (×5).
-  - Gate: `git diff verified_mlir/` empty after the build. Every artifact must be byte-identical.
-- **WP8g, program code.**
-  - X-reu-1…6: the LE readers ×7, the dead `emitChannelSplitGrad`, the float parsers, BraTS
-    scoring, `NetSpec`s in Main files, and "compile if IREE" ×3.
-  - X-pla-4/5: the classifier kit copied ×4 and the LM kit ×3.
-  - X-bes-5.
-  - X-cor-3 is already done (`1dcbcb58`).
-  - Gate: `lake build Apps` plus the affected demos' smokes (ask before any GPU run over a
-    minute), and `check_target_names.sh`.
-- The two touch disjoint files. Re-check each finding against HEAD first: the audit ran at
-  `55ad3a5a`.
-- Standing rules and the standard gate are under "How to farm this". The gate now also
-  includes `scripts/gates/comment_numbers.py` and `scripts/gates/module_refs.py`.
+## Overnight plan (2026-10-01 → 10-02)
 
-After WP8f/g: WP8a (the ParamGrad cluster, about −1k lines), then WP1 part 2B together with WP8b.
+The user asked for WP1 part 2B with WP8b, WP2's and WP5's parked items, and WP9, run as a plan
+rather than all at once. Everything stays on branch `wp8fg`, staged and uncommitted; each package
+writes its status under its own WP heading, and the morning split into commits goes by the file
+claims, as WP8a/c/d/e did. Long elaboration is allowed tonight (the box is otherwise idle); a single
+attempt past about two hours is parked with a recipe.
 
-Also owed, from the user:
-- Triage the `audit_only_mentions.py` list (158 at first run; some are capstones that want a
-  yaml or book citation rather than deletion).
-- Eventually, re-run the B0 350-epoch ImageNet pair on the i/16 drop-path config. The book notes
-  the gap.
+- **Phase 1 (parallel, disjoint files):**
+  - **A: WP1 part 2B + WP8b.** The MNIST descent rungs, via the gather route under WP1 (twins,
+    `MaxPool2MarginQUpTo`, whole-segment `L = L_gather`, descent on `L_gather`, transfer), with
+    A-pq-1's slot-level lemma as the shape, and the acceptance generator and probe. Base: WP8c's
+    `WindowSmoothUpTo`. A-pq-2 if it falls out.
+  - **B: WP2's parked corollaries.** `enet/cnx/vit_net_tied_lossGrad`, bridges first (the recipe
+    under WP2).
+  - **C: WP5 N2-scope-1.** ViT and MNv4 drop-path forward statements; B0's
+    `EfficientNetFullB0Drop` is the template.
+  - **D: WP9, codegen half.** G-name-1 (the `*Faithful{V,B}` String renderers), G-place-1 +
+    G-api-1 (one `OptRecipe` / `optOne` in RenderKit), G-place-2 (`EfficientNetRender/PC*` to
+    `Nets/EfficientNet/`). Byte-identical artifacts.
+- **Phase 2 (after phase 1):**
+  - WP5 N1-gen-2, the small nets' loss gradients, which needs A.
+  - WP9's proof half: the kit homes (P-PL-2, P-G-2, N1-place-1 is the user's, N2-place-1/2,
+    F-pl-1/2/3, A-place-2, C-plc-1/2/3), the file splits (A-place-1, A-place-3), the renames
+    (N1-name-1, P-N-1, N2-name-1, C-nam-2 last), and F-api-1/2/3.
+- **Not tonight:** N1-reuse-2 and X-bes-5 (the user's calls), N1-gen-1, F-gen-4, landing or
+  pushing anything.
 
 ## Decisions (user, 2026-09-30)
 
@@ -271,6 +287,134 @@ Findings: **P-C-1** ✔, **A-corr-1** ✔ (a)+(b), P-D-1 (the interim prose), pl
   every point (the 09-24 "`_correct` says nothing" item, WP6). Weakening their `h_mp` changes
   nothing checkable; the MNIST work with content is part 2.
 
+**Status 2026-10-02 (overnight, agent A): part 2B done for the MNIST rungs (staged); 0
+`verified_mlir/` changes.** Every finding re-checked at `bb2d22a2`.
+- **Predicate.** `WindowMarginUpTo δ T` (WindowMax, the quantitative `WindowSmoothUpTo`, on the
+  PRE-activation: dead = all cells `≤ 0`), its 2×2 abbrev `MaxPool2MarginQUpTo` (ConvIndex),
+  `WindowMarginUpTo.mono`, `windowMarginUpTo_of_cert` (one designated cell per window, `T` an
+  equivalence) and `MaxPool2MarginQ.to_marginQUpTo{,_flat}` (the old post-ReLU margin implies it).
+  Twins: `ConvPatchEq` (identical zero-padded patches; `conv2d_eq_of_convPatchEq`, for every kernel
+  AND bias), `ConvPatchEq2` (two-conv receptive fields, `convPatchEq_relu_conv`), `.symm`,
+  `.trans`, `.of_zero`.
+- **Route, as designed but per point, not per segment.** The gather is `poolGatherFlat σ`
+  (`windowGather` in WindowMax; CLM, `pdiv_poolGatherFlat`, `poolGatherFlat_l1_contract`,
+  `maxPoolFlat_eq_poolGatherFlat`). `Conv2Slot.maxPool_relu_eventuallyEq_gather`: if at `p` every
+  window is strictly negative or `σ`'s cell is strictly above its non-twins, the relu'd pool IS the
+  gather on a neighbourhood of `p` (finitely many strict inequalities, twins equal everywhere).
+  `Conv2Slot.marginUpTo_seg` gives that strict form at every segment point from the `2ρD` margin,
+  `σ` = the base argmax. So `L =ᶠ L_gather` near each segment point, and differentiability and
+  `gradAt` transfer pointwise (`EventuallyEq.fderiv_eq`); no separate endpoint step.
+- **A-pq-1 (WP8b).** `Conv2Slot.sgd_descends` / `Conv1Slot.sgd_descends`, generic in the parameter
+  map `Z`, `ρ`, a Jacobian row `J` (the slot computes the gradient itself through
+  `gather_loss_gradAt`; no `hgrad` hypothesis) and `Q`. The drift lemmas take the pool stage `S`
+  with an ℓ1-contraction hypothesis; `Conv2Slot.gather_grad_lipschitz` replaces the maxPool
+  `loss_grad_lipschitz` (the selector is constant, no argmax freeze). Each of the four real rungs
+  is one application. Deleted: the 16 margin wrappers, the four `cnn_*_loss_grad_lipschitz`, the
+  four `cnn_*_loss_differentiableAt` (MaxPool2Smooth forms, AuditAxioms-only after the change),
+  both `*Slot.loss_grad_lipschitz`, `postrelu{,2}_close_seg` and their 22 AuditAxioms lines.
+  Cnn.lean 5934 → 5443 lines including the additions below.
+- **Statements changed (names kept):** `cnn_conv2_sgd_descends`, `cnn_conv2_bias_sgd_descends`,
+  `cifar8_lastConv_sgd_descends` take `T`, `hT : T p q → ConvPatchEq kH kW x₁ p q`, and
+  `hmq : MaxPool2MarginQUpTo δ T (conv2d W b x₁)`; `cnn_conv1_sgd_descends`,
+  `cnn_conv1_bias_sgd_descends` the same with `ConvPatchEq2 kH kW x₀`. Book (thm:cnn_sgd_descends
+  prose + a twins paragraph), yaml §3 sentence, AuditAxioms repointed.
+- **Binary32 rungs keep `MaxPool2MarginQ` (statements unchanged), deliberately.** Their pool
+  backward (`MaxPool2IsArgmax` in `cnnConv*FloatGrad`) routes the
+  cotangent to EVERY tied cell, so at a twin tie the float gradient is not the loss gradient (a
+  4-way tie counts the window four times). They feed the real rungs through
+  `to_marginQUpTo_flat`. Correction (coordinator, re-checked): the rendered trainers do NOT use
+  the EQ-mask. `verified_mlir/cnn_train_step.mlir` and the other pool backwards print
+  `select_and_scatter` with a `GE` select (`Pretty.lean`), which routes each window's cotangent to
+  ONE cell, so at a twin tie the emitted conv gradient is the loss gradient (either twin gives the
+  same θ-gradient). The gap is between the binary32 proof model (`MaxPool2IsArgmax`, every tied
+  cell) and the artifact, at ties only. The CNN.lean `maxPool2HasVJP3` docstring still describes
+  the old tile-compare-select emitter and its "PyTorch/JAX semantics" (both pick one cell): fixed in phase 2 (tag I, under WP9).
+- **Acceptance.**
+  - Probe scripts/probes/mnist_pool_twin_probe.py (CPU, float64), trained `cnnVerified` dump
+    `.lake/build/cnn_verified_params.bin` (on this box, not in git; first 3489130 floats,
+    verified by its test accuracy). Full test set: old `MaxPool2MarginQ` 0 images, twin-free
+    (binary32) 0, `MaxPool2MarginQUpTo` with relu clauses 10000/10000 for both the conv2 and the
+    conv1 twin families; every positive tie is a twin. Numbers in the probe's output, not in Lean.
+  - Concrete instance: scripts/certs/trained_cnn_descent.py → `Trained/CnnDescent.lean`,
+    `trained_cnn_conv2_sgd_descends_concrete` through the new corollary
+    `cnn_conv2_exact_sgd_descends` (exact gradient, every hypothesis at the explicit radius
+    `lr·cnnConv2GradBound`, via `Conv2Slot.gradAt_abs_le` and Cauchy–Schwarz). Reduced 12×12
+    2-channel net (bias-free conv1, so a blank patch matches the padding), trained without a
+    pool regularizer, MNIST test image #0, five live twin-tied windows, `lr = 2⁻⁴²`. Byte-identical
+    on regeneration; elaborates in about 1.5 min. The decrease is not shown positive (no gradient
+    lower bound).
+- **Parked.** (1) The ResNet-stem half of part 2B (stem θ-gradients as a germ; the render's
+  scatter routes ties to one cell, needs the identical-patch weight-grad lemma): done (tag J,
+  status below). (2) A-pq-2
+  (`cnn_conv1_cot_close`): done in phase 2 (tag I, under WP9). (3) Concrete instances of the conv1 / bias rungs
+  (the corollary pattern of `cnn_conv2_exact_sgd_descends` repeats; conv1 needs a `ConvPatchEq2`
+  certificate per window): done (tag K, status below). (4) A yaml row for the new concrete
+  theorem (needs a gen_comparator_tier DECLS entry): done (tag K).
+
+**Status 2026-10-02 (overnight, agent J): the ResNet-stem half of part 2B done (staged); 0
+`verified_mlir/` changes, no pinned statement changed.** Re-checked at `bb2d22a2`.
+- **The germ in θ was already there.** Part 2A states the stem pull-back as a germ in θ
+  (`r34StemPool_param_germ` over each one-slot family, `r34StemGCg_hasGradAt` on the gather model,
+  `congr_of_eventuallyEq` onto the real pooled net); the `HasGradAt` it takes is the loss after the
+  pool, which is differentiable. So "restate as a germ in θ" needed no change. What was missing
+  is the scatter: the nodes are read at `maxPool3s2BackB`'s denotation, which routes each window to
+  `maxPool3s2LocalReindexB`'s cell (a `Classical.choose` argmax), while the emitted
+  `select_and_scatter` (GE) routes to the first maximal cell. At a twin tie the two can differ.
+- **Landed.**
+  - HeadLayers: `IsMaxPool3s2SelectB` (each output reads a maximal cell of its own window),
+    `maxPool3s2LocalReindexB_isSelect`, and `stemPoolRelu_param_eventuallyEq_select` (the 2A
+    germ for ANY selector; twins equal at every θ make the choice irrelevant).
+    `stemPoolRelu_param_eventuallyEq` is now its one-line instance.
+  - ResNet34ParamGrad: `r34StemPool_param_germ_select`, `r34StemCotNAt` / `r34StemCotCAt` (stem
+    cotangents routed along σ), `r34StemCotN_eq_at` / `r34StemCotC_eq_at`, `r34StemGCg_hasGradAt_at`,
+    `r34StemLossTiedAtB` (the four-node bundle at given cotangents; `r34StemLossTiedB` is now
+    it at the render's cotangents, same meaning), `r34_stem_lossTiedB_select`. The 2A theorems
+    (`r34StemPool_param_germ`, `r34StemGCg_hasGradAt`, `r34_stem_lossTiedB`) keep names and
+    statements and become instances at the argmax gather.
+  - **The lemma:** `r34Stem_select_grads_eq`: for any selector σ and any pool cotangent, the four
+    stem node dens (conv weight / bias, BN γ / β) at the σ-routed cotangents equal those at
+    `r34StemCotC` / `r34StemCotN`. Proved by uniqueness, not by computing the patch sums: both
+    are gradients of `linLoss dy` after the pooled stem at the same point. `r34StemLossTiedB.select`
+    transfers the capstones' stem bundle to any selector.
+  - Net level: `r34_net_lossGrad_stemSelect`, `r50_net_lossGrad_stemSelect`: under the
+    capstones' own hypotheses, the stem's four nodes at the cotangent routed along any selector
+    (the emitted scatter among them) are the loss gradients in the stem parameters.
+  - Prose: both ParamGrad module docs; blueprint thm:resnet34_loss_grad /
+    thm:resnet50_loss_grad (`\lean{}` + one sentence each) and the "one conditional" paragraph;
+    AuditAxioms pins for the nine new declarations.
+- **Not formalized:** that the printed `select_and_scatter` picks a maximal cell is the
+  StableHLO semantics of a GE select; Lean has no model of the printed op, so the selector
+  hypothesis is where the artifact enters (same standing as every other `den`).
+- Line deltas: HeadLayers +71/−21, ResNet34ParamGrad +261/−46, ResNet50ParamGrad +46/−2.
+
+**Status 2026-10-02 (overnight, agent K): parked (3) and (4) done (staged); 0 `verified_mlir/`
+changes, no pinned statement changed.**
+- **Corollaries (SgdDescent.Cnn).** `cnn_conv2_bias_exact_sgd_descends`,
+  `cnn_conv1_exact_sgd_descends`, `cnn_conv1_bias_exact_sgd_descends`, each with its named radius
+  (`cnnConv2BiasGradBound`, `cnnConv1GradBound`, `cnnConv1BiasGradBound`). They share three private
+  helpers (`stepRadius_exact_le`, `gradAt_l1_le_card`, `curvature_exact_le`), and
+  `cnn_conv2_exact_sgd_descends`'s proof now uses them too (statement unchanged). The conv1 gradient
+  bound is the new `Conv1Slot.gradAt_abs_le`. To get it, `Conv1Slot.sgd_descends`'s two inline
+  facts became private lemmas, `z2_row_l1` and `z2_pdiv`. Also new: `ConvPatchEq2.symm` / `.trans`,
+  the equivalence `windowMarginUpTo_of_cert` needs. They belong in ConvIndex, but tag I holds that
+  file, so they sit in Cnn.lean for now.
+- **Instances.** Both come from scripts/certs/trained_cnn_descent.py, which now trains two nets
+  with the same seed-0 loop.
+  - `Trained.CnnDescent` adds `trained_cnn_conv2_bias_sgd_descends_concrete` at `lr = 2⁻³⁶`, on
+    the same net and image. Its radius sits inside the kernel rung's, so `c2_margin` /
+    `pool_margin` carry over by monotonicity.
+  - The conv1 rungs can't be satisfied on that net: their relu₁ margin needs every conv1
+    pre-activation nonzero, and a bias-free conv1 is exactly 0 on a blank patch. So the new
+    `Trained.CnnDescentConv1` uses net B (trained conv1 bias, init 0.1), on test image #0 again.
+    Two live windows tie through two-layer twins (`tw_*`, 5×5 blank fields with in-bounds outer
+    reads, at column 1 rows 6–9). Results: `trained_cnn_conv1_sgd_descends_concrete` at
+    `2⁻⁴⁸`, `trained_cnn_conv1_bias_sgd_descends_concrete` at `2⁻⁴⁵`.
+  - Both files regenerate byte-identically. The generator refactor left the conv2-kernel half of
+    CnnDescent.lean byte-identical. Each file elaborates in about 1.5–2 min.
+- **yaml.** Four rows (one per concrete theorem) after the `TrainedLinearDescent` row, the house
+  style for trained-weight concrete theorems. The §4 prose sentence names both modules. Both
+  modules are added to gen_comparator_tier DECLS + MODULES, and the lakefile has the Certs root.
+
 ### WP2 — Loss-gradient capstones say what the book says · M–L · 1 agent, after WP1
 Findings: **P-C-2** (conclude `HasGradAt` in θ, not a `pdiv` equation that is junk off
 differentiability), **P-C-3** (`vitNetB = batchMap vitForwardKV`, `cnxNetB` batched bridge),
@@ -303,20 +447,23 @@ for the step tie and the loss gradient; today "the same cotangent" is a textual 
 - **P-API-2 (user: combined corollary):** `r34/r50/mnv2/mnv4_net_tied_lossGrad` state the tie and
   the loss gradient per slot at ONE chain of lets. They are generated by
   `rubric_review/wp2_combo_gen.py` from the tie theorem and the `*NetLossTiedB` def.
-- **Parked: `enet/cnx/vit_net_tied_lossGrad`.** These ties spell the activations as their own lets
-  (`a16`, `ib18`); the loss side spells them `enetPreB16 N w x` / `cnxPreB17 N ε w x`. The final
-  `exact` must prove the two spellings equal through the whole cotangent chain:
-  - Measured on this box: every variant ran past 30 min (heartbeats off), or hit max recursion
-    depth at the default limit, even with the tie's names substituted into the loss conjuncts
-    (`pre_re`).
-  - Next attempt:
-    1. First prove one-line bridges `cnxPreB17 N ε w x = <tie spelling>` (from the `*_apply`
-       lemmas), and `rw`/`simp only` them into `hl` before `obtain`, so the final `exact` compares
-       identical terms.
-    2. Or add a per-slot heartbeat cap to find which slots are expensive (the `_tmp_cnx3`
-       experiment, stopped unfinished).
-  - Run on the dedicated CPU box; ViT needs `groups` (the tie's final-LN and head bundles pair
-    with one loss bundle).
+- **Landed 2026-10-01 (overnight, staged): `enet/cnx/vit_net_tied_lossGrad`**, one per
+  ParamGrad file, at the smoothed loss like R34's (the B0/ConvNeXt/ViT ties fix `g` to the
+  smoothed cotangent), each pinned in AuditAxioms beside its `*_smoothedCE`. Generated by
+  `wp2_combo_gen.py cnx|enet|vit`; the drivers are now kept in the script.
+  - The bridges did it. The proof proves `cnxPreX N ε w x = ibK` one stage at a time from the
+    `*_apply` lemmas (`enetPreBk_apply`, `vitPreE_apply`, …) and the logits bridge from
+    `cnx_logitsB_eq` / `enet_forward_eq_head` / `vit_logitsB_eq`, then `rw`s them into the
+    unfolded loss hypothesis, so the final `exact` compares the tie's let names on both sides.
+    ConvNeXt and ViT then close at once.
+  - B0 needed one more step. `EnetNetLossTiedG`'s chain passes ε-positivity proofs to the
+    `*HasVJP` witnesses, and the def abstracted them (`EnetNetLossTiedG._proof_*`). Matching the
+    chain against the tie's `hεw.bk.e` spelling then exceeded `maxRecDepth` (it passes at 8192).
+    Instead, `extract_lets` merges the tie's and the loss side's lets into the goal's, and the 16
+    loss-side cotangent lets that cannot merge are equated with the goal's one step at a time
+    (`remerge`), so no option is raised.
+  - ViT pairs the tie's final-LN and classifier conjuncts with the loss side's one head conjunct
+    (`groups`).
 
 ### WP3 — "Certified" means proved · S · 1 agent
 Findings: **C-cor-1** ✔. Relabel the demo's print as *estimated*, drop "sound" from
@@ -422,6 +569,48 @@ ConvNeXt-T forward text guards; fixes book content.tex:12046).
   `thm:vitFwdGraphKMHV_faithful` now say so; the book no longer says "the rendered ViT is the
   tower above".
 
+**Status 2026-10-02 (overnight, agent L): G-corr-1's class at the pool backwards, done (staged);
+0 `verified_mlir/` changes, no pinned statement changed.** Re-checked first: `maxPoolBack`'s `den`
+(`maxPoolBackFlat`, = `IR.maxPoolBackDenote` flattened) tested `MaxPool2IsArgmax`, so a k-way
+positive tie counted the window k times, while the printed `select_and_scatter` (`GE` select,
+NCHW, window `1×1×2×2`) keeps the current pick while it is `≥` the next cell and so routes to ONE
+cell, the first maximum in row-major window order. `maxPool3s2BackB` (and `maxPool3s2Back`) already
+routed to one cell, but a `Classical.choose` one, so at a tie den and text could name different
+cells. No other pool backward exists in `SHlo`.
+- **Fix, at the root of both.** `windowArgmax` (WindowMax) is now the least maximal offset in
+  row-major order (`windowMaxOffsets`, `min'` over the flat index `a·k + b`), with
+  `windowArgmax_max` re-proved and a new `windowArgmax_first` (every earlier offset is strictly
+  below). `maxPool2Argmax`, `maxPool3s2Argmax`, both local reindexes, and so the 3×3/s2 `den`,
+  are therefore the printed op's choice with no other edit (the clamped first-window offset repeats
+  the real cell after it, so the first maximal offset names the first maximal position the padded
+  op visits). `maxPoolBackDenote` and `maxPoolBackFlat` route by
+  `maxPool2Argmax … = (winRowMod, winColMod)`, the same spelling in both, so every `rfl` graph tie
+  between the render's `den` and the `Back3` chains still closes untouched.
+- **(a) Step ties.** Bridge: `IR.maxPool2Argmax_eq_iff_isArgmax` (→ at every point, ← under
+  `MaxPool2Smooth`) and `IR.maxPoolBackDenote_eq_of_smooth`. Re-proved through it:
+  `maxpool_back_bridge`, `maxpool3_node_bridge`, `maxpool_flatten_bridge`, `maxPoolBack_faithful`,
+  and ChapterGraphTies' `maxPoolFlatHasVJPAt'` (now `maxPoolBack_faithful` applied). Nothing else
+  broke: every step tie, seal, the ResNet stem layer and J's selector lemmas only use
+  `windowArgmax_max`.
+- **(b) H's owed items 1 and 2, closed exactly (not only off ties).**
+  `SmallParamGrad.maxpool_flatDenote_eq_selScatter`: the `Back3` maxpool node is `selScatter` along
+  `poolSelIdx (maxPool2Argmax x)` at every point. Hence `CnnPoC.cnnChainCotW2_eq_sel` and
+  `CifarPoC.cifarChainCotW2_eq_sel`: the step ties' chains ARE the capstones' `*Sel` chains at
+  `σ = maxPool2Argmax`, whose `PoolSelDom` clause `poolSelDom_argmax` already discharges. Cifar8 and
+  Cifar8Bn reuse these chains / the scatter lemma.
+- **(c) Prose.** WindowMax header, IR section comment + `maxPoolBackDenote` / bridge docstrings
+  (and the stale `MaxPool2IsArgmax` decidability comment, deleted), `Basic`'s constructor comments
+  and the two flat backwards' docstrings, the six step-tie "Scope" bullets, the Cnn/Cifar ParamGrad
+  module docs, the R34/R50 ParamGrad stem paragraphs and `r34_net_lossGrad_stemSelect`, blueprint's
+  `thm:cnn_loss_grad` follow-up paragraph, Proofs/README trust item (b). AuditAxioms pins for the six
+  new theorems.
+- **Not changed:** the binary32 rungs' `MaxPool2IsArgmax` routing (`cnnConv*FloatGrad`, agent K's
+  files) and `maxPool2HasVJPAt3`'s backward (smooth-only, read by CnnSeal); blueprint
+  `thm:cnn_sgd_descends`'s "routes to every tied cell" is about that float model and stays true.
+- Line deltas: WindowMax +42/−10, IR +48/−20, Basic +25/−13, SmallParamGrad +36, CnnParamGrad
+  +17/−5, CifarParamGrad +12/−1, ChapterGraphTies +2/−3, six step-tie docs about +4/−3 each,
+  ResNet34ParamGrad +6/−7, ResNet50ParamGrad +3/−3.
+
 ### WP5 — Per-net capstone reach · M each · parallelisable by net
 - **N1-corr-1** ✔ ConvNeXt stem bias is tied on a free `xstem`. State it at `flatConvStride4`.
   The docstring's "same modelling as mnv2/r34" is false.
@@ -434,7 +623,7 @@ ConvNeXt-T forward text guards; fixes book content.tex:12046).
 - **N1-gen-2**: the five small nets have no param-level loss gradient.
 - **N2-gen-1**: a ViT per-example tie is still at 10 classes.
 
-**Status 2026-09-30: four done (staged), three parked.**
+**Status 2026-09-30: four done (staged), three parked; N2-scope-1 done 2026-10-01.**
 - **N2-gen-1 done.** `vitTinyInputGrad_eq_vitTiny_vjp` binds `{nCls}`.
 - **N1-corr-1 done.** The stem-bias clause of `cnxStemChTied`, `cnxStemChTiedGB` and the
   ParamGrad stem is at the real `flatConvStride4 Wst b' x`; `xstem` is gone from every capstone.
@@ -454,15 +643,79 @@ ConvNeXt-T forward text guards; fixes book content.tex:12046).
   - New `Cifar8StepTieG` / `Cifar8BnStepTieG` (`cifar8{,Bn}_train_step_tiedG`) state the fused
     ties' chain node for node, with lakefile roots, audit pins and book `thm:cifar8_step_tieG`.
   - The fused ties' docs say they tie no trained artifact.
-- **Parked: N2-scope-1** (ViT and MNv4 drop-path forwards).
-  - ViT has no batched typed forward graph, and its drop sites are batched ops.
-  - MNv4 needs drop-carrying copies of five group graphs in the file whose `simp only` spelling
-    already dies in the kernel.
-  - Both are size L and belong on the CPU box. MNv4FullB's "not this graph" row now lists
-    `mnv4in_acc{,dp}8x128wxdropdowd01bf16`.
-- **Parked: N1-gen-2** (small-net loss gradients). `cnnHasVJPAt` / `cifarCnn8HasVJPAt` take the
-  activation-level pool hypothesis real MNIST fails on 99.5% of images. Stating capstones on it
-  would recreate WP1's defect, so do it with WP1 part 2B.
+- **N2-scope-1 done (2026-10-01, overnight), staged.** Both nets have a drop-path forward
+  statement on the `EfficientNetFullB0Drop` template; each file elaborates in seconds.
+  - **MNv4:** new `MobileNetV4FullBDrop`. `mnv4SkipDrop` / `mnv4SkipDropGraphB` (generic, one
+    `_faithful`) put a `dropPathB` at `dpName k` on each of the 18 skip rows, in
+    `mnv4DropSites` order. Five drop-carrying group graphs and
+    `mnv4FwdGraphBFullDrop_faithful` sit over the classifier-dropout head, all by outside-in
+    `rw`, with no `simp only` over `den`. `mobilenetv4ForwardBFullDrop_sdOnes` (to
+    `…Do`) and `_ones` (to `mobilenetv4ForwardBFull`) are stated against the `*_fwd_apply`
+    expansions. The masks are non-optional, like MNv4's `Do`: both artifacts are `dropdo`.
+    MobileNetV4FullB is touched in three places: `mnv4StemB_graph_faithful` and
+    `mnv4HeadDo_graph_faithful` lose `private`, and its artifacts row points at the new file.
+  - **ViT, decision: a batched graph.** A per-example graph with the mask as an input cannot
+    exist: a per-example node cannot see the example index, which is why the drop artifacts are
+    written by `ViTRenderB`. So new `ViTFwdDrop` states:
+    - `vitBlockGraphBDrop` / `vitBodyGraphBDrop` / `vitFwdGraphBDrop`, at the render's tokens and
+      names (`b<i>_`, `%dp<2i>` / `%dp<2i+1>`, `%wConv`, `%Wc`), any depth;
+    - `vitFwdGraphBDrop_slice`: example `t` of the graph is the per-example
+      `vitForwardKVDrop` at example `t`'s mask entries;
+    - `vitFwdGraphBDrop_faithful`: the graph denotes `vitForwardKVDropB`;
+    - `vitForwardKVDrop_ones` / `vitForwardKVDropB_ones`: at all-ones masks the forward is
+      `vitForwardKV`, per example and `batchMap`ped.
+    The spelled block ties to `blockVDrop` as `vitBlockSpelledMHV_eq` does. Like
+    `vitFwdGraphKMHV`, the graph is not text-tied (shared intermediates).
+  - Pins: 12 AuditAxioms lines, two lakefile roots, and book clauses in
+    `thm:vitFwdGraphKMHV_faithful` and `thm:mobilenetv4FullHasVJP`.
+  - Owed:
+    - ~~a FwdGraphTextTies guard for the MNv4 drop skip row~~ done 2026-10-01: all 21 rows at
+      their `mnv4DropSite` print as `mnv4SkipDropGraphB`, and the drop graph's site numbering is
+      `mnv4DropSites` (no name changes needed);
+    - the backward through the drop sites, for both nets, as for B0.
+- **N1-gen-2 done (2026-10-02, overnight, agent H), staged; 0 `verified_mlir/` changes.** All six
+  chapter nets have a `*_net_lossGrad`, per example, at the un-fused `*Grad` nodes, for any loss
+  `L` with gradient `g` at the logits, plus a `_CE` corollary at the emitted loss cotangent:
+  `linear_net_lossGrad`, `mlp_net_lossGrad`, `cnn_net_lossGrad`, `cifar_net_lossGrad`,
+  `cifar8_net_lossGrad`, `cifar8Bn_net_lossGrad` (bundles `LinNetLossTied` … `Cifar8BnNetLossTied`).
+  Each file elaborates in seconds.
+  - **Kit** (new `Nets/Small/SmallParamGrad`, the per-example peer of ParamGradNodes): node lemmas
+    (`convW/convB/denseW/denseB_hasGradAt`; BN `bnGamma/bnBeta_hasGradAt` in the BN file), the
+    `*Sgd = θ − lr·*Grad` bridges, stage pull-backs (`hasGradAt_dense/relu/conv`), the pool at a
+    fixed selection (`poolSelIdx`, `PoolSelDom`, `selScatter`, `hasGradAt_gatherRelu`), the abbrev
+    `MaxPool2SmoothUpTo` (the 2×2 `WindowSmoothUpTo`, pre-activation, dead = all `≤ 0`;
+    `MaxPool2MarginQUpTo` implies it) and the germ `maxPool_relu_eventuallyEq_sel`.
+  - **Pool clause in θ, as WP1 2A/2B.** Twins are semantic: cells equal at every weight upstream
+    of that pool (`CnnPoolTwin`, `CifarPoolTwin2`, `Cifar8PoolTwin2/3/4`, `Cifar8BnPoolTwin1–4`);
+    `cnnPoolTwin_of_convPatchEq2` gives them from identical two-layer receptive fields (the
+    probe's conv1 family), and the CIFAR nets' first pool reuses `CnnPoolTwin`. A stage-`s`
+    parameter's germ rewrites pools `s…4` outermost first at the true pre-activations.
+  - **Which cotangent: a finding.** At a live tie the loss gradient routes each window's cotangent
+    to ONE maximal cell (the gather's adjoint at a selection `σ`, any `σ` naming a maximum: the
+    rendered `select_and_scatter` GE choice is one). The step ties' chains read the 2×2 pool
+    backward as `maxPoolBackDenote` (the `den` of `maxPoolBack`), which routes to EVERY maximal
+    cell, so at a positive twin tie those chain cotangents are NOT the loss gradient (a k-way tie
+    counts the window k times). The capstones therefore state the chain with new constructors
+    `cnnChainCotW2Sel` / `cifarChainCotW2Sel` (scatter at `σ`) and reuse `cnnChainCotW1`; they
+    agree with the step ties' chains except at a live tie (remark, not a lemma). The step-tie files'
+    "not stated" sentences (CnnFold, CifarFold, Cifar8StepTie(G), Cifar8BnStepTie(G), MlpFold) now
+    point at the capstones and say this. The same gap is the binary32 one WP1 noted, here at
+    the ℝ `den` level: `maxPoolBack`'s `den` is not the artifact's `select_and_scatter` at a tie.
+  - **Pins:** 27 AuditAxioms `#print` lines, 7 Certs roots, six yaml rows + gen_comparator_tier DECLS /
+    MODULES (tier regenerated, 48 theorems), five book blocks (`thm:linear_loss_grad`,
+    `thm:mlp_loss_grad`, `thm:cnn_loss_grad`, `thm:cifar_loss_grad`, `thm:cifar8_loss_grad`),
+    `\uses` by `blueprint_uses.py --fix`, dep-graph figures ch1–4 regenerated.
+  - **Hypotheses:** odd kernels (the rendered conv backward is the conv VJP there); BN `ε > 0`.
+  - Cifar8BnParamGrad's statements were generated by a scratch script (not committed); the file is
+    hand-maintainable.
+  - Owed: (1) and (2) are closed by agent L (WP4 status, 2026-10-02): `maxPoolBack`'s `den` now
+    routes to the first maximal cell, as the printed op does, and `cnnChainCotW2_eq_sel` /
+    `cifarChainCotW2_eq_sel` make the step ties' chains the capstones' at that selection, ties
+    included; (3) `*_net_tied_lossGrad` combined statements (the seven nets have them); (4) a
+    `_of_convPatchEq2` lemma for the CIFAR nets' deeper pools and the BN first pool; (5)
+    `SmallParamGrad.maxPool_relu_eventuallyEq_sel` repeats the filter argument of
+    `Conv2Slot.maxPool_relu_eventuallyEq_gather` (still in SgdDescent/Cnn, which the kit does not
+    import); derive it from that lemma once it moves to a light module.
 - **Parked: N1-gen-1** (ConvNeXt S/B), per the user.
 - Noted, not done: `EfficientNetSyncB`'s train-mode sync graphs still use the old SE names
   (`zWa…`), and nothing text-checks them.
@@ -739,6 +992,8 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **A-pq-2** (`cnn_conv1_cot_close`).
   - **A-scope-1** (the ~330-line MNIST float-budget cluster has no roadmap consumer: delete?).
   - Coordinate with WP1 part 2: same file.
+  - **Status 2026-10-02: A-pq-1 done with WP1 part 2B (see WP1's status); A-scope-1 was done in
+    `1dcbcb58`; A-pq-2 parked, then done in phase 2 (tag I, under WP9).**
 - **8c MaxPool unification**, ~−400 (**A-gen-2**, L): one window-max over an index family, with
   2×2 and 3×3/s2 as instances. ⚠ Graph ties `rfl`-match `maxPoolBack` (the IR-spelled trap). Keep
   the instance names as `abbrev`s and check the T2 ties. Best done *with* WP1 part 1.
@@ -950,6 +1205,33 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **G-place-1** + **G-api-1** (one `OptRecipe` plus one `optOne` in RenderKit; MNv4 stops
     importing ResNet34RenderB).
   - **G-place-2** (`EfficientNetRender/PC*` → `Nets/EfficientNet/`).
+  - **Status 2026-10-01 (codegen half, with G-name-1): done (staged); every artifact
+    byte-identical** (`regen_verified_mlir.sh proofs` rewrote 274 files, then `check`; empty
+    `git diff verified_mlir/`). Every finding was re-checked against HEAD after WP8f.
+    - G-place-1 + G-api-1: `R34Opt` and `StableHLO.OptKind` are one `OptRecipe` in RenderKit
+      (`adamw | rmsprop | heavyBall | sgd | lamb | adamwAccum k | lambAccum k`), with
+      `OptRecipe.label` and `OptRecipe.slug` (the optimizer marker four variant functions had
+      spelled separately). `optOne` gains the `.rmsprop` arm and an `emaSuf` argument (`"e"`; the
+      ResNet family's `"ema"` through `optAllParams`), and `adamOne` / `rmsOne` / `adamOneEma` are
+      deleted: MobileNetV2, EfficientNet (whose hand-written EMA line goes too), ViT and ConvNeXt
+      call `optOne`. The rest of ResNet34RenderB's optimizer stage moved unchanged (`optAllParams`,
+      `optConstsB`, which takes the net's `RmsHyper` for `.rmsprop`, `accumScalarConsts`, the clip
+      constants, `optWd*`, `wdVariantMark`, `lsVariantMark`, `wdNameExcludes`). MobileNetV4 imports
+      RenderKit + SyncBnSites, its `mnv4OptLabel` is `OptRecipe.label`, and its `none` tail is
+      `optAllParams .adamw`; R50's label match is `opt.label`. MobileNetV2 / EfficientNet take any
+      recipe but the accumulating two (no `G` region); ResNet-34 refuses `.rmsprop` (no RmsHyper).
+      Not merged: `CnnRender.CifarOpt`, the per-example CIFAR family's own selector.
+    - G-place-2: `git mv` to `Nets/EfficientNet/EfficientNetStagesPC{,Eval}.lean`; importers,
+      the Certs root, `LeanMlir.lean`, AuditAxioms and the Codegen README follow. No renames.
+    - G-name-1: the 33 renderers are `<net><Kind>Text` (the kit's existing `maxPool3s2FwdText`,
+      `allReduceMeanText`, `mnv4RowGraphText` spelling, thing-first like the VJP names). `B` stays
+      only where a per-example peer exists (`cifar8AdamTrainStepBText`, `cifar8BnTrainStepBText`,
+      `convNextAdamTrainStepBText`, `vitAdamTrainStepBText`); `resnet34FwdFaithfulB` →
+      `resnet34FwdText`, `mnv4FwdFaithfulV` → `mnv4FwdText`. The rule is in the Codegen README.
+      Repointed: tests, apps, docstrings, the lakefile comments, the book's two `\texttt` names,
+      `scripts/parity/resnet_timm_parity.py`, ffi/jax.yml comments and the three
+      `runs/2026-08-27-r50-a2-a1-ema-fifth-region/render_ghostbn*.lean` recipes; planning docs keep
+      the old names as history.
 - **Program:** **X-pla-1/2/3**, **X-nam-1**.
 - **API:** **F-api-1** (`FloatModel.u_nonneg` field → theorem, 112 uses unchanged), **F-api-2/3**.
 - **Naming** (approved 2026-09-30):
@@ -958,6 +1240,145 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **P-N-1**, **N2-name-1**.
   - **C-nam-2**: the `LipschitzCertDemo` namespace (carried from api_design_audit §6.5; ~181 AA
     lines plus 9 generators; expensive).
+  - **Status 2026-10-01 (proof half, tag E: F-api, F-pl, C-plc, C-nam-2): done (staged) except
+    F-pl-2; 0 `verified_mlir/` changes.** Every finding was re-checked against HEAD (after WP8e).
+    - F-api-1: `FloatModel.u_nonneg` is a theorem under the same name (from `err 1`); the field and
+      the two `u_nonneg :=` lines go, every `M.u_nonneg` use is untouched.
+    - F-api-2 was already done by WP8e (`den_convBackBatched_eq_cInB` and peers).
+    - F-api-3 + F-pl-1: `FloatModel.rnd_zero` (now `@[simp]`) and `FloatModel.dot_right_zero`
+      move from Binary32Instance into FloatBridge beside `dot_succ`.
+    - F-pl-2 parked: its home is Tensor.lean, a root file; it rides the next Tensor batch.
+    - F-pl-3: done after all. `Float/RndP.lean` is not a root file (two importers), so
+      `int_log_zpow_mul`, `int_log_abs_zpow_mul` and `rndP_zpow_mul` move there from SyncBf16 with
+      their names kept (no `Int.` namespace: a project lemma in Mathlib's namespace breaks on the
+      bump that adds it).
+    - C-plc-1: `FloatModel.mlp2F` / `mlp2_float_close_uniform` live in MlpFloatBridge and
+      `Robustness.certified_at_eps_close` in DenseEuclid; `lipschitz_cert_float.py` emits only the
+      capped instance (`--check` passes); the Certificates README says so and drops its file count.
+    - C-plc-2: `Foundation/IntervalBoundConv{,Q}.lean` → `Certificates/IntervalBoundConv/{Basic,Q}.lean`
+      (`git mv`); importers, `ibp_conv_scorecard.py` and the `Net.lean` it emits, the Certs root,
+      AuditAxioms(Heavy), certs-heavy.yml, the yaml note and the README follow. `IBP.` unchanged.
+    - C-plc-3: the stdGaussian full-support instance, the likelihood ratio, the 1-D Cameron–Martin
+      formula and the halfspace-mass lemma move to UpstreamDraft (`MathlibUpstream.`
+      `instIsOpenPosMeasureStdGaussian`, `gaussianPDFReal_add_mean`,
+      `integral_gaussianReal_comp_add_const`, `integral_indicator_Iic_eq_cdf`), generalised to any
+      mean and variance (the Cameron–Martin one also drops its measurability binder), mirrored in
+      PR1 / PR2 and a new `PR3_GaussianMultivariate.lean`; a section-by-section diff of the drafts
+      against UpstreamDraft is identical. C-doc-4b (the stale path, the `haveI` drift) was already
+      fixed at HEAD.
+    - C-nam-2: `Proofs.LipschitzCertDemo` → `Proofs.Robustness` everywhere (engines, scorecards,
+      AuditAxioms 106 + Heavy 75 lines, the yaml row, the comparator DECLS and regenerated tier
+      files, 9 generators). The two generators with `--check` (`lipschitz_cert_float`,
+      `smoothing_net_witness_gen`) pass; the other seven have no `--check` and retrain nets, so they
+      got the same token substitution as their outputs instead of a rerun.
+- **Status, proof half (P-PL-1/2, P-G-2, N2-place-1/2, P-N-1, N2-name-1; 2026-10-01 overnight):**
+  - P-G-2 landed: `colSlabApplyH`, `pdivMat_colIndepH`, `colSlabwiseHasVJPMatH`,
+    `colSlabApplyH_flat_differentiable` and `sdpa{Q,K,V}_flat_differentiable` live in
+    Architectures/Attention (namespace `Proofs`); `pdivMat_colIndep`, `colSlabwiseHasVJPMat.correct`
+    and `colSlabApply_flat_differentiable` are their constant-family instances, and
+    `colSlabwiseHasVJPMat.backward` keeps its spelling. `attnCore*` stays in ViTParamGrad: it reads
+    ViTMultiHead's `headSliceMat` / `headPadMat` and the `*_backward` ties read ViTBackChains'
+    `coreQFlat`, both downstream of Attention.
+  - P-PL-1 rest landed: `rowDense_{weight,bias}_differentiable` → Attention (beside
+    `dense_per_token_flat_differentiable`); `chanLNTensor3_{gamma,beta}_differentiable` →
+    ChannelLN; `seGateMulB` / `seGateMulBHasVJP` / `seGateMulB_differentiable` → Batched/BackLinks
+    beside `gateCotB` (not SE.lean: the VJP's backward IS `gateCotB`, which sits downstream of SE);
+    `hasGradAt_linLoss_constAdd` deleted, its four uses are `hasGradAt_constAdd` at `linLoss dy`.
+  - P-PL-2 landed: `batchSlice_batchMapAux` beside `batchSlice_batchMap` in Batched/Basic (now
+    `StableHLO.batchSlice_batchMapAux`).
+  - P-N-1: the two MNv4 names were WP8a's; `lb_batchMap_congr` is deleted for the audit's
+    `congrArg (fun f => Lb (batchMap N f X)) (funext …)`.
+  - N2-place-2 landed, reshaped: the nine per-example lemmas go to the end of ViTStepTie (namespace
+    `Proofs`), not ViTWholeBackCertifiedTie, which imports neither `vitBlockCotInAtMHV` (ViTStepTie)
+    nor `vitCotD{Q,K,V}mh` (ViTMultiHeadChain); ViTStepTie now imports ViTWholeBackCertifiedTie, so
+    `vit_net_tied_certified`'s docstring cites lemmas in its own file. ViTStepTieGB keeps the two
+    `*B_eq_vjp` lifts.
+  - N2-name-1 landed: `vitCotTowerOutV`, `vitCotTowerOutV_eq_vjp`, `vitCotTowerOutB_eq_vjp`; the
+    comparator tier text of `vit_net_tied_certified` changes by that name.
+  - N2-place-1 parked: the graph half goes beside `dropPathB` in StableHLO/Basic, which the codegen
+    half holds tonight, and the motive went away (the ViT / MNv4 drop files use their own
+    `blockVDrop` / `mnv4SkipDrop`). Recipe: move `dropPathOpt` / `dropoutOpt` + `_ones` to
+    Training/DropPath and the four `*OptG` defs/dens beside `den_dropPathB`, one batched root edit.
+- **Status 2026-10-02 (phase 2, tag I: A-place-1/2/3, A-pq-2, the maxpool-backward prose):
+  done (staged); 0 `verified_mlir/` changes; no declaration renamed.** Re-checked against the
+  staged tree after WP1 part 2B (agent A's rewrite), not the audit's line numbers.
+  - A-place-1: `SgdDescent/Cnn.lean` (5443 lines) splits into the ℝ rungs (`Cnn`, 2856) and the
+    FloatModel rungs (new `SgdDescent.CnnFloat`, importing `Cnn`): `cnnConv{1,2}{,Bias}FloatGrad`,
+    the budgets, `cnn_conv2_cot_close` / `cnn_conv2_cot_real_abs_le`, every `*_grad_close`,
+    `convTap_back_close`, `mask_scalar_close` and the four `*_float_sgd_descends`. The reluMask
+    restatements (`cnn_conv{1,2}{,_bias}_loss_gradAt_reluMask`, `head3_cot_reluMask`) are ℝ and
+    stay in `Cnn`. Certs root, `LeanMlir.lean`, AuditAxioms import, README and the blueprint's
+    file list follow. Every moved declaration keeps its name and namespace, and every kit home is
+    reachable from `Cnn`, so importers of `Cnn` see the same ℝ names.
+  - A-place-2: `ConvGrad` (now importing `ConvIndex`) takes the conv's kernel / input / bias
+    Jacobians and drifts (`conv2d_kernel_*`, `conv2d_weight_pdiv`, `convPadWin` / `cotWin`,
+    `convWeightGrad_eq_dot`, `convBiasGrad_eq_sum`, `convTap` and its four lemmas,
+    `convTap_back_abs_le`, `conv2d_input_pdiv3`, `conv2d_flat_input_pdiv`,
+    `conv2d_input_{entry,l1}_drift`, `conv2d_bias_*`, `conv2d_flat_bias_drift_*`). `ConvIndex`
+    takes `t3Idx_def`, `MaxPool2MarginQ.poolBack_close`, WP1's twin relations (`ConvPatchEq`,
+    `ConvPatchEq2` and their lemmas) and, from `ConvFloat`, the ℝ conv index facts the drifts read
+    (`conv2d_eq_convPad`, `abs_convPad_le`, `k4Idx` and its lemmas, `sum_abs_k4`,
+    `sum_abs_kernel_slab_le`). `FloatBridge` takes `abs_le_of_close`,
+    `FloatModel.dot_perturbed_close` and `FloatModel.sum_perturbed_close`. Reshaped:
+    `mask_scalar_close` stays (in `CnnFloat`): its proof reads `sign_stable_of_close`
+    (`SgdDescent.Mlp`), downstream of `Float/`.
+  - A-place-3: new `Architectures/Activations` (GELU with `differentiable_tanh` /
+    `hasDerivAt_tanh`, Swish, sigmoid, the activation-taxonomy note); `LayerNorm` imports it and
+    keeps LN, `layerScale` and the vector LN; `SE` keeps the gate. Comments naming the old homes
+    (StableHLO/Basic, Attention, SE, the comment-number allow rows) follow. Not repointed:
+    `MlirCodegen.lean`'s emitted `// … LayerNorm.lean: pdiv_gelu` comment strings (generic-walk
+    output text).
+  - A-pq-2: `cnn_conv1_cot_close` is the conv-1-output cotangent closeness both conv-1 rungs
+    shared verbatim, stated over two new named cotangents (`FloatModel.cnnConv1CotF`, the float
+    one, and `cnnConv1CotR`, the reluMask one) and `FloatModel.cnnConv1CotBudget`;
+    `cnnConv1FloatGrad` / `cnnConv1BiasFloatGrad` and the two conv-1 budgets are spelled through
+    them (bodies changed, defeq; statements of the pinned theorems unchanged). Net about −15
+    lines, not −150: the 45-line margin binder block repeats in the new lemma. The audit's
+    `FloatModel.offkink_of_margin` dropped: the four `hz*` discharges per rung differ in their
+    nested `layerBudget_nonneg` chains, which a one-line lemma would not shorten.
+  - Maxpool backward prose: `maxPool2HasVJP3`'s docstring (and the accessor, the smooth-point
+    section, `maxPool2_codegen_matches_canonical`, `maxPool2HasVJPAt3`), IR's
+    `maxPoolBackDenote` / `maxpool_back_bridge` and the blueprint's CNN chapter now say the
+    renders emit `select_and_scatter` with a `GE` select (one cell per window, as PyTorch and
+    JAX); the generic `MlirCodegen` walk's EQ-mask tile-compare-select is named as such. Proofs
+    README: the trust-boundary bullet no longer calls the EQ-mask "PyTorch/JAX semantics", and
+    residual (b) of the verified path names the scatter.
+  - Gates: `lake build Certs CertsHeavy LeanMlir Apps Reference TestSupport` (3656 jobs),
+    AuditAxioms (no sorryAx, no errors), comparator `--check`, name lint, import audit implied,
+    docstring-checkrefs, blueprint checkdecls (lean_decls regenerated from content.tex) +
+    `blueprint_uses.py --check`, target names, comment numbers, module refs, audit coverage,
+    `regen_verified_mlir.sh check` with an empty `git diff verified_mlir/`, book_xrefs.
+- **Status 2026-10-02 (N1-name-1, tag M): done (staged); 0 `verified_mlir/` changes; no
+  declaration's own name changed, only its namespace.** Scope: every `*PoC*` namespace at HEAD
+  (23), the audit's list plus the per-net tie / ParamGrad ones (`*TiePoC*`, `Cifar8{,Bn}PoC{,G}`)
+  and the two float folds (`Bf16PoC`, `QuantPoC`): all are production capstones, so the same
+  reasoning applies. Convention `<net><Fold|Tie><suffix>`: keep the short net prefix, replace
+  `PoC` with what the file is (`Fold` in a `*Fold*` file, `Tie` in a `*StepTie*` file, the
+  spelling `ResNet34TieB` / `Mnv4TieB` / `EnetSyncTieG` already use), keep the `G` / `B` / `GB`
+  suffix; a `*ParamGrad` file and `Bf16GradNodes` keep sharing their capstone's namespace. Map:
+  `CnnPoC`→`CnnFold`, `CifarPoC`→`CifarFold`, `MlpPoC`→`MlpFold`, `LinPoC`→`LinFold`,
+  `CnxPoC{,G,GB}`→`CnxFold{,G,GB}`, `EnetPoC`→`EnetFold`, `ViTPoC{,G,GB}`→`ViTFold{,G,GB}`,
+  `Bf16PoC`→`Bf16Fold`, `QuantPoC`→`QuantFold`, `Cifar8PoC{,G}`→`Cifar8Tie{,G}`,
+  `Cifar8BnPoC{,G}`→`Cifar8BnTie{,G}`, `CnxTiePoC`→`CnxTie`, `CnxTiePoCGB`→`CnxTieGB`,
+  `EnetTiePoC{,G}`→`EnetTie{,G}`, `ViTTiePoC`→`ViTTie`, `ViTTiePoCGB`→`ViTTieGB`. One scripted
+  word-boundary rewrite (777 hits in 52 files: Lean sources, AuditAxioms, the comparator DECLS +
+  regenerated tier files, the yaml, content.tex, certs.yml, `LeanMlir.lean`, tests); the
+  regenerated tier files differ from the rewrite only in line reflow. By hand: the stale
+  qualifiers naming namespaces that no longer exist (`CifarBnPoC`, `ResNet34PoC`, `Mnv2PoC`,
+  `ResNet34PoCB`, and CnnArtifacts' `Cifar8PoC` / `CifarPoC` comment) repoint to `SgdNode` / `GradNodeB`,
+  where the cited lemmas live (one of them the blueprint's `\leandocref` for
+  `bnSgdPairTied_holds`); the six `/-! # PoC:` headers, two "PoC" prose sites in StableHLO/Basic,
+  certs.yml's comment, AuditAxioms' two section comments and the book's `ProofsMinimal` line say
+  what the thing is; the Proofs README states the convention. No compatibility aliases. Left:
+  `jax/scripts/poc_running_bn.py` (a JAX proof-of-concept script, correctly named) and the
+  lowercase `poc_*` declaration names in `LinFold` (declaration names, not namespaces; renaming
+  them moves a `\lean{}` pin, a candidate for a later naming pass). No generator under
+  `scripts/` emitted a `PoC` name besides gen_comparator_tier.py. Gates: `lake build Certs
+  CertsHeavy LeanMlir Apps Reference TestSupport` (3664 jobs), AuditAxioms (no sorryAx, no
+  errors), comparator `--check`, name lint, import audit implied, docstring-checkrefs, blueprint
+  checkdecls (lean_decls regenerated from content.tex: the 29 renamed pins) + `blueprint_uses.py
+  --check`, target names, comment numbers, module refs, audit coverage, `regen_verified_mlir.sh
+  check` with an empty `git diff verified_mlir/`, book_xrefs.
 
 ### WP10 — Generality
 - **A-gen-1**: unused `_hc _hh _hw` on the pool derivatives, forwarded through 87 call sites;

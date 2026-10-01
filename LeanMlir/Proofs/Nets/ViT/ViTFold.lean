@@ -8,7 +8,7 @@ The ViT peer of `ConvNeXtFold`/`EfficientNetFold`: for every param-SGD op the
 vector-LN γ / β nodes (`veclnGammaSgd_den`, `rowDenseBiasSgd_den_lnbeta` and their tie clauses) are
 in `SgdNodes`, under this namespace, because ConvNeXt's head uses them too. Each is a one-or-few-line delegation to the already-proven render certs in
 `ViTVecLN` (vector-[D] LN γ/β) and `TokenParamGrad` (rowwise dense W/b, patch conv W/b, cls, pos); the
-classifier head reuses `Cifar8PoC.dense{W,B}_den`. Together these cover EVERY parameter family
+classifier head reuses `Cifar8Tie.dense{W,B}_den`. Together these cover EVERY parameter family
 of the depth-12 ViT-Tiny train step (200 params), so the step tie (`ViTStepTie`) can thread them at
 the real backward chain cotangents.
 
@@ -19,7 +19,7 @@ these grads): `veclnGammaSgd`→`layerNormVec_gamma_sgd_certified`, `rowDenseWei
 →`patchEmbed_weight_sgd_certified`, `patchEmbedBiasSgd`→`patchEmbed_bias_sgd_certified`, `posEmbedSgd`→
 `posEmbed_sgd_certified`, cls (`clsSliceF`→`denseBiasSgdB`)→`clsToken_sgd_certified`. -/
 
-namespace Proofs.ViTPoC
+namespace Proofs.ViTFold
 open Proofs.SgdNode
 
 open scoped BigOperators
@@ -130,4 +130,4 @@ theorem rowDenseBSgdTied_holds {N a c : Nat} {bN lrStr cotN : String} {W : Mat a
     RowDenseBSgdTied N bN lrStr cotN W x b dy lr := fun i =>
   rowDenseBiasSgd_den bN lrStr cotN W (Mat.unflatten x) b dy lr i
 
-end Proofs.ViTPoC
+end Proofs.ViTFold

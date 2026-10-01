@@ -8,7 +8,7 @@ Every one of B0's 262 parameters' SGD ops, at the cotangent the rendered net's o
 hands it: the real forward (`efficientnetForwardBFull`) threaded through every parameter op, the
 loss cotangent composed back through all 16 MBConv blocks, the residual fan-in at each stride-1
 skip and the squeeze-excite gate fan-in included. The batched, un-fused peer (tied at the
-`*GradB` nodes) is `EnetTiePoCG.efficientnet_net_tiedG` in `EfficientNetStepTieG`.
+`*GradB` nodes) is `EnetTieG.efficientnet_net_tiedG` in `EfficientNetStepTieG`.
 
 ## What B0 adds over MobileNetV2's tie
 
@@ -27,7 +27,7 @@ tie builds explicit chain-cotangent constructors rather than reading them off.
 ## Contents
 
 * Per block type, every parameter op at the chain cotangent — each a delegation to the fold
-  generics `EnetPoC.*`:
+  generics `EnetFold.*`:
   - `enet_exp_tied` (16 params) — the stride-1 expand block: the 9 residual blocks and the two
     widenings b9/b16 (the parameter ops are skip-agnostic; the fan-in lives in the thread);
   - `enet_strided_tied` (16) — b2/4/6/12: expand at `2h×2w`, strided depthwise;
@@ -46,11 +46,11 @@ Not done: the dense head's total-loss fold (`Wfc → ∂CE/∂Wfc`, the batched 
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.EnetTiePoC
+namespace Proofs.EnetTie
 open Proofs.BackLinks
 
 open scoped BigOperators
-open Proofs.EnetPoC (bnSgdPairTiedB_holds convWSgdTiedB_holds denseBSgdTiedB_holds
+open Proofs.EnetFold (bnSgdPairTiedB_holds convWSgdTiedB_holds denseBSgdTiedB_holds
   denseWSgdTiedB_holds depthwiseWSgdTiedB_holds)
 
 /-! ## Residual stride-1 MBConv block — all 16 params tied (expand → dw → SE → project + skip)
@@ -78,7 +78,7 @@ def ConvBBetaSgdTied (N h w : Nat) {oc : Nat} (bN lrStr cotN : String) (ε : ℝ
 theorem convBBetaSgdTied_holds {N h w oc : Nat} {bN lrStr cotN : String} {ε : ℝ} {b : Vec oc}
     {cot : Vec (N * (oc * h * w))} {lr : ℝ} : ConvBBetaSgdTied N h w bN lrStr cotN ε b cot lr :=
   fun o =>
-    EnetPoC.bnBetaB_den bN lrStr cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) lr o
+    EnetFold.bnBetaB_den bN lrStr cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) lr o
 
 /-- **Residual stride-1 MBConv block, tied.** All 16 params (expand/project 1×1 conv W+b, depthwise
     W+b, SE reduce/excite dense W₁/b₁/W₂/b₂, three true-BN γ/β) denote the certified batched Σ_n
@@ -118,24 +118,24 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * h * w)) := swBackB (N * (mid * h * w)) en cotEr
   let cotEc : Vec (N * (mid * h * w)) := bnBackB N mid h w εe hεe γe βe ec cotEn
   -- expand 1×1 conv (c → mid), cot = cotEc
-  EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN be xin We cotEc lr
+  EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN be xin We cotEc lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εe be cotEc lr
-  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εe γe βe (reassocB N mid h w ec)
+  ∧ EnetFold.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εe γe βe (reassocB N mid h w ec)
         (reassocB N mid h w cotEn) lr
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
-  ∧ EnetPoC.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd er Wd cotDc lr
+  ∧ EnetFold.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd er Wd cotDc lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εd bd cotDc lr
-  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
+  ∧ EnetFold.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn) lr
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
+  ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr
-  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ EnetFold.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut) lr
 
 theorem enet_exp_tied {N ic mid oc h w r kHd kWd : Nat}
@@ -197,9 +197,9 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * (2 * h) * (2 * w))) := swBackB (N * (mid * (2 * h) * (2 * w))) en cotEr
   let cotEc : Vec (N * (mid * (2 * h) * (2 * w))) := bnBackB N mid (2 * h) (2 * w) εe hεe γe βe ec cotEn
   -- expand 1×1 conv (ic → mid, at 2h×2w), cot = cotEc
-  EnetPoC.ConvWSgdTiedB N (2 * h) (2 * w) xN wN lrStr cotN be xin We cotEc lr
+  EnetFold.ConvWSgdTiedB N (2 * h) (2 * w) xN wN lrStr cotN be xin We cotEc lr
   ∧ ConvBBetaSgdTied N (2 * h) (2 * w) bN lrStr cotN εe be cotEc lr
-  ∧ EnetPoC.BnSgdPairTiedB N mid (2 * h) (2 * w) gN vN epsStr bN lrStr cotN εe γe βe
+  ∧ EnetFold.BnSgdPairTiedB N mid (2 * h) (2 * w) gN vN epsStr bN lrStr cotN εe γe βe
         (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn) lr
   -- strided depthwise (kHd×kWd, 2h→h), cot = cotDc
   ∧ (∀ idx : Fin (mid * kHd * kWd),
@@ -209,17 +209,17 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
                       depthwiseStride2Flat (Tensor3.unflatten v') bd (batchSlice N (mid * (2 * h) * (2 * w)) er n))
                    (Tensor3.flatten Wd) idx j * batchSlice N (mid * h * w) cotDc n j)
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εd bd cotDc lr
-  ∧ EnetPoC.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
+  ∧ EnetFold.BnSgdPairTiedB N mid h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn) lr
   -- SE reduce/excite dense (mid → r → mid)
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
+  ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr
-  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ EnetFold.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut) lr
 
 theorem enet_strided_tied {N ic mid oc h w r kHd kWd : Nat}
@@ -239,7 +239,7 @@ theorem enet_strided_tied {N ic mid oc h w r kHd kWd : Nat}
   · exact convWSgdTiedB_holds
   · exact convBBetaSgdTied_holds
   · exact bnSgdPairTiedB_holds
-  · intro idx; exact EnetPoC.depthwiseStridedWB_den xN wN lrStr cotN bd er Wd cotDc lr idx
+  · intro idx; exact EnetFold.depthwiseStridedWB_den xN wN lrStr cotN bd er Wd cotDc lr idx
   · exact convBBetaSgdTied_holds
   · exact bnSgdPairTiedB_holds
   · exact denseWSgdTiedB_holds
@@ -284,19 +284,19 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
   let cotDn : Vec (N * (ic * h * w)) := swBackB (N * (ic * h * w)) dn cotDxSe
   let cotDc : Vec (N * (ic * h * w)) := bnBackB N ic h w εd hεd γd βd dc cotDn
   -- depthwise (stride-1, kHd×kWd, on ic), cot = cotDc
-  EnetPoC.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd xin Wd cotDc lr
+  EnetFold.DepthwiseWSgdTiedB N h w xN wN lrStr cotN bd xin Wd cotDc lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εd bd cotDc lr
-  ∧ EnetPoC.BnSgdPairTiedB N ic h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N ic h w dc)
+  ∧ EnetFold.BnSgdPairTiedB N ic h w gN vN epsStr bN lrStr cotN εd γd βd (reassocB N ic h w dc)
         (reassocB N ic h w cotDn) lr
   -- SE reduce/excite dense (ic → r → ic)
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
-  ∧ EnetPoC.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetPoC.DenseBSgdTiedB N bN lrStr cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 lr
   -- project 1×1 conv (ic → oc), cot = cotPbn
-  ∧ EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
+  ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr
-  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ EnetFold.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut) lr
 
 theorem enet_noexp_tied {N ic oc h w r kHd kWd : Nat}
@@ -337,7 +337,7 @@ def enetStemTied {N ic oc h w kHs kWs : Nat}
                       flatConvStride2Xla (Kernel4.unflatten v') bs (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                    (Kernel4.flatten Ws) idx j * batchSlice N (oc * h * w) cotStc n j)
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εs bs cotStc lr
-  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εs γs βs (reassocB N oc h w stc)
+  ∧ EnetFold.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εs γs βs (reassocB N oc h w stc)
         (reassocB N oc h w cotBnS) lr
 
 theorem enet_stem_tied {N ic oc h w kHs kWs : Nat}
@@ -348,7 +348,7 @@ theorem enet_stem_tied {N ic oc h w kHs kWs : Nat}
   unfold enetStemTied
   intro stc stn cotBnS cotStc
   refine ⟨?_, ?_, ?_⟩
-  · intro idx; exact EnetPoC.convStridedWB_den xN wN lrStr cotN bs x Ws cotStc lr idx
+  · intro idx; exact EnetFold.convStridedWB_den xN wN lrStr cotN bs x Ws cotStc lr idx
   · exact convBBetaSgdTied_holds
   · exact bnSgdPairTiedB_holds
 
@@ -376,13 +376,13 @@ def enetHeadTied {N c oc h w nC : Nat}
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
   -- head 1×1 conv (c → oc), cot = cotHbn
-  EnetPoC.ConvWSgdTiedB N h w xN wN lrStr cotN bh xhead Wh cotHbn lr
+  EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bh xhead Wh cotHbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εh bh cotHbn lr
-  ∧ EnetPoC.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εh γh βh (reassocB N oc h w hc)
+  ∧ EnetFold.BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHsw) lr
   -- dense classifier (oc → nC), cot = g (the batched softmax-CE gradient)
-  ∧ EnetPoC.DenseWSgdTiedB N dN wN lrStr cotN a_gap Wfc bfc g lr
-  ∧ EnetPoC.DenseBSgdTiedB N dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr
+  ∧ EnetFold.DenseWSgdTiedB N dN wN lrStr cotN a_gap Wfc bfc g lr
+  ∧ EnetFold.DenseBSgdTiedB N dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr
 
 theorem enet_head_tied {N c oc h w nC : Nat}
     (xN wN bN gN vN epsStr lrStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
@@ -538,4 +538,4 @@ theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N 
   · exact enet_exp_tiedAt xN wN bN gN vN epsStr lrStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16 lr
   · exact enet_head_tied xN wN bN gN vN epsStr lrStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 onehot lr
 
-end Proofs.EnetTiePoC
+end Proofs.EnetTie

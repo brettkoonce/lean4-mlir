@@ -15,15 +15,15 @@ disjoint axes — and tests/TestConvNeXtFwdBTie.lean allows exactly that pair an
 
 | emitted node | lemma | per-example peer it batches |
 |---|---|---|
-| `layerScaleChGammaGradB` (18 block γ) | `layerScaleChGammaGradB_den` | `CnxPoCG.layerScaleChGammaGrad_den` |
+| `layerScaleChGammaGradB` (18 block γ) | `layerScaleChGammaGradB_den` | `CnxFoldG.layerScaleChGammaGrad_den` |
 | `convWeightGradB` / `convBiasGradB` (18 expand + 18 project 1×1, + the stem bias) | `GradNodeB.convWGradB_den` / `convBGradB_den` (`GradNodesB`) | — |
 | `depthwiseWeightGradB` / `depthwiseBiasGradB` (18 × 7×7) | `GradNodeB.depthwiseWGradB_den` / `GradNodeB.depthwiseBGradB_den` (`GradNodesB`) | — |
 | `convStridedWeightGradB` / `convStridedBiasGradB` (3 × 2×2/s2 downsample) | `GradNodeB.convStridedWGradB_den` / `convStridedBGradB_den` (`GradNodesB`) | — |
 | `convStride4WeightGradB` (patchify stem) | `GradNodeB.psWGradB_den` (`GradNodesB`) | `flatConvStride4WeightGradHasVJP`, per example |
-| `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
+| `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxFoldG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `GradNodeB.veclnGammaGradB_den` / `rowDenseBiasGradB_den_lnbeta` | — |
 | `weightGradB` / `biasGradB` (the classifier) | `GradNodeB.headWGradB_den` / `headBGradB_den` | — |
-| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) | none — a bf16 node is its own op kind |
+| `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16Fold.convWGradBBf16_den` and its siblings, [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) | none — a bf16 node is its own op kind |
 
 **No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n` — `GradNodeB.denseWGradB_den`'s shape — because
@@ -45,7 +45,7 @@ lemmas.
 
 ## Scope
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
-  delivers and the smoothed loss, is `CnxTiePoCGB.cnx_net_tiedGB`.
+  delivers and the smoothed loss, is `CnxTieGB.cnx_net_tiedGB`.
 * `convnextin_adamdp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
   gradient node (`DataParallel.Node`), so these lemmas are about the per-replica gradient node
   it averages.
@@ -55,7 +55,7 @@ lemmas.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CnxPoCGB
+namespace Proofs.CnxFoldGB
 
 open scoped BigOperators
 
@@ -76,7 +76,7 @@ theorem layerScaleChGammaGradB_den {N c h w : Nat} (xN cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  have h := Proofs.CnxPoCG.layerScaleChGammaGrad_den (h := h) (w := w) xN cotN
+  have h := Proofs.CnxFoldG.layerScaleChGammaGrad_den (h := h) (w := w) xN cotN
     (batchSlice N (c * h * w) x n) γ (batchSlice N (c * h * w) dy n) cc
   simp only [denStepApp] at h
   exact h
@@ -104,7 +104,7 @@ theorem chanLnGammaGradB_den {N c h w : Nat} (xN epsStr cotN : String)
   apply Finset.sum_congr rfl
   intro n _
   rw [batchSlice_batchMap, batchSlice_batchMap]
-  have h := Proofs.CnxPoCG.chanLnGammaGrad_den xN epsStr cotN ε β
+  have h := Proofs.CnxFoldG.chanLnGammaGrad_den xN epsStr cotN ε β
     (batchSlice N (c * h * w) x n) γ (batchSlice N (c * h * w) cot n) k
   simp only [denStep, denStepApp] at h
   exact h
@@ -124,7 +124,7 @@ theorem chanLnBetaGradB_den {N c h w : Nat} (cotN : String)
   apply Finset.sum_congr rfl
   intro n _
   rw [batchSlice_batchMap]
-  have h := Proofs.CnxPoCG.chanLnBetaGrad_den cotN ε γ (batchSlice N (c * h * w) x n) β
+  have h := Proofs.CnxFoldG.chanLnBetaGrad_den cotN ε γ (batchSlice N (c * h * w) x n) β
     (batchSlice N (c * h * w) cot n) k
   simp only [denStep, denStepApp] at h
   exact h
@@ -166,4 +166,4 @@ theorem chanLNBetaTiedB_holds {N h w c : Nat} {cotN : String} {ε : ℝ} {γ : V
     {x : Vec (N * (c * h * w))} {β : Vec c} {cot : Vec (N * (c * h * w))} :
     ChanLNBetaTiedB N h w cotN ε γ x β cot := fun k => chanLnBetaGradB_den cotN ε γ x β cot k
 
-end Proofs.CnxPoCGB
+end Proofs.CnxFoldGB

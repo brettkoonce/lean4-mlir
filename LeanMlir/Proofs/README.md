@@ -18,7 +18,7 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 |---|---|
 | [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel/`; `OpaquePrefix`; the batched conv-net kit (`Batched/Stages` → `Batched/StageLayers` → `Batched/BackLinks`, `GradNodesB` for the batched gradient nodes, `SgdNodes` for the per-example fused-SGD ones, `HeadLayers` for the stem pool / GAP / dense, `IndexCast` for the `c·h·w ↔ c·(h·w)` relabelling, `DataParallel/SyncKit` for sync-BN); `GramQ`, `ListDot`, `Muon/`, `MatBridge` — opt-in `Mat` ↔ Mathlib `Matrix` interop) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, the conv interval bounds). Directories are by content; no Foundation file imports a net or a certificate. |
 | [`SpecVJP.lean`](SpecVJP.lean) | the apex, not a starting point: the executable `VerifiedNetSpec`s (`LeanMlir/Verified/NetsCore.lean`) denote the functions the proofs are about (nine specs), and the linear, MLP and ViT-Tiny VJPs are stated at the spec's denotation |
-| [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `WindowMax` (the max pool over product windows) with its `MaxPool3s2` instance, the channel-LN and depthwise backward ties, and the per-op parameter-gradient bridges (`ConvGrad`, `PerChannelBNGrad`, `TokenParamGrad`) |
+| [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Activations` (GELU, Swish, sigmoid), `Depthwise`, `SE`, `Residual`, `WindowMax` (the max pool over product windows) with its `MaxPool3s2` instance, the channel-LN and depthwise backward ties, and the per-op parameter-gradient bridges (`ConvGrad`, `PerChannelBNGrad`, `TokenParamGrad`) |
 | [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
 | [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
 | [`Codegen/`](Codegen/) | `StableHLO/Basic` (the `SHlo` AST and its `den` semantics), `StableHLO/Pretty` (the printer), `ChapterGraphs` (the chapter 1–4 graphs and printers), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle) |
@@ -115,13 +115,14 @@ certified step; `…Tied*` are the per-node clause `Prop`s a tie is a conjunctio
 (`Foundation/SgdNodes`), the batched backward graphs and cotangent steps (`reassocB`, `cInB`,
 `reluMaskB`, …) `BackLinks` (`Foundation/Batched/BackLinks`), the sync-BN twin kit `SyncKit`
 (`Foundation/DataParallel/SyncKit`), and the batch-seal kit `BatchSeal` (`Training/BatchSealKit`).
-A net's own ties keep a namespace named for the net, which does not follow the file name, for
-history: `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
-`ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`; the
-`PoC*` namespaces are the production tier. The batched stages and their VJPs are in
-`Foundation/Batched/Stages`.
+A net's own folds and ties live in a namespace named `<net><Fold|Tie><suffix>`: the short net
+prefix, then `Fold` for a `*Fold*` file's namespace and `Tie` for a `*StepTie*` file's, then the
+file's `G` / `B` / `GB` suffix (`ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTieGB`,
+`ViTFoldGB` → `ViTFoldGB`, `EfficientNetStepTieG` → `EnetTieG`, `MobileNetV4StepTieB` → `Mnv4TieB`).
+A net's `*ParamGrad` file extends its step tie's namespace (its fold's where it has no step tie).
+The batched stages and their VJPs are in `Foundation/Batched/Stages`.
 
-**Don't start with the big files:** `SgdDescent/Cnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
+**Don't start with the big files:** `SgdDescent/Cnn.lean` (~2.9k) and its float half `CnnFloat.lean` (~1.8k), `Attention.lean` (~2.3k), the
 `StableHLO/Basic.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of
 string assembly, no theorems). Start from a `*FullB` file — the net's forward, stated once.
 
@@ -182,7 +183,9 @@ Tensor.lean                    ← pdiv (def via fderiv) + VJP framework
   │
   ├── SE.lean                  squeeze-and-excitation (elemwiseProduct; zero new axioms)
   │
-  ├── LayerNorm.lean           LayerNorm (proved) + GELU (gelu Jacobian proved)
+  ├── LayerNorm.lean           LayerNorm (proved)
+  │
+  ├── Activations.lean         GELU, Swish, sigmoid (diagonal Jacobians proved)
   │
   └── Attention.lean           softmax (proved) + SDPA (proved) + MHSA (proved)
                                + ViT body chains (proved) + patchEmbed (proved)
@@ -291,7 +294,7 @@ over `biPathHasVJP` + `identityHasVJP` from `Tensor.lean`.
 **SE.lean** — squeeze-and-excitation: **0 axioms.** Pure composition
 over `elemwiseProductHasVJP` + `denseHasVJP` + `identityHasVJP`.
 
-**LayerNorm.lean** — layer norm and GELU: **0 axioms.**
+**LayerNorm.lean** — layer norm, and **Activations.lean** — GELU, Swish, sigmoid: **0 axioms.**
 
 > `geluScalar` and `geluScalarDeriv` are now concrete `def`s using
 > the standard `tanh`-approximation formula. `pdiv_gelu` is a
@@ -348,7 +351,7 @@ framework subgradient conventions:
   avoids `stablehlo.select_and_scatter` because IREE does not support
   it (see `MlirCodegen.lean` near the maxPool backward case). At
   argmax ties, the EQ-mask routes the gradient to *every* tied input
-  cell, matching the PyTorch/JAX semantics.
+  cell; PyTorch's and JAX's max-pool backwards route it to one cell.
 
 These match the canonical Lean witness at smooth points and differ
 only at the kinks. The verification gap is intrinsic to backward
@@ -375,7 +378,10 @@ fan-in included — not a free `∀`-cotangent). All 3-axiom-clean in
 `tests/AuditAxioms.lean`. The residuals on *that* path are narrower: (a) `den` is
 the `ℝ` denotation, so the `den`→`Float32` rounding gap, the per-op `pretty`
 lexing, `iree-compile`, the runtime, and the FFI stay trusted; (b) the same
-ReLU/MaxPool/ReLU6 kink convention above; and (c) the CI drift guard (`proofs.yml`,
+ReLU/ReLU6 kink convention above, and at MaxPool ties the render's `select_and_scatter`,
+whose `GE` select routes each window's cotangent to the first tied cell, as PyTorch and JAX
+do (the `den`, `IR.maxPoolBackDenote`, routes it to the same cell), where the canonical witness
+gives `0`; and (c) the CI drift guard (`proofs.yml`,
 "Verified-render drift guard") re-elaborates the `Proofs/Codegen` renderers and
 byte-checks their committed `verified_mlir/` files against them;
 `scripts/gates/check_render_coverage.py` holds the unguarded remainder (14 of 240 files)

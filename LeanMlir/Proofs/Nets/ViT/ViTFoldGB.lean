@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 /-! # The gradient-node fold for ViT-Tiny at the batched index
 
 `ViTFoldG.lean` holds the two per-example lemmas specific to this net (`posEmbedGrad_den`,
-`clsGrad_den`); the other per-example peers are the fused `ViTPoC` lemmas. This file is the batched
+`clsGrad_den`); the other per-example peers are the fused `ViTFold` lemmas. This file is the batched
 peer, at `ViTRenderB.vitBackAllB`'s constructors, from which the committed ViT artifacts render.
 
 Every batched form emits its per-example peer's text, and tests/TestBatchedEmitTie.lean pins each
@@ -23,16 +23,16 @@ why the byte tie cannot see it and `den_rowDenseBiasGradB_at_one` exists to argu
 The vector-LN and classifier-head lemmas, and the vector-LN tie clauses, are in `GradNodesB` under
 this namespace, because ConvNeXt's batched tier uses them too.
 
-| emitted node | lemma | per-example peer (fused `ViTPoC` op unless noted) |
+| emitted node | lemma | per-example peer (fused `ViTFold` op unless noted) |
 |---|---|---|
 | `veclnGammaGradB` (25 LN γ: LN1/LN2 × 12 + final) | `veclnGammaGradB_den` (`GradNodesB`) | `SgdNode.veclnGammaSgd_den` |
 | `rowDenseBiasGradB` (25 LN β) | `rowDenseBiasGradB_den_lnbeta` (`GradNodesB`) | `SgdNode.rowDenseBiasSgd_den_lnbeta` |
-| `rowDenseWeightGradB` (Wq/Wk/Wv/Wo/Wfc1/Wfc2 × 12) | `rowDenseWeightGradB_den` | `ViTPoC.rowDenseWeightSgd_den` |
-| `rowDenseBiasGradB` (bq/bk/bv/bo/bfc1/bfc2 × 12) | `rowDenseBiasGradB_den` | `ViTPoC.rowDenseBiasSgd_den` |
-| `patchEmbedWeightGradB` / `patchEmbedBiasGradB` | `patchEmbedWeightGradB_den` / `patchEmbedBiasGradB_den` | `ViTPoC.patchEmbedWeightSgd_den` / `patchEmbedBiasSgd_den` |
-| `posEmbedGradB` | `posEmbedGradB_den` | `ViTPoCG.posEmbedGrad_den` (un-fused) |
-| `denseBiasGradB` at `N = B` (the CLS token) | `clsGrad_denB` | `ViTPoCG.clsGrad_den` (un-fused), at `N = 1` |
-| `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` (`GradNodesB`) | `ViTPoC.headW_den` / `headB_den` |
+| `rowDenseWeightGradB` (Wq/Wk/Wv/Wo/Wfc1/Wfc2 × 12) | `rowDenseWeightGradB_den` | `ViTFold.rowDenseWeightSgd_den` |
+| `rowDenseBiasGradB` (bq/bk/bv/bo/bfc1/bfc2 × 12) | `rowDenseBiasGradB_den` | `ViTFold.rowDenseBiasSgd_den` |
+| `patchEmbedWeightGradB` / `patchEmbedBiasGradB` | `patchEmbedWeightGradB_den` / `patchEmbedBiasGradB_den` | `ViTFold.patchEmbedWeightSgd_den` / `patchEmbedBiasSgd_den` |
+| `posEmbedGradB` | `posEmbedGradB_den` | `ViTFoldG.posEmbedGrad_den` (un-fused) |
+| `denseBiasGradB` at `N = B` (the CLS token) | `clsGrad_denB` | `ViTFoldG.clsGrad_den` (un-fused), at `N = 1` |
+| `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` (`GradNodesB`) | `ViTFold.headW_den` / `headB_den` |
 
 **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n`.** That is `GradNodeB.denseWGradB_den`'s shape, and
@@ -49,7 +49,7 @@ bf16 one, so its weight gradients go through the bf16 kinds listed below.
 
 ## Scope
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
-  delivers, is `ViTTiePoCGB.vit_net_tiedGB`; the per-example `ViTStepTie.lean` stays at the
+  delivers, is `ViTTieGB.vit_net_tiedGB`; the per-example `ViTStepTie.lean` stays at the
   SGD-inline `vit_train_step.mlir`.
 * The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
   kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them (the row-dense one keeps its f32 result).
@@ -60,7 +60,7 @@ bf16 one, so its weight gradients go through the bf16 kinds listed below.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.ViTPoCGB
+namespace Proofs.ViTFoldGB
 
 open scoped BigOperators
 
@@ -162,7 +162,7 @@ theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact Proofs.ViTPoCG.posEmbedGrad_den (ic := ic) (H := H) (W := W) (P := P) (N := tk) (D := D)
+  exact Proofs.ViTFoldG.posEmbedGrad_den (ic := ic) (H := H) (W := W) (P := P) (N := tk) (D := D)
     cotN Wc bc cls pos (batchSlice N (ic * H * W) img n) (batchSlice N ((tk + 1) * D) dy n) i
 
 /-- **The CLS-token GRADIENT, and this is the one statement the per-example fold could not make.**
@@ -170,12 +170,12 @@ theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
     and reduces the result as an `[N, D]` batch, so the op is `denseBiasGradB` at `N = B` and its
     `den` sums over the batch — which is what a shared `[192]` parameter's gradient IS.
 
-    `ViTPoCG.clsGrad_den` is the same theorem at `N = 1`, where the batch lift lived in
+    `ViTFoldG.clsGrad_den` is the same theorem at `N = 1`, where the batch lift lived in
     `pretty B` outside the AST. The bytes are identical (`biasGrad`'s emitted reduce takes the `B`
     axis either way) and the functions are not; `den_rowDenseBiasGradB_at_one` is the general form
     of the trap.
 
-    Note: stated at the committed ViT-Tiny dims rather than generically, for `ViTPoCG.clsGrad_den`'s
+    Note: stated at the committed ViT-Tiny dims rather than generically, for `ViTFoldG.clsGrad_den`'s
     reason: the CLS operand's type is `Vec (N * (1 * D))`, which reduces to `Vec (N * D)` only at a
     literal `D`. -/
 theorem clsGrad_denB {N : Nat} (cotN : String)
@@ -198,7 +198,7 @@ theorem clsGrad_denB {N : Nat} (cotN : String)
   rw [hslice]
   -- The per-example lemma's LHS is the `N = 1` node, whose `den` is a one-term sum; unfolding it
   -- is what leaves the bare `clsSliceFlat` this goal is stated at.
-  have h := Proofs.ViTPoCG.clsGrad_den cotN Wc bc cls pos
+  have h := Proofs.ViTFoldG.clsGrad_den cotN Wc bc cls pos
     (batchSlice N (3 * 224 * 224) img n) (batchSlice N (197 * 192) dyEmbed n) i
   simp only [denStepApp, Fin.sum_univ_one, batchSlice] at h
   exact h
@@ -244,4 +244,4 @@ theorem rowDenseBTiedB_holds {N tk a c : Nat} {cotN : String} {W : Mat a c}
     RowDenseBTiedB N tk cotN W x b dy := fun i =>
   rowDenseBiasGradB_den cotN W (fun n => Mat.unflatten (batchSlice N (tk * a) x n)) b dy i
 
-end Proofs.ViTPoCGB
+end Proofs.ViTFoldGB

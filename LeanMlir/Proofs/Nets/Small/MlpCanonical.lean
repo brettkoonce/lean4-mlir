@@ -69,12 +69,12 @@ noncomputable def w1_grad_close :=
 noncomputable def w0_grad_close :=
   mlp_w0_grad_close (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
-/-- Canonical emitted-train-step tie (`MlpPoC.mlp_train_step_tied_certified` at
+/-- Canonical emitted-train-step tie (`MlpFold.mlp_train_step_tied_certified` at
     the canonical dims): at the REAL canonical forward, the output-weight SGD op denotes
     `W₂ − lr·∂CE/∂W₂`, and each of the other five denotes `θ − lr·(certified per-layer
     Jacobian · the rendered chain cotangent)`. -/
 noncomputable def train_step_tied_certified :=
-  MlpPoC.mlp_train_step_tied_certified (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
+  MlpFold.mlp_train_step_tied_certified (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
 end MlpCanonical
 end Proofs
