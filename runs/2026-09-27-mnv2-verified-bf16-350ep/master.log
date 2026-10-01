@@ -1,0 +1,7 @@
+[sup] 2026-09-29 06:29:19 START job=mnv2-default-4gpu devs=0,1,2,3 epochs=350 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-27-mnv2-verified-bf16-350ep
+[sup] 2026-09-29 06:29:19 cmd: .lake/build/bin/mobilenetv2-imagenet-verified data
+[sup] 2026-09-29 06:29:19 eta: bf16 ~66 h on 4x 4060 Ti: PROBED 2026-09-25 on rmsdp64wxdols0bf16 (sync-BN) at 123 ms/step median (= mean, 615 s/epoch) + ~60 s/epoch eval/ckpt, 350 ep; 51-54 h on 4x 3060 (MEASURED end to end on the pre-sync-BN rmsdp64bf16)
+[sup] 2026-09-29 06:29:19 attempt 1: resuming at epoch 0/350 (next rest: 999)
+[sup] 2026-09-29 06:29:19   launched PID=2851353 PGID=2851353
+[sup]   last line:     BN companion -> .lake/build/mobilenetv2in_rmsdp64wxdols0eps0001bf16_ckpt_xla.bin.bn (34112 floats x 2, hash 16838725250994080982)
+[sup] 2026-10-01 14:16:26 ✅ COMPLETE — 350/350 epochs

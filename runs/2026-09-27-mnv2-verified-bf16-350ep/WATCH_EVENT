@@ -1,0 +1,50 @@
+=== RUN ENDED at 2026-10-01 14:19:37 UTC ===
+[sup] 2026-09-29 06:29:19 cmd: .lake/build/bin/mobilenetv2-imagenet-verified data
+[sup] 2026-09-29 06:29:19 eta: bf16 ~66 h on 4x 4060 Ti: PROBED 2026-09-25 on rmsdp64wxdols0bf16 (sync-BN) at 123 ms/step median (= mean, 615 s/epoch) + ~60 s/epoch eval/ckpt, 350 ep; 51-54 h on 4x 3060 (MEASURED end to end on the pre-sync-BN rmsdp64bf16)
+[sup] 2026-09-29 06:29:19 attempt 1: resuming at epoch 0/350 (next rest: 999)
+[sup] 2026-09-29 06:29:19   launched PID=2851353 PGID=2851353
+[sup]   last line:     BN companion -> .lake/build/mobilenetv2in_rmsdp64wxdols0eps0001bf16_ckpt_xla.bin.bn (34112 floats x 2, hash 16838725250994080982)
+[sup] 2026-10-01 14:16:26 ✅ COMPLETE — 350/350 epochs
+--- final evals ---
+  epoch 348: test_acc = 35570/50000 = 71.140000%  top5 = 45036/50000 = 90.072000%  [95% CI 70.74–71.54]
+  epoch 349: test_acc = 35532/50000 = 71.064000%  top5 = 45040/50000 = 90.080000%  [95% CI 70.66–71.46]
+  epoch 350: test_acc = 35562/50000 = 71.124000%  top5 = 45018/50000 = 90.036000%  [95% CI 70.73–71.52]
+--- loaders at end ---
+  pid 2853723  age   1.4 h  rss  5.10 GiB  arena  3.82 GiB  maps 344
+  pid 2853854  age   3.0 h  rss  5.59 GiB  arena  4.09 GiB  maps 325
+  pid 2854037  age   4.6 h  rss  6.76 GiB  arena  5.26 GiB  maps 348
+  pid 2854229  age   6.4 h  rss  9.66 GiB  arena  8.43 GiB  maps 413
+  pid 2889068  age   6.4 h  rss  5.86 GiB  arena  4.07 GiB  maps 320
+  pid 2923549  age   6.4 h  rss  5.74 GiB  arena  4.15 GiB  maps 323
+  pid 2958397  age   6.4 h  rss  5.99 GiB  arena  4.28 GiB  maps 327
+  pid 2998427  age   6.2 h  rss  5.85 GiB  arena  4.13 GiB  maps 328
+  pid 3033137  age   6.2 h  rss  5.85 GiB  arena  4.13 GiB  maps 324
+  pid 3069318  age   6.2 h  rss  5.77 GiB  arena  4.13 GiB  maps 321
+  pid 3104488  age   6.2 h  rss  5.97 GiB  arena  4.29 GiB  maps 326
+  pid 3139532  age   6.2 h  rss  5.76 GiB  arena  3.95 GiB  maps 321
+  pid 3174827  age   6.2 h  rss  5.93 GiB  arena  4.20 GiB  maps 326
+  pid 3209731  age   6.2 h  rss  5.95 GiB  arena  4.12 GiB  maps 321
+  pid 3244423  age   6.2 h  rss  5.58 GiB  arena  4.10 GiB  maps 321
+  pid 3279497  age   6.2 h  rss  5.87 GiB  arena  4.22 GiB  maps 322
+  pid 3314366  age   6.2 h  rss  5.84 GiB  arena  4.16 GiB  maps 325
+  pid 3349331  age   6.2 h  rss  6.03 GiB  arena  4.35 GiB  maps 326
+  pid 3384159  age   6.2 h  rss  5.97 GiB  arena  4.10 GiB  maps 321
+  pid 3419226  age   6.2 h  rss  5.83 GiB  arena  4.16 GiB  maps 333
+  pid 3453918  age   6.2 h  rss  5.94 GiB  arena  4.17 GiB  maps 331
+  pid 3488553  age   6.2 h  rss  5.43 GiB  arena  3.94 GiB  maps 322
+  pid 3523239  age   6.2 h  rss  5.49 GiB  arena  4.08 GiB  maps 326
+  pid 3557938  age   6.2 h  rss  5.60 GiB  arena  4.11 GiB  maps 323
+  pid 3594144  age   6.2 h  rss  5.53 GiB  arena  4.03 GiB  maps 326
+  pid 3629051  age   6.2 h  rss  5.29 GiB  arena  3.91 GiB  maps 317
+  pid 3665850  age   6.2 h  rss  5.41 GiB  arena  3.98 GiB  maps 323
+  pid 3701470  age   6.2 h  rss  5.50 GiB  arena  3.90 GiB  maps 324
+  pid 3736705  age   6.2 h  rss  5.36 GiB  arena  3.90 GiB  maps 324
+  pid 3771441  age   6.2 h  rss  5.46 GiB  arena  3.96 GiB  maps 327
+  pid 3806159  age   6.2 h  rss  5.38 GiB  arena  3.91 GiB  maps 323
+  pid 3850464  age   6.2 h  rss  5.60 GiB  arena  4.00 GiB  maps 324
+  pid 3886517  age   6.2 h  rss  5.25 GiB  arena  3.84 GiB  maps 322
+  pid 3923150  age   6.2 h  rss  5.43 GiB  arena  4.01 GiB  maps 322
+  pid 3959250  age   6.2 h  rss  5.37 GiB  arena  3.77 GiB  maps 323
+  pid 3995153  age   4.6 h  rss  5.37 GiB  arena  3.90 GiB  maps 322
+  pid 4031159  age   3.0 h  rss  5.36 GiB  arena  3.84 GiB  maps 325
+  pid 4067117  age   1.4 h  rss  5.14 GiB  arena  3.69 GiB  maps 330

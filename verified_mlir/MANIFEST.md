@@ -286,9 +286,9 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mobilenetv2in_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 4 |
+| `mobilenetv2in_fwd.mlir` | fwd | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 6 |
 | `mobilenetv2in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 2 |
-| `mobilenetv2in_fwd_eval_eps0001.mlir` | fwd_eval BN ε 0.001 | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 2 |
+| `mobilenetv2in_fwd_eval_eps0001.mlir` | fwd_eval BN ε 0.001 | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 4 |
 | `mobilenetv2in_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.0 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
 | `mobilenetv2in_adam64bf16_train_step.mlir` | train_step | `adam64bf16` | AdamW, bf16, batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
 | `mobilenetv2in_adamdp64_train_step.mlir` | train_step | `adamdp64` | AdamW, data-parallel, batch 64 per replica | 1.2 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
@@ -298,7 +298,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `mobilenetv2in_rmsdp64_train_step.mlir` | train_step | `rmsdp64` | RMSProp, data-parallel, batch 64 per replica | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
 | `mobilenetv2in_rmsdp64bf16_train_step.mlir` | train_step | `rmsdp64bf16` | RMSProp, data-parallel, bf16, batch 64 per replica | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 2 |
 | `mobilenetv2in_rmsdp64wxdols0bf16_train_step.mlir` | train_step | `rmsdp64wxdols0bf16` | RMSProp, data-parallel, classifier dropout, no decay on norm/bias, bf16, label smoothing 0, batch 64 per replica | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | — |
-| `mobilenetv2in_rmsdp64wxdols0eps0001bf16_train_step.mlir` | train_step | `rmsdp64wxdols0eps0001bf16` | RMSProp, data-parallel, classifier dropout, no decay on norm/bias, bf16, label smoothing 0, BN ε 0.001, batch 64 per replica | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 2 |
+| `mobilenetv2in_rmsdp64wxdols0eps0001bf16_train_step.mlir` | train_step | `rmsdp64wxdols0eps0001bf16` | RMSProp, data-parallel, classifier dropout, no decay on norm/bias, bf16, label smoothing 0, BN ε 0.001, batch 64 per replica | 1.1 | `LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean` | 4 |
 
 ## `resnet34` — 19 artifacts, 11.4 MB
 
