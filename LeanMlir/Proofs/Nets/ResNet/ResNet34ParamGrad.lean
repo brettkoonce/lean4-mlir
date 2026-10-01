@@ -23,12 +23,13 @@ global batch.
 
 * **Per node kind** (`ParamGradNodes`): a node is `∂G/∂θ` whenever its cotangent is the gradient of
   `G` — the loss read at that op's output — there (`HasGradAt`).
-* **Per block kind** (this file, at variable widths): the loss read at each internal activation of
-  an identity / downsample block, the stem and the head (`r34IdG*`, `r34DownG*`, `r34StemG*`), with
-  its gradient the chain's own cotangent (`r34IdGC1_hasGradAt`, …), pulled back one certified stage at a
-  time (`HasGradAt.comp`). The bundles `r34IdLossTiedB` / `r34DownLossTiedB` / `r34StemLossTiedB` /
-  `r34HeadLossTiedB` state all of a block's nodes against `Φ`, the loss as a function of that
-  block's weight record.
+* **Per block kind** (this file, at variable widths): the loss read at the block output, pulled
+  back one certified stage at a time by `ParamGradNodes`' pull-backs (`hasGradAt_relu`,
+  `hasGradAt_bnBatchLA`, `hasGradAt_conv`, the skip's `hasGradAt_addConst`), so each internal
+  activation's gradient is the chain's own cotangent. The stem goes through the argmax gather
+  instead (`r34StemGCg_hasGradAt`). The bundles `r34IdLossTiedB` / `r34DownLossTiedB` /
+  `r34StemLossTiedB` / `r34HeadLossTiedB` state all of a block's nodes against `Φ`, the loss as a
+  function of that block's weight record.
 * **Per net**: the loss read after each block (`r34Suf*`), its gradient pulled back through the
   sixteen certified block VJPs (`r34IdB_hasGradAt_comp`, `r34DownB_hasGradAt_comp`), and `Φ` identified with the
   whole net at updated weights (`r34_factor_*`) — each a standalone `rfl`; inside the capstone the
@@ -54,98 +55,19 @@ open Proofs Proofs.StableHLO
 namespace Proofs.ResNet34TieB
 
 open Proofs.BackLinks (bnInB bnInB_eq_bnBackB reluMaskB cInB reassocB rowB unrowB)
+open Proofs.GradNodeB (hasGradAt_bnBatchLA hasGradAt_relu hasGradAt_conv hasGradAt_addConst
+  hasGradAt_constAdd)
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § The identity block: the loss at each internal activation, and its gradient there
---   `Gn` is the loss read at the block's OUTPUT (the rest of the net, then the loss). Each
---   `r34IdG*` is the same loss read one stage further in; each `r34IdG*_hasGradAt` says its gradient
---   there is the emitted chain's cotangent.
+-- § The identity block
+--   `Gn` is the loss read at the block's OUTPUT (the rest of the net, then the loss). The block's
+--   proof pulls its gradient back one stage at a time through `ParamGradNodes`' pull-backs, each
+--   landing on the emitted chain's own cotangent.
 -- ════════════════════════════════════════════════════════════════
 
 section IdBlock
-variable (N h w : Nat) {c : Nat}
-
-/-- The loss at the outer relu's input `a`. -/
-noncomputable def r34IdGA (Gn : Vec (N * (c * h * w)) → Vec 1) : Vec (N * (c * h * w)) → Vec 1 :=
-  fun u => Gn (relu (N * (c * h * w)) u)
-
-/-- The loss at bn₂'s output (the skip `v` held fixed). -/
-noncomputable def r34IdGN2 (Gn : Vec (N * (c * h * w)) → Vec 1) (v : Vec (N * (c * h * w))) :
-    Vec (N * (c * h * w)) → Vec 1 :=
-  fun u => r34IdGA N h w Gn (fun i => u i + v i)
-
-/-- The loss at conv₂'s output. -/
-noncomputable def r34IdGC2 (Gn : Vec (N * (c * h * w)) → Vec 1) (p : R34IdW c)
-    (v : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) → Vec 1 :=
-  fun z => r34IdGN2 N h w Gn v (bnBatchLA N c h w p.ε₂ p.γ₂ p.β₂ z)
-
-/-- The loss at bn₁'s output. -/
-noncomputable def r34IdGN1 (Gn : Vec (N * (c * h * w)) → Vec 1) (p : R34IdW c)
-    (v : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) → Vec 1 :=
-  fun u => r34IdGC2 N h w Gn p v (batchMap N (flatConv p.W₂ p.b₂) (relu (N * (c * h * w)) u))
-
-/-- The loss at conv₁'s output. -/
-noncomputable def r34IdGC1 (Gn : Vec (N * (c * h * w)) → Vec 1) (p : R34IdW c)
-    (v : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) → Vec 1 :=
-  fun z => r34IdGN1 N h w Gn p v (bnBatchLA N c h w p.ε₁ p.γ₁ p.β₁ z)
-
-variable {N h w}
-
-theorem r34IdGA_hasGradAt (p : R34IdW c) (v : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p v)
-    {Gn : Vec (N * (c * h * w)) → Vec 1} {dy : Vec (N * (c * h * w))}
-    (hGn : HasGradAt Gn (r34IdB N h w p v) dy) :
-    HasGradAt (r34IdGA N h w Gn)
-      (residual (projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
-        cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v)
-      (r34IdCotA N h w p v dy) :=
-  HasGradAt.comp (f := relu (N * (c * h * w)))
-    (x := residual (projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
-      cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v)
-    hGn (relu_differentiableAt_of_smooth _ _ hs.hout) (reluHasVJPAt _ _ hs.hout)
-
-theorem r34IdGN2_hasGradAt (p : R34IdW c) (v : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p v)
-    {Gn : Vec (N * (c * h * w)) → Vec 1} {dy : Vec (N * (c * h * w))}
-    (hGn : HasGradAt Gn (r34IdB N h w p v) dy) :
-    HasGradAt (r34IdGN2 N h w Gn v)
-      (bnBatchLA N c h w p.ε₂ p.γ₂ p.β₂ (batchMap N (flatConv p.W₂ p.b₂)
-        (cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v)))
-      (r34IdCotA N h w p v dy) :=
-  (r34IdGA_hasGradAt p v hs hGn).comp (f := fun u i => u i + v i) (differentiableAt_id.add_const v)
-    (addConstHasVJPAt (fun u => u) v _ differentiableAt_id (identityHasVJPAt _ _))
-
-theorem r34IdGC2_hasGradAt (p : R34IdW c) (hq : R34IdPos p) (v : Vec (N * (c * h * w)))
-    (hs : R34IdSmoothAt N h w p v) {Gn : Vec (N * (c * h * w)) → Vec 1}
-    {dy : Vec (N * (c * h * w))} (hGn : HasGradAt Gn (r34IdB N h w p v) dy) :
-    HasGradAt (r34IdGC2 N h w Gn p v)
-      (batchMap N (flatConv p.W₂ p.b₂) (cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v))
-      (r34IdCotC2 N h w p v dy) :=
-  ((r34IdGN2_hasGradAt p v hs hGn).comp ((bnBatchLA_differentiable N c h w p.ε₂ hq.h2 p.γ₂ p.β₂) _)
-    ((bnBatchLAHasVJP N c h w p.ε₂ hq.h2 p.γ₂ p.β₂).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N c h w p.ε₂ hq.h2 p.γ₂ p.β₂ _ _).symm
-
-theorem r34IdGN1_hasGradAt (p : R34IdW c) (hq : R34IdPos p) (v : Vec (N * (c * h * w)))
-    (hs : R34IdSmoothAt N h w p v) {Gn : Vec (N * (c * h * w)) → Vec 1}
-    {dy : Vec (N * (c * h * w))} (hGn : HasGradAt Gn (r34IdB N h w p v) dy) :
-    HasGradAt (r34IdGN1 N h w Gn p v)
-      (bnBatchLA N c h w p.ε₁ p.γ₁ p.β₁ (batchMap N (flatConv p.W₁ p.b₁) v))
-      (r34IdCotN1 N h w p v dy) := by
-  have hc := ((r34IdGC2_hasGradAt p hq v hs hGn).comp
-    ((batchMap_differentiable _ (flatConv_differentiable p.W₂ p.b₂)) _)
-    ((batchMapHasVJP _ (flatConvHasVJP p.W₂ p.b₂) (flatConv_differentiable p.W₂ p.b₂)).toHasVJPAt
-      _)).of_eq (GradNodeB.cInB_eq_batchMapBackward (h := h) (w := w) p.W₂ p.b₂ _ _).symm
-  exact HasGradAt.comp (f := relu (N * (c * h * w)))
-    (x := bnBatchLA N c h w p.ε₁ p.γ₁ p.β₁ (batchMap N (flatConv p.W₁ p.b₁) v))
-    hc (relu_differentiableAt_of_smooth _ _ hs.hmid) (reluHasVJPAt _ _ hs.hmid)
-
-theorem r34IdGC1_hasGradAt (p : R34IdW c) (hq : R34IdPos p) (v : Vec (N * (c * h * w)))
-    (hs : R34IdSmoothAt N h w p v) {Gn : Vec (N * (c * h * w)) → Vec 1}
-    {dy : Vec (N * (c * h * w))} (hGn : HasGradAt Gn (r34IdB N h w p v) dy) :
-    HasGradAt (r34IdGC1 N h w Gn p v) (batchMap N (flatConv p.W₁ p.b₁) v)
-      (r34IdCotC1 N h w p v dy) :=
-  ((r34IdGN1_hasGradAt p hq v hs hGn).comp ((bnBatchLA_differentiable N c h w p.ε₁ hq.h1 p.γ₁ p.β₁) _)
-    ((bnBatchLAHasVJP N c h w p.ε₁ hq.h1 p.γ₁ p.β₁).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N c h w p.ε₁ hq.h1 p.γ₁ p.β₁ _ _).symm
+variable {N h w c : Nat}
 
 /-- **Identity block, every parameter node a loss derivative.** With `Gn` the loss read at the
     block's output and `Φ` the loss as a function of the block's weight record (`hΦ`), each of the
@@ -186,10 +108,11 @@ theorem r34_idblock_lossTiedB (xN cotN vN epsStr : String) (p : R34IdW c) (hq : 
     (hΦ : ∀ p', Φ p' = Gn (r34IdB N h w p' v)) :
     r34IdLossTiedB xN cotN vN epsStr p v Φ dy := by
   rw [show Φ = fun p' => Gn (r34IdB N h w p' v) from funext hΦ]
-  have hC1 := r34IdGC1_hasGradAt p hq v hs hGn
-  have hN1 := r34IdGN1_hasGradAt p hq v hs hGn
-  have hC2 := r34IdGC2_hasGradAt p hq v hs hGn
-  have hN2 := r34IdGN2_hasGradAt p v hs hGn
+  have hN2 := hasGradAt_addConst (bnBatchLA N c h w p.ε₂ p.γ₂ p.β₂ (batchMap N (flatConv p.W₂ p.b₂)
+    (cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v))) v (hasGradAt_relu _ hs.hout hGn)
+  have hC2 := hasGradAt_bnBatchLA p.ε₂ hq.h2 p.γ₂ p.β₂ _ hN2
+  have hN1 := hasGradAt_relu _ hs.hmid (hasGradAt_conv p.W₂ p.b₂ _ hC2)
+  have hC1 := hasGradAt_bnBatchLA p.ε₁ hq.h1 p.γ₁ p.β₁ _ hN1
   exact ⟨GradNodeB.convW_hasGradAt xN cotN p.b₁ v p.W₁ hC1,
     GradNodeB.convB_hasGradAt cotN p.W₁ v p.b₁ hC1,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.ε₁ p.γ₁ p.β₁ _ hN1,
@@ -208,124 +131,7 @@ end IdBlock
 -- ════════════════════════════════════════════════════════════════
 
 section DownBlock
-variable (N h w : Nat) {ic oc : Nat}
-
-/-- The loss at the downsample block's pre-relu sum. -/
-noncomputable def r34DownGA (Gn : Vec (N * (oc * h * w)) → Vec 1) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => Gn (relu (N * (oc * h * w)) u)
-
-/-- The projection branch's output, `bnₚ(convₚ v)`. -/
-@[reducible] noncomputable def r34DownProjOut (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) :=
-  projStridedB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp v
-
-/-- The body branch's output, `bn₂(conv₂(relu(bn₁(conv₁ v))))`. -/
-@[reducible] noncomputable def r34DownBodyOut (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) :=
-  projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂
-    (cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v)
-
-/-- The loss at bn₂'s output (projection branch fixed, on the left). -/
-noncomputable def r34DownGN2 (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => r34DownGA N h w Gn (fun i => r34DownProjOut N h w p v i + u i)
-
-noncomputable def r34DownGC2 (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => r34DownGN2 N h w Gn p v (bnBatchLA N oc h w p.ε₂ p.γ₂ p.β₂ z)
-
-noncomputable def r34DownGN1 (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => r34DownGC2 N h w Gn p v (batchMap N (flatConv p.W₂ p.b₂) (relu (N * (oc * h * w)) u))
-
-noncomputable def r34DownGC1 (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => r34DownGN1 N h w Gn p v (bnBatchLA N oc h w p.ε₁ p.γ₁ p.β₁ z)
-
-/-- The loss at bnₚ's output (body branch fixed, on the right). -/
-noncomputable def r34DownGNp (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => r34DownGA N h w Gn (fun i => u i + r34DownBodyOut N h w p v i)
-
-noncomputable def r34DownGCp (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : R34DownW ic oc)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => r34DownGNp N h w Gn p v (bnBatchLA N oc h w p.εp p.γp p.βp z)
-
-variable {N h w}
-
-theorem r34DownGA_hasGradAt (p : R34DownW ic oc) (v : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hs : R34DownSmoothAt N h w p v) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGA N h w Gn) (r34DownPre N h w p v) (r34DownCotA N h w p v dy) :=
-  HasGradAt.comp (f := relu (N * (oc * h * w))) (x := r34DownPre N h w p v)
-    hGn (relu_differentiableAt_of_smooth _ _ hs.hout) (reluHasVJPAt _ _ hs.hout)
-
-theorem r34DownGN2_hasGradAt (p : R34DownW ic oc) (v : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hs : R34DownSmoothAt N h w p v) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGN2 N h w Gn p v) (r34DownBodyOut N h w p v) (r34DownCotA N h w p v dy) :=
-  HasGradAt.comp (f := fun u i => r34DownProjOut N h w p v i + u i) (x := r34DownBodyOut N h w p v)
-    (r34DownGA_hasGradAt p v hs hGn) (differentiableAt_id.const_add _)
-    (constAddHasVJPAt _ (fun u => u) _ differentiableAt_id (identityHasVJPAt _ _))
-
-theorem r34DownGNp_hasGradAt (p : R34DownW ic oc) (v : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hs : R34DownSmoothAt N h w p v) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGNp N h w Gn p v) (r34DownProjOut N h w p v) (r34DownCotA N h w p v dy) :=
-  HasGradAt.comp (f := fun u i => u i + r34DownBodyOut N h w p v i) (x := r34DownProjOut N h w p v)
-    (r34DownGA_hasGradAt p v hs hGn) (differentiableAt_id.add_const _)
-    (addConstHasVJPAt (fun u => u) _ _ differentiableAt_id (identityHasVJPAt _ _))
-
-theorem r34DownGC2_hasGradAt (p : R34DownW ic oc) (hq : R34DownPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : R34DownSmoothAt N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGC2 N h w Gn p v)
-      (batchMap N (flatConv p.W₂ p.b₂) (cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v))
-      (r34DownCotC2 N h w p v dy) :=
-  (HasGradAt.comp (f := bnBatchLA N oc h w p.ε₂ p.γ₂ p.β₂)
-    (x := batchMap N (flatConv p.W₂ p.b₂)
-      (cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v))
-    (r34DownGN2_hasGradAt p v hs hGn) ((bnBatchLA_differentiable N oc h w p.ε₂ hq.h2 p.γ₂ p.β₂) _)
-    ((bnBatchLAHasVJP N oc h w p.ε₂ hq.h2 p.γ₂ p.β₂).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.ε₂ hq.h2 p.γ₂ p.β₂ _ _).symm
-
-theorem r34DownGN1_hasGradAt (p : R34DownW ic oc) (hq : R34DownPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : R34DownSmoothAt N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGN1 N h w Gn p v)
-      (bnBatchLA N oc h w p.ε₁ p.γ₁ p.β₁ (batchMap N (flatConvStride2 p.W₁ p.b₁) v))
-      (r34DownCotN1 N h w p v dy) := by
-  have hc := ((r34DownGC2_hasGradAt p hq v hs hGn).comp
-    ((batchMap_differentiable _ (flatConv_differentiable p.W₂ p.b₂)) _)
-    ((batchMapHasVJP _ (flatConvHasVJP p.W₂ p.b₂) (flatConv_differentiable p.W₂ p.b₂)).toHasVJPAt
-      _)).of_eq (GradNodeB.cInB_eq_batchMapBackward (h := h) (w := w) p.W₂ p.b₂ _ _).symm
-  exact HasGradAt.comp (f := relu (N * (oc * h * w)))
-    (x := bnBatchLA N oc h w p.ε₁ p.γ₁ p.β₁ (batchMap N (flatConvStride2 p.W₁ p.b₁) v))
-    hc (relu_differentiableAt_of_smooth _ _ hs.hmid) (reluHasVJPAt _ _ hs.hmid)
-
-theorem r34DownGC1_hasGradAt (p : R34DownW ic oc) (hq : R34DownPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : R34DownSmoothAt N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGC1 N h w Gn p v) (batchMap N (flatConvStride2 p.W₁ p.b₁) v)
-      (r34DownCotC1 N h w p v dy) :=
-  ((r34DownGN1_hasGradAt p hq v hs hGn).comp ((bnBatchLA_differentiable N oc h w p.ε₁ hq.h1 p.γ₁ p.β₁) _)
-    ((bnBatchLAHasVJP N oc h w p.ε₁ hq.h1 p.γ₁ p.β₁).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.ε₁ hq.h1 p.γ₁ p.β₁ _ _).symm
-
-theorem r34DownGCp_hasGradAt (p : R34DownW ic oc) (hq : R34DownPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : R34DownSmoothAt N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (r34DownB N h w p v) dy) :
-    HasGradAt (r34DownGCp N h w Gn p v) (batchMap N (flatConvStride2 p.Wp p.bp) v)
-      (r34DownCotCp N h w p v dy) :=
-  (HasGradAt.comp (f := bnBatchLA N oc h w p.εp p.γp p.βp)
-    (x := batchMap N (flatConvStride2 p.Wp p.bp) v)
-    (r34DownGNp_hasGradAt p v hs hGn) ((bnBatchLA_differentiable N oc h w p.εp hq.hp p.γp p.βp) _)
-    ((bnBatchLAHasVJP N oc h w p.εp hq.hp p.γp p.βp).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.εp hq.hp p.γp p.βp _ _).symm
+variable {N h w ic oc : Nat}
 
 /-- **Downsample block, every parameter node a loss derivative** — the twelve nodes
     `r34DownTiedB` ties. -/
@@ -380,12 +186,20 @@ theorem r34_downblock_lossTiedB (xN cotN vN epsStr : String) (p : R34DownW ic oc
     (hΦ : ∀ p', Φ p' = Gn (r34DownB N h w p' v)) :
     r34DownLossTiedB xN cotN vN epsStr p v Φ dy := by
   rw [show Φ = fun p' => Gn (r34DownB N h w p' v) from funext hΦ]
-  have hC1 := r34DownGC1_hasGradAt p hq v hs hGn
-  have hN1 := r34DownGN1_hasGradAt p hq v hs hGn
-  have hC2 := r34DownGC2_hasGradAt p hq v hs hGn
-  have hN2 := r34DownGN2_hasGradAt p v hs hGn
-  have hCp := r34DownGCp_hasGradAt p hq v hs hGn
-  have hNp := r34DownGNp_hasGradAt p v hs hGn
+  have hA := hasGradAt_relu (r34DownPre N h w p v) hs.hout hGn
+  -- the body sees the projection branch as a constant on the left, the projection the body's on
+  -- the right (`residualProj proj body = proj + body`)
+  have hN2 := hasGradAt_constAdd (projStridedB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp v)
+    (bnBatchLA N oc h w p.ε₂ p.γ₂ p.β₂ (batchMap N (flatConv p.W₂ p.b₂)
+      (cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v))) hA
+  have hNp := hasGradAt_addConst
+    (bnBatchLA N oc h w p.εp p.γp p.βp (batchMap N (flatConvStride2 p.Wp p.bp) v))
+    (projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂
+      (cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ v)) hA
+  have hC2 := hasGradAt_bnBatchLA p.ε₂ hq.h2 p.γ₂ p.β₂ _ hN2
+  have hN1 := hasGradAt_relu _ hs.hmid (hasGradAt_conv p.W₂ p.b₂ _ hC2)
+  have hC1 := hasGradAt_bnBatchLA p.ε₁ hq.h1 p.γ₁ p.β₁ _ hN1
+  have hCp := hasGradAt_bnBatchLA p.εp hq.hp p.γp p.βp _ hNp
   exact ⟨GradNodeB.convStridedW_hasGradAt xN cotN p.b₁ v p.W₁ hC1,
     GradNodeB.convStridedB_hasGradAt cotN p.W₁ v p.b₁ hC1,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.ε₁ p.γ₁ p.β₁ _ hN1,

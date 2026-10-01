@@ -19,13 +19,13 @@ gradient at the global batch.
 
 **How.** `ResNet50ParamGrad`'s shape:
 
-* **Per stage** (at variable widths): the loss read at each internal activation of the stem, the
-  `t = 1` block, the stride-1 body, the stride-2 body and the head (`mnv2StemG*`, `mnv2NoExpG*`,
-  `mnv2BodyG*`, `mnv2SBodyG*`, `mnv2HeadG*`), its gradient the chain's own cotangent through relu6
-  (`relu6HasVJPAt`, whose backward IS `relu6MaskB`), batch BN, and the conv, depthwise and
-  XLA-`SAME` strided depthwise input-VJPs. The stride-1 body bundle covers both the skip blocks and
-  the two widenings: a skip block's body sees the loss `u ↦ Gn (u + v)`, whose gradient at the body
-  output is still `dyOut` (`mnv2_resid_lossTiedB`).
+* **Per stage** (at variable widths): the loss read at the output of the stem, the `t = 1` block,
+  the stride-1 body, the stride-2 body and the head, pulled back one stage at a time by
+  `ParamGradNodes`' pull-backs (relu6's `hasGradAt_relu6`, batch BN, the conv and depthwise
+  input-VJPs) and this file's XLA-`SAME` strided depthwise `hasGradAt_depthwiseStridedXla`, so each
+  internal activation's gradient is the chain's own cotangent. The stride-1 body bundle covers
+  both the skip blocks and the two widenings: a skip block's body sees the loss `u ↦ Gn (u + v)`,
+  whose gradient at the body output is still `dyOut` (`mnv2_resid_lossTiedB`).
 * **Per net**: the loss read after each block (`mnv2Suf*`), pulled back through the seventeen
   certified block VJPs and the head's, and each `Φ` identified with the whole net at updated
   weights by a standalone `mnv2_factor_*` theorem.
@@ -40,6 +40,7 @@ open Proofs Proofs.StableHLO
 namespace Proofs.MobileNetV2TieB
 
 open Proofs.BackLinks (bnInB bnInB_eq_bnBackB relu6MaskB cInB dInB gapInB reassocB rowB unrowB)
+open Proofs.GradNodeB (hasGradAt_bnBatchLA hasGradAt_relu6 hasGradAt_conv hasGradAt_depthwise)
 open scoped BigOperators
 
 /-- `dStridedXlaInB` — the emitted XLA-`SAME` strided depthwise input-cotangent — is the batched
@@ -51,43 +52,24 @@ theorem dStridedXlaInB_eq_batchMapBackward {N c h w kH kW : Nat} (W : DepthwiseK
           (depthwiseStride2FlatXla_differentiable W b)).backward x dy :=
   depthwiseStridedXlaBackBatched_faithful "" W b x (.operand "" dy)
 
+/-- Back through a batched XLA-`SAME` strided depthwise: `dStridedXlaInB` (the stride-2 body's
+    stage, beside `ParamGradNodes`' symmetric `hasGradAt_depthwiseStrided`). -/
+theorem hasGradAt_depthwiseStridedXla {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) {G : Vec (N * (c * h * w)) → Vec 1}
+    {dy : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseStride2FlatXla W b) x) dy) :
+    HasGradAt (fun y => G (batchMap N (depthwiseStride2FlatXla W b) y)) x
+      (dStridedXlaInB N W b dy) :=
+  (hG.comp ((batchMap_differentiable _ (depthwiseStride2FlatXla_differentiable W b)) _)
+    ((batchMapHasVJP _ (depthwiseStride2FlatXlaHasVJP W b)
+      (depthwiseStride2FlatXla_differentiable W b)).toHasVJPAt _)).of_eq
+    (dStridedXlaInB_eq_batchMapBackward (h := h) (w := w) W b _ _).symm
+
 -- ════════════════════════════════════════════════════════════════
 -- § The stem — XLA-`SAME` strided conv, batch BN, relu6
 -- ════════════════════════════════════════════════════════════════
 
 section Stem
-variable (N h w : Nat) {ic oc : Nat}
-
-/-- The loss at the stem BN's output. -/
-noncomputable def mnv2StemGN (Gn : Vec (N * (oc * h * w)) → Vec 1) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => Gn (relu6 (N * (oc * h * w)) u)
-
-/-- The loss at the stem conv's output. -/
-noncomputable def mnv2StemGC (Gn : Vec (N * (oc * h * w)) → Vec 1) (εs : ℝ) (γs βs : Vec oc) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => mnv2StemGN N h w Gn (bnBatchLA N oc h w εs γs βs z)
-
-variable {N h w}
-
-theorem mnv2StemGC_hasGradAt (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs)
-    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hs : MNV2StemSmoothAtB N h w Ws bs εs γs βs x)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2StemB N h w Ws bs εs γs βs x) dy) :
-    HasGradAt (mnv2StemGN N h w Gn)
-        (bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2Xla Ws bs) x))
-        (mnv2StemCotN N h w Ws bs εs γs βs x dy)
-      ∧ HasGradAt (mnv2StemGC N h w Gn εs γs βs) (batchMap N (flatConvStride2Xla Ws bs) x)
-        (mnv2StemCotC N h w Ws bs εs γs βs x dy) := by
-  have hN : HasGradAt (mnv2StemGN N h w Gn)
-      (bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2Xla Ws bs) x))
-      (mnv2StemCotN N h w Ws bs εs γs βs x dy) :=
-    HasGradAt.comp (f := relu6 (N * (oc * h * w)))
-      (x := bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2Xla Ws bs) x))
-      hGn (relu6_differentiableAt_of_smooth _ _ hs) (relu6HasVJPAt _ _ hs)
-  exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc h w εs hεs γs βs) _)
-    ((bnBatchLAHasVJP N oc h w εs hεs γs βs).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w εs hεs γs βs _ _).symm⟩
+variable {N h w ic oc : Nat}
 
 /-- **Stem, every parameter node a loss derivative** — the four nodes `mnv2StemTiedB` ties, `Φ` the
     loss as a function of the stem's `(W, b, γ, β)`. -/
@@ -119,7 +101,8 @@ theorem mnv2_stem_lossTiedB (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic 3 3
     mnv2StemLossTiedB xN cotN vN epsStr Ws bs εs γs βs x Φ dy := by
   rw [show Φ = fun W b γ β => Gn (mnv2StemB N h w W b εs γ β x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
-  obtain ⟨hN, hC⟩ := mnv2StemGC_hasGradAt Ws bs εs hεs γs βs x hs hGn
+  have hN := hasGradAt_relu6 _ hs hGn
+  have hC := hasGradAt_bnBatchLA εs hεs γs βs _ hN
   exact ⟨GradNodeB.convStridedXlaW_hasGradAt xN cotN bs x Ws hC,
     GradNodeB.convStridedXlaB_hasGradAt cotN Ws x bs hC,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN εs γs βs _ hN,
@@ -132,60 +115,7 @@ end Stem
 -- ════════════════════════════════════════════════════════════════
 
 section NoExp
-variable (N h w : Nat) {ic oc : Nat}
-
-/-- The loss at the project conv's output (`Gn` is the loss at the block output, bnₚ's). -/
-noncomputable def mnv2NoExpGPc (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVWNoExp ic oc) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => Gn (bnBatchLA N oc h w p.pε p.pγ p.pβ z)
-
-/-- The loss at the depthwise BN's output. -/
-noncomputable def mnv2NoExpGDn (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVWNoExp ic oc) :
-    Vec (N * (ic * h * w)) → Vec 1 :=
-  fun u => mnv2NoExpGPc N h w Gn p (batchMap N (flatConv p.pW p.pb) (relu6 (N * (ic * h * w)) u))
-
-/-- The loss at the depthwise conv's output. -/
-noncomputable def mnv2NoExpGDc (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVWNoExp ic oc) :
-    Vec (N * (ic * h * w)) → Vec 1 :=
-  fun z => mnv2NoExpGDn N h w Gn p (bnBatchLA N ic h w p.dε p.dγ p.dβ z)
-
-variable {N h w}
-
-theorem mnv2NoExpGPc_hasGradAt (p : IVWNoExp ic oc) (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w)))
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2NoExpB N h w p v) dy) :
-    HasGradAt (mnv2NoExpGPc N h w Gn p)
-      (batchMap N (flatConv p.pW p.pb) (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ v))
-      (mnv2NoExpCotPc N h w p v dy) :=
-  (HasGradAt.comp (f := bnBatchLA N oc h w p.pε p.pγ p.pβ)
-    (x := batchMap N (flatConv p.pW p.pb) (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ v))
-    hGn ((bnBatchLA_differentiable N oc h w p.pε hq.hp p.pγ p.pβ) _)
-    ((bnBatchLAHasVJP N oc h w p.pε hq.hp p.pγ p.pβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.pε hq.hp p.pγ p.pβ _ _).symm
-
-theorem mnv2NoExpGDn_hasGradAt (p : IVWNoExp ic oc) (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVNoExpSmoothAtB N h w p v) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (mnv2NoExpB N h w p v) dy) :
-    HasGradAt (mnv2NoExpGDn N h w Gn p)
-      (bnBatchLA N ic h w p.dε p.dγ p.dβ (batchMap N (depthwiseFlat p.dW p.db) v))
-      (mnv2NoExpCotDn N h w p v dy) := by
-  have hc := ((mnv2NoExpGPc_hasGradAt p hq v hGn).comp
-    ((batchMap_differentiable _ (flatConv_differentiable p.pW p.pb)) _)
-    ((batchMapHasVJP _ (flatConvHasVJP p.pW p.pb) (flatConv_differentiable p.pW p.pb)).toHasVJPAt
-      _)).of_eq (GradNodeB.cInB_eq_batchMapBackward (h := h) (w := w) p.pW p.pb _ _).symm
-  exact HasGradAt.comp (f := relu6 (N * (ic * h * w)))
-    (x := bnBatchLA N ic h w p.dε p.dγ p.dβ (batchMap N (depthwiseFlat p.dW p.db) v))
-    hc (relu6_differentiableAt_of_smooth _ _ hs.hd) (relu6HasVJPAt _ _ hs.hd)
-
-theorem mnv2NoExpGDc_hasGradAt (p : IVWNoExp ic oc) (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVNoExpSmoothAtB N h w p v) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (mnv2NoExpB N h w p v) dy) :
-    HasGradAt (mnv2NoExpGDc N h w Gn p) (batchMap N (depthwiseFlat p.dW p.db) v)
-      (mnv2NoExpCotDc N h w p v dy) :=
-  ((mnv2NoExpGDn_hasGradAt p hq v hs hGn).comp
-    ((bnBatchLA_differentiable N ic h w p.dε hq.hd p.dγ p.dβ) _)
-    ((bnBatchLAHasVJP N ic h w p.dε hq.hd p.dγ p.dβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N ic h w p.dε hq.hd p.dγ p.dβ _ _).symm
+variable {N h w ic oc : Nat}
 
 /-- **`t = 1` block, every parameter node a loss derivative** — the eight nodes `mnv2NoExpTiedB`
     ties. The project BN's γ/β read `dyOut` itself: nothing follows the linear bottleneck. -/
@@ -226,11 +156,11 @@ theorem mnv2_noexp_lossTiedB (xN cotN vN epsStr : String) (p : IVWNoExp ic oc)
     (hΦ : ∀ p', Φ p' = Gn (mnv2NoExpB N h w p' v)) :
     mnv2NoExpLossTiedB xN cotN vN epsStr p v Φ dy := by
   rw [show Φ = fun p' => Gn (mnv2NoExpB N h w p' v) from funext hΦ]
-  have hDc := mnv2NoExpGDc_hasGradAt p hq v hs hGn
-  have hDn := mnv2NoExpGDn_hasGradAt p hq v hs hGn
-  have hPc := mnv2NoExpGPc_hasGradAt p hq v hGn
   have hPn : HasGradAt Gn (bnBatchLA N oc h w p.pε p.pγ p.pβ (batchMap N (flatConv p.pW p.pb)
       (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ v))) dy := hGn
+  have hPc := hasGradAt_bnBatchLA p.pε hq.hp p.pγ p.pβ _ hPn
+  have hDn := hasGradAt_relu6 _ hs.hd (hasGradAt_conv p.pW p.pb _ hPc)
+  have hDc := hasGradAt_bnBatchLA p.dε hq.hd p.dγ p.dβ _ hDn
   exact ⟨GradNodeB.depthwiseW_hasGradAt xN cotN p.db v p.dW hDc,
     GradNodeB.depthwiseB_hasGradAt cotN p.dW v p.db hDc,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.dε p.dγ p.dβ _ hDn,
@@ -249,92 +179,7 @@ end NoExp
 -- ════════════════════════════════════════════════════════════════
 
 section Body
-variable (N h w : Nat) {ic mid oc : Nat}
-
-noncomputable def mnv2BodyGPc (Gb : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => Gb (bnBatchLA N oc h w p.pε p.pγ p.pβ z)
-
-noncomputable def mnv2BodyGDn (Gb : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun u => mnv2BodyGPc N h w Gb p (batchMap N (flatConv p.pW p.pb) (relu6 (N * (mid * h * w)) u))
-
-noncomputable def mnv2BodyGDc (Gb : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun z => mnv2BodyGDn N h w Gb p (bnBatchLA N mid h w p.dε p.dγ p.dβ z)
-
-noncomputable def mnv2BodyGEn (Gb : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun u => mnv2BodyGDc N h w Gb p (batchMap N (depthwiseFlat p.dW p.db) (relu6 (N * (mid * h * w)) u))
-
-noncomputable def mnv2BodyGEc (Gb : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun z => mnv2BodyGEn N h w Gb p (bnBatchLA N mid h w p.eε p.eγ p.eβ z)
-
-variable {N h w}
-
-theorem mnv2BodyGPc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p) (v : Vec (N * (ic * h * w)))
-    {Gb : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGb : HasGradAt Gb (mnv2ExpOnlyB N h w p v) dy) :
-    HasGradAt (mnv2BodyGPc N h w Gb p)
-      (batchMap N (flatConv p.pW p.pb)
-        (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XE N h w p v)))
-      (mnv2CotPc N h w p v dy) :=
-  (HasGradAt.comp (f := bnBatchLA N oc h w p.pε p.pγ p.pβ)
-    (x := batchMap N (flatConv p.pW p.pb)
-      (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XE N h w p v)))
-    hGb ((bnBatchLA_differentiable N oc h w p.pε hq.hp p.pγ p.pβ) _)
-    ((bnBatchLAHasVJP N oc h w p.pε hq.hp p.pγ p.pβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.pε hq.hp p.pγ p.pβ _ _).symm
-
-theorem mnv2BodyGDn_hasGradAt (p : IVW ic mid oc) (hq : IVPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVSmoothAtB N h w p v) {Gb : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGb : HasGradAt Gb (mnv2ExpOnlyB N h w p v) dy) :
-    HasGradAt (mnv2BodyGDn N h w Gb p)
-      (bnBatchLA N mid h w p.dε p.dγ p.dβ (batchMap N (depthwiseFlat p.dW p.db) (mnv2XE N h w p v)))
-      (mnv2CotDn N h w p v dy) := by
-  have hc := ((mnv2BodyGPc_hasGradAt p hq v hGb).comp
-    ((batchMap_differentiable _ (flatConv_differentiable p.pW p.pb)) _)
-    ((batchMapHasVJP _ (flatConvHasVJP p.pW p.pb) (flatConv_differentiable p.pW p.pb)).toHasVJPAt
-      _)).of_eq (GradNodeB.cInB_eq_batchMapBackward (h := h) (w := w) p.pW p.pb _ _).symm
-  exact HasGradAt.comp (f := relu6 (N * (mid * h * w)))
-    (x := bnBatchLA N mid h w p.dε p.dγ p.dβ (batchMap N (depthwiseFlat p.dW p.db) (mnv2XE N h w p v)))
-    hc (relu6_differentiableAt_of_smooth _ _ hs.hd) (relu6HasVJPAt _ _ hs.hd)
-
-theorem mnv2BodyGDc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVSmoothAtB N h w p v) {Gb : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGb : HasGradAt Gb (mnv2ExpOnlyB N h w p v) dy) :
-    HasGradAt (mnv2BodyGDc N h w Gb p) (batchMap N (depthwiseFlat p.dW p.db) (mnv2XE N h w p v))
-      (mnv2CotDc N h w p v dy) :=
-  ((mnv2BodyGDn_hasGradAt p hq v hs hGb).comp
-    ((bnBatchLA_differentiable N mid h w p.dε hq.hd p.dγ p.dβ) _)
-    ((bnBatchLAHasVJP N mid h w p.dε hq.hd p.dγ p.dβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N mid h w p.dε hq.hd p.dγ p.dβ _ _).symm
-
-theorem mnv2BodyGEn_hasGradAt (p : IVW ic mid oc) (hq : IVPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVSmoothAtB N h w p v) {Gb : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGb : HasGradAt Gb (mnv2ExpOnlyB N h w p v) dy) :
-    HasGradAt (mnv2BodyGEn N h w Gb p)
-      (bnBatchLA N mid h w p.eε p.eγ p.eβ (batchMap N (flatConv p.eW p.eb) v))
-      (mnv2CotEn N h w p v dy) := by
-  have hc := ((mnv2BodyGDc_hasGradAt p hq v hs hGb).comp
-    ((batchMap_differentiable _ (depthwiseFlat_differentiable p.dW p.db)) _)
-    ((batchMapHasVJP _ (depthwiseFlatHasVJP p.dW p.db)
-      (depthwiseFlat_differentiable p.dW p.db)).toHasVJPAt _)).of_eq
-    (GradNodeB.dInB_eq_batchMapBackward (h := h) (w := w) p.dW p.db _ _).symm
-  exact HasGradAt.comp (f := relu6 (N * (mid * h * w)))
-    (x := bnBatchLA N mid h w p.eε p.eγ p.eβ (batchMap N (flatConv p.eW p.eb) v))
-    hc (relu6_differentiableAt_of_smooth _ _ hs.he) (relu6HasVJPAt _ _ hs.he)
-
-theorem mnv2BodyGEc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p) (v : Vec (N * (ic * h * w)))
-    (hs : IVSmoothAtB N h w p v) {Gb : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGb : HasGradAt Gb (mnv2ExpOnlyB N h w p v) dy) :
-    HasGradAt (mnv2BodyGEc N h w Gb p) (batchMap N (flatConv p.eW p.eb) v)
-      (mnv2CotEc N h w p v dy) :=
-  ((mnv2BodyGEn_hasGradAt p hq v hs hGb).comp
-    ((bnBatchLA_differentiable N mid h w p.eε hq.he p.eγ p.eβ) _)
-    ((bnBatchLAHasVJP N mid h w p.eε hq.he p.eγ p.eβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N mid h w p.eε hq.he p.eγ p.eβ _ _).symm
+variable {N h w ic mid oc : Nat}
 
 /-- **Stride-1 body, every parameter node a loss derivative** — the twelve nodes
     `mnv2Stride1TiedB` ties, `Φ` the loss at the body output as a function of the weight record. -/
@@ -389,13 +234,13 @@ theorem mnv2_stride1_lossTiedB (xN cotN vN epsStr : String) (p : IVW ic mid oc) 
     (hΦ : ∀ p', Φ p' = Gb (mnv2ExpOnlyB N h w p' v)) :
     mnv2Stride1LossTiedB xN cotN vN epsStr p v Φ dy := by
   rw [show Φ = fun p' => Gb (mnv2ExpOnlyB N h w p' v) from funext hΦ]
-  have hEc := mnv2BodyGEc_hasGradAt p hq v hs hGb
-  have hEn := mnv2BodyGEn_hasGradAt p hq v hs hGb
-  have hDc := mnv2BodyGDc_hasGradAt p hq v hs hGb
-  have hDn := mnv2BodyGDn_hasGradAt p hq v hs hGb
-  have hPc := mnv2BodyGPc_hasGradAt p hq v hGb
   have hPn : HasGradAt Gb (bnBatchLA N oc h w p.pε p.pγ p.pβ (batchMap N (flatConv p.pW p.pb)
       (dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XE N h w p v)))) dy := hGb
+  have hPc := hasGradAt_bnBatchLA p.pε hq.hp p.pγ p.pβ _ hPn
+  have hDn := hasGradAt_relu6 _ hs.hd (hasGradAt_conv p.pW p.pb _ hPc)
+  have hDc := hasGradAt_bnBatchLA p.dε hq.hd p.dγ p.dβ _ hDn
+  have hEn := hasGradAt_relu6 _ hs.he (hasGradAt_depthwise p.dW p.db _ hDc)
+  have hEc := hasGradAt_bnBatchLA p.eε hq.he p.eγ p.eβ _ hEn
   exact ⟨GradNodeB.convW_hasGradAt xN cotN p.eb v p.eW hEc,
     GradNodeB.convB_hasGradAt cotN p.eW v p.eb hEc,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.eε p.eγ p.eβ _ hEn,
@@ -418,10 +263,7 @@ theorem mnv2_resid_lossTiedB {c : Nat} (xN cotN vN epsStr : String) (p : IVW c m
     (hΦ : ∀ p', Φ p' = Gn (mnv2ResidB N h w p' v)) :
     mnv2Stride1LossTiedB xN cotN vN epsStr p v Φ dy :=
   mnv2_stride1_lossTiedB xN cotN vN epsStr p hq v hs
-    (HasGradAt.comp (f := fun u i => u i + v i) (x := mnv2ExpOnlyB N h w p v) hGn
-      (differentiableAt_id.add_const v)
-      (addConstHasVJPAt (fun u => u) v _ differentiableAt_id (identityHasVJPAt _ _)))
-    (fun p' => hΦ p')
+    (GradNodeB.hasGradAt_addConst (mnv2ExpOnlyB N h w p v) v hGn) (fun p' => hΦ p')
 
 end Body
 
@@ -430,101 +272,7 @@ end Body
 -- ════════════════════════════════════════════════════════════════
 
 section SBody
-variable (N h w : Nat) {ic mid oc : Nat}
-
-noncomputable def mnv2SBodyGPc (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => Gn (bnBatchLA N oc h w p.pε p.pγ p.pβ z)
-
-noncomputable def mnv2SBodyGDn (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun u => mnv2SBodyGPc N h w Gn p (batchMap N (flatConv p.pW p.pb) (relu6 (N * (mid * h * w)) u))
-
-noncomputable def mnv2SBodyGDc (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * h * w)) → Vec 1 :=
-  fun z => mnv2SBodyGDn N h w Gn p (bnBatchLA N mid h w p.dε p.dγ p.dβ z)
-
-/-- The loss at the expand BN's output, at the input grid `2h × 2w`. -/
-noncomputable def mnv2SBodyGEn (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * (2 * h) * (2 * w))) → Vec 1 :=
-  fun u => mnv2SBodyGDc N h w Gn p
-    (batchMap N (depthwiseStride2FlatXla p.dW p.db) (relu6 (N * (mid * (2 * h) * (2 * w))) u))
-
-noncomputable def mnv2SBodyGEc (Gn : Vec (N * (oc * h * w)) → Vec 1) (p : IVW ic mid oc) :
-    Vec (N * (mid * (2 * h) * (2 * w))) → Vec 1 :=
-  fun z => mnv2SBodyGEn N h w Gn p (bnBatchLA N mid (2 * h) (2 * w) p.eε p.eγ p.eβ z)
-
-variable {N h w}
-
-theorem mnv2SBodyGPc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) {Gn : Vec (N * (oc * h * w)) → Vec 1}
-    {dy : Vec (N * (oc * h * w))} (hGn : HasGradAt Gn (mnv2StridedB N h w p v) dy) :
-    HasGradAt (mnv2SBodyGPc N h w Gn p)
-      (batchMap N (flatConv p.pW p.pb)
-        (dwbrBstrided N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XES N h w p v)))
-      (mnv2SCotPc N h w p v dy) :=
-  (HasGradAt.comp (f := bnBatchLA N oc h w p.pε p.pγ p.pβ)
-    (x := batchMap N (flatConv p.pW p.pb)
-      (dwbrBstrided N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XES N h w p v)))
-    hGn ((bnBatchLA_differentiable N oc h w p.pε hq.hp p.pγ p.pβ) _)
-    ((bnBatchLAHasVJP N oc h w p.pε hq.hp p.pγ p.pβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w p.pε hq.hp p.pγ p.pβ _ _).symm
-
-theorem mnv2SBodyGDn_hasGradAt (p : IVW ic mid oc) (hq : IVPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : IVStridedSmoothAtB N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2StridedB N h w p v) dy) :
-    HasGradAt (mnv2SBodyGDn N h w Gn p)
-      (bnBatchLA N mid h w p.dε p.dγ p.dβ
-        (batchMap N (depthwiseStride2FlatXla p.dW p.db) (mnv2XES N h w p v)))
-      (mnv2SCotDn N h w p v dy) := by
-  have hc := ((mnv2SBodyGPc_hasGradAt p hq v hGn).comp
-    ((batchMap_differentiable _ (flatConv_differentiable p.pW p.pb)) _)
-    ((batchMapHasVJP _ (flatConvHasVJP p.pW p.pb) (flatConv_differentiable p.pW p.pb)).toHasVJPAt
-      _)).of_eq (GradNodeB.cInB_eq_batchMapBackward (h := h) (w := w) p.pW p.pb _ _).symm
-  exact HasGradAt.comp (f := relu6 (N * (mid * h * w)))
-    (x := bnBatchLA N mid h w p.dε p.dγ p.dβ
-      (batchMap N (depthwiseStride2FlatXla p.dW p.db) (mnv2XES N h w p v)))
-    hc (relu6_differentiableAt_of_smooth _ _ hs.hd) (relu6HasVJPAt _ _ hs.hd)
-
-theorem mnv2SBodyGDc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : IVStridedSmoothAtB N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2StridedB N h w p v) dy) :
-    HasGradAt (mnv2SBodyGDc N h w Gn p)
-      (batchMap N (depthwiseStride2FlatXla p.dW p.db) (mnv2XES N h w p v))
-      (mnv2SCotDc N h w p v dy) :=
-  ((mnv2SBodyGDn_hasGradAt p hq v hs hGn).comp
-    ((bnBatchLA_differentiable N mid h w p.dε hq.hd p.dγ p.dβ) _)
-    ((bnBatchLAHasVJP N mid h w p.dε hq.hd p.dγ p.dβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N mid h w p.dε hq.hd p.dγ p.dβ _ _).symm
-
-theorem mnv2SBodyGEn_hasGradAt (p : IVW ic mid oc) (hq : IVPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : IVStridedSmoothAtB N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2StridedB N h w p v) dy) :
-    HasGradAt (mnv2SBodyGEn N h w Gn p)
-      (bnBatchLA N mid (2 * h) (2 * w) p.eε p.eγ p.eβ (batchMap N (flatConv p.eW p.eb) v))
-      (mnv2SCotEn N h w p v dy) := by
-  have hc := ((mnv2SBodyGDc_hasGradAt p hq v hs hGn).comp
-    ((batchMap_differentiable _ (depthwiseStride2FlatXla_differentiable p.dW p.db)) _)
-    ((batchMapHasVJP _ (depthwiseStride2FlatXlaHasVJP p.dW p.db)
-      (depthwiseStride2FlatXla_differentiable p.dW p.db)).toHasVJPAt _)).of_eq
-    (dStridedXlaInB_eq_batchMapBackward (h := h) (w := w) p.dW p.db _ _).symm
-  exact HasGradAt.comp (f := relu6 (N * (mid * (2 * h) * (2 * w))))
-    (x := bnBatchLA N mid (2 * h) (2 * w) p.eε p.eγ p.eβ (batchMap N (flatConv p.eW p.eb) v))
-    hc (relu6_differentiableAt_of_smooth _ _ hs.he) (relu6HasVJPAt _ _ hs.he)
-
-theorem mnv2SBodyGEc_hasGradAt (p : IVW ic mid oc) (hq : IVPos p)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (hs : IVStridedSmoothAtB N h w p v)
-    {Gn : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
-    (hGn : HasGradAt Gn (mnv2StridedB N h w p v) dy) :
-    HasGradAt (mnv2SBodyGEc N h w Gn p) (batchMap N (flatConv p.eW p.eb) v)
-      (mnv2SCotEc N h w p v dy) :=
-  ((mnv2SBodyGEn_hasGradAt p hq v hs hGn).comp
-    ((bnBatchLA_differentiable N mid (2 * h) (2 * w) p.eε hq.he p.eγ p.eβ) _)
-    ((bnBatchLAHasVJP N mid (2 * h) (2 * w) p.eε hq.he p.eγ p.eβ).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N mid (2 * h) (2 * w) p.eε hq.he p.eγ p.eβ _ _).symm
+variable {N h w ic mid oc : Nat}
 
 /-- **Stride-2 block, every parameter node a loss derivative** — the twelve nodes
     `mnv2Stride2TiedB` ties; the depthwise nodes are the XLA-`SAME` strided ones. -/
@@ -578,13 +326,13 @@ theorem mnv2_stride2_lossTiedB (xN cotN vN epsStr : String) (p : IVW ic mid oc) 
     (hΦ : ∀ p', Φ p' = Gn (mnv2StridedB N h w p' v)) :
     mnv2Stride2LossTiedB xN cotN vN epsStr p v Φ dy := by
   rw [show Φ = fun p' => Gn (mnv2StridedB N h w p' v) from funext hΦ]
-  have hEc := mnv2SBodyGEc_hasGradAt p hq v hs hGn
-  have hEn := mnv2SBodyGEn_hasGradAt p hq v hs hGn
-  have hDc := mnv2SBodyGDc_hasGradAt p hq v hs hGn
-  have hDn := mnv2SBodyGDn_hasGradAt p hq v hs hGn
-  have hPc := mnv2SBodyGPc_hasGradAt p hq v hGn
   have hPn : HasGradAt Gn (bnBatchLA N oc h w p.pε p.pγ p.pβ (batchMap N (flatConv p.pW p.pb)
       (dwbrBstrided N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ (mnv2XES N h w p v)))) dy := hGn
+  have hPc := hasGradAt_bnBatchLA p.pε hq.hp p.pγ p.pβ _ hPn
+  have hDn := hasGradAt_relu6 _ hs.hd (hasGradAt_conv p.pW p.pb _ hPc)
+  have hDc := hasGradAt_bnBatchLA p.dε hq.hd p.dγ p.dβ _ hDn
+  have hEn := hasGradAt_relu6 _ hs.he (hasGradAt_depthwiseStridedXla p.dW p.db _ hDc)
+  have hEc := hasGradAt_bnBatchLA p.eε hq.he p.eγ p.eβ _ hEn
   exact ⟨GradNodeB.convW_hasGradAt (h := 2 * h) (w := 2 * w) xN cotN p.eb v p.eW hEc,
     GradNodeB.convB_hasGradAt (h := 2 * h) (w := 2 * w) cotN p.eW v p.eb hEc,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.eε p.eγ p.eβ _ hEn,
@@ -605,62 +353,7 @@ end SBody
 -- ════════════════════════════════════════════════════════════════
 
 section Head
-variable (N h w : Nat) {ic oc nCls : Nat}
-
-/-- The loss at the GAP output (the classifier's input). -/
-noncomputable def mnv2HeadGA (L : Vec (N * nCls) → Vec 1) (Wd : Mat oc nCls) (bd : Vec nCls) :
-    Vec (N * oc) → Vec 1 :=
-  fun a => L (batchMap N (dense Wd bd) a)
-
-/-- The loss at the head relu6's output. -/
-noncomputable def mnv2HeadGHr (L : Vec (N * nCls) → Vec 1) (Wd : Mat oc nCls) (bd : Vec nCls) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => mnv2HeadGA N L Wd bd (batchMap N (globalAvgPoolFlat oc h w) u)
-
-/-- The loss at the head BN's output. -/
-noncomputable def mnv2HeadGHn (L : Vec (N * nCls) → Vec 1) (Wd : Mat oc nCls) (bd : Vec nCls) :
-    Vec (N * (oc * h * w)) → Vec 1 :=
-  fun u => mnv2HeadGHr N h w L Wd bd (relu6 (N * (oc * h * w)) u)
-
-/-- The loss at the head conv's output. -/
-noncomputable def mnv2HeadGHc (L : Vec (N * nCls) → Vec 1) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) : Vec (N * (oc * h * w)) → Vec 1 :=
-  fun z => mnv2HeadGHn N h w L Wd bd (bnBatchLA N oc h w εh γh βh z)
-
-variable {N h w}
-
-theorem mnv2HeadGHc_hasGradAt (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (ic * h * w)))
-    (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) {L : Vec (N * nCls) → Vec 1}
-    {g : Vec (N * nCls)} (hL : HasGradAt L (mnv2HeadB N h w Wh bh εh γh βh Wd bd v) g) :
-    HasGradAt (mnv2HeadGHn N h w L Wd bd)
-        (bnBatchLA N oc h w εh γh βh (batchMap N (flatConv Wh bh) v))
-        (mnv2HeadCotHn N h w Wh bh εh γh βh Wd v g)
-      ∧ HasGradAt (mnv2HeadGHc N h w L εh γh βh Wd bd) (batchMap N (flatConv Wh bh) v)
-        (mnv2HeadCotHc N h w Wh bh εh γh βh Wd v g) := by
-  have hA : HasGradAt (mnv2HeadGA N L Wd bd)
-      (batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
-      (mnv2HeadCotGapIn N Wd g) :=
-    HasGradAt.comp (f := batchMap N (dense Wd bd))
-      (x := batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
-      hL ((batchMap_differentiable _ (dense_differentiable Wd bd)) _)
-      ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
-  have hR : HasGradAt (mnv2HeadGHr N h w L Wd bd) (cbrB N (h := h) (w := w) Wh bh εh γh βh v)
-      (mnv2HeadCotHr N h w Wd g) :=
-    HasGradAt.comp (f := batchMap N (globalAvgPoolFlat oc h w))
-      (x := cbrB N (h := h) (w := w) Wh bh εh γh βh v) hA
-      ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _)
-      ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
-        (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
-  have hN : HasGradAt (mnv2HeadGHn N h w L Wd bd)
-      (bnBatchLA N oc h w εh γh βh (batchMap N (flatConv Wh bh) v))
-      (mnv2HeadCotHn N h w Wh bh εh γh βh Wd v g) :=
-    HasGradAt.comp (f := relu6 (N * (oc * h * w)))
-      (x := bnBatchLA N oc h w εh γh βh (batchMap N (flatConv Wh bh) v))
-      hR (relu6_differentiableAt_of_smooth _ _ hs) (relu6HasVJPAt _ _ hs)
-  exact ⟨hN, (hN.comp ((bnBatchLA_differentiable N oc h w εh hεh γh βh) _)
-    ((bnBatchLAHasVJP N oc h w εh hεh γh βh).toHasVJPAt _)).of_eq
-    (bnInB_eq_bnBackB N oc h w εh hεh γh βh _ _).symm⟩
+variable {N h w ic oc nCls : Nat}
 
 /-- **Head, every parameter node a loss derivative** — the six nodes `mnv2HeadTiedB` ties, `Φ`
     the loss as a function of `(hW, hb, hγ, hβ, Wd, bd)`. -/
@@ -698,7 +391,18 @@ theorem mnv2_head_lossTiedB (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1
   rw [show Φ = fun W b γ β Wd' bd' => L (mnv2HeadB N h w W b εh γ β Wd' bd' v) from
     funext fun W => funext fun b => funext fun γ => funext fun β => funext fun Wd' =>
       funext fun bd' => hΦ W b γ β Wd' bd']
-  obtain ⟨hN, hC⟩ := mnv2HeadGHc_hasGradAt Wh bh εh hεh γh βh Wd bd v hs hL
+  -- back through the classifier and the GAP, then the head's relu6 and BN
+  have hA := HasGradAt.comp (f := batchMap N (dense Wd bd))
+    (x := batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
+    hL ((batchMap_differentiable _ (dense_differentiable Wd bd)) _)
+    ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
+  have hR := HasGradAt.comp (f := batchMap N (globalAvgPoolFlat oc h w))
+    (x := cbrB N (h := h) (w := w) Wh bh εh γh βh v) hA
+    ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _)
+    ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
+      (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
+  have hN := hasGradAt_relu6 _ hs hR
+  have hC := hasGradAt_bnBatchLA εh hεh γh βh _ hN
   exact ⟨GradNodeB.convW_hasGradAt xN cotN bh v Wh hC,
     GradNodeB.convB_hasGradAt cotN Wh v bh hC,
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN εh γh βh _ hN,

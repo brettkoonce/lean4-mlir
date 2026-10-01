@@ -48,14 +48,6 @@ open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChA
 -- § Parameter differentiability of the ConvNeXt-specific ops
 -- ════════════════════════════════════════════════════════════════
 
-theorem rowLNVecFlat_gamma_differentiable (s c : Nat) (ε : ℝ) (β : Vec c) (x : Vec (s * c)) :
-    Differentiable ℝ (fun γ : Vec c => rowLNVecFlat s c ε γ β x) := by
-  unfold rowLNVecFlat Mat.flatten layerNormVec; fun_prop
-
-theorem rowLNVecFlat_beta_differentiable (s c : Nat) (ε : ℝ) (γ : Vec c) (x : Vec (s * c)) :
-    Differentiable ℝ (fun β : Vec c => rowLNVecFlat s c ε γ β x) := by
-  unfold rowLNVecFlat Mat.flatten layerNormVec; fun_prop
-
 theorem chanLNTensor3_gamma_differentiable (c h w : Nat) (ε : ℝ) (β : Vec c)
     (x : Vec (c * h * w)) : Differentiable ℝ (fun γ : Vec c => chanLNTensor3 c h w ε γ β x) := by
   unfold chanLNTensor3

@@ -44,15 +44,10 @@ theorem bceBatchLoss_pdiv (N K : Nat) (t : Vec (N * (1 * K))) (z : Vec (N * K)) 
     pdiv (bceBatchLoss N K t) z (finProdFinEquiv (n, j)) 0
       = pdiv (fun z' : Vec K => fun _ : Fin 1 => bceLogits K (targetRow N K t n) z')
           (logitRow N K z n) j 0 / ((N : ℝ) * (K : ℝ)) := by
-  have hℓ : ∀ m : Fin N, Differentiable ℝ (fun r : Vec K => fun _ : Fin 1 =>
-      ((N : ℝ) * (K : ℝ))⁻¹ * bceLogits K (targetRow N K t m) r) := fun m r =>
-    differentiableAt_pi.2 fun _ =>
-      (differentiableAt_pi.1 ((bceLogits_differentiable K _) r) 0).const_mul _
   rw [show bceBatchLoss N K t = fun z' _ => ∑ m : Fin N,
       ((N : ℝ) * (K : ℝ))⁻¹ * bceLogits K (targetRow N K t m) (logitRow N K z' m) from by
     funext z' _; simp only [bceBatchLoss, div_eq_inv_mul],
-    rowSumLoss_pdiv N K _ hℓ,
-    pdiv_const_smul _ _ _ ((bceLogits_differentiable K _) _), div_eq_inv_mul]
+    rowSumLoss_pdiv_smul N K _ _ (fun m => bceLogits_differentiable K _), div_eq_inv_mul]
 
 /-- **The emitted BCE cotangent is the batched loss's gradient.** Read at the head's `N·K` index
     (`unrowB`), the three-op chain at the logits `rowB z`, with the committed divisor `N·K`, is
@@ -63,14 +58,7 @@ theorem bceBatchLoss_grad (N K : Nat) (bStr logN ohN : String) (t : Vec (N * (1 
       = unrowB N K (den (bceLossCotGraph N K ((N : ℝ) * (K : ℝ)) bStr logN ohN (rowB N K z) t))
           J := by
   obtain ⟨⟨n, j⟩, rfl⟩ := finProdFinEquiv.surjective J
-  have hidx : Fin.cast (congrArg (N * ·) (Nat.one_mul K)).symm (finProdFinEquiv (n, j))
-      = finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)) := by
-    ext; simp [finProdFinEquiv_apply_val]
-  have hrow : Mat.unflatten (batchSlice N (1 * K) (rowB N K z) n) (0 : Fin 1) = logitRow N K z n := by
-    funext k
-    simp only [Mat.unflatten, batchSlice, rowB, logitRow]
-    exact congrArg z (Fin.ext (by simp [finProdFinEquiv_apply_val]))
-  rw [bceBatchLoss_pdiv, unrowB, hidx, bceLossCotGraph_row_committed, hrow]
+  rw [bceBatchLoss_pdiv, unrowB, rowIdx_cast, bceLossCotGraph_row_committed, rowB_row_eq_logitRow]
   rfl
 
 end Proofs

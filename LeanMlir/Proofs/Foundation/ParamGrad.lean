@@ -76,6 +76,7 @@ theorem HasGradAt.comp {m n : Nat} {G : Vec n → Vec 1} {f : Vec m → Vec n} {
     {dy : Vec n} (hG : HasGradAt G (f x) dy) (hf : DifferentiableAt ℝ f x) (vf : HasVJPAt f x) :
     HasGradAt (fun y => G (f y)) x (vf.backward dy) := by
   refine ⟨hG.differentiableAt.comp x hf, fun i => ?_⟩
+  -- `pdiv_comp` is stated on `G ∘ f`
   change pdiv (G ∘ f) x i 0 = _
   rw [pdiv_comp f G x hf hG.differentiableAt i 0, vf.correct dy i]
   simp_rw [hG.pdiv_eq]
@@ -116,6 +117,7 @@ theorem HasGradAt.param {P m : Nat} {G : Vec m → Vec 1} {layer : Vec P → Vec
     {θ : Vec P} {dy : Vec m} (hG : HasGradAt G (layer θ) dy) (hl : DifferentiableAt ℝ layer θ) :
     HasGradAt (fun θ' => G (layer θ')) θ (fun i => ∑ j, pdiv layer θ i j * dy j) := by
   refine ⟨hG.differentiableAt.comp θ hl, fun i => ?_⟩
+  -- `pdiv_comp` is stated on `G ∘ layer`
   change pdiv (G ∘ layer) θ i 0 = _
   rw [pdiv_comp layer G θ hl hG.differentiableAt i 0]
   simp_rw [hG.pdiv_eq]

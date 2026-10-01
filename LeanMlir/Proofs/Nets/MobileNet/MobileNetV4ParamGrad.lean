@@ -62,7 +62,7 @@ namespace Proofs.Mnv4TieB
 
 open Proofs.BackLinks (bnInB reluMaskB cInB dInB cStridedInB dStridedInB gapInB reassocB rowB unrowB)
 open Proofs.GradNodeB (hasGradAt_bnBatchLA hasGradAt_relu hasGradAt_conv hasGradAt_convStrided
-  hasGradAt_depthwise hasGradAt_depthwiseStrided)
+  hasGradAt_depthwise hasGradAt_depthwiseStrided hasGradAt_cast)
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
@@ -112,21 +112,6 @@ theorem mnv4PostDWSlot_fwd_apply_of_eq_zero (N : Nat) {c h w kH kW : Nat} {k : N
     (x : Vec (N * (c * h * w))) :
     (mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β).fwd x = x := by
   rw [mnv4PostDWSlot_fwd_of_eq_zero N hk]
-
-/-- Back through the head's `[N, c] ↔ [N, c, 1, 1]` relabelling: the cotangent is read back
-    along the same cast. -/
-theorem hasGradAt_cast {n m : Nat} (e : n = m) (x : Vec n) {G : Vec m → Vec 1} {dy : Vec m}
-    (hG : HasGradAt G (fun j => x (Fin.cast e.symm j)) dy) :
-    HasGradAt (fun u => G (fun j => u (Fin.cast e.symm j))) x (fun i => dy (Fin.cast e i)) := by
-  refine (HasGradAt.comp (f := reindexCLM (Fin.cast e.symm)) (x := x) hG
-    (reindexCLM _).differentiableAt ((reindexHasVJP (Fin.cast e.symm)).toHasVJPAt x)).of_eq ?_
-  funext i
-  show ∑ k : Fin m, (if i = Fin.cast e.symm k then dy k else 0) = dy (Fin.cast e i)
-  have hk : ∀ k : Fin m, i = Fin.cast e.symm k ↔ Fin.cast e i = k := fun k => by
-    constructor
-    · rintro rfl; exact Fin.ext rfl
-    · rintro rfl; exact Fin.ext rfl
-  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stem — symmetric strided conv, batch BN, relu (no bias node)
@@ -716,27 +701,13 @@ end Strided
 -- § The whole net: the loss after each block, and the net with one block's weights varied
 -- ════════════════════════════════════════════════════════════════
 
-/-- Pull a gradient back through any certified layer, at a point it certifies. -/
-theorem certLayer_hasGradAt_comp {m n : Nat} (L : CertLayer m n) (x : Vec m) (hx : L.ok x)
-    {G : Vec n → Vec 1} {dy : Vec n} (hG : HasGradAt G (L.fwd x) dy) :
-    HasGradAt (fun y => G (L.fwd y)) x ((L.vjp x hx).backward dy) :=
-  HasGradAt.comp (f := L.fwd) (x := x) hG (L.diff x hx) (L.vjp x hx)
-
 /-- A skip block's step: the emitted fan-in `body dx + dyOut` is the residual layer's backward. -/
 theorem mnv4Skip_hasGradAt_comp {N n : Nat} (L : CertLayer (N * n) (N * n)) (v : Vec (N * n))
     (hok : L.ok v) {G : Vec (N * n) → Vec 1} {dy bodyDx : Vec (N * n)}
     (hdx : bodyDx = (L.vjp v hok).backward dy) (hG : HasGradAt G ((CertLayer.residual L).fwd v) dy) :
     HasGradAt (fun y => G ((CertLayer.residual L).fwd y)) v (mnv4SkipCotIn bodyDx dy) :=
-  (certLayer_hasGradAt_comp (CertLayer.residual L) v hok hG).of_eq
+  (CertLayer.hasGradAt_comp (CertLayer.residual L) v hok hG).of_eq
     (by rw [hdx, mnv4SkipCotIn_eq_vjp])
-
-/-- At a skip block the loss read at the BODY output is `u ↦ G (u + v)`: the skip is a constant
-    once a body parameter varies, so its gradient there is still the block-output cotangent. -/
-theorem mnv4_residual_body_hasGradAt {N n : Nat} (L : CertLayer (N * n) (N * n)) (v : Vec (N * n))
-    {G : Vec (N * n) → Vec 1} {dy : Vec (N * n)} (hG : HasGradAt G ((CertLayer.residual L).fwd v) dy) :
-    HasGradAt (fun u => G (fun i => u i + v i)) (L.fwd v) dy :=
-  HasGradAt.comp (f := fun u i => u i + v i) (x := L.fwd v) hG (differentiableAt_id.add_const v)
-    (addConstHasVJPAt (fun u => u) v _ differentiableAt_id (identityHasVJPAt _ _))
 
 /-- The group prefixes meet the block prefixes at every group boundary. -/
 theorem mnv4Pre2_eq_blk (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
@@ -1202,7 +1173,7 @@ theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   have hL' : HasGradAt L ((mnv4HeadStack N w).fwd (mnv4Blk21 N w x)) g :=
     hL.congr_point (by rw [mobilenetv4ForwardBFull, mnv4Pre6_eq_blk])
   have h21 : HasGradAt (fun y => L (mnv4Suf21 N w y)) (mnv4Blk21 N w x) dy21 :=
-    (certLayer_hasGradAt_comp (mnv4HeadStack N w) _ hh hL').of_eq
+    (CertLayer.hasGradAt_comp (mnv4HeadStack N w) _ hh hL').of_eq
       (mnv4HeadCotIn_eq_vjp N 7 7 w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt w.hW w.hb w.hE w.hhE w.hg
         w.hbt w.Wd w.bd _ g hh).symm
   have ok1 : (mnv4StridedBodyOfRow N mnv4Row1 w.b1).ok (mnv4Blk0 N w x) := hx.g28.1
@@ -1257,7 +1228,7 @@ theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     mnv4Skip_hasGradAt_comp (mnv4BodyOfRow N mnv4Row12 w.b12) _ ok12
       (mnv4BodyCotIn_eq_vjp N mnv4Row12 w.b12 _ _ ok12) h12
   have h10 : HasGradAt (fun y => L (mnv4Suf10 N w y)) (mnv4Blk10 N w x) dy10 :=
-    (certLayer_hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row11 w.b11) _ ok11 h11).of_eq
+    (CertLayer.hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row11 w.b11) _ ok11 h11).of_eq
       (mnv4SBodyCotIn_eq_vjp N mnv4Row11 w.b11 _ _ ok11).symm
   have h9 : HasGradAt (fun y => L (mnv4Suf9 N w y)) (mnv4Blk9 N w x) dy9 :=
     mnv4Skip_hasGradAt_comp (mnv4BodyOfRow N mnv4Row10 w.b10) _ ok10
@@ -1281,13 +1252,13 @@ theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     mnv4Skip_hasGradAt_comp (mnv4BodyOfRow N mnv4Row4 w.b4) _ ok4
       (mnv4BodyCotIn_eq_vjp N mnv4Row4 w.b4 _ _ ok4) h4
   have h2 : HasGradAt (fun y => L (mnv4Suf2 N w y)) (mnv4Blk2 N w x) dy2 :=
-    (certLayer_hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row3 w.b3) _ ok3 h3).of_eq
+    (CertLayer.hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row3 w.b3) _ ok3 h3).of_eq
       (mnv4SBodyCotIn_eq_vjp N mnv4Row3 w.b3 _ _ ok3).symm
   have h1 : HasGradAt (fun y => L (mnv4Suf1 N w y)) (mnv4Blk1 N w x) dy1 :=
     mnv4Skip_hasGradAt_comp (mnv4BodyOfRow N mnv4Row2 w.b2) _ ok2
       (mnv4BodyCotIn_eq_vjp N mnv4Row2 w.b2 _ _ ok2) h2
   have h0 : HasGradAt (fun y => L (mnv4Suf0 N w y)) (mnv4Blk0 N w x) dy0 :=
-    (certLayer_hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row1 w.b1) _ ok1 h1).of_eq
+    (CertLayer.hasGradAt_comp (mnv4StridedBodyOfRow N mnv4Row1 w.b1) _ ok1 h1).of_eq
       (mnv4SBodyCotIn_eq_vjp N mnv4Row1 w.b1 _ _ ok1).symm
   have hs2 : ∀ k, bnBatchLA N 1280 1 1 w.hE w.hg w.hbt (batchMap N (flatConv w.hW w.hb)
       (mnv4HeadPool N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt (mnv4Blk21 N w x))) k ≠ 0 := by
@@ -1295,7 +1266,7 @@ theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     rw [castLayer_fwd_apply] at h
     exact h
   have hStem : HasGradAt (fun y => L (mnv4SufStem N w y)) (mnv4Pre0 N w x) dyStem :=
-    (certLayer_hasGradAt_comp (mnv4FusedStack N w) _ hx.fused h0).of_eq
+    (CertLayer.hasGradAt_comp (mnv4FusedStack N w) _ hx.fused h0).of_eq
       (mnv4FusedCotIn_eq_vjp N 56 56 w.f0cW w.f0cb w.f0cE w.hf0cE w.f0cg w.f0cbt w.f0pW w.f0pb
         w.f0pE w.hf0pE w.f0pg w.f0pbt _ dy0 hx.fused).symm
   refine ⟨?cStem, ?cFused, ?c1, ?c2, ?c3, ?c4, ?c5, ?c6, ?c7, ?c8, ?c9, ?c10, ?c11, ?c12, ?c13, ?c14, ?c15, ?c16, ?c17, ?c18, ?c19, ?c20, ?c21, ?cHead⟩
@@ -1312,64 +1283,64 @@ theorem mnv4_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       (h1.congr_point (by rw [mnv4Blk1])) (fun p => congrArg L (mnv4_factor_b1 N w x p))
   case c2 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b2 (by decide) (by decide) (mnv4Blk1 N w x) ok2
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row2 w.b2) _ (h2.congr_point (by rw [mnv4Blk2]))) (fun p => congrArg L (mnv4_factor_b2 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row2 w.b2) _ (h2.congr_point (by rw [mnv4Blk2]))) (fun p => congrArg L (mnv4_factor_b2 N w x p))
   case c3 =>
     exact mnv4_strided_lossTiedB xN cotN vN epsStr w.b3 (by decide) (by decide) (mnv4Blk2 N w x) ok3
       (h3.congr_point (by rw [mnv4Blk3])) (fun p => congrArg L (mnv4_factor_b3 N w x p))
   case c4 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b4 (by decide) (by decide) (mnv4Blk3 N w x) ok4
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row4 w.b4) _ (h4.congr_point (by rw [mnv4Blk4]))) (fun p => congrArg L (mnv4_factor_b4 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row4 w.b4) _ (h4.congr_point (by rw [mnv4Blk4]))) (fun p => congrArg L (mnv4_factor_b4 N w x p))
   case c5 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b5 (by decide) (by decide) (mnv4Blk4 N w x) ok5
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row5 w.b5) _ (h5.congr_point (by rw [mnv4Blk5]))) (fun p => congrArg L (mnv4_factor_b5 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row5 w.b5) _ (h5.congr_point (by rw [mnv4Blk5]))) (fun p => congrArg L (mnv4_factor_b5 N w x p))
   case c6 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b6 (by decide) (by decide) (mnv4Blk5 N w x) ok6
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row6 w.b6) _ (h6.congr_point (by rw [mnv4Blk6]))) (fun p => congrArg L (mnv4_factor_b6 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row6 w.b6) _ (h6.congr_point (by rw [mnv4Blk6]))) (fun p => congrArg L (mnv4_factor_b6 N w x p))
   case c7 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b7 (by decide) (by decide) (mnv4Blk6 N w x) ok7
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row7 w.b7) _ (h7.congr_point (by rw [mnv4Blk7]))) (fun p => congrArg L (mnv4_factor_b7 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row7 w.b7) _ (h7.congr_point (by rw [mnv4Blk7]))) (fun p => congrArg L (mnv4_factor_b7 N w x p))
   case c8 =>
     exact mnv4_convnext_lossTiedB xN cotN vN epsStr w.b8 (by decide) rfl (mnv4Blk7 N w x) ok8
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row8 w.b8) _ (h8.congr_point (by rw [mnv4Blk8]))) (fun p => congrArg L (mnv4_factor_b8 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row8 w.b8) _ (h8.congr_point (by rw [mnv4Blk8]))) (fun p => congrArg L (mnv4_factor_b8 N w x p))
   case c9 =>
     exact mnv4_ffn_lossTiedB xN cotN vN epsStr w.b9 rfl rfl (mnv4Blk8 N w x) ok9
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row9 w.b9) _ (h9.congr_point (by rw [mnv4Blk9]))) (fun p => congrArg L (mnv4_factor_b9 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row9 w.b9) _ (h9.congr_point (by rw [mnv4Blk9]))) (fun p => congrArg L (mnv4_factor_b9 N w x p))
   case c10 =>
     exact mnv4_convnext_lossTiedB xN cotN vN epsStr w.b10 (by decide) rfl (mnv4Blk9 N w x) ok10
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row10 w.b10) _ (h10.congr_point (by rw [mnv4Blk10]))) (fun p => congrArg L (mnv4_factor_b10 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row10 w.b10) _ (h10.congr_point (by rw [mnv4Blk10]))) (fun p => congrArg L (mnv4_factor_b10 N w x p))
   case c11 =>
     exact mnv4_strided_lossTiedB xN cotN vN epsStr w.b11 (by decide) (by decide) (mnv4Blk10 N w x) ok11
       (h11.congr_point (by rw [mnv4Blk11])) (fun p => congrArg L (mnv4_factor_b11 N w x p))
   case c12 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b12 (by decide) (by decide) (mnv4Blk11 N w x) ok12
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row12 w.b12) _ (h12.congr_point (by rw [mnv4Blk12]))) (fun p => congrArg L (mnv4_factor_b12 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row12 w.b12) _ (h12.congr_point (by rw [mnv4Blk12]))) (fun p => congrArg L (mnv4_factor_b12 N w x p))
   case c13 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b13 (by decide) (by decide) (mnv4Blk12 N w x) ok13
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row13 w.b13) _ (h13.congr_point (by rw [mnv4Blk13]))) (fun p => congrArg L (mnv4_factor_b13 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row13 w.b13) _ (h13.congr_point (by rw [mnv4Blk13]))) (fun p => congrArg L (mnv4_factor_b13 N w x p))
   case c14 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b14 (by decide) (by decide) (mnv4Blk13 N w x) ok14
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row14 w.b14) _ (h14.congr_point (by rw [mnv4Blk14]))) (fun p => congrArg L (mnv4_factor_b14 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row14 w.b14) _ (h14.congr_point (by rw [mnv4Blk14]))) (fun p => congrArg L (mnv4_factor_b14 N w x p))
   case c15 =>
     exact mnv4_ffn_lossTiedB xN cotN vN epsStr w.b15 rfl rfl (mnv4Blk14 N w x) ok15
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row15 w.b15) _ (h15.congr_point (by rw [mnv4Blk15]))) (fun p => congrArg L (mnv4_factor_b15 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row15 w.b15) _ (h15.congr_point (by rw [mnv4Blk15]))) (fun p => congrArg L (mnv4_factor_b15 N w x p))
   case c16 =>
     exact mnv4_convnext_lossTiedB xN cotN vN epsStr w.b16 (by decide) rfl (mnv4Blk15 N w x) ok16
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row16 w.b16) _ (h16.congr_point (by rw [mnv4Blk16]))) (fun p => congrArg L (mnv4_factor_b16 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row16 w.b16) _ (h16.congr_point (by rw [mnv4Blk16]))) (fun p => congrArg L (mnv4_factor_b16 N w x p))
   case c17 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b17 (by decide) (by decide) (mnv4Blk16 N w x) ok17
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row17 w.b17) _ (h17.congr_point (by rw [mnv4Blk17]))) (fun p => congrArg L (mnv4_factor_b17 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row17 w.b17) _ (h17.congr_point (by rw [mnv4Blk17]))) (fun p => congrArg L (mnv4_factor_b17 N w x p))
   case c18 =>
     exact mnv4_extradw_lossTiedB xN cotN vN epsStr w.b18 (by decide) (by decide) (mnv4Blk17 N w x) ok18
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row18 w.b18) _ (h18.congr_point (by rw [mnv4Blk18]))) (fun p => congrArg L (mnv4_factor_b18 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row18 w.b18) _ (h18.congr_point (by rw [mnv4Blk18]))) (fun p => congrArg L (mnv4_factor_b18 N w x p))
   case c19 =>
     exact mnv4_ffn_lossTiedB xN cotN vN epsStr w.b19 rfl rfl (mnv4Blk18 N w x) ok19
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row19 w.b19) _ (h19.congr_point (by rw [mnv4Blk19]))) (fun p => congrArg L (mnv4_factor_b19 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row19 w.b19) _ (h19.congr_point (by rw [mnv4Blk19]))) (fun p => congrArg L (mnv4_factor_b19 N w x p))
   case c20 =>
     exact mnv4_ffn_lossTiedB xN cotN vN epsStr w.b20 rfl rfl (mnv4Blk19 N w x) ok20
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row20 w.b20) _ (h20.congr_point (by rw [mnv4Blk20]))) (fun p => congrArg L (mnv4_factor_b20 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row20 w.b20) _ (h20.congr_point (by rw [mnv4Blk20]))) (fun p => congrArg L (mnv4_factor_b20 N w x p))
   case c21 =>
     exact mnv4_convnext_lossTiedB xN cotN vN epsStr w.b21 (by decide) rfl (mnv4Blk20 N w x) ok21
-      (mnv4_residual_body_hasGradAt (mnv4BodyOfRow N mnv4Row21 w.b21) _ (h21.congr_point (by rw [mnv4Blk21]))) (fun p => congrArg L (mnv4_factor_b21 N w x p))
+      (HasGradAt.residual_body (mnv4BodyOfRow N mnv4Row21 w.b21) _ (h21.congr_point (by rw [mnv4Blk21]))) (fun p => congrArg L (mnv4_factor_b21 N w x p))
   case cHead =>
     exact mnv4_head_lossTiedB (N := N) (h := 7) (w := 7) (c := 256) w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt w.hW w.hb w.hE w.hhE w.hg w.hbt
       w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x) hh.1 hs2

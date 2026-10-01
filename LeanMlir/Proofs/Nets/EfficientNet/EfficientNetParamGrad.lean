@@ -447,10 +447,7 @@ theorem enet_resid_lossTiedG {c : Nat} (xN vN epsStr cotN : String) (p : MBW c m
     {Φ : MBW c mid c r kh kw → Vec 1} (hΦ : ∀ p', Φ p' = Gn (mbResidW N h w p' v)) :
     enetExpLossTiedG xN vN epsStr cotN p hq v Φ dy :=
   enet_exp_lossTiedG xN vN epsStr cotN p hq v
-    (HasGradAt.comp (f := fun u i => u i + v i) (x := mbExpW N h w p v) hGn
-      (differentiableAt_id.add_const v)
-      (addConstHasVJPAt (fun u => u) v _ differentiableAt_id (identityHasVJPAt _ _)))
-    (fun p' => hΦ p')
+    (GradNodeB.hasGradAt_addConst (mbExpW N h w p v) v hGn) (fun p' => hΦ p')
 
 end Exp
 

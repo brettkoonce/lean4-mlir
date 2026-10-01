@@ -689,6 +689,50 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
   - **P-R-3**, **P-R-4**.
   - **P-PQ-1** (`vit_block_lossTiedGB` 233 lines → one local lemma).
   - **P-PQ-2**, **P-S-1**.
+  - **Status 2026-10-01: done (staged); every finding re-checked at `9eed9240`; 0 `verified_mlir/`
+    changes.** Net about −885 lines over the ParamGrad files and their kit. No pinned statement
+    changed.
+    - P-R-1: `ParamGradNodes` gains `hasGradAt_relu6`, `hasGradAt_addConst` and
+      `hasGradAt_constAdd` (the skip held fixed on either side). Every R34/R50/MNv2 `*_lossTiedB`
+      proof is now the MNv4 chain of one-line pull-backs. The `r34IdG*` / `r34DownG*` /
+      `r50{Id,Proj,Down}G*` / `mnv2{Stem,NoExp,Body,SBody,Head}G*` defs and their `_hasGradAt`
+      theorems are deleted, as are the four `*ProjOut` / `*BodyOut` abbrevs. MNv2 keeps its
+      XLA-`SAME` strided depthwise stage as a local `hasGradAt_depthwiseStridedXla`, because
+      `dStridedXlaInB` lives in `MobileNetV2StepTieB`. The head goes through dense and GAP by
+      `HasGradAt.comp` inline. The R34 stem keeps `r34StemGNg` / `r34StemGCg`: the argmax-gather
+      model is not a kit stage, and AuditAxioms pins `r34StemGCg_hasGradAt`.
+    - P-R-2, reshaped: `CertLayer.hasGradAt_comp` and `HasGradAt.residual_body` moved from MNv4
+      into `ParamGradNodes` (which now imports `CertifiedChain`). The residual-body step at the
+      MNv2 and B0 skip blocks and at the R34/R50 identity blocks is `hasGradAt_addConst`.
+      Dropped: the audit's R34/R50/MNv2 `*_hasGradAt_comp` sites are not `CertLayer` re-inlines.
+      They compose the bundle-level `HasVJPAt`s (`r34IdBHasVJPAt`, …), not `L.vjp`, so the
+      `CertLayer` lemma would need a `Subsingleton` bridge and save nothing. No `den (L.graph …)`
+      variant was added, because nothing would use it. With WP9's P-PL-1, MNv4's `hasGradAt_cast`
+      moved to `ParamGradNodes` too.
+    - P-R-3: the ConvNeXt pair is now `rowLNVecFlat_{gamma,beta}_differentiable` in
+      `Architectures/ChannelLN.lean`. ViT's `rowVecLN_*` are deleted, and its six call sites use
+      the moved pair by defeq.
+    - P-R-4, partly: `rowSumLoss_pdiv_smul`, `rowIdx_cast` and `rowB_row_eq_logitRow` in
+      `SmoothedBatchLoss` replace the `hℓ` + `pdiv_const_smul` block (three copies) and the
+      `hidx` / `hrow` blocks (two copies). Dropped: redefining `smoothedBatchLoss` through
+      `smoothedBatchLossDiv`, since that changes a pinned def's body.
+    - P-PQ-1: one private `vit_node_lossTied` (`param_batchMap_through`, `congr_left` along the
+      slot's factoring, `of_eq` at the node) closes each of the sixteen bullets. The `*TiedB_holds`
+      ascriptions that spelled `blkSaves` / `c*` with their 16–17 arguments are gone, because the
+      node's denotation fixes them. No `BlockParamsV` abbrevs were needed (they would have gone in
+      `ViTStepTie.lean`). The proof drops from about 233 to about 180 lines (each bullet still
+      names its pre/per/post). Left alone: `cnx_block_lossTiedGB`, which already rewrites `Φ`
+      up front and needs no `congr_left`, so the lemma buys nothing there.
+    - P-PQ-2: one-line comments at the `change`/`show` sites (`ParamGrad` ×2, `ParamGradNodes` ×2,
+      `MlpBias` ×2; the third `MlpBias` site already had one). The `bnBatchLA_apply_perm` half is
+      moot, because the small tier deleted it.
+    - P-S-1: already done in `1dcbcb58`.
+    - Gates: `lake build Certs CertsHeavy LeanMlir Apps Reference TestSupport`, comparator
+      `--check`, name lint, import audit, blueprint checkdecls (lean_decls regenerated from
+      content.tex, unchanged) + `blueprint_uses.py --check`, target names, comment numbers, module
+      refs, `regen_verified_mlir.sh check` with an empty `git diff verified_mlir/`.
+      `audit_only_mentions.py`: no WP8a declaration on its list. Red only from other in-flight WPs:
+      AuditAxioms (`floatClose_residual`) and docstring-checkrefs (`WindowMax.lean`).
 - **8b CNN descent**, ~−750:
   - **A-pq-1** (`Conv{1,2}Slot.sgd_descends`; deletes 16 margin wrappers; subsumes audit_v2 §8's
     owner item).

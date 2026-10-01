@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Foundation.ParamGrad
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.SmoothedBatchLoss
+import LeanMlir.Proofs.Foundation.CertifiedChain
 
 /-! # ParamGradNodes — each batched parameter gradient node is a loss derivative
 
@@ -77,6 +78,57 @@ theorem hasGradAt_relu {n : Nat} (x : Vec n) (hs : ∀ k, x k ≠ 0) {G : Vec n 
     HasGradAt (fun u => G (relu n u)) x (reluMaskB n x dy) :=
   HasGradAt.comp (f := relu n) (x := x) hG (relu_differentiableAt_of_smooth _ _ hs)
     (reluHasVJPAt _ _ hs)
+
+/-- Back through relu6, off both kinks: `relu6MaskB`. -/
+theorem hasGradAt_relu6 {n : Nat} (x : Vec n) (hs : ∀ k, x k ≠ 0 ∧ x k ≠ 6) {G : Vec n → Vec 1}
+    {dy : Vec n} (hG : HasGradAt G (relu6 n x) dy) :
+    HasGradAt (fun u => G (relu6 n u)) x (relu6MaskB n x dy) :=
+  HasGradAt.comp (f := relu6 n) (x := x) hG (relu6_differentiableAt_of_smooth _ _ hs)
+    (relu6HasVJPAt _ _ hs)
+
+/-- Back through `u ↦ u + v` with the skip `v` held fixed: the gradient passes unchanged. This is
+    how a residual block's body sees the loss once one of its parameters varies. -/
+theorem hasGradAt_addConst {n : Nat} (u v : Vec n) {G : Vec n → Vec 1} {dy : Vec n}
+    (hG : HasGradAt G (fun i => u i + v i) dy) :
+    HasGradAt (fun u' => G (fun i => u' i + v i)) u dy :=
+  HasGradAt.comp (f := fun u' i => u' i + v i) (x := u) hG (differentiableAt_id.add_const v)
+    (addConstHasVJPAt (fun u => u) v _ differentiableAt_id (identityHasVJPAt _ _))
+
+/-- …and through `u ↦ v + u`, the fixed branch on the left (a projected skip seen from the body). -/
+theorem hasGradAt_constAdd {n : Nat} (v u : Vec n) {G : Vec n → Vec 1} {dy : Vec n}
+    (hG : HasGradAt G (fun i => v i + u i) dy) :
+    HasGradAt (fun u' => G (fun i => v i + u' i)) u dy :=
+  HasGradAt.comp (f := fun u' i => v i + u' i) (x := u) hG (differentiableAt_id.const_add v)
+    (constAddHasVJPAt v (fun u => u) _ differentiableAt_id (identityHasVJPAt _ _))
+
+/-- At a residual layer the loss read at the BODY output is `u ↦ G (u + v)`: the skip is a constant
+    once a body parameter varies, so its gradient there is still the block-output cotangent. -/
+theorem _root_.Proofs.HasGradAt.residual_body {n : Nat} (L : CertLayer n n) (v : Vec n)
+    {G : Vec n → Vec 1} {dy : Vec n} (hG : HasGradAt G ((CertLayer.residual L).fwd v) dy) :
+    HasGradAt (fun u => G (fun i => u i + v i)) (L.fwd v) dy :=
+  hasGradAt_addConst (L.fwd v) v hG
+
+/-- Back through a relabelling `Fin n ≃ Fin m` along `n = m` (MobileNetV4's head reads `[N, c]` as
+    `[N, c, 1, 1]`): the cotangent is read back along the same cast. -/
+theorem hasGradAt_cast {n m : Nat} (e : n = m) (x : Vec n) {G : Vec m → Vec 1} {dy : Vec m}
+    (hG : HasGradAt G (fun j => x (Fin.cast e.symm j)) dy) :
+    HasGradAt (fun u => G (fun j => u (Fin.cast e.symm j))) x (fun i => dy (Fin.cast e i)) := by
+  refine (HasGradAt.comp (f := reindexCLM (Fin.cast e.symm)) (x := x) hG
+    (reindexCLM _).differentiableAt ((reindexHasVJP (Fin.cast e.symm)).toHasVJPAt x)).of_eq ?_
+  funext i
+  -- `reindexHasVJP`'s backward is this indicator sum by definition
+  show ∑ k : Fin m, (if i = Fin.cast e.symm k then dy k else 0) = dy (Fin.cast e i)
+  have hk : ∀ k : Fin m, i = Fin.cast e.symm k ↔ Fin.cast e i = k := fun k => by
+    constructor
+    · rintro rfl; exact Fin.ext rfl
+    · rintro rfl; exact Fin.ext rfl
+  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+
+/-- Back through a certified layer, at a point it certifies: the layer's own backward. -/
+theorem _root_.Proofs.StableHLO.CertLayer.hasGradAt_comp {m n : Nat} (L : CertLayer m n)
+    (x : Vec m) (hx : L.ok x) {G : Vec n → Vec 1} {dy : Vec n} (hG : HasGradAt G (L.fwd x) dy) :
+    HasGradAt (fun y => G (L.fwd y)) x ((L.vjp x hx).backward dy) :=
+  HasGradAt.comp (f := L.fwd) (x := x) hG (L.diff x hx) (L.vjp x hx)
 
 /-- Back through batch BN, at the certified backward's own spelling `bnBackB` (EfficientNet-B0's
     tie threads this form; the ResNets and MobileNets emit `bnInB`). -/
@@ -475,6 +527,7 @@ theorem biasBeta_hasGradAt {N a oc h w : Nat} (cotN : String)
   rw [hP.pdiv_eq o]
   symm
   simp_rw [pdiv_bias_of_split per hsplit]
+  -- the β node's denotation is the per-channel β gradient of the transposed cotangent, by `rfl`
   show bnPerChannelGradBeta oc (N * (h * w)) (bnchwFwd N oc h w (reassocB N oc h w cot)) o = _
   unfold bnPerChannelGradBeta
   rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]

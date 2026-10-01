@@ -57,6 +57,7 @@ theorem gradAt_bias_eq_pdiv {m n : Nat} (W : Mat m n) (x : Vec m) (G : Vec n →
   have hf : DifferentiableAt ℝ (fun b' : Vec n => G (dense W b' x) 0) b :=
     DifferentiableAt.comp (g := fun z => G z 0) b (differentiableAt_pi.1 hG 0) hZ
   rw [gradAt_eq_pdiv _ _ hf,
+    -- `pdiv_comp` is stated on `G ∘ f`; the scalar loss is `G`'s one output read as a `Vec 1`
     show (fun w => fun _ : Fin 1 => G (dense W w x) 0) = G ∘ fun b' => dense W b' x by
       funext w i; fin_cases i; rfl,
     pdiv_comp _ _ _ hZ hG]
@@ -168,6 +169,7 @@ theorem mlp_hidden_bias_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (W₁ : Mat d
     (by rw [Finset.sum_eq_single j (fun l _ hl => by simp [hl]) (by simp)]; simp)
     j (fun _ => True)
     (fun v' _ hz => by
+      -- the slot's loss is `mlpHiddenBiasLoss` unfolded; fold it back for its gradient lemma
       show gradAt (mlpHiddenBiasLoss W₁ W₂ b₂ a₀ label) v' j = _
       rw [mlp_hidden_bias_loss_gradAt W₁ W₂ b₂ a₀ label v' hz j,
         Finset.sum_eq_single j (fun l _ hl => by simp [hl]) (by simp), ite_eq_left rfl, one_mul])

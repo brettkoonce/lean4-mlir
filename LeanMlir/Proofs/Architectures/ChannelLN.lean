@@ -79,6 +79,16 @@ noncomputable def rowLNVecFlat (s c : Nat) (ε : ℝ) (γ β : Vec c) :
   fun v => Mat.flatten ((fun X : Mat s c => fun r => layerNormVec c ε γ β (X r))
                           (Mat.unflatten v))
 
+/-- `rowLNVecFlat` is differentiable in `γ` (the parameter-gradient nodes vary it). -/
+theorem rowLNVecFlat_gamma_differentiable (s c : Nat) (ε : ℝ) (β : Vec c) (x : Vec (s * c)) :
+    Differentiable ℝ (fun γ : Vec c => rowLNVecFlat s c ε γ β x) := by
+  unfold rowLNVecFlat Mat.flatten layerNormVec; fun_prop
+
+/-- …and in `β`. -/
+theorem rowLNVecFlat_beta_differentiable (s c : Nat) (ε : ℝ) (γ : Vec c) (x : Vec (s * c)) :
+    Differentiable ℝ (fun β : Vec c => rowLNVecFlat s c ε γ β x) := by
+  unfold rowLNVecFlat Mat.flatten layerNormVec; fun_prop
+
 theorem rowLNVecFlat_differentiable (s c : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
     Differentiable ℝ (rowLNVecFlat s c ε γ β) :=
   layerNormVec_per_token_flat_differentiable s c ε γ β hε

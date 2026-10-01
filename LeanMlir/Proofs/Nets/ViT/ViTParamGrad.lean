@@ -743,18 +743,6 @@ theorem rowDense_bias_differentiable {tk a c : Nat} (W : Mat a c) (x : Vec (tk *
       Mat.flatten (fun r => Proofs.dense W θ (Mat.unflatten x r))) := by
   unfold Proofs.dense Mat.flatten; fun_prop
 
-/-- The per-token vector LayerNorm is differentiable in `γ`. -/
-theorem rowVecLN_gamma_differentiable {tk D : Nat} (ε : ℝ) (β : Vec D) (x : Vec (tk * D)) :
-    Differentiable ℝ (fun θ : Vec D =>
-      Mat.flatten (fun r => layerNormVec D ε θ β (Mat.unflatten x r))) := by
-  unfold layerNormVec Mat.flatten; fun_prop
-
-/-- …in `β`. -/
-theorem rowVecLN_beta_differentiable {tk D : Nat} (ε : ℝ) (γ : Vec D) (x : Vec (tk * D)) :
-    Differentiable ℝ (fun θ : Vec D =>
-      Mat.flatten (fun r => layerNormVec D ε γ θ (Mat.unflatten x r))) := by
-  unfold layerNormVec Mat.flatten; fun_prop
-
 /-- Each `vitPost*` is differentiable (`0 < ε` where the MLP sublayer's LN₂ is inside). -/
 theorem vitPostO_differentiable (ε : ℝ) (hε : 0 < ε) (p : BlockParamsV (heads * d) mlpDim)
     (y : Vec (Np1 * (heads * d))) : Differentiable ℝ (vitPostO ε p y) := by
@@ -878,6 +866,29 @@ def vitBlockLossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : St
   ∧ (HasGradAt (fun θ => Φ { p with bfc2 := θ }) p.bfc2
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN dyOut))))
 
+/-- One node of the block bundle: `HasGradAt.param_batchMap_through` at the factoring `hF` of the
+    block with one slot varied, restated against `Φ'` (that slot of the loss) and at the node's own
+    denotation `hnode`. -/
+private theorem vit_node_lossTied {P N D b m : Nat} {Lb : Vec (N * D) → Vec 1}
+    {X dY : Vec (N * D)} {Φ' : Vec P → Vec 1} {F : Vec P → Vec D → Vec D}
+    (pre : Vec D → Vec b) (per : Vec P → Vec b → Vec m) (post : Vec D → Vec m → Vec D)
+    (cot : Vec D → Vec D → Vec m) {θ node : Vec P}
+    (hF : ∀ θ' y, F θ' y = post y (per θ' (pre y)))
+    (hΦ : ∀ θ', Φ' θ' = Lb (batchMap N (F θ') X))
+    (hG : HasGradAt Lb (batchMap N (fun y => post y (per θ (pre y))) X) dY)
+    (hper : ∀ y, DifferentiableAt ℝ (fun θ' => per θ' y) θ)
+    (hpost : ∀ y, Differentiable ℝ (post y))
+    (hcot : ∀ y dy, HasGradAt (fun u => linLoss dy (post y u)) (per θ (pre y)) (cot y dy))
+    (A : Vec (N * b)) (COT : Vec (N * m))
+    (hA : ∀ n, batchSlice N b A n = pre (batchSlice N D X n))
+    (hC : ∀ n, batchSlice N m COT n = cot (batchSlice N D X n) (batchSlice N D dY n))
+    (hnode : (fun i => ∑ n : Fin N, ∑ j : Fin m,
+      pdiv (fun θ' => per θ' (batchSlice N b A n)) θ i j * batchSlice N m COT n j) = node) :
+    HasGradAt Φ' θ node :=
+  ((HasGradAt.param_batchMap_through pre per post cot X hG hper hpost hcot A COT hA hC).congr_left
+    (funext fun θ' => (lb_batchMap_congr Lb X fun y => (hF θ' y).symm).trans (hΦ θ').symm)).of_eq
+    hnode
+
 theorem vit_block_lossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (hε : 0 < ε) (p : BlockParamsV (heads * d) mlpDim) (xin : Vec (N * (Np1 * (heads * d))))
     {Lb : Vec (N * (Np1 * (heads * d))) → Vec 1} {dyOut : Vec (N * (Np1 * (heads * d)))}
@@ -890,206 +901,173 @@ theorem vit_block_lossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cot
     fun h => hLb.congr_point (congrArg (batchMap N · xin) (funext h))
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · -- LN₁ γ
-    exact ((HasGradAt.param_batchMap_through (fun y => y)
-      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε θ p.β1 (Mat.unflatten x r)))
-      (vitPostL1 ε p) (fun y dy => cLn1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.γ1)
-      (hG fun y => vit_fwd_γ1 ε p p.γ1 y) (fun y => (rowVecLN_gamma_differentiable ε p.β1 y) _)
-      (vitPostL1_differentiable ε hε p) (fun y dy => vitPostL1_hasGradAt ε hε p y dy)
-      xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_γ1 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun k => ((vecLNGammaTiedB_holds : GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε p.β1 xin p.γ1
-      (batchMapAux N (cLn1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) k).symm)
+    exact vit_node_lossTied (fun y => y) (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε θ p.β1 (Mat.unflatten x r)))
+      (vitPostL1 ε p) _ (vit_fwd_γ1 ε p) (fun _ => hΦ _) (hG (vit_fwd_γ1 ε p p.γ1))
+      (fun y => (rowLNVecFlat_gamma_differentiable _ _ ε p.β1 y) _) (vitPostL1_differentiable ε hε p)
+      (vitPostL1_hasGradAt ε hε p) xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun k => (vecLNGammaTiedB_holds k).symm)
   · -- LN₁ β
-    exact ((HasGradAt.param_batchMap_through (fun y => y)
-      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε p.γ1 θ (Mat.unflatten x r)))
-      (vitPostL1 ε p) (fun y dy => cLn1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.β1)
-      (hG fun y => vit_fwd_β1 ε p p.β1 y) (fun y => (rowVecLN_beta_differentiable ε p.γ1 y) _)
-      (vitPostL1_differentiable ε hε p) (fun y dy => vitPostL1_hasGradAt ε hε p y dy)
-      xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_β1 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((vecLNBetaTiedB_holds : GradNodeB.VecLNBetaTiedB N Np1 cotN ε p.γ1 xin p.β1
-      (batchMapAux N (cLn1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wq
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+    exact vit_node_lossTied (fun y => y) (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε p.γ1 θ (Mat.unflatten x r)))
+      (vitPostL1 ε p) _ (vit_fwd_β1 ε p) (fun _ => hΦ _) (hG (vit_fwd_β1 ε p p.β1))
+      (fun y => (rowLNVecFlat_beta_differentiable _ _ ε p.γ1 y) _) (vitPostL1_differentiable ε hε p)
+      (vitPostL1_hasGradAt ε hε p) xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (vecLNBetaTiedB_holds i).symm)
+  · -- Q W
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat (heads * d) (heads * d)) p.bq (Mat.unflatten x r)))
-      (vitPostQ ε p) (fun y dy => cQ ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := Mat.flatten p.Wq)
+      (vitPostQ ε p) _ (fun θ => vit_fwd_Wq ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wq ε p p.Wq y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bq y) _) (vitPostQ_differentiable ε hε p)
-      (fun y dy => (vitPostQ_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wq ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (fun y dy => (vitPostQ_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bq
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.Wq
-      (batchMapAux N (cQ ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i j).symm)
-  · -- bq
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- Q b
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wq θ (Mat.unflatten x r)))
-      (vitPostQ ε p) (fun y dy => cQ ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.bq)
-      (hG fun y => vit_fwd_bq ε p p.bq y)
+      (vitPostQ ε p) _ (vit_fwd_bq ε p) (fun _ => hΦ _) (hG (vit_fwd_bq ε p p.bq))
       (fun y => (rowDense_bias_differentiable p.Wq y) _) (vitPostQ_differentiable ε hε p)
-      (fun y dy => (vitPostQ_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bq ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wq
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.bq
-      (batchMapAux N (cQ ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wk
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+      (fun y dy => (vitPostQ_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
+  · -- K W
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat (heads * d) (heads * d)) p.bk (Mat.unflatten x r)))
-      (vitPostK ε p) (fun y dy => cK ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := Mat.flatten p.Wk)
+      (vitPostK ε p) _ (fun θ => vit_fwd_Wk ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wk ε p p.Wk y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bk y) _) (vitPostK_differentiable ε hε p)
-      (fun y dy => (vitPostK_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wk ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (fun y dy => (vitPostK_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bk
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.Wk
-      (batchMapAux N (cK ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i j).symm)
-  · -- bk
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- K b
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wk θ (Mat.unflatten x r)))
-      (vitPostK ε p) (fun y dy => cK ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.bk)
-      (hG fun y => vit_fwd_bk ε p p.bk y)
+      (vitPostK ε p) _ (vit_fwd_bk ε p) (fun _ => hΦ _) (hG (vit_fwd_bk ε p p.bk))
       (fun y => (rowDense_bias_differentiable p.Wk y) _) (vitPostK_differentiable ε hε p)
-      (fun y dy => (vitPostK_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bk ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wk
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.bk
-      (batchMapAux N (cK ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wv
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+      (fun y dy => (vitPostK_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
+  · -- V W
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat (heads * d) (heads * d)) p.bv (Mat.unflatten x r)))
-      (vitPostV ε p) (fun y dy => cV ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := Mat.flatten p.Wv)
+      (vitPostV ε p) _ (fun θ => vit_fwd_Wv ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wv ε p p.Wv y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bv y) _) (vitPostV_differentiable ε hε p)
-      (fun y dy => (vitPostV_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wv ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (fun y dy => (vitPostV_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bv
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.Wv
-      (batchMapAux N (cV ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i j).symm)
-  · -- bv
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn1M ε p y))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- V b
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wv θ (Mat.unflatten x r)))
-      (vitPostV ε p) (fun y dy => cV ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.bv)
-      (hG fun y => vit_fwd_bv ε p p.bv y)
+      (vitPostV ε p) _ (vit_fwd_bv ε p) (fun _ => hΦ _) (hG (vit_fwd_bv ε p p.bv))
       (fun y => (rowDense_bias_differentiable p.Wv y) _) (vitPostV_differentiable ε hε p)
-      (fun y dy => (vitPostV_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bv ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wv
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin) p.bv
-      (batchMapAux N (cV ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wo
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitAttM ε p y))
+      (fun y dy => (vitPostV_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn1M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
+  · -- out-projection W
+    exact vit_node_lossTied (fun y => Mat.flatten (vitAttM ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat (heads * d) (heads * d)) p.bo (Mat.unflatten x r)))
-      (vitPostO ε p) (fun y dy => cH ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := Mat.flatten p.Wo)
+      (vitPostO ε p) _ (fun θ => vit_fwd_Wo ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wo ε p p.Wo y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bo y) _) (vitPostO_differentiable ε hε p)
-      (fun y dy => (vitPostO_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wo ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (fun y dy => (vitPostO_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitAttM ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bo
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).att) xin) p.Wo
-      (batchMapAux N (cH ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i j).symm)
-  · -- bo
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitAttM ε p y))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- out-projection b
+    exact vit_node_lossTied (fun y => Mat.flatten (vitAttM ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wo θ (Mat.unflatten x r)))
-      (vitPostO ε p) (fun y dy => cH ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.bo)
-      (hG fun y => vit_fwd_bo ε p p.bo y)
+      (vitPostO ε p) _ (vit_fwd_bo ε p) (fun _ => hΦ _) (hG (vit_fwd_bo ε p p.bo))
       (fun y => (rowDense_bias_differentiable p.Wo y) _) (vitPostO_differentiable ε hε p)
-      (fun y dy => (vitPostO_hasGradAt ε hε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bo ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wo
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).att) xin) p.bo
-      (batchMapAux N (cH ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
+      (fun y dy => (vitPostO_hasGradAt ε hε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitAttM ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
   · -- LN₂ γ
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitHM ε p y))
-      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε θ p.β2 (Mat.unflatten x r)))
-      (vitPostL2 ε p) (fun y dy => cLn2 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.γ2)
-      (hG fun y => vit_fwd_γ2 ε p p.γ2 y) (fun y => (rowVecLN_gamma_differentiable ε p.β2 y) _)
-      (vitPostL2_differentiable ε p)
-      (fun y dy => (vitPostL2_hasGradAt ε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_γ2 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun k => ((vecLNGammaTiedB_holds : GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε p.β2
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).h) xin) p.γ2
-      (batchMapAux N (cLn2 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) k).symm)
+    exact vit_node_lossTied (fun y => Mat.flatten (vitHM ε p y))
+      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε θ p.β2 (Mat.unflatten x r))) (vitPostL2 ε p) _ (vit_fwd_γ2 ε p)
+      (fun _ => hΦ _) (hG (vit_fwd_γ2 ε p p.γ2))
+      (fun y => (rowLNVecFlat_gamma_differentiable _ _ ε p.β2 y) _) (vitPostL2_differentiable ε p)
+      (fun y dy => (vitPostL2_hasGradAt ε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitHM ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun k => (vecLNGammaTiedB_holds k).symm)
   · -- LN₂ β
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitHM ε p y))
-      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε p.γ2 θ (Mat.unflatten x r)))
-      (vitPostL2 ε p) (fun y dy => cLn2 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.β2)
-      (hG fun y => vit_fwd_β2 ε p p.β2 y) (fun y => (rowVecLN_beta_differentiable ε p.γ2 y) _)
-      (vitPostL2_differentiable ε p)
-      (fun y dy => (vitPostL2_hasGradAt ε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_β2 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((vecLNBetaTiedB_holds : GradNodeB.VecLNBetaTiedB N Np1 cotN ε p.γ2
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).h) xin) p.β2
-      (batchMapAux N (cLn2 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wfc1
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn2M ε p y))
+    exact vit_node_lossTied (fun y => Mat.flatten (vitHM ε p y))
+      (fun θ x => Mat.flatten (fun r => layerNormVec (heads * d) ε p.γ2 θ (Mat.unflatten x r))) (vitPostL2 ε p) _ (vit_fwd_β2 ε p)
+      (fun _ => hΦ _) (hG (vit_fwd_β2 ε p p.β2))
+      (fun y => (rowLNVecFlat_beta_differentiable _ _ ε p.γ2 y) _) (vitPostL2_differentiable ε p)
+      (fun y dy => (vitPostL2_hasGradAt ε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitHM ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (vecLNBetaTiedB_holds i).symm)
+  · -- fc1 W
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn2M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat (heads * d) mlpDim) p.bfc1 (Mat.unflatten x r)))
-      (vitPostF1 ε p) (fun y dy => cM1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := Mat.flatten p.Wfc1)
+      (vitPostF1 ε p) _ (fun θ => vit_fwd_Wfc1 ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wfc1 ε p p.Wfc1 y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bfc1 y) _) (vitPostF1_differentiable ε p)
-      (fun y dy => (vitPostF1_hasGradAt ε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wfc1 ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (fun y dy => (vitPostF1_hasGradAt ε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn2M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bfc1
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln2) xin) p.Wfc1
-      (batchMapAux N (cM1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i j).symm)
-  · -- bfc1
-    exact ((HasGradAt.param_batchMap_through (fun y => Mat.flatten (vitLn2M ε p y))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- fc1 b
+    exact vit_node_lossTied (fun y => Mat.flatten (vitLn2M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wfc1 θ (Mat.unflatten x r)))
-      (vitPostF1 ε p) (fun y dy => cM1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) xin (θ := p.bfc1)
-      (hG fun y => vit_fwd_bfc1 ε p p.bfc1 y)
+      (vitPostF1 ε p) _ (vit_fwd_bfc1 ε p) (fun _ => hΦ _) (hG (vit_fwd_bfc1 ε p p.bfc1))
       (fun y => (rowDense_bias_differentiable p.Wfc1 y) _) (vitPostF1_differentiable ε p)
-      (fun y dy => (vitPostF1_hasGradAt ε p y dy).congr_point (by simp only [Mat.unflatten_flatten]; rfl))
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bfc1 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wfc1
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln2) xin) p.bfc1
-      (batchMapAux N (cM1 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2) xin dyOut)) i).symm)
-  · -- Wfc2
-    exact ((HasGradAt.param_batchMap_through
-      (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r)))
-      (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat mlpDim (heads * d)) p.bfc2
-        (Mat.unflatten x r)))
-      (vitPostF2 ε p) (fun _ dy => dy) xin (θ := Mat.flatten p.Wfc2)
+      (fun y dy => (vitPostF1_hasGradAt ε p y dy).congr_point
+        (by simp only [Mat.unflatten_flatten]; rfl))
+      (batchMap N (fun y => Mat.flatten (vitLn2M ε p y)) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
+  · -- fc2 W
+    exact vit_node_lossTied (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r)))
+      (fun θ x => Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ : Mat mlpDim (heads * d)) p.bfc2 (Mat.unflatten x r)))
+      (vitPostF2 ε p) _ (fun θ => vit_fwd_Wfc2 ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wfc2 ε p p.Wfc2 y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bfc2 y) _) (vitPostF2_differentiable ε p)
       (fun y dy => hasGradAt_linLoss_constAdd _ _ dy)
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_Wfc2 ε p (Mat.unflatten θ) y).symm).trans (hΦ _).symm)).of_eq
+      (batchMap N (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r))) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact ((rowDenseWTiedB_holds : ViTPoCGB.RowDenseWTiedB N Np1 xN cotN p.bfc2
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).g) xin) p.Wfc2 dyOut) i j).symm)
-  · -- bfc2
-    exact ((HasGradAt.param_batchMap_through
-      (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r)))
+        exact (rowDenseWTiedB_holds i j).symm)
+  · -- fc2 b
+    exact vit_node_lossTied (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r)))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wfc2 θ (Mat.unflatten x r)))
-      (vitPostF2 ε p) (fun _ dy => dy) xin (θ := p.bfc2)
-      (hG fun y => vit_fwd_bfc2 ε p p.bfc2 y)
+      (vitPostF2 ε p) _ (vit_fwd_bfc2 ε p) (fun _ => hΦ _) (hG (vit_fwd_bfc2 ε p p.bfc2))
       (fun y => (rowDense_bias_differentiable p.Wfc2 y) _) (vitPostF2_differentiable ε p)
       (fun y dy => hasGradAt_linLoss_constAdd _ _ dy)
-      _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).congr_left (funext fun θ =>
-      (lb_batchMap_congr Lb xin fun y => (vit_fwd_bfc2 ε p θ y).symm).trans (hΦ _).symm)).of_eq
-      (funext fun i => ((rowDenseBTiedB_holds : ViTPoCGB.RowDenseBTiedB N Np1 cotN p.Wfc2
-      (batchMap N (fun x => (blkSaves ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).g) xin) p.bfc2 dyOut) i).symm)
+      (batchMap N (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r))) xin) _
+      (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)
+      (funext fun i => (rowDenseBTiedB_holds i).symm)
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -1141,7 +1119,7 @@ theorem vit_head_lossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (�
   · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ x => Mat.flatten (fun r => layerNormVec 192 ε θ βF (Mat.unflatten x r)))
         (fun _ u => classifierFlat 196 192 nC Wcls bcls u) (fun _ dy => vitCotFl 196 192 nC Wcls dy)
-        b12out (θ := γF) hL (fun y => (rowVecLN_gamma_differentiable ε βF y) _)
+        b12out (θ := γF) hL (fun y => (rowLNVecFlat_gamma_differentiable _ _ ε βF y) _)
         (fun _ => classifierFlat_differentiable 196 192 nC Wcls bcls) (fun _ dy => hc _ dy)
         b12out _ (fun _ => rfl) (fun n => batchSlice_batchMap _ _ n)).of_eq
       (funext fun k => ((vecLNGammaTiedB_holds : GradNodeB.VecLNGammaTiedB N 197 xN epsStr cotN ε βF b12out γF
@@ -1149,7 +1127,7 @@ theorem vit_head_lossTiedGB (N : Nat) {nC : Nat} (xN aN epsStr cotN : String) (�
   · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ x => Mat.flatten (fun r => layerNormVec 192 ε γF θ (Mat.unflatten x r)))
         (fun _ u => classifierFlat 196 192 nC Wcls bcls u) (fun _ dy => vitCotFl 196 192 nC Wcls dy)
-        b12out (θ := βF) hL (fun y => (rowVecLN_beta_differentiable ε γF y) _)
+        b12out (θ := βF) hL (fun y => (rowLNVecFlat_beta_differentiable _ _ ε γF y) _)
         (fun _ => classifierFlat_differentiable 196 192 nC Wcls bcls) (fun _ dy => hc _ dy)
         b12out _ (fun _ => rfl) (fun n => batchSlice_batchMap _ _ n)).of_eq
       (funext fun i => ((vecLNBetaTiedB_holds : GradNodeB.VecLNBetaTiedB N 197 cotN ε γF b12out βF
