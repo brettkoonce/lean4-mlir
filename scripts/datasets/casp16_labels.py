@@ -68,14 +68,24 @@ if __name__ == "__main__":
     rows = list(csv.DictReader(open(a.list)))
     if a.limit:
         rows = rows[: a.limit]
+    # L is the canonical sequence's length (what label_seq_id indexes and what ESM-2 embeds), NOT
+    # reps.csv's `length` (rcsb_sample_sequence_length): the two differ for a few entities
+    # (8Q79_1: 234 vs 236), and a label matrix of the wrong size shifted every later chain's
+    # labels in the packed pool on 2026-10-01.
+    seq_len = {}
+    with open(ROOT / "train" / "entities.jsonl") as f:
+        for line in f:
+            e = json.loads(line)
+            if e["seq"]:
+                seq_len[e["id"]] = len(e["seq"])
     t0 = time.time(); stats = []; missing = skipped = 0
     for i, r in enumerate(rows, 1):
         src = ROOT / "pdb" / f"{r['id']}.npz"; dst = out / f"{r['id']}.npz"
-        if not src.exists():
+        if not src.exists() or r["id"] not in seq_len:
             missing += 1; continue
         if dst.exists():
             skipped += 1; continue
-        stats.append(one(src, int(r["length"]), dst))
+        stats.append(one(src, seq_len[r["id"]], dst))
         if i % 2000 == 0:
             print(f"  {i}/{len(rows)}  {i / (time.time() - t0):.0f}/s", flush=True)
     if stats:

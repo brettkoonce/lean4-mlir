@@ -70,16 +70,35 @@ def official():
 
 
 # ── structures ───────────────────────────────────────────────────────────────────────────────────
-def prep(src, dst, segs=None):
-    """CASP PDB -> OST-clean PDB: ATOM lines only, chain A, kept to the EU's residue ranges."""
-    with open(src) as f, open(dst, "w") as g:
+def prep(src, dst, segs=None, pseudo_cb=False):
+    """CASP PDB -> OST-clean PDB: ATOM lines only, chain A, kept to the EU's residue ranges.
+    `pseudo_cb`: one atom per residue, the Cβ (Cα for glycine or when no Cβ), written as CA —
+    the atom set the distogram is defined on, for scoring a folded pseudo-Cβ trace against the
+    field's models on equal terms (a file that already has only CA atoms passes through)."""
+    lines = []
+    with open(src) as f:
         for line in f:
             if not line.startswith("ATOM"):
                 continue
             resnum = int(line[22:26])
             if segs and not any(a <= resnum <= b for a, b in segs):
                 continue
-            g.write(line[:21] + "A" + line[22:])
+            lines.append(line[:21] + "A" + line[22:])
+    if pseudo_cb:
+        by_res, order = {}, []
+        for line in lines:
+            key = (int(line[22:26]), line[26])
+            if key not in by_res:
+                by_res[key] = {}; order.append(key)
+            by_res[key].setdefault(line[12:16].strip(), line)
+        lines = []
+        for key in order:
+            atoms = by_res[key]
+            pick = atoms.get("CB") if atoms.get("CB") and atoms[next(iter(atoms))][17:20] != "GLY" else atoms.get("CA")
+            if pick:
+                lines.append(pick[:12] + " CA " + pick[16:])
+    with open(dst, "w") as g:
+        g.writelines(lines)
         g.write("END\n")
 
 
@@ -145,22 +164,26 @@ def usalign_tm(model, ref):
     return float(f[3])
 
 
-def score(model_file, eu, eus=None, tag=None, keep=False):
-    """One model against one EU. Returns the metrics dict; CA-lDDT works for a CA-only model."""
+def score(model_file, eu, eus=None, tag=None, keep=False, pseudo_cb=False):
+    """One model against one EU. Returns the metrics dict. `pseudo_cb`: both sides reduced to
+    one pseudo-Cβ atom per residue (prep); then `ca_lddt` is the Cβ-lDDT and `tm` the TM-score
+    over those atoms, and OST (which needs a backbone) is skipped."""
     eus = eus or eu_ranges()
     e = eus[eu]
     work = ROOT / "work" / "prep"
     work.mkdir(parents=True, exist_ok=True)
     tag = tag or Path(model_file).name
-    ref = work / f"{eu}.ref.pdb"
+    suffix = ".cb" if pseudo_cb else ""
+    ref = work / f"{eu}.ref{suffix}.pdb"
     if not ref.exists():
-        prep(ROOT / "raw" / "dom" / f"{eu}.pdb", ref)
-    mdl = work / f"{tag}-{eu}.pdb"
-    prep(model_file, mdl, e["segs"])
+        prep(ROOT / "raw" / "dom" / f"{eu}.pdb", ref, pseudo_cb=pseudo_cb)
+    mdl = work / f"{tag}-{eu}{suffix}.pdb"
+    prep(model_file, mdl, e["segs"], pseudo_cb=pseudo_cb)
     r = dict(model=tag, eu=eu)
     r["ca_lddt"] = lddt(read_atoms(mdl, True), read_atoms(ref, True))
     r["tm"] = usalign_tm(mdl, ref)
-    r.update(ost(mdl, ref, work / f"{tag}-{eu}.ost.json"))
+    if not pseudo_cb:
+        r.update(ost(mdl, ref, work / f"{tag}-{eu}.ost.json"))
     if not keep:
         mdl.unlink(missing_ok=True)
         (work / f"{tag}-{eu}.ost.json").unlink(missing_ok=True)
@@ -200,7 +223,7 @@ def cmd_validate(a):
             if not src.exists():
                 print(f"{name}: no model")
                 continue
-            r = score(src, eu, eus, tag=name)
+            r = score(src, eu, eus, tag=name, pseudo_cb=a.pseudo_cb)
             o = off.get(f"{name}-{eu.split('-')[1]}", {})
             f3 = lambda x: "  -  " if x is None else f"{x:.3f}"
             print(f"{name + '-' + eu.split('-')[1]:22s} {f3(r.get('lddt')) + '/' + o.get('LDDT', '-'):>14s} "
@@ -212,7 +235,7 @@ def cmd_validate(a):
 def cmd_field(a):
     eus = eu_ranges()
     t = eus[a.eu]["target"]
-    out = ROOT / "work" / f"field_{a.eu}_m{a.model}.csv"
+    out = ROOT / "work" / f"field_{a.eu}_m{a.model}{'_cb' if a.pseudo_cb else ''}.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     files = sorted((ROOT / "raw" / "predictions" / t).glob(f"{t}TS???_{a.model}"))
     with open(out, "w", newline="") as f:
@@ -220,7 +243,7 @@ def cmd_field(a):
                                           "ost_ca_lddt", "gdtts", "gdtha", "rms_ca"])
         w.writeheader()
         for i, src in enumerate(files):
-            r = score(src, a.eu, eus, tag=src.name)
+            r = score(src, a.eu, eus, tag=src.name, pseudo_cb=a.pseudo_cb)
             r["group"] = src.name.split("TS")[1].split("_")[0]
             w.writerow({k: r.get(k) for k in w.fieldnames})
             if a.verbose:
@@ -229,7 +252,7 @@ def cmd_field(a):
 
 
 def cmd_score(a):
-    r = score(a.model, a.eu, keep=a.keep)
+    r = score(a.model, a.eu, keep=a.keep, pseudo_cb=a.pseudo_cb)
     print(json.dumps(r, indent=1))
 
 
@@ -242,13 +265,16 @@ if __name__ == "__main__":
     v.add_argument("--eus", nargs="+", default=["T1235-D1", "T1267s1-D1", "T1226-D1"])
     v.add_argument("--groups", nargs="+", default=["304", "051", "145"])
     v.add_argument("--model", type=int, default=1)
+    v.add_argument("--pseudo-cb", action="store_true")
     v.set_defaults(fn=cmd_validate)
     s = sp.add_parser("score")
     s.add_argument("model"); s.add_argument("eu"); s.add_argument("--keep", action="store_true")
+    s.add_argument("--pseudo-cb", action="store_true")
     s.set_defaults(fn=cmd_score)
     fl = sp.add_parser("field")
     fl.add_argument("eu"); fl.add_argument("--model", type=int, default=1)
     fl.add_argument("-v", "--verbose", action="store_true")
+    fl.add_argument("--pseudo-cb", action="store_true")
     fl.set_defaults(fn=cmd_field)
     a = p.parse_args()
     a.fn(a)

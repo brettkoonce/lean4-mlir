@@ -56,14 +56,20 @@ official table to the printed digit, so our model's dot goes on the same axis as
 5. Missing residues are masked exactly with `perPixelWeightedCE`: 66 classes (64 distance
    bins, one ">22 Å" bin, one "unobserved" bin) with weight 0 on the last. The reduction
    divides by Σw, so masked pairs drop out of loss and gradient with no new code.
-6. CA-only fold, CA-lDDT on both sides. Our fold is a CA trace. CASP's lDDT column is all-atom
-   and counts an atom the model lacks as lost, so it would punish a CA trace for not having
-   side chains. The headline is therefore CA-lDDT (OpenStructure `--bb-lddt`, which is CA-only;
-   §5), computed for the field's models and ours by the same command; the all-atom column is
-   kept for the field as the official number. TM-score is CA-based already.
+6. Pseudo-Cβ fold, scored on that atom set on both sides. The net predicts Cβ–Cβ distances
+   (the CASP contact convention), so the fold (`scripts/demos/casp16_fold.py`) optimizes one
+   pseudo-Cβ point per residue; scoring reduces the field's models and the reference to the
+   same atom (`casp16_score.py --pseudo-cb`: Cβ, Cα for glycine, written as CA) and reports
+   Cβ-lDDT (the numpy `lddt()`, which equals OST's `--bb-lddt` on CA) and the TM-score over
+   those atoms (US-align `-TMscore 1`). CASP's all-atom lDDT would count every missing side
+   chain against a trace, so the official column stays the field's number and ours is never
+   compared to it directly. Check 2026-10-01: folding T1235-D1's *true* distogram gives TM
+   0.9999 and Cβ-lDDT 1.00.
 7. One sentence the book owes: lDDT is a distance score and cannot see a mirror image;
    TM-score superposes with a proper rotation and can. A distance-geometry fold has that
-   ambiguity, so the fold step scores both hands and keeps the right-handed one.
+   ambiguity, so the fold step runs both hands, picks by the sign of the i…i+3 dihedral over
+   helical stretches, and writes both. Measured on T1235-D1's true distogram: the mirror
+   scores Cβ-lDDT 1.00 and TM 0.34.
 8. Headline on the date-cut-only list, purge as an ablation (decided 2026-10-01). The 82
    chains the purge drops are templates the CASP16 field was allowed to use — the "easy" class
    is defined by their existence — so the purged set is stricter than the field's conditions
@@ -107,6 +113,14 @@ Featured EUs (model 1, official all-atom lDDT): T1235-D1 easy 106 aa, field medi
 T1267s1-D1 medium 157 aa, median 0.65, MULTICOM best at 0.76; T1226-D1 hard 123 aa, median
 0.37, ColabFold baseline 0.58 against AF3-server 0.36. Placeholders until the final pick (§9).
 
+The same three at pseudo-Cβ (`casp16_score.py field <EU> --pseudo-cb`, model 1, our scoring
+of the field; `data/casp16/work/field_<EU>_m1_cb.csv`), Cβ-lDDT / TM: T1235-D1 median
+0.899 / 0.939, best 0.968 / 0.985 (AF3 0.882 / 0.919, MULTICOM 0.893 / 0.927, ColabFold
+0.963 / 0.981); T1267s1-D1 median 0.671 / 0.757, best 0.785 / 0.895 (MULTICOM); T1226-D1
+median 0.362 / 0.357, best 0.676 / 0.760 (ColabFold 0.596 / 0.668, AF3 0.357 / 0.358). On
+the nine validation models Cβ-lDDT sits within 0.03 of the official all-atom lDDT and the
+Cβ TM-score 0.01–0.02 under the official CA one.
+
 ## 3. Pipeline
 
 ```
@@ -129,10 +143,12 @@ T1267s1-D1 medium 157 aa, median 0.65, MULTICOM best at 0.76; T1226-D1 hard 123 
                      perPixelWeightedCE; random 64×64 crops anywhere in L×L
  8  predict          tiled inference (§1.4); contacts P(d < 8 Å) = Σ bins below 8 Å;
                      top-L/5 long-range precision (|i − j| ≥ 24)
- 9  fold.py          CA coordinates by Adam on −Σ log p_ij(‖x_i − x_j‖) + clash + chain
-                     terms, both hands, 5 restarts → PDB CA records
-10  casp16_score.py  CA-lDDT / TM-score / GDT_TS for ours; `field <EU>` rescoring every group
-                     the same way; join with the official LDDT column for the strip plot
+ 9  casp16_fold.py   pseudo-Cβ coordinates by Adam on the Gaussian-smoothed −log p_ij(d) +
+                     chain (5.4 Å) + clash terms, classical-MDS start + random restarts, both
+                     hands → PDB (one CA-named pseudo-atom per residue, target numbering)
+10  casp16_score.py  `--pseudo-cb`: Cβ-lDDT / TM-score for ours and, with `field <EU>`, for
+                     every group's model the same way; the official LDDT column stays the
+                     field's all-atom number
 ```
 
 Sizes (step 1 run 2026-10-01): 230,942 entities pass the search; 27,756 of RCSB's 40 % clusters
@@ -186,9 +202,14 @@ step of 32 crops on one 4060 Ti (≈ 2 min per epoch of one crop per chain); 128
 Inference: every 64 × 64 window at stride 32, logits summed per target in C, averaged and
 symmetrized by `scripts/demos/casp16_predict.py` (84 EUs, 10,703 windows, 55 s).
 
-Proof items: `pairTile` forward tie + VJP (dense ∘ reduce-sum), and the whole-net step tie at
-the demo bar the other Chapter-10 demos meet. Everything downstream of the tile is already
-proven. The gradient check for the new op goes through the existing vjp_oracle path.
+Proof item (done 2026-10-01): `LeanMlir/Proofs/Foundation/PairTile.lean` — `tileWHasVJP` and
+`tileWjHasVJP`, the VJP witnesses of the pair map as a function of each weight (the other
+block's term is the constant), by `pdiv_of_affine` in the shape of `pdiv_dense_W`; their
+backwards `gradW` / `gradWj` are the cotangent summed over the broadcast axis then
+contracted with the block — the two `reduce` + `dot_general` pairs the emitter writes. No
+input gradient exists to prove: the input is the host's feature block. Everything downstream
+of the tile is the chapter's. A whole-net step tie is not attempted; the demo's gradient
+evidence is the FD smoke (§4 above) and the eval ≡ train identity.
 
 Ablation rows the table wants (each one run): ESM-2's own contact head (no training by us;
 measured 2026-10-01: top-L/5 long-range 0.533 easy / 0.478 medium / 0.233 hard, 0.474 over
@@ -240,6 +261,10 @@ TM-score, GDT_TS for ours; field median and best; the three ablation rows of §4
   homologous to a CASP16 EU (spot-check the 31 EUs with PDB ids: none in train).
 - G2 (done 2026-10-01): FD gradient check on `pairTile` passes (§4); the one-epoch probe runs
   train → val → checkpoint → predict → assemble end to end; loss 11.8 → 3.18, val CE 2.54.
+  Added after the label-offset bug: the packed pools are checked against the per-chain files
+  (300 random chains, all targets) before any run, and a 64-chain memorization probe must
+  reach high train-set contact precision — a plateau at the separation prior (loss ≈ 2.47,
+  precision ≈ 5 %) means the labels are not the features' labels.
 - G3: full training; top-L/5 long-range precision on val reported before any CASP target is
   touched.
 - G4: fold + score on the 85 EUs; strip plot; the field rescored at CA-lDDT on the featured
@@ -273,7 +298,22 @@ Every launch is asked for first.
   decided headline = date cut only, purge = ablation; full fetch launched; committed 3485efa9.
 - 2026-10-01 (night): Brett picked `pairTile`; layer + emitters + FD smoke; `casp16_pack.py`
   (8.2 GB in 19 s), the demo trainer / predictor, `casp16_predict.py`; one-epoch probe end to
-  end (155 ms/step). G2 passed. Not yet committed.
+  end (155 ms/step). G2 passed; committed fcff9ce1. Four 30-epoch runs launched (GPU 0
+  headline train_full; 1 purged list; 2 seed 2; 3 128 channels). `casp16_fold.py` written;
+  `casp16_score.py --pseudo-cb`; truth-fold check passes (TM 0.9999 / mirror 0.34).
+- 2026-10-01 (late): the four runs sat at loss 2.47 / chance precision through epoch 3 — a
+  packing bug: `casp16_labels.py` sized each matrix from reps.csv's `length`
+  (rcsb_sample_sequence_length), the packer from the embedding (len(seq)); 19 entities
+  differ (8Q79_1: 234 vs 236), the first at pool position 444, and every later chain read
+  shifted labels (296 of 300 sampled). Labels now sized from the sequence, the packer
+  asserts L×L, both pools re-verified (0 of 300; targets 0 of 84). Runs restarted ~21:50 with
+  a 64-chain memorization probe alongside (`val=tiny`). The smoke now also checks eval ≡
+  train (the eval forward's masked CE at one batch's BN statistics equals that step's loss,
+  5.210230 both). On the fixed pool the restarted runs learn from the first epoch: val
+  top-L/5 long-range precision 19.0 % after epoch 1 (purged and seed-2 arms alike; the
+  ESM-2 head's number on the EUs is 47 %), val CE 2.90; epoch 3: 24.5–24.8 %, loss 2.28.
+  `Proofs/Foundation/PairTile.lean` (two HasVJP witnesses) builds clean, registered in the
+  Proofs and Certs roots.
 - 2026-10-01: `casp16_labels.py` (183 chains/s; adjacent Cβ–Cβ 5.39 Å, 4.0 % of pairs < 8 Å,
   93 % residues observed), `casp16_embed.py` (ESM-2 35M on CPU, ~1,700 residues/s at 16
   threads), `casp16_targets.py` (84 EUs, 0 residue-name mismatches, 98 % observed; ESM-2

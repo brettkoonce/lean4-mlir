@@ -17,10 +17,12 @@ import LeanMlir.SmallClassifier
     XLA backend only.
     `lake exe distogram-casp smoke` — emit a tiny instance, run one step, finite-difference the
     gradient of the pairTile parameters (and a few others) against the step's Adam moment.
-    `lake exe distogram-casp train [list=train_full|train] [epochs=30] [batch=32] [lr=0.001]
-        [ch=64] [units=16] [crop=64] [crops=1] [seed=1] [tag=<name>] [out=<dir>] [steps=N]`
-      — `crops` windows per chain per epoch; val every epoch on one diagonal window per val
-      chain (masked CE and top-L/5 long-range contact precision). Writes `<prefix>_curve.csv`,
+    `lake exe distogram-casp train [list=train_full|train] [val=val] [epochs=30] [batch=32]
+        [lr=0.001] [ch=64] [units=16] [crop=64] [crops=1] [seed=1] [tag=<name>] [out=<dir>]
+        [steps=N]`
+      — `crops` windows per chain per epoch; val every epoch on one diagonal window per chain
+      of the `val` index (masked CE and top-L/5 long-range contact precision); `val=tiny` on a
+      training subset is the memorization probe. Writes `<prefix>_curve.csv`,
       `_params.bin`, `_bn_stats.bin` under `out` (default `.lake/build`).
     `lake exe distogram-casp predict [same net args] [stride=32]` — reloads the params and
       writes, per evaluation unit, the summed window logits `<prefix>_targets/<EU>.acc.bin`
@@ -209,7 +211,7 @@ def train (args : List String) : IO Unit := do
   unless feat.size % (2 * net.D) == 0 do
     throw <| IO.userError s!"pool_feat.bin: {feat.size} bytes is not a multiple of 2·{net.D}; dim= is wrong"
   let tr ← ChainIdx.load s!"{dataDir}/{listName}_idx.bin"
-  let va ← ChainIdx.load s!"{dataDir}/val_idx.bin"
+  let va ← ChainIdx.load s!"{dataDir}/{parseArg args "val" "val"}_idx.bin"
   let t1 ← IO.monoMsNow
   IO.eprintln s!"  {tr.n} train chains, {va.n} val chains; features {feat.size / 1000000} MB, \
 labels {lab.size / 1000000} MB ({t1 - t0} ms)"
@@ -395,13 +397,26 @@ def smoke : IO Unit := do
     if (fd - g).abs > tol then bad := bad + 1
     IO.println s!"  {pad nm 20} {padL (fmt g 6) 14} {padL (fmt fd 6) 14} {padL (fmt (fd - g).abs 6) 10} {padL (fmt tol 6) 10}\
 {if (fd - g).abs > tol then "  ✗" else ""}"
-  let evalParams := p0.append (← F32.const nBn.toUSize 0.0)
+  -- eval ≡ train: with the BN running stats set to this batch's own statistics (what the
+  -- train step returns after its loss), the eval forward's masked CE on the same batch must
+  -- equal the train step's loss.
+  let packed0 := (p0.append m0).append m0
+  let out0 ← LowererSession.trainStepAdamF32Seg sess spec.trainFnName
+    packed0 allShapes x xSh y 0.001 1.0 bnShapes B.toUSize L.toUSize L.toUSize
+  let batchBn := out0.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
+  let evalParams := p0.append batchBn
   let logits ← LowererSession.forwardF32 evalSess spec.evalFnName evalParams spec.evalShapesBA x xSh
     B.toUSize (nClasses * L * L).toUSize
-  IO.println s!"  eval logits: {F32.size logits} floats (expected {B * nClasses * L * L})"
+  let mtr ← caspValMetrics logits y B.toUSize nClasses.toUSize L.toUSize longRangeSep.toUSize
+    contactMaxClass.toUSize unobserved.toUSize
+  let evalCe := F32.read mtr 2 / F32.read mtr 3
+  IO.println s!"  eval logits: {F32.size logits} floats (expected {B * nClasses * L * L}); \
+eval-forward masked CE at batch BN stats {evalCe} vs train-step loss {loss0} (|diff| {(evalCe - loss0).abs})"
+  if (evalCe - loss0).abs > 1e-3 * loss0 then
+    throw <| IO.userError "eval forward disagrees with the train forward"
   if bad > 0 then
     throw <| IO.userError s!"pairTile gradient check FAILED on {bad} coordinate(s)"
-  IO.println "smoke: pairTile gradient check passed"
+  IO.println "smoke: pairTile gradient check passed; eval forward ≡ train forward"
 
 
 end DistogramCasp

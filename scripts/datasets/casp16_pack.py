@@ -46,6 +46,7 @@ def pack(rows, feat_of, lab_of, out, name, feat_f=None, lab_f=None, idx_rows=Non
         feat = np.concatenate([emb.astype(np.float16), pos_feats(L)], 1)
         assert feat.shape == (L, 480 + NPOS)
         lab = lab_of(r, L)
+        assert lab.shape == (L, L) and lab.dtype == np.uint8, f"{r}: labels {lab.shape}, features {L} rows"
         feat_f.write(feat.tobytes()); lab_f.write(lab.tobytes())
         idx.append((foff, loff, L, k))
         foff += L; loff += L * L
