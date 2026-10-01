@@ -53,6 +53,13 @@ noncomputable def batchMapAux (N : Nat) {s a b : Nat} (f : Vec s → Vec a → V
     let p := finProdFinEquiv.symm idx
     f (batchSlice N s aux p.1) (batchSlice N a x p.1) p.2
 
+/-- `batchSlice` of a `batchMapAux` is the per-example map at the two slices. -/
+theorem batchSlice_batchMapAux {N s a b : Nat} (f : Vec s → Vec a → Vec b) (aux : Vec (N * s))
+    (x : Vec (N * a)) (n : Fin N) :
+    batchSlice N b (batchMapAux N f aux x) n = f (batchSlice N s aux n) (batchSlice N a x n) := by
+  funext i
+  simp [batchSlice, batchMapAux]
+
 /-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
     proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
     reindex so it slots into the `N·(oc·h·w)` batched composition (where conv/etc.

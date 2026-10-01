@@ -39,54 +39,15 @@ classifier dropout and the bf16 nodes are outside this statement, as they are ou
 
 open Proofs Proofs.StableHLO
 
-namespace Proofs.EnetTiePoCG
+namespace Proofs.EnetTieG
 
 open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
-  gateCotB rowB unrowB)
+  gateCotB rowB unrowB seGateMulB seGateMulBHasVJP seGateMulB_differentiable)
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § The SE gate — the gated product and its VJP
+-- § The SE gate — the block split at its gated product (`seGateMulB`, BackLinks)
 -- ════════════════════════════════════════════════════════════════
-
-/-- The SE block's gated product with the gate read at its pre-broadcast `[N, c]` value:
-    `x ⊙ broadcast(s)`, per example. -/
-noncomputable def seGateMulB (N c h w : Nat) (x : Vec (N * (c * h * w))) :
-    Vec (N * c) → Vec (N * (c * h * w)) :=
-  fun s J => x J * s (finProdFinEquiv ((finProdFinEquiv.symm J).1,
-    flatChannel c h w (finProdFinEquiv.symm J).2))
-
-/-- The gated product is linear in the gate; its backward is `gateCotB`, the emitted
-    `seReduceB`. -/
-noncomputable def seGateMulBHasVJP (N c h w : Nat) (x : Vec (N * (c * h * w))) :
-    HasVJP (seGateMulB N c h w x) where
-  backward _ dy := gateCotB N c h w x dy
-  correct s dy i := by
-    have hp : ∀ J, pdiv (seGateMulB N c h w x) s i J
-        = x J * (if i = finProdFinEquiv ((finProdFinEquiv.symm J).1,
-            flatChannel c h w (finProdFinEquiv.symm J).2) then 1 else 0) := fun J => by
-      have hm := pdiv_mul (fun _ => x) (fun s'' : Vec (N * c) => fun J'' =>
-          s'' (finProdFinEquiv ((finProdFinEquiv.symm J'').1,
-            flatChannel c h w (finProdFinEquiv.symm J'').2))) s
-        (differentiableAt_const _) ((reindexCLM _).differentiable s) i J
-      rw [pdiv_const, pdiv_reindex] at hm
-      exact hm.trans (by ring)
-    simp_rw [hp]
-    obtain ⟨⟨n0, c0⟩, rfl⟩ := finProdFinEquiv.surjective i
-    unfold gateCotB batchSlice
-    rw [Equiv.symm_apply_apply]
-    conv_rhs => rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
-    simp only [Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, mul_ite,
-      mul_one, mul_zero]
-    rw [Fintype.sum_eq_single n0 fun n hn => by simp [Ne.symm hn]]
-    refine Finset.sum_congr rfl fun q _ => ?_
-    by_cases hq : flatChannel c h w q = c0
-    · simp [hq]
-    · simp [hq, Ne.symm hq]
-
-theorem seGateMulB_differentiable (N c h w : Nat) (x : Vec (N * (c * h * w))) :
-    Differentiable ℝ (seGateMulB N c h w x) := by
-  unfold seGateMulB; fun_prop
 
 /-- **The batched SE block, split at the gate.** `seB` is the gated product of the block input
     with the sigmoid of the excite dense's output, the squeeze path computed on the whole batch —
@@ -1384,4 +1345,174 @@ theorem enet_net_lossGrad_smoothedCE (xN vN epsStr cotN dN aStr negAK bStr logN 
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
-end Proofs.EnetTiePoCG
+/-- **The emitted EfficientNet-B0 step's gradient nodes ARE the loss's gradient, at one chain.**
+    For each of the 262 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
+    smoothed-loss cotangent `g`): the node denotes its layer's Jacobian against the chain cotangent
+    (`efficientnet_net_tiedG`), and the batched smoothed loss of `efficientnetForwardBFull` with that
+    one slot varied is differentiable there with the node as its gradient
+    (`enet_net_lossGrad_smoothedCE`). The tie spells each block input as its own let; the proof
+    rewrites the loss side's `enetPre*` into those lets (`enetPreB0_apply`, …) and the loss side's
+    logits into the tie's (`enet_forward_eq_head`). -/
+theorem enet_net_tied_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
+    (hεw : w.EpsPos)
+    (aStr negAK bStr logN ohN : String) (α B : ℝ)
+    (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
+    (hK : 0 < nCls) (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
+    -- forward block inputs (the prefixes of efficientnetForwardBFull)
+    let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
+    let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
+    let a2  : Vec (N * (24 * 56 * 56))   := mbStridedW N 56 56 w.b2 a1
+    let a3  : Vec (N * (24 * 56 * 56))   := mbResidW N 56 56 w.b3 a2
+    let a4  : Vec (N * (40 * 28 * 28))   := mbStridedW N 28 28 w.b4 a3
+    let a5  : Vec (N * (40 * 28 * 28))   := mbResidW N 28 28 w.b5 a4
+    let a6  : Vec (N * (80 * 14 * 14))   := mbStridedW N 14 14 w.b6 a5
+    let a7  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b7 a6
+    let a8  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b8 a7
+    let a9  : Vec (N * (112 * 14 * 14))  := mbExpW N 14 14 w.b9 a8
+    let a10 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b10 a9
+    let a11 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b11 a10
+    let a12 : Vec (N * (192 * 7 * 7))    := mbStridedW N 7 7 w.b12 a11
+    let a13 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b13 a12
+    let a14 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b14 a13
+    let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
+    let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
+    -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
+    let g    : Vec (N * nCls) :=
+      Proofs.BackLinks.unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+        (Proofs.BackLinks.rowB N nCls
+          (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
+    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
+    let L := smoothedBatchLoss N nCls α B t
+    -- every block + stem + head tied at its real input + threaded output cotangent
+    (enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0
+      ∧ enetStemLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x
+        (fun W b γ β => L (efficientnetForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+        dy0)
+  ∧ (enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1
+      ∧ enetNoExpLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.b1 hεw.b1 a0
+        (fun p => L (efficientnetForwardBFull N { w with b1 := p } x)) dy1)
+  ∧ (enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 dy2
+      ∧ enetStridedLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b2 hεw.b2 a1
+        (fun p => L (efficientnetForwardBFull N { w with b2 := p } x)) dy2)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 dy3
+      ∧ enetExpLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b3 hεw.b3 a2
+        (fun p => L (efficientnetForwardBFull N { w with b3 := p } x)) dy3)
+  ∧ (enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 dy4
+      ∧ enetStridedLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b4 hεw.b4 a3
+        (fun p => L (efficientnetForwardBFull N { w with b4 := p } x)) dy4)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 dy5
+      ∧ enetExpLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b5 hεw.b5 a4
+        (fun p => L (efficientnetForwardBFull N { w with b5 := p } x)) dy5)
+  ∧ (enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 dy6
+      ∧ enetStridedLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b6 hεw.b6 a5
+        (fun p => L (efficientnetForwardBFull N { w with b6 := p } x)) dy6)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 dy7
+      ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b7 hεw.b7 a6
+        (fun p => L (efficientnetForwardBFull N { w with b7 := p } x)) dy7)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 dy8
+      ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b8 hεw.b8 a7
+        (fun p => L (efficientnetForwardBFull N { w with b8 := p } x)) dy8)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 dy9
+      ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b9 hεw.b9 a8
+        (fun p => L (efficientnetForwardBFull N { w with b9 := p } x)) dy9)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 dy10
+      ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b10 hεw.b10 a9
+        (fun p => L (efficientnetForwardBFull N { w with b10 := p } x)) dy10)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 dy11
+      ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b11 hεw.b11 a10
+        (fun p => L (efficientnetForwardBFull N { w with b11 := p } x)) dy11)
+  ∧ (enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 dy12
+      ∧ enetStridedLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b12 hεw.b12 a11
+        (fun p => L (efficientnetForwardBFull N { w with b12 := p } x)) dy12)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 dy13
+      ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b13 hεw.b13 a12
+        (fun p => L (efficientnetForwardBFull N { w with b13 := p } x)) dy13)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 dy14
+      ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b14 hεw.b14 a13
+        (fun p => L (efficientnetForwardBFull N { w with b14 := p } x)) dy14)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 dy15
+      ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b15 hεw.b15 a14
+        (fun p => L (efficientnetForwardBFull N { w with b15 := p } x)) dy15)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
+      ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b16 hεw.b16 a15
+        (fun p => L (efficientnetForwardBFull N { w with b16 := p } x)) dy16)
+  ∧ (enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g
+      ∧ enetHeadLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ
+        w.fcW w.fcb a16
+        (fun W b γ β Wd bd => L (efficientnetForwardBFull N
+        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x)) g) := by
+  intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 g dy16 dy15 dy14 dy13 dy12 dy11
+    dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0 L
+  have htie :=
+    efficientnet_net_tiedG xN vN epsStr cotN dN N w hεw aStr negAK bStr logN ohN α B x t
+  extract_lets at htie
+  obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17⟩ := htie
+  have hl :=
+    enet_net_lossGrad_smoothedCE xN vN epsStr cotN dN aStr negAK bStr logN ohN N hK α B w hεw x t ht
+  -- the loss side's activations and logits, in the tie's spelling
+  have e0 : enetPreB0 N w x = a0 := by rw [enetPreB0_apply N w x]
+  have e1 : enetPreB1 N w x = a1 := by rw [enetPreB1_apply N w x, e0]
+  have e2 : enetPreB2 N w x = a2 := by rw [enetPreB2_apply N w x, e1]
+  have e3 : enetPreB3 N w x = a3 := by rw [enetPreB3_apply N w x, e2]
+  have e4 : enetPreB4 N w x = a4 := by rw [enetPreB4_apply N w x, e3]
+  have e5 : enetPreB5 N w x = a5 := by rw [enetPreB5_apply N w x, e4]
+  have e6 : enetPreB6 N w x = a6 := by rw [enetPreB6_apply N w x, e5]
+  have e7 : enetPreB7 N w x = a7 := by rw [enetPreB7_apply N w x, e6]
+  have e8 : enetPreB8 N w x = a8 := by rw [enetPreB8_apply N w x, e7]
+  have e9 : enetPreB9 N w x = a9 := by rw [enetPreB9_apply N w x, e8]
+  have e10 : enetPreB10 N w x = a10 := by rw [enetPreB10_apply N w x, e9]
+  have e11 : enetPreB11 N w x = a11 := by rw [enetPreB11_apply N w x, e10]
+  have e12 : enetPreB12 N w x = a12 := by rw [enetPreB12_apply N w x, e11]
+  have e13 : enetPreB13 N w x = a13 := by rw [enetPreB13_apply N w x, e12]
+  have e14 : enetPreB14 N w x = a14 := by rw [enetPreB14_apply N w x, e13]
+  have e15 : enetPreB15 N w x = a15 := by rw [enetPreB15_apply N w x, e14]
+  have e16 : enetPreB16 N w x = a16 := by rw [enetPreB16_apply N w x, e15]
+  have eg : unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+      (rowB N nCls (efficientnetForwardBFull N w x)) t)) = g := by
+    rw [enet_forward_eq_head, e16]
+  unfold EnetNetLossTiedG at hl
+  rw [eg, e16, e15, e14, e13, e12, e11, e10, e9, e8, e7, e6, e5, e4, e3, e2, e1, e0] at hl
+  extract_lets at hl
+  -- the loss def's abstracted proof arguments keep these from merging; match them stepwise
+  rename_i d_dy15 d_dy14 d_dy13 d_dy12 d_dy11 d_dy10 d_dy9 d_dy8 d_dy7 d_dy6 d_dy5 d_dy4 d_dy3
+    d_dy2 d_dy1 d_dy0
+  have q_dy15 : d_dy15 = dy15 := rfl
+  have q_dy14 : d_dy14 = dy14 := by simp only [d_dy14, q_dy15]; rfl
+  have q_dy13 : d_dy13 = dy13 := by simp only [d_dy13, q_dy14]; rfl
+  have q_dy12 : d_dy12 = dy12 := by simp only [d_dy12, q_dy13]; rfl
+  have q_dy11 : d_dy11 = dy11 := by simp only [d_dy11, q_dy12]; rfl
+  have q_dy10 : d_dy10 = dy10 := by simp only [d_dy10, q_dy11]; rfl
+  have q_dy9 : d_dy9 = dy9 := by simp only [d_dy9, q_dy10]; rfl
+  have q_dy8 : d_dy8 = dy8 := by simp only [d_dy8, q_dy9]; rfl
+  have q_dy7 : d_dy7 = dy7 := by simp only [d_dy7, q_dy8]; rfl
+  have q_dy6 : d_dy6 = dy6 := by simp only [d_dy6, q_dy7]; rfl
+  have q_dy5 : d_dy5 = dy5 := by simp only [d_dy5, q_dy6]; rfl
+  have q_dy4 : d_dy4 = dy4 := by simp only [d_dy4, q_dy5]; rfl
+  have q_dy3 : d_dy3 = dy3 := by simp only [d_dy3, q_dy4]; rfl
+  have q_dy2 : d_dy2 = dy2 := by simp only [d_dy2, q_dy3]; rfl
+  have q_dy1 : d_dy1 = dy1 := by simp only [d_dy1, q_dy2]; rfl
+  have q_dy0 : d_dy0 = dy0 := by simp only [d_dy0, q_dy1]; rfl
+  rw [q_dy0, q_dy1, q_dy2, q_dy3, q_dy4, q_dy5, q_dy6, q_dy7, q_dy8, q_dy9, q_dy10, q_dy11, q_dy12,
+    q_dy13, q_dy14, q_dy15] at hl
+  obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17⟩ := hl
+  exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
+    ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, l12⟩, ⟨t13, l13⟩, ⟨t14, l14⟩, ⟨t15, l15⟩, ⟨t16, l16⟩,
+    ⟨t17, l17⟩⟩
+
+end Proofs.EnetTieG

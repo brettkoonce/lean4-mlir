@@ -53,7 +53,7 @@ its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with
 | stride | the three stride-2 rows (1, 3, 11) stride their POST-DW (timm's `dw_mid`); the pre-DW and the expand run at the input resolution |
 | head | 1×1 256 → 960 conv-bn-relu at 7×7, GAP, then `conv_head` 960 → 1280 conv-bn-relu on the pooled `[N, 960, 1, 1]` (its BN over the batch alone), then dense |
 | census | **233** parameter slots at `nCls = 10` (8,447,322 scalars; 9,715,512 at 1000), bias-free by construction |
-| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals `mnv4{,in}_fwd_eval` and the 256×256 `mnv4in_fwd_eval_s256` (stated in `MobileNetV4FullBEval`, at any input size), the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand; bf16, and their f32 form is `mnv4FwdGraphBFullDo` below), and the stochastic-depth train steps `mnv4in_acc{,dp}8x128wxdropdowd01bf16` (a drop-path site on each of the 18 skip rows; no drop-path forward is stated) |
+| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals `mnv4{,in}_fwd_eval` and the 256×256 `mnv4in_fwd_eval_s256` (stated in `MobileNetV4FullBEval`, at any input size), the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand; bf16, and their f32 form is `mnv4FwdGraphBFullDo` below), and the stochastic-depth train steps `mnv4in_acc{,dp}8x128wxdropdowd01bf16` (a drop-path site on each of the 18 skip rows; bf16, and their f32 forward is `MobileNetV4FullBDrop`'s) |
 
 `N` stays a binder throughout, as at r34/R50. On the data-parallel artifacts the render's `N` is
 the per-replica batch and BatchNorm is synchronised across replicas; `MobileNetV4SyncB.lean` is
@@ -784,7 +784,7 @@ private theorem mnv4HeadStack_graph_faithful (N : Nat) (epsStr : String) {nCls :
     w.hW w.hb w.hE w.hhE w.hg w.hbt w.Wd w.bd e
 
 /-- The stem's, likewise, at the net's own widths. -/
-private theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
     den (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)
       = mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt (den e) :=
@@ -987,7 +987,7 @@ def mnv4FwdGraphBFullDo (N : Nat) (epsStr mName : String) {nCls : Nat} (w : Mnv4
 
 /-- The dropout head's faithfulness at the net's widths — the barrier `mnv4HeadStack_graph_faithful`
     is for the plain head. -/
-private theorem mnv4HeadDo_graph_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
+theorem mnv4HeadDo_graph_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (256 * 7 * 7))) :
     den (mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
           w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m e)

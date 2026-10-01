@@ -137,6 +137,20 @@ theorem chanLNTensor3_differentiable (c h w : Nat) (ε : ℝ) (γ β : Vec c) (h
       ((rowLNVecFlat_differentiable (h * w) c ε γ β hε).comp
         ((transposeFlat_differentiable c (h * w)).comp (reassocFwd_differentiable c h w))))
 
+/-- `chanLNTensor3` is differentiable in `γ` (the parameter-gradient nodes vary it). -/
+theorem chanLNTensor3_gamma_differentiable (c h w : Nat) (ε : ℝ) (β : Vec c)
+    (x : Vec (c * h * w)) : Differentiable ℝ (fun γ : Vec c => chanLNTensor3 c h w ε γ β x) := by
+  unfold chanLNTensor3
+  exact (reassocBack_differentiable c h w).comp ((transposeFlat_differentiable (h * w) c).comp
+    (rowLNVecFlat_gamma_differentiable (h * w) c ε β _))
+
+/-- …and in `β`. -/
+theorem chanLNTensor3_beta_differentiable (c h w : Nat) (ε : ℝ) (γ : Vec c)
+    (x : Vec (c * h * w)) : Differentiable ℝ (fun β : Vec c => chanLNTensor3 c h w ε γ β x) := by
+  unfold chanLNTensor3
+  exact (reassocBack_differentiable c h w).comp ((transposeFlat_differentiable (h * w) c).comp
+    (rowLNVecFlat_beta_differentiable (h * w) c ε γ _))
+
 /-- **Channel-LN VJP (global)** — `vjpComp` over the five proven pieces. The only hypothesis
     is the LN positivity `0 < ε`, exactly as the scalar `layerNormHasVJP` it replaces. A term,
     not a tactic proof, so its `.backward` unfolds to the nested chain. -/

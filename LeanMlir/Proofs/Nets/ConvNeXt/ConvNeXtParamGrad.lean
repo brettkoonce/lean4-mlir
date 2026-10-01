@@ -38,27 +38,15 @@ statement, as they are outside the tie.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.CnxTiePoCGB
+namespace Proofs.CnxTieGB
 
 open scoped BigOperators
-open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt
+open Proofs.CnxTie (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt
   CnxTieWeights CnxTieBlk CnxTieDown)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Parameter differentiability of the ConvNeXt-specific ops
 -- ════════════════════════════════════════════════════════════════
-
-theorem chanLNTensor3_gamma_differentiable (c h w : Nat) (ε : ℝ) (β : Vec c)
-    (x : Vec (c * h * w)) : Differentiable ℝ (fun γ : Vec c => chanLNTensor3 c h w ε γ β x) := by
-  unfold chanLNTensor3
-  exact (reassocBack_differentiable c h w).comp ((transposeFlat_differentiable (h * w) c).comp
-    (rowLNVecFlat_gamma_differentiable (h * w) c ε β _))
-
-theorem chanLNTensor3_beta_differentiable (c h w : Nat) (ε : ℝ) (γ : Vec c)
-    (x : Vec (c * h * w)) : Differentiable ℝ (fun β : Vec c => chanLNTensor3 c h w ε γ β x) := by
-  unfold chanLNTensor3
-  exact (reassocBack_differentiable c h w).comp ((transposeFlat_differentiable (h * w) c).comp
-    (rowLNVecFlat_beta_differentiable (h * w) c ε γ _))
 
 theorem layerScaleCh_gamma_differentiable (c h w : Nat) (x : Vec (c * h * w)) :
     Differentiable ℝ (fun γ : Vec c => layerScale (fun k => γ (chanIdx c h w k)) x) := by
@@ -272,7 +260,7 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostN_differentiable h w p y)
         (fun y dy => (hc y dy).2.2.2.1)
         _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.nB _ p.nG _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnGammaGradB_den xN epsStr cotN ε p.nB _ p.nG _ k).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => cnxActD h w p y)
         (fun θ d => chanLNTensor3 c h w ε p.nG θ d)
         (cnxPostN h w p) (fun y dy => blkCotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
@@ -281,7 +269,7 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => cnxPostN_differentiable h w p y)
         (fun y dy => (hc y dy).2.2.2.1)
         _ _ (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε p.nG _ p.nB _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnBetaGradB_den cotN ε p.nG _ p.nB _ k).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => cnxActNl h w ε p y)
         (fun θ nl => flatConv (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 cExp c 1 1) p.eB nl)
         (cnxPostE h w p) (fun y dy => blkCotE ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
@@ -330,7 +318,7 @@ theorem cnx_block_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε
         (fun y => differentiable_id.add_const y)
         (fun y dy => (hc y dy).1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl) (fun _ => rfl)).of_eq
-      (funext fun cc => (CnxPoCGB.layerScaleChGammaGradB_den xN cotN _ p.sL _ cc).symm)
+      (funext fun cc => (CnxFoldGB.layerScaleChGammaGradB_den xN cotN _ p.sL _ cc).symm)
 
 end Block
 
@@ -384,7 +372,7 @@ theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
         (fun y => (chanLNTensor3_gamma_differentiable ci (2 * h) (2 * w) ε p.T y) _)
         (fun _ => flatConvStride2_differentiable p.W p.B) hc
         xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε p.T xin p.G _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnGammaGradB_den xN epsStr cotN ε p.T xin p.G _ k).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G θ y)
         (fun _ u => flatConvStride2 (h := h) (w := w) p.W p.B u)
@@ -392,7 +380,7 @@ theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
         (fun y => (chanLNTensor3_beta_differentiable ci (2 * h) (2 * w) ε p.G y) _)
         (fun _ => flatConvStride2_differentiable p.W p.B) hc
         xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε p.G xin p.T _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnBetaGradB_den cotN ε p.G xin p.T _ k).symm)
   · exact (HasGradAt.param_batchMap_through
         (fun y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T y)
         (fun θ n => flatConvStride2 (h := h) (w := w) (Kernel4.unflatten θ : Kernel4 co ci 2 2) p.B n)
@@ -465,13 +453,13 @@ theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
         hLb (fun y => (chanLNTensor3_gamma_differentiable c h w ε psnbt y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt _ psng _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt _ psng _ k).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => flatConvStride4 (h := h) (w := w) Wst psb y)
         (fun θ u => chanLNTensor3 c h w ε psng θ u) (fun _ z => z) (fun _ dy => dy) x (θ := psnbt)
         hLb (fun y => (chanLNTensor3_beta_differentiable c h w ε psng y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
-      (funext fun k => (CnxPoCGB.chanLnBetaGradB_den cotN ε psng _ psnbt _ k).symm)
+      (funext fun k => (CnxFoldGB.chanLnBetaGradB_den cotN ε psng _ psnbt _ k).symm)
   · -- the emitted bias node reads the channel sum; any conv's bias Jacobian is the indicator
     refine (HasGradAt.param_batchMap_through (fun y => y)
       (fun θ y => flatConvStride4 (h := h) (w := w) Wst θ y)
@@ -1167,7 +1155,7 @@ theorem cnxNetB_eq_convNextForwardTCh (N : Nat) {nC : Nat} (ε : ℝ) (w : CnxTi
         ∘ w.b2.fwdO (h := 56) (w := 56) ε ∘ w.b1.fwdO (h := 56) (w := 56) ε
         ∘ cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) y := by
     intro y
-    rw [← CnxTiePoC.CnxTieWeights.forward_eq_convNextForwardTCh w ε y]
+    rw [← CnxTie.CnxTieWeights.forward_eq_convNextForwardTCh w ε y]
     simp only [Function.comp_apply, cnxHeadO, mnistLinear]
   rw [show convNextForwardTCh (w.toCh ε) = _ from funext hper, batchMap_comp, batchMap_comp,
     batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp, batchMap_comp,
@@ -1374,4 +1362,182 @@ theorem cnx_net_lossGrad_smoothedCE (xN epsStr cotN dN aStr negAK bStr logN ohN 
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
       fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
-end Proofs.CnxTiePoCGB
+/-- **The emitted ConvNeXt-T step's gradient nodes ARE the loss's gradient, at one chain.** For
+    each of the 182 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
+    smoothed-loss cotangent `g`): the node denotes its layer's Jacobian against the chain cotangent
+    (`cnx_net_tiedGB`), and the batched smoothed loss of `cnxNetB` with that one slot varied is
+    differentiable there with the node as its gradient (`cnx_net_lossGrad_smoothedCE`). The tie
+    spells each block input as its own let; the proof rewrites the loss side's `cnxPre*` into those
+    lets (`cnxPreS_apply`, …) and the loss side's logits into the tie's (`cnx_logitsB_eq`). -/
+theorem cnx_net_tied_lossGrad (N : Nat) {nC : Nat}
+    (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
+    (w : CnxTieWeights nC)
+    (x : Vec (N * (3*224*224))) (t : Vec (N * nC))
+    (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
+    -- forward block inputs (the prefixes of the committed render's forward)
+    let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) x
+    let ib2 : Vec (N * (96*56*56)) := batchMap N (w.b1.fwdO ε) ib1
+    let ib3 : Vec (N * (96*56*56)) := batchMap N (w.b2.fwdO ε) ib2
+    let ibD0 : Vec (N * (96*56*56)) := batchMap N (w.b3.fwdO ε) ib3
+    let ib4 : Vec (N * (192*28*28)) := batchMap N (w.d0.fwdO (h := 28) (w := 28) ε) ibD0
+    let ib5 : Vec (N * (192*28*28)) := batchMap N (w.b4.fwdO ε) ib4
+    let ib6 : Vec (N * (192*28*28)) := batchMap N (w.b5.fwdO ε) ib5
+    let ibD1 : Vec (N * (192*28*28)) := batchMap N (w.b6.fwdO ε) ib6
+    let ib7 : Vec (N * (384*14*14)) := batchMap N (w.d1.fwdO (h := 14) (w := 14) ε) ibD1
+    let ib8 : Vec (N * (384*14*14)) := batchMap N (w.b7.fwdO ε) ib7
+    let ib9 : Vec (N * (384*14*14)) := batchMap N (w.b8.fwdO ε) ib8
+    let ib10 : Vec (N * (384*14*14)) := batchMap N (w.b9.fwdO ε) ib9
+    let ib11 : Vec (N * (384*14*14)) := batchMap N (w.b10.fwdO ε) ib10
+    let ib12 : Vec (N * (384*14*14)) := batchMap N (w.b11.fwdO ε) ib11
+    let ib13 : Vec (N * (384*14*14)) := batchMap N (w.b12.fwdO ε) ib12
+    let ib14 : Vec (N * (384*14*14)) := batchMap N (w.b13.fwdO ε) ib13
+    let ib15 : Vec (N * (384*14*14)) := batchMap N (w.b14.fwdO ε) ib14
+    let ibD2 : Vec (N * (384*14*14)) := batchMap N (w.b15.fwdO ε) ib15
+    let ib16 : Vec (N * (768*7*7)) := batchMap N (w.d2.fwdO (h := 7) (w := 7) ε) ibD2
+    let ib17 : Vec (N * (768*7*7)) := batchMap N (w.b16.fwdO ε) ib16
+    let ib18 : Vec (N * (768*7*7)) := batchMap N (w.b17.fwdO ε) ib17
+    let xhead : Vec (N * (768*7*7)) := batchMap N (w.b18.fwdO ε) ib18
+    -- head forward + the SMOOTHED loss cotangent, at a general target `t`
+    let gapB    : Vec (N * (1*768)) := batchMap N (globalAvgPoolFlat 768 7 7) xhead
+    let hnB     : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε w.hG w.hT) gapB
+    let logitsB : Vec (N * nC)      := batchMap N (dense w.Wfc w.bfc) hnB
+    let g       : Vec (N * nC)      :=
+      den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t)
+    -- backward cotangents (composed from the loss; residual fan-in at each skip, LN-back at each
+    -- downsample and at the stem)
+    let dyO18 : Vec (N * (768*7*7)) := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc) xhead g
+    let dyO17 : Vec (N * (768*7*7)) := batchMapAux N (w.b18.cotIn ε) ib18 dyO18
+    let dyO16 : Vec (N * (768*7*7)) := batchMapAux N (w.b17.cotIn ε) ib17 dyO17
+    let dyD2 : Vec (N * (768*7*7)) := batchMapAux N (w.b16.cotIn ε) ib16 dyO16
+    let dyO15 : Vec (N * (384*14*14)) := batchMapAux N (w.d2.cotIn (h := 7) (w := 7) ε) ibD2 dyD2
+    let dyO14 : Vec (N * (384*14*14)) := batchMapAux N (w.b15.cotIn ε) ib15 dyO15
+    let dyO13 : Vec (N * (384*14*14)) := batchMapAux N (w.b14.cotIn ε) ib14 dyO14
+    let dyO12 : Vec (N * (384*14*14)) := batchMapAux N (w.b13.cotIn ε) ib13 dyO13
+    let dyO11 : Vec (N * (384*14*14)) := batchMapAux N (w.b12.cotIn ε) ib12 dyO12
+    let dyO10 : Vec (N * (384*14*14)) := batchMapAux N (w.b11.cotIn ε) ib11 dyO11
+    let dyO9 : Vec (N * (384*14*14)) := batchMapAux N (w.b10.cotIn ε) ib10 dyO10
+    let dyO8 : Vec (N * (384*14*14)) := batchMapAux N (w.b9.cotIn ε) ib9 dyO9
+    let dyO7 : Vec (N * (384*14*14)) := batchMapAux N (w.b8.cotIn ε) ib8 dyO8
+    let dyD1 : Vec (N * (384*14*14)) := batchMapAux N (w.b7.cotIn ε) ib7 dyO7
+    let dyO6 : Vec (N * (192*28*28)) := batchMapAux N (w.d1.cotIn (h := 14) (w := 14) ε) ibD1 dyD1
+    let dyO5 : Vec (N * (192*28*28)) := batchMapAux N (w.b6.cotIn ε) ib6 dyO6
+    let dyO4 : Vec (N * (192*28*28)) := batchMapAux N (w.b5.cotIn ε) ib5 dyO5
+    let dyD0 : Vec (N * (192*28*28)) := batchMapAux N (w.b4.cotIn ε) ib4 dyO4
+    let dyO3 : Vec (N * (96*56*56)) := batchMapAux N (w.d0.cotIn (h := 28) (w := 28) ε) ibD0 dyD0
+    let dyO2 : Vec (N * (96*56*56)) := batchMapAux N (w.b3.cotIn ε) ib3 dyO3
+    let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (w.b2.cotIn ε) ib2 dyO2
+    let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn ε) ib1 dyO1
+    let L := smoothedBatchLossDiv N nC α B t
+    -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
+    (cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem
+      ∧ cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x
+        (fun W b γ β => L (cnxNetB N ε { w with sW := W, sb := b, sγ := γ, sβ := β } x)) dyStem)
+  ∧ (w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1
+      ∧ cnxBlockLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.b1 ib1
+        (fun p => L (cnxNetB N ε { w with b1 := p } x)) dyO1)
+  ∧ (w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2
+      ∧ cnxBlockLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.b2 ib2
+        (fun p => L (cnxNetB N ε { w with b2 := p } x)) dyO2)
+  ∧ (w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3
+      ∧ cnxBlockLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.b3 ib3
+        (fun p => L (cnxNetB N ε { w with b3 := p } x)) dyO3)
+  ∧ (w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0
+      ∧ cnxDownLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 ibD0
+        (fun p => L (cnxNetB N ε { w with d0 := p } x)) dyD0)
+  ∧ (w.b4.TiedGB N xN epsStr cotN ε ib4 dyO4
+      ∧ cnxBlockLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.b4 ib4
+        (fun p => L (cnxNetB N ε { w with b4 := p } x)) dyO4)
+  ∧ (w.b5.TiedGB N xN epsStr cotN ε ib5 dyO5
+      ∧ cnxBlockLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.b5 ib5
+        (fun p => L (cnxNetB N ε { w with b5 := p } x)) dyO5)
+  ∧ (w.b6.TiedGB N xN epsStr cotN ε ib6 dyO6
+      ∧ cnxBlockLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.b6 ib6
+        (fun p => L (cnxNetB N ε { w with b6 := p } x)) dyO6)
+  ∧ (w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1
+      ∧ cnxDownLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 ibD1
+        (fun p => L (cnxNetB N ε { w with d1 := p } x)) dyD1)
+  ∧ (w.b7.TiedGB N xN epsStr cotN ε ib7 dyO7
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b7 ib7
+        (fun p => L (cnxNetB N ε { w with b7 := p } x)) dyO7)
+  ∧ (w.b8.TiedGB N xN epsStr cotN ε ib8 dyO8
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b8 ib8
+        (fun p => L (cnxNetB N ε { w with b8 := p } x)) dyO8)
+  ∧ (w.b9.TiedGB N xN epsStr cotN ε ib9 dyO9
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b9 ib9
+        (fun p => L (cnxNetB N ε { w with b9 := p } x)) dyO9)
+  ∧ (w.b10.TiedGB N xN epsStr cotN ε ib10 dyO10
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b10 ib10
+        (fun p => L (cnxNetB N ε { w with b10 := p } x)) dyO10)
+  ∧ (w.b11.TiedGB N xN epsStr cotN ε ib11 dyO11
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b11 ib11
+        (fun p => L (cnxNetB N ε { w with b11 := p } x)) dyO11)
+  ∧ (w.b12.TiedGB N xN epsStr cotN ε ib12 dyO12
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b12 ib12
+        (fun p => L (cnxNetB N ε { w with b12 := p } x)) dyO12)
+  ∧ (w.b13.TiedGB N xN epsStr cotN ε ib13 dyO13
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b13 ib13
+        (fun p => L (cnxNetB N ε { w with b13 := p } x)) dyO13)
+  ∧ (w.b14.TiedGB N xN epsStr cotN ε ib14 dyO14
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b14 ib14
+        (fun p => L (cnxNetB N ε { w with b14 := p } x)) dyO14)
+  ∧ (w.b15.TiedGB N xN epsStr cotN ε ib15 dyO15
+      ∧ cnxBlockLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.b15 ib15
+        (fun p => L (cnxNetB N ε { w with b15 := p } x)) dyO15)
+  ∧ (w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2
+      ∧ cnxDownLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 ibD2
+        (fun p => L (cnxNetB N ε { w with d2 := p } x)) dyD2)
+  ∧ (w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16
+      ∧ cnxBlockLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.b16 ib16
+        (fun p => L (cnxNetB N ε { w with b16 := p } x)) dyO16)
+  ∧ (w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17
+      ∧ cnxBlockLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.b17 ib17
+        (fun p => L (cnxNetB N ε { w with b17 := p } x)) dyO17)
+  ∧ (w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18
+      ∧ cnxBlockLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.b18 ib18
+        (fun p => L (cnxNetB N ε { w with b18 := p } x)) dyO18)
+  ∧ (cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
+      ∧ cnxHeadLossTiedGB N (h := 7) (w := 7) xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead
+        (fun a b W bb => L (cnxNetB N ε { w with hG := a, hT := b, Wfc := W, bfc := bb } x)) g) := by
+  intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17
+    ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9
+    dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem L
+  obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19,
+    t20, t21, t22⟩ :=
+    cnx_net_tiedGB N xN epsStr cotN dN aStr negAK bStr logN ohN ε α B w x t
+  have hl :=
+    cnx_net_lossGrad_smoothedCE xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w x t ht
+  -- the loss side's activations and logits, in the tie's spelling
+  have e0 : cnxPreS N ε w x = ib1 := by rw [cnxPreS_apply N ε w x]
+  have e1 : cnxPreB1 N ε w x = ib2 := by rw [cnxPreB1_apply N ε w x, e0]
+  have e2 : cnxPreB2 N ε w x = ib3 := by rw [cnxPreB2_apply N ε w x, e1]
+  have e3 : cnxPreB3 N ε w x = ibD0 := by rw [cnxPreB3_apply N ε w x, e2]
+  have e4 : cnxPreD0 N ε w x = ib4 := by rw [cnxPreD0_apply N ε w x, e3]
+  have e5 : cnxPreB4 N ε w x = ib5 := by rw [cnxPreB4_apply N ε w x, e4]
+  have e6 : cnxPreB5 N ε w x = ib6 := by rw [cnxPreB5_apply N ε w x, e5]
+  have e7 : cnxPreB6 N ε w x = ibD1 := by rw [cnxPreB6_apply N ε w x, e6]
+  have e8 : cnxPreD1 N ε w x = ib7 := by rw [cnxPreD1_apply N ε w x, e7]
+  have e9 : cnxPreB7 N ε w x = ib8 := by rw [cnxPreB7_apply N ε w x, e8]
+  have e10 : cnxPreB8 N ε w x = ib9 := by rw [cnxPreB8_apply N ε w x, e9]
+  have e11 : cnxPreB9 N ε w x = ib10 := by rw [cnxPreB9_apply N ε w x, e10]
+  have e12 : cnxPreB10 N ε w x = ib11 := by rw [cnxPreB10_apply N ε w x, e11]
+  have e13 : cnxPreB11 N ε w x = ib12 := by rw [cnxPreB11_apply N ε w x, e12]
+  have e14 : cnxPreB12 N ε w x = ib13 := by rw [cnxPreB12_apply N ε w x, e13]
+  have e15 : cnxPreB13 N ε w x = ib14 := by rw [cnxPreB13_apply N ε w x, e14]
+  have e16 : cnxPreB14 N ε w x = ib15 := by rw [cnxPreB14_apply N ε w x, e15]
+  have e17 : cnxPreB15 N ε w x = ibD2 := by rw [cnxPreB15_apply N ε w x, e16]
+  have e18 : cnxPreD2 N ε w x = ib16 := by rw [cnxPreD2_apply N ε w x, e17]
+  have e19 : cnxPreB16 N ε w x = ib17 := by rw [cnxPreB16_apply N ε w x, e18]
+  have e20 : cnxPreB17 N ε w x = ib18 := by rw [cnxPreB17_apply N ε w x, e19]
+  have e21 : cnxPreB18 N ε w x = xhead := by rw [cnxPreB18_apply N ε w x, e20]
+  have eg : den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN
+      (cnxNetB N ε w x) t) = g := by rw [← cnx_logitsB_eq, e21]
+  unfold CnxNetLossTiedGB at hl
+  rw [eg, e21, e20, e19, e18, e17, e16, e15, e14, e13, e12, e11, e10, e9, e8, e7, e6, e5, e4, e3,
+    e2, e1, e0] at hl
+  obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18, l19,
+    l20, l21, l22⟩ := hl
+  exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
+    ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, l12⟩, ⟨t13, l13⟩, ⟨t14, l14⟩, ⟨t15, l15⟩, ⟨t16, l16⟩,
+    ⟨t17, l17⟩, ⟨t18, l18⟩, ⟨t19, l19⟩, ⟨t20, l20⟩, ⟨t21, l21⟩, ⟨t22, l22⟩⟩
+
+end Proofs.CnxTieGB

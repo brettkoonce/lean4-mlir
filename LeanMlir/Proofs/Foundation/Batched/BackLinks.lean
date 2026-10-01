@@ -331,7 +331,7 @@ cotangents are the genuine loss-driven backward, not a free `∀c`. `reassocB` b
 index `(oc·h·w)` to the BN param-op index `(oc·(h·w))`. -/
 
 /-- `(oc·h·w) → (oc·(h·w))` batched reassociation reindex — bridges the conv/swish chain index to the
-    BN γ/β + conv-bias op index (`EnetPoC.bn{Gamma,Beta}B_den` consume `Vec (N·(oc·(h·w)))`). -/
+    BN γ/β + conv-bias op index (`EnetFold.bn{Gamma,Beta}B_den` consume `Vec (N·(oc·(h·w)))`). -/
 noncomputable def reassocB (N oc h w : Nat) (v : Vec (N * (oc * h * w))) : Vec (N * (oc * (h * w))) :=
   fun i => v (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm i)
 
@@ -441,6 +441,45 @@ noncomputable def gateCotB (N c h w : Nat) (x dy : Vec (N * (c * h * w))) : Vec 
       batchSlice N (c * h * w) x (finProdFinEquiv.symm idx).1 q
         * batchSlice N (c * h * w) dy (finProdFinEquiv.symm idx).1 q
     else 0
+
+/-- The SE block's gated product with the gate read at its pre-broadcast `[N, c]` value:
+    `x ⊙ broadcast(s)`, per example. -/
+noncomputable def seGateMulB (N c h w : Nat) (x : Vec (N * (c * h * w))) :
+    Vec (N * c) → Vec (N * (c * h * w)) :=
+  fun s J => x J * s (finProdFinEquiv ((finProdFinEquiv.symm J).1,
+    flatChannel c h w (finProdFinEquiv.symm J).2))
+
+/-- The gated product is linear in the gate; its backward is `gateCotB`, the emitted
+    `seReduceB`. With the block input held fixed, this is the SE output's VJP in its gate. -/
+noncomputable def seGateMulBHasVJP (N c h w : Nat) (x : Vec (N * (c * h * w))) :
+    HasVJP (seGateMulB N c h w x) where
+  backward _ dy := gateCotB N c h w x dy
+  correct s dy i := by
+    have hp : ∀ J, pdiv (seGateMulB N c h w x) s i J
+        = x J * (if i = finProdFinEquiv ((finProdFinEquiv.symm J).1,
+            flatChannel c h w (finProdFinEquiv.symm J).2) then 1 else 0) := fun J => by
+      have hm := pdiv_mul (fun _ => x) (fun s'' : Vec (N * c) => fun J'' =>
+          s'' (finProdFinEquiv ((finProdFinEquiv.symm J'').1,
+            flatChannel c h w (finProdFinEquiv.symm J'').2))) s
+        (differentiableAt_const _) ((reindexCLM _).differentiable s) i J
+      rw [pdiv_const, pdiv_reindex] at hm
+      exact hm.trans (by ring)
+    simp_rw [hp]
+    obtain ⟨⟨n0, c0⟩, rfl⟩ := finProdFinEquiv.surjective i
+    unfold gateCotB batchSlice
+    rw [Equiv.symm_apply_apply]
+    conv_rhs => rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
+    simp only [Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq, mul_ite,
+      mul_one, mul_zero]
+    rw [Fintype.sum_eq_single n0 fun n hn => by simp [Ne.symm hn]]
+    refine Finset.sum_congr rfl fun q _ => ?_
+    by_cases hq : flatChannel c h w q = c0
+    · simp [hq]
+    · simp [hq, Ne.symm hq]
+
+theorem seGateMulB_differentiable (N c h w : Nat) (x : Vec (N * (c * h * w))) :
+    Differentiable ℝ (seGateMulB N c h w x) := by
+  unfold seGateMulB; fun_prop
 
 end Proofs.BackLinks
 

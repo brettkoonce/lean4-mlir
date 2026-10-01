@@ -23,8 +23,8 @@ per example and lifted once.
   the full attention layer for LN₁ (`mhsaBackFlat_eq_mhsa_vjp`).
 * **The attention core in one of `Q`, `K`, `V`** is the new piece. The render's per-head core is a
   column-slab map with a different function on each head's slab (head `h` reads `K`'s and `V`'s
-  slab `h`), so `colSlabApply` generalises to `colSlabApplyH` and its Jacobian stays
-  block-diagonal (`pdivMat_colIndepH`). Each head's VJP is the certified single-head
+  slab `h`), so it is Attention's `colSlabApplyH`, whose Jacobian stays block-diagonal
+  (`pdivMat_colIndepH`). Each head's VJP is the certified single-head
   `sdpaBack{Q,K,V}`, and the lifted backward IS the tie's `coreQFlat` / `coreKFlat` /
   `coreVFlat` (`attnCoreQ_backward`, …, all `rfl`).
 * **Lifted** (`HasGradAt.param_batchMap_through`, ParamGrad): read against the linear loss
@@ -33,7 +33,7 @@ per example and lifted once.
   forward read as "the rest of the block ∘ the node's op ∘ the prefix" (`vit_fwd_Wq`, …), an
   equation up to `Mat.unflatten_flatten`.
 * **Per net**: the loss read after each stage (`vitSuf*`), pulled back through the certified
-  batched block and head VJPs (`vitBlockCotInB_eq_vjp`, `vitCotB2outB_eq_vjp`), and each `Φ`
+  batched block and head VJPs (`vitBlockCotInB_eq_vjp`, `vitCotTowerOutB_eq_vjp`), and each `Φ`
   identified with the whole net at updated weights by a standalone `vit_factor_*` theorem.
 
 **Two nodes carry the batch sum inside `den`,** as their text does: the classifier bias
@@ -47,138 +47,12 @@ tie is.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.ViTTiePoCGB
+namespace Proofs.ViTTieGB
 
 open scoped BigOperators
-open Proofs.ViTTiePoC (ViTTieWeights)
-open Proofs.ViTPoCGB (rowDenseBTiedB_holds rowDenseWTiedB_holds)
-open Proofs.GradNodeB (vecLNBetaTiedB_holds vecLNGammaTiedB_holds)
-
--- ════════════════════════════════════════════════════════════════
--- § A column-slab map with a different function on each slab
--- ════════════════════════════════════════════════════════════════
-
-/-- `colSlabApply` with its own map on each head's slab: output column `(h, j)` is column `j` of
-    `g h` applied to input slab `h`. The attention core in one of `Q`, `K`, `V` is one, since head
-    `h` reads the other two projections' slab `h`. -/
-noncomputable def colSlabApplyH {n heads d_in d_out : Nat}
-    (g : Fin heads → Mat n d_in → Mat n d_out) : Mat n (heads * d_in) → Mat n (heads * d_out) :=
-  fun M => fun r hj =>
-    g (finProdFinEquiv.symm hj).1
-      (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
-      r (finProdFinEquiv.symm hj).2
-
-/-- **The Jacobian stays block-diagonal across heads** — `pdivMat_colIndep` with a per-slab map:
-    zero unless the input and output slabs agree, and `g h`'s own Jacobian on slab `h` if they do. -/
-theorem pdivMat_colIndepH {n heads d_in d_out : Nat} (g : Fin heads → Mat n d_in → Mat n d_out)
-    (h_g_diff : ∀ h, Differentiable ℝ
-                  (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v))))
-    (A : Mat n (heads * d_in))
-    (i : Fin n) (h_j : Fin heads) (j' : Fin d_in)
-    (k : Fin n) (h_l : Fin heads) (j'' : Fin d_out) :
-    pdivMat (colSlabApplyH g) A
-            i (finProdFinEquiv (h_j, j'))
-            k (finProdFinEquiv (h_l, j'')) =
-    (if h_j = h_l then
-      pdivMat (g h_l) (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
-     else 0) := by
-  let slab : Fin heads → (Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in)) := fun h =>
-    reindexCLM fun idx => finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-      finProdFinEquiv (h, (finProdFinEquiv.symm idx).2))
-  let G := fun (h : Fin heads) (w : Vec (n * d_in)) => Mat.flatten (g h (Mat.unflatten w))
-  let D : Fin n → Fin heads → Fin d_out → (Vec (n * (heads * d_in)) →L[ℝ] ℝ) := fun r h c =>
-    (ContinuousLinearMap.proj (finProdFinEquiv (r, c)) : Vec (n * d_out) →L[ℝ] ℝ).comp
-      ((fderiv ℝ (G h) (slab h (Mat.flatten A))).comp (slab h))
-  have hF : HasFDerivAt (fun v => Mat.flatten (colSlabApplyH g (Mat.unflatten v)))
-      (ContinuousLinearMap.pi fun idx => D (finProdFinEquiv.symm idx).1
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1
-        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2) (Mat.flatten A) :=
-    hasFDerivAt_pi.2 fun idx => by
-      obtain ⟨⟨r, hc⟩, rfl⟩ := finProdFinEquiv.surjective idx
-      obtain ⟨⟨h, c⟩, rfl⟩ := finProdFinEquiv.surjective hc
-      rw [show (fun v : Vec (n * (heads * d_in)) => Mat.flatten (colSlabApplyH g (Mat.unflatten v))
-          (finProdFinEquiv (r, finProdFinEquiv (h, c)))) = fun v => G h (slab h v)
-          (finProdFinEquiv (r, c)) by
-        funext v; simp only [G, slab, reindexCLM_apply]
-        unfold Mat.flatten Mat.unflatten colSlabApplyH; simp only [Equiv.symm_apply_apply]]
-      simp only [Equiv.symm_apply_apply]
-      exact hasFDerivAt_pi'.1 ((h_g_diff h _).hasFDerivAt.comp _ (slab h).hasFDerivAt) _
-  have hslab : slab h_l (Mat.flatten A) =
-      Mat.flatten (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) := by
-    funext; simp only [slab, Mat.flatten, reindexCLM_apply, Equiv.symm_apply_apply]
-  have hb : slab h_l (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
-      if h_j = h_l then basisVec (finProdFinEquiv (i, j')) else 0 := by
-    funext idx; obtain ⟨⟨r, c⟩, rfl⟩ := finProdFinEquiv.surjective idx
-    simp only [slab, reindexCLM_apply, Equiv.symm_apply_apply, basisVec_apply,
-      EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq]
-    rcases eq_or_ne h_j h_l with rfl | hne
-    · simp
-    · simp [hne, hne.symm]
-  rw [pdivMat, pdiv_eq_of_hasFDerivAt hF]
-  simp only [ContinuousLinearMap.pi_apply, Equiv.symm_apply_apply, D,
-    ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply, hslab, hb]
-  split_ifs <;> simp [G, pdivMat, pdiv]
-
-/-- **Lift per-slab VJPs to `colSlabApplyH`** — `colSlabwiseHasVJPMat` with a per-slab map: the
-    backward runs slab `h`'s own backward on slab `h`. -/
-noncomputable def colSlabwiseHasVJPMatH {n heads d_in d_out : Nat}
-    {g : Fin heads → Mat n d_in → Mat n d_out}
-    (hg : ∀ h, HasVJPMat (g h))
-    (hg_diff : ∀ h, Differentiable ℝ
-                 (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v)))) :
-    HasVJPMat (colSlabApplyH g) where
-  backward := fun M dY r hj =>
-    (hg (finProdFinEquiv.symm hj).1).backward
-      (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
-      (fun r' j_out => dY r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_out)))
-      r (finProdFinEquiv.symm hj).2
-  correct := by
-    intro M dY i jj
-    obtain ⟨⟨h, j'⟩, rfl⟩ := finProdFinEquiv.surjective jj
-    rw [Equiv.symm_apply_apply]
-    simp only [sum_finProdFinEquiv (m := heads), pdivMat_colIndepH g hg_diff]
-    simp [(hg h).correct]
-
-/-- `colSlabApplyH` is differentiable, flattened, when every slab's map is. -/
-theorem colSlabApplyH_flat_differentiable {n heads d_in d_out : Nat}
-    (g : Fin heads → Mat n d_in → Mat n d_out)
-    (hg_diff : ∀ h, Differentiable ℝ
-                 (fun v : Vec (n * d_in) => Mat.flatten (g h (Mat.unflatten v)))) :
-    Differentiable ℝ (fun v : Vec (n * (heads * d_in)) =>
-      Mat.flatten (colSlabApplyH g (Mat.unflatten v) : Mat n (heads * d_out))) := by
-  rw [differentiable_pi]; intro idx
-  obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
-  obtain ⟨⟨h, j⟩, rfl⟩ := finProdFinEquiv.surjective q
-  have hh := flat_differentiable_comp (G := g h) (F := fun M : Mat n (heads * d_in) =>
-    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by fun_prop) (hg_diff h)
-  simpa [Mat.flatten, colSlabApplyH] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
-
-/-- Single-head attention is differentiable in `Q`, flattened (`K`, `V` fixed). -/
-theorem sdpaQ_flat_differentiable (n d : Nat) (K V : Mat n d) :
-    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d (Mat.unflatten v) K V)) := by
-  have h1 : Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten
-      ((fun Q' : Mat n d => fun i j => sdpaScale d * Mat.mul Q' (Mat.transpose K) i j)
-        (Mat.unflatten v))) := by
-    unfold Mat.flatten Mat.unflatten Mat.mul Mat.transpose; fun_prop
-  exact flat_differentiable_comp (G := fun w : Mat n n => Mat.mul w V)
-    (flat_differentiable_comp (F := fun Q' : Mat n d => fun i j => sdpaScale d * Mat.mul Q' (Mat.transpose K) i j) h1 (rowSoftmax_flat_differentiable n n))
-    (matmul_right_const_flat_differentiable (m := n) V)
-
-/-- …in `K`. -/
-theorem sdpaK_flat_differentiable (n d : Nat) (Q V : Mat n d) :
-    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d Q (Mat.unflatten v) V)) := by
-  have h1 : Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten
-      ((fun K' : Mat n d => fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K') i j)
-        (Mat.unflatten v))) := by
-    unfold Mat.flatten Mat.unflatten Mat.mul Mat.transpose; fun_prop
-  exact flat_differentiable_comp (G := fun w : Mat n n => Mat.mul w V)
-    (flat_differentiable_comp (F := fun K' : Mat n d => fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K') i j) h1 (rowSoftmax_flat_differentiable n n))
-    (matmul_right_const_flat_differentiable (m := n) V)
-
-/-- …in `V` (the softmax weights are a constant). -/
-theorem sdpaV_flat_differentiable (n d : Nat) (Q K : Mat n d) :
-    Differentiable ℝ (fun v : Vec (n * d) => Mat.flatten (sdpa n d Q K (Mat.unflatten v))) :=
-  matmul_left_const_flat_differentiable (sdpaWeights n d Q K)
+open Proofs.ViTTie (ViTTieWeights)
+open Proofs.ViTFoldGB (rowDenseBTiedB_holds rowDenseWTiedB_holds)
+open Proofs.GradNodeB (vecLNBetaTiedB_holds vecLNGammaTiedB_holds hasGradAt_constAdd)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The attention core in one of `Q`, `K`, `V`, the other two fixed
@@ -312,13 +186,6 @@ end Core
 
 section Chain
 variable {Np1 heads d mlpDim : Nat}
-
-/-- `⟨a + ·, dy⟩` has gradient `dy`: a residual's other branch held fixed. -/
-theorem hasGradAt_linLoss_constAdd {m : Nat} (a x dy : Vec m) :
-    HasGradAt (fun u => linLoss dy (fun i => a i + u i)) x dy :=
-  HasGradAt.comp (f := fun u i => a i + u i) (x := x) (hasGradAt_linLoss dy _)
-    (differentiableAt_id.const_add a)
-    (constAddHasVJPAt a (fun u => u) x differentiableAt_id (identityHasVJPAt _ _))
 
 /-- The flat MLP sublayer `h ↦ h + MLP(LN₂ h)`. -/
 noncomputable def vitMlpSubF (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim) :
@@ -563,7 +430,7 @@ theorem vitPostL2_hasGradAt (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim)
       (cLn2 ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 p.Wfc2 y dy) := by
   refine (HasGradAt.comp_global
     (f := fun u => Mat.flatten (transformerMlp Np1 (heads * d) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 (Mat.unflatten u)))
-    (x := Mat.flatten (vitLn2M ε p y)) (hasGradAt_linLoss_constAdd _ _ dy)
+    (x := Mat.flatten (vitLn2M ε p y)) (hasGradAt_constAdd (G := linLoss dy) _ _ (hasGradAt_linLoss dy _))
     (transformerMlp_flat_differentiable Np1 (heads * d) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2)
     (transformerMlpHasVJPMat Np1 (heads * d) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2).toHasVJP).of_eq ?_
   have h := transformerMlp_back_flat_eq_perRowFlatPR Np1 (heads * d) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2
@@ -587,7 +454,7 @@ theorem vitPostF1_hasGradAt (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim)
   refine (HasGradAt.comp_global
     (f := fun u => Mat.flatten (((fun Y : Mat Np1 mlpDim => fun n => Proofs.dense p.Wfc2 p.bfc2 (Y n)) ∘
       (fun Y : Mat Np1 mlpDim => fun n => gelu mlpDim (Y n))) (Mat.unflatten u)))
-    (x := Mat.flatten (vitM1M ε p y)) (hasGradAt_linLoss_constAdd _ _ dy)
+    (x := Mat.flatten (vitM1M ε p y)) (hasGradAt_constAdd (G := linLoss dy) _ _ (hasGradAt_linLoss dy _))
     (flat_differentiable_comp (gelu_per_token_flat_differentiable Np1 mlpDim)
       (dense_per_token_flat_differentiable p.Wfc2 p.bfc2))
     (vjpMatComp _ _ (gelu_per_token_flat_differentiable Np1 mlpDim)
@@ -731,18 +598,6 @@ theorem vit_fwd_bfc2 (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim) (θ : Vec 
 
 /-! ### Differentiability -/
 
-/-- The per-token dense is differentiable in its weight. -/
-theorem rowDense_weight_differentiable {tk a c : Nat} (b : Vec c) (x : Vec (tk * a)) :
-    Differentiable ℝ (fun θ : Vec (a * c) =>
-      Mat.flatten (fun r => Proofs.dense (Mat.unflatten θ) b (Mat.unflatten x r))) := by
-  unfold Proofs.dense Mat.flatten; fun_prop
-
-/-- …in its bias. -/
-theorem rowDense_bias_differentiable {tk a c : Nat} (W : Mat a c) (x : Vec (tk * a)) :
-    Differentiable ℝ (fun θ : Vec c =>
-      Mat.flatten (fun r => Proofs.dense W θ (Mat.unflatten x r))) := by
-  unfold Proofs.dense Mat.flatten; fun_prop
-
 /-- Each `vitPost*` is differentiable (`0 < ε` where the MLP sublayer's LN₂ is inside). -/
 theorem vitPostO_differentiable (ε : ℝ) (hε : 0 < ε) (p : BlockParamsV (heads * d) mlpDim)
     (y : Vec (Np1 * (heads * d))) : Differentiable ℝ (vitPostO ε p y) := by
@@ -787,12 +642,6 @@ theorem vitPostF1_differentiable (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim
 theorem vitPostF2_differentiable (ε : ℝ) (p : BlockParamsV (heads * d) mlpDim)
     (y : Vec (Np1 * (heads * d))) : Differentiable ℝ (vitPostF2 ε p y) := by
   unfold vitPostF2; fun_prop
-
-/-- `Lb` of a batched stage, at two pointwise-equal stage maps. -/
-theorem lb_batchMap_congr {N a q : Nat} (Lb : Vec (N * q) → Vec 1) (X : Vec (N * a))
-    {f g : Vec a → Vec q} (h : ∀ y, f y = g y) :
-    Lb (batchMap N f X) = Lb (batchMap N g X) := by
-  rw [funext h]
 
 end Chain
 
@@ -886,7 +735,7 @@ private theorem vit_node_lossTied {P N D b m : Nat} {Lb : Vec (N * D) → Vec 1}
       pdiv (fun θ' => per θ' (batchSlice N b A n)) θ i j * batchSlice N m COT n j) = node) :
     HasGradAt Φ' θ node :=
   ((HasGradAt.param_batchMap_through pre per post cot X hG hper hpost hcot A COT hA hC).congr_left
-    (funext fun θ' => (lb_batchMap_congr Lb X fun y => (hF θ' y).symm).trans (hΦ θ').symm)).of_eq
+    (funext fun θ' => (congrArg (fun f => Lb (batchMap N f X)) (funext fun y => (hF θ' y).symm)).trans (hΦ θ').symm)).of_eq
     hnode
 
 theorem vit_block_lossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
@@ -1053,7 +902,7 @@ theorem vit_block_lossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cot
       (vitPostF2 ε p) _ (fun θ => vit_fwd_Wfc2 ε p (Mat.unflatten θ)) (fun _ => hΦ _)
       (hG fun y => (vit_fwd_Wfc2 ε p p.Wfc2 y).trans (by simp only [Mat.unflatten_flatten]))
       (fun y => (rowDense_weight_differentiable p.bfc2 y) _) (vitPostF2_differentiable ε p)
-      (fun y dy => hasGradAt_linLoss_constAdd _ _ dy)
+      (fun y dy => hasGradAt_constAdd (G := linLoss dy) _ _ (hasGradAt_linLoss dy _))
       (batchMap N (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r))) xin) _
       (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)
       (funext fun idx => by
@@ -1064,7 +913,7 @@ theorem vit_block_lossTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cot
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wfc2 θ (Mat.unflatten x r)))
       (vitPostF2 ε p) _ (vit_fwd_bfc2 ε p) (fun _ => hΦ _) (hG (vit_fwd_bfc2 ε p p.bfc2))
       (fun y => (rowDense_bias_differentiable p.Wfc2 y) _) (vitPostF2_differentiable ε p)
-      (fun y dy => hasGradAt_linLoss_constAdd _ _ dy)
+      (fun y dy => hasGradAt_constAdd (G := linLoss dy) _ _ (hasGradAt_linLoss dy _))
       (batchMap N (fun y => Mat.flatten (fun r => gelu mlpDim (vitM1M ε p y r))) xin) _
       (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)
       (funext fun i => (rowDenseBTiedB_holds i).symm)
@@ -1235,21 +1084,21 @@ theorem vit_embed_lossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16
     obtain ⟨⟨a, kw⟩, rfl⟩ := finProdFinEquiv.surjective idx
     obtain ⟨⟨b, kh⟩, rfl⟩ := finProdFinEquiv.surjective a
     obtain ⟨⟨dd, c⟩, rfl⟩ := finProdFinEquiv.surjective b
-    exact (ViTPoCGB.patchEmbedWeightGradB_den xN cotN bc cls pos img Wc dyEmbed dd c kh kw).symm
+    exact (ViTFoldGB.patchEmbedWeightGradB_den xN cotN bc cls pos img Wc dyEmbed dd c kh kw).symm
   · refine (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => patchEmbedFlat 3 224 224 16 196 192 Wc θ cls pos y)
         (fun _ z => z) (fun _ dy => dy) img (θ := bc) hLb
         (fun y => (patchEmbedFlat_bias_differentiable Wc cls pos y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         img dyEmbed (fun _ => rfl) (fun _ => rfl)).of_eq
-      (funext fun i => (ViTPoCGB.patchEmbedBiasGradB_den cotN Wc bc cls pos img dyEmbed i).symm)
+      (funext fun i => (ViTFoldGB.patchEmbedBiasGradB_den cotN Wc bc cls pos img dyEmbed i).symm)
   · refine (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => patchEmbedFlat 3 224 224 16 196 192 Wc bc θ pos y)
         (fun _ z => z) (fun _ dy => dy) img (θ := cls) hLb
         (fun y => (patchEmbedFlat_cls_differentiable Wc bc pos y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         img dyEmbed (fun _ => rfl) (fun _ => rfl)).of_eq
-      (funext fun i => (ViTPoCGB.clsGrad_denB cotN Wc bc cls pos img dyEmbed i).symm)
+      (funext fun i => (ViTFoldGB.clsGrad_denB cotN Wc bc cls pos img dyEmbed i).symm)
   · refine (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => patchEmbedFlat 3 224 224 16 196 192 Wc bc cls (Mat.unflatten θ) y)
         (fun _ z => z) (fun _ dy => dy) img (θ := Mat.flatten pos)
@@ -1257,7 +1106,7 @@ theorem vit_embed_lossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16
         (fun y => (patchEmbedFlat_pos_differentiable Wc bc cls y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         img dyEmbed (fun _ => rfl) (fun _ => rfl)).of_eq
-      (funext fun i => (ViTPoCGB.posEmbedGradB_den cotN Wc bc cls pos img dyEmbed i).symm)
+      (funext fun i => (ViTFoldGB.posEmbedGradB_den cotN Wc bc cls pos img dyEmbed i).symm)
 
 end Embed
 
@@ -1291,19 +1140,19 @@ theorem vitBlkB_hasGradAt_comp (N : Nat) {Np1 heads d mlpDim : Nat} (ε : ℝ) (
         p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) _))).of_eq
     (congrFun (vitBlockCotInB_eq_vjp N ε hε p X) dY).symm
 
-/-- …and through the batched head (`vitCotB2outB_eq_vjp`). -/
+/-- …and through the batched head (`vitCotTowerOutB_eq_vjp`). -/
 theorem vitHeadB_hasGradAt_comp (N : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε) (γF βF : Vec 192)
     (Wcls : Mat 192 nC) (bcls : Vec nC) (X : Vec (N * (197 * 192))) {L : Vec (N * nC) → Vec 1}
     {g : Vec (N * nC)} (hL : HasGradAt L (batchMap N (vitHeadO ε γF βF Wcls bcls) X) g) :
     HasGradAt (fun y => L (batchMap N (vitHeadO ε γF βF Wcls bcls) y)) X
-      (batchMapAux N (vitCotB2outV 196 192 nC ε γF Wcls) X g) :=
+      (batchMapAux N (vitCotTowerOutV 196 192 nC ε γF Wcls) X g) :=
   (HasGradAt.comp (x := X) hL
     ((batchMap_differentiable _ ((classifierFlat_differentiable 196 192 nC Wcls bcls).comp
       (layerNormVec_per_token_flat_differentiable (196 + 1) 192 ε γF βF hε))) X)
     (batchMapHasVJPAt _ X (fun _ => (vitHeadHasVJP 196 192 nC ε hε γF βF Wcls bcls).toHasVJPAt _)
       (fun _ => ((classifierFlat_differentiable 196 192 nC Wcls bcls).comp
         (layerNormVec_per_token_flat_differentiable (196 + 1) 192 ε γF βF hε)) _))).of_eq
-    (congrFun (vitCotB2outB_eq_vjp N ε hε γF βF Wcls bcls X) g).symm
+    (congrFun (vitCotTowerOutB_eq_vjp N ε hε γF βF Wcls bcls X) g).symm
 
 /-- **ViT-Tiny, batched**: the tie's forward, stage by stage — `batchMap N` of the patch
     embedding, each block, then of the head. It is `batchMap N` of `vitForwardKV` at the twelve
@@ -1660,7 +1509,7 @@ theorem vitNetB_eq_vitForwardKV (N : Nat) {nC : Nat} (ε : ℝ) (w : ViTTieWeigh
     `L` of `vitNetB` with that one parameter varied. -/
 def ViTNetLossTiedGB (xN aN epsStr cotN : String) (N : Nat) {nC : Nat} (ε : ℝ)
     (w : ViTTieWeights nC) (img : Vec (N * (3 * 224 * 224))) (L : Vec (N * nC) → Vec 1) (g : Vec (N * nC)) : Prop :=
-  let dy12 := batchMapAux N (vitCotB2outV 196 192 nC ε w.γF w.Wcls) (vitPreB12 N ε w img) g
+  let dy12 := batchMapAux N (vitCotTowerOutV 196 192 nC ε w.γF w.Wcls) (vitPreB12 N ε w img) g
   let dy11 := batchMapAux N (w.b12.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB11 N ε w img) dy12
   let dy10 := batchMapAux N (w.b11.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB10 N ε w img) dy11
   let dy9 := batchMapAux N (w.b10.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB9 N ε w img) dy10
@@ -1785,7 +1634,125 @@ theorem vit_net_lossGrad_smoothedCE (xN aN epsStr cotN aStr negAK bStr logN ohN 
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
       fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
+/-- **The emitted ViT-Tiny step's gradient nodes ARE the loss's gradient, at one chain.** For each
+    of the 200 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
+    smoothed-loss cotangent `g`): the node denotes its layer's Jacobian against the chain cotangent
+    (`vit_net_tiedGB`), and the batched smoothed loss of `vitNetB` with that one slot varied is
+    differentiable there with the node as its gradient (`vit_net_lossGrad_smoothedCE`). The tie's
+    final-LN and classifier conjuncts pair with the one head conjunct of the loss side. The tie
+    spells each block input as its own let; the proof rewrites the loss side's `vitPre*` into those
+    lets (`vitPreE_apply`, …) and the loss side's logits into the tie's (`vit_logitsB_eq`). -/
+theorem vit_net_tied_lossGrad (N : Nat) {nC : Nat}
+    (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
+    (w : ViTTieWeights nC)
+    (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
+    (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
+    let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
+    let ib2    : Vec (N * (197 * 192)) := batchMap N (w.b1.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib1
+    let ib3    : Vec (N * (197 * 192)) := batchMap N (w.b2.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib2
+    let ib4    : Vec (N * (197 * 192)) := batchMap N (w.b3.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib3
+    let ib5    : Vec (N * (197 * 192)) := batchMap N (w.b4.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib4
+    let ib6    : Vec (N * (197 * 192)) := batchMap N (w.b5.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib5
+    let ib7    : Vec (N * (197 * 192)) := batchMap N (w.b6.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib6
+    let ib8    : Vec (N * (197 * 192)) := batchMap N (w.b7.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib7
+    let ib9    : Vec (N * (197 * 192)) := batchMap N (w.b8.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib8
+    let ib10   : Vec (N * (197 * 192)) := batchMap N (w.b9.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib9
+    let ib11   : Vec (N * (197 * 192)) := batchMap N (w.b10.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib10
+    let ib12   : Vec (N * (197 * 192)) := batchMap N (w.b11.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib11
+    let b12out : Vec (N * (197 * 192)) := batchMap N (w.b12.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib12
+    -- final LN → CLS row → dense head, then the SMOOTHED loss cotangent at a general target `t`
+    let flB     : Vec (N * (197 * 192)) :=
+      batchMap N (fun b => Mat.flatten (fun r => layerNormVec 192 ε w.γF w.βF (Mat.unflatten b r))) b12out
+    let hnB     : Vec (N * 192) := batchMap N (clsSliceFlat 196 192) flB
+    let logitsB : Vec (N * nC)  := batchMap N (dense w.Wcls w.bcls) hnB
+    let g       : Vec (N * nC)  :=
+      den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t)
+    let dy12    : Vec (N * (197 * 192)) := batchMapAux N (vitCotTowerOutV 196 192 nC ε w.γF w.Wcls) b12out g
+    let dy11   : Vec (N * (197 * 192)) := batchMapAux N (w.b12.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib12 dy12
+    let dy10   : Vec (N * (197 * 192)) := batchMapAux N (w.b11.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib11 dy11
+    let dy9    : Vec (N * (197 * 192)) := batchMapAux N (w.b10.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib10 dy10
+    let dy8    : Vec (N * (197 * 192)) := batchMapAux N (w.b9.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib9 dy9
+    let dy7    : Vec (N * (197 * 192)) := batchMapAux N (w.b8.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib8 dy8
+    let dy6    : Vec (N * (197 * 192)) := batchMapAux N (w.b7.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib7 dy7
+    let dy5    : Vec (N * (197 * 192)) := batchMapAux N (w.b6.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib6 dy6
+    let dy4    : Vec (N * (197 * 192)) := batchMapAux N (w.b5.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib5 dy5
+    let dy3    : Vec (N * (197 * 192)) := batchMapAux N (w.b4.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib4 dy4
+    let dy2    : Vec (N * (197 * 192)) := batchMapAux N (w.b3.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib3 dy3
+    let dy1    : Vec (N * (197 * 192)) := batchMapAux N (w.b2.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib2 dy2
+    let dyEmbed: Vec (N * (197 * 192)) := batchMapAux N (w.b1.cotIn (Np1 := 197) (heads := 3) (d := 64) ε) ib1 dy1
+    let L := smoothedBatchLossDiv N nC α B t
+    (w.b1.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b1 ib1
+        (fun p => L (vitNetB N ε { w with b1 := p } img)) dy1)
+  ∧ (w.b2.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b2 ib2
+        (fun p => L (vitNetB N ε { w with b2 := p } img)) dy2)
+  ∧ (w.b3.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b3 ib3
+        (fun p => L (vitNetB N ε { w with b3 := p } img)) dy3)
+  ∧ (w.b4.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b4 ib4
+        (fun p => L (vitNetB N ε { w with b4 := p } img)) dy4)
+  ∧ (w.b5.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b5 ib5
+        (fun p => L (vitNetB N ε { w with b5 := p } img)) dy5)
+  ∧ (w.b6.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b6 ib6
+        (fun p => L (vitNetB N ε { w with b6 := p } img)) dy6)
+  ∧ (w.b7.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b7 ib7
+        (fun p => L (vitNetB N ε { w with b7 := p } img)) dy7)
+  ∧ (w.b8.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b8 ib8
+        (fun p => L (vitNetB N ε { w with b8 := p } img)) dy8)
+  ∧ (w.b9.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b9 ib9
+        (fun p => L (vitNetB N ε { w with b9 := p } img)) dy9)
+  ∧ (w.b10.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b10 ib10
+        (fun p => L (vitNetB N ε { w with b10 := p } img)) dy10)
+  ∧ (w.b11.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b11 ib11
+        (fun p => L (vitNetB N ε { w with b11 := p } img)) dy11)
+  ∧ (w.b12.TiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
+      ∧ vitBlockLossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b12 ib12
+        (fun p => L (vitNetB N ε { w with b12 := p } img)) dy12)
+  ∧ (vitFinalLNTiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
+      ∧ vitHeadTiedGB N aN cotN hnB w.Wcls w.bcls g
+      ∧ vitHeadLossTiedGB N xN aN epsStr cotN ε w.γF w.βF w.Wcls w.bcls b12out
+        (fun a b W bb => L (vitNetB N ε { w with γF := a, βF := b, Wcls := W, bcls := bb } img)) g)
+  ∧ (vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed
+      ∧ vitEmbedLossTiedGB N xN cotN w.Wc w.bc w.cls w.pos img
+        (fun W b c q => L (vitNetB N ε { w with Wc := W, bc := b, cls := c, pos := q } img)) dyEmbed) := by
+  intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out flB hnB logitsB g dy12 dy11 dy10
+    dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed L
+  obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14⟩ :=
+    vit_net_tiedGB N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w img t
+  have hl :=
+    vit_net_lossGrad_smoothedCE xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w img t ht
+  -- the loss side's activations and logits, in the tie's spelling
+  have e0 : vitPreE N w img = ib1 := by rw [vitPreE_apply N w img]
+  have e1 : vitPreB1 N ε w img = ib2 := by rw [vitPreB1_apply N ε w img, e0]
+  have e2 : vitPreB2 N ε w img = ib3 := by rw [vitPreB2_apply N ε w img, e1]
+  have e3 : vitPreB3 N ε w img = ib4 := by rw [vitPreB3_apply N ε w img, e2]
+  have e4 : vitPreB4 N ε w img = ib5 := by rw [vitPreB4_apply N ε w img, e3]
+  have e5 : vitPreB5 N ε w img = ib6 := by rw [vitPreB5_apply N ε w img, e4]
+  have e6 : vitPreB6 N ε w img = ib7 := by rw [vitPreB6_apply N ε w img, e5]
+  have e7 : vitPreB7 N ε w img = ib8 := by rw [vitPreB7_apply N ε w img, e6]
+  have e8 : vitPreB8 N ε w img = ib9 := by rw [vitPreB8_apply N ε w img, e7]
+  have e9 : vitPreB9 N ε w img = ib10 := by rw [vitPreB9_apply N ε w img, e8]
+  have e10 : vitPreB10 N ε w img = ib11 := by rw [vitPreB10_apply N ε w img, e9]
+  have e11 : vitPreB11 N ε w img = ib12 := by rw [vitPreB11_apply N ε w img, e10]
+  have e12 : vitPreB12 N ε w img = b12out := by rw [vitPreB12_apply N ε w img, e11]
+  have eg : den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN
+      (vitNetB N ε w img) t) = g := by rw [← vit_logitsB_eq, e12]
+  unfold ViTNetLossTiedGB at hl
+  rw [eg, e12, e11, e10, e9, e8, e7, e6, e5, e4, e3, e2, e1, e0] at hl
+  obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13⟩ := hl
+  exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
+    ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, t13, l12⟩, ⟨t14, l13⟩⟩
+
 end Net
 
-end Proofs.ViTTiePoCGB
+end Proofs.ViTTieGB
 

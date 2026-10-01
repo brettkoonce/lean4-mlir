@@ -160,14 +160,6 @@ theorem hasGradAt_linLoss {m : Nat} (dy x : Vec m) : HasGradAt (linLoss dy) x dy
     (fun a v => by funext; simp [linLoss, Finset.mul_sum, mul_assoc])]
   simp [linLoss, basisVec]
 
-/-- `batchSlice` of a `batchMapAux` is the per-example map at the two slices. -/
-theorem batchSlice_batchMapAux {N s a b : Nat} (f : Vec s → Vec a → Vec b) (aux : Vec (N * s))
-    (x : Vec (N * a)) (n : Fin N) :
-    StableHLO.batchSlice N b (StableHLO.batchMapAux N f aux x) n
-      = f (StableHLO.batchSlice N s aux n) (StableHLO.batchSlice N a x n) := by
-  funext i
-  simp [StableHLO.batchSlice, StableHLO.batchMapAux]
-
 /-- **A parameter inside a per-example stage, lifted over the batch.** Each example runs
     `y ↦ post y (per θ (pre y))`: the stage `per θ` at its input `pre y`, then the rest of the block
     `post y`. If, per example, the loss `⟨post y ·, dy⟩` has gradient `cot y dy` at the stage output,

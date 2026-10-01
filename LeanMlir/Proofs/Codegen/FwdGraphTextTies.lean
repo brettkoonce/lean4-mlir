@@ -5,6 +5,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
 import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 import LeanMlir.Proofs.Codegen.ConvNeXtRender
@@ -33,7 +34,8 @@ ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block k
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
 21-row table), MobileNetV2's per-example inference forward (`MobileNetV2FullPaperEval`), the
 MobileNetV2, MobileNetV4 and EfficientNet-B0 heads with classifier dropout (`cd := true`),
-EfficientNet-B0's residual block with its stochastic-depth site (`sd := true`), and
+EfficientNet-B0's residual block and every MobileNetV4 skip row with its stochastic-depth site
+(`sd := true`), and
 MobileNetV4's inference forward (`.eval`, frozen-statistics BN) at both input
 sizes its evals are rendered at, and EfficientNet-B0's inference forward
 (`efficientnetFwdGraphBFullEval`: stem, the four block shapes, head). ConvNeXt-T's per-example forward (`convNextFwdGraphTCh`) is
@@ -231,7 +233,7 @@ def ivwNoExpEval0 (ic oc : Nat) : IVWNoExpEval ic oc :=
 -- The batched artifact is the per-example graph at each example: its only reduction is the GAP
 -- over `[2, 3]` — nothing in the eval render reduces across the batch axis.
 #guard
-  let t := mnv2FwdEvalFaithfulV 2 10 "1.0e-03"
+  let t := mnv2FwdEvalText 2 10 "1.0e-03"
   (t.splitOn "across dimensions = [").length == 2 &&
     (t.splitOn "across dimensions = [2, 3]").length == 2
 
@@ -251,8 +253,10 @@ def mnv4UibW0 (s : UibSpec) : UibParams s :=
     a pre-DW); a stride-1 row is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled
     out here because the leaf is width-polymorphic and a skip row has `ic = oc` only numerically).
     A row with no typed graph — an IB block, or a strided row without a pre-DW — prints `""`, so a
-    table that grew one fails. -/
-def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
+    table that grew one fails. With `site := some k` a skip row is instead `mnv4SkipDropGraphB` at
+    `dpName k` (`MobileNetV4FullBDrop`); its body is passed as a constant function of the same
+    leaf, for the same width reason. -/
+def mnv4RowGraphText (B : Nat) (s : UibSpec) (site : Option Nat := none) : String :=
   if s.stride2 then
     if s.preDWk > 0 then
       prettyText B (mnv4StridedGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _))
@@ -266,7 +270,9 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
       else
         mnv4FfnBodyGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _)
     if s.postDWk > 0 ∧ s.preDWk = 0 then "" else
-    prettyText B (.addVB body (leaf "%in" _))
+    match site with
+    | none => prettyText B (.addVB body (leaf "%in" _))
+    | some k => prettyText B (mnv4SkipDropGraphB (dpName k) (fun _ => 0) (fun _ => body) (leaf "%in" _))
 
 -- Stem: 3×3/s2 symmetric, 224 → 112.
 #guard textOf (mnv4StemFwdB 2 "1.0e-03") (·.code) ==
@@ -282,6 +288,17 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
 -- All 21 table rows: the render's dispatch vs the typed graph's, row by row.
 #guard mnv4Blocks.length == 21 && mnv4Blocks.all fun s =>
   textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in") (·.code) == mnv4RowGraphText 2 s
+
+-- All 21 rows with their stochastic-depth sites (`sd := true`, the `drop` train steps): each row
+-- at the site `mnv4FwdChainB` gives it, a `dropPathB` on a skip row's branch before the add, no
+-- site on a strided row (`MobileNetV4FullBDrop`).
+#guard mnv4Blocks.zipIdx.all fun (s, bi) =>
+  textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in" (drop := mnv4DropSite bi)) (·.code) ==
+    mnv4RowGraphText 2 s (mnv4DropSite bi)
+
+-- The drop graph's site numbering: `mnv4Res28DropGraphB` … `mnv4Res7bDropGraphB` put site `k` on
+-- the `k`-th of rows 2, 4–10, 12–21, which is the renderer's `mnv4DropSites` (0-based block indices).
+#guard mnv4DropSites.map (· + 1) == [2] ++ (List.range' 4 7) ++ (List.range' 12 10)
 
 -- Head: 1×1 (256 → 960) → BN → relu → GAP(7²) → 1×1 (→ 1280) → BN → relu → dense(→ 10).
 #guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in") (·.code) ==
