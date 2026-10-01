@@ -3479,8 +3479,9 @@ and the gradient moves to the real net with the germ; see
         Proofs.cnn_conv2_float_sgd_descends,
         Proofs.TrainedCnnDescent.trained_cnn_conv2_sgd_descends_concrete}
   \leanok
-  \uses{ax:conv2d, ax:conv2dWeightGradHasVJP, ax:maxPool2, ax:pdiv, ax:pdiv_comp,
-      ax:pdiv_dense, ax:pdiv_relu, ax:softmaxCE_grad, def:hasvjp}
+  \uses{ax:conv2d, ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:maxPool2, ax:pdiv,
+      ax:pdiv_comp, ax:pdiv_dense, ax:pdiv_relu, ax:softmaxCE_grad, def:hasvjp,
+      def:hasvjp3}
   \Assume{}
   \begin{enumerate}
     \item the second convolution's input and the dense weights are bounded,
@@ -5644,10 +5645,12 @@ stem's endpoint ties, and each block's backward in its slot; see
   \lean{Proofs.ResNet34TieB.r34_net_tiedB, Proofs.ResNet34TieB.r34IdCotIn_eq_vjp,
         Proofs.ResNet34TieB.r34DownCotIn_eq_vjp}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3,
-      ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
-      def:hasvjpmat, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat,
+      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:identityHasVJP, thm:rowwiseHasVJPMat,
+      thm:vjpComp}
   \Prove{} each of the 110 emitted parameter gradients of the batched
   ResNet-34 step (\texttt{resnet34\_sgd\_train\_step.mlir} and
   \texttt{\_adam\_} at \(N = 32\), \texttt{resnet34in\_momdp64} at
@@ -5711,11 +5714,12 @@ Theorem~\ref{thm:hasGradAt_comp} per stage; see
         Proofs.ResNet50TieB.r50IdCotIn_eq_vjp, Proofs.ResNet50TieB.r50ProjCotIn_eq_vjp,
         Proofs.ResNet50TieB.r50DownCotIn_eq_vjp}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3,
-      ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
-      def:hasvjpmat, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat,
-      thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat,
+      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:identityHasVJP, thm:pdiv_finset_sum,
+      thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} each of the 161 parameter gradients of the batched ResNet-50 step
   denotes the certified batch gradient at the chain cotangent of a loss
   cotangent \(g\) left as a binder, generic in \(N\) and \(q\). Instantiated
@@ -5767,10 +5771,10 @@ As for ResNet-34; see \leandocref{Proofs.ResNet50TieB.r50\_net\_lossGrad}.
   \label{thm:resnet34_seal}
   \lean{Proofs.R34FullBSeal.sealX_backward_nontrivial}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv, ax:pdiv_add,
-      ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv,
+      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
       def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP,
-      thm:rowwiseHasVJPMat, thm:vjpComp}
+      thm:resnet34FullHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} at the structural weights \texttt{sealW} and input
   \texttt{sealX}, batch 2, there is a class \(j_0\) and a pixel \(i_0\) at
   which the backward of the full-width ResNet-34 is non-zero: the identity of
@@ -5788,10 +5792,10 @@ coordinate; see \leandocref{Proofs.R34FullBSeal.sealX\_backward\_nontrivial}.
   \label{thm:resnet50_seal}
   \lean{Proofs.R50FullBSeal.sealX_backward_nontrivial}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv, ax:pdiv_add,
-      ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv,
+      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3,
       def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP,
-      thm:rowwiseHasVJPMat, thm:vjpComp}
+      thm:resnet50FullHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} the same witness for ResNet-50, at both 224 and 160 pixels
   (\(0 < q \le 7\)).
 \end{theorem}
@@ -7516,9 +7520,10 @@ graph tie op by op; see
   \lean{Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp, Proofs.mnv2InputGradB_correct,
         Proofs.mobilenetv2ForwardBFull_eq_slots}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv, ax:pdiv_comp,
-      ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
-      thm:denseHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:depthwiseConv2d, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex, def:hasvjp,
+      def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP, thm:rowwiseHasVJPMat,
+      thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) at the stem's and the head's BatchNorm, and the
@@ -7553,9 +7558,11 @@ stem's endpoint ties, and each block's backward in its slot; see
   \lean{Proofs.mnv4InputGradB_eq_mnv4B_full_vjp, Proofs.mnv4InputGradB_correct,
         Proofs.mobilenetv4ForwardBFull_eq_slots}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:pdiv, ax:pdiv_comp,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
       ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat,
-      thm:bnHasVJP, thm:denseHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+      thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP, thm:rowwiseHasVJPMat,
+      thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) at the stem's and the two head BatchNorms, and
@@ -7584,12 +7591,13 @@ As for MobileNetV2; see \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}
         Proofs.MobileNetV2TieB.mnv2ResidCotIn_eq_vjp, Proofs.MobileNetV2TieB.mnv2StridedCotIn_eq_vjp,
         Proofs.MobileNetV2TieB.mnv2StemCotC_eq_vjp, Proofs.MobileNetV2TieB.mnv2HeadCotBlk_eq_vjp}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3,
-      ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseBiasGradHasVJP,
-      ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_const,
-      ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasvjp, def:hasvjp3,
-      thm:denseBiasGrad_correct, thm:denseWeightGrad_correct, thm:pdiv_finset_sum,
-      thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3, ax:pdiv,
+      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex,
+      ax:softmaxCE_grad, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:identityHasVJP, thm:pdiv_finset_sum, thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} each of the 158 emitted parameter gradients of the batched
   MobileNetV2 step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at
   \(N = 32\), \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) denotes the
@@ -7705,10 +7713,11 @@ As for MobileNetV2; see \leandocref{Proofs.Mnv4TieB.mnv4\_net\_lossGrad}.
   \label{thm:mobilenetv2_seal}
   \lean{Proofs.Mnv2FullBSeal.sealX_backward_nontrivial}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:depthwiseConv2d,
-      ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex,
-      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP,
-      thm:identityHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
+      thm:denseHasVJP, thm:identityHasVJP, thm:mobilenetv2FullHasVJP,
+      thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} at the structural weights \texttt{sealW} and input
   \texttt{sealX}, batch 2, there is a class and a pixel at which the backward
   of the full-width MobileNetV2 is non-zero: the identity of
@@ -7726,10 +7735,11 @@ coordinate; see \leandocref{Proofs.Mnv2FullBSeal.sealX\_backward\_nontrivial}.
   \label{thm:mobilenetv4_seal}
   \lean{Proofs.Mnv4FullBSeal.sealX_backward_nontrivial}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3, ax:depthwiseConv2d,
-      ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex,
-      ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
-      thm:denseHasVJP, thm:identityHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_reindex, ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat,
+      thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP, thm:mobilenetv4FullHasVJP,
+      thm:rowwiseHasVJPMat, thm:vjpComp}
   \Prove{} the same for MobileNetV4-Conv-M, thirty-eight clauses, from a
   grid-constant base.
 \end{theorem}
@@ -10454,12 +10464,14 @@ the block's, the downsample's or the head's; see
   \lean{Proofs.CnxTieGB.cnx_net_tiedGB, Proofs.CnxTieGB.cnxBlockCotInB_eq_vjp,
         Proofs.CnxTieGB.cnxDownCotInB_eq_vjp, Proofs.CnxTieGB.cnxHeadDyB_eq_vjp}
   \leanok
-  \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP,
-      ax:depthwiseBiasGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
-      ax:depthwiseWeightGradHasVJP3, ax:geluScalar, ax:geluScalarDeriv, ax:pdiv,
-      ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_reindex, def:hasvjp,
-      def:hasvjp3, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
+      ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
+      ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
+      ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_const, ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat,
+      thm:bnHasVJP, thm:chanLNTensor3HasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:layerNormVecHasVJP,
+      thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
   \Prove{} each of the 182 parameter gradients of the batched ConvNeXt-T
   step (\([3, 3, 9, 3]\) blocks, channel-LayerNorm at twenty-two sites,
   per-channel layer scale, GELU) denotes the certified batch gradient at the
@@ -12248,8 +12260,11 @@ computed independently by the 1D three-term formula. \Qed{}
   \lean{Proofs.layerNormVecHasVJP, Proofs.layerNormVecPerTokenHasVJPMat,
         Proofs.transformerBlockV, Proofs.vitFullHasVJP}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:pdiv, def:hasvjp, def:hasvjpmat,
-      thm:layerNormHasVJP, thm:rowwiseHasVJPMat, thm:vjpComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar,
+      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
+      def:hasvjpmat, thm:denseHasVJP, thm:layerNormHasVJP, thm:rowwiseHasVJPMat,
+      thm:vitBodyHasVJPMat, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -12524,7 +12539,7 @@ head; see \leandocref{Proofs.vitForwardKVHasVJP\_correct}.
   \label{thm:vitFwdGraphKMHV_faithful}
   \lean{Proofs.StableHLO.vitFwdGraphKMHV_faithful, Proofs.StableHLO.vitFwdGraphBDrop_faithful}
   \leanok
-  \uses{ax:geluScalar}
+  \uses{ax:geluScalar, thm:layerNormVecHasVJP}
   \Prove{} for every depth \(k\) the typed forward graph
   \texttt{vitFwdGraphKMHV} denotes \texttt{vitForwardKV}; and with stochastic
   depth on both residual branches of every block, the batched graph of the
@@ -12546,8 +12561,7 @@ Op by op along the graph, block by block along the tower; see
   \lean{Proofs.vitTinyHasVJP_correct, Proofs.vitTinyInputGrad_eq_vitTiny_vjp}
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
-      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
-      ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_reindex,
+      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv,
       ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
       thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
       thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
@@ -12604,7 +12618,7 @@ Op by op along the graph, block by block along the tower; see
       thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
       thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
       thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
-      thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
+      thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -12626,8 +12640,14 @@ batch; see \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
   \lean{Proofs.ViTTieGB.vit_net_tiedGB, Proofs.ViTTieGB.vitBlockCotInB_eq_vjp,
         Proofs.ViTTieGB.vitCotTowerOutB_eq_vjp}
   \leanok
-  \uses{ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, thm:denseBiasGrad_correct,
-      thm:denseWeightGrad_correct}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
+      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_reindex,
+      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
+      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:identityMatHasVJP,
+      thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat, thm:sdpaBackK_correct,
+      thm:sdpaBackQ_correct, thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat,
+      thm:vjpComp, thm:vjpMatComp}
   \Prove{} each of the 200 parameter gradients of the batched ViT-Tiny step
   (three heads of 64, depth 12, \(16 \times 16\) patches) denotes the
   certified batch gradient at the chain cotangent of the label-smoothed
