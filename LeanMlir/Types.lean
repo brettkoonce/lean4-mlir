@@ -296,6 +296,19 @@ inductive Layer where
       `t/Tmax` plane), so there is no extra input. Parameters `W [2·nFreq, channels]` and
       `b [channels]` start at zero, so conditioning starts as a no-op. -/
   | timeCondAdd (channels nFreq : Nat)
+  /-- Pair tile, the distogram stem of AlphaFold 1 / trRosetta. The host feeds two blocks of
+      `seqLen` per-residue feature rows of width `inDim` — the rows `i` and the rows `j` of a
+      crop — flat as `[B, 2 · seqLen · inDim]`. Each block goes through its own weight
+      `inDim → outDim` (`W` on the `i` block, `Wj` on the `j` block) and the two are
+      outer-summed, `y[b, c, i, j] = (W xᵢ)[c] + (Wj xⱼ)[c]`: an NCHW map
+      `[B, outDim, seqLen, seqLen]` for the conv stack that follows. The same function as a
+      bias-free 1×1 conv on the outer concatenation `[xᵢ ; xⱼ]`, without materializing it; no
+      bias of its own, because the `convBn` that follows it subtracts any per-channel constant
+      (its β is the bias — a pairTile bias had gradient exactly 0 in the FD check). Backward:
+      the cotangent summed over `j` gives the `W` gradient by the dense rule, summed over `i`
+      the `Wj` gradient; the features are host-side, so there is no input gradient. First
+      layer only. -/
+  | pairTile (seqLen inDim outDim : Nat)
 deriving Repr
 
 /-- A reference-path architecture: a name, the layer list, the input size, and the per-net

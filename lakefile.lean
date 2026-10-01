@@ -752,6 +752,13 @@ lean_exe «gw-detect» where
   root := `demos.MainGwDetect
   moreLinkArgs := lowererLink
 
+-- The CASP16 distogram demo: a `pairTile` stem on frozen ESM-2 features, the chapter residual
+-- body at stride 1, per-pixel weighted CE over 66 distance bins; folded and scored against the
+-- CASP16 field by scripts/demos/casp16_score.py. See planning/casp16_distogram_demo.md.
+lean_exe «distogram-casp» where
+  root := `demos.MainDistogramCasp
+  moreLinkArgs := lowererLink
+
 -- Neural quantum states: the ground
 -- state of the transverse-field Ising chain as an MLP / ViT / GPT wavefunction
 -- times the mean-field reference, energy gradient through the rank-2 DDPM MSE

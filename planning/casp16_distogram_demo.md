@@ -11,9 +11,12 @@ https://claude.ai/artifact/TFoTN9GQvcEHe5eBkwYBvK, panel g already real). This d
 plan after the feasibility pass against the repo, with the four changes of §1 and the scoring
 recipe of §5 validated.
 
-Status 2026-10-01: §5 scoring validated on nine field models (table in §5); §3 steps 1 and 3
-done (26,228 train / 1,380 val chains, G1 passed). Steps 2, 4–6, the Lean op (§4), training and
-the fold not started.
+Status 2026-10-01 (evening): §5 scoring validated (G0); §3 steps 1 and 3 done (G1); step 6
+done — 84 EU files with the ESM-2 contact-head baseline (easy 0.533 / medium 0.478 / hard
+0.233 top-L/5 long-range); steps 2 and 4 done (27,690 chains, 0 fetch failures; 91.5 % of
+residues observed, 4.2 % of pairs under 8 Å); step 5 (embeddings) running; `casp16_pack.py`
+written and waits on it. Open: the §4 input route (host-tiled 1×1 conv vs a `pairTile` op,
+recommendation below), then the trainer, training and the fold.
 
 ## 0. The one-paragraph version
 
@@ -87,7 +90,10 @@ official table to the printed digit, so our model's dot goes on the same axis as
 | `train/clusters-by-entity-40.txt` | RCSB's 40 % identity clusters (324,163) | cdn.rcsb.org/resources/sequence/clusters |
 | `train/reps.csv`, `train/reps.fasta` | 27,690 cluster representatives | `casp16_chain_list.py cluster` |
 | `train/train_full.csv`, `train/train.csv`, `train/val.csv`, `train/target_hits.m8` | 26,310 date-cut-only (headline) / 26,228 purged (ablation) / 1,380 val; the MMseqs2 hits | `casp16_chain_list.py purge` |
-| `pdb/<entity>.cif.gz` | per-chain coordinates (step 2) | RCSB ModelServer, `casp16_fetch_chains.py` |
+| `pdb/<entity>.npz` | backbone + Cβ of the entity's first chain, keyed by label_seq_id (step 2) | RCSB CDN + gemmi, `casp16_fetch_chains.py` |
+| `labels/<entity>.npz` | 66-class pair labels, observed mask, Cβ coordinates (step 4) | `casp16_labels.py` |
+| `emb/<entity>.npy` | ESM-2 35M final-layer representation, f16 [L, 480] (step 5) | `casp16_embed.py` |
+| `targets/<EU>.npz`, `targets/summary.csv` | the 84 scorable EUs: sequence, embedding, labels, ESM-2 contact head (step 6) | `casp16_targets.py` |
 
 `scripts/datasets/download_casp16.sh` fetches all of it (idempotent, ~60 MB). The Python side
 runs in `.venv-casp` (numpy, pandas, gemmi; torch-cpu + fair-esm to be added for step 5).
@@ -116,8 +122,9 @@ T1267s1-D1 medium 157 aa, median 0.65, MULTICOM best at 0.76; T1226-D1 hard 123 
                      + "unobserved" → uint8 .npz
  5  embed.py         ESM-2 35M (esm2_t12_35M_UR50D, frozen, CPU is enough) → f16 [L, 480]
                      per chain; the representations, not the model's contact head
- 6  targets.py       the same labels and embeddings for the 85 EUs from raw/dom/*.pdb, sliced
-                     by eu_list.csv segments
+ 6  targets.py       the same labels and embeddings for the EUs from raw/dom/*.pdb, sliced by
+                     eu_list.csv segments; ESM-2 on the full target sequence; the v2 EUs are the
+                     v1 sequence in a second conformation; T1249v2-D1 has no structure → 84 EUs
  7  Lean trainer     demos/MainDistogramCasp.lean: pairTile → residualBlock stack → 1×1 head,
                      perPixelWeightedCE; random 64×64 crops anywhere in L×L
  8  predict          tiled inference (§1.4); contacts P(d < 8 Å) = Σ bins below 8 Å;
@@ -141,21 +148,51 @@ every target structure. Per-chain coordinates ~130 KB → ~3.6 GB; labels < 2 GB
 
 ## 4. The net
 
+Route decided 2026-10-01 (Brett): `pairTile` as a new `Layer`, not a host-tiled 1×1 conv.
+(The alternative, recorded for the ablation that may want it: outer-concat on the host + a
+16-bin |i−j| one-hot = 994 channels into `conv2d 994 64 1`, the same function, 16 MB per crop.)
+`Layer.pairTile seqLen inDim outDim`: the flat host input `[B, 2·L·D]` (the crop's i rows then
+its j rows) → two weights `W`, `Wj` (`[D, C]`, He) → outer sum → `[B, C, L, L]`. No bias: the
+`convBn` after it subtracts any per-channel constant, and a pairTile bias had gradient exactly
+0 in the FD check. Backward = the two broadcast adjoints (reduce over j, over i) and the dense
+weight rule; no input gradient. Touch points: `Types.lean` (constructor), `Spec.lean`
+(`paramSlots` one group W + Wj, `archStr`, `outChannels`), `MlirCodegen.lean`
+(`inputFlatDim` = 2·L·D, `emitPairTileForward` shared by eval and train, `fwdSigParts`,
+`bnLayers` pidx +1, `FwdRec.{isPairTile, ptPidx, ptUSSA, ptVSSA}`, the backward arm), and
+the header comment of `generateTrainStep` now stays on one line (a 66-weight `repr` wrapped
+onto lines the MLIR parser read as code). Gradient check (`lake exe distogram-casp smoke`,
+L = 8, D = 5, 4 ch, B = 2): Adam's first moment ×10 against central differences on W, Wj, a
+body weight and the head bias — every coordinate within 2 % + 2e-4 (|diff| 1e-6 … 1.2e-4).
+The relative-position signal rides on the per-residue features: `casp16_pack.py` appends
+i/512 and four sin/cos pairs, and the outer sum is linear in both inputs, so the first layer
+forms j − i directly. Zero-weight class: the demo's own loop calls `generateTrainStep`
+directly, so `Train.lean`'s all-positive check is not on this path.
+
 ```
-pairTile (L := 64) (inDim := 489) (dim := 64)        -- 2 × dense 489→64 + outer sum, [B, 64, 64, 64]
-residualBlock 64 64 16 1                             -- the chapter body, stride 1 throughout
-conv2d 64 66 1 .same .identity                       -- 66-bin head, perPixelWeightedCE
+pairTile 64 489 64                 -- W, Wj: 489→64 on the i and j rows, outer sum → [B, 64, 64, 64]
+convBn 64 64 1 1 .same             -- the stem's normalization (its β is the pair map's bias)
+residualBlock 64 64 16 1           -- the chapter body, stride 1 throughout
+conv2d 64 66 1 .same .identity     -- 66-class head, perPixelWeightedCE
 ```
 
-Input per crop: two per-residue blocks `[64, 489]` (ESM-2 480 + index scalar + 8 sinusoids),
-host-built from the cached embeddings. Labels `[64, 64]` int32. ~1.2 M parameters at 64
-channels; 128 channels and 32 units are affordable (§8) and are the first ablation.
+`demos/MainDistogramCasp.lean` (`lake exe distogram-casp smoke | train | predict`), with the
+crop gatherer, val metrics and the inference accumulator in `ffi/f32_helpers.c`
+(`lean_casp_gather`, `lean_casp_val_metrics`, `lean_casp_accumulate`). Input per crop: two
+per-residue blocks `[64, 489]` (ESM-2 480 + index scalar + 8 sinusoids) f32, gathered from the
+f16 pool; labels `[64, 64]` int32. 1,254,850 parameters at 64 channels / 16 units; 155 ms per
+step of 32 crops on one 4060 Ti (≈ 2 min per epoch of one crop per chain); 128 channels and
+32 units are affordable (§8) and are the first ablation. Init loss 11.8 against ln 66 = 4.19
+(sixteen residual units with γ = 1 inflate the head's logits); the first epoch's mean is 3.18.
+Inference: every 64 × 64 window at stride 32, logits summed per target in C, averaged and
+symmetrized by `scripts/demos/casp16_predict.py` (84 EUs, 10,703 windows, 55 s).
 
 Proof items: `pairTile` forward tie + VJP (dense ∘ reduce-sum), and the whole-net step tie at
 the demo bar the other Chapter-10 demos meet. Everything downstream of the tile is already
 proven. The gradient check for the new op goes through the existing vjp_oracle path.
 
-Ablation rows the table wants (each one run): ESM-2's own contact head (no training by us);
+Ablation rows the table wants (each one run): ESM-2's own contact head (no training by us;
+measured 2026-10-01: top-L/5 long-range 0.533 easy / 0.478 medium / 0.233 hard, 0.474 over
+the 84 EUs — the number the ResNet has to beat);
 one-hot input instead of ESM-2 (what the ResNet alone can do without an MSA); the purged
 training list (§1.8, no templates); 128 ch / 32 units.
 
@@ -201,8 +238,8 @@ TM-score, GDT_TS for ours; field median and best; the three ablation rows of §4
 - G0 (done): scoring reproduces the official table on nine models (§5).
 - G1: step 1 returns a chain list of plausible size and the purge removes every chain
   homologous to a CASP16 EU (spot-check the 31 EUs with PDB ids: none in train).
-- G2: Lean smoke on 1k chains: loss falls, FD gradient check on `pairTile` passes, the
-  per-pixel mask verified by a crop with unobserved residues contributing zero gradient.
+- G2 (done 2026-10-01): FD gradient check on `pairTile` passes (§4); the one-epoch probe runs
+  train → val → checkpoint → predict → assemble end to end; loss 11.8 → 3.18, val CE 2.54.
 - G3: full training; top-L/5 long-range precision on val reported before any CASP target is
   touched.
 - G4: fold + score on the 85 EUs; strip plot; the field rescored at CA-lDDT on the featured
@@ -233,4 +270,13 @@ Every launch is asked for first.
 - 2026-10-01: `casp16_chain_list.py` search / fetch (230,942 entities, 18 min) / cluster /
   purge → 26,228 / 1,380; G1 passed; `casp16_fetch_chains.py` rewritten CDN + gemmi (4/s per
   core; ModelServer alone was 0.9/s), 200-chain smoke, label_seq alignment check 12 / 37,672;
-  decided headline = date cut only, purge = ablation; full fetch launched.
+  decided headline = date cut only, purge = ablation; full fetch launched; committed 3485efa9.
+- 2026-10-01 (night): Brett picked `pairTile`; layer + emitters + FD smoke; `casp16_pack.py`
+  (8.2 GB in 19 s), the demo trainer / predictor, `casp16_predict.py`; one-epoch probe end to
+  end (155 ms/step). G2 passed. Not yet committed.
+- 2026-10-01: `casp16_labels.py` (183 chains/s; adjacent Cβ–Cβ 5.39 Å, 4.0 % of pairs < 8 Å,
+  93 % residues observed), `casp16_embed.py` (ESM-2 35M on CPU, ~1,700 residues/s at 16
+  threads), `casp16_targets.py` (84 EUs, 0 residue-name mismatches, 98 % observed; ESM-2
+  contact-head baseline above). Full embedding run launched. Fetch finished (27,690, 0 failed,
+  40 min); labels for all 27,690 in 145 s (652 MB); `casp16_pack.py` written; code read for
+  the input route (see §4).

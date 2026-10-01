@@ -4394,3 +4394,148 @@ LEAN_EXPORT lean_obj_res lean_ttt_enumerate(size_t n, size_t k, size_t max_stone
     free(buf);
     return lean_io_result_mk_ok(ba);
 }
+
+// ═══════════════ CASP16 distogram demo (demos/MainDistogramCasp.lean) ═══════════════
+// The packed files scripts/datasets/casp16_pack.py writes: feat = f16 [Σ L, D] residue rows of
+// every chain back to back; lab = u8, each chain's L×L class matrix row-major; idx = i64
+// [nChains, 4] = (feat offset in residues, label offset in bytes, L, csv row).
+
+static inline float casp_half_to_float(uint16_t h) {
+    uint32_t sign = (uint32_t)(h & 0x8000u) << 16, e = (h >> 10) & 0x1fu, m = h & 0x3ffu, out;
+    if (e == 0) {
+        if (m == 0) out = sign;
+        else { e = 1; while (!(m & 0x400u)) { m <<= 1; e--; } m &= 0x3ffu; out = sign | ((e + 112u) << 23) | (m << 13); }
+    } else if (e == 31) out = sign | 0x7f800000u | (m << 13);
+    else out = sign | ((e + 112u) << 23) | (m << 13);
+    float f; memcpy(&f, &out, 4); return f;
+}
+
+// Gather B crops. pos = u32 [B, 3] = (chain row, r1, r2): with exact = 0, r1/r2 are random
+// draws reduced here to offsets in [0, L − crop] (0 when L ≤ crop); with exact = 1 they are the
+// offsets themselves (inference windows). Output x = f32 [B, 2·crop·D] — the crop's i rows then
+// its j rows, rows past the chain end zero (the pairTile input) — and y = i32 [B, crop, crop],
+// `unobs` where either residue is past the end.
+LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
+                                          b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
+                                          size_t B, size_t crop, size_t D, size_t unobs, size_t exact) {
+    const uint16_t* feat = (const uint16_t*)lean_sarray_cptr(feat_ba);
+    const uint8_t* lab = lean_sarray_cptr(lab_ba);
+    const int64_t* idx = (const int64_t*)lean_sarray_cptr(idx_ba);
+    const uint32_t* pos = (const uint32_t*)lean_sarray_cptr(pos_ba);
+    size_t n_chains = lean_sarray_size(idx_ba) / 32;
+    size_t xf = 2 * crop * D, yn = crop * crop;
+    lean_object* xo = lean_alloc_sarray(1, B * xf * 4, B * xf * 4);
+    lean_object* yo = lean_alloc_sarray(1, B * yn * 4, B * yn * 4);
+    float* x = (float*)lean_sarray_cptr(xo);
+    int32_t* y = (int32_t*)lean_sarray_cptr(yo);
+    for (size_t b = 0; b < B; b++) {
+        size_t c = pos[3 * b];
+        if (c >= n_chains) return lean_io_result_mk_error(
+            lean_mk_io_user_error(lean_mk_string("casp_gather: chain row out of range")));
+        int64_t foff = idx[4 * c], loff = idx[4 * c + 1], L = idx[4 * c + 2];
+        size_t span = (size_t)L > crop ? (size_t)L - crop + 1 : 1;
+        size_t i0 = exact ? pos[3 * b + 1] : pos[3 * b + 1] % span;
+        size_t j0 = exact ? pos[3 * b + 2] : pos[3 * b + 2] % span;
+        float* xb = x + b * xf;
+        for (size_t half = 0; half < 2; half++) {
+            size_t r0 = half ? j0 : i0;
+            for (size_t a = 0; a < crop; a++) {
+                float* row = xb + (half * crop + a) * D;
+                size_t r = r0 + a;
+                if ((int64_t)r < L) {
+                    const uint16_t* src = feat + ((size_t)foff + r) * D;
+                    for (size_t k = 0; k < D; k++) row[k] = casp_half_to_float(src[k]);
+                } else memset(row, 0, D * 4);
+            }
+        }
+        int32_t* yb = y + b * yn;
+        for (size_t a = 0; a < crop; a++)
+            for (size_t k = 0; k < crop; k++) {
+                size_t i = i0 + a, j = j0 + k;
+                yb[a * crop + k] = ((int64_t)i < L && (int64_t)j < L)
+                    ? (int32_t)lab[(size_t)loff + i * (size_t)L + j] : (int32_t)unobs;
+            }
+    }
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, xo);
+    lean_ctor_set(pair, 1, yo);
+    return lean_io_result_mk_ok(pair);
+}
+
+// Val metrics over a batch of diagonal crops. logits f32 [B, NC, crop, crop], y i32 [B, crop,
+// crop]. Returns f32 [4] = (hits, taken, Σ CE, observed pairs): the masked per-pixel CE (classes
+// < unobs), and the top-⌈crop/5⌉ long-range contact precision per crop — pairs with k − a ≥ sep
+// (= j − i on a diagonal window) ranked by Σ_{classes ≤ contact_max} softmax, a hit when the
+// label is ≤ contact_max (its lower edge under 8 Å).
+LEAN_EXPORT lean_obj_res lean_casp_val_metrics(b_lean_obj_arg logits_ba, b_lean_obj_arg y_ba,
+                                               size_t B, size_t NC, size_t crop, size_t sep,
+                                               size_t contact_max, size_t unobs) {
+    const float* lg = (const float*)lean_sarray_cptr(logits_ba);
+    const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
+    size_t hw = crop * crop, top = (crop + 4) / 5;
+    double hits = 0, taken = 0, ce = 0, nobs = 0;
+    float* score = (float*)malloc(hw * sizeof(float));
+    int32_t* cls = (int32_t*)malloc(hw * sizeof(int32_t));
+    for (size_t b = 0; b < B; b++) {
+        size_t n = 0;
+        for (size_t p = 0; p < hw; p++) {
+            int32_t yy = y[b * hw + p];
+            if (yy >= (int32_t)unobs) continue;
+            float mx = -1e30f;
+            for (size_t c = 0; c < NC; c++) { float v = lg[(b * NC + c) * hw + p]; if (v > mx) mx = v; }
+            double z = 0, under = 0;
+            for (size_t c = 0; c < NC; c++) {
+                double e = exp((double)lg[(b * NC + c) * hw + p] - mx);
+                z += e; if (c <= contact_max) under += e;
+            }
+            ce += log(z) - ((double)lg[(b * NC + (size_t)yy) * hw + p] - mx);
+            nobs += 1;
+            size_t a = p / crop, k = p % crop;
+            if (k >= a + sep) { score[n] = (float)(under / z); cls[n] = yy; n++; }
+        }
+        size_t take = top < n ? top : n;
+        for (size_t t = 0; t < take; t++) {           // selection of the `take` largest
+            size_t best = t;
+            for (size_t u = t + 1; u < n; u++) if (score[u] > score[best]) best = u;
+            float ts = score[t]; score[t] = score[best]; score[best] = ts;
+            int32_t tc = cls[t]; cls[t] = cls[best]; cls[best] = tc;
+            if (cls[t] <= (int32_t)contact_max) hits += 1;
+            taken += 1;
+        }
+    }
+    free(score); free(cls);
+    lean_object* out = lean_alloc_sarray(1, 16, 16);
+    float* o = (float*)lean_sarray_cptr(out);
+    o[0] = (float)hits; o[1] = (float)taken; o[2] = (float)ce; o[3] = (float)nobs;
+    return lean_io_result_mk_ok(out);
+}
+
+// Tiled inference: add the first `n_valid` windows' logits into a target's accumulators.
+// acc f32 [L, L, NC] and cnt f32 [L, L] (both modified in place when unshared, as
+// `f32_sarray_exclusive` arranges), logits f32 [B, NC, crop, crop], pos u32 [B, 3] exact
+// offsets. Returns the pair (acc, cnt).
+LEAN_EXPORT lean_obj_res lean_casp_accumulate(lean_obj_arg acc_ba, lean_obj_arg cnt_ba,
+                                              b_lean_obj_arg logits_ba, b_lean_obj_arg pos_ba,
+                                              size_t n_valid, size_t L, size_t crop, size_t NC) {
+    acc_ba = f32_sarray_exclusive(acc_ba);
+    cnt_ba = f32_sarray_exclusive(cnt_ba);
+    float* acc = (float*)lean_sarray_cptr(acc_ba);
+    float* cnt = (float*)lean_sarray_cptr(cnt_ba);
+    const float* lg = (const float*)lean_sarray_cptr(logits_ba);
+    const uint32_t* pos = (const uint32_t*)lean_sarray_cptr(pos_ba);
+    size_t hw = crop * crop;
+    for (size_t b = 0; b < n_valid; b++) {
+        size_t i0 = pos[3 * b + 1], j0 = pos[3 * b + 2];
+        for (size_t a = 0; a < crop && i0 + a < L; a++)
+            for (size_t k = 0; k < crop && j0 + k < L; k++) {
+                size_t pix = (i0 + a) * L + (j0 + k);
+                float* dst = acc + pix * NC;
+                for (size_t c = 0; c < NC; c++) dst[c] += lg[(b * NC + c) * hw + a * crop + k];
+                cnt[pix] += 1.0f;
+            }
+    }
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, acc_ba);
+    lean_ctor_set(pair, 1, cnt_ba);
+    return lean_io_result_mk_ok(pair);
+}

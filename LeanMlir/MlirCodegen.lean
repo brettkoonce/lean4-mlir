@@ -120,6 +120,7 @@ def inputFlatDim (spec : NetSpec) : Nat :=
   | some ic, _ => ic * spec.imageH * spec.imageW
   | none, some (.dense fanIn _ _) => fanIn
   | none, some (.tokenPositionEmbed v t _ ids gather _) => if ids || gather then t else v * t
+  | none, some (.pairTile sl dIn _) => 2 * sl * dIn
   | none, _ => spec.imageH * spec.imageW
 
 /-- Render tensor type: `tensor<128x1x28x28xf32>`. -/
@@ -1183,6 +1184,38 @@ private def emitDense3D (tag : String) (xSSA : String) (shape : List Nat)
     s := s ++ s!"    %d3_out{tag} = stablehlo.add %d3_mm{tag}, %d3_bb{tag} : {outTy}\n"
     return (s, s!"%d3_out{tag}", outShape)
   | _ => return ("    // dense3D error\n", xSSA, shape)
+
+/-- `pairTile` forward, shared by the eval and train emitters: the flat host input `[B, 2·L·D]`
+    (residue block `i`, then block `j`) reshaped to `[B, 2L, D]` and split; the `i` block times
+    `W`, the `j` block times `Wj` (no bias: the convBn after it has β); the two `[B, L, C]`
+    results broadcast against each other and summed into `[B, L, L, C]`, then transposed to
+    NCHW `[B, C, L, L]`. Returns `(code, outSSA, uSSA, vSSA)`, the two block inputs kept for the
+    backward's weight gradients. -/
+private def emitPairTileForward (tag xSSA : String) (b l d c : Nat) (wi wj : String)
+    : String × String × String × String := Id.run do
+  let flat := [b, 2 * l * d]
+  let x3 := [b, 2 * l, d]
+  let blk := [b, l, d]
+  let blc := [b, l, c]
+  let bllc := [b, l, l, c]
+  let bcll := [b, c, l, l]
+  let mut s := ""
+  s := s ++ s!"    %pt_x{tag} = stablehlo.reshape {xSSA} : ({tensorTy flat}) -> {tensorTy x3}\n"
+  s := s ++ s!"    %pt_u{tag} = \"stablehlo.slice\"(%pt_x{tag}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, {l}, {d}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy x3}) -> {tensorTy blk}\n"
+  s := s ++ s!"    %pt_v{tag} = \"stablehlo.slice\"(%pt_x{tag}) " ++ "{" ++ s!" start_indices = array<i64: 0, {l}, 0>, limit_indices = array<i64: {b}, {2 * l}, {d}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy x3}) -> {tensorTy blk}\n"
+  s := s ++ s!"    %pt_um{tag} = stablehlo.dot_general %pt_u{tag}, {wi},\n"
+  s := s ++ "              contracting_dims = [2] x [0],\n"
+  s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
+  s := s ++ s!"            : ({tensorTy blk}, {tensorTy [d, c]}) -> {tensorTy blc}\n"
+  s := s ++ s!"    %pt_vm{tag} = stablehlo.dot_general %pt_v{tag}, {wj},\n"
+  s := s ++ "              contracting_dims = [2] x [0],\n"
+  s := s ++ "              precision = [DEFAULT, DEFAULT]\n"
+  s := s ++ s!"            : ({tensorTy blk}, {tensorTy [d, c]}) -> {tensorTy blc}\n"
+  s := s ++ s!"    %pt_bu{tag} = stablehlo.broadcast_in_dim %pt_um{tag}, dims = [0, 1, 3] : ({tensorTy blc}) -> {tensorTy bllc}\n"
+  s := s ++ s!"    %pt_bv{tag} = stablehlo.broadcast_in_dim %pt_vm{tag}, dims = [0, 2, 3] : ({tensorTy blc}) -> {tensorTy bllc}\n"
+  s := s ++ s!"    %pt_s{tag} = stablehlo.add %pt_bu{tag}, %pt_bv{tag} : {tensorTy bllc}\n"
+  s := s ++ s!"    %pt_out{tag} = stablehlo.transpose %pt_s{tag}, dims = [0, 3, 1, 2] : ({tensorTy bllc}) -> {tensorTy bcll}\n"
+  return (s, s!"%pt_out{tag}", s!"%pt_u{tag}", s!"%pt_v{tag}")
 
 /-- Emit the FlashAttention forward SDPA core: `softmax(Q·Kᵀ/√dh + mask)·V`
     via a tiled online-softmax `stablehlo.while` over ⌈n/bk⌉ key blocks, so the
@@ -2548,6 +2581,17 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
           pidx := pidx + 1
         curShape := btd
       | _ => code := code ++ "    // tokenPositionEmbed error: input not [B, _]\n"
+    | .pairTile sl dIn oc =>
+      -- Pair tile: the flat two-block input [B, 2·L·D] → [B, C, L, L] (`emitPairTileForward`).
+      match curShape with
+      | [b, _] =>
+        let (snip, outSSA, _, _) := emitPairTileForward s!"e{pos}" curSSA b sl dIn oc
+          s!"%W{pidx}" s!"%Wj{pidx}"
+        code := code ++ snip
+        curSSA := outSSA
+        curShape := [b, oc, sl, sl]
+        pidx := pidx + 1
+      | _ => code := code ++ "    // pairTile error: input not [B, 2·L·D]\n"
     | .lmHead _d v t =>
       -- Per-position dense [B, T, D] → [B, T, V] via dot_general + bias,
       -- then reshape to flat [B, T*V] so the existing CE machinery accepts it.
@@ -2724,6 +2768,7 @@ private def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat 
       match curShape with
       | [b, _] => curShape := [b, t, d]
       | _ => pure ()
+    | .pairTile sl _ oc => curShape := [batchSize, oc, sl, sl]
     | .lmHead _ v t =>
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
@@ -2903,6 +2948,9 @@ def _root_.NetSpec.bnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
       pidx := pidx + 1
     | .timeCondAdd _ _ =>
       -- 1 slot (W, b). No BN.
+      pidx := pidx + 1
+    | .pairTile _ _ _ =>
+      -- one group (W, Wj). No BN.
       pidx := pidx + 1
     -- spatialFlatten / spatialUnflatten: no params, no pidx advance.
     | _ => pure ()
@@ -3206,6 +3254,12 @@ private structure FwdRec where
   --   lmhBtv  = SSA name of the post-dense [B, T, V] tensor (pre-transpose)
   isLmHead        : Bool := false
   lmhPidx         : Nat := 0
+  -- pairTile (first layer): the two block inputs [B, L, D] (`ptUSSA` the i rows, `ptVSSA` the
+  -- j rows) and the index of its one param group (W, Wj).
+  isPairTile      : Bool := false
+  ptPidx          : Nat := 0
+  ptUSSA          : String := ""
+  ptVSSA          : String := ""
   -- ═════════ FPN multi-scale detector ═════════
   -- One record per `.fpnDetect` layer (pidx := base of its
   -- 9 params — 6 weights + 3 head biases). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
@@ -6562,6 +6616,25 @@ private def emitTrainForward (spec : NetSpec) (B : Nat)
         curShape := bchw
       | _ => code := code ++ "    // spatialUnflatten train: input not [B, _, _]\n"
 
+    | .pairTile sl dIn oc =>
+      -- Pair tile (first layer): [B, 2·L·D] host features → [B, C, L, L]. The record keeps the
+      -- two block inputs for the backward's weight gradients; there is no input gradient.
+      match curShape with
+      | [b, _] =>
+        let inSSA := curSSA
+        let (snip, outSSA, uSSA, vSSA) := emitPairTileForward s!"t{pos}" curSSA b sl dIn oc
+          s!"%W{pidx}" s!"%Wj{pidx}"
+        code := code ++ snip
+        let bcll := [b, oc, sl, sl]
+        records := records.push
+          { layer := l, pidx := some pidx, pos, inputSSA := inSSA, preActSSA := "",
+            outputSSA := outSSA, inShape := curShape, outShape := bcll,
+            isPairTile := true, ptPidx := pidx, ptUSSA := uSSA, ptVSSA := vSSA }
+        curSSA := outSSA
+        curShape := bcll
+        pidx := pidx + 1
+      | _ => code := code ++ "    // pairTile train: input not [B, 2·L·D]\n"
+
     | .lmHead d v t =>
       -- Forward: [B, T, D] → dense3D D→V → [B, T, V] → transpose [B, V, T] →
       -- reshape [B, V, T, 1].  The 4-D output drops into the existing useSeg
@@ -7820,6 +7893,36 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         | _ => pure ()
       else pure ()
 
+    | .pairTile sl dIn oc =>
+      -- d_u = Σ_j d_out and d_v = Σ_i d_out (the adjoints of the two broadcasts), then the
+      -- dense weight gradients of each block. The features are host-side: no d_input, and
+      -- nothing upstream consumes gradSSA, so it is left as is.
+      if r.isPairTile then
+        match r.inShape with
+        | [b, _] =>
+          let p := r.ptPidx
+          let blk := [b, sl, dIn]
+          let blc := [b, sl, oc]
+          let bllc := [b, sl, sl, oc]
+          let bcll := [b, oc, sl, sl]
+          let tag := s!"ptb{r.pos}"
+          code := code ++ s!"    // ─── pairTile backward: d_u = Σ_j d_out, d_v = Σ_i d_out; dense weight grads; no d_input ───\n"
+          code := code ++ s!"    %{tag}_t = stablehlo.transpose {gradSSA}, dims = [0, 2, 3, 1] : ({tensorTy bcll}) -> {tensorTy bllc}\n"
+          code := code ++ s!"    %{tag}_du = stablehlo.reduce(%{tag}_t init: %zf) applies stablehlo.add across dimensions = [2]\n"
+          code := code ++ s!"          : ({tensorTy bllc}, tensor<f32>) -> {tensorTy blc}\n"
+          code := code ++ s!"    %{tag}_dv = stablehlo.reduce(%{tag}_t init: %zf) applies stablehlo.add across dimensions = [1]\n"
+          code := code ++ s!"          : ({tensorTy bllc}, tensor<f32>) -> {tensorTy blc}\n"
+          code := code ++ s!"    %d_W{p} = stablehlo.dot_general {r.ptUSSA}, %{tag}_du,\n"
+          code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
+          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({tensorTy blk}, {tensorTy blc}) -> {tensorTy [dIn, oc]}\n"
+          code := code ++ s!"    %d_Wj{p} = stablehlo.dot_general {r.ptVSSA}, %{tag}_dv,\n"
+          code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
+          code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
+          code := code ++ s!"            : ({tensorTy blk}, {tensorTy blc}) -> {tensorTy [dIn, oc]}\n"
+        | _ => pure ()
+      else pure ()
+
     | .lmHead d v t =>
       if r.isLmHead then
         match r.inShape with
@@ -8115,7 +8218,8 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
   s!"// {spec.name} train_step — Generated by Lean 4 → MLIR (StableHLO + VJPs)\n" ++
   s!"// Batch size: {batchSize}, optimizer: {if useAdam then "Adam" else "SGD+momentum"}\n" ++
   s!"// label_smoothing: {labelSmoothing}, weight_decay: {weightDecay}, soft_labels: {useSoftLabels}, focal: {useFocal} (γ={focalGamma}), seg: {useSeg}" ++
-  (if useSeg then s!" ({repr segLoss})" else "") ++
+  -- one line: `repr` wraps a long weight list, and a wrapped header is not a comment
+  (if useSeg then s!" ({(toString (repr segLoss)).replace "\n" " "})" else "") ++
   s!", ddpm: {useDdpm}, yolov1: {useYolov1}" ++
   (if useYolov1 then s!" (grid={yoloGridH}x{yoloGridW}, B={yoloNumBoxes}, C={yoloNumClasses})" else "") ++
   "\n\n" ++

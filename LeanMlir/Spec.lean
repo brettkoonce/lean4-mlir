@@ -151,6 +151,9 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
   | .timeCondAdd c nFreq =>
       -- W and b start at ZERO so time conditioning begins as a no-op and grows in.
       some [⟨[2 * nFreq, c], .zeroSeeded, "W", true⟩, ⟨[c], .const 0.0, "b", false⟩]
+  | .pairTile _ dIn oc =>
+      -- One group: W on the i block, Wj on the j block; no bias (the convBn after it has β).
+      some [⟨[dIn, oc], .he dIn, "W", true⟩, ⟨[dIn, oc], .he dIn, "Wj", true⟩]
   | _ => none
 
 /-- The displayed parameter count of a layer the codegen does NOT train (`Layer.paramSlots` is
@@ -473,6 +476,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .tokenPositionEmbed v t d ids _ _ => s!"TokPos({v}→{d},T={t}{if ids then ",ids" else ""})"
     | .lmHead d v t               => s!"LMHead({d}→{v},T={t})"
     | .timeCondAdd c nFreq        => s!"TimeCond({c},{2*nFreq}f)"
+    | .pairTile l d c             => s!"PairTile(L={l},{d}→{c})"
     | .spatialFlatten             => "SpFlat"
     | .spatialUnflatten c h w     => s!"SpUnflat({c},{h}x{w})")
 
@@ -526,6 +530,7 @@ def Layer.outChannels : Layer → Nat
   | .tokenPositionEmbed _ _ d _ _   => d  -- output is [B, T, D]; D acts as the channel dim downstream
   | .lmHead _ v t                   => t * v  -- flat output [B, T*V] for the loss head
   | .timeCondAdd c _                => c  -- added onto a [B, C, H, W] map; channels unchanged
+  | .pairTile _ _ c                 => c  -- the [B, C, L, L] pair map
   | .spatialFlatten                 => 0  -- pass-through (channel count unchanged on rank-3 reshape)
   | .spatialUnflatten c _ _         => c
   | _                               => 0  -- pool/flatten/GAP: pass-through
