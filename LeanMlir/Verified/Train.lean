@@ -170,6 +170,22 @@ structure VerifiedConfig where
       Like `vitInit`, NOT display-only and needs no re-render: init is host-side, so no committed
       artifact moves. Off by default — every other net keeps its seed reproducibility. -/
   cnxInit   : Bool := false
+  /-- **Depthwise fan = k², the JAX reference's rule** (`jax/Jax/Codegen.lean`'s depthwise
+      emitters use fan `k·k`). The default rank-4 rule in `mkParam` is He fan-OUT
+      `2/(dims[0]·k²)`, and for a depthwise kernel `(C, 1, k, k)` `dims[0]` is C, so without this
+      flag every depthwise conv starts √C narrower than the reference's (6–31× on MobileNetV2).
+      Stem, 1×1s and the dense head already match.
+
+      BN follows every depthwise, so the forward is unaffected; the step is not. A BN-followed
+      weight's gradient scales as 1/‖W‖, and under TF-RMSProp at ε = 1.0 the update is ≈ g, so
+      the relative step scales as 1/‖W‖² until weight decay equilibrates the norm.
+
+      Detection is `dims[1] = 1 ∧ dims[0] > 1`, i.e. a depthwise kernel; a 1-input-channel stem
+      would match too, and no net that sets this flag has one. Host-side, no re-render. Off by
+      default, so every recorded verified number reproduces from its seed;
+      `LEAN_MLIR_DW_FAN_K2=1` turns it on at launch. `tests/init_parity_audit.py` measures init
+      parity per tensor against each net's JAX reference. -/
+  dwFanK2   : Bool := false
   /-- BatchNorm running-statistic **decay** — the verified peer of `TrainConfig.bnMomentum`,
       and the same TF sense: the weight on the OLD estimate, so timm's PyTorch
       `momentum = 0.1` is `0.9` here. That field's docstring carries the per-net table and
@@ -450,7 +466,8 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
     is canonical on that axis. -/
 def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     (vitInit : Bool := false) (biasSigma : Option Float := none)
-    (heFanIn : Bool := false) (cnxInit : Bool := false) : IO ByteArray := do
+    (heFanIn : Bool := false) (cnxInit : Bool := false) (dwFanK2 : Bool := false) :
+    IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
@@ -502,6 +519,9 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
       else if heFanIn then
         (if dims.size == 4 then 2.0 / (dims[1]! * dims[2]! * dims[3]!).toFloat
          else 2.0 / (dims[0]!).toFloat)
+      -- `VerifiedConfig.dwFanK2`: the JAX reference's depthwise fan, k² rather than C·k².
+      else if dwFanK2 && dims.size == 4 && dims[1]! == 1 && dims[0]! > 1 then
+        2.0 / (dims[2]! * dims[3]!).toFloat
       else if dims.size == 4 then 2.0 / (dims[0]! * dims[2]! * dims[3]!).toFloat   -- He, fan-OUT
       else if dims.size == 2 then 2.0 / (dims[0]! + dims[1]!).toFloat         -- Glorot
       else 2.0 / (dims[0]!).toFloat                                           -- rank-1: unchanged
@@ -1946,8 +1966,12 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- here.
   if cfg.cnxInit then
     IO.println "  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)"
+  let dwFanK2 := cfg.dwFanK2 || (← IO.getEnv "LEAN_MLIR_DW_FAN_K2") == some "1"
+  if dwFanK2 then
+    IO.println "  ▸ INIT: depthwise fan = k² (the JAX reference's rule), not He fan-out C·k²"
   for spec in net.specs do
-    parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit))
+    parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit)
+      (dwFanK2 := dwFanK2))
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
   -- norm r, before any training. This is the CONDITIONING probe for gate G2: if an r that is
