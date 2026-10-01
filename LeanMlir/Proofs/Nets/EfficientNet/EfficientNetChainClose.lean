@@ -37,11 +37,10 @@ noncomputable def mbNoExpFwdBHasVJP (N : Nat) {ic oc h w kHd kWd r : Nat}
     (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec ic)
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    HasVJP (mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbNoExpFwdB
-  have dDw := dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd
-  have dSe := seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂
-  exact vjpComp _ _ (dSe.comp dDw) (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp)
+    HasVJP (mbNoExpFwdB N (h := h) (w := w) Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) :=
+  let dDw := dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd
+  let dSe := seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂
+  vjpComp _ _ (dSe.comp dDw) (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp)
     (vjpComp _ _ dDw dSe (dwbsBHasVJP N (h := h) (w := w) Wd bd εd hεd γd βd)
       (seBHasVJP N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂))
     (projBHasVJP N (h := h) (w := w) Wp bp εp hεp γp βp)

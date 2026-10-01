@@ -369,12 +369,14 @@ private theorem flatConv_ws : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
 
 private theorem bnMean_x : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
   unfold bnMean
+  -- the width `1 * (2*1) * (2*1)` is `4` by definition; restate the sum at `Fin 4`
   change (∑ i : Fin 4, X i) / ((4:ℕ):ℝ) = 3/2
   rw [Fin.sum_univ_four]; norm_num [X]
 
 private theorem bnVar_x : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
   unfold bnVar
   rw [bnMean_x]
+  -- as in `bnMean_x`: the sum at `Fin 4`
   change (∑ i : Fin 4, (X i - 3/2) * (X i - 3/2)) / ((4:ℕ):ℝ) = 5/4
   rw [Fin.sum_univ_four]; norm_num [X]
 
@@ -403,6 +405,7 @@ private theorem bnX_inj : Function.Injective (bnForward (1 * (2*1) * (2*1)) (11/
 /-- `cbr X` collapses to `bn X` (identity conv, then relu of a positive). -/
 theorem cbr_x : cbr (h := 2*1) (w := 2*1) Ws bs (11/4) 1 10 X
     = bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X := by
+  -- `cbr` is the abbrev `relu ∘ bnForward ∘ flatConv`; state it applied
   show relu _ (bnForward _ (11/4) 1 10 (flatConv Ws bs X)) = _
   rw [flatConv_ws]
   exact relu_id_of_pos (fun k => bnX_pos k)
@@ -437,6 +440,7 @@ noncomputable def cnnConcreteHasVJPAt :
           maxPool2_pos (fun _ _ _ => bnX_pos _) ci hi wi) k
       simp only [Function.comp_apply]
       rw [bnForward_gamma_zero, flatConv_ws, relu_id_of_pos (fun k => bnX_pos k)]
+      -- the outer residual sum by definition: the zeroed body's constant `1` plus the pool
       show (1:ℝ) + maxPoolFlat 1 1 1 (bnForward (1*(2*1)*(2*1)) (11/4) 1 10 X) k ≠ 0
       exact ne_of_gt (by linarith))
     -- h_rb2

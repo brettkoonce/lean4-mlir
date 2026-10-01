@@ -58,12 +58,6 @@ namespace Proofs.StableHLO
   batchMap N (relu (oc * h * w)) ∘ batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v) ∘
     batchMap N (flatConvStride2 W b)
 
-/-- Batched 1×1 project → inference BN, no activation (the linear bottleneck). -/
-@[reducible] noncomputable def mnv4ProjBEval (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β μ v : Vec oc) :
-    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
-  batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v) ∘ batchMap N (flatConv W b)
-
 /-- Batched depthwise → inference BN, no activation (timm's `dw_start`, the pre-DW). -/
 @[reducible] noncomputable def mnv4DWBEval (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β μ v : Vec c) :
@@ -211,7 +205,7 @@ noncomputable def mnv4PostDWSlotEval (N h : Nat) (ε : ℝ) {c : Nat} (k : Nat)
     project-BN, at side `h`. The skip is added by the caller. -/
 noncomputable def mnv4BodyEval (N h : Nat) (ε : ℝ) (s : UibSpec) (p : UibEvalParams s) :
     Vec (N * (s.ic * h * h)) → Vec (N * (s.oc * h * h)) :=
-  mnv4ProjBEval N (h := h) (w := h) p.Wz p.bz ε p.gz p.btz p.muz p.vz ∘
+  projBEval N (h := h) (w := h) p.Wz p.bz ε p.gz p.btz p.muz p.vz ∘
     mnv4PostDWSlotEval N h ε s.postDWk p.post ∘
     mnv4CbReluBEval N (h := h) (w := h) p.We p.be ε p.ge p.bte p.mue p.ve ∘
     mnv4PreDWSlotEval N h ε s.preDWk p.pre
@@ -220,7 +214,7 @@ noncomputable def mnv4BodyEval (N h : Nat) (ε : ℝ) (s : UibSpec) (p : UibEval
     the post-DW carrying the stride to `h` (timm's `dw_mid`), the project at `h`. No skip. -/
 noncomputable def mnv4StridedEval (N h : Nat) (ε : ℝ) (s : UibSpec) (p : UibEvalParams s) :
     Vec (N * (s.ic * (2 * h) * (2 * h))) → Vec (N * (s.oc * h * h)) :=
-  mnv4ProjBEval N (h := h) (w := h) p.Wz p.bz ε p.gz p.btz p.muz p.vz ∘
+  projBEval N (h := h) (w := h) p.Wz p.bz ε p.gz p.btz p.muz p.vz ∘
     mnv4DWReluSBEval N (h := h) (w := h) p.post.params.W p.post.params.b ε p.post.params.γ
       p.post.params.β p.post.params.μ p.post.params.v ∘
     mnv4CbReluBEval N (h := 2 * h) (w := 2 * h) p.We p.be ε p.ge p.bte p.mue p.ve ∘
@@ -231,7 +225,7 @@ noncomputable def mnv4FusedBEval (N h : Nat) (ε : ℝ) {ic mid oc kH kW : Nat}
     (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (γc βc μc vc : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (γp βp μp vp : Vec oc) :
     Vec (N * (ic * (2 * h) * (2 * h))) → Vec (N * (oc * h * h)) :=
-  mnv4ProjBEval N (h := h) (w := h) Wp bp ε γp βp μp vp ∘
+  projBEval N (h := h) (w := h) Wp bp ε γp βp μp vp ∘
     mnv4CbReluSBEval N (h := h) (w := h) Wc bc ε γc βc μc vc
 
 /-- The head at inference, timm's order: 1×1 conv-BN-relu at `h`, GAP, `conv_head` 1×1
@@ -417,23 +411,15 @@ theorem mnv4BodyGraphBEval_faithful (epsStr : String) (N h : Nat) (ε : ℝ) (s 
     (p : UibEvalParams s) (e : SHlo (N * (s.ic * h * h))) :
     den (mnv4BodyGraphBEval epsStr N h ε s p e) = mnv4BodyEval N h ε s p (den e) := by
   simp only [mnv4BodyGraphBEval, mnv4BodyEval, mnv4BnGraphBEval_faithful,
-    mnv4PostDWGraphBEval_faithful, mnv4PreDWGraphBEval_faithful, mnv4ProjBEval, mnv4CbReluBEval, den_batchOp, denOp, Function.comp_apply]
+    mnv4PostDWGraphBEval_faithful, mnv4PreDWGraphBEval_faithful, projBEval, mnv4CbReluBEval, den_batchOp, denOp, Function.comp_apply]
 
 /-- The stride-2 UIB block graph denotes its inference forward. -/
 theorem mnv4StridedGraphBEval_faithful (epsStr : String) (N h : Nat) (ε : ℝ) (s : UibSpec)
     (p : UibEvalParams s) (e : SHlo (N * (s.ic * (2 * h) * (2 * h)))) :
     den (mnv4StridedGraphBEval epsStr N h ε s p e) = mnv4StridedEval N h ε s p (den e) := by
   simp only [mnv4StridedGraphBEval, mnv4StridedEval, mnv4BnGraphBEval_faithful,
-    mnv4PreDWGraphBEval_faithful, mnv4ProjBEval,
+    mnv4PreDWGraphBEval_faithful, projBEval,
     mnv4DWReluSBEval, mnv4CbReluBEval, den_batchOp, denOp, Function.comp_apply]
-
-/-- A skip row: the body's inference forward under `residual`. Generic in the body, applied at
-    each of the eighteen rows (where `s.ic` and `s.oc` are the same literal). -/
-private theorem mnv4SkipGraphBEval_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
-    (g : Vec (N * n) → Vec (N * n))
-    (hb : ∀ e' : SHlo (N * n), den (body e') = g (den e')) (e : SHlo (N * n)) :
-    den (mnv4SkipGraphB body e) = residual g (den e) := by
-  simp only [mnv4SkipGraphB, den_addVB, hb, residual]
 
 private theorem mnv4StemGraphBEval_faithful (epsStr : String) (N h : Nat) (ε : ℝ)
     {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (γs βs μs vs : Vec oc)
@@ -448,7 +434,7 @@ private theorem mnv4FusedGraphBEval_faithful (epsStr : String) (N h : Nat) (ε :
     (e : SHlo (N * (ic * (2 * h) * (2 * h)))) :
     den (mnv4FusedGraphBEval epsStr N h ε Wc bc γc βc μc vc Wp bp γp βp μp vp e)
       = mnv4FusedBEval N h ε Wc bc γc βc μc vc Wp bp γp βp μp vp (den e) := by
-  simp only [mnv4FusedGraphBEval, mnv4FusedBEval, mnv4ProjBEval, mnv4CbReluSBEval,
+  simp only [mnv4FusedGraphBEval, mnv4FusedBEval, projBEval, mnv4CbReluSBEval,
     mnv4BnGraphBEval_faithful, den_batchOp, denOp,
     Function.comp_apply]
 
@@ -502,33 +488,33 @@ def mnv4FwdGraphBFullEval (N f : Nat) (epsStr : String) (ε : ℝ) {nCls : Nat}
 
 /-- **The MobileNetV4-Conv-M inference graph denotes the inference forward**, at every final
     feature side `f`. One rewrite per stage, outside-in; the eighteen skip rows each go through
-    `mnv4SkipGraphBEval_faithful` with the body theorem, so the term stays linear in the depth. -/
+    `mnv4SkipGraphB_faithful` with the body theorem, so the term stays linear in the depth. -/
 theorem mnv4FwdGraphBFullEval_faithful (N f : Nat) (epsStr : String) (ε : ℝ) {nCls : Nat}
     (w : Mnv4BWeightsEval nCls)
     (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) :
     den (mnv4FwdGraphBFullEval N f epsStr ε w e) = mobilenetv4ForwardBFullEval N f ε w (den e) := by
   unfold mnv4FwdGraphBFullEval mobilenetv4ForwardBFullEval
   rw [mnv4HeadGraphBEval_faithful,
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row21 w.b21),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row20 w.b20),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row19 w.b19),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row18 w.b18),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row17 w.b17),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row16 w.b16),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row15 w.b15),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row14 w.b14),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row13 w.b13),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row12 w.b12),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row21 w.b21),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row20 w.b20),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row19 w.b19),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row18 w.b18),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row17 w.b17),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row16 w.b16),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row15 w.b15),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row14 w.b14),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row13 w.b13),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N f ε mnv4Row12 w.b12),
     mnv4StridedGraphBEval_faithful,
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row10 w.b10),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row9 w.b9),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row8 w.b8),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row7 w.b7),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row6 w.b6),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row5 w.b5),
-    mnv4SkipGraphBEval_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row4 w.b4),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row10 w.b10),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row9 w.b9),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row8 w.b8),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row7 w.b7),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row6 w.b6),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row5 w.b5),
+    mnv4SkipGraphB_faithful _ _ (mnv4BodyGraphBEval_faithful epsStr N (2 * f) ε mnv4Row4 w.b4),
     mnv4StridedGraphBEval_faithful,
-    mnv4SkipGraphBEval_faithful _ _
+    mnv4SkipGraphB_faithful _ _
       (mnv4BodyGraphBEval_faithful epsStr N (2 * (2 * f)) ε mnv4Row2 w.b2),
     mnv4StridedGraphBEval_faithful, mnv4FusedGraphBEval_faithful, mnv4StemGraphBEval_faithful]
 

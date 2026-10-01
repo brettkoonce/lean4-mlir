@@ -11,7 +11,7 @@ The per-op facts that argument is assembled from are stated here once:
 
 | what | names | namespace |
 |---|---|---|
-| the `c·h·w ↔ c·(h·w)` index cast and sharding through it; non-BN nodes commute with the batch cut; the BN sync site | `castIdx`, `la_assoc`, `batchShard_castIdx`, `den_batchOp_shard`, `den_relu_shard`, `den_addVB_shard`, `bnSyncSiteLA` | `StableHLO` |
+| the `c·h·w ↔ c·(h·w)` index cast and sharding through it; non-BN nodes commute with the batch cut; the BN sync site | `castIdx`, `la_assoc`, `batchShard_castIdx`, `den_castIdx_shard`, `den_batchOp_shard`, `den_relu_shard`, `den_relu6_shard`, `den_swishF_shard`, `den_addVB_shard`, `den_addVB_shard_comm`, `den_addV_shard`, `bnSyncSiteLA` | `StableHLO` |
 | homogeneity — each cotangent step and gradient node is linear in its cotangent | `*_smul` | `SyncKit` |
 | sharding — each input-VJP is per example, so it commutes with the batch cut; sync-BN's backward is the shard of the global one | `*_shard`, `bnSyncInB_shard` | `SyncKit` |
 | P4 — the replica mean of a weight-gradient node is `1/R` of the global node | `den_allReduceMeanF_*_shard` | `SyncKit` (and `DataParallel.Sync` for conv W / BN β) |
@@ -58,6 +58,51 @@ theorem den_addVB_shard {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec 
     den (.addVB (a r) (b r)) = batchShard R N n (fun j => A j + B j) r := by
   rw [den_addVB, ha, hb]
   rfl
+
+/-- `den_addVB_shard` with the SECOND operand first on the right: ResNet-50's render emits
+    `addVB(body, projection)`, and `residualProj proj body` adds `proj + body`. -/
+theorem den_addVB_shard_comm {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec ((R * N) * n))
+    (ha : ∀ r, den (a r) = batchShard R N n A r) (hb : ∀ r, den (b r) = batchShard R N n B r)
+    (r : Fin R) :
+    den (.addVB (a r) (b r)) = batchShard R N n (fun j => B j + A j) r := by
+  rw [den_addVB, ha, hb]
+  funext i
+  exact add_comm _ _
+
+/-- The per-example identity skip spelled `addV` (EfficientNet-B0's MBConv) on every replica is
+    the shard of the global one. -/
+theorem den_addV_shard {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec ((R * N) * n))
+    (ha : ∀ r, den (a r) = batchShard R N n A r) (hb : ∀ r, den (b r) = batchShard R N n B r)
+    (r : Fin R) :
+    den (.addV (a r) (b r)) = batchShard R N n (fun j => A j + B j) r := by
+  rw [den_addV, ha, hb]
+  rfl
+
+/-- Swish on every replica denotes the shard of the global swish — pointwise, like relu. -/
+theorem den_swishF_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
+    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
+    den (.swishF (e r)) = batchShard R N n (swish ((R * N) * n) X) r := by
+  rw [swishF_faithful, he]
+  rfl
+
+/-- **relu6 on every replica is the shard of the global relu6** — the clamp reads one cell, so
+    cutting the batch before or after it is the same. Stated at the whole-batch `relu6` the
+    committed forwards are written in. -/
+theorem den_relu6_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
+    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
+    den (.batchOp (N := N) (.relu6 (n := n)) (e r))
+      = batchShard R N n (relu6 ((R * N) * n) X) r := by
+  rw [den_batchOp_relu6_eq_relu6F, relu6F_faithful, he]
+  rfl
+
+/-- **A per-example relabel on every replica is the shard of the relabelled global batch** — e.g.
+    MobileNetV4's head casts `[N, c] ↔ [N, c, 1, 1]`, read at the network index. -/
+theorem den_castIdx_shard {R N a b : Nat} (hab : a = b) (h : N * a = N * b)
+    (e : Fin R → SHlo (N * a)) (X : Vec ((R * N) * a))
+    (he : ∀ r, den (e r) = batchShard R N a X r) (r : Fin R) :
+    den (castIdx h (e r))
+      = batchShard R N b (fun i => X (Fin.cast (congrArg ((R * N) * ·) hab).symm i)) r := by
+  rw [den_castIdx, he, batchShard_castIdx hab]
 
 /-- **One sync-BN forward site, at the network index, on replica `r`** — `bnFwdSite`'s
     `replicas > 1` branch: `bnSyncF` of this replica's operand, reading `syncStats` over all `R`

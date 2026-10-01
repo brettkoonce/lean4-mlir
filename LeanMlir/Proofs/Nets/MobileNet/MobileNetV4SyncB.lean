@@ -73,19 +73,6 @@ open scoped BigOperators
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The head's relabelling — per-example, so sharding commutes with it
--- ════════════════════════════════════════════════════════════════
-
-/-- **A per-example relabel on every replica is the shard of the relabelled global batch** — the
-    head's `[N, c] ↔ [N, c, 1, 1]` casts, read at the network index. -/
-theorem den_castIdx_shard {R N a b : Nat} (hab : a = b) (h : N * a = N * b)
-    (e : Fin R → SHlo (N * a)) (X : Vec ((R * N) * a))
-    (he : ∀ r, den (e r) = batchShard R N a X r) (r : Fin R) :
-    den (castIdx h (e r))
-      = batchShard R N b (fun i => X (Fin.cast (congrArg ((R * N) * ·) hab).symm i)) r := by
-  rw [den_castIdx, he, batchShard_castIdx hab]
-
--- ════════════════════════════════════════════════════════════════
 -- § The stem and the fused stage — generic in their widths
 -- ════════════════════════════════════════════════════════════════
 

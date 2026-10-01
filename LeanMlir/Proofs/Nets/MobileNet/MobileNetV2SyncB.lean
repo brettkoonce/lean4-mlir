@@ -29,8 +29,8 @@ the shard hypothesis `∀ r, den (e r) = batchShard R N _ X r` carried from bloc
 * every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is the sync-BN
   shard identity on the graph, read at the network index.
 
-The graph reuses `ResNet34SyncB`'s site verbatim — it is net-agnostic — so the only new lemma is
-the relu6 one; the rest of this file is MobileNetV2's six block shapes and their chain.
+The graph reuses `ResNet34SyncB`'s site verbatim — it is net-agnostic — and relu6's shard lemma
+is the kit's, so this file is MobileNetV2's six block shapes and their chain.
 
 ## Names
 
@@ -52,20 +52,6 @@ namespace Proofs
 open scoped BigOperators
 
 namespace StableHLO
-
--- ════════════════════════════════════════════════════════════════
--- § relu6 — pointwise, so sharding commutes with it
--- ════════════════════════════════════════════════════════════════
-
-/-- **relu6 on every replica is the shard of the global relu6** — the clamp reads one cell, so
-    cutting the batch before or after it is the same. The MobileNetV2 peer of `den_relu_shard`,
-    stated at the whole-batch `relu6` the committed forward is written in. -/
-theorem den_relu6_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
-    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
-    den (.batchOp (N := N) (.relu6 (n := n)) (e r))
-      = batchShard R N n (relu6 ((R * N) * n) X) r := by
-  rw [den_batchOp_relu6_eq_relu6F, relu6F_faithful, he]
-  rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-block replica families + their shard lemmas

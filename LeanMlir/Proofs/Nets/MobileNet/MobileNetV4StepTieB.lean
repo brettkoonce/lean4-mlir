@@ -764,10 +764,8 @@ theorem mnv4SkipCotIn_eq_vjp {N n : Nat} (L : CertLayer (N * n) (N * n)) (x : Ve
   have hL := L.faithful x hok (.operand "" dyOut)
   have he : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [he] at h hL
-  rw [← h]
-  funext i
-  show _ = den (L.graph x (.operand "" dyOut)) i + dyOut i
-  rw [hL]; rfl
+  rw [← h, CertLayer.residual_graph, den_addV, hL, he]
+  rfl
 
 /-- **The fused stage's input cotangent is its certified VJP's backward.** -/
 theorem mnv4FusedCotIn_eq_vjp (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)

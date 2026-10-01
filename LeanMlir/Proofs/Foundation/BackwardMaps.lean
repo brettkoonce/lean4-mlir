@@ -39,6 +39,15 @@ noncomputable def reluMaskBack {n : Nat} (cond : Fin n → Prop) [DecidablePred 
     a diagonal Jacobian, so their backward is this single `multiply` at a fixed vector `s`. -/
 noncomputable def diagBack {n : Nat} (s : Vec n) (dy : Vec n) : Vec n := fun i => s i * dy i
 
+/-- The chains' dense input-VJP `dense (Wᵀ) 0` (`Wᵀ·dy`) IS the contraction `Mat.mulVec W`, the
+    certified `denseHasVJP.backward` (which ignores its activation); `mul_comm` per term. The
+    function-level form (no `dy` argument) is the one a `simp` or `rw` over a chain matches. -/
+theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
+    dense (Mat.transpose W) (0 : Vec m) = Mat.mulVec W := by
+  funext dy i
+  simp only [dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
+  exact Finset.sum_congr rfl fun j _ => mul_comm _ _
+
 -- ════════════════════════════════════════════════════════════════
 -- § Per-row lifts: a per-token map on the flattened `Mat n d ≅ Vec (n·d)`
 -- ════════════════════════════════════════════════════════════════

@@ -187,6 +187,9 @@ noncomputable def residualHasVJPAt {n : Nat}
 theorem residual_apply {n : Nat} (f : Vec n → Vec n) (v : Vec n) (k : Fin n) :
     residual f v k = f v k + v k := rfl
 
+theorem residualProj_apply {m n : Nat} (proj f : Vec m → Vec n) (v : Vec m) (k : Fin n) :
+    residualProj proj f v k = proj v k + f v k := rfl
+
 theorem residual_differentiableAt {n : Nat} {f : Vec n → Vec n} {x : Vec n}
     (hf : DifferentiableAt ℝ f x) : DifferentiableAt ℝ (residual f) x :=
   hf.add differentiable_id.differentiableAt

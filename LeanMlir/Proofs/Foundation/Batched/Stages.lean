@@ -15,6 +15,7 @@ The building blocks every batched conv-net forward is written in, at the flat ba
 | depthwise (stride 1 / symmetric stride 2) → BN → swish | `dwbsB` / `dwbsSB` | `dwbsBHasVJP` / `dwbsSBHasVJP` |
 | squeeze-excite | `seB` | `seBHasVJP` |
 | 1×1 projection → BN (no activation) | `projB` | `projBHasVJP` |
+| the same at inference BN (frozen statistics) | `projBEval` | — |
 
 The generic pieces they compose — `batchMapHasVJP` (block-diagonal VJP of a batch-separable op)
 and `bnBatchLAHasVJP` — are in `BatchMapVJPAt`. EfficientNet-B0, MobileNetV2/V4 and the ResNets
@@ -72,6 +73,14 @@ noncomputable def stemB (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
     Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
   StableHLO.bnBatchLA N oc h w ε γ β ∘ StableHLO.batchMap N (flatConv W b)
+
+/-- `projB` at inference: 1×1 conv → inference bn on frozen statistics `μ`, `v` (no swish). The
+    eval forwards of EfficientNet-B0 and MobileNetV4 both end their blocks in it. -/
+@[reducible] noncomputable def projBEval (N : Nat) {ic oc h w kH kW : Nat}
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β μ v : Vec oc) :
+    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
+  StableHLO.batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)
+    ∘ StableHLO.batchMap N (flatConv W b)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-stage VJPs — the batched stage abbreviations (`EfficientNetRender.PC`) compose the

@@ -351,12 +351,8 @@ definitional match: the lemmas below rewrite each spelling into the one the whol
     `mhsaBackFlat` uses. -/
 theorem rowDenseBackFlat_eq_perRowFlat {N D : Nat} (W : Mat D D) :
     rowDenseBackFlat N D D W = perRowFlat N D (Proofs.dense (Mat.transpose W) (0 : Vec D)) := by
-  funext v idx
-  unfold rowDenseBackFlat perRowFlat
-  congr 1; funext r c
-  unfold Proofs.dense Mat.mulVec Mat.transpose
-  rw [Pi.zero_apply, add_zero]
-  exact Finset.sum_congr rfl fun k _ => mul_comm _ _
+  rw [dense_transpose_eq_mulVec]
+  rfl
 
 /-- The rendered multi-head Q backward (per-head slice → SDPA back → pad, summed) is the
     certified concatenated core `coreQFlat`: `vitCotDQmh_eq` plus the pad-sum-is-concat lemma. -/
@@ -379,15 +375,15 @@ theorem vitCotLn2_eq_perRowFlatPR {Np1 D mlpDim : Nat} (W1 : Mat D mlpDim) (W2 :
       = perRowFlatPR Np1 D (fun r => Proofs.dense (Mat.transpose W1) (0 : Vec D)
           ∘ diagBack (fun c => geluScalarDeriv (m1 r c))
           ∘ Proofs.dense (Mat.transpose W2) (0 : Vec mlpDim)) dyOut := by
-  show Mat.flatten (fun i => Mat.mulVec W1 (Mat.unflatten (fun k =>
-      rowDenseBackFlat Np1 mlpDim D W2 dyOut k * geluScalarDeriv (Mat.flatten m1 k)) i)) = _
-  unfold perRowFlatPR
-  congr 1; funext r c
-  simp only [Mat.mulVec, Mat.unflatten, Mat.flatten, rowDenseBackFlat, Function.comp_apply,
-    diagBack, Proofs.dense, Mat.transpose, Pi.zero_apply, add_zero, Equiv.symm_apply_apply]
-  refine Finset.sum_congr rfl fun k _ => ?_
-  rw [Finset.sum_congr rfl fun j _ => mul_comm (dyOut (finProdFinEquiv (r, j))) (W2 k j)]
-  ring
+  unfold vitCotLn2 perRowFlatPR
+  rw [dense_transpose_eq_mulVec, dense_transpose_eq_mulVec]
+  unfold rowDenseBackFlat
+  congr 1; funext r
+  simp only [Function.comp_apply]
+  congr 1; funext c
+  simp only [Mat.unflatten, vitCotM1_apply, rowDenseBackFlat, Mat.flatten, Equiv.symm_apply_apply,
+    diagBack]
+  exact mul_comm _ _
 
 
 /-- `vitCotDQmh_eq_core` for K. -/

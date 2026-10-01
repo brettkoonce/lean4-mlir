@@ -59,6 +59,12 @@ noncomputable def vitCotM1 {Np1 D mlpDim : Nat} (Wfc2 : Mat mlpDim D)
     (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D)) : Vec (Np1 * mlpDim) :=
   fun i => vitCotG Wfc2 dyOut i * geluScalarDeriv (m1 i)
 
+/-- `vitCotM1` with its private fc2 back unfolded: fc2's per-token input-VJP, then the GELU mask. -/
+theorem vitCotM1_apply {Np1 D mlpDim : Nat} (Wfc2 : Mat mlpDim D) (m1 : Vec (Np1 * mlpDim))
+    (dyOut : Vec (Np1 * D)) (i : Fin (Np1 * mlpDim)) :
+    vitCotM1 Wfc2 m1 dyOut i = rowDenseBackFlat Np1 mlpDim D Wfc2 dyOut i * geluScalarDeriv (m1 i) :=
+  rfl
+
 /-- Cotangent at the **LN₂ output** (= the fc1 input): fc1's per-token input-VJP. -/
 noncomputable def vitCotLn2 {Np1 D mlpDim : Nat} (Wfc1 : Mat D mlpDim)
     (Wfc2 : Mat mlpDim D) (m1 : Vec (Np1 * mlpDim)) (dyOut : Vec (Np1 * D)) :

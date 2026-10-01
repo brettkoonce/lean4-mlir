@@ -599,8 +599,9 @@ def mnv4SkipGraphB {N n : Nat} (body : SHlo (N * n) → SHlo (N * n)) (e : SHlo 
   .addVB (body e) e
 
 /-- A skip row denotes `residual` of whatever its body denotes — generic in both, so one
-    theorem covers all eighteen and the body's own faithfulness lemma is the only input. -/
-private theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
+    theorem covers all eighteen, in this graph and the eval graph (`MobileNetV4FullBEval`), and
+    the body's own faithfulness lemma is the only input. -/
+theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
     (f : Vec (N * n) → Vec (N * n))
     (hb : ∀ e' : SHlo (N * n), den (body e') = f (den e')) (e : SHlo (N * n)) :
     den (mnv4SkipGraphB body e) = Proofs.residual f (den e) := by

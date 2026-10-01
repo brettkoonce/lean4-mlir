@@ -362,7 +362,7 @@ theorem cnxDownCotInChAt_eq_vjp {ci co h w : Nat} (ε : ℝ) (hε : 0 < ε)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) :
     cnxDownCotInChAt ε dng dnbt Wd bd xin dyOut
       = (cnxDownChWHasVJP h w ⟨ε, dng, dnbt, Wd, bd⟩ hε).backward xin dyOut := by
-  show chanLNTensor3Back ci (2*h) (2*w) ε dng xin _ = _
+  unfold cnxDownCotInChAt
   rw [chanLNTensor3Back_eq_chanLN_vjp (β := dnbt) ε hε dng xin]
   rfl
 

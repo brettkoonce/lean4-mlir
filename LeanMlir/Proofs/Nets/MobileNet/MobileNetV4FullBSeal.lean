@@ -234,8 +234,7 @@ private theorem sealZBody_eq (N : Nat) (s : UibSpec) (hn : 0 < N * (s.h * s.h))
 private theorem resid_id {n : Nat} (L : CertLayer n n) (v : Vec n) (hL : L.fwd v = fun _ => (0 : ℝ)) :
     (CertLayer.residual L).fwd v = v := by
   funext k
-  show L.fwd v k + v k = v k
-  rw [hL]
+  rw [CertLayer.residual_fwd, Proofs.residual_apply, hL]
   ring
 
 /-- **A carrier row (all three are strided ExtraDW) collapses to four BatchNorms**: the BN-only
@@ -905,8 +904,8 @@ theorem head_eq_dense (nCls : Nat) (t : ℝ) :
     mobilenetv4ForwardBFull 2 (sealW nCls) (sealX t)
       = StableHLO.batchMap 2 (dense (sealW nCls).Wd (sealW nCls).bd)
           (fun k => Ah2 t (Fin.cast (mnv4_pool11 2 1280) k)) := by
-  show (mnv4HeadStack 2 (sealW nCls)).fwd (mnv4Pre6 2 (sealW nCls) (sealX t)) = _
-  rw [headStack_apply, pc6]
+  rw [mobilenetv4ForwardBFull, headStack_apply, pc6]
+  -- restate with the head's `sealW` fields read off, the spelling `cbReluB_eq` matches
   show StableHLO.batchMap 2 (dense (sealW nCls).Wd (sealW nCls).bd)
       (fun k => StableHLO.cbReluB 2 (h := 1) (w := 1) (ctK 1280 960 1 1 1) (kv 1280 0) 1
           (kv 1280 1) (kv 1280 160)

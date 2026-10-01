@@ -773,6 +773,45 @@ Farm the sub-packages to separate agents. They touch disjoint files, except wher
       so they stay.
 - **8d Nets**: **N1-reuse-1/2**, **N2-reuse-1…4**, **N2-pq-1…4**, **N1-pq-1** (28 undocumented
   `show`/`change`; add `_def` lemmas).
+  - **Status 2026-10-01: done (staged) except N1-reuse-2; nothing renamed, no pin moved.** Every finding was re-checked at `9eed9240`.
+    - N1-pq-1: `r34IdB_apply` / `r34DownB_apply` / `r34StemB_apply` (ResNet34FullB),
+      `r50IdB_apply` / `r50ProjB_apply` / `r50DownB_apply` (ResNet50FullB) and
+      `residualProj_apply` (Residual, beside `residual_apply`). The two seals' block, stem and
+      `hout` shows are `rw`s with them; the `hmid`/`hm1`/`hm2` shows are gone too: the
+      zero-conv and constant-BN lemmas take the seal weights' fields as explicit arguments,
+      so they match the clause unreduced. ConvNeXt: `unfold cnxDownCotInChAt`,
+      `rw [cnxDownBack, Function.comp_apply]`, and `cnxStageChKBack.eq_2` plus
+      `cnxBlockChBackAt` in the stage fold. MnistCNN's four (`Fin (1*(2*1)*(2*1))` restated at
+      `Fin 4`, `cbr`/`rblk` read applied) are definitional on purpose and carry a comment.
+    - N2-reuse-1: `den_swishF_shard`, `den_addV_shard`, `den_relu6_shard`, `den_castIdx_shard`
+      and R50's `den_addVB_shard_comm` (same class, not in the finding) moved into SyncKit,
+      names and namespace unchanged, so the AuditAxioms lines stand.
+    - N2-reuse-2: `mnv4SkipGraphB_faithful` is public; the Eval copy is deleted.
+    - N2-reuse-3: `projBEval` moved from PCEval to `Batched.Stages` beside `projB` (same full
+      name, so B0's Eval/Drop `unfold`s stand); `mnv4ProjBEval` deleted, its uses repointed.
+    - N2-reuse-4: `dense_transpose_eq_mulVec` lives in `BackwardMaps`;
+      `dense_transpose_eq_vjp_backward` is it in one line. `rowDenseBackFlat_eq_perRowFlat` is
+      `rw` + `rfl`, and `vitCotLn2_eq_perRowFlatPR` (N2-pq-4) rewrites with it and the new
+      `vitCotM1_apply` (ViTChainClose; `vitCotG` is private), so its `show` is gone.
+    - N2-pq-2: `resid_id` and `head_eq_dense`'s first `show` are `rw`s (`CertLayer.residual_fwd`
+      + `residual_apply`; `mobilenetv4ForwardBFull`); its second `show` reads the `sealW` fields
+      off for `cbReluB_eq` and is commented. `mnv4SkipCotIn_eq_vjp` rewrites with the new
+      `CertLayer.residual_graph`.
+    - N2-pq-3: `rw [sum_finProdFinEquiv (m := h) (n := dh)]` ×3 replaces the three motive-spelled
+      `← Equiv.sum_comp` and the `sum_prod_type`s.
+    - Already done at HEAD: N1-reuse-1 (both `sealX_continuous` deleted in the small tier).
+    - N2-pq-1 (after WP8e released the file, on top of its `hdCotIn_eq_vjp` edit): the four
+      `have hc … := rfl` blocks go. `xCotIn` / `sCotIn` / `nCotIn` are `simp only [mb*FwdBHasVJP,
+      vjpComp_backward]` then the stage `*_back_eq` rewrites; `rCotIn` keeps a three-line `hc`
+      (commented: the witness is `residualHasVJP` of the expand body's) and then does the same.
+      `mbNoExpFwdBHasVJP` (EfficientNetChainClose) is now term-mode like its two siblings: the
+      tactic `unfold` left an `id` cast that `vjpComp_backward` cannot see through.
+    - **N1-reuse-2 / N1-place-1 parked (user):** a length name (`vjpChain18At`) changes the
+      text of the R34 capstone statement the comparator pins (`ChallengeTier` spells
+      `Proofs.r34BFullHasVJPAt`); moving it to OpaquePrefix under its ResNet-34 name only half
+      fixes it. N2-place-1 skipped: the ℝ wrappers' home `Training/DropPath` and the graph side's
+      `StableHLO/Basic` are both upstream of all of Certs. N2-place-2 is WP8a's
+      (`ViTParamGrad` opens `ViTTiePoCGB`).
 - **8e Foundation/Float/Certificates**:
   - **F-re-1/2/3**, **F-pq-1** (the `den_convBackBatched_eq_cInB` peers).
   - **C-reuse-1** ✔ (typechecked), **C-reuse-2** (−40), **C-pq-1**.

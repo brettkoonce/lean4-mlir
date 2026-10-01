@@ -149,6 +149,30 @@ structure R34BWeights (nCls : Nat) where
   StableHLO.batchMap N (maxPool3s2Flat oc h w) ∘
     StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs
 
+/-- The identity block, APPLIED: the outer relu of the residual sum. A proof that needs the relu
+    or the residual exposed rewrites with this instead of restating the goal by `show`. -/
+theorem r34IdB_apply (N h w : Nat) {c : Nat} (p : R34IdW c) (v : Vec (N * (c * h * w))) :
+    r34IdB N h w p v
+      = relu (N * (c * h * w)) (residual
+          (projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
+            StableHLO.cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v) := rfl
+
+/-- The downsample block, APPLIED: the outer relu of the projected residual sum. -/
+theorem r34DownB_apply (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+    (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    r34DownB N h w p v
+      = relu (N * (oc * h * w)) (residualProj
+          (StableHLO.projStridedB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp)
+          (projB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
+            StableHLO.cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v) := rfl
+
+/-- The stem, APPLIED: the pool of the strided conv-BN-relu. -/
+theorem r34StemB_apply (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
+    r34StemB N h w Ws bs εs γs βs x
+      = StableHLO.batchMap N (maxPool3s2Flat oc h w)
+          (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) := rfl
+
 /-- Batched head: global average pool, then the dense classifier. -/
 @[reducible] noncomputable def r34HeadB (N h w : Nat) {c nCls : Nat}
     (Wd : Mat c nCls) (bd : Vec nCls) : Vec (N * (c * h * w)) → Vec (N * nCls) :=

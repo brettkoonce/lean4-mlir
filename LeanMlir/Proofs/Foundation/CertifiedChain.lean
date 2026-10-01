@@ -195,6 +195,10 @@ peel itself is a kernel deterministic timeout by `rfl` / `Function.comp_apply` /
 @[simp] theorem residual_fwd {n : Nat} (L : CertLayer n n) :
     (residual L).fwd = Proofs.residual L.fwd := rfl
 
+/-- `residual`'s backward graph: the body's graph plus the skip's verbatim cotangent. -/
+theorem residual_graph {n : Nat} (L : CertLayer n n) (x : Vec n) (e : SHlo n) :
+    (residual L).graph x e = .addV (L.graph x e) e := rfl
+
 @[simp] theorem id'_fwd (n : Nat) : (id' n).fwd = fun y => y := rfl
 
 /-- `comp`'s forward, APPLIED — the one lemma a whole-net shape check at literal widths rests on. -/

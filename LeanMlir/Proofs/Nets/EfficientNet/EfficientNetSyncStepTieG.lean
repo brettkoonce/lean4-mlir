@@ -69,7 +69,7 @@ open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
 open Proofs.BackLinks (bnInB bnInB_eq_bnBackB rowB unrowB)
-open Proofs.BackLinks (den_bnBatchLABack_eq_bnBackB cbsB_back_eq dwbsB_back_eq dwbsSB_back_eq
+open Proofs.BackLinks (den_convBackBatched_eq_cInB cbsB_back_eq dwbsB_back_eq dwbsSB_back_eq
   projB_back_eq bnBackB_smul swBackB_smul sigBackB_smul seInB_smul gateCotB_smul
   seInB_eq_batchMapAux)
 open Proofs.SyncKit
@@ -313,8 +313,8 @@ end
 The single-device tie threads the block-output cotangents by the block VJPs' `.backward`; the
 replicas compute theirs by the explicit chain. These say the two agree, so the sharding argument
 (which needs the explicit chain) lands on the single-device tie's own `.backward` terms.
-`HasVJP.backward_unique` swaps the bundle-level witness for the unfolded one, which is then the
-stage composition by `rfl`. -/
+`HasVJP.backward_unique` swaps the bundle-level witness for the unfolded one, a `vjpComp` of the
+stage VJPs, which `vjpComp_backward` takes apart into the stage backwards. -/
 
 theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
@@ -323,19 +323,8 @@ theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid o
   rw [HasVJP.backward_unique (mbExpWHasVJP N h w p he hd hp)
     (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
-      p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (cbsBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
-            (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
-              (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
-                (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
-                  (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                    (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) := rfl
-  rw [hc, projB_back_eq, dwbsB_back_eq, cbsB_back_eq]
+  simp only [mbExpFwdBHasVJP, vjpComp_backward]
+  rw [projB_back_eq, dwbsB_back_eq, cbsB_back_eq]
   rfl
 
 theorem rCotIn_eq_vjp (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
@@ -344,19 +333,15 @@ theorem rCotIn_eq_vjp (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd k
   rw [HasVJP.backward_unique (mbResidWHasVJP N h w p he hd hp)
     (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
+  -- the witness is `residualHasVJP` of the expand body's: the skip adds its cotangent
   have hc : (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
       p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = fun i => (cbsBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
-            (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
-              (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
-                (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
-                  (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                    (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) i + dy i := rfl
-  rw [hc, projB_back_eq, dwbsB_back_eq, cbsB_back_eq]
+      = fun i => (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε
+          hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy i
+        + dy i := rfl
+  rw [hc]
+  simp only [mbExpFwdBHasVJP, vjpComp_backward]
+  rw [projB_back_eq, dwbsB_back_eq, cbsB_back_eq]
   rfl
 
 theorem sCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
@@ -366,19 +351,8 @@ theorem sCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid o
   rw [HasVJP.backward_unique (mbStridedWHasVJP N h w p he hd hp)
     (mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ
       p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
-      p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (cbsBHasVJP N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsSBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
-            (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
-              (dwbsSB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
-                (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
-                  (dwbsSB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
-                    (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) := rfl
-  rw [hc, projB_back_eq, dwbsSB_back_eq, cbsB_back_eq]
+  simp only [mbStridedFwdBHasVJP, vjpComp_backward]
+  rw [projB_back_eq, dwbsSB_back_eq, cbsB_back_eq]
   rfl
 
 theorem nCotIn_eq_vjp (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw)
@@ -387,15 +361,8 @@ theorem nCotIn_eq_vjp (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc r
   rw [HasVJP.backward_unique (mbNoExpWHasVJP N h w p hd hp)
     (mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
-      p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward xin
-          ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
-            (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ xin)
-            ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
-              (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
-                (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ xin)) dy)) := rfl
-  rw [hc, projB_back_eq, dwbsB_back_eq]
+  simp only [mbNoExpFwdBHasVJP, vjpComp_backward]
+  rw [projB_back_eq, dwbsB_back_eq]
   rfl
 
 theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
@@ -405,9 +372,8 @@ theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh
       = hdCotIn N h w Wh bh εh hεh γh βh Wfc xin g := by
   have hg := headBackBatchedGraph_faithful Wh bh εh hεh γh βh Wfc bfc xin (.operand "" g)
   rw [den_operand] at hg
-  rw [← hg]
-  show cInB N Wh bh (den (SHlo.bnBatchLABack _ _ _ εh γh _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ εh hεh γh βh]
+  rw [← hg, headBackBatchedGraph, cbsBackBatchedGraph, den_convBackBatched_eq_cInB,
+    bnBatchLABack_faithful (β := βh) (hε := hεh)]
   rfl
 
 -- § 1–2 (each link B0 adds to ResNet-34's is linear in its cotangent, and shards) live in

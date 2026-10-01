@@ -91,19 +91,8 @@ theorem mhsaBackFlat_eq_mhsa_vjp
   unfold coreQFlat coreKFlat coreVFlat
   rw [projBack_core_coord Wq _ idx, projBack_core_coord Wk _ idx, projBack_core_coord Wv _ idx]
   -- reindex each `Σ k : Fin (h*dh)` to `Σ h' Σ j` and recognize the per-head `sdpaBack{Q,K,V}`
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin h × Fin dh ≃ Fin (h * dh))
-        (fun k => Wq c k * mhsaSdpaBackQ (fun r => Proofs.dense Wq bq (X r))
-          (fun r => Proofs.dense Wk bk (X r)) (fun r => Proofs.dense Wv bv (X r))
-          (Mat.unflatten (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) 0) dconcat)) r k),
-      ← Equiv.sum_comp (finProdFinEquiv : Fin h × Fin dh ≃ Fin (h * dh))
-        (fun k => Wk c k * mhsaSdpaBackK (fun r => Proofs.dense Wq bq (X r))
-          (fun r => Proofs.dense Wk bk (X r)) (fun r => Proofs.dense Wv bv (X r))
-          (Mat.unflatten (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) 0) dconcat)) r k),
-      ← Equiv.sum_comp (finProdFinEquiv : Fin h × Fin dh ≃ Fin (h * dh))
-        (fun k => Wv c k * mhsaSdpaBackV (fun r => Proofs.dense Wq bq (X r))
-          (fun r => Proofs.dense Wk bk (X r)) (fun r => Proofs.dense Wv bv (X r))
-          (Mat.unflatten (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) 0) dconcat)) r k)]
-  rw [Fintype.sum_prod_type, Fintype.sum_prod_type, Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv (m := h) (n := dh), sum_finProdFinEquiv (m := h) (n := dh),
+    sum_finProdFinEquiv (m := h) (n := dh)]
   -- RHS: unfold `mhsaBackCollapsedMH` and combine the three `Σ h'` via `sum_add_distrib`
   simp only [Mat.flatten, StableHLO.mhsaBackCollapsedMH, mhsaSdpaBackQ, mhsaSdpaBackK, mhsaSdpaBackV,
     hwo, Equiv.symm_apply_apply, Finset.sum_add_distrib]
@@ -113,15 +102,6 @@ theorem mhsaBackFlat_eq_mhsa_vjp
 -- ════════════════════════════════════════════════════════════════
 -- § The MLP-sublayer reconciliation — the per-token-aware leaves
 -- ════════════════════════════════════════════════════════════════
-
-/-- The chain's dense input-VJP `dense (Wᵀ) 0` IS the certified contraction `Mat.mulVec W`
-    (the certified `denseHasVJP.backward`, which ignores its affine activation); `mul_comm` per
-    term. The function-level form (no `x` arg) the `simp` matches against. -/
-theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
-    Proofs.dense (Mat.transpose W) (0 : Vec m) = Mat.mulVec W := by
-  funext dy i
-  simp only [Proofs.dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
-  exact Finset.sum_congr rfl fun j _ => mul_comm _ _
 
 /-- The chain's GELU backward `diagBack (act'(s))` IS the certified `geluHasVJP.backward`
     at the saved pre-activation `s` (the elementwise derivative scaling — `geluHasVJP.backward s

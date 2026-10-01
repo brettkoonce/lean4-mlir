@@ -198,8 +198,7 @@ theorem sealIdB_eq (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (oc
     rw [residual_apply, hbody]
     ring
   funext k
-  show relu (N * (oc * h * w)) (residual _ v) k = v k + 1
-  rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
+  rw [r50IdB_apply, relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
 
 /-- The structural STRIDE-1 projection: a 1×1 centre-tap conv-BN. -/
 noncomputable def sealProj1 (N h w ic oc : Nat) :
@@ -233,11 +232,10 @@ private theorem sealPrB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
             (sealPrW ic mid oc).ε₁ (sealPrW ic mid oc).γ₁ (sealPrW ic mid oc).β₁) v k
       = sealProj1 N h w ic oc v k + 1 := by
     intro k
-    show sealProj1 N h w ic oc v k + _ = _
-    rw [hbody]
+    rw [residualProj_apply, hbody]
+    rfl
   funext k
-  show relu (N * (oc * h * w)) (residualProj _ _ v) k = sealProj1 N h w ic oc v k + 1
-  rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj1_pos N h w ic oc hm v i]),
+  rw [r50ProjB_apply, relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj1_pos N h w ic oc hm v i]),
     hres k]
 
 /-- **The structural strided projection block is ResNet-34's strided projection plus one.** -/
@@ -260,12 +258,10 @@ theorem sealDnB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
             (sealPrW ic mid oc).β₁) v k
       = BatchSeal.sealProj N h w ic oc v k + 1 := by
     intro k
-    show BatchSeal.sealProj N h w ic oc v k + _ = _
-    rw [hbody]
+    rw [residualProj_apply, hbody]
+    rfl
   funext k
-  show relu (N * (oc * h * w)) (residualProj _ _ v) k
-    = BatchSeal.sealProj N h w ic oc v k + 1
-  rw [relu_id_of_pos (fun i => by
+  rw [r50DownB_apply, relu_id_of_pos (fun i => by
     rw [hres i]; linarith [BatchSeal.sealProj_pos N h w ic oc hm v i]), hres k]
 
 -- ════════════════════════════════════════════════════════════════
@@ -295,22 +291,19 @@ theorem seal_id_smooth (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N *
     (hv : ∀ k, 0 ≤ v k) : R50IdSmoothAt N h w (sealIdW mid oc) v where
   hm1 := by
     intro k
-    show StableHLO.bnBatchLA N mid h w 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConv (zk mid oc 1 1) (kv mid 0)) v) k ≠ 0
-    rw [batchMap_flatConv_zero (zk mid oc 1 1) (kv mid 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealIdW mid oc).W₁ (sealIdW mid oc).b₁ (fun _ _ _ _ => rfl)
+        (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealIdW mid oc).β₁ 1 0 (fun _ => rfl) k]
     norm_num
   hm2 := by
     intro k
-    show StableHLO.bnBatchLA N mid h w 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConv (zk mid mid 3 3) (kv mid 0)) _) k ≠ 0
-    rw [batchMap_flatConv_zero (zk mid mid 3 3) (kv mid 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealIdW mid oc).W₂ (sealIdW mid oc).b₂ (fun _ _ _ _ => rfl)
+        (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealIdW mid oc).β₂ 1 0 (fun _ => rfl) k]
     norm_num
   hout := by
     intro k
-    show _ + v k ≠ 0
-    rw [congrFun (seal_id_body N h w mid oc hn v) k]
+    rw [residual_apply, congrFun (seal_id_body N h w mid oc hn v) k]
     intro hc
     linarith [hv k]
 
@@ -320,24 +313,20 @@ private theorem seal_pr_smooth (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     R50ProjSmoothAt N h w (sealPrW ic mid oc) v where
   hm1 := by
     intro k
-    show StableHLO.bnBatchLA N mid h w 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConv (zk mid ic 1 1) (kv mid 0)) v) k ≠ 0
-    rw [batchMap_flatConv_zero (zk mid ic 1 1) (kv mid 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealPrW ic mid oc).W₁ (sealPrW ic mid oc).b₁ (fun _ _ _ _ => rfl)
+        (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealPrW ic mid oc).β₁ 1 0 (fun _ => rfl) k]
     norm_num
   hm2 := by
     intro k
-    show StableHLO.bnBatchLA N mid h w 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConv (zk mid mid 3 3) (kv mid 0)) _) k ≠ 0
-    rw [batchMap_flatConv_zero (zk mid mid 3 3) (kv mid 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealPrW ic mid oc).W₂ (sealPrW ic mid oc).b₂ (fun _ _ _ _ => rfl)
+        (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealPrW ic mid oc).β₂ 1 0 (fun _ => rfl) k]
     norm_num
   hout := by
     intro k
-    show sealProj1 N h w ic oc v k + _ ≠ 0
-    rw [congrFun (seal_pr_body N h w ic mid oc hn v) k]
-    intro hc
-    linarith [sealProj1_pos N h w ic oc hm v k]
+    rw [residualProj_apply, congrFun (seal_pr_body N h w ic mid oc hn v) k]
+    exact (add_pos (sealProj1_pos N h w ic oc hm v k) one_pos).ne'
 
 /-- The strided projection block's three relu clauses — all weight-only. v1.5: `hm1` is at the
     INPUT resolution and only `hm2` is at the halved one. -/
@@ -346,25 +335,20 @@ theorem seal_dn_smooth (N h w ic mid oc : Nat) (hn2 : 0 < N * ((2 * h) * (2 * w)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) : R50DownSmoothAt N h w (sealPrW ic mid oc) v where
   hm1 := by
     intro k
-    show StableHLO.bnBatchLA N mid (2 * h) (2 * w) 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConv (zk mid ic 1 1) (kv mid 0)) v) k ≠ 0
-    rw [batchMap_flatConv_zero (zk mid ic 1 1) (kv mid 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn2 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealPrW ic mid oc).W₁ (sealPrW ic mid oc).b₁ (fun _ _ _ _ => rfl)
+        (fun _ => rfl),
+      bnBatchLA_const hn2 _ _ (sealPrW ic mid oc).β₁ 1 0 (fun _ => rfl) k]
     norm_num
   hm2 := by
     intro k
-    show StableHLO.bnBatchLA N mid h w 1 (kv mid 1) (kv mid 1)
-      (StableHLO.batchMap N (flatConvStride2 (zk mid mid 3 3) (kv mid 0)) _) k ≠ 0
-    rw [batchMap_flatConvStride2_zero (zk mid mid 3 3) (kv mid 0) (fun _ _ _ _ => rfl)
-        (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv mid 1) (kv mid 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConvStride2_zero (sealPrW ic mid oc).W₂ (sealPrW ic mid oc).b₂
+        (fun _ _ _ _ => rfl) (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealPrW ic mid oc).β₂ 1 0 (fun _ => rfl) k]
     norm_num
   hout := by
     intro k
-    show BatchSeal.sealProj N h w ic oc v k + _ ≠ 0
-    rw [congrFun (seal_dn_body N h w ic mid oc hn v) k]
-    intro hc
-    linarith [BatchSeal.sealProj_pos N h w ic oc hm v k]
+    rw [residualProj_apply, congrFun (seal_dn_body N h w ic mid oc hn v) k]
+    exact (add_pos (BatchSeal.sealProj_pos N h w ic oc hm v k) one_pos).ne'
 
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The witness input, the ray and the stem — all of it `BatchSeal`'s at this net's spelling

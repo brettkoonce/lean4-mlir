@@ -48,25 +48,6 @@ open scoped BigOperators
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The pointwise nodes B0 adds to ResNet-34's kit
--- ════════════════════════════════════════════════════════════════
-
-/-- Swish on every replica denotes the shard of the global swish — pointwise, like relu. -/
-theorem den_swishF_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
-    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
-    den (.swishF (e r)) = batchShard R N n (swish ((R * N) * n) X) r := by
-  rw [swishF_faithful, he]
-  rfl
-
-/-- The MBConv identity skip (`addV`) on every replica is the shard of the global one. -/
-theorem den_addV_shard {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec ((R * N) * n))
-    (ha : ∀ r, den (a r) = batchShard R N n A r) (hb : ∀ r, den (b r) = batchShard R N n B r)
-    (r : Fin R) :
-    den (.addV (a r) (b r)) = batchShard R N n (fun j => A j + B j) r := by
-  rw [den_addV, ha, hb]
-  rfl
-
--- ════════════════════════════════════════════════════════════════
 -- § Per-block replica families + their shard lemmas
 --   Names are `EfficientNetFullB0`'s graph names; the collective tags are the render's
 --   (`{p}eg` → `{p}egmu` / `{p}egvar`).

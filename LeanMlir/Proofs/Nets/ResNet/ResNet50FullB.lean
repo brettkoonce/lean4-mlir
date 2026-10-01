@@ -213,6 +213,34 @@ structure R50BWeights (nCls : Nat) where
       StableHLO.cbReluStridedB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
       StableHLO.cbReluB N (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁)
 
+/-- The identity bottleneck, APPLIED: the outer relu of the residual sum (`r34IdB_apply`'s peer). -/
+theorem r50IdB_apply (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (v : Vec (N * (oc * h * w))) :
+    r50IdB N h w p v
+      = relu (N * (oc * h * w)) (residual
+          (projB N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ p.γ₃ p.β₃ ∘
+            StableHLO.cbReluB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
+            StableHLO.cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v) := rfl
+
+/-- The stride-1 projection bottleneck, APPLIED. -/
+theorem r50ProjB_apply (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (v : Vec (N * (ic * h * w))) :
+    r50ProjB N h w p v
+      = relu (N * (oc * h * w)) (residualProj
+          (projB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp)
+          (projB N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ p.γ₃ p.β₃ ∘
+            StableHLO.cbReluB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
+            StableHLO.cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v) := rfl
+
+/-- The strided projection bottleneck, APPLIED. -/
+theorem r50DownB_apply (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    r50DownB N h w p v
+      = relu (N * (oc * h * w)) (residualProj
+          (StableHLO.projStridedB N (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp)
+          (projB N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ p.γ₃ p.β₃ ∘
+            StableHLO.cbReluStridedB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
+            StableHLO.cbReluB N (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) v) := rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § The whole net, nested-application form
 --   stem(32q -> 16q -> 8q) -> s1b0,s1b1,s1b2 @8q -> s2b0(8q->4q), s2b1..3 @4q

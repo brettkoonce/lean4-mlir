@@ -88,9 +88,7 @@ theorem cnxDownChBack_eq_vjp {cin cout h w : Nat} (p : CnxDownParamsCh cin cout)
         (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ v)
       = (cnxDownChWHasVJP h w p hε).backward v := by
   funext dy
-  show (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ v)
-      (flatConvStride2Back (h := h) (w := w) (padOdd p.W) dy) = _
-  rw [flatConvStride2Back_padOdd_eq_vjp_backward (by norm_num) (by norm_num) p.W p.b
+  rw [cnxDownBack, Function.comp_apply, flatConvStride2Back_padOdd_eq_vjp_backward (by norm_num) (by norm_num) p.W p.b
         (chanLNTensor3 cin (2 * h) (2 * w) p.ε p.γ p.β v),
       chanLNTensor3Back_eq_chanLN_vjp (β := p.β) p.ε hε p.γ v]
   rfl
@@ -141,12 +139,9 @@ theorem cnxStageChKBack_eq_vjp {c cExp h w kHd kWd : Nat}
       cnxStageChKBack k ps v = (convNextStageChKHasVJP k ps hε).backward v
   | 0, _, _, _ => rfl
   | k + 1, ps, hε, v => by
-      show cnxBlockChBackAt (ps 0) v ∘
-        cnxStageChKBack k (fun i => ps i.succ) (cnxBlockChW (ps 0) v) = _
-      rw [cnxStageChKBack_eq_vjp hkHd hkWd k (fun i => ps i.succ) (fun i => hε i.succ)
-            (cnxBlockChW (ps 0) v)]
-      show Proofs.residual _ ∘ _ = _
-      rw [cnxBlockChBack_eq_vjp hkHd hkWd (ps 0) (hε 0) v]
+      rw [cnxStageChKBack.eq_2, cnxStageChKBack_eq_vjp hkHd hkWd k (fun i => ps i.succ)
+            (fun i => hε i.succ) (cnxBlockChW (ps 0) v), cnxBlockChBackAt,
+        cnxBlockChBack_eq_vjp hkHd hkWd (ps 0) (hε 0) v]
       rfl
 
 /-- `rowLNVecFlatHasVJP_backward_eq` at the FUNCTION level — the direction and shape a whole-net

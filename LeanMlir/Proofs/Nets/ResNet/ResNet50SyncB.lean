@@ -61,20 +61,6 @@ open scoped BigOperators
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The residual fan-in in the render's order
--- ════════════════════════════════════════════════════════════════
-
-/-- The residual fan-in on every replica, with the SECOND operand first on the right: the render
-    emits `addVB(body, projection)` and `residualProj proj body` adds `proj + body`. -/
-theorem den_addVB_shard_comm {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec ((R * N) * n))
-    (ha : ∀ r, den (a r) = batchShard R N n A r) (hb : ∀ r, den (b r) = batchShard R N n B r)
-    (r : Fin R) :
-    den (.addVB (a r) (b r)) = batchShard R N n (fun j => B j + A j) r := by
-  rw [den_addVB, ha, hb]
-  funext i
-  exact add_comm _ _
-
--- ════════════════════════════════════════════════════════════════
 -- § Per-block replica families + their shard lemmas
 --   Names and tags are the render's: BN site `{p}g1` gathers `%arsum{p}g1mu` /
 --   `%armean{p}g1var`, each over a `[c]` statistic; the projection's is `{p}gp`.

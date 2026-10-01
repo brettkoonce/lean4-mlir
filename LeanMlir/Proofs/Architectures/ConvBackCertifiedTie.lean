@@ -75,12 +75,11 @@ theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
 
 /-- **Dense head input-VJP leaf tie.** The chain's dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
     IS the certified dense input-VJP `(denseHasVJP W b).backward x` (= `Mat.mulVec W dy`); dense
-    is linear in its input, so the activation `x` is ignored. One `mul_comm` per term. -/
+    is linear in its input, so the activation `x` is ignored: `dense_transpose_eq_mulVec`, whose
+    right side the witness's backward is by definition. -/
 theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
-    dense (Mat.transpose W) (0 : Vec m) = (denseHasVJP W b).backward x := by
-  funext dy i
-  simp only [dense, denseHasVJP, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
-  exact Finset.sum_congr rfl fun j _ => mul_comm _ _
+    dense (Mat.transpose W) (0 : Vec m) = (denseHasVJP W b).backward x :=
+  dense_transpose_eq_mulVec W
 
 /-- **GAP input-VJP leaf tie.** The backward map `gapBack c h w` (broadcast `dy(channel)/(h·w)`)
     IS the certified GAP input-VJP `(globalAvgPoolFlatHasVJP c h w).backward x` — definitionally

@@ -165,8 +165,7 @@ theorem sealIdB_eq (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h *
     rw [residual_apply, hbody]
     ring
   funext k
-  show relu (N * (c * h * w)) (residual _ v) k = v k + 1
-  rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
+  rw [r34IdB_apply, relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
 
 /-- **The structural downsample is its projection plus one**: the body is the constant `1` and
     the post-residual relu is off (`proj > 0`). -/
@@ -184,11 +183,10 @@ theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
           (sealDnW ic oc).ε₁ (sealDnW ic oc).γ₁ (sealDnW ic oc).β₁) v k
       = sealProj N h w ic oc v k + 1 := by
     intro k
-    show sealProj N h w ic oc v k + _ = _
-    rw [hbody]
+    rw [residualProj_apply, hbody]
+    rfl
   funext k
-  show relu (N * (oc * h * w)) (residualProj _ _ v) k = sealProj N h w ic oc v k + 1
-  rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj_pos N h w ic oc hm v i]),
+  rw [r34DownB_apply, relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj_pos N h w ic oc hm v i]),
     hres k]
 
 /-- **The stem with its relu removed**: pool ∘ bn ∘ strided conv. The pool stays — it is the
@@ -201,9 +199,7 @@ theorem r34StemB_eq {N h w ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (
       = StableHLO.batchMap N (maxPool3s2Flat oc h w)
           (StableHLO.bnBatchLA N oc (2 * h) (2 * w) εs γs βs
             (StableHLO.batchMap N (flatConvStride2 Ws bs) x)) := by
-  show StableHLO.batchMap N (maxPool3s2Flat oc h w)
-      (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) = _
-  rw [cbReluStridedB_eq Ws bs εs γs βs x hp]
+  rw [r34StemB_apply, cbReluStridedB_eq Ws bs εs γs βs x hp]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3. Every running activation is nonnegative
@@ -222,8 +218,7 @@ private theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 
     (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (k : Fin (N * (oc * h * w))) :
     0 ≤ r34StemB N h w Ws bs εs γs βs x k := by
-  show 0 ≤ StableHLO.batchMap N (maxPool3s2Flat oc h w)
-    (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) k
+  rw [r34StemB_apply]
   refine forall_flat_of_cell (P := fun z => 0 ≤ z) ?_ k
   intro n ci i j
   rw [bcell_pool]
@@ -247,15 +242,12 @@ theorem seal_id_smooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c *
     (hv : ∀ k, 0 ≤ v k) : R34IdSmoothAt N h w (sealIdW c) v where
   hmid := by
     intro k
-    show StableHLO.bnBatchLA N c h w 1 (kv c 1) (kv c 1)
-      (StableHLO.batchMap N (flatConv (zk c c 3 3) (kv c 0)) v) k ≠ 0
-    rw [batchMap_flatConv_zero (zk c c 3 3) (kv c 0) (fun _ _ _ _ => rfl) (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv c 1) (kv c 1) 1 0 (fun _ => rfl) k]
+    rw [batchMap_flatConv_zero (sealIdW c).W₁ (sealIdW c).b₁ (fun _ _ _ _ => rfl) (fun _ => rfl),
+      bnBatchLA_const hn _ _ (sealIdW c).β₁ 1 0 (fun _ => rfl) k]
     norm_num
   hout := by
     intro k
-    show _ + v k ≠ 0
-    rw [congrFun (seal_id_body N h w c hn v) k]
+    rw [residual_apply, congrFun (seal_id_body N h w c hn v) k]
     intro hc
     linarith [hv k]
 
@@ -266,18 +258,14 @@ theorem seal_dn_smooth (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) : R34DownSmoothAt N h w (sealDnW ic oc) v where
   hmid := by
     intro k
-    show StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 1)
-      (StableHLO.batchMap N (flatConvStride2 (zk oc ic 3 3) (kv oc 0)) v) k ≠ 0
-    rw [batchMap_flatConvStride2_zero (zk oc ic 3 3) (kv oc 0) (fun _ _ _ _ => rfl)
+    rw [batchMap_flatConvStride2_zero (sealDnW ic oc).W₁ (sealDnW ic oc).b₁ (fun _ _ _ _ => rfl)
         (fun _ => rfl),
-      bnBatchLA_const hn 1 (kv oc 1) (kv oc 1) 1 0 (fun _ => rfl) k]
+      bnBatchLA_const hn _ _ (sealDnW ic oc).β₁ 1 0 (fun _ => rfl) k]
     norm_num
   hout := by
     intro k
-    show sealProj N h w ic oc v k + _ ≠ 0
-    rw [congrFun (seal_dn_body N h w ic oc hn v) k]
-    intro hc
-    linarith [sealProj_pos N h w ic oc hm v k]
+    rw [residualProj_apply, congrFun (seal_dn_body N h w ic oc hn v) k]
+    exact (add_pos (sealProj_pos N h w ic oc hm v k) one_pos).ne'
 
 /-- The stem's relu clause — weight-only, from the `β = 160` margin. -/
 theorem seal_stem_smooth (N h w ic oc : Nat) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
