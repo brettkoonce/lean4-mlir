@@ -14,7 +14,7 @@ import numpy as np, torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from casp16_embed import load_model, embed_batch
-from casp16_labels import labels, EDGES, FAR, UNOBS
+from casp16_labels import labels, orient_labels, virtual_cb, EDGES, FAR, UNOBS
 
 ROOT = Path(os.environ.get("CASP16_DIR", Path(__file__).resolve().parents[2] / "data" / "casp16"))
 AA3 = {"ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
@@ -30,6 +30,25 @@ def read_targets():
         elif name:
             seqs[name] += line.strip()
     return seqs
+
+
+def pdb_backbone(path, resnum):
+    """N, Cα, Cβ as [L, 3] in `resnum` order (NaN where absent); Cβ deposited or virtual, as
+    `casp16_labels.backbone` builds it for the training chains."""
+    atoms = {}
+    for line in open(path):
+        if not line.startswith("ATOM") or line[16] not in " A":
+            continue
+        n = int(line[22:26]); atom = line[12:16].strip()
+        if atom in ("N", "CA", "C", "CB"):
+            atoms.setdefault((n, atom), np.array([float(line[30:38]), float(line[38:46]), float(line[46:54])], np.float32))
+    arr = {a: np.full((len(resnum), 3), np.nan, np.float32) for a in ("N", "CA", "C", "CB")}
+    for k, n in enumerate(resnum):
+        for a in arr:
+            if (n, a) in atoms:
+                arr[a][k] = atoms[(n, a)]
+    cb = np.where(np.isnan(arr["CB"][:, :1]), virtual_cb(arr["N"], arr["CA"], arr["C"]), arr["CB"])
+    return arr["N"], arr["CA"], cb
 
 
 def pdb_cb(path):
@@ -59,11 +78,33 @@ def top_l5_precision(score, cls, obs, sep=24, frac=0.2):
 
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--model", default="esm2_t12_35M_UR50D")
+    ap.add_argument("--out", default="targets", help="output dir under data/casp16 (targets_esm150 for the 150M model)")
+    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--orient", action="store_true",
+                    help="add the ω, θ, φ planes (casp16_labels.orient_labels) to every existing <out>/<EU>.npz and stop")
+    a = ap.parse_args()
+    if a.orient:
+        out = ROOT / a.out; n = 0; binned = []
+        for f in sorted(out.glob("*.npz")):
+            t = dict(np.load(f))
+            N, CA, cb = pdb_backbone(ROOT / "raw" / "dom" / f"{f.stem}.pdb", t["resnum"])
+            om, th, ph = orient_labels(N, CA, cb)
+            assert om.shape == t["cls"].shape, (f.stem, om.shape, t["cls"].shape)
+            # the distance labels' Cβ (Cα for glycine) and this Cβ agree wherever a Cβ was deposited
+            both = ~np.isnan(cb[:, 0]) & ~np.isnan(t["cb"][:, 0]) & np.array([c != "G" for c in str(t["seq"])])
+            assert np.nanmax(np.abs(cb[both] - t["cb"][both])) < 1e-3 if both.any() else True, f.stem
+            np.savez_compressed(f, **{k: v for k, v in t.items() if k not in ("omega", "theta", "phi")}, omega=om, theta=th, phi=ph)
+            n += 1; binned.append((om < 24).mean())
+        print(f"{n} EUs given orientation planes in {out}; binned pairs {np.mean(binned):.3f} of all")
+        sys.exit(0)
     torch.set_num_threads(16)
     seqs = read_targets()
     eus = list(csv.DictReader(open(ROOT / "eu_list.csv")))
-    out = ROOT / "targets"; out.mkdir(exist_ok=True)
-    model, alphabet = load_model()
+    out = ROOT / a.out; out.mkdir(exist_ok=True)
+    model, alphabet = load_model(a.model, a.device)
     cache = {}
     print(f"{'EU':12s} {'L':>4s} {'obs':>5s} {'mismatch':>8s} {'ESM-2 head P@L/5':>17s}  difficulty")
     rows = []

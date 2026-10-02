@@ -4414,16 +4414,22 @@ static inline float casp_half_to_float(uint16_t h) {
 // draws reduced here to offsets in [0, L − crop] (0 when L ≤ crop); with exact = 1 they are the
 // offsets themselves (inference windows). Output x = f32 [B, 2·crop·D] — the crop's i rows then
 // its j rows, rows past the chain end zero (the pairTile input) — and y = i32 [B, crop, crop],
-// `unobs` where either residue is past the end.
-LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
-                                          b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
-                                          size_t B, size_t crop, size_t D, size_t unobs, size_t exact) {
+// `unobs` where either residue is past the end. With `orient` (u8 [N, 3] = ω, θ, φ per pair at
+// three times the label offset) the label is packed mixed-radix behind the distance class,
+// y = d + nd·(ω + no·(θ + no·φ)), every head "unobserved" past the chain end.
+static lean_obj_res casp_gather_impl(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba, const uint8_t* orient,
+                                     b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
+                                     size_t B, size_t crop, size_t D, size_t unobs, size_t exact,
+                                     size_t nd, size_t no, size_t np_) {
     const uint16_t* feat = (const uint16_t*)lean_sarray_cptr(feat_ba);
     const uint8_t* lab = lean_sarray_cptr(lab_ba);
     const int64_t* idx = (const int64_t*)lean_sarray_cptr(idx_ba);
     const uint32_t* pos = (const uint32_t*)lean_sarray_cptr(pos_ba);
     size_t n_chains = lean_sarray_size(idx_ba) / 32;
     size_t xf = 2 * crop * D, yn = crop * crop;
+    int32_t y_unobs = orient
+        ? (int32_t)((nd - 1) + nd * ((no - 1) + no * ((no - 1) + no * (np_ - 1))))
+        : (int32_t)unobs;
     lean_object* xo = lean_alloc_sarray(1, B * xf * 4, B * xf * 4);
     lean_object* yo = lean_alloc_sarray(1, B * yn * 4, B * yn * 4);
     float* x = (float*)lean_sarray_cptr(xo);
@@ -4452,8 +4458,15 @@ LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg
         for (size_t a = 0; a < crop; a++)
             for (size_t k = 0; k < crop; k++) {
                 size_t i = i0 + a, j = j0 + k;
-                yb[a * crop + k] = ((int64_t)i < L && (int64_t)j < L)
-                    ? (int32_t)lab[(size_t)loff + i * (size_t)L + j] : (int32_t)unobs;
+                if ((int64_t)i < L && (int64_t)j < L) {
+                    size_t pix = (size_t)loff + i * (size_t)L + j;
+                    int32_t v = (int32_t)lab[pix];
+                    if (orient) {
+                        const uint8_t* o = orient + 3 * pix;
+                        v += (int32_t)(nd * (o[0] + no * (o[1] + no * (size_t)o[2])));
+                    }
+                    yb[a * crop + k] = v;
+                } else yb[a * crop + k] = y_unobs;
             }
     }
     lean_object* pair = lean_alloc_ctor(0, 2, 0);
@@ -4462,13 +4475,31 @@ LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg
     return lean_io_result_mk_ok(pair);
 }
 
+LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
+                                          b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
+                                          size_t B, size_t crop, size_t D, size_t unobs, size_t exact) {
+    return casp_gather_impl(feat_ba, lab_ba, NULL, idx_ba, pos_ba, B, crop, D, unobs, exact, 0, 0, 0);
+}
+
+LEAN_EXPORT lean_obj_res lean_casp_gather_orient(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
+                                                 b_lean_obj_arg orient_ba, b_lean_obj_arg idx_ba,
+                                                 b_lean_obj_arg pos_ba, size_t B, size_t crop, size_t D,
+                                                 size_t unobs, size_t exact, size_t nd, size_t no, size_t np_) {
+    if (lean_sarray_size(orient_ba) != 3 * lean_sarray_size(lab_ba)) return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("casp_gather_orient: orientation planes are not 3 bytes per label")));
+    return casp_gather_impl(feat_ba, lab_ba, lean_sarray_cptr(orient_ba), idx_ba, pos_ba, B, crop, D, unobs, exact,
+                            nd, no, np_);
+}
+
 // Val metrics over a batch of diagonal crops. logits f32 [B, NC, crop, crop], y i32 [B, crop,
-// crop]. Returns f32 [4] = (hits, taken, Σ CE, observed pairs): the masked per-pixel CE (classes
-// < unobs), and the top-⌈crop/5⌉ long-range contact precision per crop — pairs with k − a ≥ sep
-// (= j − i on a diagonal window) ranked by Σ_{classes ≤ contact_max} softmax, a hit when the
-// label is ≤ contact_max (its lower edge under 8 Å).
+// crop]. The distance head is the first `nd` of the NC channels (nd = NC without orientation
+// heads) and its label the low mixed-radix digit, y mod nd. Returns f32 [4] = (hits, taken,
+// Σ CE, observed pairs): the masked per-pixel distance CE (classes < unobs), and the
+// top-⌈crop/5⌉ long-range contact precision per crop — pairs with k − a ≥ sep (= j − i on a
+// diagonal window) ranked by Σ_{classes ≤ contact_max} softmax, a hit when the label is
+// ≤ contact_max (its lower edge under 8 Å).
 LEAN_EXPORT lean_obj_res lean_casp_val_metrics(b_lean_obj_arg logits_ba, b_lean_obj_arg y_ba,
-                                               size_t B, size_t NC, size_t crop, size_t sep,
+                                               size_t B, size_t NC, size_t nd, size_t crop, size_t sep,
                                                size_t contact_max, size_t unobs) {
     const float* lg = (const float*)lean_sarray_cptr(logits_ba);
     const int32_t* y = (const int32_t*)lean_sarray_cptr(y_ba);
@@ -4479,12 +4510,12 @@ LEAN_EXPORT lean_obj_res lean_casp_val_metrics(b_lean_obj_arg logits_ba, b_lean_
     for (size_t b = 0; b < B; b++) {
         size_t n = 0;
         for (size_t p = 0; p < hw; p++) {
-            int32_t yy = y[b * hw + p];
+            int32_t yy = y[b * hw + p] % (int32_t)nd;
             if (yy >= (int32_t)unobs) continue;
             float mx = -1e30f;
-            for (size_t c = 0; c < NC; c++) { float v = lg[(b * NC + c) * hw + p]; if (v > mx) mx = v; }
+            for (size_t c = 0; c < nd; c++) { float v = lg[(b * NC + c) * hw + p]; if (v > mx) mx = v; }
             double z = 0, under = 0;
-            for (size_t c = 0; c < NC; c++) {
+            for (size_t c = 0; c < nd; c++) {
                 double e = exp((double)lg[(b * NC + c) * hw + p] - mx);
                 z += e; if (c <= contact_max) under += e;
             }

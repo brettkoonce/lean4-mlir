@@ -22,10 +22,16 @@ CENTRES = np.concatenate([(EDGES[:-1] + EDGES[1:]) / 2, [EDGES[-1] + 1.0, 0.0]])
 CONTACT_MAX = int(np.searchsorted(EDGES, 8.0, side="right") - 2)                    # 19
 
 
-def assemble(acc, cnt, L):
+ORIENT = [("omega", 26, True), ("theta", 26, False), ("phi", 14, False)]   # name, classes, symmetric
+
+
+def assemble(acc, cnt, L, n=NC, symmetric=True):
+    """Average the window logits, symmetrize (the distance and ω heads: a pair's value does not
+    depend on which residue is i; θ and φ are asymmetric and are not), softmax."""
     cnt = np.maximum(cnt, 1.0)[:, :, None]
-    logits = acc.reshape(L, L, NC) / cnt
-    logits = 0.5 * (logits + logits.transpose(1, 0, 2))
+    logits = acc.reshape(L, L, n) / cnt
+    if symmetric:
+        logits = 0.5 * (logits + logits.transpose(1, 0, 2))
     logits -= logits.max(-1, keepdims=True)
     p = np.exp(logits)
     p /= p.sum(-1, keepdims=True)
@@ -46,13 +52,19 @@ if __name__ == "__main__":
         L = len(t["obs"])
         acc = np.fromfile(accf, np.float32)
         cnt = np.fromfile(d / f"{eu}.cnt.bin", np.float32).reshape(L, L)
-        assert acc.size == L * L * NC, (eu, acc.size, L)
-        p = assemble(acc, cnt, L)
+        total = acc.size // (L * L)                 # 66, or 132 with the orientation heads
+        assert acc.size == L * L * total and total in (NC, NC + sum(n for _, n, _ in ORIENT)), (eu, acc.size, L)
+        acc = acc.reshape(L, L, total)
+        p = assemble(acc[:, :, :NC], cnt, L)
         pcontact = p[:, :, : CONTACT_MAX + 1].sum(-1).astype(np.float32)
         edist = (p[:, :, :NC - 1] * CENTRES[:NC - 1]).sum(-1).astype(np.float32)
         prec, _ = top_l5_precision(pcontact, t["cls"], t["obs"])
+        extra, off = {}, NC
+        if total > NC:
+            for name, n, sym in ORIENT:
+                extra[name] = assemble(acc[:, :, off:off + n], cnt, L, n, sym).astype(np.float16); off += n
         np.savez_compressed(d / f"{eu}.pred.npz", probs=p.astype(np.float16), pcontact=pcontact, edist=edist,
-                            windows=cnt.max())
+                            windows=cnt.max(), **extra)
         b = base.get(eu, {})
         rows.append(dict(eu=eu, L=L, ours=prec, esm=float(b.get("esm_p", "nan")), difficulty=b.get("difficulty", "")))
         print(f"{eu:12s} {L:4d} {prec:10.3f} {rows[-1]['esm']:10.3f}  {rows[-1]['difficulty']}")

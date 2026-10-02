@@ -1,0 +1,14 @@
+[11:02] crop 96 × 650M × orient, 64 ch
+[13:41] trained: 49320 steps in 9454 s -> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-crop96-orient_params.bin
+medium: Cβ-lDDT mean 0.572 median 0.574  TM mean 0.550 median 0.508  (44 EUs, mirror better on 4)
+hard  : Cβ-lDDT mean 0.437 median 0.357  TM mean 0.461 median 0.408  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.576 median 0.592  TM mean 0.586 median 0.593  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-crop96-orient_targets/fold_scores.csv
+[14:07] done .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-crop96-orient_targets
+[14:07] ω/φ fold .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-crop96-orient_targets
+easy  : Cβ-lDDT mean 0.611 median 0.663  TM mean 0.665 median 0.753  (29 EUs, mirror better on 2)
+medium: Cβ-lDDT mean 0.585 median 0.575  TM mean 0.582 median 0.557  (44 EUs, mirror better on 0)
+hard  : Cβ-lDDT mean 0.444 median 0.360  TM mean 0.473 median 0.407  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.585 median 0.599  TM mean 0.606 median 0.644  (78 EUs, mirror better on 2)
+-> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-crop96-orient_targets/fold_scores_orient.csv
+[14:22] queue10 done

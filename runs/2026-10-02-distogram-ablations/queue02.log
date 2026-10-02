@@ -1,0 +1,5 @@
+[01:49] esm150 done; orient run on GPU 2
+[02:04] one-hot done; finishing esm150 and one-hot on GPU 0
+[02:53] esm150 × 128 ch run on GPU 0
+[02:55] orient run done: trained: 24660 steps in 3965 s -> .lake/build/distogram_r16x64_orient_train_full_e30-orient_params.bin
+[05:37] esm150 × 128 ch done: trained: 24660 steps in 9829 s -> .lake/build/distogram_r16x128_esm150_train_full_e30-esm150_params.bin

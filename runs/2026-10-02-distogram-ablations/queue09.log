@@ -1,0 +1,8 @@
+[10:32] 650M × 64 ch × 30 ep seed 2 on GPU 3
+[11:43] trained: 24660 steps in 4185 s -> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-s2_params.bin
+medium: Cβ-lDDT mean 0.564 median 0.571  TM mean 0.538 median 0.486  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.437 median 0.359  TM mean 0.463 median 0.404  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.570 median 0.586  TM mean 0.571 median 0.569  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-s2_targets/fold_scores.csv
+[12:07] done .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-s2_targets
+[12:07] queue09 done

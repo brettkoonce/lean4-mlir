@@ -1,0 +1,15 @@
+[05:38] esm150 × 128 ch trainer done; finishing on GPU 0
+easy  : Cβ-lDDT mean 0.548 median 0.566  TM mean 0.569 median 0.626  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.532 median 0.536  TM mean 0.486 median 0.404  (44 EUs, mirror better on 6)
+hard  : Cβ-lDDT mean 0.384 median 0.359  TM mean 0.286 median 0.278  (5 EUs, mirror better on 2)
+all   : Cβ-lDDT mean 0.528 median 0.545  TM mean 0.504 median 0.470  (78 EUs, mirror better on 9)
+-> .lake/build/distogram_r16x128_esm150_train_full_e30-esm150_targets/fold_scores.csv
+[06:03] done .lake/build/distogram_r16x128_esm150_train_full_e30-esm150_targets
+[07:01] crops=3 trainer done; finishing on GPU 1
+easy  : Cβ-lDDT mean 0.453 median 0.467  TM mean 0.446 median 0.368  (29 EUs, mirror better on 4)
+medium: Cβ-lDDT mean 0.455 median 0.452  TM mean 0.420 median 0.380  (44 EUs, mirror better on 7)
+hard  : Cβ-lDDT mean 0.317 median 0.319  TM mean 0.250 median 0.241  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.446 median 0.449  TM mean 0.419 median 0.365  (78 EUs, mirror better on 11)
+-> .lake/build/distogram_r16x64_train_full_e30-crops3_targets/fold_scores.csv
+[07:26] done .lake/build/distogram_r16x64_train_full_e30-crops3_targets
+[07:26] queue05 done

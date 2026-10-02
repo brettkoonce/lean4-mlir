@@ -218,6 +218,22 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
       throw <| IO.userError s!"perPixelWeightedCE: got {weights.length} weights for a {nc}-class head — they must match 1:1"
     if weights.any (· <= 0.0) then
       throw <| IO.userError "perPixelWeightedCE: weights must be strictly positive (a zero weight silently deletes a class from the loss; a negative one ascends it)"
+  | .perPixelMultiCE ws =>
+    if useSoftLabels then
+      throw <| IO.userError "perPixelMultiCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
+    if cfg.useFocal then
+      throw <| IO.userError "perPixelMultiCE + focal not yet supported"
+    -- Same shape discipline as `perPixelWeightedCE`, per head: the head widths must tile the
+    -- output's channels exactly, or the slices and the `dense<[...]>` weight vectors disagree
+    -- with the logits deep inside the generated MLIR.
+    let nc := (spec.layers.getLast?.map (·.outChannels)).getD 0
+    let total := (ws.map (·.length)).foldl (· + ·) 0
+    if ws.isEmpty then
+      throw <| IO.userError "perPixelMultiCE: no heads"
+    if total != nc then
+      throw <| IO.userError s!"perPixelMultiCE: head widths {ws.map (·.length)} sum to {total}, the head has {nc} channels"
+    if ws.any (·.any (· <= 0.0)) then
+      throw <| IO.userError "perPixelMultiCE: weights must be strictly positive (a zero weight silently deletes a class from the loss; a negative one ascends it)"
   | .perPixelFocalCE gamma =>
     if useSoftLabels then
       throw <| IO.userError "perPixelFocalCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"

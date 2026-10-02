@@ -1,0 +1,28 @@
+predicted 84 EUs, 10703 windows in 87 s -> .lake/build/distogram_r16x64_esm650_orient_train_full_[07:17] assemble -> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-orient_targets
+Traceback (most recent call last):
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv-casp/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 796, in _savez
+    format.write_array(fid, val,
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv-casp/lib/python3.10/site-packages/numpy/lib/format.py", line 759, in write_array
+    fp.write(chunk.tobytes('C'))
+  File "/home/skoonce/anaconda3/lib/python3.10/zipfile.py", line 1141, in write
+    self._fileobj.write(data)
+OSError: [Errno 28] No space left on device
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/demos/casp16_predict.py", line 66, in <module>
+    np.savez_compressed(d / f"{eu}.pred.npz", probs=p.astype(np.float16), pcontact=pcontact, edist=edist,
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv-casp/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 763, in savez_compressed
+    _savez(file, args, kwds, True, allow_pickle=allow_pickle)
+  File "/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/.venv-casp/lib/python3.10/site-packages/numpy/lib/_npyio_impl.py", line 795, in _savez
+    with zipf.open(fname, 'w', force_zip64=True) as fid:
+  File "/home/skoonce/anaconda3/lib/python3.10/zipfile.py", line 1153, in close
+    self._fileobj.write(buf)
+OSError: [Errno 28] No space left on device
+T1259-D1      204      1.000      0.390  easy
+T1266-D1      295      0.983      0.932  medium
+T1267s1-D1    157      0.903      0.677  medium
+T1267s1-D2    275      0.745      0.055  medium
+T1267s2-D1    480      0.979      0.646  medium
+[07:19] fold

@@ -1,0 +1,23 @@
+⚠ [13/483] Replayed LeanMlir.Verified.Train
+warning: LeanMlir/Verified/Train.lean:1421:6: Variable name `emaOn` is not explicitly referenced.
+
+Hint: The binding can be removed (if unused) or named `_` (if used implicitly). Alternatively, prefix the name with `_` to silence this warning:
+  [apply] _emaOn
+
+Note: This linter can be disabled with `set_option linter.unusedVariables false`
+distogram r16x64-esm150: PairTile(L=64,649→64) → Conv(64→64,1x1/1)+BN → Res16(64→64,s1) → Conv(64→66,1x1); 33 BN layers; list train_full, 30 epochs, batch 32, lr 0.001000, 1 crop(s) per chain per epoch, seed 2
+I1002 04:19:04.656244 3098845 service.cc:154] XLA service 0x77e07c008390 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1002 04:19:04.656290 3098845 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 04:19:04.657908 3098845 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1002 04:19:04.657953 3098845 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1002 04:19:04.664711 3098845 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled .lake/build/distogram_r16x64_esm150_train_step.mlir (@main, 376 outputs, 1 replica) in 3987 ms
+[pjrt_ffi] compiled .lake/build/distogram_r16x64_esm150_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 133 ms
+  1275330 params (1275330 by NetSpec.totalParams), 4224 BN stat floats
+  26310 train chains, 1380 val chains; features 8362 MB, labels 1888 MB (4495 ms)
+    step 0: loss 12.260200 (390 ms so far)
+    step 1: loss 12.300800 (634 ms so far)
+    step 2: loss 12.219400 (853 ms so far)

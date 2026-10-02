@@ -1,0 +1,14 @@
+predicted 84 EUs, 10703 windows in 74 s -> .lake/build/di[09:30] assemble -> .lake/build/distogram_r16x128_train_full_e100_targets
+T1299-D1      168      0.794      0.618  easy
+easy  : ours 0.710  ESM-2 head 0.533  (30 EUs)
+medium: ours 0.672  ESM-2 head 0.478  (46 EUs)
+hard  : ours 0.271  ESM-2 head 0.233  (8 EUs)
+all   : ours 0.647  ESM-2 head 0.474  (84 EUs) -> .lake/build/distogram_r16x128_train_full_e100_targets/table.csv
+[09:31] fold
+[10:14] score
+easy  : Cβ-lDDT mean 0.473 median 0.471  TM mean 0.476 median 0.418  (29 EUs, mirror better on 3)
+medium: Cβ-lDDT mean 0.477 median 0.469  TM mean 0.445 median 0.425  (44 EUs, mirror better on 6)
+hard  : Cβ-lDDT mean 0.330 median 0.325  TM mean 0.244 median 0.239  (5 EUs, mirror better on 2)
+all   : Cβ-lDDT mean 0.466 median 0.460  TM mean 0.443 median 0.408  (78 EUs, mirror better on 11)
+-> .lake/build/distogram_r16x128_train_full_e100_targets/fold_scores.csv
+[10:14] done .lake/build/distogram_r16x128_train_full_e100_targets

@@ -1,0 +1,15 @@
+[08:04] 650M × 64 ch × 100 ep on GPU 1
+[08:25] 650M × 128 ch × 30 ep on GPU 2
+[11:12] trained: 24660 steps in 9983 s -> .lake/build/distogram_r16x128_esm650_train_full_e30-esm650_params.bin
+medium: Cβ-lDDT mean 0.586 median 0.588  TM mean 0.559 median 0.498  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.446 median 0.366  TM mean 0.462 median 0.412  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.590 median 0.608  TM mean 0.590 median 0.637  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x128_esm650_train_full_e30-esm650_targets/fold_scores.csv
+[11:37] done .lake/build/distogram_r16x128_esm650_train_full_e30-esm650_targets
+[11:58] trained: 82200 steps in 14022 s -> .lake/build/distogram_r16x64_esm650_train_full_e100-esm650_params.bin
+medium: Cβ-lDDT mean 0.582 median 0.589  TM mean 0.555 median 0.502  (44 EUs, mirror better on 0)
+hard  : Cβ-lDDT mean 0.449 median 0.370  TM mean 0.473 median 0.422  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.587 median 0.607  TM mean 0.588 median 0.607  (78 EUs, mirror better on 2)
+-> .lake/build/distogram_r16x64_esm650_train_full_e100-esm650_targets/fold_scores.csv
+[12:23] done .lake/build/distogram_r16x64_esm650_train_full_e100-esm650_targets
+[12:23] queue08 done

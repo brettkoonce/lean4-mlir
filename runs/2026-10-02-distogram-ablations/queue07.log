@@ -1,0 +1,28 @@
+[07:21] re-assemble .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-orient_targets
+T1299-D1      168      1.000      0.618  easy
+easy  : ours 0.854  ESM-2 head 0.533  (30 EUs)
+medium: ours 0.869  ESM-2 head 0.478  (46 EUs)
+hard  : ours 0.596  ESM-2 head 0.233  (8 EUs)
+all   : ours 0.838  ESM-2 head 0.474  (84 EUs) -> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-orient_targets/table.csv
+pred.npz: 84
+accumulators dropped; 12G free
+[07:23] plain fold
+easy  : Cβ-lDDT mean 0.592 median 0.635  TM mean 0.645 median 0.742  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.561 median 0.570  TM mean 0.546 median 0.504  (44 EUs, mirror better on 3)
+hard  : Cβ-lDDT mean 0.430 median 0.346  TM mean 0.454 median 0.400  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.564 median 0.582  TM mean 0.577 median 0.577  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-orient_targets/fold_scores.csv
+[07:45] ω/φ fold
+easy  : Cβ-lDDT mean 0.597 median 0.641  TM mean 0.651 median 0.731  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.575 median 0.575  TM mean 0.565 median 0.517  (44 EUs, mirror better on 1)
+hard  : Cβ-lDDT mean 0.439 median 0.357  TM mean 0.470 median 0.406  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.574 median 0.591  TM mean 0.591 median 0.636  (78 EUs, mirror better on 2)
+-> .lake/build/distogram_r16x64_esm650_orient_train_full_e30-esm650-orient_targets/fold_scores_orient.csv
+[08:00] crop 96 × 650M, 64 ch
+[10:35] trained: 49320 steps in 9291 s -> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-crop96_params.bin
+medium: Cβ-lDDT mean 0.575 median 0.584  TM mean 0.552 median 0.506  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.444 median 0.372  TM mean 0.464 median 0.428  (5 EUs, mirror better on 1)
+all   : Cβ-lDDT mean 0.583 median 0.606  TM mean 0.589 median 0.589  (78 EUs, mirror better on 3)
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-crop96_targets/fold_scores.csv
+[11:00] done .lake/build/distogram_r16x64_esm650_train_full_e30-esm650-crop96_targets
+[11:00] queue07 done

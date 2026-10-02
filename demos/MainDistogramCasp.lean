@@ -17,9 +17,11 @@ import LeanMlir.SmallClassifier
     XLA backend only.
     `lake exe distogram-casp smoke` — emit a tiny instance, run one step, finite-difference the
     gradient of the pairTile parameters (and a few others) against the step's Adam moment.
-    `lake exe distogram-casp train [list=train_full|train] [val=val] [epochs=30] [batch=32]
-        [lr=0.001] [ch=64] [units=16] [crop=64] [crops=1] [seed=1] [tag=<name>] [out=<dir>]
-        [steps=N]`
+    `lake exe distogram-casp train [list=train_full|train] [val=val] [fs=|onehot|esm150|esm650] [dim=489] [orient=0|1]
+        [epochs=30] [batch=32] [lr=0.001] [ch=64] [units=16] [crop=64] [crops=1] [seed=1]
+        [tag=<name>] [out=<dir>] [steps=N]`
+      — `fs` picks the feature set's packed files (`pool_<fs>_feat.bin`; `dim` must match: 489 for
+      ESM-2 35M, 30 for one-hot, 649 for ESM-2 150M);
       — `crops` windows per chain per epoch; val every epoch on one diagonal window per chain
       of the `val` index (masked CE and top-L/5 long-range contact precision); `val=tiny` on a
       training subset is the memorization probe. Writes `<prefix>_curve.csv`,
@@ -42,8 +44,24 @@ def contactMaxClass : Nat := 19
 def longRangeSep : Nat := 24
 def classWeights : List Float := List.replicate (nClasses - 1) 1.0 ++ [0.0]
 
-/-- The distogram net at crop `L`, feature width `D`, `ch` channels, `units` residual units. -/
-def distogramNet (name : String) (L D ch units : Nat) : NetSpec where
+/-- trRosetta's orientation heads (`orient=1`; planning/casp16_distogram_demo.md §10): ω and θ
+    in 24 bins of 15° + "no contact" (Cβ–Cβ ≥ 20 Å) + "unobserved", φ in 12 + 2.
+    `scripts/datasets/casp16_labels.py --orient` writes the planes and `casp16_pack.py
+    --orient-only` packs them; the gather carries them mixed-radix behind the distance class,
+    `y = d + 66·(ω + 26·(θ + 26·φ))`, and `perPixelMultiCE` is the loss: the sum of the four
+    masked CEs over one `66 + 26 + 26 + 14 = 132`-channel head. -/
+def orientClasses : List Nat := [26, 26, 14]
+def headSizes (orient : Bool) : List Nat := nClasses :: (if orient then orientClasses else [])
+/-- Per head: weight 1 on every class but the last ("unobserved"), which carries 0. -/
+def headWeights (orient : Bool) : List (List Float) :=
+  (headSizes orient).map fun n => List.replicate (n - 1) 1.0 ++ [0.0]
+def nOut (orient : Bool) : Nat := (headSizes orient).foldl (· + ·) 0
+def segLossFor (orient : Bool) : SegLoss :=
+  if orient then .multiCE (headWeights orient) else .weightedCE classWeights
+
+/-- The distogram net at crop `L`, feature width `D`, `ch` channels, `units` residual units,
+    `out` head channels (66, or 132 with the orientation heads). -/
+def distogramNet (name : String) (L D ch units out : Nat) : NetSpec where
   name := name
   imageH := L
   imageW := L
@@ -51,7 +69,7 @@ def distogramNet (name : String) (L D ch units : Nat) : NetSpec where
     .pairTile L D ch,
     .convBn ch ch 1 1 .same,
     .residualBlock ch ch units 1,
-    .conv2d ch nClasses 1 .same .identity ]
+    .conv2d ch out 1 .same .identity ]
 
 /-- `ffi/f32_helpers.c`: B crops from the packed set. `pos` = u32 [B, 3] (chain row, r1, r2);
     `exact = 0` reduces r1, r2 to offsets in [0, L − crop], `exact = 1` takes them as offsets.
@@ -60,10 +78,17 @@ def distogramNet (name : String) (L D ch units : Nat) : NetSpec where
 opaque caspGather (feat lab idx pos : @& ByteArray) (B crop D unobs exact : USize)
   : IO (ByteArray × ByteArray)
 
+/-- The same gather with the orientation planes `orient` (u8 [N, 3], three per label byte) packed
+    behind the distance class: `y = d + nd·(ω + no·(θ + no·φ))`. -/
+@[extern "lean_casp_gather_orient"]
+opaque caspGatherOrient (feat lab orient idx pos : @& ByteArray) (B crop D unobs exact nd no np : USize)
+  : IO (ByteArray × ByteArray)
+
 /-- f32 [4] = (contact hits, contacts taken, Σ masked CE, observed pairs) over the first `B`
-    crops of `logits` [B, NC, crop, crop] against `y` [B, crop, crop]. -/
+    crops of `logits` [B, NC, crop, crop] against `y` [B, crop, crop]; the distance head is the
+    first `nd` channels and its label `y mod nd`. -/
 @[extern "lean_casp_val_metrics"]
-opaque caspValMetrics (logits y : @& ByteArray) (B NC crop sep contactMax unobs : USize)
+opaque caspValMetrics (logits y : @& ByteArray) (B NC nd crop sep contactMax unobs : USize)
   : IO ByteArray
 
 /-- Add the first `nValid` windows' logits into a target's accumulators (in place when
@@ -140,6 +165,10 @@ structure Net where
   spec : NetSpec
   crop : Nat
   D : Nat
+  /-- Orientation heads on (`orient=1`). -/
+  orient : Bool
+  /-- Head channels: 66, or 132 with the orientation heads. -/
+  nOut : Nat
   pfx : String
 
 def netFromArgs (args : List String) (listName : String) : Net :=
@@ -149,22 +178,33 @@ def netFromArgs (args : List String) (listName : String) : Net :=
   let D := (parseArg args "dim" "489").toNat!
   let tag := parseArg args "tag" ""
   let outDir := parseArg args "out" ".lake/build"
-  let spec := distogramNet s!"distogram r{units}x{ch}" crop D ch units
-  { spec, crop, D, pfx := s!"{outDir}/{spec.sanitizedName}_{listName}" ++ (if tag == "" then "" else s!"_{tag}") }
+  let fs := parseArg args "fs" ""
+  let orient := parseArg args "orient" "0" == "1"
+  let spec := distogramNet s!"distogram r{units}x{ch}{if fs == "" then "" else "-" ++ fs}\
+{if orient then "-orient" else ""}" crop D ch units (nOut orient)
+  { spec, crop, D, orient, nOut := nOut orient,
+    pfx := s!"{outDir}/{spec.sanitizedName}_{listName}" ++ (if tag == "" then "" else s!"_{tag}") }
+
+/-- The crop gather: distance labels alone, or with the orientation planes packed behind them. -/
+def gather (net : Net) (feat lab orient idx pos : ByteArray) (B : Nat) (exact : USize)
+    : IO (ByteArray × ByteArray) :=
+  if net.orient then
+    caspGatherOrient feat lab orient idx pos B.toUSize net.crop.toUSize net.D.toUSize
+      unobserved.toUSize exact nClasses.toUSize (orientClasses[0]!).toUSize (orientClasses[2]!).toUSize
+  else caspGather feat lab idx pos B.toUSize net.crop.toUSize net.D.toUSize unobserved.toUSize exact
 
 /-- Val pass: one diagonal window per val chain through the eval forward. Returns
     (masked CE, contact precision). -/
 def valPass (evalSess : LowererSession) (net : Net) (evalParams evalShapes xSh : ByteArray)
-    (feat lab : ByteArray) (val : ChainIdx) (B : Nat) : IO (Float × Float) := do
+    (feat lab orient : ByteArray) (val : ChainIdx) (B : Nat) : IO (Float × Float) := do
   let mut hits := 0.0; let mut taken := 0.0; let mut ce := 0.0; let mut nobs := 0.0
   let nb := (val.n + B - 1) / B
   for bi in [:nb] do
     let (pos, valid) := diagPos (bi * B) B val.n
-    let (xba, yb) ← caspGather feat lab val.idx pos B.toUSize net.crop.toUSize net.D.toUSize
-      unobserved.toUSize 1
+    let (xba, yb) ← gather net feat lab orient val.idx pos B 1
     let logits ← LowererSession.forwardF32 evalSess net.spec.evalFnName evalParams evalShapes xba xSh
-      B.toUSize (nClasses * net.crop * net.crop).toUSize
-    let m ← caspValMetrics logits yb valid.toUSize nClasses.toUSize net.crop.toUSize
+      B.toUSize (net.nOut * net.crop * net.crop).toUSize
+    let m ← caspValMetrics logits yb valid.toUSize net.nOut.toUSize nClasses.toUSize net.crop.toUSize
       longRangeSep.toUSize contactMaxClass.toUSize unobserved.toUSize
     hits := hits + F32.read m 0; taken := taken + F32.read m 1
     ce := ce + F32.read m 2; nobs := nobs + F32.read m 3
@@ -191,7 +231,7 @@ def train (args : List String) : IO Unit := do
   let gpfx := spec.buildPrefix
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" <| MlirCodegen.generateTrainStep spec B
     ("jit_" ++ spec.sanitizedName ++ "_train_step") (labelSmoothing := 0.0) (weightDecay := 0.0001)
-    (useAdam := true) (useSeg := true) (segLoss := .weightedCE classWeights) (gradClipNorm := 1.0)
+    (useAdam := true) (useSeg := true) (segLoss := segLossFor net.orient) (gradClipNorm := 1.0)
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let sess ← LowererSession.create (← NetSpec.graphArtifact gpfx "train_step")
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
@@ -206,10 +246,15 @@ def train (args : List String) : IO Unit := do
   let xSh := spec.xShape B
   -- ── data: the packed pool and two index files ──
   let t0 ← IO.monoMsNow
-  let feat ← IO.FS.readBinFile s!"{dataDir}/pool_feat.bin"
+  let fs := parseArg args "fs" ""                    -- feature set: "" (ESM-2 35M) | onehot | esm150 | esm650
+  let sfx := if fs == "" then "" else s!"_{fs}"
+  let feat ← IO.FS.readBinFile s!"{dataDir}/pool{sfx}_feat.bin"
   let lab ← IO.FS.readBinFile s!"{dataDir}/pool_lab.bin"
+  let orient ← if net.orient then IO.FS.readBinFile s!"{dataDir}/pool_orient.bin" else pure ByteArray.empty
   unless feat.size % (2 * net.D) == 0 do
     throw <| IO.userError s!"pool_feat.bin: {feat.size} bytes is not a multiple of 2·{net.D}; dim= is wrong"
+  if net.orient && orient.size != 3 * lab.size then
+    throw <| IO.userError s!"pool_orient.bin: {orient.size} bytes for {lab.size} label bytes (want 3 per pair)"
   let tr ← ChainIdx.load s!"{dataDir}/{listName}_idx.bin"
   let va ← ChainIdx.load s!"{dataDir}/{parseArg args "val" "val"}_idx.bin"
   let t1 ← IO.monoMsNow
@@ -235,8 +280,7 @@ labels {lab.size / 1000000} MB ({t1 - t0} ms)"
       let lrNow := if step <= warm then lr * step.toFloat / warm.toFloat
         else lr * 0.5 * (1.0 + Float.cos (3.14159265358979 * (step - warm).toFloat / (total - warm).toFloat))
       let pos := randomPos perm (bi * B) B (seed.toUInt64 * 7919 + step.toUInt64 * 104729)
-      let (xba, yb) ← caspGather feat lab tr.idx pos B.toUSize net.crop.toUSize net.D.toUSize
-        unobserved.toUSize 0
+      let (xba, yb) ← gather net feat lab orient tr.idx pos B 0
       let packed := (p.append m).append v
       let out ← LowererSession.trainStepAdamF32Seg sess spec.trainFnName
         packed allShapes xba xSh yb lrNow step.toFloat bnShapes B.toUSize net.crop.toUSize net.crop.toUSize
@@ -253,7 +297,7 @@ labels {lab.size / 1000000} MB ({t1 - t0} ms)"
       if maxSteps > 0 && step >= maxSteps then
         throw <| IO.userError s!"stopped after {step} steps (steps={maxSteps})"
     let tV ← IO.monoMsNow
-    let (valCe, valPrec) ← valPass evalSess net (p.append bn) evalShapes xSh feat lab va B
+    let (valCe, valPrec) ← valPass evalSess net (p.append bn) evalShapes xSh feat lab orient va B
     let tD ← IO.monoMsNow
     let trainLoss := lossAcc / bpE.toFloat
     IO.eprintln s!"  epoch {epoch + 1}/{epochs}: loss {fmt trainLoss 4}  val CE {fmt valCe 4}  \
@@ -266,7 +310,7 @@ val top-L/5 LR precision {fmt (100.0 * valPrec) 2}%  ({(tV - tE) / 1000} s train
       String.intercalate "\n" curve.toList ++ "\n")
   let tEnd ← IO.monoMsNow
   IO.println s!"trained: {step} steps in {(tEnd - tStart) / 1000} s -> {net.pfx}_params.bin"
-  IO.eprintln s!"predict: lake exe distogram-casp predict list={listName} {String.intercalate " " (args.filter fun a => a.startsWith "ch=" || a.startsWith "units=" || a.startsWith "tag=")}"
+  IO.eprintln s!"predict: lake exe distogram-casp predict list={listName} {String.intercalate " " (args.filter fun a => a.startsWith "ch=" || a.startsWith "units=" || a.startsWith "tag=" || a.startsWith "fs=" || a.startsWith "dim=" || a.startsWith "crop=" || a.startsWith "orient=")}"
 
 /-- Tiled inference over the evaluation units: every (i0, j0) window at `stride`, logits summed
     into a per-target accumulator the Python side averages and symmetrizes. -/
@@ -289,7 +333,9 @@ def predict (args : List String) : IO Unit := do
   let evalShapes := spec.evalShapesBA
   let xSh := spec.xShape B
   let pool := parseArg args "pool" "targets"      -- `targets` (the EUs) or `valsub` (val chains, for fold tuning)
-  let feat ← IO.FS.readBinFile s!"{dataDir}/{pool}_feat.bin"
+  let fs := parseArg args "fs" ""
+  let sfx := if fs == "" then "" else s!"_{fs}"
+  let feat ← IO.FS.readBinFile s!"{dataDir}/{pool}{sfx}_feat.bin"
   let lab ← IO.FS.readBinFile s!"{dataDir}/{pool}_lab.bin"
   let tg ← ChainIdx.load s!"{dataDir}/{pool}_idx.bin"
   let names := ((← IO.FS.readFile s!"{dataDir}/{pool}_order.txt").splitOn "\n").filter (· != "")
@@ -303,7 +349,7 @@ def predict (args : List String) : IO Unit := do
     let L := tg.len c
     let offs := windowOffsets L net.crop stride
     let wins := (offs.flatMap fun i0 => offs.map fun j0 => (i0, j0)).toArray
-    let mut acc ← F32.const (L * L * nClasses).toUSize 0.0
+    let mut acc ← F32.const (L * L * net.nOut).toUSize 0.0
     let mut cnt ← F32.const (L * L).toUSize 0.0
     let nb := (wins.size + B - 1) / B
     for bi in [:nb] do
@@ -317,8 +363,8 @@ def predict (args : List String) : IO Unit := do
       let (xba, _) ← caspGather feat lab tg.idx pos B.toUSize net.crop.toUSize net.D.toUSize
         unobserved.toUSize 1
       let logits ← LowererSession.forwardF32 evalSess spec.evalFnName evalParams evalShapes xba xSh
-        B.toUSize (nClasses * net.crop * net.crop).toUSize
-      (acc, cnt) ← caspAccumulate acc cnt logits pos valid.toUSize L.toUSize net.crop.toUSize nClasses.toUSize
+        B.toUSize (net.nOut * net.crop * net.crop).toUSize
+      (acc, cnt) ← caspAccumulate acc cnt logits pos valid.toUSize L.toUSize net.crop.toUSize net.nOut.toUSize
     IO.FS.writeBinFile s!"{outDir}/{names[c]!}.acc.bin" acc
     IO.FS.writeBinFile s!"{outDir}/{names[c]!}.cnt.bin" cnt
     nWin := nWin + wins.size
@@ -330,11 +376,15 @@ def predict (args : List String) : IO Unit := do
 def pad (s : String) (n : Nat) : String := s ++ String.ofList (List.replicate (n - s.length) ' ')
 def padL (s : String) (n : Nat) : String := String.ofList (List.replicate (n - s.length) ' ') ++ s
 
-/-- int32 LE labels `[B, L, L]`, a fixed pattern over the 66 classes (so some pairs are masked). -/
-def smokeLabels (B L : Nat) : ByteArray := Id.run do
+/-- int32 LE labels `[B, L, L]`, a fixed pattern over the 66 classes (so some pairs are masked);
+    with `orient`, three more fixed patterns packed mixed-radix behind it, as the gather does. -/
+def smokeLabels (B L : Nat) (orient : Bool := false) : ByteArray := Id.run do
   let mut yb := ByteArray.empty
   for k in [:B * L * L] do
-    let c : UInt32 := ((k * 7 + 3) % nClasses).toUInt32
+    let d := (k * 7 + 3) % nClasses
+    let c : UInt32 := (if orient then
+      d + nClasses * (((k * 5 + 1) % 26) + 26 * (((k * 3 + 2) % 26) + 26 * ((k * 11) % 14)))
+      else d).toUInt32
     yb := yb.push c.toUInt8 |>.push (c >>> 8).toUInt8 |>.push (c >>> 16).toUInt8 |>.push (c >>> 24).toUInt8
   return yb
 
@@ -344,9 +394,9 @@ def smokeLabels (B L : Nat) : ByteArray := Id.run do
     handful of coordinates: the pairTile `W` and `Wj`, a residual-body weight, and the head
     bias. Tolerance 2 % + 2e-4 absolute (f32 differences of a loss near 5 carry ~1e-4 of
     noise). Also runs the eval forward and checks the logits' size. -/
-def smoke : IO Unit := do
+def smokeOne (orient : Bool) : IO Unit := do
   let L := 8; let D := 5; let ch := 4; let B := 2
-  let spec := distogramNet "distogram smoke" L D ch 1
+  let spec := distogramNet (if orient then "distogram smoke-orient" else "distogram smoke") L D ch 1 (nOut orient)
   spec.validate!
   unless (← LowererSession.backendName) == "xla" do
     throw <| IO.userError "distogram-casp runs on the XLA backend only"
@@ -354,7 +404,7 @@ def smoke : IO Unit := do
   let gpfx := spec.buildPrefix
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" <| MlirCodegen.generateTrainStep spec B
     ("jit_" ++ spec.sanitizedName ++ "_train_step") (labelSmoothing := 0.0) (weightDecay := 0.0)
-    (useAdam := true) (useSeg := true) (segLoss := .weightedCE classWeights)
+    (useAdam := true) (useSeg := true) (segLoss := segLossFor orient)
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let sess ← LowererSession.create (← NetSpec.graphArtifact gpfx "train_step")
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
@@ -366,7 +416,7 @@ def smoke : IO Unit := do
   let bnShapes := spec.bnShapesBA
   let xSh := spec.xShape B
   let x ← F32.heInit 7 (B * 2 * L * D).toUSize 1.0
-  let y := smokeLabels B L
+  let y := smokeLabels B L orient
   let m0 ← F32.const nP.toUSize 0.0
   let step (p : ByteArray) : IO (Float × ByteArray) := do
     let packed := (p.append m0).append m0
@@ -377,12 +427,17 @@ def smoke : IO Unit := do
     pure (F32.read out nT.toUSize, (F32.unpackAdam out nP).2.1)
   let (loss0, m1) ← step p0
   IO.println s!"{spec.name}: {spec.archStr}; {nP} params ({spec.totalParams} by totalParams), \
-{nBn} BN floats; loss at init {loss0} (ln 66 = 4.19)"
-  -- parameter layout: pairTile W [D·ch] | Wj [D·ch] | convBn … | head W, b
+{nBn} BN floats; loss at init {loss0} ({if orient then "Σ ln of 66, 26, 26, 14 = 13.37" else "ln 66 = 4.19"})"
+  -- parameter layout: pairTile W [D·ch] | Wj [D·ch] | convBn … | head W, b; with the
+  -- orientation heads the head bias is 132 wide and one coordinate per head is checked.
+  let out := nOut orient
   let coords : List (String × Nat) :=
     [("pairTile.W[0]", 0), ("pairTile.W[1]", 1), ("pairTile.W[last]", D * ch - 1),
      ("pairTile.Wj[0]", D * ch), ("pairTile.Wj[3]", D * ch + 3), ("pairTile.Wj[last]", 2 * D * ch - 1),
-     ("body[nP/2]", nP / 2), ("head.b[last]", nP - 1), ("head.b[last-1]", nP - 2)]
+     ("body[nP/2]", nP / 2), ("head.b[last]", nP - 1), ("head.b[last-1]", nP - 2)] ++
+    (if orient then [("head.b[d 10]", nP - out + 10), ("head.b[ω 66+5]", nP - out + 66 + 5),
+                     ("head.b[θ 92+7]", nP - out + 92 + 7), ("head.b[φ 118+3]", nP - out + 118 + 3),
+                     ("head.W[last]", nP - out - 1)] else [])
   let eps := 0.01
   let unit ← F32.const 1 1.0
   let mut bad := 0
@@ -407,17 +462,30 @@ def smoke : IO Unit := do
   let batchBn := out0.extract ((nT + 1) * 4) ((nT + 1 + nBn) * 4)
   let evalParams := p0.append batchBn
   let logits ← LowererSession.forwardF32 evalSess spec.evalFnName evalParams spec.evalShapesBA x xSh
-    B.toUSize (nClasses * L * L).toUSize
-  let mtr ← caspValMetrics logits y B.toUSize nClasses.toUSize L.toUSize longRangeSep.toUSize
+    B.toUSize (out * L * L).toUSize
+  let mtr ← caspValMetrics logits y B.toUSize out.toUSize nClasses.toUSize L.toUSize longRangeSep.toUSize
     contactMaxClass.toUSize unobserved.toUSize
   let evalCe := F32.read mtr 2 / F32.read mtr 3
-  IO.println s!"  eval logits: {F32.size logits} floats (expected {B * nClasses * L * L}); \
-eval-forward masked CE at batch BN stats {evalCe} vs train-step loss {loss0} (|diff| {(evalCe - loss0).abs})"
-  if (evalCe - loss0).abs > 1e-3 * loss0 then
+  -- With the orientation heads the train loss is the sum of four CEs and the eval metric the
+  -- distance head's alone, so the identity is only checked on the plain head.
+  IO.println s!"  eval logits: {F32.size logits} floats (expected {B * out * L * L}); \
+eval-forward masked distance CE at batch BN stats {evalCe} vs train-step loss {loss0}\
+{if orient then "" else s!" (|diff| {(evalCe - loss0).abs})"}"
+  unless F32.size logits == B * out * L * L do
+    throw <| IO.userError "eval logits have the wrong size"
+  if !orient && (evalCe - loss0).abs > 1e-3 * loss0 then
     throw <| IO.userError "eval forward disagrees with the train forward"
+  if orient && evalCe >= loss0 then
+    throw <| IO.userError "the distance head's CE is not below the four-head sum"
   if bad > 0 then
-    throw <| IO.userError s!"pairTile gradient check FAILED on {bad} coordinate(s)"
-  IO.println "smoke: pairTile gradient check passed; eval forward ≡ train forward"
+    throw <| IO.userError s!"gradient check FAILED on {bad} coordinate(s)"
+  IO.println s!"smoke{if orient then " (orientation heads)" else ""}: gradient check passed\
+{if orient then "" else "; eval forward ≡ train forward"}"
+
+/-- The plain head, then the four-head `perPixelMultiCE` variant. -/
+def smoke : IO Unit := do
+  smokeOne false
+  smokeOne true
 
 
 end DistogramCasp

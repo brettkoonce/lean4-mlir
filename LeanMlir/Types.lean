@@ -425,6 +425,14 @@ inductive LossKind where
       vector differently. `Σ_k w_{y_k}` depends only on the labels, so it is a
       constant w.r.t. the logits and contributes no gradient term. -/
   | perPixelWeightedCE (weights : List Float)
+  /-- K per-pixel softmax heads over one `[B, Σ_k NC_k, H, W]` output, each with its own
+      class weights (`weights[k].length = NC_k`): the loss is the sum of the K weighted
+      per-pixel CEs (each normalized by its own Σw) and the gradient their concatenation
+      along the channel axis. The int32 `[B, H, W]` label carries the K labels mixed-radix,
+      `y = y₀ + NC₀·(y₁ + NC₁·(y₂ + …))`, so the ABI is `perPixelCE`'s. One head is exactly
+      `perPixelWeightedCE`. The distogram demo's distance + orientation heads (trRosetta's
+      ω, θ, φ) are the use. -/
+  | perPixelMultiCE (weights : List (List Float))
   /-- Per-pixel focal CE (Lin et al., RetinaNet): `-(1-p_t)^γ · log p_t`, meaned
       over pixels. Same ABI as `perPixelCE`. `γ = 0` is exactly `perPixelCE`.
 
@@ -485,6 +493,9 @@ inductive SegLoss where
   /-- Per-pixel CE with a per-class weight on the true class. See
       `LossKind.perPixelWeightedCE` for the semantics and the argument. -/
   | weightedCE (weights : List Float)
+  /-- K weighted per-pixel CE heads over one output, labels mixed-radix. See
+      `LossKind.perPixelMultiCE`. -/
+  | multiCE (weights : List (List Float))
   /-- Per-pixel focal CE, `-(1-p_t)^γ·log p_t`. See `LossKind.perPixelFocalCE`. -/
   | focalCE (gamma : Float)
 deriving Repr, BEq, Inhabited
@@ -496,7 +507,7 @@ deriving Repr, BEq, Inhabited
     (`TrainConfig.lossKindFor`). -/
 def LossKind.isSeg : LossKind → Bool
   | .perPixelCE | .perPixelDice | .perPixelDiceCE
-  | .perPixelWeightedCE _ | .perPixelFocalCE _ => true
+  | .perPixelWeightedCE _ | .perPixelFocalCE _ | .perPixelMultiCE _ => true
   | _ => false
 
 /-- Which seg loss block to emit. Non-seg kinds answer `.ce` and are never
@@ -506,6 +517,7 @@ def LossKind.segLoss : LossKind → SegLoss
   | .perPixelDiceCE        => .diceCE
   | .perPixelWeightedCE w  => .weightedCE w
   | .perPixelFocalCE g     => .focalCE g
+  | .perPixelMultiCE ws    => .multiCE ws
   | _                      => .ce
 
 /-- Optimizer selector for the training loop (`TrainConfig.optimizer`). Both backends read it;

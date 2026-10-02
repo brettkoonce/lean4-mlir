@@ -1,0 +1,16 @@
+[08:04] bench steps / lr on .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_valsub_long (GPU)
+device cuda
+ ref  chain  clash  sigma orient steps    lr  Cβ-lDDT     TM  hand ok  s
+   1   1.00   3.00   1.00   0.00  1500  0.50    0.629  0.708     1.00  164
+   1   1.00   3.00   1.00   0.00  4000  0.50    0.629  0.709     1.00  428
+   1   1.00   3.00   1.00   0.00  1500  0.20    0.627  0.705     0.96  163
+   1   1.00   3.00   1.00   0.00  1500  1.00    0.630  0.710     1.00  164
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_valsub_long/tune.csv
+[08:20] short set
+device cuda
+ ref  chain  clash  sigma orient steps    lr  Cβ-lDDT     TM  hand ok  s
+   1   1.00   3.00   1.00   0.00  1500  0.50    0.617  0.593     0.96  64
+   1   1.00   3.00   1.00   0.00  4000  0.50    0.617  0.588     0.92  164
+   1   1.00   3.00   1.00   0.00  1500  0.20    0.621  0.603     0.96  65
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_valsub/tune.csv
+[08:25] bench done

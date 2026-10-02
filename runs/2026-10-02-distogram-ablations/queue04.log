@@ -1,0 +1,24 @@
+[04:21] esm150 seed-2 run stopped for the 650M chain
+[04:21] 650M chain; 23 GB free
+[04:21] embed 650M -> pool
+  25012/27690  3716 tok/s  eta 3 min
+  26003/27690  3796 tok/s  eta 2 min
+  27004/27690  3871 tok/s  eta 1 min
+27690 chains, 6442867 residues in 1644 s -> data/casp16/packed/pool_esm650_feat.bin (16.61 GB)
+[04:49] targets 650M (cpu)
+ESM-2 contact head, top-L/5 long-range precision, medium: mean 0.766 over 46 EUs
+ESM-2 contact head, top-L/5 long-range precision, hard: mean 0.532 over 8 EUs
+all 84 EUs: mean 0.754, median 0.832; residues observed 0.982; name mismatches 0
+[04:51] pack esm650 targets + valsub
+targets: 84 EUs (skipped ['T1249v2-D1'])
+valsub: 24 val chains of 80–200 residues in the targets format
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/packed: 39.35 GB in 1 s; feature set esm650, width 1289, label classes 66, index row = 4 × i64 (feat off, lab off, L, csv row)
+[04:51] train esm650 64 ch
+[06:02] trained: trained: 24660 steps in 4216 s -> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_params.bin
+easy  : Cβ-lDDT mean 0.600 median 0.645  TM mean 0.644 median 0.725  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.564 median 0.573  TM mean 0.537 median 0.509  (44 EUs, mirror better on 3)
+hard  : Cβ-lDDT mean 0.436 median 0.351  TM mean 0.458 median 0.405  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.569 median 0.591  TM mean 0.572 median 0.574  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets/fold_scores.csv
+[06:26] done .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets
+[06:26] 650M chain done

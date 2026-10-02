@@ -4082,7 +4082,9 @@ private def emitMomentumUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Li
 private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     (labelSmoothing : Float)
     (lossOut : String := "%loss") (gradOut : String := "%d_logits_seg")
-    (weights : List Float := []) : String := Id.run do
+    (weights : List Float := []) (pfx : String := "seg") : String := Id.run do
+  -- `pfx` names the block's private SSA values; the default renders the historical `%{pfx}_*`
+  -- byte for byte, and `.multiCE` emits one block per head under `%mc{k}_*`.
   let bnhwTy := s!"tensor<{B}x{H}x{W}xi32>"
   let bnhwI1 := s!"tensor<{B}x{NC}x{H}x{W}xi1>"
   let bnhwfTy := tensorTy [B, NC, H, W]
@@ -4098,37 +4100,37 @@ private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   let mut s := ""
   s := s ++ "\n    // ════════════ PER-PIXEL SOFTMAX-CE ════════════\n"
   -- 1. log_softmax along channel axis (axis 1) of (B, NC, H, W) logits.
-  s := s ++ s!"    %seg_max = stablehlo.reduce({logitsSSA} init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
+  s := s ++ s!"    %{pfx}_max = stablehlo.reduce({logitsSSA} init: %neginf) applies stablehlo.maximum across dimensions = [1]\n"
   s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
-  s := s ++ s!"    %seg_max_b = stablehlo.broadcast_in_dim %seg_max, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
-  s := s ++ s!"    %seg_shifted = stablehlo.subtract {logitsSSA}, %seg_max_b : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_exp = stablehlo.exponential %seg_shifted : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_sum = stablehlo.reduce(%seg_exp init: %zf) applies stablehlo.add across dimensions = [1]\n"
+  s := s ++ s!"    %{pfx}_max_b = stablehlo.broadcast_in_dim %{pfx}_max, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_shifted = stablehlo.subtract {logitsSSA}, %{pfx}_max_b : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_exp = stablehlo.exponential %{pfx}_shifted : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_sum = stablehlo.reduce(%{pfx}_exp init: %zf) applies stablehlo.add across dimensions = [1]\n"
   s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
-  s := s ++ s!"    %seg_logsum = stablehlo.log %seg_sum : {bhwfTy}\n"
-  s := s ++ s!"    %seg_logsum_b = stablehlo.broadcast_in_dim %seg_logsum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
-  s := s ++ s!"    %seg_logp = stablehlo.subtract %seg_shifted, %seg_logsum_b : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_logsum = stablehlo.log %{pfx}_sum : {bhwfTy}\n"
+  s := s ++ s!"    %{pfx}_logsum_b = stablehlo.broadcast_in_dim %{pfx}_logsum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_logp = stablehlo.subtract %{pfx}_shifted, %{pfx}_logsum_b : {bnhwfTy}\n"
   -- 2. Build (B, NC, H, W) onehot from (B, H, W) int32 labels with optional label smoothing.
-  s := s ++ s!"    %seg_iota = stablehlo.iota dim = 1 : tensor<{B}x{NC}x{H}x{W}xi32>\n"
-  s := s ++ s!"    %seg_y_b = stablehlo.broadcast_in_dim {labelSSA}, dims = [0, 2, 3] : ({bnhwTy}) -> tensor<{B}x{NC}x{H}x{W}xi32>\n"
-  s := s ++ s!"    %seg_mask = stablehlo.compare EQ, %seg_iota, %seg_y_b : (tensor<{B}x{NC}x{H}x{W}xi32>, tensor<{B}x{NC}x{H}x{W}xi32>) -> {bnhwI1}\n"
-  s := s ++ s!"    %seg_onef = stablehlo.constant dense<{smoothOn}> : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_zerof = stablehlo.constant dense<{smoothOff}> : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_onehot = stablehlo.select %seg_mask, %seg_onef, %seg_zerof : {bnhwI1}, {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_iota = stablehlo.iota dim = 1 : tensor<{B}x{NC}x{H}x{W}xi32>\n"
+  s := s ++ s!"    %{pfx}_y_b = stablehlo.broadcast_in_dim {labelSSA}, dims = [0, 2, 3] : ({bnhwTy}) -> tensor<{B}x{NC}x{H}x{W}xi32>\n"
+  s := s ++ s!"    %{pfx}_mask = stablehlo.compare EQ, %{pfx}_iota, %{pfx}_y_b : (tensor<{B}x{NC}x{H}x{W}xi32>, tensor<{B}x{NC}x{H}x{W}xi32>) -> {bnhwI1}\n"
+  s := s ++ s!"    %{pfx}_onef = stablehlo.constant dense<{smoothOn}> : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_zerof = stablehlo.constant dense<{smoothOff}> : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_onehot = stablehlo.select %{pfx}_mask, %{pfx}_onef, %{pfx}_zerof : {bnhwI1}, {bnhwfTy}\n"
   -- 2b. (weighted only) per-pixel weight map w_k = weights[y_k], built by
   -- selecting the weight vector through the same one-hot mask and collapsing
-  -- the channel axis. Reusing `%seg_mask` — the raw EQ comparison, which label
+  -- the channel axis. Reusing `%{pfx}_mask` — the raw EQ comparison, which label
   -- smoothing does not touch — is what keeps this a weight on the *true* class
   -- rather than on the smoothed target.
   if wOn then
     let wlit := String.intercalate ", " (weights.map toString)
-    s := s ++ s!"    %seg_wvec = stablehlo.constant dense<[{wlit}]> : {ncTy}\n"
-    s := s ++ s!"    %seg_wvec_b = stablehlo.broadcast_in_dim %seg_wvec, dims = [1] : ({ncTy}) -> {bnhwfTy}\n"
-    s := s ++ s!"    %seg_wz = stablehlo.constant dense<0.0> : {bnhwfTy}\n"
-    s := s ++ s!"    %seg_wsel = stablehlo.select %seg_mask, %seg_wvec_b, %seg_wz : {bnhwI1}, {bnhwfTy}\n"
-    s := s ++ s!"    %seg_wmap = stablehlo.reduce(%seg_wsel init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"    %{pfx}_wvec = stablehlo.constant dense<[{wlit}]> : {ncTy}\n"
+    s := s ++ s!"    %{pfx}_wvec_b = stablehlo.broadcast_in_dim %{pfx}_wvec, dims = [1] : ({ncTy}) -> {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_wz = stablehlo.constant dense<0.0> : {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_wsel = stablehlo.select %{pfx}_mask, %{pfx}_wvec_b, %{pfx}_wz : {bnhwI1}, {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_wmap = stablehlo.reduce(%{pfx}_wsel init: %zf) applies stablehlo.add across dimensions = [1]\n"
     s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
-    s := s ++ s!"    %seg_wmap_b = stablehlo.broadcast_in_dim %seg_wmap, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_wmap_b = stablehlo.broadcast_in_dim %{pfx}_wmap, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
   -- 3. Forward loss: -mean over (B, H, W) of softmax-CE per pixel, or the
   -- weighted mean Σ w_k·CE_k / Σ w_k when weights are given.
   --
@@ -4145,34 +4147,34 @@ private def emitPerPixelCEBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   -- the more honest spelling of the math anyway, since the weight is a
   -- per-pixel quantity, not a per-channel one.
   if wOn then
-    s := s ++ s!"    %seg_ce0 = stablehlo.multiply %seg_logp, %seg_onehot : {bnhwfTy}\n"
-    s := s ++ s!"    %seg_cek = stablehlo.reduce(%seg_ce0 init: %zf) applies stablehlo.add across dimensions = [1]\n"
+    s := s ++ s!"    %{pfx}_ce0 = stablehlo.multiply %{pfx}_logp, %{pfx}_onehot : {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_cek = stablehlo.reduce(%{pfx}_ce0 init: %zf) applies stablehlo.add across dimensions = [1]\n"
     s := s ++ s!"          : ({bnhwfTy}, tensor<f32>) -> {bhwfTy}\n"
-    s := s ++ s!"    %seg_wce = stablehlo.multiply %seg_cek, %seg_wmap : {bhwfTy}\n"
-    s := s ++ s!"    %seg_total = stablehlo.reduce(%seg_wce init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+    s := s ++ s!"    %{pfx}_wce = stablehlo.multiply %{pfx}_cek, %{pfx}_wmap : {bhwfTy}\n"
+    s := s ++ s!"    %{pfx}_total = stablehlo.reduce(%{pfx}_wce init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
     s := s ++ s!"           : ({bhwfTy}, tensor<f32>) -> tensor<f32>\n"
     -- Σ_k w_{y_k}. Labels-only, so it is a constant w.r.t. the logits and
     -- contributes no gradient term — which is the whole reason this
     -- normalization is affordable.
-    s := s ++ s!"    %seg_denom = stablehlo.reduce(%seg_wmap init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
+    s := s ++ s!"    %{pfx}_denom = stablehlo.reduce(%{pfx}_wmap init: %zf) applies stablehlo.add across dimensions = [0, 1, 2]\n"
     s := s ++ s!"           : ({bhwfTy}, tensor<f32>) -> tensor<f32>\n"
   else
-    s := s ++ s!"    %seg_weighted = stablehlo.multiply %seg_logp, %seg_onehot : {bnhwfTy}\n"
-    s := s ++ s!"    %seg_total = stablehlo.reduce(%seg_weighted init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
+    s := s ++ s!"    %{pfx}_weighted = stablehlo.multiply %{pfx}_logp, %{pfx}_onehot : {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_total = stablehlo.reduce(%{pfx}_weighted init: %zf) applies stablehlo.add across dimensions = [0, 1, 2, 3]\n"
     s := s ++ s!"           : ({bnhwfTy}, tensor<f32>) -> tensor<f32>\n"
-    s := s ++ s!"    %seg_denom = stablehlo.constant dense<{denom}> : tensor<f32>\n"
-  s := s ++ s!"    %seg_mean = stablehlo.divide %seg_total, %seg_denom : tensor<f32>\n"
-  s := s ++ s!"    {lossOut} = stablehlo.negate %seg_mean : tensor<f32>\n"
+    s := s ++ s!"    %{pfx}_denom = stablehlo.constant dense<{denom}> : tensor<f32>\n"
+  s := s ++ s!"    %{pfx}_mean = stablehlo.divide %{pfx}_total, %{pfx}_denom : tensor<f32>\n"
+  s := s ++ s!"    {lossOut} = stablehlo.negate %{pfx}_mean : tensor<f32>\n"
   -- 4. Backward seed: (softmax - onehot) / N, or (w_k/Σw)·(softmax - onehot).
-  s := s ++ s!"    %seg_sum_b = stablehlo.broadcast_in_dim %seg_sum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
-  s := s ++ s!"    %seg_softmax = stablehlo.divide %seg_exp, %seg_sum_b : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_smmoh = stablehlo.subtract %seg_softmax, %seg_onehot : {bnhwfTy}\n"
-  s := s ++ s!"    %seg_denom_b = stablehlo.broadcast_in_dim %seg_denom, dims = [] : (tensor<f32>) -> {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_sum_b = stablehlo.broadcast_in_dim %{pfx}_sum, dims = [0, 2, 3] : ({bhwfTy}) -> {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_softmax = stablehlo.divide %{pfx}_exp, %{pfx}_sum_b : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_smmoh = stablehlo.subtract %{pfx}_softmax, %{pfx}_onehot : {bnhwfTy}\n"
+  s := s ++ s!"    %{pfx}_denom_b = stablehlo.broadcast_in_dim %{pfx}_denom, dims = [] : (tensor<f32>) -> {bnhwfTy}\n"
   if wOn then
-    s := s ++ s!"    %seg_scale = stablehlo.divide %seg_wmap_b, %seg_denom_b : {bnhwfTy}\n"
-    s := s ++ s!"    {gradOut} = stablehlo.multiply %seg_smmoh, %seg_scale : {bnhwfTy}\n"
+    s := s ++ s!"    %{pfx}_scale = stablehlo.divide %{pfx}_wmap_b, %{pfx}_denom_b : {bnhwfTy}\n"
+    s := s ++ s!"    {gradOut} = stablehlo.multiply %{pfx}_smmoh, %{pfx}_scale : {bnhwfTy}\n"
   else
-    s := s ++ s!"    {gradOut} = stablehlo.divide %seg_smmoh, %seg_denom_b : {bnhwfTy}\n"
+    s := s ++ s!"    {gradOut} = stablehlo.divide %{pfx}_smmoh, %{pfx}_denom_b : {bnhwfTy}\n"
   return s
 
 /-- Soft-Dice loss + `d_logits` for the segmentation path.
@@ -4395,6 +4397,48 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
   | .ce   => emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing
   | .weightedCE w =>
     emitPerPixelCEBlock B NC H W logitsSSA labelSSA labelSmoothing (weights := w)
+  | .multiCE ws =>
+    -- K heads over one output: slice the logits per head, decode the mixed-radix label
+    -- (y_k = (y / Π_{m<k} NC_m) mod NC_k), one weighted CE block per head under its own
+    -- prefix; the loss is the sum, the gradient the channel-axis concatenation.
+    let yTy := s!"tensor<{B}x{H}x{W}xi32>"
+    let mut s := "\n    // ════════════ MULTI-HEAD PER-PIXEL CE ════════════\n"
+    let mut off := 0
+    let mut radix := 1
+    let mut losses : List String := []
+    let mut grads : List (String × String) := []
+    for k in [:ws.length] do
+      let w := ws[k]!
+      let n := w.length
+      let headTy := tensorTy [B, n, H, W]
+      let lg := s!"%mc{k}_lg"
+      s := s ++ s!"    {lg} = \"stablehlo.slice\"({logitsSSA}) " ++ "{" ++
+        s!" start_indices = array<i64: 0, {off}, 0, 0>, limit_indices = array<i64: {B}, {off + n}, {H}, {W}>, strides = array<i64: 1, 1, 1, 1>" ++
+        "} : " ++ s!"({bnhwfTy}) -> {headTy}\n"
+      let y := if ws.length == 1 then labelSSA else s!"%mc{k}_y"
+      if ws.length > 1 then
+        let q := if radix == 1 then labelSSA else s!"%mc{k}_q"
+        if radix > 1 then
+          s := s ++ s!"    %mc{k}_r = stablehlo.constant dense<{radix}> : {yTy}\n"
+          s := s ++ s!"    %mc{k}_q = stablehlo.divide {labelSSA}, %mc{k}_r : {yTy}\n"
+        s := s ++ s!"    %mc{k}_n = stablehlo.constant dense<{n}> : {yTy}\n"
+        s := s ++ s!"    {y} = stablehlo.remainder {q}, %mc{k}_n : {yTy}\n"
+      s := s ++ emitPerPixelCEBlock B n H W lg y labelSmoothing s!"%mc{k}_loss" s!"%mc{k}_dlg"
+        (weights := w) (pfx := s!"mc{k}")
+      losses := losses ++ [s!"%mc{k}_loss"]
+      grads := grads ++ [(s!"%mc{k}_dlg", headTy)]
+      off := off + n
+      radix := radix * n
+    s := s ++ "\n    // ──────── sum of the head losses, concatenation of their seeds ────────\n"
+    let mut acc := losses.head!
+    for k in [1:losses.length] do
+      let nxt := if k + 1 == losses.length then "%loss" else s!"%mc_lsum{k}"
+      s := s ++ s!"    {nxt} = stablehlo.add {acc}, {losses[k]!} : tensor<f32>\n"
+      acc := nxt
+    if losses.length == 1 then
+      s := s ++ s!"    %loss = stablehlo.add {acc}, %zf : tensor<f32>\n"
+    s := s ++ s!"    %d_logits_seg = stablehlo.concatenate {String.intercalate ", " (grads.map (·.1))}, dim = 1 : ({String.intercalate ", " (grads.map (·.2))}) -> {bnhwfTy}\n"
+    s
   | .focalCE g => emitSegFocalBlock B NC H W logitsSSA labelSSA g
   | .dice => emitSegDiceBlock B NC H W logitsSSA labelSSA
   | .diceCE =>

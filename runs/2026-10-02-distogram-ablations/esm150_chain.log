@@ -1,0 +1,12 @@
+[00:29] embed 150M
+  26024/27690  13216 tok/s  eta 0 min
+  27008/27690  12991 tok/s  eta 0 min
+27690 chains, 6442867 residues in 503 s -> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/emb150 (8.25 GB)
+[00:38] targets 150M (cpu)
+ESM-2 contact head, top-L/5 long-range precision, hard: mean 0.394 over 8 EUs
+all 84 EUs: mean 0.623, median 0.707; residues observed 0.982; name mismatches 0
+[00:40] pack esm150
+valsub: 24 val chains of 80–200 residues in the targets format
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/packed: 17.01 GB in 12 s; feature set esm150, width 649, label classes 66, index row = 4 × i64 (feat off, lab off, L, csv row)
+[00:40] train esm150
+[01:48] done: trained: 24660 steps in 4100 s -> .lake/build/distogram_r16x64_esm150_train_full_e30-esm150_params.bin

@@ -1,0 +1,14 @@
+[02:56] orient trainer done; finishing on GPU 2
+[03:22] orient fold + val bench: .lake/build/distogram_r16x64_orient_train_full_e30-orient_targets
+[03:23] crop-96 trainer done; finishing on GPU 1
+[03:48] crops=3 run on GPU 1
+Terminated
+easy  : Cβ-lDDT mean 0.407 median 0.457  TM mean 0.467 median 0.558  (4 EUs, mirror better on 0)
+medium: Cβ-lDDT mean 0.399 median 0.370  TM mean 0.352 median 0.318  (5 EUs, mirror better on 1)
+hard  : Cβ-lDDT mean 0.330 median 0.330  TM mean 0.256 median 0.256  (2 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.389 median 0.370  TM mean 0.376 median 0.318  (11 EUs, mirror better on 1)
+-> .lake/build/distogram_r16x64_orient_train_full_e30-orient_targets/fold_scores_orient.csv
+[04:19] esm150 seed-2 run on GPU 2
+Terminated
+[04:21] esm150 seed-2 done: 
+[07:01] crops=3 done: trained: 73980 steps in 11590 s -> .lake/build/distogram_r16x64_train_full_e30-crops3_params.bin

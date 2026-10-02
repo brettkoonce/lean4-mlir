@@ -1,0 +1,17 @@
+predicted 84 EUs, 10703 windows in 54 s -> .lake/build/distogram_r16x64_esm650_tr[06:03] assemble -> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets
+T1299-D1      168      1.000      0.618  easy
+easy  : ours 0.851  ESM-2 head 0.533  (30 EUs)
+medium: ours 0.868  ESM-2 head 0.478  (46 EUs)
+hard  : ours 0.620  ESM-2 head 0.233  (8 EUs)
+all   : ours 0.838  ESM-2 head 0.474  (84 EUs) -> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets/table.csv
+[06:04] fold
+runs/2026-10-02-distogram-ablations/finish_run.sh: line 18: t.bin: command not found
+flock: 9: Bad file descriptor
+[06:26] fold
+[06:26] score
+easy  : Cβ-lDDT mean 0.600 median 0.645  TM mean 0.644 median 0.725  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.564 median 0.573  TM mean 0.537 median 0.509  (44 EUs, mirror better on 3)
+hard  : Cβ-lDDT mean 0.436 median 0.351  TM mean 0.458 median 0.405  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.569 median 0.591  TM mean 0.572 median 0.574  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets/fold_scores.csv
+[06:26] done .lake/build/distogram_r16x64_esm650_train_full_e30-esm650_targets

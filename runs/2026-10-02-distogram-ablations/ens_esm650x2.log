@@ -1,0 +1,15 @@
+[09:34] fold plain
+[10:17] score plain
+easy  : Cβ-lDDT mean 0.600 median 0.646  TM mean 0.645 median 0.733  (29 EUs, mirror better on 2)
+medium: Cβ-lDDT mean 0.564 median 0.567  TM mean 0.542 median 0.498  (44 EUs, mirror better on 3)
+hard  : Cβ-lDDT mean 0.437 median 0.351  TM mean 0.460 median 0.404  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.569 median 0.591  TM mean 0.575 median 0.551  (78 EUs, mirror better on 5)
+-> .lake/build/distogram_ens-esm650x2_targets/fold_scores.csv
+[10:17] fold orient
+[10:32] score orient
+easy  : Cβ-lDDT mean 0.605 median 0.648  TM mean 0.654 median 0.736  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.578 median 0.584  TM mean 0.565 median 0.527  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.444 median 0.360  TM mean 0.472 median 0.413  (5 EUs, mirror better on 1)
+all   : Cβ-lDDT mean 0.579 median 0.598  TM mean 0.592 median 0.636  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_ens-esm650x2_targets/fold_scores_orient.csv
+[10:32] done .lake/build/distogram_ens-esm650x2_targets
