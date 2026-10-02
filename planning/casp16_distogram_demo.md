@@ -313,7 +313,32 @@ Every launch is asked for first.
   top-L/5 long-range precision 19.0 % after epoch 1 (purged and seed-2 arms alike; the
   ESM-2 head's number on the EUs is 47 %), val CE 2.90; epoch 3: 24.5–24.8 %, loss 2.28.
   `Proofs/Foundation/PairTile.lean` (two HasVJP witnesses) builds clean, registered in the
-  Proofs and Certs roots.
+  Proofs and Certs roots; committed c46f5a81.
+- 2026-10-01 22:16: the three 64-ch arms finished at val top-L/5 LR 35.2 / 35.6 / 35.7 %
+  (headline / purged / seed 2). On the 84 EUs: top-L/5 long-range precision 0.585 / 0.599 /
+  0.597 against the ESM-2 head's 0.474 (easy 0.63 vs 0.53, medium 0.62–0.64 vs 0.48, hard
+  0.23–0.27 vs 0.23). First folds were weak (T1235-D1 Cβ-lDDT 0.32 / TM 0.37, T1267s1-D1
+  0.29 / 0.33, T1226-D1 0.16 / 0.15): no reference state, and a hand rule blind to all-β
+  folds. Fixed both — `casp16_fold.py` subtracts the per-separation background of the
+  training labels (P(far) 0.00 / 0.14 / 0.43 / 0.81 at separation 1 / 8 / 24 / >128), and the
+  chirality score weights helical quads + and extended quads − (84/84 true traces positive,
+  min +0.39) — giving 0.388 / 0.391, 0.450 / 0.477, 0.346 / 0.230 with every mirror lower.
+  On the hard EU our 0.346 is the field's pseudo-Cβ median (0.362). 128-ch arm at epoch 15:
+  35.9 % (64-ch at 15: 33.7 %). The purged and seed-2 arms fold the same three to 0.396 /
+  0.415, 0.435 / 0.424, 0.346 / 0.250 and 0.401 / 0.414, 0.442 / 0.472, 0.349 / 0.274 — the
+  fold numbers are stable to ±0.01 lDDT across seeds and the 82 purged chains.
+- 2026-10-02 00:02: the 128-ch arm finished at val 37.4 % (64-ch: 35.2–35.7); on the 84 EUs
+  top-L/5 long-range 0.629 (easy 0.668 / medium 0.667 / hard 0.261) against 0.585–0.599 for
+  64 ch and 0.474 for the ESM-2 head — capacity matters, so the book run is 128 ch. CPU
+  folding was the bottleneck (10 of 78 EUs in 90 min); `casp16_fold.py` gained `--device`
+  (CUDA torch in .venv-casp) and resume. Fold hyperparameters benched OFF the test set
+  (`casp16_valfold.py`: 24 val chains of 80–191 residues packed as `valsub`, predicted with the
+  64-ch headline, folded against their own true pseudo-Cβ traces): reference state on/off =
+  0.518 / 0.415 Cβ-lDDT and 0.477 / 0.387 TM; chain weight 0.3–3, clash 1–10 and σ × 2 all
+  within ±0.01 — the defaults stand. The 128-ch featured folds (0.403 / 0.423, 0.459 / 0.454,
+  0.339 / 0.275) sit within ±0.02 of the 64-ch ones: the fold step, not the distogram, is the
+  limit now. Book run launched 00:20: 128 ch × 100 epochs on GPU 3
+  (runs/2026-10-02-distogram-r16x128-e100/, ~9 h).
 - 2026-10-01: `casp16_labels.py` (183 chains/s; adjacent Cβ–Cβ 5.39 Å, 4.0 % of pairs < 8 Å,
   93 % residues observed), `casp16_embed.py` (ESM-2 35M on CPU, ~1,700 residues/s at 16
   threads), `casp16_targets.py` (84 EUs, 0 residue-name mismatches, 98 % observed; ESM-2

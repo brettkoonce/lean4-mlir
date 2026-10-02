@@ -64,6 +64,8 @@ def write_idx(path, idx):
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--out", default=str(ROOT / "packed"))
+    p.add_argument("--val-targets", type=int, default=24,
+                   help="also pack the N shortest val chains in the targets format (valsub_*) for fold tuning")
     a = p.parse_args()
     out = Path(a.out); out.mkdir(exist_ok=True)
     t0 = time.time()
@@ -90,6 +92,17 @@ if __name__ == "__main__":
     with open(out / "targets_order.txt", "w") as f:
         f.write("\n".join(e["eu"] for e in tr) + "\n")
     print(f"targets: {len(tr)} EUs (skipped {[e['eu'] for e in eus if e not in tr]})")
+    # a val subset in the targets format: fold hyperparameters get tuned here, not on the EUs
+    if a.val_targets:
+        vrows = sorted(csv.DictReader(open(ROOT / "train" / "val.csv")), key=lambda r: int(r["length"]))
+        vrows = [r for r in vrows if 80 <= int(r["length"]) <= 200 and have(r)]
+        vrows = vrows[:: max(1, len(vrows) // a.val_targets)][: a.val_targets]   # a spread of lengths
+        vidx = pack(vrows, lambda r: np.load(ROOT / "emb" / f"{r['id']}.npy"),
+                    lambda r, L: np.load(ROOT / "labels" / f"{r['id']}.npz")["cls"], out, "valsub")
+        write_idx(out / "valsub_idx.bin", vidx)
+        with open(out / "valsub_order.txt", "w") as f:
+            f.write("\n".join(r["id"] for r in vrows) + "\n")
+        print(f"valsub: {len(vrows)} val chains of 60–200 residues in the targets format")
     tot = sum(f.stat().st_size for f in out.glob("*.bin"))
     print(f"-> {out}: {tot / 1e9:.2f} GB in {time.time() - t0:.0f} s; feature width {480 + NPOS}, "
           f"label classes 66, index row = 4 × i64 (feat off, lab off, L, csv row)")

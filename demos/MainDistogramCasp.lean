@@ -24,8 +24,8 @@ import LeanMlir.SmallClassifier
       of the `val` index (masked CE and top-L/5 long-range contact precision); `val=tiny` on a
       training subset is the memorization probe. Writes `<prefix>_curve.csv`,
       `_params.bin`, `_bn_stats.bin` under `out` (default `.lake/build`).
-    `lake exe distogram-casp predict [same net args] [stride=32]` — reloads the params and
-      writes, per evaluation unit, the summed window logits `<prefix>_targets/<EU>.acc.bin`
+    `lake exe distogram-casp predict [same net args] [stride=32] [pool=targets|valsub]` — reloads
+      the params and writes, per evaluation unit, the summed window logits `<prefix>_<pool>/<EU>.acc.bin`
       (f32 [L, L, 66]) and window counts `.cnt.bin` (f32 [L, L]) for
       `scripts/demos/casp16_predict.py`. -/
 
@@ -288,13 +288,14 @@ def predict (args : List String) : IO Unit := do
   let evalParams := p.append bn
   let evalShapes := spec.evalShapesBA
   let xSh := spec.xShape B
-  let feat ← IO.FS.readBinFile s!"{dataDir}/targets_feat.bin"
-  let lab ← IO.FS.readBinFile s!"{dataDir}/targets_lab.bin"
-  let tg ← ChainIdx.load s!"{dataDir}/targets_idx.bin"
-  let names := ((← IO.FS.readFile s!"{dataDir}/targets_order.txt").splitOn "\n").filter (· != "")
+  let pool := parseArg args "pool" "targets"      -- `targets` (the EUs) or `valsub` (val chains, for fold tuning)
+  let feat ← IO.FS.readBinFile s!"{dataDir}/{pool}_feat.bin"
+  let lab ← IO.FS.readBinFile s!"{dataDir}/{pool}_lab.bin"
+  let tg ← ChainIdx.load s!"{dataDir}/{pool}_idx.bin"
+  let names := ((← IO.FS.readFile s!"{dataDir}/{pool}_order.txt").splitOn "\n").filter (· != "")
   unless names.length == tg.n do
-    throw <| IO.userError s!"targets_order.txt lists {names.length} EUs, targets_idx.bin has {tg.n}"
-  let outDir := s!"{net.pfx}_targets"
+    throw <| IO.userError s!"{pool}_order.txt lists {names.length} entries, {pool}_idx.bin has {tg.n}"
+  let outDir := s!"{net.pfx}_{pool}"
   IO.FS.createDirAll outDir
   let t0 ← IO.monoMsNow
   let mut nWin := 0
