@@ -85,7 +85,10 @@ def main():
         q = ['nvidia-smi', '--query-gpu=index,name,memory.total,driver_version', '--format=csv,noheader']
         if vis: q += ['-i', vis]
         for ln in sh(*q).splitlines():
-            idx, name, mem, drv = [x.strip() for x in ln.split(',')]
+            f = [x.strip() for x in ln.split(',')]
+            if len(f) != 4 or not f[0].isdigit():   # a Jetson's nvidia-smi may refuse a field
+                continue
+            idx, name, mem, drv = f
             gpus.append({'index': int(idx), 'name': name, 'memory': mem, 'driver': drv})
     if not gpus:   # ROCm / XPU: the plugin's own device kinds, until their SMIs are parsed
         gpus = [{'index': int(k.split('_')[1]), 'name': v, 'memory': None, 'driver': None}

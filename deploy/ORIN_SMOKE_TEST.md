@@ -23,8 +23,8 @@ a multilabel decode. **Quote fps next to the device number, not mAP.**
 
 ## What is in the branch, and what is not
 
-Branch **`orin/aff30e28-remeasure`**. `git pull` it before anything else — the
-runner was rewritten for this run:
+On `main` (it was branch `orin/aff30e28-remeasure` for the 2026-09-09 run). Device
+setup, from a fresh install, is `ORIN.md` §2. The runner was rewritten for this run:
 
 - `deploy/orin_detect.py`: `TrtDetector` now reads the input's name / shape /
   dtype and the output size **off the engine**, page-locks both host buffers,
@@ -176,10 +176,10 @@ numpy arithmetic that the u8 graph now does on the GPU. Projected 28 → ~17 ms.
    the right model; 238 / 0.7109 means ctrl12 and the rest is void.
 2. The `--bench` split for both engines, verbatim.
 3. Both `trtexec` build times, fp16 fallbacks, whether u8 was accepted.
-4. Anything that needed changing to work, **as a diff, committed to the
-   branch** — the device-side fixes were lost twice before this runner was
+4. Anything that needed changing to work, **as a diff, committed and sent
+   back as patches (`ORIN.md` §6)** — the device-side fixes were lost twice before this runner was
    rewritten; the pinned buffer and the three-stage timing you see are the
-   reconstruction. If the rewrite is wrong, fix it in place and push.
+   reconstruction. If the rewrite is wrong, fix it in place and send the patch.
 5. Put 1–3 into the device table at the end of
    `runs/2026-09-09-orin-remeasure/README.md` and commit that too.
 

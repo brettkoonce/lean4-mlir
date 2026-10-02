@@ -53,6 +53,11 @@ case "$BACKEND" in
   *) echo "unknown backend $BACKEND" >&2; exit 2 ;;
 esac
 PLUGIN=${PJRT_PLUGIN:-$DEFAULT_PLUGIN}
+# Jetson: device and host share one DRAM, so a preallocated device pool starves the host.
+# The defaults here are deploy/ORIN.md's; an explicit setting wins.
+if [ -f /etc/nv_tegra_release ]; then
+  export LEAN_MLIR_PREALLOCATE=${LEAN_MLIR_PREALLOCATE:-0} LEAN_MLIR_MEM_FRACTION=${LEAN_MLIR_MEM_FRACTION:-0.15}
+fi
 
 if [ "$PLAN" = 1 ]; then
   echo "platform suite — backend $BACKEND, tiers 0..$TIER, plugin ${PLUGIN:-<unset: export PJRT_PLUGIN>}"

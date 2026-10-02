@@ -1,5 +1,8 @@
 # deploy/ — the VisDrone detector on a Jetson Orin
 
+Setting up an Orin, the PJRT plugin built for it, and the platform suite and verified
+trainers on its GPU are covered in `ORIN.md`. This page is the detector.
+
 Two routes, and the measurement that decided between them.
 
 > ## ⚠ IREE runs at ~0.5 fps on an Orin. Go through TensorRT.

@@ -2,7 +2,7 @@
 
 **Opened 2026-09-10, from the device session.** Supersedes the constraint that shaped
 `planning/orin_xla.md` §0-§1. Companion to `planning/orin_rerun.md` (the TensorRT detector).
-⛔ Nothing here is built yet: this is the brief for a fresh session.
+Built 2026-09-13 (§5 item 1); `deploy/ORIN.md` is the runbook now.
 
 ## §0 The correction, and it inverts the whole premise
 
@@ -136,7 +136,9 @@ one detector frame at a time.
 
 ## §5 Open, in order
 
-1. Build on `jax-v0.11.1` per §1; confirm Tegra redists in the log; run the ship gate.
+1. ✅ **Built 2026-09-13.** Tegra redists only (cuDNN 9.12.0.46, toolkit 12.6.2), ship gate
+   47 sm_87 cubins + 47 PTX; artifact, md5 and traps in `deploy/ORIN.md` §1. The paragraph below
+   is the recipe as briefed. Build on `jax-v0.11.1` per §1; confirm Tegra redists in the log; run the ship gate.
    `deploy/build_orin_pjrt_plugin.sh` does all of it from scratch on **any** x86 Linux box with
    docker: registers the qemu-aarch64 binfmt handler, pulls the JetPack image, installs clang-18
    and bazel 7.7.1 inside it, clones the source and launches the build detached. It takes a
