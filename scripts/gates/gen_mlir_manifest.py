@@ -259,12 +259,14 @@ def writers() -> dict[str, str]:
 
 def run_refs() -> dict[str, list[str]]:
     # TRACKED run logs only: an untracked local run must not change a committed file (it made the
-    # counts differ from machine to machine).
+    # counts differ from machine to machine). Not runs/platform/: the platform suite's logs are
+    # test invocations, not training runs, and counting them made every committed suite run
+    # stale this file.
     logs = subprocess.run(["git", "ls-files", "runs/"], cwd=ROOT, capture_output=True,
                           text=True).stdout.split()
     pat = re.compile(r"compiled verified_mlir/([a-z0-9_]*)\.mlir")
     refs: dict[str, list[str]] = {}
-    for rel in sorted(l for l in logs if l.endswith(".log")):
+    for rel in sorted(l for l in logs if l.endswith(".log") and not l.startswith("runs/platform/")):
         try:
             txt = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
         except Exception:
