@@ -1,0 +1,27 @@
+I1002 17:38:39.359315 3528846 service.cc:154] XLA service 0x5a03b8b50f20 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1002 17:38:39.359346 3528846 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:38:39.359350 3528846 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:38:39.359352 3528846 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:38:39.361983 3528846 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1002 17:38:39.362023 3528846 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1002 17:38:39.362074 3528846 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I1002 17:38:39.362092 3528846 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I1002 17:38:39.371061 3528846 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 3 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+E1002 17:38:40.813915 3528909 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1002 17:38:41.279374 3528909 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1002 17:38:41.729497 3528909 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1002 17:38:42.185362 3528909 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1002 17:38:45.683490 3528884 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 8 bytes spill stores, 8 bytes spill loads
+
+I1002 17:38:46.443185 3528905 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+
+I1002 17:38:50.229211 3528897 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_11', 28 bytes spill stores, 12 bytes spill loads
+
+I1002 17:38:50.237093 3528893 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_12', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/verified_mlir/resnet34_adambf16_train_step.mlir (@resnet34_adambf16_train_step, 405 outputs, 1 replica) in 11059 ms
+compile 11552 ms, first call 450 ms
+OK deep-conv/bf16: median 1.7e-01 (≤0.3), p90 8.8e-01 (≤3), max 1.0e+00 at output 13

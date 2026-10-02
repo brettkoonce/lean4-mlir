@@ -1,0 +1,17 @@
+I1002 17:36:13.511571 3505851 service.cc:154] XLA service 0x57eced304590 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1002 17:36:13.511665 3505851 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:36:13.511682 3505851 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:36:13.511706 3505851 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 17:36:13.513961 3505851 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1002 17:36:13.514003 3505851 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1002 17:36:13.514050 3505851 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I1002 17:36:13.514074 3505851 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I1002 17:36:13.522903 3505851 cuda_dnn.cc:440] Loaded cuDNN version 92302
+pjrt_api_header=0.90
+pjrt_api_plugin=0.114
+platform_name=cuda
+platform_version=cuda 12090
+devices=3
+device_0=NVIDIA GeForce RTX 4060 Ti
+device_1=NVIDIA GeForce RTX 4060 Ti
+device_2=NVIDIA GeForce RTX 4060 Ti
