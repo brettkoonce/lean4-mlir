@@ -88,9 +88,10 @@ if __name__ == "__main__":
     p.add_argument("--val-targets", type=int, default=24,
                    help="also pack the N shortest val chains in the targets format (valsub_*) for fold tuning")
     p.add_argument("--pair-only", action="store_true",
-                   help="write only the contact-head planes of feature set --features for the EUs (targets_pair_<fs>.bin, "
-                        "from <targets dir>/<EU>.npz esm_contacts) and the val subset (valsub_pair_<fs>.bin, sliced out of "
-                        "packed/pool_pair_<fs>.bin, casp16_embed.py --pair-out), u8 [L, L] per unit in the sets' order")
+                   help="write only the contact-head planes of feature set --features: the EUs' (targets_pair_<fs>.bin, "
+                        "from <targets dir>/<EU>.npz esm_contacts) and the val subset's (valsub_pair_<fs>.bin, sliced out of "
+                        "packed/pool_pair_<fs>.bin, casp16_embed.py --pair-out), u8 [L, L] per unit in the sets' order; "
+                        "--sets picks which (the EUs' planes can instead come from casp16_targets.py --pair-only)")
     p.add_argument("--orient-only", action="store_true",
                    help="write only pool_orient.bin: the ω, θ, φ planes (u8 [L, L, 3] per chain) over the pool's rows")
     p.add_argument("--sets", default="pool,targets,valsub",
@@ -104,6 +105,7 @@ if __name__ == "__main__":
     width, emb_dir, tdir = FEATURES[a.features]
     fs = "" if a.features == "esm" else a.features
     alt = bool(fs)
+    sfx = f"_{fs}" if fs else ""
     seqs = {}
     if a.features == "onehot":
         with open(ROOT / "train" / "entities.jsonl") as f:
@@ -134,15 +136,18 @@ if __name__ == "__main__":
     if a.pair_only:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
         from casp16_embed import contact_logit_u8
-        names = [e for e in (out / "targets_order.txt").read_text().split() if e]
-        with open(out / f"targets_pair{sfx}.bin", "wb") as f:
-            n = 0
-            for eu in names:
-                plane = contact_logit_u8(np.load(ROOT / tdir / f"{eu}.npz")["esm_contacts"])
-                f.write(plane.tobytes()); n += plane.size
-        lab_bytes = (out / "targets_lab.bin").stat().st_size
-        assert n == lab_bytes, (n, lab_bytes)
-        print(f"-> {out / f'targets_pair{sfx}.bin'}: {n / 1e6:.1f} MB over {len(names)} EUs")
+        if "targets" in sets:
+            names = [e for e in (out / "targets_order.txt").read_text().split() if e]
+            with open(out / f"targets_pair{sfx}.bin", "wb") as f:
+                n = 0
+                for eu in names:
+                    plane = contact_logit_u8(np.load(ROOT / tdir / f"{eu}.npz")["esm_contacts"])
+                    f.write(plane.tobytes()); n += plane.size
+            lab_bytes = (out / "targets_lab.bin").stat().st_size
+            assert n == lab_bytes, (n, lab_bytes)
+            print(f"-> {out / f'targets_pair{sfx}.bin'}: {n / 1e6:.1f} MB over {len(names)} EUs")
+        if a.val_name not in sets:
+            sys.exit(0)
         # the val subset's chains sit in the pool: slice their planes out at the pool's pair offsets
         if not seqs:
             with open(ROOT / "train" / "entities.jsonl") as fh:

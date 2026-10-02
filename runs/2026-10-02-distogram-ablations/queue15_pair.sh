@@ -4,6 +4,10 @@
 # 650M contact head in two shards on GPUs 2 and 3 (after queue14's four-shard embed, if that queue is
 # running), the EUs' and val subset's planes packed, then 650M × 64 ch × 30 ep with pair=1 on GPU 2 and
 # finish — against the 64-ch 650M baseline (0.838, fold 0.569 / 0.572).
+# 20:50: the first launch ran out of card memory at 6,530 chains — the contact head keeps ~5 copies of
+# the 33 × 20 attention maps (2.6 kB per pair per copy in fp32), so the batch is capped at 400k padded
+# pairs (~6 GB; the pool's longest chain is 512 residues, 262k pairs alone); fp32 as the EUs' planes
+# were (casp16_targets.py on the CPU); the .done lists resume it.
 set -uo pipefail
 cd /home/skoonce/lean/klawd_max_power/lean4-jax-mlir
 A=runs/2026-10-02-distogram-ablations
@@ -13,8 +17,8 @@ if [ -f $A/queue14.log ]; then
 fi
 echo "[$(date +%H:%M)] 650M contact-head planes -> pool_pair_esm650.bin, two shards on GPUs 2, 3"
 for k in 0 1; do
-  CUDA_VISIBLE_DEVICES=$((k + 2)) $P -u scripts/datasets/casp16_embed.py --model esm2_t33_650M_UR50D --out emb650 \
-    --pair-out data/casp16/packed/pool_pair_esm650.bin --device cuda --shard $k/2 --threads 4 --max-tokens 6144 --max-pairs 1500000 \
+  CUDA_VISIBLE_DEVICES=$((k + 2)) PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True $P -u scripts/datasets/casp16_embed.py --model esm2_t33_650M_UR50D --out emb650 \
+    --pair-out data/casp16/packed/pool_pair_esm650.bin --device cuda --shard $k/2 --threads 4 --max-tokens 6144 --max-pairs 400000 \
     > $A/pair650_$k.log 2>&1 &
 done
 wait

@@ -84,6 +84,12 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="targets", help="output dir under data/casp16 (targets_esm150 for the 150M model)")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--half", action="store_true", help="fp16 weights (casp16_embed.load_model)")
+    ap.add_argument("--pair-only", action="store_true",
+                    help="write only packed/targets_pair_<fs>.bin (fs from --out: targets_esm3b -> esm3b): the contact "
+                         "head's u8 logit planes for the EUs in targets_order.txt order, through this model on this "
+                         "device — the EU side of casp16_embed.py --pair-out; the <EU>.npz are left alone. The 1,693-"
+                         "residue target's attention maps (7.6 GB per copy at 650M fp32) need the CPU, as the npz pass "
+                         "did; casp16_pack.py --pair-only --sets targets reuses the npz's esm_contacts instead")
     ap.add_argument("--orient", action="store_true",
                     help="add the ω, θ, φ planes (casp16_labels.orient_labels) to every existing <out>/<EU>.npz and stop")
     a = ap.parse_args()
@@ -107,6 +113,28 @@ if __name__ == "__main__":
     out = ROOT / a.out; out.mkdir(exist_ok=True)
     model, alphabet = load_model(a.model, a.device, a.half)
     cache = {}
+    if a.pair_only:
+        from casp16_embed import contact_logit_u8
+        sfx = "" if a.out == "targets" else "_" + a.out.replace("targets_", "")
+        packed = ROOT / "packed"
+        order = [x for x in (packed / "targets_order.txt").read_text().split() if x]
+        by_eu = {e["eu"]: e for e in eus}
+        n = 0
+        with open(packed / f"targets_pair{sfx}.bin", "wb") as f:
+            for eu in order:
+                e = by_eu[eu]; t = e["target"]
+                if t not in seqs and re.sub(r"v\d+$", "v1", t) in seqs:
+                    t = re.sub(r"v\d+$", "v1", t)
+                if t not in cache:
+                    cache[t] = embed_batch(model, alphabet, [(t, seqs[t])], contacts=True)[0][1]
+                segs = [tuple(map(int, s.split("-"))) for s in e["segments"].split(",")]
+                idx = np.array([k for a_, b_ in segs for k in range(a_, b_ + 1)]) - 1
+                plane = contact_logit_u8(cache[t][np.ix_(idx, idx)])
+                f.write(plane.tobytes()); n += plane.size
+        lab_bytes = (packed / "targets_lab.bin").stat().st_size
+        assert n == lab_bytes, (n, lab_bytes)
+        print(f"-> {packed / f'targets_pair{sfx}.bin'}: {n / 1e6:.1f} MB over {len(order)} EUs ({a.model}{', fp16' if a.half else ''})")
+        sys.exit(0)
     print(f"{'EU':12s} {'L':>4s} {'obs':>5s} {'mismatch':>8s} {'ESM-2 head P@L/5':>17s}  difficulty")
     rows = []
     for e in eus:

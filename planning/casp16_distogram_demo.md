@@ -826,3 +826,15 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   file is 1.89 GB, the label pool's size); `casp16_pack.py --pair-only` writes the EUs' planes
   from the `esm_contacts` of their npz and the val subset's out of the pool file.
   `queue15_pair.sh` as §11 describes. Nothing launched; the work is staged, not committed.
+- 2026-10-02 20:29–20:55: Brett launched both queues (20:29); the work is origin/main 346be238
+  (rebased on the Orin commits). queue14: the 3B pool in 425–433 s per shard (27,690 chains,
+  33.1 GB), the EUs on the CPU alongside, pack, both arms training from 20:37 (64 ch: 1,521,090
+  params, loss 12.12 at step 0; 128 ch × crop 96: 5,409,602, 11.13). queue15's first plane pass
+  ran out of card memory at chain 6,531 on both shards: fair-esm's contact head keeps ~5 copies of
+  the 33 × 20 attention maps (2.6 kB per pair per copy in fp32), so the 1.5 M-pair batch cap was
+  ~4× too loose once chains passed ~130 residues. Cap 400 k (~6 GB; the pool's longest chain is
+  512 residues), still fp32 to match the EUs' planes; relaunched 20:41, the remaining 21,160 chains
+  in 11 min, 1.89 GB = the label pool's size. The packer's `--pair-only` then failed on a name
+  (`sfx` was `pack()`'s local) — fixed and run by hand (targets 11.6 MB over 84 EUs, valsub 0.5 MB
+  over 24 chains, each the size of its label file) while the `pair=1` arm, which needs only the
+  pool's planes, had already started on GPU 2 (20:52; 1,357,314 params).
