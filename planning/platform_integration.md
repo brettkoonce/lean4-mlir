@@ -1,6 +1,7 @@
 # Platform integration suite: "this GPU platform works with this build"
 
-Written 2026-10-01. Not started. Goal: one script, run by hand about monthly (and later from a
+Written 2026-10-01. Step 1 of §7 (tiers 0-1, manifest, `PLATFORMS.md`) landed 2026-10-02 with a
+CUDA baseline; tiers 2-3 are open. Goal: one script, run by hand about monthly (and later from a
 self-hosted runner with no changes), that answers whether a GPU platform (CUDA, ROCm, Intel XPU)
 runs a given build of this repo, records the answer in the repo, and separates driver/plugin
 breakage from breakage in our code. Near-term target: the Imagenette demos on an Intel Arc Pro
@@ -94,7 +95,12 @@ a device, which is expected.
 
 ## 7. Order of work
 
-1. Tier 0 + 1, the manifest, the `PLATFORMS.md` generator. CUDA baseline on this box.
+1. ✅ Tier 0 + 1, the manifest, the `PLATFORMS.md` generator. CUDA baseline on this box
+   (3× 4060 Ti, 14/14, 11 s). As built: tier 0 = `scripts/platform/probe.c` (bare plugin:
+   API version, client, devices) + `smoke.c` (one compile + execute through the shim); tier 1 =
+   the four `ffi/test_pjrt_*.c` against fixtures in `scripts/platform/fixtures/` plus
+   `verified_mlir/cifar8_adamdp_train_step.mlir` for the 2-replica compile. The plugin reports
+   PJRT API 0.114 against our vendored header's 0.90; same major, so reported, not failed.
 2. Tier 2: choose 10-15 artifacts covering the op families; `goldens.py` with `--check`;
    `tolerances.tsv`.
 3. Tier 3: wrap the existing gate scripts.

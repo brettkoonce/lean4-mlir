@@ -1,0 +1,2 @@
+# runs build their shim and test binaries here; the manifest records their hashes
+*/build/

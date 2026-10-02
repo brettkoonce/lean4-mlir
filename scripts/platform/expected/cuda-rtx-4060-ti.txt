@@ -1,0 +1,3 @@
+# Known failures on CUDA / RTX 4060 Ti, deqp-runner style: `<test> FAIL|FLAKE  # why`.
+# Empty = every test is expected to pass. A FAIL listed here reports as XFAIL; if it then
+# passes it reports as XPASS, and the line should go.
