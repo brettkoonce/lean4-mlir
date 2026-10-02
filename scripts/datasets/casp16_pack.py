@@ -24,7 +24,8 @@ NPOS = 9
 AA = "ACDEFGHIKLMNPQRSTVWY"
 # feature sets: name -> (per-residue width before the 9 position features, embedding dir, targets dir)
 FEATURES = {"esm": (480, "emb", "targets"), "esm150": (640, "emb150", "targets_esm150"),
-            "esm650": (1280, "emb650", "targets_esm650"), "onehot": (21, None, "targets")}
+            "esm650": (1280, "emb650", "targets_esm650"), "esm3b": (2560, "emb3b", "targets_esm3b"),
+            "onehot": (21, None, "targets")}
 
 
 def onehot(seq):
@@ -86,12 +87,16 @@ if __name__ == "__main__":
     p.add_argument("--val-len", type=int, nargs=2, default=[80, 200], metavar=("LO", "HI"), help="length window of the val subset")
     p.add_argument("--val-targets", type=int, default=24,
                    help="also pack the N shortest val chains in the targets format (valsub_*) for fold tuning")
+    p.add_argument("--pair-only", action="store_true",
+                   help="write only the contact-head planes of feature set --features for the EUs (targets_pair_<fs>.bin, "
+                        "from <targets dir>/<EU>.npz esm_contacts) and the val subset (valsub_pair_<fs>.bin, sliced out of "
+                        "packed/pool_pair_<fs>.bin, casp16_embed.py --pair-out), u8 [L, L] per unit in the sets' order")
     p.add_argument("--orient-only", action="store_true",
                    help="write only pool_orient.bin: the ω, θ, φ planes (u8 [L, L, 3] per chain) over the pool's rows")
     p.add_argument("--sets", default="pool,targets,valsub",
                    help="which sets to pack (the pool's feature file can instead come from casp16_embed.py --pool-out)")
     p.add_argument("--features", default="esm", choices=sorted(FEATURES),
-                   help="esm (ESM-2 35M, the default pools) | onehot | esm150: the alternatives write only "
+                   help="esm (ESM-2 35M, the default pools) | onehot | esm150 | esm650 | esm3b: the alternatives write only "
                         "<set>_<features>_feat.bin, over the same rows as the default pools")
     a = p.parse_args()
     out = Path(a.out); out.mkdir(exist_ok=True)
@@ -126,6 +131,37 @@ if __name__ == "__main__":
     pos = {r["id"]: k for k, r in enumerate(pool_rows)}
     lab_of = lambda r, L: np.load(ROOT / "labels" / f"{r['id']}.npz")["cls"]
     sets = set(a.sets.split(","))
+    if a.pair_only:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from casp16_embed import contact_logit_u8
+        names = [e for e in (out / "targets_order.txt").read_text().split() if e]
+        with open(out / f"targets_pair{sfx}.bin", "wb") as f:
+            n = 0
+            for eu in names:
+                plane = contact_logit_u8(np.load(ROOT / tdir / f"{eu}.npz")["esm_contacts"])
+                f.write(plane.tobytes()); n += plane.size
+        lab_bytes = (out / "targets_lab.bin").stat().st_size
+        assert n == lab_bytes, (n, lab_bytes)
+        print(f"-> {out / f'targets_pair{sfx}.bin'}: {n / 1e6:.1f} MB over {len(names)} EUs")
+        # the val subset's chains sit in the pool: slice their planes out at the pool's pair offsets
+        if not seqs:
+            with open(ROOT / "train" / "entities.jsonl") as fh:
+                for line in fh:
+                    e = json.loads(line)
+                    if e["seq"]:
+                        seqs[e["id"]] = e["seq"]
+        poffs, poff = {}, 0
+        for r in pool_rows:
+            poffs[r["id"]] = poff; poff += len(seqs[r["id"]]) ** 2
+        vids = [i for i in (out / f"{a.val_name}_order.txt").read_text().split() if i]
+        with open(out / f"pool_pair{sfx}.bin", "rb") as src, open(out / f"{a.val_name}_pair{sfx}.bin", "wb") as f:
+            n = 0
+            for i in vids:
+                L = len(seqs[i]); src.seek(poffs[i]); f.write(src.read(L * L)); n += L * L
+        lab_bytes = (out / f"{a.val_name}_lab.bin").stat().st_size
+        assert n == lab_bytes, (n, lab_bytes)
+        print(f"-> {out / f'{a.val_name}_pair{sfx}.bin'}: {n / 1e6:.1f} MB over {len(vids)} chains")
+        sys.exit(0)
     if a.orient_only:
         # the same rows in the same order as pool_lab.bin, three bytes per label byte, so a pair's
         # planes sit at three times its label offset (casp16_labels.py --orient wrote them)

@@ -307,8 +307,12 @@ inductive Layer where
       (its β is the bias — a pairTile bias had gradient exactly 0 in the FD check). Backward:
       the cotangent summed over `j` gives the `W` gradient by the dense rule, summed over `i`
       the `Wj` gradient; the features are host-side, so there is no input gradient. First
-      layer only. -/
-  | pairTile (seqLen inDim outDim : Nat)
+      layer only. With `pairIn = K > 0` the host appends `K` pair planes `[K, seqLen, seqLen]`
+      to the flat row (`[B, 2 · seqLen · inDim + K · seqLen²]`) — the language model's
+      contact-head logits, a template distogram — and they are concatenated onto the pair map
+      as its last `K` channels, `[B, outDim + K, seqLen, seqLen]`; constants of the step, so
+      the backward reads the cotangent's first `outDim` channels and drops the rest. -/
+  | pairTile (seqLen inDim outDim : Nat) (pairIn : Nat := 0)
 deriving Repr
 
 /-- A reference-path architecture: a name, the layer list, the input size, and the per-net

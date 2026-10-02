@@ -20,7 +20,7 @@ open Finset BigOperators
 namespace Proofs
 namespace PairTile
 
-variable {L D C : Nat}
+variable {L D C K : Nat}
 
 /-- The `(i, j, c)` behind a flat index of a row-major `[L, L, C]` pair map. -/
 @[reducible] def oidx (o : Fin (L * (L * C))) : Fin L × Fin L × Fin C :=
@@ -115,6 +115,88 @@ noncomputable def tileWjHasVJP (Xi Xj : Mat L D) (W : Mat D C) : HasVJP (tileWj 
     rw [sum_finProdFinEquiv_r]
     simp [Finset.mul_sum, ite_mul, Finset.sum_ite_eq']
     exact Finset.sum_comm
+
+/-! ## Host pair planes (`Layer.pairTile`'s `pairIn`)
+
+With `K` host pair planes the layer's output is the tile with the planes `P : Vec (L·(L·K))`
+appended — constants of the step, like the feature blocks. In the flat layout the plane block
+follows the tile block (`finSumFinEquiv`): the output is `tileW … v t` at `inl t` and `P q` at
+`inr q`. Each weight's Jacobian is the tile's own on the first block and zero on the second,
+so each VJP is the tile's backward on the cotangent's tile block (`tileBlock`) — the
+`stablehlo.slice` of the first `C` channels the pairTile backward emits when `pairIn > 0`. -/
+
+/-- The tile with `K` constant planes appended, as a function of the `i`-block weight. -/
+noncomputable def tileWPair (Xi Xj : Mat L D) (Wj : Mat D C) (P : Vec (L * (L * K)))
+    (v : Vec (D * C)) : Vec (L * (L * C) + L * (L * K)) :=
+  fun o => Sum.elim (tileW Xi Xj Wj v) P (finSumFinEquiv.symm o)
+
+/-- The same as a function of the `j`-block weight. -/
+noncomputable def tileWjPair (Xi Xj : Mat L D) (W : Mat D C) (P : Vec (L * (L * K)))
+    (v : Vec (D * C)) : Vec (L * (L * C) + L * (L * K)) :=
+  fun o => Sum.elim (tileWj Xi Xj W v) P (finSumFinEquiv.symm o)
+
+/-- The cotangent's tile block: its first `L·(L·C)` entries. -/
+def tileBlock (dy : Vec (L * (L * C) + L * (L * K))) : Vec (L * (L * C)) :=
+  fun t => dy (finSumFinEquiv (Sum.inl t))
+
+/-- The `i`-block weight's Jacobian with planes appended: the tile's on the tile block, zero on
+    the plane block. -/
+theorem pdiv_tileWPair (Xi Xj : Mat L D) (Wj : Mat D C) (P : Vec (L * (L * K))) (v : Vec (D * C))
+    (k : Fin (D * C)) (o : Fin (L * (L * C) + L * (L * K))) :
+    pdiv (tileWPair Xi Xj Wj P) v k o =
+      Sum.elim (fun t => pdiv (tileW Xi Xj Wj) v k t) (fun _ => (0 : ℝ)) (finSumFinEquiv.symm o) := by
+  rw [show tileWPair Xi Xj Wj P =
+      fun v => (fun o => Sum.elim (fun t => Mat.mul Xi (Mat.unflatten v) (oidx t).1 (oidx t).2.2)
+          (fun _ => (0 : ℝ)) (finSumFinEquiv.symm o)) +
+        (fun o => Sum.elim (fun t => Mat.mul Xj Wj (oidx t).2.1 (oidx t).2.2) P (finSumFinEquiv.symm o)) from by
+        funext v o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [tileWPair, tileW, h],
+    pdiv_of_affine _ _
+      (fun _ _ => by funext o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [Mat.mul, Mat.unflatten, mul_add, Finset.sum_add_distrib, h])
+      (fun _ _ => by funext o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [Mat.mul, Mat.unflatten, Finset.mul_sum, mul_left_comm, h])]
+  rcases h : finSumFinEquiv.symm o with t | q
+  · simp only [Sum.elim_inl, pdiv_tileW]; simp only [Mat.mul, Mat.unflatten, basisVec, ← Equiv.eq_symm_apply, Prod.ext_iff]; simp [ite_and, Finset.sum_ite_eq']
+  · simp
+
+/-- The `j`-block weight's Jacobian with planes appended. -/
+theorem pdiv_tileWjPair (Xi Xj : Mat L D) (W : Mat D C) (P : Vec (L * (L * K))) (v : Vec (D * C))
+    (k : Fin (D * C)) (o : Fin (L * (L * C) + L * (L * K))) :
+    pdiv (tileWjPair Xi Xj W P) v k o =
+      Sum.elim (fun t => pdiv (tileWj Xi Xj W) v k t) (fun _ => (0 : ℝ)) (finSumFinEquiv.symm o) := by
+  rw [show tileWjPair Xi Xj W P =
+      fun v => (fun o => Sum.elim (fun t => Mat.mul Xj (Mat.unflatten v) (oidx t).2.1 (oidx t).2.2)
+          (fun _ => (0 : ℝ)) (finSumFinEquiv.symm o)) +
+        (fun o => Sum.elim (fun t => Mat.mul Xi W (oidx t).1 (oidx t).2.2) P (finSumFinEquiv.symm o)) from by
+        funext v o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [tileWjPair, tileWj, h, add_comm],
+    pdiv_of_affine _ _
+      (fun _ _ => by funext o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [Mat.mul, Mat.unflatten, mul_add, Finset.sum_add_distrib, h])
+      (fun _ _ => by funext o; rcases h : finSumFinEquiv.symm o with t | q <;> simp [Mat.mul, Mat.unflatten, Finset.mul_sum, mul_left_comm, h])]
+  rcases h : finSumFinEquiv.symm o with t | q
+  · simp only [Sum.elim_inl, pdiv_tileWj]; simp only [Mat.mul, Mat.unflatten, basisVec, ← Equiv.eq_symm_apply, Prod.ext_iff]; simp [ite_and, Finset.sum_ite_eq']
+  · simp
+
+/-- **The `i`-block weight's VJP with planes appended** — proved. Backward: `gradW` on the
+    cotangent's tile block. -/
+noncomputable def tileWPairHasVJP (Xi Xj : Mat L D) (Wj : Mat D C) (P : Vec (L * (L * K))) :
+    HasVJP (tileWPair Xi Xj Wj P) where
+  backward := fun _v dy => gradW Xi (tileBlock dy)
+  correct := by
+    intro v dy k
+    rw [← finSumFinEquiv.sum_comp, Fintype.sum_sum_type]
+    simp only [pdiv_tileWPair, Equiv.symm_apply_apply, Sum.elim_inl, Sum.elim_inr, zero_mul,
+      Finset.sum_const_zero, add_zero]
+    exact (tileWHasVJP Xi Xj Wj).correct v (tileBlock dy) k
+
+/-- **The `j`-block weight's VJP with planes appended** — proved. Backward: `gradWj` on the
+    cotangent's tile block. -/
+noncomputable def tileWjPairHasVJP (Xi Xj : Mat L D) (W : Mat D C) (P : Vec (L * (L * K))) :
+    HasVJP (tileWjPair Xi Xj W P) where
+  backward := fun _v dy => gradWj Xj (tileBlock dy)
+  correct := by
+    intro v dy k
+    rw [← finSumFinEquiv.sum_comp, Fintype.sum_sum_type]
+    simp only [pdiv_tileWjPair, Equiv.symm_apply_apply, Sum.elim_inl, Sum.elim_inr, zero_mul,
+      Finset.sum_const_zero, add_zero]
+    exact (tileWjHasVJP Xi Xj W).correct v (tileBlock dy) k
 
 end PairTile
 end Proofs

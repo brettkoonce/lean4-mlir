@@ -83,6 +83,7 @@ if __name__ == "__main__":
     ap.add_argument("--model", default="esm2_t12_35M_UR50D")
     ap.add_argument("--out", default="targets", help="output dir under data/casp16 (targets_esm150 for the 150M model)")
     ap.add_argument("--device", default="cpu")
+    ap.add_argument("--half", action="store_true", help="fp16 weights (casp16_embed.load_model)")
     ap.add_argument("--orient", action="store_true",
                     help="add the ω, θ, φ planes (casp16_labels.orient_labels) to every existing <out>/<EU>.npz and stop")
     a = ap.parse_args()
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     seqs = read_targets()
     eus = list(csv.DictReader(open(ROOT / "eu_list.csv")))
     out = ROOT / a.out; out.mkdir(exist_ok=True)
-    model, alphabet = load_model(a.model, a.device)
+    model, alphabet = load_model(a.model, a.device, a.half)
     cache = {}
     print(f"{'EU':12s} {'L':>4s} {'obs':>5s} {'mismatch':>8s} {'ESM-2 head P@L/5':>17s}  difficulty")
     rows = []

@@ -4416,17 +4416,21 @@ static inline float casp_half_to_float(uint16_t h) {
 // its j rows, rows past the chain end zero (the pairTile input) — and y = i32 [B, crop, crop],
 // `unobs` where either residue is past the end. With `orient` (u8 [N, 3] = ω, θ, φ per pair at
 // three times the label offset) the label is packed mixed-radix behind the distance class,
-// y = d + nd·(ω + no·(θ + no·φ)), every head "unobserved" past the chain end.
+// y = d + nd·(ω + no·(θ + no·φ)), every head "unobserved" past the chain end. With `planes`
+// (u8 [N, npair] per pair at npair times the label offset; byte v ↦ (v − 128)/64, so a
+// contact-head logit stored as 128 + 16·logit comes back as logit/4) each x row carries the
+// crop's npair planes behind the feature blocks, [npair, crop, crop], zero past the chain end:
+// the `pairIn` channels of the pairTile.
 static lean_obj_res casp_gather_impl(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba, const uint8_t* orient,
                                      b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
                                      size_t B, size_t crop, size_t D, size_t unobs, size_t exact,
-                                     size_t nd, size_t no, size_t np_) {
+                                     size_t nd, size_t no, size_t np_, const uint8_t* planes, size_t npair) {
     const uint16_t* feat = (const uint16_t*)lean_sarray_cptr(feat_ba);
     const uint8_t* lab = lean_sarray_cptr(lab_ba);
     const int64_t* idx = (const int64_t*)lean_sarray_cptr(idx_ba);
     const uint32_t* pos = (const uint32_t*)lean_sarray_cptr(pos_ba);
     size_t n_chains = lean_sarray_size(idx_ba) / 32;
-    size_t xf = 2 * crop * D, yn = crop * crop;
+    size_t xf = 2 * crop * D + (planes ? npair * crop * crop : 0), yn = crop * crop;
     int32_t y_unobs = orient
         ? (int32_t)((nd - 1) + nd * ((no - 1) + no * ((no - 1) + no * (np_ - 1))))
         : (int32_t)unobs;
@@ -4454,6 +4458,17 @@ static lean_obj_res casp_gather_impl(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_
                 } else memset(row, 0, D * 4);
             }
         }
+        if (planes) {
+            float* pb = xb + 2 * crop * D;
+            for (size_t k = 0; k < npair; k++)
+                for (size_t a = 0; a < crop; a++)
+                    for (size_t kk = 0; kk < crop; kk++) {
+                        size_t i = i0 + a, j = j0 + kk;
+                        pb[(k * crop + a) * crop + kk] = ((int64_t)i < L && (int64_t)j < L)
+                            ? ((float)planes[((size_t)loff + i * (size_t)L + j) * npair + k] - 128.0f) * (1.0f / 64.0f)
+                            : 0.0f;
+                    }
+        }
         int32_t* yb = y + b * yn;
         for (size_t a = 0; a < crop; a++)
             for (size_t k = 0; k < crop; k++) {
@@ -4478,7 +4493,7 @@ static lean_obj_res casp_gather_impl(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_
 LEAN_EXPORT lean_obj_res lean_casp_gather(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
                                           b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
                                           size_t B, size_t crop, size_t D, size_t unobs, size_t exact) {
-    return casp_gather_impl(feat_ba, lab_ba, NULL, idx_ba, pos_ba, B, crop, D, unobs, exact, 0, 0, 0);
+    return casp_gather_impl(feat_ba, lab_ba, NULL, idx_ba, pos_ba, B, crop, D, unobs, exact, 0, 0, 0, NULL, 0);
 }
 
 LEAN_EXPORT lean_obj_res lean_casp_gather_orient(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
@@ -4488,7 +4503,23 @@ LEAN_EXPORT lean_obj_res lean_casp_gather_orient(b_lean_obj_arg feat_ba, b_lean_
     if (lean_sarray_size(orient_ba) != 3 * lean_sarray_size(lab_ba)) return lean_io_result_mk_error(
         lean_mk_io_user_error(lean_mk_string("casp_gather_orient: orientation planes are not 3 bytes per label")));
     return casp_gather_impl(feat_ba, lab_ba, lean_sarray_cptr(orient_ba), idx_ba, pos_ba, B, crop, D, unobs, exact,
-                            nd, no, np_);
+                            nd, no, np_, NULL, 0);
+}
+
+// The gather with `npair` host pair planes appended to each row, and the orientation planes
+// when `orient_ba` is non-empty (nd, no, np_ as above; ignored when it is empty).
+LEAN_EXPORT lean_obj_res lean_casp_gather_pair(b_lean_obj_arg feat_ba, b_lean_obj_arg lab_ba,
+                                               b_lean_obj_arg orient_ba, b_lean_obj_arg pair_ba,
+                                               b_lean_obj_arg idx_ba, b_lean_obj_arg pos_ba,
+                                               size_t B, size_t crop, size_t D, size_t unobs, size_t exact,
+                                               size_t nd, size_t no, size_t np_, size_t npair) {
+    size_t n_or = lean_sarray_size(orient_ba);
+    if (n_or != 0 && n_or != 3 * lean_sarray_size(lab_ba)) return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("casp_gather_pair: orientation planes are not 3 bytes per label")));
+    if (npair == 0 || lean_sarray_size(pair_ba) != npair * lean_sarray_size(lab_ba)) return lean_io_result_mk_error(
+        lean_mk_io_user_error(lean_mk_string("casp_gather_pair: pair planes are not npair bytes per label")));
+    return casp_gather_impl(feat_ba, lab_ba, n_or ? lean_sarray_cptr(orient_ba) : NULL, idx_ba, pos_ba,
+                            B, crop, D, unobs, exact, nd, no, np_, lean_sarray_cptr(pair_ba), npair);
 }
 
 // Val metrics over a batch of diagonal crops. logits f32 [B, NC, crop, crop], y i32 [B, crop,

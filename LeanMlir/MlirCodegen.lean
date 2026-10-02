@@ -120,7 +120,7 @@ def inputFlatDim (spec : NetSpec) : Nat :=
   | some ic, _ => ic * spec.imageH * spec.imageW
   | none, some (.dense fanIn _ _) => fanIn
   | none, some (.tokenPositionEmbed v t _ ids gather _) => if ids || gather then t else v * t
-  | none, some (.pairTile sl dIn _) => 2 * sl * dIn
+  | none, some (.pairTile sl dIn _ p) => 2 * sl * dIn + p * sl * sl
   | none, _ => spec.imageH * spec.imageW
 
 /-- Render tensor type: `tensor<128x1x28x28xf32>`. -/
@@ -1189,18 +1189,24 @@ private def emitDense3D (tag : String) (xSSA : String) (shape : List Nat)
     (residue block `i`, then block `j`) reshaped to `[B, 2L, D]` and split; the `i` block times
     `W`, the `j` block times `Wj` (no bias: the convBn after it has β); the two `[B, L, C]`
     results broadcast against each other and summed into `[B, L, L, C]`, then transposed to
-    NCHW `[B, C, L, L]`. Returns `(code, outSSA, uSSA, vSSA)`, the two block inputs kept for the
-    backward's weight gradients. -/
-private def emitPairTileForward (tag xSSA : String) (b l d c : Nat) (wi wj : String)
+    NCHW `[B, C, L, L]`. With `p > 0` pair planes the host row is `[2·L·D | p·L·L]`: the
+    feature blocks are its head, and the tail, reshaped to `[B, p, L, L]`, is concatenated
+    onto the map as its last `p` channels. Returns `(code, outSSA, uSSA, vSSA)`, the two block
+    inputs kept for the backward's weight gradients. -/
+private def emitPairTileForward (tag xSSA : String) (b l d c : Nat) (wi wj : String) (p : Nat := 0)
     : String × String × String × String := Id.run do
   let flat := [b, 2 * l * d]
+  let row := [b, 2 * l * d + p * l * l]
   let x3 := [b, 2 * l, d]
   let blk := [b, l, d]
   let blc := [b, l, c]
   let bllc := [b, l, l, c]
   let bcll := [b, c, l, l]
   let mut s := ""
-  s := s ++ s!"    %pt_x{tag} = stablehlo.reshape {xSSA} : ({tensorTy flat}) -> {tensorTy x3}\n"
+  let xf := if p == 0 then xSSA else s!"%pt_xf{tag}"
+  if p > 0 then
+    s := s ++ s!"    %pt_xf{tag} = \"stablehlo.slice\"({xSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0>, limit_indices = array<i64: {b}, {2 * l * d}>, strides = array<i64: 1, 1>" ++ "}" ++ s!" : ({tensorTy row}) -> {tensorTy flat}\n"
+  s := s ++ s!"    %pt_x{tag} = stablehlo.reshape {xf} : ({tensorTy flat}) -> {tensorTy x3}\n"
   s := s ++ s!"    %pt_u{tag} = \"stablehlo.slice\"(%pt_x{tag}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0>, limit_indices = array<i64: {b}, {l}, {d}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy x3}) -> {tensorTy blk}\n"
   s := s ++ s!"    %pt_v{tag} = \"stablehlo.slice\"(%pt_x{tag}) " ++ "{" ++ s!" start_indices = array<i64: 0, {l}, 0>, limit_indices = array<i64: {b}, {2 * l}, {d}>, strides = array<i64: 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy x3}) -> {tensorTy blk}\n"
   s := s ++ s!"    %pt_um{tag} = stablehlo.dot_general %pt_u{tag}, {wi},\n"
@@ -1215,7 +1221,13 @@ private def emitPairTileForward (tag xSSA : String) (b l d c : Nat) (wi wj : Str
   s := s ++ s!"    %pt_bv{tag} = stablehlo.broadcast_in_dim %pt_vm{tag}, dims = [0, 2, 3] : ({tensorTy blc}) -> {tensorTy bllc}\n"
   s := s ++ s!"    %pt_s{tag} = stablehlo.add %pt_bu{tag}, %pt_bv{tag} : {tensorTy bllc}\n"
   s := s ++ s!"    %pt_out{tag} = stablehlo.transpose %pt_s{tag}, dims = [0, 3, 1, 2] : ({tensorTy bllc}) -> {tensorTy bcll}\n"
-  return (s, s!"%pt_out{tag}", s!"%pt_u{tag}", s!"%pt_v{tag}")
+  if p == 0 then
+    return (s, s!"%pt_out{tag}", s!"%pt_u{tag}", s!"%pt_v{tag}")
+  -- the pair planes: the row's tail, as [B, p, L, L], behind the map's own channels
+  s := s ++ s!"    %pt_pr{tag} = \"stablehlo.slice\"({xSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, {2 * l * d}>, limit_indices = array<i64: {b}, {2 * l * d + p * l * l}>, strides = array<i64: 1, 1>" ++ "}" ++ s!" : ({tensorTy row}) -> {tensorTy [b, p * l * l]}\n"
+  s := s ++ s!"    %pt_pm{tag} = stablehlo.reshape %pt_pr{tag} : ({tensorTy [b, p * l * l]}) -> {tensorTy [b, p, l, l]}\n"
+  s := s ++ s!"    %pt_cat{tag} = stablehlo.concatenate %pt_out{tag}, %pt_pm{tag}, dim = 1 : ({tensorTy bcll}, {tensorTy [b, p, l, l]}) -> {tensorTy [b, c + p, l, l]}\n"
+  return (s, s!"%pt_cat{tag}", s!"%pt_u{tag}", s!"%pt_v{tag}")
 
 /-- Emit the FlashAttention forward SDPA core: `softmax(Q·Kᵀ/√dh + mask)·V`
     via a tiled online-softmax `stablehlo.while` over ⌈n/bk⌉ key blocks, so the
@@ -2581,15 +2593,16 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
           pidx := pidx + 1
         curShape := btd
       | _ => code := code ++ "    // tokenPositionEmbed error: input not [B, _]\n"
-    | .pairTile sl dIn oc =>
-      -- Pair tile: the flat two-block input [B, 2·L·D] → [B, C, L, L] (`emitPairTileForward`).
+    | .pairTile sl dIn oc npl =>
+      -- Pair tile: the flat two-block input [B, 2·L·D] → [B, C, L, L] (`emitPairTileForward`),
+      -- plus the npl host pair planes as channels.
       match curShape with
       | [b, _] =>
         let (snip, outSSA, _, _) := emitPairTileForward s!"e{pos}" curSSA b sl dIn oc
-          s!"%W{pidx}" s!"%Wj{pidx}"
+          s!"%W{pidx}" s!"%Wj{pidx}" npl
         code := code ++ snip
         curSSA := outSSA
-        curShape := [b, oc, sl, sl]
+        curShape := [b, oc + npl, sl, sl]
         pidx := pidx + 1
       | _ => code := code ++ "    // pairTile error: input not [B, 2·L·D]\n"
     | .lmHead _d v t =>
@@ -2768,7 +2781,7 @@ private def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat 
       match curShape with
       | [b, _] => curShape := [b, t, d]
       | _ => pure ()
-    | .pairTile sl _ oc => curShape := [batchSize, oc, sl, sl]
+    | .pairTile sl _ oc npl => curShape := [batchSize, oc + npl, sl, sl]
     | .lmHead _ v t =>
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
@@ -2949,7 +2962,7 @@ def _root_.NetSpec.bnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .timeCondAdd _ _ =>
       -- 1 slot (W, b). No BN.
       pidx := pidx + 1
-    | .pairTile _ _ _ =>
+    | .pairTile _ _ _ _ =>
       -- one group (W, Wj). No BN.
       pidx := pidx + 1
     -- spatialFlatten / spatialUnflatten: no params, no pidx advance.
@@ -6660,16 +6673,17 @@ private def emitTrainForward (spec : NetSpec) (B : Nat)
         curShape := bchw
       | _ => code := code ++ "    // spatialUnflatten train: input not [B, _, _]\n"
 
-    | .pairTile sl dIn oc =>
-      -- Pair tile (first layer): [B, 2·L·D] host features → [B, C, L, L]. The record keeps the
-      -- two block inputs for the backward's weight gradients; there is no input gradient.
+    | .pairTile sl dIn oc npl =>
+      -- Pair tile (first layer): [B, 2·L·D (+ npl·L·L)] host features → [B, C + npl, L, L]. The
+      -- record keeps the two block inputs for the backward's weight gradients; there is no
+      -- input gradient.
       match curShape with
       | [b, _] =>
         let inSSA := curSSA
         let (snip, outSSA, uSSA, vSSA) := emitPairTileForward s!"t{pos}" curSSA b sl dIn oc
-          s!"%W{pidx}" s!"%Wj{pidx}"
+          s!"%W{pidx}" s!"%Wj{pidx}" npl
         code := code ++ snip
-        let bcll := [b, oc, sl, sl]
+        let bcll := [b, oc + npl, sl, sl]
         records := records.push
           { layer := l, pidx := some pidx, pos, inputSSA := inSSA, preActSSA := "",
             outputSSA := outSSA, inShape := curShape, outShape := bcll,
@@ -7937,10 +7951,11 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         | _ => pure ()
       else pure ()
 
-    | .pairTile sl dIn oc =>
+    | .pairTile sl dIn oc np =>
       -- d_u = Σ_j d_out and d_v = Σ_i d_out (the adjoints of the two broadcasts), then the
       -- dense weight gradients of each block. The features are host-side: no d_input, and
-      -- nothing upstream consumes gradSSA, so it is left as is.
+      -- nothing upstream consumes gradSSA, so it is left as is. With np pair planes the
+      -- cotangent's last np channels belong to host constants and are dropped.
       if r.isPairTile then
         match r.inShape with
         | [b, _] =>
@@ -7951,7 +7966,10 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           let bcll := [b, oc, sl, sl]
           let tag := s!"ptb{r.pos}"
           code := code ++ s!"    // ─── pairTile backward: d_u = Σ_j d_out, d_v = Σ_i d_out; dense weight grads; no d_input ───\n"
-          code := code ++ s!"    %{tag}_t = stablehlo.transpose {gradSSA}, dims = [0, 2, 3, 1] : ({tensorTy bcll}) -> {tensorTy bllc}\n"
+          let gSSA := if np == 0 then gradSSA else s!"%{tag}_g"
+          if np > 0 then
+            code := code ++ s!"    %{tag}_g = \"stablehlo.slice\"({gradSSA}) " ++ "{" ++ s!" start_indices = array<i64: 0, 0, 0, 0>, limit_indices = array<i64: {b}, {oc}, {sl}, {sl}>, strides = array<i64: 1, 1, 1, 1>" ++ "}" ++ s!" : ({tensorTy [b, oc + np, sl, sl]}) -> {tensorTy bcll}\n"
+          code := code ++ s!"    %{tag}_t = stablehlo.transpose {gSSA}, dims = [0, 2, 3, 1] : ({tensorTy bcll}) -> {tensorTy bllc}\n"
           code := code ++ s!"    %{tag}_du = stablehlo.reduce(%{tag}_t init: %zf) applies stablehlo.add across dimensions = [2]\n"
           code := code ++ s!"          : ({tensorTy bllc}, tensor<f32>) -> {tensorTy blc}\n"
           code := code ++ s!"    %{tag}_dv = stablehlo.reduce(%{tag}_t init: %zf) applies stablehlo.add across dimensions = [1]\n"

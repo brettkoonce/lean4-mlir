@@ -435,6 +435,23 @@ top of crop 96. The field TM percentile is 0.02 at every arm: the fold's distanc
 the LM's. The night is committed (49f6993b, on origin/main); the last row, both figures and this
 section are the commit after it. All four cards idle since 18:09.
 
+**2026-10-02 20:40 — two queues ahead of the book run** (Brett 20:00: use the cards this
+afternoon, not the 20-hour run out of the gate). Both written, neither launched (the session's
+launcher was blocked; each is one line):
+
+    setsid -f nohup runs/2026-10-02-distogram-ablations/queue14_esm3b.sh > runs/2026-10-02-distogram-ablations/queue14.log 2>&1 < /dev/null
+    setsid -f nohup runs/2026-10-02-distogram-ablations/queue15_pair.sh  > runs/2026-10-02-distogram-ablations/queue15.log 2>&1 < /dev/null
+
+`queue14_esm3b.sh` is §11a item 3: the ESM-2 3B pool in fp16 as four shards (one per card,
+~15 min), the EUs on the CPU meanwhile, pack, then 3B × 64 ch × 30 ep on GPU 0 (the ladder's
+next rung after 0.585 / 0.735 / 0.838, ~75 min + finish) and 3B × 128 ch × crop 96 × 30 ep on
+GPU 1 (the best 650M config, ~6.5 h + finish). `queue15_pair.sh` is item 1, tier A: the 650M
+contact head's logit plane for the pool in two shards on GPUs 2–3 (it waits for queue14's embed
+phase if that log exists), the EUs' and val subset's planes packed, then 650M × 64 ch × 30 ep
+with `pair=1` on GPU 2 and finish — against the 64-ch baseline 0.838 / 0.569 / 0.572. The book
+run (below) waits for both: its config may change (3B, the pair plane). §12, 20:40, has what
+was built.
+
 **Next: the 650M book run** — 128 ch × crop 96 × 100 epochs with the orientation heads, the one
 config every stacking result points at. Written, not launched (Brett 18:40: "point the handoff at
 the 20 hour run and we'll come back to it"); it is one command on an idle card:
@@ -505,12 +522,12 @@ per unit, not a better optimizer (the energy-gap test, §10a, says the same from
 
 | # | experiment | what it needs | cost | expected |
 |---|---|---|---|---|
-| 1 | **ESM-2 attention maps as pair-input channels.** ESM's own contact head is a logistic regression on its (symmetrized, APC-corrected) attention maps; our ResNet sees only the per-residue embeddings. Tier A: the contact head's logit map, 1–2 channels. Tier B: the top-K heads by the contact head's weight, K = 16, u8. | one new op — a host pair input concatenated onto the pair map after `pairTile` (`Layer.pairConcat`); no input gradient, so the VJP is the identity on the net's own channels (a short proof item); the packer writes a pair pool: Σ L² = 1.80 G pairs → tier A 3.6 GB f16, tier B 29 GB u8 | 1 day codegen + 2 h packing; a 650M run is 70 min | the largest known lever for single-sequence contact prediction; attacks the 0.49 recall directly: +0.03–0.05 on the units, more on the fold |
+| 1 | **ESM-2 attention maps as pair-input channels.** ESM's own contact head is a logistic regression on its (symmetrized, APC-corrected) attention maps; our ResNet sees only the per-residue embeddings. Tier A: the contact head's logit map, 1–2 channels. Tier B: the top-K heads by the contact head's weight, K = 16, u8. | one new op — a host pair input concatenated onto the pair map after `pairTile` (`Layer.pairConcat`); no input gradient, so the VJP is the identity on the net's own channels (a short proof item); the packer writes a pair pool: Σ L² = 1.80 G pairs → tier A 3.6 GB f16, tier B 29 GB u8 | DONE 10-02 20:30 — op (`Layer.pairTile`'s `pairIn`, not a new layer), gather, packer, proof item (§12); the run is queue15 | the largest known lever for single-sequence contact prediction; attacks the 0.49 recall directly: +0.03–0.05 on the units, more on the fold |
 | 2 | **Template distograms as masked pair channels.** MMseqs2 (already in the pipeline for the purge) run the other way: for every chain and every EU, the best pre-cutoff PDB hit's Cβ distogram, aligned, one-hot into ~8 coarse bins + a "no template / unaligned" mask. | the same pair-input op as #1; a day of data engineering; the EU side must respect the CASP cutoff (templates released before 2024-05-01) | 1 day + a run | this is why "easy" is easy for the field; the four blind units should fold; easy TM 0.66 → ~0.8; nothing on hard |
-| 3 | **ESM-2 3B** (`esm2_t36_3B_UR50D`): 36 layers, 40 heads, embedding dim 2560, 2.8 B parameters. Checkpoint ~11 GB in fp32, ~5.6 GB in fp16 → fits a 16 GB card in fp16 for sequences ≤ 1,024 (`casp16_embed.py` runs the LM in fp32 today; it needs a `--half` flag). Pool: 6.12 M residues × 2,569 × 2 B = 31.4 GB (disk now 142 GB free). Time: the 650M pool took 1,644 s on one card; 3B is ~4.3× the FLOPs per token → ~2 h on one card, ~30 min across four (per-chain `.done` resume makes sharding by chain list trivial). ESM-2 15B (48 layers, dim 5120, 30 GB fp16) does not fit a card without 8-bit or sharding — out of scope. | `--half`, the model name in `MODELS`, `fs=esm3b dim=2569` | 2 h embed + 70 min/run | the ladder went +0.15 then +0.10 per step (35M → 150M → 650M); the next step should buy +0.04–0.06 on the units |
+| 3 | **ESM-2 3B** (`esm2_t36_3B_UR50D`): 36 layers, 40 heads, embedding dim 2560, 2.8 B parameters. Checkpoint ~11 GB in fp32, ~5.6 GB in fp16 → fits a 16 GB card in fp16 for sequences ≤ 1,024 (`casp16_embed.py` runs the LM in fp32 today; it needs a `--half` flag). Pool: 6.12 M residues × 2,569 × 2 B = 31.4 GB (disk now 142 GB free). Time: the 650M pool took 1,644 s on one card; 3B is ~4.3× the FLOPs per token → ~2 h on one card, ~30 min across four (per-chain `.done` resume makes sharding by chain list trivial). ESM-2 15B (48 layers, dim 5120, 30 GB fp16) does not fit a card without 8-bit or sharding — out of scope. | `--half`, the model name in `MODELS`, `fs=esm3b dim=2569` | scripted 10-02 (queue14: `--half --shard k/4`, four cards, then two arms) | the ladder went +0.15 then +0.10 per step (35M → 150M → 650M); the next step should buy +0.04–0.06 on the units |
 | 4 | **Recycling.** A second pass that sees the first pass's distogram (softmax probabilities, or P(< 8 Å) + expected distance) as pair channels. | the pair-input op from #1; at train time the first pass runs under `stop-gradient` (the AF2 recipe); predict does two passes | half a day once #1 exists | AF2 found 3 recycles worth several lDDT points; here the honest expectation is +0.01–0.02 on the fold |
 | 5 | **Receptive field.** Dilated residual units (trRosetta: 1, 2, 4, 8 cycling) or whole-map training at batch 1 for the long units. | dilation on `convBn` (check the emitter), or `crop=0` meaning whole map | half a day + a run | crop 96 was +0.012; the long easy units are the target |
-| 6 | **The 650M book run**: 128 ch × crop 96 × 100 ep with `orient=1` — queue11 answered the stacking question (0.858, fold 0.600 / 0.598 at 30 ep; the two levers add), queue10 that the ω/φ fold stacks on crop 96. | nothing new | ~20 h on one card (64 ch: 8 h) | the headline row: ~0.865 and a fold near 0.62 / 0.62 if the 64-ch schedule-length gain carries |
+| 6 | **The 650M book run**: 128 ch × crop 96 × 100 ep with `orient=1` — queue11 answered the stacking question (0.858, fold 0.600 / 0.598 at 30 ep; the two levers add), queue10 that the ω/φ fold stacks on crop 96. | nothing new; waits for queue14 / queue15 (the config may change) | ~20 h on one card (64 ch: 8 h) | the headline row: ~0.865 and a fold near 0.62 / 0.62 if the 64-ch schedule-length gain carries |
 | 7 | **The fold, last.** A full-backbone build from distances + ω/θ/φ (trRosetta style: rigid residue frames, spline potentials, both hands by energy), scored with the all-atom-ish lDDT the field is scored on. | a torch rigid-body model; the orientation heads already exist | 2 days | after #1–#3 the distogram stops being the ceiling and this becomes it |
 
 Cheap and low: test-time stride 16 / multi-crop averaging (+0.005 at best); ensembles (closed: nothing);
@@ -770,3 +787,42 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   all-units row (checked on the crop 96 × orient arm: the strip moves 0.794 / 0.798 / 0.592 →
   0.798 / 0.802 / 0.602 Cβ-lDDT). `casp16_ablation_figure.py` lists the book run as its top row and
   skips it until the directory exists. Committed; nothing launched.
+- 2026-10-02 20:40 (Brett 20:00: "let you bang on it some more this afternoon, use the GPUs;
+  maybe not the 20 h run out of the gate; anything we can code in the meantime?"): plan day 1,
+  both halves. (a) ESM-2 3B (§11a item 3). `casp16_embed.py` gained `--half` (fp16 weights,
+  5.7 GB on a card; checked against fp32 on the CPU on two pool chains: embedding cosine
+  1.0000, contact map max |Δ| 0.024, the same 624 / 602 pairs over 0.5), `--shard k/n` (one
+  process per card over the one pool file, created without O_TRUNC and only grown, per-shard
+  `.done.k`), the 3B entry (36 layers, 2560 → `dim=2569`); the packer's `esm3b` feature set;
+  the checkpoint (5.7 GB + its contact head) is in the torch hub cache. `queue14_esm3b.sh` as
+  §11 describes. (b) The pair-input op (§11a item 1), as an extension of the pair tile rather
+  than a new layer: `Layer.pairTile … (pairIn := K)`. The host row becomes `[2·L·D | K·L·L]`;
+  the emitter slices the feature blocks off its head, reshapes the tail to `[B, K, L, L]` and
+  concatenates it behind the tile's channels (`[B, C + K, L, L]`; the convBn after it takes
+  `C + K`); the backward slices the cotangent's first `C` channels and is otherwise the tile's
+  (no input gradient; `pairIn = 0` emits byte-identical graphs). `lean_casp_gather_pair`: the
+  planes ride behind the feature blocks of every row, u8 `[L, L, K]` per chain at `K` times its
+  label offset, byte v ↦ (v − 128)/64, zero past the chain end; demo knob `pair=K` (train, val,
+  predict; the prefix gets `-pairK`). Checked exactly rather than by finite differences: a
+  pass-through net (the tile and a 1×1 head whose weight picks the plane channels) returns the
+  planes to 0.0 over 256 values, and the pair net at zero planes and zero plane weights is the
+  plain net — the same loss and the same first Adam moment on all 698 shared coordinates
+  (max |Δ| 0.000000). Three train steps at full width (650M features, crop 64, batch 32,
+  `pair=1`: 1,357,314 params = the 64-ch net + 64) ran on GPU 3. Proof item,
+  `Proofs/Foundation/PairTile.lean`: `tileWPair` / `tileWjPair` (the tile with `K` constant
+  planes appended, `finSumFinEquiv` layout), `pdiv_tileWPair` / `pdiv_tileWjPair` (the tile's
+  Jacobian on the tile block, zero on the plane block) and `tileWPairHasVJP` /
+  `tileWjPairHasVJP` (backward = `gradW` / `gradWj` on the cotangent's tile block,
+  `tileBlock`), each closed by the tile's own witness. (c) The smoke's finite-difference check,
+  on the way: at seeds other than 7 the unchanged plain and orientation variants failed the
+  same way the pair variant first did (a 2–5 % miss on the stem weights, body and head at
+  1e-5) — the loss is ReLU on batch-statistics BN and the stem's FD straddles kinks. The check
+  now takes the central difference at ε/2, adds |FD(ε) − FD(ε/2)| (the FD's own uncertainty)
+  to the tolerance, and reports a coordinate whose two FDs disagree by more than the tolerance
+  as a kink instead of comparing it (at most half may be); `seed=` and `eps=` are arguments.
+  (d) Tier A data: `casp16_embed.py --pair-out` writes the model's contact-head logit planes
+  for the pool (byte = clip(128 + 16·logit, 0, 255); `--max-pairs` caps B·L² for the attention
+  maps the head keeps; a three-chain probe reproduced a CPU re-encode byte for byte, and the
+  file is 1.89 GB, the label pool's size); `casp16_pack.py --pair-only` writes the EUs' planes
+  from the `esm_contacts` of their npz and the val subset's out of the pool file.
+  `queue15_pair.sh` as §11 describes. Nothing launched; the work is staged, not committed.
