@@ -1,0 +1,30 @@
+# Tier 2 tolerances: backend<TAB>dtype<TAB>family-or-artifact<TAB>median<TAB>p90. Last match wins; * = any.
+# Gated on the median and 90th percentile of the per-output errors (tier2.py compare): each
+# output's error is rms(device − golden) over its reference rms, floored. Train steps compare
+# out − in. Uncorrelated garbage scores ~1.4 on both.
+#
+# Set 2026-10-02 at ~3× what CUDA (4060 Ti, TF32 on) measured against XLA:CPU. The deep
+# batch-BN nets at random init are chaotic in bf16: XLA:CPU against ITSELF, inputs scaled by
+# 1 + 1e-6, already spreads p90 0.66 (MobileNetV2) / 0.59 (ResNet-34). Their p90 is
+# therefore not gated (3), only the median. A new backend starts from these rows.
+#
+# Checked by breaking artifacts on purpose (one conv kernel's spatial dims swapped, a ReLU
+# threshold moved to 0.01): every f32 row fails by 3-28×. The two deep bf16 rows are THIN —
+# a swapped 3×3 kernel moved ResNet-34 bf16's median 0.16 → 0.43 and a swapped depthwise
+# kernel moved MobileNetV2 bf16's 0.17 → 0.29, so their bounds sit 1.5-1.8× over the clean
+# run. A sub-noise change (GELU's 0.044715 → 0.046 in one block) passes everywhere.
+*	*	*	1	1
+*	f32	dot	3e-3	3e-2
+*	f32	conv-pool	3e-2	7e-2
+*	bf16	conv-pool	6e-2	1e-1
+*	f32	batchnorm	5e-3	0.2
+*	bf16	batchnorm	1e-2	1
+*	f32	depthwise	6e-2	0.9
+*	bf16	depthwise	0.25	3
+*	f32	swish-se	1.5e-2	2e-2
+*	bf16	swish-se	0.2	0.4
+*	f32	attention	3e-3	5e-3
+*	bf16	attention	1e-2	5e-2
+*	f32	deep-conv	0.15	0.8
+*	bf16	deep-conv	0.3	3
+*	f32	layernorm-dw7	3e-3	5e-3

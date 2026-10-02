@@ -4,8 +4,7 @@
 #
 #   scripts/platform/check.sh [--tier 0|1] [--backend cuda|rocm|xpu] [--plan] [--out DIR]
 #
-#   --tier N     run tiers 0..N (default 1). Tiers 2 (ops vs goldens) and 3 (training)
-#                are not written yet.
+#   --tier N     run tiers 0..N (default 2). Tier 3 (training) is not written yet.
 #   --backend    default: whichever vendor SMI is on PATH.
 #   --plan       print what would run and the expected wall time; launch nothing.
 #   --out DIR    default runs/platform/<date>-<host>-<backend>[-k].
@@ -25,7 +24,7 @@ set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$ROOT"
 
-TIER=1; BACKEND=""; PLAN=0; OUT=""
+TIER=2; BACKEND=""; PLAN=0; OUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --tier) TIER=$2; shift 2 ;;
@@ -36,7 +35,7 @@ while [ $# -gt 0 ]; do
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-case "$TIER" in 0|1) ;; *) echo "--tier $TIER: only tiers 0 and 1 exist so far" >&2; exit 2 ;; esac
+case "$TIER" in 0|1|2) ;; *) echo "--tier $TIER: only tiers 0-2 exist so far" >&2; exit 2 ;; esac
 
 if [ -z "$BACKEND" ]; then
   if command -v nvidia-smi >/dev/null; then BACKEND=cuda
@@ -62,6 +61,8 @@ if [ "$PLAN" = 1 ]; then
   echo "  tier 0  smi, probe (plugin, API version, devices), smoke     ~15 s"
   [ "$TIER" -ge 1 ] && \
   echo "  tier 1  guards, compile-dp, allreduce, dp (last 3 need 2 devices)  ~1 min"
+  [ "$TIER" -ge 2 ] && \
+  echo "  tier 2  $(grep -c '^[a-z]' scripts/platform/tier2_artifacts.tsv) verified_mlir artifacts vs XLA:CPU goldens, one device   ~3 min"
   exit 0
 fi
 
@@ -93,7 +94,7 @@ record() {  # record <test> <tier> <rc> <detail>   (rc: 0 pass, 77 skip, else fa
     if [ "$exp" = FAIL ] || [ "$exp" = FLAKE ]; then st=XFAIL; else st=FAIL; NFAIL=$((NFAIL+1)); fi
   fi
   printf '%s\t%s\t%s\t%s\n' "$t" "$tier" "$st" "$detail" >> "$RESULTS"
-  printf '  %-14s %-5s %s\n' "$t" "$st" "$detail"
+  printf '  %-16s %-5s %s\n' "$t" "$st" "$detail"
 }
 # run <test> <tier> <ok-regex> <cmd...>: pass = exit 0 AND the known-answer line printed.
 run() {
@@ -130,6 +131,8 @@ if [ "$TIER" -ge 1 ]; then
   b allreduce     -O2 -Iffi ffi/test_pjrt_allreduce.c -ldl -o "$BUILD/test_pjrt_allreduce"
   b compile_check -O2 -Iffi ffi/test_pjrt_compile_check.c -ldl -o "$BUILD/test_pjrt_compile_check"
 fi
+[ "$TIER" -ge 2 ] && \
+  b tier2_run   -O2 -Iffi scripts/platform/tier2_run.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/tier2_run"
 [ "$NFAIL" -gt 0 ] && { echo "build failed — see $LOGS/build.log"; finish; }
 
 echo "tier 0 — platform:"
@@ -161,4 +164,13 @@ else
   run dp 1 'DP INVOKE CORRECT' env PJRT_PLUGIN="$PLUGIN" PJRT_REPLICAS=2 \
       "$BUILD/test_pjrt_dp" scripts/platform/fixtures/dp_shard.mlir
 fi
+[ "$TIER" -lt 2 ] && finish
+
+echo "tier 2 — ops vs XLA:CPU goldens:"
+PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python   # numpy only; no JAX needed here
+while IFS=$'\t' read -r name family dtype; do
+  case "$name" in ''|'#'*) continue ;; esac
+  run "$name" 2 '^OK ' env PJRT_PLUGIN="$PLUGIN" "$PY" scripts/platform/tier2.py run "$name" \
+      --runner "$BUILD/tier2_run" --work "$BUILD/tier2" --backend "$BACKEND"
+done < scripts/platform/tier2_artifacts.tsv
 finish

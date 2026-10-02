@@ -1,0 +1,17 @@
+# Tier 2 artifacts: one verified_mlir/ graph per op family, f32 and bf16 where both exist.
+# name<TAB>family<TAB>dtype   (family and dtype key scripts/platform/tolerances.tsv)
+linear_train_step	dot	f32
+mlp_train_step	dot	f32
+cifar8_train_step	conv-pool	f32
+cifar8_bf16_train_step	conv-pool	bf16
+cifar8_bn_adam_train_step	batchnorm	f32
+cifar8wb_bn_bf16adam_train_step	batchnorm	bf16
+mobilenetv2_adam_train_step	depthwise	f32
+mobilenetv2in_adam64bf16_train_step	depthwise	bf16
+efficientnet_adam_train_step	swish-se	f32
+efficientnet_adambf16_train_step	swish-se	bf16
+vit_adam_train_step	attention	f32
+vitin_adamwxclipdropbf16_train_step	attention	bf16
+resnet34_adam_train_step	deep-conv	f32
+resnet34_adambf16_train_step	deep-conv	bf16
+convnext_adam_train_step	layernorm-dw7	f32

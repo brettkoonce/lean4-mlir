@@ -1,7 +1,7 @@
 # Platform integration suite: "this GPU platform works with this build"
 
-Written 2026-10-01. Step 1 of §7 (tiers 0-1, manifest, `PLATFORMS.md`) landed 2026-10-02 with a
-CUDA baseline; tiers 2-3 are open. Goal: one script, run by hand about monthly (and later from a
+Written 2026-10-01. Steps 1-2 of §7 (tiers 0-2, manifest, `PLATFORMS.md`) landed 2026-10-02 with a
+CUDA baseline; tier 3 is open. Goal: one script, run by hand about monthly (and later from a
 self-hosted runner with no changes), that answers whether a GPU platform (CUDA, ROCm, Intel XPU)
 runs a given build of this repo, records the answer in the repo, and separates driver/plugin
 breakage from breakage in our code. Near-term target: the Imagenette demos on an Intel Arc Pro
@@ -101,8 +101,14 @@ a device, which is expected.
    the four `ffi/test_pjrt_*.c` against fixtures in `scripts/platform/fixtures/` plus
    `verified_mlir/cifar8_adamdp_train_step.mlir` for the 2-replica compile. The plugin reports
    PJRT API 0.114 against our vendored header's 0.90; same major, so reported, not failed.
-2. Tier 2: choose 10-15 artifacts covering the op families; `goldens.py` with `--check`;
-   `tolerances.tsv`.
+2. ✅ Tier 2: 15 artifacts, seven op families, f32 and bf16 (`scripts/platform/tier2_artifacts.tsv`);
+   `tier2.py goldens [--check]` on XLA:CPU, `tier2_run.c` through the shim on the device,
+   `tolerances.tsv`. ~3 min on one 4060 Ti. What it took to make the comparison mean something,
+   all in `tier2.py`'s docstrings: train steps compare `out − in`; the Adam state is m = 0, v = 1,
+   lr = 1 (random small v makes the update sign-like and amplifies noise); per-output errors are
+   floored (analytically-zero gradients) and gated on median + p90, not max (deep batch-BN nets
+   at random init are chaotic — XLA:CPU against itself at 1 + 1e-6 spreads p90 0.6 in bf16).
+   Fault injection is recorded in `tolerances.tsv`'s header; the two deep bf16 rows are thin.
 3. Tier 3: wrap the existing gate scripts.
 4. Intel pre-purchase check (section 6), then the B60 shim items 1-2 behind tier 0.
 5. ROCm tiers 0-1 when the MI300 box exists.
@@ -110,6 +116,6 @@ a device, which is expected.
 
 ## 8. Open
 
-- Which artifacts make up tier 2's op-family set.
-- Where goldens live (repo size: small fixed inputs, outputs as `.npy` or hashed digests).
+- Tier 2's deep bf16 rows catch a single swapped kernel by only 1.5-1.8×. A better-conditioned
+  probe (trained weights rather than random init, or the forward alone for bf16) would widen it.
 - Whether tier 3's Imagenette smoke uses a cached subset so the suite has one dataset dependency.
