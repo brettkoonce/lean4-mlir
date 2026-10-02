@@ -1,1 +1,8 @@
 [11:39] 650M × 128 ch × crop 96 × 30 ep on GPU 2
+[17:43] trained: 49320 steps in 21806 s -> .lake/build/distogram_r16x128_esm650_train_full_e30-esm650-crop96_params.bin
+medium: Cβ-lDDT mean 0.597 median 0.594  TM mean 0.566 median 0.535  (44 EUs, mirror better on 4)
+hard  : Cβ-lDDT mean 0.447 median 0.365  TM mean 0.462 median 0.423  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.600 median 0.621  TM mean 0.598 median 0.626  (78 EUs, mirror better on 7)
+-> .lake/build/distogram_r16x128_esm650_train_full_e30-esm650-crop96_targets/fold_scores.csv
+[18:09] done .lake/build/distogram_r16x128_esm650_train_full_e30-esm650-crop96_targets
+[18:09] queue11 done

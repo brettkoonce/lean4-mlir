@@ -11,7 +11,7 @@ https://claude.ai/artifact/TFoTN9GQvcEHe5eBkwYBvK, panel g already real). This d
 plan after the feasibility pass against the repo, with the four changes of §1 and the scoring
 recipe of §5 validated.
 
-Status 2026-10-02 12:30: the whole pipeline runs and the ablation table (§10) is filled
+Status 2026-10-02 18:40: the whole pipeline runs and the ablation table (§10) is filled
 (§11 is the handoff: what is running, where, and what to do when it finishes; §10a the night's
 findings). Data, `pairTile` + its VJP lemma, trainer, fold, scoring all landed (commits bc09c154
 … 77254aaa); the night's additions (orientation heads, the fold's angular restraints, the
@@ -25,9 +25,11 @@ AF3-era groups is not a contact-precision gap. The orientation heads leave the d
 unchanged and their ω/φ restraints lift the fold by +0.02 on 73 of 78 EUs and halve wrong-hand
 picks. At 650M each of width (128 ch: 0.848, fold 0.590 / 0.590), crop 96 (0.850, 0.583 / 0.589) and
 100 epochs (0.847, 0.587 / 0.588) is worth +0.01 on the EUs and +0.02 on the fold, against a seed
-gap of 0.002 / 0.001; ensembles of these heads add nothing (the LM bounds the map). The book run
-as launched (128 ch × 100 ep, 35M: 0.647, fold 0.466 / 0.443) finished at 09:27 and is the wrong
-feature set — the 650M book-run choice is Brett's (§11). Draft figure:
+gap of 0.002 / 0.001, and width and crop add: 128 ch × crop 96 is **0.858** (0.866 / 0.885 / 0.674)
+with the plain fold at **0.600 / 0.598**, the best single arm on every column; ensembles of these
+heads add nothing (the LM bounds the map). The book run as launched (128 ch × 100 ep, 35M: 0.647,
+fold 0.466 / 0.443) finished at 09:27 and is the wrong feature set — the 650M book run is 128 ch ×
+crop 96 × 100 ep with `orient=1`, ~20 h on one card, for Brett to schedule (§11, §11a item 6). Figure:
 `scripts/demos/casp16_figure.py` → https://claude.ai/artifact/CyZfnLRWnjkpByMqdHyzTo.
 
 ## 0. The one-paragraph version
@@ -331,7 +333,7 @@ fold Cβ-lDDT / TM over the folded EUs · GPU-hours. Rows and their state:
 | 650M, seed 2 | the error bar at the top LM | done 12:07: val 51.3 %, EUs 0.836 (0.849 / 0.863 / 0.632), fold 0.570 / 0.571 — seed noise 0.002 on the EUs, 0.001 on the fold; every lever above is 5–20× it |
 | ensembles (`casp16_ensemble.py`) | do differently-trained heads on one LM add information | 650M plain + orient: EUs 0.842 (members 0.838 / 0.838), fold 0.569 / 0.575 — nothing; ω/φ fold 0.579 / 0.592 vs 0.574 / 0.591. Five members (seeds 1–2, 128 ch, crop 96, 100 ep): EUs 0.852 vs the best member's 0.850, fold running GPU 3 (queue12.sh). The heads agree on what they miss: the LM bounds the map |
 | crop 96 × 650M × orientation heads | do the crop gain and the ω/φ fold gain stack | trained 13:41 (2.6 h): EUs 0.850 (= the plain crop-96 arm, the distance head unchanged a third time); plain fold 0.576 / 0.586 (plain crop 96: 0.583 / 0.589, within the arms' spread); **ω/φ fold 0.585 / 0.606** (TM median 0.644), wrong hands 2 — the best fold of the table: the angular restraints add +0.009 / +0.020 on top of crop 96, so the two gains stack |
-| 650M × 128 ch × crop 96 | do width and crop stack (the config a 650M book run would use) | running GPU 2 from 11:39 (queue11.sh), 724 s/epoch → ~17:45 + finish |
+| 650M × 128 ch × crop 96 | do width and crop stack (the config a 650M book run would use) | done 18:09 (6.1 h train): EUs **0.858** (0.866 / 0.885 / 0.674), fold **0.600 / 0.598** (TM median 0.626), 7 wrong hands — +0.020 EUs, +0.031 / +0.026 fold over the 64-ch arm: the two levers add (128 ch alone +0.010 / +0.021 / +0.018, crop 96 alone +0.011 / +0.014 / +0.017); the best single arm on every column, and its plain fold beats the crop 96 × orient ω/φ fold on lDDT (0.600 vs 0.585) while trailing it on TM (0.598 vs 0.606) — the book run takes both |
 | 650M, purged list (`list=train`) | templates at the top LM | done 14:11: EUs 0.841 (vs 0.838 with the 82 template chains), fold 0.569 / 0.567 (vs 0.569 / 0.572), 7 wrong hands — templates in the training set are worth nothing at 650M, as at 35M (0.599 vs 0.585) |
 | fold: steps × lr on 200–500-residue val chains | the fold's ceiling on the chains it fails | done (650M arm, restarts 0, GPU): long chains 0.629 / 0.708 at 1500 steps, 0.629 / 0.709 at 4000; lr 0.2 / 0.5 / 1.0 → 0.627 / 0.629 / 0.630; short chains 0.617 / 0.593, 4000 steps 0.617 / 0.588, lr 0.2 0.621 / 0.603 — the optimizer is converged; and the long val chains fold BETTER than the short ones, so the EU failures are not a length effect |
 | fold: no reference state / confidence weighting | the fold's levers | reference state done (0.415 → 0.518); confidence weighting closed by the energy-gap diagnostic (§10a): under every re-weighting the true trace scores worse than our fold, so no weighting of this distogram reaches it |
@@ -423,53 +425,56 @@ folding Cα and Cβ per residue, 6 coordinates, with the Cα–Cβ bond fixed at
 on CASP13 FM targets; that is the gap between our fold (0.46 TM on T1267s1-D1) and the
 contact precision (0.67) suggests is available.
 
-## 11. Handoff — the state at 2026-10-02 12:30 and what is still running
+## 11. Handoff — 2026-10-02 18:40: every arm landed; next, the 20-hour book run
 
-Everything the night and morning produced is in §10 (table), §10a (findings) and §12 (log); the
-one-line version: **the LM is the lever** (35M 0.585 → 150M 0.735 → 650M 0.838 on the 84 EUs at
-64 ch × 30 ep), and at 650M each of width, crop 96 and 100 epochs is worth +0.01 on the EUs and
-+0.02 on the fold, against a seed gap of 0.002 / 0.001. The field TM percentile is 0.02 at every
-arm: the fold's distance to the field is the LM's.
+Everything the night and the day produced is in §10 (table), §10a (findings), §11a (the week
+plan) and §12 (log); the one-line version: **the LM is the lever** (35M 0.585 → 150M 0.735 → 650M
+0.838 on the 84 EUs at 64 ch × 30 ep), at 650M width and crop 96 add (128 ch × crop 96: 0.858,
+fold 0.600 / 0.598, the best single arm on every column), and the ω/φ restraints add +0.02 TM on
+top of crop 96. The field TM percentile is 0.02 at every arm: the fold's distance to the field is
+the LM's. The night is committed (49f6993b, on origin/main); the last row, both figures and this
+section are the commit after it. All four cards idle since 18:09.
 
-Running (every job finishes itself — predict, assemble, fold, score — and `casp16_table.py
---field` reads the result from disk; logs in `runs/2026-10-02-distogram-ablations/`):
+**Next: the 650M book run** — 128 ch × crop 96 × 100 epochs with the orientation heads, the one
+config every stacking result points at. Written, not launched (Brett 18:40: "point the handoff at
+the 20 hour run and we'll come back to it"); it is one command on an idle card:
 
-| GPU | job | queue / log | lands |
-|---|---|---|---|
-| 0 | crop 96 × 650M × orientation heads, 64 ch × 30 ep, then plain + ω/φ folds | `queue10.sh` → `queue10.log`, `finish_esm650_crop96_orient.log` | ~14:30 |
-| 1 | idle since 12:23 | | |
-| 2 | 650M × 128 ch × crop 96, batch 16, 30 ep | `queue11.sh` → `queue11.log`, `finish_esm650x128_crop96.log` | ~18:30 |
-| 3 | five-member 650M ensemble fold, then 650M on the purged list (`list=train`) | `queue12.sh` → `queue12.log`, `finish_esm650_purged.log` | ~12:45, then ~14:15 |
+    setsid -f nohup runs/2026-10-02-distogram-ablations/queue13_bookrun.sh 1 \
+      > runs/2026-10-02-distogram-ablations/queue13.log 2>&1 < /dev/null
 
-Kill anything with `pkill -f "[d]istogram-casp"` or `pkill -f "[q]ueue1"` (bracket the pattern,
-and mention nothing else with the target's name in the same command — see §12, 08:05).
+The argument is the card. `queue13_bookrun.sh` is queue11 with `epochs=100 orient=1` and queue10's
+tail: it trains into `runs/<launch date>-distogram-r16x128-e100-esm650-crop96-orient/train.log`
+(one line per epoch, ~727 s each over 1,644 steps → ~20 h; the 35M book run's 100 epochs ran
+without a hitch), then `finish_run.sh` (predict → assemble → plain fold → score, ~45 min, into
+`finish_bookrun.log`), then the ω/φ fold and `casp16_fold_score.py --suffix orient` (~40 min), and
+ends with `queue13 done` in `queue13.log`. Disk: 140 GB free; the run keeps a few GB (params +
+predictions) and has an 8 GB transient. Kill: `pkill -f "[d]istogram-casp"` (bracket the pattern,
+and mention nothing else with the target's name in the same command — §12, 08:05).
 
-Decisions for Brett:
-1. **The book run.** The 35M × 128 ch × 100 ep run finished (0.647 / fold 0.466 / 0.443) but is the
-   wrong LM. On the EUs the best single arms are 650M crop 96 (0.850), 128 ch (0.848) and 100 ep
-   (0.847); on the fold 128 ch (0.590 / 0.590), 100 ep (0.587 / 0.588), crop 96 (0.583 / 0.589).
-   queue11 (128 ch × crop 96) says by ~18:30 whether width and crop stack; queue10 whether the ω/φ
-   fold gain stacks on crop 96. The natural book run is 650M × 128 ch × crop 96 × 100 ep (+ `orient=1`
-   if queue10 says yes): 724 s/epoch → 20 h on one card, so it is an overnight-and-a-day job, or
-   65 ch × crop 96 × 100 ep at 8 h.
-2. **Featured EUs (§9).** T1226-D1 has precision 0.00–0.08 at every LM; its fold at the field median
-   is the prior's doing. T1235-D1 is our weakest easy EU (0.71 / TM 0.38). Candidates at 650M:
-   T1271s6-D1 (easy, 93 aa, P 1.00, TM 0.82 vs field 0.95), T1295-D3 (medium, 156 aa, P 1.00, TM 0.88
-   vs 0.94) or T1267s1-D1 (medium, 157 aa, P 0.97, TM 0.73 vs 0.78), T1228v1-D3 (hard, 169 aa,
-   P 0.91, TM 0.64 vs 0.75).
-3. **Commit.** Nothing from the night is committed: `LossKind.perPixelMultiCE` (Types / Train /
-   MlirCodegen), `lean_casp_gather_orient` + `nd` in ffi/f32_helpers.c, `orient=1` in the demo,
-   `--orient` in labels / targets / pack, `--pool-out` in embed, fold.py (batched copies, ω/φ
-   restraints), `casp16_fold_score.py`, `casp16_table.py`, `casp16_ensemble.py`, the queue and
-   finish scripts, this plan. `lake exe distogram-casp smoke` is green both ways (plain: eval ≡
-   train 5.210230; orient: 14 finite-difference coordinates).
-4. **Disk.** 11 GB free. Deleted as regenerable: `emb/*.npy`, `emb150/*.npy`, `packed/
-   pool_esm150_feat.bin` (8 min on a GPU + `casp16_pack.py --sets pool`), every arm's `.acc.bin`
-   accumulators (`finish_run.sh` drops them after assembly). The 16 `distogram_*_targets` dirs
-   hold 1.3–2.5 GB of `.pred.npz` each; any arm's regenerates in two minutes from its kept params.
+What it should land, from the 30-epoch arm (0.858, fold 0.600 / 0.598) and the 64-ch
+schedule-length row (+0.009 / +0.018 / +0.016): ~0.865 on the EUs, a plain fold near 0.62 / 0.61,
+the ω/φ fold near 0.62 / 0.63. When it lands:
+1. `casp16_table.py --field` reads the row (`r16x128_esm650_orient_train_full_e100-esm650-crop96-orient`)
+   with the `(orient)` fold column beside the plain one; §10 gets the row, the status paragraph and
+   §0 the number.
+2. `casp16_ablation_figure.py` already lists the run as its top row ("the book run, ω/φ fold") and
+   skips it until the directory exists; re-run it.
+3. The figure, on the ω/φ fold (`--fold orient` puts `<EU>.orient.fold.pdb` and
+   `fold_scores_orient.csv` on panel (c)):
+   `casp16_figure.py .lake/build/distogram_r16x128_esm650_orient_train_full_e100-esm650-crop96-orient_targets
+   demos/figures/casp16_distogram.png --metric tm --all-units --fold orient --eus T1271s6-D1
+   T1295-D3 T1228v1-D3 --panel-a T1271s6-D1 --label "ours (650M, 128 ch, crop 96, 100 ep)"`.
+4. Then the section (§6, §9): the book run as the headline row, the §10 table as the ablation and
+   `casp16_ablation.png` beside it.
 
-Then: the section + figure + wiring (§6, §9), with the 650M arm as the headline and the §10 table
-as the ablation; `casp16_figure.py <…_targets> demos/figures/casp16_distogram.png --label "ours"`.
+Open for Brett besides the launch:
+- **Featured EUs (§9).** The committed figure carries the proposed trio T1271s6-D1 / T1295-D3 /
+  T1228v1-D3 (0.85 / 0.91 / 0.65 TM against field medians 0.93 / 0.93 / 0.73) with every folded
+  unit in the fourth row. The old trio (T1235-D1 / T1267s1-D1 / T1226-D1) is one `--eus` away;
+  T1226-D1's precision is 0.00–0.08 at every LM, so its dot at the field median was the prior's.
+- **The week plan (§11a)**, in order: attention maps as pair input, templates at inference, ESM-2
+  3B, recycling, dilations — each about a day plus a 70-minute run, all of them on the three cards
+  the book run leaves free.
 
 ## 11a. Where to go from here — the week plan (Brett, 2026-10-02 14:20: "throw it in the planning doc")
 
@@ -505,7 +510,7 @@ per unit, not a better optimizer (the energy-gap test, §10a, says the same from
 | 3 | **ESM-2 3B** (`esm2_t36_3B_UR50D`): 36 layers, 40 heads, embedding dim 2560, 2.8 B parameters. Checkpoint ~11 GB in fp32, ~5.6 GB in fp16 → fits a 16 GB card in fp16 for sequences ≤ 1,024 (`casp16_embed.py` runs the LM in fp32 today; it needs a `--half` flag). Pool: 6.12 M residues × 2,569 × 2 B = 31.4 GB (disk now 142 GB free). Time: the 650M pool took 1,644 s on one card; 3B is ~4.3× the FLOPs per token → ~2 h on one card, ~30 min across four (per-chain `.done` resume makes sharding by chain list trivial). ESM-2 15B (48 layers, dim 5120, 30 GB fp16) does not fit a card without 8-bit or sharding — out of scope. | `--half`, the model name in `MODELS`, `fs=esm3b dim=2569` | 2 h embed + 70 min/run | the ladder went +0.15 then +0.10 per step (35M → 150M → 650M); the next step should buy +0.04–0.06 on the units |
 | 4 | **Recycling.** A second pass that sees the first pass's distogram (softmax probabilities, or P(< 8 Å) + expected distance) as pair channels. | the pair-input op from #1; at train time the first pass runs under `stop-gradient` (the AF2 recipe); predict does two passes | half a day once #1 exists | AF2 found 3 recycles worth several lDDT points; here the honest expectation is +0.01–0.02 on the fold |
 | 5 | **Receptive field.** Dilated residual units (trRosetta: 1, 2, 4, 8 cycling) or whole-map training at batch 1 for the long units. | dilation on `convBn` (check the emitter), or `crop=0` meaning whole map | half a day + a run | crop 96 was +0.012; the long easy units are the target |
-| 6 | **The 650M book run**: 128 ch × crop 96 × 100 ep with `orient=1`, after queue11 says whether width and crop stack. | nothing new | ~20 h on one card (64 ch: 8 h) | the headline row |
+| 6 | **The 650M book run**: 128 ch × crop 96 × 100 ep with `orient=1` — queue11 answered the stacking question (0.858, fold 0.600 / 0.598 at 30 ep; the two levers add), queue10 that the ω/φ fold stacks on crop 96. | nothing new | ~20 h on one card (64 ch: 8 h) | the headline row: ~0.865 and a fold near 0.62 / 0.62 if the 64-ch schedule-length gain carries |
 | 7 | **The fold, last.** A full-backbone build from distances + ω/θ/φ (trRosetta style: rigid residue frames, spline potentials, both hands by energy), scored with the all-atom-ish lDDT the field is scored on. | a torch rigid-body model; the orientation heads already exist | 2 days | after #1–#3 the distogram stops being the ceiling and this becomes it |
 
 Cheap and low: test-time stride 16 / multi-crop averaging (+0.005 at best); ensembles (closed: nothing);
@@ -746,3 +751,22 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   35M −0.253 / −0.138 / −0.177; one-hot −0.586 / −0.250 / −0.344. The 128 ch × crop 96 row joins
   when queue11 lands. Brett: the trio reads as cherry-picked without the all-units row; the book
   wants "in the neighbourhood, a stepping stone", not SOTA. Plate rebuilt with both.
+- 2026-10-02 18:20: queue11 landed (650M × 128 ch × crop 96 × 30 ep, 49,320 steps in 6.1 h on
+  GPU 2): EUs 0.858 (0.866 / 0.885 / 0.674), fold Cβ-lDDT / TM 0.600 / 0.598 over 78 EUs (medians
+  0.621 / 0.626), 7 wrong hands. Width and crop add: +0.020 / +0.031 / +0.026 over the 64-ch arm
+  against +0.010 / +0.021 / +0.018 (128 ch) and +0.011 / +0.014 / +0.017 (crop 96); 95 % intervals
+  [+0.010, +0.030] / [+0.027, +0.036] / [+0.018, +0.036]. The best single arm on every column; the
+  field's TM percentile is still 0.02 (easy 0.671 vs 0.945, medium 0.566 vs 0.883, hard 0.462 vs
+  0.656). Both figures regenerated on this arm: `casp16_distogram.png` (the trio 0.85 / 0.91 / 0.65
+  TM against field medians 0.93 / 0.93 / 0.73; all 78 units median 0.63 vs 0.94) and
+  `casp16_ablation.png` (the row on top). `casp16_figure.py`: the legend is kept out of
+  `tight_layout` (`set_in_layout(False)`) and centred a little left of (c), because the longer
+  "ours" label pushed it off the page. All four cards idle; the 650M book run (§11a item 6) is
+  Brett's to schedule.
+- 2026-10-02 18:40: Brett: "point the handoff at the 20 hour run and we'll come back to it, commit".
+  §11 rewritten around the book run: `queue13_bookrun.sh <gpu>` (queue11 with `epochs=100
+  orient=1` plus queue10's ω/φ tail; ~22 h end to end), the expected numbers, the four steps when
+  it lands. `casp16_figure.py --fold orient` puts the ω/φ-restrained fold on panel (c) and the
+  all-units row (checked on the crop 96 × orient arm: the strip moves 0.794 / 0.798 / 0.592 →
+  0.798 / 0.802 / 0.602 Cβ-lDDT). `casp16_ablation_figure.py` lists the book run as its top row and
+  skips it until the directory exists. Committed; nothing launched.

@@ -18,6 +18,7 @@ BLUE, INK, MUTED, PAPER = "#2a78d6", "#1f1e1b", "#6b6963", "#fbfbf8"
 BASE = "r16x64_esm650_train_full_e30-esm650"
 # label, prediction dir (under .lake/build/distogram_<…>_targets), fold file
 ROWS = [
+    ("+ 128 ch + crop 96 + orientation heads, 100 ep: the book run, ω/φ fold", "r16x128_esm650_orient_train_full_e100-esm650-crop96-orient", "fold_scores_orient.csv"),
     ("+ 128 ch + crop 96 (both levers)",               "r16x128_esm650_train_full_e30-esm650-crop96", "fold_scores.csv"),
     ("+ crop 96 + orientation heads, ω/φ fold",        "r16x64_esm650_orient_train_full_e30-esm650-crop96-orient", "fold_scores_orient.csv"),
     ("+ 128 channels",                                 "r16x128_esm650_train_full_e30-esm650", "fold_scores.csv"),

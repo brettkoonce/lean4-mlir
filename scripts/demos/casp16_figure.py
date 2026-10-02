@@ -43,6 +43,7 @@ if __name__ == "__main__":
     ap.add_argument("--label", default="ours")
     ap.add_argument("--metric", choices=["lddt", "tm"], default="lddt",
                     help="panel (c)'s axis: Cβ-lDDT (CASP's headline, mirror-blind) or TM-score (sees chirality; the fair column against the official table)")
+    ap.add_argument("--fold", default="", help="which fold panel (c) shows: '' = <EU>.fold.pdb (plain); 'orient' = <EU>.orient.fold.pdb, the ω/φ-restrained fold, with fold_scores_orient.csv for the all-units row")
     ap.add_argument("--all-units", action="store_true",
                     help="add a bottom row to (c) with every folded unit: ours (blue) beside each unit's field median from the official score table (grey)")
     a = ap.parse_args()
@@ -101,7 +102,7 @@ if __name__ == "__main__":
             if r["group"].zfill(3) in NAMED:
                 nm, mk = NAMED[r["group"].zfill(3)]
                 ax.scatter([float(r[col])], [y], marker=mk, s=42, facecolor=PAPER, edgecolor=INK, lw=1.1, zorder=4)
-        fold = d / f"{eu}.fold.pdb"
+        fold = d / f"{eu}{'.' + a.fold if a.fold else ''}.fold.pdb"
         if fold.exists():
             sc = score(fold, eu, pseudo_cb=True, tag=f"fig-{eu}")
             ours[eu] = sc
@@ -114,7 +115,7 @@ if __name__ == "__main__":
         # pseudo-Cβ atoms and reads 0.01–0.02 under the official Cα TM-score); the official LDDT is
         # all-atom, which our trace cannot be scored on, so that comparison is approximate
         from casp16_table import field_percentiles
-        rows = field_percentiles(d, "")
+        rows = field_percentiles(d, f"_{a.fold}" if a.fold else "")
         o = np.array([r[2] if a.metric == "lddt" else r[5] for r in rows])
         fm = np.array([r[3] if a.metric == "lddt" else r[6] for r in rows])
         y = 0; jit = rng.normal(0, 0.09, len(rows))
@@ -132,7 +133,8 @@ if __name__ == "__main__":
         ax.scatter([], [], marker=mk, s=42, facecolor=PAPER, edgecolor=INK, lw=1.1, label=nm)
     ax.scatter([], [], s=14, color=MUTED, alpha=0.6, lw=0, label="one CASP16 group, model 1")
     ax.scatter([], [], s=90, color=BLUE, label=f"{a.label}")
-    ax.legend(loc="upper center", fontsize=7.5, frameon=False, ncol=5, bbox_to_anchor=(0.5, -0.16), handletextpad=0.3, columnspacing=1.0)
+    leg = ax.legend(loc="upper center", fontsize=7.5, frameon=False, ncol=5, bbox_to_anchor=(0.42, -0.16), handletextpad=0.3, columnspacing=0.9)
+    leg.set_in_layout(False)  # the row may overhang under (b), where nothing is; kept out of tight_layout so a long "ours" label cannot push (c) off the page
     ax.set_xlim(0, 1.0); ax.set_ylim(-0.75, nrows - 0.3 + 0.7)
     ax.set_yticks([])
     ax.set_xlabel(("Cβ-lDDT" if a.metric == "lddt" else "TM-score") + " against the experimental structure, one scorer for every dot"
