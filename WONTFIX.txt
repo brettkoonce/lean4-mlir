@@ -1,0 +1,69 @@
+WONTFIX: what this repo has decided not to do, and why. Each entry is a design choice,
+a measured dead end, or a limit we accept. Read this before proposing one of them again;
+reopening one takes new evidence, not a new argument.
+
+DESIGN
+
+Differentiation is per-layer VJPs, not compiler autodiff
+  Every op family carries a hand-written, proved VJP and nets are fixed graphs of them.
+  Autodiff of arbitrary Lean code would need a compiler fork (S4TF's fate). A new layer
+  type costs one VJP; that is the scope we keep.
+
+jax/ stays; the verified path comes up to meet it
+  The JAX trainers are the reference the port is checked against (the VJP oracle, the
+  side-by-side tables). IREE could be retired because it was an engine; JAX is the
+  oracle. Do not propose deleting jax/ or a reference trainer.
+
+No IEEE model of what XLA computes, and no FloatLib dependency
+  rndP (Mathlib only, no axioms) covers every rounding fact a proof uses. No float
+  library can speak to the real boundary, XLA/cuDNN reassociation and FMA contraction,
+  so a second one would add a require with no consumer. Reopen only if a proof needs
+  subnormals or overflow to decide its result.
+
+No bf16 BatchNorm
+  Mixed precision as practised: the bf16 flag switches conv, dense, dgrad and wgrad;
+  every bf16 net calls the same f32 BN in both branches. A render that cannot reach
+  bf16 is on the wrong op family, not missing a BN op. (planning/archive/bf16_batchnorm.md)
+
+No dtype field in the emit IR
+  The bf16-boundary project (planning/archive/bf16_dtype_ir.md) was refuted by its own
+  test: XLA keeps activations bf16 once the PRODUCING op writes a bf16 result, so the
+  fix is a bf16-typed result plus convert, with no dtype in the IR. Convert count is not
+  convert cost.
+
+CIFAR BatchNorm stays per-example
+  cifar8w_bn reduces over [2,3] and carries no running statistics, so train and eval
+  normalize the same way. The batch-coupled BN is a different function.
+
+The book carries results and recipes, not this box
+  No stall, throughput-on-this-machine or "add N %" notes in content.tex. Those live in
+  the run's RESULTS.md.
+
+Delete, don't archive
+  Demos outside the book's table of contents, and ROCm-era experiments, are deleted.
+  historical/ holds only the provenance of committed data. Git history is the archive.
+
+main moves by fast-forward only
+  No merge commits on main.
+
+A run is a dated directory
+  runs/YYYY-MM-DD-<slug>/. Suite and gate output (runs/platform/) commits its summary,
+  not its logs. scripts/gates/repo_shape.txt is the allow list; the user changes it.
+
+MEASURED DEAD ENDS
+
+bf16 does not pay at CIFAR shapes
+  At at most 32 channels the convs are launch-bound; bf16 was slower than f32 over
+  cifar8's whole conv stack. CIFAR bf16 is a stability result, not a speed one.
+
+The BN statistic group cannot be measured on Imagenette
+  R50 on Imagenette overfits until BN noise is the only regulariser, and the probe's sign
+  came out opposite to the ImageNet pairs. The ImageNet sync-BN pairs in the book are the
+  evidence. (planning/global_bn_verified.md, jax/scripts/bn_sharding_demo.py)
+
+LIMITS
+
+The generic spec walk (LeanMlir/MlirCodegen.lean) has no bf16
+  The bf16 and bf16Conv config fields are read only by the render emitters and the JAX
+  codegen; the demos on the generic walk train f32 whatever the flag says. Giving them
+  bf16 means porting the op twins, a project, not a config change.

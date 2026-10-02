@@ -18,7 +18,7 @@
 # replace one a running trainer has loaded.
 #
 # Writes <out>/manifest.json (core vs platform, section 4 of the plan), <out>/results.tsv,
-# <out>/logs/, then regenerates PLATFORMS.md. Exit 1 on any FAIL; XPASS (a listed
+# <out>/logs/ (untracked: a committed run is its manifest and results), then regenerates PLATFORMS.md. Exit 1 on any FAIL; XPASS (a listed
 # failure that passed) is reported and means scripts/platform/expected/ needs an edit.
 set -uo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)

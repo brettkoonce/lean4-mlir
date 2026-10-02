@@ -1,0 +1,127 @@
+# The shape of the repo, checked by scripts/gates/repo_shape.py (pre-commit hook + targets.yml).
+# Every tracked file matches a line. `**/` = any directories or none, `*` = within one name,
+# `?` = one character, `{a,b}` = either. `cap=NM` raises the 2 MB per-file cap for that line.
+# The first matching line wins. An agent asks the user before adding or changing a line.
+
+# Root, exactly
+.gitignore
+.zenodo.json
+CHANGELOG.md
+LICENSE
+LeanMlir.lean
+PLATFORMS.md
+README.md
+TRUST.md
+WONTFIX.txt
+formalization.yaml
+lake-manifest.json
+lakefile.lean
+lean-toolchain
+requirements-{gw,rs,timm}-lock.txt
+run.sh
+.githooks/pre-commit
+.github/workflows/*.yml
+
+# The library and its proofs
+LeanMlir/**/*.{lean,md}
+Bestiary/*.lean
+Bestiary/README.md
+ffi/*.{c,h,md}
+verified_mlir/*.mlir  cap=4M
+verified_mlir/{MANIFEST,README}.md
+
+# Trainers, demos, tests
+apps/**/*.lean
+apps/README.md
+demos/**/*.{lean,py,md}
+demos/**/.gitignore
+demos/figures/*.{png,jpg}  cap=3M
+tests/**/*.{lean,py,md,sh,json,yml,toml}
+tests/**/{lean-toolchain,.gitignore}
+
+# The JAX reference (its own Lean package)
+jax/*.{lean,md,json}
+jax/lean-toolchain
+jax/requirements-*-lock.txt
+jax/{Jax,generated,tests,probe,demos,scripts}/**/*.{lean,py,sh,md}
+
+# Scripts: the buckets, plus the drivers in-flight jobs call at the top level
+scripts/README.md
+scripts/{det_shim.sh,gen_shims.sh,regen_jax_generated.sh,regen_verified_mlir.sh,shim_wiring_gate.py,supervise.sh}
+scripts/{audit_census,book,certs,datasets,demos,gates,jobs,lib,parity,platform,probes,sweeps}/**/*.{py,sh,lean,c,md,conf,txt,tsv}
+scripts/platform/fixtures/*.mlir
+scripts/platform/goldens/*.npz
+
+# Runs: one dated directory per run, anything inside. Platform-suite runs keep their summary
+# only (PLATFORMS.md is generated from these two files); the logs stay on the box.
+runs/README.md
+runs/20??-??-??-*/**
+runs/platform/.gitignore
+runs/platform/20??-??-??-*/{manifest.json,results.tsv}
+
+# Process and site
+planning/**/*.md
+planning/*.tex
+historical/**
+blueprint/**
+home_page/*.html
+deploy/**
+
+# Grandfathered: predate a rule above. Delete the line with the file; never add one.
+grandfather LeanMlir/Proofs/check_ir_codegen.py
+grandfather LeanMlir/Proofs/check_jacobians.py
+grandfather historical/mlir_poc/cnn128/W2.npy
+grandfather historical/mlir_poc/cnn_inputs/W2.npy
+grandfather historical/traces/mnist_cnn.init.bin
+grandfather historical/traces/mnist_mlp.init.bin
+grandfather jax/runs/convnext_tiny_imagenet_bf16_300ep/**
+grandfather jax/runs/convnext_tiny_imagenet_bf16_80ep/**
+grandfather jax/runs/enet_b0_imagenet_bf16_350ep/**
+grandfather jax/runs/enet_b0_imagenet_bf16_80ep/**
+grandfather jax/runs/mnv2_imagenet_bf16_90ep/**
+grandfather jax/runs/r34_imagenet_bf16_90ep/**
+grandfather jax/runs/vit_tiny_imagenet_bf16_80ep/**
+grandfather planning/archive/conv3d_spike.mlir
+grandfather planning/mathlib_upstream_drafts/**
+grandfather planning/repro_434_kernel_timeout/**
+grandfather planning/rubric_review/wp2_combo_gen.py
+grandfather runs/2026-09-10-mnv2rms-sweep.tsv
+grandfather runs/2026-09-29-alphazero-ttt/n4_sweep.csv
+grandfather runs/2026-09-29-alphazero-ttt/n5_sweep.csv
+grandfather runs/ablation_cifar8/**
+grandfather runs/ablation_cifar8w/**
+grandfather runs/cifar8bn_grid_results.tsv
+grandfather runs/cnn_grid_rep1.tsv
+grandfather runs/cnn_grid_rep2.tsv
+grandfather runs/cnn_grid_rep3.tsv
+grandfather runs/cnn_grid_rep4.tsv
+grandfather runs/cnn_grid_rep5.tsv
+grandfather runs/efficientnet_verified_crop_gpu1.log
+grandfather runs/lipschitz_cnn.log
+grandfather runs/lipschitz_cnn.tex
+grandfather runs/lipschitz_cnn_preview.png
+grandfather runs/mlp_grid_results_xla.tsv
+grandfather runs/mobilenetv2_verified_crop_gpu0.log
+grandfather runs/pgd_cifar_bn_phase3.log
+grandfather runs/pgd_cifar_phase3.log
+grandfather runs/pgd_cnn_phase3.log
+grandfather runs/probe3060.tsv
+grandfather runs/probe3060_a3.tsv
+grandfather runs/r34_pool3s2_80ep_aug04.log
+grandfather runs/r34in_verified_30ep_2026-08-05/**
+grandfather runs/smooth_2gpu.log
+grandfather runs/smooth_cifar.log
+grandfather runs/smooth_cifar_radii.csv
+grandfather runs/smooth_cnn.log
+grandfather runs/smooth_cnn_lipschitz.csv
+grandfather runs/smooth_cnn_radii.csv
+grandfather runs/smooth_convnext_2gpu.log
+grandfather runs/smooth_convnext_s025.log
+grandfather runs/smooth_convnext_s050.log
+grandfather runs/smooth_dump_2gpu.log
+grandfather runs/smooth_mlp.log
+grandfather runs/smooth_mlp_radii.csv
+grandfather runs/smoothing_frontier.tex
+grandfather runs/smoothing_frontier_tikz_preview.png
+grandfather runs/spectral_cnn_phase3.log
+grandfather runs/spectral_mlp_phase3.log

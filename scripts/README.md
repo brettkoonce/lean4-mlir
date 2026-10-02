@@ -5,7 +5,7 @@ Every script says what it does in its first lines. Run them from the repo root.
 | directory | what is in it |
 |---|---|
 | [`jobs/`](jobs/) | one `.conf` per ImageNet run; `lake run <job>` launches it through `supervise.sh`, and `lake run imagenet` prints the plan |
-| [`gates/`](gates/) | the checks CI runs: target names, audit and render coverage, the `verified_mlir/` manifest, the comparator tier, the convention audit, the residency and eval gates |
+| [`gates/`](gates/) | the checks CI runs: the repo's shape (`repo_shape.txt`), target names, audit and render coverage, the `verified_mlir/` manifest, the comparator tier, the convention audit, the residency and eval gates |
 | [`parity/`](parity/) | the verified render against its JAX reference (`*_forward_tie.py`), the JAX reference against timm's architecture on shared weights (`*_timm_parity.py`), and `score_timm.sh` for timm's validation protocol |
 | [`certs/`](certs/) | the generators behind the scorecards in [`LeanMlir/Proofs/Certificates/`](../LeanMlir/Proofs/Certificates/) and the trained-net witnesses |
 | [`demos/`](demos/) | one figure / metrics / score set per Chapter 10 demo |

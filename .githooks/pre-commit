@@ -1,0 +1,4 @@
+#!/bin/sh
+# Enabled once per checkout with `git config core.hooksPath .githooks`.
+# Checks the index against scripts/gates/repo_shape.txt; under a second.
+exec python3 "$(git rev-parse --show-toplevel)/scripts/gates/repo_shape.py"

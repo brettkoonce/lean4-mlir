@@ -132,3 +132,9 @@ jobs:
         # here from proofs.yml 2026-09-27: two runs/ commits staled it unseen behind that
         # workflow's path filter, and the next lakefile push wore the red.
         run: python3 scripts/gates/gen_mlir_manifest.py --check
+
+      - name: Every tracked file fits scripts/gates/repo_shape.txt
+        # The allow list of the tree: a new root entry, a loose file in runs/ or a file over its
+        # size cap fails. The same check runs as .githooks/pre-commit; this catches a checkout
+        # without the hook.
+        run: python3 scripts/gates/repo_shape.py

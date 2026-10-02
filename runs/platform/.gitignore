@@ -1,2 +1,5 @@
 # runs build their shim and test binaries here; the manifest records their hashes
 */build/
+# and the per-test logs stay on the box: a committed run is its manifest.json + results.tsv
+# (scripts/gates/repo_shape.txt)
+*/logs/

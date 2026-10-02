@@ -29,7 +29,7 @@ scripts/platform/expected/<backend>-<gpu>.txt  # known fails / flakes, Mesa styl
 runs/platform/<date>-<host>-<backend>/
     manifest.json   # see section 4
     results.tsv     # test | tier | PASS/FAIL/XFAIL/XPASS/SKIP | measured | bound
-    logs/
+    logs/           # stays on the box; not committed (scripts/gates/repo_shape.txt)
 PLATFORMS.md        # generated: one row per (platform, core)
 ```
 
