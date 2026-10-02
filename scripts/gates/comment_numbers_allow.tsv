@@ -59,6 +59,7 @@ Bestiary/WRN.lean	95.7%	citation
 Bestiary/WRN.lean	96.0%	citation
 demos/MainAraslSigns.lean	80 %	spec
 demos/MainAraslSigns.lean	90 %	spec
+demos/MainDistogramCasp.lean	2 %	spec
 demos/MainNqsIsing.lean	5%	spec
 demos/MainPlantLeaf.lean	34 GB	example
 demos/MainTinyGptShakespeare.lean	10%	spec
