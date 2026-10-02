@@ -1,0 +1,15 @@
+test	tier	status	detail
+build:shim	0	PASS	
+build:probe	0	PASS	
+build:smoke	0	PASS	
+build:guards	0	PASS	
+build:dp	0	PASS	
+build:allreduce	0	PASS	
+build:compile_check	0	PASS	
+smi	0	PASS	0, NVIDIA GeForce RTX 4060 Ti, 575.57.08, 16380 MiB
+probe	0	PASS	devices=3
+smoke	0	PASS	compile + execute OK
+guards	1	PASS	all guards fire (0 failures)
+compile_dp	1	PASS	COMPILED OK — 69 outputs
+allreduce	1	PASS	ALL-REDUCE CORRECT across 2 GPUs via the PJRT C API
+dp	1	PASS	DP INVOKE CORRECT: sharding + all_reduce + replica-0 readback

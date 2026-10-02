@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-02T16:45:06Z",
+  "run": "2026-10-02-ares-cuda",
+  "core": {
+    "repo_sha": "8dd23e5b14a6881201ebf1fcb146bba50357210c",
+    "repo_dirty": false,
+    "lean_toolchain": "leanprover/lean4:v4.34.0",
+    "shim_source_sha": "f95e7a7b17330baf",
+    "shim_binary_sha": "1eae900166813461",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "5054cb0bf4f3c880",
+    "suite_sha": "e445c990c28007e5",
+    "tier": 1
+  },
+  "platform": {
+    "backend": "cuda",
+    "host": "ares",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 4060 Ti",
+        "memory": "16380 MiB",
+        "driver": "575.57.08"
+      },
+      {
+        "index": 1,
+        "name": "NVIDIA GeForce RTX 4060 Ti",
+        "memory": "16380 MiB",
+        "driver": "575.57.08"
+      },
+      {
+        "index": 3,
+        "name": "NVIDIA GeForce RTX 4060 Ti",
+        "memory": "16380 MiB",
+        "driver": "575.57.08"
+      }
+    ],
+    "gpu_count_visible": 3,
+    "visible_devices": "GPU-4bf8c885-7561-229e-2d81-1896b4bdcbcc,GPU-ccec349f-395f-b51e-a165-c8d9633ef68f,GPU-9470d1b4-0248-989b-35ea-2f60a0a33c6b",
+    "driver": "575.57.08",
+    "runtime": {
+      "driver": "12.9.0[575.57.8]",
+      "runtime": "12.9.0",
+      "toolkit": "12.9.0",
+      "dnn": "9.23.2"
+    },
+    "plugin_path": ".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so",
+    "plugin_package": "jax_cuda12_pjrt==0.11.0",
+    "plugin_sha": "ced7988972611b25",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "cuda",
+    "platform_version": "cuda 12090",
+    "kernel": "6.8.0-138-generic",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}
