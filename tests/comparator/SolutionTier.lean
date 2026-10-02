@@ -55,9 +55,6 @@ open Proofs
 open scoped Real
 
 set_option maxHeartbeats 8000000
--- The statements are pretty-printer output, and the printer names binders the declarations
--- never use (`fun (x : Fin n) => (0 : ℝ)`, `[inst : ...]` under `pp.explicit`).
-set_option linter.unusedVariables false
 
 /-! # Solution to the tier challenge
 
@@ -166,7 +163,7 @@ theorem chk_smoothedCE_grad :
         ∀ (α : ℝ) (t z : Proofs.Vec K),
           ∑ k : Fin K, t k = (1 : ℝ) →
             ∀ (j : Fin K),
-              Proofs.pdiv (fun (z' : Proofs.Vec K) (x : Fin (1 : ℕ)) => Proofs.softCE K (Proofs.smoothTarget K α t) z') z j
+              Proofs.pdiv (fun (z' : Proofs.Vec K) (_ : Fin (1 : ℕ)) => Proofs.softCE K (Proofs.smoothTarget K α t) z') z j
                   (0 : Fin (1 : ℕ)) =
                 Proofs.softmax K z j - t j + α * t j - α / ↑K :=
   Proofs.smoothedCE_grad
@@ -1559,7 +1556,7 @@ theorem chk_trained_cnn_conv1_bias_sgd_descends_concrete :
 
 /-- `Proofs.lipschitz_margin_certified_radius` -/
 theorem chk_lipschitz_margin_certified_radius :
-    ∀ {k : ℕ} {E : Type u_1} [inst : NormedAddCommGroup E]
+    ∀ {k : ℕ} {E : Type u_1} [NormedAddCommGroup E]
       {f : E → EuclideanSpace ℝ (Fin k)} {L : ℝ},
       Proofs.LipschitzL2 L f →
         (0 : ℝ) < L →
@@ -1582,7 +1579,7 @@ theorem chk_smoothing_certified_radius_classifier :
           Measurable C →
             (∀ (c : Fin k) (x : EuclideanSpace ℝ (Fin (n + (1 : ℕ)))),
                 (@MeasureTheory.integral _ _ _ _
-                    (WithLp.measurableSpace (2 : ENNReal) ((i : Fin (n + (1 : ℕ))) → (fun (x : Fin (n + (1 : ℕ))) => ℝ) i))
+                    (WithLp.measurableSpace (2 : ENNReal) ((i : Fin (n + (1 : ℕ))) → (fun (_ : Fin (n + (1 : ℕ))) => ℝ) i))
                     (ProbabilityTheory.stdGaussian (EuclideanSpace ℝ (Fin (n + (1 : ℕ)))))
                     fun (z : EuclideanSpace ℝ (Fin (n + (1 : ℕ)))) => if C (x + σ • z) = c then (1 : ℝ) else (0 : ℝ)) ∈
                   Set.Ioo (0 : ℝ) (1 : ℝ)) →
@@ -1592,7 +1589,7 @@ theorem chk_smoothing_certified_radius_classifier :
                       Proofs.stdNormalQuantile
                         (@MeasureTheory.integral _ _ _ _
                           (WithLp.measurableSpace (2 : ENNReal)
-                            ((i : Fin (n + (1 : ℕ))) → (fun (x : Fin (n + (1 : ℕ))) => ℝ) i))
+                            ((i : Fin (n + (1 : ℕ))) → (fun (_ : Fin (n + (1 : ℕ))) => ℝ) i))
                           (ProbabilityTheory.stdGaussian (EuclideanSpace ℝ (Fin (n + (1 : ℕ)))))
                           fun (z : EuclideanSpace ℝ (Fin (n + (1 : ℕ)))) =>
                           if C (x + σ • z) = i then (1 : ℝ) else (0 : ℝ)) →
@@ -1601,13 +1598,13 @@ theorem chk_smoothing_certified_radius_classifier :
                       LT.lt (α := ℝ)
                         (@MeasureTheory.integral _ _ _ _
                           (WithLp.measurableSpace (2 : ENNReal)
-                            ((i : Fin (n + (1 : ℕ))) → (fun (x : Fin (n + (1 : ℕ))) => ℝ) i))
+                            ((i : Fin (n + (1 : ℕ))) → (fun (_ : Fin (n + (1 : ℕ))) => ℝ) i))
                           (ProbabilityTheory.stdGaussian (EuclideanSpace ℝ (Fin (n + (1 : ℕ)))))
                           fun (z : EuclideanSpace ℝ (Fin (n + (1 : ℕ)))) =>
                           if C (x + δ + σ • z) = j then (1 : ℝ) else (0 : ℝ))
                         (@MeasureTheory.integral _ _ _ _
                           (WithLp.measurableSpace (2 : ENNReal)
-                            ((i : Fin (n + (1 : ℕ))) → (fun (x : Fin (n + (1 : ℕ))) => ℝ) i))
+                            ((i : Fin (n + (1 : ℕ))) → (fun (_ : Fin (n + (1 : ℕ))) => ℝ) i))
                           (ProbabilityTheory.stdGaussian (EuclideanSpace ℝ (Fin (n + (1 : ℕ)))))
                           fun (z : EuclideanSpace ℝ (Fin (n + (1 : ℕ)))) =>
                           if C (x + δ + σ • z) = i then (1 : ℝ) else (0 : ℝ)) :=

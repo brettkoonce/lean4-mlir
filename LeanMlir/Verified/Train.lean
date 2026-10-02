@@ -1418,7 +1418,6 @@ def checkLnEpsWorld (tsPath fwdPath : String) : IO Unit := do
     what the training run would have scored; `"live"` and `"ema"` name it explicitly. -/
 def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant : String)
     (ckptPath : String) (region : String := "auto") : IO Unit := do
-  let emaOn := VerifiedVariant.emaOn variant
   let nRegions := VerifiedVariant.nRegions variant
   let hasBn := !net.bnChannels.isEmpty
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0

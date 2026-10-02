@@ -477,7 +477,6 @@ J2 = {cfg.J2}, S_z = 0 sector of {M} configurations, {cfg.steps} steps, \
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact pfx "fwd_eval")
   IO.eprintln "  sessions loaded"
   let nP := spec.totalParams
-  let nT := 3 * nP
   let allShapes := spec.shapesBA
   let evalShapes := spec.evalShapesBA
   let bnShapes := spec.bnShapesBA
@@ -674,7 +673,6 @@ def main (args : List String) : IO Unit := do
   | some e => throw <| IO.userError s!"spec: {e}"
   | none => pure ()
   let M := cfg.M
-  let nOut := cfg.nOut
   IO.eprintln s!"{spec.name}: {spec.totalParams} params, N = {cfg.N}, h = {cfg.h}, J = {cfg.J}, \
 {cfg.steps} steps, {if cfg.enumerate then s!"enumeration of {M} configurations" else s!"{cfg.B} chains"}, \
 {if !cfg.useRef then "uniform start (noref)" else if cfg.symRef then "Z2-symmetrised mean-field reference" else "mean-field reference"}, seed {cfg.seed}"
@@ -728,7 +726,7 @@ def main (args : List String) : IO Unit := do
       eDiagAll := eDiagAll.push (eDiag cfg c.toUInt64)
     xAll ← inputsOf cfg (cfgsBA cs) ByteArray.empty M 0
   else if cfg.arch != "gpt" then
-    for s in [0:cfg.B] do
+    for _ in [0:cfg.B] do
       let (u, g') := randNat g 0 ((1 <<< 30) - 1)
       let (u2, g'') := randNat g' 0 ((1 <<< 30) - 1)
       g := g''
@@ -751,13 +749,19 @@ def main (args : List String) : IO Unit := do
   let mut lastVar := 0.0
   for step in [0:cfg.steps + 1] do
     -- ── samples and log ψ ──
-    let mut out : ByteArray := ByteArray.empty
+    let mut x := xAll
+    if !cfg.enumerate then
+      if cfg.arch == "gpt" then
+        let (cs', lps', g') ← net.gptSample p cfg.B g
+        cs := cs'; lps := lps'; g := g'
+      else
+        let (cs', lps', g', _) ← net.metropolis p cs lps cfg.sweeps g
+        cs := cs'; lps := lps'; g := g'
+      x ← inputsOf cfg (cfgsBA cs) ByteArray.empty cfg.B 0
+    let out ← net.forward evalSess p x xShM (if cfg.enumerate then M else cfg.B)
     let mut weights : Array Float := #[]
     let mut eloc : Array Float := #[]
-    let mut x : ByteArray := ByteArray.empty
     if cfg.enumerate then
-      x := xAll
-      out ← net.forward evalSess p xAll xShM M
       lps ← logPsiRows cfg ref biasBA out cfgsAll ByteArray.empty M 0
       let mut mx := -1.0e300
       for l in lps do if l > mx then mx := l
@@ -775,14 +779,6 @@ def main (args : List String) : IO Unit := do
           r := r + Float.exp (lps[c ^^^ (1 <<< i)]! - lps[c]!)
         eloc := eloc.push (eDiagAll[c]! - cfg.h * r)
     else
-      if cfg.arch == "gpt" then
-        let (cs', lps', g') ← net.gptSample p cfg.B g
-        cs := cs'; lps := lps'; g := g'
-      else
-        let (cs', lps', g', _) ← net.metropolis p cs lps cfg.sweeps g
-        cs := cs'; lps := lps'; g := g'
-      x ← inputsOf cfg (cfgsBA cs) ByteArray.empty cfg.B 0
-      out ← net.forward evalSess p x xShM cfg.B
       weights := Array.replicate cfg.B (1.0 / cfg.B.toFloat)
       let (e, _) ← net.localEnergies p cs lps
       eloc := e

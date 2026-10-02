@@ -17,6 +17,13 @@ step tie, whose `vitBlockCotInAtMHV` applications drop dimension implicits that 
 downstream pins; it needs `pp.explicit`, which costs 422 lines instead of 158. Hence
 EXPLICIT below.
 
+UNUSED BINDERS. The printer names binders the declarations never use: a lifted scalar
+`fun (z' : Vec K) (x : Fin 1) => …`, Mathlib's `(fun (x : Fin n) => ℝ) i` inside
+`EuclideanSpace`, an anonymous `[inst : NormedAddCommGroup E]`. Rather than switch the
+unused-variables linter off, `drop_unused_binders` elaborates the solution once, reads the
+linter's own warnings, and rewrites exactly the binders it names (`x` → `_`, `[inst : C]` →
+`[C]`). Binder names are not part of a type's identity, so the statements are unchanged.
+
 USAGE:  python3 scripts/gates/gen_comparator_tier.py            # regenerate + verify
         python3 scripts/gates/gen_comparator_tier.py --check    # fail if the files would change
 
@@ -188,9 +195,6 @@ open Proofs
 open scoped Real
 
 set_option maxHeartbeats 8000000
--- The statements are pretty-printer output, and the printer names binders the declarations
--- never use (`fun (x : Fin n) => (0 : ℝ)`, `[inst : ...]` under `pp.explicit`).
-set_option linter.unusedVariables false
 
 /-! # {title}
 
@@ -233,6 +237,38 @@ def render(types, solution: bool):
         + '\n' + '\n'.join(body)
 
 
+UNUSED = re.compile(r':(\d+):(\d+): warning: Variable name `([^`]+)` is not explicitly referenced')
+
+
+def drop_unused_binders(types):
+    """Rewrite every binder the unused-variables linter flags in the rendered solution.
+
+    The solution, not the challenge: the challenge's `sorry` proofs keep the linter quiet.
+    Each warning's line is mapped back to its declaration through the `theorem chk_<leaf> :`
+    line that opens it (`render` indents each type line by four).
+    """
+    lines = render(types, True).split('\n')
+    opener = {f'theorem chk_{d.split(".")[-1]} :': d for d in DECLS}
+    starts = {i: opener[l] for i, l in enumerate(lines) if l in opener}
+    hits = {}
+    for m in UNUSED.finditer(lean('\n'.join(lines))):
+        row, col, name = int(m.group(1)) - 1, int(m.group(2)), m.group(3)
+        top = max(i for i in starts if i < row)
+        hits.setdefault(starts[top], []).append((row - top - 1, col - 4, name))
+    for d, hs in hits.items():
+        tl = types[d].split('\n')
+        for r, c, name in sorted(hs, reverse=True):     # right to left keeps columns valid
+            ln = tl[r]
+            if ln[c:c + len(name)] != name:
+                sys.exit(f'{d}: linter flagged `{name}` at {r}:{c}, text there is {ln[c:c+20]!r}')
+            if ln[c - 1:c] == '[' and ln[c + len(name):c + len(name) + 3] == ' : ':
+                tl[r] = ln[:c] + ln[c + len(name) + 3:]                # [inst : C] → [C]
+            else:
+                tl[r] = ln[:c] + '_' + ln[c + len(name):]
+        types[d] = '\n'.join(tl)
+    return types
+
+
 def check_yaml():
     """Every `main_results` row must name a comparator config that actually holds it.
 
@@ -262,6 +298,7 @@ def main():
     types = print_types(plain, BASE_OPTS)
     if EXPLICIT:
         types.update(print_types(sorted(EXPLICIT), BASE_OPTS + ['pp.explicit true']))
+    types = drop_unused_binders(types)
     files = {'ChallengeTier.lean': render(types, False),
              'SolutionTier.lean':  render(types, True)}
     cfg = json.dumps({"challenge_module": "ChallengeTier", "solution_module": "SolutionTier",
@@ -283,6 +320,8 @@ def main():
     log = lean(files['SolutionTier.lean'])
     errs = [l for l in log.split('\n') if ': error' in l]
     if errs: sys.exit('generated SolutionTier does not elaborate:\n' + '\n'.join(errs[:20]))
+    left = [l for l in log.split('\n') if UNUSED.search(l)]
+    if left: sys.exit('unused binders survived drop_unused_binders:\n' + '\n'.join(left[:20]))
     for n, c in files.items():
         open(os.path.join(OUT, n), 'w').write(c)
     print(f'✓ wrote {len(DECLS)} theorems to ChallengeTier/SolutionTier + config-tier.json '

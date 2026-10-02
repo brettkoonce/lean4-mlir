@@ -567,8 +567,7 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let q5 := q            -- stage 4 / the GAP window
   let q4 := 2 * q5       -- stage 3
   let q3 := 2 * q4       -- stage 2
-  let q2 := 2 * q3       -- stage 1, and the max-pool's output
-  let q1 := 2 * q2       -- the stem conv's output
+  let q2 := 2 * q3       -- stage 1, and the max-pool's output; the stem conv's is 2 * q2
   -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (img→img/2→img/4) ═══
   -- `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
   -- `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM.
