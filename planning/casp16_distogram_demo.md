@@ -334,6 +334,17 @@ fold Cβ-lDDT / TM over the folded EUs · GPU-hours. Rows and their state:
 | ensembles (`casp16_ensemble.py`) | do differently-trained heads on one LM add information | 650M plain + orient: EUs 0.842 (members 0.838 / 0.838), fold 0.569 / 0.575 — nothing; ω/φ fold 0.579 / 0.592 vs 0.574 / 0.591. Five members (seeds 1–2, 128 ch, crop 96, 100 ep): EUs 0.852 vs the best member's 0.850, fold running GPU 3 (queue12.sh). The heads agree on what they miss: the LM bounds the map |
 | crop 96 × 650M × orientation heads | do the crop gain and the ω/φ fold gain stack | trained 13:41 (2.6 h): EUs 0.850 (= the plain crop-96 arm, the distance head unchanged a third time); plain fold 0.576 / 0.586 (plain crop 96: 0.583 / 0.589, within the arms' spread); **ω/φ fold 0.585 / 0.606** (TM median 0.644), wrong hands 2 — the best fold of the table: the angular restraints add +0.009 / +0.020 on top of crop 96, so the two gains stack |
 | 650M × 128 ch × crop 96 | do width and crop stack (the config a 650M book run would use) | done 18:09 (6.1 h train): EUs **0.858** (0.866 / 0.885 / 0.674), fold **0.600 / 0.598** (TM median 0.626), 7 wrong hands — +0.020 EUs, +0.031 / +0.026 fold over the 64-ch arm: the two levers add (128 ch alone +0.010 / +0.021 / +0.018, crop 96 alone +0.011 / +0.014 / +0.017); the best single arm on every column, and its plain fold beats the crop 96 × orient ω/φ fold on lDDT (0.600 vs 0.585) while trailing it on TM (0.598 vs 0.606) — the book run takes both |
+| 650M × 64 ch, `pair=1` (the 650M contact head's logit plane as a pair-tile channel; §11a item 1, tier A) | the pair-input op's first run: does the LM's own contact map, fed as a channel, lift the ResNet above what it learns from the embeddings | done 22:28 (4,199 s train — the plane costs nothing per step): val 52.7 % (48.2 % after one epoch; the baseline needed six to reach 47.0 %), EUs **0.856** (0.858 / 0.880 / **0.710**), fold **0.584 / 0.582** (medians 0.610 / 0.621), 8 wrong hands — +0.018 EUs (+0.090 on the hard class), +0.015 / +0.010 fold over the baseline; at 64 ch and 70 min it matches the 128 ch × crop 96 arm's 0.858 (6 h). The lever the plan ranked first |
+| 3B × 64 ch, `pair=1` (the 3B contact head's plane; queue16) | do the two levers stack | done 23:49 (4,646 s): val **54.3 %**, EUs **0.866** (0.876 / 0.885 / **0.724**), fold **0.603 / 0.612** (medians 0.618 / 0.684), 7 wrong hands — the best arm on every column, above 128 ch × crop 96 (0.858 / 0.600 / 0.598) at a fifth of the training time: 0.838 → +plane 0.856 → +3B 0.866 |
+| 650M × 64 ch, `pair=1 orient=1` (queue18) | do the plane and the ω/φ fold stack | done 00:23: EUs 0.849 (0.855 / — / 0.678) against the plane alone's 0.856 (the heads cost the distance head 0.007 here, where without the plane they cost nothing); plain fold 0.577 / 0.585, **ω/φ fold 0.588 / 0.605** (medians 0.611 / 0.663) — +0.011 / +0.020 over its plain fold, and against the plane alone +0.004 lDDT / **+0.023 TM**: the heads remain a TM lever through the fold |
+| 3B × 64 ch, `pair=1 orient=1` (queue19) | the book run's heads on the best arm | EUs **0.864** (0.876 / 0.880 / 0.722) against 3B + plane's 0.866 — the heads cost 0.002 at 3B (seed-noise level; 0.007 at 650M); distance head 54.2 % val = 3B + plane's 54.3 %; plain fold 0.594 / 0.611 (4 wrong hands), **ω/φ fold 0.602 / 0.628** (medians 0.619 / 0.692, 2 wrong hands) — the best TM of any arm: against 3B + plane the heads are −0.002 / −0.001 / **+0.016 TM**. `orient=1` stays in the book run |
+| 3B × 64 ch, `pair=1`, seed 2 (queue20) | the error bar on the best arm | done 02:52: EUs **0.866**, fold 0.605 / 0.614 against seed 1's 0.866 / 0.603 / 0.612 — a seed gap of 0.000 / 0.002 / 0.002, the 650M arm's size; every lever above is 5–10× it |
+| 3B × 128 ch × crop 96 (queue14's second arm) | 3B at the wide config, without the plane | trained 03:00 (22,972 s): val 75.1 % against the 650M twin's 72.9 %, EUs **0.866** (0.884 / 0.884 / 0.696) against 0.858 — at the wide config 3B is worth +0.008 on precision (+0.002 at 64 ch), and it ties 3B + plane at 64 ch (0.866, 77 min); fold **0.609 / 0.611** (medians 0.629 / 0.666, 7 wrong hands) against 0.600 / 0.598 — +0.009 / +0.013 |
+| **3B × 128 ch × crop 96, `pair=1`** (queue17) | the book-run config at 30 epochs, without the heads | trained 06:16 (23,104 s): val **75.8 %** (3B wide without the plane 75.1 %, 650M wide 72.9 %), EUs **0.880** (0.880 / **0.903** / **0.746**) — +0.014 over 3B wide, +0.022 over 650M wide (0.858), +0.042 over the baseline; fold **0.622 / 0.632** (medians 0.640 / 0.690, **1 wrong hand**) — the best fold of any arm, plain or ω/φ. **Best on every column: 0.880 / 0.622 / 0.632** |
+| 650M × 128 ch × crop 96, `pair=1` (queue21) | the 650M twin of queue17: does the wide config need 3B? | trained 08:33 (21,893 s): val 74.0 %, EUs **0.865** (0.871 / 0.892 / 0.693) — +0.007 over 650M wide (0.858), 0.015 under 3B wide + plane (0.880): at the wide config the plane is +0.007, 3B +0.008, both +0.022 — additive, and the book run needs the 3B features; fold 0.607 / 0.605 (medians 0.622 / 0.651) against 0.600 / 0.598 and 3B wide + plane's 0.622 / 0.632 |
+| **3B × 128 ch × crop 96, `pair=1 orient=1`** (queue22) | **the book-run config at 30 epochs** | trained 09:44 (22,650 s): distance head **76.0 %** val (the highest of any arm; queue17 without the heads 75.8 %), EUs **0.877** (0.880 / 0.895 / **0.764**) against queue17's 0.880 (0.880 / 0.903 / 0.746) — the heads −0.003 overall, within noise, and the best hard-class number; plain fold 0.621 / 0.630 (= queue17's), **ω/φ fold 0.628 / 0.645** (medians 0.639 / 0.698, 1 wrong hand) — the best fold of any arm. **The book-run config: 0.877 / 0.628 / 0.645 against the baseline's 0.838 / 0.569 / 0.572** |
+| 3B × 64 ch × 100 ep, `pair=1` (queue23) | schedule length with the plane (the book run's 100 epochs) | trained 11:01 (15,523 s): val 54.8 % against 54.3 % at 30 ep, EUs **0.868** (0.870 / 0.889 / 0.739) against 0.866 — +0.002: with the plane the long schedule is nearly flat on precision (+0.009 at 650M without it); fold 0.612 / 0.617 (medians 0.630 / 0.678) against 0.603 / 0.612 — +0.009 / +0.005, half the 650M schedule gain. 100 epochs with the plane: +0.002 / +0.009 / +0.005 |
+| ESM-2 3B × 64 ch (`fs=esm3b`, dim 2569; §11a item 3) | the ladder's next rung after 35M 0.585 → 150M 0.735 → 650M 0.838 | done 22:19 (4,632 s train; the pool 33.1 GB in fp16, 7 min over four cards): val 53.0 % (+1.5 pt from epoch 10 on; val CE 2.110 vs 2.138), EUs **0.840** (0.872 / 0.849 / 0.664) — a tie with 0.838 — fold **0.581 / 0.583** (+0.012 / +0.011), 3 wrong hands. The LM step shows in the calibration, not the ranking: the ladder is flat on precision past 650M |
 | 650M, purged list (`list=train`) | templates at the top LM | done 14:11: EUs 0.841 (vs 0.838 with the 82 template chains), fold 0.569 / 0.567 (vs 0.569 / 0.572), 7 wrong hands — templates in the training set are worth nothing at 650M, as at 35M (0.599 vs 0.585) |
 | fold: steps × lr on 200–500-residue val chains | the fold's ceiling on the chains it fails | done (650M arm, restarts 0, GPU): long chains 0.629 / 0.708 at 1500 steps, 0.629 / 0.709 at 4000; lr 0.2 / 0.5 / 1.0 → 0.627 / 0.629 / 0.630; short chains 0.617 / 0.593, 4000 steps 0.617 / 0.588, lr 0.2 0.621 / 0.603 — the optimizer is converged; and the long val chains fold BETTER than the short ones, so the EU failures are not a length effect |
 | fold: no reference state / confidence weighting | the fold's levers | reference state done (0.415 → 0.518); confidence weighting closed by the energy-gap diagnostic (§10a): under every re-weighting the true trace scores worse than our fold, so no weighting of this distogram reaches it |
@@ -425,7 +436,59 @@ folding Cα and Cβ per residue, 6 coordinates, with the Cα–Cβ bond fixed at
 on CASP13 FM targets; that is the gap between our fold (0.46 TM on T1267s1-D1) and the
 contact precision (0.67) suggests is available.
 
-## 11. Handoff — 2026-10-02 18:40: every arm landed; next, the 20-hour book run
+## 11. Handoff — 2026-10-03 07:00: the night stacked three levers; the book run's config is settled
+
+**The morning version.** Day 1 of §11a ran as a night: the pair-input op (`Layer.pairTile`'s `pairIn`,
+the LM's own contact-head logits as one pair-tile channel) and ESM-2 3B both landed, and they stack
+with width and crop. The arms, 30 epochs each, EUs top-L/5 LR precision over 84 / fold Cβ-lDDT / TM
+over 78 (the 650M × 64 ch baseline 0.838 / 0.569 / 0.572; §10 has every row, §12 the log):
+
+| arm | EUs | fold |
+|---|---|---|
+| 650M × 64 ch + plane | 0.856 (hard 0.710) | 0.584 / 0.582 |
+| 3B × 64 ch | 0.840 | 0.581 / 0.583 |
+| 3B × 64 ch + plane | 0.866 (seed 2: 0.866) | 0.603 / 0.612 (seed 2: 0.605 / 0.614) |
+| 3B × 64 ch + plane + heads, ω/φ fold | 0.864 | 0.602 / **0.628** |
+| 3B × 128 ch × crop 96 | 0.866 | 0.609 / 0.611 |
+| 650M × 128 ch × crop 96 + plane (queue21, 08:58) | 0.865 | 0.607 / 0.605 |
+| **3B × 128 ch × crop 96 + plane + heads, ω/φ fold** (queue22, 10:26) — **the book config** | **0.877** (0.880 / 0.895 / 0.764) | 0.621 / 0.630 plain, **0.628 / 0.645** ω/φ, 1 wrong hand |
+| **3B × 128 ch × crop 96 + plane** (queue17) | **0.880** (0.880 / 0.903 / 0.746) | **0.622 / 0.632**, 1 wrong hand |
+
+Against the baseline the book config (ω/φ fold) is +0.039 [+0.021, +0.058] precision, +0.059
+[+0.050, +0.069] lDDT, +0.073 [+0.056, +0.091] TM (95 % bootstrap over units); the same without the
+heads +0.041 / +0.053 / +0.060 — twice the 128 ch × crop 96 arm's gains. The plane costs
+nothing per step and gives the hard class most (+0.09 at 64 ch); 3B is worth +0.002 on precision at
+64 ch and +0.008 at the wide config, +0.012 on the fold; the orientation heads cost 0.002 precision
+at 3B and buy +0.016 TM through the ω/φ fold. The field's TM percentile moves for the first time, 0.02 → 0.03 (Cβ-lDDT 0.06; field medians
+0.945 / 0.883 / 0.656 against the best arm's 0.707 / 0.597 / 0.499 by class): the fold's distance
+to the field is still the field's templates and MSAs. The figures are on
+the book config's ω/φ fold (queue22): the trio T1271s6-D1 / T1295-D3 / T1228v1-D3 at 0.84 / 0.92 /
+0.70 TM (field medians 0.93 / 0.93 / 0.73; the night started at 0.85 / 0.91 / 0.65), all 78 units in
+the fourth row, `casp16_ablation.png` with the night's rows on top.
+
+**At 11:30 everything has landed and all four cards are idle.** queue22 — the book-run config at
+30 epochs — is the row above: the heads cost 0.003 precision against queue17 and buy +0.015 TM
+through the ω/φ fold; the config is settled. queue23 (3B × 64 ch × 100 ep × pair=1, 0.868 / 0.612 /
+0.617 against 0.866 / 0.603 / 0.612 at 30 epochs) says the 100-epoch schedule is worth +0.002 /
++0.009 / +0.005 with the plane — half what it gave at 650M.
+
+**The book run** — queue22's config with `epochs=100`: `fs=esm3b dim=2569 ch=128 crop=96 pair=1
+orient=1 batch=16`, ~21 h of training (755 s/epoch) + the finish and the ω/φ fold; from the 30-epoch
+row (0.877 / 0.628 / 0.645) and queue23's schedule gains (+0.002 / +0.009 / +0.005), expect ~0.88 on
+the EUs and a fold near 0.635 / 0.65 — the book run buys the headline's schedule, not a new lever.
+`queue24_bookrun.sh <gpu>` is written; not launched — Brett's call. The levers left (§11a):
+templates at inference (item 2, the field's actual advantage on the easy class), recycling (item 4)
+and tier B, all on the pair-input op that now exists. The
+rest of §11a: item 2 (templates at inference) is the lever still untouched; item 4 (recycling) and
+tier B (the top-K attention heads as K planes) are next on the op that now exists.
+
+**Hygiene for the morning:** the night's rows, figures and queue17–23 are staged, not committed;
+`73b2333c` is committed and unpushed. Rules learned: the contact-head pass needs a 400 k-pair batch
+cap (fair-esm keeps ~5 copies of the attention maps) and the 3B pass fp16; the EUs' planes come from
+the fp32 CPU npz; at most three 3B-pool trainers at once (the fourth dies at `cuInit`).
+
+### The 2026-10-02 18:40 handoff (kept)
+
 
 Everything the night and the day produced is in §10 (table), §10a (findings), §11a (the week
 plan) and §12 (log); the one-line version: **the LM is the lever** (35M 0.585 → 150M 0.735 → 650M
@@ -838,3 +901,87 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   (`sfx` was `pack()`'s local) — fixed and run by hand (targets 11.6 MB over 84 EUs, valsub 0.5 MB
   over 24 chains, each the size of its label file) while the `pair=1` arm, which needs only the
   pool's planes, had already started on GPU 2 (20:52; 1,357,314 params).
+- 2026-10-02 22:20: the first two arms land. **3B × 64 ch × 30 ep** (queue14, 4,632 s): val top-L/5
+  53.0 % against the 650M arm's 51.5 % (+1.5 pt from epoch 10 on; val CE 2.110 vs 2.138), but on the
+  EUs **0.840** (0.872 / 0.849 / 0.664) against 0.838 (0.851 / 0.868 / 0.620) — a tie on precision —
+  and the fold **0.581 / 0.583** against 0.569 / 0.572 (+0.012 / +0.011; medians 0.592 / 0.617, 3
+  wrong hands): the LM step shows up in the calibration, not the ranking. The 3B × 128 ch × crop 96
+  arm tracks its 650M twin at +2 pt on val (71.4 % vs 69.4 % at epoch 5). **650M × 64 ch × 30 ep
+  pair=1** (queue15, 4,199 s — the plane costs nothing per step): val 52.7 % (48.2 % after ONE epoch,
+  where the baseline needed six to reach 47.0 %), EUs **0.856** (0.858 / 0.880 / **0.710**) against
+  0.838 — +0.018 overall and +0.090 on the hard class, at 64 ch matching the 128 ch × crop 96 arm's
+  0.858 at a fifth of the training time; fold pending. The plan's ranking held: tier A (item 1) is
+  the lever, 3B (item 3) is a fold-only gain. queue16 (3B + the 3B head's plane) training on GPU 3
+  from 22:07; `queue17_pair_wide.sh` (650M × 128 ch × crop 96 × pair=1 × 30 ep, GPU 0, ~6 h) written
+  as the book-run config test, awaiting Brett's go.
+- 2026-10-02 23:50: **3B × 64 ch × 30 ep pair=1** (queue16, the 3B head's plane; 4,646 s): val
+  54.3 % (the highest of any 64-ch arm), EUs **0.866** (0.876 / 0.885 / **0.724**) — above every arm
+  including 128 ch × crop 96 (0.858); the levers stack (0.838 → +plane 0.856 → +3B 0.866; 3B alone
+  0.840). Fold (23:49) **0.603 / 0.612**, medians 0.618 / **0.684**, 7 wrong hands — the best fold of
+  any arm (128 ch × crop 96: 0.600 / 0.598; the ω/φ fold's TM 0.606), so 3B + plane at 64 ch is the
+  best arm on every column, in 77 min. queue18 (650M × 64 ch, plane + orientation heads): distance
+  head 52.9 % val, EUs 0.849 (0.855 / — / 0.678) against the plane alone's 0.856 — the heads cost
+  0.007 here where at 650M without the plane they cost nothing; folds pending. Launched 23:50 with
+  the permission Brett gave at 21:35: queue17 = 3B × 128 ch × crop 96 × pair=1 × 30 ep on GPU 0
+  (~6.5 h, the book-run candidate at the wide config) and queue19 = queue18 on 3B features (GPU 3,
+  ~2.5 h): the head question for the book run.
+- 2026-10-03 00:30: queue18 lands — plane + orientation heads at 650M × 64 ch: plain fold 0.577 /
+  0.585, ω/φ fold **0.588 / 0.605** (medians 0.611 / 0.663): the ω/φ fold adds +0.011 / +0.020 over
+  the plain one, so against the plane alone the heads are −0.007 precision, +0.004 lDDT, +0.023 TM
+  — the same shape as every earlier orient arm. queue19 (3B + plane + heads) tracks 3B + plane
+  exactly on the distance head (53.4 % / 54.2 % at epochs 10 / 20). The 3B × 128 ch × crop 96 arm
+  (no plane) is at 75.1 % against 72.7 % for its 650M twin at epoch 20; queue17 (with the plane) at
+  73.6 % at epoch 4. queue20 (3B + plane, seed 2) launched on GPU 2 for the headline row's error bar
+  — and died at `cuInit` (CUDA_ERROR_NOT_INITIALIZED, the NVRM host-memory symptom): three 3B-pool
+  trainers (33 GB each, 36–44 GB RSS) and 108 GB of page cache left 23 GB free. At most three 3B
+  trainers at once; relaunched 00:55 gated on queue19's trainer exiting (it started 01:10).
+- 2026-10-03 01:15: queue19 (3B + plane + orientation heads, 64 ch; 4,683 s): distance head 54.2 %
+  val, EUs **0.864** (0.876 / 0.880 / 0.722) against 3B + plane's 0.866 — at 3B the heads cost
+  0.002, seed-noise level, where at 650M + plane they cost 0.007. Plain fold 0.594 / 0.611, ω/φ fold
+  **0.602 / 0.628** (medians 0.619 / 0.692, 2 wrong hands; done 01:51): the best TM of any arm —
+  the heads are −0.002 / −0.001 / +0.016 TM on the best arm, so `orient=1` stays in the book run.
+  queue21 (650M × 128 ch × crop 96 × pair=1, the 650M twin of queue17) launched gated on queue20's
+  trainer exiting (~02:30), GPU 3, ~6 h: whether the wide config needs 3B or the plane alone carries it.
+- 2026-10-03 02:55 (Brett 02:35: "carry on, will be back in the morning"): queue20 — seed 2 of 3B +
+  plane: val 54.2 %, EUs **0.866**, fold 0.605 / 0.614 against seed 1's 0.866 / 0.603 / 0.612: a seed
+  gap of 0.000 / 0.002 / 0.002. queue21 (650M × 128 ch × crop 96 × pair=1) started 02:27 on GPU 3 the
+  minute queue20's trainer exited; queue22 — the book-run config at 30 epochs, 3B × 128 ch × crop 96
+  × pair=1 × orient=1 with the ω/φ fold — written and parked for GPU 1 behind queue14's finish (~03:30;
+  lands ~11:30). GPU 2 idle on purpose: three trainers is the host's limit. Overnight rule: log, stage,
+  no commits, no book run.
+- 2026-10-03 03:10: the 3B × 128 ch × crop 96 arm (no plane; 6.4 h): val 75.1 % against 72.9 %,
+  EUs **0.866** (0.884 / 0.884 / 0.696) against the 650M twin's 0.858 — 3B is worth +0.008 at the
+  wide config; fold running. queue17 (with the plane) is at 75.5 % val at epoch 15, already past
+  this arm's final; queue21 (650M wide + plane) at 71.0 % at epoch 3. 03:26: its fold 0.609 / 0.611
+  (medians 0.629 / 0.666) against the twin's 0.600 / 0.598; queue14 done, queue22 (the book-run
+  config at 30 ep) takes GPU 1.
+- 2026-10-03 06:20: **queue17 lands on precision — 3B × 128 ch × crop 96 × pair=1 × 30 ep: 0.880**
+  (0.880 / 0.903 / 0.746), val 75.8 %: +0.014 over the same without the plane (0.866), +0.022 over
+  650M wide (0.858), +0.042 over the baseline. Every lever stacks at the wide config. Fold running.
+  queue21 (650M wide + plane) at 73.9 % val at epoch 20 (650M wide 72.7 %, 3B wide 75.1 %); queue22
+  (the book config with the heads) at 75.5 % at epoch 12, tracking queue17. 06:41: queue17's fold
+  **0.622 / 0.632** (medians 0.640 / 0.690, 1 wrong hand) — the best fold of any arm; the wide 3B +
+  plane arm is best on every column, 0.880 / 0.622 / 0.632. queue23 (3B × 64 ch × 100 ep pair=1, the
+  schedule-length question with the plane, GPU 0, ~5 h) launched; GPU 2 idle under the trainer limit.
+- 2026-10-03 08:36: queue21 (650M × 128 ch × crop 96 × pair=1; 6.1 h): val 74.0 %, EUs **0.865**
+  (0.871 / 0.892 / 0.693) — +0.007 over 650M wide, 0.015 under 3B wide + plane: at the wide config
+  the plane and 3B are each worth ~+0.007 and add to +0.022; the book run keeps the 3B features. Fold
+  running. queue22 (the book config) at 76.0 % on the distance head at epoch 22; queue23 (100 ep) at
+  54.7 % at epoch 35, past the 30-epoch arm's final. 08:58: queue21's fold 0.607 / 0.605 (medians
+  0.622 / 0.651) against 650M wide's 0.600 / 0.598; queue21 done, GPU 3 left free for the book run.
+- 2026-10-03 09:50: **queue22, the book-run config at 30 epochs** (3B × 128 ch × crop 96 × pair=1 ×
+  orient=1; 6.3 h): distance head 76.0 % val, EUs **0.877** (0.880 / 0.895 / 0.764) against
+  queue17's 0.880 without the heads — −0.003, within noise, hard class +0.018. Folds running (plain
+  ~10:15, ω/φ ~10:55). queue23 (100 ep) at 54.8 % at epoch 70. 10:26: queue22's plain fold 0.621 /
+  0.630 (= queue17's), **ω/φ fold 0.628 / 0.645** (medians 0.639 / 0.698, 1 wrong hand) — the best
+  fold of any arm; the book-run config at 30 epochs is **0.877 / 0.628 / 0.645**, +0.039 / +0.059 /
+  +0.073 over the baseline. `queue24_bookrun.sh` written (queue22 with epochs=100); not launched.
+  Figures regenerated on queue22's ω/φ fold; the ablation figure gains the queue21/22 rows.
+- 2026-10-03 11:05: queue23 (3B × 64 ch × 100 ep × pair=1; 4.3 h): val 54.8 % (30 ep: 54.3 %),
+  EUs **0.868** (0.870 / 0.889 / 0.739) against 0.866 at 30 ep — +0.002: with the plane the
+  100-epoch schedule is nearly flat on precision; fold running (at 650M the schedule was +0.018 /
+  +0.016 on the fold). The book run's expectation on precision is therefore ~0.88, not 0.89.
+  11:26: its fold 0.612 / 0.617 (medians 0.630 / 0.678) against 0.603 / 0.612 at 30 epochs — the
+  schedule is +0.009 / +0.005 on the fold with the plane, half the 650M gain. queue23 done; every
+  arm of the night has landed; all four cards idle. The night's rows, figures and queue17–24 are
+  staged, not committed; `73b2333c` committed, not pushed.
