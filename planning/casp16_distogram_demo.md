@@ -307,6 +307,8 @@ Every launch is asked for first.
   (1.85 GB). Second, once the CASP16 run lands.
 - Whether `lddt()` becomes a Lean function in the book (a verified scorer is a natural coda).
 - CASP17 after the December 2026 conference.
+- The MSA route (§11a, parked 2026-10-04): go or no-go after its half-day probe; a source for the alignments of
+  T1214, T1228 and T1239, which MassiveFold's release does not cover.
 
 ## 10. The ablation table (decided 2026-10-02 with Brett: "poke at it a few different ways")
 
@@ -316,6 +318,7 @@ fold Cβ-lDDT / TM over the folded EUs · GPU-hours. Rows and their state:
 | row | isolates | state |
 |---|---|---|
 | ESM-2 35M contact head | the LM without us | done: 0.474 |
+| ESMFold v1 (`scripts/demos/casp16_esmfold.py`) | the same LM (ESM-2 3B) under its published folding trunk and structure module: the single-sequence reference for everything downstream of the LM | done 2026-10-04: fold **0.751 / 0.778** over the 78 against the book run's 0.627 / 0.646 — paired TM +0.132 [+0.101, +0.165], better on 71 of 78. On the 73 units folded from the full target sequence 0.770 against 0.647, +0.123 [+0.093, +0.157]; T1218 and T1269 (over 1,000 residues) do not fit a 16 GB card at any chunk size, and their five units are folded from an 800-residue window of the target (a sensitivity run outside the script: 0.84 / 0.91 / 0.91 / 0.88 / 0.93) |
 | one-hot residues, no LM (`fs=onehot`, dim 30) | the ResNet without the LM | done: val 17.1 %, EUs 0.252 (0.27 / 0.24 / 0.17), fold 0.319 / 0.228, hand a coin flip (39 of 78 mirrors better) |
 | 64 ch · headline / purged / seed 2 | noise, templates | done: 0.585 / 0.599 / 0.597 |
 | 128 ch · 30 ep | capacity | done: 0.629 |
@@ -349,6 +352,12 @@ fold Cβ-lDDT / TM over the folded EUs · GPU-hours. Rows and their state:
 | fold: steps × lr on 200–500-residue val chains | the fold's ceiling on the chains it fails | done (650M arm, restarts 0, GPU): long chains 0.629 / 0.708 at 1500 steps, 0.629 / 0.709 at 4000; lr 0.2 / 0.5 / 1.0 → 0.627 / 0.629 / 0.630; short chains 0.617 / 0.593, 4000 steps 0.617 / 0.588, lr 0.2 0.621 / 0.603 — the optimizer is converged; and the long val chains fold BETTER than the short ones, so the EU failures are not a length effect |
 | fold: no reference state / confidence weighting | the fold's levers | reference state done (0.415 → 0.518); confidence weighting closed by the energy-gap diagnostic (§10a): under every re-weighting the true trace scores worse than our fold, so no weighting of this distogram reaches it |
 | orientation heads (`orient=1`, below) | the AlphaFold-1 / trRosetta angular restraints | done: distance head unchanged (EUs 0.595 vs 0.585, plain fold 0.427 / 0.400 vs 0.423 / 0.389); heads weak but calibrated (ω/θ/φ ±1 bin on contacts 0.24 / 0.27 / 0.46, chance 0.125 / 0.125 / 0.25; 89–96 % right where > 0.5 confident); **the ω/φ fold: 0.446 / 0.422, +0.019 lDDT on 73 of 78 EUs, +0.022 TM on 62, wrong hands 15 → 7** (val bench 0.519 / 0.487 / hand 96 % vs 0.498 / 0.444 / 83 %) |
+
+Columns added 2026-10-04 (`casp16_table.py`, cached per arm in `<dir>/map_scores.csv`): **map lDDT** (the lDDT of
+the distogram's own mean distances, over the pairs `lddt()` scores), **recall** (true long-range contacts given
+P > 0.5) and **top-L** long-range precision, all over the 84 units. Book run 0.605 / 0.476 / 0.623; the 650M × 64 ch
+baseline 0.549 / 0.387 / 0.557; one-hot 0.327 / 0.001 / 0.135. Top-L/5 precision is at 0.95 or above on 54 of the 78
+folded units, so it no longer separates arms; these three do. Rows for the 650M and 3B contact heads (0.754, 0.759).
 
 Not yet in the table: ESM-2 attention maps as pair channels (the largest known lever; needs a
 second host input into the pair map — a day of codegen).
@@ -449,6 +458,29 @@ hold: at 128 ch × crop 96 the 30-epoch net has already used what the schedule o
 can carry the book; the 100-epoch run is the headline, the 30-epoch row its schedule check (the
 two agree within 0.004 on every column). Figures stay on queue22's fold for now. Outputs:
 `.lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets/`.
+
+**The review, 2026-10-04 evening** (Brett: "doesn't seem to have moved the needle … any thoughts on what to do
+next"). All from the book run's outputs; nothing trained.
+- Saturation, not under-training: validation precision is level from about epoch 20 in both runs; validation CE is
+  lowest at epoch 41 (1.932; the 30-epoch run ends at 1.935) and rises to 1.967 while the training loss falls 4.29 →
+  4.03.
+- The fold realises the map: map lDDT 0.615 against the ω/φ fold's 0.627 over the 78 (the fold is ahead on 52, most
+  at separations of 48 and more); corr(TM, map lDDT) = 0.90. Item 7 of §11a (a better fold) is not next.
+- Breadth: long-range recall at P > 0.5 is 0.49 and top-L precision 0.62 over the 78; the error on pairs under 12 Å
+  is 3.2 Å.
+- The net's lift over the 3B contact head (0.864 against 0.747 top-L/5 on the 78) is the same in every separation
+  band: +0.14 to +0.17 precision at the true contact count from 6–12 residues out to 96 and beyond. Both decay
+  together, so the decay at long range is the LM's and the receptive field is not the evident limit (item 5).
+- The distance to the field (0.646 against a median model of 0.892): the 16 units under 0.85 precision fold to 0.34
+  against the field's 0.83 and are 41 % of the gap; the other 62 fold to 0.72 against 0.91. Units over 200 residues
+  0.59 against 0.93.
+- ESMFold (§10): +0.132 TM over our head on the same LM. On the 62 units where our top contacts are right it is 0.84
+  against 0.72 and never under 0.5 (we are on 7); on the 16 where they are not, 0.53 against 0.34 — it lifts 4 above
+  0.8 (T1298-D2, T1284-D1, T1279-D2, T1272s8-D1) and is under 0.5 on 8. So the head is the larger gap, and half of
+  the low-precision units are blind for the LM itself.
+- Closed: longer schedules, seeds, ensembles, the fold engine, dilations. Parked: the MSA route (§11a, "The MSA
+  route — parked": OpenProteinSet for the alignments, the steps in order, the estimate). Open: the headline row
+  (100 epochs or its 30-epoch twin); the featured units. The plate carries all of it (version 8).
 
 **The morning version.** Day 1 of §11a ran as a night: the pair-input op (`Layer.pairTile`'s `pairIn`,
 the LM's own contact-head logits as one pair-tile channel) and ESM-2 3B both landed, and they stack
@@ -607,6 +639,77 @@ per unit, not a better optimizer (the energy-gap test, §10a, says the same from
 
 Cheap and low: test-time stride 16 / multi-crop averaging (+0.005 at best); ensembles (closed: nothing);
 more seeds (0.002); longer schedules alone (+0.009 at 650M).
+
+### The MSA route — parked 2026-10-04
+
+Brett, 2026-10-04: "i would use OpenProteinSet for the alignments / nothing custom", then "we'll come back to it".
+**Status: nothing downloaded, nothing built, nothing launched.** Decided: the training alignments come from
+OpenProteinSet and nothing is searched locally. Open: go or no-go, and the three targets with no public alignment.
+
+**What it is.** One alignment per chain; MSA Transformer (`esm_msa1b_t12_100M_UR50S`, already in `.venv-casp`'s
+fair-esm) over each gives a 768-wide per-residue embedding and a contact-logit plane — the two things the net
+already takes from ESM-2. So the Lean side is done: a wider `dim=` and `pair=2` on the existing
+`Layer.pairTile … (pairIn := K)`; no new op, no new proof item.
+
+**What to expect — an estimate, not a measurement** (the plate's chart, version 8): fold TM ≈ 0.71 (0.67–0.74) from
+0.646, top-L/5 ≈ 0.90–0.93 from 0.873. Assumptions: (1) an MSA un-blinds a low-precision unit only where the
+ColabFold baseline group's model (group 145; the field median where it has none) is at TM 0.8 or better — 10 of
+the 16; (2) those reach what our head gets where its top contacts are right, 0.72; (3) the 62 units the LM already
+sees gain +0.02. Low = half of the 10 and nothing else; high = +0.05 on the seen units and +0.10 on the rest. That
+is about a quarter of the distance to the field's median model (0.892), and it stays under OpenComplex (0.768, the
+lowest of the 30 groups with all 78 units) and under ESMFold without an MSA (0.778): the head, not the input, is
+the larger gap (§11, the review).
+
+**The data, as measured 2026-10-04.**
+- Training side, OpenProteinSet: `https://openfold.s3.amazonaws.com/pdb/<pdb>_<chain>/a3m/` holds
+  `uniref90_hits.a3m`, `bfd_uniclust_hits.a3m` and `mgnify_hits.a3m` per chain (public, no sign-in; 131,487 chain
+  directories; `duplicate_pdb_chains.txt` at the bucket root lists identical chains, one of which carries the
+  files). Our entity maps to `<entry, lower case>_<auth chain>`, directly or through its duplicate group. Coverage:
+  22,063 of the 26,310 `train_full` chains — all but 29 of those released through 2021, none of the 4,218 released
+  2022–24 — and 1,149 of the 1,380 val chains; 84 % of the residues. From a 60-chain sample: 0.43 MB per chain for
+  the BFD / UniClust30 file (≈ 10 GB for the 22,063), 1.51 MB for UniRef90 (≈ 33 GB), 0.49 MB for MGnify.
+- Target side: the targets postdate OpenProteinSet. MassiveFold's CASP16 release
+  (github.com/GBLille/CASP16-CAPRI_MassiveFold_Data; files on entrepot.recherche.data.gouv.fr, one `.tar.gz` per
+  target, URLs in `dataset_download/casp_massivefold_files_{monomers,multimers}.csv`) says each archive holds
+  "predictions as well as pickle files, sequence alignments, rankings and plots". It has an archive for 54 of our
+  59 targets (28 monomeric, 26 inside multimer archives) and none for T1214, T1228 and T1239: 17 of the 84 units,
+  16 of the 78 folded, so an MSA arm is scored on 62 folded units unless those three get a source.
+- Not checked: which alignment files a MassiveFold archive holds (tools, databases, formats) and how large an
+  archive is (each carries up to 8,040 models; a HEAD request on the file URL is refused).
+- Not taken, being the custom route: a local MMseqs2 search (UniRef50 is an 8.8 GB download; ColabFold's UniRef30
+  is 103 GB plus 118 GB for the environmental set) and the ColabFold server for the targets.
+
+**When we come back, in this order.**
+1. *Checks, about an hour, before anything is built.* List one monomeric MassiveFold archive without keeping it
+   (stream it through `tar tz`): which alignment files, which databases, how many GB. Pick the alignment kind to
+   feed MSA Transformer — it has to be the same kind on both sides, so the choice is whichever of OpenProteinSet's
+   three files MassiveFold also ships (the BFD / UniClust30 file is the smallest and the closest to what MSA
+   Transformer was trained on). Confirm on a sample that an OpenProteinSet alignment's query row is our entity's
+   sequence, residue for residue.
+2. *The probe, half a day, no training.* The target alignments only; MSA Transformer's own contact head on each,
+   scored like the ESM-2 heads (`casp16_targets.py`'s top-L/5 column), unit by unit against the 3B head (0.759 over
+   the 84). It tests assumption (1): go if it lifts the low-precision units the estimate counts on. If it does not,
+   stop here.
+3. *Training alignments.* A fetch script beside `casp16_fetch_chains.py` (to write): per covered chain, stream the
+   chosen file, subsample to a fixed depth (256 at most, diversity-maximising, as in the ESM examples), keep only
+   the filtered alignment (about 2 GB in all), resume from a `.done` list. It writes the covered lists
+   (`train_msa.csv` 22,063, `val_msa.csv` 1,149).
+4. *Encoder pass.* `casp16_embed.py` grows an MSA mode (to write): fp16, `--shard k/n` over the four cards, the
+   query row's embedding into a pool and the contact-logit plane beside the 3B plane. Estimated 2.5–5 h on four
+   cards at depth 128–256 (scaled from the 650M pool's 1,644 s; not measured). Pool ≈ 7.9 GB (5.1 M residues × 768
+   in fp16), plane ≈ 1.5 GB. MSA Transformer takes 1,024 positions: the training pool's longest chain is 512, but
+   five targets are longer and need windows.
+5. *Arms at 64 ch × 30 ep, 77 min each,* all on the covered lists: the no-MSA twin (3B + its plane — the baseline
+   the other two are paired against, since the list is 16 % shorter), MSA only (`dim=777 pair=1`), 3B + MSA
+   (`dim=3337 pair=2`). The wide config (about 6 h) only if 3B + MSA clears the twin by more than seed noise
+   (0.002 on precision, 0.002 on the fold).
+6. *Score* with `finish_run.sh` on the units that have a target alignment, paired against the book run on the same
+   units; `casp16_table.py` reads the row.
+
+**Constraints to plan around.** Disk: about 60 GB free, and a combined 3B + MSA feature file for the covered
+chains would be about 34 GB next to the 33 GB 3B pool it duplicates — better that the gatherer
+(`lean_casp_gather`) reads two pools side by side. Memory: at most three 3B-pool trainers at once (§11, hygiene).
+About three days end to end, most of it steps 3–4.
 
 ### The week's shape (four cards)
 
@@ -1002,3 +1105,15 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   0.625, ω/φ fold **0.627 / 0.646** (medians 0.642 / 0.706, 2 wrong hands) — the 30-epoch row's
   0.877 / 0.628 / 0.645 to within 0.004; paired 100 − 30: −0.004 / −0.001 / +0.001, every CI
   across zero. The schedule is flat at the wide config. All four cards idle.
+- 2026-10-04 evening: review of the book run (§11), no training. `casp16_table.py` gains map lDDT / recall / top-L
+  (cached `map_scores.csv`), the 650M and 3B head rows and an ESMFold row; `casp16_esmfold.py` (new; `transformers`
+  in `.venv-casp`, `facebook/esmfold_v1`) folds 54 of the 59 targets on one card in 37 min — the five over 1,000
+  residues do not fit — and scores 75 units through `casp16_score.score`: 0.770 TM against our 0.647 on the 73 folded
+  units it covers; with T1218's and T1269's five units from an 800-residue window, 0.778 against 0.646 over the 78.
+  `casp16_ablation_figure.py`: the top row is the landed book run and the three longest labels no longer clip.
+  OpenProteinSet coverage measured and MassiveFold's CASP16 archives located (§11a, the MSA route); Brett:
+  OpenProteinSet for the alignments, nothing custom. Plate version 8 (the ladder on one TM axis with the ESMFold
+  row and the MSA estimate; figures re-rendered on the 100-epoch run into the session scratchpad, `demos/figures/`
+  untouched). Working tree only: nothing staged, nothing committed. All four cards idle.
+- 2026-10-04 (late): the MSA route parked (Brett: "we'll come back to it"); §11a carries it as a resumable
+  plan — the decision, the measured coverage, the unchecked items, six steps in order, the constraints.

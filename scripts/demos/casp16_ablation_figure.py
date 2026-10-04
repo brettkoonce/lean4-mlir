@@ -18,9 +18,9 @@ BLUE, INK, MUTED, PAPER = "#2a78d6", "#1f1e1b", "#6b6963", "#fbfbf8"
 BASE = "r16x64_esm650_train_full_e30-esm650"
 # label, prediction dir (under .lake/build/distogram_<…>_targets), fold file
 ROWS = [
-    ("+ 128 ch + crop 96 + orientation heads, 100 ep: the book run, ω/φ fold", "r16x128_esm650_orient_train_full_e100-esm650-crop96-orient", "fold_scores_orient.csv"),
-    ("the book config at 30 ep: 3B + plane + 128 ch + crop 96 + heads, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e30-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
-    ("3B + plane + 128 ch + crop 96 (the book config without the heads)", "r16x128_esm3b_pair1_train_full_e30-esm3b-crop96-pair1", "fold_scores.csv"),
+    ("the same at 100 epochs: the book run, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
+    ("3B + plane + 128 ch + crop 96 + heads, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e30-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
+    ("3B + plane + 128 ch + crop 96", "r16x128_esm3b_pair1_train_full_e30-esm3b-crop96-pair1", "fold_scores.csv"),
     ("+ plane + 128 ch + crop 96 (650M)",               "r16x128_esm650_pair1_train_full_e30-esm650-crop96-pair1", "fold_scores.csv"),
     ("3B + 128 ch + crop 96",                           "r16x128_esm3b_train_full_e30-esm3b-crop96", "fold_scores.csv"),
     ("3B + plane + orientation heads, ω/φ fold",        "r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient", "fold_scores_orient.csv"),
