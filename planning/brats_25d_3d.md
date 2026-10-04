@@ -2,7 +2,8 @@
 
 **Opened 2026-09-09.** Scoped, not started. **2026-09-29: §1, §2, §3, §5 done (committed
 `145b911b`); §2 is a tie, §3 passes, §4a/§4b measured; §4c is the plan for the long 3D
-session that decides the port.** Companions: `planning/archive/unet3d.md` (the 3D scope,
+session that decides the port.** **2026-10-04: §4d — the 20k-step 3D run and a second 2D seed; the §4c
+rule says go on one 3D seed.** Companions: `planning/archive/unet3d.md` (the 3D scope,
 with the XLA compile spike and the DECIDED-2026-07-15 entry: **codegen + FD, no proofs** — Phase 5
 struck, not deferred) and `planning/archive/brats_demo.md` §Dimensionality / Workstream D (Gate D:
 2.5D must beat 2D at matched budget before 3D starts). ⚠ `brats_demo.md:315,347` say "3D is not
@@ -231,7 +232,50 @@ value in the tail; the floor is parity.
 byte-identical 2D MLIR after the rank-generic refactor; the JAX trainer above is what the Lean
 train step ties to, per op through FD probes and end to end through per-patient Dice.
 
-## §5 Stage G — sliding-window whole-volume inference (separate line item)
+## §4d The 20k-step run, 2026-10-03/04: the decision rule says go
+
+Run dir `runs/2026-10-03-brats-3d/` (README has the commands). Prep items 1, 2, 4 and 6 of §4c
+landed for it: the tail and the per-slice ET false-alarm rate in both scorers (`brats-eval`,
+`unet3d_brats.py`; the CSVs carry `ET_clear_slices`, `ET_fa1`, `ET_fa10`),
+`scripts/probes/brats_tail.py --min-et` as the post-processing control applied to every CSV alike,
+checkpoint + per-patient eval every 2k steps with `--resume`, and a second 2D anchor seed —
+which needed `LEAN_MLIR_SEED` first, because every Lean run's init, shuffle and augmentation seeds
+were constants (`tag=s2` alone would have replayed seed 0). Items 3 (TTA) and 5 (B4 / pmap) not
+done. The 3D run is §4a's recipe with the cosine over 20k steps (318 min at 911 ms/step).
+
+At min-ET 200 on every model (73 patients; worst-10% = the 7 lowest):
+
+| model | WT mean · worst-10% | TC mean · worst-10% · n<0.7 | ET mean · worst-10% · n<0.7 | ET false alarms, ≥1 px |
+|---|---|---|---|---|
+| 2D R34 anchor, seed 0 | 0.893 · 0.713 | 0.821 · 0.470 · 14 | 0.804 · 0.418 · 13 | 0.0249 |
+| 2D R34 anchor, seed 1 | 0.891 · 0.699 | 0.818 · 0.453 · 12 | 0.801 · 0.421 · 15 | 0.0242 |
+| 3D UNet, 4k steps (§4a) | 0.894 · 0.744 | 0.810 · 0.457 · 17 | 0.790 · 0.397 · 15 | 0.0136 |
+| **3D UNet, 20k steps** | **0.900 · 0.747** | **0.827 · 0.495 · 13** | **0.807 · 0.464 · 13** | **0.0107** |
+
+The false-alarm rate is over the 8,060 slices with no ET in the ground truth.
+
+* **Seed noise, measured:** the two 2D seeds differ by 0.002–0.003 on the means, 0.014–0.020 on
+  the worst-10% means, ~2 patients on n<0.7, and 0.0007 on the false-alarm rate.
+* **The rule (§4c), clause by clause:** worst decile beyond seed noise on TC or ET — ET +0.045
+  over both seeds, TC +0.025 / +0.042: **yes on ET, marginal on TC**. Per-slice ET false-alarm
+  rate lower beyond noise — 0.0107 against 0.0242–0.0249, about 20× the seed spread: **yes**.
+  Mean > 2 points on TC — +0.008: **no**. One clause suffices; two hold.
+* Paired over patients, 3D 20k minus the two seeds' mean: WT +0.007 (95 % bootstrap CI
+  [+0.001, +0.015]), TC +0.008 [−0.008, +0.024], ET +0.018 [−0.003, +0.050]. The mean is a tie or
+  better, never worse; the tail and the false alarms are where the volume pays.
+* min-ET 200 and 500 give identical tables; on ET it closes most of the 2D seeds' tail gap from
+  the raw numbers (0.341 → 0.418), which is why the post-process had to be on both sides.
+* The curve (`unet3d_20k_pervol_s*.csv`): under the high learning rate the evals swing (step 2k
+  WT 0.657 — under-segmentation, partly a BN running-stat lag; step 10k ET n<0.7 = 19), and they
+  settle from 16k on (16k / 18k / 20k within 0.003 on every mean).
+* ⚠ **One 3D seed.** The 2D side has two; the 3D side's own noise is unmeasured and the run is
+  ~6× the anchor's wall clock. §4c's "second day = second seed" is the open item before the
+  verdict goes in the book; the two 2D-dead patients (volumes 8, 55) are still dead.
+
+**Verdict:** the port (Stages D–F) has its reason on the false-alarm clause beyond any doubt the
+2D seeds leave, and on the ET tail; confirm with a second 3D seed (~5.5 h) before building it.
+
+ — sliding-window whole-volume inference (separate line item)
 
 The only thing that makes ANY BraTS number here comparable to the literature
 (`brats_demo.md:110-118`: slice-level over tumour-bearing slices). Do it for the **2D** model

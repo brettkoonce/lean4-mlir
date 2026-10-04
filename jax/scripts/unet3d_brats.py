@@ -25,7 +25,12 @@ Data: whole volumes from `preprocess_brats.py --train-full --val-full` (`train_f
         jax/scripts/unet3d_brats.py --steps 4000 --out runs/<dir>/unet3d
 
 Throughput on one 4060 Ti: ~0.9 s/step at 128³ × B2 (jax/scripts/unet3d_gate0.py), so 4,000
-steps is ~1 h. The per-volume CSV has `brats-eval`'s columns.
+steps is ~1 h. The per-volume CSV has `brats-eval`'s columns, the ET false-alarm counts included,
+so `scripts/probes/brats_tail.py` puts the two side by side under one post-process.
+
+With `--eval-every N` every N steps writes `<out>_ckpt.npz` (params, BN stats, both Adam moments,
+the step) and `<out>_pervol_s<step>.csv`; `--resume <out>_ckpt.npz` continues from that step on
+the same schedule, so a dead run loses at most N steps.
 """
 import argparse
 import json
@@ -332,6 +337,11 @@ def evaluate(P, S, val, depth, out_csv=None, log=print, limit=None):
         for name, cls in REGIONS:
             i, g, p = region_counts(conf, cls)
             row.update({f"{name}_inter": i, f"{name}_gt": g, f"{name}_pred": p, f"{name}_dice": dice_of(i, g, p)})
+        # Slices with no ground-truth ET, and those of them with >= 1 / >= 10 predicted ET pixels.
+        clear = (msk == 3).sum((1, 2)) == 0
+        pr_et = (pred == 3).sum((1, 2))
+        row.update({"ET_clear_slices": int(clear.sum()), "ET_fa1": int((clear & (pr_et >= 1)).sum()),
+                    "ET_fa10": int((clear & (pr_et >= 10)).sum())})
         per_vol.append(row)
     log(f"  scored {n_vols} volumes in {time.time() - t0:.0f} s")
 
@@ -352,8 +362,18 @@ def evaluate(P, S, val, depth, out_csv=None, log=print, limit=None):
         log(f"    {name}: {d.mean():.4f} ± {d.std(ddof=1):.4f}  median {np.median(d):.4f}   "
             f"present-only {present.mean():.4f} (n={len(present)})   absent in {len(d) - len(present)}")
         summary[name] = float(d.mean())
+    k = max(1, n_vols // 10)
+    log(f"  tail over {n_vols} patients (worst-10% mean · n<0.7 · n<0.5):")
+    for name, _ in REGIONS:
+        d = np.array([r[f"{name}_dice"] for r in per_vol])
+        log(f"    {name}: {np.sort(d)[:k].mean():.4f} · {(d < 0.7).sum()} · {(d < 0.5).sum()}")
+    clear = sum(r["ET_clear_slices"] for r in per_vol)
+    fa1, fa10 = sum(r["ET_fa1"] for r in per_vol), sum(r["ET_fa10"] for r in per_vol)
+    log(f"  ET false alarms over {clear} slices with no ET: >=1 px on {fa1} ({fa1 / max(clear, 1):.4f}), "
+        f">=10 px on {fa10} ({fa10 / max(clear, 1):.4f})")
     if out_csv:
-        cols = ["volume", "slices"] + [f"{n}_{k}" for n, _ in REGIONS for k in ("inter", "gt", "pred", "dice")]
+        cols = ["volume", "slices"] + [f"{n}_{k}" for n, _ in REGIONS for k in ("inter", "gt", "pred", "dice")] \
+            + ["ET_clear_slices", "ET_fa1", "ET_fa10"]
         with open(out_csv, "w") as f:
             f.write(",".join(cols) + "\n")
             for r in per_vol:
@@ -378,6 +398,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="runs/unet3d", help="prefix for the params .npz, the CSV and the log")
     ap.add_argument("--init", default=None, help="a saved .npz to evaluate (no training)")
+    ap.add_argument("--resume", default=None, help="a <out>_ckpt.npz to continue training from")
     ap.add_argument("--val-limit", type=int, default=None, help="smoke test: score only the first N volumes")
     args = ap.parse_args()
 
@@ -405,14 +426,27 @@ def main():
 
     train = Corpus(args.data, "train_full", size)
     log(f"train: {len(train.vols)} volumes, {train.mm.shape[0]} slices")
-    sampler = PatchSampler(train, args.patch, args.batch, args.fg, args.seed)
     step = make_step(args.loss, lr_schedule(args.lr, args.warmup), args.wd, args.steps)
     m = jax.tree_util.tree_map(jnp.zeros_like, P)
     v = jax.tree_util.tree_map(jnp.zeros_like, P)
+    t0_step = 0
+    if args.resume:
+        z = np.load(args.resume, allow_pickle=True)
+        load = lambda ref, key: jax.tree_util.tree_map(lambda _, a: jnp.asarray(a), ref, z[key].item())
+        P, S, m, v = load(P, "P"), load(S, "S"), load(P, "m"), load(P, "v")
+        t0_step = int(z["t"])
+        log(f"  resumed {args.resume} at step {t0_step}")
+    # A resumed run draws fresh patches rather than replaying the first run's.
+    sampler = PatchSampler(train, args.patch, args.batch, args.fg, args.seed + 1000003 * t0_step)
+
+    def save(path, t):
+        tree = lambda x: np.asarray(jax.tree_util.tree_map(np.asarray, x), dtype=object)
+        np.savez(path + ".tmp.npz", P=tree(P), S=tree(S), m=tree(m), v=tree(v), t=t)
+        os.replace(path + ".tmp.npz", path)
 
     losses, times = [], []
     t_start = time.time()
-    for t in range(1, args.steps + 1):
+    for t in range(t0_step + 1, args.steps + 1):
         x, y = sampler.get()
         t0 = time.time()
         P, S, m, v, loss = step(P, S, m, v, jnp.asarray(t, jnp.int32), jnp.asarray(x), jnp.asarray(y.astype(np.int32)))
@@ -426,8 +460,9 @@ def main():
         if np.isnan(loss):
             log("  loss is NaN — stopping"); break
         if args.eval_every and t % args.eval_every == 0 and t < args.steps:
-            log(f"--- eval at step {t}")
-            evaluate(P, S, val, args.patch, None, log, args.val_limit)
+            save(args.out + "_ckpt.npz", t)
+            log(f"--- eval at step {t} (checkpoint {args.out}_ckpt.npz)")
+            evaluate(P, S, val, args.patch, f"{args.out}_pervol_s{t}.csv", log, args.val_limit)
     log(f"trained {args.steps} steps in {(time.time() - t_start) / 60:.1f} min; median step {np.median(times) * 1000:.0f} ms")
     np.savez(args.out + "_params.npz",
              P=np.asarray(jax.tree_util.tree_map(np.asarray, P), dtype=object),

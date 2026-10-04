@@ -643,6 +643,11 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let (trainImg, trainLbl, nTrain) ← dio.loadTrain dataDir
   IO.eprintln s!"  train: {nTrain} images ({dio.trainPixels} floats/image)"
 
+  -- LEAN_MLIR_SEED=<k> moves the He-init, the per-epoch shuffle and the augmentation draws
+  -- off their fixed seeds, for a second seed of a run; unset (0) leaves every run as it was.
+  let seedOff : Nat := ((← IO.getEnv "LEAN_MLIR_SEED").bind String.toNat?).getD 0
+  if seedOff > 0 then IO.eprintln s!"  seed offset: {seedOff} (LEAN_MLIR_SEED)"
+
   -- Optional pretrained-backbone bootstrap. Replaces the prefix
   -- of the He-init with bytes read from a saved checkpoint (e.g. R34
   -- Imagenette weights loaded into a YOLOv1 init). Auto-loads BN stats
@@ -651,7 +656,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     | some (path, dstOff, srcOff, count), _ => do
         IO.eprintln s!"  bootstrap(range): {count} floats from {path}[{srcOff}..] → init[{dstOff}..]"
         IO.eprintln s!"  bootstrap(range): init[0..{dstOff}) stays He-init (fresh stem)"
-        let init ← spec.heInitParams
+        let init ← spec.heInitParams (42 + (seedOff * 100003).toUSize)
         let patched ← NetSpec.patchInitWithPretrainedRange init path
                         (dstOff * 4) (srcOff * 4) (count * 4)
         -- GUARD ("backbone actually loaded?").
@@ -673,10 +678,10 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
             throw <| IO.userError "bootstrap(range) GUARD FAILED: fresh stem was overwritten"
         IO.eprintln s!"  bootstrap(range): GUARD OK — {count} floats byte-equal checkpoint, stem untouched"
         pure patched
-    | none, none => spec.heInitParams
+    | none, none => spec.heInitParams (42 + (seedOff * 100003).toUSize)
     | none, some (path, prefixFloats) => do
         IO.eprintln s!"  bootstrap: loading first {prefixFloats} floats from {path}"
-        let init ← spec.heInitParams
+        let init ← spec.heInitParams (42 + (seedOff * 100003).toUSize)
         NetSpec.patchInitWithPretrainedPrefix init path (prefixFloats * 4)
   -- RetinaNet prior-bias init. Applied AFTER the bootstrap patch (which only
   -- ever rewrites a prefix — the backbone — and never reaches the head) and
@@ -863,7 +868,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   for epoch in [startEpoch:epochs] do
     if !skipShuffle then
       let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPixels.toUSize
-                           dio.labelBytesPerRecord.toUSize (epoch + 42).toUSize
+                           dio.labelBytesPerRecord.toUSize (epoch + 42 + seedOff * 1000).toUSize
       curImg := sImg; curLbl := sLbl
 
     -- LR is computed PER STEP (see inside the bi loop) so warmup ramps smoothly
@@ -900,7 +905,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                 baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * prog))
             else baseLR
       let xbaRaw := F32.sliceImages curImg (bi * batchN) batchN trainPixels
-      let xbaInit ← if cfg.augment then dio.augmentBatch xbaRaw batch (epoch * 10000 + bi)
+      let xbaInit ← if cfg.augment then dio.augmentBatch xbaRaw batch (epoch * 10000 + bi + seedOff * 1000003)
                                    else dio.preprocessBatch xbaRaw batch
       let mut xba : ByteArray := xbaInit
       let yb := F32.sliceLabels curLbl (bi * batchN) batchN dio.labelBytesPerRecord

@@ -30,6 +30,14 @@ open SegMetrics (regionCounts regionDice)
       exists, since the convention's 0/1 jumps are a large share of the spread
       on ET (roughly a fifth of Task01's cases are lower-grade gliomas with no
       enhancing tumour at all).
+    * **the tail**: per region the mean over the worst tenth of the patients and
+      how many score under 0.7 and under 0.5 — the patients a clinician would
+      have to redo, which the mean hides.
+    * **the per-slice ET false-alarm rate**: of the slices with no enhancing
+      tumour in the ground truth, how many get at least 1 and at least 10
+      predicted ET pixels. The CSV carries the per-volume counts
+      (`ET_clear_slices`, `ET_fa1`, `ET_fa10`) so `scripts/probes/brats_tail.py`
+      can recompute both under a minimum-ET post-process.
     * **pooled Dice over every slice**, the trainer's number recomputed on the
       whole volumes — same instrument, tumour-free slices included.
     * **pooled Dice over the tumour-bearing slices** at stride 1, which should
@@ -143,6 +151,10 @@ def main (args : List String) : IO Unit := do
   let mut pooledAll : Array Nat := Array.replicate (NC * NC) 0
   let mut pooledTumour : Array Nat := Array.replicate (NC * NC) 0
   let mut nTumourSlices := 0
+  -- Per volume: slices with no ground-truth ET, and those of them with ≥ 1 / ≥ 10 predicted ET pixels.
+  let mut etClear : Array Nat := Array.replicate nVol 0
+  let mut etFa1 : Array Nat := Array.replicate nVol 0
+  let mut etFa10 : Array Nat := Array.replicate nVol 0
   let t0 ← IO.monoMsNow
   for bi in [:nBatches] do
     let start := bi * evalBatch
@@ -164,6 +176,15 @@ def main (args : List String) : IO Unit := do
         pooledAll := pooledAll.set! j (pooledAll[j]! + c)
         if j / NC != 0 then tumourPx := tumourPx + c
       conf := conf.set! v cv
+      let mut gtEt := 0
+      let mut prEt := 0
+      for j in [:NC] do
+        gtEt := gtEt + readU64LE cb (8 * (3 * NC + j))
+        prEt := prEt + readU64LE cb (8 * (j * NC + 3))
+      if gtEt == 0 then
+        etClear := etClear.set! v (etClear[v]! + 1)
+        if prEt ≥ 1 then etFa1 := etFa1.set! v (etFa1[v]! + 1)
+        if prEt ≥ 10 then etFa10 := etFa10.set! v (etFa10[v]! + 1)
       if tumourPx > 0 then
         nTumourSlices := nTumourSlices + 1
         for j in [:NC * NC] do
@@ -198,10 +219,11 @@ def main (args : List String) : IO Unit := do
   let mut csv := "volume,slices"
   for (name, _) in kind.segRegions do
     csv := csv ++ s!",{name}_inter,{name}_gt,{name}_pred,{name}_dice"
-  csv := csv ++ "\n"
+  csv := csv ++ ",ET_clear_slices,ET_fa1,ET_fa10\n"
   let mut rows : Array String := Array.replicate nVol ""
   for v in [:nVol] do
     rows := rows.set! v s!"{v},{counts[v]!}"
+  let mut tails : List (String × Array Float) := []
   for (name, cls) in kind.segRegions do
     let mut dices : Array Float := #[]
     let mut present : Array Float := #[]
@@ -213,8 +235,19 @@ def main (args : List String) : IO Unit := do
       if g > 0 then present := present.push d else absent := absent + 1
       rows := rows.set! v (rows[v]! ++ s!",{i},{g},{p},{d}")
     IO.println s!"    {name}: {fmt (meanOf dices)} ± {fmt (stdOf dices)}  median {fmt (medianOf dices)}   present-only {fmt (meanOf present)} (n={present.size})   absent in {absent}"
+    tails := tails ++ [(name, dices)]
+  IO.println s!"  tail over {nVol} patients (worst-10% mean · n<0.7 · n<0.5):"
+  for (name, dices) in tails do
+    let sorted := dices.qsort (· < ·)
+    let k := max 1 (nVol / 10)
+    IO.println s!"    {name}: {fmt (meanOf (sorted.extract 0 k))} · {(dices.filter (· < 0.7)).size} · {(dices.filter (· < 0.5)).size}"
+  let clear := etClear.foldl (· + ·) 0
+  let fa1 := etFa1.foldl (· + ·) 0
+  let fa10 := etFa10.foldl (· + ·) 0
+  let rate := fun (n : Nat) => if clear == 0 then 0.0 else n.toFloat / clear.toFloat
+  IO.println s!"  ET false alarms over {clear} slices with no ET: ≥1 px on {fa1} ({fmt (rate fa1)}), ≥10 px on {fa10} ({fmt (rate fa10)})"
   for v in [:nVol] do
-    csv := csv ++ rows[v]! ++ "\n"
+    csv := csv ++ rows[v]! ++ s!",{etClear[v]!},{etFa1[v]!},{etFa10[v]!}\n"
   if let some path := outCsv then
     IO.FS.writeFile path csv
     IO.eprintln s!"  wrote {path}"

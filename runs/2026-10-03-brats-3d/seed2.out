@@ -1,0 +1,15 @@
+[20:07] r34 seed 1 on GPU 0
+[20:51] trained:   val Dice ET: 0.857425  (inter=664556 gt=768149 pred=781972) Saved params + BN stats. 
+  wrote runs/2026-10-03-brats-3d/pervol_2d_r34_s2.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9118  TC 0.8657  ET 0.8569  mIoU 0.7395
+  pooled Dice, every slice (11315 slices): WT 0.9100  TC 0.8648  ET 0.8557  mIoU 0.7388
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8914 ± 0.0768  median 0.9179   present-only 0.8914 (n=73)   absent in 0
+    TC: 0.8180 ± 0.1564  median 0.8671   present-only 0.8180 (n=73)   absent in 0
+    ET: 0.7896 ± 0.1775  median 0.8510   present-only 0.8006 (n=72)   absent in 1
+  tail over 73 patients (worst-10% mean · n<0.7 · n<0.5):
+    WT: 0.6987 · 4 · 0
+    TC: 0.4530 · 12 · 2
+    ET: 0.3612 · 16 · 4
+  ET false alarms over 8060 slices with no ET: ≥1 px on 206 (0.0255), ≥10 px on 122 (0.0151)
+[20:52] seed2 done

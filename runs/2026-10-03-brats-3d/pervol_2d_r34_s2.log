@@ -1,0 +1,35 @@
+  net: ResNet-34 UNet skip (BraTS, 224×224 4-modality MRI → 4-class tumour)
+  checkpoint: .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_params.bin
+  loading data/brats224/val_full.bin at 224², 4 channels ...
+  73 volumes, 11315 slices
+I1003 20:51:21.669196 3849319 service.cc:154] XLA service 0x70bb640083e0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1003 20:51:21.669236 3849319 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1003 20:51:21.670679 3849319 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1003 20:51:21.670710 3849319 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1003 20:51:21.677275 3849319 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 3845 ms
+  708 eval forwards at batch 16 ...
+    batch 0/708
+    batch 100/708
+    batch 200/708
+    batch 300/708
+    batch 400/708
+    batch 500/708
+    batch 600/708
+    batch 700/708
+  scored in 37 s
+  wrote runs/2026-10-03-brats-3d/pervol_2d_r34_s2.csv
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9118  TC 0.8657  ET 0.8569  mIoU 0.7395
+  pooled Dice, every slice (11315 slices): WT 0.9100  TC 0.8648  ET 0.8557  mIoU 0.7388
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8914 ± 0.0768  median 0.9179   present-only 0.8914 (n=73)   absent in 0
+    TC: 0.8180 ± 0.1564  median 0.8671   present-only 0.8180 (n=73)   absent in 0
+    ET: 0.7896 ± 0.1775  median 0.8510   present-only 0.8006 (n=72)   absent in 1
+  tail over 73 patients (worst-10% mean · n<0.7 · n<0.5):
+    WT: 0.6987 · 4 · 0
+    TC: 0.4530 · 12 · 2
+    ET: 0.3612 · 16 · 4
+  ET false alarms over 8060 slices with no ET: ≥1 px on 206 (0.0255), ≥10 px on 122 (0.0151)

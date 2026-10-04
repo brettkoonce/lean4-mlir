@@ -1,0 +1,15 @@
+backend gpu cuda:0 jax 0.11.0; args {'data': 'data/brats224', 'steps': 4000, 'batch': 2, 'patch': 128, 'lr': 0.0003, 'warmup': 200, 'wd': 0.0001, 'fg': 0.3333333333333333, 'loss': 'dicece', 'eval_every': 0, 'seed': 0, 'out': 'runs/2026-10-03-brats-3d/unet3d_1h_rescore', 'init': 'runs/2026-09-29-brats-25d/unet3d_params.npz', 'resume': None, 'val_limit': None}
+3D UNet: 23,537,924 params; patch 128³ × B2; 73 val volumes
+  scored 73 volumes in 117 s
+  pooled Dice, tumour-bearing slices (5103 slices): WT 0.9096  TC 0.8591  ET 0.8476  mIoU 0.7370
+  pooled Dice, every slice (11315 slices): WT 0.9093  TC 0.8589  ET 0.8474  mIoU 0.7375
+  per-volume Dice over 73 patients (mean ± sd, median; mean over volumes with the region; volumes without it):
+    WT: 0.8943 ± 0.0632  median 0.9142   present-only 0.8943 (n=73)   absent in 0
+    TC: 0.8099 ± 0.1620  median 0.8582   present-only 0.8099 (n=73)   absent in 0
+    ET: 0.7902 ± 0.1712  median 0.8536   present-only 0.7873 (n=72)   absent in 1
+  tail over 73 patients (worst-10% mean · n<0.7 · n<0.5):
+    WT: 0.7437 · 1 · 0
+    TC: 0.4565 · 17 · 2
+    ET: 0.3970 · 15 · 3
+  ET false alarms over 8060 slices with no ET: >=1 px on 111 (0.0138), >=10 px on 69 (0.0086)
+  wrote runs/2026-10-03-brats-3d/unet3d_1h_rescore_pervol.csv

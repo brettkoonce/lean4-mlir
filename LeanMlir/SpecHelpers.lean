@@ -81,10 +81,10 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     | .zeroSeeded => parts := parts.push (← F32.const n 0.0); s := s + 1
   return (parts, s)
 
-/-- He-initialize all parameters for a spec, walking layer-by-layer. -/
-def heInitParams (spec : NetSpec) : IO ByteArray := do
+/-- He-initialize all parameters for a spec, walking layer-by-layer from `seed`. -/
+def heInitParams (spec : NetSpec) (seed : USize := 42) : IO ByteArray := do
   let mut paramParts : Array ByteArray := #[]
-  let mut seed : USize := 42
+  let mut seed : USize := seed
   for l in spec.layers do
     let (parts, s') ← heInitLayer l seed
     paramParts := paramParts ++ parts
