@@ -1,0 +1,14 @@
+predicted 84 EUs, 9474 windows in 136 s -> .lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair[14:20] assemble -> .lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets
+T1299-D1      168      1.000      0.618  easy
+easy  : ours 0.878  ESM-2 head 0.533  (30 EUs)
+medium: ours 0.896  ESM-2 head 0.478  (46 EUs)
+hard  : ours 0.723  ESM-2 head 0.233  (8 EUs)
+all   : ours 0.873  ESM-2 head 0.474  (84 EUs) -> .lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets/table.csv
+[14:22] fold
+[14:44] score
+easy  : Cβ-lDDT mean 0.656 median 0.731  TM mean 0.702 median 0.787  (29 EUs, mirror better on 0)
+medium: Cβ-lDDT mean 0.613 median 0.602  TM mean 0.591 median 0.577  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.450 median 0.382  TM mean 0.483 median 0.416  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.619 median 0.639  TM mean 0.625 median 0.684  (78 EUs, mirror better on 2)
+-> .lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets/fold_scores.csv
+[14:44] done .lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets

@@ -438,6 +438,18 @@ contact precision (0.67) suggests is available.
 
 ## 11. Handoff — 2026-10-03 07:00: the night stacked three levers; the book run's config is settled
 
+**The book run landed 2026-10-04 14:59 — and the 100-epoch schedule bought nothing.** queue24
+(the book config at `epochs=100`; 164,400 steps in 21.0 h on GPU 1): distance head 75.7 % val
+(flat from epoch ~98), EUs **0.873** (0.878 / 0.896 / 0.723) over 84, plain fold 0.619 / 0.625,
+**ω/φ fold 0.627 / 0.646** (medians 0.642 / 0.706, 2 wrong hands) over 78 — against the 30-epoch
+row's 0.877 / 0.628 / 0.645. Paired over units, 100 minus 30 epochs: precision −0.004 [−0.017,
++0.007], Cβ-lDDT −0.001 [−0.006, +0.003], TM +0.001 [−0.005, +0.007] (95 % bootstrap). The
+expectation below (~0.88 / 0.635 / 0.65, from queue23's +0.002 / +0.009 / +0.005 at 64 ch) did not
+hold: at 128 ch × crop 96 the 30-epoch net has already used what the schedule offers. Either row
+can carry the book; the 100-epoch run is the headline, the 30-epoch row its schedule check (the
+two agree within 0.004 on every column). Figures stay on queue22's fold for now. Outputs:
+`.lake/build/distogram_r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient_targets/`.
+
 **The morning version.** Day 1 of §11a ran as a night: the pair-input op (`Layer.pairTile`'s `pairIn`,
 the LM's own contact-head logits as one pair-tile channel) and ESM-2 3B both landed, and they stack
 with width and crop. The arms, 30 epochs each, EUs top-L/5 LR precision over 84 / fold Cβ-lDDT / TM
@@ -482,8 +494,8 @@ and tier B, all on the pair-input op that now exists. The
 rest of §11a: item 2 (templates at inference) is the lever still untouched; item 4 (recycling) and
 tier B (the top-K attention heads as K planes) are next on the op that now exists.
 
-**Hygiene for the morning:** the night's rows, figures and queue17–23 are staged, not committed;
-`73b2333c` is committed and unpushed. Rules learned: the contact-head pass needs a 400 k-pair batch
+**Hygiene for the morning (stale — kept):** the night's rows, figures and queue17–23 landed in
+`77fd1a12`, pushed with `73b2333c` to origin/main 2026-10-03. Rules learned: the contact-head pass needs a 400 k-pair batch
 cap (fair-esm keeps ~5 copies of the attention maps) and the 3B pass fp16; the EUs' planes come from
 the fp32 CPU npz; at most three 3B-pool trainers at once (the fourth dies at `cuInit`).
 
@@ -985,3 +997,8 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   schedule is +0.009 / +0.005 on the fold with the plane, half the 650M gain. queue23 done; every
   arm of the night has landed; all four cards idle. The night's rows, figures and queue17–24 are
   staged, not committed; `73b2333c` committed, not pushed.
+- 2026-10-04 14:59: **queue24, the book run** (launched by Brett 2026-10-03 17:18, GPU 1; training
+  ended 14:17 after 21.0 h): val 75.7 %, EUs **0.873** (0.878 / 0.896 / 0.723), plain fold 0.619 /
+  0.625, ω/φ fold **0.627 / 0.646** (medians 0.642 / 0.706, 2 wrong hands) — the 30-epoch row's
+  0.877 / 0.628 / 0.645 to within 0.004; paired 100 − 30: −0.004 / −0.001 / +0.001, every CI
+  across zero. The schedule is flat at the wide config. All four cards idle.
