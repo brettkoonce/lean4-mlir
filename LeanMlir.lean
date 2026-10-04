@@ -196,6 +196,9 @@ the standard subgradient convention the codegen emits. The book's appendix takes
 lake exe cache get          # Mathlib oleans
 lake build ProofsMinimal    # the linear on-ramp above
 lake build Proofs           # the engine slice the trainers import
-lake build Certs            # the certificate corpus CI checks; tests/AuditAxioms.lean is its axiom audit
+lake build Certs            # the certificate corpus CI checks
 ```
+
+[`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)
+is the corpus's axiom audit.
 -/

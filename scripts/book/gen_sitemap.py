@@ -152,7 +152,11 @@ def main() -> int:
     # So: no blanket Allow, and Allow lines BEFORE the Disallow they carve out of.
     # Longest-match parsers pick `/docs/LeanMlir/` (18 chars) over `/docs/` (6);
     # first-match parsers hit the Allow first. Both land in the same place.
-    doc_allows = "".join(f"Allow: /docs/{k}/\n" for k in DOC_KEEP)
+    # Each namespace is a directory AND a sibling page (docs/LeanMlir.html is the root
+    # module's page, the docs landing); `/docs/LeanMlir/` does not match the latter.
+    # `/docs/$` is doc-gen4's index page (`$` anchors the end, RFC 9309).
+    doc_allows = "Allow: /docs/$\n" + "".join(
+        f"Allow: /docs/{k}/\nAllow: /docs/{k}.html\n" for k in DOC_KEEP)
     (root / "robots.txt").write_text(
         "User-agent: *\n"
         "Disallow: /build-logs/\n"
