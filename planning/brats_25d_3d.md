@@ -280,8 +280,8 @@ The false-alarm rate is over the 8,060 slices with no ET in the ground truth.
 
 **Verdict:** the port (Stages D–F) has its reason, on two seeds a side: the ET false-alarm rate
 halves on either 3D seed, and the TC tail clears both 2D seeds on either. The ET tail, which carried
-the one-seed verdict, is the weaker clause on two. Next: the verdict goes in the book; Stages D–F
-are Brett's call.
+the one-seed verdict, is the weaker clause on two. The verdict is in the book (2026-10-05: the BraTS
+section's per-patient table and through-plane paragraph); Stages D–F are Brett's call.
 
 ## §5 Stage G — sliding-window whole-volume inference (separate line item)
 

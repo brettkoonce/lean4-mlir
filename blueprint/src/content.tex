@@ -14996,8 +14996,9 @@ crazing at $0.29$ and rolled-in scale at $0.41$ against $0.66$--$0.84$ for the
 other four --- the diffuse textures whose ``box'' is most of the crop, the
 worst two in every published NEU-DET table and the worst two for both heads
 here. The ImageNet prefix is worth $+0.07$ at $1{,}080$ training images, a gap
-that has not closed by epoch 30. Photometric augmentation is within the noise
-floor the VisDrone table established ($+0.007$, $n=1$).
+that has not closed by epoch 30. Photometric augmentation's $+0.007$ is one
+run against one run; no seed spread has been measured on this detector, so
+it is not a result in either direction.
 
 \medskip\noindent The distance to the published rows is recipe. Those
 detectors run at $640$\,px for 300 epochs on a $1{,}440/180/180$ split; this
@@ -15518,7 +15519,7 @@ ResNet-34 UNet, from scratch       & 0.889 (0.917) & 0.819 (0.869) & 0.783 (0.85
 from-scratch UNet $240^2$, Dice+CE, 3 ep & 0.882 (0.908) & 0.802 (0.850) & 0.782 (0.839) \\
 \hline
 ResNet-34 UNet, 2.5D ($\pm 1$ slice) & 0.893 (0.916) & 0.824 (0.868) & 0.788 (0.850) \\
-3D UNet, $128^3$ patches, 1~h (JAX)  & 0.894 (0.914) & 0.810 (0.858) & 0.790 (0.854) \\
+3D UNet, $128^3$ patches, 20k steps (JAX) & 0.900 (0.918) & 0.827 (0.868) & 0.808 (0.867) \\
 \hline
 \end{tabular}
 \end{center}
@@ -15544,13 +15545,40 @@ metric, pooled and per patient. At 1~mm spacing the neighbours are nearly the
 centre slice again, so this says adjacent slices add nothing the slice model
 cannot infer, not that volumetric context is useless. The direct test is a 3D
 UNet --- this section's UNet with $3^3$ kernels and $2^3$ pools, 23.5M
-parameters --- trained in JAX on random $128^3$ patches for one hour on one card
-(\texttt{jax/scripts/unet3d\_brats.py}, the reference a Lean rank-5 port would
-be tied to): per patient it lands on the anchor on WT and ET, a point behind on
-TC, and it was still improving when the schedule ended. Rank-5 convolution itself
-runs at 77\% of the 2D per-voxel rate through XLA on this card, so the port is
-affordable; whether it is warranted is a longer-schedule question the plan keeps
-open (\texttt{planning/brats\_25d\_3d.md}).
+parameters --- trained in JAX on random $128^3$ patches for 20{,}000 steps,
+a little over five hours on one card (\texttt{jax/scripts/unet3d\_brats.py},
+the reference a Lean rank-5 port would be tied to). In the table above its
+means are ahead of the anchor's by under a point on WT and TC and by two on
+ET, and most of the ET gain is what a size threshold also buys. So the
+comparison below applies the usual BraTS post-process to every model ---
+enhancing-tumour predictions under 200 voxels in a volume are relabelled as
+core --- and reads two seeds a side:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\hline
+per-patient Dice, mean $\cdot$ worst tenth & WT & TC & ET & ET false alarms \\
+\hline
+ResNet-34 UNet, seed 0 & 0.893 $\cdot$ 0.713 & 0.821 $\cdot$ 0.470 & 0.804 $\cdot$ 0.418 & 2.49\% \\
+ResNet-34 UNet, seed 1 & 0.891 $\cdot$ 0.699 & 0.818 $\cdot$ 0.453 & 0.801 $\cdot$ 0.421 & 2.42\% \\
+3D UNet, seed 0        & 0.900 $\cdot$ 0.747 & 0.827 $\cdot$ 0.495 & 0.807 $\cdot$ 0.464 & 1.07\% \\
+3D UNet, seed 1        & 0.903 $\cdot$ 0.772 & 0.830 $\cdot$ 0.521 & 0.805 $\cdot$ 0.440 & 1.03\% \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The worst tenth is the seven lowest-scoring of the 73 patients, and
+a false alarm is a slice with no enhancing tumour in the ground truth on which
+the model paints some, out of 8{,}060 such slices. Paired over patients the
+3D means are ahead by $0.009$ on WT and TC and $0.004$ on ET, and the
+bootstrap interval excludes zero on WT alone. The tail is where the two
+part. On tumour core the 3D net's worst tenth is above both 2D seeds' on
+both of its own, and it raises a false enhancing-tumour alarm on under half
+as many slices, a gap twenty times the seed-to-seed spread on either side. On
+enhancing tumour its worst tenth is ahead on both seeds too, on one of them
+by less than the two 3D seeds differ from each other. Rank-5 convolution itself runs at 77\% of
+the 2D per-voxel rate through XLA on this card, so the port is affordable;
+it is not built, and this section's Lean trainer is the slice model.
 
 \paragraph{Pairing a decoder to a backbone that has no \texttt{unetDown}.} The
 canonical UNet below pairs skips implicitly --- $i$-th \texttt{unetUp} from the

@@ -40,6 +40,9 @@ In order of value per cost.
    0.910); the per-patient protocol, the tail and the two-seed 3D verdict are only in
    `brats_25d_3d.md` §4d, which says "the verdict goes in the book". The section is also
    in the old voice (tutorial bullets, no published row, no "what this is not").
+   *2026-10-05:* the 20k-step, two-seed 3D verdict is in the section (the per-patient table's 3D
+   row, and a tail / false-alarm table at min-ET 200 in the through-plane paragraph). Still owed:
+   the pooled lead table, the old voice, a published row.
 2. **TinyGPT: the weakest section.** "In passing", no question, brackets only bigram and
    uniform. `lm_demos_modernization.md`: a rerun overwrites the checkpoint (resume is
    documented, not implemented), no dropout while `tiny` overfits, the train/val curve is
@@ -50,6 +53,7 @@ In order of value per cost.
    landed for BraTS); the top rows need two more seeds. `detector_v5_next.md` §1 has the
    rest: T1+T2 unmerged on `yolo-v5-assignment`, compiled defaults that train r50 / 12
    epochs / no augmentation, bootstrap BN stats falling back to zeros.
+   *2026-10-05:* the "noise floor" sentence now says the +0.007 is one run against one run.
 4. **GW.** A live `% TODO Phase 4` in the tex (catalogue table, Gravity Spy row). The
    section blames the 1.5-SNR gap to the matched filter on the spectrogram discarding phase
    and does not test it; a 1-D arm on the whitened strain would.
