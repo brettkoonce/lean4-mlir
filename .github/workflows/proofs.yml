@@ -16,6 +16,7 @@ on:
       - 'scripts/gates/check_audit_coverage.py'
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/train_step_arity.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/certs/_gencheck.py'
@@ -37,6 +38,7 @@ on:
       - 'scripts/gates/check_audit_coverage.py'
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/train_step_arity.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/certs/_gencheck.py'
@@ -79,6 +81,12 @@ jobs:
         # not, for ResNet34RenderB and MobileNetV2RenderB. Also pins the
         # drift-guard debt at its baseline so it can shrink but never grow.
         run: python3 scripts/gates/check_render_coverage.py
+
+      - name: Train-step arity (#out = #in − 2, every mask passed through)
+        # Fail fast (no Lean needed). The PJRT shim's G4 check refuses a train step that returns
+        # fewer values than the driver copies back, but only on a GPU: the 12 R50 drop-path renders
+        # sat 16 outputs short from 08-27 to 10-05 because nothing ran them.
+        run: python3 scripts/gates/train_step_arity.py
 
       - name: verified_mlir/ audit suite (writers, pairings, entry names)
         # `scripts/regen_verified_mlir.sh check` writes nothing and needs no Lean, no GPU and no

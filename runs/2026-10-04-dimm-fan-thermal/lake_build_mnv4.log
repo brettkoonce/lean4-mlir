@@ -1,0 +1,4 @@
+✔ [27/29] Built apps.imagenette.MainMobilenetV4Imagenet (297ms)
+✔ [28/29] Built apps.imagenette.MainMobilenetV4Imagenet:c.o (122ms)
+✔ [29/29] Built «mobilenetv4-imagenet-verified»:exe (192ms)
+Build completed successfully (29 jobs).

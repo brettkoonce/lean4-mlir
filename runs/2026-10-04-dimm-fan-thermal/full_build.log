@@ -1,0 +1,64 @@
+Build completed successfully (2359 jobs).
+✔ [3532/3533] Built LeanMlir.Proofs.Codegen.FwdGraphTextTies (2.2s)
+Build completed successfully (3533 jobs).
+── verified_mlir/ writer audit ──
+  OK — 279 artifacts, one writer each
+
+── verified_mlir/ manifest (on disk == has a literal Proofs writer) ──
+  OK — 276 artifacts, each with exactly one literal Proofs/Codegen writer
+
+── artifact path == declared entry ──
+  OK — all 275 audited artifacts declare the entry their filename names
+
+── forward ⊂ train-step prefix check ──
+  OK — resnet34_fwd.mlir is a byte-identical 1220-line prefix of resnet34_sgd_train_step.mlir
+  OK — convnext_fwd.mlir is a byte-identical 1662-line prefix of convnext_train_step.mlir
+  OK — efficientnet_fwd.mlir is a byte-identical 1820-line prefix of efficientnet_train_step.mlir
+  OK — efficientnet_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnet_adamdrop_train_step.mlir
+  OK — efficientnetin_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnetin_emarms64drop_train_step.mlir
+  OK — efficientnet_do_fwd.mlir is a byte-identical 1821-line prefix of efficientnet_adamdo_train_step.mlir
+  OK — efficientnetin_dropdo_fwd.mlir is a byte-identical 1857-line prefix of efficientnetin_emarms64dropdo_train_step.mlir
+  OK — convnext_drop_fwd.mlir is a byte-identical 1734-line prefix of convnext_adamdrop_train_step.mlir
+  OK — convnextin_drop_fwd.mlir is a byte-identical 1734-line prefix of convnextin_adamwxclipdrop_train_step.mlir
+  OK — convnextsin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextsin_adamwxclipdrop_train_step.mlir
+  OK — convnextbin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextbin_adamwxclipdrop_train_step.mlir
+  OK — vit_drop_fwd.mlir is a byte-identical 2520-line prefix of vit_adamdrop_train_step.mlir
+  OK — vitin_drop_fwd.mlir is a byte-identical 2520-line prefix of vitin_adamwxclipdrop_train_step.mlir
+
+── forward ⊂ ADAM train-step prefix check (§3d(b)) ──
+  OK — resnet34_fwd.mlir is a byte-identical 1220-line prefix of resnet34_adam_train_step.mlir
+  OK — resnet50_fwd.mlir is a byte-identical 1760-line prefix of resnet50_adam_train_step.mlir
+  OK — mobilenetv2_fwd.mlir is a byte-identical 1714-line prefix of mobilenetv2_adam_train_step.mlir
+  OK — efficientnet_fwd.mlir is a byte-identical 1820-line prefix of efficientnet_adam_train_step.mlir
+  OK — convnext_fwd.mlir is a byte-identical 1662-line prefix of convnext_adam_train_step.mlir
+  OK — vit_fwd.mlir is a byte-identical 2472-line prefix of vit_adam_train_step.mlir
+  OK — mnv4_fwd.mlir is a byte-identical 2388-line prefix of mnv4_adam_train_step.mlir
+  OK — resnet34in_fwd.mlir is a byte-identical 1220-line prefix of resnet34in_mom256_train_step.mlir
+  OK — resnet50in_fwd.mlir is a byte-identical 1760-line prefix of resnet50in_mom256_train_step.mlir
+  OK — resnet50in160_fwd.mlir is a byte-identical 1760-line prefix of resnet50in160_lambacc8x64bce_train_step.mlir
+  OK — mobilenetv2in_fwd.mlir is a byte-identical 1714-line prefix of mobilenetv2in_rms64_train_step.mlir
+  OK — efficientnetin_fwd.mlir is a byte-identical 1820-line prefix of efficientnetin_emarms64_train_step.mlir
+  OK — efficientnetin_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnetin_emarms64drop_train_step.mlir
+  OK — efficientnetin_dropdo_fwd.mlir is a byte-identical 1857-line prefix of efficientnetin_emarms64dropdo_train_step.mlir
+  OK — convnextin_fwd.mlir is a byte-identical 1662-line prefix of convnextin_adamdp_train_step.mlir
+  OK — convnextin_drop_fwd.mlir is a byte-identical 1734-line prefix of convnextin_adamdpwxclipdrop_train_step.mlir
+  OK — convnextsin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextsin_adamdpwxclipdrop_train_step.mlir
+  OK — convnextbin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextbin_adamdpwxclipdrop_train_step.mlir
+  OK — vitin_drop_fwd.mlir is a byte-identical 2520-line prefix of vitin_adamwxclipdrop_train_step.mlir
+  OK — mnv4in_fwd.mlir is a byte-identical 2388-line prefix of mnv4in_adam64_train_step.mlir
+  20 paired, 0 known-split, 0 unaccounted
+  OK — all 20 ImageNet forwards classified (13 paired, 7 no-partner: no train step exists at their batch/drop configuration)
+
+── silent-emit audit (MALFORMED / render TODO) ──
+  OK — no artifact contains a catch-all emit marker
+
+── empty-SSA-slot audit (a gated op whose name list was not gated) ──
+  OK — no artifact has an empty operand or return slot
+
+── zero-bias prelude audit (%zb used but not declared) ──
+  OK — every %zb an artifact uses is declared by its prelude
+
+── batch / loss-divisor audit (the batch spelled twice) ──
+  ── batch/divisor gate: 213 train-step artifacts, 213 ok, 0 MISMATCH
+  ✅ CONTROL FIRES — injected dense<32.0> on a 64-row tensor, gate caught: [('32.0', '64x1000')]
+exit=0

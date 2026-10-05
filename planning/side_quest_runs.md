@@ -17,43 +17,64 @@ then its verified pass. Running a side quest does not promote it into the Track-
 
 ## 1. Schedule
 
-Stall-free hours on this box, i.e. once the DIMM throttle is cooled away (§5). Every job takes
-all four cards, so the queue is sequential. Per-epoch evals (a few hours per run) are not included.
+Measured 2026-10-05 on this box with the DIMM fans in (§5.2): every row is the job's own trainer on
+all four cards, no stall in any window. JAX = 100-step windows from the trainer's own step lines;
+verified = the §3a smoke's MEAN over steps 201–600. Every job takes all four cards, so the queue is
+sequential. Per-epoch evals (a few hours per run) are not included.
 
 | batch | runs (hours) | total | days 24/7 |
 |---|---|---|---|
-| 1, JAX | R50 A2 73 · MNv4 `full` 500 ep ~70–85 · ViT-S 63 | ~210 | ~9 |
-| 2, verified | R50 A2 ~95 · MNv4 500 ep ~90 · ViT-S ~68 | ~255 | ~10.5 |
-| 3, JAX | R50 A1 ~146 · ViT-B ~146 · ConvNeXt-S ~110 | ~400 | ~16.7 |
-| 4, verified | R50 A1 ~190 · ViT-B ~170 · ConvNeXt-S ~159 | ~520 | ~21.7 |
-| 5 | ConvNeXt-B JAX ~167, then verified ~253 | ~420 | ~17.5 |
-| total | | ~1,805 | ~75 |
+| 1, JAX | R50 A2 76 · MNv4 `full` 500 ep ~100–105 · ViT-S 72 | ~250 | ~10.4 |
+| 2, verified | R50 A2 93 · MNv4 500 ep 114 · ViT-S 127 | ~334 | ~13.9 |
+| 3, JAX | R50 A1 153 · ViT-B 148 · ConvNeXt-S 127 | ~428 | ~17.8 |
+| 4, verified | R50 A1 185 · ViT-B 185 · ConvNeXt-S 156 | ~526 | ~21.9 |
+| 5 | ConvNeXt-B JAX 167, then verified 216 | ~383 | ~16 |
+| total | | ~1,920 | ~80 |
 
-Where each number comes from:
+The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
 
-| run | basis |
-|---|---|
-| A2 JAX 73, ViT-S JAX 63 | measured today, clean windows (§5) |
-| A1 JAX | 2× A2's measured rate |
-| ViT-B / ConvNeXt-S / ConvNeXt-B JAX | the 4-GPU compute probe (`runs/2026-08-27-jax-sb-tier-step-probe`: 700.8 / 260.8 / 399.3 ms per step); the feed does not bind them |
-| MNv4 JAX | between the tf.data ceiling (1.5 s/step) and the 3060 box's 1.9 s/step |
-| MNv4 / ViT-S verified | their shim ceilings (§4.2); MNv4's matches the 3060 box's run |
-| A2 / A1 verified | the 08-27 device-probe model |
-| ViT-B / ConvNeXt verified | the 09-10 bf16 probes, which predate sync-BN, so re-probe before launch |
+| run | step | steps/epoch × epochs | ms/step | bound |
+|---|---|---|---|---|
+| A2 JAX | optimizer (512 × 4) | 625 × 300 | 1,467 | compute, flat |
+| A1 JAX | optimizer (512 × 4) | 625 × 600 | 1,469 | compute, flat |
+| ViT-S JAX | 512 | 2,502 × 300 | 344 | tf.data, flat 343–346 |
+| ViT-B JAX | 512 | 2,502 × 300 | 708 | compute, flat |
+| ConvNeXt-S JAX | 256 | 5,004 × 300 | 304 | compute, flat |
+| ConvNeXt-B JAX | 256 | 5,004 × 300 | 401 | compute, flat |
+| MNv4 `full` JAX | optimizer (512 × 8) | 312 × 500 | 2,543 → 2,386 → 2,303 | still falling at 20 min |
+| ViT-S verified | 512 | 2,502 × 300 | 609 (med 595, min 290) | ⚠ shim: 305 ms starved |
+| ViT-B verified | 512 | 2,502 × 300 | 887 (med 884, min 839) | compute |
+| A2 verified | micro (4 × 128) | 2,500 × 300 | 446 (med 446, min 415) | compute |
+| A1 verified | micro (4 × 128) | 2,500 × 600 | 444 (med 444, min 412) | compute |
+| ConvNeXt-S verified | 256 | 5,004 × 300 | 373 (med 372, min 355) | compute |
+| ConvNeXt-B verified | 256 | 5,004 × 300 | 518 (med 518, min 507) | compute |
+| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 329 (med 323, min 198) | ⚠ shim: 125 ms starved |
 
-## 2. Where things stand (2026-09-29, afternoon)
+Against the 09-29 table: ConvNeXt-B verified is 37 h shorter (253 modelled), ConvNeXt-S JAX 17 h
+longer (110 was a compute probe), and the two shim-bound verified jobs are the big misses — ViT-S
+127 against 68, MNv4 114 against ~90. Fed at their floors they would be ~61 h and ~69 h (§4.3).
 
-* **The software side of the whole queue is written** (§3), uncommitted. Every conf's DRY_RUN
-  PRECHECK passes. `lake build`, `lake build Certs`, `regen_verified_mlir.sh check`, the render
-  coverage and target-name gates, `docstring-checkrefs`, `TestVariantPredicates` and the new
-  `bce_target_gate.py` are green. Every committed artifact re-renders byte-identical, except the
-  two ConvNeXt S/B eval forwards, which moved to batch 64.
-* **Nothing new has run on a GPU** except compile-only peak-memory probes. The launch smokes in §3a
-  are the user's to start.
-* **A2 JAX can launch now.** It does not stall even without the fan:
-  `setsid nohup scripts/supervise.sh r50-a2accum-jax-4gpu >/dev/null 2>&1 &`
-* **MNv4 `full` and ViT-S JAX wait for the DIMM fan** (§5.1). After the fan goes in, rerun the
-  ViT-S thermal smoke. Pass = the hottest DIMM stays below 77 °C and ViT-S runs at ~300 ms/step.
+## 2. Where things stand (2026-10-05)
+
+* **The DIMM throttle is gone** (§5.2). The DIMMs were re-slotted per the board manual and two fans
+  put on them; across 16 runs the hottest DIMM peaked at 57.9 °C (throttle at 80) and no window
+  stalled. ViT-S JAX: 344 ms/step flat, against 656 overall on 09-29.
+* **Every job has a measured rate** (§1), both paths. The §3a smokes are done for all seven verified
+  confs. The `ETA=` strings in the confs carry the §1 numbers.
+* **The R50 drop-path renders were broken and are fixed** (2026-10-05, uncommitted). All 12
+  `resnet50in_…drop…` train steps (A2/A1, EMA and not) returned 16 values short — the masks went in
+  and never came out, while the driver copies the whole output blob back (`#out = #in − 2`). The
+  PJRT shim refuses that (G4: 755 outputs, 771 destinations), but only on a GPU, and nothing had
+  run them; the 08-27 `arity_check.py` encoded the wrong rule and printed green. Fixed in
+  `ResNet50RenderB.lean` (masks returned last, as MobileNetV4 does), re-rendered (12 files, two lines
+  each), and guarded by the new `scripts/gates/train_step_arity.py` (all 213 train steps; in
+  proofs.yml and in the six drop-render confs' PRECHECK). `lake build`, `lake build Certs` and
+  `regen_verified_mlir.sh check` are green on the fix.
+* **Open: the two shim-bound verified jobs** — ViT-S (305 ms of a 609 ms step starved) and MNv4
+  (125 of 329). §4.2's producer bench timed batch 128 per producer; the jobs run batch 512 per
+  producer round-robin, so the ceiling it reports was never measured at the job's shape. Next: the
+  bench at 512, then §4.3's L2 (in-place mixup, bit-identical).
+* All the JAX jobs can launch.
 
 ## 3. Software work list
 
@@ -314,3 +335,22 @@ hysteresis 77.0, critical 95. The shipped ViT-S trainer ran 15 minutes with ever
 
 The fix is airflow across the DIMMs. The re-test is the same smoke with the same logging.
 Baseline: 54% of wall stalled, 656 ms/step overall, 300 clean.
+
+### 5.2 The re-test with the DIMM fans in (2026-10-05)
+
+The DIMMs were moved to the slots the board manual gives for four modules (their sensors now read at
+i2c 1-0018/19/1c/1d) and two fans were tied on over them. Same smoke as §5.1: 15 min of the shipped
+ViT-S JAX trainer, temps every 2 s, 20 s idle before and 60 s cool-down after.
+
+| | 09-29 | 10-05 |
+|---|---|---|
+| idle, hottest DIMM | 56 °C | 38 °C |
+| under load, hottest DIMM | 80.2 °C, oscillating 77–80 | 56.8 °C |
+| CPU Tctl peak | 95.7 °C | 89.0 °C |
+| ms/step | 656 overall, 54% stalled | 344, all 24 windows 343–346 |
+
+The two DIMMs nearer the fans run 15–20 °C cooler than the other two. All 16 runs (§1's seven JAX and seven
+verified, plus the two R50 smokes that failed before the fix) peaked at 57.9 °C. ViT-S's 344 is
+above §5's "300 clean": those clean windows were served from a queue the producers filled during
+the pauses, so 344 is the in-process tf.data rate, not a new loss.
+

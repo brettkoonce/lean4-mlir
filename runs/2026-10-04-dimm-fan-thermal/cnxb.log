@@ -1,0 +1,26 @@
+1791161816.217557969	ConvNeXt-B (ImageNet, bf16) · Lean 4 → JAX
+1791161816.219027770	  CNXStem(3→128,4x4)+LN → ConvNeXt3(c=128) → CNXDown(128→256) → ConvNeXt3(c=256) → CNXDown(256→512) → ConvNeXt27(c=512) → CNXDown(512→1024) → ConvNeXt3(c=1024) → GAP → LN(1024) → 1024→1000
+1791161816.220054263	
+1791161816.221086857	ImageNet (1000-class) — tfds streaming pipeline
+1791161816.222090787	lr=0.000250  batch_size=256 (4 devices x 64)  epochs=300  params=88591464
+1791161816.223117520	steps_per_epoch=5004  total_steps=1501200
+1791161816.224092485	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791161816.225021754	Starting training...
+1791161872.434930770	E1005 00:57:52.433425   97583 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791161872.668794648	E1005 00:57:52.667092   97575 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791161873.567025897	E1005 00:57:53.565225   97575 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791161875.540582799	E1005 00:57:55.538459   97571 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791161979.484082826	  step 100/1501200  loss=7.0954  lr=0.0  (1537.0ms/step avg)
+1791162019.577770403	  step 200/1501200  loss=7.1171  lr=0.0  (969.0ms/step avg)
+1791162059.630745293	  step 300/1501200  loss=7.0947  lr=0.0  (779.0ms/step avg)
+1791162099.720246481	  step 400/1501200  loss=7.0192  lr=0.0  (685.0ms/step avg)
+1791162139.843436258	  step 500/1501200  loss=7.0374  lr=0.0  (628.0ms/step avg)
+1791162180.069577846	  step 600/1501200  loss=7.0482  lr=0.0  (590.0ms/step avg)
+1791162220.137338175	  step 700/1501200  loss=7.0321  lr=0.0  (563.0ms/step avg)
+1791162260.319619306	  step 800/1501200  loss=6.9209  lr=0.0  (543.0ms/step avg)
+1791162300.410345339	  step 900/1501200  loss=6.9843  lr=0.0  (527.0ms/step avg)
+1791162340.560890362	  step 1000/1501200  loss=6.9607  lr=0.0  (515.0ms/step avg)
+1791162380.689790192	  step 1100/1501200  loss=6.9699  lr=0.0  (504.0ms/step avg)
+1791162420.911103297	  step 1200/1501200  loss=6.9339  lr=0.0  (496.0ms/step avg)
+1791162461.030583403	  step 1300/1501200  loss=6.9418  lr=0.0  (489.0ms/step avg)
+1791162501.143626539	  step 1400/1501200  loss=6.905  lr=0.0  (482.0ms/step avg)

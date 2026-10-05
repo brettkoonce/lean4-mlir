@@ -23,8 +23,10 @@ def variant_of(path):
 
 def acc_on(v):  return "acc" in v
 def ema_on(v):  return v.startswith("ema")
-# ⚠ stochastic depth adds graph INPUTS and nothing else — no region, no scalar, no output. That
-# independence is the point of checking it here rather than assuming it.
+# Stochastic depth adds no region and no scalar, but its 16 masks are OUTPUTS as well as inputs:
+# the driver copies the whole output blob back (`pbuf := out`), so `#out = #in − 2` (%x, %onehot)
+# counts them. ⛔ This file said "graph INPUTS and nothing else" until 2026-10-05 and printed green
+# over 12 renders the PJRT shim refuses (G4: 755 outputs, 771 destinations).
 def sd_on(v):   return "drop" in v
 def n_regions(v): return 3 + acc_on(v) + ema_on(v)
 def n_scalars(v): return 3 + 2 * acc_on(v) + 2 * ema_on(v)
@@ -46,7 +48,7 @@ for path in sorted(glob.glob("verified_mlir/resnet50in_*_train_step.mlir")):
     # what the driver packs: %x + R*P params + S scalars + BN + %onehot
     D = NDROP if sd_on(v) else 0
     want_in = 1 + R * P + S + BN + D + 1
-    want_out = R * P + S + BN            # theta'..E', loss/bc/aup/akeep/emad/oemad, batch stats
+    want_out = R * P + S + BN + D        # theta'..E', loss/bc/aup/akeep/emad/oemad, batch stats, masks
     # the region suffixes, in the order the driver concatenates them
     order = ['', 'm', 'v'] + (['a'] if acc_on(v) else []) + (['e'] if ema_on(v) else [])
     seen, pos, ok_order = [], 1, True

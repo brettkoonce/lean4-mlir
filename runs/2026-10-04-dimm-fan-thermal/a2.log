@@ -1,0 +1,15 @@
+1791158203.825647051	ResNet-50 (ImageNet) · Lean 4 → JAX
+1791158203.826886737	  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+1791158203.827906897	
+1791158203.828948567	ImageNet (1000-class) — tfds streaming pipeline
+1791158203.830104574	lr=0.005000  batch_size=2048 (4 devices x 512)  epochs=300  params=25557032
+1791158203.831094637	steps_per_epoch=625  total_steps=187500
+1791158203.832077637	grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+1791158203.833065305	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791158203.834078182	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791158203.835011097	Starting training...
+1791158369.374841098	  step 100/187500  loss=0.6285  lr=0.00016  (1582.0ms/step avg)
+1791158516.116101222	  step 200/187500  loss=0.3539  lr=0.00032  (1525.0ms/step avg)
+1791158662.819427386	  step 300/187500  loss=0.0738  lr=0.00048  (1505.0ms/step avg)
+1791158809.518272746	  step 400/187500  loss=0.0152  lr=0.00064  (1496.0ms/step avg)
+1791158956.223328785	  step 500/187500  loss=0.0146  lr=0.0008  (1490.0ms/step avg)

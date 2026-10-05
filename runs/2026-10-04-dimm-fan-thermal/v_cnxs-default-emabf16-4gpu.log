@@ -1,0 +1,84 @@
+1791164676.545561667	box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+1791164678.109452880	[sup] 2026-10-05 01:44:38 START job=cnxs-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=runs/2026-10-05-cnxs-default-emabf16-4gpu
+1791164678.110765083	[sup] 2026-10-05 01:44:38 cmd: .lake/build/bin/convnext-s-imagenet-verified data
+1791164678.112567363	[sup] 2026-10-05 01:44:38 eta: bf16 ~159 h on 4x 4060 Ti (modelled from the 09-10 bf16 probes, pre-EMA, pre-64 rescope). ⚠ probe median + mean before launch; peak 6.80 GiB of the 11.68 default (compile probe 2026-09-29)
+1791164678.114212807	[sup] 2026-10-05 01:44:38 ONCE — one foreground run, no restart policy
+1791164678.792252139	I1005 01:44:38.790699  160121 service.cc:154] XLA service 0x7272380388c0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+1791164678.793563130	I1005 01:44:38.790743  160121 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791164678.794536502	I1005 01:44:38.790751  160121 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791164678.795617797	I1005 01:44:38.790755  160121 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791164678.796578355	I1005 01:44:38.790759  160121 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791164678.797480041	I1005 01:44:38.793656  160121 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+1791164678.798514248	I1005 01:44:38.793681  160121 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+1791164678.799592118	I1005 01:44:38.793716  160121 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+1791164678.800607078	I1005 01:44:38.793728  160121 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+1791164678.801610707	I1005 01:44:38.793740  160121 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+1791164678.804634559	I1005 01:44:38.803469  160121 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791164678.810788133	[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+1791164678.811887102	[pjrt_ffi] command buffers: enabled (CUDA default)
+1791164678.812972697	[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+1791164695.201981254	E1005 01:44:55.200192  160181 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791164696.073950766	I1005 01:44:56.072479  160197 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 128 bytes spill stores, 128 bytes spill loads
+1791164696.075282806	
+1791164698.585381415	I1005 01:44:58.583915  160204 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 804 bytes spill stores, 548 bytes spill loads
+1791164698.586747130	
+1791164699.639630090	I1005 01:44:59.638273  160196 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 124 bytes spill stores, 72 bytes spill loads
+1791164699.640722928	
+1791164702.880409491	I1005 01:45:02.875972  160199 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1977', 4 bytes spill stores, 4 bytes spill loads
+1791164702.882209607	
+1791164703.151676298	I1005 01:45:03.150202  160183 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_857', 88 bytes spill stores, 88 bytes spill loads
+1791164703.152863795	
+1791164703.536505652	[pjrt_ffi] compiled verified_mlir/convnextsin_emadpwxclipdropbf16_train_step.mlir (@convnextsin_emadpwxclipdropbf16_train_step, 1417 outputs, 4 replicas) in 24721 ms
+1791164704.689174229	E1005 01:45:04.686977  160193 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791164704.819667421	E1005 01:45:04.817618  160183 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791164705.409235086	E1005 01:45:05.407333  160190 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791164706.063543844	[pjrt_ffi] compiled verified_mlir/convnextsin_fwd.mlir (@convnextsin_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 2527 ms
+1791164706.091480386	ConvNeXt-Small on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU (ConvNeXt-T deepened: stage 3 goes 9 → 27 blocks, dims unchanged at [96,192,384,768], 50.2M params)
+1791164706.092613571	  xla/pjrt verified_mlir/convnextsin_emadpwxclipdropbf16_train_step.mlir
+1791164706.093658077	  xla/pjrt verified_mlir/convnextsin_fwd.mlir  (eval, SHARDED over 4 replicas)
+1791164706.094680722	  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+1791164706.095725159	  train 1281167, test 50000; bs 64, ConvNeXt-S (ImageNet-1k) emadpwxclipdropbf16 (cosine+warmup 20ep, baseLR 0.000250), He init
+1791164706.096996123	  ▸ STOCHASTIC DEPTH: 36 drop sites, keeps #[1.000000, 0.989000, 0.977000, 0.966000, 0.954000, 0.943000, 0.931000, 0.920000, 0.909000, 0.897000, 0.886000, 0.874000, 0.863000, 0.851000, 0.840000, 0.829000, 0.817000, 0.806000, 0.794000, 0.783000, 0.771000, 0.760000, 0.749000, 0.737000, 0.726000, 0.714000, 0.703000, 0.691000, 0.680000, 0.669000, 0.657000, 0.646000, 0.634000, 0.623000, 0.611000, 0.600000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+1791164706.098049126	  ▸ EMA: region 3 of 4 [θ|m|v|ema], shadow starts AT the weights, decay min(0.999900, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.
+1791164706.099027207	  DATA-PARALLEL: 4 replicas x bs 64 = global batch 256, 5004 steps/epoch
+1791164706.099885371	  EVAL SHARDED: 4 replicas x 64 = 256 test images per invoke, 196 invokes, last one 80 real + 176 pad
+1791164707.304307297	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791164707.306159211	I0000 00:00:1791164707.302185  161673 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791164707.307173921	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791164712.701614912	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791164712.703156750	I0000 00:00:1791164712.700263  161852 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791164712.704455317	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791164713.040837818	I0000 00:00:1791164713.039350  161919 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791164718.770326584	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791164718.771790625	I0000 00:00:1791164718.768898  162240 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791164718.772987529	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791164719.093178182	I0000 00:00:1791164719.091710  162306 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791164724.871268032	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791164724.872856047	I0000 00:00:1791164724.869791  162569 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791164724.874215750	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791164725.220706037	I0000 00:00:1791164725.219377  162635 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791164732.327418730	I0000 00:00:1791164732.326026  162920 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791164733.679441520	[pjrt_ffi] RESIDENT: @convnextsin_emadpwxclipdropbf16_train_step holds 1376 parameter tensors (766.4 MB) on 4 devices; they stop crossing PCIe from here
+1791164734.740646217	I1005 01:45:34.738575  160162 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791164734.741832161	I1005 01:45:34.738626  160159 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791164734.742861238	I1005 01:45:34.738651  160156 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791164737.198598894	  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)
+1791164737.201000188	  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+1791164737.202488514	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 1), wire v4 soft targets [256x1000]
+1791164737.203757966	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 2), wire v4 soft targets [256x1000]
+1791164737.204972825	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 3), wire v4 soft targets [256x1000]
+1791164737.206190118	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 4), wire v4 soft targets [256x1000]
+1791164737.207327881	  imagenet shim: 4 sharded producers (round-robin over batches)
+1791164737.208443082	  ▸ SHIM RESPAWN: one producer every 10 epoch(s), round-robin over 4 — no loader lives past 40 epochs.
+1791164737.209639916	  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+1791164737.211249632	  step 0/5004: loss=7.054356
+1791164737.535854507	  step 1/5004: loss=7.115538
+1791164737.977025381	  step 2/5004: loss=6.985476
+1791164774.850490857	  step 100/5004: loss=7.092263
+1791164812.038593624	  step 200/5004: loss=7.025573
+1791164849.322631758	  step 300/5004: loss=7.060169
+1791164886.752358255	  step 400/5004: loss=7.091985
+1791164924.196884706	  step 500/5004: loss=6.979852
+1791164961.603357647	  step 600/5004: loss=6.976612
+1791164961.605060262	  PROBE: 372 ms/step (median of 400 steps 201..600, ConvNeXt-S (ImageNet-1k))
+1791164961.606167660	  PROBE-SPREAD: min=355 med=372 p90=388 mean=373 ms/step (starvation wait = med-min = 17 ms)

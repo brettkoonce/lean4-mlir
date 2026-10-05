@@ -1,0 +1,6 @@
+1791162696.220270724	box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+1791162698.133793166	⛔ this box's jax/.lake/build artifacts are STALE vs committed jax/generated/:
+1791162698.292367021	   ⛔ STALE: /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/jax/.lake/build/generated_vit_tiny_imagenet.py differs from the committed jax/generated/generated_vit_tiny_imagenet.py
+1791162698.293502570	   ⛔ STALE: /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/jax/.lake/build/generated_vit_tiny_imagenet_xavier.py differs from the committed jax/generated/generated_vit_tiny_imagenet_xavier.py
+1791162698.294604385	   scripts/regen_jax_generated.sh sync, then re-run.
+1791162698.352529525	[sup] 2026-10-05 01:11:38 ⛔ PRECHECK failed — refusing to start

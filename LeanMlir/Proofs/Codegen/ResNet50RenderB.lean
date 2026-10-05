@@ -909,11 +909,16 @@ def resnet50TrainStepText (B nClasses : Nat) (epsStr : String)
     -- forced either a second artifact or an EMA running k times per optimizer step.
     let emaScalars := if ema then ["%emad", "%oemad"] else []
     let accScalarTys := (accScalars ++ emaScalars).map (fun _ => "tensor<f32>")
+    -- The 16 drop masks ride out as passthroughs LAST, after the BN stats — the driver copies the
+    -- whole output blob back into `pbuf`, so `#out = #in − 2` must count them too (ViT, ConvNeXt,
+    -- EfficientNet and MobileNetV4 already do; PJRT's G4 check refuses a render without them).
+    let dropNames := if sd then (List.range r50DropTotal).map dpName else []
     let retVals := thetaN ++ mNames ++ vNames ++ aNames ++ eNames ++
-      ["%loss", "%bc1", "%bc2"] ++ accScalars ++ emaScalars ++ statNames
+      ["%loss", "%bc1", "%bc2"] ++ accScalars ++ emaScalars ++ statNames ++ dropNames
     let retTys  := pTypes ++ pTypes ++ pTypes ++ (if accOn then pTypes else []) ++
       (if ema then pTypes else []) ++
-      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accScalarTys ++ statTypes
+      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accScalarTys ++ statTypes ++
+      dropNames.map (fun _ => ty [B])
     pure <|
       (if replicas ≤ 1 then
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: {trainStepHandNote accOn} ──\n"
@@ -954,7 +959,8 @@ def resnet50TrainStepText (B nClasses : Nat) (epsStr : String)
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
-    (packedTrainRetTys pTy accOn ema ++ (r50StatSigList.map (·.2)))
+    (packedTrainRetTys pTy accOn ema ++ (r50StatSigList.map (·.2)) ++
+     (if sd then (List.range r50DropTotal).map (fun _ => ty [B]) else []))
   let inner : String := go.run' (0, [])
   -- Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.
