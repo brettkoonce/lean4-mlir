@@ -557,6 +557,26 @@ did not move).
   one-step cosine offset); :13411–13413 feed fixes "none built" (f5b6853f, 329f5c59 landed);
   :13472–13486 S/B timings pre-10-05 and S/B "Tiny's recipe" (true only since X2).
 
+**Status (2026-10-05):** applied to `content.tex`, one chapter per commit. Every pair table's
+"differs" band now carries that pair's own rows: evaluation forward and classifier head on every
+net (F8, X3); zero-γ and BN decay on R50; depthwise init on MNv2, MNv4 and B0, SE-reduce init on B0;
+patch embed + head, CLS/position init and the cosine phase on ViT-Ti. Where the code has since
+closed a row the table is followed by a `[TODO: …]` marker, not prose. Listings carry X1–X3;
+`book_listings.py` matches every new line to its file.
+
+* Not applied: "RSB Table 2" stands (Table 2 is the ingredients table, its EMA row is ✗ for A1–A3;
+  read off arXiv 2110.00476). Top-5 95.50 stands (`jax/runs/convnext_tiny_imagenet_bf16_300ep/RESULTS.md`).
+  Ch 6's listing already had `bnMomentum := 0.997`. TF-slim's initializer is not asserted in ch 6:
+  nothing in the repo records it.
+* Corrections to §9 found on the way: λ is drawn once per emitted shim batch, and `SHIM_BATCH` is the
+  global micro-batch, so the granularity differs from JAX only under accumulation (R50), not "per
+  producer shard" (§9.4, `vit_parity_todo.md` G2). `bnFirst` is every running-BN net's, not B0's.
+* Fixed outside the list: ch 7's two comparisons to "MobileNetV2's pair", which described the
+  retired per-replica MNv2 pair; ch 7's crop range (the ch 5 sentence, same code).
+* Left open: `apps/imagenette/MainResnet34Imagenet.lean`'s docstring still says "He et al.'s own
+  schedule"; Appendix A says every top-1 follows timm's protocol, which ConvNeXt-T's 224 / 0.875
+  does not (D18).
+
 ### 9.6 Run status (for the book's run-status sentences)
 
 Not run on this box: the 10-01 ViT-Ti rerun (may have run on the 3060 box), the B0 TF-recipe pair (R5),

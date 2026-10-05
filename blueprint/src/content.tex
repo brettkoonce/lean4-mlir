@@ -13115,6 +13115,7 @@ def vitTinyImagenetConfig : TrainConfig where
   wdExcludeNormBias := true          -- no_weight_decay: skip norm/bias/pos-embed/CLS
   cosineDecay       := true
   warmupEpochs      := 5
+  minLR             := 0.00001       -- DeiT --min-lr 1e-5 (after the run below)
   labelSmoothing    := 0.1
   gradClipNorm      := 1.0           -- the unlock for the 5e-4 LR (see below)
   useMixup          := true          -- Mixup alpha 0.8
@@ -13129,12 +13130,15 @@ def vitTinyImagenetConfig : TrainConfig where
   useEMA            := true          -- model EMA (eval on shadow)
   emaDecay          := 0.99996       -- DeiT default
   bf16              := true          -- bf16 matmul compute
+  lnEps             := 0.000001      -- DeiT's LayerNorm eps, 1e-6 (after the run below)
+  f32StemHead       := true          -- patch embed + head in fp32 (after the run below)
   valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
   repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
 
 -- 3. Weight init. vitInit above selects trunc_normal(0.02) for every
---    transformer Linear and leaves the patch-embed conv on PyTorch's
---    Conv2d default; Xavier-uniform is the emitter's generic path, and
+--    transformer Linear and gives the patch-embed conv PyTorch's Conv2d
+--    default for its weight and a zero bias; Xavier-uniform is the
+--    emitter's generic path, and
 --    at ViT-Ti's d=192 it is 3.6x wider than timm's fixed 0.02. The run
 --    reported below is the default; xavier is the A/B arm.
 def vitTinyImagenetConfigXavier : TrainConfig :=
@@ -13230,15 +13234,17 @@ The recipe does not yet match exactly, and the honest list is short but
 not empty.
 
 \emph{What matches.} Architecture (patch16, $d{=}192$, 12 blocks, 3
-heads, 5{,}717{,}416 parameters); schedule (300 epochs, 5-epoch warmup,
-cosine to zero); optimizer (AdamW, weight decay $0.05$, no decay on
+heads, 5{,}717{,}416 parameters, LayerNorm at $\varepsilon = 10^{-6}$);
+schedule (300 epochs, 5-epoch warmup, cosine to DeiT's floor of
+$10^{-5}$); optimizer (AdamW, weight decay $0.05$, no decay on
 norms, biases, CLS or positional embedding); the augmentation stack (Mixup $0.8$, CutMix
 $1.0$, \texttt{rand-m9-mstd0.5-inc1} with the SolarizeAdd$+$Invert
 op-set and per-op apply probability $0.5$, Random-Erase $p{=}0.25$,
 repeated augmentation $3\times$); stochastic depth $0.1$; and model EMA
-at $0.99996$. Weight initialization now matches as well --- every
-transformer \texttt{Linear} gets $\mathrm{trunc\_normal}(\sigma{=}0.02)$
-and the patch-embed convolution PyTorch's \texttt{Conv2d} default ---
+at $0.99996$. Weight initialization matches as well --- every
+transformer \texttt{Linear}, the CLS token and the position embedding get
+$\mathrm{trunc\_normal}(\sigma{=}0.02)$, and the patch-embed
+convolution's weight PyTorch's \texttt{Conv2d} default ---
 which is what \texttt{vitInit} in the listing above selects. It is worth
 saying why that one mattered: Xavier-uniform scales as $1/\sqrt{d}$
 against timm's fixed $0.02$, so the generic path was
@@ -13247,7 +13253,7 @@ ViT-Ti, while the patch embed came out ${\sim}6\times$ too narrow
 (it divided by the output fan $d\cdot p^2$ rather than the input fan
 $c\cdot p^2$). The smallest model was the worst case.
 
-\emph{What does not match.} Six things, in rough order of how much
+\emph{What does not match.} Nine things, in rough order of how much
 they could matter:
 
 \begin{enumerate}
@@ -13269,12 +13275,17 @@ they could matter:
   that was observed on the Xavier initialization, before \texttt{vitInit}
   narrowed the weights $3.6\times$, and whether the collapse survives the
   init fix is untested. Until it is, the clip stays and is an addition.
-\item \textbf{RandomResizedCrop and Random-Erasing are a from-scratch
-  \texttt{tf.data} reimplementation}, not timm's code, so they agree by
-  specification rather than bit-for-bit. Random-Erase filled with zero
-  where timm fills with noise; the trainer now erases in timm's pixel mode
-  (\texttt{erasingPixel}), so this is a property of the run, not of the
-  recipe as it stands.
+\item \textbf{The GELU is the tanh approximation}, on both paths
+  (Definition~\ref{ax:geluScalar}), where DeiT's is the exact erf form.
+\item \textbf{RandomResizedCrop is TensorFlow's sampler, not
+  torchvision's.} The crop covers $10$--$100\%$ of the image where
+  torchvision's covers $8$--$100\%$, its aspect ratio is drawn uniformly
+  rather than log-uniformly, and a failed draw falls back to the whole
+  image rather than a centre crop. Random-Erasing is a \texttt{tf.data}
+  reimplementation of timm's; it filled with zero where timm fills with
+  noise, and the trainer now erases in timm's pixel mode
+  (\texttt{erasingPixel}), so that part is a property of the run, not of
+  the recipe as it stands.
 \item \textbf{Geometric RandAugment interpolated bilinearly}, where
   timm resolves bicubic from the model's data config. On a $21^\circ$
   rotation the bilinear warp sits $0.56$ / $2.53$ of $255$ from PIL's
@@ -13284,11 +13295,24 @@ they could matter:
   both. The trainer now carries a PIL-matched bicubic warp
   (\texttt{augBicubic}, worst mean $0.094$ of $255$ against PIL), so the
   rerun closes this one.
+\item \textbf{LayerNorm $\varepsilon$, the learning-rate floor, and the
+  patch embedding and head.} The run trained LayerNorm at
+  $\varepsilon = 10^{-5}$ and annealed to zero, on both paths, and the
+  reference ran its patch embedding and head in bf16. The listing carries
+  DeiT's $10^{-6}$ and $10^{-5}$ floor and keeps both layers in fp32
+  (\texttt{lnEps}, \texttt{minLR}, \texttt{f32StemHead}), so the rerun
+  closes these as well.
+\item \textbf{The schedule's shape and the mixing switch.} The learning
+  rate is set per step, warmed up from zero, and annealed over the
+  post-warmup span, where DeiT's scheduler steps once per epoch, warms up
+  from $10^{-6}$, and runs its cosine over all $300$ epochs. Mixup and
+  CutMix alternate step by step, where DeiT draws which one per batch.
 \item \textbf{Smaller things the parity ledger carries.} Evaluation
-  scores the EMA shadow where DeiT scores the live weights; there is no
-  cooldown or \texttt{min\_lr}; repeated-augmentation copies are spread by
-  a shuffle window rather than placed in one batch; and the in-training
-  evaluation centre-crops at $0.875$ where timm scores DeiT at $0.9$.
+  scores the EMA shadow where DeiT scores the live weights, and the
+  shadow's decay is ramped in from the first step where DeiT's is
+  constant; repeated-augmentation copies are spread by a shuffle window
+  rather than placed by an index-level sampler; and the patch-embedding
+  bias starts at zero where PyTorch draws it.
 \end{enumerate}
 
 \noindent The first is a bug, on the reference side only; the loss curve is
@@ -13352,13 +13376,15 @@ here they compose.} Weight-decay exclusion, grad clipping and stochastic
 depth are spelled \texttt{wx}, \texttt{clip} and \texttt{drop}, EMA is a
 variant too, and \texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropbf16} is the render
 that carries all four at once on top of AdamW and the four-way
-all-reduce. It is the artifact the run used, and it is what makes the
-pair below one-variable in recipe. Theorem~\ref{thm:vit_step_tie} is stated
+all-reduce. It is the artifact the run used.
+Theorem~\ref{thm:vit_step_tie} is stated
 on the f32, drop-free chain; this render's gradient nodes are the bf16
 \texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
 carries the drop-path sites. Mixup, CutMix and repeated
 augmentation never enter the graph at all, because they are data-side
-and ride the shim. It runs with:
+and ride the shim. The job below runs its successor,
+\texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropeps0000001bf16},
+the same render at LayerNorm $\varepsilon = 10^{-6}$:
 
 \begin{verbatim}
 lake run vit-default-emabf16-4gpu
@@ -13390,8 +13416,12 @@ ms/step              & 161                      & 199 \\
 per epoch            & 6.8 min                  & 9.6 min \\
 total                & 34.2 hr                  & 48.0 hr \\
 label smoothing      & $0$ (effective)          & $0.1$ \\
+patch embed + head   & bf16                     & fp32 \\
+evaluation forward   & bf16                     & fp32 \\
+CLS + position init  & $\sigma = 0.02$          & $0$ \\
+cosine phase         & ---                      & one step ahead \\
 \hline
-precision            & bf16                     & bf16 \\
+precision            & bf16 block matmuls       & bf16 block matmuls \\
 global batch         & 512 ($4\times128$)       & 512 ($4\times128$) \\
 steps/epoch          & 2{,}502                  & 2{,}502 \\
 EMA (scored)         & 0.99996                  & 0.99996 \\
@@ -13410,11 +13440,15 @@ equal by construction.
 \medskip\noindent\textbf{The two paths agree to $0.04$ points on top-1 and
 $0.10$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Above the rule sit the
-lowering, what it costs, and one recipe field: the reference's effective
-label smoothing of $0$ against the render's $0.1$. Precision is equal, the
-batch is the reference's own $512$, and there is no BatchNorm to
-normalize over a different group; the reference's rerun makes this the
-one-variable pair in the book.
+lowering, what it costs, and five things the two runs did not share: the
+reference's effective label smoothing of $0$ against the render's $0.1$,
+the precision of the patch embedding and head, the precision of the
+evaluation forward, a CLS token and position embedding that started at
+zero on the verified path, and a cosine one step ahead of the
+reference's. The batch is the reference's own $512$, and there is no
+BatchNorm to normalize over a different group; the rerun of both paths
+leaves the evaluation forward as the one row above the rule beside the
+lowering and its cost.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end together.}
 The verified path runs half a point behind through warmup, is level by
@@ -13474,9 +13508,9 @@ Turning it off took this run from $69$ to $48$ hours; it moves the order of
 random draws and nothing else, and the reference has never paid it either.
 The same accounting holds for every verified ImageNet run in this book,
 and the convnets' gaps are read against it.
-\textbf{[TODO: feed fixes --- mixing in place on the shim host, the uint8
-wire, PIL rotate --- measured at $+34$/$+22$/$+13\%$, none built; re-measure
-the gap when they land.]}
+\textbf{[TODO: re-measure the gap on the shim as it stands, which mixes
+in place and writes from its own thread; the uint8 wire does not apply to
+this recipe, and PIL rotate is not built.]}
 
 \medskip\noindent A caution on reading the two side by side: the training
 loss is not the metric to compare. It runs ${\sim}0.47$ apart at epoch 50 where
@@ -13535,19 +13569,22 @@ compile, so it times the graph with the data feed all but removed.
 \S\ref{sec:vit_phase4} is the check: ViT-Ti's bf16 figure here is $153$\,ms/step
 and $35$ hours, and the completed run measured $153$\,ms/step with the shim
 removed but $199$ fed, for $48.0$ hours. The ratio is not a constant --- it is
-whatever the host pipeline costs for that recipe. ViT-S has since been
-measured: the verified trainer sits at $310$--$323$\,ms/step against its
-shim's $326$\,ms ceiling per $512$ images, so it is feed-bound at ${\sim}68$
-hours; ViT-B's margin is unmeasured.
+whatever the host pipeline costs for that recipe. Measured at the jobs'
+own shape, ViT-S's verified step is $379$\,ms, $79$ hours, with $79$\,ms
+of it waiting on the shim; ViT-B's is $887$\,ms, $185$ hours, and
+compute-bound.
 
 \medskip\noindent\textbf{What is queued.} Both pairs exist. The verified jobs
 are \texttt{vits-default-emabf16-4gpu} and \texttt{vitb-default-emabf16-4gpu}
-on \texttt{vit\{s,b\}in\_emadp128x4wxclipdropbf16} --- \texttt{vitInit}, EMA
-at $0.99996$, the clip, bf16 --- and their references are
+on \texttt{vit\{s,b\}in\_\allowbreak emadp128x4\allowbreak
+wxclipdropeps0000001bf16} --- Tiny's recipe as its listing has it:
+\texttt{vitInit}, LayerNorm $\varepsilon = 10^{-6}$, the $10^{-5}$
+learning-rate floor, EMA at $0.99996$, the clip, bf16 under an fp32 patch
+embedding and head --- and their references are
 \texttt{vits-default-jax-4gpu} and \texttt{vitb-accum-jax-4gpu}, the latter
-accumulating $4\times128$ to DeiT's $512$. The reference steps were probed
-at $290$\,ms for S and $701$\,ms for B on four cards, ${\sim}63$ and
-${\sim}146$ hours. ViT-B's EMA render peaks at $13.19$\,GiB, over the
+accumulating $4\times128$ to DeiT's $512$. The reference steps measure
+$344$\,ms for S and $708$\,ms for B on four cards, $72$ and $148$
+hours. ViT-B's EMA render peaks at $13.19$\,GiB, over the
 $11.68$\,GiB default arena, so its job raises the allocator fraction to
 $0.97$ ($15.11$\,GiB); S fits the default at $10.27$. Neither has run.
 
