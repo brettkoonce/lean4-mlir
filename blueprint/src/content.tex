@@ -8169,9 +8169,10 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   warmupEpochs   := 0               -- the paper has no warmup
   augment        := true            -- random-crop + horizontal flip
   useAutoAugment := false           -- MNv2 paper used crop/flip only, no AA
-  labelSmoothing := 0.0             -- Sandler 2018 used none
+  labelSmoothing := 0.0             -- the paper names none; TF-slim's default
   bf16           := true
   bf16Conv       := true            -- reaches the inverted-residual blocks
+  f32StemHead    := true            -- classifier head in fp32
   runningBN      := true            -- paper-faithful eval: running BN stats
   bnMomentum     := 0.997           -- TF-slim's BN decay (PyTorch momentum 0.003)
   bnEps          := 1e-3            -- TF-slim's BN epsilon
@@ -8182,10 +8183,15 @@ def mobilenetV2ImagenetConfigFull : TrainConfig :=
 \end{verbatim}
 
 \noindent The run below is \texttt{mobilenetV2ImagenetConfigFull}, launched
-by \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}. One row of
-the paper's recipe is not reproduced: Sandler et al.\ trained
-asynchronously on sixteen workers of $96$ images each, and this run is four
-replicas of $64$, synchronous, at the paper's peak of $0.045$.
+by \texttt{scripts/jobs/\allowbreak mnv2-full-jax-4gpu.conf}. On either
+path, three rows of the paper's TF-slim recipe are not reproduced. Sandler
+et al.\ trained asynchronously on sixteen workers of $96$ images each, and
+this run is four replicas of $64$, synchronous, at the paper's peak of
+$0.045$. The depthwise kernels are weight-decayed, where slim exempts them.
+And the learning rate multiplies the momentum buffer on its way into the
+weights, where TensorFlow's RMSProp folds it into the buffer; the two agree
+while the rate holds still and part by a little at each step of the
+staircase.
 
 The one knob specific to MobileNet is \texttt{bf16Conv}. ResNet's
 convolutions cast to bfloat16 the instant the flag is on, but MobileNet's
@@ -8228,10 +8234,10 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 
 \noindent Global batch 256 as $4 \times 64$ replicas, scored over all
 $50{,}000$ validation images every epoch. The wall-clock win over the
-$9.5\times$-larger ResNet-34 is real but sub-proportional, as
+$6.2\times$-larger ResNet-34 is real but sub-proportional, as
 \S\ref{sec:mnv2_runit} measured at small scale: depthwise convolution is
 memory-bound, so an order of magnitude fewer FLOPs buys a factor of two or
-three on this hardware rather than nine. The RMSProp peak of $0.045$ took
+three on this hardware rather than six. The RMSProp peak of $0.045$ took
 off cleanly, because $\varepsilon=1.0$ keeps the adaptive step well damped
 --- in sharp contrast to EfficientNet's $\varepsilon=10^{-3}$ in
 Chapter~\ref{chap:se}. The last $25$ epochs average $71.54\%$, within a
@@ -8319,8 +8325,8 @@ BatchNorm $\gamma/\beta$ and biases, peak LR $0.045$ with the
 $\times 0.98$ staircase from step $0$ and no warmup, classifier dropout
 $0.2$, no label smoothing, BatchNorm at TF-slim's $0.997$ / $10^{-3}$
 with the running statistics read at that $\varepsilon$ by its eval graph
-\texttt{mobilenetv2in\_fwd\_eval\_eps0001}, bf16 matmul and convolution,
-data-parallel over four replicas of $64$ with each of the $52$ BatchNorms
+\texttt{mobilenetv2in\_fwd\_eval\_eps0001}, bf16 convolution under an fp32
+classifier head, data-parallel over four replicas of $64$ with each of the $52$ BatchNorms
 all-reducing its mean and variance across them, so the statistic group is
 the global $256$. The peak and decay rate live in \texttt{mnv2RmsSchedule},
 shared with the Imagenette peer so the two cannot carry different values;
@@ -8359,8 +8365,11 @@ BatchNorm statistics, scored over the same $50{,}000$ images every epoch.
 \hline
 lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step   & yes                      & none \\
+evaluation forward   & bf16                     & fp32 \\
+classifier head      & bf16                     & fp32 \\
+depthwise init, variance & $2/k^2$              & $2/(C k^2)$ \\
 \hline
-precision            & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
+precision            & bf16 convolutions        & bf16 convolutions \\
 global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
 BN statistic group   & 256 (global)             & 256 (global) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
@@ -8388,11 +8397,11 @@ in training, not at evaluation: the verified path's training loss runs
 below the reference's for the first $25$ epochs and $0.02$ above it from
 epoch $26$ to the end, while the sampled accuracies stay level through
 epoch $100$ and part by half a point from $150$ on. Every row between the
-rules is held equal by construction, and the step is the same function on
-both paths. The one input the two do not share is the initialization:
+rules is held equal by construction. Two inputs to training are not
+shared: the classifier head's precision, and the initialization, where
 every depthwise kernel starts $\sqrt{C}$ narrower on the verified path,
-He fan-out over $C \cdot k^2$ against the reference's fan over $k^2$. That
-row is open; a run with the initializations matched is what closes it.
+He fan-out over $C \cdot k^2$ against the reference's fan over $k^2$. Those
+rows are open; a run with them matched is what closes them.
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
@@ -8460,14 +8469,15 @@ Peak LR       & $0.1$                  & $0.045$                       & RMSProp
 LR schedule   & cosine to zero         & exponential, $\times0.98$ per epoch & the TF-lineage staircase the whole family inherits \\
 Epochs        & 90                     & $\sim$300--400                & the long-haul schedule, and the row the exponential decay above makes non-negotiable \\
 Weight decay  & $10^{-4}$, all params  & $4\times10^{-5}$              & depthwise filters are 9 weights per channel, and $10^{-4}$ over-regularizes them \\
-Label smoothing & $0.1$                & none                          & Sandler et al.\ used no smoothing at all \\
+Label smoothing & $0.1$                & none                          & the paper names none, and TF-slim's default is $0$ \\
 Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged, with no learned policy and no mixing, the leanest recipe in this book \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent What carries over unchanged: batch 256, train and eval both
-at $224$, running-BN evaluation, and bf16 matmul and convolution. R34's
+at $224$, running-BN evaluation, and bf16 convolution under an fp32
+classifier head. R34's
 5-epoch warmup does not: MobileNetV2's staircase starts at step $0$, as
 the paper's does.
 
@@ -8528,7 +8538,7 @@ Epochs        & $\sim$300--400         & 500                           & the fam
 Weight decay  & $4\times10^{-5}$       & $0.1$, skip norm/bias         & $2500\times$ stronger, applied selectively, because AdamW makes heavy decay usable \\
 Augmentation  & RRC + hflip            & + RandAugment (N2, m15, p0.7) & heavy learned augmentation, and still no Mixup/CutMix for Conv-M \\
 Label smoothing & none                 & $0.1$                         & standard by 2024 \\
-Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 18 skip-carrying UIB blocks \\
+Stochastic depth & none                & drop-path $0.075$             & linear ramp over the 21 UIB blocks, applied at the 18 that carry a skip \\
 EMA           & none                   & none in the paper; $0.9999$ here, warmup-corrected & weight averaging on both paths below (with the BN buffers shadowed, per Ch~\ref{chap:se}'s lesson), an addition to the paper's recipe that the \texttt{full} tier drops \\
 \hline
 \end{tabular}
@@ -8552,11 +8562,11 @@ $10{,}000$. The fix is TensorFlow's, which this family's reference
 implementations assume: ramp the decay,
 $d_t = \min\!\big(d,\ (1+t)/(10+t)\big)$.
 
-\texttt{mobilenet-v4-imagenet} ships the paper recipe end to end as
+\texttt{mobilenet-v4-imagenet} ships the paper recipe as
 \texttt{full}, 500 epochs, and a \textbf{100-epoch} tier as
 \texttt{default}: wd $0.05$ against the paper's $0.1$, dropout $0.1$
-against $0.2$, RandAugment $m9$ against $m15$, no drop-path, and
-$224$ throughout, because the paper's full regularization pack
+against $0.2$, RandAugment $m9$ at $p\,0.5$ against $m15$ at $p\,0.7$, no
+drop-path, and $224$ throughout, because the paper's full regularization pack
 underfits a short schedule. The 100-epoch tier is the one run here, on
 both paths, and the $79.9\%$ headline is a 500-epoch number.
 
@@ -8568,7 +8578,8 @@ built as \texttt{lake build mobilenet-v4-imagenet}, with
 \texttt{scripts/jobs/mnv4-default-jax-4gpu.conf}. AdamW at peak
 $0.004$ for an effective batch of $4096$, reached as a $512$-image
 micro-batch accumulated eight times, so $312$ optimizer steps an epoch;
-bf16 matmuls and convolutions against fp32 master weights; the EMA
+bf16 convolutions against fp32 master weights, the classifier head in
+fp32; the EMA
 shadow is what gets scored, every five epochs and at the end.
 
 \begin{center}
@@ -8677,8 +8688,8 @@ every mask in f32 (\texttt{mnv4FwdGraphBFullDo\_faithful}), while the
 AdamW at $0.004$, accumulation $k = 8$ over four replicas of $128$ to
 the reference's effective $4096$, weight decay $0.05$ with BN
 $\gamma/\beta$ and biases excluded, classifier dropout $0.1$, the EMA
-shadow at $0.9999$ with the warmup correction above, bf16 matmul and
-convolution. Each of the 77 BatchNorms all-reduces its mean and
+shadow at $0.9999$ with the warmup correction above, bf16 convolution
+under an fp32 classifier head. Each of the 77 BatchNorms all-reduces its mean and
 variance across the four replicas, so the statistic group is the
 $512$-image micro-batch, which is the group the reference's
 accumulation gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the f32
@@ -8714,8 +8725,11 @@ $50{,}000$ images.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
+evaluation forward  & bf16                     & fp32 \\
+classifier head     & bf16                     & fp32 \\
+depthwise init, variance & $2/k^2$             & $2/(C k^2)$ \\
 \hline
-precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
+precision           & bf16 convolutions        & bf16 convolutions \\
 effective batch     & 4096                     & 4096 \\
 accumulation        & $8 \times 512$           & $8 \times 512$ \\
 BN statistic group  & 512 (Ghost-BN)           & 512 (Ghost-BN) \\
@@ -8738,9 +8752,11 @@ normalizes over the $512$-image shard its accumulation hands each step,
 and the verified render all-reduces to the same $512$.
 
 \medskip\noindent\textbf{The two paths agree to $0.11$ points on top-1
-and $0.16$ on top-5}, inside the 95\% Wilson interval ($\pm0.37$ at $77\%$ on $50{,}000$ images), at one seed each. Precision
-and the BatchNorm group are both held equal, so nothing above the rule
-but the lowering separates the columns.
+and $0.16$ on top-5}, inside the 95\% Wilson interval ($\pm0.37$ at $77\%$ on $50{,}000$ images), at one seed each. The
+BatchNorm group is held equal. Above the rule, beside the lowering, sit
+the precision of the classifier head and of the evaluation forward, and
+the depthwise initialization, which starts every depthwise kernel
+$\sqrt{C}$ narrower on the verified path.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The verified path trails at epoch~5 and leads from epoch~10,
@@ -8793,19 +8809,22 @@ all $50{,}000$ validation images.
 
 \medskip\noindent\textbf{[TODO, 500 epochs.]} The tier above is detuned by
 construction, at wd $0.05$ against the paper's $0.1$, dropout $0.1$ against
-$0.2$, RandAugment $m9$ against $m15$, no drop-path against $0.075$, $224$
+$0.2$, RandAugment $m9$ at $p\,0.5$ against $m15$ at $p\,0.7$, no
+drop-path against $0.075$, $224$
 against $256$ and $100$ epochs against $500$, so its $76.57\%$ and
 $76.68\%$ are not a reproduction of $79.9\%$. Both curves are flat over
 their last ten epochs; the remaining points live in the regularization and
 the length. The paper tier exists on both paths and has not run:
 \texttt{mnv4-full-jax-4gpu} and \texttt{mnv4-full-4gpu}, the latter on
 \texttt{mnv4in\_accdp8x128wxdropdowd01bf16} --- wd $0.1$, dropout $0.2$,
-$m15$, drop-path $0.075$ ramped over the 18 skip-carrying UIB blocks, $500$
-epochs. Both paths above score the EMA shadow, which the paper's Conv-M
+RandAugment $m15$ at $p\,0.7$, drop-path $0.075$ ramped over the 21 UIB
+blocks, $500$ epochs. Both paths above score the EMA shadow, which the paper's Conv-M
 recipe does not carry; the tie stands, since both columns carry it, and the
 \texttt{full} pair drops it, scoring the live weights as the paper does. It
-trains at $224$; the paper's $256$ is the one gap the \texttt{full} tier
-leaves open.
+trains at $224$ against the paper's $256$, and two smaller gaps stay open
+with it: the drop-path ramp runs over the 21 UIB blocks where
+\texttt{timm}'s runs over all 23, and the BatchNorm running statistics
+decay at $0.99$ against \texttt{timm}'s $0.9$.
 
 \chapter{EfficientNet}
 \label{chap:se}
