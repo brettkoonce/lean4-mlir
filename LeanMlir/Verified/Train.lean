@@ -637,6 +637,16 @@ abbrev ShimCfg : IO.Process.StdioConfig :=
 structure ShimProc where
   child : IO.Process.Child ShimCfg
   h     : IO.FS.Handle
+  /-- `some ms` when the producer came up on the uint8 wire (v5/v6): the six float32 normalize
+      constants from its preamble, which `readShimBatch` hands to `u8Norm`. -/
+  norm  : Option ByteArray := none
+
+/-- The uint8 wire's consumer half (`lean_mlir_u8_norm`): `buf` holds `B` uint8 HWC images at its
+    front and the capacity of the float batch; it comes back as `B` float32 CHW images,
+    `((float)u − mean[c]) / std[c]` — the shim's own normalize and transpose, op for op — in place,
+    so the main thread still allocates and frees every batch buffer (see `readInto`). -/
+@[extern "lean_mlir_u8_norm"]
+opaque u8Norm (buf : ByteArray) (B hw : USize) (ms : @& ByteArray) : IO ByteArray
 
 /-- Spawn the shim for one split and consume its preamble.
 
@@ -645,6 +655,9 @@ structure ShimProc where
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
 def spawnShim (shimScript : String) (split : String) (batch flat seed : Nat)
     (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0)
+    -- ask for the uint8 wire (`SHIM_U8=1`). A request, not a demand: the shim answers v5/v6 only
+    -- where its train images are uint8 before the normalize, and v3/v4 otherwise; both are read.
+    (u8 : Bool := false)
     -- extra child variables, appended last: `scoreCheckpoint`'s `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP`
     -- (timm's test protocol). Empty by default, so every existing spawn is unchanged.
     (extraEnv : Array (String × Option String) := #[]) : IO ShimProc := do
@@ -731,7 +744,8 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
     cmd := py.toString, args := #[script.toString],
     stdout := .piped, stdin := .null, stderr := .inherit,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
-             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv ++ extraEnv }
+             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv ++
+             (if u8 then #[("SHIM_U8", some "1")] else #[]) ++ extraEnv }
   let h := child.stdout
   let pre ← readExact h 16
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
@@ -742,14 +756,14 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
   -- no way to express a short final batch — see `readShimBatchPartial`. Refusing an old shim here
   -- is the point: a v1 stream read as v3 would take the first four label bytes as a row count.
   let wantVer := if nclasses > 0 then 4 else 3
-  if ver != wantVer then
+  if ver != wantVer && !(u8 && ver == wantVer + 2) then
     throw <| IO.userError s!"imagenet shim: wire version {ver}, expected {wantVer} \
 (nclasses={nclasses} ⇒ v{wantVer}). A v3 shim cannot serve soft targets and a v4 record read as v3 \
 slides off by a factor of nClasses on every batch, so this refuses rather than reading garbage. \
 ⚠ v1/v2 are the PRE-ROW-COUNT framing — regenerate with scripts/gen_shims.sh."
   -- v4 appends `nclasses` to the preamble, so it is 20 bytes rather than 16. Read the tail HERE,
   -- not at the first record: the alignment error a missed field causes is silent and cumulative.
-  if ver == 4 then
+  if ver == 4 || ver == 6 then
     let pre2 ← readExact h 4
     let sNC := readU32LE pre2 0
     if sNC != nclasses then
@@ -762,13 +776,17 @@ the render wants batch={batch} flat={flat} — refusing rather than reading misa
   -- looks exactly like a run streaming the right one. This line is what makes the wiring readable
   -- from a log.
   IO.println s!"  imagenet shim: {script} — {split} split, batch {sBatch}, {sFlat} floats/img \
-(seed {seed}){if nclasses > 0 then s!", wire v{ver} soft targets [{batch}x{nclasses}]" else ""}"
-  pure { child := child, h := h }
+(seed {seed}){if nclasses > 0 then s!", wire v{ver} soft targets [{batch}x{nclasses}]" else ""}\
+{if ver ≥ 5 then ", UINT8 wire (normalized in C)" else ""}"
+  -- v5/v6: the shim's six float32 normalize constants follow the preamble.
+  let norm ← if ver ≥ 5 then some <$> readExact h 24 else pure none
+  pure { child := child, h := h, norm := norm }
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
     (the shim writes labels first so a partial record is detectable at the smaller read). -/
 private def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
-    (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
+    (imgBuf : Option (IO.Ref ByteArray) := none) (norm : Option ByteArray := none) :
+    IO (ByteArray × ByteArray) := do
   -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
   -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
   -- downstream of here changes shape.
@@ -790,8 +808,12 @@ ends (the val drain)."
   let buf ← match imgBuf with
     | some r => r.swap ByteArray.empty
     | none   => pure (ByteArray.emptyWithCapacity (4 * batch * flat))
-  let img ← readExactInto h buf (4 * batch * flat)
-  pure (img, lbl)
+  match norm with
+  | none => pure (← readExactInto h buf (4 * batch * flat), lbl)
+  | some ms =>
+    -- uint8 wire: a quarter of the bytes into the front of the same buffer, widened in place.
+    let raw ← readExactInto h buf (batch * flat)
+    pure (← u8Norm raw (USize.ofNat batch) (USize.ofNat (flat / 3)) ms, lbl)
 
 /-- Read up to `n` bytes, returning **what actually arrived** instead of throwing at EOF.
     The peer of `readExact`, and the only difference is which of "short read" and "clean end of
@@ -870,14 +892,15 @@ reading a misframed batch"
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
 private def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
-    (nclasses : Nat := 0) (extraEnv : Array (String × Option String) := #[]) :
+    (nclasses : Nat := 0) (extraEnv : Array (String × Option String) := #[]) (u8 : Bool := false) :
     IO (Array ShimProc) := do
   if n <= 1 then
-    pure #[← spawnShim shimScript split batch flat seed none nclasses extraEnv]
+    pure #[← spawnShim shimScript split batch flat seed none nclasses (u8 := u8) (extraEnv := extraEnv)]
   else
     let mut hs : Array ShimProc := #[]
     for i in [0:n] do
-      hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses extraEnv)
+      hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses
+        (u8 := u8) (extraEnv := extraEnv))
     IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
     pure hs
 
@@ -886,7 +909,7 @@ private def spawnShimSharded (shimScript : String) (split : String) (batch flat 
 private def readShimBatchRR (hs : Array ShimProc) (k batch flat : Nat) (nclasses : Nat := 0)
     (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   match hs[k % hs.size]? with
-  | some p => readShimBatch p.h batch flat nclasses imgBuf
+  | some p => readShimBatch p.h batch flat nclasses imgBuf p.norm
   | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
@@ -2139,6 +2162,12 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- the single-producer stream). Needed once the step rate outruns one producer's
   -- ~1,530 img/s: a 4-replica ViT step wants ~1,940. See `spawnShimSharded`.
   let shimWorkers := ((← IO.getEnv "SHIM_WORKERS").bind (·.toNat?)).getD 1
+  -- The uint8 wire (`SHIM_U8`, wire v5/v6): requested by default, granted by each shim only where
+  -- its train images are uint8 before the normalize and nothing acts after it (no erasing, no
+  -- mixing) — MobileNetV4's RandAugment stream, not ViT's. The normalize and transpose then run in
+  -- C on the read (`u8Norm`), the same float32 ops, so the batch is bit-identical; the pipe carries
+  -- a quarter of the bytes. `LEAN_MLIR_SHIM_U8=0` keeps the float wire everywhere.
+  let shimU8 := (← IO.getEnv "LEAN_MLIR_SHIM_U8") != some "0"
   -- $SHIM_SOFT=1 asks the shim for WIRE v2 — `float32[batch*nClasses]` target distributions rather
   -- than `int32[batch]` labels. Unmixed, those are one-hots, i.e. the same information in the shape
   -- the graph already consumes, which is exactly what makes the transport gateable on its own:
@@ -2199,7 +2228,7 @@ re-seeded from the running stats over the first 100 steps, not restored"
       -- INERT for every incumbent — `LeanMlir/Verified/NetsCore.lean`'s closing `#guard` block proves
       -- `net.d0 == 3*224*224` for all six 224 ImageNet nets, so this substitutes equal for equal
       -- there and changes only `resnet50in160`.
-      spawnShimSharded net.shimScript "train" gbs net.d0 shimSeed shimWorkers shimNC
+      spawnShimSharded net.shimScript "train" gbs net.d0 shimSeed shimWorkers shimNC (u8 := shimU8)
     else pure #[]
   -- `LEAN_MLIR_SHIM_RESPAWN_EPOCHS=E` (default 0 = off): every E epochs ONE producer is killed
   -- and replaced, cycling through the slots, so no loader lives past `E × n` epochs and at most one
@@ -2873,7 +2902,7 @@ gate's control, not a configuration.")
         shimGen := shimGen + 1
         let newSeed := shimSeed + slot + shimGen * imgStreams.size
         let fresh ← spawnShim net.shimScript "train" gbs net.d0 newSeed
-                      (some (slot, imgStreams.size)) shimNC
+                      (some (slot, imgStreams.size)) shimNC (u8 := shimU8)
         imgStreams := imgStreams.set! slot fresh
         IO.println s!"  ▸ shim respawn: producer {slot} of {imgStreams.size} replaced after epoch \
 {ep + 1} (generation {shimGen}, seed {newSeed})"

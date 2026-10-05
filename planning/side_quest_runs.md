@@ -25,11 +25,11 @@ sequential. Per-epoch evals (a few hours per run) are not included.
 | batch | runs (hours) | total | days 24/7 |
 |---|---|---|---|
 | 1, JAX | R50 A2 76 · MNv4 `full` 500 ep ~100–105 · ViT-S 72 | ~250 | ~10.4 |
-| 2, verified | R50 A2 93 · MNv4 500 ep 110 · ViT-S 79 | ~282 | ~11.8 |
+| 2, verified | R50 A2 93 · MNv4 500 ep 100 · ViT-S 79 | ~272 | ~11.3 |
 | 3, JAX | R50 A1 153 · ViT-B 148 · ConvNeXt-S 127 | ~428 | ~17.8 |
 | 4, verified | R50 A1 185 · ViT-B 185 · ConvNeXt-S 156 | ~526 | ~21.9 |
 | 5 | ConvNeXt-B JAX 167, then verified 216 | ~383 | ~16 |
-| total | | ~1,870 | ~78 |
+| total | | ~1,860 | ~77.5 |
 
 The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
 
@@ -48,10 +48,10 @@ The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
 | A1 verified | micro (4 × 128) | 2,500 × 600 | 444 (med 444, min 412) | compute |
 | ConvNeXt-S verified | 256 | 5,004 × 300 | 373 (med 372, min 355) | compute |
 | ConvNeXt-B verified | 256 | 5,004 × 300 | 518 (med 518, min 507) | compute |
-| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 318 (med 316, min 207); 329 before | ⚠ shim CPU: 109 ms starved |
+| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 290 (med 290, min 233) on the uint8 wire; 318 / 329 before | shim CPU: 57 ms starved |
 
 Against the 09-29 table: ConvNeXt-B verified is 37 h shorter (253 modelled), ConvNeXt-S JAX 17 h
-longer (110 was a compute probe), and MNv4 verified is the one big miss left (110 against ~90). ViT-S
+longer (110 was a compute probe), and MNv4 verified is the one big miss left (100 against ~90, after §4.5). ViT-S
 verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread); it is 79 now.
 
 ## 2. Where things stand (2026-10-05)
@@ -61,7 +61,7 @@ verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread
   stalled. ViT-S JAX: 344 ms/step flat, against 656 overall on 09-29.
 * **Every job has a measured rate** (§1), both paths. The §3a smokes are done for all seven verified
   confs. The `ETA=` strings in the confs carry the §1 numbers.
-* **The R50 drop-path renders were broken and are fixed** (2026-10-05, uncommitted). All 12
+* **The R50 drop-path renders were broken and are fixed** (c84fad74). All 12
   `resnet50in_…drop…` train steps (A2/A1, EMA and not) returned 16 values short — the masks went in
   and never came out, while the driver copies the whole output blob back (`#out = #in − 2`). The
   PJRT shim refuses that (G4: 755 outputs, 771 destinations), but only on a GPU, and nothing had
@@ -70,11 +70,13 @@ verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread
   each), and guarded by the new `scripts/gates/train_step_arity.py` (all 213 train steps; in
   proofs.yml and in the six drop-render confs' PRECHECK). `lake build`, `lake build Certs` and
   `regen_verified_mlir.sh check` are green on the fix.
-* **The ViT shim fix landed** (§4.4, uncommitted): mixup/cutmix in place and the pipe write on its
+* **The ViT shim fix landed** (§4.4, f5b6853f): mixup/cutmix in place and the pipe write on its
   own thread. Byte-identical streams (SHIM_HASH and the wire, old vs new, five shims); ViT-S verified
   609 → 379 ms/step (127 → 79 h), MNv4 329 → 318.
-* **Open: MNv4 verified is CPU-bound in its producers** (109 of 318 ms starved, the box saturated).
-  Only less CPU per image moves it: §4.3's L3 (uint8 wire) is the lever.
+* **The uint8 wire landed** (§4.5): a shim whose train images are uint8 before the
+  normalize sends them as uint8 HWC and the trainer normalizes in C, bit-identical
+  (`tests/u8_wire_tie.sh`). MNv4 verified 318 → 290 ms/step (110 → 100 h). Still producer
+  CPU-bound (57 ms starved): what is left is TF's per-image augmentation itself (§4.3 L4/L5).
 * All the JAX jobs can launch.
 
 ## 3. Software work list
@@ -320,6 +322,30 @@ since an earlier change; the scripts-audit open item).
 | MNv4 512 × 4, rr | 1,862 | 275 |
 
 On the GPUs: ViT-S verified 609 → 379 ms/step (starved 305 → 79), MNv4 verified 329 → 318.
+
+### 4.5 The uint8 wire (2026-10-05)
+
+`runs/2026-10-05-uint8-wire/`. Wire v5/v6 = v3/v4 with uint8 HWC images and the shim's six float32
+normalize constants after the preamble. The trainer asks for it (`SHIM_U8=1`, on by default,
+`LEAN_MLIR_SHIM_U8=0` off) and each shim grants it only where it is exact:
+- at generation time, for a recipe with no erasing and no mixing (both act after the normalize);
+- at trace time, when the augmented image is uint8 — `_randaugment`/`_autoaugment` end in
+  `tf.cast(<uint8>, tf.float32)`, and `_pp` takes that Cast's uint8 input from the graph.
+  MNv4/MNv2/EfficientNet-B0 grant it; R34's crop + flip ends in float and stays on v3; ViT and
+  ConvNeXt (mixing, erasing) stay on v4. Validation is never uint8.
+
+`emitDataLoading` gains `u8Wire`, set only by the shim, so the JAX reference trainers re-emit
+byte-identical. The consumer reads B·flat bytes into the front of the main-thread float buffer and
+`lean_mlir_u8_norm` widens it in place, last image first (`((float)u − mean[c]) / std[c]`, the
+shim's own two float32 ops, then its transpose), AVX2 behind a runtime check (15 vs 52 ms per 512,
+bit-identical to the generic loop over every byte value, `normbench3.c`).
+
+Gates: `tests/u8_wire_tie.sh` — float wire twice (control, 0 bytes) and uint8 vs float (0 bytes
+of the 155 MB trained state after 16 micro-steps), with a vacuity check that the uint8 run was
+granted the wire; it caught the first version, whose trace-time test looked for a uint8 tensor and
+found RandAugment's float32 cast. The float wire is unchanged: `identity_float.txt`.
+
+MNv4 verified: mean 318 → 290 ms/step (starved 109 → 57 ms), ~100 h for 500 epochs.
 
 ## 5. Batch-1 smokes on the four cards (2026-09-28/29)
 

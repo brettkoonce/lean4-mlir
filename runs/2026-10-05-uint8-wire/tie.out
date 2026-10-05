@@ -1,0 +1,16 @@
+── uint8 shim wire: bit-identity gate ──
+   net      mnv4in/accdp8x128wxdropdowd01bf16, 4 x 128 on devices 0,1,2,3, 16 micro-steps
+   scratch  /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/runs/2026-10-05-uint8-wire/tie
+
+── runs ──
+   A1  u8=0  155448192 bytes  uint8 producers: 0 of 4
+   A2  u8=0  155448192 bytes  uint8 producers: 0 of 4
+   B   u8=1  155448192 bytes  uint8 producers: 4 of 4
+
+── verdict ──
+   control  A1 vs A2 (float wire, twice): 0 differing bytes
+   verdict  A1 vs B  (float vs uint8)    : 0 differing bytes
+   wire     B granted uint8 on 4 producer(s), A1 on 0
+
+✓ PASS — control clean, B on the uint8 wire, trained state bit-identical over 16 micro-steps.
+exit=0

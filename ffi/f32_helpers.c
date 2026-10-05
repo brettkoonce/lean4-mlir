@@ -3110,6 +3110,74 @@ LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf,
     return lean_io_result_mk_ok(buf);
 }
 
+// ---- The shim's uint8 wire (wire v5/v6, VerifiedTrain.u8Norm) ----
+// One image: uint8 HWC `src` -> float32 CHW `dst`, each element ((float)u − mean[c]) / std[c] —
+// the shim's own `(img − _MEAN_RGB) / _STD_RGB` and its transpose, the same two float32 ops in the
+// same order (a subtract then a divide cannot contract to an FMA). `ms` = mean[3], std[3].
+// Pixel-major: each source pixel is read once and its three channels written.
+// The AVX2 clone is the same body vectorized 8-wide, and IEEE subtract / divide are elementwise,
+// so it is bit-identical to the generic one (checked over every byte value in every channel,
+// runs/2026-10-05-uint8-wire/normbench3.c); it is ~3.5x faster (15 vs 52 ms per 512 at 224²).
+#define U8NORM_BODY                                                                          \
+    float* d0 = dst; float* d1 = dst + hw; float* d2 = dst + 2 * hw;                         \
+    const float m0 = ms[0], m1 = ms[1], m2 = ms[2], s0 = ms[3], s1 = ms[4], s2 = ms[5];      \
+    _Pragma("clang loop vectorize(enable)")                                                  \
+    for (size_t p = 0; p < hw; p++) {                                                        \
+        const uint8_t* q = src + 3 * p;                                                      \
+        d0[p] = ((float)q[0] - m0) / s0;                                                     \
+        d1[p] = ((float)q[1] - m1) / s1;                                                     \
+        d2[p] = ((float)q[2] - m2) / s2;                                                     \
+    }
+static void u8norm_img_generic(const uint8_t* src, float* dst, size_t hw, const float* ms) {
+    U8NORM_BODY
+}
+#if defined(__x86_64__)
+__attribute__((target("avx2")))
+static void u8norm_img_avx2(const uint8_t* src, float* dst, size_t hw, const float* ms) {
+    U8NORM_BODY
+}
+#endif
+
+// `buf` holds B uint8 HWC images at its front (B·hw·3 bytes, as `readExactInto` left them) and has
+// the capacity of the float batch. Rewrites it IN PLACE as B float32 CHW images, with `ms` = the
+// six float32 constants the shim sent in its preamble.
+// Images go LAST FIRST: float image i covers bytes [4·i·f, 4·(i+1)·f) and uint8 image j sits at
+// [j·f, (j+1)·f), so writing image i can only overrun uint8 images j ≥ 4i — already converted for
+// i ≥ 1 — and image 0's own bytes, which is why each image is copied out to `tmp` first.
+// Same buffer discipline as `lean_mlir_read_into`: the main thread allocated `buf`, so the pool
+// thread only fills it and nothing here allocates a batch-sized block.
+LEAN_EXPORT lean_obj_res lean_mlir_u8_norm(lean_obj_arg buf, size_t B, size_t hw, b_lean_obj_arg ms) {
+    int rc = buf->m_rc;
+    const size_t f = 3 * hw;
+    if (!(rc == 1 || rc == -1) || lean_sarray_size(buf) != B * f ||
+        lean_sarray_capacity(buf) < 4 * B * f || lean_sarray_size(ms) != 24) {
+        char msg[200];
+        snprintf(msg, sizeof msg, "u8Norm: rc=%d size=%zu cap=%zu (want %zu bytes of uint8 in a "
+                 "%zu-byte exclusive buffer, 24 constant bytes, got %zu)", rc,
+                 lean_sarray_size(buf), lean_sarray_capacity(buf), B * f, 4 * B * f,
+                 lean_sarray_size(ms));
+        lean_dec(buf);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+    }
+    float k[6];
+    memcpy(k, lean_sarray_cptr(ms), 24);
+    void (*img)(const uint8_t*, float*, size_t, const float*) = u8norm_img_generic;
+#if defined(__x86_64__)
+    if (__builtin_cpu_supports("avx2")) img = u8norm_img_avx2;
+#endif
+    uint8_t* base = lean_sarray_cptr(buf);
+    uint8_t* tmp = (uint8_t*)malloc(f);
+    if (!tmp) { lean_dec(buf);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("u8Norm: malloc"))); }
+    for (size_t i = B; i-- > 0; ) {
+        memcpy(tmp, base + i * f, f);
+        img(tmp, (float*)(base + 4 * i * f), hw, k);
+    }
+    free(tmp);
+    lean_to_sarray(buf)->m_size = 4 * B * f;
+    return lean_io_result_mk_ok(buf);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Neural quantum states (demos/MainNqsIsing.lean, planning/transformer_wavefunction_demo.md)
 // ═══════════════════════════════════════════════════════════════════════════

@@ -327,7 +327,9 @@ def _randaugment(img, n, m, mstd=0.0):
                       lambda x=img: x)
     return tf.cast(img, tf.float32)"
 
-private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
+/-- `u8Wire` is the batch shim's: it adds one trace-time branch to `_pp` (below) and nothing else,
+    so the reference trainers, which call this with the default, regenerate byte-identical. -/
+private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Bool := false) : String :=
   match ds with
   | .brats | .brats224 | .brats224Ctx _ => panic! "JAX backend does not support the brats segmentation dataset (MLIR backend only)"
   | .mnist =>
@@ -578,6 +580,25 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "        img = (_imagenet_decode_random_crop_flip(b)\n" ++
     "               if (training and augment)\n" ++
     "               else _imagenet_decode_center_crop(b))\n" ++
+    -- THE UINT8 WIRE (the shim's `SHIM_U8=1`): when the augmented train image is ALREADY uint8 —
+    -- RandAugment / AutoAugment work in uint8, as timm's PIL ops do — it goes on
+    -- the wire as is, HWC, a quarter of the float bytes, and the trainer applies the normalize and
+    -- the transpose below in C with the same float32 ops (`lean_mlir_u8_norm`). Decided at TRACE
+    -- time on the tensor's dtype, so a recipe whose crop ends in float (RRC + flip alone, the
+    -- bicubic resize) keeps the float wire untouched. Emitted only for a recipe with no erasing and
+    -- no mixing, the two steps that act AFTER the normalize and so cannot move behind the wire.
+    (if u8Wire && !cfg.randomErasing && !cfg.useMixup && !cfg.useCutmix then
+      -- `_randaugment` / `_autoaugment` return `tf.cast(<uint8>, tf.float32)`, so the traced image
+      -- is float32 holding integers; the uint8 tensor is that Cast's input, and it is taken from
+      -- the graph rather than re-quantized — exact by construction, and only when it is there.
+      "        if _U8_WIRE and training and augment:\n" ++
+      "            _u8 = (img if img.dtype == tf.uint8 else\n" ++
+      "                   img.op.inputs[0] if (img.op.type == 'Cast' and\n" ++
+      "                                         img.op.inputs[0].dtype == tf.uint8) else None)\n" ++
+      "            if _u8 is not None:\n" ++
+      "                _U8_ACTIVE[0] = True\n" ++
+      "                return tf.reshape(_u8, [-1]), ex['label']   # uint8 HWC, flat\n"
+     else "") ++
     "        img = tf.cast(img, tf.float32)              # 0..255 HWC\n" ++
     "        img = (img - _MEAN_RGB) / _STD_RGB          # normalize, still HWC\n" ++
     (if cfg.randomErasing then
@@ -3601,7 +3622,9 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "_SHIM_SEED = int(os.environ.get('SHIM_SEED', '0'))\n" ++
   "os.environ.setdefault('AUG_SEED', str(_SHIM_SEED + 1))  # non-zero: TF rejects 0 under determinism\n\n" ++
   -- The whole preprocessing definition, verbatim from the reference trainer's emitter.
-  emitDataLoading .imagenet cfg ++
+  "_U8_WIRE = os.environ.get('SHIM_U8') == '1'   # asked for; `_pp` decides whether it applies\n" ++
+  "_U8_ACTIVE = [False]                           # set at trace time when this stream IS uint8\n" ++
+  emitDataLoading .imagenet cfg (u8Wire := true) ++
   "\n" ++
   "def _main():\n" ++
   "    batch    = int(os.environ.get('SHIM_BATCH', '256'))\n" ++
@@ -3689,6 +3712,10 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        globals()['_IMG_SIZE'] = int(os.environ['SHIM_EVAL_SIZE'])\n" ++
   "        globals()['_CROP_PCT'] = float(os.environ.get('SHIM_EVAL_CROP', globals().get('_CROP_PCT', 0.875)))\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
+  -- `_pp` was traced by the line above, so `_U8_ACTIVE` now says which wire this stream is. A
+  -- uint8 batch must not be widened back to float32 on its way out.
+  "    _wire_img = ((lambda a: np.ascontiguousarray(a)) if _U8_ACTIVE[0]\n" ++
+  "                 else (lambda a: np.ascontiguousarray(a, dtype=np.float32)))\n" ++
   -- `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
   -- splits. The dataset above already resizes train to `_TRAIN_SIZE` and eval to `_IMG_SIZE`
   -- (RSB-A3's 160/224 split), so hardcoding `_IMG_SIZE` here frames a 160 batch as though it
@@ -3836,10 +3863,10 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
    let bceT := cfg.lossKind == some .bce && (ls > 0.0 || cfg.bceTargetThresh.isSome)
    if !bceT then
     "    def _emit(x, y, step):\n" ++
-    "        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n"
+    "        return _mix(_wire_img(x), _targets(y), step)\n"
    else
     "    def _emit(x, y, step):\n" ++
-    "        xo, to = _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)\n" ++
+    "        xo, to = _mix(_wire_img(x), _targets(y), step)\n" ++
     "        if not training or nclasses <= 0:\n" ++
     "            return xo, to\n" ++
     (if ls > 0.0 then
@@ -3873,10 +3900,16 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- framing that can carry one.
   -- The count is authoritative: the reader does not INFER the row count from a read length,
   -- so a torn stream is a mismatch rather than a silent reframing.
+  -- WIRE v5/v6 = v3/v4 with uint8 HWC images, announced by the version and followed by the six
+  -- float32 normalize constants this shim would have applied (mean[3], std[3], `_MEAN_RGB` /
+  -- `_STD_RGB` as TF holds them), so the trainer's C normalize uses exactly these bits.
+  "    _u8 = _U8_ACTIVE[0]\n" ++
   "    if nclasses > 0:\n" ++
-  "        out.write(np.array([4, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++
+  "        out.write(np.array([6 if _u8 else 4, batch, flat, nclasses], dtype=np.int32).tobytes())\n" ++
   "    else:\n" ++
-  "        out.write(np.array([3, batch, flat], dtype=np.int32).tobytes())\n" ++
+  "        out.write(np.array([5 if _u8 else 3, batch, flat], dtype=np.int32).tobytes())\n" ++
+  "    if _u8:\n" ++
+  "        out.write(np.concatenate([_MEAN_RGB.numpy(), _STD_RGB.numpy()]).astype(np.float32).tobytes())\n" ++
   "    out.flush()\n" ++
   -- THE WRITE IS ON ITS OWN THREAD. A record is ~308 MB at 512 × 224² and the pipe holds 64 KB,
   -- so `write` blocks until the trainer's round-robin reaches this producer; inline, that stalled

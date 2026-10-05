@@ -32,6 +32,8 @@ import numpy as np
 _SHIM_SEED = int(os.environ.get('SHIM_SEED', '0'))
 os.environ.setdefault('AUG_SEED', str(_SHIM_SEED + 1))  # non-zero: TF rejects 0 under determinism
 
+_U8_WIRE = os.environ.get('SHIM_U8') == '1'   # asked for; `_pp` decides whether it applies
+_U8_ACTIVE = [False]                           # set at trace time when this stream IS uint8
 # ═══════════════════════════════════════════════════════════════════════
 #  ImageNet streaming pipeline (tfds + tf.data)
 # ═══════════════════════════════════════════════════════════════════════
@@ -373,6 +375,8 @@ def _main():
         globals()['_IMG_SIZE'] = int(os.environ['SHIM_EVAL_SIZE'])
         globals()['_CROP_PCT'] = float(os.environ.get('SHIM_EVAL_CROP', globals().get('_CROP_PCT', 0.875)))
     it = iter(build_imagenet_iter(split, batch, training, training, shard))
+    _wire_img = ((lambda a: np.ascontiguousarray(a)) if _U8_ACTIVE[0]
+                 else (lambda a: np.ascontiguousarray(a, dtype=np.float32)))
     _RES = _TRAIN_SIZE if training else _IMG_SIZE
     flat = 3 * _RES * _RES
     nclasses = int(os.environ.get('SHIM_NCLASSES', '0'))
@@ -442,7 +446,7 @@ def _main():
         tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)
         return x, np.ascontiguousarray(tm, dtype=np.float32)
     def _emit(x, y, step):
-        return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)
+        return _mix(_wire_img(x), _targets(y), step)
     if hash_n:
         h = hashlib.sha256()
         for i, (x, y) in enumerate(it):
@@ -456,10 +460,13 @@ def _main():
         return
     out = sys.stdout.buffer
     out.write(b'LMSH')
+    _u8 = _U8_ACTIVE[0]
     if nclasses > 0:
-        out.write(np.array([4, batch, flat, nclasses], dtype=np.int32).tobytes())
+        out.write(np.array([6 if _u8 else 4, batch, flat, nclasses], dtype=np.int32).tobytes())
     else:
-        out.write(np.array([3, batch, flat], dtype=np.int32).tobytes())
+        out.write(np.array([5 if _u8 else 3, batch, flat], dtype=np.int32).tobytes())
+    if _u8:
+        out.write(np.concatenate([_MEAN_RGB.numpy(), _STD_RGB.numpy()]).astype(np.float32).tobytes())
     out.flush()
     import queue as _queue, threading, traceback
     _q = _queue.Queue(maxsize=1)

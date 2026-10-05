@@ -1,0 +1,87 @@
+--- jax/generated/generated_vit_s_imagenet.py (c4a8ee2c)	2026-10-05 04:00:19.695226286 +0000
++++ probe/vits_u8_pilrot.py	2026-10-05 04:00:19.764227378 +0000
+@@ -284,6 +284,13 @@
+ _AA_OPS['TranslateX'] = (_aa_translate_x, _aa_trn, True)
+ _AA_OPS['TranslateY'] = (_aa_translate_y, _aa_trn, True)
+ 
++from PIL import Image as _PILImage
++def _pil_rot(x, d):
++    return np.asarray(_PILImage.fromarray(x).rotate(float(d), resample=_PILImage.BICUBIC, fillcolor=(128, 128, 128)))
++def _aa_rotate_pil(img, deg):
++    out = tf.numpy_function(_pil_rot, [img, tf.cast(deg, tf.float32)], tf.uint8, stateful=False)
++    out.set_shape(img.shape); return out
++_AA_OPS['Rotate'] = (_aa_rotate_pil, _aa_rot, True)
+ _RA_INC = True   # timm inc1 (gap D)
+ 
+ # ──────────────────────────────────────────────────────────────────
+@@ -362,6 +369,28 @@
+         return tf.cond(tf.reduce_any(ok), box, lambda: img)
+     return tf.cond(tf.random.uniform([]) < 0.250000, erase, lambda: img)
+ 
++def _random_erase_px(img):
++    # timm RandomErasing(mode='pixel'): an N(0,1) box, area U(0.02, 1/3) of the image, aspect
++    # log-uniform in [0.3, 1/0.3], the first of 10 draws that fits; with prob p.
++    def erase():
++        H = tf.shape(img)[0]; W = tf.shape(img)[1]
++        area = tf.cast(H * W, tf.float32)
++        ta = tf.random.uniform([10], 0.02, 1.0 / 3.0) * area
++        ar = tf.exp(tf.random.uniform([10], np.log(0.3), np.log(1.0 / 0.3)))
++        eh = tf.cast(tf.round(tf.sqrt(ta * ar)), tf.int32)
++        ew = tf.cast(tf.round(tf.sqrt(ta / ar)), tf.int32)
++        ok = (eh < H) & (ew < W)
++        k = tf.argmax(tf.cast(ok, tf.int32))   # the first draw that fits
++        def box():
++            h = eh[k]; w = ew[k]
++            top = tf.random.uniform([], 0, H - h + 1, dtype=tf.int32)
++            left = tf.random.uniform([], 0, W - w + 1, dtype=tf.int32)
++            my = (tf.range(H) >= top) & (tf.range(H) < top + h)
++            mx = (tf.range(W) >= left) & (tf.range(W) < left + w)
++            return tf.where((my[:, None] & mx[None, :])[:, :, None], (tf.random.normal(tf.shape(img)) * _STD_RGB + _MEAN_RGB), img)
++        return tf.cond(tf.reduce_any(ok), box, lambda: img)
++    return tf.cond(tf.random.uniform([]) < 0.250000, erase, lambda: img)
++
+ def build_imagenet_iter(split, batch_size, training, augment, shard=None):
+     ds = tfds.load('imagenet2012', split=split,
+                    decoders={'image': tfds.decode.SkipDecoding()},
+@@ -373,12 +402,14 @@
+         img = (_imagenet_decode_random_crop_flip(b)
+                if (training and augment)
+                else _imagenet_decode_center_crop(b))
+-        img = tf.cast(img, tf.float32)              # 0..255 HWC
+-        img = (img - _MEAN_RGB) / _STD_RGB          # normalize, still HWC
+         if training and augment:
+-            img = _random_erase(img)
+-        img = tf.transpose(img, [2, 0, 1])          # HWC -> CHW
+-        img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()
++            img = _random_erase_px(tf.cast(img, tf.float32))
++            img = tf.cast(tf.clip_by_value(tf.round(img), 0.0, 255.0), tf.uint8)   # uint8 HWC wire
++        else:
++            img = tf.cast(img, tf.float32)              # 0..255 HWC
++            img = (img - _MEAN_RGB) / _STD_RGB          # normalize, still HWC
++            img = tf.transpose(img, [2, 0, 1])          # HWC -> CHW
++            img = tf.reshape(img, [3 * _IMG_SIZE * _IMG_SIZE])  # flat to match forward()
+         return img, ex['label']
+     if training:
+         ds = ds.shuffle(8192, seed=42, reshuffle_each_iteration=True)
+@@ -1746,6 +1777,13 @@
+     ym = lam_adj * y1h + (1.0 - lam_adj) * jnp.flip(y1h, 0)
+     return x4m.reshape(B, -1), ym
+ 
++_U8_MEAN = jnp.array([0.485 * 255, 0.456 * 255, 0.406 * 255], jnp.float32)
++_U8_STD = jnp.array([0.229 * 255, 0.224 * 255, 0.225 * 255], jnp.float32)
++@jit
++def _prep_u8(x):
++    x = (x.astype(jnp.float32) - _U8_MEAN) / _U8_STD
++    return jnp.transpose(x, (0, 3, 1, 2)).reshape(x.shape[0], -1)
++
+ @jit
+ def eval_batch(params, x, y, take):
+     logits = forward(params, x)
+@@ -1934,6 +1972,7 @@
+         n_batches = 0
+         for _ in range(steps_per_epoch):
+             x, y = next(train_iter)
++            x = _prep_u8(x)
+             # Per-step LR (warmup → cosine)
+             warmup_steps = steps_per_epoch * 5
+             if _global_step < warmup_steps:

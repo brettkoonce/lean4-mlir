@@ -1,0 +1,11 @@
+✓ hash   generated_vit_tiny_imagenet_shim.py B=63 nc=1000 n=4: ef21a88cc66a9cd5 == ef21a88cc66a9cd5
+✓ stream generated_vit_tiny_imagenet_shim.py B=63 nc=1000 n=4: 3b1f5a2ec3cdd834 == 3b1f5a2ec3cdd834
+✓ hash   generated_vit_tiny_imagenet_shim.py B=64 nc=1000 n=4: 5c8f8e9fce94a4cc == 5c8f8e9fce94a4cc
+✓ stream generated_vit_tiny_imagenet_shim.py B=64 nc=1000 n=4: 8e2bb44fc810abc4 == 8e2bb44fc810abc4
+✓ hash   generated_convnext_s_imagenet_shim.py B=32 nc=1000 n=4: 70403e03fcdbbc56 == 70403e03fcdbbc56
+✓ stream generated_convnext_s_imagenet_shim.py B=32 nc=1000 n=4: 42ad6deba0d0adce == 42ad6deba0d0adce
+✓ hash   generated_resnet50_imagenet_a2accum_shim.py B=33 nc=1000 n=4: 81a7ca5070aeb565 == 81a7ca5070aeb565
+✓ stream generated_resnet50_imagenet_a2accum_shim.py B=33 nc=1000 n=4: b57665ed8b343540 == b57665ed8b343540
+✓ hash   generated_mobilenet_v4_imagenet_full_shim.py B=32 nc=0 n=3: 90d31cb33911f563 == 90d31cb33911f563
+✓ stream generated_mobilenet_v4_imagenet_full_shim.py B=32 nc=0 n=3: cc253bafabc3fd2b == cc253bafabc3fd2b
+✓ identical
