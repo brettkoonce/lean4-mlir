@@ -466,12 +466,25 @@ def _main():
     if _MIX_ON and nclasses <= 0:
         raise SystemExit('SHIM_MIX=%s needs SHIM_NCLASSES>0: a mixed target is a distribution '
                          'and wire v1 carries int32 hard labels' % _MIX_MODE)
+    _MIX_BLK = 8  # row pairs per block: ~5 MB temporaries at 224², cache-sized
+    def _mix_rows(x, f):
+        # x[i] <- f(x[i], x[B-1-i]) for every row, in place. At odd B the middle row is its own
+        # partner and is written twice with the same value.
+        B = x.shape[0]; h = (B + 1) // 2
+        for s in range(0, h, _MIX_BLK):
+            e = min(s + _MIX_BLK, h)
+            a = x[s:e].copy()
+            b = x[B - e:B - s][::-1].copy()
+            x[s:e] = f(a, b)
+            x[B - e:B - s] = f(b, a)[::-1]
     def _mix(x, t, step):
         # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests
         # are byte-for-byte what they were before mixing existed. Also the path the VALIDATION
         # split always takes, whatever SHIM_MIX says.
         if not _MIX_ON:
             return x, t
+        if not x.flags.writeable:
+            x = x.copy()
         B = t.shape[0]
         # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded
         # draw makes the run unreproducible and breaks every gate that replays a batch.
@@ -480,10 +493,10 @@ def _main():
         cut = (_MIX_MODE == 'cutmix') or (_MIX_MODE == 'both' and (step % 2) == 1)
         if not cut:
             lam = np.float32(rng.beta(_MIX_A, _MIX_A))
-            xm = lam * x + (np.float32(1.0) - lam) * np.flip(x, 0)
+            om = np.float32(1.0) - lam
+            _mix_rows(x, lambda a, b: lam * a + om * b)  # = lam * x + (1 - lam) * np.flip(x, 0)
             tm = lam * t + (np.float32(1.0) - lam) * np.flip(t, 0)
-            return (np.ascontiguousarray(xm, dtype=np.float32),
-                    np.ascontiguousarray(tm, dtype=np.float32))
+            return x, np.ascontiguousarray(tm, dtype=np.float32)
         H = W = _IMG_SIZE
         lam = float(rng.beta(_CUT_A, _CUT_A))
         x4 = x.reshape(B, 3, H, W)
@@ -494,13 +507,13 @@ def _main():
         y1c = int(np.clip(cy - ch // 2, 0, H)); y2c = int(np.clip(cy + ch // 2, 0, H))
         mask = np.zeros((H, W), dtype=np.float32)
         mask[y1c:y2c, x1:x2] = np.float32(1.0)
-        x4m = x4 * (np.float32(1.0) - mask) + np.flip(x4, 0) * mask
+        omask = np.float32(1.0) - mask
+        _mix_rows(x4, lambda a, b: a * omask + b * mask)  # = x4 * (1 - mask) + np.flip(x4, 0) * mask
         # λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped
         # at the border, so the two differ and the label must follow the pixels.
         lam_adj = np.float32(1.0 - float(mask.sum()) / float(H * W))
         tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)
-        return (np.ascontiguousarray(x4m.reshape(B, -1), dtype=np.float32),
-                np.ascontiguousarray(tm, dtype=np.float32))
+        return x, np.ascontiguousarray(tm, dtype=np.float32)
     def _emit(x, y, step):
         return _mix(np.ascontiguousarray(x, dtype=np.float32), _targets(y), step)
     if hash_n:
@@ -521,12 +534,30 @@ def _main():
     else:
         out.write(np.array([3, batch, flat], dtype=np.int32).tobytes())
     out.flush()
+    import queue as _queue, threading, traceback
+    _q = _queue.Queue(maxsize=1)
+    def _writer():
+        try:
+            while True:
+                item = _q.get()
+                if item is None:
+                    return
+                xo, to = item
+                out.write(np.array([to.shape[0]], dtype=np.int32).tobytes())
+                out.write(memoryview(np.ascontiguousarray(to)).cast('B'))
+                out.write(memoryview(np.ascontiguousarray(xo)).cast('B'))
+                out.flush()
+        except BrokenPipeError:
+            os._exit(0)  # the consumer stopped: quiet, as `__main__` below
+        except BaseException:
+            traceback.print_exc()
+            os._exit(1)
+    _w = threading.Thread(target=_writer, daemon=True)
+    _w.start()
     for i, (x, y) in enumerate(it):
-        xo, to = _emit(x, y, i)
-        out.write(np.array([to.shape[0]], dtype=np.int32).tobytes())
-        out.write(to.tobytes())
-        out.write(xo.tobytes())
-        out.flush()
+        _q.put(_emit(x, y, i))
+    _q.put(None)
+    _w.join()
 
 if __name__ == '__main__':
     try:

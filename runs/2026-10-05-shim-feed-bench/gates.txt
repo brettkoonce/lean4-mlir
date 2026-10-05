@@ -1,0 +1,21 @@
+  OK    cutmix b1: x' = x*(1-M) + flip(x)*M  — the IMAGES   maxdiff 0.000e+00
+  OK    cutmix b2: the pasted region is a RECTANGLE   29376 px, rows 32-223 cols 0-152
+  OK    cutmix b2: L is the ACTUAL pasted area  [L=0.414541, 1-area=0.414541]
+  OK    cutmix b2: t' = L*t + (1-L)*flip(t)   maxdiff 0.000e+00
+  OK    cutmix b2: x' = x*(1-M) + flip(x)*M  — the IMAGES   maxdiff 0.000e+00
+  OK    cutmix: a box was pasted in at least one of 3 batches   3 non-empty
+
+✖ 2 check(s) FAILED: ['v1 digest unchanged since before mixing existed', 'v2 digest unchanged since before mixing existed']
+---
+  a1       batch 0: images =, targets =, 8/8 rows mixed, ones/row 1–1
+  a1       batch 1: images =, targets =, 8/8 rows mixed, ones/row 1–1
+  a1       batch 2: images =, targets =, 8/8 rows mixed, ones/row 1–1
+  a1       batch 3: images =, targets =, 8/8 rows mixed, ones/row 2–2
+✅ BCE target transform matches its reference
+── gate 1: INERT WHEN OFF (the digests must not move at all)
+  v1 (int32 hard labels)      8a204cd5679d0c868b67e3fc2f797f6577ebca10983e67761d82ba398aca074b
+  v2 (one-hot soft targets)   ad5f9e0b2f1e9da0be164f6df5ca363ae7852ca586a7cf237a7dd5f7597c1f08
+  OK    validation survives SHIM_MIX=mixup at wire v1 (the driver's own spawn)   cd786eb9ba6814cf
+  OK    validation survives SHIM_MIX=cutmix at wire v1 (the driver's own spawn)   cd786eb9ba6814cf
+  OK    validation survives SHIM_MIX=both at wire v1 (the driver's own spawn)   cd786eb9ba6814cf
+✖ 2 check(s) FAILED: ['v1 digest unchanged since before mixing existed', 'v2 digest unchanged since before mixing existed']

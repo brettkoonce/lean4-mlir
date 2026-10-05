@@ -3768,12 +3768,31 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    if _MIX_ON and nclasses <= 0:\n" ++
   "        raise SystemExit('SHIM_MIX=%s needs SHIM_NCLASSES>0: a mixed target is a distribution '\n" ++
   "                         'and wire v1 carries int32 hard labels' % _MIX_MODE)\n" ++
+  -- IN PLACE, a block of row PAIRS at a time. Row i mixes with row B−1−i (`np.flip(x, 0)`), so
+  -- a pair is read into two small temporaries and both rows are written back from them; every
+  -- output element is the same float32 expression, rounded op by op, as the whole-array form —
+  -- which allocated four fresh B × flat arrays per batch (308 MB each at 512 × 224²) and ran
+  -- single-threaded ahead of the pipe write. `SHIM_HASH` is unchanged by construction; the
+  -- digests are the gate (runs/2026-10-05-shim-feed-bench/).
+  "    _MIX_BLK = 8  # row pairs per block: ~5 MB temporaries at 224², cache-sized\n" ++
+  "    def _mix_rows(x, f):\n" ++
+  "        # x[i] <- f(x[i], x[B-1-i]) for every row, in place. At odd B the middle row is its own\n" ++
+  "        # partner and is written twice with the same value.\n" ++
+  "        B = x.shape[0]; h = (B + 1) // 2\n" ++
+  "        for s in range(0, h, _MIX_BLK):\n" ++
+  "            e = min(s + _MIX_BLK, h)\n" ++
+  "            a = x[s:e].copy()\n" ++
+  "            b = x[B - e:B - s][::-1].copy()\n" ++
+  "            x[s:e] = f(a, b)\n" ++
+  "            x[B - e:B - s] = f(b, a)[::-1]\n" ++
   "    def _mix(x, t, step):\n" ++
   "        # Returns (x, t) UNTOUCHED when off — the identity, not a copy, so the v1/v2 digests\n" ++
   "        # are byte-for-byte what they were before mixing existed. Also the path the VALIDATION\n" ++
   "        # split always takes, whatever SHIM_MIX says.\n" ++
   "        if not _MIX_ON:\n" ++
   "            return x, t\n" ++
+  "        if not x.flags.writeable:\n" ++
+  "            x = x.copy()\n" ++
   "        B = t.shape[0]\n" ++
   "        # Seeded from (SHIM_SEED, step), like `augSeed`: an unseeded or wall-clock-seeded\n" ++
   "        # draw makes the run unreproducible and breaks every gate that replays a batch.\n" ++
@@ -3782,10 +3801,10 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        cut = (_MIX_MODE == 'cutmix') or (_MIX_MODE == 'both' and (step % 2) == 1)\n" ++
   "        if not cut:\n" ++
   "            lam = np.float32(rng.beta(_MIX_A, _MIX_A))\n" ++
-  "            xm = lam * x + (np.float32(1.0) - lam) * np.flip(x, 0)\n" ++
+  "            om = np.float32(1.0) - lam\n" ++
+  "            _mix_rows(x, lambda a, b: lam * a + om * b)  # = lam * x + (1 - lam) * np.flip(x, 0)\n" ++
   "            tm = lam * t + (np.float32(1.0) - lam) * np.flip(t, 0)\n" ++
-  "            return (np.ascontiguousarray(xm, dtype=np.float32),\n" ++
-  "                    np.ascontiguousarray(tm, dtype=np.float32))\n" ++
+  "            return x, np.ascontiguousarray(tm, dtype=np.float32)\n" ++
   -- Same hardcode, same fix: CutMix pastes a box into `x.reshape(B, 3, H, W)`, and `_mix` only
   -- ever runs on the TRAIN split (`_MIX_ON` is `and training`). At `trainRes` the train images are
   -- `_TRAIN_SIZE`, so `_IMG_SIZE` here would reshape a 160 batch as 224 and throw. `_mix` is nested
@@ -3800,13 +3819,13 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        y1c = int(np.clip(cy - ch // 2, 0, H)); y2c = int(np.clip(cy + ch // 2, 0, H))\n" ++
   "        mask = np.zeros((H, W), dtype=np.float32)\n" ++
   "        mask[y1c:y2c, x1:x2] = np.float32(1.0)\n" ++
-  "        x4m = x4 * (np.float32(1.0) - mask) + np.flip(x4, 0) * mask\n" ++
+  "        omask = np.float32(1.0) - mask\n" ++
+  "        _mix_rows(x4, lambda a, b: a * omask + b * mask)  # = x4 * (1 - mask) + np.flip(x4, 0) * mask\n" ++
   "        # λ is re-derived from the ACTUAL pasted area, not from the draw — the box is clipped\n" ++
   "        # at the border, so the two differ and the label must follow the pixels.\n" ++
   "        lam_adj = np.float32(1.0 - float(mask.sum()) / float(H * W))\n" ++
   "        tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)\n" ++
-  "        return (np.ascontiguousarray(x4m.reshape(B, -1), dtype=np.float32),\n" ++
-  "                np.ascontiguousarray(tm, dtype=np.float32))\n" ++
+  "        return x, np.ascontiguousarray(tm, dtype=np.float32)\n" ++
   -- ── BCE TARGET TRANSFORM, the verified path's copy of the reference loss's target build. The
   --    BCE renders take `%onehot` as given (no smoothing node, unlike the CE renders), so a
   --    recipe's label smoothing and timm's `--bce-target-thresh` are applied here, on the train
@@ -3859,12 +3878,36 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    else:\n" ++
   "        out.write(np.array([3, batch, flat], dtype=np.int32).tobytes())\n" ++
   "    out.flush()\n" ++
+  -- THE WRITE IS ON ITS OWN THREAD. A record is ~308 MB at 512 × 224² and the pipe holds 64 KB,
+  -- so `write` blocks until the trainer's round-robin reaches this producer; inline, that stalled
+  -- the next batch's `_emit` (mixing, target build) the whole time. The bounded queue keeps one
+  -- batch in hand, order is preserved, and the bytes are the same: `memoryview` writes the arrays'
+  -- own C-contiguous buffers, which is what `tobytes()` copied. Measured on the ViT shim at 4 × 512:
+  -- runs/2026-10-05-shim-feed-bench/.
+  "    import queue as _queue, threading, traceback\n" ++
+  "    _q = _queue.Queue(maxsize=1)\n" ++
+  "    def _writer():\n" ++
+  "        try:\n" ++
+  "            while True:\n" ++
+  "                item = _q.get()\n" ++
+  "                if item is None:\n" ++
+  "                    return\n" ++
+  "                xo, to = item\n" ++
+  "                out.write(np.array([to.shape[0]], dtype=np.int32).tobytes())\n" ++
+  "                out.write(memoryview(np.ascontiguousarray(to)).cast('B'))\n" ++
+  "                out.write(memoryview(np.ascontiguousarray(xo)).cast('B'))\n" ++
+  "                out.flush()\n" ++
+  "        except BrokenPipeError:\n" ++
+  "            os._exit(0)  # the consumer stopped: quiet, as `__main__` below\n" ++
+  "        except BaseException:\n" ++
+  "            traceback.print_exc()\n" ++
+  "            os._exit(1)\n" ++
+  "    _w = threading.Thread(target=_writer, daemon=True)\n" ++
+  "    _w.start()\n" ++
   "    for i, (x, y) in enumerate(it):\n" ++
-  "        xo, to = _emit(x, y, i)\n" ++
-  "        out.write(np.array([to.shape[0]], dtype=np.int32).tobytes())\n" ++
-  "        out.write(to.tobytes())\n" ++
-  "        out.write(xo.tobytes())\n" ++
-  "        out.flush()\n\n" ++
+  "        _q.put(_emit(x, y, i))\n" ++
+  "    _q.put(None)\n" ++
+  "    _w.join()\n\n" ++
   "if __name__ == '__main__':\n" ++
   "    try:\n" ++
   "        _main()\n" ++

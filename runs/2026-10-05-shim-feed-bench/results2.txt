@@ -1,0 +1,5 @@
+start Mon Oct  5 03:27:25 AM UTC 2026
+NEW ViT  512 rr (the job) batch=512 n=4 mode=rr mix=default extra=[]: 1,410 img/s (249 batches in 90.1s; per producer [63, 62, 62, 62]; = 363 ms per 512)
+NEW ViT  512 free batch=512 n=4 mode=free mix=default extra=[]: 1,381 img/s (248 batches in 91.5s; per producer [64, 61, 62, 61]; = 371 ms per 512)
+NEW MNv4 512 rr (the job) batch=512 n=4 mode=rr mix=off extra=[]: 1,862 img/s (328 batches in 89.9s; per producer [82, 82, 82, 82]; = 275 ms per 512)
+done Mon Oct  5 03:34:58 AM UTC 2026

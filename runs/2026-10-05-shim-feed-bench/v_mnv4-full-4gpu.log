@@ -1,0 +1,103 @@
+1791171982.448639867	box=ares plugin=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so python=.venv/bin/python3
+1791171982.457730476	⚠ other mnv4in checkpoints present — they must NOT be resumed into this run:
+1791171982.458911048	   .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla.bin
+1791171983.960060426	[sup] 2026-10-05 03:46:23 START job=mnv4-full-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-05-mnv4-full-4gpu
+1791171983.961822197	[sup] 2026-10-05 03:46:23 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+1791171983.963614386	[sup] 2026-10-05 03:46:23 eta: ~114 h for 500 ep on 4x 4060 Ti (mean 329 / median 323 / floor 198 ms per micro-batch: shim-bound, 125 ms starved; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal)
+1791171983.965378151	[sup] 2026-10-05 03:46:23 ONCE — one foreground run, no restart policy
+1791171984.652587166	I1005 03:46:24.650886  293726 service.cc:154] XLA service 0x76749079ba60 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+1791171984.654143979	I1005 03:46:24.650925  293726 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791171984.655704871	I1005 03:46:24.650940  293726 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791171984.656788570	I1005 03:46:24.650944  293726 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791171984.658164030	I1005 03:46:24.650948  293726 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+1791171984.659351185	I1005 03:46:24.653588  293726 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+1791171984.660483616	I1005 03:46:24.653614  293726 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+1791171984.661473127	I1005 03:46:24.653648  293726 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+1791171984.662489219	I1005 03:46:24.653660  293726 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+1791171984.663441069	I1005 03:46:24.653673  293726 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+1791171984.665076531	I1005 03:46:24.663551  293726 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791171984.670749107	[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+1791171984.671785817	[pjrt_ffi] command buffers: enabled (CUDA default)
+1791171984.672825563	[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+1791171989.703369602	E1005 03:46:29.701285  293806 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171993.665065795	E1005 03:46:33.663206  293811 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171993.748916444	E1005 03:46:33.747104  293811 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171993.996647405	I1005 03:46:33.995303  293801 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 88 bytes spill stores, 56 bytes spill loads
+1791171993.997972120	
+1791171994.176045009	I1005 03:46:34.174622  293806 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 80 bytes spill stores, 48 bytes spill loads
+1791171994.177464593	
+1791171994.726182546	E1005 03:46:34.724407  293811 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171997.566540175	E1005 03:46:37.564443  293811 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171997.753148693	E1005 03:46:37.751645  293811 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171997.846874374	E1005 03:46:37.845618  293796 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791171999.248046331	E1005 03:46:39.246070  293796 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172001.193753655	E1005 03:46:41.191627  293796 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172003.270203655	E1005 03:46:43.267979  293796 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172008.429715019	I1005 03:46:48.428453  293787 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 132 bytes spill stores, 72 bytes spill loads
+1791172008.430920218	
+1791172021.679994833	[pjrt_ffi] compiled verified_mlir/mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir (@mnv4in_accdp8x128wxdropdowd01bf16_train_step, 1110 outputs, 4 replicas) in 37006 ms
+1791172022.547973622	E1005 03:47:02.546310  293785 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172022.633940473	I1005 03:47:02.632528  293789 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 112 bytes spill stores, 112 bytes spill loads
+1791172022.635285266	
+1791172022.655849500	I1005 03:47:02.654559  293780 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 12 bytes spill stores, 12 bytes spill loads
+1791172022.657020414	
+1791172022.662676088	E1005 03:47:02.661316  293806 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172022.913148727	I1005 03:47:02.911745  293800 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 872 bytes spill stores, 616 bytes spill loads
+1791172022.914340000	
+1791172023.162438500	E1005 03:47:03.160459  293799 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172023.882725273	E1005 03:47:03.880513  293804 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791172025.563019018	[pjrt_ffi] compiled verified_mlir/mnv4in_fwd.mlir (@mnv4in_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 3883 ms
+1791172025.943040217	[pjrt_ffi] compiled verified_mlir/mnv4in_fwd_eval.mlir (@mnv4in_fwd_eval, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 380 ms
+1791172025.944617900	  ▸ RECIPE: full — augmentation from generated_mobilenet_v4_imagenet_full_shim.py
+1791172025.945797490	MobileNetV4-Conv-M on full 1000-class ImageNet, the paper's 500-epoch regularisation (RandAugment m15, dropout 0.2, drop-path 0.075), via the VERIFIED renderer.
+1791172025.946885067	  xla/pjrt verified_mlir/mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir
+1791172025.947767716	  xla/pjrt verified_mlir/mnv4in_fwd.mlir  (eval, SHARDED over 4 replicas)
+1791172025.948799326	  xla/pjrt verified_mlir/mnv4in_fwd_eval.mlir  (eval, SHARDED over 4 replicas)
+1791172025.949799678	  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+1791172025.950830377	  train 1281167, test 50000; bs 128, MobileNetV4-Conv-M (ImageNet-1k, paper tier) accdp8x128wxdropdowd01bf16 (cosine+warmup 5ep, baseLR 0.004000), He init
+1791172025.952043390	  ▸ STOCHASTIC DEPTH: 18 drop sites, keeps #[0.996000, 0.989000, 0.985000, 0.981000, 0.978000, 0.974000, 0.970000, 0.966000, 0.959000, 0.955000, 0.951000, 0.948000, 0.944000, 0.940000, 0.936000, 0.933000, 0.929000, 0.925000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+1791172025.953183246	  ▸ CLASSIFIER DROPOUT: keep 0.800000, mask tensor<512x1280xf32> (PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward).
+1791172025.954346325	  ▸ GRADIENT ACCUMULATION: k = 8, blob region 3 of 4 [θ|m|v|G]. Micro-batch 512 x 8 = EFFECTIVE BATCH 4096. 2496 micro-batches/epoch = 312 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+1791172025.955392864	  eval batch 64 (the batch @mnv4in_fwd_eval was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+1791172025.956403024	  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4in_fwd_eval
+1791172025.957446718	     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.001256 = 1 − 0.990000^(1/8), compensated for grad-accum
+1791172025.958496903	  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2496 steps/epoch
+1791172025.959392347	  EVAL SHARDED: 4 replicas x 64 = 256 test images per invoke, 196 invokes, last one 80 real + 176 pad
+1791172026.498888560	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791172026.500092186	I0000 00:00:1791172026.497572  296614 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791172026.501433092	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791172031.227208194	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791172031.228758876	I0000 00:00:1791172031.225833  296789 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791172031.230105252	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791172031.451231372	I0000 00:00:1791172031.449765  296882 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791172037.148414049	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791172037.149719157	I0000 00:00:1791172037.146955  297116 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791172037.151105899	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791172037.380840747	I0000 00:00:1791172037.379536  297179 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791172043.541114085	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791172043.542424904	I0000 00:00:1791172043.539685  297449 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791172043.543806596	To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791172043.766958708	I0000 00:00:1791172043.765558  297501 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791172051.218011976	I0000 00:00:1791172051.216621  297826 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791172051.439491066	[pjrt_ffi] RESIDENT: @mnv4in_accdp8x128wxdropdowd01bf16_train_step holds 932 parameter tensors (148.2 MB) on 4 devices; they stop crossing PCIe from here
+1791172053.170349193	I1005 03:47:33.165786  293764 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791172053.174838401	I1005 03:47:33.169375  293767 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791172053.179874304	I1005 03:47:33.170038  293761 cuda_dnn.cc:440] Loaded cuDNN version 92302
+1791172062.870490767	  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — train split, batch 512, 150528 floats/img (seed 1)
+1791172062.871968411	  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — train split, batch 512, 150528 floats/img (seed 2)
+1791172062.873595768	  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — train split, batch 512, 150528 floats/img (seed 3)
+1791172062.875079584	  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_full_shim.py — train split, batch 512, 150528 floats/img (seed 4)
+1791172062.876136212	  imagenet shim: 4 sharded producers (round-robin over batches)
+1791172062.877240520	  ▸ SHIM RESPAWN: one producer every 10 epoch(s), round-robin over 4 — no loader lives past 40 epochs.
+1791172062.878520500	  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+1791172062.879598138	  step 0/2496: loss=7.203707
+1791172063.043178038	  step 1/2496: loss=7.353765
+1791172063.245863131	  step 2/2496: loss=7.297242
+1791172093.907494032	  step 100/2496: loss=7.358274
+1791172125.858582375	  step 200/2496: loss=7.160436
+1791172157.580737211	  step 300/2496: loss=7.075919
+1791172189.518340796	  step 400/2496: loss=6.928923
+1791172221.723692427	  step 500/2496: loss=6.945966
+1791172253.371466434	  step 600/2496: loss=7.019639
+1791172253.379127802	  PROBE: 316 ms/step (median of 400 steps 201..600, MobileNetV4-Conv-M (ImageNet-1k, paper tier))
+1791172253.385794979	  PROBE-SPREAD: min=207 med=316 p90=348 mean=318 ms/step (starvation wait = med-min = 109 ms)

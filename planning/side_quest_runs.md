@@ -25,11 +25,11 @@ sequential. Per-epoch evals (a few hours per run) are not included.
 | batch | runs (hours) | total | days 24/7 |
 |---|---|---|---|
 | 1, JAX | R50 A2 76 · MNv4 `full` 500 ep ~100–105 · ViT-S 72 | ~250 | ~10.4 |
-| 2, verified | R50 A2 93 · MNv4 500 ep 114 · ViT-S 127 | ~334 | ~13.9 |
+| 2, verified | R50 A2 93 · MNv4 500 ep 110 · ViT-S 79 | ~282 | ~11.8 |
 | 3, JAX | R50 A1 153 · ViT-B 148 · ConvNeXt-S 127 | ~428 | ~17.8 |
 | 4, verified | R50 A1 185 · ViT-B 185 · ConvNeXt-S 156 | ~526 | ~21.9 |
 | 5 | ConvNeXt-B JAX 167, then verified 216 | ~383 | ~16 |
-| total | | ~1,920 | ~80 |
+| total | | ~1,870 | ~78 |
 
 The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
 
@@ -42,17 +42,17 @@ The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
 | ConvNeXt-S JAX | 256 | 5,004 × 300 | 304 | compute, flat |
 | ConvNeXt-B JAX | 256 | 5,004 × 300 | 401 | compute, flat |
 | MNv4 `full` JAX | optimizer (512 × 8) | 312 × 500 | 2,543 → 2,386 → 2,303 | still falling at 20 min |
-| ViT-S verified | 512 | 2,502 × 300 | 609 (med 595, min 290) | ⚠ shim: 305 ms starved |
+| ViT-S verified | 512 | 2,502 × 300 | 379 (med 381, min 302); 609 before the shim fix | shim: 79 ms starved (was 305) |
 | ViT-B verified | 512 | 2,502 × 300 | 887 (med 884, min 839) | compute |
 | A2 verified | micro (4 × 128) | 2,500 × 300 | 446 (med 446, min 415) | compute |
 | A1 verified | micro (4 × 128) | 2,500 × 600 | 444 (med 444, min 412) | compute |
 | ConvNeXt-S verified | 256 | 5,004 × 300 | 373 (med 372, min 355) | compute |
 | ConvNeXt-B verified | 256 | 5,004 × 300 | 518 (med 518, min 507) | compute |
-| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 329 (med 323, min 198) | ⚠ shim: 125 ms starved |
+| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 318 (med 316, min 207); 329 before | ⚠ shim CPU: 109 ms starved |
 
 Against the 09-29 table: ConvNeXt-B verified is 37 h shorter (253 modelled), ConvNeXt-S JAX 17 h
-longer (110 was a compute probe), and the two shim-bound verified jobs are the big misses — ViT-S
-127 against 68, MNv4 114 against ~90. Fed at their floors they would be ~61 h and ~69 h (§4.3).
+longer (110 was a compute probe), and MNv4 verified is the one big miss left (110 against ~90). ViT-S
+verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread); it is 79 now.
 
 ## 2. Where things stand (2026-10-05)
 
@@ -70,10 +70,11 @@ longer (110 was a compute probe), and the two shim-bound verified jobs are the b
   each), and guarded by the new `scripts/gates/train_step_arity.py` (all 213 train steps; in
   proofs.yml and in the six drop-render confs' PRECHECK). `lake build`, `lake build Certs` and
   `regen_verified_mlir.sh check` are green on the fix.
-* **Open: the two shim-bound verified jobs** — ViT-S (305 ms of a 609 ms step starved) and MNv4
-  (125 of 329). §4.2's producer bench timed batch 128 per producer; the jobs run batch 512 per
-  producer round-robin, so the ceiling it reports was never measured at the job's shape. Next: the
-  bench at 512, then §4.3's L2 (in-place mixup, bit-identical).
+* **The ViT shim fix landed** (§4.4, uncommitted): mixup/cutmix in place and the pipe write on its
+  own thread. Byte-identical streams (SHIM_HASH and the wire, old vs new, five shims); ViT-S verified
+  609 → 379 ms/step (127 → 79 h), MNv4 329 → 318.
+* **Open: MNv4 verified is CPU-bound in its producers** (109 of 318 ms starved, the box saturated).
+  Only less CPU per image moves it: §4.3's L3 (uint8 wire) is the lever.
 * All the JAX jobs can launch.
 
 ## 3. Software work list
@@ -283,6 +284,42 @@ read to the end of the pipe and timed over 40 batches:
 The box has 4 of the 5955WX's 8 memory channels populated. The periodic stall tracks memory
 traffic ([[imagenet_periodic_invoke_stall]]), and filling channels 0–3 is the hardware lever for
 it.
+
+### 4.4 The bench at the jobs' shape, and the ViT shim fix (2026-10-05)
+
+`runs/2026-10-05-shim-feed-bench/`: the producers spawned with `spawnShim`'s env and read in the
+trainer's round-robin (`rr`) or one reader thread each (`free`). Before the fix:
+
+| config | img/s | ms per 512 |
+|---|---|---|
+| ViT 512 × 4, rr (the job) | 831 | 616 (job: 609) |
+| ViT 512 × 4, free | 1,220 | 420 |
+| ViT 512 × 4, rr, mix off | 1,113 | 460 |
+| ViT 128 × 4, rr | 822 | 623 |
+| MNv4 512 × 4, rr (the job) | 1,758 | 291 (job: 329) |
+
+The bench reproduces the jobs, and batch size does not matter (128 ≈ 512). On ViT, mixing and the
+round-robin were each about a third: `_emit` mixed on the producer's main thread (four fresh
+308 MB arrays per batch) and then blocked in `write()` on a 308 MB record against a 64 KB pipe.
+MNv4 does not mix; it is plain CPU (the box saturated, rr ≈ free). Every config reads 55–87% of
+§4.2's 09-28 numbers on the same shim; clocks and memory are normal, and the 09-28 harness is gone.
+
+The fix (`Jax/Codegen.lean`, all 37 shims re-emitted): `_mix_rows` mixes in place a block of row
+pairs at a time — each element the same float32 expression as before — and `_writer` puts the
+pipe write on its own thread behind a one-batch queue, writing the arrays' buffers (`memoryview`)
+instead of `tobytes()` copies. `identity.py`: old vs new SHIM_HASH digests and streamed bytes are
+equal on ViT (B = 63 and 64), ConvNeXt-S, R50 A2 (the BCE threshold) and MNv4, and mix on vs off
+differs (the control). `mixup_gate.py`'s known-answer checks and `bce_target_gate.py` pass; the
+mixup gate's two pinned "inert when off" digests fail on the old shim and the new alike (stale
+since an earlier change; the scripts-audit open item).
+
+| after | img/s | ms per 512 |
+|---|---|---|
+| ViT 512 × 4, rr | 1,410 | 363 |
+| ViT 512 × 4, free | 1,381 | 371 |
+| MNv4 512 × 4, rr | 1,862 | 275 |
+
+On the GPUs: ViT-S verified 609 → 379 ms/step (starved 305 → 79), MNv4 verified 329 → 318.
 
 ## 5. Batch-1 smokes on the four cards (2026-09-28/29)
 
