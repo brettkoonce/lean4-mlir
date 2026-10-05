@@ -54,6 +54,13 @@ Against the 09-29 table: ConvNeXt-B verified is 37 h shorter (253 modelled), Con
 longer (110 was a compute probe), and MNv4 verified is the one big miss left (100 against ~90, after §4.5). ViT-S
 verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread); it is 79 now.
 
+**In the book (2026-10-05):** each side-quest section carries the rates above for both paths, as a
+"full schedule" table with a reference (JAX) and a verified (PJRT) column: A2 / A1 per optimizer
+step (the verified column is 4 × the micro-batch time), ConvNeXt-S / B, ViT-S / B, and MobileNetV4
+`full` as a sentence. They replace the fp32 → bf16 probe tables (ConvNeXt at 4 × 32, ViT's 40-step
+compute floors). Appendix B's MobileNetV4 side-quest row is `mnv4-full-4gpu`. These are the probes
+taken before X2 / X5 / X6 of `imagenet_parity.md` §9.1; the re-probes are its D17.
+
 ## 2. Where things stand (2026-10-05)
 
 * **The DIMM throttle is gone** (§5.2). The DIMMs were re-slotted per the board manual and two fans

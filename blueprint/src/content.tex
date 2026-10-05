@@ -7056,6 +7056,25 @@ ghost batch of $512$ per micro-step, as for A3. A1 is its own render rather
 than A2's with a flag: the weight decay is baked into the artifact, $0.01$
 against A2's $0.02$.
 
+\medskip\noindent \textbf{A full schedule}, four cards, each path's own
+trainer timed on real ImageNet at the job's shape --- four replicas of $128$
+accumulated four times to $2048$, $625$ optimizer steps an epoch:
+
+\begin{center}
+\begin{tabular}{@{}l r r r r r@{}}
+\hline
+ & & \multicolumn{2}{c}{reference (JAX)} & \multicolumn{2}{c}{verified path (PJRT)} \\
+4 cards, bf16 & epochs & ms/step & total & ms/step & total \\
+\hline
+A2 & $300$ & $1{,}467$ & $76$\,h \;($3.2$\,d)  & $1{,}784$ & $93$\,h \;($3.9$\,d) \\
+A1 & $600$ & $1{,}469$ & $153$\,h \;($6.4$\,d) & $1{,}776$ & $185$\,h \;($7.7$\,d) \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent A step is one optimizer step, four micro-batches. Totals are
+training steps alone; evaluation adds a few hours a run.
+
 \medskip\noindent What the two renders carry, and where they stop short of
 the paper:
 
@@ -7071,11 +7090,13 @@ In & Still out \\
 Repeated augmentation $3\times$; both tiers, four replicas
   & Mixup and CutMix alternate step by step, where \texttt{timm} draws which one per batch \\[2pt]
 \textbf{Bicubic RandAugment geometry}, matched to PIL's as \texttt{timm} resolves it
-  & Neither tier has been run \\[2pt]
-A1's own weight decay and own shim
-  & \\[2pt]
+  & RandAugment's geometric ops fill with grey $128$, where \texttt{timm} fills with the image mean \\[2pt]
+A1's own weight decay ($0.01$) and own shim (Mixup $\alpha\,0.2$, label smoothing $0.1$)
+  & The random-resized crop is TensorFlow's sampler, not torchvision's \\[2pt]
 As A3: \texttt{wdExcludeNormBias}, LAMB's clip at $kC$ after the all-reduce and the accumulation, BCE-with-logits over Mixup/CutMix soft labels, accumulation to $2048$ at $k=4$
-  & \\[2pt]
+  & The learning rate is set per step, where \texttt{timm}'s scheduler steps once per epoch \\[2pt]
+Also as A3: zero-$\gamma$ bottlenecks, BN decay $0.9$, the fp32 classifier head, evaluation at \texttt{timm}'s $0.95$ crop
+  & Neither tier has been run \\[2pt]
 Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \hline
 \end{tabular}
@@ -8818,7 +8839,10 @@ the length. The paper tier exists on both paths and has not run:
 \texttt{mnv4-full-jax-4gpu} and \texttt{mnv4-full-4gpu}, the latter on
 \texttt{mnv4in\_accdp8x128wxdropdowd01bf16} --- wd $0.1$, dropout $0.2$,
 RandAugment $m15$ at $p\,0.7$, drop-path $0.075$ ramped over the 21 UIB
-blocks, $500$ epochs. Both paths above score the EMA shadow, which the paper's Conv-M
+blocks, $500$ epochs. Timed on four cards, the schedule is about $100$
+hours on either path: $2.3$--$2.4$\,s an optimizer step on the reference
+(JAX), $100$--$105$ hours, and $2.3$\,s on the verified path (PJRT), $100$
+hours. Both paths above score the EMA shadow, which the paper's Conv-M
 recipe does not carry; the tie stands, since both columns carry it, and the
 \texttt{full} pair drops it, scoring the live weights as the paper does. It
 trains at $224$ against the paper's $256$, and two smaller gaps stay open
@@ -11342,39 +11366,42 @@ ConvNeXt-B & $27$ blocks, $128$ wide& $88{,}591{,}464$ & $378.6 \to 158.0$\,ms \
 \end{tabular}
 \end{center}
 
-\noindent Every number in this section was measured in one session on
+\noindent Every number in this section was measured on
 4$\times$ RTX 4060 Ti (16\,GB, CUDA 12.9). Counts are \texttt{\#guard}ed at
 $50{,}223{,}688$ and $88{,}591{,}464$, $344$ tensors each, the head
 LayerNorm's $\gamma$ and $\beta$ included.
 
-\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
-including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
-steps:
+\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs at the
+jobs' own shape --- $64$ per replica, global $256$, $5{,}004$ steps an
+epoch --- with each path's own trainer timed on real ImageNet:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
 \hline
-verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
+ & \multicolumn{2}{c}{reference (JAX)} & \multicolumn{2}{c}{verified path (PJRT)} \\
+4 cards, bf16 & ms/step & 300 epochs & ms/step & 300 epochs \\
 \hline
-ConvNeXt-T & $128$ & $10{,}009$ & $206 \to 131$ & $175 \to 112$\,h \;($7.3 \to 4.7$\,d) \\
-ConvNeXt-S & $128$ & $10{,}009$ & $345 \to 192$ & $291 \to 163$\,h \;($12.1 \to 6.8$\,d) \\
-ConvNeXt-B & $128$ & $10{,}009$ & $521 \to 301$ & $438 \to 254$\,h \;($18.2 \to 10.6$\,d) \\
+ConvNeXt-S & $304$ & $127$\,h \;($5.3$\,d) & $373$ & $156$\,h \;($6.5$\,d) \\
+ConvNeXt-B & $401$ & $167$\,h \;($7.0$\,d) & $518$ & $216$\,h \;($9.0$\,d) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent\textbf{What is queued.} The tables above are the $4\times32$
-probes. The jobs that will run are \texttt{cnxs-default-emabf16-4gpu} and
-\texttt{cnxb-default-emabf16-4gpu} on
-\texttt{convnext\{s,b\}in\_emadpwxclipdropbf16}: $64$ per replica, the
-reference's global $256$, EMA scored, \texttt{cnxInit} on both paths, with
-\texttt{\_fwd\_s288} forwards for \texttt{timm}'s test protocol; their
-references are \texttt{cnxs-default-jax-4gpu} and
-\texttt{cnxb-default-jax-4gpu}. At $64$ per replica S peaks at $6.80$\,GiB
-and B at $9.53$ of the $11.68$\,GiB arena, so B needs no accumulation
-render. Neither has run. Probed on the four cards at the jobs' own shape,
-the verified steps are $373$ and $518$\,ms, $156$ and $216$ hours, and the
-references' $304$ and $401$\,ms, $127$ and $167$ hours.
+\noindent Totals are training steps alone; evaluation adds a few hours a
+run. All four are compute-bound.
+
+\medskip\noindent\textbf{What is queued.} Both pairs exist. The verified
+jobs are \texttt{cnx\{s,b\}-default-emabf16-4gpu}, on the renders
+\texttt{convnext\{s,b\}in\_\allowbreak emadpwxclipdropbf16}, and their
+references are \texttt{cnx\{s,b\}-default-jax-4gpu}. In:
+ConvNeXt-T's recipe as its listing has it, at $64$ per replica and the
+reference's global $256$, with drop-path at the paper's $0.4$ for S and
+$0.5$ for B, EMA scored, \texttt{cnxInit} on both paths, and
+\texttt{\_fwd\_s288} forwards for \texttt{timm}'s test protocol. At $64$ per
+replica S peaks at $6.80$\,GiB and B at $9.53$ of the $11.68$\,GiB arena, so
+B needs no accumulation render. Still out, as for ConvNeXt-T: the paper's
+batch of $4096$, the exact erf GELU, the per-batch Mixup/CutMix switch and
+torchvision's crop sampler; the clip at $1.0$ stays in. Neither has run.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
@@ -13547,32 +13574,27 @@ recipe's $5\times10^{-4}$ is the rate that batch was set for --- which took four
 \texttt{\#eval} lines rather than a renderer feature, because the batch was
 never the obstacle.
 
-\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs, totals
-including \evalckptnote. Trainer steps, all measured on real ImageNet over $40$
-steps:
+\medskip\noindent \textbf{A full schedule}, four cards, $300$ epochs at the
+jobs' own shape --- global $512$, $2{,}502$ steps an epoch --- with each
+path's own trainer timed on real ImageNet:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r@{}}
 \hline
-verified, 4 cards & global & steps/epoch & ms/step & 300 epochs \\
+ & \multicolumn{2}{c}{reference (JAX)} & \multicolumn{2}{c}{verified path (PJRT)} \\
+4 cards, bf16 & ms/step & 300 epochs & ms/step & 300 epochs \\
 \hline
-ViT-Ti & $512$ & $2{,}502$ & $224 \to 153$   & $50 \to 35$\,h \;($2.1 \to 1.5$\,d) \\
-ViT-S  & $512$ & $2{,}502$ & $507 \to 296$   & $109 \to 65$\,h \;($4.5 \to 2.7$\,d) \\
-ViT-B  & $512$ & $2{,}502$ & $1369 \to 799$  & $289 \to 170$\,h \;($12.0 \to 7.1$\,d) \\
+ViT-S & $344$ & $72$\,h \;($3.0$\,d)  & $379$ & $79$\,h \;($3.3$\,d) \\
+ViT-B & $708$ & $148$\,h \;($6.2$\,d) & $887$ & $185$\,h \;($7.7$\,d) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent\textbf{Read these as compute floors, not as schedules.} A $40$-step
-window drains a \texttt{SHIM PREFETCH} queue that the producers filled during
-compile, so it times the graph with the data feed all but removed.
-\S\ref{sec:vit_phase4} is the check: ViT-Ti's bf16 figure here is $153$\,ms/step
-and $35$ hours, and the completed run measured $153$\,ms/step with the shim
-removed but $199$ fed, for $48.0$ hours. The ratio is not a constant --- it is
-whatever the host pipeline costs for that recipe. Measured at the jobs'
-own shape, ViT-S's verified step is $379$\,ms, $79$ hours, with $79$\,ms
-of it waiting on the shim; ViT-B's is $887$\,ms, $185$ hours, and
-compute-bound.
+\noindent Totals are training steps alone; evaluation adds a few hours a
+run. These are fed steps, not graph times. ViT-S waits on its data on both
+paths: $79$ of the verified step's $379$\,ms is spent waiting on the shim,
+and the reference is bound by \texttt{tf.data}. ViT-B is compute-bound on
+both.
 
 \medskip\noindent\textbf{What is queued.} Both pairs exist. The verified jobs
 are \texttt{vits-default-emabf16-4gpu} and \texttt{vitb-default-emabf16-4gpu}
@@ -13582,11 +13604,13 @@ wxclipdropeps0000001bf16} --- Tiny's recipe as its listing has it:
 learning-rate floor, EMA at $0.99996$, the clip, bf16 under an fp32 patch
 embedding and head --- and their references are
 \texttt{vits-default-jax-4gpu} and \texttt{vitb-accum-jax-4gpu}, the latter
-accumulating $4\times128$ to DeiT's $512$. The reference steps measure
-$344$\,ms for S and $708$\,ms for B on four cards, $72$ and $148$
-hours. ViT-B's EMA render peaks at $13.19$\,GiB, over the
-$11.68$\,GiB default arena, so its job raises the allocator fraction to
-$0.97$ ($15.11$\,GiB); S fits the default at $10.27$. Neither has run.
+accumulating $4\times128$ to DeiT's $512$. ViT-B's EMA render peaks at
+$13.19$\,GiB, over the $11.68$\,GiB default arena, so its job raises the
+allocator fraction to $0.97$ ($15.11$\,GiB); S fits the default at $10.27$.
+Still out, as for Tiny: the exact erf GELU, DeiT's batch of $1024$, its
+per-epoch schedule and per-batch Mixup/CutMix switch, and torchvision's
+crop sampler; the clip at $1.0$ stays in, and the EMA shadow is what is
+scored. Neither has run.
 
 \subsection*{What Part 1 has established}
 
@@ -18431,7 +18455,7 @@ chapter's row. Each row's section says where it stands.
 \hline \\[-6pt]
 \texttt{resnet50-imagenet-verified}    & \texttt{a2} & \texttt{r50-a2-bf16-4gpu} & \S\ref{sec:r50_a2_a1_cost} \\
 \texttt{resnet50-imagenet-verified}    & \texttt{a1} & \texttt{r50-a1-bf16-4gpu} & \S\ref{sec:r50_a2_a1_cost} \\
-\texttt{mobilenetv4-imagenet-verified} & Conv-M & \texttt{mnv4-default-4gpu} & \S\ref{sec:mnv4_side_quest} \\
+\texttt{mobilenetv4-imagenet-verified} & \texttt{full} & \texttt{mnv4-full-4gpu} & \S\ref{sec:mnv4_side_quest} \\
 \texttt{convnext-s-imagenet-verified}  & --- & \texttt{cnxs-default-emabf16-4gpu} & \S\ref{sec:convnext_sb} \\
 \texttt{convnext-b-imagenet-verified}  & --- & \texttt{cnxb-default-emabf16-4gpu} & \S\ref{sec:convnext_sb} \\
 \texttt{vit-s-imagenet-verified}       & --- & \texttt{vits-default-emabf16-4gpu} & \S\ref{sec:vit_sb} \\
