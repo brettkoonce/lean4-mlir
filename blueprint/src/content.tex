@@ -18397,22 +18397,28 @@ fallback silently gave every net ResNet-34's augmentation.
 
 \prosesection{Running one}
 
-Single device, with the knobs the recipe needs:
+Single device, on the driver's own defaults:
 
 \begin{verbatim}
-LEAN_MLIR_VARIANT=mom256 LEAN_MLIR_BATCH=256 LEAN_MLIR_BASE_LR_U=100000 \
-  .lake/build/bin/resnet34-imagenet-verified data
+LEAN_MLIR_MEM_FRACTION=0.97 .lake/build/bin/resnet34-imagenet-verified data
 \end{verbatim}
 
-\texttt{LEAN\_MLIR\_BATCH} must match the batch its variant was rendered at:
-the batch is baked into the graph, not a runtime dimension, so a mismatch is a
-shape error at the first invoke.
+The defaults are the recipe: the \texttt{mom256} render at batch $256$, a
+peak learning rate of $0.1$, $90$ epochs. The one knob is the allocator's.
+At batch $256$ the fp32 step peaks above the $11.68$\,GiB the PJRT shim
+reserves by default on a 16\,GB card, and $0.97$ reserves $15.11$. Three
+more knobs override the defaults. \texttt{LEAN\_MLIR\_VARIANT} names another
+render, and \texttt{LEAN\_MLIR\_BATCH} must match the batch that variant was
+rendered at: the batch is baked into the graph, not a runtime dimension, so
+a mismatch is a shape error at the first invoke.
 \texttt{LEAN\_MLIR\_BASE\_LR\_U} is the base learning rate in millionths
 (\texttt{100000} = 0.1), integer-encoded because this toolchain has no
-\texttt{String.toFloat?}. The default 0.001 is an AdamW rate and will
-under-step a heavy-ball render by $\sim$100$\times$, which looks like a broken
-render rather than a wrong knob. That is the one-card shape. The four-card one,
-with every knob taken from the job's own config, is \texttt{lake run
+\texttt{String.toFloat?}. ResNet-50's driver defaults to the AdamW rate
+$0.001$ and its 2018 render is heavy-ball, so left unset there it
+under-steps by $\sim$100$\times$, which looks like a broken render rather
+than a wrong knob. That is the one-card shape: $695$\,ms a step, about $87$
+hours for the schedule on one RTX 4060 Ti. The four-card one, with every
+knob taken from the job's own config, is \texttt{lake run
 r34-default-bf16-4gpu once} --- the next section.
 
 \prosesection{Running one for a day and a half}
