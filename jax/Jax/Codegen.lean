@@ -3798,7 +3798,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- IN PLACE, a block of row PAIRS at a time. Row i mixes with row B−1−i (`np.flip(x, 0)`), so
   -- a pair is read into two small temporaries and both rows are written back from them; every
   -- output element is the same float32 expression, rounded op by op, as the whole-array form —
-  -- which allocated four fresh B × flat arrays per batch (308 MB each at 512 × 224²) and ran
+  -- which allocated four fresh B × flat float32 arrays per batch, each the size of the record, and ran
   -- single-threaded ahead of the pipe write. `SHIM_HASH` is unchanged by construction; the
   -- digests are the gate (runs/2026-10-05-shim-feed-bench/).
   "    _MIX_BLK = 8  # row pairs per block: ~5 MB temporaries at 224², cache-sized\n" ++
@@ -3911,7 +3911,8 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    if _u8:\n" ++
   "        out.write(np.concatenate([_MEAN_RGB.numpy(), _STD_RGB.numpy()]).astype(np.float32).tobytes())\n" ++
   "    out.flush()\n" ++
-  -- THE WRITE IS ON ITS OWN THREAD. A record is ~308 MB at 512 × 224² and the pipe holds 64 KB,
+  -- THE WRITE IS ON ITS OWN THREAD. A record is the whole batch's pixels and a pipe buffers far less
+  -- (pipe(7)'s default capacity, runs/2026-10-05-shim-feed-bench/README.md),
   -- so `write` blocks until the trainer's round-robin reaches this producer; inline, that stalled
   -- the next batch's `_emit` (mixing, target build) the whole time. The bounded queue keeps one
   -- batch in hand, order is preserved, and the bytes are the same: `memoryview` writes the arrays'
