@@ -694,10 +694,12 @@ and one is the other's opening: the linear classifier's
 forward render is the first three of its training step's twenty-seven
 operations, and Chapter~\ref{chap:tensor} prints both.
 
-Every architecture in Part~1 trains under this loop. What changes from
-one chapter to the next is the inside of \texttt{train\_step}: the
-forward pass gains a layer, the backward pass gains that layer's VJP, and
-the proof that the VJP is correct is the chapter's theorem.
+Every architecture in Part~1 trains under this loop. Two things change
+as the chapters go. The \texttt{data} the loop draws its batches from
+grows, from MNIST to CIFAR to ImageNet. And in every chapter the inside of
+\texttt{train\_step} changes: the forward pass gains a layer, the backward
+pass gains that layer's VJP, and the proof that the VJP is correct is the
+chapter's theorem.
 Chapter~\ref{chap:tensor} builds the function for a single matrix
 multiply, proves it, compiles it to one GPU kernel and runs the loop;
 \S\ref{sec:mlp_inside_train} is the loop as Lean and
@@ -2359,9 +2361,9 @@ There is one catch, and it is ReLU's. Theorem~\ref{thm:vjpComp} asks
 for both functions to be differentiable everywhere, and ReLU is not. So
 the whole-network result is stated at a point: wherever no
 pre-activation is exactly zero, the composed backward equals the
-\(\pdiv\)-contracted Jacobian (Theorem~\ref{thm:mlpHasVJPAt}). The
-canonical witness \texttt{mlpHasVJP}
-(Definition~\ref{ax:mlpHasVJP}) is the object later chapters name; the
+\(\pdiv\)-contracted Jacobian (Theorem~\ref{thm:mlpHasVJPAt}). The VJP
+record \texttt{mlpHasVJP}, with the \(\pdiv\)-derived backward
+(Definition~\ref{ax:mlpHasVJP}), is the object later chapters name; the
 theorem is what makes naming it a claim.
 
 \section{The theorems}
