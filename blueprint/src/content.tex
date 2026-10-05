@@ -9633,10 +9633,12 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true
   useAutoAugment := true    -- the full ImageNet policy
+  autoAugmentV0  := true    -- TF EfficientNet's policy v0 (timm's `v0`)
   augBicubic     := true    -- PIL-bicubic geometry, as timm
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- reaches the MBConv expand/dw/project
+  f32StemHead    := true    -- classifier head in fp32
   useEMA         := true    -- weight averaging, decay 0.9999
   dropPath       := 0.2     -- stochastic depth (B0 drop-connect rate)
   dropPathOverN  := true    -- TF's and timm's ramp: 0.2 * i/16, not the default i/15
@@ -9648,10 +9650,15 @@ def efficientNetB0ImagenetConfigFull : TrainConfig :=
   { efficientNetB0ImagenetConfig with epochs := 350 }
 \end{verbatim}
 
-\noindent The number this section reports is the \texttt{full} recipe,
-the 350-epoch one. Those runs predate \texttt{dropPathOverN}: they ramped
-stochastic depth as \(0.2 \cdot i/15\), not the \(i/16\) printed above, and
-will be re-run on this config.
+\noindent The number this section reports is the \texttt{full} tier, the
+350-epoch one, from a run that predates seven lines of the listing. It
+decayed every parameter, BatchNorm and biases included; ran BatchNorm at
+$\varepsilon = 10^{-5}$; decayed the learning rate continuously rather than
+as a staircase; ramped stochastic depth as \(0.2 \cdot i/15\), not the
+\(i/16\) printed above; drew AutoAugment from the 2018 paper's table at
+TensorFlow's Posterize levels, which is neither published policy, with
+bilinear geometry; and ran the classifier head in bf16. It will be
+re-run on this config.
 
 Two details are specific to EfficientNet. First, \texttt{bf16Conv}
 casts the MBConv block's heavy convolutions (the $1\times1$
@@ -9670,12 +9677,12 @@ $5.3$M-parameter B0 and an $8.4$M one, and it is what makes the spec in
 $\mathbf{5.29}$M.
 
 \textbf{Augmentation.} The base is Inception-style random-resized-crop
-(sampling 8--100\% of the image area at a 3/4--4/3 aspect ratio, resized
-to $224\times224$) plus a random horizontal flip, with label smoothing
-$0.1$ in the loss, and validation center-crops. On top of that the run
-turns on \textbf{AutoAugment}, the full ImageNet policy including its
-geometric operations, which is the learned augmentation B0's recipe calls
-for. The heavier pack (Mixup, CutMix, RandAugment, Random Erasing) is
+through TensorFlow's sampler (10--100\% of the image area at a 3/4--4/3
+aspect ratio, resized to $224\times224$) plus a random horizontal flip,
+with label smoothing $0.1$ in the loss, and validation center-crops. On
+top of that the recipe turns on \textbf{AutoAugment} at policy
+\texttt{v0}, the table TensorFlow's EfficientNet trains with and
+\texttt{timm} ships under that name, geometric operations included. The heavier pack (Mixup, CutMix, RandAugment, Random Erasing) is
 wired into the reference trainer, emitted into the generated
 \texttt{tf.data} pipeline with each knob gated on a config flag, and left
 off here because the 2019 recipe reaches for AutoAugment instead.
@@ -9690,11 +9697,11 @@ GPU & Epochs & Per epoch & Wall-clock & Val top-1 & Val top-5 \\
 \end{tabular}
 \end{center}
 
-\noindent (CUDA, bf16, batch 256.) That is the paper recipe end to end,
-and it reached $\mathbf{77.15\%}$ top-1 / $\mathbf{93.30\%}$ top-5 on the
-full 50{,}000-image validation split against EfficientNet-B0's published
-$77.1\%\,/\,93.3\%$ --- a match. In four details of the recipe the obvious
-implementation is not the one B0 was trained with.
+\noindent (CUDA, bf16, batch 256.) The run reached
+$\mathbf{77.15\%}$ top-1 / $\mathbf{93.30\%}$ top-5 on the full
+50{,}000-image validation split against EfficientNet-B0's published
+$77.1\%\,/\,93.3\%$ --- a match on the number. In four details of the
+recipe the obvious implementation is not the one B0 was trained with.
 
 \textbf{RMSProp in TensorFlow's form.} B0's optimizer is RMSProp
 ($\rho=0.9$, $\mu=0.9$, $\varepsilon=10^{-3}$) in TensorFlow's variant of
@@ -9740,12 +9747,12 @@ the way in and on the way out.
 
 \textbf{The 350-epoch run.} The full tier reached $\mathbf{77.15\%}$
 top-1 / $\mathbf{93.30\%}$ top-5 against EfficientNet-B0's paper
-$77.1\%\,/\,93.3\%$: level on top-1 and within $0.03$ on top-5. That tier
-is the paper recipe end to end, with RMSProp at $0.016$, AutoAugment,
-stochastic depth, EMA and exponential LR decay --- a faithful,
-from-scratch reproduction with no hacks: real RMSProp, real LR, real EMA,
-real swish. It ran $46.6$\,hr on four RTX 3060 at $8.0$ minutes per
-epoch. The headline figure is the EMA weights scored over all
+$77.1\%\,/\,93.3\%$: level on top-1 and within $0.03$ on top-5. The run
+is from scratch at the paper's optimizer, learning rate, EMA and
+activation, with RMSProp at $0.016$, AutoAugment, stochastic depth and
+exponential LR decay, and it departs from the paper in the lines listed
+after the config above. It ran $46.6$\,hr on four RTX 3060 at $8.0$
+minutes per epoch. The headline figure is the EMA weights scored over all
 50{,}000 validation images; the same run's raw weights score
 $76.33\%\,/\,92.90\%$, so the weight average is worth $+0.82$ points:
 
@@ -9774,7 +9781,7 @@ $76.33\%\,/\,92.90\%$, so the weight average is worth $+0.82$ points:
 \end{center}
 
 \noindent EfficientNet-B0 / ImageNet-1k validation accuracy per epoch,
-faithful 350-epoch RMSProp run (bf16, 4$\times$ 3060), scored over all
+350-epoch RMSProp run (bf16, 4$\times$ 3060), scored over all
 50{,}000 validation images at every epoch. The final
 $77.15\%\,/\,93.30\%$ matches the paper's $77.1\%\,/\,93.3\%$. The
 flattening past
@@ -9830,19 +9837,21 @@ $0.99$, 350 epochs. All of it is carried on both paths, including the two
 places the TensorFlow original differs from a naive port: $\varepsilon$ goes
 inside the square root ($g/\sqrt{s+\varepsilon}$, not
 $g/(\sqrt{s}+\varepsilon)$), and the mean-square accumulator starts at $1.0$
-rather than $0$. Drop-connect is a linear ramp over blocks, as the official
-implementation does it, and the EMA shadows the BN buffers as well as the
-weights. That is the recipe the pair below trained on.
+rather than $0$. Drop-connect is a linear ramp over blocks, $0.2 \cdot
+i/15$ in the pair below where the official implementation divides by $16$,
+and the EMA shadows the BN buffers as well as the weights. That is the
+recipe the pair below trained on.
 \textbf{[TODO: the final pair --- the staircase floored on the global step
 from step $0$, no decay on BN or biases, drop-connect $0.2 \cdot i/16$, BN
-$\varepsilon = 10^{-3}$, synchronised BatchNorm, and the strided-depthwise
+$\varepsilon = 10^{-3}$, AutoAugment \texttt{v0} with bicubic geometry, the
+fp32 classifier head, synchronised BatchNorm, and the strided-depthwise
 padding decision below; \texttt{enet-full-jax-4gpu} and
 \texttt{enet-default-4gpu}.]}
 
 \medskip\noindent\textbf{One difference was known and open: batch-norm
 $\varepsilon$ was $10^{-5}$ in this pair against the TF reference's
 $10^{-3}$.} \texttt{\_bn(..., eps=1e-5)} in the reference's emitted code of
-the time, and $196$ splat constants of \texttt{1.0e-5} in the render it
+the time, and $147$ splat constants of \texttt{1.0e-5} in the render it
 trained on --- so the two paths agreed with each other and both differed from
 the paper. Both now carry $10^{-3}$: \texttt{bnEps} on the reference, and
 the \texttt{emarmsdp64dropdowxeps0001bf16} render with its
@@ -9855,10 +9864,15 @@ depthwise convolutions pad symmetrically on both paths where TensorFlow pads
 \texttt{SAME}.} TF's \texttt{SAME} puts the odd pixel of padding on the
 bottom and right; ours splits it evenly, so at stride two the depthwise
 window sits one pixel off. Measured against \texttt{tf\_efficientnet\_b0} on
-shared weights (\texttt{scripts/enet\_timm\_parity.py --pad tf}), the
+shared weights (\texttt{scripts/parity/\allowbreak enet\_timm\_parity.py
+--pad tf}), the
 logits differ by $0.37$ of their scale at training resolution and $0.048$
 at evaluation. It is the largest deviation left, it is the same on both
-paths, and it is decided before the rerun rather than by it.
+paths, and it is decided before the rerun rather than by it. A smaller
+one is also the same on both paths: the learning rate multiplies the
+momentum buffer on its way into the weights, where TensorFlow's RMSProp
+folds it into the buffer, so the two part while the rate moves --- through
+the warmup, and for a few steps after each drop of the staircase.
 
 \medskip\noindent\textbf{The activation agrees on both sides.} The verified
 render is swish throughout --- $178$ \texttt{stablehlo.logistic} and not one
@@ -9876,11 +9890,15 @@ network.
 lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step   & yes                      & none \\
 BN statistic group   & 256 (global)             & 64 (per replica) \\
+evaluation forward   & bf16                     & fp32 \\
+classifier head      & bf16                     & fp32 \\
+depthwise init, variance & $2/k^2$              & $2/(C k^2)$ \\
+SE reduce init, variance & $2/\mathrm{out}$     & $2/(\mathrm{in}+\mathrm{out})$ \\
 ms/step              & $\sim$92                 & 134 \\
 per epoch            & 8.0 min                  & 11.7 min \\
 total                & 46.6 hr                  & 73.4 hr \\
 \hline
-precision            & bf16                     & bf16 \\
+precision            & bf16 convolutions        & bf16 convolutions \\
 global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
 optimizer            & RMSProp (TF form)        & RMSProp (TF form) \\
@@ -9906,10 +9924,10 @@ saved state at a different evaluation batch size, and the $0.03$ between
 them is bf16 batch-shape noise. Against the in-training figure the verified
 path's $76.878\%$ is $-0.30$, the $\Delta$ the curve table below carries.
 
-\medskip\noindent\textbf{$-0.27$ points --- and unlike MobileNetV2's pair,
-this one is not a dead heat.} One evaluation at $-0.27$ is not a result: the verified final's 95\%
-Wilson interval, $[76.51, 77.25]$, contains the reference. What separates
-this pair from MobileNetV2's is persistence. From epoch~51 the verified
+\medskip\noindent\textbf{$-0.27$ points, and the gap persists.} One
+evaluation at $-0.27$ is not a result: the verified final's 95\%
+Wilson interval, $[76.51, 77.25]$, contains the reference. What makes it
+more than one evaluation is persistence. From epoch~51 the verified
 curve sits below the reference at every one of 300 evaluations, and over the
 last fifty the paired gap averages $-0.32$ with a spread of $0.07$ ---
 narrower than either curve's own spread over the same fifty ($0.11$ and $0.14$).
@@ -9918,20 +9936,17 @@ two, three tenths of a point apart. Whether the three tenths would survive
 on images neither run scored is what one validation set cannot say; that
 the trajectories differ, it can. This section does not claim to know why.
 
-\medskip\noindent\textbf{The suspect is the BatchNorm group, and it is
-unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
-one numerical asymmetry above the rule is the BatchNorm group: each replica's $64$ against the reference's global $256$: the render this
-pair trained on normalizes each replica's shard on its own. The committed
-render has since moved to synchronised BatchNorm (global $256$,
-Theorem~\ref{thm:efficientnet_sync_tie}), and the rerun pair is the test.
-MobileNetV2's pair, which carries the same fourfold difference,
-landed $0.01$ apart, and it has as much BatchNorm as this net
-($52$ layers to $49$), so the count of normalization layers does not by
-itself explain a $0.3$. What this recipe adds is that evaluation scores an
-EMA of the BatchNorm buffers in place of the live statistics, and whether
-that turns a per-replica group into a persistent offset is not known. The
-test is cheap and touches no proof: train the reference with per-shard
-BatchNorm and see whether the $0.3$ appears on the JAX side. A third
+\medskip\noindent\textbf{The suspects are the rows above the rule, and
+none is measured.} The render this pair trained on normalizes each
+replica's shard of $64$ on its own, against the reference's global $256$.
+The committed render has since moved to synchronised BatchNorm (global
+$256$, Theorem~\ref{thm:efficientnet_sync_tie}), and the rerun pair is the
+test of that row. The initialization differs in two families of tensor:
+every depthwise kernel starts $\sqrt{C}$ narrower on the verified path,
+and every squeeze-excitation reduction about a fifth as wide. What this
+recipe adds is that evaluation scores an EMA of the BatchNorm buffers in
+place of the live statistics, and whether that turns a per-replica group
+into a persistent offset is not known. A further
 difference is variance rather than bias --- the stochastic-depth and
 dropout masks are host-drawn on one side and JAX-PRNG on the other --- and
 does not survive a fifty-epoch average.
@@ -9984,16 +9999,19 @@ $\Delta$              & $+0.10$ & $-0.56$ & $-0.31$ & $-0.66$ & $-0.43$ & $-0.38
 
 \noindent One recipe, two paths to XLA, sampled every 10 epochs and scored
 over all $50{,}000$ validation images. The verified curve's epoch-1
-$20.62\%$ against the reference's $10.09\%$ is unexplained; the two are
-level by epoch~10 and the difference never recurs.
+$20.62\%$ against the reference's $10.09\%$ has two candidates, neither
+measured: the initialization above the rule, and the BatchNorm running
+statistics, which the verified path seeds from the first batch and the
+reference from $0$ and $1$. The two are level by epoch~10 and the
+difference never recurs.
 
 \subsection*{What the EfficientNet recipe changes from the 2018 recipe}
 
 The ResNet-34 trainer of Chapter~\ref{chap:residual} is the
 2018-era recipe: SGD with momentum plus the ``bag of tricks''
 polish (cosine schedule, warmup, label smoothing,
-random-resized-crop). The 350-epoch run above is the 2019
-EfficientNet recipe (Tan \& Le), reproduced end to end.
+random-resized-crop). The config above is the 2019
+EfficientNet recipe (Tan \& Le).
 Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
 to the 2018 baseline, and Chapter~\ref{chap:layernorm}'s recipe table is
 2022's version. This table is the 2019 rung of the same ladder. The
@@ -10012,7 +10030,7 @@ Peak LR       & $0.1$                  & $0.016$                       & linearl
 LR schedule   & cosine to zero         & exponential, $\times0.97$ every 2.4 epochs & the paper's staircase, floored on the global step, under the same 5-epoch warmup \\
 Epochs        & 90                     & 350                           & the long-schedule regime the regularizers need, and the row the exponential decay above makes non-negotiable \\
 Weight decay  & $10^{-4}$, all params  & $10^{-5}$, BN and biases excluded & $10\times$ weaker --- depthwise and SE parameters are decay-sensitive \\
-Augmentation  & RRC + hflip            & + AutoAugment                 & the learned ImageNet policy --- 2019's forerunner of ConvNeXt's DeiT pack \\
+Augmentation  & RRC + hflip            & + AutoAugment \texttt{v0}     & the learned ImageNet policy, in TensorFlow's table --- 2019's forerunner of ConvNeXt's DeiT pack \\
 Stochastic depth & none                & drop-path $0.2$               & randomly drops whole residual branches per step, at B0's drop-connect rate \\
 EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights and the BN buffers (below) \\
 \hline
@@ -10022,8 +10040,8 @@ EMA           & none                   & decay $0.9999$                & evaluat
 \noindent What carries over unchanged: softmax cross-entropy with
 label smoothing $0.1$, the 5-epoch warmup, random-resized-crop +
 horizontal flip as the base augmentation, batch 256, train and eval
-both at $224$, bf16 matmul and convolution (the SE $1\times1$s in
-fp32), and no gradient clipping, which is unlike every later recipe in
+both at $224$, bf16 convolution (the SE $1\times1$s and the classifier
+head in fp32), and no gradient clipping, which is unlike every later recipe in
 this ladder.
 
 The two quietest rows carry the chapter's two debugging lessons, both
