@@ -1112,7 +1112,7 @@ def forward(params, x, bn, training, drop_key=None):
     x, _ne = bottleneck_block(params, x, 50, bn, bn_i, training)
     bn_out.extend(_ne); bn_i += len(_ne)
     x = global_avg_pool(x)
-    x = mm(x, params[53][0].T) + params[53][1]
+    x = jnp.matmul(x, params[53][0].T) + params[53][1]
     return x, bn_out
 
 def loss_fn(params, bn, x, y, drop_key=None):

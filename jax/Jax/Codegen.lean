@@ -220,8 +220,9 @@ def _autoaugment(img):
     `_aa_transform` / shear / translate ops replace the bilinear ones by name, and the op table's
     four shear/translate entries are re-pointed (the table captured the originals). Checked against PIL 12.2 on timm's
     own affine calls: worst mean |Δ| 0.094 / 255, max 1, over shear, translate and rotate at three
-    magnitudes each, where the bilinear ops sit at 2.6–8.0 mean. -/
-private def bicubicGeometryPy : String :=
+    magnitudes each, where the bilinear ops sit at 2.6–8.0 mean. `fill` is the out-of-image
+    value (Python expression); the default 128.0 is timm's `_FILL`, `aaV0Py` passes `_AA_FILL`. -/
+private def bicubicGeometryPy (fill : String := "128.0") : String :=
 "# ── timm's geometric ops run PIL BICUBIC, and TF has no bicubic
 #    projective warp (ImageProjectiveTransformV3 takes NEAREST/BILINEAR only and LOGS, not raises,
 #    on anything else). So the warp is written out: PIL's own affine sampler, a = -1 cubic (PIL's
@@ -255,7 +256,7 @@ def _aa_transform(img, vec):
         for j in range(4):
             row += wx[:, :, j:j+1] * tf.gather(flat, yi[:, :, i] * W + xi[:, :, j])
         out += wy[:, :, i:i+1] * row
-    out = tf.where(inside[..., None], out, 128.0)
+    out = tf.where(inside[..., None], out, " ++ fill ++ ")
     return tf.cast(tf.clip_by_value(tf.floor(out), 0.0, 255.0), tf.uint8)
 
 # Shear and translate move pixels along ONE axis, where the other axis lands on integer rows
@@ -285,7 +286,7 @@ def _aa_warp1d(img, a, c, axis):
         tap = tf.clip_by_value(tf.cast(u0, tf.int32) + (k - 1), 0, n - 1)
         idx = iy * W + tap if axis == 1 else tap * W + ix
         out += wts[k][:, :, None] * tf.gather(flat, idx)
-    out = tf.where(inside[..., None], out, 128.0)
+    out = tf.where(inside[..., None], out, " ++ fill ++ ")
     return tf.cast(tf.clip_by_value(tf.floor(out), 0.0, 255.0), tf.uint8)
 
 # PIL's affine data is in pixel-CENTRE coordinates: timm's shear (1, f, 0, 0, 1, 0) is
@@ -298,6 +299,43 @@ _AA_OPS['ShearX'] = (_aa_shear_x, _aa_she, True)
 _AA_OPS['ShearY'] = (_aa_shear_y, _aa_she, True)
 _AA_OPS['TranslateX'] = (_aa_translate_x, _aa_trn, True)
 _AA_OPS['TranslateY'] = (_aa_translate_y, _aa_trn, True)"
+
+/-- AutoAugment policy v0 (`TrainConfig.autoAugmentV0`): TF TPU EfficientNet's ImageNet policy,
+    timm 1.0.28's `auto_augment_policy_v0`, emitted after `autoAugmentPy` (and `bicubicGeometryPy`)
+    so it replaces their `_AA_POLICY` by name. The table `autoAugmentPy` carries is the 2018 paper's
+    sub-policies with TF-v0 Posterize levels, which is neither policy. Gate:
+    `scripts/parity/aa_v0_timm_check.py`. -/
+private def aaV0Py : String :=
+"# ── AutoAugment policy v0 = TF TPU EfficientNet's ImageNet policy = timm `auto_augment_policy_v0`,
+#    op for op (TrainConfig.autoAugmentV0). Replaces _AA_POLICY above; the levels are timm's
+#    non-increasing ones (_RA_INC stays False), Rotate/Shear/TranslateRel randomly negated. ──
+# timm's create_transform fills with img_mean = round(255 * mean) for IMAGENET_DEFAULT_MEAN;
+# the bicubic warps read it (the bilinear ImageProjectiveTransformV3 path takes a scalar only).
+_AA_FILL = tf.constant([124.0, 116.0, 104.0])
+_AA_OPS['TranslateYRel'] = _AA_OPS['TranslateY']   # fraction (translate_pct 0.45) of the height
+# PIL posterize at 0 bits is a black image (timm: 'results in black image with Tpu posterize');
+# TF clamps a uint8 shift of 8 to 7 and would keep the top bit.
+def _aa_posterize(img, bits):
+    if bits <= 0:
+        return tf.zeros_like(img)
+    shift = tf.cast(8 - bits, img.dtype)
+    return tf.bitwise.left_shift(tf.bitwise.right_shift(img, shift), shift)
+_AA_OPS['Posterize'] = (_aa_posterize, _aa_pos, False)
+_AA_POLICY = [
+  [('Equalize',0.8,1),('ShearY',0.8,4)],      [('Color',0.4,9),('Equalize',0.6,3)],
+  [('Color',0.4,1),('Rotate',0.6,8)],         [('Solarize',0.8,3),('Equalize',0.4,7)],
+  [('Solarize',0.4,2),('Solarize',0.6,2)],    [('Color',0.2,0),('Equalize',0.8,8)],
+  [('Equalize',0.4,8),('SolarizeAdd',0.8,3)], [('ShearX',0.2,9),('Rotate',0.6,8)],
+  [('Color',0.6,1),('Equalize',1.0,2)],       [('Invert',0.4,9),('Rotate',0.6,0)],
+  [('Equalize',1.0,9),('ShearY',0.6,3)],      [('Color',0.4,7),('Equalize',0.6,0)],
+  [('Posterize',0.4,6),('AutoContrast',0.4,7)], [('Solarize',0.6,8),('Color',0.6,9)],
+  [('Solarize',0.2,4),('Rotate',0.8,9)],      [('Rotate',1.0,7),('TranslateYRel',0.8,9)],
+  [('ShearX',0.0,0),('Solarize',0.8,4)],      [('ShearY',0.8,0),('Color',0.6,4)],
+  [('Color',1.0,0),('Rotate',0.6,2)],         [('Equalize',0.8,4),('Equalize',0.0,8)],
+  [('Equalize',1.0,4),('AutoContrast',0.6,2)], [('ShearY',0.4,7),('SolarizeAdd',0.6,7)],
+  [('Posterize',0.8,2),('Solarize',0.6,10)],  [('Solarize',0.6,8),('Equalize',0.6,1)],
+  [('Color',0.8,6),('Rotate',0.4,5)],
+]"
 
 /-- RandAugment (Cubuk et al. 2019): N ops sampled uniformly at one shared
     magnitude M, drawn from the color+geometric op set defined in
@@ -326,6 +364,15 @@ def _randaugment(img, n, m, mstd=0.0):
                       lambda k=k, br=branches: tf.switch_case(k, br),
                       lambda x=img: x)
     return tf.cast(img, tf.float32)"
+
+/-- `randAugmentPy` with each layer applied at probability `p` (`TrainConfig.randAugmentProb`).
+    At timm's 0.5 the text is `randAugmentPy` verbatim, so every existing recipe re-emits
+    byte-identical. -/
+private def randAugmentPyAt (p : Float) : String :=
+  if p == 0.5 then randAugmentPy else
+  randAugmentPy.replace "tf.random.uniform([]) < 0.5,   # timm AugmentOp applies each op with prob 0.5"
+    ("tf.random.uniform([]) < " ++ toString p ++ ",   # each op applied with prob " ++ toString p ++
+     " (TrainConfig.randAugmentProb)")
 
 /-- `u8Wire` is the batch shim's: it adds one trace-time branch to `_pp` (below) and nothing else,
     so the reference trainers, which call this with the default, regenerate byte-identical. -/
@@ -444,9 +491,10 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
     (if cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric)
        then autoAugmentPy ++ "\n" else "") ++
     (if cfg.augBicubic && (cfg.useAutoAugment || (cfg.useRandAugment && cfg.randAugmentGeometric))
-       then bicubicGeometryPy ++ "\n\n" else "") ++
+       then bicubicGeometryPy (if cfg.useAutoAugment && cfg.autoAugmentV0 then "_AA_FILL" else "128.0") ++ "\n\n" else "") ++
+    (if cfg.useAutoAugment && cfg.autoAugmentV0 then aaV0Py ++ "\n\n" else "") ++
     (if cfg.randAugmentInc then "_RA_INC = True   # timm inc1 (gap D)\n\n" else "") ++
-    (if cfg.useRandAugment && cfg.randAugmentGeometric then randAugmentPy ++ "\n" else "") ++
+    (if cfg.useRandAugment && cfg.randAugmentGeometric then randAugmentPyAt cfg.randAugmentProb ++ "\n" else "") ++
     "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
     "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++

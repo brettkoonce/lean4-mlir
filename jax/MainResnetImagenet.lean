@@ -50,6 +50,7 @@ def resnet34ImagenetConfig : TrainConfig where
   -- set bf16Conv := false (bf16 conv is slower there); see reference_ares_pcie_aer.
   bf16           := true
   bf16Conv       := true
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   runningBN      := true    -- paper-faithful eval: running BN stats, not eval-batch stats
 
 #eval resnet34Imagenet.validate!

@@ -59,6 +59,12 @@ def resnet50ImagenetConfig : VerifiedConfig where
   -- = 8 the driver compensates to `1 − 0.9^(1/8)` = 0.013084 per micro-batch, against `1 −
   -- 0.99^(1/8)` = 0.001256 at 0.99 — a 10× shorter window, as intended. EVAL-ONLY.
   bnMomentum := 0.9
+  -- **Zero-γ, as the JAX reference.** Every recipe of `jax/MainResnet50Imagenet.lean` starts each
+  -- bottleneck's last BN γ at 0 (`emitConvBnInit … (zeroGamma := true)`, timm's
+  -- `zero_init_last`); RSB-A3 is written around it. The 16 kind-4 tensors of
+  -- `VLayer.bottleneckStage`. Verified R50 runs before 2026-10-05 started them at 1;
+  -- `LEAN_MLIR_ZERO_GAMMA=0` reproduces those from their seed.
+  zeroGammaInit := true
 
 /-- Entry point. Defaults to the 4-replica `adamdp64` artifact, since ImageNet-scale R50 on this
     box is a data-parallel job; `LEAN_MLIR_VARIANT=adam64` selects the single-device render. -/

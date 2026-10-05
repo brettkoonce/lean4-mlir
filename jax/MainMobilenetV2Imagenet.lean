@@ -75,6 +75,7 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   labelSmoothing := 0.0     -- MNv2 paper (Sandler 2018) used none
   bf16           := true
   bf16Conv       := true    -- reaches the inverted-residual blocks
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   runningBN      := true    -- paper-faithful eval: running BN stats, not eval-batch stats
   bnMomentum     := 0.997   -- TF-slim's BN decay (PyTorch momentum 0.003)
   bnEps          := 1e-3    -- TF-slim's BN ε

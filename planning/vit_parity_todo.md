@@ -9,6 +9,11 @@ note. The comparison targets are DeiT's own `main.py` / `datasets.py` (facebookr
 Jobs: `vit-default-jax-4gpu` (JAX) and `vit-default-emabf16-4gpu`, which now runs
 `emadp128x4wxclipdropeps0000001bf16`.
 
+2026-10-05: ViT-S and ViT-B carry the same D1/D2/P4 items (`lnEps`, `minLR`, `f32StemHead` in
+`vitSImagenetConfig`/`vitBImagenetConfig`, inherited by short/accum; `vitsin_`/`vitbin_emadp128x4wxclipdropeps0000001bf16`
+train steps + their own eval forwards; `minLR` in both verified drivers). Jobs:
+`vits-default-{jax,emabf16}-4gpu`, `vitb-accum-jax-4gpu` / `vitb-default-emabf16-4gpu`.
+
 ## 1. Closed in this rerun
 
 | # | axis | before (JAX / verified) | now (both) | where |

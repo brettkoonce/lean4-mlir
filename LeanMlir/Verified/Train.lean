@@ -59,7 +59,8 @@ structure VerifiedNet where
   slug     : String
   /-- `(dims, initKind)` per param, in func-arg order — the matching `XLayout.specs`.
       `initKind`: 0 = random weight (conv: He fan-out; dense: Glorot; see `mkParam`), 1 = ones (γ),
-      2 = zeros (β / bias), 3 = 1e-6 (layer scale). -/
+      2 = zeros (β / bias), 3 = 1e-6 (layer scale), 4 = zero-γ (0 under `zeroGammaInit`, else 1),
+      5 = embedding (σ 0.02 under `vitInit`, else 0). -/
   specs    : Array (Array Nat × Nat)
   /-- Per-example flattened input width (e.g. `3 * 224 * 224`). -/
   d0       : Nat
@@ -187,6 +188,15 @@ structure VerifiedConfig where
       `LEAN_MLIR_DW_FAN_K2=1` turns it on at launch. `tests/init_parity_audit.py` measures init
       parity per tensor against each net's JAX reference. -/
   dwFanK2   : Bool := false
+  /-- **Zero-γ on every residual-closing BN — the JAX reference's ResNet-50 init.** Each
+      bottleneck's last BN γ is init kind 4 (`VLayer.bottleneckStage`); the reference starts it at 0
+      (`emitConvBnInit … (zeroGamma := true)`, timm's `zero_init_last=True`, torchvision's
+      `zero_init_residual`), so every residual branch starts as the identity. Without the flag kind
+      4 is γ = 1, as every verified R50 run before 2026-10-05 trained (`planning/init_parity.md`
+      §2c, the audit's 16/161). Only the 16 kind-4 tensors move, each on its own seed.
+      Host-side, no re-render. Off by default, so every other driver and every gate that inits
+      through `mkParam` is byte-identical; `LEAN_MLIR_ZERO_GAMMA=0|1` overrides it at launch. -/
+  zeroGammaInit : Bool := false
   /-- BatchNorm running-statistic **decay** — the verified peer of `TrainConfig.bnMomentum`,
       and the same TF sense: the weight on the OLD estimate, so timm's PyTorch
       `momentum = 0.1` is `0.9` here. That field's docstring carries the per-net table and
@@ -449,6 +459,8 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
       * rank-4 conv kernel `[oc, ic, kH, kW]` → He **fan-OUT**, variance `2/(oc·kH·kW)`
       * rank-2 dense matrix `[in, out]`       → **Glorot**, variance `2/(in + out)`
       * γ = 1 (kind 1), β / bias = 0 (kind 2), layer scale = 1e-6 (kind 3)
+      * zero-γ (kind 4: a bottleneck's residual-closing BN γ) → 0 under `zeroGamma`, 1 otherwise
+        (`planning/init_parity.md` §2c)
       * embedding (kind 5: ViT's CLS token and positional embedding) → σ = 0.02 under `vitInit`,
         0 otherwise (`planning/init_parity.md` §2d, §3a)
 
@@ -469,11 +481,16 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
     is canonical on that axis. -/
 def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     (vitInit : Bool := false) (biasSigma : Option Float := none)
-    (heFanIn : Bool := false) (cnxInit : Bool := false) (dwFanK2 : Bool := false) :
+    (heFanIn : Bool := false) (cnxInit : Bool := false) (dwFanK2 : Bool := false)
+    (zeroGamma : Bool := false) :
     IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
   | 1 => F32.const n.toUSize 1.0
+  -- **Kind 4 = zero-γ**, the residual-closing BN of a ResNet bottleneck. 0 under `zeroGamma`
+  -- (`VerifiedConfig.zeroGammaInit`), the JAX reference's `jnp.zeros`; 1, kind 1's value, without
+  -- it, so every caller that does not pass the flag is byte-identical to the old kind-1 spec.
+  | 4 => F32.const n.toUSize (if zeroGamma then 0.0 else 1.0)
   | 3 => F32.const n.toUSize 1e-6
   -- **Kind 5 = a learned embedding** (ViT's CLS token and positional embedding). timm/DeiT
   -- `trunc_normal_(std=0.02)` both, as the JAX reference does (`random.normal · 0.02`); under the
@@ -2034,9 +2051,15 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   let dwFanK2 := cfg.dwFanK2 || (← IO.getEnv "LEAN_MLIR_DW_FAN_K2") == some "1"
   if dwFanK2 then
     IO.println "  ▸ INIT: depthwise fan = k² (the JAX reference's rule), not He fan-out C·k²"
+  let zeroGamma := match (← IO.getEnv "LEAN_MLIR_ZERO_GAMMA") with
+    | some "1" => true
+    | some "0" => false
+    | _        => cfg.zeroGammaInit
+  if zeroGamma && net.specs.any (·.2 == 4) then
+    IO.println s!"  ▸ INIT: zero-γ on {(net.specs.filter (·.2 == 4)).size} residual-closing BNs (the JAX reference's zero_init_last)"
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit)
-      (dwFanK2 := dwFanK2))
+      (dwFanK2 := dwFanK2) (zeroGamma := zeroGamma))
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
   -- norm r, before any training. This is the CONDITIONING probe for gate G2: if an r that is

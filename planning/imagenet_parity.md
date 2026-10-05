@@ -1,8 +1,8 @@
 # imagenet_parity.md — paper ↔ JAX ↔ verified for the five remaining ImageNet chapters
 
 Started 2026-09-25 from a six-way read-only audit (MNv2, MNv4-Conv-M, EfficientNet-B0, ConvNeXt-T,
-ViT-Ti, plus a cross-cutting pass). ResNet (ch 5) is the template: R50-2018 is running on the other
-box with the current patterns, and after it lands that chapter is done. This doc brings the other
+ViT-Ti, plus a cross-cutting pass). ResNet (ch 5) is the template: R50-2018 landed on the other box on
+09-25 with the current patterns, which closed that chapter (§9 reopens a few rows). This doc brings the other
 five up to that standard in three stages, in order:
 
 1. **Code** (§3–§5): the emitter, renderers, drivers, confs and gates say what each recipe
@@ -363,7 +363,7 @@ config's `test_input_size` / `test_crop_pct`, which is often not the training si
 | S1 | protocol table from the pinned timm, with `--check` | ✅ `scripts/parity/timm_eval_protocols.py`, `jax/timm_eval_protocols.json` |
 | S2 | JAX forwards score at any size: every conv stem infers its square side (`_s = …`, the A3 idiom), ViT stays fixed (pos-embed tied to the grid; timm scores DeiT at 224) | ✅ `Codegen.lean`; 24 trainers moved one line each |
 | S3 | `jax/scripts/eval_full50k.py`: `PROTOCOL=train\|timm\|both`, `EVAL_SIZE`/`EVAL_CROP`; refuses a fixed forward at a foreign size | ✅ A/B on the RSB-A3 rerun: committed scorer 74.64 / 91.75, new 74.62 / 91.75 (XLA noise); B0 `both` gives two identical passes |
-| S4 | the verified path at timm's test size, scored by a VERIFIED graph (the user's call): eval renders at the test size (`mnv4in_fwd_eval_s256`, `convnextin_fwd_s288`; `f`/`s` parameters on the MNv4 and ConvNeXt forward chains, default byte-identical, proofs untouched), `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in every shim, `score-checkpoint` under `LEAN_MLIR_EVAL_SIZE`/`_CROP`, `scripts/parity/score_timm.sh <net>` | ✅ MNv4 epoch-17 checkpoint: 67.10 at 224 / 0.875, **68.02** at 256 / 1.0; ConvNeXt 288 plumbing smoke green. Open: RSB-A1/A2 at 288 (R50 renders) |
+| S4 | the verified path at timm's test size, scored by a VERIFIED graph (the user's call): eval renders at the test size (`mnv4in_fwd_eval_s256`, `convnextin_fwd_s288`; `f`/`s` parameters on the MNv4 and ConvNeXt forward chains, default byte-identical, proofs untouched), `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in every shim, `score-checkpoint` under `LEAN_MLIR_EVAL_SIZE`/`_CROP`, `scripts/parity/score_timm.sh <net>` | ✅ MNv4 epoch-17 checkpoint: 67.10 at 224 / 0.875, **68.02** at 256 / 1.0; ConvNeXt 288 plumbing smoke green; `resnet50in_fwd_eval_s288` rendered for RSB-A1/A2 |
 | S4b | the other box: the generated trainers and shims moved (forward reshape, eval-size override). Run `scripts/regen_jax_generated.sh sync` there after pulling, or its prechecks refuse | note |
 | S5 | DeiT's 0.9 crop in the in-training eval (shim constant, both paths, no render) | open |
 | S6 | retire the six per-net `jax/scripts/eval_<net>_full50k.py` copies for the generic one | open |
@@ -439,3 +439,126 @@ decisions and on C6, so one rerun per net takes every change.
 * ✅ `next_session_{mnv2,enet,convnext}_verified_run.md` moved to `planning/archive/`.
 * ✅ `jax/runs/mnv2_imagenet_bf16_90ep/RESULTS.md` carries a SUPERSEDED banner.
 * Stale ETAs: every BN-net conf ETA now says pre-sync-BN, re-probe owed; `vit-default` rewritten.
+
+## 9. Review of ch 5–9, 2026-10-05: what still keeps the nets from being paper-faithful
+
+A second five-way read-only review, run at `046fec72`, compared paper/timm, JAX and verified per net,
+reading each at file:line. Its cheap fixes landed the same day and are in §9.1. Everything below
+§9.1 is open. Numbering continues the doc's style: X = landed, D = decision for the user,
+F = fleet-wide, P = pair, B = book.
+
+### 9.1 Landed (2026-10-05, uncommitted)
+
+| # | net | fix | where | checked by |
+|---|---|---|---|---|
+| X1 | B0 | **AutoAugment is now timm's `v0` (TF EfficientNet's policy), op for op.** The emitted table was the 2018 paper's "original" policy with TF-v0 Posterize levels (`int(m/10·4)` bits kept), so m = 8/7/6/5 kept 3/2/2/2 bits where `PosterizeOriginal` keeps 7/6/6/6, and about 10% of images trained 2–3-bit. Neither policy as published. Also fixed: geometric fill (img_mean (124,116,104) where we filled 128) and Posterize at 0 bits (PIL gives black, TF's uint8 shift clamped at 7). The 77.15 / 76.88 pair trained the old table. | `TrainConfig.autoAugmentV0` (default off, byte-identical; only B0 calls `_autoaugment`), `aaV0Py` and `bicubicGeometryPy (fill)` in `Jax/Codegen.lean`; set in `efficientNetB0ImagenetConfig`; both enet conf prechecks grep the v0 entry `('TranslateYRel',0.8,9)` | `scripts/parity/aa_v0_timm_check.py` (table, level→arg 0–10, sign flags, fill, Posterize pixels vs PIL; control red on the old table); `aug_bicubic_pil_check.py` reads the shim's `_AA_FILL`; `randaug_timm_diff.py` green |
+| X2 | ViT-S/B | Tiny's 10-01 items, D1/D2/P4 (`vit_parity_todo.md`): LN ε 1e-6, min lr 1e-5, fp32 patch embed + head on JAX | `lnEps`/`minLR`/`f32StemHead` in `vit{S,B}ImagenetConfig` (short/accum inherit); `vit{s,b}in_emadp128x4wxclipdropeps0000001bf16_{train_step,fwd}.mlir` (75 / 25 ε constants + the entry name against their 1e-5 twins); `minLR` in both verified drivers; four confs re-pointed (new checkpoint names), prechecks as Ti's; proofs.yml diff list, `regen_verified_mlir.sh` NO_PARTNER rows, MANIFEST | `vit-ema-drop-render` on both new variants; `train_step_arity` 215/215 |
+| X3 | every CNN | **JAX classifier head in fp32** (`f32StemHead := true` on the R34, R50, MNv2, MNv4, B0, ConvNeXt-T/S/B base configs). Every verified render's head dot is f32 (read in R34, R50, MNv2, MNv4, B0, ConvNeXt), the JAX head was bf16 `mm`: a pair difference on every net the book called "held equal". | the base config of each `jax/Main*Imagenet.lean` | 30 trainers move one line (`mm` → `jnp.matmul`) |
+| X4 | R50 | **Verified zero-γ**: the last BN γ of each bottleneck starts at 0, as JAX and timm (`zero_init_last`). init-parity 16/161 → 0/161 on both R50 references. Host-side, no render moves. | init kind 4 + `VerifiedConfig.zeroGammaInit` (`Train.lean`), set in `MainResnet50Imagenet`; `LEAN_MLIR_ZERO_GAMMA=0` restores γ = 1; `VLayer.bnWidths` accepts kind 4 (it would otherwise have dropped 16 of 53 BN layers) | `tests/init_parity_audit.py` (forced off → 16/161 again); `regen_verified_mlir.sh check` |
+| X5 | R50 A2/A1 | **Bicubic RandAugment geometry (C6)** for the A2/A1 family: `augBicubic` on the base (A2) config, pinned off in `resnet50ImagenetConfigShort`, so the landed A3 family (short / rsb-faithful / true-2048 / adam-probe) stays bilinear and byte-identical apart from X3 | `jax/MainResnet50Imagenet.lean` | `bce_target_gate.py` green (it compares against the `default` shim, which is now bicubic too); feed cost NOT re-probed (D17) |
+| X6 | MNv4 `full` | RandAugment layers at **p 0.7** (paper Table 9, per `archive/mnv4_imagenet.md`), not timm's 0.5 | `TrainConfig.randAugmentProb` (0.5 emits `randAugmentPy` verbatim); set in `mobilenetV4ConvMImagenetConfigFull`; both MNv4 `full` confs grep `< 0.700000,` | only the two `full` files move |
+
+Gates run on the whole set: `lake build` (default targets), `lake build LeanMlir Apps Proofs Certs
+TestSupport`, `regen_verified_mlir.sh check`, `regen_jax_generated.sh` + `sync` + `box` (40 files
+move, each to the cause above; ViT-Ti and every other shim byte-identical), `check_target_names.sh`,
+`comment_numbers.py`, `gen_mlir_manifest.py --check`, `train_step_arity.py`, `module_refs.py`,
+`name_lint.py`, `repo_shape.py`, and the DRY_RUN PRECHECK of 26 affected confs (r34-default-bf16
+needed `lake build resnet34-imagenet-verified` first). `mixup_gate.py` fails only on its two
+"inert when off" digests, which were already stale (§4.4 of `side_quest_runs.md`; the R34 shim they pin
+did not move).
+
+### 9.2 Decisions for the user (each costs a rerun, or proof work)
+
+| # | net | item | paper / timm | ours | cost |
+|---|---|---|---|---|---|
+| D1 | ConvNeXt, ViT | exact-erf GELU | erf | tanh, both paths | L: erf op + Φ/FTC proof + re-render (`vit_parity_todo.md` P-A); JAX side S |
+| D2 | ConvNeXt, ViT | grad clip 1.0 | none | 1.0, both paths | S code; ~30 min clip-off JAX probe on ViT first (P-B) |
+| D3 | B0 | strided-depthwise padding | SAME (TF) | symmetric, both paths (0.37 / 0.048 of logit scale, `enet_timm_parity --pad tf`) | JAX S; verified M–L, moves the T2/T3 ties. Parked 09-25 |
+| D4 | MNv2, MNv4, B0 | verified depthwise init | var 2/k² (TF/timm, = JAX) | He fan-out 2/(C·k²): 0.03–0.18× std | S: `dwFanK2` built, off (`init_parity.md` §5). Leading suspect for MNv2's −0.51 |
+| D5 | B0 | SE FC init | var 2/out | verified Glorot (reduce ~0.2×, expand 0.91×) | M: new init kind |
+| D6 | B0 (+all CNNs) | classifier init | TF U(±1/√1000); torch Linear default | Glorot, both paths | S each |
+| D7 | MNv4 `full` | RandAugment m15 | TF extrapolates; pinned timm clamps at 10 | extrapolates | decision |
+| D8 | MNv4 `full` | RandAugment mapping | timm inc1, or TF's set | timm's inc1 op list with NON-increasing mappings (`_RA_INC` off): at m15 Solarize is a no-op, Posterize keeps 6 bits | S |
+| D9 | MNv4 | BN running-stat decay | timm 0.9 | 0.99, both paths (C4 value never chosen) | S, eval only |
+| D10 | MNv4 | drop-path ramp | timm idx/23 over all blocks | 0.075·i/20 over 21 UIBs, both paths | S, host side |
+| D11 | MNv2 | depthwise weight decay | TF-slim skips it | decayed, both paths | M (variant + both arms) |
+| D12 | MNv2 | slim inception colour distortion | yes (unverified offline) | none | M |
+| D13 | MNv2, B0 | RMSProp lr placement | TF1: lr inside momentum | outside, both paths | JAX S, verified M; matters only while lr moves |
+| D14 | R50 A3 | BCE target threshold | 0.2 on A2/A1 per timm; A3 UNVERIFIED | none on A3 | S code; if timm's A3 used it, both A3 numbers are off-recipe. Check RSB Table 1 / timm's published args first |
+| D15 | ConvNeXt-T | the EMA pair | — | the 81.53 reference is pre-C6; a verified EMA run today is post-C6 | rerun the JAX T too, or disclose a two-axis pair |
+| D16 | R50 (Imagenette) | zero-γ on the Imagenette R50 | JAX twin zero-inits | verified γ = 1 (X4 left it off) | S; moves that net's landed number |
+| D17 | A2/A1, ViT-S/B, MNv4 `full` | ETA re-probes after X2/X5/X6 (bicubic is the C6 feed cost) | — | conf ETAs are the 10-05 probes | short GPU each |
+| D18 | MNv4 (100-ep pair), ConvNeXt-T | timm-protocol score (256/1.0, 288/1.0) of the landed checkpoints | user rule §5.6 | none exists | S, minutes each, no rerun (CNX-T checkpoints are on the 3060 box) |
+| D19 | ViT | score the live weights beside the EMA (DeiT scores live) | — | EMA only | S, no training change (P-C) |
+
+### 9.3 Fleet-wide, rerun-scale (every reference moves)
+
+| # | item | timm | ours |
+|---|---|---|---|
+| F1 | mixup/cutmix switch | random, p 0.5 | strict alternation by step (P-E) |
+| F2 | random resized crop | torchvision RRC (log-uniform aspect, centre-crop fallback) | TF `sample_distorted_bounding_box`, `min_object_covered` 0.1 (effective 10% floor), uniform aspect, whole-image fallback (P-G). For B0 TF's sampler is the right one, minus the fallback |
+| F3 | repeated aug | index-level `RASampler` | stream repeat + shuffle window (P-F) |
+| F4 | LR schedule | per epoch, warmup from 1e-6, cosine over the whole span | per step, from ~0, cosine after warmup (P-D) |
+| F5 | RandAugment fill and 0-bit Posterize | img_mean; PIL black | 128; TF keeps the top bit (X1 fixed both for B0's AutoAugment only) |
+| F6 | timm-protocol resize | `floor(224/crop)` | `round` (P-J) |
+| F7 | ConvNeXt min lr | 1e-6 (official) | 0 |
+| F8 | eval precision | f32/AMP | JAX scores through the bf16 training forward, verified through an f32 forward (G1) |
+| F9 | `aa_v0_timm_check.py` and `aug_bicubic_pil_check.py` | — | not in CI (no TF in any CI job) |
+
+### 9.4 Pair differences the book does not disclose
+
+* **R50 BN running-stat decay**: the R50-2018 and A3 JAX runs finished 08-18, before `1cd65734` (08-30)
+  set 0.9, so they trained 0.99 against the verified runs' 0.9. Eval-only, but with zero-γ (X4) and
+  the head (X3) it makes ch 5's "held equal by construction" false for the landed pairs, and it is a
+  candidate (inference, not shown) for verified leading at every mid-run epoch on both R50 pairs
+  while R34, which has neither, swings both ways.
+* Mixup granularity: verified draws λ per producer shard, JAX per global batch (R50, ConvNeXt, ViT;
+  verified is the timm/DDP way). For R50 accumulation the verified mode also alternates per
+  micro-step.
+* `opt_step_tie.py` lists heavy-ball as uncovered with a reason that is wrong: both paths are
+  `g + wd·θ; v = μv + g; θ −= lr·v`. A heavy-ball row is S, CPU.
+* B0 `bnFirst` running-stat seeding (verified copies the first batch, JAX starts at 0/1; B0-3).
+
+### 9.5 Book text that is false today (text only, no runs; one chapter per commit)
+
+* **Ch 5:** :6864 "held equal by construction" (§9.4, X3, X4); :6579 / :6836 / :6594 "bf16 on both"
+  (head); :6977–6978 2018 vs A3 "spec, render and entry point identical" (separate specs, shims,
+  renders); :7011 "one-line `TrainConfig` change" (true on JAX only); :6822 the 0.08% drop is not a
+  difference (JAX runs 625 steps too); :6385 "8–100% of the area" (F2); :6375 "He et al.'s 90
+  epochs" (He et al. ran ~120 with step decay; 90 is torchvision's, from memory); :6716 the 2018 row
+  "is the R34 recipe" (R50 JAX adds zero-γ); ~:6460 listing shows `bnChannels :=`, which no longer
+  exists; :7041–7056 A2/A1 "still out" omits F1 and (until X5) bilinear geometry; :7049 "RSB Table 2"
+  is probably Table 1.
+* **Ch 6:** :8720–8722 MNv4 "nothing above the rule but the lowering" (D4, head, eval precision);
+  :8785–8787 "256 is the one gap `full` leaves open" (D7–D10, D4, eval protocol); :8510 ramp "over the
+  18 skip-carrying blocks" (code ramps over 21, applies at 18; timm over 23); :8369–8372 "the one
+  input the two do not share is the init" (head, eval forward); :8210 "9.5×" is the Imagenette ratio
+  (ImageNet 6.2×, the book's own :8433); :8442 "Sandler et al. used no smoothing" (paper silent;
+  slim default 0); :8164 against TF-slim also D11/D13 and init; the verbatim config omits
+  `bnMomentum := 0.997`.
+* **Ch 7:** :9636–9638 / :9975 AutoAugment "the policy B0's recipe calls for" (X1: it was not);
+  :9653 / :9704–9706 / :9956 "paper recipe end to end / faithful" (the 77.15 run: wd on everything,
+  ε 1e-5, continuous offset schedule, i/15, hybrid padding, Glorot head, wrong AA table); :9612–9614
+  "predate `dropPathOverN`" (also predate wx, ε, staircase); :9793–9795 the ramp "the pair trained
+  on" was i/15; :9805 the trained-on render has 147 ε constants, not 196; :9818 path is
+  `scripts/parity/enet_timm_parity.py`; :9881–9895 / :9947 "the suspect is the BN group / epoch-1 gap
+  unexplained" (D4, D5, `bnFirst`); :9955 vs :9972–9974 the table describes the unrun TF config;
+  :9985 "bf16 matmul" on both (head).
+* **Ch 8:** :11192 ConvNeXt has no AutoAugment; :11043–11044 / :11230 clip presented as a paper knob;
+  :10918 / :10933–10938 "every element wired / no deviation but the GELU" (also clip, batch, F1, F2,
+  and the run was pre-C6); :10956–10958 timm's protocol for ConvNeXt is 288/1.0, not 224/0.875;
+  :11237 "batch 256 carries over" (recipe batch is 4096); :11310–11311 S/B ETAs pre-re-probe
+  (verified 156 / 216 h, JAX 127 / 167 h); :10927 / :10957 top-5 95.50 vs the log's 95.51 (K6).
+* **Ch 9:** :13027–13060 listing lacks `minLR`/`lnEps`/`f32StemHead`; :13166–13168 "what matches"
+  (tanh GELU, LN ε, schedule floor); :13188–13225 the "six things" omit GELU, LN ε, F4, F1, EMA warmup,
+  and "no min_lr" is stale for the code; :13207 RRC "agree by specification" (F2); :13070 patch-embed
+  bias is 0, not the Conv2d default; :13289 / :13298 name the old render; :13341–13351 "one-variable /
+  precision is equal" (the 72.31/72.35 pair also differed in CLS/pos init, head precision and a
+  one-step cosine offset); :13411–13413 feed fixes "none built" (f5b6853f, 329f5c59 landed);
+  :13472–13486 S/B timings pre-10-05 and S/B "Tiny's recipe" (true only since X2).
+
+### 9.6 Run status (for the book's run-status sentences)
+
+Not run on this box: the 10-01 ViT-Ti rerun (may have run on the 3060 box), the B0 TF-recipe pair (R5),
+the ConvNeXt-T EMA verified run (R2; its smoke + resume passed 09-25), and every S/B and A2/A1 side
+quest. Each of those launches now carries X1–X6.

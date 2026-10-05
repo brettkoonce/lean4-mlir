@@ -325,7 +325,7 @@ def _randaugment(img, n, m, mstd=0.0):
         k = tf.random.uniform([], 0, len(_RA_OPS), dtype=tf.int32)
         mg = m if mstd <= 0.0 else tf.clip_by_value(tf.random.normal([], m, mstd), 0.0, _AA_MAX)
         branches = [(lambda nm=nm, x=img, mv=mg: _aa_apply_op(x, nm, mv)) for nm in _RA_OPS]
-        img = tf.cond(tf.random.uniform([]) < 0.5,   # timm AugmentOp applies each op with prob 0.5
+        img = tf.cond(tf.random.uniform([]) < 0.700000,   # each op applied with prob 0.700000 (TrainConfig.randAugmentProb)
                       lambda k=k, br=branches: tf.switch_case(k, br),
                       lambda x=img: x)
     return tf.cast(img, tf.float32)

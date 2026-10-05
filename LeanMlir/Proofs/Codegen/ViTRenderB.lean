@@ -848,6 +848,22 @@ end Proofs.StableHLO
 #guard "vitsin_emadp128x4wxclipdropbf16_train_step" ==
   "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
 
+-- S's pair render at DeiT's LayerNorm ε 1e-6: Tiny's `eps0000001` pair (above) at `vitSDims`, one
+-- string at all 25 LN sites. Its JAX partner is `vitSImagenetConfig.lnEps := 1e-6`. The layout is
+-- the 1e-5 render's; its own eval forward follows, for the reason Tiny's note gives
+-- (`checkLnEpsWorld`).
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitsin_emadp128x4wxclipdropeps0000001bf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true)
+    (eps := "1.0e-6"))
+#guard "vitsin_emadp128x4wxclipdropeps0000001bf16_train_step" ==
+  "vitsin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "bf16" ++ "_train_step"
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitsin_emadp128x4wxclipdropeps0000001bf16_fwd" 1000
+    (V := Proofs.StableHLO.vitSDims) (eps := "1.0e-6"))
+
 #eval IO.FS.writeFile "verified_mlir/vitsin_drop_fwd.mlir"
   (Proofs.StableHLO.vitFwdRenderB "vitsin_drop_fwd" 1000 (sd := true) (V := Proofs.StableHLO.vitSDims))
 
@@ -930,6 +946,20 @@ end Proofs.StableHLO
     (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
 #guard "vitbin_emadp128x4wxclipdropbf16_train_step" ==
   "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
+
+-- B's pair render at DeiT's LayerNorm ε 1e-6 (S's note above), with its own eval forward. The
+-- peak is the 1e-5 render's: ε reaches no operand.
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText "vitbin_emadp128x4wxclipdropeps0000001bf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true)
+    (eps := "1.0e-6"))
+#guard "vitbin_emadp128x4wxclipdropeps0000001bf16_train_step" ==
+  "vitbin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "bf16" ++ "_train_step"
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB "vitbin_emadp128x4wxclipdropeps0000001bf16_fwd" 1000
+    (V := Proofs.StableHLO.vitBDims) (eps := "1.0e-6"))
 
 -- **The 1-replica peers are a CONTROL, not a second recipe.** "The all-reduce buffer is not in a
 -- single-device peak" cannot be checked without a graph that has no all-reduce in it. These two are

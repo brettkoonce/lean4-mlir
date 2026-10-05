@@ -463,7 +463,7 @@ def _drop_branch(branch, drop_key, keep_prob):
 def layer_norm(x, gamma, beta):
     mean = jnp.mean(x, axis=-1, keepdims=True)
     var = jnp.var(x, axis=-1, keepdims=True)
-    return (x - mean) / jnp.sqrt(var + 1e-5) * gamma + beta
+    return (x - mean) / jnp.sqrt(var + 0.000001) * gamma + beta
 
 def mhsa(x, wq, bq, wk, bk, wv, bv, wo, bo, n_heads):
     B, N, D = x.shape
@@ -1619,7 +1619,7 @@ def forward(params, x, drop_key=None):
     x = x.reshape(-1, 3, 224, 224)
     dpkeys = (jax.random.split(drop_key, 12) if drop_key is not None else [None] * 12)
     x = x.reshape(x.shape[0], 3, 14, 16, 14, 16).transpose(0, 2, 4, 1, 3, 5).reshape(x.shape[0], 196, 768)
-    x = mm(x, params[0][0].reshape(384, -1).T) + params[0][1]
+    x = jnp.matmul(x, params[0][0].reshape(384, -1).T) + params[0][1]
     cls = jnp.broadcast_to(params[1][0], (x.shape[0], 1, 384))
     x = jnp.concatenate([cls, x], axis=1)
     x = x + params[2][0]
@@ -1637,7 +1637,7 @@ def forward(params, x, drop_key=None):
     x = transformer_block(params, x, 91, 6, dpkeys[11], 0.900000)
     x = layer_norm(x, params[99][0], params[99][1])
     x = x[:, 0]
-    x = mm(x, params[100][0].T) + params[100][1]
+    x = jnp.matmul(x, params[100][0].T) + params[100][1]
     return x
 
 def loss_fn(params, x, y, drop_key=None):
@@ -1956,7 +1956,7 @@ if __name__ == "__main__":
                 lr = jnp.float32(LR * (_global_step + 1) / warmup_steps)
             else:
                 prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)
-                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))
+                lr = jnp.float32(0.000010 + (LR - 0.000010) * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))   # timm lr_min floor
             if _global_step % 2 == 0:
                 x, y = _mixup(x, y, jax.random.fold_in(jax.random.PRNGKey(314159), _global_step))
             else:

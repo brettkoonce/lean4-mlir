@@ -723,6 +723,10 @@ structure TrainConfig where
       enhancement ops center at 1.0 ± sign·scaled (random direction). -/
   randAugmentMstd : Float := 0.0
   randAugmentInc  : Bool  := false
+  /-- Probability that each of the `randAugmentN` geometric RandAugment layers applies its op
+      (timm `AugmentOp`'s `p`, TF's `prob_to_apply`). 0.5 is timm's default and keeps every
+      generated file byte-identical; MobileNetV4's paper recipe uses 0.7. -/
+  randAugmentProb : Float := 0.5
   /-- AutoAugment, ImageNet learned policy (Cubuk et al. 2018) — the full 25
       sub-policies, applied per-image after crop/hflip on the imagenet (tfds)
       path. Unlike `useRandAugment` (color subset only), this includes the
@@ -732,6 +736,9 @@ structure TrainConfig where
       Subsumes the color RandAugment, so leave `useRandAugment` off when this
       is on. EfficientNet's original recipe; no labels touched. -/
   useAutoAugment : Bool  := false
+  /-- With `useAutoAugment`: TF TPU EfficientNet's policy v0 (= timm `auto_augment_policy_v0`,
+      img_mean fill on the bicubic warps) in place of the default table. EfficientNet-B0 only. -/
+  autoAugmentV0 : Bool  := false
   /-- Repeated Augmentation (Hoffer et al. 2020; timm RASampler), RSB-A2's `3×`.
       Each image contributes `repeatedAug` independently-augmented copies per
       epoch. On the tfds path this is a stream-level `flat_map(repeat K)` before

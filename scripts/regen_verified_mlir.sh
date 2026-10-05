@@ -258,6 +258,12 @@ NO_PARTNER = {
   "vitin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir":
                            "the LN-ε-1e-6 eval forward: drop-free f32 at B=256, vitin_fwd.mlir's "
                            "geometry at DeiT's ε; its only step is bf16 drop at B=128",
+  "vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir":
+                           "the LN-ε-1e-6 eval forward: drop-free f32 at B=32, vitsin_fwd.mlir's "
+                           "geometry at DeiT's ε; its only step is bf16 drop at B=128",
+  "vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir":
+                           "the LN-ε-1e-6 eval forward: drop-free f32 at B=32, vitbin_fwd.mlir's "
+                           "geometry at DeiT's ε; its only step is bf16 drop at B=128",
 }
 
 # ── the ratchet. May SHRINK, never grow: a new entry means a forward and the graph that trains it

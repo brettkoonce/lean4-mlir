@@ -835,7 +835,7 @@ def forward(params, x, bn, training, drop_key=None):
     x, _ne = basic_block(params, x, 34, bn, bn_i, training)
     bn_out.extend(_ne); bn_i += len(_ne)
     x = global_avg_pool(x)
-    x = mm(x, params[36][0].T) + params[36][1]
+    x = jnp.matmul(x, params[36][0].T) + params[36][1]
     return x, bn_out
 
 def loss_fn(params, bn, x, y, drop_key=None):

@@ -91,6 +91,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   valEveryEpochs       := 5        -- eval every 5 ep (per-epoch 50k-img val wastes hours over 100ep)
   bf16                 := true
   bf16Conv             := true
+  f32StemHead          := true    -- classifier head in fp32, as every verified render keeps it
   runningBN            := true     -- paper-faithful eval: running BN stats (UIB + fusedMbConv wired)
 
 #eval mobilenetV4ConvMImagenet.validate!
@@ -113,6 +114,7 @@ def mobilenetV4ConvMImagenetConfigFull : TrainConfig :=
       weightDecay    := 0.1        -- paper
       dropout        := 0.2        -- paper
       randAugmentM   := 15.0       -- paper; NOT clamped at mstd 0: the shim scales ops by m/_AA_MAX (10), so 15 extrapolates past timm's range
+      randAugmentProb := 0.7       -- paper (Table 9): each RandAugment layer applies at p 0.7, not timm's 0.5
       dropPath       := 0.075      -- paper; drop-path reaches every residual UIB (`uib_block`'s `_drop_branch`)
       useEMA         := false }    -- paper: Conv-M trains without EMA, so the live weights are scored
 

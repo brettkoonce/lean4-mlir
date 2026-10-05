@@ -190,11 +190,13 @@ private def stageSpec (ic oc count stride : Nat) : Array (Array Nat × Nat) := I
   return a
 
 /-- Identity bottleneck block `cin→mid→mid→oc`, **no conv biases**: `1×1 → BN → relu`,
-    `3×3 → BN → relu`, `1×1 → BN`, skip = identity. Nine tensors. -/
+    `3×3 → BN → relu`, `1×1 → BN`, skip = identity. Nine tensors. The last BN's γ is init
+    kind 4 (zero-γ): it closes the residual branch, and the JAX reference starts it at 0
+    (`emitConvBnInit … (zeroGamma := true)`, timm's `zero_init_last`). -/
 private def bneckIdBlk (cin mid oc : Nat) : Array (Array Nat × Nat) :=
   #[(#[mid,cin,1,1],0),(#[mid],1),(#[mid],2),
     (#[mid,mid,3,3],0),(#[mid],1),(#[mid],2),
-    (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
+    (#[oc,mid,1,1],0),(#[oc],4),(#[oc],2)]
 /-- Projecting bottleneck block: the identity body plus the `1×1` shortcut conv → BN.
     The projection comes **last**, matching the reference's `conv_bn` call order
     (`bottleneck_block_down` does idx, idx+1, idx+2, then idx+3 for the shortcut) — the same
@@ -213,8 +215,9 @@ private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat ×
 /-- The `(dims, initKind)` params this layer contributes, in func-arg order
     (`initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot, with the ConvNeXt
     and ViT overrides), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ, the ConvNeXt
-    paper's value and the JAX reference's `emitLayerScaleInit`), 5 = embedding (ViT CLS / pos:
-    σ = 0.02 under `vitInit`, else zeros; only `param` emits it)). -/
+    paper's value and the JAX reference's `emitLayerScaleInit`), 4 = zero-γ (the residual-closing
+    BN of a bottleneck: 0 under `zeroGammaInit`, else ones; only `bottleneckStage` emits it),
+    5 = embedding (ViT CLS / pos: σ = 0.02 under `vitInit`, else zeros; only `param` emits it)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
   | convBnNB ic oc k _      => convBnNBSpec ic oc k
@@ -271,11 +274,11 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | param dims kind         => #[(dims, kind)]
 
 /-- The layer's BatchNorm widths, in `toSpecs` (func-arg) order: each BN γ is a `(#[c], 1)` entry
-    (initKind 1 = ones). LayerNorm γ has the same shape and kind, so the LN-bearing layers answer
-    `#[]`. -/
+    (initKind 1 = ones), or `(#[c], 4)` for a bottleneck's residual-closing zero-γ BN. LayerNorm γ
+    has the same shape and kind 1, so the LN-bearing layers answer `#[]`. -/
 def bnWidths : VLayer → Array Nat
   | .convNextBlock .. | .convNextBlockCh .. | .layerNorm .. | .transformerBlock .. => #[]
-  | L => L.toSpecs.filterMap (fun (d, k) => if k == 1 && d.size == 1 then some d[0]! else none)
+  | L => L.toSpecs.filterMap (fun (d, k) => if (k == 1 || k == 4) && d.size == 1 then some d[0]! else none)
 
 end VLayer
 

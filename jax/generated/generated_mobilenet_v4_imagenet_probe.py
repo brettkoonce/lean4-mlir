@@ -1833,7 +1833,7 @@ def forward(params, x, bn, training, drop_key=None):
     x = x.reshape(x.shape[0], -1)
     if drop_key is not None:
         x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), 0.900000, x.shape).astype(x.dtype) / 0.900000
-    x = mm(x, params[77][0].T) + params[77][1]
+    x = jnp.matmul(x, params[77][0].T) + params[77][1]
     return x, bn_out
 
 def loss_fn(params, bn, x, y, drop_key=None):

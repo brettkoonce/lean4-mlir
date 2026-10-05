@@ -57,8 +57,9 @@ to start without them:
 scripts/supervise.sh vitb-default-emabf16-4gpu
 DRY_RUN=1 scripts/supervise.sh vitb-default-emabf16-4gpu   # print the plan, run nothing
 ```
-`vitb-default-emabf16-4gpu` is the pair job: `vitbin_emadp128x4wxclipdropbf16`, Tiny's pair
-recipe (EMA 0.99996, timm/DeiT init, bf16) at this width. `vitb-default-g512-4gpu` is the non-EMA
+`vitb-default-emabf16-4gpu` is the pair job: `vitbin_emadp128x4wxclipdropeps0000001bf16`, Tiny's
+pair recipe (EMA 0.99996, timm/DeiT init, bf16, DeiT's LayerNorm ε 1e-6 and min lr 1e-5) at this
+width; its eval forward is `vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir`. `vitb-default-g512-4gpu` is the non-EMA
 f32 sibling.
 
 By hand, at DeiT's global 512 (4 GPUs — and BOTH replica knobs are required):
@@ -148,5 +149,7 @@ def runViTBImagenet (argv : List String) : IO Unit := do
   vitBImagenetVerified.toNet.trainAdamSched
     { vitBImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant (emaDecay := 0.99996)
+    -- DeiT `--min-lr 1e-5`, the reference's `vitBImagenetConfig.minLR`, as the Tiny driver.
+    (minLR := 0.00001)
 
 def main (argv : List String) : IO Unit := runViTBImagenet argv

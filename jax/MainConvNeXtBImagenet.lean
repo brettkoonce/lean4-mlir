@@ -62,6 +62,7 @@ def convNeXtBImagenetConfig : TrainConfig where
   gradClipNorm   := 1.0
   bf16           := true
   bf16Conv       := true
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   useEMA         := true
   dropPath       := 0.5      -- ConvNeXt-B paper value
   valEveryEpochs := 5

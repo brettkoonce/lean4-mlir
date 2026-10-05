@@ -301,7 +301,7 @@ def _randaugment(img, n, m, mstd=0.0):
         k = tf.random.uniform([], 0, len(_RA_OPS), dtype=tf.int32)
         mg = m if mstd <= 0.0 else tf.clip_by_value(tf.random.normal([], m, mstd), 0.0, _AA_MAX)
         branches = [(lambda nm=nm, x=img, mv=mg: _aa_apply_op(x, nm, mv)) for nm in _RA_OPS]
-        img = tf.cond(tf.random.uniform([]) < 0.5,   # timm AugmentOp applies each op with prob 0.5
+        img = tf.cond(tf.random.uniform([]) < 0.700000,   # each op applied with prob 0.700000 (TrainConfig.randAugmentProb)
                       lambda k=k, br=branches: tf.switch_case(k, br),
                       lambda x=img: x)
     return tf.cast(img, tf.float32)
@@ -1834,7 +1834,7 @@ def forward(params, x, bn, training, drop_key=None):
     x = x.reshape(x.shape[0], -1)
     if drop_key is not None:
         x = x * jax.random.bernoulli(jax.random.fold_in(drop_key, 999983), 0.800000, x.shape).astype(x.dtype) / 0.800000
-    x = mm(x, params[77][0].T) + params[77][1]
+    x = jnp.matmul(x, params[77][0].T) + params[77][1]
     return x, bn_out
 
 def loss_fn(params, bn, x, y, drop_key=None):

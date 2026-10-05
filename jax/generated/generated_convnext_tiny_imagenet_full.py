@@ -1572,7 +1572,7 @@ def forward(params, x, drop_key=None):
     x = convnext_block(params, x, 93, dpkeys[17], 0.900000)
     x = global_avg_pool(x)
     x = head_layer_norm(x, params[98][0], params[98][1])
-    x = mm(x, params[99][0].T) + params[99][1]
+    x = jnp.matmul(x, params[99][0].T) + params[99][1]
     return x
 
 def loss_fn(params, x, y, drop_key=None):

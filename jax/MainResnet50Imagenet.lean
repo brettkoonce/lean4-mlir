@@ -66,12 +66,14 @@ def resnet50ImagenetConfig : TrainConfig where
   randAugmentM   := 7.0      -- RSB rand-m7-...
   randAugmentMstd := 0.5     -- ...-mstd0.5-...
   randAugmentInc := true     -- ...-inc1 increasing-severity mappings
+  augBicubic     := true     -- PIL-bicubic RandAugment geometry, as timm (the A2/A1 family; A3 pins it off below)
   repeatedAug    := 3        -- RSB Repeated Augmentation 3×
   dropPath       := 0.05     -- stochastic depth, RSB-A2 value
   useEMA         := true     -- model EMA; eval + checkpoints use the shadow
   emaDecay       := 0.9999
   bf16           := true
   bf16Conv       := true     -- CUDA/cuDNN: bf16 conv markedly faster (R50 is conv-bound, ares is its home); slower-but-correct on ROCm
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   runningBN      := true     -- paper-faithful eval + bottleneck running-BN
   -- **0.9, NOT the emitter's 0.99 default, and it applies to the WHOLE FAMILY.**
   -- `Jax/Codegen.lean`'s `_bn` defaults to 0.99 for every net. That is TF's EfficientNet value; the
@@ -136,7 +138,8 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       dropPath      := 0.0      -- A3: no stochastic depth (sd0.0)
       useEMA        := false    -- A3: no model EMA
       trainRes      := 160      -- A3: train @160×160
-      testCropRatio := 0.95 }   -- A3: eval @224, center-crop ratio 0.95
+      testCropRatio := 0.95     -- A3: eval @224, center-crop ratio 0.95
+      augBicubic    := false }  -- bilinear geometry, as the landed A3 runs trained (C6 is off for them)
 
 /-- **The 2018 recipe** — the ResNet-50 side of the blueprint's A3-vs-2018 recipe diff
     (`sec:r50_a3_vs_2018`), and the JAX peer of the verified `momdp64` run. It is the

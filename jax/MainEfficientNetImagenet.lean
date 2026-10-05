@@ -50,7 +50,7 @@ def efficientNetB0Imagenet : NetSpec where
     bf16 + bf16Conv.
 
     EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth + EMA, and all four
-    are here: the full AutoAugment ImageNet policy (useAutoAugment, geometric ops included via
+    are here: AutoAugment policy v0 as TF trains it (useAutoAugment + autoAugmentV0, geometric ops via
     ImageProjectiveTransformV3; no RandAugment), drop-connect 0.2, EMA 0.9999 with the BN buffers
     shadowed too. RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value, inside the sqrt as
     TF has it, mean-square initialised to 1.0). Mixup/cutmix off. -/
@@ -73,10 +73,12 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true
   useAutoAugment := true     -- full AutoAugment ImageNet policy (incl. geometric)
+  autoAugmentV0  := true     -- TF EfficientNet's policy v0 (timm `v0`), img_mean fill
   augBicubic     := true    -- PIL-bicubic geometry, as timm
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- reaches the MBConv expand/depthwise/project
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   useEMA         := true     -- weight averaging (decay 0.9999) — paper-faithful; the emitter EMA-shadows the BN buffers too (eval uses ema_bn); EMA weights with live BN stats blow up at eval
   dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
   dropPathOverN  := true     -- TF's and timm's ramp: 0.2 · i/16, not the default i/15

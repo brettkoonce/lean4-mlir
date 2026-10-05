@@ -39,6 +39,7 @@ def vitSImagenetConfig : TrainConfig where
   valEveryEpochs := 5
   cosineDecay    := true
   warmupEpochs   := 5
+  minLR          := 0.00001         -- DeiT `--min-lr 1e-5`, as ViT-Ti (`vitTinyImagenetConfig`)
   augment        := true
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
@@ -59,6 +60,8 @@ def vitSImagenetConfig : TrainConfig where
   useEMA         := true
   emaDecay       := 0.99996
   bf16           := true
+  lnEps          := 0.000001        -- DeiT `partial(nn.LayerNorm, eps=1e-6)` (the render's `eps0000001`)
+  f32StemHead    := true            -- patch embed + head in fp32: the verified render's carve-out
   repeatedAug    := 3               -- DeiT Repeated Augmentation 3× (Hoffer et al. 2020 /
                                     -- timm RASampler). Closes the last DeiT faithfulness gap;
                                     -- steps_per_epoch is unchanged, so an epoch sees ~1/3 the

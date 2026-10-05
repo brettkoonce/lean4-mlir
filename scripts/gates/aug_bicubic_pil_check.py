@@ -43,7 +43,11 @@ base = np.stack([128 + 100 * np.sin(xx / 9.0), 128 + 100 * np.cos(yy / 13.0), (x
 img = np.clip(base + rng.normal(0, 20, base.shape), 0, 255).astype(np.uint8)
 img[60:120, 80:160] = [250, 10, 40]
 pil = Image.fromarray(img)
-kw = dict(resample=Image.BICUBIC, fillcolor=(128, 128, 128))
+# The fill PIL is given is the shim's own: timm's _FILL (128) unless the recipe sets `_AA_FILL`
+# (autoAugmentV0: img_mean, as timm's create_transform passes it). The bilinear control keeps 128.
+fill = tuple(int(v) for v in ns["bicubic"]["_AA_FILL"].numpy()) if "_AA_FILL" in ns["bicubic"] else (128, 128, 128)
+print(f"fill {fill}")
+kw = dict(resample=Image.BICUBIC, fillcolor=fill)
 W, H = pil.size
 cases = []
 for f in (0.3, -0.17, 0.05):

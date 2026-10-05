@@ -137,7 +137,9 @@ graph directly:
 private def mkParamBiasSeeded (seed : Nat) (dims : Array Nat) (kind : Nat) : IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
-  | 1 => F32.const n.toUSize 1.0
+  -- Kind 4 (a bottleneck's zero-γ BN) stays at 1: the driver's `zeroGammaInit` would zero it, and
+  -- γ = 0 cuts every gradient into the block body — the degenerate point this gate avoids.
+  | 1 | 4 => F32.const n.toUSize 1.0
   | 2 => F32.heInit (seed + 90000).toUSize n.toUSize 0.05
   | _ =>
     let variance :=

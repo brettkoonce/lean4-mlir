@@ -89,6 +89,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   gradClipNorm   := 1.0
   bf16           := true
   bf16Conv       := true
+  f32StemHead    := true    -- classifier head in fp32, as every verified render keeps it
   useEMA         := true     -- weight averaging (decay 0.9999) — eval + ckpt use it
   dropPath       := 0.1      -- stochastic depth, ConvNeXt-T paper value
 

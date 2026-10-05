@@ -43,8 +43,9 @@ GEN = os.path.join(REPO, "jax/.lake/build")
 # pair's JAX run trained (scripts/jobs/*jax*.conf, or the run's RESULTS.md where no conf exists).
 PAIRS = {
     "resnet34in":     ("generated_resnet34_imagenet.py", {}),
-    "resnet50in":     ("generated_resnet50_imagenet_2018.py", {}),
-    "resnet50in160":  ("generated_resnet50_imagenet_rsbfaithful.py", {}),
+    # MainResnet50Imagenet's config sets zeroGammaInit (every recipe, 224 and 160).
+    "resnet50in":     ("generated_resnet50_imagenet_2018.py", {"zeroGamma": True}),
+    "resnet50in160":  ("generated_resnet50_imagenet_rsbfaithful.py", {"zeroGamma": True}),
     "mobilenetv2in":  ("generated_mobilenet_v2_imagenet_full.py", {}),
     "efficientnetin": ("generated_efficientnet_b0_imagenet_full.py", {}),
     "mnv4in":         ("generated_mobilenet_v4_imagenet.py", {}),
@@ -61,6 +62,8 @@ def verified_moments(dims, kind, flags):
         return 1e-6, 0.0
     if kind == 2:
         return 0.0, 0.0
+    if kind == 4:   # zero-γ (a bottleneck's residual-closing BN): 0 under zeroGammaInit, else 1
+        return (0.0, 0.0) if flags.get("zeroGamma") else (1.0, 0.0)
     if kind == 5:   # embedding (ViT CLS / pos): σ 0.02 under vitInit, zeros without it
         return (0.0, 0.0004) if flags.get("vitInit") else (0.0, 0.0)
     if flags.get("cnxInit"):
