@@ -6372,7 +6372,7 @@ of the recipe gets credit for is augmentation.
 
 The Imagenette runs above all trained on $\sim$9.5K images for 80
 epochs. This section is the same 21.8M-parameter network on 1.28M images
-and 1000 classes, trained on the paper's 90-epoch schedule. The
+and 1000 classes, trained on the standard 90-epoch schedule. The
 architecture is unchanged. Only the dataset, the output head width, and
 the training schedule differ.
 
@@ -6387,8 +6387,8 @@ reference first, the verified path second, and then the two side by side.
 
 The recipe in full: SGD with momentum $0.9$ at batch 256, cosine LR with a
 5-epoch warmup from peak $0.1$, label smoothing $0.1$, Inception-style
-random-resized-crop (sampling $8$--$100\%$ of the image area at a
-$\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, then resizing to
+random-resized-crop through TensorFlow's sampler ($10$--$100\%$ of the
+image area at a $\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, resized to
 $224\times224$) plus a horizontal flip, and $\ell_2$ weight decay
 $10^{-4}$. SGD with momentum and the weight decay are the original paper's;
 the cosine schedule, the warmup, the label smoothing and the
@@ -6399,8 +6399,9 @@ after 2018.
 
 The reference trainer is \texttt{jax/MainResnetImagenet.lean}, built as
 \texttt{lake build resnet34-imagenet}, with \texttt{.imagenet} streamed
-through tfds. It runs in bf16 --- both matmuls and convolutions cast to
-bfloat16 against fp32 master weights --- which is a throughput choice
+through tfds. It runs in bf16 --- the convolutions cast to bfloat16
+against fp32 master weights, the classifier head left in fp32 --- which is
+a throughput choice
 rather than a fidelity one, and is why its column is the faster of the
 two below.
 
@@ -6477,7 +6478,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer ->
             %LOWERER% -> GPU, with the tfds batch shim supplying the same
             augmentation the Lean->JAX reference trainer uses"
-  bnChannels := #[64, 64,64, 64,64, ... ]   -- all 36, in forward order
+  runningBN := true    -- 36 BatchNorms, read off the layer list
 
 -- The head is the ONLY thing that may differ from the 10-class net.
 -- Anything else moving means the spec drifted from its Imagenette twin.
@@ -6485,7 +6486,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 #guard resnet34ImagenetVerified.toSpecs.pop.pop == resnet34Verified.toSpecs.pop.pop
 #guard resnet34ImagenetVerified.toSpecs.back!  == (#[1000], 2)
 
--- 2. 90 epochs at batch 256 — the paper schedule.
+-- 2. 90 epochs at batch 256.
 def resnet34ImagenetConfig : VerifiedConfig where
   epochs    := 90
   batchSize := 256
@@ -6552,8 +6553,8 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \end{tabular}
 \end{center}
 
-\noindent Global batch 256 as $4 \times 64$ replicas, bf16 matmul and
-convolution as on the reference, BatchNorm statistics all-reduced across
+\noindent Global batch 256 as $4 \times 64$ replicas, bf16 convolutions
+under an fp32 classifier head, BatchNorm statistics all-reduced across
 the four replicas, scored over the same $50{,}000$ images.
 
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
@@ -6575,8 +6576,10 @@ agreeing'', not ``proven at ImageNet scale''.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
+evaluation forward  & bf16                     & fp32 \\
+classifier head     & bf16                     & fp32 \\
 \hline
-precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
+precision           & bf16 convolutions        & bf16 convolutions \\
 global batch        & 256 ($4\times64$)        & 256 ($4\times64$) \\
 BN statistic group  & 256 (global)             & 256 (global) \\
 steps/epoch         & 5{,}004                  & 5{,}004 \\
@@ -6592,7 +6595,8 @@ schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, scored
 over the same $50{,}000$ validation images under the same protocol. Rows
 above the first rule differ; rows between the rules are held equal by
-construction.
+construction. \textbf{[TODO: rerun the reference with its classifier head
+in fp32.]}
 
 \medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
 $0.03$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson interval is $\pm0.38$ points on either top-1
@@ -6711,7 +6715,10 @@ recipe is diffed against.
 
 The reference is \texttt{jax/MainResnet50Imagenet.lean}, the bottleneck
 backbone on the same tfds stream, with the recipe as an argument. The 2018
-row is the ResNet-34 recipe as it stands. A3 is LAMB at effective batch
+row is the ResNet-34 recipe with two settings of its own, which A3 keeps:
+the last BatchNorm $\gamma$ of each bottleneck starts at zero, and the
+BatchNorm running statistics decay at $0.9$ against ResNet-34's $0.99$.
+A3 is LAMB at effective batch
 2048 (accumulated as $4\times512$), BCE over Mixup/CutMix soft targets,
 RandAugment, and train@160 / eval@224.
 
@@ -6818,10 +6825,12 @@ decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
 and the accumulation, at threshold $kC$,
 \texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
 left out of layer adaptation. The optimizer is tied to the reference at the
-update as well as the gradient, seven variants to $\sim\!10^{-7}$. Two things
-differ from the reference: $0.08\%$ of each epoch is dropped because
-$4 \nmid 2{,}502$, and Mixup's $\lambda$ is drawn host-side, so agreement
-there is distributional rather than per-step.
+update as well as the gradient, seven variants to $\sim\!10^{-7}$. Both
+paths run $625$ steps an epoch and leave $0.08\%$ of it unused, because
+$4 \nmid 2{,}502$. One thing differs from the reference: Mixup's $\lambda$
+is drawn host-side, once per $512$-image micro-batch where the reference
+draws once per accumulated step, so agreement there is distributional
+rather than per-step.
 
 \prosesection{The two paths, side by side}
 
@@ -6832,8 +6841,12 @@ there is distributional rather than per-step.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
+evaluation forward  & bf16                     & fp32 \\
+classifier head     & bf16                     & fp32 \\
+last-BN $\gamma$ at init & $0$                 & $1$ \\
+BN running-stat decay & $0.99$                 & $0.9$ \\
 \hline
-precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
+precision           & bf16 convolutions        & bf16 convolutions \\
 schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \hline
 \multicolumn{3}{@{}l}{\textbf{2018} (90 ep)} \\
@@ -6866,7 +6879,8 @@ construction. The BatchNorm statistic group is the setting that changes
 between the blocks, on both paths at once: the 2018 recipe normalizes over
 the global $256$, and A3 over the $512$-image micro-batch its accumulation
 hands each step --- ghost batch norm, on the reference and the verified
-path alike.
+path alike. \textbf{[TODO: rerun both pairs with the head, the $\gamma$
+initialization and the BN decay matched --- fp32, zero, $0.9$.]}
 
 \medskip\noindent\textbf{The two paths agree within $0.21$ points on top-1
 on both recipes}, and within $0.24$ on top-5 --- inside the 95\% Wilson interval, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta replicates}: A3 beats 2018 by
@@ -6884,8 +6898,10 @@ first half of both schedules --- by about seven points on average over the
 first forty-five epochs of 2018 and the first sixty of A3, twelve and
 twenty-one at the widest --- and the two converge only in the anneal. Over
 the last ten epochs they average within $0.33$ of each other on 2018 and
-$0.07$ on A3. Where the route difference lives is not established, and it
-is why these pairs are read at their endpoints and nowhere else:
+$0.07$ on A3. Where the route difference lives is not established --- the
+head, the $\gamma$ initialization and the BN decay above the rule are
+untested candidates --- and it is why these pairs are read at their
+endpoints and nowhere else:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r r@{}}
@@ -6974,9 +6990,9 @@ random-resized-crop). RSB-A3 is the 2021 ``ResNet Strikes Back'' recipe
 (Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
 A3 sets differently is one lever of the three-year jump in how these networks
 are trained, and holding the architecture fixed is what stops the comparison
-confounding the recipe with the backbone. The spec, the render and the entry
-point are identical between them, and only the arguments differ. Here is the
-full diff:
+confounding the recipe with the backbone. The backbone and the entry point
+are the same for both, and each recipe has its own spec, shim and render.
+Here is the full diff:
 
 \begin{center}
 \begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
@@ -7001,15 +7017,18 @@ BN statistics & global over batch      & Ghost-BN over 512             & side-ef
 \end{center}
 
 \noindent What carries over unchanged: cosine LR decay, the 5-epoch
-warmup, the base augmentation in the row above, bf16 matmul and
-convolution, and running-BN evaluation. The through-line
+warmup, the base augmentation in the row above, zero-$\gamma$
+initialization, bf16 convolution under an fp32 classifier head, and
+running-BN evaluation. The through-line
 of the 2018$\to$2021 shift is ``regularize harder, train bigger'':
 heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
 soft targets (BCE), an order-of-magnitude more weight decay applied
 selectively, and a large-batch optimizer (LAMB) to make the longer,
 noisier training converge, with FixRes buying back the compute the
-extra epochs would cost. Every one of these is a one-line
-\texttt{TrainConfig} change on the same verified backbone.
+extra epochs would cost. On the reference every one of these is a
+one-line \texttt{TrainConfig} change; on the verified path each is a render
+variant or a shim setting on the same backbone, and the $160$ train
+resolution is a spec of its own.
 
 \section{Side quest: the A2 and A1 recipes}
 \label{sec:r50_a2_a1_cost}
@@ -7050,6 +7069,8 @@ In & Still out \\
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
   & Repeated augmentation is stream-level, not per-batch \\[2pt]
 Repeated augmentation $3\times$; both tiers, four replicas
+  & Mixup and CutMix alternate step by step, where \texttt{timm} draws which one per batch \\[2pt]
+\textbf{Bicubic RandAugment geometry}, matched to PIL's as \texttt{timm} resolves it
   & Neither tier has been run \\[2pt]
 A1's own weight decay and own shim
   & \\[2pt]
