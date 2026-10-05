@@ -10921,7 +10921,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   cnxInit           := true         -- ConvNeXt _init_weights: trunc_normal(0.02) on every conv
   cosineDecay       := true
   warmupEpochs      := 20           -- ConvNeXt paper warmup (was 5)
-  gradClipNorm      := 1.0          -- cheap insurance (unlocked the ViT run)
+  gradClipNorm      := 1.0          -- ours: the paper does not clip
   augment           := true
   useRandAugment    := true         -- geometric RandAugment N=2, M=9, mstd0.5, inc1
   randAugmentGeometric := true
@@ -10936,6 +10936,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   labelSmoothing    := 0.1
   bf16              := true
   bf16Conv          := true         -- dw-7x7 + 1x1s; LN/GELU stay fp32
+  f32StemHead       := true         -- classifier head in fp32
   useEMA            := true         -- weight averaging, decay 0.9999
   dropPath          := 0.1          -- stochastic depth (ConvNeXt-T paper value)
 
@@ -10953,7 +10954,7 @@ cores to bite, unlike the $3\times3$ depthwise, which is a wash), and
 the inverted-bottleneck $1\times1$s are matmuls that love it. The
 channel LayerNorm and GELU stay in fp32.
 
-Every element of the paper recipe is now wired and on:
+The elements of the paper recipe, wired and on:
 
 \begin{itemize}
   \item the faithful patchify stem (\texttt{.convNextStem}:
@@ -10972,11 +10973,13 @@ Every element of the paper recipe is now wired and on:
 $4\mathrm{e}{-}3$@4096 official value linearly scaled to batch 256)
 over a 20-epoch warmup. No deviation from the paper's architecture remains
 but the GELU, which is the tanh approximation on both paths
-(Definition~\ref{ax:geluScalar}); the recipe adds a global-norm clip at
-$1.0$ and runs at batch $256$ rather than $4096$, and the schedule is no
-longer short of it either. The run below is the full 300-epoch tier, trained and
-evaluated on timm's antialiased bicubic resampler and validation
-protocol.
+(Definition~\ref{ax:geluScalar}). The recipe departs from the paper's in
+four places: it runs at batch $256$ rather than $4096$, adds a global-norm
+clip at $1.0$, alternates Mixup and CutMix step by step where the official
+code draws which one per batch, and crops through TensorFlow's sampler
+rather than torchvision's. The run below is the full 300-epoch tier,
+trained and evaluated on an antialiased bicubic resize and scored at the
+paper's protocol, $224$ with a $0.875$ centre crop.
 
 \begin{center}
 \begin{tabular}{l l r r r r}
@@ -11004,9 +11007,9 @@ ResNet-50 RSB-A3 ($78.33\%$), EfficientNet-B0 ($77.15\%$) and ResNet-34
 $\sim$0.6\% of ConvNeXt-T's $82.1\%$ paper headline from a from-scratch
 Lean$\to$JAX-codegen reimplementation. Two candidate explanations for
 that residual can be ruled out from this run: weight averaging is
-measured above and accounts for none of it, and the evaluation crop is
-already timm's $0.875$. What is left is augmentation and schedule
-detail, not the architecture and not the eval protocol.
+measured above and accounts for none of it, and the evaluation is the
+paper's own, $224$ at a $0.875$ crop. What is left is the recipe
+departures above, not the architecture and not the eval protocol.
 
 The validation curve tells the augmentation story directly: a
 deliberately slow start, since Mixup and CutMix blend labels, so the net
@@ -11098,10 +11101,10 @@ the shard check was written before being generalized to the other nets,
 so this is the one chapter where both gates are native rather than
 inherited.
 
-\medskip\noindent\textbf{Four of the paper's six extra knobs are
-rendered, and the run carries three of them.} Weight-decay exclusion, grad
-clipping and stochastic depth are render variants, spelled \texttt{wx},
-\texttt{clip} and \texttt{drop}, and
+\medskip\noindent\textbf{The regularizer knobs are render variants, and
+the run carries three of the four.} Weight-decay exclusion, stochastic
+depth and this book's gradient clip are spelled \texttt{wx},
+\texttt{drop} and \texttt{clip}, and
 \texttt{convnextin\_\allowbreak adamdpwxclipdropbf16} carries all three at
 once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
 the run below used; Theorem~\ref{thm:convnext_step_tie} is stated on the f32,
@@ -11148,8 +11151,10 @@ ms/step              & 179                      & 220 \\
 per epoch            & 15.3 min                 & 18.3 min \\
 total                & 76.5 hr                  & 91.3 hr \\
 EMA                  & trained, scored per epoch & none \\
+evaluation forward   & bf16                     & fp32 \\
+classifier head      & bf16                     & fp32 \\
 \hline
-precision            & bf16                     & bf16 \\
+precision            & bf16 convolutions        & bf16 convolutions \\
 global batch         & 256 ($4\times64$)        & 256 ($4\times64$) \\
 steps/epoch          & 5{,}004                  & 5{,}004 \\
 peak LR              & $2.5\mathrm{e}{-4}$      & $2.5\mathrm{e}{-4}$ \\
@@ -11248,8 +11253,8 @@ $50{,}000$ validation images.
 $1.23\times$ per step}, $220$ against $179$\,ms at the same shape on the
 same cards. Of the $41$\,ms, $15$ is the feed --- the fed step against the
 step with the shim removed, measured on this box --- which is $6.8\%$ of
-the step on the heaviest shim in the book (AutoAugment, RandAugment and
-random erasing per image), because doubling the per-replica batch from
+the step on the heaviest shim in the book (RandAugment and random
+erasing per image), because doubling the per-replica batch from
 $32$ to $64$ doubled the arithmetic each augmented image amortizes over.
 The other $26$ is the lowering, read against
 \S\ref{sec:vit_imagenet}'s accounting.
@@ -11285,15 +11290,17 @@ Weight decay  & $10^{-4}$, all params  & $0.05$, skip 1-D params       & $500\ti
 Augmentation  & RRC + hflip            & full DeiT pack                & RandAugment + Mixup + CutMix + Random Erasing --- where the modernization actually lives \\
 Stochastic depth & none                & drop-path $0.1$               & randomly drops whole residual branches per step --- the depth regularizer \\
 EMA           & none                   & decay $0.9999$                & evaluates a smoothed shadow of the weights; with drop-path, together ${<}5\%$ per epoch \\
-Grad clip     & none                   & global-norm $1.0$             & cheap insurance that made the peak LR a non-event \\
+Grad clip     & none                   & global-norm $1.0$             & this book's addition, not the paper's: cheap insurance that made the peak LR a non-event \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent What carries over unchanged: cosine LR decay, the
 warmup-then-anneal structure, random-resized-crop + horizontal flip
-as the base augmentation, label smoothing $0.1$, batch 256, train
-and eval both at $224$ (no FixRes), and bf16 matmul and convolution.
+as the base augmentation, label smoothing $0.1$, batch 256 (the paper's
+own batch is $4096$, and the peak LR is scaled for it), train and eval
+both at $224$ (no FixRes), and bf16 convolution under an fp32 classifier
+head.
 
 The augmentation row is the full DeiT pack: Mixup (Zhang et al.\ 2017,
 \href{https://arxiv.org/abs/1710.09412}{arXiv:1710.09412}), CutMix
@@ -11365,8 +11372,9 @@ reference's global $256$, EMA scored, \texttt{cnxInit} on both paths, with
 references are \texttt{cnxs-default-jax-4gpu} and
 \texttt{cnxb-default-jax-4gpu}. At $64$ per replica S peaks at $6.80$\,GiB
 and B at $9.53$ of the $11.68$\,GiB arena, so B needs no accumulation
-render. Neither has run; the modelled totals are ${\sim}159$ and
-${\sim}253$ hours, re-probed before launch.
+render. Neither has run. Probed on the four cards at the jobs' own shape,
+the verified steps are $373$ and $518$\,ms, $156$ and $216$ hours, and the
+references' $304$ and $401$\,ms, $127$ and $167$ hours.
 
 \chapter{Vision Transformer}
 \label{chap:attention}
