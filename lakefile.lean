@@ -2234,16 +2234,19 @@ script imagenette do
 
 /-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
-    rows are the ones with chapter numbers; the five side quests have job configs, and only
-    MobileNetV4's has run (once, as a consistency check on its pair). Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
+    rows are the ones with chapter numbers; the seven side-quest rows are the verified halves of
+    `planning/side_quest_runs.md`'s queue (their JAX peers, the `*-jax-4gpu` confs, stay
+    `scripts/supervise.sh`-only), each conf's ETA measured on this box on 2026-10-05. MobileNetV4's
+    row is the 500-epoch `full` job; its 100-epoch pair (`mnv4-default-4gpu`, landed 09-27) is an
+    axis sibling. Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
     `r50-a3-wxclip-bf16-4gpu` (RSB-A3 at 8 × 64: the same effective 2048 at a BatchNorm group of 256),
     `vit-default-4gpu`, `vits-default-g512-4gpu`, `vitb-default-g512-4gpu` (the non-EMA f32 S/B jobs),
-    `cnx-default-emabf16-4gpu`, `cnxs-default-4gpu` / `cnxb-default-4gpu` (ConvNeXt-S/B f32 at 4 × 32) (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
-    overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
+    `cnx-default-emabf16-4gpu`, `cnxs-default-4gpu` / `cnxb-default-4gpu` (ConvNeXt-S/B f32 at 4 × 32) (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch pair `mnv4-default-4gpu` /
+    `mnv4-default-jax-4gpu` (run as overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
     `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` are the 4× 3060
     box's confs, named by the
-    book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is
-    the honest answer. -/
+    book's Track-4 table as the jobs behind their rows; their PRECHECK passes here too (`_box.sh`
+    picks the plugin), and their ETAs are the 3060 box's where they say so. -/
 private def imagenetRows : List (String × String × String) :=
   [ ("r34-default-bf16-4gpu",  "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe, bf16"),
     ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
@@ -2251,7 +2254,7 @@ private def imagenetRows : List (String × String × String) :=
     ("r50-a2-bf16-4gpu",       "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A2 (300 ep, 4 × 128), bf16 (side quest)"),
     ("r50-a1-bf16-4gpu",       "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, RSB-A1 (600 ep, 4 × 128), bf16 (side quest)"),
     ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
-    ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
+    ("mnv4-full-4gpu",         "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M, `full` (500 ep), bf16 (side quest)"),
     ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
     ("cnx-default-4gpu",       "convnext-imagenet-verified",     "Ch. 8  ConvNeXt-T"),
     ("cnxs-default-emabf16-4gpu", "convnext-s-imagenet-verified", "Ch. 8  ConvNeXt-S, EMA + bf16 (side quest)"),
@@ -2302,7 +2305,7 @@ script «r50-a3-wxclip4x128-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip4x1
 script «r50-a2-bf16-4gpu»       (args) do runJobScript "r50-a2-bf16-4gpu" args
 script «r50-a1-bf16-4gpu»       (args) do runJobScript "r50-a1-bf16-4gpu" args
 script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
-script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
+script «mnv4-full-4gpu»         (args) do runJobScript "mnv4-full-4gpu" args
 script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args
 script «cnx-default-4gpu»       (args) do runJobScript "cnx-default-4gpu" args
 script «cnxs-default-emabf16-4gpu» (args) do runJobScript "cnxs-default-emabf16-4gpu" args
