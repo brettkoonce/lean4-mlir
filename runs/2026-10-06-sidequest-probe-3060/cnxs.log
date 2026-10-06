@@ -1,0 +1,35 @@
+1791302617.627031648	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791302617.629701742	I0000 00:00:1791302617.624041 2154558 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791302618.448187135	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791302618.450717882	I0000 00:00:1791302618.445840 2154558 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791302619.599309282	ConvNeXt-S (ImageNet, bf16) · Lean 4 → JAX
+1791302619.602304817	  CNXStem(3→96,4x4)+LN → ConvNeXt3(c=96) → CNXDown(96→192) → ConvNeXt3(c=192) → CNXDown(192→384) → ConvNeXt27(c=384) → CNXDown(384→768) → ConvNeXt3(c=768) → GAP → LN(768) → 768→1000
+1791302619.603259538	
+1791302619.605415259	ImageNet (1000-class) — tfds streaming pipeline
+1791302619.606346555	lr=0.000250  batch_size=256 (4 devices x 64)  epochs=300  params=50223688
+1791302619.608124622	steps_per_epoch=5004  total_steps=1501200
+1791302619.608906235	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791302619.609579497	Starting training...
+1791302675.233075617	W1006 16:04:35.231558 2154778 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791302675.713307651	W1006 16:04:35.712094 2154762 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791302676.787189347	W1006 16:04:36.784374 2154774 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791302677.630201576	W1006 16:04:37.627182 2154774 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791302774.747877469	  step 100/1501200  loss=7.0649  lr=0.0  (1475.0ms/step avg)
+1791302805.113641924	  step 200/1501200  loss=7.0334  lr=0.0  (889.0ms/step avg)
+1791302835.557599058	  step 300/1501200  loss=7.0642  lr=0.0  (694.0ms/step avg)
+1791302866.038263389	  step 400/1501200  loss=6.9996  lr=0.0  (597.0ms/step avg)
+1791302896.516046117	  step 500/1501200  loss=7.0127  lr=0.0  (538.0ms/step avg)
+1791302927.005076909	  step 600/1501200  loss=7.0045  lr=0.0  (500.0ms/step avg)
+1791302957.487176309	  step 700/1501200  loss=6.9921  lr=0.0  (472.0ms/step avg)
+1791302987.963706461	  step 800/1501200  loss=6.9878  lr=0.0  (451.0ms/step avg)
+1791303018.445721278	  step 900/1501200  loss=6.947  lr=0.0  (435.0ms/step avg)
+1791303048.908806633	  step 1000/1501200  loss=6.9344  lr=0.0  (422.0ms/step avg)
+1791303079.362010172	  step 1100/1501200  loss=6.9365  lr=0.0  (411.0ms/step avg)
+1791303109.841358102	  step 1200/1501200  loss=6.9142  lr=0.0  (402.0ms/step avg)
+1791303140.346926077	  step 1300/1501200  loss=6.94  lr=0.0  (395.0ms/step avg)
+1791303170.811664956	  step 1400/1501200  loss=6.9056  lr=0.0  (388.0ms/step avg)
+1791303201.300201802	  step 1500/1501200  loss=6.9282  lr=0.0  (383.0ms/step avg)
+1791303231.759246083	  step 1600/1501200  loss=6.9125  lr=0.0  (378.0ms/step avg)
+1791303262.242061208	  step 1700/1501200  loss=6.8892  lr=0.0  (374.0ms/step avg)
+1791303292.724436426	  step 1800/1501200  loss=6.9023  lr=0.0  (370.0ms/step avg)
+1791303323.208187512	  step 1900/1501200  loss=6.9231  lr=0.0  (366.0ms/step avg)

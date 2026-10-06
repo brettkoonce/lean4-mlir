@@ -1,0 +1,21 @@
+1791301800.671675157	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791301800.674379145	I0000 00:00:1791301800.668724 2146999 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791301801.486628630	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791301801.489191832	I0000 00:00:1791301801.483986 2146999 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791301802.655728576	ViT-B/16 (ImageNet, bf16) · Lean 4 → JAX
+1791301802.657530646	  Patch(3→768,16x16) → Trans(12x[12h,768]) → 768→1000
+1791301802.659474625	
+1791301802.660514648	ImageNet (1000-class) — tfds streaming pipeline
+1791301802.661403932	lr=0.000500  batch_size=512 (4 devices x 128)  epochs=300  params=86567656
+1791301802.662271414	steps_per_epoch=2502  total_steps=750600
+1791301802.662971818	grad-accum=4x  micro_batch=128 (4 devices x 32)  -> effective_batch=512  (LR targets effective)
+1791301802.663863627	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791301802.664526652	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791301802.665214102	Starting training...
+1791301928.932126647	  step 100/750600  loss=6.9957  lr=0.0  (1212.0ms/step avg)
+1791302019.426731763	  step 200/750600  loss=6.9146  lr=1e-05  (1059.0ms/step avg)
+1791302109.937565908	  step 300/750600  loss=6.8812  lr=1e-05  (1007.0ms/step avg)
+1791302200.437561351	  step 400/750600  loss=6.8641  lr=2e-05  (982.0ms/step avg)
+1791302290.925997318	  step 500/750600  loss=6.8632  lr=2e-05  (966.0ms/step avg)
+1791302381.463697981	  step 600/750600  loss=6.8898  lr=2e-05  (956.0ms/step avg)
+1791302471.980389621	  step 700/750600  loss=6.858  lr=3e-05  (949.0ms/step avg)

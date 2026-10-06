@@ -1,0 +1,21 @@
+[sup] 2026-10-06 15:08:28 START job=vits-default-jax-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=0 stall=1800s logs=/tmp/supervise_dry_vits-default-jax-4gpu
+[sup] 2026-10-06 15:08:28 cmd: bash -c 
+  set -u
+  base=/home/skoonce/vit_s_default_300ep/vit_s_imagenet
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_vit_s_imagenet.py
+
+[sup] 2026-10-06 15:08:28 eta: ~72 h for 300 ep on 4x 4060 Ti (344 ms/step, flat, tf.data-bound; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal)
+[sup] 2026-10-06 15:08:28 DRY_RUN — nothing launched

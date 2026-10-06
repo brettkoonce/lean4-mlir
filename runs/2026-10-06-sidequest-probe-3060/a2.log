@@ -1,0 +1,22 @@
+1791300166.619070370	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791300166.622365709	I0000 00:00:1791300166.615952 2130259 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791300167.435585016	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791300167.438436101	I0000 00:00:1791300167.432980 2130259 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791300168.601157377	ResNet-50 (ImageNet) · Lean 4 → JAX
+1791300168.602738376	  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+1791300168.605200780	
+1791300168.606366678	ImageNet (1000-class) — tfds streaming pipeline
+1791300168.607370476	lr=0.005000  batch_size=2048 (4 devices x 512)  epochs=300  params=25557032
+1791300168.608042502	steps_per_epoch=625  total_steps=187500
+1791300168.608815105	grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+1791300168.609574332	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791300168.610231220	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791300168.612343235	Starting training...
+1791300189.928722288	W1006 15:23:09.926376 2130450 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791300190.293868449	W1006 15:23:10.293008 2130450 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791300192.027359721	W1006 15:23:12.024497 2130468 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791300193.366691959	W1006 15:23:13.363938 2130468 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791300383.489490522	  step 100/187500  loss=0.6286  lr=0.00016  (2079.0ms/step avg)
+1791300532.281989250	  step 200/187500  loss=0.3539  lr=0.00032  (1783.0ms/step avg)
+1791300680.988331942	  step 300/187500  loss=0.0738  lr=0.00048  (1685.0ms/step avg)
+1791300829.578488483	  step 400/187500  loss=0.0152  lr=0.00064  (1635.0ms/step avg)

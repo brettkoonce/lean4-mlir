@@ -1,0 +1,34 @@
+1791299349.555111570	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791299349.557651373	I0000 00:00:1791299349.552569 2122553 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791299350.369597852	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791299350.372057865	I0000 00:00:1791299350.366855 2122553 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791299351.534157426	ViT-S/16 (ImageNet, bf16) · Lean 4 → JAX
+1791299351.536883970	  Patch(3→384,16x16) → Trans(12x[6h,384]) → 384→1000
+1791299351.537985376	
+1791299351.538816195	ImageNet (1000-class) — tfds streaming pipeline
+1791299351.541158040	lr=0.000500  batch_size=512 (4 devices x 128)  epochs=300  params=22050664
+1791299351.542040179	steps_per_epoch=2502  total_steps=750600
+1791299351.542850870	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791299351.543736185	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791299351.544384500	Starting training...
+1791299421.825585966	  step 100/750600  loss=6.9482  lr=0.0  (652.0ms/step avg)
+1791299453.849503012	  step 200/750600  loss=6.9083  lr=1e-05  (486.0ms/step avg)
+1791299485.958255958	  step 300/750600  loss=6.913  lr=1e-05  (431.0ms/step avg)
+1791299518.091965237	  step 400/750600  loss=6.9008  lr=2e-05  (404.0ms/step avg)
+1791299550.208407540	  step 500/750600  loss=6.88  lr=2e-05  (387.0ms/step avg)
+1791299582.330360562	  step 600/750600  loss=6.8897  lr=2e-05  (376.0ms/step avg)
+1791299614.468391974	  step 700/750600  loss=6.8768  lr=3e-05  (368.0ms/step avg)
+1791299646.594219777	  step 800/750600  loss=6.8186  lr=3e-05  (362.0ms/step avg)
+1791299678.716215007	  step 900/750600  loss=6.8617  lr=4e-05  (358.0ms/step avg)
+1791299710.839592004	  step 1000/750600  loss=6.8124  lr=4e-05  (354.0ms/step avg)
+1791299742.963970984	  step 1100/750600  loss=6.8017  lr=4e-05  (351.0ms/step avg)
+1791299775.098443194	  step 1200/750600  loss=6.7762  lr=5e-05  (349.0ms/step avg)
+1791299807.227324366	  step 1300/750600  loss=6.7711  lr=5e-05  (347.0ms/step avg)
+1791299839.357127709	  step 1400/750600  loss=6.8314  lr=6e-05  (345.0ms/step avg)
+1791299871.475005708	  step 1500/750600  loss=6.7278  lr=6e-05  (343.0ms/step avg)
+1791299903.614248453	  step 1600/750600  loss=6.7689  lr=6e-05  (342.0ms/step avg)
+1791299935.758229322	  step 1700/750600  loss=6.6622  lr=7e-05  (341.0ms/step avg)
+1791299967.891922796	  step 1800/750600  loss=6.7099  lr=7e-05  (340.0ms/step avg)
+1791300000.020557050	  step 1900/750600  loss=6.7421  lr=8e-05  (339.0ms/step avg)
+1791300032.157115868	  step 2000/750600  loss=6.7288  lr=8e-05  (338.0ms/step avg)
+1791300064.276586527	  step 2100/750600  loss=6.6786  lr=8e-05  (337.0ms/step avg)

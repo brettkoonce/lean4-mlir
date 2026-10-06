@@ -1,0 +1,148 @@
+1791306613.123239281	box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+1791306613.132774045	⚠ other resnet50in checkpoints present — they must NOT be resumed into this run:
+1791306613.133693992	   .lake/build/resnet50in_momdp64bf16_ckpt_xla.bin
+1791306613.134548375	   .lake/build/resnet50in_momdp64bf16_PERREPLICA_2026-08-27_e90_ckpt_xla.bin
+1791306614.426778746	[sup] 2026-10-06 17:10:14 START job=r50-a1-bf16-4gpu devs=0,1,2,3 epochs=600 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-06-r50-a1-bf16-4gpu
+1791306614.428764549	[sup] 2026-10-06 17:10:14 cmd: .lake/build/bin/resnet50-imagenet-verified data
+1791306614.432821388	[sup] 2026-10-06 17:10:14 eta: bf16 ~185 h for 600 ep on 4x 4060 Ti (mean 444 / median 444 ms per micro-batch, 2,500 per epoch; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal)
+1791306614.434731198	[sup] 2026-10-06 17:10:14 ONCE — one foreground run, no restart policy
+1791306615.234179633	I1006 17:10:15.231925 2202171 service.cc:154] XLA service 0x742f0801d8b0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+1791306615.236382359	I1006 17:10:15.231948 2202171 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791306615.238686414	I1006 17:10:15.231953 2202171 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791306615.241074199	I1006 17:10:15.231954 2202171 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791306615.242213038	I1006 17:10:15.231956 2202171 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791306615.243228050	I1006 17:10:15.233937 2202171 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+1791306615.244119925	I1006 17:10:15.233973 2202171 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+1791306615.244736252	I1006 17:10:15.234008 2202171 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+1791306615.245351229	I1006 17:10:15.234017 2202171 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+1791306615.245952496	I1006 17:10:15.234027 2202171 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+1791306615.246553521	[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+1791306615.247592587	[pjrt_ffi] command buffers: enabled (CUDA default)
+1791306615.248459168	[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+1791306615.352169481	I1006 17:10:15.349774 2202171 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+1791306618.663360667	I1006 17:10:18.660589 2202171 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791306619.880599643	W1006 17:10:19.879583 2202238 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791306619.904676294	I1006 17:10:19.903766 2202242 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 56 bytes spill stores, 56 bytes spill loads
+1791306619.905771842	
+1791306622.137113729	W1006 17:10:22.134251 2202238 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791306623.358780956	W1006 17:10:23.355963 2202238 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791306624.609944501	W1006 17:10:24.607398 2202238 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791306626.127391112	I1006 17:10:26.126454 2202231 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 832 bytes spill stores, 832 bytes spill loads
+1791306626.128188160	
+1791306626.353012201	I1006 17:10:26.352082 2202234 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 160 bytes spill stores, 108 bytes spill loads
+1791306626.353856696	
+1791306702.103733913	I1006 17:11:42.099646 2202218 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_4', 20 bytes spill stores, 20 bytes spill loads
+1791306702.104861448	
+1791306702.147701877	I1006 17:11:42.146665 2202240 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_3', 60 bytes spill stores, 36 bytes spill loads
+1791306702.148687052	
+1791306702.180683934	I1006 17:11:42.179370 2202233 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_2', 60 bytes spill stores, 36 bytes spill loads
+1791306702.182547700	
+1791306702.246258083	I1006 17:11:42.242642 2202241 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_reduce_select_fusion_1', 60 bytes spill stores, 36 bytes spill loads
+1791306702.247359221	
+1791306702.769211068	[pjrt_ffi] compiled verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir (@resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step, 771 outputs, 4 replicas) in 87525 ms
+1791306703.527026379	I1006 17:11:43.525822 2202241 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 56 bytes spill stores, 56 bytes spill loads
+1791306703.527998873	
+1791306703.806376274	I1006 17:11:43.803920 2202221 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 832 bytes spill stores, 832 bytes spill loads
+1791306703.808775458	
+1791306717.233942402	[pjrt_ffi] compiled verified_mlir/resnet50in_fwd.mlir (@resnet50in_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 14465 ms
+1791306717.547324192	[pjrt_ffi] compiled verified_mlir/resnet50in_fwd_eval.mlir (@resnet50in_fwd_eval, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 313 ms
+1791306717.549642533	  ▸ TRAIN RES: 224×224 (slug resnet50in, d0 150528, shim generated_resnet50_imagenet_a1_shim.py)
+1791306717.550648465	  ▸ RECIPE: a1 — augmentation comes from generated_resnet50_imagenet_a1_shim.py
+1791306717.552128502	ResNet-50 on full 1000-class ImageNet with RSB-A1's augmentation (A2's pack at Mixup α 0.2), via the VERIFIED renderer.
+1791306717.554679429	  xla/pjrt verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir
+1791306717.556062598	  xla/pjrt verified_mlir/resnet50in_fwd.mlir  (eval, SHARDED over 4 replicas)
+1791306717.556797240	  xla/pjrt verified_mlir/resnet50in_fwd_eval.mlir  (eval, SHARDED over 4 replicas)
+1791306717.557590849	  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+1791306717.558315961	  train 1281167, test 50000; bs 128, ResNet-50 (ImageNet-1k, RSB-A1) lambaccdp4x128wxclipdropbcewd001bf16 (cosine+warmup 5ep, baseLR 0.005000), He init
+1791306717.559070588	  ▸ STOCHASTIC DEPTH: 16 drop sites, keeps #[1.000000, 0.997000, 0.993000, 0.990000, 0.987000, 0.983000, 0.980000, 0.977000, 0.973000, 0.970000, 0.967000, 0.963000, 0.960000, 0.957000, 0.953000, 0.950000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+1791306717.561289827	  ▸ GRADIENT ACCUMULATION: k = 4, blob region 3 of 4 [θ|m|v|G]. Micro-batch 512 x 4 = EFFECTIVE BATCH 2048. 2500 micro-batches/epoch = 625 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+1791306717.562141428	     ▸ LAMB (per-tensor trust ratio) + BCE-with-logits: RSB-faithful optimizer and loss at this batch.
+1791306717.564408088	  eval batch 256 (the batch @resnet50in_fwd_eval was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+1791306717.565311014	  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50in_fwd_eval
+1791306717.565994368	     decay 0.900000 (TF sense; = PyTorch/timm momentum 0.100000), new-batch weight 0.025996 = 1 − 0.900000^(1/4), compensated for grad-accum
+1791306717.566701275	  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2500 steps/epoch
+1791306717.567374709	  EVAL SHARDED: 4 replicas x 256 = 1024 test images per invoke, 49 invokes, last one 848 real + 176 pad
+1791306718.368415203	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306718.371547674	I0000 00:00:1791306718.365456 2204971 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306718.396997747	I0000 00:00:1791306718.394542 2204971 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306718.399518428	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306719.438359047	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306719.441080202	I0000 00:00:1791306719.435924 2204971 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306722.098003933	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306722.099429410	I0000 00:00:1791306722.095608 2205096 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306722.126159593	I0000 00:00:1791306722.123471 2205096 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306722.128063883	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306722.691744114	I0000 00:00:1791306722.689553 2205130 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306723.576962486	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306723.579497599	I0000 00:00:1791306723.574427 2205096 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306727.301723736	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306727.303379266	I0000 00:00:1791306727.298969 2205314 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306727.329180593	I0000 00:00:1791306727.326580 2205314 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306727.330417465	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306727.915481455	I0000 00:00:1791306727.913702 2205352 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306728.822321312	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306728.823651463	I0000 00:00:1791306728.820342 2205314 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306732.571012975	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306732.573134282	I0000 00:00:1791306732.568401 2205538 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306732.598335992	I0000 00:00:1791306732.596154 2205538 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306732.599969255	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306733.195615916	I0000 00:00:1791306733.193202 2205582 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306734.084913384	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306734.086704296	I0000 00:00:1791306734.083171 2205538 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306737.788079547	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306737.789657493	I0000 00:00:1791306737.785269 2205756 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306737.814852656	I0000 00:00:1791306737.812715 2205756 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306737.817589154	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306738.421380535	I0000 00:00:1791306738.419574 2205797 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306739.243711574	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306739.245542914	I0000 00:00:1791306739.241620 2205756 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306742.936602296	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306742.938775164	I0000 00:00:1791306742.934111 2205992 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306742.964301622	I0000 00:00:1791306742.961840 2205992 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306742.966537664	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306743.565685197	I0000 00:00:1791306743.564314 2206035 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306744.388492001	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306744.389645330	I0000 00:00:1791306744.386928 2205992 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306748.084765651	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306748.087374052	I0000 00:00:1791306748.082139 2206220 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306748.112236118	I0000 00:00:1791306748.109722 2206220 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306748.113308811	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306748.722473778	I0000 00:00:1791306748.721465 2206268 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306749.660045636	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306749.662290551	I0000 00:00:1791306749.657897 2206220 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306753.310745544	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306753.313214400	I0000 00:00:1791306753.307802 2206444 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306753.337098196	I0000 00:00:1791306753.334731 2206444 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791306753.338201193	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791306753.946480500	I0000 00:00:1791306753.944346 2206489 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306754.895679654	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791306754.897192978	I0000 00:00:1791306754.893225 2206444 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791306761.198316004	[pjrt_ffi] RESIDENT: @resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step holds 644 parameter tensors (390.0 MB) on 4 devices; they stop crossing PCIe from here
+1791306761.262454797	I0000 00:00:1791306761.259682 2206691 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791306762.289866557	I1006 17:12:42.287955 2202213 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791306762.291747064	I1006 17:12:42.288021 2202210 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791306762.293229213	I1006 17:12:42.288080 2202207 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791306762.836918830	  ▸ INIT: zero-γ on 16 residual-closing BNs (the JAX reference's zero_init_last)
+1791306762.839829855	  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+1791306762.841616851	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+1791306762.843872646	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+1791306762.845827634	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+1791306762.848059796	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+1791306762.853963050	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 5), wire v4 soft targets [512x1000]
+1791306762.855647946	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 6), wire v4 soft targets [512x1000]
+1791306762.857687963	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 7), wire v4 soft targets [512x1000]
+1791306762.858878677	  imagenet shim: jax/.lake/build/generated_resnet50_imagenet_a1_shim.py — train split, batch 512, 150528 floats/img (seed 8), wire v4 soft targets [512x1000]
+1791306762.860412239	  imagenet shim: 8 sharded producers (round-robin over batches)
+1791306762.862758932	  ▸ SHIM RESPAWN: one producer every 10 epoch(s), round-robin over 8 — no loader lives past 80 epochs.
+1791306762.865024337	  ▸ SHIM PREFETCH: ON (depth 8 over 8 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+1791306762.867881725	  step 0/2500: loss=0.720813
+1791306763.359053588	  step 1/2500: loss=0.719894
+1791306763.924565284	  step 2/2500: loss=0.721255
+1791306809.010280718	  step 100/2500: loss=0.713899
+1791306854.797643858	  step 200/2500: loss=0.690423
+1791306900.673977114	  step 300/2500: loss=0.657505
+1791306946.503393836	  step 400/2500: loss=0.615542
+1791306992.522337345	  step 500/2500: loss=0.559249
+1791307038.431169013	  step 600/2500: loss=0.493165
+1791307038.434108049	  PROBE: 457 ms/step (median of 400 steps 201..600, ResNet-50 (ImageNet-1k, RSB-A1))
+1791307038.435585063	  PROBE-SPREAD: min=422 med=457 p90=478 mean=459 ms/step (starvation wait = med-min = 35 ms)

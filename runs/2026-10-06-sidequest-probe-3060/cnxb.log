@@ -1,0 +1,44 @@
+1791303434.512260335	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791303434.515216484	I0000 00:00:1791303434.509955 2162936 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791303435.328000983	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791303435.330924342	I0000 00:00:1791303435.325345 2162936 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791303436.468383348	ConvNeXt-B (ImageNet, bf16) · Lean 4 → JAX
+1791303436.469501842	  CNXStem(3→128,4x4)+LN → ConvNeXt3(c=128) → CNXDown(128→256) → ConvNeXt3(c=256) → CNXDown(256→512) → ConvNeXt27(c=512) → CNXDown(512→1024) → ConvNeXt3(c=1024) → GAP → LN(1024) → 1024→1000
+1791303436.471800902	
+1791303436.473259565	ImageNet (1000-class) — tfds streaming pipeline
+1791303436.474032192	lr=0.000250  batch_size=256 (4 devices x 64)  epochs=300  params=88591464
+1791303436.474847638	steps_per_epoch=5004  total_steps=1501200
+1791303436.476301300	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791303436.477059188	Starting training...
+1791303488.895269231	W1006 16:18:08.892938 2163138 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791303490.731554474	W1006 16:18:10.730193 2163137 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791303565.099978452	W1006 16:19:25.096847 2163113 bfc_allocator.cc:598] Allocator (GPU_0_bfc) ran out of memory trying to allocate 5.98GiB (rounded to 6417191424) from the lower end requested by op 
+1791303565.102950666	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791303565.105554198	Current allocation summary follows.
+1791303565.106550101	W1006 16:19:25.101611 2163113 bfc_allocator.cc:609] ****************************************____________________________________________________________
+1791303565.136603659	W1006 16:19:25.134494 2163119 bfc_allocator.cc:598] Allocator (GPU_2_bfc) ran out of memory trying to allocate 5.98GiB (rounded to 6417191424) from the lower end requested by op 
+1791303565.138684125	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791303565.140835248	Current allocation summary follows.
+1791303565.143119740	W1006 16:19:25.134519 2163116 bfc_allocator.cc:598] Allocator (GPU_1_bfc) ran out of memory trying to allocate 5.98GiB (rounded to 6417191424) from the lower end requested by op 
+1791303565.144497050	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791303565.145495069	Current allocation summary follows.
+1791303565.146450732	W1006 16:19:25.134838 2163122 bfc_allocator.cc:598] Allocator (GPU_3_bfc) ran out of memory trying to allocate 5.98GiB (rounded to 6417191424) from the lower end requested by op 
+1791303565.148756416	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791303565.149619564	Current allocation summary follows.
+1791303565.150824265	W1006 16:19:25.138045 2163116 bfc_allocator.cc:609] ***************************************_____________________________________________________________
+1791303565.151608599	W1006 16:19:25.138045 2163119 bfc_allocator.cc:609] ***************************************_____________________________________________________________
+1791303565.152355711	W1006 16:19:25.138683 2163122 bfc_allocator.cc:609] ***************************************_____________________________________________________________
+1791303576.822401275	Traceback (most recent call last):
+1791303576.826877602	  File "/home/skoonce/lean/proof_verify_demo/verify-v2/jax/.lake/build/generated_convnext_b_imagenet.py", line 2830, in <module>
+1791303576.831439884	    "  loss=" + str(round(float(loss), 4)) +
+1791303576.836318038	                          ^^^^^^^^^^^
+1791303576.838928733	  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 300, in __float__
+1791303576.840281293	    return self._value.__float__()
+1791303576.841496861	           ^^^^^^^^^^^
+1791303576.843100283	  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/profiler.py", line 420, in wrapper
+1791303576.844264924	    return func(*args, **kwargs)
+1791303576.845803893	           ^^^^^^^^^^^^^^^^^^^^^
+1791303576.846745792	  File "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax/_src/array.py", line 642, in _value
+1791303576.847516484	    npy_value, did_copy = self._single_device_array_to_np_array_did_copy()
+1791303576.848441331	                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1791303576.853833195	jax.errors.JaxRuntimeError: RESOURCE_EXHAUSTED: Out of memory while trying to allocate 5.98GiB with allocator GPU_0_bfc on device 0. [executable_name='jit_train_step'] [tf-allocator-allocation-error='']

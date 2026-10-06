@@ -1,0 +1,26 @@
+1791308322.747929436	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791308322.749281864	I0000 00:00:1791308322.744754 2241873 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791308323.578578593	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791308323.581170463	I0000 00:00:1791308323.575892 2241873 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791308324.742354588	ConvNeXt-B (ImageNet, bf16) · Lean 4 → JAX
+1791308324.745023317	  CNXStem(3→128,4x4)+LN → ConvNeXt3(c=128) → CNXDown(128→256) → ConvNeXt3(c=256) → CNXDown(256→512) → ConvNeXt27(c=512) → CNXDown(512→1024) → ConvNeXt3(c=1024) → GAP → LN(1024) → 1024→1000
+1791308324.747297374	
+1791308324.748278738	ImageNet (1000-class) — tfds streaming pipeline
+1791308324.749027916	lr=0.000250  batch_size=256 (4 devices x 64)  epochs=300  params=88591464
+1791308324.749722466	steps_per_epoch=5004  total_steps=1501200
+1791308324.750527053	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791308324.751220673	Starting training...
+1791308390.513143487	  step 100/1501200  loss=7.0973  lr=0.0  (578.0ms/step avg)
+1791308437.183946998	  step 200/1501200  loss=7.1273  lr=0.0  (522.0ms/step avg)
+1791308483.983023594	  step 300/1501200  loss=7.0865  lr=0.0  (504.0ms/step avg)
+1791308530.772329714	  step 400/1501200  loss=7.0217  lr=0.0  (495.0ms/step avg)
+1791308577.553460880	  step 500/1501200  loss=7.0126  lr=0.0  (490.0ms/step avg)
+1791308624.337538077	  step 600/1501200  loss=7.0034  lr=0.0  (486.0ms/step avg)
+1791308671.120069329	  step 700/1501200  loss=7.0118  lr=0.0  (483.0ms/step avg)
+1791308717.907292448	  step 800/1501200  loss=6.9705  lr=0.0  (481.0ms/step avg)
+1791308764.706344527	  step 900/1501200  loss=6.9667  lr=0.0  (480.0ms/step avg)
+1791308811.494934499	  step 1000/1501200  loss=6.9565  lr=0.0  (479.0ms/step avg)
+1791308858.284884991	  step 1100/1501200  loss=6.9577  lr=0.0  (478.0ms/step avg)
+1791308905.065894547	  step 1200/1501200  loss=6.9581  lr=0.0  (477.0ms/step avg)
+1791308951.861581349	  step 1300/1501200  loss=6.9302  lr=0.0  (476.0ms/step avg)
+1791308998.644942699	  step 1400/1501200  loss=6.9264  lr=0.0  (476.0ms/step avg)

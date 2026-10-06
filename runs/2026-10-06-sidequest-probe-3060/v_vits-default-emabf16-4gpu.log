@@ -1,0 +1,126 @@
+1791304973.225338618	box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+1791304974.768296892	[sup] 2026-10-06 16:42:54 START job=vits-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=runs/2026-10-06-vits-default-emabf16-4gpu
+1791304974.770794396	[sup] 2026-10-06 16:42:54 cmd: .lake/build/bin/vit-s-imagenet-verified data
+1791304974.773075692	[sup] 2026-10-06 16:42:54 eta: bf16 ~79 h for 300 ep on 4x 4060 Ti (mean 379 / median 381 / floor 302 ms/step on the in-place-mix + writer-thread shim; was 609 before it; runs/2026-10-05-shim-feed-bench)
+1791304974.775594030	[sup] 2026-10-06 16:42:54 ONCE — one foreground run, no restart policy
+1791304975.582659105	I1006 16:42:55.579919 2180304 service.cc:154] XLA service 0x79c978052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+1791304975.584135277	I1006 16:42:55.579942 2180304 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791304975.584963927	I1006 16:42:55.579946 2180304 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791304975.586259268	I1006 16:42:55.579947 2180304 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791304975.587697310	I1006 16:42:55.579949 2180304 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791304975.588521235	I1006 16:42:55.581986 2180304 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+1791304975.589129961	I1006 16:42:55.582020 2180304 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+1791304975.589713738	I1006 16:42:55.582055 2180304 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+1791304975.590321501	I1006 16:42:55.582065 2180304 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+1791304975.590932422	I1006 16:42:55.582072 2180304 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+1791304975.591526473	[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+1791304975.592112039	[pjrt_ffi] command buffers: enabled (CUDA default)
+1791304975.592710213	[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+1791304975.724273189	I1006 16:42:55.721332 2180304 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+1791304980.461398452	I1006 16:43:00.458749 2180304 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791304980.731642596	I1006 16:43:00.730349 2180365 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_867', 72 bytes spill stores, 40 bytes spill loads
+1791304980.732819859	
+1791304980.888750286	I1006 16:43:00.884559 2180360 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_867', 9676 bytes spill stores, 9648 bytes spill loads
+1791304980.889885091	
+1791304981.272514169	I1006 16:43:01.267789 2180372 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1359', 32 bytes spill stores, 32 bytes spill loads
+1791304981.273521942	
+1791304981.328496557	I1006 16:43:01.326339 2180365 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1359', 712 bytes spill stores, 712 bytes spill loads
+1791304981.334698012	
+1791304981.690498041	I1006 16:43:01.688229 2180358 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 32 bytes spill stores, 32 bytes spill loads
+1791304981.695480563	
+1791304981.749912726	I1006 16:43:01.748715 2180373 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_654', 16 bytes spill stores, 16 bytes spill loads
+1791304981.751301106	
+1791304982.000135373	I1006 16:43:01.998492 2180356 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 32 bytes spill stores, 32 bytes spill loads
+1791304982.003022015	
+1791304982.380875811	I1006 16:43:02.379229 2180358 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_75', 32 bytes spill stores, 32 bytes spill loads
+1791304982.384302769	
+1791304982.971948912	I1006 16:43:02.970614 2180362 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_73', 32 bytes spill stores, 32 bytes spill loads
+1791304982.973169603	
+1791304985.453968438	[pjrt_ffi] compiled verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir (@vitsin_emadp128x4wxclipdropeps0000001bf16_train_step, 829 outputs, 4 replicas) in 9861 ms
+1791304986.976799016	I1006 16:43:06.972074 2180353 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 92 bytes spill stores, 92 bytes spill loads
+1791304986.977966273	
+1791304987.326533560	I1006 16:43:07.322332 2180372 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 1360 bytes spill stores, 1120 bytes spill loads
+1791304987.331191313	
+1791304987.434392217	I1006 16:43:07.433273 2180353 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 60 bytes spill stores, 60 bytes spill loads
+1791304987.475442573	
+1791304987.476545511	I1006 16:43:07.466655 2180367 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_220', 8 bytes spill stores, 8 bytes spill loads
+1791304987.477460872	
+1791304987.632344485	I1006 16:43:07.630533 2180359 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 4 bytes spill stores, 4 bytes spill loads
+1791304987.633502291	
+1791304987.755822326	I1006 16:43:07.752952 2180361 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 4 bytes spill stores, 4 bytes spill loads
+1791304987.757057089	
+1791304987.805880693	I1006 16:43:07.802575 2180376 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_85', 12 bytes spill stores, 4 bytes spill loads
+1791304987.807216175	
+1791304988.010482717	I1006 16:43:08.009195 2180361 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 60 bytes spill stores, 60 bytes spill loads
+1791304988.011503160	
+1791304988.157315747	I1006 16:43:08.155774 2180354 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_85', 240 bytes spill stores, 224 bytes spill loads
+1791304988.160030354	
+1791304988.200527569	I1006 16:43:08.199265 2180359 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 9312 bytes spill stores, 9360 bytes spill loads
+1791304988.203079546	
+1791304988.346676748	I1006 16:43:08.343486 2180366 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_3', 8916 bytes spill stores, 9016 bytes spill loads
+1791304988.348982660	
+1791304989.528308021	I1006 16:43:09.525284 2180376 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_85', 4220 bytes spill stores, 3700 bytes spill loads
+1791304989.531224239	
+1791304990.097167525	[pjrt_ffi] compiled verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir (@vitsin_emadp128x4wxclipdropeps0000001bf16_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 4643 ms
+1791304990.115829141	ViT-Small on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU (Tiny widened: D 384 = 6 heads x 64, MLP 1536, same depth 12)
+1791304990.118391246	  xla/pjrt verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir
+1791304990.120212299	  xla/pjrt verified_mlir/vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir  (eval, SHARDED over 4 replicas)
+1791304990.121288790	  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+1791304990.122261176	  train 1281167, test 50000; bs 128, ViT-Small (ImageNet-1k) emadp128x4wxclipdropeps0000001bf16 (cosine→0.000010+warmup 5ep, baseLR 0.000500), He init
+1791304990.123208095	  ▸ STOCHASTIC DEPTH: 24 drop sites, keeps #[1.000000, 1.000000, 0.991000, 0.991000, 0.982000, 0.982000, 0.973000, 0.973000, 0.964000, 0.964000, 0.955000, 0.955000, 0.945000, 0.945000, 0.936000, 0.936000, 0.927000, 0.927000, 0.918000, 0.918000, 0.909000, 0.909000, 0.900000, 0.900000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+1791304990.125434553	  ▸ EMA: region 3 of 4 [θ|m|v|ema], shadow starts AT the weights, decay min(0.999960, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.
+1791304990.126326117	  eval batch 32 (the batch @vitsin_fwd was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+1791304990.127015323	  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2502 steps/epoch
+1791304990.129220872	  EVAL SHARDED: 4 replicas x 32 = 128 test images per invoke, 391 invokes, last one 80 real + 48 pad
+1791304990.882896394	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791304990.885725636	I0000 00:00:1791304990.880121 2181302 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791304990.912640245	I0000 00:00:1791304990.910252 2181302 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791304990.914905123	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791304992.249727258	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791304992.252304287	I0000 00:00:1791304992.246836 2181302 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791304995.148169562	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791304995.150411381	I0000 00:00:1791304995.145770 2181419 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791304995.177154498	I0000 00:00:1791304995.174697 2181419 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791304995.180005401	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791304995.853237579	I0000 00:00:1791304995.850938 2181467 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791304996.521773521	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791304996.523876290	I0000 00:00:1791304996.520164 2181419 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791305000.261209555	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791305000.264586338	I0000 00:00:1791305000.258377 2181647 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791305000.288402410	I0000 00:00:1791305000.286016 2181647 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791305000.291327671	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791305000.980537060	I0000 00:00:1791305000.979475 2181698 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791305001.762424553	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791305001.765151197	I0000 00:00:1791305001.759617 2181647 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791305005.433044999	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791305005.434396044	I0000 00:00:1791305005.430324 2181865 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791305005.460239826	I0000 00:00:1791305005.458075 2181865 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791305005.463188047	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791305006.128398771	I0000 00:00:1791305006.126543 2181915 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791305006.970518945	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791305006.972792112	I0000 00:00:1791305006.969267 2181865 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791305011.845715069	[pjrt_ffi] RESIDENT: @vitsin_emadp128x4wxclipdropeps0000001bf16_train_step holds 800 parameter tensors (336.5 MB) on 4 devices; they stop crossing PCIe from here
+1791305012.211947470	I0000 00:00:1791305012.210952 2182123 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791305012.759292981	I1006 16:43:32.757631 2180339 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791305012.760367252	I1006 16:43:32.757891 2180343 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791305012.762087526	I1006 16:43:32.757991 2180346 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791305013.124019349	  ▸ INIT: timm/DeiT (σ=0.02 weights + CLS/pos-embed, patch-embed on PyTorch Conv2d default)
+1791305013.125481136	  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+1791305013.129880911	  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1), wire v4 soft targets [512x1000]
+1791305013.132969681	  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2), wire v4 soft targets [512x1000]
+1791305013.134650622	  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3), wire v4 soft targets [512x1000]
+1791305013.136363966	  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4), wire v4 soft targets [512x1000]
+1791305013.137971032	  imagenet shim: 4 sharded producers (round-robin over batches)
+1791305013.140248642	  ▸ SHIM RESPAWN: one producer every 10 epoch(s), round-robin over 4 — no loader lives past 40 epochs.
+1791305013.143018321	  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+1791305013.144968231	  step 0/2502: loss=7.012475
+1791305013.525939836	  step 1/2502: loss=6.957630
+1791305014.013622650	  step 2/2502: loss=6.989037
+1791305053.734280407	  step 100/2502: loss=6.964497
+1791305093.538150299	  step 200/2502: loss=6.893833
+1791305133.488940015	  step 300/2502: loss=6.928111
+1791305173.650650107	  step 400/2502: loss=6.858354
+1791305213.446168074	  step 500/2502: loss=6.886086
+1791305253.271845713	  step 600/2502: loss=6.876414
+1791305253.274209725	  PROBE: 399 ms/step (median of 400 steps 201..600, ViT-Small (ImageNet-1k))
+1791305253.276084058	  PROBE-SPREAD: min=346 med=399 p90=419 mean=399 ms/step (starvation wait = med-min = 53 ms)

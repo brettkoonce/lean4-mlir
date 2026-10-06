@@ -1,0 +1,16 @@
+start Tue Oct  6 03:08:49 PM UTC 2026
+jax vits Tue Oct  6 03:08:49 PM UTC 2026
+jax a2 Tue Oct  6 03:22:26 PM UTC 2026
+jax a1 Tue Oct  6 03:36:03 PM UTC 2026
+jax vitb Tue Oct  6 03:49:40 PM UTC 2026
+jax cnxs Tue Oct  6 04:03:17 PM UTC 2026
+jax cnxb Tue Oct  6 04:16:53 PM UTC 2026
+jax mnv4 Tue Oct  6 04:20:55 PM UTC 2026
+verified vits-default-emabf16-4gpu Tue Oct  6 04:42:33 PM UTC 2026
+verified vitb-default-emabf16-4gpu Tue Oct  6 04:48:49 PM UTC 2026
+verified r50-a2-bf16-4gpu Tue Oct  6 05:01:01 PM UTC 2026
+verified r50-a1-bf16-4gpu Tue Oct  6 05:09:53 PM UTC 2026
+verified cnxs-default-emabf16-4gpu Tue Oct  6 05:18:39 PM UTC 2026
+verified cnxb-default-emabf16-4gpu Tue Oct  6 05:24:41 PM UTC 2026
+verified mnv4-full-4gpu Tue Oct  6 05:32:22 PM UTC 2026
+done Tue Oct  6 05:38:09 PM UTC 2026

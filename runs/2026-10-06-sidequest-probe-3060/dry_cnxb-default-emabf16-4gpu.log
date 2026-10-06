@@ -1,0 +1,5 @@
+box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+[sup] 2026-10-06 15:08:38 START job=cnxb-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=/tmp/supervise_dry_cnxb-default-emabf16-4gpu
+[sup] 2026-10-06 15:08:38 cmd: .lake/build/bin/convnext-b-imagenet-verified data
+[sup] 2026-10-06 15:08:38 eta: bf16 ~216 h for 300 ep on 4x 4060 Ti (mean 518 / median 518 ms/step; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal); peak 9.53 GiB of the 11.68 default (compile probe 2026-09-29)
+[sup] 2026-10-06 15:08:38 DRY_RUN — nothing launched

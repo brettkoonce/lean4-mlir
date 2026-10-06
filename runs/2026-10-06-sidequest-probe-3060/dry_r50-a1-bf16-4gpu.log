@@ -1,0 +1,8 @@
+box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+⚠ other resnet50in checkpoints present — they must NOT be resumed into this run:
+   .lake/build/resnet50in_momdp64bf16_ckpt_xla.bin
+   .lake/build/resnet50in_momdp64bf16_PERREPLICA_2026-08-27_e90_ckpt_xla.bin
+[sup] 2026-10-06 15:08:36 START job=r50-a1-bf16-4gpu devs=0,1,2,3 epochs=600 rest_after=[none] temp_max=78 stall=1800s logs=/tmp/supervise_dry_r50-a1-bf16-4gpu
+[sup] 2026-10-06 15:08:36 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-10-06 15:08:36 eta: bf16 ~185 h for 600 ep on 4x 4060 Ti (mean 444 / median 444 ms per micro-batch, 2,500 per epoch; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal)
+[sup] 2026-10-06 15:08:36 DRY_RUN — nothing launched

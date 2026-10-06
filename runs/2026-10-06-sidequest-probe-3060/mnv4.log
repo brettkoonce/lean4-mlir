@@ -1,0 +1,19 @@
+1791303675.788075322	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791303675.789525023	I0000 00:00:1791303675.785793 2167771 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791303676.634637455	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791303676.636348855	I0000 00:00:1791303676.631898 2167771 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791303677.787513060	MobileNetV4-Conv-M (ImageNet, bf16) · Lean 4 → JAX
+1791303677.789035342	  Conv(3→32,3x3/2)+BN → FMB1(32→48,e4,k3,s2,relu) → UIB(48→80,e4,s2,dw3/5) → UIB(80→80,e2,s1,dw3/3) → UIB(80→160,e6,s2,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/0) → UIB(160→160,e2,s1,dw0/0) → UIB(160→160,e4,s1,dw3/0) → UIB(160→256,e6,s2,dw5/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw3/0) → UIB(256→256,e2,s1,dw3/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e2,s1,dw5/0) → Conv(256→960,1x1/1)+BN → GAP → Conv(960→1280,1x1/1)+BN → 1280→1000
+1791303677.790355435	
+1791303677.791419978	ImageNet (1000-class) — tfds streaming pipeline
+1791303677.793387564	lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=500  params=9715512
+1791303677.794224320	steps_per_epoch=312  total_steps=156000
+1791303677.795525460	grad-accum=8x  micro_batch=512 (4 devices x 128)  -> effective_batch=4096  (LR targets effective)
+1791303677.796595645	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791303677.797686295	Starting training...
+1791303932.538047000	  step 100/156000  loss=6.9557  lr=0.00026  (2456.0ms/step avg)
+1791304142.148028653	  step 200/156000  loss=6.8391  lr=0.00051  (2276.0ms/step avg)
+1791304352.023400509	  step 300/156000  loss=6.6189  lr=0.00077  (2217.0ms/step avg)
+1791304377.608329046	[Epoch 1] lr=0.0008 loss(train_avg)=6.8765  [690.6s train, val skipped]
+1791304561.902249081	  step 400/156000  loss=6.4393  lr=0.00103  (2187.0ms/step avg)
+1791304772.523911732	  step 500/156000  loss=6.3115  lr=0.00128  (2171.0ms/step avg)

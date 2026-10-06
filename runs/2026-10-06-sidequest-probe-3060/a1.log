@@ -1,0 +1,18 @@
+1791300983.604491000	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791300983.605980868	I0000 00:00:1791300983.601264 2138984 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791300984.422839265	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791300984.425691030	I0000 00:00:1791300984.420036 2138984 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791300985.583048016	ResNet-50 (ImageNet) · Lean 4 → JAX
+1791300985.585742654	  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+1791300985.586580181	
+1791300985.587580996	ImageNet (1000-class) — tfds streaming pipeline
+1791300985.589759968	lr=0.005000  batch_size=2048 (4 devices x 512)  epochs=600  params=25557032
+1791300985.590621905	steps_per_epoch=625  total_steps=375000
+1791300985.591284370	grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+1791300985.592845599	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791300985.593511651	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791300985.595593637	Starting training...
+1791301169.738572123	  step 100/375000  loss=0.6284  lr=0.00016  (1772.0ms/step avg)
+1791301317.121501198	  step 200/375000  loss=0.3538  lr=0.00032  (1623.0ms/step avg)
+1791301464.405380629	  step 300/375000  loss=0.0737  lr=0.00048  (1573.0ms/step avg)
+1791301611.522848734	  step 400/375000  loss=0.0152  lr=0.00064  (1547.0ms/step avg)

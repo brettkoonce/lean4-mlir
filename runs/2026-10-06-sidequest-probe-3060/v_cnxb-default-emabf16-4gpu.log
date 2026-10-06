@@ -1,0 +1,1055 @@
+1791307501.215490169	box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+1791307502.614119276	[sup] 2026-10-06 17:25:02 START job=cnxb-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=runs/2026-10-06-cnxb-default-emabf16-4gpu
+1791307502.616103938	[sup] 2026-10-06 17:25:02 cmd: .lake/build/bin/convnext-b-imagenet-verified data
+1791307502.617663324	[sup] 2026-10-06 17:25:02 eta: bf16 ~216 h for 300 ep on 4x 4060 Ti (mean 518 / median 518 ms/step; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal); peak 9.53 GiB of the 11.68 default (compile probe 2026-09-29)
+1791307502.620292154	[sup] 2026-10-06 17:25:02 ONCE — one foreground run, no restart policy
+1791307503.420334839	I1006 17:25:03.419349 2216836 service.cc:154] XLA service 0x7bb440052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+1791307503.421075295	I1006 17:25:03.419410 2216836 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791307503.423049142	I1006 17:25:03.419424 2216836 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791307503.423926757	I1006 17:25:03.419431 2216836 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791307503.425407175	I1006 17:25:03.419438 2216836 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+1791307503.426251550	I1006 17:25:03.422968 2216836 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+1791307503.427007037	I1006 17:25:03.423008 2216836 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+1791307503.428704249	I1006 17:25:03.423043 2216836 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+1791307503.429580891	I1006 17:25:03.423051 2216836 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+1791307503.430887082	I1006 17:25:03.423058 2216836 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+1791307503.433041350	[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+1791307503.433779282	[pjrt_ffi] command buffers: enabled (CUDA default)
+1791307503.434823030	[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+1791307503.604904160	I1006 17:25:03.601999 2216836 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+1791307512.931744903	I1006 17:25:12.929169 2216836 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791307513.402710191	I1006 17:25:13.400763 2216896 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 8 bytes spill stores, 8 bytes spill loads
+1791307513.403853729	
+1791307513.415092408	W1006 17:25:13.413885 2216899 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791307513.535901158	W1006 17:25:13.533720 2216899 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791307513.675266675	I1006 17:25:13.674417 2216890 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_1', 132 bytes spill stores, 72 bytes spill loads
+1791307513.676033056	
+1791307514.638024690	W1006 17:25:14.635057 2216899 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791307516.557125796	W1006 17:25:16.555103 2216894 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791307517.289898535	I1006 17:25:17.286509 2216902 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 120 bytes spill stores, 120 bytes spill loads
+1791307517.291058035	
+1791307518.113032987	I1006 17:25:18.110073 2216912 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 10956 bytes spill stores, 10856 bytes spill loads
+1791307518.115803682	
+1791307533.225741336	I1006 17:25:33.220835 2216908 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_1718', 4 bytes spill stores, 4 bytes spill loads
+1791307533.227019406	
+1791307533.711495746	I1006 17:25:33.708949 2216903 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'fusion_857', 28 bytes spill stores, 28 bytes spill loads
+1791307533.713407112	
+1791307534.095906406	[pjrt_ffi] compiled verified_mlir/convnextbin_emadpwxclipdropbf16_train_step.mlir (@convnextbin_emadpwxclipdropbf16_train_step, 1417 outputs, 4 replicas) in 30660 ms
+1791307534.591670351	W1006 17:25:34.590288 2216889 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+1791307538.376462722	[pjrt_ffi] compiled verified_mlir/convnextbin_fwd.mlir (@convnextbin_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 4279 ms
+1791307538.399078858	ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)
+1791307538.400479707	  xla/pjrt verified_mlir/convnextbin_emadpwxclipdropbf16_train_step.mlir
+1791307538.402829545	  xla/pjrt verified_mlir/convnextbin_fwd.mlir  (eval, SHARDED over 4 replicas)
+1791307538.405496902	  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+1791307538.406428060	  train 1281167, test 50000; bs 64, ConvNeXt-B (ImageNet-1k) emadpwxclipdropbf16 (cosine+warmup 20ep, baseLR 0.000250), He init
+1791307538.407301953	  ▸ STOCHASTIC DEPTH: 36 drop sites, keeps #[1.000000, 0.986000, 0.971000, 0.957000, 0.943000, 0.929000, 0.914000, 0.900000, 0.886000, 0.871000, 0.857000, 0.843000, 0.829000, 0.814000, 0.800000, 0.786000, 0.771000, 0.757000, 0.743000, 0.729000, 0.714000, 0.700000, 0.686000, 0.671000, 0.657000, 0.643000, 0.629000, 0.614000, 0.600000, 0.586000, 0.571000, 0.557000, 0.543000, 0.529000, 0.514000, 0.500000] — host-drawn per step, 1/keep folded in, NOT on the resident path. Eval is the identity (drop-free forward).
+1791307538.409492408	  ▸ EMA: region 3 of 4 [θ|m|v|ema], shadow starts AT the weights, decay min(0.999900, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW.
+1791307538.410351955	  DATA-PARALLEL: 4 replicas x bs 64 = global batch 256, 5004 steps/epoch
+1791307538.411052898	  EVAL SHARDED: 4 replicas x 64 = 256 test images per invoke, 196 invokes, last one 80 real + 176 pad
+1791307540.450816475	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307540.453474421	I0000 00:00:1791307540.448174 2218244 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307540.480621055	I0000 00:00:1791307540.478378 2218244 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791307540.483348499	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791307541.510960257	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307541.513843898	I0000 00:00:1791307541.508342 2218244 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307544.158857027	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307544.161559850	I0000 00:00:1791307544.156449 2218350 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307544.186571726	I0000 00:00:1791307544.184114 2218350 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791307544.189005225	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791307544.826686647	I0000 00:00:1791307544.824228 2218395 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791307545.589079344	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307545.590813799	I0000 00:00:1791307545.586906 2218350 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307548.576730283	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307548.578858419	I0000 00:00:1791307548.574078 2218571 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307548.604862359	I0000 00:00:1791307548.602682 2218571 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791307548.607201029	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791307549.219598847	I0000 00:00:1791307549.217270 2218622 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791307550.025467242	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307550.027396282	I0000 00:00:1791307550.022614 2218571 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307553.051144890	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307553.052604569	I0000 00:00:1791307553.048740 2218787 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307553.079192626	I0000 00:00:1791307553.077025 2218787 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+1791307553.081697272	To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+1791307553.665882197	I0000 00:00:1791307553.663616 2218837 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791307554.524490447	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791307554.525807495	I0000 00:00:1791307554.520892 2218787 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+1791307558.660492128	I0000 00:00:1791307558.659249 2219041 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+1791307559.276183145	[pjrt_ffi] RESIDENT: @convnextbin_emadpwxclipdropbf16_train_step holds 1376 parameter tensors (1351.8 MB) on 4 devices; they stop crossing PCIe from here
+1791307560.357485070	I1006 17:26:00.351636 2216873 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791307560.359031030	I1006 17:26:00.355819 2216877 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791307560.360342261	I1006 17:26:00.358673 2216880 cuda_dnn.cc:442] Loaded cuDNN version 92400
+1791307562.882657689	  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)
+1791307562.884232178	  ▸ MIXUP/CUTMIX: this net's recipe declares SHIM_MIX=both; ON (wire v2, soft float32 targets — the reference recipe). ⚠ λ is drawn from numpy's Generator, not jax.random — agreement with the reference is DISTRIBUTIONAL, never per-step.
+1791307562.885058440	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 1), wire v4 soft targets [256x1000]
+1791307562.886748714	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 2), wire v4 soft targets [256x1000]
+1791307562.888157780	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 3), wire v4 soft targets [256x1000]
+1791307562.889246072	  imagenet shim: jax/.lake/build/generated_convnext_tiny_imagenet_shim.py — train split, batch 256, 150528 floats/img (seed 4), wire v4 soft targets [256x1000]
+1791307562.890648506	  imagenet shim: 4 sharded producers (round-robin over batches)
+1791307562.891488858	  ▸ SHIM RESPAWN: one producer every 10 epoch(s), round-robin over 4 — no loader lives past 40 epochs.
+1791307562.892430386	  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+1791307562.893504048	  step 0/5004: loss=7.128241
+1791307563.419020394	  step 1/5004: loss=7.033648
+1791307563.956311468	  step 2/5004: loss=7.173657
+1791307616.701205057	  step 100/5004: loss=7.076048
+1791307670.680968721	  step 200/5004: loss=7.108943
+1791307724.645245656	  step 300/5004: loss=7.055992
+1791307778.584717796	  step 400/5004: loss=7.023186
+1791307832.555980385	  step 500/5004: loss=7.081961
+1791307854.962231996	W1006 17:30:54.959373 2216869 bfc_allocator.cc:598] Allocator (GPU_0_bfc) ran out of memory trying to allocate 5.87GiB (rounded to 6308182016) from the lower end requested by op 
+1791307854.964312443	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791307854.966953294	Current allocation summary follows.
+1791307854.969647227	W1006 17:30:54.959397 2216877 bfc_allocator.cc:598] Allocator (GPU_2_bfc) ran out of memory trying to allocate 5.87GiB (rounded to 6308182016) from the lower end requested by op 
+1791307854.970834422	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791307854.973404878	Current allocation summary follows.
+1791307854.974571439	W1006 17:30:54.959374 2216873 bfc_allocator.cc:598] Allocator (GPU_1_bfc) ran out of memory trying to allocate 5.87GiB (rounded to 6308182016) from the lower end requested by op 
+1791307854.975431550	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791307854.976285439	Current allocation summary follows.
+1791307854.977409545	W1006 17:30:54.959467 2216880 bfc_allocator.cc:598] Allocator (GPU_3_bfc) ran out of memory trying to allocate 5.87GiB (rounded to 6308182016) from the lower end requested by op 
+1791307854.978688945	If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+1791307854.979823172	Current allocation summary follows.
+1791307854.980913576	I1006 17:30:54.959724 2216869 bfc_allocator.cc:1383] BFCAllocator dump for GPU_0_bfc
+1791307854.981741451	I1006 17:30:54.959727 2216869 bfc_allocator.cc:1390] Bin (256): 	Total Chunks: 82, Chunks in use: 82. 20.5KiB allocated for chunks. 20.5KiB in use in bin. 18.0KiB client-requested in use in bin.
+1791307854.982665247	I1006 17:30:54.959729 2216877 bfc_allocator.cc:1383] BFCAllocator dump for GPU_2_bfc
+1791307854.983559844	I1006 17:30:54.959731 2216869 bfc_allocator.cc:1390] Bin (512): 	Total Chunks: 160, Chunks in use: 160. 80.0KiB allocated for chunks. 80.0KiB in use in bin. 80.0KiB client-requested in use in bin.
+1791307854.984391031	I1006 17:30:54.959733 2216869 bfc_allocator.cc:1390] Bin (1024): 	Total Chunks: 144, Chunks in use: 144. 144.0KiB allocated for chunks. 144.0KiB in use in bin. 144.0KiB client-requested in use in bin.
+1791307854.985228783	I1006 17:30:54.959734 2216869 bfc_allocator.cc:1390] Bin (2048): 	Total Chunks: 1128, Chunks in use: 1128. 2.20MiB allocated for chunks. 2.20MiB in use in bin. 2.20MiB client-requested in use in bin.
+1791307854.987141478	I1006 17:30:54.959732 2216877 bfc_allocator.cc:1390] Bin (256): 	Total Chunks: 82, Chunks in use: 82. 20.5KiB allocated for chunks. 20.5KiB in use in bin. 18.0KiB client-requested in use in bin.
+1791307854.989657134	I1006 17:30:54.959737 2216869 bfc_allocator.cc:1390] Bin (4096): 	Total Chunks: 176, Chunks in use: 176. 704.0KiB allocated for chunks. 704.0KiB in use in bin. 703.2KiB client-requested in use in bin.
+1791307854.991358790	I1006 17:30:54.959739 2216869 bfc_allocator.cc:1390] Bin (8192): 	Total Chunks: 217, Chunks in use: 217. 1.70MiB allocated for chunks. 1.70MiB in use in bin. 1.70MiB client-requested in use in bin.
+1791307854.992539738	I1006 17:30:54.959740 2216877 bfc_allocator.cc:1390] Bin (512): 	Total Chunks: 160, Chunks in use: 160. 80.0KiB allocated for chunks. 80.0KiB in use in bin. 80.0KiB client-requested in use in bin.
+1791307854.994016740	I1006 17:30:54.959741 2216869 bfc_allocator.cc:1390] Bin (16384): 	Total Chunks: 55, Chunks in use: 55. 1.11MiB allocated for chunks. 1.11MiB in use in bin. 1.11MiB client-requested in use in bin.
+1791307854.994954680	I1006 17:30:54.959744 2216877 bfc_allocator.cc:1390] Bin (1024): 	Total Chunks: 144, Chunks in use: 144. 144.0KiB allocated for chunks. 144.0KiB in use in bin. 144.0KiB client-requested in use in bin.
+1791307854.995809503	I1006 17:30:54.959749 2216877 bfc_allocator.cc:1390] Bin (2048): 	Total Chunks: 1128, Chunks in use: 1128. 2.20MiB allocated for chunks. 2.20MiB in use in bin. 2.20MiB client-requested in use in bin.
+1791307854.996627887	I1006 17:30:54.959751 2216877 bfc_allocator.cc:1390] Bin (4096): 	Total Chunks: 176, Chunks in use: 176. 704.0KiB allocated for chunks. 704.0KiB in use in bin. 703.2KiB client-requested in use in bin.
+1791307854.997572067	I1006 17:30:54.959753 2216877 bfc_allocator.cc:1390] Bin (8192): 	Total Chunks: 217, Chunks in use: 217. 1.70MiB allocated for chunks. 1.70MiB in use in bin. 1.70MiB client-requested in use in bin.
+1791307854.998427544	I1006 17:30:54.959758 2216877 bfc_allocator.cc:1390] Bin (16384): 	Total Chunks: 55, Chunks in use: 55. 1.11MiB allocated for chunks. 1.11MiB in use in bin. 1.11MiB client-requested in use in bin.
+1791307854.999299760	I1006 17:30:54.959760 2216877 bfc_allocator.cc:1390] Bin (32768): 	Total Chunks: 22, Chunks in use: 22. 1.04MiB allocated for chunks. 1.04MiB in use in bin. 1.03MiB client-requested in use in bin.
+1791307855.000088776	I1006 17:30:54.959745 2216869 bfc_allocator.cc:1390] Bin (32768): 	Total Chunks: 22, Chunks in use: 22. 1.04MiB allocated for chunks. 1.04MiB in use in bin. 1.03MiB client-requested in use in bin.
+1791307855.000940109	I1006 17:30:54.959763 2216877 bfc_allocator.cc:1390] Bin (65536): 	Total Chunks: 214, Chunks in use: 214. 20.50MiB allocated for chunks. 20.50MiB in use in bin. 20.34MiB client-requested in use in bin.
+1791307855.002644437	I1006 17:30:54.959764 2216869 bfc_allocator.cc:1390] Bin (65536): 	Total Chunks: 214, Chunks in use: 214. 20.50MiB allocated for chunks. 20.50MiB in use in bin. 20.34MiB client-requested in use in bin.
+1791307855.003588222	I1006 17:30:54.959765 2216877 bfc_allocator.cc:1390] Bin (131072): 	Total Chunks: 30, Chunks in use: 30. 5.53MiB allocated for chunks. 5.53MiB in use in bin. 5.32MiB client-requested in use in bin.
+1791307855.004499668	I1006 17:30:54.959766 2216869 bfc_allocator.cc:1390] Bin (131072): 	Total Chunks: 30, Chunks in use: 30. 5.53MiB allocated for chunks. 5.53MiB in use in bin. 5.32MiB client-requested in use in bin.
+1791307855.005289361	I1006 17:30:54.959767 2216877 bfc_allocator.cc:1390] Bin (262144): 	Total Chunks: 48, Chunks in use: 48. 12.30MiB allocated for chunks. 12.30MiB in use in bin. 12.00MiB client-requested in use in bin.
+1791307855.006952862	I1006 17:30:54.959768 2216869 bfc_allocator.cc:1390] Bin (262144): 	Total Chunks: 48, Chunks in use: 48. 12.30MiB allocated for chunks. 12.30MiB in use in bin. 12.00MiB client-requested in use in bin.
+1791307855.007858258	I1006 17:30:54.959769 2216873 bfc_allocator.cc:1383] BFCAllocator dump for GPU_1_bfc
+1791307855.008598904	I1006 17:30:54.959770 2216877 bfc_allocator.cc:1390] Bin (524288): 	Total Chunks: 8, Chunks in use: 8. 4.30MiB allocated for chunks. 4.30MiB in use in bin. 4.00MiB client-requested in use in bin.
+1791307855.010642192	I1006 17:30:54.959774 2216877 bfc_allocator.cc:1390] Bin (1048576): 	Total Chunks: 48, Chunks in use: 48. 57.42MiB allocated for chunks. 57.42MiB in use in bin. 48.00MiB client-requested in use in bin.
+1791307855.011580241	I1006 17:30:54.959772 2216873 bfc_allocator.cc:1390] Bin (256): 	Total Chunks: 82, Chunks in use: 82. 20.5KiB allocated for chunks. 20.5KiB in use in bin. 18.0KiB client-requested in use in bin.
+1791307855.012331470	I1006 17:30:54.959776 2216877 bfc_allocator.cc:1390] Bin (2097152): 	Total Chunks: 15, Chunks in use: 15. 46.98MiB allocated for chunks. 46.98MiB in use in bin. 43.34MiB client-requested in use in bin.
+1791307855.013155423	I1006 17:30:54.959779 2216877 bfc_allocator.cc:1390] Bin (4194304): 	Total Chunks: 433, Chunks in use: 433. 1.78GiB allocated for chunks. 1.78GiB in use in bin. 1.69GiB client-requested in use in bin.
+1791307855.013914004	I1006 17:30:54.959781 2216877 bfc_allocator.cc:1390] Bin (8388608): 	Total Chunks: 8, Chunks in use: 8. 68.81MiB allocated for chunks. 68.81MiB in use in bin. 64.00MiB client-requested in use in bin.
+1791307855.014689407	I1006 17:30:54.959780 2216873 bfc_allocator.cc:1390] Bin (512): 	Total Chunks: 160, Chunks in use: 160. 80.0KiB allocated for chunks. 80.0KiB in use in bin. 80.0KiB client-requested in use in bin.
+1791307855.015697585	I1006 17:30:54.959783 2216877 bfc_allocator.cc:1390] Bin (16777216): 	Total Chunks: 48, Chunks in use: 48. 833.15MiB allocated for chunks. 833.15MiB in use in bin. 768.00MiB client-requested in use in bin.
+1791307855.016922341	I1006 17:30:54.959785 2216877 bfc_allocator.cc:1390] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 36.75MiB allocated for chunks. 36.75MiB in use in bin. 36.75MiB client-requested in use in bin.
+1791307855.017854677	I1006 17:30:54.959787 2216877 bfc_allocator.cc:1390] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.018620437	I1006 17:30:54.959786 2216873 bfc_allocator.cc:1390] Bin (1024): 	Total Chunks: 144, Chunks in use: 144. 144.0KiB allocated for chunks. 144.0KiB in use in bin. 144.0KiB client-requested in use in bin.
+1791307855.019402400	I1006 17:30:54.959771 2216869 bfc_allocator.cc:1390] Bin (524288): 	Total Chunks: 8, Chunks in use: 8. 4.30MiB allocated for chunks. 4.30MiB in use in bin. 4.00MiB client-requested in use in bin.
+1791307855.020178576	I1006 17:30:54.959801 2216869 bfc_allocator.cc:1390] Bin (1048576): 	Total Chunks: 48, Chunks in use: 48. 57.42MiB allocated for chunks. 57.42MiB in use in bin. 48.00MiB client-requested in use in bin.
+1791307855.021285593	I1006 17:30:54.959803 2216869 bfc_allocator.cc:1390] Bin (2097152): 	Total Chunks: 15, Chunks in use: 15. 46.98MiB allocated for chunks. 46.98MiB in use in bin. 43.34MiB client-requested in use in bin.
+1791307855.022090209	I1006 17:30:54.959804 2216869 bfc_allocator.cc:1390] Bin (4194304): 	Total Chunks: 433, Chunks in use: 433. 1.78GiB allocated for chunks. 1.78GiB in use in bin. 1.69GiB client-requested in use in bin.
+1791307855.023100201	I1006 17:30:54.959789 2216877 bfc_allocator.cc:1390] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.023876943	I1006 17:30:54.959806 2216869 bfc_allocator.cc:1390] Bin (8388608): 	Total Chunks: 8, Chunks in use: 8. 68.81MiB allocated for chunks. 68.81MiB in use in bin. 64.00MiB client-requested in use in bin.
+1791307855.026072759	I1006 17:30:54.959808 2216869 bfc_allocator.cc:1390] Bin (16777216): 	Total Chunks: 48, Chunks in use: 48. 833.15MiB allocated for chunks. 833.15MiB in use in bin. 768.00MiB client-requested in use in bin.
+1791307855.027245327	I1006 17:30:54.959809 2216869 bfc_allocator.cc:1390] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 36.75MiB allocated for chunks. 36.75MiB in use in bin. 36.75MiB client-requested in use in bin.
+1791307855.028026912	I1006 17:30:54.959809 2216877 bfc_allocator.cc:1390] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.028827888	I1006 17:30:54.959812 2216869 bfc_allocator.cc:1390] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.029588178	I1006 17:30:54.959813 2216877 bfc_allocator.cc:1406] Bin for 5.87GiB was 256.00MiB, Chunk State: 
+1791307855.030916448	I1006 17:30:54.959814 2216869 bfc_allocator.cc:1390] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.032949417	I1006 17:30:54.959815 2216877 bfc_allocator.cc:1419] Next region of size 9365880832
+1791307855.034141560	I1006 17:30:54.959819 2216869 bfc_allocator.cc:1390] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.035776936	I1006 17:30:54.959796 2216873 bfc_allocator.cc:1390] Bin (2048): 	Total Chunks: 1128, Chunks in use: 1128. 2.20MiB allocated for chunks. 2.20MiB in use in bin. 2.20MiB client-requested in use in bin.
+1791307855.036567872	I1006 17:30:54.959821 2216869 bfc_allocator.cc:1406] Bin for 5.87GiB was 256.00MiB, Chunk State: 
+1791307855.037407448	I1006 17:30:54.959826 2216873 bfc_allocator.cc:1390] Bin (4096): 	Total Chunks: 176, Chunks in use: 176. 704.0KiB allocated for chunks. 704.0KiB in use in bin. 703.2KiB client-requested in use in bin.
+1791307855.038127057	I1006 17:30:54.959831 2216869 bfc_allocator.cc:1419] Next region of size 9365880832
+1791307855.038959729	I1006 17:30:54.959830 2216873 bfc_allocator.cc:1390] Bin (8192): 	Total Chunks: 217, Chunks in use: 217. 1.70MiB allocated for chunks. 1.70MiB in use in bin. 1.70MiB client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.041181817	I1006 17:30:54.959837 2216873 bfc_allocator.cc:1390] Bin (16384): 	Total Chunks: 55, Chunks in use: 55. 1.11MiB allocated for chunks. 1.11MiB in use in bin. 1.11MiB client-requested in use in bin.
+	[… 10 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.052111161	I1006 17:30:54.959843 2216873 bfc_allocator.cc:1390] Bin (32768): 	Total Chunks: 22, Chunks in use: 22. 1.04MiB allocated for chunks. 1.04MiB in use in bin. 1.03MiB client-requested in use in bin.
+	[… 16 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.069971309	I1006 17:30:54.959865 2216873 bfc_allocator.cc:1390] Bin (65536): 	Total Chunks: 214, Chunks in use: 214. 20.50MiB allocated for chunks. 20.50MiB in use in bin. 20.34MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.074051875	I1006 17:30:54.959887 2216873 bfc_allocator.cc:1390] Bin (131072): 	Total Chunks: 30, Chunks in use: 30. 5.53MiB allocated for chunks. 5.53MiB in use in bin. 5.32MiB client-requested in use in bin.
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.080698654	I1006 17:30:54.959896 2216880 bfc_allocator.cc:1383] BFCAllocator dump for GPU_3_bfc
+1791307855.081362328	I1006 17:30:54.959893 2216873 bfc_allocator.cc:1390] Bin (262144): 	Total Chunks: 48, Chunks in use: 48. 12.30MiB allocated for chunks. 12.30MiB in use in bin. 12.00MiB client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.084305417	I1006 17:30:54.959907 2216873 bfc_allocator.cc:1390] Bin (524288): 	Total Chunks: 8, Chunks in use: 8. 4.30MiB allocated for chunks. 4.30MiB in use in bin. 4.00MiB client-requested in use in bin.
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.087826055	I1006 17:30:54.959913 2216873 bfc_allocator.cc:1390] Bin (1048576): 	Total Chunks: 48, Chunks in use: 48. 57.42MiB allocated for chunks. 57.42MiB in use in bin. 48.00MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.091649237	I1006 17:30:54.959913 2216880 bfc_allocator.cc:1390] Bin (256): 	Total Chunks: 82, Chunks in use: 82. 20.5KiB allocated for chunks. 20.5KiB in use in bin. 18.0KiB client-requested in use in bin.
+1791307855.092827578	I1006 17:30:54.959920 2216873 bfc_allocator.cc:1390] Bin (2097152): 	Total Chunks: 15, Chunks in use: 15. 46.98MiB allocated for chunks. 46.98MiB in use in bin. 43.34MiB client-requested in use in bin.
+1791307855.093682856	I1006 17:30:54.959941 2216880 bfc_allocator.cc:1390] Bin (512): 	Total Chunks: 160, Chunks in use: 160. 80.0KiB allocated for chunks. 80.0KiB in use in bin. 80.0KiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.097027720	I1006 17:30:54.959950 2216880 bfc_allocator.cc:1390] Bin (1024): 	Total Chunks: 144, Chunks in use: 144. 144.0KiB allocated for chunks. 144.0KiB in use in bin. 144.0KiB client-requested in use in bin.
+1791307855.098864021	I1006 17:30:54.959947 2216873 bfc_allocator.cc:1390] Bin (4194304): 	Total Chunks: 433, Chunks in use: 433. 1.78GiB allocated for chunks. 1.78GiB in use in bin. 1.69GiB client-requested in use in bin.
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.101659352	I1006 17:30:54.959967 2216873 bfc_allocator.cc:1390] Bin (8388608): 	Total Chunks: 8, Chunks in use: 8. 68.81MiB allocated for chunks. 68.81MiB in use in bin. 64.00MiB client-requested in use in bin.
+1791307855.102483738	I1006 17:30:54.959963 2216880 bfc_allocator.cc:1390] Bin (2048): 	Total Chunks: 1128, Chunks in use: 1128. 2.20MiB allocated for chunks. 2.20MiB in use in bin. 2.20MiB client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.103921529	I1006 17:30:54.959973 2216873 bfc_allocator.cc:1390] Bin (16777216): 	Total Chunks: 48, Chunks in use: 48. 833.15MiB allocated for chunks. 833.15MiB in use in bin. 768.00MiB client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.106607339	I1006 17:30:54.959977 2216873 bfc_allocator.cc:1390] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 36.75MiB allocated for chunks. 36.75MiB in use in bin. 36.75MiB client-requested in use in bin.
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.108069321	I1006 17:30:54.959975 2216880 bfc_allocator.cc:1390] Bin (4096): 	Total Chunks: 176, Chunks in use: 176. 704.0KiB allocated for chunks. 704.0KiB in use in bin. 703.2KiB client-requested in use in bin.
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.112303421	I1006 17:30:54.959984 2216880 bfc_allocator.cc:1390] Bin (8192): 	Total Chunks: 217, Chunks in use: 217. 1.70MiB allocated for chunks. 1.70MiB in use in bin. 1.70MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.116877430	I1006 17:30:54.959995 2216880 bfc_allocator.cc:1390] Bin (16384): 	Total Chunks: 55, Chunks in use: 55. 1.11MiB allocated for chunks. 1.11MiB in use in bin. 1.11MiB client-requested in use in bin.
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.118978675	I1006 17:30:54.959982 2216873 bfc_allocator.cc:1390] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.124077243	I1006 17:30:54.960009 2216873 bfc_allocator.cc:1390] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.124906870	I1006 17:30:54.960027 2216873 bfc_allocator.cc:1390] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+1791307855.125618164	I1006 17:30:54.960030 2216873 bfc_allocator.cc:1406] Bin for 5.87GiB was 256.00MiB, Chunk State: 
+1791307855.126308102	I1006 17:30:54.960033 2216873 bfc_allocator.cc:1419] Next region of size 9365880832
+1791307855.127041446	I1006 17:30:54.960005 2216880 bfc_allocator.cc:1390] Bin (32768): 	Total Chunks: 22, Chunks in use: 22. 1.04MiB allocated for chunks. 1.04MiB in use in bin. 1.03MiB client-requested in use in bin.
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.132777206	I1006 17:30:54.960043 2216880 bfc_allocator.cc:1390] Bin (65536): 	Total Chunks: 214, Chunks in use: 214. 20.50MiB allocated for chunks. 20.50MiB in use in bin. 20.34MiB client-requested in use in bin.
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.136704211	I1006 17:30:54.960055 2216880 bfc_allocator.cc:1390] Bin (131072): 	Total Chunks: 30, Chunks in use: 30. 5.53MiB allocated for chunks. 5.53MiB in use in bin. 5.32MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.140623298	I1006 17:30:54.960068 2216880 bfc_allocator.cc:1390] Bin (262144): 	Total Chunks: 48, Chunks in use: 48. 12.30MiB allocated for chunks. 12.30MiB in use in bin. 12.00MiB client-requested in use in bin.
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.145575551	I1006 17:30:54.960077 2216880 bfc_allocator.cc:1390] Bin (524288): 	Total Chunks: 8, Chunks in use: 8. 4.30MiB allocated for chunks. 4.30MiB in use in bin. 4.00MiB client-requested in use in bin.
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.149370723	I1006 17:30:54.960086 2216880 bfc_allocator.cc:1390] Bin (1048576): 	Total Chunks: 48, Chunks in use: 48. 57.42MiB allocated for chunks. 57.42MiB in use in bin. 48.00MiB client-requested in use in bin.
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.155476960	I1006 17:30:54.960097 2216880 bfc_allocator.cc:1390] Bin (2097152): 	Total Chunks: 15, Chunks in use: 15. 46.98MiB allocated for chunks. 46.98MiB in use in bin. 43.34MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.158354621	I1006 17:30:54.960107 2216880 bfc_allocator.cc:1390] Bin (4194304): 	Total Chunks: 433, Chunks in use: 433. 1.78GiB allocated for chunks. 1.78GiB in use in bin. 1.69GiB client-requested in use in bin.
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.164628128	I1006 17:30:54.960117 2216880 bfc_allocator.cc:1390] Bin (8388608): 	Total Chunks: 8, Chunks in use: 8. 68.81MiB allocated for chunks. 68.81MiB in use in bin. 64.00MiB client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.168132668	I1006 17:30:54.960127 2216880 bfc_allocator.cc:1390] Bin (16777216): 	Total Chunks: 48, Chunks in use: 48. 833.15MiB allocated for chunks. 833.15MiB in use in bin. 768.00MiB client-requested in use in bin.
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.175243343	I1006 17:30:54.960139 2216880 bfc_allocator.cc:1390] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 36.75MiB allocated for chunks. 36.75MiB in use in bin. 36.75MiB client-requested in use in bin.
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.178759411	I1006 17:30:54.960151 2216880 bfc_allocator.cc:1390] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.181891784	I1006 17:30:54.960163 2216880 bfc_allocator.cc:1390] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.186370218	I1006 17:30:54.960172 2216880 bfc_allocator.cc:1390] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.193993468	I1006 17:30:54.960179 2216880 bfc_allocator.cc:1406] Bin for 5.87GiB was 256.00MiB, Chunk State: 
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307855.198388623	I1006 17:30:54.960191 2216880 bfc_allocator.cc:1419] Next region of size 9365880832
+	[… 10412 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.810802950	I1006 17:31:04.430472 2216877 bfc_allocator.cc:1445] Free  at b18430c00 of size 6308033536 tag central_gap next 18446744073709551615
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.816062116	I1006 17:31:04.430474 2216877 bfc_allocator.cc:1450]      Summary of in-use Chunks by size: 
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.817439703	I1006 17:31:04.454119 2216877 bfc_allocator.cc:1453] 82 Chunks of size 256 totalling 20.5KiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.822205810	I1006 17:31:04.454138 2216877 bfc_allocator.cc:1453] 160 Chunks of size 512 totalling 80.0KiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.829020653	I1006 17:31:04.454163 2216877 bfc_allocator.cc:1453] 144 Chunks of size 1024 totalling 144.0KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.831098772	I1006 17:31:04.454177 2216877 bfc_allocator.cc:1453] 1128 Chunks of size 2048 totalling 2.20MiB
+1791307864.831744007	I1006 17:31:04.454180 2216877 bfc_allocator.cc:1453] 176 Chunks of size 4096 totalling 704.0KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.833059085	I1006 17:31:04.454182 2216877 bfc_allocator.cc:1453] 216 Chunks of size 8192 totalling 1.69MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.835957968	I1006 17:31:04.454185 2216877 bfc_allocator.cc:1453] 1 Chunks of size 11520 totalling 11.2KiB
+	[… 10 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.844108016	I1006 17:31:04.454189 2216877 bfc_allocator.cc:1453] 24 Chunks of size 16384 totalling 384.0KiB
+	[… 13 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.857118648	I1006 17:31:04.478096 2216877 bfc_allocator.cc:1453] 8 Chunks of size 24576 totalling 192.0KiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.861711958	I1006 17:31:04.478123 2216877 bfc_allocator.cc:1453] 23 Chunks of size 25088 totalling 563.5KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.863767855	I1006 17:31:04.478128 2216877 bfc_allocator.cc:1453] 1 Chunks of size 33536 totalling 32.8KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.865820587	I1006 17:31:04.499163 2216877 bfc_allocator.cc:1453] 21 Chunks of size 50176 totalling 1.00MiB
+1791307864.867066074	I1006 17:31:04.499170 2216877 bfc_allocator.cc:1453] 1 Chunks of size 73728 totalling 72.0KiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.871565383	I1006 17:31:04.499178 2216877 bfc_allocator.cc:1453] 1 Chunks of size 96256 totalling 94.0KiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.875476496	I1006 17:31:04.499195 2216877 bfc_allocator.cc:1453] 1 Chunks of size 98304 totalling 96.0KiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.879195020	I1006 17:31:04.499202 2216877 bfc_allocator.cc:1453] 206 Chunks of size 100352 totalling 19.71MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.886232908	I1006 17:31:04.499208 2216877 bfc_allocator.cc:1453] 1 Chunks of size 107520 totalling 105.0KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.888348646	I1006 17:31:04.499217 2216877 bfc_allocator.cc:1453] 1 Chunks of size 108544 totalling 106.0KiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.893585708	I1006 17:31:04.522966 2216877 bfc_allocator.cc:1453] 1 Chunks of size 109824 totalling 107.2KiB
+	[… 17 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.910039327	I1006 17:31:04.523011 2216877 bfc_allocator.cc:1453] 1 Chunks of size 110592 totalling 108.0KiB
+	[… 19 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.926311299	I1006 17:31:04.523050 2216877 bfc_allocator.cc:1453] 1 Chunks of size 114688 totalling 112.0KiB
+	[… 31 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.954033034	I1006 17:31:04.548546 2216877 bfc_allocator.cc:1453] 1 Chunks of size 132864 totalling 129.8KiB
+	[… 15 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.967593556	I1006 17:31:04.575579 2216877 bfc_allocator.cc:1453] 1 Chunks of size 137472 totalling 134.2KiB
+	[… 16 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.983735782	I1006 17:31:04.597237 2216877 bfc_allocator.cc:1453] 1 Chunks of size 143360 totalling 140.0KiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.988609600	I1006 17:31:04.622169 2216877 bfc_allocator.cc:1453] 1 Chunks of size 143872 totalling 140.5KiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.992631325	I1006 17:31:04.622180 2216877 bfc_allocator.cc:1453] 1 Chunks of size 145408 totalling 142.0KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.995259398	I1006 17:31:04.622185 2216877 bfc_allocator.cc:1453] 23 Chunks of size 200704 totalling 4.40MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307864.998254843	I1006 17:31:04.622189 2216877 bfc_allocator.cc:1453] 1 Chunks of size 221184 totalling 216.0KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.001088534	I1006 17:31:04.622192 2216877 bfc_allocator.cc:1453] 1 Chunks of size 256000 totalling 250.0KiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.007807027	I1006 17:31:04.622200 2216877 bfc_allocator.cc:1453] 46 Chunks of size 262144 totalling 11.50MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.009527300	I1006 17:31:04.649845 2216877 bfc_allocator.cc:1453] 1 Chunks of size 393472 totalling 384.2KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.010930161	I1006 17:31:04.649855 2216877 bfc_allocator.cc:1453] 1 Chunks of size 443648 totalling 433.2KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.012663047	I1006 17:31:04.649859 2216877 bfc_allocator.cc:1453] 6 Chunks of size 524288 totalling 3.00MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.017377701	I1006 17:31:04.649861 2216877 bfc_allocator.cc:1453] 1 Chunks of size 550144 totalling 537.2KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.018753539	I1006 17:31:04.649880 2216877 bfc_allocator.cc:1453] 1 Chunks of size 818432 totalling 799.2KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.022401328	I1006 17:31:04.649883 2216877 bfc_allocator.cc:1453] 30 Chunks of size 1048576 totalling 30.00MiB
+1791307865.023405342	I1006 17:31:04.649887 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1383424 totalling 1.32MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.024801479	I1006 17:31:04.649890 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1396736 totalling 1.33MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.027218315	I1006 17:31:04.649893 2216877 bfc_allocator.cc:1453] 2 Chunks of size 1462272 totalling 2.79MiB
+1791307865.028294557	I1006 17:31:04.649898 2216877 bfc_allocator.cc:1453] 4 Chunks of size 1464320 totalling 5.59MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.029671764	I1006 17:31:04.649902 2216877 bfc_allocator.cc:1453] 2 Chunks of size 1465344 totalling 2.79MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.032470645	I1006 17:31:04.649904 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1490176 totalling 1.42MiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.038171088	I1006 17:31:04.649913 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1547008 totalling 1.47MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.043697169	I1006 17:31:04.675407 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1652480 totalling 1.58MiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.049186728	I1006 17:31:04.675413 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1775104 totalling 1.69MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.051234598	I1006 17:31:04.675437 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1819904 totalling 1.74MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.052718003	I1006 17:31:04.675440 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1988608 totalling 1.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.054939324	I1006 17:31:04.675443 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1990656 totalling 1.90MiB
+	[… 16 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.067073943	I1006 17:31:04.675446 2216877 bfc_allocator.cc:1453] 1 Chunks of size 1998848 totalling 1.91MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.070043603	I1006 17:31:04.701394 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2207744 totalling 2.11MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.072362297	I1006 17:31:04.701400 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2211840 totalling 2.11MiB
+	[… 8 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.079327921	I1006 17:31:04.701402 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2254848 totalling 2.15MiB
+	[… 8 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.086483331	I1006 17:31:04.701416 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2467840 totalling 2.35MiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.094096091	I1006 17:31:04.725611 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2513920 totalling 2.40MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.097800111	I1006 17:31:04.725626 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2768896 totalling 2.64MiB
+	[… 24 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.120334868	I1006 17:31:04.725636 2216877 bfc_allocator.cc:1453] 1 Chunks of size 2920192 totalling 2.78MiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.128354606	I1006 17:31:04.745545 2216877 bfc_allocator.cc:1453] 1 Chunks of size 3181568 totalling 3.03MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.132054540	I1006 17:31:04.745552 2216877 bfc_allocator.cc:1453] 5 Chunks of size 4096000 totalling 19.53MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.133528915	I1006 17:31:04.768578 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4119040 totalling 3.93MiB
+1791307865.134380772	I1006 17:31:04.768586 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4134656 totalling 3.94MiB
+1791307865.135063046	I1006 17:31:04.768587 2216877 bfc_allocator.cc:1453] 382 Chunks of size 4194304 totalling 1.49GiB
+1791307865.136087913	I1006 17:31:04.768588 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4247552 totalling 4.05MiB
+1791307865.136835618	I1006 17:31:04.768589 2216877 bfc_allocator.cc:1453] 2 Chunks of size 4341760 totalling 8.28MiB
+1791307865.137550720	I1006 17:31:04.768591 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4453376 totalling 4.25MiB
+1791307865.138205396	I1006 17:31:04.768592 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4546560 totalling 4.34MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.140793111	I1006 17:31:04.768593 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4674048 totalling 4.46MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.142843991	I1006 17:31:04.768616 2216877 bfc_allocator.cc:1453] 1 Chunks of size 4776960 totalling 4.56MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.147233094	I1006 17:31:04.768620 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5033984 totalling 4.80MiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.152068050	I1006 17:31:04.768627 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5038080 totalling 4.80MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.158858429	I1006 17:31:04.768633 2216877 bfc_allocator.cc:1453] 2 Chunks of size 5132288 totalling 9.79MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.164652545	I1006 17:31:04.791486 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5135360 totalling 4.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.166575145	I1006 17:31:04.791494 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5175296 totalling 4.94MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.167955711	I1006 17:31:04.791498 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5353472 totalling 5.11MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.169734848	I1006 17:31:04.791501 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5471232 totalling 5.22MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.174162527	I1006 17:31:04.791503 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5508096 totalling 5.25MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.175522899	I1006 17:31:04.791519 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5587456 totalling 5.33MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.176989899	I1006 17:31:04.791525 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5613568 totalling 5.35MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.179433902	I1006 17:31:04.791527 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5615616 totalling 5.36MiB
+1791307865.180142832	I1006 17:31:04.791529 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5617664 totalling 5.36MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.182643837	I1006 17:31:04.791531 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5658624 totalling 5.40MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.184046456	I1006 17:31:04.791532 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5697536 totalling 5.43MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.185413104	I1006 17:31:04.791535 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5702144 totalling 5.44MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.188705608	I1006 17:31:04.791538 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5764096 totalling 5.50MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.192708948	I1006 17:31:04.814830 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5865472 totalling 5.59MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.194716414	I1006 17:31:04.814838 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5873664 totalling 5.60MiB
+1791307865.195373387	I1006 17:31:04.814841 2216877 bfc_allocator.cc:1453] 1 Chunks of size 5874688 totalling 5.60MiB
+1791307865.195999793	I1006 17:31:04.814842 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6121216 totalling 5.84MiB
+1791307865.197868549	I1006 17:31:04.814844 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6176768 totalling 5.89MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.199242446	I1006 17:31:04.814846 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6182912 totalling 5.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.200726375	I1006 17:31:04.814850 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6195712 totalling 5.91MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.202826759	I1006 17:31:04.814853 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6299648 totalling 6.01MiB
+1791307865.203568530	I1006 17:31:04.814857 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6344704 totalling 6.05MiB
+1791307865.204219552	I1006 17:31:04.814859 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6402048 totalling 6.11MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.208007589	I1006 17:31:04.814861 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6446080 totalling 6.15MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.210523636	I1006 17:31:04.814869 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6661120 totalling 6.35MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.213095525	I1006 17:31:04.837355 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6662144 totalling 6.35MiB
+1791307865.213860285	I1006 17:31:04.837363 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6850816 totalling 6.53MiB
+1791307865.214815303	I1006 17:31:04.837366 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6918144 totalling 6.60MiB
+1791307865.215755348	I1006 17:31:04.837367 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6924288 totalling 6.60MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.219884055	I1006 17:31:04.837368 2216877 bfc_allocator.cc:1453] 1 Chunks of size 6969344 totalling 6.65MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.222212618	I1006 17:31:04.837397 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7109376 totalling 6.78MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.223596170	I1006 17:31:04.837399 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7164928 totalling 6.83MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.225008983	I1006 17:31:04.837401 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7188480 totalling 6.86MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.227692224	I1006 17:31:04.837403 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7494656 totalling 7.15MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.230990654	I1006 17:31:04.837408 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7648256 totalling 7.29MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.232472426	I1006 17:31:04.837411 2216877 bfc_allocator.cc:1453] 1 Chunks of size 7878656 totalling 7.51MiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.239369962	I1006 17:31:04.837415 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8071168 totalling 7.70MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.245068092	I1006 17:31:04.860145 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8265472 totalling 7.88MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.248521948	I1006 17:31:04.860152 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8281088 totalling 7.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.249915576	I1006 17:31:04.860157 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8334848 totalling 7.95MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.252100899	I1006 17:31:04.860159 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8435712 totalling 8.04MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.254314172	I1006 17:31:04.860162 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8513536 totalling 8.12MiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.261793610	I1006 17:31:04.860164 2216877 bfc_allocator.cc:1453] 1 Chunks of size 8772096 totalling 8.37MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.264605702	I1006 17:31:04.860176 2216877 bfc_allocator.cc:1453] 1 Chunks of size 9062400 totalling 8.64MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.268860550	I1006 17:31:04.886395 2216877 bfc_allocator.cc:1453] 1 Chunks of size 9120768 totalling 8.70MiB
+1791307865.270194076	I1006 17:31:04.886404 2216877 bfc_allocator.cc:1453] 2 Chunks of size 9326592 totalling 17.79MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.271586738	I1006 17:31:04.886406 2216877 bfc_allocator.cc:1453] 1 Chunks of size 9591808 totalling 9.15MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.273635932	I1006 17:31:04.886411 2216880 bfc_allocator.cc:1445] Free  at d48430c00 of size 6308033536 tag central_gap next 18446744073709551615
+1791307865.274373287	I1006 17:31:04.886412 2216880 bfc_allocator.cc:1450]      Summary of in-use Chunks by size: 
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.275732501	I1006 17:31:04.886409 2216877 bfc_allocator.cc:1453] 35 Chunks of size 16777216 totalling 560.00MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.277730340	I1006 17:31:04.886413 2216880 bfc_allocator.cc:1453] 82 Chunks of size 256 totalling 20.5KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.280866194	I1006 17:31:04.886421 2216880 bfc_allocator.cc:1453] 160 Chunks of size 512 totalling 80.0KiB
+1791307865.281515030	I1006 17:31:04.886418 2216877 bfc_allocator.cc:1453] 1 Chunks of size 16926464 totalling 16.14MiB
+1791307865.282151769	I1006 17:31:04.886424 2216880 bfc_allocator.cc:1453] 144 Chunks of size 1024 totalling 144.0KiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.285528253	I1006 17:31:04.886427 2216880 bfc_allocator.cc:1453] 1128 Chunks of size 2048 totalling 2.20MiB
+	[… 27 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.309176611	I1006 17:31:04.886431 2216880 bfc_allocator.cc:1453] 176 Chunks of size 4096 totalling 704.0KiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.314222256	I1006 17:31:04.886424 2216877 bfc_allocator.cc:1453] 1 Chunks of size 16928768 totalling 16.14MiB
+1791307865.316213220	I1006 17:31:04.933487 2216877 bfc_allocator.cc:1453] 1 Chunks of size 17511680 totalling 16.70MiB
+1791307865.317052455	I1006 17:31:04.933495 2216877 bfc_allocator.cc:1453] 1 Chunks of size 18485248 totalling 17.63MiB
+1791307865.317732354	I1006 17:31:04.933497 2216877 bfc_allocator.cc:1453] 1 Chunks of size 18503680 totalling 17.65MiB
+1791307865.318739948	I1006 17:31:04.933498 2216877 bfc_allocator.cc:1453] 1 Chunks of size 19239936 totalling 18.35MiB
+1791307865.319469062	I1006 17:31:04.933499 2216877 bfc_allocator.cc:1453] 1 Chunks of size 20940032 totalling 19.97MiB
+1791307865.320121686	I1006 17:31:04.933501 2216877 bfc_allocator.cc:1453] 1 Chunks of size 21650432 totalling 20.65MiB
+1791307865.320956312	I1006 17:31:04.933502 2216877 bfc_allocator.cc:1453] 1 Chunks of size 24066048 totalling 22.95MiB
+1791307865.322872374	I1006 17:31:04.933503 2216877 bfc_allocator.cc:1453] 1 Chunks of size 24562944 totalling 23.42MiB
+1791307865.323857913	I1006 17:31:04.933504 2216877 bfc_allocator.cc:1453] 1 Chunks of size 26318592 totalling 25.10MiB
+1791307865.324525227	I1006 17:31:04.933509 2216877 bfc_allocator.cc:1453] 1 Chunks of size 28204032 totalling 26.90MiB
+1791307865.325244938	I1006 17:31:04.933510 2216877 bfc_allocator.cc:1453] 1 Chunks of size 33085440 totalling 31.55MiB
+1791307865.325977375	I1006 17:31:04.933511 2216877 bfc_allocator.cc:1453] 1 Chunks of size 38535168 totalling 36.75MiB
+1791307865.326679606	I1006 17:31:04.933513 2216877 bfc_allocator.cc:1473] Sum Total of in-use chunks: 2.85GiB
+1791307865.327447911	I1006 17:31:04.933514 2216877 bfc_allocator.cc:1475] Allocator memory summary: rounded request 5.87GiB, total free in pool 5.87GiB, largest free chunk usable by lower end 5.87GiB, unallocated bytes 0B, pool size 8.72GiB, pool limit 8.72GiB
+1791307865.328159326	I1006 17:31:04.933517 2216877 bfc_allocator.cc:1486] Spatial partitioning summary for lower end: central gap 5.87GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+1791307865.329039310	I1006 17:31:04.933519 2216877 bfc_allocator.cc:1497] Allocator region growth hint: next region allocation target 17.45GiB (growth disabled; fixed-size pool; not an attempted allocation).
+1791307865.329719200	I1006 17:31:04.933521 2216877 bfc_allocator.cc:1506] Stats: 
+1791307865.330353192	Limit:                         8.72GiB
+1791307865.331218320	InUse:                         2.85GiB
+1791307865.333350997	MaxInUse:                      8.72GiB
+1791307865.334353461	NumAllocs:                      768925
+1791307865.335023722	MaxAllocSize:                  6.00GiB
+1791307865.335669445	Reserved:                           0B
+1791307865.336600008	PeakReserved:                       0B
+1791307865.337663969	PeakAllocated:                          0B
+1791307865.338416582	LargestFreeBlock:              5.87GiB
+1791307865.339062536	
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.342729748	I1006 17:31:04.933474 2216880 bfc_allocator.cc:1453] 216 Chunks of size 8192 totalling 1.69MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.345100368	I1006 17:31:04.955961 2216880 bfc_allocator.cc:1453] 1 Chunks of size 11520 totalling 11.2KiB
+1791307865.346965826	I1006 17:31:04.955969 2216880 bfc_allocator.cc:1453] 24 Chunks of size 16384 totalling 384.0KiB
+1791307865.347782675	I1006 17:31:04.955970 2216880 bfc_allocator.cc:1453] 8 Chunks of size 24576 totalling 192.0KiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.350962799	W1006 17:31:04.933532 2216877 bfc_allocator.cc:609] *********************************___________________________________________________________________
+1791307865.351598625	I1006 17:31:04.955971 2216880 bfc_allocator.cc:1453] 23 Chunks of size 25088 totalling 563.5KiB
+1791307865.352224663	I1006 17:31:04.956000 2216880 bfc_allocator.cc:1453] 1 Chunks of size 33536 totalling 32.8KiB
+1791307865.353260626	I1006 17:31:04.956001 2216880 bfc_allocator.cc:1453] 21 Chunks of size 50176 totalling 1.00MiB
+1791307865.353910437	I1006 17:31:04.956002 2216880 bfc_allocator.cc:1453] 1 Chunks of size 73728 totalling 72.0KiB
+1791307865.354551064	I1006 17:31:04.956003 2216880 bfc_allocator.cc:1453] 1 Chunks of size 96256 totalling 94.0KiB
+1791307865.355190280	I1006 17:31:04.956005 2216880 bfc_allocator.cc:1453] 1 Chunks of size 98304 totalling 96.0KiB
+1791307865.356659568	I1006 17:31:04.956006 2216880 bfc_allocator.cc:1453] 206 Chunks of size 100352 totalling 19.71MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.358501843	I1006 17:31:04.956007 2216880 bfc_allocator.cc:1453] 1 Chunks of size 107520 totalling 105.0KiB
+1791307865.359191425	I1006 17:31:04.956014 2216880 bfc_allocator.cc:1453] 1 Chunks of size 108544 totalling 106.0KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.362307548	I1006 17:31:04.956015 2216880 bfc_allocator.cc:1453] 1 Chunks of size 109824 totalling 107.2KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.364650137	I1006 17:31:04.956027 2216880 bfc_allocator.cc:1453] 1 Chunks of size 110592 totalling 108.0KiB
+1791307865.365353980	I1006 17:31:04.956037 2216880 bfc_allocator.cc:1453] 1 Chunks of size 114688 totalling 112.0KiB
+1791307865.366075216	I1006 17:31:04.956038 2216880 bfc_allocator.cc:1453] 1 Chunks of size 132864 totalling 129.8KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.369526392	I1006 17:31:04.956040 2216880 bfc_allocator.cc:1453] 1 Chunks of size 137472 totalling 134.2KiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.372092342	I1006 17:31:04.956046 2216880 bfc_allocator.cc:1453] 1 Chunks of size 143360 totalling 140.0KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.373411784	I1006 17:31:04.980137 2216880 bfc_allocator.cc:1453] 1 Chunks of size 143872 totalling 140.5KiB
+1791307865.374645342	I1006 17:31:04.980156 2216880 bfc_allocator.cc:1453] 1 Chunks of size 145408 totalling 142.0KiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.378071704	I1006 17:31:04.980160 2216880 bfc_allocator.cc:1453] 23 Chunks of size 200704 totalling 4.40MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.381205110	I1006 17:31:04.980173 2216880 bfc_allocator.cc:1453] 1 Chunks of size 221184 totalling 216.0KiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.390450460	I1006 17:31:04.980180 2216880 bfc_allocator.cc:1453] 1 Chunks of size 256000 totalling 250.0KiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.394712109	I1006 17:31:04.980187 2216880 bfc_allocator.cc:1453] 46 Chunks of size 262144 totalling 11.50MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.397273479	I1006 17:31:04.980192 2216880 bfc_allocator.cc:1453] 1 Chunks of size 393472 totalling 384.2KiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.401886610	I1006 17:31:04.980198 2216880 bfc_allocator.cc:1453] 1 Chunks of size 443648 totalling 433.2KiB
+	[… 9 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.411040690	I1006 17:31:05.005935 2216880 bfc_allocator.cc:1453] 6 Chunks of size 524288 totalling 3.00MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.416560062	I1006 17:31:05.005945 2216880 bfc_allocator.cc:1453] 1 Chunks of size 550144 totalling 537.2KiB
+1791307865.417475192	I1006 17:31:05.005949 2216880 bfc_allocator.cc:1453] 1 Chunks of size 818432 totalling 799.2KiB
+1791307865.418236138	I1006 17:31:05.005950 2216880 bfc_allocator.cc:1453] 30 Chunks of size 1048576 totalling 30.00MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.420988496	I1006 17:31:05.005953 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1383424 totalling 1.32MiB
+1791307865.421792261	I1006 17:31:05.005955 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1396736 totalling 1.33MiB
+1791307865.422527755	I1006 17:31:05.005957 2216880 bfc_allocator.cc:1453] 2 Chunks of size 1462272 totalling 2.79MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.424817033	I1006 17:31:05.005958 2216880 bfc_allocator.cc:1453] 4 Chunks of size 1464320 totalling 5.59MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.426393554	I1006 17:31:05.005960 2216880 bfc_allocator.cc:1453] 2 Chunks of size 1465344 totalling 2.79MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.429732301	I1006 17:31:05.005963 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1490176 totalling 1.42MiB
+	[… 9 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.439029392	I1006 17:31:05.033335 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1547008 totalling 1.47MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.440373420	I1006 17:31:05.033343 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1652480 totalling 1.58MiB
+1791307865.440988837	I1006 17:31:05.033345 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1775104 totalling 1.69MiB
+1791307865.441700657	I1006 17:31:05.033346 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1819904 totalling 1.74MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.443009338	I1006 17:31:05.033348 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1988608 totalling 1.90MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.446271215	I1006 17:31:05.033351 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1990656 totalling 1.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.447741019	I1006 17:31:05.033353 2216880 bfc_allocator.cc:1453] 1 Chunks of size 1998848 totalling 1.91MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.449782727	I1006 17:31:05.033354 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2207744 totalling 2.11MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.451693004	I1006 17:31:05.033356 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2211840 totalling 2.11MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.453495657	I1006 17:31:05.033357 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2254848 totalling 2.15MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.456443599	I1006 17:31:05.033358 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2467840 totalling 2.35MiB
+	[… 9 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.468416636	I1006 17:31:05.058775 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2513920 totalling 2.40MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.474956786	I1006 17:31:05.058799 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2768896 totalling 2.64MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.476425392	I1006 17:31:05.058807 2216880 bfc_allocator.cc:1453] 1 Chunks of size 2920192 totalling 2.78MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.483050549	I1006 17:31:05.058815 2216880 bfc_allocator.cc:1453] 1 Chunks of size 3181568 totalling 3.03MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.485740526	I1006 17:31:05.058823 2216880 bfc_allocator.cc:1453] 5 Chunks of size 4096000 totalling 19.53MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.489350815	I1006 17:31:05.058829 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4119040 totalling 3.93MiB
+1791307865.491262081	I1006 17:31:05.080436 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4134656 totalling 3.94MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.493039181	I1006 17:31:05.080443 2216880 bfc_allocator.cc:1453] 382 Chunks of size 4194304 totalling 1.49GiB
+1791307865.493692965	I1006 17:31:05.080448 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4247552 totalling 4.05MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.495299630	I1006 17:31:05.080450 2216880 bfc_allocator.cc:1453] 2 Chunks of size 4341760 totalling 8.28MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.497185419	I1006 17:31:05.080452 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4453376 totalling 4.25MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.499037922	I1006 17:31:05.080454 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4546560 totalling 4.34MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.500520275	I1006 17:31:05.080457 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4674048 totalling 4.46MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.501956578	I1006 17:31:05.080461 2216880 bfc_allocator.cc:1453] 1 Chunks of size 4776960 totalling 4.56MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.504796123	I1006 17:31:05.080464 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5033984 totalling 4.80MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.507363405	I1006 17:31:05.080466 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5038080 totalling 4.80MiB
+	[… 8 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.518047251	I1006 17:31:05.080469 2216880 bfc_allocator.cc:1453] 2 Chunks of size 5132288 totalling 9.79MiB
+	[… 9 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.526795810	I1006 17:31:05.104428 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5135360 totalling 4.90MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.528573298	I1006 17:31:05.104436 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5175296 totalling 4.94MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.533126056	I1006 17:31:05.104438 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5353472 totalling 5.11MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.534631336	I1006 17:31:05.104457 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5471232 totalling 5.22MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.536354646	I1006 17:31:05.104460 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5508096 totalling 5.25MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.538243980	I1006 17:31:05.104463 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5587456 totalling 5.33MiB
+	[… 10 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.550199971	I1006 17:31:05.104464 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5613568 totalling 5.35MiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.557625154	I1006 17:31:05.130193 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5615616 totalling 5.36MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.559207827	I1006 17:31:05.130201 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5617664 totalling 5.36MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.560962855	I1006 17:31:05.130203 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5658624 totalling 5.40MiB
+1791307865.561650056	I1006 17:31:05.130204 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5697536 totalling 5.43MiB
+1791307865.563528913	I1006 17:31:05.130206 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5702144 totalling 5.44MiB
+1791307865.564296048	I1006 17:31:05.130207 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5764096 totalling 5.50MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.565733464	I1006 17:31:05.130208 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5865472 totalling 5.59MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.570001778	I1006 17:31:05.130210 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5873664 totalling 5.60MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.573558640	I1006 17:31:05.130213 2216880 bfc_allocator.cc:1453] 1 Chunks of size 5874688 totalling 5.60MiB
+1791307865.574333070	I1006 17:31:05.130218 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6121216 totalling 5.84MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.578600617	I1006 17:31:05.130219 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6176768 totalling 5.89MiB
+	[… 12 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.589017986	I1006 17:31:05.156383 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6182912 totalling 5.90MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.591941220	I1006 17:31:05.156393 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6195712 totalling 5.91MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.594520641	I1006 17:31:05.156395 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6299648 totalling 6.01MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.596863259	I1006 17:31:05.156397 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6344704 totalling 6.05MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.604165587	I1006 17:31:05.156400 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6402048 totalling 6.11MiB
+	[… 14 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.615889305	I1006 17:31:05.184857 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6446080 totalling 6.15MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.617264255	I1006 17:31:05.184876 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6661120 totalling 6.35MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.619416483	I1006 17:31:05.184882 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6662144 totalling 6.35MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.621600372	I1006 17:31:05.184885 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6850816 totalling 6.53MiB
+	[… 5 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.625903416	I1006 17:31:05.184890 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6918144 totalling 6.60MiB
+	[… 21 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.644865572	I1006 17:31:05.209284 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6924288 totalling 6.60MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.648002902	I1006 17:31:05.209306 2216880 bfc_allocator.cc:1453] 1 Chunks of size 6969344 totalling 6.65MiB
+	[… 10 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.656350214	I1006 17:31:05.234091 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7109376 totalling 6.78MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.659908477	I1006 17:31:05.234120 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7164928 totalling 6.83MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.661399584	I1006 17:31:05.234130 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7188480 totalling 6.86MiB
+	[… 8 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.668248536	I1006 17:31:05.234136 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7494656 totalling 7.15MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.669859614	I1006 17:31:05.261118 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7648256 totalling 7.29MiB
+1791307865.670621471	I1006 17:31:05.261126 2216880 bfc_allocator.cc:1453] 1 Chunks of size 7878656 totalling 7.51MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.674295640	I1006 17:31:05.261130 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8071168 totalling 7.70MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.678128487	I1006 17:31:05.261139 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8265472 totalling 7.88MiB
+1791307865.678909153	I1006 17:31:05.261147 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8281088 totalling 7.90MiB
+	[… 8 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.685850277	I1006 17:31:05.261157 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8334848 totalling 7.95MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.687317282	I1006 17:31:05.261164 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8435712 totalling 8.04MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.690095385	I1006 17:31:05.261169 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8513536 totalling 8.12MiB
+1791307865.691028926	I1006 17:31:05.284769 2216880 bfc_allocator.cc:1453] 1 Chunks of size 8772096 totalling 8.37MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.692485827	I1006 17:31:05.284777 2216880 bfc_allocator.cc:1453] 1 Chunks of size 9062400 totalling 8.64MiB
+1791307865.693218942	I1006 17:31:05.284782 2216880 bfc_allocator.cc:1453] 1 Chunks of size 9120768 totalling 8.70MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.695402573	I1006 17:31:05.284788 2216880 bfc_allocator.cc:1453] 2 Chunks of size 9326592 totalling 17.79MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.696840764	I1006 17:31:05.284794 2216880 bfc_allocator.cc:1453] 1 Chunks of size 9591808 totalling 9.15MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.699079975	I1006 17:31:05.284802 2216880 bfc_allocator.cc:1453] 35 Chunks of size 16777216 totalling 560.00MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.701218461	I1006 17:31:05.284809 2216880 bfc_allocator.cc:1453] 1 Chunks of size 16926464 totalling 16.14MiB
+	[… 7 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.707126960	I1006 17:31:05.284816 2216880 bfc_allocator.cc:1453] 1 Chunks of size 16928768 totalling 16.14MiB
+	[… 6 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.712513611	I1006 17:31:05.284838 2216880 bfc_allocator.cc:1453] 1 Chunks of size 17511680 totalling 16.70MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.716253137	I1006 17:31:05.307020 2216880 bfc_allocator.cc:1453] 1 Chunks of size 18485248 totalling 17.63MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.720189406	I1006 17:31:05.307028 2216880 bfc_allocator.cc:1453] 1 Chunks of size 18503680 totalling 17.65MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.721636857	I1006 17:31:05.307036 2216880 bfc_allocator.cc:1453] 1 Chunks of size 19239936 totalling 18.35MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.725413434	I1006 17:31:05.307039 2216880 bfc_allocator.cc:1453] 1 Chunks of size 20940032 totalling 19.97MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.728927340	I1006 17:31:05.307044 2216880 bfc_allocator.cc:1453] 1 Chunks of size 21650432 totalling 20.65MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.730423444	I1006 17:31:05.307051 2216880 bfc_allocator.cc:1453] 1 Chunks of size 24066048 totalling 22.95MiB
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.732924507	I1006 17:31:05.307055 2216880 bfc_allocator.cc:1453] 1 Chunks of size 24562944 totalling 23.42MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.735862007	I1006 17:31:05.340715 2216880 bfc_allocator.cc:1453] 1 Chunks of size 26318592 totalling 25.10MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.739375171	I1006 17:31:05.340743 2216880 bfc_allocator.cc:1453] 1 Chunks of size 28204032 totalling 26.90MiB
+	[… 4 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.743010344	I1006 17:31:05.340755 2216880 bfc_allocator.cc:1453] 1 Chunks of size 33085440 totalling 31.55MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.744381261	I1006 17:31:05.340761 2216880 bfc_allocator.cc:1453] 1 Chunks of size 38535168 totalling 36.75MiB
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.747184205	I1006 17:31:05.340771 2216880 bfc_allocator.cc:1473] Sum Total of in-use chunks: 2.85GiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.748634839	I1006 17:31:05.340782 2216869 bfc_allocator.cc:1445] Free  at 6b8430c00 of size 6308033536 tag central_gap next 18446744073709551615
+1791307865.749367921	I1006 17:31:05.340783 2216869 bfc_allocator.cc:1450]      Summary of in-use Chunks by size: 
+	[… 2 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.751431327	I1006 17:31:05.340785 2216869 bfc_allocator.cc:1453] 82 Chunks of size 256 totalling 20.5KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.752888295	I1006 17:31:05.340793 2216869 bfc_allocator.cc:1453] 160 Chunks of size 512 totalling 80.0KiB
+1791307865.753630972	I1006 17:31:05.340780 2216880 bfc_allocator.cc:1475] Allocator memory summary: rounded request 5.87GiB, total free in pool 5.87GiB, largest free chunk usable by lower end 5.87GiB, unallocated bytes 0B, pool size 8.72GiB, pool limit 8.72GiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.755079175	I1006 17:31:05.370425 2216880 bfc_allocator.cc:1486] Spatial partitioning summary for lower end: central gap 5.87GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+1791307865.755786259	I1006 17:31:05.340796 2216869 bfc_allocator.cc:1453] 144 Chunks of size 1024 totalling 144.0KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.757377987	I1006 17:31:05.370450 2216869 bfc_allocator.cc:1453] 1128 Chunks of size 2048 totalling 2.20MiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.758960541	I1006 17:31:05.370439 2216880 bfc_allocator.cc:1497] Allocator region growth hint: next region allocation target 17.45GiB (growth disabled; fixed-size pool; not an attempted allocation).
+1791307865.759647367	I1006 17:31:05.370459 2216869 bfc_allocator.cc:1453] 176 Chunks of size 4096 totalling 704.0KiB
+1791307865.760309524	I1006 17:31:05.370462 2216869 bfc_allocator.cc:1453] 216 Chunks of size 8192 totalling 1.69MiB
+1791307865.761099328	I1006 17:31:05.370464 2216869 bfc_allocator.cc:1453] 1 Chunks of size 11520 totalling 11.2KiB
+1791307865.761798911	I1006 17:31:05.370465 2216869 bfc_allocator.cc:1453] 24 Chunks of size 16384 totalling 384.0KiB
+1791307865.762512069	I1006 17:31:05.370466 2216869 bfc_allocator.cc:1453] 8 Chunks of size 24576 totalling 192.0KiB
+	[… 1 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.763912665	I1006 17:31:05.370467 2216869 bfc_allocator.cc:1453] 23 Chunks of size 25088 totalling 563.5KiB
+1791307865.764649286	I1006 17:31:05.370469 2216869 bfc_allocator.cc:1453] 1 Chunks of size 33536 totalling 32.8KiB
+1791307865.765440068	I1006 17:31:05.370464 2216880 bfc_allocator.cc:1506] Stats: 
+1791307865.766177808	Limit:                         8.72GiB
+1791307865.767279747	InUse:                         2.85GiB
+1791307865.768040001	MaxInUse:                      8.72GiB
+1791307865.768729327	NumAllocs:                      768925
+1791307865.769404816	MaxAllocSize:                  6.00GiB
+1791307865.770046927	Reserved:                           0B
+1791307865.770773801	PeakReserved:                       0B
+1791307865.771468222	PeakAllocated:                          0B
+1791307865.772249827	LargestFreeBlock:              5.87GiB
+1791307865.772918472	
+	[… 3 BFC allocator chunk-map lines (InUse/Free at …) dropped]
+1791307865.775804504	I1006 17:31:05.370480 2216873 bfc_allocator.cc:1445] Free  at 8e8430c00 of size 6308033536 tag central_gap next 18446744073709551615
+1791307865.776524027	I1006 17:31:05.370481 2216873 bfc_allocator.cc:1450]      Summary of in-use Chunks by size: 
+1791307865.777196511	I1006 17:31:05.370470 2216869 bfc_allocator.cc:1453] 21 Chunks of size 50176 totalling 1.00MiB
+1791307865.777860299	I1006 17:31:05.370482 2216873 bfc_allocator.cc:1453] 82 Chunks of size 256 totalling 20.5KiB
+1791307865.778544321	I1006 17:31:05.370486 2216869 bfc_allocator.cc:1453] 1 Chunks of size 73728 totalling 72.0KiB
+1791307865.779367731	I1006 17:31:05.370487 2216873 bfc_allocator.cc:1453] 160 Chunks of size 512 totalling 80.0KiB
+1791307865.780081752	I1006 17:31:05.370489 2216873 bfc_allocator.cc:1453] 144 Chunks of size 1024 totalling 144.0KiB
+1791307865.780795393	I1006 17:31:05.370491 2216873 bfc_allocator.cc:1453] 1128 Chunks of size 2048 totalling 2.20MiB
+1791307865.781494660	I1006 17:31:05.370487 2216869 bfc_allocator.cc:1453] 1 Chunks of size 96256 totalling 94.0KiB
+1791307865.782195325	I1006 17:31:05.370492 2216873 bfc_allocator.cc:1453] 176 Chunks of size 4096 totalling 704.0KiB
+1791307865.782928696	I1006 17:31:05.370494 2216869 bfc_allocator.cc:1453] 1 Chunks of size 98304 totalling 96.0KiB
+1791307865.783653173	I1006 17:31:05.370494 2216873 bfc_allocator.cc:1453] 216 Chunks of size 8192 totalling 1.69MiB
+1791307865.784475145	I1006 17:31:05.396761 2216869 bfc_allocator.cc:1453] 206 Chunks of size 100352 totalling 19.71MiB
+1791307865.785289687	I1006 17:31:05.396769 2216869 bfc_allocator.cc:1453] 1 Chunks of size 107520 totalling 105.0KiB
+1791307865.785945829	I1006 17:31:05.396771 2216869 bfc_allocator.cc:1453] 1 Chunks of size 108544 totalling 106.0KiB
+1791307865.786818375	I1006 17:31:05.396772 2216869 bfc_allocator.cc:1453] 1 Chunks of size 109824 totalling 107.2KiB
+1791307865.787502996	I1006 17:31:05.396773 2216869 bfc_allocator.cc:1453] 1 Chunks of size 110592 totalling 108.0KiB
+1791307865.788278838	I1006 17:31:05.396774 2216869 bfc_allocator.cc:1453] 1 Chunks of size 114688 totalling 112.0KiB
+1791307865.788966039	I1006 17:31:05.396775 2216869 bfc_allocator.cc:1453] 1 Chunks of size 132864 totalling 129.8KiB
+1791307865.789683572	I1006 17:31:05.396776 2216869 bfc_allocator.cc:1453] 1 Chunks of size 137472 totalling 134.2KiB
+1791307865.790435582	I1006 17:31:05.396777 2216869 bfc_allocator.cc:1453] 1 Chunks of size 143360 totalling 140.0KiB
+1791307865.791272133	I1006 17:31:05.396778 2216869 bfc_allocator.cc:1453] 1 Chunks of size 143872 totalling 140.5KiB
+1791307865.792049946	I1006 17:31:05.396779 2216869 bfc_allocator.cc:1453] 1 Chunks of size 145408 totalling 142.0KiB
+1791307865.792792455	I1006 17:31:05.396773 2216873 bfc_allocator.cc:1453] 1 Chunks of size 11520 totalling 11.2KiB
+1791307865.793530321	I1006 17:31:05.396780 2216869 bfc_allocator.cc:1453] 23 Chunks of size 200704 totalling 4.40MiB
+1791307865.794259985	I1006 17:31:05.396780 2216873 bfc_allocator.cc:1453] 24 Chunks of size 16384 totalling 384.0KiB
+1791307865.795172645	I1006 17:31:05.396781 2216869 bfc_allocator.cc:1453] 1 Chunks of size 221184 totalling 216.0KiB
+1791307865.795868269	I1006 17:31:05.396782 2216873 bfc_allocator.cc:1453] 8 Chunks of size 24576 totalling 192.0KiB
+1791307865.796578077	I1006 17:31:05.396782 2216869 bfc_allocator.cc:1453] 1 Chunks of size 256000 totalling 250.0KiB
+1791307865.797309243	I1006 17:31:05.396784 2216873 bfc_allocator.cc:1453] 23 Chunks of size 25088 totalling 563.5KiB
+1791307865.798014384	I1006 17:31:05.396785 2216869 bfc_allocator.cc:1453] 46 Chunks of size 262144 totalling 11.50MiB
+1791307865.798675588	W1006 17:31:05.370484 2216880 bfc_allocator.cc:609] *********************************___________________________________________________________________
+1791307865.799330540	I1006 17:31:05.396785 2216873 bfc_allocator.cc:1453] 1 Chunks of size 33536 totalling 32.8KiB
+1791307865.800100065	I1006 17:31:05.396804 2216873 bfc_allocator.cc:1453] 21 Chunks of size 50176 totalling 1.00MiB
+1791307865.800774158	I1006 17:31:05.396805 2216873 bfc_allocator.cc:1453] 1 Chunks of size 73728 totalling 72.0KiB
+1791307865.801464845	I1006 17:31:05.396806 2216873 bfc_allocator.cc:1453] 1 Chunks of size 96256 totalling 94.0KiB
+1791307865.802195093	I1006 17:31:05.396807 2216873 bfc_allocator.cc:1453] 1 Chunks of size 98304 totalling 96.0KiB
+1791307865.803083569	I1006 17:31:05.396786 2216869 bfc_allocator.cc:1453] 1 Chunks of size 393472 totalling 384.2KiB
+1791307865.803989331	I1006 17:31:05.396811 2216869 bfc_allocator.cc:1453] 1 Chunks of size 443648 totalling 433.2KiB
+1791307865.804979781	I1006 17:31:05.396808 2216873 bfc_allocator.cc:1453] 206 Chunks of size 100352 totalling 19.71MiB
+1791307865.806114581	I1006 17:31:05.396812 2216869 bfc_allocator.cc:1453] 6 Chunks of size 524288 totalling 3.00MiB
+1791307865.806967473	I1006 17:31:05.396813 2216873 bfc_allocator.cc:1453] 1 Chunks of size 107520 totalling 105.0KiB
+1791307865.807831705	I1006 17:31:05.396815 2216873 bfc_allocator.cc:1453] 1 Chunks of size 108544 totalling 106.0KiB
+1791307865.808743108	I1006 17:31:05.396813 2216869 bfc_allocator.cc:1453] 1 Chunks of size 550144 totalling 537.2KiB
+1791307865.809691310	I1006 17:31:05.396819 2216869 bfc_allocator.cc:1453] 1 Chunks of size 818432 totalling 799.2KiB
+1791307865.810640092	I1006 17:31:05.396820 2216869 bfc_allocator.cc:1453] 30 Chunks of size 1048576 totalling 30.00MiB
+1791307865.811647863	I1006 17:31:05.396817 2216873 bfc_allocator.cc:1453] 1 Chunks of size 109824 totalling 107.2KiB
+1791307865.812529448	I1006 17:31:05.396821 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1383424 totalling 1.32MiB
+1791307865.813440368	I1006 17:31:05.396822 2216873 bfc_allocator.cc:1453] 1 Chunks of size 110592 totalling 108.0KiB
+1791307865.814380795	I1006 17:31:05.396823 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1396736 totalling 1.33MiB
+1791307865.815209185	I1006 17:31:05.396823 2216873 bfc_allocator.cc:1453] 1 Chunks of size 114688 totalling 112.0KiB
+1791307865.816036167	I1006 17:31:05.396824 2216869 bfc_allocator.cc:1453] 2 Chunks of size 1462272 totalling 2.79MiB
+1791307865.817034269	I1006 17:31:05.396824 2216873 bfc_allocator.cc:1453] 1 Chunks of size 132864 totalling 129.8KiB
+1791307865.817923480	I1006 17:31:05.396825 2216869 bfc_allocator.cc:1453] 4 Chunks of size 1464320 totalling 5.59MiB
+1791307865.818886580	I1006 17:31:05.426556 2216873 bfc_allocator.cc:1453] 1 Chunks of size 137472 totalling 134.2KiB
+1791307865.819938653	I1006 17:31:05.426566 2216869 bfc_allocator.cc:1453] 2 Chunks of size 1465344 totalling 2.79MiB
+1791307865.820835794	I1006 17:31:05.426574 2216873 bfc_allocator.cc:1453] 1 Chunks of size 143360 totalling 140.0KiB
+1791307865.821596085	I1006 17:31:05.426577 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1490176 totalling 1.42MiB
+1791307865.822253543	I1006 17:31:05.426578 2216873 bfc_allocator.cc:1453] 1 Chunks of size 143872 totalling 140.5KiB
+1791307865.823048274	I1006 17:31:05.426579 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1547008 totalling 1.47MiB
+1791307865.823754841	I1006 17:31:05.426584 2216873 bfc_allocator.cc:1453] 1 Chunks of size 145408 totalling 142.0KiB
+1791307865.824546735	I1006 17:31:05.426588 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1652480 totalling 1.58MiB
+1791307865.825306175	I1006 17:31:05.426590 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1775104 totalling 1.69MiB
+1791307865.826069814	I1006 17:31:05.426590 2216873 bfc_allocator.cc:1453] 23 Chunks of size 200704 totalling 4.40MiB
+1791307865.826751799	I1006 17:31:05.426596 2216873 bfc_allocator.cc:1453] 1 Chunks of size 221184 totalling 216.0KiB
+1791307865.827453223	I1006 17:31:05.426591 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1819904 totalling 1.74MiB
+1791307865.828253400	I1006 17:31:05.426599 2216873 bfc_allocator.cc:1453] 1 Chunks of size 256000 totalling 250.0KiB
+1791307865.829000902	I1006 17:31:05.426602 2216873 bfc_allocator.cc:1453] 46 Chunks of size 262144 totalling 11.50MiB
+1791307865.829764010	I1006 17:31:05.426607 2216873 bfc_allocator.cc:1453] 1 Chunks of size 393472 totalling 384.2KiB
+1791307865.830482680	I1006 17:31:05.426601 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1988608 totalling 1.90MiB
+1791307865.831291749	I1006 17:31:05.426618 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1990656 totalling 1.90MiB
+1791307865.832068723	I1006 17:31:05.426619 2216869 bfc_allocator.cc:1453] 1 Chunks of size 1998848 totalling 1.91MiB
+1791307865.832862707	I1006 17:31:05.426611 2216873 bfc_allocator.cc:1453] 1 Chunks of size 443648 totalling 433.2KiB
+1791307865.833784142	I1006 17:31:05.426621 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2207744 totalling 2.11MiB
+1791307865.834559290	I1006 17:31:05.426624 2216873 bfc_allocator.cc:1453] 6 Chunks of size 524288 totalling 3.00MiB
+1791307865.835256909	I1006 17:31:05.426628 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2211840 totalling 2.11MiB
+1791307865.835993674	I1006 17:31:05.426629 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2254848 totalling 2.15MiB
+1791307865.836734757	I1006 17:31:05.426629 2216873 bfc_allocator.cc:1453] 1 Chunks of size 550144 totalling 537.2KiB
+1791307865.837496130	I1006 17:31:05.426631 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2467840 totalling 2.35MiB
+1791307865.838198319	I1006 17:31:05.426632 2216873 bfc_allocator.cc:1453] 1 Chunks of size 818432 totalling 799.2KiB
+1791307865.839001410	I1006 17:31:05.426633 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2513920 totalling 2.40MiB
+1791307865.839712320	I1006 17:31:05.426637 2216873 bfc_allocator.cc:1453] 30 Chunks of size 1048576 totalling 30.00MiB
+1791307865.840413715	I1006 17:31:05.426639 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2768896 totalling 2.64MiB
+1791307865.841129087	I1006 17:31:05.426640 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1383424 totalling 1.32MiB
+1791307865.841913129	I1006 17:31:05.426645 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1396736 totalling 1.33MiB
+1791307865.842621891	I1006 17:31:05.426641 2216869 bfc_allocator.cc:1453] 1 Chunks of size 2920192 totalling 2.78MiB
+1791307865.843374690	I1006 17:31:05.426648 2216873 bfc_allocator.cc:1453] 2 Chunks of size 1462272 totalling 2.79MiB
+1791307865.844049123	I1006 17:31:05.426650 2216869 bfc_allocator.cc:1453] 1 Chunks of size 3181568 totalling 3.03MiB
+1791307865.844946291	I1006 17:31:05.426656 2216869 bfc_allocator.cc:1453] 5 Chunks of size 4096000 totalling 19.53MiB
+1791307865.845737259	I1006 17:31:05.426659 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4119040 totalling 3.93MiB
+1791307865.846428693	I1006 17:31:05.426651 2216873 bfc_allocator.cc:1453] 4 Chunks of size 1464320 totalling 5.59MiB
+1791307865.847170094	I1006 17:31:05.426660 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4134656 totalling 3.94MiB
+1791307865.847872734	I1006 17:31:05.426664 2216873 bfc_allocator.cc:1453] 2 Chunks of size 1465344 totalling 2.79MiB
+1791307865.848554803	I1006 17:31:05.426667 2216869 bfc_allocator.cc:1453] 382 Chunks of size 4194304 totalling 1.49GiB
+1791307865.849458196	I1006 17:31:05.426669 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4247552 totalling 4.05MiB
+1791307865.850294855	I1006 17:31:05.426668 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1490176 totalling 1.42MiB
+1791307865.851089683	I1006 17:31:05.453626 2216869 bfc_allocator.cc:1453] 2 Chunks of size 4341760 totalling 8.28MiB
+1791307865.851887865	I1006 17:31:05.453643 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4453376 totalling 4.25MiB
+1791307865.852750854	I1006 17:31:05.453646 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4546560 totalling 4.34MiB
+1791307865.853592222	I1006 17:31:05.453640 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1547008 totalling 1.47MiB
+1791307865.854439011	I1006 17:31:05.453648 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4674048 totalling 4.46MiB
+1791307865.855216165	I1006 17:31:05.453651 2216869 bfc_allocator.cc:1453] 1 Chunks of size 4776960 totalling 4.56MiB
+1791307865.856164014	I1006 17:31:05.453653 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5033984 totalling 4.80MiB
+1791307865.856909210	I1006 17:31:05.453651 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1652480 totalling 1.58MiB
+1791307865.857616902	I1006 17:31:05.453658 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1775104 totalling 1.69MiB
+1791307865.858300410	I1006 17:31:05.453665 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1819904 totalling 1.74MiB
+1791307865.859093923	I1006 17:31:05.453654 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5038080 totalling 4.80MiB
+1791307865.860248954	I1006 17:31:05.453671 2216869 bfc_allocator.cc:1453] 2 Chunks of size 5132288 totalling 9.79MiB
+1791307865.861045834	I1006 17:31:05.453671 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1988608 totalling 1.90MiB
+1791307865.861784897	I1006 17:31:05.453673 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5135360 totalling 4.90MiB
+1791307865.862551638	I1006 17:31:05.453678 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1990656 totalling 1.90MiB
+1791307865.863301386	I1006 17:31:05.453683 2216873 bfc_allocator.cc:1453] 1 Chunks of size 1998848 totalling 1.91MiB
+1791307865.864057934	I1006 17:31:05.453682 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5175296 totalling 4.94MiB
+1791307865.864770346	I1006 17:31:05.453689 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2207744 totalling 2.11MiB
+1791307865.865450496	I1006 17:31:05.453693 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5353472 totalling 5.11MiB
+1791307865.866224552	I1006 17:31:05.453694 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2211840 totalling 2.11MiB
+1791307865.866962932	I1006 17:31:05.453699 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5471232 totalling 5.22MiB
+1791307865.867712499	I1006 17:31:05.453701 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5508096 totalling 5.25MiB
+1791307865.868533228	I1006 17:31:05.453703 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5587456 totalling 5.33MiB
+1791307865.869329094	I1006 17:31:05.453701 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2254848 totalling 2.15MiB
+1791307865.870029515	I1006 17:31:05.453709 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2467840 totalling 2.35MiB
+1791307865.870752987	I1006 17:31:05.453716 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2513920 totalling 2.40MiB
+1791307865.871527143	I1006 17:31:05.453705 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5613568 totalling 5.35MiB
+1791307865.872290420	I1006 17:31:05.453722 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2768896 totalling 2.64MiB
+1791307865.872970809	I1006 17:31:05.453727 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5615616 totalling 5.36MiB
+1791307865.873790619	I1006 17:31:05.453730 2216873 bfc_allocator.cc:1453] 1 Chunks of size 2920192 totalling 2.78MiB
+1791307865.874528509	I1006 17:31:05.453732 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5617664 totalling 5.36MiB
+1791307865.875334449	I1006 17:31:05.453735 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5658624 totalling 5.40MiB
+1791307865.876031372	I1006 17:31:05.453735 2216873 bfc_allocator.cc:1453] 1 Chunks of size 3181568 totalling 3.03MiB
+1791307865.876809719	I1006 17:31:05.453737 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5697536 totalling 5.43MiB
+1791307865.877516966	I1006 17:31:05.453742 2216873 bfc_allocator.cc:1453] 5 Chunks of size 4096000 totalling 19.53MiB
+1791307865.878226512	I1006 17:31:05.453746 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5702144 totalling 5.44MiB
+1791307865.879012673	I1006 17:31:05.453748 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4119040 totalling 3.93MiB
+1791307865.879757555	I1006 17:31:05.453751 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5764096 totalling 5.50MiB
+1791307865.880863163	I1006 17:31:05.453754 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4134656 totalling 3.94MiB
+1791307865.881632779	I1006 17:31:05.453759 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5865472 totalling 5.59MiB
+1791307865.882460590	I1006 17:31:05.453761 2216873 bfc_allocator.cc:1453] 382 Chunks of size 4194304 totalling 1.49GiB
+1791307865.883215978	I1006 17:31:05.485168 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4247552 totalling 4.05MiB
+1791307865.883863147	I1006 17:31:05.453765 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5873664 totalling 5.60MiB
+1791307865.884545983	I1006 17:31:05.485176 2216873 bfc_allocator.cc:1453] 2 Chunks of size 4341760 totalling 8.28MiB
+1791307865.885295306	I1006 17:31:05.485183 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4453376 totalling 4.25MiB
+1791307865.885960730	I1006 17:31:05.485182 2216869 bfc_allocator.cc:1453] 1 Chunks of size 5874688 totalling 5.60MiB
+1791307865.886727366	I1006 17:31:05.485186 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4546560 totalling 4.34MiB
+1791307865.887400077	I1006 17:31:05.485192 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4674048 totalling 4.46MiB
+1791307865.888017948	I1006 17:31:05.485192 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6121216 totalling 5.84MiB
+1791307865.888674754	I1006 17:31:05.485193 2216873 bfc_allocator.cc:1453] 1 Chunks of size 4776960 totalling 4.56MiB
+1791307865.889389537	I1006 17:31:05.485194 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6176768 totalling 5.89MiB
+1791307865.890085265	I1006 17:31:05.485194 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5033984 totalling 4.80MiB
+1791307865.890796409	I1006 17:31:05.485196 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6182912 totalling 5.90MiB
+1791307865.891464670	I1006 17:31:05.485196 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5038080 totalling 4.80MiB
+1791307865.892150256	I1006 17:31:05.485197 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6195712 totalling 5.91MiB
+1791307865.894143600	I1006 17:31:05.485198 2216873 bfc_allocator.cc:1453] 2 Chunks of size 5132288 totalling 9.79MiB
+1791307865.894887056	I1006 17:31:05.485199 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6299648 totalling 6.01MiB
+1791307865.895748467	I1006 17:31:05.485200 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5135360 totalling 4.90MiB
+1791307865.896451598	I1006 17:31:05.485200 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6344704 totalling 6.05MiB
+1791307865.897205246	I1006 17:31:05.485201 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5175296 totalling 4.94MiB
+1791307865.897970866	I1006 17:31:05.485201 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6402048 totalling 6.11MiB
+1791307865.898735815	I1006 17:31:05.485202 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5353472 totalling 5.11MiB
+1791307865.899563841	I1006 17:31:05.485203 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6446080 totalling 6.15MiB
+1791307865.900279853	I1006 17:31:05.485205 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6661120 totalling 6.35MiB
+1791307865.901091705	I1006 17:31:05.485203 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5471232 totalling 5.22MiB
+1791307865.901817778	I1006 17:31:05.485207 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6662144 totalling 6.35MiB
+1791307865.902485326	I1006 17:31:05.485208 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5508096 totalling 5.25MiB
+1791307865.903170534	I1006 17:31:05.485208 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6850816 totalling 6.53MiB
+1791307865.903824438	I1006 17:31:05.485209 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5587456 totalling 5.33MiB
+1791307865.904593129	I1006 17:31:05.485210 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6918144 totalling 6.60MiB
+1791307865.905371764	I1006 17:31:05.485210 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5613568 totalling 5.35MiB
+1791307865.906016787	I1006 17:31:05.485211 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6924288 totalling 6.60MiB
+1791307865.907032776	I1006 17:31:05.485211 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5615616 totalling 5.36MiB
+1791307865.907747870	I1006 17:31:05.485213 2216869 bfc_allocator.cc:1453] 1 Chunks of size 6969344 totalling 6.65MiB
+1791307865.908517152	I1006 17:31:05.485216 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7109376 totalling 6.78MiB
+1791307865.909218801	I1006 17:31:05.485217 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7164928 totalling 6.83MiB
+1791307865.909895910	I1006 17:31:05.485213 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5617664 totalling 5.36MiB
+1791307865.910614380	I1006 17:31:05.485218 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7188480 totalling 6.86MiB
+1791307865.911279991	I1006 17:31:05.485219 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5658624 totalling 5.40MiB
+1791307865.911917557	I1006 17:31:05.485220 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7494656 totalling 7.15MiB
+1791307865.912643053	I1006 17:31:05.485220 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5697536 totalling 5.43MiB
+1791307865.913412668	I1006 17:31:05.485222 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7648256 totalling 7.29MiB
+1791307865.914120699	I1006 17:31:05.485224 2216869 bfc_allocator.cc:1453] 1 Chunks of size 7878656 totalling 7.51MiB
+1791307865.914941391	I1006 17:31:05.485222 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5702144 totalling 5.44MiB
+1791307865.915638174	I1006 17:31:05.514080 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8071168 totalling 7.70MiB
+1791307865.916393957	I1006 17:31:05.514089 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8265472 totalling 7.88MiB
+1791307865.917074403	I1006 17:31:05.514092 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8281088 totalling 7.90MiB
+1791307865.917731835	I1006 17:31:05.514094 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8334848 totalling 7.95MiB
+1791307865.918489605	I1006 17:31:05.514089 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5764096 totalling 5.50MiB
+1791307865.919228693	I1006 17:31:05.514096 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8435712 totalling 8.04MiB
+1791307865.919905672	I1006 17:31:05.514097 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5865472 totalling 5.59MiB
+1791307865.920574059	I1006 17:31:05.514097 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8513536 totalling 8.12MiB
+1791307865.921250014	I1006 17:31:05.514099 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5873664 totalling 5.60MiB
+1791307865.921938487	I1006 17:31:05.514099 2216869 bfc_allocator.cc:1453] 1 Chunks of size 8772096 totalling 8.37MiB
+1791307865.922720126	I1006 17:31:05.514102 2216869 bfc_allocator.cc:1453] 1 Chunks of size 9062400 totalling 8.64MiB
+1791307865.923419817	I1006 17:31:05.514104 2216869 bfc_allocator.cc:1453] 1 Chunks of size 9120768 totalling 8.70MiB
+1791307865.924106508	I1006 17:31:05.514100 2216873 bfc_allocator.cc:1453] 1 Chunks of size 5874688 totalling 5.60MiB
+1791307865.924763408	I1006 17:31:05.514106 2216869 bfc_allocator.cc:1453] 2 Chunks of size 9326592 totalling 17.79MiB
+1791307865.925463106	I1006 17:31:05.514107 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6121216 totalling 5.84MiB
+1791307865.926165098	I1006 17:31:05.514108 2216869 bfc_allocator.cc:1453] 1 Chunks of size 9591808 totalling 9.15MiB
+1791307865.926870189	I1006 17:31:05.514110 2216869 bfc_allocator.cc:1453] 35 Chunks of size 16777216 totalling 560.00MiB
+1791307865.927553171	I1006 17:31:05.514108 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6176768 totalling 5.89MiB
+1791307865.928233388	I1006 17:31:05.514118 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6182912 totalling 5.90MiB
+1791307865.928943754	I1006 17:31:05.514119 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6195712 totalling 5.91MiB
+1791307865.929646244	I1006 17:31:05.514120 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6299648 totalling 6.01MiB
+1791307865.930329054	I1006 17:31:05.514113 2216869 bfc_allocator.cc:1453] 1 Chunks of size 16926464 totalling 16.14MiB
+1791307865.931007658	I1006 17:31:05.514121 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6344704 totalling 6.05MiB
+1791307865.931673040	I1006 17:31:05.514123 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6402048 totalling 6.11MiB
+1791307865.932407242	I1006 17:31:05.514123 2216869 bfc_allocator.cc:1453] 1 Chunks of size 16928768 totalling 16.14MiB
+1791307865.933131639	I1006 17:31:05.514124 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6446080 totalling 6.15MiB
+1791307865.933816637	I1006 17:31:05.514126 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6661120 totalling 6.35MiB
+1791307865.934556368	I1006 17:31:05.514125 2216869 bfc_allocator.cc:1453] 1 Chunks of size 17511680 totalling 16.70MiB
+1791307865.935262226	I1006 17:31:05.514127 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6662144 totalling 6.35MiB
+1791307865.935921694	I1006 17:31:05.514128 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6850816 totalling 6.53MiB
+1791307865.936613934	I1006 17:31:05.514128 2216869 bfc_allocator.cc:1453] 1 Chunks of size 18485248 totalling 17.63MiB
+1791307865.937314693	I1006 17:31:05.514129 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6918144 totalling 6.60MiB
+1791307865.937997717	I1006 17:31:05.514130 2216869 bfc_allocator.cc:1453] 1 Chunks of size 18503680 totalling 17.65MiB
+1791307865.938795111	I1006 17:31:05.514133 2216869 bfc_allocator.cc:1453] 1 Chunks of size 19239936 totalling 18.35MiB
+1791307865.939503116	I1006 17:31:05.514135 2216869 bfc_allocator.cc:1453] 1 Chunks of size 20940032 totalling 19.97MiB
+1791307865.940259730	I1006 17:31:05.514131 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6924288 totalling 6.60MiB
+1791307865.940964607	I1006 17:31:05.514136 2216869 bfc_allocator.cc:1453] 1 Chunks of size 21650432 totalling 20.65MiB
+1791307865.941636988	I1006 17:31:05.514137 2216873 bfc_allocator.cc:1453] 1 Chunks of size 6969344 totalling 6.65MiB
+1791307865.942325535	I1006 17:31:05.514138 2216869 bfc_allocator.cc:1453] 1 Chunks of size 24066048 totalling 22.95MiB
+1791307865.942989995	I1006 17:31:05.514140 2216869 bfc_allocator.cc:1453] 1 Chunks of size 24562944 totalling 23.42MiB
+1791307865.943669712	I1006 17:31:05.514142 2216869 bfc_allocator.cc:1453] 1 Chunks of size 26318592 totalling 25.10MiB
+1791307865.944369238	I1006 17:31:05.514139 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7109376 totalling 6.78MiB
+1791307865.945013866	I1006 17:31:05.543023 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7164928 totalling 6.83MiB
+1791307865.945708462	I1006 17:31:05.543031 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7188480 totalling 6.86MiB
+1791307865.946422921	I1006 17:31:05.543032 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7494656 totalling 7.15MiB
+1791307865.947153043	I1006 17:31:05.543034 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7648256 totalling 7.29MiB
+1791307865.947895123	I1006 17:31:05.543015 2216869 bfc_allocator.cc:1453] 1 Chunks of size 28204032 totalling 26.90MiB
+1791307865.948628196	I1006 17:31:05.543035 2216873 bfc_allocator.cc:1453] 1 Chunks of size 7878656 totalling 7.51MiB
+1791307865.949385978	I1006 17:31:05.543043 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8071168 totalling 7.70MiB
+1791307865.950097068	I1006 17:31:05.543041 2216869 bfc_allocator.cc:1453] 1 Chunks of size 33085440 totalling 31.55MiB
+1791307865.950859016	I1006 17:31:05.543044 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8265472 totalling 7.88MiB
+1791307865.951584466	I1006 17:31:05.543047 2216869 bfc_allocator.cc:1453] 1 Chunks of size 38535168 totalling 36.75MiB
+1791307865.952287980	I1006 17:31:05.543050 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8281088 totalling 7.90MiB
+1791307865.952976149	I1006 17:31:05.543052 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8334848 totalling 7.95MiB
+1791307865.953773130	I1006 17:31:05.543053 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8435712 totalling 8.04MiB
+1791307865.954542082	I1006 17:31:05.543054 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8513536 totalling 8.12MiB
+1791307865.955258072	I1006 17:31:05.543056 2216873 bfc_allocator.cc:1453] 1 Chunks of size 8772096 totalling 8.37MiB
+1791307865.955998306	I1006 17:31:05.543056 2216873 bfc_allocator.cc:1453] 1 Chunks of size 9062400 totalling 8.64MiB
+1791307865.956672290	I1006 17:31:05.543054 2216869 bfc_allocator.cc:1473] Sum Total of in-use chunks: 2.85GiB
+1791307865.957380325	I1006 17:31:05.543058 2216873 bfc_allocator.cc:1453] 1 Chunks of size 9120768 totalling 8.70MiB
+1791307865.958110703	I1006 17:31:05.543063 2216873 bfc_allocator.cc:1453] 2 Chunks of size 9326592 totalling 17.79MiB
+1791307865.958813174	I1006 17:31:05.543065 2216873 bfc_allocator.cc:1453] 1 Chunks of size 9591808 totalling 9.15MiB
+1791307865.959523349	I1006 17:31:05.543066 2216873 bfc_allocator.cc:1453] 35 Chunks of size 16777216 totalling 560.00MiB
+1791307865.960266051	I1006 17:31:05.543061 2216869 bfc_allocator.cc:1475] Allocator memory summary: rounded request 5.87GiB, total free in pool 5.87GiB, largest free chunk usable by lower end 5.87GiB, unallocated bytes 0B, pool size 8.72GiB, pool limit 8.72GiB
+1791307865.960992186	I1006 17:31:05.543068 2216873 bfc_allocator.cc:1453] 1 Chunks of size 16926464 totalling 16.14MiB
+1791307865.961753890	I1006 17:31:05.543073 2216873 bfc_allocator.cc:1453] 1 Chunks of size 16928768 totalling 16.14MiB
+1791307865.962497438	I1006 17:31:05.543075 2216873 bfc_allocator.cc:1453] 1 Chunks of size 17511680 totalling 16.70MiB
+1791307865.963207716	I1006 17:31:05.543071 2216869 bfc_allocator.cc:1486] Spatial partitioning summary for lower end: central gap 5.87GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+1791307865.963895387	I1006 17:31:05.543076 2216873 bfc_allocator.cc:1453] 1 Chunks of size 18485248 totalling 17.63MiB
+1791307865.964598038	I1006 17:31:05.543082 2216873 bfc_allocator.cc:1453] 1 Chunks of size 18503680 totalling 17.65MiB
+1791307865.965329853	I1006 17:31:05.543079 2216869 bfc_allocator.cc:1497] Allocator region growth hint: next region allocation target 17.45GiB (growth disabled; fixed-size pool; not an attempted allocation).
+1791307865.966123917	I1006 17:31:05.543083 2216873 bfc_allocator.cc:1453] 1 Chunks of size 19239936 totalling 18.35MiB
+1791307865.966823866	I1006 17:31:05.543089 2216873 bfc_allocator.cc:1453] 1 Chunks of size 20940032 totalling 19.97MiB
+1791307865.967499787	I1006 17:31:05.543090 2216873 bfc_allocator.cc:1453] 1 Chunks of size 21650432 totalling 20.65MiB
+1791307865.968239108	I1006 17:31:05.543092 2216873 bfc_allocator.cc:1453] 1 Chunks of size 24066048 totalling 22.95MiB
+1791307865.968961398	I1006 17:31:05.543093 2216873 bfc_allocator.cc:1453] 1 Chunks of size 24562944 totalling 23.42MiB
+1791307865.969666939	I1006 17:31:05.543094 2216873 bfc_allocator.cc:1453] 1 Chunks of size 26318592 totalling 25.10MiB
+1791307865.970383035	I1006 17:31:05.543095 2216873 bfc_allocator.cc:1453] 1 Chunks of size 28204032 totalling 26.90MiB
+1791307865.971034122	I1006 17:31:05.543086 2216869 bfc_allocator.cc:1506] Stats: 
+1791307865.971717953	Limit:                         8.72GiB
+1791307865.972376639	InUse:                         2.85GiB
+1791307865.973032472	MaxInUse:                      8.72GiB
+1791307865.973743326	NumAllocs:                      774896
+1791307865.974574817	MaxAllocSize:                  6.00GiB
+1791307865.975282700	Reserved:                           0B
+1791307865.975983536	PeakReserved:                       0B
+1791307865.976626289	PeakAllocated:                          0B
+1791307865.977336339	LargestFreeBlock:              5.87GiB
+1791307865.977968265	
+1791307865.978649673	I1006 17:31:05.573749 2216873 bfc_allocator.cc:1453] 1 Chunks of size 33085440 totalling 31.55MiB
+1791307865.979325711	I1006 17:31:05.573779 2216873 bfc_allocator.cc:1453] 1 Chunks of size 38535168 totalling 36.75MiB
+1791307865.979999004	I1006 17:31:05.573789 2216873 bfc_allocator.cc:1473] Sum Total of in-use chunks: 2.85GiB
+1791307865.980749246	I1006 17:31:05.573794 2216873 bfc_allocator.cc:1475] Allocator memory summary: rounded request 5.87GiB, total free in pool 5.87GiB, largest free chunk usable by lower end 5.87GiB, unallocated bytes 0B, pool size 8.72GiB, pool limit 8.72GiB
+1791307865.981478616	I1006 17:31:05.573804 2216873 bfc_allocator.cc:1486] Spatial partitioning summary for lower end: central gap 5.87GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+1791307865.982337933	I1006 17:31:05.573810 2216873 bfc_allocator.cc:1497] Allocator region growth hint: next region allocation target 17.45GiB (growth disabled; fixed-size pool; not an attempted allocation).
+1791307865.983055445	I1006 17:31:05.573816 2216873 bfc_allocator.cc:1506] Stats: 
+1791307865.983851829	Limit:                         8.72GiB
+1791307865.984566790	InUse:                         2.85GiB
+1791307865.985242564	MaxInUse:                      8.72GiB
+1791307865.985942443	NumAllocs:                      768925
+1791307865.987147942	MaxAllocSize:                  6.00GiB
+1791307865.987874003	Reserved:                           0B
+1791307865.988776572	PeakReserved:                       0B
+1791307865.989522672	PeakAllocated:                          0B
+1791307865.990629419	LargestFreeBlock:              5.87GiB
+1791307865.991385711	
+1791307865.992129231	W1006 17:31:05.573761 2216869 bfc_allocator.cc:609] *********************************___________________________________________________________________
+1791307865.992801767	W1006 17:31:05.573846 2216873 bfc_allocator.cc:609] *********************************___________________________________________________________________
+1791307865.993495200	[pjrt_ffi] d2h(res): Out of memory while trying to allocate 5.87GiB with allocator GPU_0_bfc on device 0.
+1791307865.993495200	[… previous line repeated 40 more times]
+1791307866.129459442	uncaught exception: data-parallel train step failed

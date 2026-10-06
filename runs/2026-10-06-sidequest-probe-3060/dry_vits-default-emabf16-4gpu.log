@@ -1,0 +1,5 @@
+box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+[sup] 2026-10-06 15:08:33 START job=vits-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=/tmp/supervise_dry_vits-default-emabf16-4gpu
+[sup] 2026-10-06 15:08:33 cmd: .lake/build/bin/vit-s-imagenet-verified data
+[sup] 2026-10-06 15:08:33 eta: bf16 ~79 h for 300 ep on 4x 4060 Ti (mean 379 / median 381 / floor 302 ms/step on the in-place-mix + writer-thread shim; was 609 before it; runs/2026-10-05-shim-feed-bench)
+[sup] 2026-10-06 15:08:33 DRY_RUN — nothing launched

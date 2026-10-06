@@ -1,0 +1,21 @@
+[sup] 2026-10-06 15:08:32 START job=mnv4-full-jax-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=0 stall=1800s logs=/tmp/supervise_dry_mnv4-full-jax-4gpu
+[sup] 2026-10-06 15:08:32 cmd: bash -c 
+  set -u
+  base=/home/skoonce/mnv4_full_500ep/mobilenet_v4_imagenet_full
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_mobilenet_v4_imagenet_full.py
+
+[sup] 2026-10-06 15:08:32 eta: ~100-105 h for 500 ep on 4x 4060 Ti (2.30-2.39 s per optimizer step, still falling at 20 min; measured 2026-10-05, runs/2026-10-04-dimm-fan-thermal), ~81 h on 4x 3060
+[sup] 2026-10-06 15:08:32 DRY_RUN — nothing launched

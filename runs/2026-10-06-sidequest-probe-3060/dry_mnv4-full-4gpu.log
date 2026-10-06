@@ -1,0 +1,7 @@
+box=3060 plugin=/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so python=/home/skoonce/.venv-cuda/bin/python3
+⚠ other mnv4in checkpoints present — they must NOT be resumed into this run:
+   .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin
+[sup] 2026-10-06 15:08:38 START job=mnv4-full-4gpu devs=0,1,2,3 epochs=500 rest_after=[none] temp_max=78 stall=1800s logs=/tmp/supervise_dry_mnv4-full-4gpu
+[sup] 2026-10-06 15:08:38 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-10-06 15:08:38 eta: ~100 h for 500 ep on 4x 4060 Ti (mean 290 / median 290 / floor 233 ms per micro-batch on the uint8 wire, 57 ms starved; runs/2026-10-05-uint8-wire)
+[sup] 2026-10-06 15:08:38 DRY_RUN — nothing launched
