@@ -1,0 +1,24 @@
+[sup] 2026-10-01 16:15:13 START job=vit-default-jax-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-01-vit-jax-bf16-300ep
+[sup] 2026-10-01 16:15:13 cmd: bash -c 
+  set -u
+  base=/home/skoonce/vit_tiny_default_300ep/vit_tiny_imagenet
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_vit_tiny_imagenet.py
+
+[sup] 2026-10-01 16:15:13 eta: ~44.5-46 h for 300 ep on 4x 3060 post-C6 (PROBED 2026-09-26 at 220 ms/step; the pre-C6 72.31 run was 34.2 h); ~79 h on 4x 4060 Ti (MEASURED ~380 ms/step, feed-bound) — use the 3060 box
+[sup] 2026-10-01 16:15:13 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-10-01 16:15:13   launched PID=4167590 PGID=4167590
+[sup]   last line: Done. Total time: 165258.3s
+[sup] 2026-10-03 14:09:45 ✅ COMPLETE — 300/300 epochs
