@@ -15,14 +15,14 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 (`content.tex` ~11002–11007), the still-out lists of §8.6 and §9.7, ch 5's A2/A1 ledger (the crop,
 ~7098), appendix A (~17779) — and the same two fixes close every one of those lines.
 
-**Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done in
-code and gated, committed on `wp8fg` (aa974a95), not pushed; no run carries it. Item 3 (§3): the
-probe and the proofs (0ce30dc7) and the op, the nets and the ties (10fc13ee) are committed, not
-pushed; §3.7's JAX flag is in, set in the six ImageNet ViT and ConvNeXt configs and gated. The next
-step is §3.8, the committed exact-GELU renders: until it lands the ImageNet references compute the
-exact GELU and the committed ImageNet renders the tanh one. No runs until both items are in the code
-(§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and the
-side-quest queue.
+**Where things are (2026-10-06, end of session). Start at §3.8.** §5's decisions are made.
+Everything is committed on `wp8fg` and nothing is pushed: item 4, the crop (§2, aa974a95); item 3's
+probe and proofs (§3.3–§3.4, 0ce30dc7), its op, nets and ties (§3.5–§3.6, 10fc13ee) and its JAX flag
+(§3.7, a7a9320c). No run carries either item. What is left of item 3 is §3.8, the committed
+exact-GELU renders and their gates, and §3.9, the reruns and the book. Until §3.8 lands the two
+paths disagree on ImageNet: the ViT and ConvNeXt references compute the exact GELU and the committed
+renders the tanh one. No runs until both items are in the code (§5 b), then the ViT-Ti and
+ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and the side-quest queue.
 
 ## 1. Order
 
@@ -134,8 +134,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 
 ## 3. Item 3: the exact-erf GELU
 
-**Status 2026-10-06: §3.3–§3.6 committed (0ce30dc7, 10fc13ee); §3.7's JAX flag in; no committed
-render carries the exact form yet.** Begin at §3.8.
+**Status 2026-10-06: §3.3–§3.7 committed (0ce30dc7, 10fc13ee, a7a9320c); no committed render carries
+the exact form yet.** Begin at §3.8.
 
 ### 3.1 Today
 
@@ -313,7 +313,7 @@ such lines; nothing lints line length.
 
 ### 3.7 JAX side: done
 
-**Done 2026-10-06.**
+**Done 2026-10-06, committed a7a9320c.**
 
 * `TrainConfig.geluExact` (default off) and `geluPy` in `jax/Jax/Codegen.lean`: the three GELU
   sites — the transformer MLP, the ConvNeXt block, a `.gelu` activation — emit
@@ -359,28 +359,66 @@ Also: `planning/rubric_review/wp2_combo_gen.py` spelled the ViT and ConvNeXt pre
 form and no longer reproduced the two `*_net_tied_lossGrad` theorems after §3.6; it does again
 (0 differing lines on ViT, ConvNeXt and EfficientNet).
 
-### 3.8 Renders and the artifact gates
+### 3.8 Renders and the artifact gates: next
 
-New variant names for the ViT and ConvNeXt ImageNet renders (an activation token in the tag — the
-old names stay, they are the landed runs' artifacts), plus the Imagenette renders if §5(a) says so.
-Render guard: every new `verified_mlir/` file into `proofs.yml`'s diff list
-(`render-guard-on-new-artifact`); `gen_mlir_manifest.py`; `check_render_coverage.py`; the IREE
-differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/ViTRender.lean`; a
-`chlo.erfc` fixture in the platform suite's tier 0 (§3.3).
+**What exists.** The renderers take the form first (`vitFwdRenderB gf`, `vitAdamTrainStepBText gf`,
+`convNextFwdRenderB gf`, `convNextAdamTrainStepBText gf`, and the per-example `vitTrainStepRenderV`
+/ `convNextTrainStepText`); all 93 `#eval` writers pass `.tanh`; no committed artifact is at
+`.erf`. Scratch renders at `.erf` — ViT-Tiny's and ConvNeXt-T's forward and AdamW step — pass
+`parse_verified_mlir.py`, compile through the shim on CUDA and, the forwards, on IREE.
+`vit_timm_parity.py`'s verified half already renders `vitFwdRenderB .erf` at ε 1e-6 for Ti / S / B
+and matches timm (§3.7).
 
-From §3.6 and §3.7: the variant tag is where the form lives (the spec language does not carry
-it), so the verified drivers need a `checkLnEpsWorld`-style refusal of a train step at one form
-scored by a forward at the other; `convnext_forward_tie.py` moves to the exact render at a
-weight scale that separates the forms, with the tanh render as its red control; the two
-whole-net tie tests (`vit-fwd-b-tie`, `convnext-fwd-b-tie`) run their batched-against-per-example
-backward check at `.erf` as well as `.tanh`; and the verified ImageNet job confs assert the
-exact render the way the JAX confs now assert the trainer.
+**Two choices first.**
+
+* *The tag.* An activation token in the variant name; the old names stay, they are the landed
+  runs' artifacts. The precedent is LayerNorm ε: `eps0000001` ahead of `bf16` in
+  `emadp128x4wxclipdropeps0000001bf16`, read by `VerifiedVariant` (`Verified/Train.lean` ~288) and
+  enforced by `checkLnEpsWorld` (~1451), which refuses a train step at one ε scored by a forward
+  at another. The form needs the same refusal: the spec language does not carry it (§3.6), so the
+  tag is the only place a driver can read it.
+* *How many.* The ImageNet ViT and ConvNeXt renders number 67 (`vitin` 18, `vitsin` 7, `vitbin` 8,
+  `convnextin` 16, `convnextsin` 9, `convnextbin` 9). The reruns and the side-quest queue launch
+  the six `*-emabf16-4gpu` confs, which load two variants: `emadp128x4wxclipdropeps0000001bf16`
+  with its own eval forward (ViT Ti / S / B) and `emadpwxclipdropbf16` with the forwards its
+  driver scores at (ConvNeXt T / S / B). Rendering those is about a dozen files, and no other
+  variant is queued to train at the exact form. Imagenette stays at tanh (§5 a).
+
+**Then.**
+
+* The `#eval` writers for the chosen set, each with the path, entry name and `LEAN_MLIR_VARIANT`
+  agreeing as the existing `#guard`s pin them.
+* The render guard: every new `verified_mlir/` file into `proofs.yml`'s diff lists (the
+  `ConvNeXtRenderB` block ~319–364, the `ViTRenderB` block ~370–418; `render-guard-on-new-artifact`),
+  `gen_mlir_manifest.py`, `check_render_coverage.py`, `regen_verified_mlir.sh proofs` (both
+  renderers are in its module list), `train_step_arity.py`.
+* The verified drivers: the form read from the tag, and the `checkLnEpsWorld`-style refusal of a
+  mixed pair.
+* The job confs. The six the reruns launch (`vit{,s,b}-default-emabf16-4gpu`,
+  `cnx{,s,b}-default-emabf16-4gpu`) name the exact render and assert it carries `chlo.erfc` and
+  no `stablehlo.tanh`, as the JAX confs assert the trainer (`pc_gelu`). Their six non-EMA
+  siblings (`vit-default-4gpu`, `vit{s,b}-default-g512-4gpu`, `cnx{,s,b}-default-4gpu`) load
+  `adamdp…` variants with no exact render; they stay on the tanh renders, and a conf that pairs
+  one with the exact-GELU reference should say so or be retired.
+* The ties, at the exact form: `convnext_forward_tie.py` moved to the exact render at a weight
+  scale that separates the forms (it is blind at `--scale 0.05`, §3.7), with the tanh render as
+  its red control; `vit-fwd-b-tie` and `convnext-fwd-b-tie` run their batched-against-per-example
+  backward check at `.erf` as well as `.tanh`; `grad_tie.py` and the IREE differential oracle
+  (`vjp_oracle`) over the new op; `tests/ViTRender.lean`.
+* A `chlo.erfc` fixture in the platform suite's tier 0 (§3.3): the 3060 box's `xla_cuda13` plugin,
+  where §3.9's reruns go, and the Orin's build have not been asked.
+
+**Tools on this box.** A full `lake build Certs` is about 4 minutes. The IREE Python packages are
+in the sibling `lean4-jax/.venv`, not this repo's `.venv` (`check_ir_codegen.py`,
+`convnext_forward_tie.py`). A `lake env lean` one-liner reads whatever `.olean` is on disk: build
+the module it imports first (§3.7).
 
 ### 3.9 Reruns and the book
 
 * **ViT-Ti pair**: 45.9 h (JAX) + 64.9 h (verified) on the 3060 box. **ConvNeXt-T pair**: 76.5 h +
   91.3 h — the EMA pair D15 is owed anyway, so this is the rerun it should be. Both carry the crop
-  (§2) as well. About twelve days of that box.
+  (§2) as well. About twelve days of that box. ConvNeXt-T's JAX reference needs a job conf first
+  (§3.7): it has none, so nothing asserts its crop or its GELU.
 * **ViT-S/B and ConvNeXt-S/B** carry it if it lands before they launch (§1).
 * **Imagenette** ViT (§9.4, the bit-exact claim re-measured) and ConvNeXt (ch 8): hours on one
   card, if §5(a) flips them.
