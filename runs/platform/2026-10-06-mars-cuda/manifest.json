@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-06T20:45:48Z",
+  "run": "2026-10-06-mars-cuda",
+  "core": {
+    "repo_sha": "40e3c7eedba7d8be3534e54022148c7305f4a57e",
+    "repo_dirty": false,
+    "lean_toolchain": "leanprover/lean4:v4.34.0",
+    "shim_source_sha": "0467d1ea138c0ab5",
+    "shim_binary_sha": "a6f90ba01e748dd6",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "916ec673e964f0e6",
+    "suite_sha": "1d74aaadffc0d70e",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "cuda",
+    "host": "mars",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 3060",
+        "memory": "12288 MiB",
+        "driver": "610.57.04"
+      },
+      {
+        "index": 1,
+        "name": "NVIDIA GeForce RTX 3060",
+        "memory": "12288 MiB",
+        "driver": "610.57.04"
+      },
+      {
+        "index": 2,
+        "name": "NVIDIA GeForce RTX 3060",
+        "memory": "12288 MiB",
+        "driver": "610.57.04"
+      },
+      {
+        "index": 3,
+        "name": "NVIDIA GeForce RTX 3060",
+        "memory": "12288 MiB",
+        "driver": "610.57.04"
+      }
+    ],
+    "gpu_count_visible": 4,
+    "visible_devices": null,
+    "driver": "610.57.04",
+    "runtime": {
+      "driver": "13.3.0[610.57.4]",
+      "runtime": "13.3.0",
+      "toolkit": "13.0.0",
+      "dnn": "9.24.0"
+    },
+    "plugin_path": "/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so",
+    "plugin_package": "jax_cuda13_pjrt==0.11.1",
+    "plugin_sha": "3c45ffb79cc00e37",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "cuda",
+    "platform_version": "cuda 13030",
+    "kernel": "7.0.0-31-generic",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}

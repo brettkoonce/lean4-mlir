@@ -32,6 +32,7 @@ this repo.
 
 | date | host | GPUs | driver | runtime | plugin | PJRT API | repo | tiers | pass | xfail | fail | skip | |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-06 | mars | 4× RTX 3060 | 610.57.04 | runtime 13.3.0, dnn 9.24.0 | jax_cuda13_pjrt==0.11.1 | 0.114 (hdr 0.90) | `40e3c7ee` | 0–2 | 24 | 0 | 0 | 0 | [✅](runs/platform/2026-10-06-mars-cuda/results.tsv) |
 | 2026-10-06 | ares | 2× RTX 4060 Ti | 575.57.08 | runtime 12.9.0, dnn 9.23.2 | jax_cuda12_pjrt==0.11.0 | 0.114 (hdr 0.90) | `a2a3d5e9` | 0–2 | 22 | 0 | 0 | 0 | [✅](runs/platform/2026-10-06-ares-cuda/results.tsv) |
 | 2026-10-02 | ares | 3× RTX 4060 Ti | 575.57.08 | runtime 12.9.0, dnn 9.23.2 | jax_cuda12_pjrt==0.11.0 | 0.114 (hdr 0.90) | `d0b17730` | 0–2 | 22 | 0 | 0 | 0 | [✅](runs/platform/2026-10-02-ares-cuda-2/results.tsv) |
 | 2026-10-02 | ares | 3× RTX 4060 Ti | 575.57.08 | runtime 12.9.0, dnn 9.23.2 | jax_cuda12_pjrt==0.11.0 | 0.114 (hdr 0.90) | `8dd23e5b` | 0–1 | 7 | 0 | 0 | 0 | [✅](runs/platform/2026-10-02-ares-cuda/results.tsv) |
