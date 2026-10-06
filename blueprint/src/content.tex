@@ -10519,7 +10519,7 @@ certified step; each node is the loss's derivative.
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:geluScalar, ax:pdiv, ax:pdiv_comp,
       ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP,
-      thm:chanLNTensor3HasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
+      thm:chanLNTensor3HasVJP, thm:denseHasVJP, thm:identityHasVJP,
       thm:layerNormVecHasVJP, thm:residualHasVJP, thm:rowwiseHasVJPMat,
       thm:transposeHasVJP, thm:vjpComp}
   \Assume{}
@@ -10552,11 +10552,10 @@ the block's, the downsample's or the head's; see
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
-      ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
-      ax:pdiv_const, ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat,
-      thm:bnHasVJP, thm:chanLNTensor3HasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:layerNormVecHasVJP,
-      thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+      ax:geluScalar, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_reindex,
+      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:layerNormVecHasVJP, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
   \Prove{} each of the 182 parameter gradients of the batched ConvNeXt-T
   step (\([3, 3, 9, 3]\) blocks, channel-LayerNorm at twenty-two sites,
   per-channel layer scale, GELU) denotes the certified batch gradient at the
@@ -10582,13 +10581,12 @@ downsample and head backwards; see
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dBiasGradHasVJP,
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
-      ax:geluScalar, ax:geluScalarDeriv, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
-      ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat,
-      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
-      thm:convnext_step_tie, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:hasGradAt_comp,
-      thm:identityHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
-      thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+      ax:geluScalar, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul,
+      ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjp3,
+      def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP, thm:convnext_step_tie,
+      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
+      thm:hasGradAt_comp, thm:identityHasVJP, thm:layerNormVecHasVJP,
+      thm:pdiv_finset_sum, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) at the LayerNorms \hfill[\texttt{h\(\varepsilon\)}]
@@ -12403,7 +12401,7 @@ row-by-row with shared weights. \Qed{}
   \label{thm:geluPerTokenHasVJPMat}
   \lean{Proofs.geluPerTokenHasVJPMat}
   \leanok
-  \uses{ax:geluScalar, def:hasvjpmat, thm:geluHasVJP, thm:rowwiseHasVJPMat}
+  \uses{ax:geluScalar, ax:pdiv, def:hasvjp, def:hasvjpmat, thm:rowwiseHasVJPMat}
 \end{theorem}
 
 \begin{proof}
@@ -12656,13 +12654,13 @@ Op by op along the graph, block by block along the tower; see
   \label{thm:vitTinyHasVJP_correct}
   \lean{Proofs.vitTinyHasVJP_correct, Proofs.vitTinyInputGrad_eq_vitTiny_vjp}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
-      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv,
-      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
-      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
-      thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
-      thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
+      ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:rowSoftmax_flat_differentiable,
+      def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseHasVJP,
+      thm:identityHasVJP, thm:identityMatHasVJP, thm:layerNormVecHasVJP,
+      thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
+      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP,
+      thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -12707,14 +12705,14 @@ Op by op along the graph, block by block along the tower; see
   \label{thm:vit_whole_back}
   \lean{Proofs.vitTinyInputGradB_eq_vitTiny_vjp, Proofs.vitInputGradKB_correct, Proofs.vitInputGradKB}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
-      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
+      ax:mhsaLayer_flat_differentiable, ax:patchEmbedFlatHasVJP,
       ax:patchEmbedFlat_differentiable, ax:pdiv, ax:pdiv_comp, ax:pdiv_reindex,
       ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:bnHasVJP, thm:denseHasVJP, thm:geluHasVJP, thm:identityHasVJP,
-      thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat,
-      thm:sdpaBackK_correct, thm:sdpaBackQ_correct, thm:sdpaBackV_correct,
-      thm:transformerMlpHasVJPMat, thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
+      thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP, thm:identityMatHasVJP,
+      thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat, thm:sdpaBackK_correct,
+      thm:sdpaBackQ_correct, thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat,
+      thm:vitForwardKVHasVJP, thm:vjpComp, thm:vjpMatComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) \hfill[\texttt{h\(\varepsilon\)}]
@@ -12736,14 +12734,13 @@ batch; see \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
   \lean{Proofs.ViTTieGB.vit_net_tiedGB, Proofs.ViTTieGB.vitBlockCotInB_eq_vjp,
         Proofs.ViTTieGB.vitCotTowerOutB_eq_vjp}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
-      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_reindex,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
+      ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_reindex,
       ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
       thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:geluHasVJP, thm:identityMatHasVJP,
-      thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat, thm:sdpaBackK_correct,
-      thm:sdpaBackQ_correct, thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat,
-      thm:vjpComp, thm:vjpMatComp}
+      thm:denseWeightGrad_correct, thm:identityMatHasVJP, thm:layerNormVecHasVJP,
+      thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
+      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
   \Prove{} each of the 200 parameter gradients of the batched ViT-Tiny step
   (three heads of 64, depth 12, \(16 \times 16\) patches) denotes the
   certified batch gradient at the chain cotangent of the label-smoothed
@@ -12766,13 +12763,13 @@ of the lifted block and the head; see
   \lean{Proofs.ViTTieGB.vit_net_lossGrad, Proofs.ViTTieGB.vit_net_lossGrad_smoothedCE, Proofs.ViTTieGB.vitNetB_eq_vitForwardKV,
     Proofs.ViTTieGB.vit_net_tied_lossGrad, Proofs.ViTTieGB.vitNetB}
   \leanok
-  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:geluScalarDeriv,
-      ax:mhsaHasVJPMat, ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add,
-      ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex,
-      ax:rowSoftmax_flat_differentiable, ax:softmaxCE_grad, def:hasgradat, def:hasvjp,
-      def:hasvjpmat, thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseBiasGrad_correct,
-      thm:denseHasVJP, thm:densePerTokenHasVJPMat, thm:denseWeightGrad_correct,
-      thm:geluHasVJP, thm:geluPerTokenHasVJPMat, thm:hasGradAt_comp, thm:identityHasVJP,
+  \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
+      ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
+      ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:rowSoftmax_flat_differentiable,
+      ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
+      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:densePerTokenHasVJPMat, thm:denseWeightGrad_correct,
+      thm:geluPerTokenHasVJPMat, thm:hasGradAt_comp, thm:identityHasVJP,
       thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
       thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
       thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vit_step_tie, thm:vjpComp,
