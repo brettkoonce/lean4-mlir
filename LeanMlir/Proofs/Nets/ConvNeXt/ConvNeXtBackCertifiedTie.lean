@@ -85,7 +85,7 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
     has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn its place. The proof rewrites the
     two 1×1 conv leaves and the depthwise leaf through their gates, rewrites the LN chain through
     its tie, and the rest matches definitionally. -/
-theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
+theorem cnxBodyWithChanLNBack_eq_vjp {gf : GeluForm} {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (Wdw : DepthwiseKernel c kHd kWd) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : Vec c)
@@ -95,13 +95,13 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
     cnxBlockBodyBack Wdw Wex Wpr
       (chanLNTensor3Back c h w εn γn (depthwiseFlat (h := h) (w := w) Wdw bdw v))
       ((layerScaleHasVJP γls).backward
-        ((flatConv (h := h) (w := w) Wpr bpr ∘ gelu (cExp * h * w) ∘
+        ((flatConv (h := h) (w := w) Wpr bpr ∘ gf.map (cExp * h * w) ∘
           flatConv (h := h) (w := w) Wex bex ∘ chanLNTensor3 c h w εn γn βn ∘
           depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      ((geluHasVJP (cExp * h * w)).backward
+      ((gf.hasVJP (cExp * h * w)).backward
         ((flatConv (h := h) (w := w) Wex bex ∘ chanLNTensor3 c h w εn γn βn ∘
           depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      = (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w εn γn βn hεn)
+      = (cnxBodyWithHasVJP gf (chanLNTensor3_differentiable c h w εn γn βn hεn)
           (chanLNTensor3HasVJP c h w εn γn βn hεn)
           Wdw bdw Wex bex Wpr bpr γls).backward v := by
   funext dy
@@ -112,7 +112,7 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
         (x := (chanLNTensor3 c h w εn γn βn ∘ depthwiseFlat (h := h) (w := w) Wdw bdw) v)
         (by decide) (by decide),
       convFlatBack_eq_vjp_backward (W := Wpr) (b := bpr)
-        (x := (gelu (cExp * h * w) ∘ flatConv (h := h) (w := w) Wex bex ∘
+        (x := (gf.map (cExp * h * w) ∘ flatConv (h := h) (w := w) Wex bex ∘
           chanLNTensor3 c h w εn γn βn ∘ depthwiseFlat (h := h) (w := w) Wdw bdw) v)
         (by decide) (by decide),
       depthwiseFlatBack_eq_vjp_backward hkHd hkWd Wdw bdw v]
@@ -123,19 +123,19 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
     `(cnxBlockChWHasVJP …).backward` — the additive skip's backward being `dy`. Immediate from the
     body tie. With `chanLNTensor3Back_eq_chanLN_vjp` and `cnxBodyWithChanLNBack_eq_vjp`, the
     channel-LN net's body, block and LayerNorm backward are each tied. -/
-theorem cnxBlockChBack_eq_vjp {c cExp h w kHd kWd : Nat}
+theorem cnxBlockChBack_eq_vjp {gf : GeluForm} {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (p : CnxBlockParamsCh c cExp h w kHd kWd) (hε : 0 < p.εn) (v : Vec (c * h * w)) :
     Proofs.residual (cnxBlockBodyBack p.Wdw p.Wex p.Wpr
       (chanLNTensor3Back c h w p.εn p.γn (depthwiseFlat (h := h) (w := w) p.Wdw p.bdw v))
       ((layerScaleHasVJP (cnxGlsCh p)).backward
-        ((flatConv (h := h) (w := w) p.Wpr p.bpr ∘ gelu (cExp * h * w) ∘
+        ((flatConv (h := h) (w := w) p.Wpr p.bpr ∘ gf.map (cExp * h * w) ∘
           flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
           depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v))
-      ((geluHasVJP (cExp * h * w)).backward
+      ((gf.hasVJP (cExp * h * w)).backward
         ((flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
           depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v)))
-      = (cnxBlockChWHasVJP p hε).backward v := by
+      = (cnxBlockChWHasVJP gf p hε).backward v := by
   rw [cnxBodyWithChanLNBack_eq_vjp hkHd hkWd p.Wdw p.bdw p.εn hε p.γn p.βn p.Wex p.bex
         p.Wpr p.bpr (cnxGlsCh p) v]
   rfl

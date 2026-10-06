@@ -48,7 +48,7 @@ sites here are 1 stem + 18 block + 3 downsample (all channel-LN) + the head LN a
 /-- The ConvNeXt block body with the LN left as a parameter. Written once and instantiated at
     `chanLNTensor3`, so the channel-LN world costs one definition rather than a second copy of
     `convNextBlockBody`'s six-piece `vjpComp` chain. -/
-noncomputable def cnxBodyWith {c cExp h w kH kW : Nat}
+noncomputable def cnxBodyWith (gf : GeluForm) {c cExp h w kH kW : Nat}
     (LN : Vec (c * h * w) → Vec (c * h * w))
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -57,34 +57,34 @@ noncomputable def cnxBodyWith {c cExp h w kH kW : Nat}
     Vec (c * h * w) → Vec (c * h * w) :=
   layerScale γls ∘
   (flatConv (h := h) (w := w) Wpr bpr) ∘
-  (gelu (cExp * h * w)) ∘
+  (gf.map (cExp * h * w)) ∘
   (flatConv (h := h) (w := w) Wex bex) ∘
   LN ∘
   (depthwiseFlat (h := h) (w := w) Wdw bdw)
 
-theorem cnxBodyWith_differentiable {c cExp h w kH kW : Nat}
+theorem cnxBodyWith_differentiable {gf : GeluForm} {c cExp h w kH kW : Nat}
     {LN : Vec (c * h * w) → Vec (c * h * w)} (hLN : Differentiable ℝ LN)
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    Differentiable ℝ (cnxBodyWith LN Wdw bdw Wex bex Wpr bpr γls) := by
-  unfold cnxBodyWith layerScale gelu; fun_prop
+    Differentiable ℝ (cnxBodyWith gf LN Wdw bdw Wex bex Wpr bpr γls) := by
+  unfold cnxBodyWith layerScale GeluForm.map; fun_prop
 
 /-- The body VJP, given the LN's. Only the LN carries a hypothesis — gelu is smooth and
     conv/layerScale are linear, so this is global exactly as `convNextBlockBodyHasVJP` is. -/
-noncomputable def cnxBodyWithHasVJP {c cExp h w kH kW : Nat}
+noncomputable def cnxBodyWithHasVJP (gf : GeluForm) {c cExp h w kH kW : Nat}
     {LN : Vec (c * h * w) → Vec (c * h * w)}
     (hLN : Differentiable ℝ LN) (vLN : HasVJP LN)
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    HasVJP (cnxBodyWith LN Wdw bdw Wex bex Wpr bpr γls) := by
+    HasVJP (cnxBodyWith gf LN Wdw bdw Wex bex Wpr bpr γls) := by
   unfold cnxBodyWith
   have hdw := depthwiseFlat_differentiable (h := h) (w := w) Wdw bdw
   have hex := flatConv_differentiable (h := h) (w := w) Wex bex
-  have hge := gelu_differentiable (cExp * h * w)
+  have hge := gf.map_differentiable (cExp * h * w)
   have hpr := flatConv_differentiable (h := h) (w := w) Wpr bpr
   have hls := layerScale_differentiable γls
   have e1 := vjpComp _ _ hdw hLN
@@ -92,7 +92,7 @@ noncomputable def cnxBodyWithHasVJP {c cExp h w kH kW : Nat}
   have f1 := hLN.comp hdw
   have e2 := vjpComp _ _ f1 hex e1 (HasVJP3.toHasVJP (conv2dHasVJP3 Wex bex))
   have f2 := hex.comp f1
-  have e3 := vjpComp _ _ f2 hge e2 (geluHasVJP (cExp * h * w))
+  have e3 := vjpComp _ _ f2 hge e2 (gf.hasVJP (cExp * h * w))
   have f3 := hge.comp f2
   have e4 := vjpComp _ _ f3 hpr e3 (HasVJP3.toHasVJP (conv2dHasVJP3 Wpr bpr))
   have f4 := hpr.comp f3
@@ -120,66 +120,66 @@ noncomputable def cnxGlsCh {c cExp h w kH kW : Nat} (p : CnxBlockParamsCh c cExp
   fun k => p.γls (StableHLO.chanIdx c h w k)
 
 /-- The packaged ConvNeXt block: `residual` of the shared body at `chanLNTensor3`. -/
-noncomputable def cnxBlockChW {c cExp h w kH kW : Nat}
+noncomputable def cnxBlockChW (gf : GeluForm) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) :
     Vec (c * h * w) → Vec (c * h * w) :=
-  residual (cnxBodyWith (chanLNTensor3 c h w p.εn p.γn p.βn)
+  residual (cnxBodyWith gf (chanLNTensor3 c h w p.εn p.γn p.βn)
     p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
 
-theorem cnxBlockChW_differentiable {c cExp h w kH kW : Nat}
+theorem cnxBlockChW_differentiable {gf : GeluForm} {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
-    Differentiable ℝ (cnxBlockChW p) := by
+    Differentiable ℝ (cnxBlockChW gf p) := by
   unfold cnxBlockChW residual
   exact (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
     p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p)).add differentiable_id
 
-noncomputable def cnxBlockChWHasVJP {c cExp h w kH kW : Nat}
+noncomputable def cnxBlockChWHasVJP (gf : GeluForm) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
-    HasVJP (cnxBlockChW p) :=
+    HasVJP (cnxBlockChW gf p) :=
   residualHasVJP _
     (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
-    (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
+    (cnxBodyWithHasVJP gf (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       (chanLNTensor3HasVJP c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
 
 /-- **Depth-`k` channel-LN stage fold** (head recursion — block `0` runs first). -/
-noncomputable def convNextStageChK {c cExp h w kH kW : Nat} :
+noncomputable def convNextStageChK (gf : GeluForm) {c cExp h w kH kW : Nat} :
     (k : Nat) → (Fin k → CnxBlockParamsCh c cExp h w kH kW) →
     Vec (c * h * w) → Vec (c * h * w)
   | 0, _ => fun v => v
-  | k + 1, ps => convNextStageChK k (fun i => ps i.succ) ∘ cnxBlockChW (ps 0)
+  | k + 1, ps => convNextStageChK gf k (fun i => ps i.succ) ∘ cnxBlockChW gf (ps 0)
 
 /-- A three-block stage, unrolled. -/
-theorem convNextStageChK_three {c cExp h w kH kW : Nat}
+theorem convNextStageChK_three {gf : GeluForm} {c cExp h w kH kW : Nat}
     (a b d : CnxBlockParamsCh c cExp h w kH kW) (v : Vec (c * h * w)) :
-    convNextStageChK 3 ![a, b, d] v = cnxBlockChW d (cnxBlockChW b (cnxBlockChW a v)) := rfl
+    convNextStageChK gf 3 ![a, b, d] v = cnxBlockChW gf d (cnxBlockChW gf b (cnxBlockChW gf a v)) := rfl
 
 /-- A nine-block stage, unrolled. -/
-theorem convNextStageChK_nine {c cExp h w kH kW : Nat}
+theorem convNextStageChK_nine {gf : GeluForm} {c cExp h w kH kW : Nat}
     (a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ : CnxBlockParamsCh c cExp h w kH kW) (v : Vec (c * h * w)) :
-    convNextStageChK 9 ![a₁, a₂, a₃, a₄, a₅, a₆, a₇, a₈, a₉] v
-      = cnxBlockChW a₉ (cnxBlockChW a₈ (cnxBlockChW a₇ (cnxBlockChW a₆ (cnxBlockChW a₅
-          (cnxBlockChW a₄ (cnxBlockChW a₃ (cnxBlockChW a₂ (cnxBlockChW a₁ v)))))))) := rfl
+    convNextStageChK gf 9 ![a₁, a₂, a₃, a₄, a₅, a₆, a₇, a₈, a₉] v
+      = cnxBlockChW gf a₉ (cnxBlockChW gf a₈ (cnxBlockChW gf a₇ (cnxBlockChW gf a₆ (cnxBlockChW gf a₅
+          (cnxBlockChW gf a₄ (cnxBlockChW gf a₃ (cnxBlockChW gf a₂ (cnxBlockChW gf a₁ v)))))))) := rfl
 
-theorem convNextStageChK_differentiable {c cExp h w kH kW : Nat} :
+theorem convNextStageChK_differentiable {gf : GeluForm} {c cExp h w kH kW : Nat} :
     ∀ (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW),
-      (∀ i, 0 < (ps i).εn) → Differentiable ℝ (convNextStageChK k ps)
+      (∀ i, 0 < (ps i).εn) → Differentiable ℝ (convNextStageChK gf k ps)
   | 0, _, _ => differentiable_id
   | k + 1, ps, hε =>
       (convNextStageChK_differentiable k (fun i => ps i.succ) (fun i => hε i.succ)).comp
         (cnxBlockChW_differentiable (ps 0) (hε 0))
 
-noncomputable def convNextStageChKHasVJP {c cExp h w kH kW : Nat} :
+noncomputable def convNextStageChKHasVJP (gf : GeluForm) {c cExp h w kH kW : Nat} :
     (k : Nat) → (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW) →
-    (∀ i, 0 < (ps i).εn) → HasVJP (convNextStageChK k ps)
+    (∀ i, 0 < (ps i).εn) → HasVJP (convNextStageChK gf k ps)
   | 0, _, _ => identityHasVJP _
   | k + 1, ps, hε =>
-      vjpComp (cnxBlockChW (ps 0)) (convNextStageChK k (fun i => ps i.succ))
+      vjpComp (cnxBlockChW gf (ps 0)) (convNextStageChK gf k (fun i => ps i.succ))
         (cnxBlockChW_differentiable (ps 0) (hε 0))
         (convNextStageChK_differentiable k (fun i => ps i.succ) (fun i => hε i.succ))
-        (cnxBlockChWHasVJP (ps 0) (hε 0))
-        (convNextStageChKHasVJP k (fun i => ps i.succ) (fun i => hε i.succ))
+        (cnxBlockChWHasVJP gf (ps 0) (hε 0))
+        (convNextStageChKHasVJP gf k (fun i => ps i.succ) (fun i => hε i.succ))
 
 -- ── the stage-boundary downsample, at the channel LN ──
 
@@ -255,18 +255,18 @@ structure CnxTWeightsCh (nC : Nat) where
     faithfulness `convNextFwdGraphTCh_faithful` closes stage by stage. `nC` is a binder: the
     Imagenette artifacts run it at 10 and the `convnextin_*` ImageNet artifacts at 1000. It has no
     drop-path; the `*drop*` artifacts compute another function. -/
-noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
+noncomputable def convNextForwardTCh (gf : GeluForm) {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
     Vec nC :=
   dense w.Wd w.bd
    (rowLNVecFlat 1 768 w.hε w.hγ w.hβ
     (globalAvgPoolFlat 768 7 7
-      (convNextStageChK 3 w.s4
+      (convNextStageChK gf 3 w.s4
         (cnxDownChW 7 7 w.d3
-          (convNextStageChK 9 w.s3
+          (convNextStageChK gf 9 w.s3
             (cnxDownChW 14 14 w.d2
-              (convNextStageChK 3 w.s2
+              (convNextStageChK gf 3 w.s2
                 (cnxDownChW 28 28 w.d1
-                  (convNextStageChK 3 w.s1
+                  (convNextStageChK gf 3 w.s1
                     (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ
                       (flatConvStride4 (h := 56) (w := 56) w.sW w.sb x)))))))))))
 
@@ -274,7 +274,7 @@ noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec 
     positivities: stem + 18 blocks (via the per-stage `∀ i`) + 3 downsamples + **the head LN**,
     which this statement composes as `rowLNVecFlat 1 768 w.hε w.hγ w.hβ` and takes `hhε` for.
     Chain-stated to keep the blocks opaque. -/
-noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
+noncomputable def convNextForwardTChHasVJP (gf : GeluForm) {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
@@ -284,13 +284,13 @@ noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
       (dense w.Wd w.bd ∘
         rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
         globalAvgPoolFlat 768 7 7 ∘
-        convNextStageChK 3 w.s4 ∘
+        convNextStageChK gf 3 w.s4 ∘
         cnxDownChW 7 7 w.d3 ∘
-        convNextStageChK 9 w.s3 ∘
+        convNextStageChK gf 9 w.s3 ∘
         cnxDownChW 14 14 w.d2 ∘
-        convNextStageChK 3 w.s2 ∘
+        convNextStageChK gf 3 w.s2 ∘
         cnxDownChW 28 28 w.d1 ∘
-        convNextStageChK 3 w.s1 ∘
+        convNextStageChK gf 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) := by
   have st_diff := flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb
@@ -299,26 +299,26 @@ noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
   have lns_vjp := chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε
   have e1 := vjpComp _ _ st_diff lns_diff st_vjp lns_vjp
   have f1 := lns_diff.comp st_diff
-  have s1d := convNextStageChK_differentiable 3 w.s1 h1
-  have e2 := vjpComp _ _ f1 s1d e1 (convNextStageChKHasVJP 3 w.s1 h1)
+  have s1d := convNextStageChK_differentiable (gf := gf) 3 w.s1 h1
+  have e2 := vjpComp _ _ f1 s1d e1 (convNextStageChKHasVJP gf 3 w.s1 h1)
   have f2 := s1d.comp f1
   have d1d := cnxDownChW_differentiable 28 28 w.d1 hd1
   have e3 := vjpComp _ _ f2 d1d e2 (cnxDownChWHasVJP 28 28 w.d1 hd1)
   have f3 := d1d.comp f2
-  have s2d := convNextStageChK_differentiable 3 w.s2 h2
-  have e4 := vjpComp _ _ f3 s2d e3 (convNextStageChKHasVJP 3 w.s2 h2)
+  have s2d := convNextStageChK_differentiable (gf := gf) 3 w.s2 h2
+  have e4 := vjpComp _ _ f3 s2d e3 (convNextStageChKHasVJP gf 3 w.s2 h2)
   have f4 := s2d.comp f3
   have d2d := cnxDownChW_differentiable 14 14 w.d2 hd2
   have e5 := vjpComp _ _ f4 d2d e4 (cnxDownChWHasVJP 14 14 w.d2 hd2)
   have f5 := d2d.comp f4
-  have s3d := convNextStageChK_differentiable 9 w.s3 h3
-  have e6 := vjpComp _ _ f5 s3d e5 (convNextStageChKHasVJP 9 w.s3 h3)
+  have s3d := convNextStageChK_differentiable (gf := gf) 9 w.s3 h3
+  have e6 := vjpComp _ _ f5 s3d e5 (convNextStageChKHasVJP gf 9 w.s3 h3)
   have f6 := s3d.comp f5
   have d3d := cnxDownChW_differentiable 7 7 w.d3 hd3
   have e7 := vjpComp _ _ f6 d3d e6 (cnxDownChWHasVJP 7 7 w.d3 hd3)
   have f7 := d3d.comp f6
-  have s4d := convNextStageChK_differentiable 3 w.s4 h4
-  have e8 := vjpComp _ _ f7 s4d e7 (convNextStageChKHasVJP 3 w.s4 h4)
+  have s4d := convNextStageChK_differentiable (gf := gf) 3 w.s4 h4
+  have e8 := vjpComp _ _ f7 s4d e7 (convNextStageChKHasVJP gf 3 w.s4 h4)
   have f8 := s4d.comp f7
   have gap_diff := globalAvgPoolFlat_differentiable 768 7 7
   have e9 := vjpComp _ _ f8 gap_diff e8 (globalAvgPoolFlatHasVJP 768 7 7)
@@ -335,7 +335,7 @@ noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
     `Differentiable` peer of `convNextForwardTChHasVJP`, on the same twelve-factor chain, which
     `batchMapHasVJP` asks for beside the `HasVJP` when the net is lifted over a batch
     (`ConvNeXtWholeBackCertifiedTieB.lean`). -/
-theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
+theorem convNextForwardTCh_differentiable {gf : GeluForm} {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
@@ -345,13 +345,13 @@ theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
       (dense w.Wd w.bd ∘
         rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
         globalAvgPoolFlat 768 7 7 ∘
-        convNextStageChK 3 w.s4 ∘
+        convNextStageChK gf 3 w.s4 ∘
         cnxDownChW 7 7 w.d3 ∘
-        convNextStageChK 9 w.s3 ∘
+        convNextStageChK gf 9 w.s3 ∘
         cnxDownChW 14 14 w.d2 ∘
-        convNextStageChK 3 w.s2 ∘
+        convNextStageChK gf 3 w.s2 ∘
         cnxDownChW 28 28 w.d1 ∘
-        convNextStageChK 3 w.s1 ∘
+        convNextStageChK gf 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
   (dense_differentiable w.Wd w.bd).comp
@@ -369,18 +369,18 @@ theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
 
 /-- The nested↔chain bridge: `convNextForwardTCh w x` equals the twelve-factor `∘` chain
     `convNextForwardTChHasVJP` is stated on. -/
-theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
-    convNextForwardTCh w x =
+theorem convNextForwardTCh_eq_chain {gf : GeluForm} {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
+    convNextForwardTCh gf w x =
       (dense w.Wd w.bd ∘
         rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
         globalAvgPoolFlat 768 7 7 ∘
-        convNextStageChK 3 w.s4 ∘
+        convNextStageChK gf 3 w.s4 ∘
         cnxDownChW 7 7 w.d3 ∘
-        convNextStageChK 9 w.s3 ∘
+        convNextStageChK gf 9 w.s3 ∘
         cnxDownChW 14 14 w.d2 ∘
-        convNextStageChK 3 w.s2 ∘
+        convNextStageChK gf 3 w.s2 ∘
         cnxDownChW 28 28 w.d1 ∘
-        convNextStageChK 3 w.s1 ∘
+        convNextStageChK gf 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) x := by
   -- `rw`, not `simp`/`rfl`: those die in the kernel on the recursive stage folds.
@@ -390,27 +390,27 @@ theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (
       Function.comp_apply, Function.comp_apply, Function.comp_apply]
 
 /-- Correctness on `convNextForwardTCh` itself (via the bridge). -/
-theorem convNextForwardTChHasVJP_correct {nC : Nat} (w : CnxTWeightsCh nC)
+theorem convNextForwardTChHasVJP_correct {gf : GeluForm} {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
     (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
     (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε)
     (x : Vec (3 * 224 * 224)) (dy : Vec nC) (i : Fin (3 * 224 * 224)) :
-    (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
-      ∑ j : Fin nC, pdiv (convNextForwardTCh w) x i j * dy j := by
-  have h := (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
-  rwa [show convNextForwardTCh w =
+    (convNextForwardTChHasVJP gf w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
+      ∑ j : Fin nC, pdiv (convNextForwardTCh gf w) x i j * dy j := by
+  have h := (convNextForwardTChHasVJP gf w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
+  rwa [show convNextForwardTCh gf w =
         (dense w.Wd w.bd ∘
           rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘
         globalAvgPoolFlat 768 7 7 ∘
-          convNextStageChK 3 w.s4 ∘
+          convNextStageChK gf 3 w.s4 ∘
           cnxDownChW 7 7 w.d3 ∘
-          convNextStageChK 9 w.s3 ∘
+          convNextStageChK gf 9 w.s3 ∘
           cnxDownChW 14 14 w.d2 ∘
-          convNextStageChK 3 w.s2 ∘
+          convNextStageChK gf 3 w.s2 ∘
           cnxDownChW 28 28 w.d1 ∘
-          convNextStageChK 3 w.s1 ∘
+          convNextStageChK gf 3 w.s1 ∘
           chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
           flatConvStride4 (h := 56) (w := 56) w.sW w.sb)
       from funext (convNextForwardTCh_eq_chain w)]
@@ -468,44 +468,44 @@ private theorem headLNGraph_faithful (gN btN epsStr : String) {c : Nat} (ε : �
 
 /-- The ConvNeXt block graph — the `[3,3,9,3]` block segment, with `chanLNGraph` at its LN
     site. -/
-def cnxBlockChGraphW (pfx epsStr : String) {c cExp h w kH kW : Nat}
+def cnxBlockChGraphW (gf : GeluForm) (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
   .addV
     (.layerScaleChF s!"%{pfx}lg" p.γls
       (.flatConvF (h := h) (w := w) s!"%{pfx}pW" s!"%{pfx}pb" p.Wpr p.bpr
-        (.geluF
+        (.geluF gf
           (.flatConvF (h := h) (w := w) s!"%{pfx}eW" s!"%{pfx}eb" p.Wex p.bex
             (chanLNGraph s!"%{pfx}ng" s!"%{pfx}nbt" epsStr p.εn p.γn p.βn
               (.depthwiseF (h := h) (w := w) s!"%{pfx}dW" s!"%{pfx}db" p.Wdw p.bdw e))))))
     e
 
-theorem cnxBlockChGraphW_faithful (pfx epsStr : String) {c cExp h w kH kW : Nat}
+theorem cnxBlockChGraphW_faithful {gf : GeluForm} (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (e : SHlo (c * h * w)) :
-    den (cnxBlockChGraphW pfx epsStr p e) = cnxBlockChW p (den e) := by
+    den (cnxBlockChGraphW gf pfx epsStr p e) = cnxBlockChW gf p (den e) := by
   unfold cnxBlockChGraphW cnxBlockChW cnxGlsCh cnxBodyWith residual biPath
   simp only [layerScaleChF_faithful, flatConvF_faithful, geluF_faithful,
              chanLNGraph_faithful, depthwiseF_faithful, den_addV, Function.comp_apply]
 
 /-- **Depth-`k` channel-LN stage graph fold** — block `base+1` first, prefixes `b{base+1}_`. -/
-def cnxStageChGraphK (epsStr : String) {c cExp h w kH kW : Nat} :
+def cnxStageChGraphK (gf : GeluForm) (epsStr : String) {c cExp h w kH kW : Nat} :
     (base k : Nat) → (Fin k → CnxBlockParamsCh c cExp h w kH kW) →
     SHlo (c * h * w) → SHlo (c * h * w)
   | _, 0, _, e => e
   | base, k + 1, ps, e =>
-      cnxStageChGraphK epsStr (base + 1) k (fun i => ps i.succ)
-        (cnxBlockChGraphW s!"b{base + 1}_" epsStr (ps 0) e)
+      cnxStageChGraphK gf epsStr (base + 1) k (fun i => ps i.succ)
+        (cnxBlockChGraphW gf s!"b{base + 1}_" epsStr (ps 0) e)
 
-lemma cnxStageChGraphK_den (epsStr : String) {c cExp h w kH kW : Nat} :
+lemma cnxStageChGraphK_den {gf : GeluForm} (epsStr : String) {c cExp h w kH kW : Nat} :
     ∀ (base k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW)
       (e : SHlo (c * h * w)),
-      den (cnxStageChGraphK epsStr base k ps e) = convNextStageChK k ps (den e)
+      den (cnxStageChGraphK gf epsStr base k ps e) = convNextStageChK gf k ps (den e)
   | _, 0, _, _ => rfl
   | base, k + 1, ps, e => by
-      have ih := cnxStageChGraphK_den epsStr (base + 1) k (fun i => ps i.succ)
-        (cnxBlockChGraphW s!"b{base + 1}_" epsStr (ps 0) e)
-      rw [show cnxStageChGraphK epsStr base (k + 1) ps e =
-            cnxStageChGraphK epsStr (base + 1) k (fun i => ps i.succ)
-              (cnxBlockChGraphW s!"b{base + 1}_" epsStr (ps 0) e) from rfl,
+      have ih := cnxStageChGraphK_den (gf := gf) epsStr (base + 1) k (fun i => ps i.succ)
+        (cnxBlockChGraphW gf s!"b{base + 1}_" epsStr (ps 0) e)
+      rw [show cnxStageChGraphK gf epsStr base (k + 1) ps e =
+            cnxStageChGraphK gf epsStr (base + 1) k (fun i => ps i.succ)
+              (cnxBlockChGraphW gf s!"b{base + 1}_" epsStr (ps 0) e) from rfl,
           ih, cnxBlockChGraphW_faithful]
       rfl
 
@@ -525,18 +525,18 @@ theorem cnxDownChGraphW_faithful (pfx epsStr : String) (h w : Nat) {cin cout : N
 /-- The **channel-LN ConvNeXt-T forward graph** (3×224² → `nC`): patchify stem → **stem
     channel-LN** → the `[3,3,9,3]` stages with 3 channel-LN + 2×2/s2 downsample boundaries →
     GAP → **head LN** → dense. 23 LN sites: 1 stem + 18 block + 3 downsample + head. -/
-def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
+def convNextFwdGraphTCh (gf : GeluForm) (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (3 * 224 * 224)) : SHlo nC :=
   denseF "%Wd" "%bd" w.Wd w.bd
    (headLNGraph "%hng" "%hnbt" epsStr w.hε w.hγ w.hβ
     (.gapF (c := 768) (h := 7) (w := 7)
-      (cnxStageChGraphK epsStr 15 3 w.s4
+      (cnxStageChGraphK gf epsStr 15 3 w.s4
         (cnxDownChGraphW "d3" epsStr 7 7 w.d3
-          (cnxStageChGraphK epsStr 6 9 w.s3
+          (cnxStageChGraphK gf epsStr 6 9 w.s3
             (cnxDownChGraphW "d2" epsStr 14 14 w.d2
-              (cnxStageChGraphK epsStr 3 3 w.s2
+              (cnxStageChGraphK gf epsStr 3 3 w.s2
                 (cnxDownChGraphW "d1" epsStr 28 28 w.d1
-                  (cnxStageChGraphK epsStr 0 3 w.s1
+                  (cnxStageChGraphK gf epsStr 0 3 w.s1
                     (chanLNGraph "%psng" "%psnbt" epsStr w.sε w.sγ w.sβ
                       (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb" w.sW w.sb
                         (.operand "%x" x))))))))))))
@@ -545,9 +545,9 @@ def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     `convNextForwardTCh`. One `rw` per stage: `cnxStageChGraphK_den` / `cnxDownChGraphW_faithful`
     at the stages and downsamples, `chanLNGraph_faithful` at the stem LN and `headLNGraph_faithful`
     at the head. -/
-theorem convNextFwdGraphTCh_faithful (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
+theorem convNextFwdGraphTCh_faithful {gf : GeluForm} (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (3 * 224 * 224)) :
-    den (convNextFwdGraphTCh epsStr w x) = convNextForwardTCh w x := by
+    den (convNextFwdGraphTCh gf epsStr w x) = convNextForwardTCh gf w x := by
   rw [convNextFwdGraphTCh, denseF_faithful, headLNGraph_faithful, gapF_faithful,
       cnxStageChGraphK_den, cnxDownChGraphW_faithful,
       cnxStageChGraphK_den, cnxDownChGraphW_faithful,

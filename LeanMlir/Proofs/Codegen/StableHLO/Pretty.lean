@@ -244,8 +244,8 @@ inductive Raw where
   | swishBack  (x : String) (n : Nat)      : Raw → Raw
   | sigmoidF   (n : Nat)                   : Raw → Raw
   | sigmoidBack (x : String) (n : Nat)     : Raw → Raw
-  | geluF      (n : Nat)                   : Raw → Raw
-  | geluBack   (x : String) (n : Nat)      : Raw → Raw
+  | geluF      (gf : GeluForm) (n : Nat)   : Raw → Raw
+  | geluBack   (gf : GeluForm) (x : String) (n : Nat) : Raw → Raw
   | layerScaleF (γ : String) (n : Nat)     : Raw → Raw
   | layerScaleChF (γ : String) (c h w : Nat) : Raw → Raw
   | softmaxRowF    (m n : Nat)             : Raw → Raw
@@ -343,7 +343,9 @@ private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × 
       ("denseRowBackPBf16", [wN], [N, rows, a, c])
   -- `epsStr` rides in `names` though it is a LITERAL, not an SSA name — `bnEval` set that
   -- precedent and `emitTok` splices both the same way. The alternative is a second string list.
-  | .gelu (n := n) => ("gelu", [], [N, n])
+  -- A tag per form: the tanh and the exact GELU emit different text.
+  | .gelu (n := n) .tanh => ("gelu", [], [N, n])
+  | .gelu (n := n) .erf => ("geluErf", [], [N, n])
   | .transpose (m := m) (n := n) => ("transposeP", [], [N, m, n])
   | .convStride4 (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("convStride4P", [wN, bN], [N, ic, oc, h, w, kH, kW])
@@ -454,7 +456,8 @@ def skel : {k : Nat} → SHlo k → Raw
   -- Routed through the GENERIC `.batched` tag, like every batched op above — which is why these
   -- cost five sites (ctor, den, the `rfl` theorem, this line, `emitTok`) and not ten: `Raw`,
   -- `Tok`, `toToks`, `parseStack` and the `parse_toToks` induction all already handle `.batched`.
-  | _, .geluBackB (N := N) (n := n) xN _ e => .batched "geluBackP" [xN] [N, n] (skel e)
+  | _, .geluBackB (N := N) (n := n) .tanh xN _ e => .batched "geluBackP" [xN] [N, n] (skel e)
+  | _, .geluBackB (N := N) (n := n) .erf xN _ e => .batched "geluErfBackP" [xN] [N, n] (skel e)
   -- THESE FOUR ALIAS THEIR PER-EXAMPLE PEER'S `Raw` — deliberately, and it is the pattern the
   -- depthwise bias grads already use. Their emitted MLIR ALREADY contracts the batch axis
   -- (`layerScaleChGammaGrad` reduces `dimensions = [0, 2, 3]`, `rowDenseBiasGrad` `[0, 1]`), because
@@ -593,8 +596,8 @@ def skel : {k : Nat} → SHlo k → Raw
   | k, .swishBack x _ e      => .swishBack x k (skel e)
   | k, .sigmoidF e           => .sigmoidF k (skel e)
   | k, .sigmoidBack x _ e    => .sigmoidBack x k (skel e)
-  | k, .geluF e              => .geluF k (skel e)
-  | k, .geluBack x _ e       => .geluBack x k (skel e)
+  | k, .geluF gf e           => .geluF gf k (skel e)
+  | k, .geluBack gf x _ e    => .geluBack gf x k (skel e)
   | k, .layerScaleF γN _ e   => .layerScaleF γN k (skel e)
   | _, .layerScaleChF (c := c) (h := h) (w := w) γN _ e => .layerScaleChF γN c h w (skel e)
   | _, .softmaxRowF (m := m) (n := n) e => .softmaxRowF m n (skel e)
@@ -863,8 +866,8 @@ inductive Tok where
   | swishBack  (x : String) (n : Nat)      : Tok
   | sigmoidF   (n : Nat)                   : Tok
   | sigmoidBack (x : String) (n : Nat)     : Tok
-  | geluF      (n : Nat)                   : Tok
-  | geluBack   (x : String) (n : Nat)      : Tok
+  | geluF      (gf : GeluForm) (n : Nat)   : Tok
+  | geluBack   (gf : GeluForm) (x : String) (n : Nat) : Tok
   | layerScaleF (γ : String) (n : Nat)     : Tok
   | layerScaleChF (γ : String) (c h w : Nat) : Tok
   | softmaxRowF    (m n : Nat)             : Tok
@@ -970,8 +973,8 @@ def toToks : Raw → List Tok
   | .swishBack x n e => toToks e ++ [.swishBack x n]
   | .sigmoidF n e    => toToks e ++ [.sigmoidF n]
   | .sigmoidBack x n e => toToks e ++ [.sigmoidBack x n]
-  | .geluF n e       => toToks e ++ [.geluF n]
-  | .geluBack x n e  => toToks e ++ [.geluBack x n]
+  | .geluF gf n e    => toToks e ++ [.geluF gf n]
+  | .geluBack gf x n e => toToks e ++ [.geluBack gf x n]
   | .layerScaleF γN n e => toToks e ++ [.layerScaleF γN n]
   | .layerScaleChF γN c h w e => toToks e ++ [.layerScaleChF γN c h w]
   | .softmaxRowF m n e    => toToks e ++ [.softmaxRowF m n]
@@ -1256,6 +1259,58 @@ private def liftPointwise2 (B n : Nat) (r s : String)
               s!"    {o} = stablehlo.reshape {res} : ({ty [B,c,h,w]}) -> {ty [B,n]}\n", o)
       else k r s [B, n]
   | none => k r s [B, n]
+
+/-- **The exact GELU forward's ops** on `r` at type `d`, in the op order of
+    `jax.nn.gelu(approximate=False)`: `y = (0.5·x) · erfc((−x)·√½)`, which is `x · Φ(x)`
+    (`geluErfScalar_eq_erfc`). `chlo.erfc` is the only non-arithmetic op; XLA and IREE both
+    legalise it. The `1 + erf` spelling is the same real function and a worse float one: it
+    cancels to zero below `x ≈ −5.2`.
+
+    One body for the `.geluF .erf` token and the batched `"geluErf"` descriptor, so the two
+    renders cannot differ. -/
+private def geluErfFwdText (r : String) (d : List Nat) : StateM EmitS (String × String) := do
+  let chalf ← fresh; let hx ← fresh; let nx ← fresh; let crs ← fresh; let z ← fresh
+  let ec ← fresh; let o ← fresh
+  pure (s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+        s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
+        s!"    {nx} = stablehlo.negate {r} : {ty d}\n" ++
+        s!"    {crs} = stablehlo.constant dense<0.7071067811865476> : {ty d}\n" ++
+        s!"    {z} = stablehlo.multiply {nx}, {crs} : {ty d}\n" ++
+        s!"    {ec} = chlo.erfc {z} : {ty d} -> {ty d}\n" ++
+        s!"    {o} = stablehlo.multiply {hx}, {ec} : {ty d}\n", o)
+
+/-- **The exact GELU input-VJP's ops**, cotangent `r` and saved pre-activation `x` at type `d`,
+    in the op order of `jax.vjp` of the forward. With `z = (−x)·√½`,
+
+    `−((−2/√π) · ((0.5·x)·dy) · exp(−z²) · √½) + 0.5·(dy·erfc(z))`,
+
+    which is `dy · (Φ(x) + x·φ(x))` (`geluErfScalarDeriv_eq_erfc`); `erfc` and the Gaussian are
+    recomputed from `x`.
+
+    One body for the `.geluBack .erf` token and the batched `"geluErfBackP"` tag. -/
+private def geluErfBackText (r x : String) (d : List Nat) : StateM EmitS (String × String) := do
+  let chalf ← fresh; let hx ← fresh; let nx ← fresh; let crs ← fresh; let z ← fresh
+  let ec ← fresh; let z2 ← fresh; let nz2 ← fresh; let ex ← fresh; let hxdy ← fresh
+  let dyec ← fresh; let c ← fresh; let a ← fresh; let b ← fresh; let dd ← fresh
+  let nd ← fresh; let h ← fresh; let o ← fresh
+  pure (s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+        s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
+        s!"    {nx} = stablehlo.negate {x} : {ty d}\n" ++
+        s!"    {crs} = stablehlo.constant dense<0.7071067811865476> : {ty d}\n" ++
+        s!"    {z} = stablehlo.multiply {nx}, {crs} : {ty d}\n" ++
+        s!"    {ec} = chlo.erfc {z} : {ty d} -> {ty d}\n" ++
+        s!"    {z2} = stablehlo.multiply {z}, {z} : {ty d}\n" ++
+        s!"    {nz2} = stablehlo.negate {z2} : {ty d}\n" ++
+        s!"    {ex} = stablehlo.exponential {nz2} : {ty d}\n" ++
+        s!"    {hxdy} = stablehlo.multiply {hx}, {r} : {ty d}\n" ++
+        s!"    {dyec} = stablehlo.multiply {r}, {ec} : {ty d}\n" ++
+        s!"    {c} = stablehlo.constant dense<-1.1283791670955126> : {ty d}\n" ++
+        s!"    {a} = stablehlo.multiply {c}, {hxdy} : {ty d}\n" ++
+        s!"    {b} = stablehlo.multiply {a}, {ex} : {ty d}\n" ++
+        s!"    {dd} = stablehlo.multiply {b}, {crs} : {ty d}\n" ++
+        s!"    {nd} = stablehlo.negate {dd} : {ty d}\n" ++
+        s!"    {h} = stablehlo.multiply {chalf}, {dyec} : {ty d}\n" ++
+        s!"    {o} = stablehlo.add {nd}, {h} : {ty d}\n", o)
 
 /-- **The text of the cross-replica mean** — `ViTRender.emitGradAllReduce`'s body, verbatim, so
     that the `allReduceMean` token re-renders every committed `*dp*` artifact byte-identically.
@@ -2523,7 +2578,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [1] : ({ty [c]}) -> {ty [B,c,h,w']}\n" ++
             s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
-  | .geluF n, r :: st => do
+  | .geluF .tanh n, r :: st => do
       let (txt4, res4) ← liftPointwise B n r fun r d => do
           -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
           -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
@@ -2544,7 +2599,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                 s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
                 s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
       pure (txt4, res4 :: st)
-  | .geluBack x n, r :: st => do
+  | .geluBack .tanh x n, r :: st => do
       let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
           -- gelu input-VJP: dy ⊙ gelu'(x), recomputing tanh(u(x)) from the saved
           -- pre-activation {x}. gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1+3·0.044715·x²),
@@ -2577,6 +2632,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                 s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
                 s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
                 s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+      pure (txt4, res4 :: st)
+  | .geluF .erf n, r :: st => do
+      let (txt4, res4) ← liftPointwise B n r geluErfFwdText
+      pure (txt4, res4 :: st)
+  | .geluBack .erf x n, r :: st => do
+      let (txt4, res4) ← liftPointwise2 B n r x geluErfBackText
       pure (txt4, res4 :: st)
   | .softmaxRowF m n, r :: st => do
       -- ROW-softmax: reshape flat `[B,m*n]` → `[B,m,n]`, exp, reduce add over the
@@ -3174,6 +3235,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       --    instead of the SHlo index — which is the entire content of the batched-index move on
       --    the emit side. `tests/TestBatchedEmitTie.lean` ties each pair, so "byte-for-byte" is
       --    checked rather than intended.
+      | "geluErfBackP", [x], [_N, n] => do
+          let (txt4, res4) ← liftPointwise2 B n r x geluErfBackText
+          pure (txt4, res4 :: st)
       | "geluBackP", [x], [_N, n] => do
           let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
             -- byte-for-byte `.geluBack`'s emit, width from the descriptor's `n`.
@@ -3292,6 +3356,9 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {bb} = stablehlo.broadcast_in_dim {b}, dims = [1] : ({ty [oc]}) -> {ty [B,oc,h,w']}\n" ++
             s!"    {ob} = stablehlo.add {cv}, {bb} : {ty [B,oc,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {ob} : ({ty [B,oc,h,w']}) -> {ty [B, oc*h*w']}\n", o :: st)
+      | "geluErf", [], [_N, n] => do
+          let (txt4, res4) ← liftPointwise B n r geluErfFwdText
+          pure (txt4, res4 :: st)
       | "gelu", [], [_N, n] => do
           let (txt4, res4) ← liftPointwise B n r fun r d => do
             let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh

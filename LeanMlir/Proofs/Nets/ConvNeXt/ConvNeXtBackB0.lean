@@ -78,7 +78,7 @@ theorem chanLNBackGraph_eq_vjp (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) 
 
 /-- The channel-LN block-body backward graph — the block body's reverse chain with
     `chanLNBackGraph` for the LayerNorm and the LN affine at `Vec c`. -/
-noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
+noncomputable def cnxBlockBodyChBackGraph (gf : GeluForm) {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (γn βn : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -88,11 +88,11 @@ noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
   let d  := depthwiseFlat (h := h) (w := w) Wdw bdw x              -- LN's input
   let nl := chanLNTensor3 c h w εn γn βn d                         -- EX's input
   let ex := flatConv (h := h) (w := w) Wex bex nl                  -- GE's input
-  let ge := gelu (cExp * h * w) ex                                 -- PR's input
+  let ge := gf.map (cExp * h * w) ex                                 -- PR's input
   .depthwiseBack "%cnxWdw" Wdw bdw x
     (chanLNBackGraph "%cnxGn" "%cnxXn" "cnxE" εn γn d
       (.convBack "%cnxWex" Wex bex nl
-        (.geluBack "%cnxGe" ex
+        (.geluBack gf "%cnxGe" ex
           (.convBack "%cnxWpr" Wpr bpr ge
             (.layerScaleF "%cnxGls" γls e)))))
 
@@ -100,15 +100,15 @@ noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
     `cnxBodyWithHasVJP`'s backward at the shipped LayerNorm, under `0 < εn`. The LN is the one
     non-`rfl` op (a whole subtree, closed by `chanLNBackGraph_eq_vjp`); the depthwise, 1×1 conv,
     GELU and layer-scale backs are their `*_faithful` lemmas. -/
-theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
+theorem cnxBlockBodyChBackGraph_faithful {gf : GeluForm} {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w))
     (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
-    den (cnxBlockBodyChBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x e)
-      = (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w εn γn βn hεn)
+    den (cnxBlockBodyChBackGraph gf Wdw bdw εn γn βn Wex bex Wpr bpr γls x e)
+      = (cnxBodyWithHasVJP gf (chanLNTensor3_differentiable c h w εn γn βn hεn)
           (chanLNTensor3HasVJP c h w εn γn βn hεn)
           Wdw bdw Wex bex Wpr bpr γls).backward x (den e) := by
   unfold cnxBlockBodyChBackGraph
@@ -118,29 +118,29 @@ theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
   rfl
 
 /-- The whole channel-LN residual block backward graph (block body + identity skip). -/
-private noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
+private noncomputable def cnxResidBlockChBackGraph (gf : GeluForm) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) : SHlo (c * h * w) :=
   residualBackGraph
-    (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
+    (cnxBlockBodyChBackGraph gf p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
       ecot) ecot
 
 /-- **The whole channel-LN ConvNeXt residual block: backward graph ↔ proven VJP**, at the block
     the shipped stages are built from. Assembles the
     body backward graph + the identity skip into `cnxBlockChWHasVJP`'s backward via
     `residualBackGraph_faithful`, no hypotheses beyond `0 < p.εn`. -/
-private theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
+private theorem cnxResidBlockChBackGraph_faithful {gf : GeluForm} {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
-    den (cnxResidBlockChBackGraph p x ecot) = (cnxBlockChWHasVJP p hε).backward x (den ecot) :=
+    den (cnxResidBlockChBackGraph gf p x ecot) = (cnxBlockChWHasVJP gf p hε).backward x (den ecot) :=
   residualBackGraph_faithful
-    (cnxBodyWith (chanLNTensor3 c h w p.εn p.γn p.βn) p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr
+    (cnxBodyWith gf (chanLNTensor3 c h w p.εn p.γn p.βn) p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr
       (cnxGlsCh p))
     (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
-    (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
+    (cnxBodyWithHasVJP gf (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       (chanLNTensor3HasVJP c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
     x ecot
-    (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
+    (cnxBlockBodyChBackGraph gf p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
       ecot)
     (cnxBlockBodyChBackGraph_faithful p.Wdw p.bdw p.εn hε p.γn p.βn p.Wex p.bex p.Wpr p.bpr
       (cnxGlsCh p) x ecot)
@@ -170,14 +170,14 @@ theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
 /-- The **channel-LN** ConvNeXt block as a `CertLayer` — the form the shipped net's stages are
     built from, with `cnxResidBlockChBackGraph_faithful` as its `faithful` field. This is the one to
     chain for a real ConvNeXt stage. -/
-noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
+noncomputable def cnxBlockChLayer (gf : GeluForm) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     CertLayer (c * h * w) (c * h * w) where
-  fwd := cnxBlockChW p
+  fwd := cnxBlockChW gf p
   ok := fun _ => True
   diff := fun x _ => (cnxBlockChW_differentiable p hε) x
-  vjp := fun x _ => (cnxBlockChWHasVJP p hε).toHasVJPAt x
-  graph := fun x e => cnxResidBlockChBackGraph p x e
+  vjp := fun x _ => (cnxBlockChWHasVJP gf p hε).toHasVJPAt x
+  graph := fun x e => cnxResidBlockChBackGraph gf p x e
   faithful := fun x _ e => cnxResidBlockChBackGraph_faithful p hε x e
 
 end Proofs.StableHLO

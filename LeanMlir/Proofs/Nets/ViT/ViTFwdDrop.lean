@@ -49,11 +49,11 @@ open scoped BigOperators
 
 /-- **One vector-LN block with its two drop scalars**: `transformerBlockV` with the attention
     branch scaled by `a` and the MLP branch by `m` before their skip adds. -/
-noncomputable def blockVDrop (Np1 heads d_head mlpDim : Nat) (ε a m : ℝ)
+noncomputable def blockVDrop (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε a m : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) :
     Mat Np1 (heads * d_head) → Mat Np1 (heads * d_head) :=
   biPathMat (fun X => X)
-    (fun X r s => m * ((transformerMlp Np1 (heads * d_head) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) ∘
+    (fun X r s => m * ((transformerMlp gf Np1 (heads * d_head) mlpDim p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) ∘
       (fun X : Mat Np1 (heads * d_head) => fun n =>
         layerNormVec (heads * d_head) ε p.γ2 p.β2 (X n))) X r s) ∘
   biPathMat (fun X => X)
@@ -62,15 +62,15 @@ noncomputable def blockVDrop (Np1 heads d_head mlpDim : Nat) (ε a m : ℝ)
         layerNormVec (heads * d_head) ε p.γ1 p.β1 (X n))) X r s)
 
 /-- At unit scalars the drop block is `blockV`. -/
-theorem blockVDrop_one (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
+theorem blockVDrop_one {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) :
-    blockVDrop Np1 heads d_head mlpDim ε 1 1 p = blockV Np1 heads d_head mlpDim ε p := by
+    blockVDrop gf Np1 heads d_head mlpDim ε 1 1 p = blockV gf Np1 heads d_head mlpDim ε p := by
   unfold blockVDrop blockV transformerBlockV transformerAttnSublayerV transformerMlpSublayerV
   simp only [one_mul]
 
 /-- The drop block spelled as the graph emits it — `vitBlockSpelledMHV` with the two scalars on
     the branches. -/
-noncomputable def vitBlockSpelledMHVDrop (Np1 heads d mlpDim : Nat) (ε a mk : ℝ)
+noncomputable def vitBlockSpelledMHVDrop (gf : GeluForm) (Np1 heads d mlpDim : Nat) (ε a mk : ℝ)
     (p : BlockParamsV (heads * d) mlpDim) (X : Mat Np1 (heads * d)) : Mat Np1 (heads * d) :=
   let xh1 : Mat Np1 (heads * d) := fun r => layerNormForward (heads * d) ε 1 0 (X r)
   let sc1 : Mat Np1 (heads * d) := fun r => layerScale p.γ1 (xh1 r)
@@ -90,15 +90,15 @@ noncomputable def vitBlockSpelledMHVDrop (Np1 heads d mlpDim : Nat) (ε a mk : �
   let sc2 : Mat Np1 (heads * d) := fun r => layerScale p.γ2 (xh2 r)
   let ln2 : Mat Np1 (heads * d) := fun r k => sc2 r k + p.β2 k
   let m1 : Mat Np1 mlpDim := fun r => dense p.Wfc1 p.bfc1 (ln2 r)
-  let g : Mat Np1 mlpDim := fun r => gelu mlpDim (m1 r)
+  let g : Mat Np1 mlpDim := fun r => gf.map mlpDim (m1 r)
   let m2 : Mat Np1 (heads * d) := fun r => dense p.Wfc2 p.bfc2 (g r)
   fun r s => hres r s + mk * m2 r s
 
 /-- The spelled drop block IS `blockVDrop` (`vitBlockSpelledMHV_eq`'s proof, at the scalars). -/
-lemma vitBlockSpelledMHVDrop_eq (Np1 heads d mlpDim : Nat) (ε a mk : ℝ)
+lemma vitBlockSpelledMHVDrop_eq {gf : GeluForm} (Np1 heads d mlpDim : Nat) (ε a mk : ℝ)
     (p : BlockParamsV (heads * d) mlpDim) (X : Mat Np1 (heads * d)) :
-    vitBlockSpelledMHVDrop Np1 heads d mlpDim ε a mk p X
-      = blockVDrop Np1 heads d mlpDim ε a mk p X := by
+    vitBlockSpelledMHVDrop gf Np1 heads d mlpDim ε a mk p X
+      = blockVDrop gf Np1 heads d mlpDim ε a mk p X := by
   unfold blockVDrop transformerMlp biPathMat vitBlockSpelledMHVDrop
   simp only [Function.comp_apply]
   rw [mhsaLayer_spelled]
@@ -106,19 +106,19 @@ lemma vitBlockSpelledMHVDrop_eq (Np1 heads d mlpDim : Nat) (ε a mk : ℝ)
 
 /-- **The depth-`k` tower with drop scalars** — `vitBodyKV` with block `i` at `sd i`
     (attention, MLP). -/
-noncomputable def vitBodyKVDrop (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+noncomputable def vitBodyKVDrop (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     (k : Nat) → (Fin k → BlockParamsV (heads * d_head) mlpDim) → (Fin k → ℝ × ℝ) →
     Mat Np1 (heads * d_head) → Mat Np1 (heads * d_head)
   | 0, _, _ => fun A => A
   | k + 1, ps, sd =>
-      (vitBodyKVDrop Np1 heads d_head mlpDim ε k (fun i => ps i.succ) (fun i => sd i.succ)) ∘
-      (blockVDrop Np1 heads d_head mlpDim ε (sd 0).1 (sd 0).2 (ps 0))
+      (vitBodyKVDrop gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ) (fun i => sd i.succ)) ∘
+      (blockVDrop gf Np1 heads d_head mlpDim ε (sd 0).1 (sd 0).2 (ps 0))
 
 /-- At unit scalars the tower is `vitBodyKV`. -/
-lemma vitBodyKVDrop_ones (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+lemma vitBodyKVDrop_ones {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim),
-      vitBodyKVDrop Np1 heads d_head mlpDim ε k ps (fun _ => (1, 1))
-        = vitBodyKV Np1 heads d_head mlpDim ε k ps
+      vitBodyKVDrop gf Np1 heads d_head mlpDim ε k ps (fun _ => (1, 1))
+        = vitBodyKV gf Np1 heads d_head mlpDim ε k ps
   | 0, _ => rfl
   | k + 1, ps => by
       rw [vitBodyKVDrop, vitBodyKV, vitBodyKVDrop_ones Np1 heads d_head mlpDim ε k]
@@ -126,7 +126,7 @@ lemma vitBodyKVDrop_ones (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
 
 /-- **The depth-`k` ViT forward with drop scalars, one example**: `vitForwardKV` with the tower
     at `sd`. -/
-noncomputable def vitForwardKVDrop
+noncomputable def vitForwardKVDrop (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -142,12 +142,12 @@ noncomputable def vitForwardKVDrop
     Mat.flatten (fun n => layerNormVec (heads * d_head) ε γF βF
       ((Mat.unflatten v) n))) ∘
   (fun v : Vec ((N + 1) * (heads * d_head)) =>
-    Mat.flatten (vitBodyKVDrop (N + 1) heads d_head mlpDim ε k ps sd (Mat.unflatten v))) ∘
+    Mat.flatten (vitBodyKVDrop gf (N + 1) heads d_head mlpDim ε k ps sd (Mat.unflatten v))) ∘
   (patchEmbedFlat ic H W patchSize N (heads * d_head)
     W_conv b_conv cls_token pos_embed)
 
 /-- At unit scalars the forward is `vitForwardKV`. -/
-theorem vitForwardKVDrop_ones
+theorem vitForwardKVDrop_ones {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -157,9 +157,9 @@ theorem vitForwardKVDrop_ones
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    vitForwardKVDrop ic H W patchSize N mlpDim heads d_head nClasses k
+    vitForwardKVDrop gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps (fun _ => (1, 1)) γF βF Wcls bcls
-      = vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+      = vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls := by
   funext x
   unfold vitForwardKVDrop vitForwardKV
@@ -176,7 +176,7 @@ theorem vitForwardKVDrop_ones
 /-- **The batched ViT forward with stochastic depth**: example `t` is `vitForwardKVDrop` at
     example `t`'s input, with `(sdA i t, sdM i t)` as block `i`'s drop scalars. `sdA i` / `sdM i`
     are the render's per-example masks `%dp<2i>` / `%dp<2i+1>`. -/
-noncomputable def vitForwardKVDropB (B : Nat)
+noncomputable def vitForwardKVDropB (gf : GeluForm) (B : Nat)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -189,13 +189,13 @@ noncomputable def vitForwardKVDropB (B : Nat)
     Vec (B * (ic * H * W)) → Vec (B * nClasses) :=
   fun x idx =>
     let p := finProdFinEquiv.symm idx
-    vitForwardKVDrop ic H W patchSize N mlpDim heads d_head nClasses k
+    vitForwardKVDrop gf ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps (fun i => (sdA i p.1, sdM i p.1)) γF βF Wcls bcls
       (StableHLO.batchSlice B (ic * H * W) x p.1) p.2
 
 /-- **At the all-ones masks the batched forward is `vitForwardKV` lifted**, exactly — the masks
     the driver passes to the forward artifacts at eval. -/
-theorem vitForwardKVDropB_ones (B : Nat)
+theorem vitForwardKVDropB_ones {gf : GeluForm} (B : Nat)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -205,9 +205,9 @@ theorem vitForwardKVDropB_ones (B : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    vitForwardKVDropB B ic H W patchSize N mlpDim heads d_head nClasses k
+    vitForwardKVDropB gf B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps (fun _ _ => 1) (fun _ _ => 1) γF βF Wcls bcls
-      = StableHLO.batchMap B (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+      = StableHLO.batchMap B (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) := by
   funext x idx
   simp only [vitForwardKVDropB, vitForwardKVDrop_ones]
@@ -286,7 +286,7 @@ lemma scale_flat_pt {m n : Nat} (s : ℝ) (A : Mat m n) (j : Fin (m * n)) :
     `transpose` → `matmulFB` → `scaleB` → `softmaxRow` → `matmulFB` → `headPad`, summed by
     `headsSumGB`; out `denseRow`, `dropPathB` at `mA`, skip `addVB`; vector-LN 2, fc1, GELU, fc2,
     `dropPathB` at `mM`, skip `addVB`. -/
-def vitBlockGraphBDrop {B Np1 hm1 d mlpDim : Nat}
+def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε s : ℝ)
     (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B)
     (x : SHlo (B * (Np1 * ((hm1 + 1) * d)))) : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
@@ -321,20 +321,20 @@ def vitBlockGraphBDrop {B Np1 hm1 d mlpDim : Nat}
           hres))
   let m2 : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
     .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wfc2" s!"%{pfx}bfc2" p.Wfc2 p.bfc2)
-      (.batchOp (N := B) (.gelu (n := Np1 * mlpDim))
+      (.batchOp (N := B) (.gelu gf (n := Np1 * mlpDim))
         (.batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wfc1" s!"%{pfx}bfc1" p.Wfc1 p.bfc1) ln2))
   .addVB hres (.dropPathB mM m m2)
 
 /-- **Example `t` of the batched drop block is the spelled drop block at example `t`'s input and
     mask entries.** -/
-lemma vitBlockGraphBDrop_slice {B Np1 hm1 d mlpDim : Nat}
+lemma vitBlockGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε : ℝ)
     (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B)
     (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B) (A : Mat Np1 ((hm1 + 1) * d))
     (hA : batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A) :
     batchSlice B (Np1 * ((hm1 + 1) * d))
-        (den (vitBlockGraphBDrop pfx epsStr sStr mA mM ε (sdpaScale d) p a m e)) t
-      = Mat.flatten (vitBlockSpelledMHVDrop Np1 (hm1 + 1) d mlpDim ε (a t) (m t) p A) := by
+        (den (vitBlockGraphBDrop gf pfx epsStr sStr mA mM ε (sdpaScale d) p a m e)) t
+      = Mat.flatten (vitBlockSpelledMHVDrop gf Np1 (hm1 + 1) d mlpDim ε (a t) (m t) p A) := by
   simp only [vitBlockGraphBDrop, batchSlice_den_addVB, batchSlice_den_dropPathB,
     batchSlice_den_batchOp, batchSlice_den_matmulFB, batchSlice_den_scaleB,
     batchSlice_den_headsSumGB, denOp, hA]
@@ -346,33 +346,33 @@ lemma vitBlockGraphBDrop_slice {B Np1 hm1 d mlpDim : Nat}
 /-- **The batched depth-`k` tower with its drop sites** — block `base + i` carries the prefix
     `b{base+i}_` and reads `%dp<2(base+i)>` / `%dp<2(base+i)+1>`, as `ViTRenderB.vitFwd12B`
     names them (`vitSiteIdx`). -/
-def vitBodyGraphBDrop {B Np1 hm1 d mlpDim : Nat}
+def vitBodyGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
     (epsStr sStr : String) (ε s : ℝ) :
     (base k : Nat) → (Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) →
     (Fin k → Vec B) → (Fin k → Vec B) →
     SHlo (B * (Np1 * ((hm1 + 1) * d))) → SHlo (B * (Np1 * ((hm1 + 1) * d)))
   | _, 0, _, _, _, e => e
   | base, k + 1, ps, sdA, sdM, e =>
-      vitBodyGraphBDrop epsStr sStr ε s (base + 1) k
+      vitBodyGraphBDrop gf epsStr sStr ε s (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ)
-        (vitBlockGraphBDrop s!"b{base}_" epsStr sStr (dpName (2 * base)) (dpName (2 * base + 1))
+        (vitBlockGraphBDrop gf s!"b{base}_" epsStr sStr (dpName (2 * base)) (dpName (2 * base + 1))
           ε s (ps 0) (sdA 0) (sdM 0) e)
 
 /-- Example `t` of the batched tower is the drop tower at example `t`'s input and mask entries —
     by induction on `k`, one `vitBlockGraphBDrop_slice` per block. -/
-lemma vitBodyGraphBDrop_slice {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) (ε : ℝ) :
+lemma vitBodyGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) (ε : ℝ) :
     ∀ (base k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim)
       (sdA sdM : Fin k → Vec B) (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B)
       (A : Mat Np1 ((hm1 + 1) * d)),
       batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A →
       batchSlice B (Np1 * ((hm1 + 1) * d))
-          (den (vitBodyGraphBDrop epsStr sStr ε (sdpaScale d) base k ps sdA sdM e)) t =
-        Mat.flatten (vitBodyKVDrop Np1 (hm1 + 1) d mlpDim ε k ps (fun i => (sdA i t, sdM i t)) A)
+          (den (vitBodyGraphBDrop gf epsStr sStr ε (sdpaScale d) base k ps sdA sdM e)) t =
+        Mat.flatten (vitBodyKVDrop gf Np1 (hm1 + 1) d mlpDim ε k ps (fun i => (sdA i t, sdM i t)) A)
   | _, 0, _, _, _, _, _, _, hA => hA
   | base, k + 1, ps, sdA, sdM, e, t, A, hA => by
-      have hb := vitBlockGraphBDrop_slice s!"b{base}_" epsStr sStr (dpName (2 * base))
+      have hb := vitBlockGraphBDrop_slice (gf := gf) s!"b{base}_" epsStr sStr (dpName (2 * base))
         (dpName (2 * base + 1)) ε (ps 0) (sdA 0) (sdM 0) e t A hA
-      have ih := vitBodyGraphBDrop_slice epsStr sStr ε (base + 1) k
+      have ih := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ) _ t _ hb
       rw [vitBlockSpelledMHVDrop_eq] at ih
       exact ih
@@ -380,7 +380,7 @@ lemma vitBodyGraphBDrop_slice {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) 
 /-- **The batched ViT forward graph with stochastic depth** — the typed form of
     `ViTRenderB.vitFwd12B … (sd := true)` at depth `k`: batched patch embed over `%x`, the
     drop tower, final vector-LN, CLS slice, dense head. -/
-def vitFwdGraphBDrop {B ic H W P N hm1 d mlpDim nClasses : Nat}
+def vitFwdGraphBDrop (gf : GeluForm) {B ic H W P N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String) (ε s : ℝ)
     (Wc : Kernel4 ((hm1 + 1) * d) ic P P) (bc cls : Vec ((hm1 + 1) * d))
     (pos : Mat (N + 1) ((hm1 + 1) * d))
@@ -393,14 +393,14 @@ def vitFwdGraphBDrop {B ic H W P N hm1 d mlpDim nClasses : Nat}
       (.batchOp (N := B) (.rowBias (m := N + 1) "%btF" βF)
         (.batchOp (N := B) (.rowScale (m := N + 1) "%gF" γF)
           (.batchOp (N := B) (.lnRow (m := N + 1) (n := (hm1 + 1) * d) "%one" "%zero" epsStr ε 1 0)
-            (vitBodyGraphBDrop epsStr sStr ε s 0 k ps sdA sdM
+            (vitBodyGraphBDrop gf epsStr sStr ε s 0 k ps sdA sdM
               (.batchOp (N := B) (.patchEmbed (N := N) "%wConv" "%bConv" "%cls" "%pos"
                   Wc bc cls pos)
                 (.operand "%x" x)))))))
 
 /-- **Example `t` of the batched drop graph is the per-example drop forward at example `t`'s
     input, with example `t`'s mask entries** — for every depth `k`. -/
-theorem vitFwdGraphBDrop_slice {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
+theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String)
     (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize)
     (bc cls : Vec ((hm1 + 1) * d)) (pos : Mat (N + 1) ((hm1 + 1) * d))
@@ -409,9 +409,9 @@ theorem vitFwdGraphBDrop_slice {B ic H W patchSize N hm1 d mlpDim nClasses : Nat
     (γF βF : Vec ((hm1 + 1) * d))
     (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) (t : Fin B) :
-    batchSlice B nClasses (den (vitFwdGraphBDrop epsStr sStr ε (sdpaScale d)
+    batchSlice B nClasses (den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d)
         Wc bc cls pos k ps sdA sdM γF βF Wcls bcls x)) t
-      = vitForwardKVDrop ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
+      = vitForwardKVDrop gf ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps (fun i => (sdA i t, sdM i t)) γF βF Wcls bcls
           (batchSlice B (ic * H * W) x t) := by
   have h0 : batchSlice B ((N + 1) * ((hm1 + 1) * d))
@@ -421,7 +421,7 @@ theorem vitFwdGraphBDrop_slice {B ic H W patchSize N hm1 d mlpDim nClasses : Nat
           Wc bc cls pos (batchSlice B (ic * H * W) x t))) := by
     rw [batchSlice_den_batchOp, Mat.flatten_unflatten, den_operand]
     rfl
-  have hbody := vitBodyGraphBDrop_slice epsStr sStr ε 0 k ps sdA sdM _ t _ h0
+  have hbody := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε 0 k ps sdA sdM _ t _ h0
   simp only [vitFwdGraphBDrop, batchSlice_den_batchOp, denOp, hbody]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat]
   unfold vitForwardKVDrop classifierFlat
@@ -430,7 +430,7 @@ theorem vitFwdGraphBDrop_slice {B ic H W patchSize N hm1 d mlpDim nClasses : Nat
 
 /-- **The batched ViT forward graph with stochastic depth denotes `vitForwardKVDropB`** — at every
     depth, every pair of mask families and every input. -/
-theorem vitFwdGraphBDrop_faithful {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
+theorem vitFwdGraphBDrop_faithful {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String)
     (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize)
     (bc cls : Vec ((hm1 + 1) * d)) (pos : Mat (N + 1) ((hm1 + 1) * d))
@@ -439,11 +439,11 @@ theorem vitFwdGraphBDrop_faithful {B ic H W patchSize N hm1 d mlpDim nClasses : 
     (γF βF : Vec ((hm1 + 1) * d))
     (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) :
-    den (vitFwdGraphBDrop epsStr sStr ε (sdpaScale d) Wc bc cls pos k ps sdA sdM γF βF Wcls bcls x)
-      = vitForwardKVDropB B ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
+    den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d) Wc bc cls pos k ps sdA sdM γF βF Wcls bcls x)
+      = vitForwardKVDropB gf B ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps sdA sdM γF βF Wcls bcls x := by
   funext idx
-  have h := congrFun (vitFwdGraphBDrop_slice epsStr sStr Wc bc cls pos ε k ps sdA sdM γF βF
+  have h := congrFun (vitFwdGraphBDrop_slice (gf := gf) epsStr sStr Wc bc cls pos ε k ps sdA sdM γF βF
     Wcls bcls x (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
   simp only [batchSlice, Prod.mk.eta, Equiv.apply_symm_apply] at h
   exact h

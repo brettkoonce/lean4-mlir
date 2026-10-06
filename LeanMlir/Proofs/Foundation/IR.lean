@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.SE
+import LeanMlir.Proofs.Architectures.GeluForm
 
 /-! # The small-net backward IR — `Back` / `Fwd` and their denotations
 
@@ -371,6 +372,11 @@ def emitActBack {n : Nat} (s : Vec n) : Back n n := .scale s .cotangent
 theorem gelu_back_bridge (n : Nat) (x dy : Vec n) :
     (emitActBack (fun i => geluScalarDeriv (x i))).denote dy
       = (geluHasVJP n).backward x dy := rfl
+
+/-- **Exact-GELU backward bridge.** Same diagonal pattern, at the derivative of `x · Φ(x)`. -/
+theorem geluErf_back_bridge (n : Nat) (x dy : Vec n) :
+    (emitActBack (fun i => geluErfScalarDeriv (x i))).denote dy
+      = (geluErfHasVJP n).backward x dy := rfl
 
 /-- **Swish / SiLU backward bridge.** Same diagonal pattern. -/
 theorem swish_back_bridge (n : Nat) (x dy : Vec n) :

@@ -117,8 +117,11 @@ private def cases : List (String × String × String) :=
   --    emit — and a tie at `rows ≠ BS` is what makes a swapped pair a type error rather than a
   --    silent agreement. (`rows` is 3 against `BS` 32 here, so they cannot be confused.)
   , ("gelu",
-     render (pretty BS (.geluF (.operand "%x" zv))),
-     render (pretty BS (.batchOp (N := BS) (.gelu (n := n)) (.operand "%x" zvb))))
+     render (pretty BS (.geluF .tanh (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.gelu .tanh (n := n)) (.operand "%x" zvb))))
+  , ("geluErf",
+     render (pretty BS (.geluF .erf (.operand "%x" zv))),
+     render (pretty BS (.batchOp (N := BS) (.gelu .erf (n := n)) (.operand "%x" zvb))))
   , ("transpose",
      render (pretty BS (.transposeF (m := rows) (n := c) (.operand "%x" zr))),
      render (pretty BS (.batchOp (N := BS) (.transpose (m := rows) (n := c))
@@ -143,8 +146,11 @@ private def cases : List (String × String × String) :=
   --    `geluBackB` pointwise (`swishBackB`'s exact shape), `lnRowBackB` via `batchMapAux`.
   --    `den_lnRowBackB_per_example` is the den-side statement of that; this is the emit side.
   , ("geluBack",
-     render (pretty BS (.geluBack "%s" zv (.operand "%x" zv))),
-     render (pretty BS (.geluBackB "%s" zvb (.operand "%x" zvb))))
+     render (pretty BS (.geluBack .tanh "%s" zv (.operand "%x" zv))),
+     render (pretty BS (.geluBackB .tanh "%s" zvb (.operand "%x" zvb))))
+  , ("geluErfBack",
+     render (pretty BS (.geluBack .erf "%s" zv (.operand "%x" zv))),
+     render (pretty BS (.geluBackB .erf "%s" zvb (.operand "%x" zvb))))
   , ("lnRowBack",
      render (pretty BS (.lnRowBack "%g" "%s" "1.0e-5" 0 1 (m := rows) (n := c) zr
                           (.operand "%x" zr))),
@@ -734,5 +740,41 @@ input position, which is a different function at the same output shape:\n{txt}"
   IO.println "  ✓ maxPool3s2Back: same window on the select_and_scatter (add-reduce accumulates)"
   IO.println "  ✓ maxPool (2×2) untouched: 2×2 window, no padding attribute"
   IO.println "  ✓ maxPool3s2 ≠ maxPool: the two pools render distinguishable text"
+  -- ── the exact GELU beside the tanh approximation. Same arity, same descriptor shape, same
+  --    type: the emitted text is all that separates the two, as with the two pools above.
+  IO.println "── the two GELUs: geluF .tanh, geluF .erf ──"
+  let zg : Vec n := fun _ => 0
+  let gE  := render (pretty BS (.geluF .erf (.operand "%x" zg)))
+  let gEb := render (pretty BS (.geluBack .erf "%s" zg (.operand "%x" zg)))
+  let gT  := render (pretty BS (.geluF .tanh (.operand "%x" zg)))
+  let gTb := render (pretty BS (.geluBack .tanh "%s" zg (.operand "%x" zg)))
+  for (nm, txt) in [("geluF .erf", gE), ("geluBack .erf", gEb)] do
+    if (txt.splitOn "= chlo.erfc ").length != 2 then
+      die s!"{nm} does not emit exactly one chlo.erfc:\n{txt}"
+    -- `1 + erf` is the same real function and cancels to zero below x ≈ −5.2 in f32; the emit
+    --    is the erfc spelling, which is also `jax.nn.gelu(approximate=False)`'s.
+    if (txt.splitOn "chlo.erf ").length != 1 then
+      die s!"{nm} emits chlo.erf — the 1 + erf spelling, which loses the negative tail:\n{txt}"
+    if (txt.splitOn "stablehlo.tanh").length != 1 then
+      die s!"{nm} emits stablehlo.tanh — that is the approximation, not the exact GELU:\n{txt}"
+    if (txt.splitOn "dense<0.7071067811865476>").length != 2 then
+      die s!"{nm} does not scale by √½ exactly once:\n{txt}"
+  if (gEb.splitOn "stablehlo.exponential").length != 2 then
+    die s!"geluBack .erf does not form the Gaussian with one stablehlo.exponential:\n{gEb}"
+  if (gEb.splitOn "dense<-1.1283791670955126>").length != 2 then
+    die s!"geluBack .erf does not carry erfc's derivative constant −2/√π:\n{gEb}"
+  -- The tanh ops must NOT move: every committed ViT and ConvNeXt render trained under them.
+  for (nm, txt) in [("geluF .tanh", gT), ("geluBack .tanh", gTb)] do
+    if (txt.splitOn "stablehlo.tanh").length != 2 then
+      die s!"{nm} no longer emits exactly one stablehlo.tanh — the committed renders just moved:\n{txt}"
+    if (txt.splitOn "chlo.").length != 1 then
+      die s!"{nm} now emits a chlo op — the committed renders just moved:\n{txt}"
+  if gE == gT then die s!"geluF .erf and geluF .tanh emit IDENTICAL text — one of them is the wrong GELU:\n{gE}"
+  if gEb == gTb then
+    die s!"geluBack .erf and geluBack .tanh emit IDENTICAL text — one of them is the wrong GELU:\n{gEb}"
+  IO.println "  ✓ geluF .erf / geluBack .erf: one chlo.erfc at √½, no tanh, no 1 + erf"
+  IO.println "  ✓ geluBack .erf: the Gaussian by one exponential, erfc's −2/√π"
+  IO.println "  ✓ geluF .tanh / geluBack .tanh untouched: one stablehlo.tanh, no chlo op"
+  IO.println "  ✓ .erf ≠ .tanh: the two GELUs render distinguishable text"
 
 #eval main

@@ -94,7 +94,7 @@ lemma mhsaLayer_spelled (Np1 heads d : Nat)
 /-- The spelled multi-head block at vector-[D] LN — each LN site decomposed as
     the graph (and `ViTRender`) emit it: pure normalize (scalar-LN at 1,0) →
     per-channel scale → per-channel bias; attention spelled per head (`mhsaLayer_spelled`). -/
-noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
+noncomputable def vitBlockSpelledMHV (gf : GeluForm) (Np1 heads d mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : Vec (heads * d))
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (γ2 β2 : Vec (heads * d))
@@ -119,23 +119,23 @@ noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
   let sc2 : Mat Np1 (heads * d) := fun r => layerScale γ2 (xh2 r)
   let ln2 : Mat Np1 (heads * d) := fun r k => sc2 r k + β2 k
   let m1 : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
-  let g : Mat Np1 mlpDim := fun r => gelu mlpDim (m1 r)
+  let g : Mat Np1 mlpDim := fun r => gf.map mlpDim (m1 r)
   let m2 : Mat Np1 (heads * d) := fun r => dense Wfc2 bfc2 (g r)
   fun r s => hres r s + m2 r s
 
 /-- **The spelled multi-head vector-LN block IS `transformerBlockV` at general
     `heads`** — the three-stage LN decomposition collapses to `layerNormVec`
     definitionally; the per-head plumbing via `mhsaLayer_spelled`. -/
-lemma vitBlockSpelledMHV_eq (Np1 heads d mlpDim : Nat) (ε : ℝ)
+lemma vitBlockSpelledMHV_eq {gf : GeluForm} (Np1 heads d mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : Vec (heads * d))
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (γ2 β2 : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
     (X : Mat Np1 (heads * d)) :
-    vitBlockSpelledMHV Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
+    vitBlockSpelledMHV gf Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
         γ2 β2 Wfc1 bfc1 Wfc2 bfc2 X =
-      transformerBlockV Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
+      transformerBlockV gf Np1 heads d mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
         γ2 β2 Wfc1 bfc1 Wfc2 bfc2 X := by
   unfold transformerBlockV transformerMlpSublayerV transformerAttnSublayerV
          transformerMlp biPathMat vitBlockSpelledMHV
@@ -198,7 +198,7 @@ lemma flatten_sum {m n H : Nat} (G : Fin H → Mat m n) :
 /-- The vector-LN multi-head block over the tokens: each LN site is
     `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β` (the `ViTRender`
     decomposition); attention per head: `headSliceF` → SDPA → `headPadF`, folded by `headsSumG`. -/
-def vitBlockGraphMHV {Np1 hm1 d mlpDim : Nat}
+def vitBlockGraphMHV (gf : GeluForm) {Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr oneStr zeroStr : String)
     (ε s : ℝ) (γ1 β1 : Vec ((hm1 + 1) * d))
     (Wq Wk Wv Wo : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
@@ -225,12 +225,12 @@ def vitBlockGraphMHV {Np1 hm1 d mlpDim : Nat}
     (SHlo.rowScaleF s!"%{pfx}g2" γ2
       (SHlo.lnRowF oneStr zeroStr epsStr ε 1 0 hres))
   let m2 := SHlo.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" Wfc2 bfc2
-    (SHlo.geluF (SHlo.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" Wfc1 bfc1 ln2))
+    (SHlo.geluF gf (SHlo.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" Wfc1 bfc1 ln2))
   SHlo.addV hres m2
 
 /-- Multi-head vector-LN block-graph denotation. Public — the depth-k
     faithfulness induction (`ViTDepthK.lean`) chains it per block. -/
-lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
+lemma vitBlockGraphMHV_den_aux {gf : GeluForm} {Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr oneStr zeroStr : String) (ε : ℝ)
     (γ1 β1 : Vec ((hm1 + 1) * d))
     (Wq Wk Wv Wo : Mat ((hm1 + 1) * d) ((hm1 + 1) * d))
@@ -240,9 +240,9 @@ lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
     (Wfc2 : Mat mlpDim ((hm1 + 1) * d)) (bfc2 : Vec ((hm1 + 1) * d))
     (e : SHlo (Np1 * ((hm1 + 1) * d))) (A : Mat Np1 ((hm1 + 1) * d))
     (hA : den e = Mat.flatten A) :
-    den (vitBlockGraphMHV pfx epsStr sStr oneStr zeroStr ε (sdpaScale d) γ1 β1
+    den (vitBlockGraphMHV gf pfx epsStr sStr oneStr zeroStr ε (sdpaScale d) γ1 β1
           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 e) =
-      Mat.flatten (vitBlockSpelledMHV Np1 (hm1 + 1) d mlpDim ε γ1 β1
+      Mat.flatten (vitBlockSpelledMHV gf Np1 (hm1 + 1) d mlpDim ε γ1 β1
           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 A) := by
   simp only [vitBlockGraphMHV, lnRowF_faithful, rowScaleF_faithful, rowBiasF_faithful,
              denseRowF_faithful, matmulF_faithful, transposeF_faithful, scaleF_faithful,

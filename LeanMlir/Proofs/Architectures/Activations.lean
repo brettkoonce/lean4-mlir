@@ -13,9 +13,10 @@ form the emitted backward computes, and its VJP:
 - Swish (SiLU): `swish`, `swishScalarDeriv_eq`, `hasDerivAt_swishScalar`, `swishHasVJP`.
 - Sigmoid: `sigmoid`, `sigmoidScalarDeriv_eq`, `sigmoidHasVJP`.
 
-GELU is `gelu(x) = x · Phi(x)`, where `Phi` is the CDF of the standard normal; in practice
-everyone uses the tanh approximation `gelu(x) ~ 0.5 x (1 + tanh(sqrt(2/pi)(x + 0.044715 x^3)))`,
-because it is faster than the exact erf form, and that is the function here and in the renders.
+GELU is `gelu(x) = x · Phi(x)`, where `Phi` is the CDF of the standard normal. `gelu` here is the
+tanh approximation `0.5 x (1 + tanh(sqrt(2/pi)(x + 0.044715 x^3)))`, the function `jax.nn.gelu`
+computes by default; the exact form, PyTorch's `nn.GELU`, is `geluErf` in `GeluErf`. The two differ
+by up to 4.7e-4.
 
 Each Jacobian is diagonal (`pdiv_elementwise`), so each VJP is one line. ReLU and ReLU6, which
 have kinks, live in `Foundation.MLP`.
@@ -38,8 +39,8 @@ namespace Proofs
 
     `gelu(x) = 0.5 · x · (1 + tanh(√(2/π) · (x + 0.044715 · x³)))`
 
-    Matches the MLIR codegen (which emits the tanh approximation rather
-    than the exact `x · Φ(x)` erf form). -/
+    What the `geluF` op emits; the exact `x · Φ(x)` is `geluErfScalar`, and `geluErfF`'s
+    emit. -/
 noncomputable def geluScalar (x : ℝ) : ℝ :=
   0.5 * x * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3)))
 

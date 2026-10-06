@@ -137,7 +137,7 @@ private noncomputable def vitAttnOutAt (Np1 heads d_head mlpDim : Nat) (ε : ℝ
     attention sublayer's output, the GELU derivative at `dense₁(LN₂(attn A))` — one function of
     the block's flat input `v`, so the tower recursion can be written down. `cnxBlockChBackAt`'s
     shape. -/
-noncomputable def vitBlockBackVAt (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
+noncomputable def vitBlockBackVAt (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) (v : Vec (Np1 * (heads * d_head))) :
     Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head)) :=
   vitBlockBackV p.Wq p.Wk p.Wv p.Wo
@@ -148,7 +148,7 @@ noncomputable def vitBlockBackVAt (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (fun r => Proofs.dense p.Wv p.bv
       (layerNormVec (heads * d_head) ε p.γ1 p.β1 (Mat.unflatten v r)))
     ε p.γ1 v p.Wfc1 p.Wfc2
-    (fun r => fun c => geluScalarDeriv (Proofs.dense p.Wfc1 p.bfc1
+    (fun r => fun c => gf.scalarDeriv (Proofs.dense p.Wfc1 p.bfc1
       (layerNormVec (heads * d_head) ε p.γ2 p.β2
         (vitAttnOutAt Np1 heads d_head mlpDim ε p v r)) c))
     p.γ2 (Mat.flatten (vitAttnOutAt Np1 heads d_head mlpDim ε p v))
@@ -165,14 +165,14 @@ noncomputable def vitBlockBackVAt (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     `cnxStageChKBack`'s recursion verbatim, one architecture over. Writing the fold as its own
     recursion (rather than a list fold) is what makes the saved-activation thread visible, and the
     thread is the content. -/
-noncomputable def vitTowerBackK (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+noncomputable def vitTowerBackK (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     (k : Nat) → (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) →
     Vec (Np1 * (heads * d_head)) → (Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head)))
   | 0, _, _ => id
   | k + 1, ps, v =>
-      vitBlockBackVAt Np1 heads d_head mlpDim ε (ps 0) v ∘
-        vitTowerBackK Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
-          (blockVFlat Np1 heads d_head mlpDim ε (ps 0) v)
+      vitBlockBackVAt gf Np1 heads d_head mlpDim ε (ps 0) v ∘
+        vitTowerBackK gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
+          (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0) v)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The endpoints: the CLS-slice scatter, the two saved prefixes, and the whole-net chain
@@ -195,12 +195,12 @@ noncomputable def vitSavedPE (ic H W patchSize N heads d_head : Nat)
   patchEmbedFlat ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x
 
 /-- The encoder tower's output — the final LayerNorm's saved input. -/
-noncomputable def vitSavedBody (ic H W patchSize N mlpDim heads d_head k : Nat)
+noncomputable def vitSavedBody (gf : GeluForm) (ic H W patchSize N mlpDim heads d_head k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (x : Vec (ic * H * W)) : Vec ((N + 1) * (heads * d_head)) :=
-  vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps
+  vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps
     (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
 
 /-- **THE WHOLE-NET ViT-TINY INPUT GRADIENT**, at the depth, head count and LayerNorm spelling the
@@ -213,17 +213,17 @@ noncomputable def vitSavedBody (ic H W patchSize N mlpDim heads d_head k : Nat)
     followed by the CLS scatter, the final LN is `rowLNVecFlatBack` at the tower's output, and the
     tower is `vitTowerBackK`. `vitInputGradK_eq_vitForwardKV_vjp` is the apex that says this is the
     certified whole-net gradient. -/
-noncomputable def vitInputGradK (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+noncomputable def vitInputGradK (gf : GeluForm) (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF : Vec (heads * d_head)) (Wcls : Mat (heads * d_head) nClasses)
     (x : Vec (ic * H * W)) : Vec nClasses → Vec (ic * H * W) :=
   patchEmbedInputGradFormula ic H W patchSize N (heads * d_head) W_conv
-    ∘ vitTowerBackK (N + 1) heads d_head mlpDim ε k ps
+    ∘ vitTowerBackK gf (N + 1) heads d_head mlpDim ε k ps
         (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
     ∘ rowLNVecFlatBack (N + 1) (heads * d_head) ε γF
-        (vitSavedBody ic H W patchSize N mlpDim heads d_head k
+        (vitSavedBody gf ic H W patchSize N mlpDim heads d_head k
           W_conv b_conv cls_token pos_embed ε ps x)
     ∘ clsScatter N (heads * d_head)
     ∘ Proofs.dense (Mat.transpose Wcls) (0 : Vec (heads * d_head))
@@ -244,12 +244,12 @@ noncomputable def vitSavedPEB (B ic H W patchSize N heads d_head : Nat)
 /-- The batched tower output: `StableHLO.batchMap B` of the tower at the batched patch embedding —
     saved stage by stage, not `batchMap B` of the composed per-example prefix (the two agree only
     up to `batchMap_comp`, `ViTWholeBackCertifiedTieB.lean`). -/
-noncomputable def vitSavedBodyB (B ic H W patchSize N mlpDim heads d_head k : Nat)
+noncomputable def vitSavedBodyB (gf : GeluForm) (B ic H W patchSize N mlpDim heads d_head k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (x : Vec (B * (ic * H * W))) : Vec (B * ((N + 1) * (heads * d_head))) :=
-  StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
+  StableHLO.batchMap B (vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps)
     (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
 
 /-- **The batched whole-net ViT input gradient** — `vitInputGradK` at each of `B` examples, stage
@@ -262,7 +262,7 @@ noncomputable def vitSavedBodyB (B ic H W patchSize N mlpDim heads d_head k : Na
     carries no batch numeral. `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`
     (`ViTWholeBackCertifiedTieB.lean`) says it is the certified gradient of
     `batchMap B vitForwardKV`. -/
-noncomputable def vitInputGradKB (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+noncomputable def vitInputGradKB (gf : GeluForm) (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
@@ -270,10 +270,10 @@ noncomputable def vitInputGradKB (B ic H W patchSize N mlpDim heads d_head nClas
     (x : Vec (B * (ic * H * W))) : Vec (B * nClasses) → Vec (B * (ic * H * W)) :=
   StableHLO.batchMap B
       (patchEmbedInputGradFormula ic H W patchSize N (heads * d_head) W_conv)
-  ∘ StableHLO.batchMapAux B (vitTowerBackK (N + 1) heads d_head mlpDim ε k ps)
+  ∘ StableHLO.batchMapAux B (vitTowerBackK gf (N + 1) heads d_head mlpDim ε k ps)
       (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
   ∘ StableHLO.batchMapAux B (rowLNVecFlatBack (N + 1) (heads * d_head) ε γF)
-      (vitSavedBodyB B ic H W patchSize N mlpDim heads d_head k
+      (vitSavedBodyB gf B ic H W patchSize N mlpDim heads d_head k
         W_conv b_conv cls_token pos_embed ε ps x)
   ∘ StableHLO.batchMap B (clsScatter N (heads * d_head))
   ∘ StableHLO.batchMap B (Proofs.dense (Mat.transpose Wcls) (0 : Vec (heads * d_head)))

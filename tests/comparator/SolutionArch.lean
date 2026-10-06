@@ -70,10 +70,10 @@ theorem chk_pdiv_bnNormalize (n : Nat) (ε : ℝ) (hε : 0 < ε)
         ((n : ℝ) * (if i = j then 1 else 0) - 1 - bnXhat n ε x i * bnXhat n ε x j) :=
   pdiv_bnNormalize n ε hε x i j
 
-theorem chk_pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
-    pdiv (gelu n) x i j =
-    if i = j then geluScalarDeriv (x i) else 0 :=
-  pdiv_gelu n x i j
+theorem chk_pdiv_gelu (gf : GeluForm) (n : Nat) (x : Vec n) (i j : Fin n) :
+    pdiv (gf.map n) x i j =
+    if i = j then gf.scalarDeriv (x i) else 0 :=
+  GeluForm.pdiv_map gf n x i j
 
 theorem chk_pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
     pdiv (softmax c) z i j =
@@ -162,10 +162,10 @@ theorem chk_seBlockHasVJP_correct {n : Nat}
     ∑ j : Fin n, pdiv (seBlock gate) x i j * dy j :=
   seBlockHasVJP_correct gate hg_diff hg x dy i
 
-theorem chk_geluHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (geluHasVJP n).backward x dy i =
-    ∑ j : Fin n, pdiv (gelu n) x i j * dy j :=
-  geluHasVJP_correct n x dy i
+theorem chk_geluHasVJP_correct (gf : GeluForm) (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (gf.hasVJP n).backward x dy i =
+    ∑ j : Fin n, pdiv (gf.map n) x i j * dy j :=
+  GeluForm.hasVJP_correct gf n x dy i
 
 theorem chk_layerNormHasVJP_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
     (x : Vec n) (dy : Vec n) (i : Fin n) :
@@ -185,7 +185,7 @@ theorem chk_mhsaHasVJPMat_correct (N heads d_head : Nat)
   mhsaHasVJPMat_correct N heads d_head Wq Wk Wv Wo bq bk bv bo X dY i j
 
 theorem chk_transformerBlockHasVJPMat_correct
-    (N heads d_head mlpDim : Nat)
+    (gf : GeluForm) (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -194,17 +194,17 @@ theorem chk_transformerBlockHasVJPMat_correct
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (X : Mat N (heads * d_head)) (dY : Mat N (heads * d_head))
     (i : Fin N) (j : Fin (heads * d_head)) :
-    (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
+    (transformerBlockHasVJPMat gf N heads d_head mlpDim ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward X dY i j =
     ∑ k : Fin N, ∑ l : Fin (heads * d_head),
-      pdivMat (transformerBlock N heads d_head mlpDim ε γ1 β1
+      pdivMat (transformerBlock gf N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
               X i j k l * dY k l :=
   transformerBlockHasVJPMat_correct N heads d_head mlpDim ε γ1 β1 hε
     Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 X dY i j
 
 theorem chk_vitFullHasVJP_correct
-    (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (gf : GeluForm) (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head))
@@ -218,11 +218,11 @@ theorem chk_vitFullHasVJP_correct
     (γF βF : ℝ)
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    (vitFullHasVJP ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+    (vitFullHasVJP gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
         W_conv b_conv cls_token pos_embed ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).backward x dy i =
     ∑ j : Fin nClasses,
-      pdiv (vitFull ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+      pdiv (vitFull gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
               W_conv b_conv cls_token pos_embed ε γ1 β1
               Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls)
            x i j * dy j :=
@@ -365,7 +365,7 @@ theorem chk_mobilenetv2HasVJPAt_correct
     x h_stem h_b1e h_b1d h_b2e h_b2d dy i
 
 theorem chk_convnextHasVJPAt_correct
-    {ic c cExp h w kH kW nClasses : Nat}
+    (gf : GeluForm) {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
     (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
@@ -376,12 +376,12 @@ theorem chk_convnextHasVJPAt_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJPAt Wst bst εst γst βst hεst
+    (convnextHasVJPAt gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd x).backward dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j :=
@@ -391,7 +391,7 @@ theorem chk_convnextHasVJPAt_correct
     εhd γhd βhd hεhd Wd bd x dy i
 
 theorem chk_convnextHasVJP_correct
-    {ic c cExp h w kH kW nClasses : Nat}
+    (gf : GeluForm) {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
     (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
@@ -402,12 +402,12 @@ theorem chk_convnextHasVJP_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJP Wst bst εst γst βst hεst
+    (convnextHasVJP gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd).backward x dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j :=

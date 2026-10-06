@@ -53,8 +53,8 @@ lemma rowSoftmaxFlat_flat {m n : Nat} (A : Mat m n) :
 lemma scale_flat {m n : Nat} (s : ℝ) (A : Mat m n) :
     (fun i => s * Mat.flatten A i) = Mat.flatten (fun r c => s * A r c) := rfl
 
-lemma gelu_flat {m n : Nat} (A : Mat m n) :
-    gelu (m * n) (Mat.flatten A) = Mat.flatten (fun r => gelu n (A r)) := rfl
+lemma gelu_flat {gf : GeluForm} {m n : Nat} (A : Mat m n) :
+    gf.map (m * n) (Mat.flatten A) = Mat.flatten (fun r => gf.map n (A r)) := rfl
 
 lemma add_flat_pt {m n : Nat} (A B : Mat m n) (j : Fin (m * n)) :
     Mat.flatten A j + Mat.flatten B j = Mat.flatten (fun r s => A r s + B r s) j := rfl

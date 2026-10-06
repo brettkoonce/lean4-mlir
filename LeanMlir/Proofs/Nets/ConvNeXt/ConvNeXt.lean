@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.GeluForm
 
 /-!
 # ConvNeXt
@@ -64,7 +65,9 @@ open Finset BigOperators
     `c × kH × kW` (the 7×7 in ConvNeXt), the expand conv lifts `c → cExp`
     channels (the usual 4× inverted-bottleneck), gelu is applied on the
     expanded activation, the project conv brings `cExp → c` back, and the
-    per-channel layer scale closes the block.
+    per-channel layer scale closes the block. `gf` is the form of the GELU, the tanh
+    approximation or the exact `x · Φ(x)` (`GeluForm`); the block, the net and every theorem
+    about them carry it and hold for both.
 
     The `layerNormForward` used here normalizes over the whole flattened
     `c·h·w` vector with scalar `γ_n, β_n`. The per-position channel
@@ -72,7 +75,7 @@ open Finset BigOperators
     it is `cnxBodyWith` (`ConvNeXtFullT.lean`). Because gelu is smooth everywhere, LN is smooth
     given `ε>0`, and conv/layerScale are linear, the whole body is
     differentiable everywhere — no ReLU-style kink hypotheses needed. -/
-noncomputable def convNextBlockBody {c cExp h w kH kW : Nat}
+noncomputable def convNextBlockBody (gf : GeluForm) {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -81,21 +84,21 @@ noncomputable def convNextBlockBody {c cExp h w kH kW : Nat}
     Vec (c * h * w) → Vec (c * h * w) :=
   layerScale γls ∘
   (flatConv (h := h) (w := w) Wpr bpr) ∘
-  (gelu (cExp * h * w)) ∘
+  (gf.map (cExp * h * w)) ∘
   (flatConv (h := h) (w := w) Wex bex) ∘
   (layerNormForward (c * h * w) εn γn βn) ∘
   (depthwiseFlat (h := h) (w := w) Wdw bdw)
 
 /-- The block body is differentiable everywhere (composition of
     everywhere-differentiable maps). -/
-private theorem convNextBlockBody_differentiable {c cExp h w kH kW : Nat}
+private theorem convNextBlockBody_differentiable {gf : GeluForm} {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    Differentiable ℝ (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
-  unfold convNextBlockBody layerNormForward layerScale gelu
+    Differentiable ℝ (convNextBlockBody gf Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
+  unfold convNextBlockBody layerNormForward layerScale GeluForm.map
   fun_prop (disch := assumption)
 
 /-- **ConvNeXt block body VJP (global)** — built by chaining the
@@ -103,18 +106,18 @@ private theorem convNextBlockBody_differentiable {c cExp h w kH kW : Nat}
     `0 < εn` (the LayerNorm positivity); no kink hypotheses since gelu is
     smooth and the rest are linear. Because the body is differentiable
     everywhere, the VJP is global (`HasVJP`), not pointwise. -/
-noncomputable def convNextBlockBodyHasVJP {c cExp h w kH kW : Nat}
+noncomputable def convNextBlockBodyHasVJP (gf : GeluForm) {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    HasVJP (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
+    HasVJP (convNextBlockBody gf Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
   unfold convNextBlockBody
   have hdw := depthwiseFlat_differentiable (h := h) (w := w) Wdw bdw
   have hln := bnForward_differentiable (c * h * w) εn γn βn hεn
   have hex := flatConv_differentiable (h := h) (w := w) Wex bex
-  have hge := gelu_differentiable (cExp * h * w)
+  have hge := gf.map_differentiable (cExp * h * w)
   have hpr := flatConv_differentiable (h := h) (w := w) Wpr bpr
   have hls := layerScale_differentiable γls
   set D := depthwiseFlat (h := h) (w := w) Wdw bdw with hD
@@ -127,8 +130,8 @@ noncomputable def convNextBlockBodyHasVJP {c cExp h w kH kW : Nat}
   have ex_vjp : HasVJP EX := HasVJP3.toHasVJP (conv2dHasVJP3 Wex bex)
   have s2_vjp : HasVJP (EX ∘ (LN ∘ D)) := vjpComp (LN ∘ D) EX s1_diff hex s1_vjp ex_vjp
   have s2_diff : Differentiable ℝ (EX ∘ (LN ∘ D)) := hex.comp s1_diff
-  set GE := gelu (cExp * h * w) with hGE
-  have ge_vjp : HasVJP GE := geluHasVJP (cExp * h * w)
+  set GE := gf.map (cExp * h * w) with hGE
+  have ge_vjp : HasVJP GE := gf.hasVJP (cExp * h * w)
   have s3_vjp : HasVJP (GE ∘ (EX ∘ (LN ∘ D))) := vjpComp (EX ∘ (LN ∘ D)) GE s2_diff hge s2_vjp ge_vjp
   have s3_diff : Differentiable ℝ (GE ∘ (EX ∘ (LN ∘ D))) := hge.comp s2_diff
   set PR := flatConv (h := h) (w := w) Wpr bpr with hPR
@@ -142,24 +145,24 @@ noncomputable def convNextBlockBodyHasVJP {c cExp h w kH kW : Nat}
 /-- **Full ConvNeXt block** = `residual (block body)`. ConvNeXt uses an
     identity skip (no projection, no post-add activation), so this is the
     plain `residual` of the block body. -/
-noncomputable def convNextBlock {c cExp h w kH kW : Nat}
+noncomputable def convNextBlock (gf : GeluForm) {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
     Vec (c * h * w) → Vec (c * h * w) :=
-  residual (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls)
+  residual (convNextBlockBody gf Wdw bdw εn γn βn Wex bex Wpr bpr γls)
 
 /-- The full ConvNeXt block is differentiable everywhere (residual of an
     everywhere-differentiable body). -/
-private theorem convNextBlock_differentiable {c cExp h w kH kW : Nat}
+private theorem convNextBlock_differentiable {gf : GeluForm} {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    Differentiable ℝ (convNextBlock Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
+    Differentiable ℝ (convNextBlock gf Wdw bdw εn γn βn Wex bex Wpr bpr γls) := by
   unfold convNextBlock residual
   exact (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls).add
     differentiable_id
@@ -167,16 +170,16 @@ private theorem convNextBlock_differentiable {c cExp h w kH kW : Nat}
 /-- **ConvNeXt block VJP (global)** — `residualHasVJP` on top of the
     block-body VJP. Needs only `0 < εn`. Global since the body is
     everywhere-differentiable and the skip is the identity. -/
-noncomputable def convNextBlockHasVJP {c cExp h w kH kW : Nat}
+noncomputable def convNextBlockHasVJP (gf : GeluForm) {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (γls : Vec (c * h * w)) :
-    HasVJP (convNextBlock Wdw bdw εn γn βn Wex bex Wpr bpr γls) :=
-  residualHasVJP (convNextBlockBody Wdw bdw εn γn βn Wex bex Wpr bpr γls)
+    HasVJP (convNextBlock gf Wdw bdw εn γn βn Wex bex Wpr bpr γls) :=
+  residualHasVJP (convNextBlockBody gf Wdw bdw εn γn βn Wex bex Wpr bpr γls)
     (convNextBlockBody_differentiable Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
-    (convNextBlockBodyHasVJP Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
+    (convNextBlockBodyHasVJP gf Wdw bdw εn hεn γn βn Wex bex Wpr bpr γls)
 
 -- ════════════════════════════════════════════════════════════════
 -- § End-to-end ConvNeXt
@@ -191,7 +194,7 @@ noncomputable def convNextBlockHasVJP {c cExp h w kH kW : Nat}
     ConvNeXt blocks at `c`, GAP to `Vec c`, a final LN over the pooled
     `Vec c`, and a `Mat c nClasses` linear head. The stem-LN and head-LN
     are the scalar-`γ, β` `layerNormForward`, as in `convNextBlockBody`. -/
-noncomputable def convNextForward
+noncomputable def convNextForward (gf : GeluForm)
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ)
@@ -206,8 +209,8 @@ noncomputable def convNextForward
   (dense Wd bd) ∘
   (layerNormForward c εhd γhd βhd) ∘
   (globalAvgPoolFlat c h w) ∘
-  (convNextBlock Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂) ∘
-  (convNextBlock Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁) ∘
+  (convNextBlock gf Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂) ∘
+  (convNextBlock gf Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁) ∘
   (layerNormForward (c * h * w) εst γst βst) ∘
   (flatConv (h := h) (w := w) Wst bst)
 
@@ -218,7 +221,7 @@ noncomputable def convNextForward
     VJP holds at *every* input, not just a fixed point — putting ConvNeXt
     alongside `vitFullHasVJP` (the weight-tied ViT) as an unconditional
     whole-network VJP. -/
-noncomputable def convnextHasVJP
+noncomputable def convnextHasVJP (gf : GeluForm)
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
@@ -229,7 +232,7 @@ noncomputable def convnextHasVJP
     (Wpr₂ : Kernel4 c cExp 1 1) (bpr₂ : Vec c) (γls₂ : Vec (c * h * w))
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses) :
-    HasVJP (convNextForward Wst bst εst γst βst
+    HasVJP (convNextForward gf Wst bst εst γst βst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd Wd bd) := by
@@ -242,14 +245,14 @@ noncomputable def convnextHasVJP
   have lns_vjp : HasVJP LNs := layerNormHasVJP (c * h * w) εst γst βst hεst
   have s1_vjp : HasVJP (LNs ∘ ST) := vjpComp ST LNs st_diff lns_diff st_vjp lns_vjp
   have s1_diff : Differentiable ℝ (LNs ∘ ST) := lns_diff.comp st_diff
-  set B1 := convNextBlock Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ with hB1
-  have b1_diff := convNextBlock_differentiable Wdw₁ bdw₁ εn₁ hεn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
-  have b1_vjp : HasVJP B1 := convNextBlockHasVJP Wdw₁ bdw₁ εn₁ hεn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
+  set B1 := convNextBlock gf Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁ with hB1
+  have b1_diff := convNextBlock_differentiable (gf := gf) Wdw₁ bdw₁ εn₁ hεn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
+  have b1_vjp : HasVJP B1 := convNextBlockHasVJP gf Wdw₁ bdw₁ εn₁ hεn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
   have s2_vjp : HasVJP (B1 ∘ (LNs ∘ ST)) := vjpComp (LNs ∘ ST) B1 s1_diff b1_diff s1_vjp b1_vjp
   have s2_diff : Differentiable ℝ (B1 ∘ (LNs ∘ ST)) := b1_diff.comp s1_diff
-  set B2 := convNextBlock Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ with hB2
-  have b2_diff := convNextBlock_differentiable Wdw₂ bdw₂ εn₂ hεn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
-  have b2_vjp : HasVJP B2 := convNextBlockHasVJP Wdw₂ bdw₂ εn₂ hεn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
+  set B2 := convNextBlock gf Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂ with hB2
+  have b2_diff := convNextBlock_differentiable (gf := gf) Wdw₂ bdw₂ εn₂ hεn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
+  have b2_vjp : HasVJP B2 := convNextBlockHasVJP gf Wdw₂ bdw₂ εn₂ hεn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
   have s3_vjp : HasVJP (B2 ∘ (B1 ∘ (LNs ∘ ST))) := vjpComp (B1 ∘ (LNs ∘ ST)) B2 s2_diff b2_diff s2_vjp b2_vjp
   have s3_diff : Differentiable ℝ (B2 ∘ (B1 ∘ (LNs ∘ ST))) := b2_diff.comp s2_diff
   set P3 := B2 ∘ (B1 ∘ (LNs ∘ ST)) with hP3
@@ -268,7 +271,7 @@ noncomputable def convnextHasVJP
 
 /-- **End-to-end ConvNeXt VJP at a point** — the global witness restricted
     to a point. Kept for downstream `_at` consumers and the comparator. -/
-noncomputable def convnextHasVJPAt
+noncomputable def convnextHasVJPAt (gf : GeluForm)
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
@@ -280,11 +283,11 @@ noncomputable def convnextHasVJPAt
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) :
-    HasVJPAt (convNextForward Wst bst εst γst βst
+    HasVJPAt (convNextForward gf Wst bst εst γst βst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd Wd bd) x :=
-  (convnextHasVJP Wst bst εst γst βst hεst
+  (convnextHasVJP gf Wst bst εst γst βst hεst
     Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
     Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
     εhd γhd βhd hεhd Wd bd).toHasVJPAt x
@@ -293,7 +296,7 @@ noncomputable def convnextHasVJPAt
     end-to-end ConvNeXt's backward equals the `pdiv`-contracted Jacobian
     (Jacobian-transpose applied to the cotangent), at *every* input `x`.
     The unconditional ConvNeXt analogue of `vitFullHasVJP_correct`. -/
-theorem convnextHasVJP_correct
+theorem convnextHasVJP_correct {gf : GeluForm}
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
@@ -305,16 +308,16 @@ theorem convnextHasVJP_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJP Wst bst εst γst βst hεst
+    (convnextHasVJP gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd).backward x dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j :=
-  (convnextHasVJP Wst bst εst γst βst hεst
+  (convnextHasVJP gf Wst bst εst γst βst hεst
     Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
     Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
     εhd γhd βhd hεhd Wd bd).correct x dy i
@@ -323,7 +326,7 @@ theorem convnextHasVJP_correct
     witness's `.correct` field: the end-to-end ConvNeXt's backward equals
     the `pdiv`-contracted Jacobian (Jacobian-transpose applied to the
     cotangent). Analogue of `cnnHasVJPAt_correct`. -/
-theorem convnextHasVJPAt_correct
+theorem convnextHasVJPAt_correct {gf : GeluForm}
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
@@ -335,16 +338,16 @@ theorem convnextHasVJPAt_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJPAt Wst bst εst γst βst hεst
+    (convnextHasVJPAt gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd x).backward dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j :=
-  (convnextHasVJPAt Wst bst εst γst βst hεst
+  (convnextHasVJPAt gf Wst bst εst γst βst hεst
     Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
     Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
     εhd γhd βhd hεhd Wd bd x).correct dy i

@@ -32,8 +32,9 @@ with IREE, runs it, and checks it against an independent numpy reference:
                                (p⊙(dy−⟨p,dy⟩)); the attention building block.
   • sdpa_fwd / sdpa_back      — scaled dot-product attention softmax(QKᵀ/√d)·V
                                + the proven dQ/dK/dV (the ViT apex).
-  • {sigmoid,swish,relu6,gelu} — pointwise activations: forward + the proven
-                               diagonal backward dy⊙act'(x).
+  • {sigmoid,swish,relu6,gelu,gelu_erf} — pointwise activations: forward + the
+                               proven diagonal backward dy⊙act'(x); gelu is the
+                               tanh approximation, gelu_erf the exact x·Φ(x).
   • residual / se             — the fan-in chapters: residual add (I + dense),
                                squeeze-excite gate-multiply (se_back_bridge).
   • depthwise_fwd / _back     — per-channel grouped conv (feature_group_count=c)
@@ -49,7 +50,7 @@ ROCm/HIP leg only changes the backend, not the numerics.
 Run:  .venv/bin/python LeanMlir/Proofs/check_ir_codegen.py
 Deps: iree-base-compiler, iree-base-runtime, numpy (pip); lake (to regenerate).
 """
-import os, subprocess, sys, glob, re
+import math, os, subprocess, sys, glob, re
 import numpy as np
 import iree.compiler as ic
 import iree.runtime as rt
@@ -222,6 +223,9 @@ def sdpa_back_ref(Q, K, V, dOut, d):
 def _sig(x): return 1.0 / (1.0 + np.exp(-x))
 def _gelu_parts(x):
     c = np.sqrt(2.0 / np.pi); t = np.tanh(c * (x + 0.044715 * x**3)); return c, t
+_erfc = np.vectorize(math.erfc)
+def _Phi(x): return 0.5 * _erfc(-np.asarray(x, np.float64) / np.sqrt(2.0))      # standard normal CDF
+def _phi(x): return np.exp(-np.asarray(x, np.float64)**2 / 2) / np.sqrt(2 * np.pi)
 # (forward, backward dy⊙act'(x)) per activation — derivatives match *ScalarDeriv.
 ACT_REF = {
     "sigmoid": (lambda x: _sig(x),
@@ -234,6 +238,9 @@ ACT_REF = {
                 lambda x, dy: dy * (0.5 * (1 + _gelu_parts(x)[1])
                     + 0.5 * x * (1 - _gelu_parts(x)[1]**2) * _gelu_parts(x)[0]
                       * (1 + 3 * 0.044715 * x**2))),
+    # the exact GELU x·Φ(x); derivative Φ(x) + x·φ(x) (geluErfScalarDeriv_eq)
+    "gelu_erf": (lambda x: x * _Phi(x),
+                 lambda x, dy: dy * (_Phi(x) + x * _phi(x))),
 }
 
 def dw_fwd_ref(x, W, b):

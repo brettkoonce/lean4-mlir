@@ -270,6 +270,9 @@ open Proofs
 -- LayerNorm / GELU / Swish
 #print axioms pdiv_gelu
 #print axioms geluHasVJP_correct
+-- either GELU (`GeluForm`): what the ViT and ConvNeXt chains are stated over
+#print axioms GeluForm.pdiv_map
+#print axioms GeluForm.hasVJP_correct
 -- exact GELU x·Φ(x): the VJP, the erfc closed forms (no Lean consumer; keep pinned), Φ = the standard normal cdf
 #print axioms pdiv_geluErf
 #print axioms geluErfHasVJP_correct
@@ -352,6 +355,7 @@ open Proofs
 #print axioms windowArgmax_first
 -- Smooth activations
 #print axioms IR.gelu_back_bridge
+#print axioms IR.geluErf_back_bridge
 #print axioms IR.swish_back_bridge
 #print axioms IR.sigmoid_back_bridge
 -- BatchNorm: the emitted reduce+broadcast+elementwise graph denotes the proven 3-term backward

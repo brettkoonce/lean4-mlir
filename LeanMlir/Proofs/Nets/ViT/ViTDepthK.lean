@@ -59,61 +59,61 @@ structure BlockParamsV (D mlpDim : Nat) where
   bfc2 : Vec D
 
 /-- `transformerBlockV` at a bundled param block. -/
-noncomputable def blockV (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
+noncomputable def blockV (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) :
     Mat Np1 (heads * d_head) → Mat Np1 (heads * d_head) :=
-  transformerBlockV Np1 heads d_head mlpDim ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
+  transformerBlockV gf Np1 heads d_head mlpDim ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
     p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2
 
 /-- One block at the flat index. -/
-noncomputable def blockVFlat (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
+noncomputable def blockVFlat (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
     (p : BlockParamsV (heads * d_head) mlpDim) :
     Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head)) :=
-  fun v => Mat.flatten (blockV Np1 heads d_head mlpDim ε p (Mat.unflatten v))
+  fun v => Mat.flatten (blockV gf Np1 heads d_head mlpDim ε p (Mat.unflatten v))
 
 /-- **Depth-`k` block fold** (Mat level, head recursion — block `0` runs
     first): `body (k+1) ps = body k (ps ∘ succ) ∘ block (ps 0)`. -/
-noncomputable def vitBodyKV (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+noncomputable def vitBodyKV (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     (k : Nat) → (Fin k → BlockParamsV (heads * d_head) mlpDim) →
     Mat Np1 (heads * d_head) → Mat Np1 (heads * d_head)
   | 0, _ => fun A => A
   | k + 1, ps =>
-      (vitBodyKV Np1 heads d_head mlpDim ε k (fun i => ps i.succ)) ∘
-      (blockV Np1 heads d_head mlpDim ε (ps 0))
+      (vitBodyKV gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ)) ∘
+      (blockV gf Np1 heads d_head mlpDim ε (ps 0))
 
 /-- **Depth-`k` block fold at the flat index** — per-block flat stages, so the VJP
     composes block-at-a-time. -/
-noncomputable def vitBodyKVFlat (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+noncomputable def vitBodyKVFlat (gf : GeluForm) (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     (k : Nat) → (Fin k → BlockParamsV (heads * d_head) mlpDim) →
     Vec (Np1 * (heads * d_head)) → Vec (Np1 * (heads * d_head))
   | 0, _ => fun v => v
   | k + 1, ps =>
-      (vitBodyKVFlat Np1 heads d_head mlpDim ε k (fun i => ps i.succ)) ∘
-      (blockVFlat Np1 heads d_head mlpDim ε (ps 0))
+      (vitBodyKVFlat gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ)) ∘
+      (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0))
 
 /-- The flat fold on a flattened input is the flatten of the Mat fold (the
     per-block `unflatten ∘ flatten` round-trips cancel, inductively). -/
-lemma vitBodyKVFlat_eq_flatten (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
+lemma vitBodyKVFlat_eq_flatten {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
       (A : Mat Np1 (heads * d_head)),
-      vitBodyKVFlat Np1 heads d_head mlpDim ε k ps (Mat.flatten A) =
-        Mat.flatten (vitBodyKV Np1 heads d_head mlpDim ε k ps A)
+      vitBodyKVFlat gf Np1 heads d_head mlpDim ε k ps (Mat.flatten A) =
+        Mat.flatten (vitBodyKV gf Np1 heads d_head mlpDim ε k ps A)
   | 0, _, _ => rfl
   | k + 1, ps, A => by
-      have hb : blockVFlat Np1 heads d_head mlpDim ε (ps 0) (Mat.flatten A) =
-          Mat.flatten (blockV Np1 heads d_head mlpDim ε (ps 0) A) := by
+      have hb : blockVFlat gf Np1 heads d_head mlpDim ε (ps 0) (Mat.flatten A) =
+          Mat.flatten (blockV gf Np1 heads d_head mlpDim ε (ps 0) A) := by
         unfold blockVFlat
         rw [Mat.unflatten_flatten]
-      show vitBodyKVFlat Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
-          (blockVFlat Np1 heads d_head mlpDim ε (ps 0) (Mat.flatten A)) = _
+      show vitBodyKVFlat gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
+          (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0) (Mat.flatten A)) = _
       rw [hb]
       exact vitBodyKVFlat_eq_flatten Np1 heads d_head mlpDim ε k
-        (fun i => ps i.succ) (blockV Np1 heads d_head mlpDim ε (ps 0) A)
+        (fun i => ps i.succ) (blockV gf Np1 heads d_head mlpDim ε (ps 0) A)
 
 /-- Flat differentiability of the depth-`k` body, by induction on `k`. -/
-lemma vitBodyKVFlat_differentiable (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
+lemma vitBodyKVFlat_differentiable {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim),
-      Differentiable ℝ (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)
+      Differentiable ℝ (vitBodyKVFlat gf Np1 heads d_head mlpDim ε k ps)
   | 0, _ => differentiable_id
   | k + 1, ps =>
       Differentiable.comp
@@ -126,25 +126,25 @@ lemma vitBodyKVFlat_differentiable (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (h
 /-- **Depth-`k` body VJP** — the tower induction at distinct per-block params:
     the chain step is `vjpComp` gluing the bridged
     `transformerBlockVHasVJPMat` onto the depth-`k` tail. Only `0 < ε`. -/
-noncomputable def vitBodyKVFlatHasVJP (Np1 heads d_head mlpDim : Nat)
+noncomputable def vitBodyKVFlatHasVJP (gf : GeluForm) (Np1 heads d_head mlpDim : Nat)
     (ε : ℝ) (hε : 0 < ε) :
     (k : Nat) → (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) →
-    HasVJP (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)
+    HasVJP (vitBodyKVFlat gf Np1 heads d_head mlpDim ε k ps)
   | 0, _ => identityHasVJP _
   | k + 1, ps =>
       vjpComp
-        (blockVFlat Np1 heads d_head mlpDim ε (ps 0))
-        (vitBodyKVFlat Np1 heads d_head mlpDim ε k (fun i => ps i.succ))
+        (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0))
+        (vitBodyKVFlat gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ))
         (transformerBlockV_flat_differentiable Np1 heads d_head mlpDim ε
           (ps 0).γ1 (ps 0).β1 hε (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
           (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
           (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2)
         (vitBodyKVFlat_differentiable Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
-        (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat Np1 heads d_head mlpDim ε
+        (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat gf Np1 heads d_head mlpDim ε
           (ps 0).γ1 (ps 0).β1 hε (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
           (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
           (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2))
-        (vitBodyKVFlatHasVJP Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
+        (vitBodyKVFlatHasVJP gf Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. The depth-k ViT forward + whole-net VJP
@@ -153,7 +153,7 @@ noncomputable def vitBodyKVFlatHasVJP (Np1 heads d_head mlpDim : Nat)
 /-- **Depth-`k` distinct-param ViT forward** (vector-LN): patch embed →
     `k` blocks (`Fin k → BlockParamsV`) → final vector-LN → CLS slice →
     dense head. -/
-noncomputable def vitForwardKV
+noncomputable def vitForwardKV (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -168,7 +168,7 @@ noncomputable def vitForwardKV
   (fun v : Vec ((N + 1) * (heads * d_head)) =>
     Mat.flatten (fun n => layerNormVec (heads * d_head) ε γF βF
       ((Mat.unflatten v) n))) ∘
-  (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps) ∘
+  (vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps) ∘
   (patchEmbedFlat ic H W patchSize N (heads * d_head)
     W_conv b_conv cls_token pos_embed)
 
@@ -176,7 +176,7 @@ noncomputable def vitForwardKV
     hypothesis is `0 < ε` — at EVERY depth. Three `vjpComp` steps gluing
     `patchEmbedFlatHasVJP`, the inductive `vitBodyKVFlatHasVJP`, the
     bridged per-token vector-LN, and `classifierFlatHasVJP`. -/
-noncomputable def vitForwardKVHasVJP
+noncomputable def vitForwardKVHasVJP (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -186,7 +186,7 @@ noncomputable def vitForwardKVHasVJP
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    HasVJP (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+    HasVJP (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) := by
   unfold vitForwardKV
   set PE := patchEmbedFlat ic H W patchSize N (heads * d_head)
@@ -195,11 +195,11 @@ noncomputable def vitForwardKVHasVJP
                     W_conv b_conv cls_token pos_embed
   have pe_vjp : HasVJP PE := patchEmbedFlatHasVJP ic H W patchSize N
                     (heads * d_head) W_conv b_conv cls_token pos_embed
-  set BODY := vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps with hBODY
+  set BODY := vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps with hBODY
   have body_diff : Differentiable ℝ BODY :=
     vitBodyKVFlat_differentiable (N + 1) heads d_head mlpDim ε hε k ps
   have body_vjp : HasVJP BODY :=
-    vitBodyKVFlatHasVJP (N + 1) heads d_head mlpDim ε hε k ps
+    vitBodyKVFlatHasVJP gf (N + 1) heads d_head mlpDim ε hε k ps
   have s1_vjp : HasVJP (BODY ∘ PE) := vjpComp PE BODY pe_diff body_diff pe_vjp body_vjp
   have s1_diff : Differentiable ℝ (BODY ∘ PE) := body_diff.comp pe_diff
   set LNF := (fun v : Vec ((N + 1) * (heads * d_head)) =>
@@ -221,7 +221,7 @@ noncomputable def vitForwardKVHasVJP
 /-- The `.correct` field of `vitForwardKVHasVJP`, restated: the depth-`k` ViT's backward is the
     `pdiv`-contracted Jacobian of `vitForwardKV` at every input. The tie of the hand-written
     input-gradient chain to this backward is `vitInputGradK_correct`. -/
-theorem vitForwardKVHasVJP_correct
+theorem vitForwardKVHasVJP_correct {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -232,12 +232,12 @@ theorem vitForwardKVHasVJP_correct
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+    (vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x dy i =
       ∑ j : Fin nClasses,
-        pdiv (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+        pdiv (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
-  (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+  (vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).correct x dy i
 
 end Proofs
@@ -249,45 +249,45 @@ namespace Proofs.StableHLO
 -- ════════════════════════════════════════════════════════════════
 
 /-- `vitBlockGraphMHV` at a bundled param block. -/
-def vitBlockGraphMHVP {Np1 hm1 d mlpDim : Nat}
+def vitBlockGraphMHVP (gf : GeluForm) {Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr oneStr zeroStr : String) (ε s : ℝ)
     (p : BlockParamsV ((hm1 + 1) * d) mlpDim)
     (x : SHlo (Np1 * ((hm1 + 1) * d))) : SHlo (Np1 * ((hm1 + 1) * d)) :=
-  vitBlockGraphMHV pfx epsStr sStr oneStr zeroStr ε s p.γ1 p.β1
+  vitBlockGraphMHV gf pfx epsStr sStr oneStr zeroStr ε s p.γ1 p.β1
     p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2
     p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 x
 
 /-- **Depth-`k` token-level block fold** — block `base` first, SSA prefixes
     `b{base+1}_`, `b{base+2}_`, … (distinct per block). -/
-def vitBodyGraphKMHV {Np1 hm1 d mlpDim : Nat}
+def vitBodyGraphKMHV (gf : GeluForm) {Np1 hm1 d mlpDim : Nat}
     (epsStr sStr oneStr zeroStr : String) (ε s : ℝ) :
     (base k : Nat) → (Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) →
     SHlo (Np1 * ((hm1 + 1) * d)) → SHlo (Np1 * ((hm1 + 1) * d))
   | _, 0, _, e => e
   | base, k + 1, ps, e =>
-      vitBodyGraphKMHV epsStr sStr oneStr zeroStr ε s (base + 1) k
+      vitBodyGraphKMHV gf epsStr sStr oneStr zeroStr ε s (base + 1) k
         (fun i => ps i.succ)
-        (vitBlockGraphMHVP s!"b{base + 1}_" epsStr sStr oneStr zeroStr ε s
+        (vitBlockGraphMHVP gf s!"b{base + 1}_" epsStr sStr oneStr zeroStr ε s
           (ps 0) e)
 
 /-- **Depth-`k` body denotation** — by induction on `k`, chaining
     `vitBlockGraphMHV_den_aux` + `vitBlockSpelledMHV_eq` per block: the token
     fold denotes the flatten of the Mat block fold at `heads := hm1 + 1`. -/
-lemma vitBodyGraphKMHV_den {Np1 hm1 d mlpDim : Nat}
+lemma vitBodyGraphKMHV_den {gf : GeluForm} {Np1 hm1 d mlpDim : Nat}
     (epsStr sStr oneStr zeroStr : String) (ε : ℝ) :
     ∀ (base k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim)
       (e : SHlo (Np1 * ((hm1 + 1) * d))) (A : Mat Np1 ((hm1 + 1) * d)),
       den e = Mat.flatten A →
-      den (vitBodyGraphKMHV epsStr sStr oneStr zeroStr ε (sdpaScale d)
+      den (vitBodyGraphKMHV gf epsStr sStr oneStr zeroStr ε (sdpaScale d)
             base k ps e) =
-        Mat.flatten (vitBodyKV Np1 (hm1 + 1) d mlpDim ε k ps A)
+        Mat.flatten (vitBodyKV gf Np1 (hm1 + 1) d mlpDim ε k ps A)
   | _, 0, _, _, _, hA => hA
   | base, k + 1, ps, e, A, hA => by
-      have hb := vitBlockGraphMHV_den_aux s!"b{base + 1}_" epsStr sStr oneStr zeroStr
+      have hb := vitBlockGraphMHV_den_aux (gf := gf) s!"b{base + 1}_" epsStr sStr oneStr zeroStr
         ε (ps 0).γ1 (ps 0).β1 (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
         (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
         (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2 e A hA
-      have ih := vitBodyGraphKMHV_den epsStr sStr oneStr zeroStr ε
+      have ih := vitBodyGraphKMHV_den (gf := gf) epsStr sStr oneStr zeroStr ε
         (base + 1) k (fun i => ps i.succ) _ _ hb
       -- ih lands at the spelled block; tie it to `blockV` and refold the body.
       rw [vitBlockSpelledMHV_eq] at ih
@@ -296,7 +296,7 @@ lemma vitBodyGraphKMHV_den {Np1 hm1 d mlpDim : Nat}
 /-- Whole **depth-`k` multi-head vector-LN ViT forward** graph: patch embed →
     `k` spelled multi-head vector-LN blocks (`b1_`…`b{k}_`, distinct params) →
     final vector-LN → CLS slice → dense head. -/
-def vitFwdGraphKMHV {ic H W P N hm1 d mlpDim nClasses : Nat}
+def vitFwdGraphKMHV (gf : GeluForm) {ic H W P N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr oneStr zeroStr : String) (ε s : ℝ)
     (Wc : Kernel4 ((hm1 + 1) * d) ic P P) (bc cls : Vec ((hm1 + 1) * d))
     (pos : Mat (N + 1) ((hm1 + 1) * d))
@@ -306,7 +306,7 @@ def vitFwdGraphKMHV {ic H W P N hm1 d mlpDim nClasses : Nat}
     (x : Vec (ic * H * W)) : SHlo nClasses :=
   let embed : SHlo ((N + 1) * ((hm1 + 1) * d)) :=
     .patchEmbedF "%Wp" "%bp" "%cls" "%pos" Wc bc cls pos (.operand "%x" x)
-  let body := vitBodyGraphKMHV epsStr sStr oneStr zeroStr ε s 0 k ps embed
+  let body := vitBodyGraphKMHV gf epsStr sStr oneStr zeroStr ε s 0 k ps embed
   let fl := SHlo.rowBiasF "%btF" βF
     (SHlo.rowScaleF "%gF" γF
       (SHlo.lnRowF oneStr zeroStr epsStr ε 1 0 body))
@@ -315,7 +315,7 @@ def vitFwdGraphKMHV {ic H W P N hm1 d mlpDim nClasses : Nat}
 /-- **Depth-`k` multi-head vector-LN ViT forward faithfulness** — the
     general-depth graph denotes `vitForwardKV` at `heads := hm1 + 1`, for
     EVERY depth `k`. -/
-theorem vitFwdGraphKMHV_faithful
+theorem vitFwdGraphKMHV_faithful {gf : GeluForm}
     (ic H W patchSize N hm1 d mlpDim nClasses : Nat)
     (epsStr sStr oneStr zeroStr : String)
     (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize)
@@ -325,12 +325,12 @@ theorem vitFwdGraphKMHV_faithful
     (γF βF : Vec ((hm1 + 1) * d))
     (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    den (vitFwdGraphKMHV epsStr sStr oneStr zeroStr ε (sdpaScale d)
+    den (vitFwdGraphKMHV gf epsStr sStr oneStr zeroStr ε (sdpaScale d)
           Wc bc cls pos k ps γF βF Wcls bcls x)
-      = vitForwardKV ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
+      = vitForwardKV gf ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps γF βF Wcls bcls x := by
   have h0 := patchEmbedF_x_den ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x
-  have hbody := vitBodyGraphKMHV_den epsStr sStr oneStr zeroStr ε 0 k ps _ _ h0
+  have hbody := vitBodyGraphKMHV_den (gf := gf) epsStr sStr oneStr zeroStr ε 0 k ps _ _ h0
   simp only [vitFwdGraphKMHV, denseF_faithful, clsSliceF_faithful, rowBiasF_faithful,
              rowScaleF_faithful, lnRowF_faithful, hbody]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat]

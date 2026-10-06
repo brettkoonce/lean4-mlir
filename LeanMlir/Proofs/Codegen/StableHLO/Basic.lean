@@ -229,7 +229,11 @@ inductive BatchableOp : Nat → Nat → Type where
   --    channel-LN — never the batch. That separation is the whole point of a descriptor: `N` is
   --    the denotation's batch, `m*n` the emit width. Reading `m` as the batch is the mistake the
   --    per-example renderers make structurally.
-  | gelu {n : Nat}                                          : BatchableOp n n
+  -- Either GELU: `gf` is the tanh approximation or the exact `x · Φ(x)` (`GeluForm`). One
+  -- descriptor for both, so `den` is `gf.map` without a case split; the two forms carry
+  -- different TAGS in `skel`, because their emitted text differs (`stablehlo.tanh` against
+  -- `chlo.erfc`).
+  | gelu {n : Nat} (gf : GeluForm)                          : BatchableOp n n
   | transpose {m n : Nat}                                   : BatchableOp (m*n) (n*m)
   -- ── ConvNeXt's stem conv, its LayerScale, and the loss-path softmax pair.
   --    `expe` and `softmaxDiv` are descriptors for OPPOSITE halves of the per-example-width
@@ -720,7 +724,8 @@ inductive SHlo : Nat → Type where
   --    activation to all `N`. They take the whole-batch `x` instead — `geluBackB` pointwise (so
   --    the VJP at width `N*n` already IS the batch-lift, `swishBackB`'s exact shape), `lnRowBackB`
   --    via `batchMapAux` (so example `n` gets `batchSlice n x`).
-  | geluBackB    {N n : Nat} (xName : String) (x : Vec (N*n))   : SHlo (N*n) → SHlo (N*n)
+  | geluBackB    {N n : Nat} (gf : GeluForm) (xName : String) (x : Vec (N*n))
+      : SHlo (N*n) → SHlo (N*n)
   -- ── The batch-contracting PARAMETER gradients (`Σ_n` over the batch, the shape
   --    every `*GradB` takes). Two of them contract TWO levels — the batch AND the row axis —
   --    which no existing `*GradB` does, because `denseBiasGradB` sits on a net where each example
@@ -832,14 +837,16 @@ inductive SHlo : Nat → Type where
   -- summed all `tk+1` rows would fold the CLS token's cotangent into the patch bias — it compiles,
   -- trains and descends, and the emitted `slice [.., 1:tk+1, ..]` is the only place it shows.
   | patchEmbedBiasGradB {N tk c : Nat}          : SHlo (N*((tk+1)*c)) → SHlo c
-  -- Chapter 8 (ConvNeXt): GELU forward (tanh approximation,
-  -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
-  -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
-  -- Like swish/sigmoid, SMOOTH everywhere (no kink, NO smoothness hyp — the VJP is
-  -- the GLOBAL `geluHasVJP`, not `_at`). `geluBack`'s `xName`/`x` is the saved
-  -- pre-activation. `den` via the proven `gelu` / `geluHasVJP` (Activations.lean).
-  | geluF      {n : Nat}                                        : SHlo n → SHlo n
-  | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
+  -- Chapter 8 (ConvNeXt): GELU forward and its input-VJP `dy · gelu'(x)`, at either form
+  -- (`GeluForm`). `.tanh` is the approximation `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via
+  -- `stablehlo.tanh`; `.erf` is the exact `x · Φ(x)`, emitted `(0.5·x) · erfc(−x·√½)` via
+  -- `chlo.erfc`, with input-VJP `dy · (Φ(x) + x·φ(x))`. Like swish/sigmoid, SMOOTH everywhere
+  -- (no kink, NO smoothness hyp — the VJP is the GLOBAL `GeluForm.hasVJP`, not `_at`).
+  -- `geluBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven `GeluForm.map` /
+  -- `GeluForm.hasVJP` (GeluForm.lean), which are `gelu` / `geluHasVJP` at `.tanh` and
+  -- `geluErf` / `geluErfHasVJP` at `.erf`.
+  | geluF      {n : Nat} (gf : GeluForm)                        : SHlo n → SHlo n
+  | geluBack   {n : Nat} (gf : GeluForm) (xName : String) (x : Vec n) : SHlo n → SHlo n
   -- Chapter 8 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
   -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (LayerNorm.lean).
   | layerScaleF {n : Nat} (γName : String) (γ : Vec n)          : SHlo n → SHlo n
@@ -1703,7 +1710,7 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   -- The five ViT/ConvNeXt row/pointwise forms — each denotes the SAME per-example function its
   -- descriptor-less peer does (`.geluF`, `.transposeF`, `.lnRowF`, `.rowScaleF`, `.rowBiasF`),
   -- which is what makes the batched node a `batchMap` of a proven map rather than a new function.
-  | _, _, .gelu (n := n) => gelu n
+  | _, _, .gelu (n := n) gf => gf.map n
   | _, _, .transpose (m := m) (n := n) => transposeFlat m n
   | _, _, .convStride4 _ _ W bias => flatConvStride4 W bias
   -- `convBf16`'s exact shape at the stride-4 forward: the outer `rnd` is the bf16 STORE (the
@@ -2125,7 +2132,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .swishBackB (N := N) (n := n) _ x e => (swishHasVJP (N*n)).backward x (den e)
   -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
   -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
-  | _, .geluBackB (N := N) (n := n) _ x e => (geluHasVJP (N*n)).backward x (den e)
+  | _, .geluBackB (N := N) (n := n) gf _ x e => (gf.hasVJP (N*n)).backward x (den e)
   -- The `Σ_n` shape, verbatim from `convWeightGradB`: a shared parameter's batched gradient is the
   -- sum over examples of the per-example gradient on `batchSlice n`.
   | _, .convStride4WeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
@@ -2219,8 +2226,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       batchMapAux N (rowLNBackFlat m n ε γ) x (den e)
   | _, .sigmoidB (N := N) (n := n) e => sigmoid (N*n) (den e)
   | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoidHasVJP (N*n)).backward x (den e)
-  | _, .geluF (n := n) e => gelu n (den e)
-  | _, .geluBack (n := n) _ x e => (geluHasVJP n).backward x (den e)
+  | _, .geluF (n := n) gf e => gf.map n (den e)
+  | _, .geluBack (n := n) gf _ x e => (gf.hasVJP n).backward x (den e)
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
   | _, .layerScaleChF (c := c) (h := h) (w := w) _ γ e =>
       layerScale (fun k => γ (chanIdx c h w k)) (den e)
@@ -2635,8 +2642,9 @@ theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : 
     den (.dropoutB mN mask e) = Proofs.dropout mask (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swishHasVJP (N*n)).backward x (den e) := rfl
-@[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.geluBackB xN x e) = (geluHasVJP (N*n)).backward x (den e) := rfl
+@[simp] theorem den_geluBackB {N n : Nat} (gf : GeluForm) (xN : String) (x : Vec (N*n))
+    (e : SHlo (N*n)) :
+    den (.geluBackB gf xN x e) = (gf.hasVJP (N*n)).backward x (den e) := rfl
 @[simp] theorem den_rowDenseBiasGradB {N R c : Nat} (e : SHlo (N*(R*c))) :
     den (.rowDenseBiasGradB (N := N) (R := R) (c := c) e)
       = fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j := rfl
@@ -3612,12 +3620,13 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.sigmoidBack xN x e) = (sigmoidHasVJP n).backward x (den e) := rfl
 
-/-- **GELU forward faithfulness.** The tanh-approximation graph
-    `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu`
-    (Activations.lean). Smooth everywhere; no kink, no smoothness hypothesis.
-    (`rfl`: `den`'s arm is this function by definition.) -/
-@[simp] theorem geluF_faithful {n : Nat} (e : SHlo n) :
-    den (.geluF e) = gelu n (den e) := rfl
+/-- **GELU forward faithfulness**, at either form. The tanh-approximation graph
+    `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu` (Activations.lean),
+    and the exact graph `(0.5·x) · erfc(−x·√½)` the proven `geluErf`, `x · Φ(x)` (GeluErf.lean;
+    the spelling is `geluErfScalar_eq_erfc`): `gf.map` is each at its form. Smooth everywhere; no
+    kink, no smoothness hypothesis. (`rfl`: `den`'s arm is this function by definition.) -/
+@[simp] theorem geluF_faithful {n : Nat} (gf : GeluForm) (e : SHlo n) :
+    den (.geluF gf e) = gf.map n (den e) := rfl
 
 /-- **Layer-scale faithfulness.** The per-element multiply `γ ⊙ x` denotes the proven
     `layerScale` (LayerNorm.lean). (`rfl`.) -/
@@ -3630,12 +3639,13 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     (e : SHlo (c*h*w)) :
     den (.layerScaleChF γN γ e) = layerScale (fun k => γ (chanIdx c h w k)) (den e) := rfl
 
-/-- **GELU input-VJP faithfulness.** The closed-form `dy ⊙ gelu'(x)` graph
-    (recomputing `tanh(u(x))` from the saved pre-activation `x`) denotes the proven
-    GLOBAL `geluHasVJP` backward (`dy ⊙ geluScalarDeriv x`; GELU is smooth
-    everywhere, so this is a global VJP — no smoothness hypothesis). -/
-theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
-    den (.geluBack xN x e) = (geluHasVJP n).backward x (den e) := rfl
+/-- **GELU input-VJP faithfulness**, at either form. The closed-form `dy ⊙ gelu'(x)` graph —
+    recomputing `tanh(u(x))` from the saved pre-activation `x` at `.tanh` (`geluScalarDeriv_eq`),
+    `erfc` and the Gaussian at `.erf` (`geluErfScalarDeriv_eq_erfc`) — denotes the proven GLOBAL
+    `GeluForm.hasVJP` backward (`dy ⊙ gf.scalarDeriv x`; either GELU is smooth everywhere, so
+    this is a global VJP — no smoothness hypothesis). -/
+theorem geluBack_faithful {n : Nat} (gf : GeluForm) (xN : String) (x : Vec n) (e : SHlo n) :
+    den (.geluBack gf xN x e) = (gf.hasVJP n).backward x (den e) := rfl
 
 /-- **Row-softmax forward faithfulness.** The per-row `exp / reduce[last] / divide`
     graph denotes `rowSoftmaxFlat` (= flattened `rowSoftmax`, Attention.lean). Plain

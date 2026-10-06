@@ -83,7 +83,7 @@ LN-form-agnostic and are reused verbatim from `ConvNeXtChainClose`. -/
     expand/project 1×1 conv `W`+`b`, per-channel layer-scale γ) denote
     `θ − lr·(certified per-layer Jacobian · cot)` at the real block forward activations and the
     chain cotangents driven by `dyOut`. -/
-def cnxBlockChTied {c cExp h w : Nat}
+def cnxBlockChTied (gf : GeluForm) {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
@@ -92,8 +92,8 @@ def cnxBlockChTied {c cExp h w : Nat}
     (dyOut : Vec (c*h*w)) (lr : ℝ) : Prop :=
     let γlsB : Vec (c*h*w) := fun k => lg (chanIdx c h w k)
     let cotP : Vec (c*h*w) := cnxCotP γlsB dyOut
-    let cotE : Vec (cExp*h*w) := cnxCotE γlsB Wpr bpr g e dyOut
-    let cotN' : Vec (c*h*w) := cnxCotN γlsB Wex bex Wpr bpr nl g e dyOut
+    let cotE : Vec (cExp*h*w) := cnxCotE gf γlsB Wpr bpr g e dyOut
+    let cotN' : Vec (c*h*w) := cnxCotN gf γlsB Wex bex Wpr bpr nl g e dyOut
     let cotD : Vec (c*h*w) := chanLNTensor3Back c h w ε ng d cotN'
     -- depthwise 7×7 W/b  (cot = cotD)
     (∀ idx : Fin (c*7*7),
@@ -134,14 +134,14 @@ def cnxBlockChTied {c cExp h w : Nat}
           = lg cc - lr * ∑ j : Fin (c*h*w),
               pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) p) lg cc j * dyOut j)
 
-theorem cnx_block_ch_tied {c cExp h w : Nat}
+theorem cnx_block_ch_tied {gf : GeluForm} {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c)
     (xin d nl p : Vec (c*h*w)) (e g : Vec (cExp*h*w))
     (dyOut : Vec (c*h*w)) (lr : ℝ) :
-    cnxBlockChTied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
+    cnxBlockChTied gf xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
       xin d nl p e g dyOut lr := by
   unfold cnxBlockChTied
   intro γlsB cotP cotE cotN' cotD
@@ -302,19 +302,19 @@ noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) : Vec (c*h*w) :=
   chanLNTensor3 c h w ε psng psnbt (flatConvStride4 Wst bst x)
 
-private noncomputable def cnxBlockBodyChO {c cExp h w : Nat} (ε : ℝ)
+private noncomputable def cnxBlockBodyChO (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) : Vec (c*h*w) :=
   layerScale (fun k => lg (chanIdx c h w k))
-    (flatConv (h := h) (w := w) Wpr bpr (gelu (cExp*h*w) (flatConv (h := h) (w := w) Wex bex
+    (flatConv (h := h) (w := w) Wpr bpr (gf.map (cExp*h*w) (flatConv (h := h) (w := w) Wex bex
       (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)))))
 
-noncomputable def cnxBlockFwdChO {c cExp h w : Nat} (ε : ℝ)
+noncomputable def cnxBlockFwdChO (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) : Vec (c*h*w) :=
-  fun i => cnxBlockBodyChO ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin i + xin i
+  fun i => cnxBlockBodyChO gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin i + xin i
 
 noncomputable def cnxDownFwdChO {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
@@ -325,7 +325,7 @@ noncomputable def cnxDownFwdChO {ci co h w : Nat} (ε : ℝ)
 
 /-- ConvNeXt block input cotangent: `depthwise-back(cotD) + dyOut` (the identity-skip fan-in),
     with `cotD` through the channel-LN input-VJP. -/
-noncomputable def cnxBlockCotInChAt {c cExp h w : Nat} (ε : ℝ)
+noncomputable def cnxBlockCotInChAt (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -333,8 +333,8 @@ noncomputable def cnxBlockCotInChAt {c cExp h w : Nat} (ε : ℝ)
   let d := depthwiseFlat (h := h) (w := w) Wdw bdw xin
   let nl := chanLNTensor3 c h w ε ng nbt d
   let e := flatConv (h := h) (w := w) Wex bex nl
-  let g := gelu (cExp*h*w) e
-  let cotD := chanLNTensor3Back c h w ε ng d (cnxCotN γlsB Wex bex Wpr bpr nl g e dyOut)
+  let g := gf.map (cExp*h*w) e
+  let cotD := chanLNTensor3Back c h w ε ng d (cnxCotN gf γlsB Wex bex Wpr bpr nl g e dyOut)
   fun i => (depthwiseFlatHasVJP (h := h) (w := w) Wdw bdw).backward xin cotD i + dyOut i
 
 /-- Downsample input cotangent (at `ci·(2h)·(2w)`): the channel-LN input-VJP of the
@@ -364,7 +364,7 @@ Note: only `cnxStemChTiedAt` is `@[irreducible]`: without it the capstone's
 `refine ⟨cnx_stem_ch_tiedAt …, ?_, …⟩` times out in `whnf`, and moving it to its own goal does not
 help. Every other definition in this section and the two above is a plain `def`. -/
 
-private def cnxBlockChTiedAt {c cExp h w : Nat}
+private def cnxBlockChTiedAt (gf : GeluForm) {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
@@ -372,17 +372,17 @@ private def cnxBlockChTiedAt {c cExp h w : Nat}
   let d := depthwiseFlat (h := h) (w := w) Wdw bdw xin
   let nl := chanLNTensor3 c h w ε ng nbt d
   let e := flatConv (h := h) (w := w) Wex bex nl
-  let g := gelu (cExp*h*w) e
+  let g := gf.map (cExp*h*w) e
   let p := flatConv (h := h) (w := w) Wpr bpr g
-  cnxBlockChTied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
+  cnxBlockChTied gf xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
     xin d nl p e g dyOut lr
 
-private theorem cnx_block_ch_tiedAt {c cExp h w : Nat}
+private theorem cnx_block_ch_tiedAt {gf : GeluForm} {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) (dyOut : Vec (c*h*w)) (lr : ℝ) :
-    cnxBlockChTiedAt xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut lr := by
+    cnxBlockChTiedAt gf xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut lr := by
   unfold cnxBlockChTiedAt
   intro d nl e g p
   exact cnx_block_ch_tied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
@@ -503,21 +503,21 @@ namespace CnxTieBlk
 variable {c cExp : Nat} (p : CnxTieBlk c cExp)
 
 /-- The block's forward (`cnxBlockFwdChO`). -/
-noncomputable abbrev fwdO {h w : Nat} (ε : ℝ) : Vec (c*h*w) → Vec (c*h*w) :=
-  cnxBlockFwdChO ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
+noncomputable abbrev fwdO (gf : GeluForm) {h w : Nat} (ε : ℝ) : Vec (c*h*w) → Vec (c*h*w) :=
+  cnxBlockFwdChO gf ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
 
 /-- The block's input cotangent (`cnxBlockCotInChAt`). -/
-noncomputable abbrev cotIn {h w : Nat} (ε : ℝ) : Vec (c*h*w) → Vec (c*h*w) → Vec (c*h*w) :=
-  cnxBlockCotInChAt ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
+noncomputable abbrev cotIn (gf : GeluForm) {h w : Nat} (ε : ℝ) : Vec (c*h*w) → Vec (c*h*w) → Vec (c*h*w) :=
+  cnxBlockCotInChAt gf ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
 
 /-- The block's per-example tie (`cnxBlockChTiedAt`). -/
-abbrev TiedAt {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+abbrev TiedAt (gf : GeluForm) {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (xin dyOut : Vec (c*h*w)) (lr : ℝ) : Prop :=
-  cnxBlockChTiedAt xN wN bN gN epsStr lrStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
+  cnxBlockChTiedAt gf xN wN bN gN epsStr lrStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
     xin dyOut lr
 
-theorem tied_at {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
-    (xin dyOut : Vec (c*h*w)) (lr : ℝ) : p.TiedAt xN wN bN gN epsStr lrStr cotN ε xin dyOut lr :=
+theorem tied_at {gf : GeluForm} {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+    (xin dyOut : Vec (c*h*w)) (lr : ℝ) : p.TiedAt gf xN wN bN gN epsStr lrStr cotN ε xin dyOut lr :=
   cnx_block_ch_tiedAt xN wN bN gN epsStr lrStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut lr
 
 end CnxTieBlk
@@ -551,12 +551,12 @@ The records above are the render's shape: one shared `ε`, the eighteen blocks b
 `ConvNeXtFullT` states ConvNeXt-T with an `ε` per record and `Fin`-indexed stages. These say the
 two describe one function: block by block (`rfl`), and whole-net at `toCh ε`. -/
 
-private theorem cnxBlockFwdChO_eq_cnxBlockChW {c cExp h w : Nat} (ε : ℝ)
+private theorem cnxBlockFwdChO_eq_cnxBlockChW {gf : GeluForm} {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) :
-    cnxBlockFwdChO (h := h) (w := w) ε Wdw bdw ng nbt Wex bex Wpr bpr lg
-      = cnxBlockChW (h := h) (w := w) ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ := rfl
+    cnxBlockFwdChO gf (h := h) (w := w) ε Wdw bdw ng nbt Wex bex Wpr bpr lg
+      = cnxBlockChW gf (h := h) (w := w) ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ := rfl
 
 private theorem cnxDownFwdChO_eq_cnxDownChW {ci co h w : Nat} (ε : ℝ) (dng dnbt : Vec ci)
     (Wd : Kernel4 co ci 2 2) (bd : Vec co) :
@@ -595,15 +595,15 @@ noncomputable def toCh {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ) : CnxTWeight
 /-- **The capstone's forward IS `convNextForwardTCh`.** The chain `cnx_net_tied_certified` threads
     (stem, eighteen blocks, three downsamples, GAP → LN → dense) is the FullT forward at
     `w.toCh ε`, so `convNextForwardTChHasVJP` is a VJP of the function the ties are stated on. -/
-theorem forward_eq_convNextForwardTCh {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ)
+theorem forward_eq_convNextForwardTCh {gf : GeluForm} {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ)
     (x : Vec (3 * 224 * 224)) :
     mnistLinear w.Wfc w.bfc (rowLNVecFlat 1 768 ε w.hG w.hT (globalAvgPoolFlat 768 7 7
-      (w.b18.fwdO ε (w.b17.fwdO ε (w.b16.fwdO ε (w.d2.fwdO (h := 7) (w := 7) ε (w.b15.fwdO ε
-      (w.b14.fwdO ε (w.b13.fwdO ε (w.b12.fwdO ε (w.b11.fwdO ε (w.b10.fwdO ε (w.b9.fwdO ε
-      (w.b8.fwdO ε (w.b7.fwdO ε (w.d1.fwdO (h := 14) (w := 14) ε (w.b6.fwdO ε (w.b5.fwdO ε
-      (w.b4.fwdO ε (w.d0.fwdO (h := 28) (w := 28) ε (w.b3.fwdO ε (w.b2.fwdO ε (w.b1.fwdO ε
+      (w.b18.fwdO gf ε (w.b17.fwdO gf ε (w.b16.fwdO gf ε (w.d2.fwdO (h := 7) (w := 7) ε (w.b15.fwdO gf ε
+      (w.b14.fwdO gf ε (w.b13.fwdO gf ε (w.b12.fwdO gf ε (w.b11.fwdO gf ε (w.b10.fwdO gf ε (w.b9.fwdO gf ε
+      (w.b8.fwdO gf ε (w.b7.fwdO gf ε (w.d1.fwdO (h := 14) (w := 14) ε (w.b6.fwdO gf ε (w.b5.fwdO gf ε
+      (w.b4.fwdO gf ε (w.d0.fwdO (h := 28) (w := 28) ε (w.b3.fwdO gf ε (w.b2.fwdO gf ε (w.b1.fwdO gf ε
       (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ x))))))))))))))))))))))))
-      = convNextForwardTCh (w.toCh ε) x := by
+      = convNextForwardTCh gf (w.toCh ε) x := by
   simp only [convNextForwardTCh, toCh, convNextStageChK_three, convNextStageChK_nine,
     CnxTieBlk.fwdO, CnxTieDown.fwdO, cnxBlockFwdChO_eq_cnxBlockChW, cnxDownFwdChO_eq_cnxDownChW,
     CnxTieBlk.toCh, CnxTieDown.toCh]
@@ -633,33 +633,33 @@ activations, no symbolic cotangent. -/
     hand-written text). The statement is per example, at one image `x` and a hard label `label`;
     the artifact's batch of 32 and its mean lie outside it (the batched form is
     `CnxTieGB.cnx_net_tiedGB`). -/
-theorem cnx_net_tied_certified
+theorem cnx_net_tied_certified {gf : GeluForm}
     (xN wN bN gN epsStr lrStr cotN dN nlogN ohN : String) (ε : ℝ)
     (w : CnxTieWeights 10)
     (x : Vec (3*224*224)) (label : Fin 10) (lr : ℝ) :
     -- forward block inputs (the prefixes of the committed render's forward)
     let ib1   : Vec (96*56*56)         := cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ x
-    let ib2   : Vec (96*56*56)         := w.b1.fwdO ε ib1
-    let ib3   : Vec (96*56*56)         := w.b2.fwdO ε ib2
-    let ibD0  : Vec (96*56*56)         := w.b3.fwdO ε ib3
+    let ib2   : Vec (96*56*56)         := w.b1.fwdO gf ε ib1
+    let ib3   : Vec (96*56*56)         := w.b2.fwdO gf ε ib2
+    let ibD0  : Vec (96*56*56)         := w.b3.fwdO gf ε ib3
     let ib4   : Vec (192*28*28)        := w.d0.fwdO (h := 28) (w := 28) ε ibD0
-    let ib5   : Vec (192*28*28)        := w.b4.fwdO ε ib4
-    let ib6   : Vec (192*28*28)        := w.b5.fwdO ε ib5
-    let ibD1  : Vec (192*28*28)        := w.b6.fwdO ε ib6
+    let ib5   : Vec (192*28*28)        := w.b4.fwdO gf ε ib4
+    let ib6   : Vec (192*28*28)        := w.b5.fwdO gf ε ib5
+    let ibD1  : Vec (192*28*28)        := w.b6.fwdO gf ε ib6
     let ib7   : Vec (384*14*14)        := w.d1.fwdO (h := 14) (w := 14) ε ibD1
-    let ib8   : Vec (384*14*14)        := w.b7.fwdO ε ib7
-    let ib9   : Vec (384*14*14)        := w.b8.fwdO ε ib8
-    let ib10  : Vec (384*14*14)        := w.b9.fwdO ε ib9
-    let ib11  : Vec (384*14*14)        := w.b10.fwdO ε ib10
-    let ib12  : Vec (384*14*14)        := w.b11.fwdO ε ib11
-    let ib13  : Vec (384*14*14)        := w.b12.fwdO ε ib12
-    let ib14  : Vec (384*14*14)        := w.b13.fwdO ε ib13
-    let ib15  : Vec (384*14*14)        := w.b14.fwdO ε ib14
-    let ibD2  : Vec (384*14*14)        := w.b15.fwdO ε ib15
+    let ib8   : Vec (384*14*14)        := w.b7.fwdO gf ε ib7
+    let ib9   : Vec (384*14*14)        := w.b8.fwdO gf ε ib8
+    let ib10  : Vec (384*14*14)        := w.b9.fwdO gf ε ib9
+    let ib11  : Vec (384*14*14)        := w.b10.fwdO gf ε ib10
+    let ib12  : Vec (384*14*14)        := w.b11.fwdO gf ε ib11
+    let ib13  : Vec (384*14*14)        := w.b12.fwdO gf ε ib12
+    let ib14  : Vec (384*14*14)        := w.b13.fwdO gf ε ib13
+    let ib15  : Vec (384*14*14)        := w.b14.fwdO gf ε ib14
+    let ibD2  : Vec (384*14*14)        := w.b15.fwdO gf ε ib15
     let ib16  : Vec (768*7*7)          := w.d2.fwdO (h := 7) (w := 7) ε ibD2
-    let ib17  : Vec (768*7*7)          := w.b16.fwdO ε ib16
-    let ib18  : Vec (768*7*7)          := w.b17.fwdO ε ib17
-    let xhead : Vec (768*7*7)          := w.b18.fwdO ε ib18
+    let ib17  : Vec (768*7*7)          := w.b16.fwdO gf ε ib16
+    let ib18  : Vec (768*7*7)          := w.b17.fwdO gf ε ib17
+    let xhead : Vec (768*7*7)          := w.b18.fwdO gf ε ib18
     -- head forward + the loss cotangent
     let gap : Vec (1*768) := globalAvgPoolFlat 768 7 7 xhead
     let hn  : Vec 768     := rowLNVecFlat 1 768 ε w.hG w.hT gap
@@ -667,50 +667,50 @@ theorem cnx_net_tied_certified
     -- backward cotangents (composed from the loss; residual fan-in at each skip, LN-back at each
     -- downsample and at the stem)
     let dyO18  : Vec (768*7*7)         := cnxHeadDyXheadCh (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc xhead g
-    let dyO17  : Vec (768*7*7)         := w.b18.cotIn ε ib18 dyO18
-    let dyO16  : Vec (768*7*7)         := w.b17.cotIn ε ib17 dyO17
-    let dyD2   : Vec (768*7*7)         := w.b16.cotIn ε ib16 dyO16
+    let dyO17  : Vec (768*7*7)         := w.b18.cotIn gf ε ib18 dyO18
+    let dyO16  : Vec (768*7*7)         := w.b17.cotIn gf ε ib17 dyO17
+    let dyD2   : Vec (768*7*7)         := w.b16.cotIn gf ε ib16 dyO16
     let dyO15  : Vec (384*14*14)       := w.d2.cotIn (h := 7) (w := 7) ε ibD2 dyD2
-    let dyO14  : Vec (384*14*14)       := w.b15.cotIn ε ib15 dyO15
-    let dyO13  : Vec (384*14*14)       := w.b14.cotIn ε ib14 dyO14
-    let dyO12  : Vec (384*14*14)       := w.b13.cotIn ε ib13 dyO13
-    let dyO11  : Vec (384*14*14)       := w.b12.cotIn ε ib12 dyO12
-    let dyO10  : Vec (384*14*14)       := w.b11.cotIn ε ib11 dyO11
-    let dyO9   : Vec (384*14*14)       := w.b10.cotIn ε ib10 dyO10
-    let dyO8   : Vec (384*14*14)       := w.b9.cotIn ε ib9 dyO9
-    let dyO7   : Vec (384*14*14)       := w.b8.cotIn ε ib8 dyO8
-    let dyD1   : Vec (384*14*14)       := w.b7.cotIn ε ib7 dyO7
+    let dyO14  : Vec (384*14*14)       := w.b15.cotIn gf ε ib15 dyO15
+    let dyO13  : Vec (384*14*14)       := w.b14.cotIn gf ε ib14 dyO14
+    let dyO12  : Vec (384*14*14)       := w.b13.cotIn gf ε ib13 dyO13
+    let dyO11  : Vec (384*14*14)       := w.b12.cotIn gf ε ib12 dyO12
+    let dyO10  : Vec (384*14*14)       := w.b11.cotIn gf ε ib11 dyO11
+    let dyO9   : Vec (384*14*14)       := w.b10.cotIn gf ε ib10 dyO10
+    let dyO8   : Vec (384*14*14)       := w.b9.cotIn gf ε ib9 dyO9
+    let dyO7   : Vec (384*14*14)       := w.b8.cotIn gf ε ib8 dyO8
+    let dyD1   : Vec (384*14*14)       := w.b7.cotIn gf ε ib7 dyO7
     let dyO6   : Vec (192*28*28)       := w.d1.cotIn (h := 14) (w := 14) ε ibD1 dyD1
-    let dyO5   : Vec (192*28*28)       := w.b6.cotIn ε ib6 dyO6
-    let dyO4   : Vec (192*28*28)       := w.b5.cotIn ε ib5 dyO5
-    let dyD0   : Vec (192*28*28)       := w.b4.cotIn ε ib4 dyO4
+    let dyO5   : Vec (192*28*28)       := w.b6.cotIn gf ε ib6 dyO6
+    let dyO4   : Vec (192*28*28)       := w.b5.cotIn gf ε ib5 dyO5
+    let dyD0   : Vec (192*28*28)       := w.b4.cotIn gf ε ib4 dyO4
     let dyO3   : Vec (96*56*56)        := w.d0.cotIn (h := 28) (w := 28) ε ibD0 dyD0
-    let dyO2   : Vec (96*56*56)        := w.b3.cotIn ε ib3 dyO3
-    let dyO1   : Vec (96*56*56)        := w.b2.cotIn ε ib2 dyO2
-    let dyStem : Vec (96*56*56)        := w.b1.cotIn ε ib1 dyO1
+    let dyO2   : Vec (96*56*56)        := w.b3.cotIn gf ε ib3 dyO3
+    let dyO1   : Vec (96*56*56)        := w.b2.cotIn gf ε ib2 dyO2
+    let dyStem : Vec (96*56*56)        := w.b1.cotIn gf ε ib1 dyO1
     -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
     cnxStemChTiedAt xN wN bN gN epsStr lrStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem lr
-  ∧ w.b1.TiedAt xN wN bN gN epsStr lrStr cotN ε ib1 dyO1 lr
-  ∧ w.b2.TiedAt xN wN bN gN epsStr lrStr cotN ε ib2 dyO2 lr
-  ∧ w.b3.TiedAt xN wN bN gN epsStr lrStr cotN ε ib3 dyO3 lr
+  ∧ w.b1.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib1 dyO1 lr
+  ∧ w.b2.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib2 dyO2 lr
+  ∧ w.b3.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib3 dyO3 lr
   ∧ w.d0.TiedAt xN wN bN gN epsStr lrStr cotN ε ibD0 dyD0 lr
-  ∧ w.b4.TiedAt xN wN bN gN epsStr lrStr cotN ε ib4 dyO4 lr
-  ∧ w.b5.TiedAt xN wN bN gN epsStr lrStr cotN ε ib5 dyO5 lr
-  ∧ w.b6.TiedAt xN wN bN gN epsStr lrStr cotN ε ib6 dyO6 lr
+  ∧ w.b4.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib4 dyO4 lr
+  ∧ w.b5.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib5 dyO5 lr
+  ∧ w.b6.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib6 dyO6 lr
   ∧ w.d1.TiedAt xN wN bN gN epsStr lrStr cotN ε ibD1 dyD1 lr
-  ∧ w.b7.TiedAt xN wN bN gN epsStr lrStr cotN ε ib7 dyO7 lr
-  ∧ w.b8.TiedAt xN wN bN gN epsStr lrStr cotN ε ib8 dyO8 lr
-  ∧ w.b9.TiedAt xN wN bN gN epsStr lrStr cotN ε ib9 dyO9 lr
-  ∧ w.b10.TiedAt xN wN bN gN epsStr lrStr cotN ε ib10 dyO10 lr
-  ∧ w.b11.TiedAt xN wN bN gN epsStr lrStr cotN ε ib11 dyO11 lr
-  ∧ w.b12.TiedAt xN wN bN gN epsStr lrStr cotN ε ib12 dyO12 lr
-  ∧ w.b13.TiedAt xN wN bN gN epsStr lrStr cotN ε ib13 dyO13 lr
-  ∧ w.b14.TiedAt xN wN bN gN epsStr lrStr cotN ε ib14 dyO14 lr
-  ∧ w.b15.TiedAt xN wN bN gN epsStr lrStr cotN ε ib15 dyO15 lr
+  ∧ w.b7.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib7 dyO7 lr
+  ∧ w.b8.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib8 dyO8 lr
+  ∧ w.b9.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib9 dyO9 lr
+  ∧ w.b10.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib10 dyO10 lr
+  ∧ w.b11.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib11 dyO11 lr
+  ∧ w.b12.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib12 dyO12 lr
+  ∧ w.b13.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib13 dyO13 lr
+  ∧ w.b14.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib14 dyO14 lr
+  ∧ w.b15.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib15 dyO15 lr
   ∧ w.d2.TiedAt xN wN bN gN epsStr lrStr cotN ε ibD2 dyD2 lr
-  ∧ w.b16.TiedAt xN wN bN gN epsStr lrStr cotN ε ib16 dyO16 lr
-  ∧ w.b17.TiedAt xN wN bN gN epsStr lrStr cotN ε ib17 dyO17 lr
-  ∧ w.b18.TiedAt xN wN bN gN epsStr lrStr cotN ε ib18 dyO18 lr
+  ∧ w.b16.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib16 dyO16 lr
+  ∧ w.b17.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib17 dyO17 lr
+  ∧ w.b18.TiedAt gf xN wN bN gN epsStr lrStr cotN ε ib18 dyO18 lr
   ∧ cnxHeadChTiedAt gN xN bN dN epsStr lrStr cotN cotN ε w.hG w.hT w.Wfc w.bfc xhead g lr
   ∧ (∀ i : Fin 768, ∀ j : Fin 10,
         den (SHlo.weightSgd xN wN lrStr hn w.Wfc lr

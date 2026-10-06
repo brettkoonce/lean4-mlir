@@ -71,18 +71,18 @@ theorem vitFinalLNBack_eq_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : V
     `(vitBodyKVFlatHasVJP k ps).backward`. Induction on `k`: the base is `identityHasVJP`'s
     `fun _ dy => dy`, and the step is one rewrite of the inductive hypothesis at the shifted saved
     activation (`blockVFlat (ps 0) v`, block `0`'s OUTPUT) and one of the block tie at `v`. -/
-theorem vitTowerBackK_eq_vjp (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
+theorem vitTowerBackK_eq_vjp {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
       (v : Vec (Np1 * (heads * d_head))),
-      vitTowerBackK Np1 heads d_head mlpDim ε k ps v
-        = (vitBodyKVFlatHasVJP Np1 heads d_head mlpDim ε hε k ps).backward v
+      vitTowerBackK gf Np1 heads d_head mlpDim ε k ps v
+        = (vitBodyKVFlatHasVJP gf Np1 heads d_head mlpDim ε hε k ps).backward v
   | 0, _, _ => rfl
   | k + 1, ps, v => by
-      show vitBlockBackVAt Np1 heads d_head mlpDim ε (ps 0) v ∘
-        vitTowerBackK Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
-          (blockVFlat Np1 heads d_head mlpDim ε (ps 0) v) = _
+      show vitBlockBackVAt gf Np1 heads d_head mlpDim ε (ps 0) v ∘
+        vitTowerBackK gf Np1 heads d_head mlpDim ε k (fun i => ps i.succ)
+          (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0) v) = _
       rw [vitTowerBackK_eq_vjp Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ)
-            (blockVFlat Np1 heads d_head mlpDim ε (ps 0) v),
+            (blockVFlat gf Np1 heads d_head mlpDim ε (ps 0) v),
           vitBlockBackVAt_eq_vjp Np1 heads d_head mlpDim ε hε (ps 0) v]
       rfl
 
@@ -92,7 +92,7 @@ theorem vitTowerBackK_eq_vjp (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0
 
 /-- **The whole-net witness the apex is stated at** — the committed `vitForwardKVHasVJP`, whose
     `.backward` is the four-factor `vjpComp` chain by `rfl`. -/
-noncomputable def vitApexVJP
+noncomputable def vitApexVJP (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -101,13 +101,13 @@ noncomputable def vitApexVJP
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    HasVJP (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+    HasVJP (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) :=
-  vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+  vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls
 
 /-- The four-factor composition the apex is stated at is the committed `vitForwardKV`, by `rfl`. -/
-theorem vitForwardKV_eq_chain
+theorem vitForwardKV_eq_chain {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -115,18 +115,18 @@ theorem vitForwardKV_eq_chain
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+    vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls
       = classifierFlat N (heads * d_head) nClasses Wcls bcls
           ∘ (fun v : Vec ((N + 1) * (heads * d_head)) =>
               Mat.flatten (fun n => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) n)))
-          ∘ vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps
+          ∘ vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps
           ∘ patchEmbedFlat ic H W patchSize N (heads * d_head)
               W_conv b_conv cls_token pos_embed := rfl
 
 /-- **`vitInputGradK` IS the apex witness's backward.** Four rewrites, one per factor: the
     tower fold, the final-LN tie, the head tie, and the patch-embed endpoint (`rfl`). -/
-theorem vitInputGradK_eq_vitApexVJP
+theorem vitInputGradK_eq_vitApexVJP {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -136,16 +136,16 @@ theorem vitInputGradK_eq_vitApexVJP
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    vitInputGradK ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradK gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitApexVJP ic H W patchSize N mlpDim heads d_head nClasses k
+      = (vitApexVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x := by
   funext dy
   show patchEmbedInputGradFormula ic H W patchSize N (heads * d_head) W_conv
-      (vitTowerBackK (N + 1) heads d_head mlpDim ε k ps
+      (vitTowerBackK gf (N + 1) heads d_head mlpDim ε k ps
         (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
         (rowLNVecFlatBack (N + 1) (heads * d_head) ε γF
-          (vitSavedBody ic H W patchSize N mlpDim heads d_head k
+          (vitSavedBody gf ic H W patchSize N mlpDim heads d_head k
             W_conv b_conv cls_token pos_embed ε ps x)
           (clsScatter N (heads * d_head)
             (Proofs.dense (Mat.transpose Wcls) (0 : Vec (heads * d_head)) dy)))) = _
@@ -157,7 +157,7 @@ theorem vitInputGradK_eq_vitApexVJP
 /-- **The apex.** `vitInputGradK` — the whole-net ViT-Tiny input gradient, every slot pinned
     to the certified per-op backward at its own saved activation — IS
     `(vitForwardKVHasVJP …).backward x`, the committed depth-12 witness — `vitApexVJP` by name. -/
-theorem vitInputGradK_eq_vitForwardKV_vjp
+theorem vitInputGradK_eq_vitForwardKV_vjp {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -167,9 +167,9 @@ theorem vitInputGradK_eq_vitForwardKV_vjp
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    vitInputGradK ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradK gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+      = (vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x :=
   vitInputGradK_eq_vitApexVJP (βF := βF) (bcls := bcls) ic H W patchSize N mlpDim heads
     d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
@@ -177,7 +177,7 @@ theorem vitInputGradK_eq_vitForwardKV_vjp
 /-- **The apex, read as the Jacobian.** `vitInputGradK` is the `pdiv`-contracted Jacobian
     transpose of the committed `vitForwardKV`, at EVERY image and EVERY cotangent — the ViT peer
     of `efficientnetInputGradBFull_correct`. Only `0 < ε`. -/
-theorem vitInputGradK_correct
+theorem vitInputGradK_correct {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -187,10 +187,10 @@ theorem vitInputGradK_correct
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    vitInputGradK ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradK gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x dy i
       = ∑ j : Fin nClasses,
-          pdiv (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+          pdiv (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j := by
   rw [vitInputGradK_eq_vitForwardKV_vjp (βF := βF) (bcls := bcls) ic H W patchSize N mlpDim
         heads d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x]
@@ -212,14 +212,14 @@ theorem vitInputGradK_correct
     forward, at every image. `vitTinyHasVJP_correct` reads it as the Jacobian. The peer of
     `convnextInputGrad_eq_convNextForwardTCh_vjp` and
     `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`. -/
-theorem vitTinyInputGrad_eq_vitTiny_vjp {nCls : Nat}
+theorem vitTinyInputGrad_eq_vitTiny_vjp {gf : GeluForm} {nCls : Nat}
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
     (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
     (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls) (x : Vec (3 * 224 * 224)) :
-    vitInputGradK 3 224 224 16 196 768 3 64 nCls 12
+    vitInputGradK gf 3 224 224 16 196 768 3 64 nCls 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 nCls 12
+      = (vitForwardKVHasVJP gf 3 224 224 16 196 768 3 64 nCls 12
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x :=
   vitInputGradK_eq_vitForwardKV_vjp (βF := βF) (bcls := bcls) 3 224 224 16 196 768 3 64 nCls 12
     W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x
@@ -231,16 +231,16 @@ theorem vitTinyInputGrad_eq_vitTiny_vjp {nCls : Nat}
     image, every cotangent and every class count `nCls`. The only hypothesis is `0 < ε`: softmax,
     GELU and vector LayerNorm are smooth, so no smoothness witness is needed, and the weights are
     free. The peer of `efficientnetInputGradBFull_correct`. -/
-theorem vitTinyHasVJP_correct {nCls : Nat}
+theorem vitTinyHasVJP_correct {gf : GeluForm} {nCls : Nat}
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
     (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
     (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls)
     (x : Vec (3 * 224 * 224)) (dy : Vec nCls) (i : Fin (3 * 224 * 224)) :
-    vitInputGradK 3 224 224 16 196 768 3 64 nCls 12
+    vitInputGradK gf 3 224 224 16 196 768 3 64 nCls 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x dy i
       = ∑ j : Fin nCls,
-          pdiv (vitForwardKV 3 224 224 16 196 768 3 64 nCls 12
+          pdiv (vitForwardKV gf 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
   vitInputGradK_correct 3 224 224 16 196 768 3 64 nCls 12
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x dy i

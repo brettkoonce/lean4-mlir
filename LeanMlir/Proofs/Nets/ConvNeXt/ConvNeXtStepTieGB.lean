@@ -73,32 +73,32 @@ arguments; `batchMapAux` lifts a function of (one saved value, one input), so th
 activations from the block input, exactly as `cnxBlockCotInChAt` does. -/
 
 /-- Cotangent at the expand output (pre-GELU), from the block input and output cotangent. -/
-noncomputable def blkCotE {c cExp h w : Nat} (ε : ℝ)
+noncomputable def blkCotE (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (cExp*h*w) :=
   let γlsB : Vec (c*h*w) := fun k => lg (chanIdx c h w k)
   let nl := chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)
   let e := flatConv (h := h) (w := w) Wex bex nl
-  cnxCotE γlsB Wpr bpr (gelu (cExp*h*w) e) e dyOut
+  cnxCotE gf γlsB Wpr bpr (gf.map (cExp*h*w) e) e dyOut
 
 /-- Cotangent at the channel-LN output, from the block input and output cotangent. -/
-noncomputable def blkCotN {c cExp h w : Nat} (ε : ℝ)
+noncomputable def blkCotN (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
   let γlsB : Vec (c*h*w) := fun k => lg (chanIdx c h w k)
   let nl := chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)
   let e := flatConv (h := h) (w := w) Wex bex nl
-  cnxCotN γlsB Wex bex Wpr bpr nl (gelu (cExp*h*w) e) e dyOut
+  cnxCotN gf γlsB Wex bex Wpr bpr nl (gf.map (cExp*h*w) e) e dyOut
 
 /-- Cotangent at the depthwise output (the channel-LN input-VJP of `blkCotN`). -/
-noncomputable def blkCotD {c cExp h w : Nat} (ε : ℝ)
+noncomputable def blkCotD (gf : GeluForm) {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
   chanLNTensor3Back c h w ε ng (depthwiseFlat (h := h) (w := w) Wdw bdw xin)
-    (blkCotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut)
+    (blkCotN gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut)
 
 /-- Downsample: cotangent at the LN output, i.e. the strided conv's input-VJP. -/
 noncomputable def dnCotN {ci co h w : Nat} (ε : ℝ)
@@ -134,7 +134,7 @@ noncomputable def cnxHeadDyXheadChN {h w nC : Nat} (ε : ℝ)
     channel-LN γ/β at `Vec c`, expand/project 1×1 `W`+`b`, per-channel layer-scale γ) denote the
     certified `Σ_n` gradient at the real batched block forward and the chain cotangents driven by
     `dyOut`. -/
-def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
+def cnxBlockChTiedGB (gf : GeluForm) (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
@@ -143,16 +143,16 @@ def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε 
   let dB  : Vec (N * (c*h*w))    := batchMap N (depthwiseFlat (h := h) (w := w) Wdw bdw) xin
   let nlB : Vec (N * (c*h*w))    := batchMap N (chanLNTensor3 c h w ε ng nbt) dB
   let gB  : Vec (N * (cExp*h*w)) :=
-    batchMap N (fun nl => gelu (cExp*h*w) (flatConv (h := h) (w := w) Wex bex nl)) nlB
+    batchMap N (fun nl => gf.map (cExp*h*w) (flatConv (h := h) (w := w) Wex bex nl)) nlB
   let pB  : Vec (N * (c*h*w))    := batchMap N (flatConv (h := h) (w := w) Wpr bpr) gB
   -- backward chain cotangents — `batchMapAux` of the per-example chain
   let cotPB : Vec (N * (c*h*w))    := batchMap N (cnxCotP γlsB) dyOut
   let cotEB : Vec (N * (cExp*h*w)) :=
-    batchMapAux N (blkCotE ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
+    batchMapAux N (blkCotE gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
   let cotNB : Vec (N * (c*h*w))    :=
-    batchMapAux N (blkCotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
+    batchMapAux N (blkCotN gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
   let cotDB : Vec (N * (c*h*w))    :=
-    batchMapAux N (blkCotD ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
+    batchMapAux N (blkCotD gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
   -- depthwise 7×7 W/b  (cot = cotDB, input = xin)
   GradNodeB.DepthwiseWTiedB N h w xN cotN bdw xin Wdw cotDB
   ∧ GradNodeB.DepthwiseBTiedB N h w cotN Wdw xin bdw cotDB
@@ -174,11 +174,11 @@ def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε 
                     layerScale (fun k => γ' (chanIdx c h w k)) (batchSlice N (c*h*w) pB n))
                  lg cc j * batchSlice N (c*h*w) dyOut n j)
 
-theorem cnx_block_ch_tiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
+theorem cnx_block_ch_tiedGB {gf : GeluForm} (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (N * (c*h*w))) :
-    cnxBlockChTiedGB N xN epsStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut := by
+    cnxBlockChTiedGB gf N xN epsStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut := by
   unfold cnxBlockChTiedGB
   intro γlsB dB nlB gB pB cotPB cotEB cotNB cotDB
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -337,12 +337,12 @@ hypothesis is the LayerNorm's `0 < ε`. -/
 /-- **A ConvNeXt block's input cotangent is its certified VJP's backward.** The chain's
     per-op pieces (`depthwiseFlatHasVJP`, the 1×1 `conv2dHasVJP3`s, the GELU mask, layer scale,
     `chanLNTensor3Back`) are rewritten into `cnxBlockChBack_eq_vjp`'s form, which ties the block. -/
-theorem cnxBlockCotInChAt_eq_vjp {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
+theorem cnxBlockCotInChAt_eq_vjp {gf : GeluForm} {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) :
-    cnxBlockCotInChAt ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut
-      = (cnxBlockChWHasVJP (h := h) (w := w)
+    cnxBlockCotInChAt gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut
+      = (cnxBlockChWHasVJP gf (h := h) (w := w)
           ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε).backward xin dyOut := by
   rw [← cnxBlockChBack_eq_vjp (by norm_num) (by norm_num)
     (⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ : CnxBlockParamsCh c cExp h w 7 7) hε xin]
@@ -351,7 +351,7 @@ theorem cnxBlockCotInChAt_eq_vjp {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
     convFlatBack_eq_vjp_backward (by norm_num) (by norm_num) Wex bex
       (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)),
     convFlatBack_eq_vjp_backward (by norm_num) (by norm_num) Wpr bpr
-      (gelu (cExp * h * w) (flatConv (h := h) (w := w) Wex bex
+      (gf.map (cExp * h * w) (flatConv (h := h) (w := w) Wex bex
         (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin))))]
   rfl
 
@@ -388,14 +388,14 @@ theorem cnxHeadDyXheadChN_eq_vjp {h w nC : Nat} (ε : ℝ) (hε : 0 < ε) (hng h
   rw [rowLNVecFlatHasVJP_backward_eq_fun (β := hnbt) ε hε hng]
 
 /-- **Batched: a block's `batchMapAux` cotangent is the lifted block VJP's backward.** -/
-theorem cnxBlockCotInB_eq_vjp (N : Nat) {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
+theorem cnxBlockCotInB_eq_vjp {gf : GeluForm} (N : Nat) {c cExp h w : Nat} (ε : ℝ) (hε : 0 < ε)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (N * (c*h*w))) :
-    batchMapAux N (cnxBlockCotInChAt ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin
-      = (batchMapHasVJPAt (cnxBlockChW (h := h) (w := w)
+    batchMapAux N (cnxBlockCotInChAt gf ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin
+      = (batchMapHasVJPAt (cnxBlockChW gf (h := h) (w := w)
             ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩) xin
-          (fun _ => (cnxBlockChWHasVJP ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε).toHasVJPAt _)
+          (fun _ => (cnxBlockChWHasVJP gf ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε).toHasVJPAt _)
           (fun _ => (cnxBlockChW_differentiable ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ hε)
             _)).backward :=
   batchMapAux_eq_batchMapHasVJPAt _ _ xin _ _ fun _ => by
@@ -434,13 +434,13 @@ the eighteen identity-skip merges, the channel-LN-back at each of the three down
 stem LN's own back before the patchify conv's gradients. -/
 
 /-- The block's batched tie (`cnxBlockChTiedGB`), over its `CnxTieBlk` record. -/
-abbrev _root_.Proofs.CnxTie.CnxTieBlk.TiedGB {c cExp h w : Nat} (p : CnxTie.CnxTieBlk c cExp)
+abbrev _root_.Proofs.CnxTie.CnxTieBlk.TiedGB (gf : GeluForm) {c cExp h w : Nat} (p : CnxTie.CnxTieBlk c cExp)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
-  cnxBlockChTiedGB N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
+  cnxBlockChTiedGB gf N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
 
-theorem _root_.Proofs.CnxTie.CnxTieBlk.tied_gb {c cExp h w : Nat} (p : CnxTie.CnxTieBlk c cExp)
+theorem _root_.Proofs.CnxTie.CnxTieBlk.tied_gb {gf : GeluForm} {c cExp h w : Nat} (p : CnxTie.CnxTieBlk c cExp)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) :
-    p.TiedGB N xN epsStr cotN ε xin dyOut :=
+    p.TiedGB gf N xN epsStr cotN ε xin dyOut :=
   cnx_block_ch_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut
 
 /-- The downsample's batched tie (`cnxDownChTiedGB`), over its `CnxTieDown` record. -/
@@ -475,33 +475,33 @@ theorem _root_.Proofs.CnxTie.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTie.Cn
     replica mean. It is stated at the drop-free chain: the `*drop*` artifacts' parameter nodes are
     the same `*GradB` constructors (the folds are `∀ cot`) but their cotangent chain carries the
     `dropPathB` sites, which this thread does not name. -/
-theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
+theorem cnx_net_tiedGB {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : CnxTieWeights nC)
     (x : Vec (N * (3*224*224))) (t : Vec (N * nC)) :
     -- forward block inputs (the prefixes of the committed render's forward)
     let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) x
-    let ib2 : Vec (N * (96*56*56)) := batchMap N (w.b1.fwdO ε) ib1
-    let ib3 : Vec (N * (96*56*56)) := batchMap N (w.b2.fwdO ε) ib2
-    let ibD0 : Vec (N * (96*56*56)) := batchMap N (w.b3.fwdO ε) ib3
+    let ib2 : Vec (N * (96*56*56)) := batchMap N (w.b1.fwdO gf ε) ib1
+    let ib3 : Vec (N * (96*56*56)) := batchMap N (w.b2.fwdO gf ε) ib2
+    let ibD0 : Vec (N * (96*56*56)) := batchMap N (w.b3.fwdO gf ε) ib3
     let ib4 : Vec (N * (192*28*28)) := batchMap N (w.d0.fwdO (h := 28) (w := 28) ε) ibD0
-    let ib5 : Vec (N * (192*28*28)) := batchMap N (w.b4.fwdO ε) ib4
-    let ib6 : Vec (N * (192*28*28)) := batchMap N (w.b5.fwdO ε) ib5
-    let ibD1 : Vec (N * (192*28*28)) := batchMap N (w.b6.fwdO ε) ib6
+    let ib5 : Vec (N * (192*28*28)) := batchMap N (w.b4.fwdO gf ε) ib4
+    let ib6 : Vec (N * (192*28*28)) := batchMap N (w.b5.fwdO gf ε) ib5
+    let ibD1 : Vec (N * (192*28*28)) := batchMap N (w.b6.fwdO gf ε) ib6
     let ib7 : Vec (N * (384*14*14)) := batchMap N (w.d1.fwdO (h := 14) (w := 14) ε) ibD1
-    let ib8 : Vec (N * (384*14*14)) := batchMap N (w.b7.fwdO ε) ib7
-    let ib9 : Vec (N * (384*14*14)) := batchMap N (w.b8.fwdO ε) ib8
-    let ib10 : Vec (N * (384*14*14)) := batchMap N (w.b9.fwdO ε) ib9
-    let ib11 : Vec (N * (384*14*14)) := batchMap N (w.b10.fwdO ε) ib10
-    let ib12 : Vec (N * (384*14*14)) := batchMap N (w.b11.fwdO ε) ib11
-    let ib13 : Vec (N * (384*14*14)) := batchMap N (w.b12.fwdO ε) ib12
-    let ib14 : Vec (N * (384*14*14)) := batchMap N (w.b13.fwdO ε) ib13
-    let ib15 : Vec (N * (384*14*14)) := batchMap N (w.b14.fwdO ε) ib14
-    let ibD2 : Vec (N * (384*14*14)) := batchMap N (w.b15.fwdO ε) ib15
+    let ib8 : Vec (N * (384*14*14)) := batchMap N (w.b7.fwdO gf ε) ib7
+    let ib9 : Vec (N * (384*14*14)) := batchMap N (w.b8.fwdO gf ε) ib8
+    let ib10 : Vec (N * (384*14*14)) := batchMap N (w.b9.fwdO gf ε) ib9
+    let ib11 : Vec (N * (384*14*14)) := batchMap N (w.b10.fwdO gf ε) ib10
+    let ib12 : Vec (N * (384*14*14)) := batchMap N (w.b11.fwdO gf ε) ib11
+    let ib13 : Vec (N * (384*14*14)) := batchMap N (w.b12.fwdO gf ε) ib12
+    let ib14 : Vec (N * (384*14*14)) := batchMap N (w.b13.fwdO gf ε) ib13
+    let ib15 : Vec (N * (384*14*14)) := batchMap N (w.b14.fwdO gf ε) ib14
+    let ibD2 : Vec (N * (384*14*14)) := batchMap N (w.b15.fwdO gf ε) ib15
     let ib16 : Vec (N * (768*7*7)) := batchMap N (w.d2.fwdO (h := 7) (w := 7) ε) ibD2
-    let ib17 : Vec (N * (768*7*7)) := batchMap N (w.b16.fwdO ε) ib16
-    let ib18 : Vec (N * (768*7*7)) := batchMap N (w.b17.fwdO ε) ib17
-    let xhead : Vec (N * (768*7*7)) := batchMap N (w.b18.fwdO ε) ib18
+    let ib17 : Vec (N * (768*7*7)) := batchMap N (w.b16.fwdO gf ε) ib16
+    let ib18 : Vec (N * (768*7*7)) := batchMap N (w.b17.fwdO gf ε) ib17
+    let xhead : Vec (N * (768*7*7)) := batchMap N (w.b18.fwdO gf ε) ib18
     -- head forward + the SMOOTHED loss cotangent, at a general target `t`
     let gapB    : Vec (N * (1*768)) := batchMap N (globalAvgPoolFlat 768 7 7) xhead
     let hnB     : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε w.hG w.hT) gapB
@@ -511,50 +511,50 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
     -- backward cotangents (composed from the loss; residual fan-in at each skip, LN-back at each
     -- downsample and at the stem)
     let dyO18 : Vec (N * (768*7*7)) := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc) xhead g
-    let dyO17 : Vec (N * (768*7*7)) := batchMapAux N (w.b18.cotIn ε) ib18 dyO18
-    let dyO16 : Vec (N * (768*7*7)) := batchMapAux N (w.b17.cotIn ε) ib17 dyO17
-    let dyD2 : Vec (N * (768*7*7)) := batchMapAux N (w.b16.cotIn ε) ib16 dyO16
+    let dyO17 : Vec (N * (768*7*7)) := batchMapAux N (w.b18.cotIn gf ε) ib18 dyO18
+    let dyO16 : Vec (N * (768*7*7)) := batchMapAux N (w.b17.cotIn gf ε) ib17 dyO17
+    let dyD2 : Vec (N * (768*7*7)) := batchMapAux N (w.b16.cotIn gf ε) ib16 dyO16
     let dyO15 : Vec (N * (384*14*14)) := batchMapAux N (w.d2.cotIn (h := 7) (w := 7) ε) ibD2 dyD2
-    let dyO14 : Vec (N * (384*14*14)) := batchMapAux N (w.b15.cotIn ε) ib15 dyO15
-    let dyO13 : Vec (N * (384*14*14)) := batchMapAux N (w.b14.cotIn ε) ib14 dyO14
-    let dyO12 : Vec (N * (384*14*14)) := batchMapAux N (w.b13.cotIn ε) ib13 dyO13
-    let dyO11 : Vec (N * (384*14*14)) := batchMapAux N (w.b12.cotIn ε) ib12 dyO12
-    let dyO10 : Vec (N * (384*14*14)) := batchMapAux N (w.b11.cotIn ε) ib11 dyO11
-    let dyO9 : Vec (N * (384*14*14)) := batchMapAux N (w.b10.cotIn ε) ib10 dyO10
-    let dyO8 : Vec (N * (384*14*14)) := batchMapAux N (w.b9.cotIn ε) ib9 dyO9
-    let dyO7 : Vec (N * (384*14*14)) := batchMapAux N (w.b8.cotIn ε) ib8 dyO8
-    let dyD1 : Vec (N * (384*14*14)) := batchMapAux N (w.b7.cotIn ε) ib7 dyO7
+    let dyO14 : Vec (N * (384*14*14)) := batchMapAux N (w.b15.cotIn gf ε) ib15 dyO15
+    let dyO13 : Vec (N * (384*14*14)) := batchMapAux N (w.b14.cotIn gf ε) ib14 dyO14
+    let dyO12 : Vec (N * (384*14*14)) := batchMapAux N (w.b13.cotIn gf ε) ib13 dyO13
+    let dyO11 : Vec (N * (384*14*14)) := batchMapAux N (w.b12.cotIn gf ε) ib12 dyO12
+    let dyO10 : Vec (N * (384*14*14)) := batchMapAux N (w.b11.cotIn gf ε) ib11 dyO11
+    let dyO9 : Vec (N * (384*14*14)) := batchMapAux N (w.b10.cotIn gf ε) ib10 dyO10
+    let dyO8 : Vec (N * (384*14*14)) := batchMapAux N (w.b9.cotIn gf ε) ib9 dyO9
+    let dyO7 : Vec (N * (384*14*14)) := batchMapAux N (w.b8.cotIn gf ε) ib8 dyO8
+    let dyD1 : Vec (N * (384*14*14)) := batchMapAux N (w.b7.cotIn gf ε) ib7 dyO7
     let dyO6 : Vec (N * (192*28*28)) := batchMapAux N (w.d1.cotIn (h := 14) (w := 14) ε) ibD1 dyD1
-    let dyO5 : Vec (N * (192*28*28)) := batchMapAux N (w.b6.cotIn ε) ib6 dyO6
-    let dyO4 : Vec (N * (192*28*28)) := batchMapAux N (w.b5.cotIn ε) ib5 dyO5
-    let dyD0 : Vec (N * (192*28*28)) := batchMapAux N (w.b4.cotIn ε) ib4 dyO4
+    let dyO5 : Vec (N * (192*28*28)) := batchMapAux N (w.b6.cotIn gf ε) ib6 dyO6
+    let dyO4 : Vec (N * (192*28*28)) := batchMapAux N (w.b5.cotIn gf ε) ib5 dyO5
+    let dyD0 : Vec (N * (192*28*28)) := batchMapAux N (w.b4.cotIn gf ε) ib4 dyO4
     let dyO3 : Vec (N * (96*56*56)) := batchMapAux N (w.d0.cotIn (h := 28) (w := 28) ε) ibD0 dyD0
-    let dyO2 : Vec (N * (96*56*56)) := batchMapAux N (w.b3.cotIn ε) ib3 dyO3
-    let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (w.b2.cotIn ε) ib2 dyO2
-    let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn ε) ib1 dyO1
+    let dyO2 : Vec (N * (96*56*56)) := batchMapAux N (w.b3.cotIn gf ε) ib3 dyO3
+    let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (w.b2.cotIn gf ε) ib2 dyO2
+    let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn gf ε) ib1 dyO1
     -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
     cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem
-  ∧ w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1
-  ∧ w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2
-  ∧ w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3
+  ∧ w.b1.TiedGB gf N xN epsStr cotN ε ib1 dyO1
+  ∧ w.b2.TiedGB gf N xN epsStr cotN ε ib2 dyO2
+  ∧ w.b3.TiedGB gf N xN epsStr cotN ε ib3 dyO3
   ∧ w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0
-  ∧ w.b4.TiedGB N xN epsStr cotN ε ib4 dyO4
-  ∧ w.b5.TiedGB N xN epsStr cotN ε ib5 dyO5
-  ∧ w.b6.TiedGB N xN epsStr cotN ε ib6 dyO6
+  ∧ w.b4.TiedGB gf N xN epsStr cotN ε ib4 dyO4
+  ∧ w.b5.TiedGB gf N xN epsStr cotN ε ib5 dyO5
+  ∧ w.b6.TiedGB gf N xN epsStr cotN ε ib6 dyO6
   ∧ w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1
-  ∧ w.b7.TiedGB N xN epsStr cotN ε ib7 dyO7
-  ∧ w.b8.TiedGB N xN epsStr cotN ε ib8 dyO8
-  ∧ w.b9.TiedGB N xN epsStr cotN ε ib9 dyO9
-  ∧ w.b10.TiedGB N xN epsStr cotN ε ib10 dyO10
-  ∧ w.b11.TiedGB N xN epsStr cotN ε ib11 dyO11
-  ∧ w.b12.TiedGB N xN epsStr cotN ε ib12 dyO12
-  ∧ w.b13.TiedGB N xN epsStr cotN ε ib13 dyO13
-  ∧ w.b14.TiedGB N xN epsStr cotN ε ib14 dyO14
-  ∧ w.b15.TiedGB N xN epsStr cotN ε ib15 dyO15
+  ∧ w.b7.TiedGB gf N xN epsStr cotN ε ib7 dyO7
+  ∧ w.b8.TiedGB gf N xN epsStr cotN ε ib8 dyO8
+  ∧ w.b9.TiedGB gf N xN epsStr cotN ε ib9 dyO9
+  ∧ w.b10.TiedGB gf N xN epsStr cotN ε ib10 dyO10
+  ∧ w.b11.TiedGB gf N xN epsStr cotN ε ib11 dyO11
+  ∧ w.b12.TiedGB gf N xN epsStr cotN ε ib12 dyO12
+  ∧ w.b13.TiedGB gf N xN epsStr cotN ε ib13 dyO13
+  ∧ w.b14.TiedGB gf N xN epsStr cotN ε ib14 dyO14
+  ∧ w.b15.TiedGB gf N xN epsStr cotN ε ib15 dyO15
   ∧ w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2
-  ∧ w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16
-  ∧ w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17
-  ∧ w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18
+  ∧ w.b16.TiedGB gf N xN epsStr cotN ε ib16 dyO16
+  ∧ w.b17.TiedGB gf N xN epsStr cotN ε ib17 dyO17
+  ∧ w.b18.TiedGB gf N xN epsStr cotN ε ib18 dyO18
   ∧ cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g := by
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem,

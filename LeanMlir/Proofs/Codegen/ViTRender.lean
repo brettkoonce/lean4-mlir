@@ -154,7 +154,7 @@ structure BSaves where
     summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names).
     Not text-guarded against the graph, unlike the other nets' blocks: the graph shares LN1, Q/K/V
     and the first residual, which `pretty` would print again at each use (`FwdGraphTextTies`). -/
-private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
+private def vBlockFwd (gf : GeluForm) (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let (c1, ln1) ← vecLnSite bs 197 192 vEPS s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
   let (ck, k) ← pretty bs (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
@@ -186,7 +186,7 @@ private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.Em
   let (ch, hres) ← pretty bs (.addV (.operand xin (0 : Vec (197*192))) (.operand o (0 : Vec (197*192))))
   let (c2, ln2) ← vecLnSite bs 197 192 vEPS s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty bs (.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" (0 : Mat 192 768) 0 (.operand ln2 (0 : Vec (197*192))))
-  let (cg, g) ← pretty bs (.geluF (.operand f1 (0 : Vec (197*768))))
+  let (cg, g) ← pretty bs (.geluF gf (.operand f1 (0 : Vec (197*768))))
   let (cf2, f2) ← pretty bs (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (0 : Mat 768 192) 0 (.operand g (0 : Vec (197*768))))
   let (cr, bout) ← pretty bs (.addV (.operand hres (0 : Vec (197*192))) (.operand f2 (0 : Vec (197*192))))
   pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr,
@@ -202,14 +202,14 @@ structure FwdSaves where
   deriving Inhabited
 
 /-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, saves). -/
-private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
+private def vitFwd12 (gf : GeluForm) (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
   let (ce, embed) ← pretty bs (.patchEmbedF "%wConv" "%bConv" "%cls" "%pos"
     (0 : Kernel4 192 3 16 16) 0 0 (0 : Mat 197 192) (.operand "%x" (0 : Vec (3*224*224))))
   let mut code := ce
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
   for i in [0:vDEPTH] do
-    let (cb, sv) ← vBlockFwd bs s!"b{i}_" cur
+    let (cb, sv) ← vBlockFwd gf bs s!"b{i}_" cur
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vecLnSite bs 197 192 vEPS "%gF" "%btF" cur
   let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (0 : Vec (197*192))))
@@ -232,9 +232,9 @@ def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
 /-- **ViT-Tiny depth-12 forward rendered ENTIRELY from the verified AST.** Every line is `pretty` of a
     verified `SHlo` node; `den(graph) = vitForwardKV` by `vitFwdGraphKMHV_faithful` (at depth 12).
     The output is the `[BS,10]` logits. -/
-def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
+def vitFwdRenderV (gf : GeluForm) (funcName : String := "vit_fwd") (bs : Nat := 32)
     (nClasses : Nat := 10) : String :=
-  let (body, sv) := (vitFwd12 bs nClasses).run' (0, [])
+  let (body, sv) := (vitFwd12 gf bs nClasses).run' (0, [])
   let res := sv.logits
   let blkSigs := String.intercalate ", " ((List.range vDEPTH).map blkArgSig)
   let argSig := s!"%x: {ty [bs, 3*224*224]}, %wConv: {ty [192,3,16,16]}, %bConv: {ty [192]}, " ++
@@ -294,7 +294,7 @@ private def vlnBack (bs : Nat) (gName btName xin dyOut lrStr : String) (adam : B
     → per-head SDPA backward (slice-back / matmul-backs / softmax-back / scale / transpose-backs) →
     Q/K/V-dense-back (summed) → LN1-back → +res₁ fan-in (dxin). Returns (code, dxin, the 16 param
     SGD-update SSAs in `BlockParams` order: g1,bt1, Wq,bq,Wk,bk,Wv,bv,Wo,bo, g2,bt2, Wfc1,bfc1,Wfc2,bfc2). -/
-private def vBlockBack (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : String) (adam : Bool) :
+private def vBlockBack (gf : GeluForm) (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : String) (adam : Bool) :
     StateM Proofs.StableHLO.EmitS (String × String × List String) := do
   let p := pfx
   -- ─ MLP sublayer back: bout = addV(hres, f2); df2 = dyOut, dhres ⊇ dyOut ─
@@ -304,7 +304,7 @@ private def vBlockBack (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : St
   let (c2, nWfc2) ← rdW bs adam 768 192 sv.g s!"%{p}Wfc2" lrStr dyOut
   let (c3, nbfc2) ← rdB bs adam 192 s!"%{p}bfc2" lrStr dyOut
   -- gelu: g = gelu(f1)  [197*768]
-  let (c4, df1) ← pretty bs (.geluBack (n := 197*768) sv.f1 (0 : Vec (197*768))
+  let (c4, df1) ← pretty bs (.geluBack gf (n := 197*768) sv.f1 (0 : Vec (197*768))
                               (.operand dg (0 : Vec (197*768))))
   -- fc1: f1 = denseRow(Wfc1,bfc1)(ln2)  [ln2:197*192 → f1:197*768]
   let (c5, dln2) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 768) s!"%{p}Wfc1" (0 : Mat 192 768)
@@ -387,10 +387,10 @@ private def blkRetTys : List String :=
 -- NOT `private`: `ViTRenderB`'s tie compares against this traversal directly. Comparing
 -- against the rendered ARTIFACT instead would fold the AdamW tail into the diff and lose the
 -- gradient-LIST check, which is the one a string diff cannot make.
-def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
+def vitBackAll (gf : GeluForm) (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) :
     StateM Proofs.StableHLO.EmitS (String × List String × String) := do
-    let (fwd, sv) ← vitFwd12 bs nClasses
+    let (fwd, sv) ← vitFwd12 gf bs nClasses
     -- loss cotangent. The softmax is `pretty`d on its own line rather than nested inside the
     -- `.sub`, so its SSA can also feed the report-only `%loss`; `.operand` is a leaf that emits
     -- nothing, so the fresh-name sequence — and therefore the text — is unchanged (checked: the
@@ -433,7 +433,7 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     let mut blkNames : Array (List String) := #[]   -- per-block param SSAs, fwd-index order
     for j in [0:vDEPTH] do
       let i := vDEPTH - 1 - j
-      let (cb, dx, names) ← vBlockBack bs s!"b{i}_" (sv.blocks[i]!) dcur lrStr adam
+      let (cb, dx, names) ← vBlockBack gf bs s!"b{i}_" (sv.blocks[i]!) dcur lrStr adam
       code := code ++ cb; dcur := dx; blkNames := blkNames.push names
     -- `dcur` is now the patch-embed output cotangent (dembed)
     -- patch-embed params: wConv, bConv, cls (clsSlice→denseBias), pos
@@ -544,11 +544,11 @@ def vitWdCounts (nClasses : Nat := 10) : Nat × Nat :=
     + `clsSliceF`→`denseBiasSgdB` for cls + `posEmbedSgd` for pos). Returns the 200 SGD-updated params in
     func-arg order. `lrStr` is the mean-loss-equiv literal (base/BS); cotangent has NO /B (folded into lr).
     The traversal itself is `vitBackAll false`, shared with the AdamW render. -/
-def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String := "0.003125")
+def vitTrainStepRenderV (gf : GeluForm) (funcName : String := "vit_train_step") (lrStr : String := "0.003125")
     (nClasses : Nat := 10)
     (bs : Nat := 32) : String :=
   let go : StateM Proofs.StableHLO.EmitS String := do
-    let (code, retNames, _) ← vitBackAll bs nClasses lrStr false
+    let (code, retNames, _) ← vitBackAll gf bs nClasses lrStr false
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
       ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [nClasses]]
     pure <|
@@ -662,7 +662,7 @@ private def vitInputReshapeNote : String :=
     3 → 5, so the interface becomes **807 in / 805 out** = 605/603 + 200 (the shadow) + 2
     (`%emad`/`%oemad`). `ema` is LAST in this signature on purpose: inserted mid-list it would
     capture an existing positional argument at every call site. -/
-def vitAdamTrainStepText (funcName : String := "vit_adam_train_step")
+def vitAdamTrainStepText (gf : GeluForm) (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)
     (wdExclude : Bool := false) (wdStr : String := "0.0001")
@@ -689,7 +689,7 @@ def vitAdamTrainStepText (funcName : String := "vit_adam_train_step")
   let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Proofs.StableHLO.EmitS String := do
     let (code, gradNames, nSm) ←
-      traversal.getD (vitBackAll bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
+      traversal.getD (vitBackAll gf bs nClasses "0.0" true (some (alphaStr, negAlphaKStr, bStr)))
     -- GLOBAL-NORM GRADIENT CLIPPING — the
     -- reference's `gn = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))` then
     -- `g * min(1, CLIP/(gn + 1e-6))`, applied to ALL 200 gradients before the optimizer sees them.
@@ -828,4 +828,4 @@ end Proofs.StableHLO
 -- step tie — `ViTStepTie.lean`, all 200 parameters — is stated at exactly these bytes. Moving it
 -- before that tie has a batched peer is an ordering mistake.
 #eval IO.FS.writeFile "verified_mlir/vit_train_step.mlir"
-  (Proofs.StableHLO.vitTrainStepRenderV "vit_train_step" "0.003125")
+  (Proofs.StableHLO.vitTrainStepRenderV .tanh "vit_train_step" "0.003125")

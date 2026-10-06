@@ -50,14 +50,14 @@ theorem rowLNVecFlatBack_eq_vecLN_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γ 
 -- live in `ViTBackB0.lean`, whose multi-head graph capstones rewrite with them too.
 
 /-- **The vector-LN MLP sublayer's VJP backward decomposes** — the MLP peer, also `rfl`. -/
-private theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
+private theorem transformerMlpSublayerV_backward_decomp {gf : GeluForm} (dff : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ2 β2 : Vec (h * dh))
     (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
     (hM dz : Mat N (h * dh)) :
-    (transformerMlpSublayerVHasVJPMat N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward hM dz
+    (transformerMlpSublayerVHasVJPMat gf N h dh dff ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).backward hM dz
       = fun i j => dz i j +
           (layerNormVecPerTokenHasVJPMat N (h * dh) ε γ2 β2 hε).backward hM
-            ((transformerMlpHasVJPMat N (h * dh) dff Wfc1 bfc1 Wfc2 bfc2).backward
+            ((transformerMlpHasVJPMat gf N (h * dh) dff Wfc1 bfc1 Wfc2 bfc2).backward
               (fun n => layerNormVec (h * dh) ε γ2 β2 (hM n)) dz) i j := rfl
 
 -- ════════════════════════════════════════════════════════════════
@@ -100,16 +100,16 @@ theorem attnSubFlat_tie_v (ε : ℝ) (hε : 0 < ε) (γ1 β1 : Vec (h * dh))
     is lifted out of the per-token fold. The per-token
     body tie (`transformerMlp_back_flat_eq_perRowFlatPR`) is LayerNorm-agnostic and reused
     verbatim; only the LN₂-back seam changes. -/
-theorem mlpSubFlat_tie_v (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h * dh))
+theorem mlpSubFlat_tie_v {gf : GeluForm} (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h * dh))
     (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
     (hM : Mat N (h * dh)) (v : Vec (N * (h * dh))) :
     Proofs.residual (rowLNVecFlatBack N (h * dh) ε γ2 (Mat.flatten hM)
         ∘ perRowFlatPR N (h * dh) (fun r =>
             Proofs.dense (Mat.transpose Wfc1) (0 : Vec (h * dh))
-              ∘ diagBack (fun c => geluScalarDeriv (Proofs.dense Wfc1 bfc1
+              ∘ diagBack (fun c => gf.scalarDeriv (Proofs.dense Wfc1 bfc1
                   (layerNormVec (h * dh) ε γ2 β2 (hM r)) c))
               ∘ Proofs.dense (Mat.transpose Wfc2) (0 : Vec dff))) v
-      = Mat.flatten ((transformerMlpSublayerVHasVJPMat N h dh dff ε γ2 β2 hε
+      = Mat.flatten ((transformerMlpSublayerVHasVJPMat gf N h dh dff ε γ2 β2 hε
           Wfc1 bfc1 Wfc2 bfc2).backward hM (Mat.unflatten v)) := by
   rw [transformerMlpSublayerV_backward_decomp dff ε hε γ2 β2 Wfc1 bfc1 Wfc2 bfc2 hM
         (Mat.unflatten v)]
@@ -136,7 +136,7 @@ theorem mlpSubFlat_tie_v (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h
 
     Assembled from the block unfold and the two sublayer flat ties; no new analysis, and general
     in the head count. -/
-theorem vitBlockBackV_eq_transformerBlockV_vjp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
+theorem vitBlockBackV_eq_transformerBlockV_vjp {gf : GeluForm} (dff : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ1 β1 γ2 β2 : Vec (h * dh))
     (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (bq bk bv bo : Vec (h * dh))
     (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
@@ -146,11 +146,11 @@ theorem vitBlockBackV_eq_transformerBlockV_vjp (dff : Nat) (ε : ℝ) (hε : 0 <
         (fun r => Proofs.dense Wk bk (layerNormVec (h * dh) ε γ1 β1 (A r)))
         (fun r => Proofs.dense Wv bv (layerNormVec (h * dh) ε γ1 β1 (A r)))
         ε γ1 (Mat.flatten A) Wfc1 Wfc2
-        (fun r => fun c => geluScalarDeriv (Proofs.dense Wfc1 bfc1
+        (fun r => fun c => gf.scalarDeriv (Proofs.dense Wfc1 bfc1
           (layerNormVec (h * dh) ε γ2 β2
             (transformerAttnSublayerV N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A r)) c))
         γ2 (Mat.flatten (transformerAttnSublayerV N h dh ε γ1 β1 Wq Wk Wv Wo bq bk bv bo A))
-      = fun dY => Mat.flatten ((transformerBlockVHasVJPMat N h dh dff ε γ1 β1 hε
+      = fun dY => Mat.flatten ((transformerBlockVHasVJPMat gf N h dh dff ε γ1 β1 hε
           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward A (Mat.unflatten dY)) := by
   funext dY
   set hM : Mat N (h * dh) :=
@@ -163,7 +163,7 @@ theorem vitBlockBackV_eq_transformerBlockV_vjp (dff : Nat) (ε : ℝ) (hε : 0 <
       (Proofs.residual (rowLNVecFlatBack N (h * dh) ε γ2 (Mat.flatten hM)
         ∘ perRowFlatPR N (h * dh) (fun r =>
             Proofs.dense (Mat.transpose Wfc1) (0 : Vec (h * dh))
-              ∘ diagBack (fun c => geluScalarDeriv (Proofs.dense Wfc1 bfc1
+              ∘ diagBack (fun c => gf.scalarDeriv (Proofs.dense Wfc1 bfc1
                   (layerNormVec (h * dh) ε γ2 β2 (hM r)) c))
               ∘ Proofs.dense (Mat.transpose Wfc2) (0 : Vec dff))) dY) = _
   rw [mlpSubFlat_tie_v dff ε hε γ2 β2 Wfc1 bfc1 Wfc2 bfc2 hM dY,
@@ -175,13 +175,13 @@ theorem vitBlockBackV_eq_transformerBlockV_vjp (dff : Nat) (ε : ℝ) (hε : 0 <
 /-- **The block tie in the form the tower recursion needs** — `vitBlockBackVAt` at a FLAT saved
     input `v` is the flat block's VJP backward at `v`, i.e. exactly the `HasVJP` that
     `vitBodyKVFlatHasVJP`'s chain step consumes. `Mat.flatten_unflatten` is the only step. -/
-theorem vitBlockBackVAt_eq_vjp (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε)
+theorem vitBlockBackVAt_eq_vjp {gf : GeluForm} (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV (heads * d_head) mlpDim) (v : Vec (Np1 * (heads * d_head))) :
-    vitBlockBackVAt Np1 heads d_head mlpDim ε p v
-      = (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat Np1 heads d_head mlpDim ε
+    vitBlockBackVAt gf Np1 heads d_head mlpDim ε p v
+      = (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat gf Np1 heads d_head mlpDim ε
           p.γ1 p.β1 hε p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2
           p.Wfc1 p.bfc1 p.Wfc2 p.bfc2)).backward v := by
-  have h := vitBlockBackV_eq_transformerBlockV_vjp (N := Np1) (h := heads) (dh := d_head)
+  have h := vitBlockBackV_eq_transformerBlockV_vjp (gf := gf) (N := Np1) (h := heads) (dh := d_head)
     mlpDim ε hε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
     p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 (Mat.unflatten v)
   rw [Mat.flatten_unflatten] at h

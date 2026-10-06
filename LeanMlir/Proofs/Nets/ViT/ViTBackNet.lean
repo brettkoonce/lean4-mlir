@@ -57,16 +57,16 @@ namespace Proofs.StableHLO
 
     `ok = True`: GELU and LayerNorm are smooth, so the graph denotes the VJP at **every**
     input, with no side condition to discharge. -/
-private noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
+private noncomputable def vitBlockVLayer (gf : GeluForm) {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV ((hm1+1) * d) mlpDim) :
     CertLayer (Np1 * ((hm1+1) * d)) (Np1 * ((hm1+1) * d)) where
-  fwd := blockVFlat Np1 (hm1+1) d mlpDim ε p
+  fwd := blockVFlat gf Np1 (hm1+1) d mlpDim ε p
   ok := fun _ => True
   diff := fun x _ =>
     (transformerBlockV_flat_differentiable Np1 (hm1+1) d mlpDim ε p.γ1 p.β1 hε
       p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) x
-  vjp := fun x _ => (HasVJPMat.toHasVJP (transformerBlockVHasVJPMatP ε hε p)).toHasVJPAt x
-  graph := fun v e => transformerBlockVBackGraphMHP ε p (Mat.unflatten v) e
+  vjp := fun x _ => (HasVJPMat.toHasVJP (transformerBlockVHasVJPMatP gf ε hε p)).toHasVJPAt x
+  graph := fun v e => transformerBlockVBackGraphMHP gf ε p (Mat.unflatten v) e
   faithful := by
     intro v _ e
     -- The block capstone at the unflattened cotangent; its den-hypothesis is the
@@ -83,26 +83,26 @@ private noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (h�
     shape and mirroring `vitBodyKVFlat`'s recursion (block `0` runs first), so the two can be
     compared term for term below. The only content is `CertLayer.comp`, which is already proven —
     depth costs nothing. -/
-noncomputable def vitTrunkV {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
+noncomputable def vitTrunkV (gf : GeluForm) {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     (k : Nat) → (Fin k → BlockParamsV ((hm1+1) * d) mlpDim) →
     CertLayer (Np1 * ((hm1+1) * d)) (Np1 * ((hm1+1) * d))
   | 0, _ => CertLayer.id' _
   | k + 1, ps =>
-      (vitBlockVLayer (Np1 := Np1) ε hε (ps 0)).comp (vitTrunkV ε hε k (fun i => ps i.succ))
+      (vitBlockVLayer gf (Np1 := Np1) ε hε (ps 0)).comp (vitTrunkV gf ε hε k (fun i => ps i.succ))
 
 /-- **The trunk's forward is the shipped depth-`k` body.** Without this the fold would be a
     chain of blocks that merely resembles ViT's; with it, `vitTrunkV` is `vitBodyKVFlat`. -/
-theorem vitTrunkV_fwd {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
+theorem vitTrunkV_fwd {gf : GeluForm} {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
       (v : Vec (Np1 * ((hm1+1) * d))),
-      (vitTrunkV (Np1 := Np1) ε hε k ps).fwd v
-        = vitBodyKVFlat Np1 (hm1+1) d mlpDim ε k ps v
+      (vitTrunkV gf (Np1 := Np1) ε hε k ps).fwd v
+        = vitBodyKVFlat gf Np1 (hm1+1) d mlpDim ε k ps v
   | 0, _, _ => rfl
   | k + 1, ps, v => by
-      show (vitTrunkV (Np1 := Np1) ε hε k (fun i => ps i.succ)).fwd
-            (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) v) = _
+      show (vitTrunkV gf (Np1 := Np1) ε hε k (fun i => ps i.succ)).fwd
+            (blockVFlat gf Np1 (hm1+1) d mlpDim ε (ps 0) v) = _
       exact vitTrunkV_fwd ε hε k (fun i => ps i.succ)
-        (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) v)
+        (blockVFlat gf Np1 (hm1+1) d mlpDim ε (ps 0) v)
 
 /-- **The generic fold reproduces the hand-written tower, term for term.**
 
@@ -116,30 +116,30 @@ theorem vitTrunkV_fwd {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     graph differentiates at) and `blockVFlat (flatten A) = flatten (blockV A)` (the activation the
     TAIL differentiates at) — which is exactly the fact `CertLayer.comp` encodes and the endo slip
     would break. -/
-theorem vitTrunkV_graph {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
+theorem vitTrunkV_graph {gf : GeluForm} {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
       (A : Mat Np1 ((hm1+1) * d)) (e : SHlo (Np1 * ((hm1+1) * d))),
-      (vitTrunkV (Np1 := Np1) ε hε k ps).graph (Mat.flatten A) e
-        = vitBodyBackGraphKMHV ε k ps A e
+      (vitTrunkV gf (Np1 := Np1) ε hε k ps).graph (Mat.flatten A) e
+        = vitBodyBackGraphKMHV gf ε k ps A e
   | 0, _, _, _ => rfl
   | k + 1, ps, A, e => by
-      have hb : blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) (Mat.flatten A)
-          = Mat.flatten (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) := by
+      have hb : blockVFlat gf Np1 (hm1+1) d mlpDim ε (ps 0) (Mat.flatten A)
+          = Mat.flatten (blockV gf Np1 (hm1+1) d mlpDim ε (ps 0) A) := by
         unfold blockVFlat; rw [Mat.unflatten_flatten]
-      show transformerBlockVBackGraphMHP ε (ps 0) (Mat.unflatten (Mat.flatten A))
-            ((vitTrunkV (Np1 := Np1) ε hε k (fun i => ps i.succ)).graph
-              (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) (Mat.flatten A)) e) = _
+      show transformerBlockVBackGraphMHP gf ε (ps 0) (Mat.unflatten (Mat.flatten A))
+            ((vitTrunkV gf (Np1 := Np1) ε hε k (fun i => ps i.succ)).graph
+              (blockVFlat gf Np1 (hm1+1) d mlpDim ε (ps 0) (Mat.flatten A)) e) = _
       rw [Mat.unflatten_flatten, hb,
         vitTrunkV_graph ε hε k (fun i => ps i.succ)
-          (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) e]
+          (blockV gf Np1 (hm1+1) d mlpDim ε (ps 0) A) e]
       rfl
 
 /-- **A ViT trunk's `ok` is `True` at every depth.** `CertLayer.comp` conjoins preconditions, so
     for a relu net this is a stack of side conditions growing with depth; for ViT the conjunction
     collapses and the whole depth-`k` trunk is certified at every input. -/
-private theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
+private theorem vitTrunkV_ok {gf : GeluForm} {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
-      (v : Vec (Np1 * ((hm1+1) * d))), (vitTrunkV (Np1 := Np1) ε hε k ps).ok v
+      (v : Vec (Np1 * ((hm1+1) * d))), (vitTrunkV gf (Np1 := Np1) ε hε k ps).ok v
   | 0, _, _ => trivial
   | k + 1, ps, _v => ⟨trivial, vitTrunkV_ok ε hε k (fun i => ps i.succ) _⟩
 
@@ -193,7 +193,7 @@ noncomputable def vitClassifierLayer (N D nClasses : Nat)
 /-- **The whole net as one `CertLayer`** — stem, depth-`k` trunk, final LN, head, composed
     by `comp` alone. Image in, logits out, and the backward graph and its faithfulness come with
     it. -/
-noncomputable def vitNetLayer (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+noncomputable def vitNetLayer (gf : GeluForm) (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))
@@ -202,12 +202,12 @@ noncomputable def vitNetLayer (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses) :
     CertLayer (ic * H * W) nClasses :=
   (vitPatchEmbedLayer ic H W patchSize N ((hm1+1) * d) Wc bc cls pos).comp
-    ((vitTrunkV (Np1 := N + 1) ε hε k ps).comp
+    ((vitTrunkV gf (Np1 := N + 1) ε hε k ps).comp
       ((vitFinalLNLayer N ((hm1+1) * d) ε γF βF hε).comp
         (vitClassifierLayer N ((hm1+1) * d) nClasses Wcls bcls)))
 
 /-- The whole-net layer's forward **is** the shipped `vitForwardKV`. -/
-theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+theorem vitNetLayer_fwd {gf : GeluForm} (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))
@@ -215,13 +215,13 @@ theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (γF βF : Vec ((hm1+1) * d))
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+    (vitNetLayer gf ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls).fwd x
-      = vitForwardKV ic H W patchSize N mlpDim (hm1+1) d nClasses k
+      = vitForwardKV gf ic H W patchSize N mlpDim (hm1+1) d nClasses k
           Wc bc cls pos ε ps γF βF Wcls bcls x := by
   show (vitClassifierLayer N ((hm1+1) * d) nClasses Wcls bcls).fwd
         ((vitFinalLNLayer N ((hm1+1) * d) ε γF βF hε).fwd
-          ((vitTrunkV (Np1 := N + 1) ε hε k ps).fwd
+          ((vitTrunkV gf (Np1 := N + 1) ε hε k ps).fwd
             (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))) = _
   rw [vitTrunkV_fwd ε hε k ps (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)]
   rfl
@@ -231,7 +231,7 @@ theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     `CertLayer.comp` produces, so `vitNetBackGraph_faithful` is a consequence of the shared
     combinator rather than a parallel result. The saved activations `comp` threads
     automatically are exactly the ones that theorem pins by hand. -/
-theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+theorem vitNetLayer_graph {gf : GeluForm} (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))
@@ -239,19 +239,19 @@ theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (γF βF : Vec ((hm1+1) * d))
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (e : SHlo nClasses) :
-    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+    (vitNetLayer gf ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls).graph x e
-      = vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
+      = vitNetBackGraph gf ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
           (Mat.unflatten (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
           (Mat.unflatten
-            (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
+            (vitBodyKVFlat gf (N + 1) (hm1+1) d mlpDim ε k ps
               (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
           e := by
   set PE := patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x with hPE
   show patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
-        ((vitTrunkV (Np1 := N + 1) ε hε k ps).graph PE
+        ((vitTrunkV gf (Np1 := N + 1) ε hε k ps).graph PE
           (finalLNBackGraph N ((hm1+1) * d) ε γF
-            ((vitTrunkV (Np1 := N + 1) ε hε k ps).fwd PE)
+            ((vitTrunkV gf (Np1 := N + 1) ε hε k ps).fwd PE)
             (classifierBackGraph N ((hm1+1) * d) nClasses Wcls e))) = _
   rw [vitTrunkV_fwd ε hε k ps PE]
   -- The trunk's graph is stated at a FLATTENED saved activation; `PE` is a raw `Vec`, so
@@ -259,10 +259,10 @@ theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
   conv_lhs => rw [show PE = Mat.flatten (Mat.unflatten PE) from (Mat.flatten_unflatten PE).symm]
   rw [vitTrunkV_graph ε hε k ps (Mat.unflatten PE)]
   show _ = patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
-        (vitBodyBackGraphKMHV ε k ps (Mat.unflatten PE)
+        (vitBodyBackGraphKMHV gf ε k ps (Mat.unflatten PE)
           (finalLNBackGraph N ((hm1+1) * d) ε γF
             (Mat.flatten (Mat.unflatten
-              (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps PE)))
+              (vitBodyKVFlat gf (N + 1) (hm1+1) d mlpDim ε k ps PE)))
             (classifierBackGraph N ((hm1+1) * d) nClasses Wcls e)))
   -- Both sides carry a `flatten ∘ unflatten` on the body output — the LHS's arrived from the
   -- `conv_lhs` round-trip above, the RHS's from `vitNetBackGraph`'s own `Mat.flatten bodyOut`.
@@ -271,7 +271,7 @@ theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
 
 /-- The whole net is certified at **every** input — `ok = True` end to end, because every stage
     is smooth (affine stem, GELU/LN blocks, LN, affine head). No side condition anywhere. -/
-theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
+theorem vitNetLayer_ok {gf : GeluForm} (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))
@@ -279,7 +279,7 @@ theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (γF βF : Vec ((hm1+1) * d))
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+    (vitNetLayer gf ic H W patchSize N mlpDim hm1 d nClasses k ε hε
       Wc bc cls pos ps γF βF Wcls bcls).ok x :=
   ⟨trivial, vitTrunkV_ok ε hε k ps _, trivial, trivial⟩
 
@@ -289,7 +289,7 @@ theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition argument is
     `comp`'s, proven once in `CertifiedChain`, and the only ViT-specific input is the forward
     equality. -/
-theorem vitNetBackGraph_faithful
+theorem vitNetBackGraph_faithful {gf : GeluForm}
     (ic H W patchSize N mlpDim hm1 d nClasses k : Nat) (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
     (pos : Mat (N + 1) ((hm1+1) * d))
@@ -297,17 +297,17 @@ theorem vitNetBackGraph_faithful
     (γF βF : Vec ((hm1+1) * d))
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (e : SHlo nClasses) :
-    den (vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
+    den (vitNetBackGraph gf ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
           (Mat.unflatten (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
           (Mat.unflatten
-            (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
+            (vitBodyKVFlat gf (N + 1) (hm1+1) d mlpDim ε k ps
               (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
           e)
-      = (vitForwardKVHasVJP ic H W patchSize N mlpDim (hm1+1) d nClasses k
+      = (vitForwardKVHasVJP gf ic H W patchSize N mlpDim (hm1+1) d nClasses k
           Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x (den e) := by
   rw [← vitNetLayer_graph ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls x e,
-    (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
+    (vitNetLayer gf ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls).faithful x
       (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls x) e]
@@ -316,7 +316,7 @@ theorem vitNetBackGraph_faithful
   exact HasVJPAt.backward_unique_of_eq
     (funext (vitNetLayer_fwd ic H W patchSize N mlpDim hm1 d nClasses k ε hε
       Wc bc cls pos ps γF βF Wcls bcls)) _
-    ((vitForwardKVHasVJP ic H W patchSize N mlpDim (hm1+1) d nClasses k
+    ((vitForwardKVHasVJP gf ic H W patchSize N mlpDim (hm1+1) d nClasses k
       Wc bc cls pos ε hε ps γF βF Wcls bcls).toHasVJPAt x) (den e)
 
 -- ════════════════════════════════════════════════════════════════

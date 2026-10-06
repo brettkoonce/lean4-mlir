@@ -785,11 +785,11 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
   s!"    return %dQ, %dK, %dV : {tt [n,d]}, {tt [n,d]}, {tt [n,d]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
--- § Pointwise activations — gelu, swish, sigmoid, relu6
+-- § Pointwise activations — gelu (tanh and exact), swish, sigmoid, relu6
 --
 -- Each has a diagonal Jacobian, so its proven backward is `dy ⊙ act'(x)`
--- (gelu/swish/sigmoid_back_bridge — a single multiply). Forward renders the
--- transcendental directly (`logistic`/`tanh`); the derivative is the
+-- (gelu/geluErf/swish/sigmoid_back_bridge — a single multiply). Forward renders the
+-- transcendental directly (`logistic`/`tanh`/`chlo.erfc`); the derivative is the
 -- closed form matching the repo's `*ScalarDeriv = deriv …`. relu6 is the
 -- two-sided clamp with mask `1[0<x<6]` (relu6HasVJPAt). Length `m`. -/
 -- ════════════════════════════════════════════════════════════════
@@ -880,6 +880,40 @@ def geluBackM (m : Nat) : String :=
      s!"    %tb = stablehlo.multiply %hxo, %cin2 : {tt [m]}\n" ++
      s!"    %gp = stablehlo.add %ta, %tb : {tt [m]}\n" ++
      s!"    %dx = stablehlo.multiply %dy, %gp : {tt [m]}\n    return %dx : {tt [m]}\n")
+
+/-- exact gelu `x·Φ(x)`, in `jax.nn.gelu(approximate=False)`'s op order:
+    y = (0.5·x)·erfc(z), z = (−x)·√½. -/
+def geluErfFwdM (m : Nat) : String :=
+  actMod "gelu_erf_fwd" s!"%x: {tt [m]}" (tt [m])
+    (s!"    %half = stablehlo.constant dense<0.5> : {tt [m]}\n" ++
+     s!"    %hx = stablehlo.multiply %half, %x : {tt [m]}\n" ++
+     s!"    %nx = stablehlo.negate %x : {tt [m]}\n" ++
+     s!"    %rs = stablehlo.constant dense<0.7071067811865476> : {tt [m]}\n" ++
+     s!"    %z = stablehlo.multiply %nx, %rs : {tt [m]}\n" ++
+     s!"    %ec = chlo.erfc %z : {tt [m]} -> {tt [m]}\n" ++
+     s!"    %y = stablehlo.multiply %hx, %ec : {tt [m]}\n    return %y : {tt [m]}\n")
+/-- exact gelu backward `dy ⊙ (Φ(x) + x·φ(x))`: the proven backward
+    (`IR.geluErf_back_bridge`), in the op order of `jax.vjp` of the forward. -/
+def geluErfBackM (m : Nat) : String :=
+  actMod "gelu_erf_back" s!"%x: {tt [m]}, %dy: {tt [m]}" (tt [m])
+    (s!"    %half = stablehlo.constant dense<0.5> : {tt [m]}\n" ++
+     s!"    %hx = stablehlo.multiply %half, %x : {tt [m]}\n" ++
+     s!"    %nx = stablehlo.negate %x : {tt [m]}\n" ++
+     s!"    %rs = stablehlo.constant dense<0.7071067811865476> : {tt [m]}\n" ++
+     s!"    %z = stablehlo.multiply %nx, %rs : {tt [m]}\n" ++
+     s!"    %ec = chlo.erfc %z : {tt [m]} -> {tt [m]}\n" ++
+     s!"    %z2 = stablehlo.multiply %z, %z : {tt [m]}\n" ++
+     s!"    %nz2 = stablehlo.negate %z2 : {tt [m]}\n" ++
+     s!"    %ex = stablehlo.exponential %nz2 : {tt [m]}\n" ++
+     s!"    %hxdy = stablehlo.multiply %hx, %dy : {tt [m]}\n" ++
+     s!"    %dyec = stablehlo.multiply %dy, %ec : {tt [m]}\n" ++
+     s!"    %c = stablehlo.constant dense<-1.1283791670955126> : {tt [m]}\n" ++
+     s!"    %a = stablehlo.multiply %c, %hxdy : {tt [m]}\n" ++
+     s!"    %b = stablehlo.multiply %a, %ex : {tt [m]}\n" ++
+     s!"    %d = stablehlo.multiply %b, %rs : {tt [m]}\n" ++
+     s!"    %nd = stablehlo.negate %d : {tt [m]}\n" ++
+     s!"    %h = stablehlo.multiply %half, %dyec : {tt [m]}\n" ++
+     s!"    %dx = stablehlo.add %nd, %h : {tt [m]}\n    return %dx : {tt [m]}\n")
 
 -- ════════════════════════════════════════════════════════════════
 -- § Residual + Squeeze-Excite — the fan-in chapters
@@ -1853,6 +1887,8 @@ def convnextBackModule (c cExp H W kH kW : Nat) (eps : String) : String :=
 #eval IO.FS.writeFile "/tmp/relu6_back.mlir" (relu6BackM 8)
 #eval IO.FS.writeFile "/tmp/gelu_fwd.mlir" (geluFwdM 8)
 #eval IO.FS.writeFile "/tmp/gelu_back.mlir" (geluBackM 8)
+#eval IO.FS.writeFile "/tmp/gelu_erf_fwd.mlir" (geluErfFwdM 8)
+#eval IO.FS.writeFile "/tmp/gelu_erf_back.mlir" (geluErfBackM 8)
 -- Residual (add fan-in) + Squeeze-Excite (gate-multiply fan-in).
 #eval IO.FS.writeFile "/tmp/residual_fwd.mlir" (residualFwdM 2 4)
 #eval IO.FS.writeFile "/tmp/residual_back.mlir" (residualBackM 2 4)

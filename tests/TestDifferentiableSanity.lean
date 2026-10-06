@@ -53,9 +53,9 @@ example (N inD outD : Nat) (W : Mat inD outD) (b : Vec outD) :
                    (Mat.unflatten v))) :=
   dense_per_token_flat_differentiable (N := N) W b
 
-example (N D : Nat) :
+example (gf : GeluForm) (N D : Nat) :
     Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten ((fun X : Mat N D => fun n => gelu D (X n))
+      Mat.flatten ((fun X : Mat N D => fun n => gf.map D (X n))
                    (Mat.unflatten v))) :=
   gelu_per_token_flat_differentiable N D
 

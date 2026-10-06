@@ -27,6 +27,10 @@ here. Per net, up to three pieces:
      with the spec's denotation;
   3. a `*_fwd_faithful` lemma composing the forward graph's faithfulness theorem with the
      tie, so the generated forward MLIR denotes the spec's function.
+
+ConvNeXt-T's and ViT-Tiny's denotations take the form of the GELU (`GeluForm`) as an argument. A
+spec's layer list does not record it: like weight-decay exclusion, clipping or drop-path it is a
+property of the render variant, and the ties hold at either form.
 -/
 
 open Proofs
@@ -377,7 +381,7 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
 -- An earlier version matched a `.convNextBlock`/`.bn` list and denoted a scalar-LN net (one
 -- mean/variance over the whole `c·h·w` map); that chain has been deleted, so re-pointing this
 -- denotation at a scalar-LN function is no longer expressible.
-noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh 10) :
+noncomputable def denoteConvnextT (gf : GeluForm) (layers : List VLayer) (w : CnxTWeightsCh 10) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
   | [.conv 3 96 4 4, .layerNorm 96,
@@ -390,22 +394,22 @@ noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh 10) 
      .convNextBlockCh 384, .convNextBlockCh 384, .convNextBlockCh 384,
      .layerNorm 384, .conv 384 768 2 2,
      .convNextBlockCh 768, .convNextBlockCh 768, .convNextBlockCh 768,
-     .globalAvgPool, .layerNorm 768, .dense 768 10] => convNextForwardTCh w
+     .globalAvgPool, .layerNorm 768, .dense 768 10] => convNextForwardTCh gf w
   | _ => fun _ => 0
 
 /-- **Spec ≡ the full proven net.** `convnextVerified`'s denotation is exactly
     `convNextForwardTCh` ([3,3,9,3] @ [96,192,384,768], channel LN + head LN, 28,589,128 params at
     K = 1000 — the JAX reference's own count) — by `rfl`. -/
-theorem convnextVerified_denote_eq (w : CnxTWeightsCh 10) :
-    denoteConvnextT convnextVerified.layers w = convNextForwardTCh w := rfl
+theorem convnextVerified_denote_eq {gf : GeluForm} (w : CnxTWeightsCh 10) :
+    denoteConvnextT gf convnextVerified.layers w = convNextForwardTCh gf w := rfl
 
 open Proofs.StableHLO in
 /-- **Forward graph ↔ the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
     the committed spec's function: `convNextFwdGraphTCh_faithful` ∘ the tie. -/
-theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeightsCh 10)
+theorem convnextVerified_fwd_faithful {gf : GeluForm} (epsStr : String) (w : CnxTWeightsCh 10)
     (x : Vec (3 * 224 * 224)) :
-    den (convNextFwdGraphTCh epsStr w x)
-      = denoteConvnextT convnextVerified.layers w x :=
+    den (convNextFwdGraphTCh gf epsStr w x)
+      = denoteConvnextT gf convnextVerified.layers w x :=
   (convNextFwdGraphTCh_faithful epsStr w x).trans
     (congrFun (convnextVerified_denote_eq w).symm x)
 
@@ -427,13 +431,13 @@ structure ViTTinyWeights where
   bcls : Vec 10
 
 /-- `vitForwardKV` at the committed ViT-Tiny config (depth 12, 3 heads × 64). -/
-noncomputable def vitForwardTiny (w : ViTTinyWeights) : Vec (3 * 224 * 224) → Vec 10 :=
-  vitForwardKV 3 224 224 16 196 768 3 64 10 12
+noncomputable def vitForwardTiny (gf : GeluForm) (w : ViTTinyWeights) : Vec (3 * 224 * 224) → Vec 10 :=
+  vitForwardKV gf 3 224 224 16 196 768 3 64 10 12
     w.Wc w.bc w.cls w.pos w.ε w.blocks w.γF w.βF w.Wcls w.bcls
 
 /-- Math denotation of the committed ViT-Tiny spec: the 17-entry layer list (12 untied
     `.transformerBlock`s, per-channel `[192]` LN, 1D CLS) denotes to `vitForwardTiny`. -/
-noncomputable def denoteVitTiny (layers : List VLayer) (w : ViTTinyWeights) :
+noncomputable def denoteVitTiny (gf : GeluForm) (layers : List VLayer) (w : ViTTinyWeights) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
   | [.conv 3 192 16 16,
@@ -442,21 +446,21 @@ noncomputable def denoteVitTiny (layers : List VLayer) (w : ViTTinyWeights) :
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
      .transformerBlock 192 768, .transformerBlock 192 768, .transformerBlock 192 768,
-     .layerNorm 192, .dense 192 10] => vitForwardTiny w
+     .layerNorm 192, .dense 192 10] => vitForwardTiny gf w
   | _ => fun _ => 0
 
 /-- **Spec ≡ the full proven net.** `vitVerified`'s denotation is exactly
     `vitForwardKV` at the committed config (depth-12 DISTINCT-param multi-head,
     per-token vector-LN — `ViTDepthK.lean`) — by `rfl`. -/
-theorem vitVerified_denote_eq (w : ViTTinyWeights) :
-    denoteVitTiny vitVerified.layers w = vitForwardTiny w := rfl
+theorem vitVerified_denote_eq {gf : GeluForm} (w : ViTTinyWeights) :
+    denoteVitTiny gf vitVerified.layers w = vitForwardTiny gf w := rfl
 
 /-- **The whole-net VJP at the committed ViT-Tiny spec.** ViT is all-smooth
     (GELU/softmax/LN), so the chain-rule fold applies globally: `vitForwardKVHasVJP` at the
     committed config, hypothesis `0 < ε` only. Not the canonical witness. -/
-noncomputable def vitVerifiedHasVJP (w : ViTTinyWeights) (hε : 0 < w.ε) :
-    HasVJP (denoteVitTiny vitVerified.layers w) :=
-  vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
+noncomputable def vitVerifiedHasVJP (gf : GeluForm) (w : ViTTinyWeights) (hε : 0 < w.ε) :
+    HasVJP (denoteVitTiny gf vitVerified.layers w) :=
+  vitForwardKVHasVJP gf 3 224 224 16 196 768 3 64 10 12
     w.Wc w.bc w.cls w.pos w.ε hε w.blocks w.γF w.βF w.Wcls w.bcls
 
 open Proofs.StableHLO in
@@ -464,13 +468,13 @@ open Proofs.StableHLO in
     (`vitFwdGraphKMHV` — patch embed → 12 spelled multi-head blocks →
     final vector-LN → CLS → head) denotes the committed spec's function:
     `vitFwdGraphKMHV_faithful` composed with the tie. -/
-theorem vitVerified_fwd_faithful (epsStr sStr oneStr zeroStr : String)
+theorem vitVerified_fwd_faithful {gf : GeluForm} (epsStr sStr oneStr zeroStr : String)
     (w : ViTTinyWeights) (x : Vec (3 * 224 * 224)) :
-    den (vitFwdGraphKMHV (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196)
+    den (vitFwdGraphKMHV gf (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196)
           (hm1 := 2) (d := 64) (mlpDim := 768) (nClasses := 10)
           epsStr sStr oneStr zeroStr w.ε (sdpaScale 64)
           w.Wc w.bc w.cls w.pos 12 w.blocks w.γF w.βF w.Wcls w.bcls x)
-      = denoteVitTiny vitVerified.layers w x :=
+      = denoteVitTiny gf vitVerified.layers w x :=
   (vitFwdGraphKMHV_faithful 3 224 224 16 196 2 64 768 10 epsStr sStr oneStr zeroStr
       w.Wc w.bc w.cls w.pos w.ε 12 w.blocks w.γF w.βF w.Wcls w.bcls x).trans
     (congrFun (vitVerified_denote_eq w).symm x)

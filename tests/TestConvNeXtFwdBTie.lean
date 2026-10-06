@@ -39,7 +39,7 @@ open Proofs.StableHLO
     `exit` discards every diagnostic. -/
 def main : IO Unit := do
   let want ← IO.FS.readFile "verified_mlir/convnext_fwd.mlir"
-  let got := convNextFwdText "convnext_fwd"
+  let got := convNextFwdText .tanh "convnext_fwd"
   IO.println "── ConvNeXt: the per-example forward vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
@@ -71,8 +71,8 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   --  ORDER, which is also what the AdamW tail consumes.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
-  let (wantCode, wantMap, wantSm) := (Proofs.StableHLO.convNextBackAll true smooth 10).run' (0, [])
-  let (gotCode, gotMap, gotSm) := (convNextBackAllB smooth 10).run' (0, [])
+  let (wantCode, wantMap, wantSm) := (Proofs.StableHLO.convNextBackAll .tanh true smooth 10).run' (0, [])
+  let (gotCode, gotMap, gotSm) := (convNextBackAllB .tanh smooth 10).run' (0, [])
   IO.println "── ConvNeXt: the batched-index BACKWARD vs the per-example traversal ──"
   IO.println s!"  per-example : {wantCode.length} chars, {wantMap.length} gradients, softmax {wantSm}"
   IO.println s!"  batched     : {gotCode.length} chars, {gotMap.length} gradients, softmax {gotSm}"
@@ -150,7 +150,7 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   --  difference here that is not the conv-VJP swap is therefore in the traversal, and is a defect.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let wantTS ← IO.FS.readFile "verified_mlir/convnext_adam_train_step.mlir"
-  let gotTS := convNextAdamTrainStepText "0.100000" "-0.010000" "32.0"
+  let gotTS := convNextAdamTrainStepText .tanh "0.100000" "-0.010000" "32.0"
   IO.println "── ConvNeXt: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"

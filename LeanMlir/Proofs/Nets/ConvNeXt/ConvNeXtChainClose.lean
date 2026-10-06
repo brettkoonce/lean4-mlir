@@ -12,9 +12,10 @@ tie lifts them with `batchMapAux`.
 The chain through a ConvNeXt block composes the *rendered* backward denotations — layer-scale back
 (`layerScale γls` applied to the cotangent: the input-VJP `γ ⊙ dy` is the forward map itself, the
 `layerScaleF`-on-the-cotangent trick the render uses), the 1×1 conv input-VJP
-(`conv2dHasVJP3` via the flatten bridge, = `convBack`'s denotation), the GELU mask
-(`dy ⊙ geluScalarDeriv`, = `geluHasVJP`'s backward; `geluScalarDeriv_eq` certifies the closed
-form `geluBack` emits) — back through `layerScale → project → gelu → expand` to the LN output,
+(`conv2dHasVJP3` via the flatten bridge, = `convBack`'s denotation), the GELU mask at either
+form of the GELU (`dy ⊙ gf.scalarDeriv`, = `GeluForm.hasVJP`'s backward; `geluScalarDeriv_eq` and
+`geluErfScalarDeriv_eq_erfc` certify the closed forms `geluBack` emits at `.tanh` and `.erf`) —
+back through `layerScale → project → gelu → expand` to the LN output,
 where the channel-LN (`chanLNTensor3`, `Vec c` γ/β) grads read it:
 
   block:  o = addV( layerScale γls (conv₁ₓ₁ₚᵣ( gelu( conv₁ₓ₁ₑₓ( LN( dw₇ₓ₇(x) ))))), x )
@@ -46,21 +47,21 @@ noncomputable def cnxCotP {n : Nat} (γls : Vec n) (dyOut : Vec n) : Vec n :=
   layerScale γls dyOut
 
 /-- Cotangent at the **expand conv output** (`cExp` ch, pre-GELU): continue through the project
-    1×1 conv-back and the GELU mask (`geluScalarDeriv` at the saved pre-GELU activation `e`). -/
-noncomputable def cnxCotE {c cExp h w : Nat} (γls : Vec (c * h * w))
+    1×1 conv-back and the GELU mask (`gf.scalarDeriv` at the saved pre-GELU activation `e`). -/
+noncomputable def cnxCotE (gf : GeluForm) {c cExp h w : Nat} (γls : Vec (c * h * w))
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (g e : Vec (cExp * h * w)) (dyOut : Vec (c * h * w)) : Vec (cExp * h * w) :=
   let cotG := (HasVJP3.toHasVJP (conv2dHasVJP3 (h := h) (w := w) Wpr bpr)).backward g
     (cnxCotP γls dyOut)
-  fun i => cotG i * geluScalarDeriv (e i)
+  fun i => cotG i * gf.scalarDeriv (e i)
 
 /-- Cotangent at the **LN output** (`c` ch): continue through the expand 1×1 conv-back. This is
     the cotangent the channel-LN (`chanLNTensor3`, `Vec c` γ/β) grads contract with. -/
-noncomputable def cnxCotN {c cExp h w : Nat} (γls : Vec (c * h * w))
+noncomputable def cnxCotN (gf : GeluForm) {c cExp h w : Nat} (γls : Vec (c * h * w))
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (nl : Vec (c * h * w)) (g e : Vec (cExp * h * w)) (dyOut : Vec (c * h * w)) :
     Vec (c * h * w) :=
   (HasVJP3.toHasVJP (conv2dHasVJP3 (h := h) (w := w) Wex bex)).backward nl
-    (cnxCotE γls Wpr bpr g e dyOut)
+    (cnxCotE gf γls Wpr bpr g e dyOut)
 
 end Proofs

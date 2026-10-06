@@ -172,7 +172,7 @@ private def headLnBetaTailB (bB : Nat) (cot : String) (d : Nat) :
     At `drop = none` **no `pretty` call happens**, so the fresh-name counter does not move and the
     drop-free chain re-renders byte-identically. That is what keeps `convnext-fwd-b-tie` and the
     committed artifacts free of this feature. -/
-private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
+private def fwdBlockB (gf : GeluForm) (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
     -- TRAILING and defaulted, the `wx`/`clip`/`sd` idiom: every existing call site re-renders
     -- byte-identically.
     (bf16 : Bool := false) :
@@ -187,7 +187,7 @@ private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option
   let (k3, e') ← pretty bB (.batchOp (N := bB)
       (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}eW" s!"%{pfx}eb" (0 : Kernel4 e c 1 1) 0)
       (.operand n 0))
-  let (k4, g) ← pretty bB (.batchOp (N := bB) (.gelu (n := e*h*h))
+  let (k4, g) ← pretty bB (.batchOp (N := bB) (.gelu gf (n := e*h*h))
       (.operand e' (0 : Vec (bB*(e*h*h)))))
   let (k5, p) ← pretty bB (.batchOp (N := bB)
       (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}pW" s!"%{pfx}pb" (0 : Kernel4 c e 1 1) 0)
@@ -225,7 +225,7 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
     — and the sites are emitted in the FORWARD as well as the train step deliberately: at eval the driver supplies an all-ones mask, so they are the exact
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
-def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
+def convNextFwdChainB (gf : GeluForm) (nClasses : Nat := 10) (sd : Bool := false)
     (V : CnxDims := bTiny) (bf16 : Bool := false)
     -- THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
     (bB : Nat := 32)
@@ -256,7 +256,7 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       -- AND `D` MUST BE PASSED. Dropping it takes the ConvNeXt-T default silently: at S that
       -- pairs stage 3's 27 blocks with T's stage-3 numbering and stage 4 with indices 15..17 that
       -- another stage already owns — duplicate mask sites on a graph that compiles and descends.
-      let (code, bn) ← fwdBlockB bB s!"s{si}b{j}" cur c e h
+      let (code, bn) ← fwdBlockB gf bB s!"s{si}b{j}" cur c e h
                           (if sd then some (cnxBlockIdx si j V) else none) bf16
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
@@ -278,7 +278,7 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
     (182 parameters at ConvNeXt-T) and same `%x`. This WRITES `convnext_fwd`, `convnextin_fwd`,
     `convnextsin_fwd` and `convnextbin_fwd` (the `#eval`s at the bottom of this file);
     `convnext-fwd-b-tie` renders the per-example chain against these bytes. -/
-def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat := 10)
+def convNextFwdRenderB (gf : GeluForm) (funcName : String := "convnext_fwd_b") (nClasses : Nat := 10)
     (banner : String :=
       "    // ── ConvNeXt-T forward at the BATCHED index N := B: every op is pretty(batchOp …) except the %one/%zero LayerNorm constants ──\n")
     -- TRAILING: a parameter inserted mid-list captures an existing positional argument at every
@@ -295,7 +295,7 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     -- the input side (224, or timm's test size); a multiple of 32 (the final side is s/32)
     (s : Nat := 224)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd V bf16 (bB := bB) (f := s / 32)).run' (0, [])
+  let F : CFwd := (convNextFwdChainB gf nClasses sd V bf16 (bB := bB) (f := s / 32)).run' (0, [])
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [bB, 3*s*s]) ::
@@ -378,7 +378,7 @@ private def lnBetaTailB (bB : Nat) (cot : String) (c h : Nat) : StateM Proofs.St
     against an undropped cotangent. It type-checks, trains and descends: 18 of 180 gradients wrong
     by a per-example factor, on the parameter stochastic depth is *about*. At `drop = none` this is
     `dy` itself, so nothing moves. -/
-private def bwdBlockB (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
+private def bwdBlockB (gf : GeluForm) (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (drop : Option Nat := none)
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String) := do
   let (kD, dyd) ← match drop with
@@ -389,7 +389,7 @@ private def bwdBlockB (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (d
       (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c)) (.operand dyd 0))
   let (k2, cot_g) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}pW"
         (0 : Kernel4 c e 1 1) 0 (.operand cot_p 0))
-  let (k3, cot_e) ← pretty bB (.geluBackB b.e (0 : Vec (bB*(e*h*h))) (.operand cot_g 0))
+  let (k3, cot_e) ← pretty bB (.geluBackB gf b.e (0 : Vec (bB*(e*h*h))) (.operand cot_g 0))
   let (k4, cot_n) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}eW"
         (0 : Kernel4 e c 1 1) 0 (.operand cot_e 0))
   let (k5, cot_d) ← lnBackSiteB bB s!"%{pfx}ng" b.d cot_n c h
@@ -488,7 +488,7 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
     sides**, carried over verbatim. It is one of the declared non-AST carve-outs, so the batched
     move neither improves nor degrades it — but note it is parameterised by `bB` and therefore
     already batch-correct, which is why it needs no peer. -/
-def convNextBackAllB (smooth : Option (String × String × String) := none) (nClasses : Nat := 10)
+def convNextBackAllB (gf : GeluForm) (smooth : Option (String × String × String) := none) (nClasses : Nat := 10)
     (sd : Bool := false) (V : CnxDims := bTiny)
     -- **bf16**, TRAILING and defaulted, so every existing render is byte-identical.
     -- It reaches every CONVOLUTION — the stem, the block 1×1s, the 7×7 depthwise, the 2×2/s2
@@ -501,7 +501,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     (bB : Nat := 32) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain the byte-tied `convNextFwdChainB` emits ═══
-    let F : CFwd ← convNextFwdChainB nClasses sd V bf16 (bB := bB)
+    let F : CFwd ← convNextFwdChainB gf nClasses sd V bf16 (bB := bB)
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
           (.operand F.logits (0 : Vec (bB*nClasses)))))
@@ -554,7 +554,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
         -- in reverse to name the same sites — the mismatch would pair every backward site with the
         -- wrong forward mask, which typechecks and trains.
         let (code, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd) ←
-          bwdBlockB bB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none) bf16
+          bwdBlockB gf bB s!"s{si}b{j}" dy b c e h (if sd then some (cnxBlockIdx si j V) else none) bf16
         -- `dyd`, not `dy` — LayerScale's γ gradient reads the cotangent at the LayerScale OUTPUT,
         -- which the drop site scales. See `bwdBlockB`.
         let (pcode, pairs) ← blockParamGradB bB s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dyd c e h bf16
@@ -596,7 +596,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     own size and never see the batch. So "the AdamW tail at the batched index" is no
     work at all — the batch is factored out of it by the ops' own shapes. The only
     thing that moves is which traversal produced the gradients. -/
-def convNextAdamTrainStepBText (alphaStr negAlphaKStr bStr : String)
+def convNextAdamTrainStepBText (gf : GeluForm) (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false) (wdExclude : Bool := false) (wdStr : String := "0.0001")
     (clip : Bool := false) (clipStr : String := "1.0") (sd : Bool := false)
@@ -618,7 +618,7 @@ def convNextAdamTrainStepBText (alphaStr negAlphaKStr bStr : String)
     -- the verified job pairs with its JAX reference's global 256 (4 × 64).
     (bB : Nat := 32) : String :=
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
-  convNextAdamTrainStepText alphaStr negAlphaKStr bStr replicas nClasses slug ema
+  convNextAdamTrainStepText gf alphaStr negAlphaKStr bStr replicas nClasses slug ema
     wdExclude wdStr clip clipStr
     -- `sd` IS SPELLED ONCE AND REACHES BOTH HALVES FROM HERE — the traversal (which places the
     -- 18 sites) and the wrapper (which declares the 18 inputs, the 18 pass-through outputs and the
@@ -628,7 +628,7 @@ def convNextAdamTrainStepBText (alphaStr negAlphaKStr bStr : String)
     -- decides how many blocks are EMITTED, the wrapper decides how many parameters are DECLARED,
     -- and a disagreement between them is an arity mismatch the driver reports as a blob-walk
     -- failure rather than anything that names the depth table.
-    (traversal := some (convNextBackAllB (some (alphaStr, negAK, bStr)) nClasses sd V bf16 (bB := bB)))
+    (traversal := some (convNextBackAllB gf (some (alphaStr, negAK, bStr)) nClasses sd V bf16 (bB := bB)))
     -- AND HERE. `bf16` reaching the traversal above but not this line is the entry-name defect
     -- in its most convincing form — the graph really would be bf16, every other check would pass,
     -- and only the artifact's declared name would be wrong.
@@ -673,7 +673,7 @@ end Proofs.StableHLO
 -- comparable to nothing. It exists because every gate that has to run (keep = 1, the misplacement
 -- control, the ones-mask forward) is seconds here and minutes at ImageNet scale.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 1 10 "convnext"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
     (sd := true))
 
@@ -682,7 +682,7 @@ end Proofs.StableHLO
 -- but it would leave the SD train step with no prefix partner at all — i.e. SPEND one of the two
 -- load-bearing structural gates in the repo rather than pay 18 dead multiplies at eval.
 #eval IO.FS.writeFile "verified_mlir/convnext_drop_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnext_drop_fwd" 10
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnext_drop_fwd" 10
     Proofs.StableHLO.cnxDropFwdBanner (sd := true))
 
 -- The **2-replica** peer, and it exists for one reason: `lake build drop-shard-check` is the gate
@@ -697,7 +697,7 @@ end Proofs.StableHLO
 -- says so rather than assumes it: on an LN net the replica-0-local witness is `%loss` ALONE (there
 -- are no batch statistics), which is a materially weaker anti-vacuity half.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamdpdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 2 10 "convnext"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 2 10 "convnext"
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := false) (clipStr := "1.0")
     (sd := true))
 
@@ -711,15 +711,15 @@ end Proofs.StableHLO
 -- `wdExcludeNormBias := true`, `gradClipNorm := 1.0`, `dropPath := 0.1`) — the first ConvNeXt
 -- artifact that carries every optimizer-and-regulariser knob its reference sets.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_drop_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextin_drop_fwd" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_drop_fwd" 1000
     Proofs.StableHLO.cnxDropFwdBanner (sd := true) (bB := cnxInBS))
 
 -- ── THE bf16 PEERS — `adamwxclipdropbf16` ─────────────────────────────────────────────────────
@@ -748,7 +748,7 @@ end Proofs.StableHLO
 -- second, neither of which is a statement about the renderer. Read any 4-replica number here as a
 -- SYSTEM result and check `SHIM_WORKERS` before ever blaming the emit.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true) (bB := cnxInBS))
 -- The DP peer: an ImageNet run loads the DP render, and DP renders are exactly
@@ -757,7 +757,7 @@ end Proofs.StableHLO
 -- untied. The clip still sits AFTER the collective: 180 all_reduces, not 360, all before the norm
 -- fold — and all of them f32, a tax this artifact pays.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true) (bB := cnxInBS))
 
@@ -770,11 +770,11 @@ end Proofs.StableHLO
 -- update, as the reference's `ema_update` follows `train_step`.
 -- `vit-ema-drop-render convnextin` pins the artifact's arity against the driver's packing.
 #eval IO.FS.writeFile "verified_mlir/convnextin_emawxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_emadpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true) (bB := cnxInBS))
 #guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true == "emadpwxclipdropbf16"
@@ -801,11 +801,11 @@ end Proofs.StableHLO
 -- NOTHING HAS BEEN TRAINED. These render, the shapes tie, the counts are `#guard`ed. No
 -- accuracy, and no wall clock beyond a step probe.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 1 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 1 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 4 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 4 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
 
@@ -827,11 +827,11 @@ end Proofs.StableHLO
 -- Measure with `scripts/probes/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
 -- system number that also moves with `PJRT_FFI_RESIDENT` (on by default) and the shim feed.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 1 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 1 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 4 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 4 1000 "convnextsin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
 -- The SD train step's PREFIX PARTNER — the same reason `convnextin_drop_fwd` exists. It is not the
@@ -839,7 +839,7 @@ end Proofs.StableHLO
 -- it is what keeps the `forward ⊂ train-step` structural audit from having nothing to pair the SD
 -- render with. Without that gate a forward can score a net it did not train.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_drop_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextsin_drop_fwd" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextsin_drop_fwd" 1000
     (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxSmall)
     (sd := true) (V := Proofs.StableHLO.cnxSmall))
 
@@ -851,11 +851,11 @@ end Proofs.StableHLO
 -- so either train batch scores through them.
 -- `vit-ema-drop-render convnextsin` pins the arity.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_emawxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextsin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextsin_emadpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
 
@@ -876,7 +876,7 @@ end Proofs.StableHLO
 -- NOTHING HAS BEEN TRAINED, and see the app docstring before quoting any wall clock: B at bs32
 -- fp32 is the first ConvNeXt size where fitting is a real question rather than a formality.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 1 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 1 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase))
 
@@ -886,15 +886,15 @@ end Proofs.StableHLO
 -- memory by a few per cent, because this emit converts back to f32 after every op and so keeps the f32
 -- activation alive anyway. bf16 here is a SPEED change, not a memory one.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 1 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 1 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 4 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 4 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" "32.0" 4 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" "32.0" 4 1000 "convnextbin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase))
 -- **B's PAIR RENDERS, at T's batch**, as S's: 64 per replica × 4 = global 256, the EMA shadow, bf16.
@@ -903,15 +903,15 @@ end Proofs.StableHLO
 -- and no `LEAN_MLIR_MEM_FRACTION` (0.97 OOMs ConvNeXt's bf16 arms outside the pool).
 -- `vit-ema-drop-render convnextbin` pins the arity.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_emawxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextbin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_emadpwxclipdropbf16_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
     (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextbin_drop_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextbin_drop_fwd" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextbin_drop_fwd" 1000
     (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxBase)
     (sd := true) (V := Proofs.StableHLO.cnxBase))
 
@@ -943,7 +943,7 @@ end Proofs.StableHLO
 -- example, never over the batch, so this forward is already class-batch-independent — the very
 -- property `@resnet34_fwd_eval` / `@efficientnet_fwd_eval` exist to recover for the BN nets.
 #eval IO.FS.writeFile "verified_mlir/convnext_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnext_fwd" 10 Proofs.StableHLO.cnxFwdBanner)
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnext_fwd" 10 Proofs.StableHLO.cnxFwdBanner)
 
 -- The **AdamW** train step — **the artifact `convnext-verified-adam` trains on**, and this `#eval`
 -- is its ONLY writer. `tests/TestConvNeXtTrain.lean` only iree-compiles the committed bytes.
@@ -961,7 +961,7 @@ end Proofs.StableHLO
 --   IREE_BACKEND=rocm .lake/build/bin/convnext-adam-tie /tmp/retired.mlir \
 --     verified_mlir/convnext_adam_train_step.mlir
 #eval IO.FS.writeFile "verified_mlir/convnext_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0")
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0")
 
 -- ── THE EMA VARIANT, selected by `LEAN_MLIR_VARIANT=ema` ────────────────
 -- Same graph plus one `adamMNextF` per parameter on the UPDATED weight — `d·ema + (1−d)·θ'`, which
@@ -980,7 +980,7 @@ end Proofs.StableHLO
 -- epochs and scores no top-1 at all while the live weights train (`planning/archive/ema.md`); an
 -- 80-epoch Imagenette run is 2.4 τ, i.e. inside that regime.
 #eval IO.FS.writeFile "verified_mlir/convnext_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0"
     (ema := true))
 
 -- The **DATA-PARALLEL** render, selected at run time by `LEAN_MLIR_VARIANT=adamdp`; `replicas` is
@@ -1005,7 +1005,7 @@ end Proofs.StableHLO
 -- path, and the IREE shim refuses a DP entry point outright rather than silently running
 -- single-device.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 2)
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 2)
 
 -- The DATA-PARALLEL peer of the EMA render. One `#eval`: `replicas` and `ema` are both already
 -- renderer parameters, so this is the cheap half exactly as `mobilenetv2in_rmsdp64` is.
@@ -1017,7 +1017,7 @@ end Proofs.StableHLO
 -- then checks is that the 4th region is threaded identically on both paths, which an arity check
 -- cannot see (both renders have the region; the question is whether it carries the same values).
 #eval IO.FS.writeFile "verified_mlir/convnext_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 2
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 2
     (ema := true))
 
 -- ── ConvNeXt-T on FULL 1000-class ImageNet, slug `convnextin` ──────────────────────────────────────
@@ -1034,24 +1034,24 @@ end Proofs.StableHLO
 -- clip, one-hot targets); the decay is not one of those ways.
 -- The variant that MATCHES the reference is `convnextin_adamdpwxclip` below.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adam_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (wdStr := "0.05") (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (wdStr := "0.05") (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS))
 -- timm's TEST protocol for ConvNeXt-T (`convnext_tiny.fb_in1k`: 288px, crop 1.0,
 -- jax/timm_eval_protocols.json): the same forward at a 288 input, stages 72/36/18/9, entry
 -- `@convnextin_fwd_s288` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
 -- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`.
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd_s288.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd_s288" 1000 Proofs.StableHLO.cnxFwdBanner
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd_s288" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS) (s := 288))
-#guard Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+#guard Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS) (s := 224) ==
-  Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner (bB := cnxInBS)
+  Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner (bB := cnxInBS)
 
 -- ── `wdExcludeNormBias` — timm/DeiT `no_weight_decay` ──────────────────────────────────────────
 -- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 123 of the 182 params take `%wdz`: every
@@ -1063,10 +1063,10 @@ end Proofs.StableHLO
 -- reference's decay recipe — the magnitude and the mask — have to be right for the pair. `convnext_adamwx` is the Imagenette-shaped
 -- peer that `wdx-tie convnext` drives, where the compile is seconds.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 1 10 "convnext"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := true))
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwx_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (bB := cnxInBS))
 
 -- ── GLOBAL-NORM GRADIENT CLIPPING ──────────────────────────────────────────────────────────────
@@ -1084,17 +1084,17 @@ end Proofs.StableHLO
 -- differ only in a baked constant, and those two ARE different functions.** ViT's explicit
 -- `funcName` hides this class of mistake; this net derives its name and does not.
 #eval IO.FS.writeFile "verified_mlir/convnext_adamclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "-0.010000" "32.0" 1 10 "convnext"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0" 1 10 "convnext"
     (ema := false) (wdExclude := false) (wdStr := "0.0001") (clip := true) (clipStr := "1.0"))
 -- The ImageNet render — BOTH halves of the reference's recipe, `wx` ++ `clip`.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (bB := cnxInBS))
 -- **THE DATA-PARALLEL PEER — the artifact an ImageNet run actually loads.** The clip sits AFTER the
 -- collective: 180 all_reduces, not 360, all before the norm fold.
 #eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclip_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (bB := cnxInBS))
 
@@ -1102,9 +1102,9 @@ end Proofs.StableHLO
 -- ConvNeXt's reference number IS the EMA shadow's top-1, not the live weights', so without this
 -- render the `convnextin` pair is not comparable at all, whatever else it carries.
 #eval IO.FS.writeFile "verified_mlir/convnextin_ema_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin" (ema := true) (bB := cnxInBS))
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin" (ema := true) (bB := cnxInBS))
 #eval IO.FS.writeFile "verified_mlir/convnextin_emadp_train_step.mlir"
-  (Proofs.StableHLO.convNextAdamTrainStepBText "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin" (ema := true) (bB := cnxInBS))
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin" (ema := true) (bB := cnxInBS))
 
 -- ════════════════════════════════════════════════════════════════
 -- § ConvNeXt-**S** on ImageNet, slug `convnextsin`
@@ -1122,13 +1122,13 @@ end Proofs.StableHLO
 -- reduces within one example and never across the batch, so this forward is already
 -- class-batch-independent.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextsin_fwd" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextsin_fwd" 1000
     (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
     (bB := cnxInBS))
 -- timm's TEST protocol for ConvNeXt-S (`convnext_small.fb_in1k`: 288px, crop 1.0), as T's
 -- `convnextin_fwd_s288`.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_fwd_s288.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextsin_fwd_s288" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextsin_fwd_s288" 1000
     (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
     (bB := cnxInBS) (s := 288))
 
@@ -1143,12 +1143,12 @@ end Proofs.StableHLO
 -- was written and committed. The byte-identity gate at T and S says the threading does not disturb
 -- those sizes; the shape check of the emitted B artifact says B's is right.
 #eval IO.FS.writeFile "verified_mlir/convnextbin_fwd.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextbin_fwd" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextbin_fwd" 1000
     (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
     (bB := cnxInBS))
 -- timm's TEST protocol for ConvNeXt-B (`convnext_base.fb_in1k`: 288px, crop 1.0).
 #eval IO.FS.writeFile "verified_mlir/convnextbin_fwd_s288.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextbin_fwd_s288" 1000
+  (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextbin_fwd_s288" 1000
     (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
     (bB := cnxInBS) (s := 288))
 

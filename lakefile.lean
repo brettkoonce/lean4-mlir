@@ -1148,8 +1148,8 @@ lean_exe «fwd-tie» where
     compares it — the same statement from the other side, load-bearing as long as both chains exist
     (the per-example one still writes the SGD-inline `convnext_train_step.mlir`).
 
-    Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each of the 31
-    batched forms against its per-example peer individually, so it localises a failure this
+    Pair it with `lake env lean tests/TestBatchedEmitTie.lean`: that file pins each
+    batched form against its per-example peer individually, so it localises a failure this
     whole-net diff can only report. -/
 lean_exe «convnext-fwd-b-tie» where
   root := `tests.TestConvNeXtFwdBTie

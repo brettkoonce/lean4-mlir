@@ -17,11 +17,11 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 
 **Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done in
 code and gated, committed on `wp8fg` (aa974a95), not pushed; no run carries it. Item 3 (§3): the
-§3.3 probe is done — XLA and IREE both take `chlo.erf` and `chlo.erfc`, and the op to emit is
-`chlo.erfc`, in JAX's spelling — and §3.4's proofs are written and gated, staged on `wp8fg` and not
-committed. The next step is §3.5, the AST and printer. No runs until both items are in the code
-(§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and
-the side-quest queue.
+§3.3 probe and §3.4's proofs are committed (0ce30dc7, not pushed); §3.5's op and §3.6's nets and
+ties are in and gated, staged and not committed — every ViT and ConvNeXt definition and theorem now
+takes the form of the GELU and holds for both. The next step is §3.7, the JAX flag. No runs until
+both items are in the code (§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed
+R34 / R50 reruns and the side-quest queue.
 
 ## 1. Order
 
@@ -133,8 +133,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 
 ## 3. Item 3: the exact-erf GELU
 
-**Status 2026-10-06: §3.3 probed, §3.4 proved (staged, not committed); no AST op, render or JAX flag
-yet.** Begin at §3.5.
+**Status 2026-10-06: §3.3 probed and §3.4 proved (committed 0ce30dc7); §3.5's op and §3.6's nets and
+ties staged; no committed render or JAX flag carries the exact form yet.** Begin at §3.7.
 
 ### 3.1 Today
 
@@ -198,7 +198,7 @@ probe itself was a scratch run and is not in the repo.
 
 ### 3.4 Proofs: done
 
-**Done 2026-10-06, staged.** Two leaf modules, 264 lines, nothing downstream rebuilt:
+**Done 2026-10-06, committed 0ce30dc7.** Two leaf modules, 264 lines, nothing downstream rebuilt:
 `Proofs/Architectures/GeluErf.lean` and `GeluErfGaussian.lean`. `GeluErfGaussian` is a `Certs`
 root; five declarations are in `tests/AuditAxioms.lean` (1,813 verdicts, all within the three
 axioms); `lake build Certs`, `docstring-checkrefs`, `name_lint.py`, `module_refs.py`,
@@ -228,33 +228,87 @@ Parked for §3.5's rebuild: `Activations.lean`'s module docstring says the tanh 
 function here and in the renders". A pointer to `GeluErf` there rebuilds `LayerNorm` and the 279
 modules above `Activations`, so it goes in with the AST change.
 
-### 3.5 AST, printer, parser, gates
+### 3.5 AST, printer, parser, gates: done
 
-New constructors rather than a flag on the old ones — `geluErfF` / `geluErfBack`, batched
-`geluErf` / `geluErfBackB` — so every committed render keeps parsing and the tanh theorems stand
-for the runs that used them. Sites: `Basic.lean` (ops, `den`, faithfulness theorems), `Pretty.lean`
-(Raw / Tok / skeleton / emit: forward `chlo.erfc` + arithmetic; backward `dy ⊙ (½ erfc(−x/√2) +
-x · exp(−x²/2)/√(2π))`, i.e. `chlo.erfc`, `stablehlo.exponential` and arithmetic, both in JAX's op
-order so the op is bit-identical to the reference's, §3.3), `Parse.lean`
-(round-trip, under `Certs`), `IR.lean` (`geluErf_back_bridge`), `check_ir_codegen.py` /
-`check_jacobians.py` (numeric derivative of the new closed form), `tests/TestBatchedEmitTie.lean`,
-`tests/AuditAxioms.lean`, `convention_audit.py`, the comparator DECLS (`gen_comparator_tier.py`,
-with the yaml rows — the coupling `comparator-tier-yaml` notes) and `formalization.yaml`. About
-twenty files, mechanical.
+**Done 2026-10-06, staged.** The four GELU constructors carry the form, `GeluForm` (`.tanh` or
+`.erf`, §3.6), rather than doubling: a first cut added `geluErfF` / `geluErfBack` / `geluErf` /
+`geluErfBackB` beside the tanh ones, and §3.6 folded them back, because a selector over two
+constructors makes `den` case on the form and a parameter does not. Every committed render is
+the `.tanh` instance and its bytes are unchanged.
 
-### 3.6 The nets and the ties — the risk item
+* `StableHLO/Basic.lean`: `geluF gf` / `geluBack gf`, the descriptor `BatchableOp.gelu gf` and
+  `geluBackB gf`; their `den` arms are `gf.map` / `gf.hasVJP`, with no case split;
+  `geluF_faithful`, `geluBack_faithful` and `den_geluBackB` hold at either form by `rfl`.
+  `Foundation/IR.lean`: `geluErf_back_bridge`, and the one import of `GeluForm`.
+* `Pretty.lean`: `Raw` and `Tok` carry the form; `skel` gives the two forms different batched
+  tags (`"gelu"` / `"geluErf"`, `"geluBackP"` / `"geluErfBackP"`); the tanh emit is untouched, and
+  the exact emit is one text function per direction — `geluErfFwdText`, `geluErfBackText` —
+  shared by the token and its batched tag, in JAX's op order (§3.3). `Parse.lean`: `parseStack`.
+* The text, run: `renderModule` of `.geluF .erf` and of `.geluBack .erf` through a fresh shim
+  equals `jax.nn.gelu(approximate=False)` and its `jax.vjp` bit for bit at 65,536 points (random
+  cotangent); IREE (`cuda` and `llvm-cpu`) within 2.4e-7 forward, 4.8e-7 backward.
+* `tests/TestBatchedEmitTie.lean`: the two batched forms tie their per-example peers (51 forms),
+  and a pair check: one `chlo.erfc` at √½, no tanh and no `chlo.erf` in the exact emit; one
+  `stablehlo.tanh` and no `chlo` op in the tanh emit; the two distinguishable.
+* `IRPrint.lean` and `check_ir_codegen.py`: `gelu_erf_fwd` / `gelu_erf_back` modules, ALL PASS on
+  IREE `llvm-cpu` (run from the sibling `lean4-jax/.venv`; this repo's `.venv` has no `iree`).
+* `check_jacobians.py`, 31 of 31: `pdiv_gelu` had been checking the exact form under the tanh
+  theorem's name, and skipping without scipy. It now checks the tanh closed form, the exact form
+  is `pdiv_geluErf`, and neither needs scipy.
+* `Activations.lean`'s docstrings point at `GeluErf` (§3.4's parked item); `tests/AuditAxioms.lean`
+  gains `IR.geluErf_back_bridge`.
 
-The activation becomes part of the spec (`Spec.lean` / `Verified/Spec.lean` / `NetsCore.lean`:
-`.geluErf` beside `.gelu`), and `ViTRender`, `ViTRenderB`, `ConvNeXtRender` pick the op from it.
-The whole-net ties are stated on concrete chains that name `geluBack`. Two ways:
+`lake build Certs` rebuilt the 181 modules above `Activations.lean` in 4 min 20 s of wall time
+(80 CPU-minutes, 32 cores), so each of §3.6's rechecks is minutes.
+Re-elaborating every renderer rewrote `verified_mlir/` with no diff. `lake build`, `Apps`,
+`TestSupport`, `docstring-checkrefs`, `name_lint.py`, `module_refs.py`, `comment_numbers.py`,
+`check_audit_coverage.py`, `check_render_coverage.py`, `repo_shape.py`, `import_audit.py implied`
+and the five `#guard` scripts of `certs.yml` are green.
 
-* duplicate the statements for erf — mechanical, doubles about twenty files' proof surface; or
-* parametrise `blockV` / `vitBodyKVFlat` and ConvNeXt's block over an activation record
-  (forward, backward, `HasVJP`) and instantiate twice. The right end state; its cost is the
-  `ViTBackB0` and `ConvNeXtBackB0` rechecks (P-A's estimate: ~11 min / 14 GB for ViT) and the
-  kernel budgets of the step ties (`lean-434-async-elab-memory`: split, don't disable).
+Moved out of this step: `convention_audit.py` counts `jax.nn.gelu` calls and pairs with §3.7's
+flag; the comparator DECLS and `formalization.yaml` carry whole-net rows, none for an op, so
+theirs come with §3.6's statements; `tests/ViTRender.lean` is §3.8's.
 
-Take the second. Budget 2–4 days; the first is the fallback if a budget will not close.
+### 3.6 The nets and the ties: done
+
+**Done 2026-10-06, staged.** Parametrised, not duplicated; no budget had to move.
+
+* `Proofs/Architectures/GeluForm.lean`: `inductive GeluForm | tanh | erf`, with `scalar`,
+  `scalarDeriv` (a `deriv`), `map`, `pdiv_map`, `hasVJP`, `hasVJP_correct`. At each form they are
+  `gelu` / `geluHasVJP` and `geluErf` / `geluErfHasVJP` by `rfl`. Only `scalar` and its
+  differentiability case on the form, so a definition built on `gf.map` unfolds the same way at
+  both.
+* The cone, measured inside Lean (a metaprogram over the environment, type and definition
+  dependencies): 263 definitions and 264 theorems in 32 modules depended on the tanh GELU — the
+  ViT and ConvNeXt architecture files, back chains, parameter gradients, step ties, the four
+  renderers and `SpecVJP`. Each definition now takes `(gf : GeluForm)` first, each theorem
+  `{gf : GeluForm}`; about 2,100 use sites. The same metaprogram afterwards finds no declaration
+  outside the GELU's own files that depends on a particular form.
+* What the proofs needed: two differentiability proofs lose `geluScalar` from their `unfold`
+  (`GeluForm.scalar_differentiable` is a `fun_prop` lemma), and 21 uses of a theorem with no
+  expected type, a `have … := thm …`, pin `(gf := gf)`. Nothing else changed in a proof body; no
+  heartbeat or kernel budget moved; the corpus rebuilds in the same 4 minutes.
+* Renders: the 93 `#eval` writers of `ViTRender`, `ViTRenderB`, `ConvNeXtRender` and
+  `ConvNeXtRenderB` pass `.tanh`, and `verified_mlir/` is rewritten with no diff;
+  `vit-fwd-b-tie` and `convnext-fwd-b-tie` are byte-identical against the committed artifacts;
+  `FwdGraphTextTies`' ConvNeXt block guard checks both forms.
+* The exact form, whole net (scratch renders, §3.8 commits them): ViT-Tiny's forward carries 12
+  `chlo.erfc` and its AdamW step 24, ConvNeXt-T's 18 and 36, none a `stablehlo.tanh`. All four
+  compile through the shim on CUDA (the ViT step in 8.4 s, 603 outputs); both forwards compile on
+  IREE.
+* Statements: the comparator's architecture pair takes `gf` in its six GELU statements
+  (`chk_pdiv_gelu` and `chk_geluHasVJP_correct` are now about `GeluForm.map` / `GeluForm.hasVJP`),
+  and the regenerated tier quantifies six of its 54 over the form; `tests/comparator/run.sh`
+  passes all three configurations. `tests/AuditAxioms.lean`: 1,816 verdicts, all within the
+  three axioms.
+
+The spec language does not carry the form. `VLayer.transformerBlock` and the ConvNeXt block
+constructors are unchanged, and `SpecVJP`'s ConvNeXt-T and ViT-Tiny denotations take `gf` as an
+argument: like weight-decay exclusion, clipping and drop-path, the GELU is a property of the
+render variant (§3.8's tag), not of the layer list. The sketch had it in the spec.
+
+Left as it fell: the pass pushed 183 more lines past 100 columns in files that already had 838
+such lines; nothing lints line length.
 
 ### 3.7 JAX side
 
@@ -289,8 +343,8 @@ differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/Vi
 |---|---|
 | 3.3 probe | done |
 | 3.4 proofs | done |
-| 3.5 AST / printer / parser / gates | 1–2 |
-| 3.6 ties parametrised, rechecked | 2–4 |
+| 3.5 AST / printer / parser / gates | done |
+| 3.6 ties parametrised, rechecked | done |
 | 3.7–3.8 JAX, renders, artifact gates | 1 |
 | 3.9 reruns | ~12 days of the 3060 box, not of a person |
 

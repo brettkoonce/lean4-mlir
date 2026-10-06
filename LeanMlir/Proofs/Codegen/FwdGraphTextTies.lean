@@ -491,9 +491,10 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
 -- ════════════════════════════════════════════════════════════════
 
 -- Block (`s0b0`, 96 ch at 56², expansion 384): depthwise 7×7 → channel-LN → 1×1 → GELU → 1×1 →
--- layer-scale → + input.
-#guard textOf (cnxFwdBlock 2 "s0b0" "%in" 96 384 56) (·.1) ==
-  prettyText 2 (cnxBlockChGraphW "s0b0" "1.0e-6" (c := 96) (cExp := 384) (h := 56) (w := 56)
+-- layer-scale → + input. At both GELUs: the tanh approximation and the exact form.
+#guard [GeluForm.tanh, GeluForm.erf].all fun gf =>
+  textOf (cnxFwdBlock gf 2 "s0b0" "%in" 96 384 56) (·.1) ==
+  prettyText 2 (cnxBlockChGraphW gf "s0b0" "1.0e-6" (c := 96) (cExp := 384) (h := 56) (w := 56)
     (kH := 7) (kW := 7)
     ⟨fun _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0, fun _ _ _ _ => 0, fun _ => 0,
      fun _ _ _ _ => 0, fun _ => 0, fun _ => 0⟩ (leaf "%in" _))

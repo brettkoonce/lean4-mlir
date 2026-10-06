@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.CNN          -- needed for Kernel4 in patchEmbed
 import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.GeluForm
 
 /-!
 # Attention — the Capstone
@@ -316,15 +317,14 @@ lemma rowDense_bias_differentiable {tk a c : Nat} (W : Mat a c) (x : Vec (tk * a
       Mat.flatten (fun r => dense W θ (Mat.unflatten x r))) := by
   unfold dense Mat.flatten; fun_prop
 
-/-- Differentiability of the flattened per-token GELU map.
-    `geluScalar = 0.5 · x · (1 + tanh(√(2/π)(x + 0.044715·x³)))`. With
-    `differentiable_tanh` available to `fun_prop`, the proof
-    discharges automatically. -/
-theorem gelu_per_token_flat_differentiable (N D : Nat) :
+/-- Differentiability of the flattened per-token GELU map, at either form of the GELU.
+    `GeluForm.scalar_differentiable` is tagged for `fun_prop`, so the proof discharges
+    automatically. -/
+theorem gelu_per_token_flat_differentiable {gf : GeluForm} (N D : Nat) :
     Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten ((fun X : Mat N D => fun n => gelu D (X n))
+      Mat.flatten ((fun X : Mat N D => fun n => gf.map D (X n))
                    (Mat.unflatten v))) := by
-  unfold gelu geluScalar; fun_prop
+  unfold GeluForm.map; fun_prop
 
 /-- Differentiability of `layerNormForward D ε γ β` — it is `bnForward` (definitionally),
     differentiable when `ε > 0`. Tagged for `fun_prop`. -/
@@ -1361,17 +1361,17 @@ noncomputable def densePerTokenHasVJPMat (N inD outD : Nat)
 
 /-- Per-token GELU across a sequence. Elementwise activation,
     so diagonal Jacobian both across rows and within a row. -/
-noncomputable def geluPerTokenHasVJPMat (N D : Nat) :
-    HasVJPMat (fun X : Mat N D => fun n => gelu D (X n)) :=
-  rowwiseHasVJPMat (geluHasVJP D) (gelu_differentiable D)
+noncomputable def geluPerTokenHasVJPMat (gf : GeluForm) (N D : Nat) :
+    HasVJPMat (fun X : Mat N D => fun n => gf.map D (X n)) :=
+  rowwiseHasVJPMat (gf.hasVJP D) (gf.map_differentiable D)
 
-/-- Per-token GELU input-VJP: the flat `geluHasVJP (N*D)` backward IS the
+/-- Per-token GELU input-VJP: the flat `gf.hasVJP (N*D)` backward IS the
     flatten of the rowwise `geluPerTokenHasVJPMat.backward` at the saved
     pre-GELU activation `A` (GELU is elementwise, so flat and rowwise agree). -/
-theorem geluFlat_eq_backward {N D : Nat} (A : Mat N D) (dY : Mat N D) :
-    (geluHasVJP (N * D)).backward (Mat.flatten A) (Mat.flatten dY)
-      = Mat.flatten ((geluPerTokenHasVJPMat N D).backward A dY) := by
-  unfold geluPerTokenHasVJPMat rowwiseHasVJPMat geluHasVJP Mat.flatten
+theorem geluFlat_eq_backward {gf : GeluForm} {N D : Nat} (A : Mat N D) (dY : Mat N D) :
+    (gf.hasVJP (N * D)).backward (Mat.flatten A) (Mat.flatten dY)
+      = Mat.flatten ((geluPerTokenHasVJPMat gf N D).backward A dY) := by
+  unfold geluPerTokenHasVJPMat rowwiseHasVJPMat GeluForm.hasVJP Mat.flatten
   rfl
 
 /-! ## A transformer encoder block
@@ -1398,44 +1398,46 @@ The transformer block theorem below glues these with `vjpMatComp` and
 
 /-- MLP sublayer of a transformer block: `dense ∘ GELU ∘ dense` applied per-token.
 
-    Concretely: `MLP(z) = Wfc2 · gelu(Wfc1 · z + bfc1) + bfc2`, applied row-wise. -/
-noncomputable def transformerMlp (N D mlpDim : Nat)
+    Concretely: `MLP(z) = Wfc2 · gelu(Wfc1 · z + bfc1) + bfc2`, applied row-wise. `gf` is the form
+    of the GELU — the tanh approximation or the exact `x · Φ(x)` (`GeluForm`) — and every
+    definition and theorem built on this one carries it and holds for both. -/
+noncomputable def transformerMlp (gf : GeluForm) (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
     Mat N D → Mat N D :=
   (fun Y : Mat N mlpDim => fun n => dense Wfc2 bfc2 (Y n)) ∘
-  (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
+  (fun Y : Mat N mlpDim => fun n => gf.map mlpDim (Y n)) ∘
   (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n))
 
 /-- Differentiability of the flattened `transformerMlp` — `dense ∘ gelu ∘ dense` per token,
-    all smooth (`differentiable_tanh` is tagged for `fun_prop`). -/
-lemma transformerMlp_flat_differentiable (N D mlpDim : Nat)
+    all smooth at either GELU (`GeluForm.scalar_differentiable` is tagged for `fun_prop`). -/
+lemma transformerMlp_flat_differentiable {gf : GeluForm} (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
     Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten (transformerMlp N D mlpDim Wfc1 bfc1 Wfc2 bfc2
+      Mat.flatten (transformerMlp gf N D mlpDim Wfc1 bfc1 Wfc2 bfc2
                      (Mat.unflatten v))) := by
-  unfold transformerMlp dense gelu geluScalar; fun_prop
+  unfold transformerMlp dense GeluForm.map; fun_prop
 
 /-- `HasVJPMat` for the MLP sublayer — chain of two `vjpMatComp`
     steps over per-token liftings (`dense ∘ gelu ∘ dense`). Every Diff
     hypothesis is discharged by the per-token-flat helpers above. -/
-noncomputable def transformerMlpHasVJPMat (N D mlpDim : Nat)
+noncomputable def transformerMlpHasVJPMat (gf : GeluForm) (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
-    HasVJPMat (transformerMlp N D mlpDim Wfc1 bfc1 Wfc2 bfc2) :=
+    HasVJPMat (transformerMlp gf N D mlpDim Wfc1 bfc1 Wfc2 bfc2) :=
   -- Inner composition: gelu ∘ dense₁
   let innerHasVJP :=
-    vjpMatComp _ (fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n))
+    vjpMatComp _ (fun Y : Mat N mlpDim => fun n => gf.map mlpDim (Y n))
       (dense_per_token_flat_differentiable Wfc1 bfc1)
       (gelu_per_token_flat_differentiable N mlpDim)
       (densePerTokenHasVJPMat N D mlpDim Wfc1 bfc1)
-      (geluPerTokenHasVJPMat N mlpDim)
+      (geluPerTokenHasVJPMat gf N mlpDim)
   -- Diff of the inner composition (gelu ∘ dense₁), via Mat.flatten/unflatten
   -- round-trip + Differentiable.comp.
   have inner_diff : Differentiable ℝ
       (fun v : Vec (N * D) =>
-        Mat.flatten (((fun Y : Mat N mlpDim => fun n => gelu mlpDim (Y n)) ∘
+        Mat.flatten (((fun Y : Mat N mlpDim => fun n => gf.map mlpDim (Y n)) ∘
                       (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n)))
                      (Mat.unflatten v))) :=
     flat_differentiable_comp (dense_per_token_flat_differentiable Wfc1 bfc1) (gelu_per_token_flat_differentiable N mlpDim)
@@ -1472,26 +1474,26 @@ noncomputable def transformerAttnSublayer (N heads d_head : Nat) (ε γ1 β1 : �
         layerNormForward (heads * d_head) ε γ1 β1 (X n)))
 
 /-- MLP sublayer: `h ↦ h + MLP(LN2(h))`. Same biPathMat structure. -/
-noncomputable def transformerMlpSublayer (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ)
+noncomputable def transformerMlpSublayer (gf : GeluForm) (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Mat N (heads * d_head) → Mat N (heads * d_head) :=
   biPathMat
     (fun X => X)
-    ((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
+    ((transformerMlp gf N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
      (fun X : Mat N (heads * d_head) => fun n =>
         layerNormForward (heads * d_head) ε γ2 β2 (X n)))
 
 /-- **Transformer encoder block forward**: MLP-sublayer ∘ attention-sublayer.
     Signature matches the codegen: `Mat N (heads·d_head) → Mat N (heads·d_head)`. -/
-noncomputable def transformerBlock (N heads d_head mlpDim : Nat) (ε γ1 β1 : ℝ)
+noncomputable def transformerBlock (gf : GeluForm) (N heads d_head mlpDim : Nat) (ε γ1 β1 : ℝ)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
     (γ2 β2 : ℝ)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Mat N (heads * d_head) → Mat N (heads * d_head) :=
-  (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
+  (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
   (transformerAttnSublayer N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
 
 /-- Differentiability of the flattened attention sublayer's non-trivial arm
@@ -1537,13 +1539,13 @@ noncomputable def transformerAttnSublayerHasVJPMat (N heads d_head : Nat)
 /-- Differentiability of the MLP sublayer's non-trivial arm
     (`transformerMlp ∘ LN2`). Composition of `transformerMlp_flat_differentiable`
     and `layerNorm_per_token_flat_differentiable`. -/
-private lemma transformerMlpSublayer_inner_flat_differentiable
+private lemma transformerMlpSublayer_inner_flat_differentiable {gf : GeluForm}
     (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten
-        (((transformerMlp N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
+        (((transformerMlp gf N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormForward (heads * d_head) ε γ2 β2 (X n)))
          (Mat.unflatten v))) :=
@@ -1552,31 +1554,31 @@ private lemma transformerMlpSublayer_inner_flat_differentiable
 
 /-- Differentiability of the flattened MLP sublayer.
     `biPathMat (id) (transformerMlp ∘ LN2)` flattens to a sum, both arms Differentiable. -/
-lemma transformerMlpSublayer_flat_differentiable
+lemma transformerMlpSublayer_flat_differentiable {gf : GeluForm}
     (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2
+      Mat.flatten (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2
                      Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
   exact (identity_mat_flat_differentiable N (heads * d_head)).add
     (transformerMlpSublayer_inner_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
 /-- MLP sublayer VJP: `preLNResHasVJPMat` at `L = LN2`, `F = transformerMlp`. -/
-noncomputable def transformerMlpSublayerHasVJPMat (N heads d_head mlpDim : Nat)
+noncomputable def transformerMlpSublayerHasVJPMat (gf : GeluForm) (N heads d_head mlpDim : Nat)
     (ε γ2 β2 : ℝ) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
-    HasVJPMat (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2
+    HasVJPMat (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2
                  Wfc1 bfc1 Wfc2 bfc2) :=
   preLNResHasVJPMat _ _ (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
     (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
     (layerNormPerTokenHasVJPMat N (heads * d_head) ε γ2 β2 hε)
-    (transformerMlpHasVJPMat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
+    (transformerMlpHasVJPMat gf N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Differentiability of the flattened transformer block.
     `MlpSublayer ∘ AttnSublayer`; both sublayers' flat Diff are theorems above. -/
-lemma transformerBlock_flat_differentiable (N heads d_head mlpDim : Nat)
+lemma transformerBlock_flat_differentiable {gf : GeluForm} (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -1584,7 +1586,7 @@ lemma transformerBlock_flat_differentiable (N heads d_head mlpDim : Nat)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (transformerBlock N heads d_head mlpDim ε γ1 β1
+      Mat.flatten (transformerBlock gf N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
                    (Mat.unflatten v))) :=
   flat_differentiable_comp
@@ -1594,24 +1596,24 @@ lemma transformerBlock_flat_differentiable (N heads d_head mlpDim : Nat)
 /-- **Transformer block VJP** — composition of attn + mlp sublayers:
     a single `vjpMatComp` of the two sublayer witnesses with their Diff
     helpers. Both LayerNorms are scalar-affine (`γ1 β1 γ2 β2 : ℝ`). -/
-noncomputable def transformerBlockHasVJPMat (N heads d_head mlpDim : Nat)
+noncomputable def transformerBlockHasVJPMat (gf : GeluForm) (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
     (γ2 β2 : ℝ)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
-    HasVJPMat (transformerBlock N heads d_head mlpDim ε γ1 β1
+    HasVJPMat (transformerBlock gf N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo
                  γ2 β2 Wfc1 bfc1 Wfc2 bfc2) :=
-  vjpMatComp _ (transformerMlpSublayer N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+  vjpMatComp _ (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
     (transformerAttnSublayer_flat_differentiable N heads d_head ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo)
     (transformerMlpSublayer_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε
        Wfc1 bfc1 Wfc2 bfc2)
     (transformerAttnSublayerHasVJPMat N heads d_head ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo)
-    (transformerMlpSublayerHasVJPMat N heads d_head mlpDim ε γ2 β2 hε
+    (transformerMlpSublayerHasVJPMat gf N heads d_head mlpDim ε γ2 β2 hε
        Wfc1 bfc1 Wfc2 bfc2)
 
 -- ════════════════════════════════════════════════════════════════
@@ -1634,7 +1636,7 @@ file. -/
 /-- k-fold iterated transformer block, sharing parameters across all
     k layers. Defined by `Nat.rec` so the `HasVJPMat` proof is a
     straightforward induction on k. -/
-noncomputable def transformerTower (k N heads d_head mlpDim : Nat)
+noncomputable def transformerTower (gf : GeluForm) (k N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -1645,14 +1647,14 @@ noncomputable def transformerTower (k N heads d_head mlpDim : Nat)
   Nat.rec (motive := fun _ => Mat N (heads * d_head) → Mat N (heads * d_head))
     (fun X => X)
     (fun _ acc =>
-      (transformerBlock N heads d_head mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
+      (transformerBlock gf N heads d_head mlpDim ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
          γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘ acc)
     k
 
 /-- Differentiability of the flattened k-fold transformer tower.
     Induction on `k`: zero case is identity, successor case is
     `block ∘ tower(k)` composed via `Differentiable.comp`. -/
-lemma transformerTower_flat_differentiable (k N heads d_head mlpDim : Nat)
+lemma transformerTower_flat_differentiable {gf : GeluForm} (k N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -1660,7 +1662,7 @@ lemma transformerTower_flat_differentiable (k N heads d_head mlpDim : Nat)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (transformerTower k N heads d_head mlpDim ε γ1 β1
+      Mat.flatten (transformerTower gf k N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
                    (Mat.unflatten v))) := by
   induction k with
@@ -1673,14 +1675,14 @@ lemma transformerTower_flat_differentiable (k N heads d_head mlpDim : Nat)
 /-- **Transformer tower VJP** — k-fold composition of one shared block
     (`transformerTower`): induction on `k` via `vjpMatComp` and
     `transformerBlockHasVJPMat`. -/
-noncomputable def transformerTowerHasVJPMat (k N heads d_head mlpDim : Nat)
+noncomputable def transformerTowerHasVJPMat (gf : GeluForm) (k N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
     (γ2 β2 : ℝ)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
-    HasVJPMat (transformerTower k N heads d_head mlpDim ε γ1 β1
+    HasVJPMat (transformerTower gf k N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo
                  γ2 β2 Wfc1 bfc1 Wfc2 bfc2) := by
   induction k with
@@ -1688,9 +1690,9 @@ noncomputable def transformerTowerHasVJPMat (k N heads d_head mlpDim : Nat)
     show HasVJPMat (fun X : Mat N (heads * d_head) => X)
     exact identityMatHasVJP N (heads * d_head)
   | succ k' ih =>
-    show HasVJPMat ((transformerBlock N heads d_head mlpDim ε γ1 β1
+    show HasVJPMat ((transformerBlock gf N heads d_head mlpDim ε γ1 β1
                        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
-                    (transformerTower k' N heads d_head mlpDim ε γ1 β1
+                    (transformerTower gf k' N heads d_head mlpDim ε γ1 β1
                        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2))
     exact vjpMatComp _ _
       (transformerTower_flat_differentiable k' N heads d_head mlpDim ε γ1 β1 hε
@@ -1698,7 +1700,7 @@ noncomputable def transformerTowerHasVJPMat (k N heads d_head mlpDim : Nat)
       (transformerBlock_flat_differentiable N heads d_head mlpDim ε γ1 β1 hε
          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
       ih
-      (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
+      (transformerBlockHasVJPMat gf N heads d_head mlpDim ε γ1 β1 hε
          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
 
 /-! ## ViT body: tower + final LN
@@ -1725,7 +1727,7 @@ ranks): the body is flattened with `HasVJPMat.toHasVJP` and composed with
     Composition is `finalLN ∘ transformerTower`; matches the codegen's
     `emitForwardBody` ordering for a `.transformerEncoder` followed by
     the implicit final LN block. -/
-noncomputable def vitBody (k N heads d_head mlpDim : Nat) (ε : ℝ)
+noncomputable def vitBody (gf : GeluForm) (k N heads d_head mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : ℝ)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -1736,12 +1738,12 @@ noncomputable def vitBody (k N heads d_head mlpDim : Nat) (ε : ℝ)
     : Mat N (heads * d_head) → Mat N (heads * d_head) :=
   (fun X : Mat N (heads * d_head) => fun n =>
       layerNormForward (heads * d_head) ε γF βF (X n)) ∘
-  (transformerTower k N heads d_head mlpDim ε γ1 β1
+  (transformerTower gf k N heads d_head mlpDim ε γ1 β1
      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Differentiability of the flattened ViT body.
     `finalLN ∘ transformerTower` — both have flat Diff theorems above. -/
-lemma vitBody_flat_differentiable (k N heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε)
+lemma vitBody_flat_differentiable {gf : GeluForm} (k N heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ1 β1 : ℝ)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -1750,7 +1752,7 @@ lemma vitBody_flat_differentiable (k N heads d_head mlpDim : Nat) (ε : ℝ) (h�
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (γF βF : ℝ) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten (vitBody k N heads d_head mlpDim ε γ1 β1
+      Mat.flatten (vitBody gf k N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
                    (Mat.unflatten v))) :=
   flat_differentiable_comp (transformerTower_flat_differentiable k N heads d_head mlpDim ε γ1 β1 hε
@@ -1765,7 +1767,7 @@ lemma vitBody_flat_differentiable (k N heads d_head mlpDim : Nat) (ε : ℝ) (h�
     proved building blocks; `mhsaHasVJPMat` and
     `mhsaLayer_flat_differentiable` are proved through the column-stacking
     framework, so the chain uses no project axioms. -/
-noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
+noncomputable def vitBodyHasVJPMat (gf : GeluForm) (k N heads d_head mlpDim : Nat) (ε : ℝ)
     (hε : 0 < ε)
     (γ1 β1 : ℝ)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -1774,14 +1776,14 @@ noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (γF βF : ℝ) :
-    HasVJPMat (vitBody k N heads d_head mlpDim ε γ1 β1
+    HasVJPMat (vitBody gf k N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF) :=
   vjpMatComp _ (fun X : Mat N (heads * d_head) => fun n =>
                    layerNormForward (heads * d_head) ε γF βF (X n))
     (transformerTower_flat_differentiable k N heads d_head mlpDim ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
     (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γF βF hε)
-    (transformerTowerHasVJPMat k N heads d_head mlpDim ε γ1 β1 hε
+    (transformerTowerHasVJPMat gf k N heads d_head mlpDim ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
     (layerNormPerTokenHasVJPMat N (heads * d_head) ε γF βF hε)
 
@@ -1799,7 +1801,7 @@ noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
 - Residual / biPath fan-in (`Residual.lean`)
 - Depthwise conv (`Depthwise.lean`)
 - Squeeze-and-Excitation / elementwise product VJP (`SE.lean`)
-- LayerNorm (`LayerNorm.lean`); GELU (`Activations.lean`)
+- LayerNorm (`LayerNorm.lean`); GELU (`Activations.lean`, `GeluErf.lean`, `GeluForm.lean`)
 - Standalone softmax VJP (`softmaxHasVJP`, `Softmax.lean`)
 - Scaled dot-product attention backwards `sdpaBackQ`/`sdpaBackK`/`sdpaBackV`
   (`sdpaBackQ_correct` via `vjpMatComp` composition of four matrix-level
@@ -2179,7 +2181,7 @@ All three are `HasVJP`s on `Vec`, so `vjpComp` chains them directly. -/
     Composition: `patchEmbed → (flatten ∘ vitBody ∘ unflatten) → classifier`.
     Uses `D := heads * d_head` directly (no separate `D` parameter) so the
     type-level reinterpretation at the body is a no-op. -/
-noncomputable def vitFull
+noncomputable def vitFull (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -2197,7 +2199,7 @@ noncomputable def vitFull
   (classifierFlat N (heads * d_head) nClasses Wcls bcls) ∘
   (fun v : Vec ((N + 1) * (heads * d_head)) =>
     Mat.flatten
-      (vitBody kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+      (vitBody gf kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
        (Mat.unflatten v))) ∘
   (patchEmbedFlat ic H W patchSize N (heads * d_head)
@@ -2215,7 +2217,7 @@ lemma classifierFlat_differentiable (N D nClasses : Nat)
     `HasVJPMat.toHasVJP (vitBodyHasVJPMat ...)`, and
     `classifierFlatHasVJP`. Each `vjpComp`'s Diff hypotheses are
     discharged by the per-stage Diff theorems above. -/
-noncomputable def vitFullHasVJP
+noncomputable def vitFullHasVJP (gf : GeluForm)
     (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -2229,17 +2231,17 @@ noncomputable def vitFullHasVJP
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (γF βF : ℝ)
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    HasVJP (vitFull ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+    HasVJP (vitFull gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
               W_conv b_conv cls_token pos_embed
               ε γ1 β1 Wq Wk Wv Wo bq bk bv bo
               γ2 β2 Wfc1 bfc1 Wfc2 bfc2
               γF βF Wcls bcls) :=
   -- Inner: patchEmbed
   let body_bridge : HasVJP (fun v : Vec ((N + 1) * (heads * d_head)) =>
-        Mat.flatten (vitBody kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+        Mat.flatten (vitBody gf kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
                        Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
                      (Mat.unflatten v))) :=
-    HasVJPMat.toHasVJP (vitBodyHasVJPMat kBlocks (N + 1) heads d_head mlpDim
+    HasVJPMat.toHasVJP (vitBodyHasVJPMat gf kBlocks (N + 1) heads d_head mlpDim
                           ε hε γ1 β1 Wq Wk Wv Wo bq bk bv bo
                           γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF)
   let body_bridge_diff := vitBody_flat_differentiable kBlocks (N + 1) heads d_head mlpDim
@@ -2254,7 +2256,7 @@ noncomputable def vitFullHasVJP
                         patchHasVJP body_bridge
   have inner_diff : Differentiable ℝ
       ((fun v : Vec ((N + 1) * (heads * d_head)) =>
-          Mat.flatten (vitBody kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
+          Mat.flatten (vitBody gf kBlocks (N + 1) heads d_head mlpDim ε γ1 β1
                          Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF
                        (Mat.unflatten v))) ∘
         (patchEmbedFlat ic H W patchSize N (heads * d_head)
@@ -2291,7 +2293,7 @@ theorem mhsaHasVJPMat_correct (N heads d_head : Nat)
 /-- **Public correctness theorem for `transformerBlockHasVJPMat`**:
 the full transformer block backward (attention sublayer + MLP sublayer
 glued by `vjpMatComp`) equals the `pdivMat`-contracted Jacobian. -/
-theorem transformerBlockHasVJPMat_correct
+theorem transformerBlockHasVJPMat_correct {gf : GeluForm}
     (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -2301,13 +2303,13 @@ theorem transformerBlockHasVJPMat_correct
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (X : Mat N (heads * d_head)) (dY : Mat N (heads * d_head))
     (i : Fin N) (j : Fin (heads * d_head)) :
-    (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
+    (transformerBlockHasVJPMat gf N heads d_head mlpDim ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward X dY i j =
     ∑ k : Fin N, ∑ l : Fin (heads * d_head),
-      pdivMat (transformerBlock N heads d_head mlpDim ε γ1 β1
+      pdivMat (transformerBlock gf N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
               X i j k l * dY k l :=
-  (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
+  (transformerBlockHasVJPMat gf N heads d_head mlpDim ε γ1 β1 hε
      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).correct X dY i j
 
 /-- **Public correctness theorem for `vitFullHasVJP`**: the backward of
@@ -2316,7 +2318,7 @@ theorem transformerBlockHasVJPMat_correct
     proposition so consumers (and `#print axioms` audits) can cite the apex
     contract directly instead of reaching into the record. The long signature is
     `vitFull`'s parameter set; the proof is the witness field. -/
-theorem vitFullHasVJP_correct
+theorem vitFullHasVJP_correct {gf : GeluForm}
     (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -2331,15 +2333,15 @@ theorem vitFullHasVJP_correct
     (γF βF : ℝ)
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    (vitFullHasVJP ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+    (vitFullHasVJP gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
         W_conv b_conv cls_token pos_embed ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).backward x dy i =
       ∑ j : Fin nClasses,
-        pdiv (vitFull ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+        pdiv (vitFull gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
                 W_conv b_conv cls_token pos_embed ε γ1 β1
                 Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls)
              x i j * dy j :=
-  (vitFullHasVJP ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+  (vitFullHasVJP gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
       W_conv b_conv cls_token pos_embed ε γ1 β1 hε
       Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).correct x dy i
 

@@ -128,14 +128,14 @@ theorem chk_pdiv_bnNormalize (n : Nat) (ε : ℝ) (hε : 0 < ε)
       bnIstd n x ε / (n : ℝ) *
         ((n : ℝ) * (if i = j then 1 else 0) - 1 - bnXhat n ε x i * bnXhat n ε x j) := by sorry
 
-/-- **GELU activation Jacobian** (diagonal):
+/-- **GELU activation Jacobian** (diagonal), at either form of the GELU:
 $\frac{\partial \text{gelu}(x)_j}{\partial x_i} = \delta_{i,j} \cdot \text{gelu}'(x_i)$
 
-GELU is a smooth approximation of ReLU (uses $\tanh$ internally), so its
-Jacobian is genuinely diagonal — no kink, no convention pick. -/
-theorem chk_pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
-    pdiv (gelu n) x i j =
-    if i = j then geluScalarDeriv (x i) else 0 := by sorry
+`gf` is the tanh approximation or the exact $x \cdot \Phi(x)$ (`GeluForm`). Both are smooth, so
+the Jacobian is genuinely diagonal — no kink, no convention pick. -/
+theorem chk_pdiv_gelu (gf : GeluForm) (n : Nat) (x : Vec n) (i j : Fin n) :
+    pdiv (gf.map n) x i j =
+    if i = j then gf.scalarDeriv (x i) else 0 := by sorry
 
 /-- **Softmax Jacobian** (rank-1 correction to a diagonal):
 $\frac{\partial \text{softmax}(z)_j}{\partial z_i} = p_j \cdot (\delta_{i,j} - p_i)$
@@ -246,11 +246,12 @@ theorem chk_seBlockHasVJP_correct {n : Nat}
     (seBlockHasVJP gate hg_diff hg).backward x dy i =
     ∑ j : Fin n, pdiv (seBlock gate) x i j * dy j := by sorry
 
-/-- **`geluHasVJP` contract**: GELU backward (diagonal scaling by
-`geluScalarDeriv`) equals the `pdiv`-contracted Jacobian. -/
-theorem chk_geluHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (geluHasVJP n).backward x dy i =
-    ∑ j : Fin n, pdiv (gelu n) x i j * dy j := by sorry
+/-- **`GeluForm.hasVJP` contract**: the GELU backward at either form (diagonal scaling by
+`gf.scalarDeriv`) equals the `pdiv`-contracted Jacobian. At `.tanh` this is `geluHasVJP`, at
+`.erf` `geluErfHasVJP`. -/
+theorem chk_geluHasVJP_correct (gf : GeluForm) (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (gf.hasVJP n).backward x dy i =
+    ∑ j : Fin n, pdiv (gf.map n) x i j * dy j := by sorry
 
 /-- **`layerNormHasVJP` contract**: LayerNorm reuses the BN proof
 template; backward equals `pdiv`-contracted Jacobian of `layerNormForward`. -/
@@ -276,7 +277,7 @@ theorem chk_mhsaHasVJPMat_correct (N heads d_head : Nat)
 backward (attn sublayer + MLP sublayer glued by `vjpMatComp`) equals
 `pdivMat`-contracted Jacobian. -/
 theorem chk_transformerBlockHasVJPMat_correct
-    (N heads d_head mlpDim : Nat)
+    (gf : GeluForm) (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -285,10 +286,10 @@ theorem chk_transformerBlockHasVJPMat_correct
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head))
     (X : Mat N (heads * d_head)) (dY : Mat N (heads * d_head))
     (i : Fin N) (j : Fin (heads * d_head)) :
-    (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
+    (transformerBlockHasVJPMat gf N heads d_head mlpDim ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).backward X dY i j =
     ∑ k : Fin N, ∑ l : Fin (heads * d_head),
-      pdivMat (transformerBlock N heads d_head mlpDim ε γ1 β1
+      pdivMat (transformerBlock gf N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
               X i j k l * dY k l := by sorry
 
@@ -298,7 +299,7 @@ the `pdiv`-contracted Jacobian. Just lifts the wrapper
 `vitFullHasVJP_correct` introduced in
 `LeanMlir/Proofs/Architectures/Attention.lean`. -/
 theorem chk_vitFullHasVJP_correct
-    (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
+    (gf : GeluForm) (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head))
@@ -312,11 +313,11 @@ theorem chk_vitFullHasVJP_correct
     (γF βF : ℝ)
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    (vitFullHasVJP ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+    (vitFullHasVJP gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
         W_conv b_conv cls_token pos_embed ε γ1 β1 hε
         Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls).backward x dy i =
     ∑ j : Fin nClasses,
-      pdiv (vitFull ic H W patchSize N mlpDim heads d_head kBlocks nClasses
+      pdiv (vitFull gf ic H W patchSize N mlpDim heads d_head kBlocks nClasses
               W_conv b_conv cls_token pos_embed ε γ1 β1
               Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 γF βF Wcls bcls)
            x i j * dy j := by sorry
@@ -470,7 +471,7 @@ Jacobian. Chains `vjpCompAt` through stem → two ConvNeXt blocks
 (depthwise → LayerNorm → pointwise-expand → GELU → pointwise-project →
 layer-scale, residual) → head LayerNorm → dense. -/
 theorem chk_convnextHasVJPAt_correct
-    {ic c cExp h w kH kW nClasses : Nat}
+    (gf : GeluForm) {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
     (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
@@ -481,12 +482,12 @@ theorem chk_convnextHasVJPAt_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJPAt Wst bst εst γst βst hεst
+    (convnextHasVJPAt gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd x).backward dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j := by sorry
@@ -495,7 +496,7 @@ theorem chk_convnextHasVJPAt_correct
 (LayerNorm + GELU, no kinks), so its whole-network VJP holds at *every*
 input — the unconditional analogue of `vitFullHasVJP_correct`. -/
 theorem chk_convnextHasVJP_correct
-    {ic c cExp h w kH kW nClasses : Nat}
+    (gf : GeluForm) {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)
     (Wdw₁ : DepthwiseKernel c kH kW) (bdw₁ : Vec c) (εn₁ γn₁ βn₁ : ℝ) (hεn₁ : 0 < εn₁)
     (Wex₁ : Kernel4 cExp c 1 1) (bex₁ : Vec cExp)
@@ -506,12 +507,12 @@ theorem chk_convnextHasVJP_correct
     (εhd γhd βhd : ℝ) (hεhd : 0 < εhd)
     (Wd : Mat c nClasses) (bd : Vec nClasses)
     (x : Vec (ic * h * w)) (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (convnextHasVJP Wst bst εst γst βst hεst
+    (convnextHasVJP gf Wst bst εst γst βst hεst
       Wdw₁ bdw₁ εn₁ γn₁ βn₁ hεn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
       Wdw₂ bdw₂ εn₂ γn₂ βn₂ hεn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
       εhd γhd βhd hεhd Wd bd).backward x dy i =
       ∑ j : Fin nClasses,
-        pdiv (convNextForward Wst bst εst γst βst
+        pdiv (convNextForward gf Wst bst εst γst βst
           Wdw₁ bdw₁ εn₁ γn₁ βn₁ Wex₁ bex₁ Wpr₁ bpr₁ γls₁
           Wdw₂ bdw₂ εn₂ γn₂ βn₂ Wex₂ bex₂ Wpr₂ bpr₂ γls₂
           εhd γhd βhd Wd bd) x i j * dy j := by sorry

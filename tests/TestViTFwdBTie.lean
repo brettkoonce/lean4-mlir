@@ -38,7 +38,7 @@ open Proofs.StableHLO
     `exit` discards every diagnostic. -/
 def main : IO Unit := do
   let want ← IO.FS.readFile "verified_mlir/vit_fwd.mlir"
-  let got := vitFwdRenderV "vit_fwd"
+  let got := vitFwdRenderV .tanh "vit_fwd"
   IO.println "── ViT: the per-example forward vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
@@ -74,12 +74,12 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   --  8's parameters.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
-  let (wantCode, wantNames, wantSm) := (Proofs.StableHLO.vitBackAll 32 10 "0.003125" true smooth).run' (0, [])
+  let (wantCode, wantNames, wantSm) := (Proofs.StableHLO.vitBackAll .tanh 32 10 "0.003125" true smooth).run' (0, [])
   -- `32` IS THE BATCH: `vitBackAllB` takes a LEADING `vbB`. A tie that reports ✅ from a stale
   -- binary is worse than one that fails: when `lake build vit-fwd-b-tie` exits 1, the stale
   -- `.lake/build/bin/vit-fwd-b-tie` still prints three green lines. Run the BUILD, not just the
   -- binary.
-  let (gotCode, gotNames, gotSm) := (vitBackAllB 32 10 smooth).run' (0, [])
+  let (gotCode, gotNames, gotSm) := (vitBackAllB .tanh 32 10 smooth).run' (0, [])
   IO.println "── ViT: the batched-index BACKWARD vs the per-example traversal ──"
   IO.println s!"  per-example : {wantCode.length} chars, {wantNames.length} gradients, softmax {wantSm}"
   IO.println s!"  batched     : {gotCode.length} chars, {gotNames.length} gradients, softmax {gotSm}"
@@ -138,7 +138,7 @@ is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are
   --  tail zips.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let wantTS ← IO.FS.readFile "verified_mlir/vit_adam_train_step.mlir"
-  let gotTS := vitAdamTrainStepText "vit_adam_train_step"
+  let gotTS := vitAdamTrainStepText .tanh "vit_adam_train_step"
   IO.println "── ViT: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
   IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"

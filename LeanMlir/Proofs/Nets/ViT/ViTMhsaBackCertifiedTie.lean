@@ -103,36 +103,37 @@ theorem mhsaBackFlat_eq_mhsa_vjp
 -- § The MLP-sublayer reconciliation — the per-token-aware leaves
 -- ════════════════════════════════════════════════════════════════
 
-/-- The chain's GELU backward `diagBack (act'(s))` IS the certified `geluHasVJP.backward`
-    at the saved pre-activation `s` (the elementwise derivative scaling — `geluHasVJP.backward s
-    dy i = dy i · geluScalarDeriv (s i)`, `diagBack` is the same scaling, `mul_comm`). -/
-private theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
-    diagBack (fun c => geluScalarDeriv (s c)) = (geluHasVJP n).backward s := by
+/-- The chain's GELU backward `diagBack (act'(s))` IS the certified `GeluForm.hasVJP` backward
+    at the saved pre-activation `s`, for either form (the elementwise derivative scaling —
+    `(gf.hasVJP n).backward s dy i = dy i · gf.scalarDeriv (s i)`, `diagBack` is the same scaling,
+    `mul_comm`). -/
+private theorem diagBack_eq_gelu_vjp {gf : GeluForm} {n : Nat} (s : Vec n) :
+    diagBack (fun c => gf.scalarDeriv (s c)) = (gf.hasVJP n).backward s := by
   funext dy i
-  simp only [diagBack, geluHasVJP, mul_comm]
+  simp only [diagBack, GeluForm.hasVJP, mul_comm]
 
 /-- **The `transformerMlp` backward in explicit per-token form.** The nested `vjpMatComp`
     (`dense₂ ∘ gelu ∘ dense₁`, per token) reduces to: each token's `dz r` runs `mulVec Wfc2`,
     the GELU backward at the saved pre-activation `dense₁(Y r)`, then `mulVec Wfc1`. Pure
     `rfl` (the per-token VJPs are `rowwise`/`vjpMatComp` structure projections). -/
-private theorem transformerMlp_backward_pertoken (N D dff : Nat)
+private theorem transformerMlp_backward_pertoken {gf : GeluForm} (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (dz : Mat N D) :
-    (transformerMlpHasVJPMat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y dz
+    (transformerMlpHasVJPMat gf N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y dz
       = fun r => Mat.mulVec Wfc1
-          ((geluHasVJP dff).backward (Proofs.dense Wfc1 bfc1 (Y r)) (Mat.mulVec Wfc2 (dz r))) := by
+          ((gf.hasVJP dff).backward (Proofs.dense Wfc1 bfc1 (Y r)) (Mat.mulVec Wfc2 (dz r))) := by
   rfl
 
 /-- **L2 — the `transformerMlp` backward, flattened, IS `perRowFlatPR` of the flat chain.**
     The certified per-token MLP-body backward (`mulVec Wfc1 ∘ gelu-back ∘ mulVec Wfc2`) equals the
     chain's `dense Wᵀ₁ 0 ∘ diagBack(act'(dense₁ Y)) ∘ dense Wᵀ₂ 0`, row by row. -/
-theorem transformerMlp_back_flat_eq_perRowFlatPR (N D dff : Nat)
+theorem transformerMlp_back_flat_eq_perRowFlatPR {gf : GeluForm} (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (v : Vec (N * D)) :
-    Mat.flatten ((transformerMlpHasVJPMat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y (Mat.unflatten v))
+    Mat.flatten ((transformerMlpHasVJPMat gf N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y (Mat.unflatten v))
       = perRowFlatPR N D
           (fun r => Proofs.dense (Mat.transpose Wfc1) (0 : Vec D)
-            ∘ diagBack (fun c => geluScalarDeriv (Proofs.dense Wfc1 bfc1 (Y r) c))
+            ∘ diagBack (fun c => gf.scalarDeriv (Proofs.dense Wfc1 bfc1 (Y r) c))
             ∘ Proofs.dense (Mat.transpose Wfc2) (0 : Vec dff)) v := by
   rw [transformerMlp_backward_pertoken]
   funext idx

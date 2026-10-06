@@ -381,21 +381,21 @@ structure FNames where
   deriving Inhabited
 
 -- ── forward + backward-cotangent block helpers (verbatim pretty(SHlo), from the committed emitter) ──
-def cnxFwdBlock (cBS : Nat) (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
+def cnxFwdBlock (gf : GeluForm) (cBS : Nat) (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty cBS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (0 : DepthwiseKernel c 7 7) 0 (.operand xin 0))
   let (k2, n) ← cnxLnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   let (k3, e') ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (0 : Kernel4 e c 1 1) 0 (.operand n 0))
-  let (k4, g) ← pretty cBS (.geluF (.operand e' (0 : Vec (e*h*h))))
+  let (k4, g) ← pretty cBS (.geluF gf (.operand e' (0 : Vec (e*h*h))))
   let (k5, p) ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (0 : Kernel4 c e 1 1) 0 (.operand g 0))
   let (k6, ls) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c) (.operand p 0))
   let (k7, bout) ← pretty cBS (.addV (.operand ls (0 : Vec (c*h*h))) (.operand xin 0))
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, ⟨xin, d, n, e', g, p, bout⟩)
 
-private def bwdBlock (cBS : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) :
+private def bwdBlock (gf : GeluForm) (cBS : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
   let (k1, cot_p) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c) (.operand dy 0))
   let (k2, cot_g) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}pW" (0 : Kernel4 c e 1 1) 0 0 (.operand cot_p 0))
-  let (k3, cot_e) ← pretty cBS (.geluBack b.e (0 : Vec (e*h*h)) (.operand cot_g 0))
+  let (k3, cot_e) ← pretty cBS (.geluBack gf b.e (0 : Vec (e*h*h)) (.operand cot_g 0))
   let (k4, cot_n) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}eW" (0 : Kernel4 e c 1 1) 0 0 (.operand cot_e 0))
   let (k5, cot_d) ← lnBackSite cBS s!"%{pfx}ng" b.d cot_n c h
   let (k6, cot_main) ← pretty cBS (.depthwiseBack (h := h) (w := h) s!"%{pfx}dW" (0 : DepthwiseKernel c 7 7) 0 0 (.operand cot_d 0))
@@ -592,7 +592,7 @@ structure CFwd where
     LayerNorm, which reduces over the channel/spatial axes of ONE example and never over the batch.
     So the forward is already class-batch-independent: train == eval, and `@convnext_fwd` is the
     only forward artifact this net needs (unlike the BN nets, which need a frozen-stats peer). -/
-private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
+private def convNextFwdChain (gf : GeluForm) (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     : StateM Proofs.StableHLO.EmitS CFwd := do
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
     (0 : Kernel4 (V.dims[0]!) 3 4 4) 0 (.operand "%x" (0 : Vec (3*(2*(2*56))*(2*(2*56))))))
@@ -607,7 +607,7 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     let c := V.dims[si]!; let e := 4 * c; let h := cSpats[si]!
     let mut blks : Array FNames := #[]
     for j in [0:V.depths[si]!] do
-      let (code, bn) ← cnxFwdBlock cBS s!"s{si}b{j}" cur c e h
+      let (code, bn) ← cnxFwdBlock gf cBS s!"s{si}b{j}" cur c e h
       fwd := fwd ++ code; cur := bn.bout; blks := blks.push bn
     blksAll := blksAll.push blks
     if si < 3 then
@@ -634,11 +634,11 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
     (`convNextFwdRenderB`); `TestConvNeXtFwdBTie` checks this render against it byte for byte, and
     `scripts/regen_verified_mlir.sh check` checks that its body is a prefix of
     `convnext_train_step.mlir`'s. -/
-def convNextFwdText (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
+def convNextFwdText (gf : GeluForm) (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
     (V : CnxDims := cnxTiny)
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
-  let F : CFwd := (convNextFwdChain cBS nClasses V).run' (0, [])
+  let F : CFwd := (convNextFwdChain gf cBS nClasses V).run' (0, [])
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> {ty [cBS,nClasses]} " ++ "{\n" ++
@@ -669,14 +669,14 @@ def convNextFwdText (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
     The softmax is `pretty`d on its own line rather than nested inside the `.sub` so that `%loss`
     can read it; `.operand` is a leaf that emits nothing, so the fresh-name sequence is the same
     either way. -/
-def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) := none)
+def convNextBackAll (gf : GeluForm) (adam : Bool) (smooth : Option (String × String × String) := none)
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String) × String) := do
     -- ═══ forward — the SAME chain `convNextFwdText` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions ═══
-    let F : CFwd ← convNextFwdChain cBS nClasses V
+    let F : CFwd ← convNextFwdChain gf cBS nClasses V
     let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (0 : Vec nClasses))))
     let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (0 : Vec nClasses)) (.operand "%onehot" 0))
     let blksAll := F.blksAll
@@ -731,7 +731,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
       for j' in [0:V.depths[si]!] do
         let j := V.depths[si]! - 1 - j'
         let b := (blksAll[si]!)[j]!
-        let (code, cot_xin, cot_p, cot_e, cot_n, cot_d) ← bwdBlock cBS s!"s{si}b{j}" dy b c e h
+        let (code, cot_xin, cot_p, cot_e, cot_n, cot_d) ← bwdBlock gf cBS s!"s{si}b{j}" dy b c e h
         let (pcode, pairs) ← blockParamSgd cBS adam s!"s{si}b{j}" b cot_p cot_e cot_n cot_d dy c e h
         bwd := bwd ++ code ++ pcode; updMap := updMap ++ pairs; dy := cot_xin
       if si > 0 then
@@ -771,11 +771,11 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
     differently. -/
-def convNextTrainStepText (funcName : String := "convnext_train_step")
+def convNextTrainStepText (gf : GeluForm) (funcName : String := "convnext_train_step")
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     -- TRAILING + DEFAULTED, see the note at the top of this file.
     (cBS : Nat := 32) : String := Id.run do
-  let (body, updMap, _) := (convNextBackAll false none nClasses V (cBS := cBS)).run' (0, [])
+  let (body, updMap, _) := (convNextBackAll gf false none nClasses V (cBS := cBS)).run' (0, [])
   let argSig := String.intercalate ", "
     (("%x: " ++ ty [cBS, 3*224*224]) :: (allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}") ++ ["%onehot: " ++ ty [cBS,nClasses]])
   let retTyL := String.intercalate ", " ((allParams nClasses V).map (fun p => ty p.2))
@@ -885,7 +885,7 @@ private def cnxGapBackNote : String :=
     and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*.
     See `optOne` for the carve-out. -/
 -- Numeric tie: `convnext-adam-tie` (tests/TestConvNeXtAdamTie.lean).
-def convNextAdamTrainStepText (alphaStr negAlphaKStr bStr : String)
+def convNextAdamTrainStepText (gf : GeluForm) (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)
     -- TRAILING: a parameter inserted mid-list captures an existing positional argument at every
@@ -939,7 +939,7 @@ def convNextAdamTrainStepText (alphaStr negAlphaKStr bStr : String)
   -- every existing call site byte-identical while making the K=1000 spelling impossible to get
   -- wrong.
   let negAK := if negAlphaKStr.isEmpty then "-" ++ alphaOverK nClasses 0.1 else negAlphaKStr
-  let trav := traversal.getD (convNextBackAll true (some (alphaStr, negAK, bStr)) nClasses V (cBS := cBS))
+  let trav := traversal.getD (convNextBackAll gf true (some (alphaStr, negAK, bStr)) nClasses V (cBS := cBS))
   let (body, gradMap, nSm) := trav.run' (0, [])
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- GLOBAL-NORM GRADIENT CLIPPING — ConvNeXt's half. Structurally the ViT block, and it has to be
@@ -1075,7 +1075,7 @@ end Proofs.StableHLO
 -- `convnext_fwd` (the batched chain's) with it, and the pairing holds because the two chains'
 -- forwards are byte-identical.
 #eval IO.FS.writeFile "verified_mlir/convnext_train_step.mlir"
-  (Proofs.StableHLO.convNextTrainStepText "convnext_train_step")
+  (Proofs.StableHLO.convNextTrainStepText .tanh "convnext_train_step")
 
 -- The entry name, the artifact path and `LEAN_MLIR_VARIANT` must agree or the shim refuses the call
 -- ("entry mismatch"). These pin the literal paths the AdamW/EMA writers use — which live in

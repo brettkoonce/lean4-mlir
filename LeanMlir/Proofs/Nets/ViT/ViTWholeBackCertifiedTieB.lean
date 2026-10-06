@@ -57,11 +57,11 @@ private noncomputable def vitEmbedBAt (B ic H W patchSize N D : Nat)
       pos_embed).differentiableAt)
 
 /-- The batched tower witness at `v`. -/
-noncomputable def vitTowerBAt (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
+noncomputable def vitTowerBAt (gf : GeluForm) (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) (v : Vec (B * (Np1 * (heads * d_head)))) :
-    HasVJPAt (StableHLO.batchMap B (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)) v :=
+    HasVJPAt (StableHLO.batchMap B (vitBodyKVFlat gf Np1 heads d_head mlpDim ε k ps)) v :=
   batchMapHasVJPAt _ v
-    (fun _ => (vitBodyKVFlatHasVJP Np1 heads d_head mlpDim ε hε k ps).toHasVJPAt _)
+    (fun _ => (vitBodyKVFlatHasVJP gf Np1 heads d_head mlpDim ε hε k ps).toHasVJPAt _)
     (fun _ => (vitBodyKVFlat_differentiable Np1 heads d_head mlpDim ε hε k ps).differentiableAt)
 
 /-- The batched final-LayerNorm witness at `v`. -/
@@ -84,10 +84,10 @@ noncomputable def vitHeadBAt (B N D nClasses : Nat) (Wcls : Mat D nClasses)
 
 /-- **The batched tower tie.** `batchMapAux B` of the depth-`k` tower backward at the batched
     saved input IS the lift's backward: `vitTowerBackK_eq_vjp` at each row. -/
-theorem vitTowerBackB_eq_vjp (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
+theorem vitTowerBackB_eq_vjp {gf : GeluForm} (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) (v : Vec (B * (Np1 * (heads * d_head)))) :
-    StableHLO.batchMapAux B (vitTowerBackK Np1 heads d_head mlpDim ε k ps) v
-      = (vitTowerBAt B Np1 heads d_head mlpDim ε hε k ps v).backward :=
+    StableHLO.batchMapAux B (vitTowerBackK gf Np1 heads d_head mlpDim ε k ps) v
+      = (vitTowerBAt gf B Np1 heads d_head mlpDim ε hε k ps v).backward :=
   batchMapAux_eq_batchMapHasVJPAt _ _ v _ _ fun _ =>
     vitTowerBackK_eq_vjp Np1 heads d_head mlpDim ε hε k ps _
 
@@ -117,7 +117,7 @@ theorem vitHeadBackB_eq_vjp (B N D nClasses : Nat) (Wcls : Mat D nClasses)
 
 /-- **The batched whole-net witness**, four batched stages composed by `vjpCompDiffAt`, each
     at the batched saved activation the chain uses (`vitSavedPEB`, `vitSavedBodyB`). -/
-noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+noncomputable def vitKVBHasVJPAt (gf : GeluForm) (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
@@ -130,7 +130,7 @@ noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClas
       (StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)
         ∘ StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
             Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))
-        ∘ StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
+        ∘ StableHLO.batchMap B (vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps)
         ∘ StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
             W_conv b_conv cls_token pos_embed)) x :=
   (vjpCompDiffAt _ (StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)) x
@@ -140,16 +140,16 @@ noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClas
       (vjpCompDiffAt
         (StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
           W_conv b_conv cls_token pos_embed))
-        (StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)) x
+        (StableHLO.batchMap B (vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps)) x
         ⟨vitEmbedBAt B ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x,
          batchMap_differentiableAt _ x (fun _ => (patchEmbedFlat_differentiable ic H W patchSize N
            (heads * d_head) W_conv b_conv cls_token pos_embed).differentiableAt)⟩
-        ⟨vitTowerBAt B (N + 1) heads d_head mlpDim ε hε k ps
+        ⟨vitTowerBAt gf B (N + 1) heads d_head mlpDim ε hε k ps
            (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x),
          batchMap_differentiableAt _ _ (fun _ => (vitBodyKVFlat_differentiable (N + 1) heads d_head mlpDim
            ε hε k ps).differentiableAt)⟩)
       ⟨vitLNBAt B (N + 1) (heads * d_head) ε hε γF βF
-         (vitSavedBodyB B ic H W patchSize N mlpDim heads d_head k
+         (vitSavedBodyB gf B ic H W patchSize N mlpDim heads d_head k
            W_conv b_conv cls_token pos_embed ε ps x),
        batchMap_differentiableAt _ _ (fun _ => (layerNormVec_per_token_flat_differentiable (N + 1)
          (heads * d_head) ε γF βF hε).differentiableAt)⟩)
@@ -161,7 +161,7 @@ noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClas
     the per-example backward at the batched saved activation — is the backward of
     `vitKVBHasVJPAt`. Three leaf rewrites (tower, final LN, head), then `rfl`: the patch-embed leaf
     is definitional. -/
-theorem vitInputGradKB_eq_vitKVB_vjp (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+theorem vitInputGradKB_eq_vitKVB_vjp {gf : GeluForm} (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
@@ -170,9 +170,9 @@ theorem vitInputGradKB_eq_vitKVB_vjp (B ic H W patchSize N mlpDim heads d_head n
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) :
-    vitInputGradKB B ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradKB gf B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitKVBHasVJPAt B ic H W patchSize N mlpDim heads d_head nClasses k
+      = (vitKVBHasVJPAt gf B ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x).backward := by
   unfold vitInputGradKB
   rw [vitTowerBackB_eq_vjp B (N + 1) heads d_head mlpDim ε hε k ps,
@@ -180,32 +180,32 @@ theorem vitInputGradKB_eq_vitKVB_vjp (B ic H W patchSize N mlpDim heads d_head n
       vitHeadBackB_eq_vjp B N (heads * d_head) nClasses Wcls bcls
         (StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
             Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))
-          (vitSavedBodyB B ic H W patchSize N mlpDim heads d_head k
+          (vitSavedBodyB gf B ic H W patchSize N mlpDim heads d_head k
             W_conv b_conv cls_token pos_embed ε ps x))]
   rfl
 
 /-- **The shape check.** The four batched stages the apex is stated at compose to
     `batchMap B vitForwardKV`, the committed per-example forward lifted whole: the per-example
     shape check `vitForwardKV_eq_chain` and three `batchMap_comp`s. -/
-theorem vitForwardKVB_eq_chain (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+theorem vitForwardKVB_eq_chain {gf : GeluForm} (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    StableHLO.batchMap B (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+    StableHLO.batchMap B (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
       = StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)
         ∘ StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
             Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))
-        ∘ StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
+        ∘ StableHLO.batchMap B (vitBodyKVFlat gf (N + 1) heads d_head mlpDim ε k ps)
         ∘ StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
             W_conv b_conv cls_token pos_embed) := by
   rw [vitForwardKV_eq_chain, batchMap_comp, batchMap_comp, batchMap_comp]
 
 /-- `vitForwardKV` is differentiable everywhere (only `0 < ε`): the four stage lemmas composed. -/
-theorem vitForwardKV_differentiable (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+theorem vitForwardKV_differentiable {gf : GeluForm} (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
@@ -213,7 +213,7 @@ theorem vitForwardKV_differentiable (ic H W patchSize N mlpDim heads d_head nCla
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
-    Differentiable ℝ (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+    Differentiable ℝ (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) := by
   rw [vitForwardKV_eq_chain]
   exact (classifierFlat_differentiable N (heads * d_head) nClasses Wcls bcls).comp
@@ -226,7 +226,7 @@ theorem vitForwardKV_differentiable (ic H W patchSize N mlpDim heads d_head nCla
     `(batchMapHasVJP (vitForwardKV …) …).backward x` — the certified gradient of the drop-free
     per-example forward lifted over `B` examples, under `0 < ε`. Carried from the chain-shaped apex
     by `HasVJPAt.backward_unique_of_eq` along the shape check. -/
-theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
+theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp {gf : GeluForm}
     (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -236,12 +236,12 @@ theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) :
-    vitInputGradKB B ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradKB gf B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
       = (batchMapHasVJP (N := B)
-          (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+          (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-          (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+          (vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
           (vitForwardKV_differentiable ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).backward x := by
@@ -251,19 +251,19 @@ theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
   exact HasVJPAt.backward_unique_of_eq
     (vitForwardKVB_eq_chain B ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls).symm
-    (vitKVBHasVJPAt B ic H W patchSize N mlpDim heads d_head nClasses k
+    (vitKVBHasVJPAt gf B ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x)
     ((batchMapHasVJP (N := B)
-        (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+        (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-        (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
+        (vitForwardKVHasVJP gf ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
         (vitForwardKV_differentiable ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).toHasVJPAt x) dy
 
 /-- **The batched apex, read as the Jacobian.** `vitInputGradKB` is the `pdiv`-contracted Jacobian
     transpose of `batchMap B vitForwardKV`, at EVERY batch and EVERY cotangent. Only `0 < ε`. -/
-theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+theorem vitInputGradKB_correct {gf : GeluForm} (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
@@ -272,10 +272,10 @@ theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasse
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) (dy : Vec (B * nClasses)) (i : Fin (B * (ic * H * W))) :
-    vitInputGradKB B ic H W patchSize N mlpDim heads d_head nClasses k
+    vitInputGradKB gf B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x dy i
       = ∑ j : Fin (B * nClasses),
-          pdiv (StableHLO.batchMap B (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
+          pdiv (StableHLO.batchMap B (vitForwardKV gf ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)) x i j * dy j := by
   rw [vitInputGradKB_eq_batchMap_vitForwardKV_vjp (βF := βF) (bcls := bcls) B ic H W patchSize N
         mlpDim heads d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x]
@@ -294,17 +294,17 @@ theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasse
     drop-free `vitForwardKV` in exact arithmetic; the `*drop*` artifacts compute another function.
     The batched peers of the other nets include `r34InputGradB_eq_r34B_full_vjp` and
     `mnv2InputGradB_eq_mobilenetv2B_full_vjp`. -/
-theorem vitTinyInputGradB_eq_vitTiny_vjp (B : Nat) {nCls : Nat}
+theorem vitTinyInputGradB_eq_vitTiny_vjp {gf : GeluForm} (B : Nat) {nCls : Nat}
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)
     (ps : Fin 12 → BlockParamsV (3 * 64) 768) (γF βF : Vec (3 * 64))
     (Wcls : Mat (3 * 64) nCls) (bcls : Vec nCls) (x : Vec (B * (3 * 224 * 224))) :
-    vitInputGradKB B 3 224 224 16 196 768 3 64 nCls 12
+    vitInputGradKB gf B 3 224 224 16 196 768 3 64 nCls 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
       = (batchMapHasVJP (N := B)
-          (vitForwardKV 3 224 224 16 196 768 3 64 nCls 12
+          (vitForwardKV gf 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-          (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 nCls 12
+          (vitForwardKVHasVJP gf 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
           (vitForwardKV_differentiable 3 224 224 16 196 768 3 64 nCls 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).backward x :=

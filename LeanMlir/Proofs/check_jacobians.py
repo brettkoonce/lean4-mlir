@@ -11,6 +11,7 @@ and off-by-one mistakes in the stated Jacobian formulas.
 
 Usage: python3 check_jacobians.py
 """
+import math
 import numpy as np
 
 EPS = 1e-5
@@ -697,7 +698,21 @@ def test_sdpaBackV(): return _test_sdpa_back("V")
 # GELU: diagonal Jacobian
 # ════════════════════════════════════════════════════════════════
 def test_gelu():
-    from scipy.special import erf
+    """`pdiv_gelu`: the tanh approximation, with `geluScalarDeriv_eq`'s closed form."""
+    n = 5
+    c, a = np.sqrt(2.0 / np.pi), 0.044715
+    def gelu(x):
+        return 0.5 * x * (1.0 + np.tanh(c * (x + a * x**3)))
+    def gelu_deriv(x):
+        t = np.tanh(c * (x + a * x**3))
+        return 0.5 * (1 + t) + 0.5 * x * ((1 - t**2) * (c * (1 + a * (3 * x**2))))
+    def jac(x):
+        return np.diag(gelu_deriv(x))
+    return check("pdiv_gelu", gelu, jac, (n,))
+
+def test_gelu_erf():
+    """`pdiv_geluErf`: the exact `x · Φ(x)`, with `geluErfScalarDeriv_eq`'s `Φ + x · φ`."""
+    erf = np.vectorize(math.erf)
     n = 5
     def gelu(x):
         return 0.5 * x * (1.0 + erf(x / np.sqrt(2.0)))
@@ -707,7 +722,7 @@ def test_gelu():
         return Phi + x * phi
     def jac(x):
         return np.diag(gelu_deriv(x))
-    return check("pdiv_gelu", gelu, jac, (n,))
+    return check("pdiv_geluErf", gelu, jac, (n,))
 
 # ════════════════════════════════════════════════════════════════
 # PatchEmbed (ViT): conv2d (stride=patchSize) + reshape to (N, D) +
@@ -1203,10 +1218,8 @@ if __name__ == "__main__":
     results.append(("UNet",         "channelConcat_input_grad",    test_channel_concat_input_grad()))
     results.append(("UNet",         "perPixelSoftmaxCE_grad",      test_per_pixel_softmax_ce()))
     results.append(("UNet",         "unetSkipPlumbing_input_grad", test_unet_skip_plumbing()))
-    try:
-        results.append(("LayerNorm", "pdiv_gelu",           test_gelu()))
-    except ImportError:
-        print("  SKIP: pdiv_gelu (scipy not installed)")
+    results.append(("Activations", "pdiv_gelu",         test_gelu()))
+    results.append(("GeluErf",      "pdiv_geluErf",      test_gelu_erf()))
 
     print("=" * 60)
     passed = sum(1 for _, _, r in results if r)
