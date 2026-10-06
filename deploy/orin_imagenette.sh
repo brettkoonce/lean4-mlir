@@ -59,15 +59,14 @@ fail () { echo "✗ $*" >&2; exit 2; }
 # a direct launch does not.
 [ -f ffi/libpjrt_ffi.so ] || fail "missing ffi/libpjrt_ffi.so — gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so"
 [ ffi/pjrt_ffi.c -nt ffi/libpjrt_ffi.so ] && fail "ffi/libpjrt_ffi.so is older than ffi/pjrt_ffi.c — rebuild it (ffi/README.md); a stale shim ignores the allocator knobs"
-# The plugin: the board's env file names it; on a desktop the box's plugin stands in, so the recipe
-# can be smoke-tested where the board is not.
-if [ -z "${PJRT_PLUGIN:-}" ]; then
-  . scripts/jobs/_box.sh
-  [ -f "$BOX_PLUG" ] && export PJRT_PLUGIN="$BOX_PLUG"
-fi
-[ -n "${PJRT_PLUGIN:-}" ] && [ -f "$PJRT_PLUGIN" ] || fail "PJRT_PLUGIN unset or missing — on the board: . ~/pjrt/orin_env.sh"
+# The platform profile names the plugin (the board's ~/pjrt/orin_env.sh through it; on a desktop
+# the box's own plugin stands in, so the recipe can be smoke-tested where the board is not) and
+# says whether this is a Jetson.
+. scripts/platform/env.sh
+[ -n "$PLATFORM_PLUGIN" ] && [ -f "$PLATFORM_PLUGIN" ] || fail "no PJRT plugin (PLATFORM_PLUGIN='$PLATFORM_PLUGIN') — on the board: bash deploy/orin_setup.sh, then . ~/pjrt/orin_env.sh"
+export PJRT_PLUGIN=$PLATFORM_PLUGIN
 
-tegra=0; [ -f /etc/nv_tegra_release ] && tegra=1
+tegra=0; [ "$PLATFORM_KIND" = tegra ] && tegra=1
 clocks=""
 if [ "$tegra" = 1 ]; then
   f=$(cat /sys/class/devfreq/*gpu*/min_freq 2>/dev/null | head -1)

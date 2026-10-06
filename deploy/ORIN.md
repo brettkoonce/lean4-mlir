@@ -107,7 +107,8 @@ sudo jetson_clocks                   # before any timing; record `sudo nvpmodel 
 cuDNN 9.12.0.46 for `linux-aarch64` from NVIDIA's redist and checks its sha256, runs the
 ship gate when `cuobjdump` is present, and writes the env file. It is safe to rerun.
 
-The env file is the whole contract:
+The env file is the whole contract, and `scripts/platform/env.sh` — the profile every runner
+sources — reads it on a Jetson when `PJRT_PLUGIN` is not already set:
 
 | variable | value | why |
 |---|---|---|
@@ -151,8 +152,9 @@ scripts/platform/check.sh            # tiers 0-2 → runs/platform/<date>-<host>
   against XLA:CPU goldens that are committed in the repo.
 - With one GPU, tier 1's `compile_dp`, `allreduce` and `dp` report SKIP. That is the
   expected result.
-- On a Jetson, `check.sh` defaults `LEAN_MLIR_PREALLOCATE=0` and `LEAN_MLIR_MEM_FRACTION=0.15`
-  when they are unset. The suite's graphs are small; the trainers' recipe is §2's.
+- On a Jetson, `scripts/platform/env.sh` (which `check.sh` sources) sets §2's allocator
+  recipe when the variables are unset: `LEAN_MLIR_PREALLOCATE=1`, `LEAN_MLIR_MEM_FRACTION=0.25`.
+  The suite's graphs are small and fit at that pool.
 - A test the Orin is known to fail goes in `scripts/platform/expected/cuda-<gpu>.txt`, so it
   reports XFAIL instead of FAIL. The `<gpu>` part is the slug the run prints. Never loosen a
   tolerance in `tolerances.tsv` to get the Orin green.

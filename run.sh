@@ -8,7 +8,7 @@
 #   trainer  - the lean_exe name (e.g. "resnet34-verified-adam"); a name without "-train" also
 #              resolves to "<name>-train" if that binary exists
 #   gpu      - GPU index to expose (default: 0)
-#   backend  - "cuda" (default) or "rocm"
+#   backend  - "cuda", "rocm" or "xpu" (default: what scripts/platform/env.sh detects on this box)
 #
 # Examples:
 #   ./run.sh mnist-cnn-verified
@@ -47,7 +47,9 @@ if [ ! -x "$binpath" ]; then
 fi
 
 gpu="${2:-0}"
-backend="${3:-cuda}"
+# The platform profile: the backend when none is named, and the device variable it selects on.
+. scripts/platform/env.sh
+backend="${3:-$PLATFORM_BACKEND}"
 
 logdir="${RUN_LOG_DIR:-runs/$(date +%F)-$(echo "$trainer" | tr '/' '_')}"
 mkdir -p "$logdir"
@@ -56,7 +58,8 @@ logfile="$logdir/$(echo "$trainer" | tr '/' '_').log"
 case "$backend" in
   cuda) export CUDA_VISIBLE_DEVICES="$gpu" ;;
   rocm) export HIP_VISIBLE_DEVICES="$gpu" ;;
-  *)    echo "Unknown backend: $backend (expected cuda or rocm)" >&2; exit 1 ;;
+  xpu)  export ZE_AFFINITY_MASK="$gpu" ;;
+  *)    echo "Unknown backend: $backend (expected cuda, rocm or xpu)" >&2; exit 1 ;;
 esac
 
 export IREE_BACKEND="$backend"

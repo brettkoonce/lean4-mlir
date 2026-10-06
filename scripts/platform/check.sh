@@ -37,27 +37,19 @@ while [ $# -gt 0 ]; do
 done
 case "$TIER" in 0|1|2) ;; *) echo "--tier $TIER: only tiers 0-2 exist so far" >&2; exit 2 ;; esac
 
-if [ -z "$BACKEND" ]; then
-  if command -v nvidia-smi >/dev/null; then BACKEND=cuda
-  elif command -v rocm-smi >/dev/null; then BACKEND=rocm
-  elif command -v xpu-smi >/dev/null; then BACKEND=xpu
-  else echo "no vendor SMI on PATH; pass --backend" >&2; exit 2; fi
-fi
+# The platform profile: backend (--backend overrides its detection), the plugin, the GPU slug the
+# baseline is keyed by, and on a Jetson the allocator defaults the trainers run with.
+[ -n "$BACKEND" ] && export PLATFORM_BACKEND=$BACKEND
+. scripts/platform/env.sh
+BACKEND=$PLATFORM_BACKEND
 case "$BACKEND" in
-  cuda) SMI=(nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader)
-        DEFAULT_PLUGIN=.venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so ;;
-  rocm) SMI=(rocm-smi --showproductname --showdriverversion)
-        DEFAULT_PLUGIN=.venv/lib/python3.12/site-packages/jax_plugins/xla_rocm7/xla_rocm_plugin.so ;;
-  xpu)  SMI=(xpu-smi discovery)
-        DEFAULT_PLUGIN="" ;;
-  *) echo "unknown backend $BACKEND" >&2; exit 2 ;;
+  cuda) if [ "$PLATFORM_KIND" = tegra ]; then SMI=(cat /etc/nv_tegra_release)   # the query form is unsupported there
+        else SMI=(nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader); fi ;;
+  rocm) SMI=(rocm-smi --showproductname --showdriverversion) ;;
+  xpu)  SMI=(xpu-smi discovery) ;;
 esac
-PLUGIN=${PJRT_PLUGIN:-$DEFAULT_PLUGIN}
-# Jetson: device and host share one DRAM, so a preallocated device pool starves the host.
-# The defaults here are deploy/ORIN.md's; an explicit setting wins.
-if [ -f /etc/nv_tegra_release ]; then
-  export LEAN_MLIR_PREALLOCATE=${LEAN_MLIR_PREALLOCATE:-0} LEAN_MLIR_MEM_FRACTION=${LEAN_MLIR_MEM_FRACTION:-0.15}
-fi
+command -v "${SMI[0]}" >/dev/null || { echo "backend $BACKEND: no ${SMI[0]} on PATH" >&2; exit 2; }
+PLUGIN=$PLATFORM_PLUGIN
 
 if [ "$PLAN" = 1 ]; then
   echo "platform suite — backend $BACKEND, tiers 0..$TIER, plugin ${PLUGIN:-<unset: export PJRT_PLUGIN>}"
@@ -71,7 +63,7 @@ if [ "$PLAN" = 1 ]; then
   exit 0
 fi
 
-slug() { tr 'A-Z' 'a-z' | sed -E 's/nvidia geforce |nvidia |amd radeon |intel\(r\) //; s/[^a-z0-9]+/-/g; s/^-|-$//g'; }
+slug() { _platform_slug; }   # env.sh's: one spelling of the baseline key
 if [ -z "$OUT" ]; then
   base="runs/platform/$(date -u +%F)-$(hostname -s)-$BACKEND"; OUT=$base; k=2
   while [ -e "$OUT" ]; do OUT="$base-$k"; k=$((k+1)); done
@@ -81,10 +73,9 @@ BUILD=$(cd "$OUT/build" && pwd); LOGS=$OUT/logs
 RESULTS=$OUT/results.tsv
 printf 'test\ttier\tstatus\tdetail\n' > "$RESULTS"
 
-# expected/<backend>-<gpu>.txt: `<test> FAIL|FLAKE  # why`, Mesa deqp-runner style.
-GPU_SLUG=unknown
-[ "$BACKEND" = cuda ] && GPU_SLUG=$(nvidia-smi --query-gpu=name --format=csv,noheader -i "${CUDA_VISIBLE_DEVICES:-0}" 2>/dev/null | head -1 | slug)
-[ -z "$GPU_SLUG" ] && GPU_SLUG=unknown
+# expected/<backend>-<gpu>.txt: `<test> FAIL|FLAKE  # why`, Mesa deqp-runner style. The slug
+# is env.sh's PLATFORM_GPU (nvidia-smi's name, or the device-tree model on a Jetson).
+GPU_SLUG=${PLATFORM_GPU:-unknown}
 EXPECTED=scripts/platform/expected/$BACKEND-$GPU_SLUG.txt
 expected_status() { [ -f "$EXPECTED" ] && awk -v t="$1" '$1==t {print $2; exit}' "$EXPECTED"; }
 
@@ -147,7 +138,7 @@ if [ -z "$PLUGIN" ] || [ ! -f "$PLUGIN" ]; then
 fi
 run probe 0 '^devices=[1-9]' "$BUILD/probe" "$PLUGIN"
 NDEV=$(sed -n 's/^devices=//p' "$LOGS/probe.log"); NDEV=${NDEV:-0}
-# Off CUDA the baseline is named from the plugin's own device kind (ROCm, XPU).
+# Where no tool named the device (ROCm, XPU), the baseline is named from the plugin's own device kind.
 if [ "$GPU_SLUG" = unknown ]; then
   GPU_SLUG=$(sed -n 's/^device_0=//p' "$LOGS/probe.log" | slug); GPU_SLUG=${GPU_SLUG:-unknown}
   EXPECTED=scripts/platform/expected/$BACKEND-$GPU_SLUG.txt

@@ -1,0 +1,16 @@
+# The support matrix behind PLATFORMS.md: one row per GPU platform, one column per rung of the
+# ladder — the suite (tiers 0-2), then `lake run mnist`, `cifar`, `imagenette`, `imagenet`.
+# A cell is the record of the LAST run of that rung on that platform: a date and the run directory
+# or runbook section it lives in (markdown), or `-` when the rung has not been run there, which is
+# not a failure. The `suite` column may be `auto:<host>`, and is then filled from the newest
+# runs/platform/*/manifest.json with that host (date, verdict, pass count, link). `plugin` is what
+# the shim dlopens and `runbook` the page that sets it up; `env` is scripts/platform/env.sh's
+# profile for the row. scripts/platform/platforms_md.py renders this; `--check` fails when the
+# committed PLATFORMS.md is stale.
+#
+# platform	env	plugin	runbook	suite	mnist	cifar	imagenette	imagenet
+ares — 4× RTX 4060 Ti, CUDA 12, driver 575	cuda / desktop / `ares`	`jax_cuda12_pjrt` 0.11.0 in the pinned `.venv`	[README](README.md#the-tour)	auto:ares	2026-09-01 · [`runs/2026-09-01-mnist-n30`](runs/2026-09-01-mnist-n30/) (30 seeds)	2026-09-01 · [`runs/2026-09-01-cifar8w-bn-xla-cuda`](runs/2026-09-01-cifar8w-bn-xla-cuda/)	2026-09-13 · [`runs/2026-09-12-r34-ablation-fp32-seeds`](runs/2026-09-12-r34-ablation-fp32-seeds/) (R34, five seeds); [`runs/2026-09-13-convnext-imagenette-ls1e-6-resident`](runs/2026-09-13-convnext-imagenette-ls1e-6-resident/); the rest in chapters 5–9	2026-09-24 · [`runs/2026-09-23-r50-a3-syncbn-bf16-100ep`](runs/2026-09-23-r50-a3-syncbn-bf16-100ep/) (R50 RSB-A3, 4 × 128); [`runs/2026-09-22-r34-syncbn-bf16-90ep`](runs/2026-09-22-r34-syncbn-bf16-90ep/) (R34)
+3060 box — 4× RTX 3060, CUDA 13.3, driver 610	cuda / desktop / `3060`	`xla_cuda13` in `/home/skoonce/.venv-cuda`, `SHIM_PYTHON` required	[scripts/jobs/_box.sh](scripts/jobs/_box.sh)	-	-	-	-	2026-09-16 · [`runs/2026-09-16-r34-bf16-90ep`](runs/2026-09-16-r34-bf16-90ep/) (R34 2018, bf16); [`runs/2026-09-27-mnv2-verified-bf16-350ep`](runs/2026-09-27-mnv2-verified-bf16-350ep/); [`runs/2026-09-26-mnv4-verified-bf16-100ep`](runs/2026-09-26-mnv4-verified-bf16-100ep/)
+Jetson Orin Nano 8 GB — sm_87, JetPack 6.2, unified memory	cuda / tegra / `orin`	jax v0.11.1 built for sm_87 by [`deploy/build_orin_pjrt_plugin.sh`](deploy/build_orin_pjrt_plugin.sh), staged by `orin_setup.sh`	[deploy/ORIN.md](deploy/ORIN.md)	-	2026-09-13 · [ORIN.md §4](deploy/ORIN.md#4-the-verified-trainers-on-the-gpu) (mnist-cnn)	2026-09-13 · [ORIN.md §4](deploy/ORIN.md#4-the-verified-trainers-on-the-gpu) (cifar, cifar8-bn)	2026-09-13 · [ORIN.md §4](deploy/ORIN.md#4-the-verified-trainers-on-the-gpu): ViT-Tiny 80 epochs; the six-row `lake run imagenette-orin` tier is the next run	n/a: one 8 GB board
+AMD ROCm — the MI300 cloud box, when it exists	rocm / desktop	`jax-rocm7-pjrt` in the pinned `.venv`	[historical/ROCM.md](historical/ROCM.md) (the 2026-08 runs; code kept, [planning/platform_integration.md §5](planning/platform_integration.md))	-	-	-	-	-
+Intel Arc Pro B60 — XPU, inbound	xpu / desktop	Intel's OpenXLA PJRT plugin, its own venv	[planning/platform_integration.md §6](planning/platform_integration.md)	-	-	-	-	-

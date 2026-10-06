@@ -1,7 +1,8 @@
 # Platform integration suite: "this GPU platform works with this build"
 
 Written 2026-10-01. Steps 1-2 of §7 (tiers 0-2, manifest, `PLATFORMS.md`) landed 2026-10-02 with a
-CUDA baseline; tier 3 is open. Goal: one script, run by hand about monthly (and later from a
+CUDA baseline; the platform profile and the support matrix (§2) landed 2026-10-06 with the Orin's
+Imagenette tier (`lake run imagenette-orin`, deploy/ORIN.md §4); tier 3 is open. Goal: one script, run by hand about monthly (and later from a
 self-hosted runner with no changes), that answers whether a GPU platform (CUDA, ROCm, Intel XPU)
 runs a given build of this repo, records the answer in the repo, and separates driver/plugin
 breakage from breakage in our code. Near-term target: the Imagenette demos on an Intel Arc Pro
@@ -22,16 +23,28 @@ A new backend's baseline may start mostly red; the signal is the baseline shrink
 ## 2. Layout
 
 ```
+scripts/platform/env.sh                        # THE profile: backend, kind, host, plugin, device var, GPU slug;
+                                               #   a Jetson's allocator defaults; sourced by check.sh,
+                                               #   scripts/jobs/_box.sh, run.sh, deploy/orin_imagenette.sh,
+                                               #   and the lakefile's detectBackend
 scripts/platform/check.sh [--tier 0|1|2|3] [--backend cuda|rocm|xpu] [--plan]
 scripts/platform/goldens.py [--check]          # JAX-on-CPU reference outputs for tier 2
 scripts/platform/tolerances.tsv                # backend | dtype | op family | atol | rtol
 scripts/platform/expected/<backend>-<gpu>.txt  # known fails / flakes, Mesa style
+scripts/platform/support.tsv                   # the support matrix: platform × (suite, mnist, cifar,
+                                               #   imagenette, imagenet), each cell the last run's record
 runs/platform/<date>-<host>-<backend>/
     manifest.json   # see section 4
     results.tsv     # test | tier | PASS/FAIL/XFAIL/XPASS/SKIP | measured | bound
     logs/           # stays on the box; not committed (scripts/gates/repo_shape.txt)
-PLATFORMS.md        # generated: one row per (platform, core)
+PLATFORMS.md        # generated: the matrix, then one row per suite run
+deploy/<PLATFORM>.md                           # one runbook page per platform that needs more than env;
+                                               #   deploy/README.md is the index
 ```
+
+Adding a platform is one `case` arm in `env.sh`, one `expected/` baseline, one `support.tsv` row and,
+if it needs more than the environment (the Jetson does: a plugin built for it, a memory cap, a
+different ResNet-50 render), a page in `deploy/` and a named `lake run` tier.
 
 `--plan` prints what would run and the expected wall time and launches nothing (the
 `lake run <job> plan` convention). Tier 3 is never the default.

@@ -2014,14 +2014,17 @@ require checkdecls from git "https://github.com/PatrickMassot/checkdecls.git"
 -- and tees to `runs/<date>-<name>/<name>.log` via run.sh.
 -- ═══════════════════════════════════════════════════════════════════════
 
-/-- cuda when an NVIDIA GPU is visible (`nvidia-smi -L` succeeds), else rocm. -/
+/-- The backend `scripts/platform/env.sh` resolves for this box — cuda, rocm or xpu by the vendor
+    SMI on PATH (a Jetson is cuda), `IREE_BACKEND` / `PLATFORM_BACKEND` overriding. That file is
+    the one place a platform is described (plugin, device variable, box profile); this asks it
+    rather than keeping a second copy of the detection. cuda when the file cannot be read. -/
 private def detectBackend : IO String := do
-  let ok (cmd : String) (args : Array String) : IO Bool := do
-    try pure ((← IO.Process.output { cmd, args }).exitCode == 0) catch _ => pure false
-  -- ROCm only when its tool answers and NVIDIA's does not; anything else is the NVIDIA default.
-  if ← ok "nvidia-smi" #["-L"] then return "cuda"
-  if ← ok "rocm-smi" #[] then return "rocm"
-  return "cuda"
+  try
+    let r ← IO.Process.output
+      { cmd := "bash", args := #["-c", ". scripts/platform/env.sh && printf %s \"$PLATFORM_BACKEND\""] }
+    let b := r.stdout.trimAscii.toString
+    pure (if r.exitCode == 0 && !b.isEmpty then b else "cuda")
+  catch _ => pure "cuda"
 
 /-- `ffi/libpjrt_ffi.so` is **not** a lake target — it is the gcc one-liner documented at the head
     of the XLA/PJRT section. Build it when it is missing or older than its source, so
