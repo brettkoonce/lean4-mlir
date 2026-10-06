@@ -434,7 +434,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 |---|---|---|---|---|---|---|
 | `vitin_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 38 |
 | `vitin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
-| `vitin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
 | `vitin_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitin_adam128wx_train_step.mlir` | train_step | `adam128wx` | AdamW, no decay on norm/bias, batch 128 | 1.2 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_adam128wxclip_train_step.mlir` | train_step | `adam128wxclip` | AdamW, no decay on norm/bias, grad clip, batch 128 | 1.4 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
@@ -449,7 +449,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitin_ema128_train_step.mlir` | train_step | `ema128` | EMA shadow (4-region blob), AdamW, batch 128 | 1.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp128x4_train_step.mlir` | train_step | `emadp128x4` | EMA shadow (4-region blob), AdamW, data-parallel, batch 128 per replica × 4 replicas | 1.4 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitin_emadp128x4wxclipdropbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, batch 128 per replica × 4 replicas | 1.7 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
-| `vitin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 1.7 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 1.7 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
 
 ## `vitsin` — 7 artifacts, 9.1 MB
 
