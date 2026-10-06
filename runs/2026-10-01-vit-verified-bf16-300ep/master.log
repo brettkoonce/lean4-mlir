@@ -1,0 +1,7 @@
+[sup] 2026-10-03 14:10:35 START job=vit-default-emabf16-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=3600s logs=runs/2026-10-01-vit-verified-bf16-300ep
+[sup] 2026-10-03 14:10:35 cmd: .lake/build/bin/vit-imagenet-verified data
+[sup] 2026-10-03 14:10:35 eta: bf16 ~61-62 h on 4x 3060 post-C6 (PROBED 2026-09-26 at 277 ms/step; the pre-C6 72.35 run was 48.0 h). ⚠ FEED-BOUND on 4x 4060 Ti: PROBED 2026-09-25 at 288 median / 691 mean / 605 p90 ms/step (shim starvation), i.e. well over 100 h here — run it on the 3060 box
+[sup] 2026-10-03 14:10:35 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-10-03 14:10:35   launched PID=689814 PGID=689814
+[sup]   last line: done (trained ViT-Tiny (ImageNet-1k) emadp128x4wxclipdropeps0000001bf16 + cosine→0.000010/warmup via packed threading).
+[sup] 2026-10-06 07:05:31 ✅ COMPLETE — 300/300 epochs
