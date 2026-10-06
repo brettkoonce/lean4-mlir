@@ -238,6 +238,29 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- peer.
   , ("adamdp128x4wxclipdropbf16", false, false, true)
   , ("adam128wxclipdropbf16", false, false, true)
+    -- **The exact GELU**, `geluMarker`'s `erf`: every ImageNet ConvNeXt and ViT spelling again
+    -- with the marker closing the name, before `bf16`. It needs no layout predicate (the form
+    -- changes no arity, type or region), so these rows show it disturbs none of the five; the
+    -- driver reads it only to pick the forward (`erfOn`, `fwdStem`, below). Its adjacencies are
+    -- new ones: after a digit (`128erf`), after `dp`, `wx`, `clip` and `drop` (`droperf`), and
+    -- before `bf16`.
+  , ("adamerf", false, false, false), ("adamdperf", false, false, false)
+  , ("emaerf", true, false, false), ("emadperf", true, false, false)
+  , ("adamwxerf", false, false, false), ("adamwxcliperf", false, false, false)
+  , ("adamdpwxcliperf", false, false, false)
+  , ("adamwxclipdroperf", false, false, true), ("adamdpwxclipdroperf", false, false, true)
+  , ("adamwxclipdroperfbf16", false, false, true), ("adamdpwxclipdroperfbf16", false, false, true)
+  , ("emawxclipdroperfbf16", true, false, true), ("emadpwxclipdroperfbf16", true, false, true)
+  , ("adam128erf", false, false, false), ("adamdp128x4erf", false, false, false)
+  , ("ema128erf", true, false, false), ("emadp128x4erf", true, false, false)
+  , ("adam128wxerf", false, false, false), ("adam128wxcliperf", false, false, false)
+  , ("adamdp128x4wxcliperf", false, false, false)
+  , ("adamdp128x4wxclipdroperf", false, false, true)
+  , ("adamdp128x2wxclipdroperf", false, false, true)
+  , ("adamdp256x2wxclipdroperf", false, false, true)
+  , ("adam128wxclipdroperf", false, false, true), ("adam128wxclipdroperfbf16", false, false, true)
+  , ("adamdp128x4wxclipdroperfbf16", false, false, true)
+  , ("emadp128x4wxclipdroperfbf16", true, false, true)
     -- LAMB (`r34AdamVariant .lamb`). It needs NO driver predicate — three regions, the same
     -- `[θ|m|v]` signature as `adam`, because the trust ratio is computed inside the graph from θ
     -- and the direction and needs no extra state. So it is here for `wx`/`clip`'s reason: to prove
@@ -579,3 +602,72 @@ private def accumSpellings : List String :=
 #guard table.all (fun (v, _, _, _) =>
   VerifiedVariant.evalTag v == (if v.contains "eps0001" then "_eps0001" else ""))
 #guard (table.filter (fun (v, _, _, _) => v.contains "eps")).length == 2
+
+-- THE `erf` MARKER, the exact GELU, against every concatenation in the table, as a partition:
+-- it reads as exact on the spellings that carry it and on no other. `erf` is three characters no
+-- other marker holds in order; `cliperf`, `droperf`, `dperf` and `8erf` are the meetings, and the
+-- table runs them through the five layout predicates above.
+private def erfSpellings : List String :=
+  ["adamerf", "adamdperf", "emaerf", "emadperf", "adamwxerf", "adamwxcliperf", "adamdpwxcliperf",
+   "adamwxclipdroperf", "adamdpwxclipdroperf", "adamwxclipdroperfbf16",
+   "adamdpwxclipdroperfbf16", "emawxclipdroperfbf16", "emadpwxclipdroperfbf16",
+   "adam128erf", "adamdp128x4erf", "ema128erf", "emadp128x4erf", "adam128wxerf",
+   "adam128wxcliperf", "adamdp128x4wxcliperf", "adamdp128x4wxclipdroperf",
+   "adamdp128x2wxclipdroperf", "adamdp256x2wxclipdroperf", "adam128wxclipdroperf",
+   "adam128wxclipdroperfbf16", "adamdp128x4wxclipdroperfbf16", "emadp128x4wxclipdroperfbf16"]
+#guard table.all (fun (v, _, _, _) => erfOn v == erfSpellings.contains v)
+#guard erfSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
+-- The form adds no region, scalar or mask: an exact spelling packs as its tanh partner does.
+#guard erfSpellings.all (fun v =>
+  let t := v.replace "erf" ""
+  nRegions v == nRegions t && nScalars v == nScalars t && emaRegion v == emaRegion t &&
+  sdOn v == sdOn t && cdOn v == cdOn t && accOn v == accOn t && rmsOn v == rmsOn t)
+-- ViT's pair variant: the marker follows the ε digits and `evalTag`-style digit reads stop at it.
+#guard erfOn "emadp128x4wxclipdropeps0000001erfbf16" == true
+#guard erfOn "emadp128x4wxclipdropeps0000001bf16" == false
+#guard emaOn "emadp128x4wxclipdropeps0000001erfbf16" == true
+#guard sdOn  "emadp128x4wxclipdropeps0000001erfbf16" == true
+#guard cdOn  "emadp128x4wxclipdropeps0000001erfbf16" == false
+#guard accOn "emadp128x4wxclipdropeps0000001erfbf16" == false
+#guard nRegions "emadp128x4wxclipdropeps0000001erfbf16" == 4
+#guard VerifiedVariant.evalTag "emadp128x4wxclipdropeps0000001erfbf16" == "_eps0000001"
+-- `fwdStem`: the forward a variant with none of its own scores through.
+#guard fwdStem "convnextin" "emadpwxclipdroperfbf16" == "convnextin_erf_fwd"
+#guard fwdStem "convnextin" "emadpwxclipdropbf16" == "convnextin_fwd"
+#guard fwdStem "vitin" "adam128erf" == "vitin_erf_fwd"
+#guard fwdStem "resnet50in" "momdp64bf16" == "resnet50in_fwd"
+
+-- THE GELU-FORM WORLD CHECK, run on the committed artifacts. For every ImageNet ViT / ConvNeXt
+-- train step, at both forms, the forward the driver resolves (the variant's own, else `fwdStem`)
+-- exists and `checkGeluWorld` accepts the pair; and the three mixed readings are refused: an exact
+-- train step scored through the tanh forward, a tanh train step through the exact forward, and an
+-- `erf` name on a tanh train step.
+#eval show IO Unit from do
+  let dir := "verified_mlir"
+  let refused (act : IO Unit) : IO Bool := do
+    try act; pure false catch _ => pure true
+  let mut pairs := 0
+  for slug in ["vitin", "vitsin", "vitbin", "convnextin", "convnextsin", "convnextbin"] do
+    for e in ← System.FilePath.readDir dir do
+      let f := e.fileName
+      if f.startsWith (slug ++ "_") && f.endsWith "_train_step.mlir" then
+        let variant := ((f.drop (slug.length + 1)).dropEnd "_train_step.mlir".length).toString
+        let own := s!"{dir}/{slug}_{variant}_fwd.mlir"
+        let fwd := if ← System.FilePath.pathExists own then own
+                   else s!"{dir}/{fwdStem slug variant}.mlir"
+        unless ← System.FilePath.pathExists fwd do
+          throw <| IO.userError s!"{slug} {variant}: no forward at {fwd}"
+        checkGeluWorld variant s!"{dir}/{f}" fwd
+        pairs := pairs + 1
+  let ts (v : String) := s!"{dir}/convnextin_{v}_train_step.mlir"
+  let mixed ← [
+      checkGeluWorld "emadpwxclipdroperfbf16" (ts "emadpwxclipdroperfbf16") s!"{dir}/convnextin_fwd.mlir",
+      checkGeluWorld "emadpwxclipdropbf16" (ts "emadpwxclipdropbf16") s!"{dir}/convnextin_erf_fwd.mlir",
+      checkGeluWorld "emadpwxclipdroperfbf16" (ts "emadpwxclipdropbf16") s!"{dir}/convnextin_erf_fwd.mlir"
+    ].mapM refused
+  unless mixed.all id do
+    throw <| IO.userError s!"checkGeluWorld accepted a mixed pair: refusals {mixed}"
+  unless pairs == 100 do
+    throw <| IO.userError s!"{pairs} train steps paired, expected 100 (50 at each form)"
+  IO.println s!"✓ checkGeluWorld: {pairs} train steps score through a forward at their own form; \
+3 mixed pairs refused"

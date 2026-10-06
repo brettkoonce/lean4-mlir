@@ -42,12 +42,17 @@ def vitImagenetConfig : VerifiedConfig where
   -- the paper's number. Init is host-side, so this needs no re-render.
   vitInit   := true
 
-/-- Entry point. Defaults to the **single-device** `adam128` variant rather than the four-replica
+/-- Entry point. Defaults to the **single-device** `adam128erf` variant rather than the four-replica
     one, matching `runResnet34Imagenet`: a DP default would make a plain invocation fail at the
     first step with a replica-count refusal, which reads as a broken build rather than a missing
-    flag. `LEAN_MLIR_VARIANT=adamdp128x4` selects the 4-GPU render. -/
+    flag. `LEAN_MLIR_VARIANT=adamdp128x4erf` selects the 4-GPU render.
+
+    The `erf` marker is the exact GELU `x · Φ(x)`, DeiT's own and the JAX reference's
+    (`vitTinyImagenetConfig.geluExact`); every ImageNet render also exists without it, at the tanh
+    approximation the runs before 2026-10-06 trained. The driver reads the marker to score through
+    a forward at the same form (`VerifiedVariant.erfOn`). -/
 def runViTImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam128"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam128erf"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6

@@ -24,15 +24,17 @@ tier use `LEAN_MLIR_DROP_RATE_U=300000` (0.3): the paper's per-size values under
 schedule (measured on the JAX side).
 
 **Batch is 64 per device** for the pair, ConvNeXt-T's rescope: global 256, the batch the LR is
-scaled to. The pair variant is `emadpwxclipdropbf16` (EMA shadow, bf16), `emawxclipdropbf16` its
-single-device peer and the default here; it fits the plugin's default arena (compile probe,
-2026-09-29), so no accumulation render and no `LEAN_MLIR_MEM_FRACTION`. The
-`adam*wxclipdrop{,bf16}` siblings are rendered at 32 and need `LEAN_MLIR_BATCH=32`.
+scaled to. The pair variant is `emadpwxclipdroperfbf16` (EMA shadow, the exact GELU, bf16),
+`emawxclipdroperfbf16` its single-device peer and the default here; the tanh twin fits the
+plugin's default arena (compile probe, 2026-09-29), so no accumulation render and no
+`LEAN_MLIR_MEM_FRACTION`. The `adam*wxclipdroperf{,bf16}` siblings are rendered at 32 and need
+`LEAN_MLIR_BATCH=32`. `erf` is the exact GELU `x · Φ(x)`, ConvNeXt's own and the JAX reference's
+(`geluExact`); each render also exists without the marker, at the tanh approximation.
 
-ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_fwd.mlir` (at
-64) plus the train step is the complete artifact set, and `convnextbin_fwd_s288` scores at timm's
-test size; `convnextbin_drop_fwd.mlir` is the 32-batch SD renders' structural prefix partner, not
-what the driver evals.
+ConvNeXt has no BatchNorm, so there is no running-stats eval forward. `convnextbin_erf_fwd.mlir`
+(at 64) plus the train step is the complete artifact set, and `convnextbin_erf_fwd_s288` scores at
+timm's test size (`convnextbin_fwd{,_s288}` for a tanh variant); `convnextbin_droperf_fwd.mlir` is
+the 32-batch SD renders' structural prefix partner, not what the driver evals.
 
 **NOTHING HAS BEEN TRAINED.** The artifacts render, the shapes tie to `VLayer.toSpecs`, the
 count is `#guard`ed against the published 88.59M and against the independent JAX emitter. No
@@ -52,11 +54,11 @@ def convnextBImagenetConfig : VerifiedConfig where
   -- The reference samples validation every 5 epochs (`jax/MainConvNeXtBImagenet.lean`); so does this.
   valEveryEpochs := 5
 
-/-- Entry point. Defaults to the single-device `emawxclipdropbf16` at 64, as the S driver does: a DP
+/-- Entry point. Defaults to the single-device `emawxclipdroperfbf16` at 64, as the S driver does: a DP
     default makes a plain invocation fail at the first step on a replica-count refusal, which reads
     as a broken build rather than a missing flag. -/
 def runConvNeXtBImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdropbf16"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdroperfbf16"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextBImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6

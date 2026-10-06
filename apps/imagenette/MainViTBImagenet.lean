@@ -57,16 +57,18 @@ to start without them:
 scripts/supervise.sh vitb-default-emabf16-4gpu
 DRY_RUN=1 scripts/supervise.sh vitb-default-emabf16-4gpu   # print the plan, run nothing
 ```
-`vitb-default-emabf16-4gpu` is the pair job: `vitbin_emadp128x4wxclipdropeps0000001bf16`, Tiny's
-pair recipe (EMA 0.99996, timm/DeiT init, bf16, DeiT's LayerNorm ε 1e-6 and min lr 1e-5) at this
-width; its eval forward is `vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir`. `vitb-default-g512-4gpu` is the non-EMA
-f32 sibling.
+`vitb-default-emabf16-4gpu` is the pair job: `vitbin_emadp128x4wxclipdropeps0000001erfbf16`, Tiny's
+pair recipe (EMA 0.99996, timm/DeiT init, bf16, DeiT's LayerNorm ε 1e-6, min lr 1e-5 and exact
+GELU) at this width; its eval forward is `vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir`.
+`vitb-default-g512-4gpu` is the non-EMA f32 sibling. The `erf` marker is the exact GELU
+`x · Φ(x)`, DeiT's own and the JAX reference's (`geluExact`); each render also exists without it,
+at the tanh approximation the table above was measured on (the two forms cost the same).
 
 By hand, at DeiT's global 512 (4 GPUs — and BOTH replica knobs are required):
 ```
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
   LEAN_MLIR_MEM_FRACTION=0.97 \
-  LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
+  LEAN_MLIR_VARIANT=adamdp128x4wxclipdroperf LEAN_MLIR_BATCH=128 \
   SHIM_WORKERS=8 \
   .lake/build/bin/vit-b-imagenet-verified data
 ```
@@ -113,7 +115,7 @@ def vitBImagenetConfig : VerifiedConfig where
     target, so `lake build` reports SUCCESS without recompiling it. This driver cannot see that
     from Lean; `scripts/jobs/vitb-default-g512-4gpu.conf` greps the binary for the string. -/
 def runViTBImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamdp128x4wxclipdrop"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamdp128x4wxclipdroperf"
   -- `bf16` is a SUFFIX test and not a substring one: every variant this net renders ends in the
   -- marker or does not carry it, and a substring test would exempt a hypothetical `bf16`-prefixed
   -- spelling that is still fp32 in its optimizer tail. See `TestVariantPredicates`.
@@ -132,7 +134,7 @@ def runViTBImagenet (argv : List String) : IO Unit := do
 " ++
         "  Or run the bf16 twin, which fits at the default:
 " ++
-        "    LEAN_MLIR_VARIANT=adamdp128x4wxclipdropbf16
+        "    LEAN_MLIR_VARIANT=adamdp128x4wxclipdroperfbf16
 " ++
         "  Or use the job config, which sets both this and the shim check:
 " ++

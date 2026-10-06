@@ -195,6 +195,38 @@ pc_render() {
   return $ok
 }
 
+# pc_gelu_render SLUG VARIANT KIND — the GELU the committed renders compute: the train step, and the
+# forward the driver scores through (its own `<slug>_<variant>_fwd.mlir`, else `<slug>_erf_fwd.mlir`
+# for an `…erf…` variant and `<slug>_fwd.mlir` for any other: VerifiedVariant.fwdStem). KIND `exact`:
+# VARIANT carries the `erf` marker and both files compute the GELU through chlo.erfc, with no
+# stablehlo.tanh — the verified peer of `pc_gelu FILE exact` on the JAX trainer. KIND `tanh`: no
+# marker, no chlo.erfc. The driver's checkGeluWorld refuses a mixed pair at startup; this catches it
+# before launch, and catches a conf left on the other form's render.
+pc_gelu_render() {
+  local slug="$1" var="$2" kind="$3" ok=0 f fwd ne nt
+  fwd="verified_mlir/${slug}_${var}_fwd.mlir"
+  case "$kind" in
+    exact) case "$var" in *erf*) ;; *)
+             echo "⛔ variant $var has no \`erf\` marker — it is a tanh-GELU render, and this recipe trains the exact GELU"; ok=1 ;; esac
+           [ -f "$fwd" ] || fwd="verified_mlir/${slug}_erf_fwd.mlir" ;;
+    tanh)  case "$var" in *erf*)
+             echo "⛔ variant $var is an exact-GELU render, which this recipe does not train"; ok=1 ;; esac
+           [ -f "$fwd" ] || fwd="verified_mlir/${slug}_fwd.mlir" ;;
+    *) echo "⛔ pc_gelu_render: unknown kind $kind"; return 1 ;;
+  esac
+  for f in "verified_mlir/${slug}_${var}_train_step.mlir" "$fwd"; do
+    [ -f "$f" ] || { echo "⛔ missing $f — scripts/regen_verified_mlir.sh proofs"; ok=1; continue; }
+    ne="$(grep -c 'chlo\.erfc' "$f" || true)"; nt="$(grep -c 'stablehlo\.tanh' "$f" || true)"
+    case "$kind" in
+      exact) { [ "${ne:-0}" -ge 1 ] && [ "${nt:-0}" = 0 ]; } || {
+               echo "⛔ $f computes ${ne:-0} chlo.erfc and ${nt:-0} stablehlo.tanh — not the exact-GELU render"; ok=1; } ;;
+      tanh)  { [ "${ne:-0}" = 0 ] && [ "${nt:-0}" -ge 1 ]; } || {
+               echo "⛔ $f computes ${ne:-0} chlo.erfc and ${nt:-0} stablehlo.tanh — not the tanh-GELU render"; ok=1; } ;;
+    esac
+  done
+  return $ok
+}
+
 # pc_ckpt SLUG VARIANT [TAG] — LEAN_MLIR_VARIANT and CKPT_EPOCH_FILE both name VARIANT. Checkpoints are
 # `<slug>_<variant>_ckpt_xla.bin`, so an epoch file left at another variant's name reads 0 forever
 # and the run never advances and never ends. Also warns about a resume and about other variants'

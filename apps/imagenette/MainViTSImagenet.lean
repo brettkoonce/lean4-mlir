@@ -15,8 +15,10 @@ and Small at different arguments. The widths live in the RENDERER: `ViTRenderB.l
 `VitDims` record as a trailing defaulted parameter, so one renderer serves both sizes.
 
 **Only the 4-replica variant is rendered**, so unlike the other ImageNet drivers this one has no
-single-device default to fall back to. `adamdp128x4wxclipdrop` at 128 per device × 4 = the global
-512 the DeiT recipe uses. There is no `adam128` peer for ViT-S; asking for one fails at load.
+single-device default to fall back to. `adamdp128x4wxclipdroperf` at 128 per device × 4 = the
+global 512 the DeiT recipe uses. There is no `adam128` peer for ViT-S; asking for one fails at
+load. The `erf` marker is the exact GELU `x · Φ(x)`, DeiT's own and the JAX reference's
+(`geluExact`); each render also exists without it, at the tanh approximation.
 
 ViT has no BatchNorm, so there is no running-stats eval forward. `vitsin_drop_fwd` plus the
 train step is the complete artifact set for this net.
@@ -30,15 +32,15 @@ policy:
 scripts/supervise.sh vits-default-emabf16-4gpu
 DRY_RUN=1 scripts/supervise.sh vits-default-emabf16-4gpu   # print the plan, run nothing
 ```
-`vits-default-emabf16-4gpu` is the pair job: `vitsin_emadp128x4wxclipdropeps0000001bf16`, Tiny's
-pair recipe (EMA 0.99996, timm/DeiT init, bf16, DeiT's LayerNorm ε 1e-6 and min lr 1e-5) at this
-width; its eval forward is `vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir`. `vits-default-g512-4gpu` is the non-EMA
-f32 sibling.
+`vits-default-emabf16-4gpu` is the pair job: `vitsin_emadp128x4wxclipdropeps0000001erfbf16`, Tiny's
+pair recipe (EMA 0.99996, timm/DeiT init, bf16, DeiT's LayerNorm ε 1e-6, min lr 1e-5 and exact
+GELU) at this width; its eval forward is `vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir`.
+`vits-default-g512-4gpu` is the non-EMA f32 sibling.
 
 By hand (4 GPUs — BOTH replica knobs are required):
 ```
 CUDA_VISIBLE_DEVICES=0,1,2,3 PJRT_REPLICAS=4 LEAN_MLIR_REPLICAS=4 \
-  LEAN_MLIR_VARIANT=adamdp128x4wxclipdrop LEAN_MLIR_BATCH=128 \
+  LEAN_MLIR_VARIANT=adamdp128x4wxclipdroperf LEAN_MLIR_BATCH=128 \
   SHIM_WORKERS=8 \
   .lake/build/bin/vit-s-imagenet-verified data
 ```
@@ -69,7 +71,7 @@ def vitSImagenetConfig : VerifiedConfig where
     refusal. That is the honest failure: the alternative is a single-device default that names an
     artifact which does not exist. -/
 def runViTSImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamdp128x4wxclipdrop"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamdp128x4wxclipdroperf"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD vitSImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6

@@ -372,6 +372,20 @@ def evalTag (v : String) : String :=
   | _ :: rest :: _ => "_eps" ++ String.ofList (rest.toList.takeWhile Char.isDigit)
   | _ => ""
 
+/-- The exact GELU `x · Φ(x)` rather than the tanh approximation — the renderers' `geluMarker`,
+    `erf` after `drop` or the ε marker and before `bf16` (`emadpwxclipdroperfbf16`,
+    `emadp128x4wxclipdropeps0000001erfbf16`). Unlike the layout markers it changes no arity, type
+    or region. The driver reads it for one thing: which forward the variant scores through
+    (`fwdStem`), with `checkGeluWorld` refusing a train step and a forward at different forms. -/
+def erfOn (v : String) : Bool := v.contains "erf"
+
+/-- The forward a variant scores through when it has none of its own (`<slug>_<variant>_fwd`):
+    `<slug>_fwd`, or `<slug>_erf_fwd` for an exact-GELU variant. The GELU is baked into every
+    block of the forward, so the tanh `<slug>_fwd` is a different net from the one an `…erf…`
+    train step trains. -/
+def fwdStem (slug v : String) : String :=
+  if erfOn v then s!"{slug}_erf_fwd" else s!"{slug}_fwd"
+
 end VerifiedVariant
 
 /-- iree-compile one `.mlir` → `.vmfb`, surfacing failures. Skips when the `.vmfb` is already
@@ -1459,6 +1473,28 @@ def checkLnEpsWorld (tsPath fwdPath : String) : IO Unit := do
   forward    {fwdPath} : LayerNorm ε {if has6 fw then "1e-6" else "not 1e-6"}\n\
   Render the variant's own forward (`<slug>_<variant>_fwd.mlir`) at the train step's ε."
 
+/-- **The GELU-form world check** — `checkLnEpsWorld`'s peer for the form of the GELU.
+
+    The spec language does not carry the form (it is a render parameter, `GeluForm`), so the
+    variant name is the only place the driver can read it and the artifacts are the only place it
+    is true. An exact-GELU train step scored through a tanh forward, or the reverse, is a
+    different net and a plausible number. Three readings must agree: the name's `erf` marker
+    (`VerifiedVariant.erfOn`), the train step's ops and the forward's. Across `verified_mlir/`
+    only the exact GELU emits `chlo.erfc`, so a net with no GELU carries none on either side and
+    passes unchanged. -/
+def checkGeluWorld (variant tsPath fwdPath : String) : IO Unit := do
+  let byName := VerifiedVariant.erfOn variant
+  let form (b : Bool) : String := if b then "the exact GELU (chlo.erfc)" else "no exact GELU"
+  for (what, path) in [("train step", tsPath), ("forward   ", fwdPath)] do
+    if ← System.FilePath.pathExists path then
+      let hasErfc := ((← IO.FS.readFile path).splitOn "chlo.erfc").length > 1
+      if hasErfc != byName then
+        throw <| IO.userError s!"GELU-FORM MISMATCH — refusing to train or score a different net.\n\
+  variant    {variant} : {if byName then "`erf` marker, the exact GELU" else "no `erf` marker, not the exact GELU"}\n\
+  {what} {path} : {form hasErfc}\n\
+  An `…erf…` variant scores through `<slug>_<variant>_fwd.mlir` or `<slug>_erf_fwd.mlir`; any \
+other through `<slug>_<variant>_fwd.mlir` or `<slug>_fwd.mlir`."
+
 /-- **Score a checkpoint, standalone** — the eval half of `trainAdamSched` with no training in
     front of it. It scores any saved checkpoint, not only the weights live during training — the
     verified peer of the JAX side's `eval_*_full50k.py`. No new MLIR: every piece is the eval
@@ -1533,8 +1569,9 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
       | some i => pure i
     | r => throw <| IO.userError s!"unknown region '{r}' — one of auto | live | ema"
   -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
-  -- exists, `<slug>_fwd.mlir` is the fallback. The FUNCTION is the one the chosen file declares
-  -- (its stem: `@<slug>_<variant>_fwd` or `@<slug>_fwd`), as in `trainAdamSched`.
+  -- exists, `<slug>_fwd.mlir` is the fallback (`<slug>_erf_fwd.mlir` for an exact-GELU variant,
+  -- `VerifiedVariant.fwdStem`). The FUNCTION is the one the chosen file declares (its stem:
+  -- `@<slug>_<variant>_fwd`, `@<slug>_fwd` or `@<slug>_erf_fwd`), as in `trainAdamSched`.
   -- A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
   -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
   let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
@@ -1542,7 +1579,7 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
     let v := s!"{net.mlirDir}/{net.slug}_{variant}_fwd{suf}.mlir"
     if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}{suf}.mlir"
     else if (← System.FilePath.pathExists v) then pure v
-    else pure s!"{net.mlirDir}/{net.slug}_fwd{suf}.mlir"
+    else pure s!"{net.mlirDir}/{VerifiedVariant.fwdStem net.slug variant}{suf}.mlir"
   -- A protocol that changes only the CROP (DeiT: 224 at 0.9) needs no second render: the base
   -- artifact serves when it is already rendered at that size.
   let fwdPath ← do
@@ -1555,6 +1592,7 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
       pure (if w == evalSize.map (fun s => 3 * s * s) then base else sized)
   if !hasBn then
     checkLnEpsWorld s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
+    checkGeluWorld variant s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
   if !(← System.FilePath.pathExists fwdPath) then
     throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
 {fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
@@ -1835,11 +1873,12 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   --
   -- `<slug>_<variant>_fwd.mlir` wins when it exists; `<slug>_fwd.mlir` is the fallback, which is
   -- correct for every net whose forward already matches its batched train step (efficientnet,
-  -- convnext, vit, mnv4, resnet50). The fallback is only safe because it is CHECKED below —
+  -- convnext, vit, mnv4, resnet50). An exact-GELU variant falls back to `<slug>_erf_fwd.mlir`
+  -- instead (`VerifiedVariant.fwdStem`). The fallback is only safe because it is CHECKED below —
   -- a silent fallback to the wrong world is the defect, not the fix.
   let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
   let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
-                 else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+                 else s!"{net.mlirDir}/{VerifiedVariant.fwdStem net.slug variant}.mlir"
   -- `mkSynthData` must be sized at the GLOBAL batch, not `bs`. Under data parallelism one step
   -- consumes `bs * replicas` images (the shim shards them), so a `bs`-sized synthetic buffer is
   -- read past its end every step: silent at bs32×2, a `free(): invalid next size` abort at bs128×2.
@@ -1893,9 +1932,11 @@ running buffers — diagnostic only, transductive, not a reportable number."
   Render {net.mlirDir}/{net.slug}_{variant}_fwd.mlir from the chain the train step \
 differentiates (see r50FwdChainB for the pattern), or drop the env var and score through \
 @{net.slug}_fwd_eval."
-  -- The LN peer of the check above, on the path a no-BN net's eval actually reads.
+  -- The LN peer of the check above, on the path a no-BN net's eval actually reads, and the
+  -- GELU-form one.
   if !hasBn then
     checkLnEpsWorld s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
+    checkGeluWorld variant s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir" fwdPath
   -- The eval forward is rendered at ITS OWN batch AND ITS OWN INPUT WIDTH, neither of which need
   -- match training. Read both off the artifact rather than assuming (`fwdRenderedShape`); when they
   -- agree with `(bs, d0)` — every 224 net — nothing below changes.

@@ -43,11 +43,16 @@ def convnextImagenetConfig : VerifiedConfig where
   --   init is applied only on a FRESH start, so a resume silently keeps the checkpoint's weights.
   cnxInit   := true
 
-/-- Entry point. Defaults to the single-device `adam` variant rather than `adamdp`, matching the
-    R34 and ViT ImageNet drivers: a DP default makes a plain invocation fail at the first step with
-    a replica-count refusal, which reads as a broken build rather than a missing flag. -/
+/-- Entry point. Defaults to the single-device `adamerf` variant rather than `adamdperf`, matching
+    the R34 and ViT ImageNet drivers: a DP default makes a plain invocation fail at the first step
+    with a replica-count refusal, which reads as a broken build rather than a missing flag.
+
+    The `erf` marker is the exact GELU `x · Φ(x)`, ConvNeXt's own and the JAX reference's
+    (`convNeXtTinyImagenetConfig.geluExact`); every ImageNet render also exists without it, at the
+    tanh approximation the runs before 2026-10-06 trained. The driver reads the marker to score
+    through a forward at the same form (`VerifiedVariant.erfOn`). -/
 def runConvNeXtImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adamerf"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6

@@ -33,13 +33,16 @@ so `LEAN_MLIR_DROP_RATE_U` retunes it without touching an artifact. At the 80-ep
 (measured on the JAX side).
 
 **Batch is 64 per device** for the pair, ConvNeXt-T's rescope: global 256 and 5,004 steps/epoch,
-the paper's batch scaled as the LR is. The pair variant is `emadpwxclipdropbf16` (the EMA shadow
-the reference scores, bf16), with `emawxclipdropbf16` its single-device peer and the default here.
-The `adam*wxclipdrop{,bf16}` siblings are rendered at 32 and need `LEAN_MLIR_BATCH=32`.
+the paper's batch scaled as the LR is. The pair variant is `emadpwxclipdroperfbf16` (the EMA
+shadow the reference scores, the exact GELU, bf16), with `emawxclipdroperfbf16` its single-device
+peer and the default here. The `adam*wxclipdroperf{,bf16}` siblings are rendered at 32 and need
+`LEAN_MLIR_BATCH=32`. `erf` is the exact GELU `x · Φ(x)`, ConvNeXt's own and the JAX reference's
+(`geluExact`); each render also exists without the marker, at the tanh approximation.
 
-ConvNeXt has no BatchNorm, so there is no running-stats eval forward: `convnextsin_fwd.mlir`
-(drop-free, at 64) plus the train step is the complete artifact set, and `convnextsin_fwd_s288`
-scores at timm's test size.
+ConvNeXt has no BatchNorm, so there is no running-stats eval forward: `convnextsin_erf_fwd.mlir`
+(drop-free, at 64) plus the train step is the complete artifact set, and
+`convnextsin_erf_fwd_s288` scores at timm's test size (`convnextsin_fwd{,_s288}` for a tanh
+variant).
 
 **NOTHING HAS BEEN TRAINED.** The artifacts render, the shapes tie to `VLayer.toSpecs`, the
 parameter count is `#guard`ed against the published 50.22M and against the independent JAX emitter,
@@ -65,12 +68,12 @@ def convnextSImagenetConfig : VerifiedConfig where
   -- The reference samples validation every 5 epochs (`jax/MainConvNeXtSImagenet.lean`); so does this.
   valEveryEpochs := 5
 
-/-- Entry point. Defaults to the SINGLE-DEVICE `emawxclipdropbf16` at 64, the pair recipe's
+/-- Entry point. Defaults to the SINGLE-DEVICE `emawxclipdroperfbf16` at 64, the pair recipe's
     single-device peer: a DP default makes a plain invocation fail at the first step with a
     replica-count refusal, which reads as a broken build rather than a missing flag. The job is
-    `scripts/jobs/cnxs-default-emabf16-4gpu.conf` (`emadpwxclipdropbf16`). -/
+    `scripts/jobs/cnxs-default-emabf16-4gpu.conf` (`emadpwxclipdroperfbf16`). -/
 def runConvNeXtSImagenet (argv : List String) : IO Unit := do
-  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdropbf16"
+  let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "emawxclipdroperfbf16"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextSImagenetConfig.batchSize
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6

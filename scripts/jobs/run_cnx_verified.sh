@@ -3,7 +3,7 @@
 #
 #   systemd-run --user --unit=cnx-verified --working-directory="$PWD" ./scripts/jobs/run_cnx_verified.sh [JOB]
 #
-# JOB defaults to `cnx-default-emabf16-4gpu`, the EMA peer (`emadpwxclipdropbf16`: AdamW + wd off
+# JOB defaults to `cnx-default-emabf16-4gpu`, the EMA peer (`emadpwxclipdroperfbf16`: AdamW + wd off
 # norm/bias + clip + drop-path + the EMA shadow the reference scores, bf16, 4x64). The non-EMA job,
 # `cnx-default-4gpu`, finished in runs/2026-09-18-cnx-verified-300ep; this script used to hard-code
 # that job and RUNDIR, so running it again would have resumed into the finished run.
