@@ -12,6 +12,7 @@ efficientnet_adam_train_step	swish-se	f32
 efficientnet_adambf16_train_step	swish-se	bf16
 vit_adam_train_step	attention	f32
 vitin_adamwxclipdropbf16_train_step	attention	bf16
+vitin_adamwxclipdroperfbf16_train_step	attention	bf16
 resnet34_adam_train_step	deep-conv	f32
 resnet34_adambf16_train_step	deep-conv	bf16
 convnext_adam_train_step	layernorm-dw7	f32

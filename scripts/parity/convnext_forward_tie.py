@@ -26,14 +26,23 @@ one side was fixed, at which point it goes red and names the disagreement. The e
 (`sum(p.numel() for p in timm.create_model('convnext_tiny', num_classes=1000).parameters())` =
 28,589,128), which is what actually caught B1. Run both; they fail in different directions.
 
-**Mechanism.** IREE compiles `verified_mlir/convnextin_fwd.mlir` to `llvm-cpu` and runs it on
+**Mechanism.** IREE compiles `verified_mlir/convnextin_erf_fwd.mlir` to `llvm-cpu` and runs it on
 random weights; the same arrays are regrouped into the reference's `params` list and pushed through
 the generated `forward()`. CPU on both sides — no GPU, so this is safe to run beside a training job,
 and there is no device nondeterminism in the comparison.
 
-⚠ **Batch is 32 and cannot be shrunk.** `ConvNeXtRender.cBS` pins it, and the artifact's `%x` is
-`tensor<32x150528xf32>`. Unlike the BN nets there is no statistical reason it must be 32 — ConvNeXt
-normalises with LayerNorm, which never reduces over the batch — it is simply what the render emits.
+**The GELU.** The references compute the exact `x · Φ(x)` (`TrainConfig.geluExact`), so the render
+tied is the exact one, `<net>_erf_fwd.mlir`; its tanh twin `<net>_fwd.mlir` is the second control,
+`--tanh-render`, and must fail. The weight scale decides whether the tie can see the form at all:
+at σ = 0.05 the pre-activations are small enough that the tanh render passes too (5.4e-07 on
+ConvNeXt-T). At the default σ = 0.2 the exact render lands at 8.1e-06 (T), 8.1e-06 (S) and
+1.1e-05 (B) and the tanh render at 5.3e-04, 4.3e-04 and 4.5e-04, against a tolerance of 3e-05 on
+logits of magnitude 5.
+
+⚠ **Batch is 64 and cannot be shrunk.** `ConvNeXtRenderB.cnxInBS` pins it, and the artifact's `%x`
+is `tensor<64x150528xf32>`. Unlike the BN nets there is no statistical reason it must be 64 —
+ConvNeXt normalises with LayerNorm, which never reduces over the batch — it is simply what the
+render emits.
 
 ⚠ **The parameter REGROUPING is the part that can silently lie.** The render's signature is 182
 flat tensors; the reference wants 100 tuples. The map below is built from the same `[3,3,9,3]`
@@ -45,11 +54,13 @@ time and a *wrong but plausible* tie the rest of the time.
 at `highest` matmul precision, as the timm gates do. Until then the reference ran its trainers' bf16
 convs and matmuls, and the tie passed at max |Δ| 1.44e-03 against a 2e-03 bar (ConvNeXt-B at
 1.86e-03, 93 % of it): bf16 rounding, which a 2e-03 bar would also have hidden a real defect under.
-At f32 the residual is **4.8e-07** (T), 7.2e-07 (S) and 8.0e-07 (B), and the tolerance is 1e-05.
-`--break`, which reintroduces the B1 defect on the reference side, lands at 8.8e-01.
+At f32 and σ = 0.05 the residual was **4.8e-07** (T), 7.2e-07 (S) and 8.0e-07 (B) under a tolerance
+of 1e-05, and `--break`, which reintroduces the B1 defect on the reference side, landed at 8.8e-01.
+At today's σ = 0.2 the numbers are the ones under **The GELU** above, and `--break` lands at 82.
 
     .venv/bin/python3 scripts/parity/convnext_forward_tie.py
     .venv/bin/python3 scripts/parity/convnext_forward_tie.py --break        # expect a FAIL; rc 0 if it fails
+    .venv/bin/python3 scripts/parity/convnext_forward_tie.py --tanh-render  # expect a FAIL; rc 0 if it fails
     .venv/bin/python3 scripts/parity/convnext_forward_tie.py --net convnextsin --depths 3,3,27,3
 """
 import argparse, os, re, subprocess, sys, tempfile
@@ -62,13 +73,14 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 import jax  # noqa: E402
 jax.config.update("jax_default_matmul_precision", "highest")
 
-# (mlir slug, reference file). Both members of each pair are the 1000-class ImageNet artifacts.
+# slug -> (the exact-GELU render, its tanh twin, the reference file). All are the 1000-class
+# ImageNet artifacts; the references compute the exact GELU (`TrainConfig.geluExact`).
 NETS = {
-    "convnextin":  ("verified_mlir/convnextin_fwd.mlir",
+    "convnextin":  ("verified_mlir/convnextin_erf_fwd.mlir", "verified_mlir/convnextin_fwd.mlir",
                     "jax/generated/generated_convnext_tiny_imagenet.py"),
-    "convnextsin": ("verified_mlir/convnextsin_fwd.mlir",
+    "convnextsin": ("verified_mlir/convnextsin_erf_fwd.mlir", "verified_mlir/convnextsin_fwd.mlir",
                     "jax/generated/generated_convnext_s_imagenet.py"),
-    "convnextbin": ("verified_mlir/convnextbin_fwd.mlir",
+    "convnextbin": ("verified_mlir/convnextbin_erf_fwd.mlir", "verified_mlir/convnextbin_fwd.mlir",
                     "jax/generated/generated_convnext_b_imagenet.py"),
 }
 
@@ -161,19 +173,27 @@ def main():
     ap.add_argument("--net", default="convnextin", choices=sorted(NETS))
     ap.add_argument("--depths", default="3,3,9,3", help="stage depths of the selected net")
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--scale", type=float, default=0.05,
-                    help="σ of the random weights; LN is scale-free but the conv stack is not")
-    ap.add_argument("--tol", type=float, default=1e-5,
-                    help="max |Δ| over the logits (llvm-cpu vs XLA-CPU fp32, 60+ layers deep)")
+    ap.add_argument("--scale", type=float, default=0.2,
+                    help="σ of the random weights; LN is scale-free but the conv stack is not, and "
+                         "below ~0.1 the two forms of the GELU are indistinguishable here")
+    ap.add_argument("--tol", type=float, default=3e-5,
+                    help="max |Δ| over the logits (llvm-cpu vs XLA-CPU fp32, 60+ layers deep; the "
+                         "logits are of magnitude 5 at the default scale)")
     ap.add_argument("--keep", action="store_true", help="keep the work directory")
     ap.add_argument("--break", dest="brk", action="store_true",
                     help="THE CONTROL: delete the head LN from the reference and expect a FAIL. "
                          "This is the B1 defect, reintroduced on one side only — a gate nobody "
                          "has watched go red is an assertion, not a test.")
+    ap.add_argument("--tanh-render", dest="tanh", action="store_true",
+                    help="THE FORM CONTROL: tie the tanh-GELU render against the reference, which "
+                         "computes the exact GELU, and expect a FAIL.")
     args = ap.parse_args()
+    if args.brk and args.tanh:
+        sys.exit("--break and --tanh-render are two controls; run them one at a time")
 
-    mlir, ref_py = NETS[args.net]
-    fn = args.net + "_fwd"
+    erf_mlir, tanh_mlir, ref_py = NETS[args.net]
+    mlir = tanh_mlir if args.tanh else erf_mlir
+    fn = os.path.basename(mlir)[:-len(".mlir")]      # an artifact's entry is its file name
     depths = [int(d) for d in args.depths.split(",")]
     for f in (mlir, ref_py):
         if not os.path.exists(f):
@@ -232,6 +252,11 @@ def main():
         ok = d.max() > args.tol
         print(f"  {'✓' if ok else '⛔'} CONTROL: with the head LN removed from the reference the tie "
               f"{'FAILS as it must' if ok else 'STILL PASSES — THE GATE IS BLIND'}")
+        return 0 if ok else 1
+    if args.tanh:
+        ok = d.max() > args.tol
+        print(f"  {'✓' if ok else '⛔'} CONTROL: the tanh-GELU render against the exact-GELU reference "
+              f"{'FAILS as it must' if ok else 'STILL PASSES — the tie cannot see the form at this scale'}")
         return 0 if ok else 1
     if d.max() <= args.tol:
         print(f"  ✓ FORWARD TIE PASSES (tol {args.tol:.1e}) — the verified render computes the "

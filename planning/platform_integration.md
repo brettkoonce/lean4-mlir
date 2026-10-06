@@ -110,11 +110,13 @@ a device, which is expected.
 
 1. ✅ Tier 0 + 1, the manifest, the `PLATFORMS.md` generator. CUDA baseline on this box
    (3× 4060 Ti, 14/14, 11 s). As built: tier 0 = `scripts/platform/probe.c` (bare plugin:
-   API version, client, devices) + `smoke.c` (one compile + execute through the shim); tier 1 =
+   API version, client, devices) + `smoke.c` (one compile + execute through the shim; since
+   2026-10-06 also `chlo.erfc` on eight known answers, the one op under the exact GELU); tier 1 =
    the four `ffi/test_pjrt_*.c` against fixtures in `scripts/platform/fixtures/` plus
    `verified_mlir/cifar8_adamdp_train_step.mlir` for the 2-replica compile. The plugin reports
    PJRT API 0.114 against our vendored header's 0.90; same major, so reported, not failed.
-2. ✅ Tier 2: 15 artifacts, seven op families, f32 and bf16 (`scripts/platform/tier2_artifacts.tsv`);
+2. ✅ Tier 2: 15 artifacts, seven op families, f32 and bf16 (`scripts/platform/tier2_artifacts.tsv`;
+   16 since 2026-10-06, with ViT-Tiny's exact-GELU bf16 step beside its tanh twin);
    `tier2.py goldens [--check]` on XLA:CPU, `tier2_run.c` through the shim on the device,
    `tolerances.tsv`. ~3 min on one 4060 Ti. What it took to make the comparison mean something,
    all in `tier2.py`'s docstrings: train steps compare `out − in`; the Adam state is m = 0, v = 1,

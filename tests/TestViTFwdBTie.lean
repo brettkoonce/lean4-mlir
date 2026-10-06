@@ -34,13 +34,17 @@ reading the batch as the token axis keeps one example and drops the rest, and at
 
 open Proofs.StableHLO
 
-/-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
+/-- The three checks at one form of the GELU. `want` and `wantTS` are the batched chain's forward
+    and AdamW train step: the committed bytes at the tanh form, and the chain's own render at the
+    exact form, for which Imagenette commits no artifact (`src` says which).
+
+    Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
     `exit` discards every diagnostic. -/
-def main : IO Unit := do
-  let want ← IO.FS.readFile "verified_mlir/vit_fwd.mlir"
-  let got := vitFwdRenderV .tanh "vit_fwd"
-  IO.println "── ViT: the per-example forward vs the committed (batched-chain) artifact ──"
-  IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
+def tieAt (gf : Proofs.GeluForm) (src want wantTS : String) : IO Unit := do
+  let got := vitFwdRenderV gf "vit_fwd"
+  IO.println s!"══ GELU form: {repr gf} — the per-example chain against {src} ══"
+  IO.println "── ViT: the per-example forward vs the batched chain's ──"
+  IO.println s!"  batched   : {want.length} chars, {(want.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
   if got == want then
     IO.println "  ✅ BYTE-IDENTICAL — the batched index changed the denotation, not the render"
@@ -54,10 +58,10 @@ emits identical bytes. That half is den_matmulFB_per_example / den_batchOp_clsSl
       if gl[i]! != wl[i]! then
         if diffs < 8 then
           IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
-          IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
+          IO.println s!"  L{i+1} batched  : {(wl[i]!).take 160}"
         diffs := diffs + 1
     IO.println s!"  ✗ {diffs} differing line(s); lengths {gl.size} vs {wl.size}"
-    throw <| IO.userError "MISMATCH: the per-example ViT forward does not emit the committed (batched-chain) artifact. \
+    throw <| IO.userError "MISMATCH: the per-example ViT forward does not emit the batched chain's forward. \
 Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 47 batched \
 forms diverged from its per-example peer, which this whole-net diff cannot."
 
@@ -74,12 +78,12 @@ forms diverged from its per-example peer, which this whole-net diff cannot."
   --  8's parameters.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
-  let (wantCode, wantNames, wantSm) := (Proofs.StableHLO.vitBackAll .tanh 32 10 "0.003125" true smooth).run' (0, [])
+  let (wantCode, wantNames, wantSm) := (Proofs.StableHLO.vitBackAll gf 32 10 "0.003125" true smooth).run' (0, [])
   -- `32` IS THE BATCH: `vitBackAllB` takes a LEADING `vbB`. A tie that reports ✅ from a stale
   -- binary is worse than one that fails: when `lake build vit-fwd-b-tie` exits 1, the stale
   -- `.lake/build/bin/vit-fwd-b-tie` still prints three green lines. Run the BUILD, not just the
   -- binary.
-  let (gotCode, gotNames, gotSm) := (vitBackAllB .tanh 32 10 smooth).run' (0, [])
+  let (gotCode, gotNames, gotSm) := (vitBackAllB gf 32 10 smooth).run' (0, [])
   IO.println "── ViT: the batched-index BACKWARD vs the per-example traversal ──"
   IO.println s!"  per-example : {wantCode.length} chars, {wantNames.length} gradients, softmax {wantSm}"
   IO.println s!"  batched     : {gotCode.length} chars, {gotNames.length} gradients, softmax {gotSm}"
@@ -137,10 +141,9 @@ is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are
   --  the seam between the traversal and the tail — the fresh-name counter, or the gradient list the
   --  tail zips.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
-  let wantTS ← IO.FS.readFile "verified_mlir/vit_adam_train_step.mlir"
-  let gotTS := vitAdamTrainStepText .tanh "vit_adam_train_step"
-  IO.println "── ViT: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
-  IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
+  let gotTS := vitAdamTrainStepText gf "vit_adam_train_step"
+  IO.println "── ViT: the per-example AdamW train step vs the batched chain's ──"
+  IO.println s!"  batched   : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
   if gotTS == wantTS then
     IO.println "  ✅ BYTE-IDENTICAL — the whole train step, no allowance"
@@ -155,7 +158,18 @@ is the same statement at N = 1, and den_rowDenseBiasGradB_at_one is why they are
         diffs := diffs + 1
         if shown < 6 then
           IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
-          IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
+          IO.println s!"  L{i+1} batched  : {(wl[i]!).take 160}"
           shown := shown + 1
-    throw <| IO.userError s!"MISMATCH in the per-example ViT TRAIN STEP vs the committed (batched-chain) artifact ({diffs} differing line(s)). \
+    throw <| IO.userError s!"MISMATCH in the per-example ViT TRAIN STEP vs the batched chain's ({diffs} differing line(s)). \
 The gradient-list check above passed, so the routing is right — look at the fresh-name seam."
+
+/-- Both forms of the GELU. The tanh form is tied to the committed artifacts. The exact form
+    (`x · Φ(x)`, the ImageNet renders' `…erf…` twins) is tied chain to chain: the batched emit of
+    `geluF .erf` / `geluBack .erf` shares one text function with the per-example token, and this
+    runs that through the whole net, the gradient list and the AdamW seam. -/
+def main : IO Unit := do
+  tieAt .tanh "the committed artifacts"
+    (← IO.FS.readFile "verified_mlir/vit_fwd.mlir")
+    (← IO.FS.readFile "verified_mlir/vit_adam_train_step.mlir")
+  tieAt .erf "the batched chain's render (no Imagenette artifact is committed at this form)"
+    (vitFwdRenderB .erf "vit_fwd") (vitAdamTrainStepBText .erf "vit_adam_train_step" "32.0")

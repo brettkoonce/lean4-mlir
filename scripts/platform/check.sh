@@ -55,7 +55,7 @@ if [ "$PLAN" = 1 ]; then
   echo "platform suite — backend $BACKEND, tiers 0..$TIER, plugin ${PLUGIN:-<unset: export PJRT_PLUGIN>}"
   echo "  visible devices: CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES-<all>} HIP_VISIBLE_DEVICES=${HIP_VISIBLE_DEVICES-<all>}"
   echo "  build   shim + probe + smoke + 4 ffi tests (gcc)             ~10 s"
-  echo "  tier 0  smi, probe (plugin, API version, devices), smoke     ~15 s"
+  echo "  tier 0  smi, probe (plugin, API version, devices), smoke, erfc   ~15 s"
   [ "$TIER" -ge 1 ] && \
   echo "  tier 1  guards, compile-dp, allreduce, dp (last 3 need 2 devices)  ~1 min"
   [ "$TIER" -ge 2 ] && \
@@ -120,7 +120,7 @@ CC=${CC:-gcc}
 b() { local t=$1; shift; "$CC" "$@" >> "$LOGS/build.log" 2>&1; record "build:$t" 0 $? ""; }
 b shim     -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o "$BUILD/libpjrt_ffi.so"
 b probe    -O2 -Iffi scripts/platform/probe.c -ldl -o "$BUILD/probe"
-b smoke    -O2 -Iffi scripts/platform/smoke.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/smoke"
+b smoke    -O2 -Iffi scripts/platform/smoke.c -L"$BUILD" -lpjrt_ffi -ldl -lm -Wl,-rpath,"$BUILD" -o "$BUILD/smoke"
 if [ "$TIER" -ge 1 ]; then
   b guards        -O2 -Iffi ffi/test_pjrt_guards.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_guards"
   b dp            -O2 -Iffi ffi/test_pjrt_dp.c -L"$BUILD" -lpjrt_ffi -ldl -Wl,-rpath,"$BUILD" -o "$BUILD/test_pjrt_dp"
@@ -144,6 +144,8 @@ if [ "$GPU_SLUG" = unknown ]; then
   EXPECTED=scripts/platform/expected/$BACKEND-$GPU_SLUG.txt
 fi
 run smoke 0 'compile \+ execute OK' env PJRT_PLUGIN="$PLUGIN" "$BUILD/smoke" scripts/platform/fixtures/add.mlir
+# `chlo.erfc`, the one op under the exact GELU of the ViT and ConvNeXt `…erf…` renders.
+run erfc 0 'chlo\.erfc OK' env PJRT_PLUGIN="$PLUGIN" "$BUILD/smoke" --erfc scripts/platform/fixtures/erfc.mlir
 [ "$TIER" -lt 1 ] && finish
 
 echo "tier 1 — shim:"

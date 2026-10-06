@@ -35,13 +35,17 @@ with a hole, and the hole would sit exactly where a renderer describes what it d
 
 open Proofs.StableHLO
 
-/-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
+/-- The three checks at one form of the GELU. `want` and `wantTS` are the batched chain's forward
+    and AdamW train step: the committed bytes at the tanh form, and the chain's own render at the
+    exact form, for which Imagenette commits no artifact (`src` says which).
+
+    Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
     `exit` discards every diagnostic. -/
-def main : IO Unit := do
-  let want ← IO.FS.readFile "verified_mlir/convnext_fwd.mlir"
-  let got := convNextFwdText .tanh "convnext_fwd"
-  IO.println "── ConvNeXt: the per-example forward vs the committed (batched-chain) artifact ──"
-  IO.println s!"  committed : {want.length} chars, {(want.splitOn "\n").length} lines"
+def tieAt (gf : Proofs.GeluForm) (src want wantTS : String) : IO Unit := do
+  let got := convNextFwdText gf "convnext_fwd"
+  IO.println s!"══ GELU form: {repr gf} — the per-example chain against {src} ══"
+  IO.println "── ConvNeXt: the per-example forward vs the batched chain's ──"
+  IO.println s!"  batched   : {want.length} chars, {(want.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {got.length} chars, {(got.splitOn "\n").length} lines"
   if got == want then
     IO.println "  ✅ BYTE-IDENTICAL — the batched index changed the denotation, not the render"
@@ -53,11 +57,10 @@ def main : IO Unit := do
       if gl[i]! != wl[i]! then
         if diffs < 8 then
           IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
-          IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
+          IO.println s!"  L{i+1} batched  : {(wl[i]!).take 160}"
         diffs := diffs + 1
     IO.println s!"  ✗ {diffs} differing line(s); lengths {gl.size} vs {wl.size}"
-    throw <| IO.userError "MISMATCH: the per-example ConvNeXt forward does not emit the committed (batched-chain) \
-artifact. Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 34 \
+    throw <| IO.userError "MISMATCH: the per-example ConvNeXt forward does not emit the batched chain's forward. Run `lake env lean tests/TestBatchedEmitTie.lean` FIRST — it localises which of the 34 \
 batched forms diverged from its per-example peer, which this whole-net diff cannot."
 
   -- ══════════════════════════════════════════════════════════════════════════════════════════
@@ -71,8 +74,8 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   --  ORDER, which is also what the AdamW tail consumes.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
   let smooth : Option (String × String × String) := some ("0.1", "-0.01", "32.0")
-  let (wantCode, wantMap, wantSm) := (Proofs.StableHLO.convNextBackAll .tanh true smooth 10).run' (0, [])
-  let (gotCode, gotMap, gotSm) := (convNextBackAllB .tanh smooth 10).run' (0, [])
+  let (wantCode, wantMap, wantSm) := (Proofs.StableHLO.convNextBackAll gf true smooth 10).run' (0, [])
+  let (gotCode, gotMap, gotSm) := (convNextBackAllB gf smooth 10).run' (0, [])
   IO.println "── ConvNeXt: the batched-index BACKWARD vs the per-example traversal ──"
   IO.println s!"  per-example : {wantCode.length} chars, {wantMap.length} gradients, softmax {wantSm}"
   IO.println s!"  batched     : {gotCode.length} chars, {gotMap.length} gradients, softmax {gotSm}"
@@ -149,10 +152,9 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
   --  and never see the batch), so it is rendered by the SAME function on both sides. Any
   --  difference here that is not the conv-VJP swap is therefore in the traversal, and is a defect.
   -- ══════════════════════════════════════════════════════════════════════════════════════════
-  let wantTS ← IO.FS.readFile "verified_mlir/convnext_adam_train_step.mlir"
-  let gotTS := convNextAdamTrainStepText .tanh "0.100000" "-0.010000" "32.0"
-  IO.println "── ConvNeXt: the per-example AdamW train step vs the committed (batched-chain) artifact ──"
-  IO.println s!"  committed : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
+  let gotTS := convNextAdamTrainStepText gf "0.100000" "-0.010000" "32.0"
+  IO.println "── ConvNeXt: the per-example AdamW train step vs the batched chain's ──"
+  IO.println s!"  batched   : {wantTS.length} chars, {(wantTS.splitOn "\n").length} lines"
   IO.println s!"  per-ex    : {gotTS.length} chars, {(gotTS.splitOn "\n").length} lines"
   if gotTS == wantTS then
     IO.println "  ✅ BYTE-IDENTICAL"
@@ -175,12 +177,12 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
           otherTS := otherTS + 1
           if shown < 6 then
             IO.println s!"  L{i+1} per-ex   : {(gl[i]!).take 160}"
-            IO.println s!"  L{i+1} committed: {(wl[i]!).take 160}"
+            IO.println s!"  L{i+1} batched  : {(wl[i]!).take 160}"
             shown := shown + 1
     IO.println s!"  ◐ {pairSwap} line(s) are the conv-VJP transpose/reverse ORDER swap — allowed"
     if otherTS != 0 then
       IO.println s!"  ✗ {otherTS} differing line(s) are NOT that swap"
-      throw <| IO.userError s!"MISMATCH between the per-example ConvNeXt TRAIN STEP and the committed batched one ({otherTS} unexplained \
+      throw <| IO.userError s!"MISMATCH between the per-example ConvNeXt TRAIN STEP and the batched one ({otherTS} unexplained \
 difference(s)). The gradMap check above passed, so the routing is right — look at the emitted ops."
     IO.println s!"  ✅ train step identical apart from that swap; {gl.size} lines, SSA unmoved"
     IO.println "  ⭐ THE SWAP HAPPENED (4c leg 3, 2026-09-07): the committed artifact is the batched \
@@ -188,3 +190,16 @@ chain's, and those lines are exactly what moved — licensed by the keep = 1 num
 (planning/archive/xla_pjrt_handoff.md §0.10) and re-run as `convnext-adam-tie` on the swapped bytes. This \
 check now pins that the per-example chain, which still writes convnext_train_step.mlir, differs \
 from the committed bytes by that pair and nothing else."
+
+/-- Both forms of the GELU. The tanh form is tied to the committed artifacts. The exact form
+    (`x · Φ(x)`, the ImageNet renders' `…erf…` twins) is tied chain to chain, under the same one
+    allowance: the batched emit of `geluF .erf` / `geluBack .erf` shares one text function with
+    the per-example token, and this runs that through the whole net, the gradient map and the
+    AdamW seam. -/
+def main : IO Unit := do
+  tieAt .tanh "the committed artifacts"
+    (← IO.FS.readFile "verified_mlir/convnext_fwd.mlir")
+    (← IO.FS.readFile "verified_mlir/convnext_adam_train_step.mlir")
+  tieAt .erf "the batched chain's render (no Imagenette artifact is committed at this form)"
+    (convNextFwdRenderB .erf "convnext_fwd" 10 cnxFwdBanner)
+    (convNextAdamTrainStepBText .erf "0.100000" "-0.010000" "32.0")

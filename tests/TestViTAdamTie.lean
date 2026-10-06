@@ -1,5 +1,7 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
+import LeanMlir.Proofs.Codegen.ViTRenderB
+import tests.ViTRender
 
 /-! # `@vit_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 
@@ -27,16 +29,55 @@ disagreement and a backward one both land in `m` and cannot be separated. Two co
 
     lake build vit-adam-tie
     .lake/build/bin/vit-adam-tie <refRender.mlir> <candRender.mlir>
+    .lake/build/bin/vit-adam-tie --hand tanh      # render both sides, then tie them
+    .lake/build/bin/vit-adam-tie --hand erf       # …at the exact GELU
+
+`--hand` renders the two sides itself, under `.lake/build/vit_adam_tie/`: the hand-written module
+at `vitTinyConfig 32` with the constants the retired driver baked, and the certified batched
+render (`vitAdamTrainStepBText`, the writer of `vit_adam_train_step.mlir`) at the same form of the
+GELU. At `erf` the two sides spell the activation differently — the hand-written
+`x · ½(1 + erf(x/√2))` through `chlo.erf` against the certified `(½x) · erfc(−x/√2)` through
+`chlo.erfc`, and likewise the derivative — so the tie is between two spellings of one function,
+forward and backward, through the whole net: the numeric peer, at the exact form, of the byte
+ties `vit-fwd-b-tie` runs.
+
+**Run it on IREE** (`LEAN_MLIR_LOWERER=iree`, with `iree-compile` on `PATH`). There both forms tie
+at a gradient norm-relative 1e-6 with no parameter over the bar, and the cross-form pair
+(`hand_erf.mlir` against `certified_tanh.mlir`) fails at 6e-4, so the bar separates the two
+activations. On the CUDA plugin XLA runs f32 matmuls on tensor cores at TF32, and two differently
+fused graphs of this net then sit 7e-4 apart in the stem gradients at either form: over the bar,
+and as far apart as the two activations are.
 
 Exits non-zero if the renders disagree or the comparison is degenerate.
 -/
 
+/-- The two sides of `--hand <form>`, written under `.lake/build/vit_adam_tie/`: the hand-written
+    scheduled AdamW module (`ViTRender.vitTrainStepModuleAdamSched`, β₁ 0.9, β₂ 0.999, ε 1e-8,
+    wd 1e-4, α 0.1 — what `vit-verified-adam` emitted at startup until the certified render
+    replaced it) and the certified batched render, both at `gf`. -/
+def renderHandPair (form : String) : IO (String × String) := do
+  let gf : Proofs.GeluForm ← match form with
+    | "tanh" => pure .tanh
+    | "erf"  => pure .erf
+    | f => throw <| IO.userError s!"--hand {f}: the form is `tanh` or `erf`"
+  let dir := ".lake/build/vit_adam_tie"
+  IO.FS.createDirAll dir
+  let cfg := { ViTRender.vitTinyConfig 32 with geluErf := gf == .erf }
+  let hand := s!"{dir}/hand_{form}.mlir"
+  let cert := s!"{dir}/certified_{form}.mlir"
+  IO.FS.writeFile hand <| ViTRender.vitTrainStepModuleAdamSched cfg (ViTRender.vitTinyBlocks 12)
+    "0.9" "0.1" "0.999" "0.001" "1.0e-8" "0.0001" 0.1
+  IO.FS.writeFile cert <|
+    Proofs.StableHLO.vitAdamTrainStepBText gf "vit_adam_train_step" "32.0"
+  pure (hand, cert)
+
 def main (args : List String) : IO Unit := do
   let dflt := "verified_mlir/vit_adam_train_step.mlir"
-  let (pathA, pathB) := match args with
-    | a :: b :: _ => (a, b)
-    | [a]         => (dflt, a)
-    | []          => (dflt, dflt)
+  let (pathA, pathB) ← match args with
+    | ["--hand", form] => renderHandPair form
+    | a :: b :: _ => pure (a, b)
+    | [a]         => pure (dflt, a)
+    | []          => pure (dflt, dflt)
   let net := vitVerified.toNet
   let bs  := 32
   IO.println "@vit_adam_train_step tie"
@@ -141,7 +182,10 @@ bit-exact {exact}/{hi-lo}"
       let a := (F32.read oa i.toUSize).abs
       if a > pm then pm := a
     let nr := if pm > 1e-30 then pd / pm else 0.0
-    if nr > 1e-4 then bad := bad + 1
+    if nr > 1e-4 then
+      bad := bad + 1
+      if bad ≤ 12 then
+        IO.println s!"    p{pi} {dims}: max|a-b| = {pd}, max|a| = {pm}, norm-rel = {nr}"
     if nr > worstR then worstR := nr; worst := s!"p{pi} {dims}"
     base := base + cnt
   IO.println s!"  params whose gradient disagrees (>1e-4 norm-rel): {bad}/{net.paramShapes.size}\

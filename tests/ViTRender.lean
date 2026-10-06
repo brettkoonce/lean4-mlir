@@ -11,7 +11,8 @@ lean_lib: the tests that import it (TestMHSA, TestViTBlock, TestViTFwd, TestViTT
 TestViTTiny, TestCifar8AdamTrain, TestMobilenetV2TrainPC) use it as a numeric reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
 the row-softmax is the op pattern of `Proofs.StableHLO.SHlo.softmaxRowF` /
 `Proofs.StableHLO.SHlo.softmaxRowBack` (plain exp/sum), GELU is the tanh approximation of
-`Proofs.StableHLO.SHlo.geluF`, and LayerNorm is `Proofs.layerNormForward` (per-token over D,
+`Proofs.StableHLO.SHlo.geluF` (or, at `ViTConfig.geluErf`, the exact `x · Φ(x)` in its textbook
+`1 + erf` spelling, which the proof side emits through `erfc`), and LayerNorm is `Proofs.layerNormForward` (per-token over D,
 γ=1/β=0) followed by a per-channel `[D]` affine (`Proofs.layerScale` + a `[D]` bias).
 
 Every fragment is prefix-parameterized (`p`) so it can be instantiated many times
@@ -127,16 +128,59 @@ def geluActBack (p xpre dy : String) (bb n m : Nat) : String :=
   s!"    %{p}dx = stablehlo.multiply {dy}, %{p}bgp : {t}\n"
 
 -- ════════════════════════════════════════════════════════════════
+-- § GELU (exact, x · Φ(x)) — elementwise over [b,n,m]
+--
+-- The textbook spelling: Φ(x) = ½ (1 + erf(x/√2)) through `chlo.erf`, and
+-- gelu'(x) = Φ(x) + x · φ(x) with φ(x) = exp(−x²/2)/√(2π). The proof side
+-- (`geluErfFwdText` / `geluErfBackText`) emits the same function as JAX spells it,
+-- (½x) · erfc(−x/√2), so the two agree to rounding and not op for op, which is
+-- what makes this an independent reference for `vit-adam-tie --hand erf`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- `Φ(x) = ½ (1 + erf(x/√2))` over `[b,n,m]`, names prefixed `%{p}{q}…`. Result `%{p}{q}phi`. -/
+def gaussPhiAct (p q inp : String) (bb n m : Nat) : String :=
+  let t := ty [bb,n,m]
+  s!"    %{p}{q}crt = stablehlo.constant dense<0.7071067811865476> : {t}\n" ++
+  s!"    %{p}{q}u = stablehlo.multiply {inp}, %{p}{q}crt : {t}\n" ++
+  s!"    %{p}{q}e = chlo.erf %{p}{q}u : {t} -> {t}\n" ++
+  s!"    %{p}{q}one = stablehlo.constant dense<1.0> : {t}\n" ++
+  s!"    %{p}{q}ope = stablehlo.add %{p}{q}one, %{p}{q}e : {t}\n" ++
+  s!"    %{p}{q}chalf = stablehlo.constant dense<0.5> : {t}\n" ++
+  s!"    %{p}{q}phi = stablehlo.multiply %{p}{q}chalf, %{p}{q}ope : {t}\n"
+
+/-- **Exact GELU forward** over `[b,n,m]`, prefix `p`, input SSA `inp`. Result `%{p}a`, as
+    `geluActF`'s. -/
+def geluErfActF (p inp : String) (bb n m : Nat) : String :=
+  gaussPhiAct p "" inp bb n m ++
+  s!"    %{p}a = stablehlo.multiply {inp}, %{p}phi : {ty [bb,n,m]}\n"
+
+/-- **Exact GELU backward** over `[b,n,m]`, prefix `p`: `dx = dy · (Φ(x) + x · φ(x))` from the
+    saved pre-activation `xpre`. Result `%{p}dx`, as `geluActBack`'s. -/
+def geluErfActBack (p xpre dy : String) (bb n m : Nat) : String :=
+  let t := ty [bb,n,m]
+  gaussPhiAct p "b" xpre bb n m ++
+  s!"    %{p}bx2 = stablehlo.multiply {xpre}, {xpre} : {t}\n" ++
+  s!"    %{p}bnh = stablehlo.constant dense<-0.5> : {t}\n" ++
+  s!"    %{p}barg = stablehlo.multiply %{p}bnh, %{p}bx2 : {t}\n" ++
+  s!"    %{p}bexp = stablehlo.exponential %{p}barg : {t}\n" ++
+  s!"    %{p}bcn = stablehlo.constant dense<0.3989422804014327> : {t}\n" ++
+  s!"    %{p}bpdf = stablehlo.multiply %{p}bcn, %{p}bexp : {t}\n" ++
+  s!"    %{p}bxp = stablehlo.multiply {xpre}, %{p}bpdf : {t}\n" ++
+  s!"    %{p}bgp = stablehlo.add %{p}bphi, %{p}bxp : {t}\n" ++
+  s!"    %{p}dx = stablehlo.multiply {dy}, %{p}bgp : {t}\n"
+
+-- ════════════════════════════════════════════════════════════════
 -- § MLP sublayer  fc2 ∘ gelu ∘ fc1   over [b,n,d] (hidden m)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **MLP forward**, prefix `p`. KEEPS `%{p}h1` `[b,n,m]` (pre-gelu) and
-    `%{p}ga` `[b,n,m]` (post-gelu) for the backward. Result `%{p}y` `[b,n,d]`. -/
-def mlpFwd (p x Wfc1 bfc1 Wfc2 bfc2 : String) (bb n d m : Nat) : String :=
+    `%{p}ga` `[b,n,m]` (post-gelu) for the backward. Result `%{p}y` `[b,n,d]`.
+    `erf` selects the exact GELU over the tanh approximation. -/
+def mlpFwd (p x Wfc1 bfc1 Wfc2 bfc2 : String) (bb n d m : Nat) (erf : Bool := false) : String :=
   s!"    %{p}h1d = stablehlo.dot_general {x}, {Wfc1}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,d]}, {ty [d,m]}) -> {ty [bb,n,m]}\n" ++
   s!"    %{p}h1bb = stablehlo.broadcast_in_dim {bfc1}, dims = [2] : ({ty [m]}) -> {ty [bb,n,m]}\n" ++
   s!"    %{p}h1 = stablehlo.add %{p}h1d, %{p}h1bb : {ty [bb,n,m]}\n" ++
-  geluActF s!"{p}g" s!"%{p}h1" bb n m ++           -- result %{p}ga
+  (if erf then geluErfActF else geluActF) s!"{p}g" s!"%{p}h1" bb n m ++   -- result %{p}ga
   s!"    %{p}y2d = stablehlo.dot_general %{p}ga, {Wfc2}, contracting_dims = [2] x [0], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,m]}, {ty [m,d]}) -> {ty [bb,n,d]}\n" ++
   s!"    %{p}y2bb = stablehlo.broadcast_in_dim {bfc2}, dims = [2] : ({ty [d]}) -> {ty [bb,n,d]}\n" ++
   s!"    %{p}y = stablehlo.add %{p}y2d, %{p}y2bb : {ty [bb,n,d]}\n"
@@ -144,13 +188,13 @@ def mlpFwd (p x Wfc1 bfc1 Wfc2 bfc2 : String) (bb n d m : Nat) : String :=
 /-- **MLP backward**, prefix `p`. Reuses `%{p}h1`/`%{p}ga` from `mlpFwd p`. `dy`
     `[b,n,d]`. Produces `%{p}dx` `[b,n,d]` + `%{p}dWfc1` `[d,m]`, `%{p}dbfc1` `[m]`,
     `%{p}dWfc2` `[m,d]`, `%{p}dbfc2` `[d]`. -/
-def mlpBack (p x Wfc1 Wfc2 dy : String) (bb n d m : Nat) : String :=
+def mlpBack (p x Wfc1 Wfc2 dy : String) (bb n d m : Nat) (erf : Bool := false) : String :=
   -- fc2 back
   s!"    %{p}da1 = stablehlo.dot_general {dy}, {Wfc2}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,d]}, {ty [m,d]}) -> {ty [bb,n,m]}\n" ++
   s!"    %{p}dWfc2 = stablehlo.dot_general %{p}ga, {dy}, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,m]}, {ty [bb,n,d]}) -> {ty [m,d]}\n" ++
   s!"    %{p}dbfc2 = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [bb,n,d]}, tensor<f32>) -> {ty [d]}\n" ++
   -- gelu back (dh1 = da1 ⊙ gelu'(h1))
-  geluActBack s!"{p}gb" s!"%{p}h1" s!"%{p}da1" bb n m ++   -- result %{p}gbdx
+  (if erf then geluErfActBack else geluActBack) s!"{p}gb" s!"%{p}h1" s!"%{p}da1" bb n m ++   -- result %{p}gbdx
   -- fc1 back
   s!"    %{p}dx = stablehlo.dot_general %{p}gbdx, {Wfc1}, contracting_dims = [2] x [1], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,m]}, {ty [d,m]}) -> {ty [bb,n,d]}\n" ++
   s!"    %{p}dWfc1 = stablehlo.dot_general {x}, %{p}gbdx, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [bb,n,d]}, {ty [bb,n,m]}) -> {ty [d,m]}\n" ++
@@ -249,21 +293,21 @@ structure BlockParams where
     Keeps `%{p}r1` (the first residual) + all sub-fragment saves. The sub-prefixes
     are `{p}1` (LN1), `{p}m` (MHSA), `{p}2` (LN2), `{p}p` (MLP). -/
 def blockFwd (p x : String) (bp : BlockParams) (b n d m h dh : Nat)
-    (eps scale : String) : String :=
+    (eps scale : String) (erf : Bool := false) : String :=
   lnFwd s!"{p}1" x bp.g1 bp.b1 b n d eps ++
   mhsaFwd s!"{p}m" s!"%{p}1y" bp.Wq bp.bq bp.Wk bp.bk bp.Wv bp.bv bp.Wo bp.bo b n d h dh scale ++
   s!"    %{p}r1 = stablehlo.add {x}, %{p}mO : {ty [b,n,d]}\n" ++
   lnFwd s!"{p}2" s!"%{p}r1" bp.g2 bp.b2 b n d eps ++
-  mlpFwd s!"{p}p" s!"%{p}2y" bp.Wfc1 bp.bfc1 bp.Wfc2 bp.bfc2 b n d m ++
+  mlpFwd s!"{p}p" s!"%{p}2y" bp.Wfc1 bp.bfc1 bp.Wfc2 bp.bfc2 b n d m erf ++
   s!"    %{p}out = stablehlo.add %{p}r1, %{p}py : {ty [b,n,d]}\n"
 
 /-- **Transformer block backward**, prefix `p`. Reuses `blockFwd p` saves. `dOut`
     `[b,n,d]` is the block-output cotangent. Produces `%{p}dx` `[b,n,d]` and the 16
     param grads (see `blockGradNames`). -/
 def blockBack (p dOut : String) (bp : BlockParams) (b n d m h dh : Nat)
-    (scale : String) : String :=
+    (scale : String) (erf : Bool := false) : String :=
   -- MLP + LN2 path (dOut → mlp → ln2)
-  mlpBack s!"{p}p" s!"%{p}2y" bp.Wfc1 bp.Wfc2 dOut b n d m ++
+  mlpBack s!"{p}p" s!"%{p}2y" bp.Wfc1 bp.Wfc2 dOut b n d m erf ++
   lnBack s!"{p}2" bp.g2 s!"%{p}pdx" b n d ++
   s!"    %{p}dr1 = stablehlo.add {dOut}, %{p}2dx : {ty [b,n,d]}\n" ++
   -- MHSA + LN1 path (dr1 → mhsa → ln1)
@@ -381,6 +425,8 @@ structure ViTConfig where
   h : Nat        -- heads
   nc : Nat       -- classes
   eps : String
+  /-- The exact GELU `x · Φ(x)` in every block's MLP, over the tanh approximation. -/
+  geluErf : Bool := false
 
 /-- Head dim `d / h`. -/
 def ViTConfig.dh (cfg : ViTConfig) : Nat := cfg.d / cfg.h
@@ -400,7 +446,8 @@ def vitFwd (p x wConv bConv cls pos gF bF Wc bc : String)
   let (blkCode, lastZ) := (blocks.zipIdx).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
       let (acc, prev) := st
       let (bpi, i) := bi
-      (acc ++ blockFwd s!"{p}b{i}_" prev bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.eps cfg.scale,
+      (acc ++ blockFwd s!"{p}b{i}_" prev bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.eps cfg.scale
+                cfg.geluErf,
        s!"%{p}b{i}_out")) ("", s!"%{p}cpz")
   patchEmbedFwd s!"{p}pe" x wConv bConv cfg.b cfg.ic cfg.d cfg.ph cfg.pw cfg.s ++
   clsPosFwd s!"{p}cp" s!"%{p}petok" cls pos cfg.b n0 cfg.d ++
@@ -418,7 +465,8 @@ def vitBack (p dlog x _wConv Wc gF : String)
   let (blkCode, firstDz) := (blocks.zipIdx.reverse).foldl (fun (st : String × String) (bi : BlockParams × Nat) =>
       let (acc, dnext) := st
       let (bpi, i) := bi
-      (acc ++ blockBack s!"{p}b{i}_" dnext bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.scale,
+      (acc ++ blockBack s!"{p}b{i}_" dnext bpi cfg.b n cfg.d cfg.m cfg.h cfg.dh cfg.scale
+                cfg.geluErf,
        s!"%{p}b{i}_dx")) ("", s!"%{p}flndx")
   headBack s!"{p}hd" Wc dlog cfg.b n cfg.d cfg.nc ++
   lnBack s!"{p}fln" gF s!"%{p}hddz" cfg.b n cfg.d ++
