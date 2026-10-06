@@ -15,11 +15,13 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 (`content.tex` ~11002–11007), the still-out lists of §8.6 and §9.7, ch 5's A2/A1 ledger (the crop,
 ~7098), appendix A (~17779) — and the same two fixes close every one of those lines.
 
-**Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done
-in code and gated, staged on `wp8fg` and **not committed**; no run carries it. Item 3 (§3) has not
-started: the next step is §3.3, the `chlo.erf` probe through `ffi/libpjrt_ffi.so` and
-`iree-compile`. No runs until both items are in the code (§5 b), then the ViT-Ti and ConvNeXt-T
-reruns go first, ahead of the owed R34 / R50 reruns and the side-quest queue.
+**Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done in
+code and gated, committed on `wp8fg` (aa974a95), not pushed; no run carries it. Item 3 (§3): the
+§3.3 probe is done — XLA and IREE both take `chlo.erf` and `chlo.erfc`, and the op to emit is
+`chlo.erfc`, in JAX's spelling — and §3.4's proofs are written and gated, staged on `wp8fg` and not
+committed. The next step is §3.5, the AST and printer. No runs until both items are in the code
+(§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and
+the side-quest queue.
 
 ## 1. Order
 
@@ -131,7 +133,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 
 ## 3. Item 3: the exact-erf GELU
 
-**Status 2026-10-06: not started.** Begin at §3.3.
+**Status 2026-10-06: §3.3 probed, §3.4 proved (staged, not committed); no AST op, render or JAX flag
+yet.** Begin at §3.5.
 
 ### 3.1 Today
 
@@ -150,43 +153,89 @@ transcendental op, so neither tanh nor erf enters a bridge bound.
 
 ### 3.2 Target
 
-`gelu(x) = x · Φ(x)`, `Φ(x) = ½ (1 + erf(x/√2))`, derivative `Φ(x) + x · φ(x)` with
-`φ(x) = exp(−x²/2) / √(2π)`.
+`gelu(x) = x · Φ(x)`, `Φ(x) = ½ (1 + erf(x/√2)) = ½ erfc(−x/√2)`, derivative `Φ(x) + x · φ(x)`
+with `φ(x) = exp(−x²/2) / √(2π)`. Emitted in the erfc form, as JAX spells it (§3.3).
 
-### 3.3 Step 0: the op exists downstream?
+### 3.3 Step 0: the op exists downstream? Yes, and the op is `chlo.erfc`
 
-StableHLO has no erf. CHLO has `chlo.erf`, which is what JAX's `lax.erf` lowers to, and XLA's PJRT
-compile legalises CHLO before HLO; IREE's StableHLO input pipeline legalises `chlo.erf` as well
-(to a polynomial). Probe before writing anything: a ten-line module with one `chlo.erf` through
-`ffi/libpjrt_ffi.so` (the suite's tier-0 compile-and-execute shape) and through `iree-compile`,
-on this box. Expected: both accept. If one refuses, the fallback is emitting XLA's own f32
-rational approximation as arithmetic — which puts an approximation of erf into our graph and
-makes the forward faithfulness theorem a statement about that polynomial, so only if forced.
+**Done 2026-10-06 on ares** (RTX 4060 Ti, the pinned `jax-cuda12` plugin 0.11.0, PJRT API 0.114;
+IREE 3.12.0rc20260428). StableHLO has no erf; CHLO has `chlo.erf` and `chlo.erfc`, which JAX's
+`lax.erf` / `lax.erfc` lower to. One-op modules for each and a forward-plus-backward GELU module,
+65,536 points on [−40, 40], went through a fresh build of `ffi/pjrt_ffi.c` and through
+`iree-compile` (`cuda` at `sm_86` and `llvm-cpu`, the repo's flags, input type auto-detected),
+executed by `ffi/libiree_ffi.so`. Every module compiles and executes on both, so the fallback —
+XLA's rational approximation emitted as arithmetic — is not needed. The text form is the one JAX
+prints: `%0 = chlo.erfc %x : tensor<…xf32> -> tensor<…xf32>`.
 
-### 3.4 Proofs (150–250 lines, `Activations.lean` or a sibling)
+**The spelling.** JAX 0.11's `jax.nn.gelu(approximate=False)` is `(0.5·x) · erfc((−x)·√½)`, not
+`1 + erf`. Emitted in JAX's op order — that forward, and the backward as `jax.vjp` prints it,
+`0.5·(dy·erfc(z)) − (−2/√π)·((0.5·x)·dy)·exp(−z²)·√½` with `z = (−x)·√½` — the shim's output equals
+JAX's bit for bit at all 65,536 points, forward and backward. The `1 + erf` spelling differs from
+JAX at 47% of the points (by up to 9.5e-7) and loses the negative tail: 6% relative error at
+x = −5 and exactly 0 below −5.24, where the erfc form holds 4e-8. PyTorch's `nn.GELU` (2.13, CPU)
+is the `1 + erf` form over its own erf kernel, so neither spelling reproduces it bit for bit; it
+carries the same tail loss (0 below −5.54). So §3.4 and §3.5 are written for `chlo.erfc`.
 
-No `Real.erf` in Mathlib; what it has is enough:
+| max abs difference, erfc spelling, unit cotangent | forward | backward |
+|---|---|---|
+| PJRT CUDA against the float64 closed form | 3.7e-7 | 1.4e-7 |
+| IREE against float64 (`cuda` and `llvm-cpu` agree) | 3.7e-7 | 1.4e-7 |
+| IREE against PJRT (what the differential oracle sees; `grad_tie.py` runs at 2e-3) | 2.4e-7 | 1.2e-7 |
+| PJRT against `jax.nn.gelu` / `jax.vjp`, same card | 0 | 0 |
+| PJRT against PyTorch `nn.GELU` and its autograd | 4.8e-7 | 2.4e-7 |
+| PyTorch against float64 | 3.7e-7 | 2.5e-7 |
+| today's tanh form against float64 | 4.7e-4 | 8.7e-4 |
 
-* `gaussPhi x := 1/2 + ∫ t in (0:ℝ)..x, gaussianPDFReal 0 1 t` (`ProbabilityTheory.gaussianPDFReal`,
-  `Mathlib/Probability/Distributions/Gaussian/Real.lean`).
-* `HasDerivAt gaussPhi (gaussianPDFReal 0 1 x) x` from
-  `intervalIntegral.integral_hasDerivAt_right` (interval-integrable from continuity; `ContinuousAt`
-  from the PDF's closed form); `fun_prop` instance so `blockV`-style smoothness goals dispatch.
-* `geluErfScalar x := x * gaussPhi x`; `geluErfScalarDeriv_eq : deriv geluErfScalar x = gaussPhi x
-  + x * gaussianPDFReal 0 1 x`; `geluErfHasVJP` on the pdiv-derived pattern of `geluHasVJP`.
-* The erf identity the printer needs: with `erf z := (2/√π) ∫ t in 0..z, exp(−t²)` defined locally,
-  `gaussPhi x = ½ (1 + erf (x/√2))` is one substitution (`intervalIntegral.integral_comp_mul_left`),
-  and `chlo.erf`'s denotation is that `erf`.
-* `0 < Φ < 1` from `integral_gaussianPDFReal_eq_one` and positivity, only if a downstream lemma
-  asks for it (the ties do not).
+**Cost and dtype.** One GELU on the card costs the same either way: tanh → erfc is 0.757 → 0.762 ms
+forward and 1.378 → 1.393 ms forward-plus-VJP at ViT-Ti's 128×197×768, 2.670 → 2.697 and
+5.185 → 5.132 ms at ViT-B's 128×197×3072 (JAX, medians of 200, the same kernels the render gets).
+Both paths run the GELU in f32 — the bf16 renders convert after it and JAX's `mm` returns f32 — so
+no bf16 kernel is involved.
+
+**Not asked.** The 3060 box's `xla_cuda13` plugin, where §3.9's reruns go, and the Orin's build. A
+`chlo.erfc` fixture in the platform suite's tier 0 asks every platform; it goes in with §3.8. The
+probe itself was a scratch run and is not in the repo.
+
+### 3.4 Proofs: done
+
+**Done 2026-10-06, staged.** Two leaf modules, 264 lines, nothing downstream rebuilt:
+`Proofs/Architectures/GeluErf.lean` and `GeluErfGaussian.lean`. `GeluErfGaussian` is a `Certs`
+root; five declarations are in `tests/AuditAxioms.lean` (1,813 verdicts, all within the three
+axioms); `lake build Certs`, `docstring-checkrefs`, `name_lint.py`, `module_refs.py`,
+`check_audit_coverage.py` and `import_audit.py implied` are green. Mathlib (v4.34.0) has no error
+function.
+
+* `GeluErf.lean`, on `Tensor` and the interval-integral FTC: `gaussPdf x = exp(−x²/2)/√(2π)` and
+  `gaussPhi x = ½ + ∫₀ˣ gaussPdf`; `hasDerivAt_gaussPhi` (`Continuous.integral_hasStrictDerivAt`);
+  `geluErfScalar x = x · gaussPhi x`, `geluErf`, `geluErfScalarDeriv` (a `deriv`, as
+  `geluScalarDeriv` is), `geluErfScalarDeriv_eq` (`Φ + x · φ`), `pdiv_geluErf`, `geluErfHasVJP`,
+  `geluErfHasVJP_correct`, and the `fun_prop` differentiability lemmas; `erf`, `erfc`, `erf_neg`,
+  `gaussPhi_eq_erf`, `gaussPhi_eq_erfc`; and the two forms as §3.3 computes them,
+  `geluErfScalar_eq_erfc : geluErfScalar x = 0.5 · x · erfc(−x · √½)` and
+  `geluErfScalarDeriv_eq_erfc : … = 0.5 · erfc(z) + (2/√π) · (0.5 · x) · exp(−z²) · √½`, `z = −x · √½`.
+* `GeluErfGaussian.lean`, on Mathlib's Gaussian and CDF: `gaussPdf_eq_gaussianPDFReal`,
+  `integral_Iic_zero_gaussPdf` (the `½`), `gaussPhi_eq_measureReal_Iic` and
+  `gaussPhi_eq_cdf : gaussPhi x = cdf (gaussianReal 0 1) x`.
+
+Two departures from the sketch. The density is a closed form in the core, not `gaussianPDFReal`:
+§3.5 makes `StableHLO/Basic.lean` import the core, and its 265 downstream modules then load 438
+more Mathlib modules for the interval integral, against 869 with the probability library; the
+equality with `gaussianPDFReal 0 1` is the leaf's first theorem. And `Φ` is proved to be Mathlib's
+CDF of the standard normal, which the sketch left out and which is what makes the `½` in the
+definition a theorem.
+
+Parked for §3.5's rebuild: `Activations.lean`'s module docstring says the tanh form is "the
+function here and in the renders". A pointer to `GeluErf` there rebuilds `LayerNorm` and the 279
+modules above `Activations`, so it goes in with the AST change.
 
 ### 3.5 AST, printer, parser, gates
 
 New constructors rather than a flag on the old ones — `geluErfF` / `geluErfBack`, batched
 `geluErf` / `geluErfBackB` — so every committed render keeps parsing and the tanh theorems stand
 for the runs that used them. Sites: `Basic.lean` (ops, `den`, faithfulness theorems), `Pretty.lean`
-(Raw / Tok / skeleton / emit: forward `chlo.erf` + arithmetic; backward `dy ⊙ (½(1 + erf(x/√2)) +
-x · exp(−x²/2)/√(2π))`, i.e. `chlo.erf`, `stablehlo.exponential` and arithmetic), `Parse.lean`
+(Raw / Tok / skeleton / emit: forward `chlo.erfc` + arithmetic; backward `dy ⊙ (½ erfc(−x/√2) +
+x · exp(−x²/2)/√(2π))`, i.e. `chlo.erfc`, `stablehlo.exponential` and arithmetic, both in JAX's op
+order so the op is bit-identical to the reference's, §3.3), `Parse.lean`
 (round-trip, under `Certs`), `IR.lean` (`geluErf_back_bridge`), `check_ir_codegen.py` /
 `check_jacobians.py` (numeric derivative of the new closed form), `tests/TestBatchedEmitTie.lean`,
 `tests/AuditAxioms.lean`, `convention_audit.py`, the comparator DECLS (`gen_comparator_tier.py`,
@@ -219,7 +268,8 @@ New variant names for the ViT and ConvNeXt ImageNet renders (an activation token
 old names stay, they are the landed runs' artifacts), plus the Imagenette renders if §5(a) says so.
 Render guard: every new `verified_mlir/` file into `proofs.yml`'s diff list
 (`render-guard-on-new-artifact`); `gen_mlir_manifest.py`; `check_render_coverage.py`; the IREE
-differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/ViTRender.lean`.
+differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/ViTRender.lean`; a
+`chlo.erfc` fixture in the platform suite's tier 0 (§3.3).
 
 ### 3.9 Reruns and the book
 
@@ -237,8 +287,8 @@ differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/Vi
 
 | step | days |
 |---|---|
-| 3.3 probe | ½ |
-| 3.4 proofs | 2–3 |
+| 3.3 probe | done |
+| 3.4 proofs | done |
 | 3.5 AST / printer / parser / gates | 1–2 |
 | 3.6 ties parametrised, rechecked | 2–4 |
 | 3.7–3.8 JAX, renders, artifact gates | 1 |

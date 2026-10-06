@@ -7,6 +7,7 @@ import LeanMlir.Proofs.Architectures.Residual
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.LayerNorm
+import LeanMlir.Proofs.Architectures.GeluErfGaussian
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
@@ -269,6 +270,12 @@ open Proofs
 -- LayerNorm / GELU / Swish
 #print axioms pdiv_gelu
 #print axioms geluHasVJP_correct
+-- exact GELU x·Φ(x): the VJP, the erfc closed forms (no Lean consumer; keep pinned), Φ = the standard normal cdf
+#print axioms pdiv_geluErf
+#print axioms geluErfHasVJP_correct
+#print axioms geluErfScalar_eq_erfc
+#print axioms geluErfScalarDeriv_eq_erfc
+#print axioms gaussPhi_eq_cdf
 -- closed form the emitted swishBack text computes (no Lean consumer; keep pinned)
 #print axioms swishScalarDeriv_eq
 #print axioms layerNormHasVJP_correct

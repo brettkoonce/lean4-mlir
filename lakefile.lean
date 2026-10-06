@@ -107,6 +107,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC,
              `LeanMlir.Proofs.Nets.ViT.ViTFwdGraph,
              `LeanMlir.Proofs.Architectures.TokenParamGrad,
+             `LeanMlir.Proofs.Architectures.GeluErfGaussian,
              `LeanMlir.Proofs.Nets.ViT.ViTChainClose,
              `LeanMlir.Proofs.Nets.ViT.ViTVecLN,
              `LeanMlir.Proofs.Nets.ViT.ViTDepthK,
