@@ -43,3 +43,10 @@
 % (macros/web.tex) demotes it below the web TOC depth so the ch1-9 web
 % sidebars match the PDF table of contents (numbered sections only).
 \newcommand{\prosesection}[1]{\section*{#1}}
+
+% \cellleft: ragged-right text in a p{...} tabular cell. \raggedright alone
+% turns the row-ending \\ into a line break, so the row end is restored.
+% The web version (macros/web.tex) is empty: plasTeX sets cells as plain
+% left-aligned HTML, and its \raggedright wraps the cell in a block that
+% breaks the inline text apart.
+\newcommand{\cellleft}{\raggedright\let\\\tabularnewline}

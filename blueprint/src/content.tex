@@ -18484,10 +18484,10 @@ plugin pinned per platform:
 \begin{tabular}{@{}p{0.24\textwidth}p{0.34\textwidth}p{0.36\textwidth}@{}}
 \textbf{Platform} & \textbf{Plugin, pinned} & \textbf{Where it stands} \\[2pt]
 \hline \\[-6pt]
-\raggedright NVIDIA, CUDA 12 & \raggedright \texttt{jax-cuda12-pjrt} 0.11.0 (CUDA 12.9, cuDNN 9.23) & \raggedright the book's numbers; Tracks 1--4 \tabularnewline[4pt]
-\raggedright NVIDIA, CUDA 13 & \raggedright \texttt{jax-cuda13-pjrt} 0.11 (CUDA 13.3, cuDNN 9.24) & \raggedright Track 4 on record: the four-card ImageNet runs \tabularnewline[4pt]
-\raggedright AMD, ROCm 7.2 & \raggedright \texttt{jax-rocm7-pjrt} 0.11.0 (Track 2's second line) & \raggedright in the code (\texttt{HIP\_VISIBLE\_DEVICES}, the suite's \texttt{--backend rocm}) \tabularnewline[4pt]
-\raggedright Jetson Orin Nano 8\,GB, JetPack 6.2 & \raggedright jax 0.11.1 built for sm\_87 against cuDNN 9.12, per \texttt{deploy/ORIN.md} & \raggedright Tracks 1--3 on record; \texttt{lake run imagenette-orin} is the Imagenette tier at the board's memory \tabularnewline
+\cellleft NVIDIA, CUDA 12 & \cellleft \texttt{jax-cuda12-pjrt} 0.11.0 (CUDA 12.9, cuDNN 9.23) & \cellleft the book's numbers; Tracks 1--4 \\[4pt]
+\cellleft NVIDIA, CUDA 13 & \cellleft \texttt{jax-cuda13-pjrt} 0.11 (CUDA 13.3, cuDNN 9.24) & \cellleft Track 4 on record: the four-card ImageNet runs \\[4pt]
+\cellleft AMD, ROCm 7.2 & \cellleft \texttt{jax-rocm7-pjrt} 0.11.0 (Track 2's second line) & \cellleft in the code (\texttt{HIP\_VISIBLE\_DEVICES}, the suite's \texttt{--backend rocm}) \\[4pt]
+\cellleft Jetson Orin Nano 8\,GB, JetPack 6.2 & \cellleft jax 0.11.1 built for sm\_87 against cuDNN 9.12, per \texttt{deploy/ORIN.md} & \cellleft Tracks 1--3 on record; \texttt{lake run imagenette-orin} is the Imagenette tier at the board's memory \\
 \end{tabular}
 \end{center}
 
