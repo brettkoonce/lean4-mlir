@@ -15,14 +15,15 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 (`content.tex` ~11002–11007), the still-out lists of §8.6 and §9.7, ch 5's A2/A1 ledger (the crop,
 ~7098), appendix A (~17779) — and the same two fixes close every one of those lines.
 
-**Where things are (2026-10-06, end of session). Start at §3.8.** §5's decisions are made.
-Everything is committed on `wp8fg` and nothing is pushed: item 4, the crop (§2, aa974a95); item 3's
-probe and proofs (§3.3–§3.4, 0ce30dc7), its op, nets and ties (§3.5–§3.6, 10fc13ee) and its JAX flag
-(§3.7, a7a9320c). No run carries either item. What is left of item 3 is §3.8, the committed
-exact-GELU renders and their gates, and §3.9, the reruns and the book. Until §3.8 lands the two
-paths disagree on ImageNet: the ViT and ConvNeXt references compute the exact GELU and the committed
-renders the tanh one. No runs until both items are in the code (§5 b), then the ViT-Ti and
-ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and the side-quest queue.
+**Where things are (2026-10-06, second session). Start at §3.9.** §5's decisions are made. Item 4,
+the crop (§2, aa974a95), and item 3's probe, proofs, op, nets, ties and JAX flag (§3.3–§3.7:
+0ce30dc7, 10fc13ee, a7a9320c) are committed on `wp8fg`, and so is §3.8 (0a474ae8, 2855e413,
+c166ccb3): every ImageNet ViT and ConvNeXt render has an exact-GELU twin under an `erf` marker,
+with its gates, the driver's forward choice and refusal, and the twelve verified job confs moved
+onto the twins. Nothing is pushed. Both paths now compute the exact GELU on ImageNet, the
+references by `geluExact` and the verified confs by the `…erf…` renders, and no run carries either
+item. What is left is §3.9: ConvNeXt-T's JAX job conf, then the ViT-Ti and ConvNeXt-T reruns,
+ahead of the owed R34 / R50 reruns and the side-quest queue, and the book lines as each lands.
 
 ## 1. Order
 
@@ -134,8 +135,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 
 ## 3. Item 3: the exact-erf GELU
 
-**Status 2026-10-06: §3.3–§3.7 committed (0ce30dc7, 10fc13ee, a7a9320c); no committed render carries
-the exact form yet.** Begin at §3.8.
+**Status 2026-10-06: §3.3–§3.8 committed (0ce30dc7, 10fc13ee, a7a9320c; 0a474ae8, 2855e413,
+c166ccb3), 67 exact-GELU renders beside the 67 tanh ones.** Begin at §3.9.
 
 ### 3.1 Today
 
@@ -359,66 +360,121 @@ Also: `planning/rubric_review/wp2_combo_gen.py` spelled the ViT and ConvNeXt pre
 form and no longer reproduced the two `*_net_tied_lossGrad` theorems after §3.6; it does again
 (0 differing lines on ViT, ConvNeXt and EfficientNet).
 
-### 3.8 Renders and the artifact gates: next
+### 3.8 Renders and the artifact gates: done
 
-**What exists.** The renderers take the form first (`vitFwdRenderB gf`, `vitAdamTrainStepBText gf`,
-`convNextFwdRenderB gf`, `convNextAdamTrainStepBText gf`, and the per-example `vitTrainStepRenderV`
-/ `convNextTrainStepText`); all 93 `#eval` writers pass `.tanh`; no committed artifact is at
-`.erf`. Scratch renders at `.erf` — ViT-Tiny's and ConvNeXt-T's forward and AdamW step — pass
-`parse_verified_mlir.py`, compile through the shim on CUDA and, the forwards, on IREE.
-`vit_timm_parity.py`'s verified half already renders `vitFwdRenderB .erf` at ε 1e-6 for Ti / S / B
-and matches timm (§3.7).
+**Done 2026-10-06, committed 0a474ae8 (the renders and their gates), 2855e413 (the driver and the
+job confs) and c166ccb3 (the ties and the platform suite).** The marker is `erf` and all 67
+ImageNet ViT and ConvNeXt renders have an exact twin: 50 train steps and 17 forwards, 94 MB,
+`verified_mlir/` at 348 artifacts. The tanh renders are untouched byte for byte, and Imagenette
+has no exact twin (§5 a).
 
-**Two choices first.**
+**The name.** `geluMarker` (`RenderKit.lean`): nothing at the tanh form, `erf` at the exact one,
+after `drop` or the ε marker and before `bf16` — `emadp128x4wxclipdropeps0000001erfbf16`,
+`emadpwxclipdroperfbf16`. `bf16` stays the suffix (`MainViTBImagenet` tests `endsWith "bf16"`). A
+forward with no train-step variant in its name carries the marker in the same slot:
+`<slug>_erf_fwd`, `<slug>_droperf_fwd`, `<slug>_erf_fwd_s288`. `cnxAdamVariant` takes the form, so
+ConvNeXt's entry names follow from `.erf`; ViT's are literals, pinned by `#guard`.
 
-* *The tag.* An activation token in the variant name; the old names stay, they are the landed
-  runs' artifacts. The precedent is LayerNorm ε: `eps0000001` ahead of `bf16` in
-  `emadp128x4wxclipdropeps0000001bf16`, read by `VerifiedVariant` (`Verified/Train.lean` ~288) and
-  enforced by `checkLnEpsWorld` (~1451), which refuses a train step at one ε scored by a forward
-  at another. The form needs the same refusal: the spec language does not carry it (§3.6), so the
-  tag is the only place a driver can read it.
-* *How many.* The ImageNet ViT and ConvNeXt renders number 67 (`vitin` 18, `vitsin` 7, `vitbin` 8,
-  `convnextin` 16, `convnextsin` 9, `convnextbin` 9). The reruns and the side-quest queue launch
-  the six `*-emabf16-4gpu` confs, which load two variants: `emadp128x4wxclipdropeps0000001bf16`
-  with its own eval forward (ViT Ti / S / B) and `emadpwxclipdropbf16` with the forwards its
-  driver scores at (ConvNeXt T / S / B). Rendering those is about a dozen files, and no other
-  variant is queued to train at the exact form. Imagenette stays at tanh (§5 a).
+**The renders and what holds them.**
 
-**Then.**
+* Writers: a closing section in `ViTRenderB.lean` (33) and in `ConvNeXtRenderB.lean` (34), each
+  writer its tanh partner's call at `.erf`. Both modules elaborate in 15 s together.
+* `scripts/gates/gelu_form_twins.py`, run with its control by `regen_verified_mlir.sh check`: each
+  exact artifact against its tanh twin with every GELU site collapsed to one line and the SSA
+  names renumbered. 67 of 67 are identical outside the sites, with one `chlo.erfc` per
+  `stablehlo.tanh` and none of the other form's op; an artifact of the six slugs without a twin
+  fails. The control moves one constant, and leaves one tanh site in an exact render; both fail.
+* The render guard: the 67 in `proofs.yml`'s two diff lists; `check_render_coverage.py` at 327 of
+  341 diffed, baseline unchanged. `check_fwd_prefix` and `check_adam_prefix` derive each twin's
+  row from its tanh row (25 forward ⊂ AdamW pairs, 36 ImageNet forwards classified).
+  `gen_mlir_manifest.py` decodes the marker and its selftest replays the new adjacencies;
+  `train_step_arity.py` 266 of 266.
 
-* The `#eval` writers for the chosen set, each with the path, entry name and `LEAN_MLIR_VARIANT`
-  agreeing as the existing `#guard`s pin them.
-* The render guard: every new `verified_mlir/` file into `proofs.yml`'s diff lists (the
-  `ConvNeXtRenderB` block ~319–364, the `ViTRenderB` block ~370–418; `render-guard-on-new-artifact`),
-  `gen_mlir_manifest.py`, `check_render_coverage.py`, `regen_verified_mlir.sh proofs` (both
-  renderers are in its module list), `train_step_arity.py`.
-* The verified drivers: the form read from the tag, and the `checkLnEpsWorld`-style refusal of a
-  mixed pair.
-* The job confs. The six the reruns launch (`vit{,s,b}-default-emabf16-4gpu`,
-  `cnx{,s,b}-default-emabf16-4gpu`) name the exact render and assert it carries `chlo.erfc` and
-  no `stablehlo.tanh`, as the JAX confs assert the trainer (`pc_gelu`). Their six non-EMA
-  siblings (`vit-default-4gpu`, `vit{s,b}-default-g512-4gpu`, `cnx{,s,b}-default-4gpu`) load
-  `adamdp…` variants with no exact render; they stay on the tanh renders, and a conf that pairs
-  one with the exact-GELU reference should say so or be retired.
-* The ties, at the exact form: `convnext_forward_tie.py` moved to the exact render at a weight
-  scale that separates the forms (it is blind at `--scale 0.05`, §3.7), with the tanh render as
-  its red control; `vit-fwd-b-tie` and `convnext-fwd-b-tie` run their batched-against-per-example
-  backward check at `.erf` as well as `.tanh`; `grad_tie.py` and the IREE differential oracle
-  (`vjp_oracle`) over the new op; `tests/ViTRender.lean`.
-* A `chlo.erfc` fixture in the platform suite's tier 0 (§3.3): the 3060 box's `xla_cuda13` plugin,
-  where §3.9's reruns go, and the Orin's build have not been asked.
+**The driver.** `VerifiedVariant.erfOn` reads the marker; `fwdStem` gives a variant with no forward
+of its own `<slug>_erf_fwd` when it carries the marker and `<slug>_fwd` otherwise, in
+`trainAdamSched` and in `scoreCheckpoint` (timm's `_s288` protocol included); `checkGeluWorld`
+refuses a train step or a forward whose `chlo.erfc` disagrees with the name.
+`tests/TestVariantPredicates.lean`: 27 `erf` spellings through the five layout predicates (131
+rows, each packing as its tanh partner does), the marker as a partition, and the world check run
+on the committed artifacts — 100 train steps, 50 at each form, each scoring through a forward at
+its own form, and three mixed pairs refused.
 
-**Tools on this box.** A full `lake build Certs` is about 4 minutes. The IREE Python packages are
-in the sibling `lean4-jax/.venv`, not this repo's `.venv` (`check_ir_codegen.py`,
-`convnext_forward_tie.py`). A `lake env lean` one-liner reads whatever `.olean` is on disk: build
-the module it imports first (§3.7).
+**The job confs.** All twelve verified confs name exact renders: the six `*-emabf16-4gpu` pair
+confs (`…eps0000001erfbf16`, `emadpwxclipdroperfbf16`), `cnx-default-4gpu`
+(`adamdpwxclipdroperfbf16`) and the five f32 siblings (`adamdp128x4wxclipdroperf`,
+`adamdpwxclipdroperf`), so no conf pairs a tanh render with an exact reference. `pc_gelu_render`
+(`scripts/lib/precheck.sh`) is in each: the marker, `chlo.erfc` and no `stablehlo.tanh`, in the
+train step and in the forward the driver will resolve. All twelve pass `DRY_RUN`. The S / B pair
+confs' layout gate now checks the variant they launch (it checked the default tanh one). A new
+variant is a new checkpoint name. The six ImageNet app mains default to exact twins
+(`adam128erf`, `adamdp128x4wxclipdroperf`, `adamerf`, `emawxclipdroperfbf16`). The ViT f32
+siblings still train LayerNorm ε 1e-5 against the reference's 1e-6: no f32 render carries DeiT's ε.
+
+**The ties, at the exact form.**
+
+* `vit-fwd-b-tie` and `convnext-fwd-b-tie` run both forms. The tanh form is against the committed
+  bytes as before; the exact form is chain to chain, there being no Imagenette artifact at it.
+  ViT: forward, backward (6,894 lines), gradient list and AdamW step byte-identical. ConvNeXt:
+  the same up to its 78 conv-VJP transpose / reverse lines.
+* `convnext_forward_tie.py` ties `<net>_erf_fwd` to the JAX reference, with the tanh render as a
+  second control (`--tanh-render`). Its defaults move to σ 0.2 and a tolerance of 3e-5, on logits
+  of magnitude 5: at σ 0.05 it is blind to the form (§3.7).
+
+  | max abs Δ of the logits, σ 0.2 | exact render | tanh render (control) |
+  |---|---|---|
+  | ConvNeXt-T | 8.1e-6 | 5.3e-4 |
+  | ConvNeXt-S | 8.1e-6 | 4.3e-4 |
+  | ConvNeXt-B | 1.1e-5 | 4.5e-4 |
+
+  ConvNeXt-T at σ 0.05: 5.4e-7. At σ 0.3: 2.0e-5 against the tanh render's 4.6e-4. `--break`
+  (the head LayerNorm removed) at σ 0.2: 82.
+* `tests/ViTRender.lean`, the hand-written emitter, has the exact GELU in its textbook spelling,
+  `x · ½(1 + erf(x/√2))` through `chlo.erf` and `Φ + x·φ` for the derivative
+  (`ViTConfig.geluErf`), where the certified render spells `(½x) · erfc(−x/√2)`.
+  `vit-adam-tie --hand tanh|erf` renders that module and the certified batched step and ties
+  them: one AdamW step, 16,579,041 returned floats.
+
+  | `vit-adam-tie`, gradient norm-relative | IREE (cuda) | XLA:CUDA |
+  |---|---|---|
+  | `--hand tanh` | 1e-6, 0 of 200 parameters over 1e-4, loss bit-exact | 7.3e-4, 8 of 200 |
+  | `--hand erf` | 1e-6, 0 of 200, loss equal to six decimals | 8.6e-4, 18 of 200 |
+  | hand-written exact against certified tanh (control) | 5.9e-4, 16 of 200 | — |
+
+  So on IREE the two spellings of the exact GELU agree through the whole net, forward and
+  backward, as closely as the tanh pair does, and the gate separates the two activations.
+
+**The platform suite.** Tier 0 gains `erfc`: `chlo.erfc` on eight known answers through the shim
+(`smoke --erfc`, `fixtures/erfc.mlir`), 2.8e-7 relative on ares. Tier 2 gains
+`vitin_adamwxclipdroperfbf16_train_step` beside its tanh twin: median 1.6e-3 against the 1e-2
+bound. One 4060 Ti, output to scratch: 29 pass, 3 two-device skips. Not run: the suite on four
+cards with a committed record, the 3060 box's `xla_cuda13` plugin, the Orin.
+
+**What this step found.**
+
+* **`vit-adam-tie` no longer passes on this box's XLA, at either form.** The retired hand-written
+  render against the certified artifact of 2026-07-28, the pair the tie licensed at 1e-6, reads
+  7.3e-4 today, as the current artifact does; the largest difference is on the CLS token's
+  gradient, with the loss bit-exact. On IREE the same pair reads 1e-6. The platform suite's
+  tolerance table records TF32 on for this plugin's f32 matmuls, and two differently fused
+  graphs then sit as far apart as the tanh and exact GELUs do (5.9e-4). The tie's docstring now
+  says to run it on IREE; the comment over `vit_adam_train_step.mlir`'s writer still quotes
+  1e-6 without naming the backend.
+* **`grad_tie.py` and `vjp_oracle` do not reach this op.** `grad_tie.py` has two nets, MobileNetV4
+  and ResNet-34, and `vjp_oracle` trains through the generic emitter (`MlirCodegen`), which has
+  no exact GELU. The backward at the exact form rests on §3.5's per-op checks (bit-identical to
+  `jax.vjp` through the shim) and on `vit-adam-tie --hand erf`.
+* **ConvNeXt has no independent whole-net backward at the exact form.** Its GELU sites are the
+  text function ViT's are, its two chains tie at `.erf`, and its forward ties to the reference;
+  no hand-written ConvNeXt emitter carries the exact form.
 
 ### 3.9 Reruns and the book
 
 * **ViT-Ti pair**: 45.9 h (JAX) + 64.9 h (verified) on the 3060 box. **ConvNeXt-T pair**: 76.5 h +
   91.3 h — the EMA pair D15 is owed anyway, so this is the rerun it should be. Both carry the crop
   (§2) as well. About twelve days of that box. ConvNeXt-T's JAX reference needs a job conf first
-  (§3.7): it has none, so nothing asserts its crop or its GELU.
+  (§3.7): it has none, so nothing asserts its crop or its GELU. The verified halves launch from
+  `vit-default-emabf16-4gpu` and `cnx-default-emabf16-4gpu`, which name the exact renders (§3.8);
+  the 3060 box needs the platform suite's `erfc` test green on `xla_cuda13` before either.
 * **ViT-S/B and ConvNeXt-S/B** carry it if it lands before they launch (§1).
 * **Imagenette** ViT (§9.4, the bit-exact claim re-measured) and ConvNeXt (ch 8): hours on one
   card, if §5(a) flips them.
@@ -435,7 +491,7 @@ the module it imports first (§3.7).
 | 3.5 AST / printer / parser / gates | done |
 | 3.6 ties parametrised, rechecked | done |
 | 3.7 JAX flag and gates | done |
-| 3.8 renders, artifact gates | ½–1 |
+| 3.8 renders, artifact gates | done |
 | 3.9 reruns | ~12 days of the 3060 box, not of a person |
 
 ## 4. Not touched
