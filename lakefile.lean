@@ -2215,6 +2215,71 @@ script imagenette do
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"] (xla := true)
 
+/-- The Orin tier's rows: (exe, pool fraction, the row's extra env), six of `imagenette`'s seven nets
+    in book order. The fraction is `LEAN_MLIR_MEM_FRACTION`, the BFC pool as a share of the board's one
+    DRAM — it must hold the net's train-step activation arena and leave the process the rest — each from
+    the 2026-09-13 sweep in `deploy/ORIN.md` §4. ResNet-50 is the `acc2x16` render (micro-batch 16 × 2, the
+    same recipe at effective batch 32), because the batch-32 step's arena does not fit at any fraction;
+    `LEAN_MLIR_G2_STEPS=590` makes its epoch the 9,440 images a batch-32 epoch takes. ConvNeXt-T is
+    absent: its renderer hard-codes batch 32 and that step does not fit the board. -/
+private def orinRows : List (String × String × List (String × String)) :=
+  [ ("resnet34-verified-adam",     "0.25", []),
+    ("resnet50-verified-adam",     "0.36", [("LEAN_MLIR_VARIANT", "acc2x16"), ("LEAN_MLIR_BATCH", "16"),
+                                            ("LEAN_MLIR_G2_STEPS", "590")]),
+    ("mobilenetv2-verified-adam",  "0.25", []),
+    ("mobilenetv4-verified-adam",  "0.25", []),
+    ("efficientnet-verified-adam", "0.30", []),
+    ("vit-verified-adam",          "0.25", []) ]
+
+/-- `lake run imagenette-orin [plan] [net-prefix …]` — the Imagenette tier on a Jetson Orin Nano:
+    `orinRows` through `deploy/orin_imagenette.sh`, the board's recipe (the train split streamed from
+    disk, the pool reserved once at the row's fraction, the process under a memory cap) with a relaunch
+    that resumes from the checkpoint while each attempt completes an epoch. About a day for the six
+    rows at 80 epochs (`deploy/ORIN.md` §4 has the per-net wall clocks); the board needs `~/pjrt/orin_env.sh`
+    sourced and `jetson_clocks` applied, both of which the plan reports.
+
+    **Six nets, not `imagenette`'s seven**, and ResNet-50 on a different render (`acc2x16`), so this is a
+    named tier and not an environment: the drop-in platforms (a desktop CUDA or ROCm card) run
+    `lake run imagenette` itself. `plan` prints each row's env, command and checkpoint state and launches
+    nothing; a net-prefix list (`lake run imagenette-orin vit r34`) runs a subset. A row that fails is
+    named at the end and the rest run, as in `imagenette`; a second invocation resumes every row from
+    its checkpoint and scores the finished ones. The recipe is not Tegra-specific — on a desktop the
+    rows run under the box's plugin, which is how it is smoke-tested here. -/
+script «imagenette-orin» (args) do
+  let (plan, only) := match args with
+    | "plan" :: rest => (true, rest)
+    | rest           => (false, rest)
+  let rows := orinRows.filter fun (exe, _, _) => only.isEmpty || only.any (exe.startsWith ·)
+  if rows.isEmpty then
+    IO.eprintln s!"no Orin row matches {only} — rows: {orinRows.map (·.1)}"
+    return 1
+  IO.println s!"━━━ lake run imagenette-orin: {rows.length} row(s){if plan then " — plan only" else ""} ━━━"
+  if !plan then
+    IO.println "━━━ XLA/PJRT backend ━━━"
+    if !(← ensurePjrtShim) then return 1
+    notePjrtPlugin
+  let mut failed : Array String := #[]
+  for (exe, fraction, extra) in rows do
+    if !plan then
+      IO.println s!"\n━━━ {exe}: build ━━━"
+      let bp ← IO.Process.spawn { cmd := "lake", args := #["build", exe] }
+      if (← bp.wait) != 0 then
+        IO.eprintln s!"build failed: {exe}"
+        return 1
+    IO.println ""
+    let env : Array (String × Option String) :=
+      #[("BIN", some exe), ("FRACTION", some fraction)]
+        ++ (if plan then #[("DRY_RUN", some "1")] else #[])
+        ++ (extra.map fun (k, v) => (k, some v)).toArray
+    let p ← IO.Process.spawn { cmd := "deploy/orin_imagenette.sh", env := env }
+    let rc ← p.wait
+    if rc != 0 then
+      IO.eprintln s!"━━━ {exe}: {if plan then "plan REFUSED" else "FAILED"} (exit {rc}) — continuing with the rest ━━━"
+      failed := failed.push exe
+  if failed.isEmpty then return 0
+  IO.eprintln s!"\n━━━ {failed.size} of {rows.length} {if plan then "refused" else "failed"}: {", ".intercalate failed.toList} ━━━"
+  return 1
+
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run imagenet` — the fourth tier — and one `lake run <job>` per ImageNet job.

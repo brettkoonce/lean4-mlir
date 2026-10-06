@@ -191,16 +191,31 @@ opt-in loaders in `trainAdamSched` make it fit, and both are bit-identical to th
 | `LEAN_MLIR_IMAGENETTE_U8=1` | pixels stay the uint8 they are on disk, normalised one batch at a time | 2.45 GB |
 | `LEAN_MLIR_IMAGENETTE_STREAM=1` | train pixels never loaded: labels and a shuffled index array, each batch `pread` from `train.bin`; implies the uint8 val path | val only, 563 MiB |
 
-The streamed loader is the one the board runs. On top of `orin_env.sh`, under the memory cap
-of §2, clocks pinned:
+The streamed loader is the one the board runs, and the tier is a command:
 
 ```bash
-export LEAN_MLIR_IMAGENETTE_STREAM=1 LEAN_MLIR_PREALLOCATE=1 LEAN_MLIR_MEM_FRACTION=0.25
-systemd-run --user --scope -p MemoryMax=5800M -p MemorySwapMax=0 -- .lake/build/bin/vit-verified-adam data
+. ~/pjrt/orin_env.sh && sudo jetson_clocks
+lake run imagenette-orin plan        # each row's env, command and checkpoint state; launches nothing
+lake run imagenette-orin             # the six rows below, in book order, ~22 h
+lake run imagenette-orin vit r34     # a subset, by net prefix
+```
+
+Each row runs through `deploy/orin_imagenette.sh`: `LEAN_MLIR_IMAGENETTE_STREAM=1`,
+`LEAN_MLIR_PREALLOCATE=1`, the row's `LEAN_MLIR_MEM_FRACTION`, the checkpoint tag `orin`, the
+process under §2's memory cap, logs in `runs/<date>-<net>-orin/`. An attempt that dies is
+relaunched while each attempt completes an epoch (the cap turns a memory excursion into a clean
+exit, and the trainer resumes from its checkpoint); two attempts in a row that complete nothing
+stop the row. A second `lake run imagenette-orin` resumes every row and scores the finished ones.
+One net by hand is the same script with its env:
+
+```bash
+BIN=vit-verified-adam FRACTION=0.25 deploy/orin_imagenette.sh
+EPOCHS=2 BIN=resnet34-verified-adam FRACTION=0.25 deploy/orin_imagenette.sh      # a two-epoch smoke
 ```
 
 The 2026-09-13 sweep, two epochs of every `lake run imagenette` net on that recipe, eval
-every epoch; `non-file peak` is anonymous memory plus NvMap, what the cap counts:
+every epoch; `non-file peak` is anonymous memory plus NvMap, what the cap counts. The
+fractions are the tier's rows (`orinRows` in the lakefile):
 
 | net | pool fraction | s / epoch | 80 epochs | non-file peak MiB |
 |---|---|---|---|---|
@@ -216,20 +231,20 @@ Six of the seven, about 22 hours for 80 epochs each. The fractions are the BFC p
 the cgroup: EfficientNet at 0.25 fails at step 0 on one 1.89 GiB block. ResNet-50's batch-32
 step plans a 2.55 GiB arena and does not fit at any fraction, so the board runs the same
 recipe as two accumulated micro-batches of 16, `verified_mlir/resnet50_acc2x16_train_step.mlir`
-(`LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 LEAN_MLIR_G2_STEPS=590`: 590 × 16 is the
-9,440 images a batch-32 epoch takes; eval stays on the batch-32 forward). It sits 126 MiB
-under the cap, so an 80-epoch run of it wants a relaunch loop that resumes from the
-checkpoint. ConvNeXt's renderer hard-codes batch 32; a batch-8 test render trained, but at
-batch 32's learning rate with four times the updates it is a different recipe, and it is not
-committed.
+(the tier's row sets `LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 LEAN_MLIR_G2_STEPS=590`:
+590 × 16 is the 9,440 images a batch-32 epoch takes; eval stays on the batch-32 forward). It
+sits 126 MiB under the cap, which is what the relaunch is for. ConvNeXt's renderer hard-codes
+batch 32; a batch-8 test render trained, but at batch 32's learning rate with four times the
+updates it is a different recipe, and it is not committed.
 
 One full run on record: ViT-Tiny, 80 epochs in 1 h 48 m on one attempt, 67.97% / 90.06%
 top-1 / top-5 (best 68.48% at epoch 62), against the desktop's 68.74% / 90.42%
 (`runs/2026-08-12-vit-imagenette-xla-cuda`). The desktop run's seed spread is unmeasured.
 
 ⚠ `trainAdamSched` resumes from `.lake/build/<slug>_<variant>_ckpt_xla<TAG>.bin` and its
-`.epoch` marker without asking. Set `LEAN_MLIR_CKPT_TAG` per run, or move the files, before
-a real run; the sweep's test runs write them.
+`.epoch` marker without asking. The tier's tag is `orin` (`TAG=` on the script), so a
+hand-launched test run without a tag cannot be resumed by mistake; to start a tier row over,
+give it another tag or move its files.
 
 ## §5 The VisDrone detector — TensorRT
 
