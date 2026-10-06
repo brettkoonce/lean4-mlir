@@ -1,0 +1,51 @@
+{
+  "date": "2026-10-06T12:15:14Z",
+  "run": "2026-10-06-ares-cuda",
+  "core": {
+    "repo_sha": "a2a3d5e99cb985b9cc52c8199b1bc127653168c6",
+    "repo_dirty": false,
+    "lean_toolchain": "leanprover/lean4:v4.34.0",
+    "shim_source_sha": "0467d1ea138c0ab5",
+    "shim_binary_sha": "a6f90ba01e748dd6",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "f3a4bebdf74ae5ea",
+    "suite_sha": "bbe531e385d04004",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "cuda",
+    "host": "ares",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 4060 Ti",
+        "memory": "16380 MiB",
+        "driver": "575.57.08"
+      },
+      {
+        "index": 1,
+        "name": "NVIDIA GeForce RTX 4060 Ti",
+        "memory": "16380 MiB",
+        "driver": "575.57.08"
+      }
+    ],
+    "gpu_count_visible": 2,
+    "visible_devices": "0,1",
+    "driver": "575.57.08",
+    "runtime": {
+      "driver": "12.9.0[575.57.8]",
+      "runtime": "12.9.0",
+      "toolkit": "12.9.0",
+      "dnn": "9.23.2"
+    },
+    "plugin_path": ".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so",
+    "plugin_package": "jax_cuda12_pjrt==0.11.0",
+    "plugin_sha": "ced7988972611b25",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "cuda",
+    "platform_version": "cuda 12090",
+    "kernel": "6.8.0-142-generic",
+    "cc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0"
+  }
+}

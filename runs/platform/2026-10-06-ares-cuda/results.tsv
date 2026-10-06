@@ -1,0 +1,31 @@
+test	tier	status	detail
+build:shim	0	PASS	
+build:probe	0	PASS	
+build:smoke	0	PASS	
+build:guards	0	PASS	
+build:dp	0	PASS	
+build:allreduce	0	PASS	
+build:compile_check	0	PASS	
+build:tier2_run	0	PASS	
+smi	0	PASS	0, NVIDIA GeForce RTX 4060 Ti, 575.57.08, 16380 MiB
+probe	0	PASS	devices=2
+smoke	0	PASS	compile + execute OK
+guards	1	PASS	all guards fire (0 failures)
+compile_dp	1	PASS	COMPILED OK — 69 outputs
+allreduce	1	PASS	ALL-REDUCE CORRECT across 2 GPUs via the PJRT C API
+dp	1	PASS	DP INVOKE CORRECT: sharding + all_reduce + replica-0 readback
+linear_train_step	2	PASS	OK dot/f32: median 2.5e-04 (≤0.003), p90 2.8e-04 (≤0.03), max 2.9e-04 at output 0
+mlp_train_step	2	PASS	OK dot/f32: median 5.1e-04 (≤0.003), p90 8.6e-03 (≤0.03), max 1.1e-02 at output 0
+cifar8_train_step	2	PASS	OK conv-pool/f32: median 3.7e-03 (≤0.03), p90 5.3e-03 (≤0.07), max 1.1e-02 at output 0
+cifar8_bf16_train_step	2	PASS	OK conv-pool/bf16: median 1.8e-02 (≤0.06), p90 2.6e-02 (≤0.1), max 9.9e-02 at output 0
+cifar8_bn_adam_train_step	2	PASS	OK batchnorm/f32: median 3.7e-04 (≤0.005), p90 1.6e-02 (≤0.2), max 2.4e-02 at output 15
+cifar8wb_bn_bf16adam_train_step	2	PASS	OK batchnorm/bf16: median 3.1e-03 (≤0.01), p90 3.5e-01 (≤1), max 4.0e-01 at output 38
+mobilenetv2_adam_train_step	2	PASS	OK depthwise/f32: median 1.7e-02 (≤0.06), p90 3.0e-01 (≤0.9), max 4.9e-01 at output 10
+mobilenetv2in_adam64bf16_train_step	2	PASS	OK depthwise/bf16: median 1.8e-01 (≤0.25), p90 1.1e+00 (≤3), max 3.0e+01 at output 8
+efficientnet_adam_train_step	2	PASS	OK swish-se/f32: median 4.4e-03 (≤0.015), p90 7.5e-03 (≤0.02), max 4.9e-02 at output 238
+efficientnet_adambf16_train_step	2	PASS	OK swish-se/bf16: median 7.4e-02 (≤0.2), p90 1.3e-01 (≤0.4), max 1.2e+00 at output 12
+vit_adam_train_step	2	PASS	OK attention/f32: median 6.0e-04 (≤0.003), p90 1.1e-03 (≤0.005), max 1.6e-02 at output 209
+vitin_adamwxclipdropbf16_train_step	2	PASS	OK attention/bf16: median 2.4e-03 (≤0.01), p90 1.6e-02 (≤0.05), max 9.1e-02 at output 209
+resnet34_adam_train_step	2	PASS	OK deep-conv/f32: median 5.6e-02 (≤0.15), p90 2.7e-01 (≤0.8), max 3.4e-01 at output 114
+resnet34_adambf16_train_step	2	PASS	OK deep-conv/bf16: median 1.7e-01 (≤0.3), p90 8.7e-01 (≤3), max 1.1e+00 at output 157
+convnext_adam_train_step	2	PASS	OK layernorm-dw7/f32: median 8.4e-04 (≤0.003), p90 1.0e-03 (≤0.005), max 1.5e-03 at output 142
