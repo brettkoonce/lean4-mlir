@@ -22,8 +22,10 @@ c166ccb3): every ImageNet ViT and ConvNeXt render has an exact-GELU twin under a
 with its gates, the driver's forward choice and refusal, and the twelve verified job confs moved
 onto the twins. Nothing is pushed. Both paths now compute the exact GELU on ImageNet, the
 references by `geluExact` and the verified confs by the `…erf…` renders, and no run carries either
-item. What is left is §3.9: ConvNeXt-T's JAX job conf, then the ViT-Ti and ConvNeXt-T reruns,
-ahead of the owed R34 / R50 reruns and the side-quest queue, and the book lines as each lands.
+item. §3.9's code step is done too: ConvNeXt-T's JAX reference has a job conf,
+`cnx-default-jax-4gpu`. What is left is on the 3060 box: the platform suite's `erfc` test on
+`xla_cuda13`, then the ViT-Ti and ConvNeXt-T reruns, ahead of the owed R34 / R50 reruns and the
+side-quest queue, and the book lines as each lands.
 
 ## 1. Order
 
@@ -471,8 +473,12 @@ cards with a committed record, the 3060 box's `xla_cuda13` plugin, the Orin.
 
 * **ViT-Ti pair**: 45.9 h (JAX) + 64.9 h (verified) on the 3060 box. **ConvNeXt-T pair**: 76.5 h +
   91.3 h — the EMA pair D15 is owed anyway, so this is the rerun it should be. Both carry the crop
-  (§2) as well. About twelve days of that box. ConvNeXt-T's JAX reference needs a job conf first
-  (§3.7): it has none, so nothing asserts its crop or its GELU. The verified halves launch from
+  (§2) as well. About twelve days of that box. ConvNeXt-T's JAX reference launches from
+  `cnx-default-jax-4gpu` (written 2026-10-06; the 81.53 run had no conf): the `_full` trainer, a
+  fresh `CKPT_BASE` (`/home/skoonce/cnx_t_default_300ep/`), and a precheck of `pc_crop`, `pc_gelu`
+  exact, `pc_jax_trainer`, RandAugment m9 mstd0.5, no AutoAugment, `cnxInit`, the ConvNeXt-T
+  trainer and 300 epochs. Green under `DRY_RUN` on ares; the 80-epoch and ConvNeXt-S trainers are
+  refused. The verified halves launch from
   `vit-default-emabf16-4gpu` and `cnx-default-emabf16-4gpu`, which name the exact renders (§3.8);
   the 3060 box needs the platform suite's `erfc` test green on `xla_cuda13` before either.
 * **ViT-S/B and ConvNeXt-S/B** carry it if it lands before they launch (§1).
