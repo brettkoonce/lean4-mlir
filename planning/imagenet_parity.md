@@ -338,7 +338,7 @@ the shipping job; `vit-default-emabf16-4gpu` has the measured 48 h ETA and no lo
 (each new `default` is byte-identical to the old `deit-init` file); `deit-init` recipes deleted; Ti
 keeps `xavier` for the A/B. `vit-default-jax-4gpu.conf` checks the smoothing fix and the init.
 ⚠ The "RSB-A2 3×" comment is emitted text: fixing it moves R50's generated trainers while
-R50-2018 runs on the other box, so it waits. The book still says `deit-init` (K1).
+R50-2018 runs on the other box, so it waits. The book's ViT pair is the post-C6 one (K1 ✅).
 
 ## 5.6 Scoring: timm's validation protocol, on both paths
 
@@ -388,7 +388,7 @@ is not a like-for-like check. (The canonical B0 77.15 and ConvNeXt 81.53 checkpo
 
 | # | where in `content.tex` | fix |
 |---|---|---|
-| K1 | ViT ~12102–12110, 12215–12275 | caveat H1 now; the pair's claim returns with the JAX rerun (§7); add EMA-vs-live, cooldown/min_lr, repeated-aug placement |
+| K1 | ViT §9.6 | ✅ 2026-10-06: §9.6 carries the post-C6 pair (72.07 JAX / 72.42 verified, live 71.86 / 72.15, McNemar p 0.009), the six-item ledger, EMA-vs-live; cooldown is not a gap (vit_parity_todo.md §1), repeated-aug placement stays in item 6 |
 | K2 | MNv2 7705–7740, ~7690, 7498, 7619–7620 | the side-by-side table lists all four rows (H2), or three after M2-1; `epochs := 90 -- the real run` is the 350-ep `full` recipe; the BN-decay row compares against PyTorch 0.9 where TF's 0.997 is the paper's; resolve the ls ledger row (H3) |
 | K3 | MNv4 7893–8083, 16742–16743 | EMA "none" for Conv-M; ε 1e-7; add a resolution row; "ships two tiers" ignores `half`/`probe`; label the 49,664-image in-loop curve against the 50k 75.48; "+3.58 over MNv2" is pre-fix; the Phase-4 prose (`adamdp64` table, "TODO: run mnv4-default-4gpu") is superseded; Track 4 points at `mnv4-default` |
 | K4 | B0 8392–8394 | `thm:efficientnet_step_tie` claims 262 gradients of "every `efficientnetin_*` artifact"; the Lean theorem is pinned at 10 classes (`EfficientNetStepTieG.lean:414,434`; sync twin `SyncStepTieG.lean:1548`), and the ImageNet renders have 213 tensors at 1000 classes. Restate the scope |
@@ -471,7 +471,7 @@ did not move).
 
 | # | net | item | paper / timm | ours | cost |
 |---|---|---|---|---|---|
-| D1 | ConvNeXt, ViT | exact-erf GELU | erf | tanh, both paths | L: erf op + Φ/FTC proof + re-render (`vit_parity_todo.md` P-A); JAX side S |
+| D1 | ConvNeXt, ViT | exact-erf GELU | erf | tanh, both paths | L: erf op + Φ/FTC proof + re-render (`vit_parity_todo.md` P-A); JAX side S. Plan: `gelu_erf_and_torchvision_crop.md` §3 |
 | D2 | ConvNeXt, ViT | grad clip 1.0 | none | 1.0, both paths | S code; ~30 min clip-off JAX probe on ViT first (P-B) |
 | D3 | B0 | strided-depthwise padding | SAME (TF) | symmetric, both paths (0.37 / 0.048 of logit scale, `enet_timm_parity --pad tf`) | JAX S; verified M–L, moves the T2/T3 ties. Parked 09-25 |
 | D4 | MNv2, MNv4, B0 | verified depthwise init | var 2/k² (TF/timm, = JAX) | He fan-out 2/(C·k²): 0.03–0.18× std | S: `dwFanK2` built, off (`init_parity.md` §5). Leading suspect for MNv2's −0.51 |
@@ -496,7 +496,7 @@ did not move).
 | # | item | timm | ours |
 |---|---|---|---|
 | F1 | mixup/cutmix switch | random, p 0.5 | strict alternation by step (P-E) |
-| F2 | random resized crop | torchvision RRC (log-uniform aspect, centre-crop fallback) | TF `sample_distorted_bounding_box`, `min_object_covered` 0.1 (effective 10% floor), uniform aspect, whole-image fallback (P-G). For B0 TF's sampler is the right one, minus the fallback |
+| F2 | random resized crop | torchvision RRC (log-uniform aspect, centre-crop fallback) | TF `sample_distorted_bounding_box`, `min_object_covered` 0.1 (effective 10% floor), uniform aspect, whole-image fallback (P-G). For B0 TF's sampler is the right one, minus the fallback. Plan: `gelu_erf_and_torchvision_crop.md` §2 (per-recipe flag, off for MNv2 / B0) |
 | F3 | repeated aug | index-level `RASampler` | stream repeat + shuffle window (P-F) |
 | F4 | LR schedule | per epoch, warmup from 1e-6, cosine over the whole span | per step, from ~0, cosine after warmup (P-D) |
 | F5 | RandAugment fill and 0-bit Posterize | img_mean; PIL black | 128; TF keeps the top bit (X1 fixed both for B0's AutoAugment only) |

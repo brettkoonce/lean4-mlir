@@ -55,6 +55,8 @@ Outcome (2026-10-06): JAX 72.072 / 91.000 (`runs/2026-10-01-vit-jax-bf16-300ep/`
 
 ## 3. Still different from DeiT on both arms (paper, not pair)
 
+P-A and P-G have an execution plan: `planning/gelu_erf_and_torchvision_crop.md` (crop first, GELU second; both before the side-quest queue launches).
+
 | # | gap | DeiT | ours | what fixing it takes |
 |---|---|---|---|---|
 | P-A | **GELU** | exact erf (`nn.GELU`) | tanh approximation | Multi-day. No erf op exists in the SHlo AST and Mathlib has no `Real.erf`, so this needs Φ as the Gaussian cdf plus FTC (~150–250 lines), about 20 AST/printer/parser sites (the parser round-trip is under `Certs`), and a whole-net tie that parametrises `blockV`/`vitBodyKVFlat` over the activation (ViTBackB0 recheck, ~11 min / 14 GB). Lowering works: `chlo.erf` compiled on PJRT CPU (agent probe 2026-10-01). Send one op through CUDA PJRT and IREE first. JAX side: `jax.nn.gelu(approximate=False)` behind a flag. ConvNeXt's paper is erf too. |

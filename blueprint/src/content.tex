@@ -13028,7 +13028,7 @@ when trained on ImageNet-21K (14M images) or JFT-300M (300M images). At
 Imagenette scale the ConvNets' inductive bias, locality and translation
 equivariance, actively helps, and the ViT has to learn those properties
 from data it doesn't have. \S\ref{sec:vit_imagenet} is the control:
-the same architecture on 1.28M images reaches $72.31\%$ over a
+the same architecture on 1.28M images reaches $72.42\%$ over a
 thousand classes, which is the regime the design was for.
 
 \medskip\noindent\textbf{It reproduces exactly.} This number was measured three times
@@ -13145,23 +13145,23 @@ def vitTinyImagenetConfig : TrainConfig where
   wdExcludeNormBias := true          -- no_weight_decay: skip norm/bias/pos-embed/CLS
   cosineDecay       := true
   warmupEpochs      := 5
-  minLR             := 0.00001       -- DeiT --min-lr 1e-5 (after the run below)
+  minLR             := 0.00001       -- DeiT --min-lr 1e-5
   labelSmoothing    := 0.1
   gradClipNorm      := 1.0           -- the unlock for the 5e-4 LR (see below)
   useMixup          := true          -- Mixup alpha 0.8
   useCutmix         := true          -- CutMix alpha 1.0 (alternates with Mixup)
   useRandAugment    := true          -- rand-m9-mstd0.5-inc1 (color + geometric)
   randAugmentGeometric := true
-  augBicubic        := true          -- PIL-bicubic geometry, as timm (after the run below)
+  augBicubic        := true          -- PIL-bicubic geometry, as timm
   randomErasing     := true          -- Random-Erase p 0.25
   randomErasingProb := 0.25
-  erasingPixel      := true          -- timm mode='pixel', N(0,1) fill (after the run below)
+  erasingPixel      := true          -- timm mode='pixel', N(0,1) fill
   dropPath          := 0.1           -- stochastic depth (linear 0 -> 0.1)
   useEMA            := true          -- model EMA (eval on shadow)
   emaDecay          := 0.99996       -- DeiT default
   bf16              := true          -- bf16 matmul compute
-  lnEps             := 0.000001      -- DeiT's LayerNorm eps, 1e-6 (after the run below)
-  f32StemHead       := true          -- patch embed + head in fp32 (after the run below)
+  lnEps             := 0.000001      -- DeiT's LayerNorm eps, 1e-6
+  f32StemHead       := true          -- patch embed + head in fp32
   valEveryEpochs    := 5             -- ImageNet val is data-loading-bound
   repeatedAug       := 3             -- DeiT Repeated Augmentation (see below)
 
@@ -13213,17 +13213,20 @@ LayerNorm/softmax that bf16 leaves alone.
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & 6.8 min & 300 & 34.2 hr & $\mathbf{72.31\%}$ & $\mathbf{91.12\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & 9.1 min & 300 & 45.9 hr & $\mathbf{72.07\%}$ & $\mathbf{91.00\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Global batch 512 as $4 \times 128$ replicas, the EMA weights
 scored over all $50{,}000$ validation images; one attempt, no restarts.
-DeiT-Ti without distillation publishes $72.2\%$ / $91.1\%$, so this is
-$+0.11$ and $+0.02$, and at $n = 50{,}000$ the Wilson 95\% interval on
-this run is $[71.92, 72.70]$: on the paper, not past it in any meaningful
-sense.
+DeiT-Ti without distillation publishes $72.2\%$ / $91.1\%$, and
+publishes it for the live weights, not a shadow: this run's live weights
+score $71.86\%$ / $90.88\%$, $0.34$ and $0.23$ under the paper, and the
+EMA is worth about $+0.2$ on top of them (McNemar $p = 0.002$ over the
+$50{,}000$ images, so the shadow's gain is real, if small). At
+$n = 50{,}000$ the Wilson 95\% interval is $\pm0.39$ points either way:
+on the paper's number, not under it in any meaningful sense.
 
 \begin{center}
 \begin{tikzpicture}
@@ -13243,11 +13246,11 @@ sense.
     title={DeiT-Ti recipe, 300 epochs --- reference},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(5,14.07) (10,30.64) (15,39.38) (20,44.78) (25,48.44) (30,51.03) (35,53.13) (40,54.89) (45,56.20) (50,57.36) (55,58.29) (60,59.14) (65,59.94) (70,60.61) (75,61.18) (80,61.85) (85,62.30) (90,62.82) (95,63.20) (100,63.62) (105,63.95) (110,64.41) (115,64.80) (120,65.20) (125,65.42) (130,65.74) (135,66.10) (140,66.44) (145,66.77) (150,66.99) (155,67.11) (160,67.49) (165,67.78) (170,68.08) (175,68.31) (180,68.57) (185,68.85) (190,69.04) (195,69.21) (200,69.40) (205,69.59) (210,69.88) (215,70.08) (220,70.30) (225,70.56) (230,70.78) (235,70.98) (240,71.19) (245,71.46) (250,71.57) (255,71.66) (260,71.78) (265,71.91) (270,71.99) (275,72.05) (280,72.12) (285,72.23) (290,72.29) (295,72.29) (300,72.31)
+(5,13.99) (10,30.31) (15,39.23) (20,44.50) (25,48.24) (30,50.67) (35,52.85) (40,54.45) (45,55.77) (50,57.05) (55,58.00) (60,58.74) (65,59.57) (70,60.22) (75,60.78) (80,61.54) (85,62.01) (90,62.41) (95,62.84) (100,63.15) (105,63.50) (110,63.93) (115,64.27) (120,64.60) (125,64.93) (130,65.23) (135,65.49) (140,65.80) (145,66.08) (150,66.31) (155,66.68) (160,66.95) (165,67.16) (170,67.50) (175,67.73) (180,67.93) (185,68.22) (190,68.42) (195,68.58) (200,68.75) (205,69.19) (210,69.33) (215,69.52) (220,69.79) (225,69.95) (230,70.20) (235,70.37) (240,70.58) (245,70.78) (250,71.02) (255,71.14) (260,71.22) (265,71.32) (270,71.52) (275,71.68) (280,71.81) (285,71.95) (290,71.95) (295,71.99) (300,72.07)
 };
 \addlegendentry{top-1}
 \addplot[orange, mark=*, mark options={fill=orange}] coordinates {
-(5,32.08) (10,54.58) (15,64.70) (20,70.06) (25,73.53) (30,75.88) (35,77.68) (40,79.02) (45,80.11) (50,81.05) (55,81.86) (60,82.46) (65,83.03) (70,83.57) (75,84.01) (80,84.39) (85,84.80) (90,85.13) (95,85.46) (100,85.79) (105,86.11) (110,86.45) (115,86.66) (120,86.93) (125,87.09) (130,87.36) (135,87.54) (140,87.70) (145,87.96) (150,88.10) (155,88.27) (160,88.45) (165,88.60) (170,88.76) (175,88.88) (180,89.01) (185,89.15) (190,89.30) (195,89.46) (200,89.50) (205,89.67) (210,89.73) (215,89.86) (220,90.05) (225,90.17) (230,90.36) (235,90.43) (240,90.52) (245,90.57) (250,90.69) (255,90.81) (260,90.88) (265,90.91) (270,90.94) (275,90.99) (280,91.03) (285,91.07) (290,91.09) (295,91.09) (300,91.12)
+(5,31.79) (10,54.41) (15,64.49) (20,70.01) (25,73.34) (30,75.82) (35,77.60) (40,78.82) (45,79.88) (50,80.79) (55,81.58) (60,82.23) (65,82.87) (70,83.46) (75,84.01) (80,84.36) (85,84.63) (90,84.91) (95,85.29) (100,85.59) (105,85.85) (110,86.08) (115,86.27) (120,86.51) (125,86.73) (130,86.93) (135,87.14) (140,87.27) (145,87.48) (150,87.63) (155,87.83) (160,87.95) (165,88.14) (170,88.32) (175,88.55) (180,88.65) (185,88.79) (190,88.98) (195,89.09) (200,89.25) (205,89.40) (210,89.48) (215,89.65) (220,89.73) (225,89.84) (230,89.99) (235,90.10) (240,90.19) (245,90.31) (250,90.40) (255,90.48) (260,90.53) (265,90.60) (270,90.66) (275,90.75) (280,90.82) (285,90.86) (290,90.94) (295,90.98) (300,91.00)
 };
 \addlegendentry{top-5}
 \end{axis}
@@ -13267,11 +13270,14 @@ not empty.
 heads, 5{,}717{,}416 parameters, LayerNorm at $\varepsilon = 10^{-6}$);
 schedule (300 epochs, 5-epoch warmup, cosine to DeiT's floor of
 $10^{-5}$); optimizer (AdamW, weight decay $0.05$, no decay on
-norms, biases, CLS or positional embedding); the augmentation stack (Mixup $0.8$, CutMix
-$1.0$, \texttt{rand-m9-mstd0.5-inc1} with the SolarizeAdd$+$Invert
-op-set and per-op apply probability $0.5$, Random-Erase $p{=}0.25$,
-repeated augmentation $3\times$); stochastic depth $0.1$; and model EMA
-at $0.99996$. Weight initialization matches as well --- every
+norms, biases, CLS or positional embedding); the augmentation stack (Mixup $0.8$ and CutMix
+$1.0$ with label smoothing $0.1$ folded into the mixed target,
+\texttt{rand-m9-mstd0.5-inc1} with the SolarizeAdd$+$Invert
+op-set, per-op apply probability $0.5$ and PIL-matched bicubic geometry,
+Random-Erase $p{=}0.25$ in timm's pixel mode,
+repeated augmentation $3\times$); stochastic depth $0.1$; model EMA
+at $0.99996$; and the patch embedding and classifier head in fp32 under
+the bf16 blocks. Weight initialization matches as well --- every
 transformer \texttt{Linear}, the CLS token and the position embedding get
 $\mathrm{trunc\_normal}(\sigma{=}0.02)$, and the patch-embed
 convolution's weight PyTorch's \texttt{Conv2d} default ---
@@ -13283,15 +13289,10 @@ ViT-Ti, while the patch embed came out ${\sim}6\times$ too narrow
 (it divided by the output fan $d\cdot p^2$ rather than the input fan
 $c\cdot p^2$). The smallest model was the worst case.
 
-\emph{What does not match.} Nine things, in rough order of how much
+\emph{What does not match.} Six things, in rough order of how much
 they could matter:
 
 \begin{enumerate}
-\item \textbf{The reference trained at an effective label smoothing of
-  $0$.} Its Mixup and CutMix targets were built from the unsmoothed
-  one-hots (fixed in 4b765be7, after this run); the verified render smooths
-  the mixed target at $0.1$, so the pair below differs in this one recipe
-  field until the reference reruns.
 \item \textbf{Batch $512$, not DeiT's $1024$.} The learning rate is
   scaled consistently for it ($5\times 10^{-4}$ at $512$ is DeiT's own
   $\mathrm{lr} = 5\times10^{-4}\cdot B/512$), so this is a
@@ -13311,42 +13312,25 @@ they could matter:
   torchvision's.} The crop covers $10$--$100\%$ of the image where
   torchvision's covers $8$--$100\%$, its aspect ratio is drawn uniformly
   rather than log-uniformly, and a failed draw falls back to the whole
-  image rather than a centre crop. Random-Erasing is a \texttt{tf.data}
-  reimplementation of timm's; it filled with zero where timm fills with
-  noise, and the trainer now erases in timm's pixel mode
-  (\texttt{erasingPixel}), so that part is a property of the run, not of
-  the recipe as it stands.
-\item \textbf{Geometric RandAugment interpolated bilinearly}, where
-  timm resolves bicubic from the model's data config. On a $21^\circ$
-  rotation the bilinear warp sits $0.56$ / $2.53$ of $255$ from PIL's
-  bicubic on a smooth / noisy image, and PIL's own bilinear sits $0.39$ /
-  $2.41$ from it, so it was as close as a bilinear implementation can be;
-  TensorFlow's own \texttt{BICUBIC} is a third resampler, ${\sim}30$ from
-  both. The trainer now carries a PIL-matched bicubic warp
-  (\texttt{augBicubic}, worst mean $0.094$ of $255$ against PIL), so the
-  rerun closes this one.
-\item \textbf{LayerNorm $\varepsilon$, the learning-rate floor, and the
-  patch embedding and head.} The run trained LayerNorm at
-  $\varepsilon = 10^{-5}$ and annealed to zero, on both paths, and the
-  reference ran its patch embedding and head in bf16. The listing carries
-  DeiT's $10^{-6}$ and $10^{-5}$ floor and keeps both layers in fp32
-  (\texttt{lnEps}, \texttt{minLR}, \texttt{f32StemHead}), so the rerun
-  closes these as well.
+  image rather than a centre crop. It is what is left of the pipeline's
+  differences: Random-Erasing fills with noise in timm's pixel mode
+  (\texttt{erasingPixel}) and the geometric RandAugment ops resample with
+  a PIL-matched bicubic warp (\texttt{augBicubic}, worst mean $0.094$ of
+  $255$ against PIL), both closed since the first pair.
 \item \textbf{The schedule's shape and the mixing switch.} The learning
   rate is set per step, warmed up from zero, and annealed over the
   post-warmup span, where DeiT's scheduler steps once per epoch, warms up
   from $10^{-6}$, and runs its cosine over all $300$ epochs. Mixup and
   CutMix alternate step by step, where DeiT draws which one per batch.
 \item \textbf{Smaller things the parity ledger carries.} Evaluation
-  scores the EMA shadow where DeiT scores the live weights, and the
-  shadow's decay is ramped in from the first step where DeiT's is
-  constant; repeated-augmentation copies are spread by a shuffle window
+  scores the EMA shadow where DeiT scores the live weights --- both are
+  reported above, two tenths apart --- and the shadow's decay is ramped in
+  from the first step where DeiT's is constant; repeated-augmentation copies are spread by a shuffle window
   rather than placed by an index-level sampler; and the patch-embedding
   bias starts at zero where PyTorch draws it.
 \end{enumerate}
 
-\noindent The first is a bug, on the reference side only; the loss curve is
-textbook DeiT. The rest are properties of the recipe and of the shim rather
+\noindent These are properties of the recipe and of the shim rather
 than of this trainer, and the verified path inherits them: it runs the
 same $4\times128$, clips at the same $1.0$ inside the render, and streams
 the same \texttt{tf.data} pipeline. But ``matches the paper's number'' and
@@ -13404,17 +13388,19 @@ one and a half of them rather than ConvNeXt's two.
 \medskip\noindent\textbf{The regularizer knobs are render variants, and
 here they compose.} Weight-decay exclusion, grad clipping and stochastic
 depth are spelled \texttt{wx}, \texttt{clip} and \texttt{drop}, EMA is a
-variant too, and \texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropbf16} is the render
-that carries all four at once on top of AdamW and the four-way
-all-reduce. It is the artifact the run used.
+variant too, and \texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdrop\allowbreak eps0000001bf16}
+is the render that carries all four at once on top of AdamW and the
+four-way all-reduce, at LayerNorm $\varepsilon = 10^{-6}$ (the last
+field spells the $\varepsilon$). It is the artifact the run used: four
+regions, $[\theta \mid m \mid v \mid \mathrm{ema}]$, 831 operands and
+200 all-reduces, with an fp32 evaluation forward at the same
+$\varepsilon$ beside it.
 Theorem~\ref{thm:vit_step_tie} is stated
 on the f32, drop-free chain; this render's gradient nodes are the bf16
 \texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
 carries the drop-path sites. Mixup, CutMix and repeated
 augmentation never enter the graph at all, because they are data-side
-and ride the shim. The job below runs its successor,
-\texttt{vitin\_\allowbreak emadp128x4\allowbreak wxclipdropeps0000001bf16},
-the same render at LayerNorm $\varepsilon = 10^{-6}$:
+and ride the shim. The job:
 
 \begin{verbatim}
 lake run vit-default-emabf16-4gpu
@@ -13425,13 +13411,15 @@ lake run vit-default-emabf16-4gpu
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & 9.6 min & 300 & 48.0 hr & $\mathbf{72.35\%}$ & $\mathbf{91.22\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & 13.0 min & 300 & 64.9 hr & $\mathbf{72.42\%}$ & $\mathbf{91.21\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Global batch 512 as $4 \times 128$ replicas, the EMA weights
-scored over the same $50{,}000$ images.
+scored over the same $50{,}000$ images; one attempt, no restarts, every
+epoch scored. The live weights score $72.15\%$ / $91.11\%$, which is
+DeiT-Ti's own $72.2$ / $91.1$ to within a twentieth of a point.
 
 \prosesection{The two paths, side by side}
 
@@ -13442,22 +13430,24 @@ scored over the same $50{,}000$ images.
 \hline
 lowering             & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step   & yes                      & none \\
-ms/step              & 161                      & 199 \\
-per epoch            & 6.8 min                  & 9.6 min \\
-total                & 34.2 hr                  & 48.0 hr \\
-label smoothing      & $0$ (effective)          & $0.1$ \\
-patch embed + head   & bf16                     & fp32 \\
+ms/step              & 220                      & 299 \\
+per epoch            & 9.1 min                  & 13.0 min \\
+total                & 45.9 hr                  & 64.9 hr \\
+Mixup / CutMix draw  & one per global 512       & one per 128-row shard \\
 evaluation forward   & bf16                     & fp32 \\
-CLS + position init  & $\sigma = 0.02$          & $0$ \\
-cosine phase         & ---                      & one step ahead \\
 \hline
 precision            & bf16 block matmuls       & bf16 block matmuls \\
+patch embed + head   & fp32                     & fp32 \\
 global batch         & 512 ($4\times128$)       & 512 ($4\times128$) \\
 steps/epoch          & 2{,}502                  & 2{,}502 \\
+label smoothing      & $0.1$                    & $0.1$ \\
+LayerNorm $\varepsilon$ / LR floor & $10^{-6}$ / $10^{-5}$ & $10^{-6}$ / $10^{-5}$ \\
+CLS + position init  & $\sigma = 0.02$          & $\sigma = 0.02$ \\
 EMA (scored)         & 0.99996                  & 0.99996 \\
 \hline
-\textbf{val top-1}   & $\mathbf{72.31\%}$       & $\mathbf{72.35\%}$ \\
-\textbf{val top-5}   & $\mathbf{91.12\%}$       & $\mathbf{91.22\%}$ \\
+\textbf{val top-1}   & $\mathbf{72.07\%}$       & $\mathbf{72.42\%}$ \\
+\textbf{val top-5}   & $\mathbf{91.00\%}$       & $\mathbf{91.21\%}$ \\
+live weights, top-1 / top-5 & 71.86 / 90.88     & 72.15 / 91.11 \\
 \hline
 \end{tabular}
 \end{center}
@@ -13467,31 +13457,48 @@ the same four RTX 3060 cards, scored over the same $50{,}000$ validation
 images. Rows above the first rule differ; rows between the rules are held
 equal by construction.
 
-\medskip\noindent\textbf{The two paths agree to $0.04$ points on top-1 and
-$0.10$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
+\medskip\noindent\textbf{The two paths agree within $0.34$ points on top-1 and
+$0.21$ on top-5}, inside the 95\% Wilson interval ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Above the rule sit the
-lowering, what it costs, and five things the two runs did not share: the
-reference's effective label smoothing of $0$ against the render's $0.1$,
-the precision of the patch embedding and head, the precision of the
-evaluation forward, a CLS token and position embedding that started at
-zero on the verified path, and a cosine one step ahead of the
-reference's. The batch is the reference's own $512$, and there is no
-BatchNorm to normalize over a different group; the rerun of both paths
-leaves the evaluation forward as the one row above the rule beside the
-lowering and its cost.
+lowering, what it costs, and the two things the runs did not share: where
+the Mixup and CutMix draws are made --- once over the global batch on the
+reference, once per replica's $128$ rows on the verified path, whose four
+producers each mix their own shard, which is also how timm mixes under
+DDP --- and the precision of the evaluation forward, which a re-score of
+the reference in fp32 puts at $+0.01$. Everything the first pair did not
+share --- the label smoothing, the precision of the patch embedding and
+head, the CLS and position initialization, the cosine's phase --- is now
+held equal, and the batch is the reference's own $512$ with no BatchNorm
+to normalize over a different group. Against that first pair ($72.31$ /
+$72.35$) the reference moved $-0.24$ and the verified path $+0.07$, each
+rerun also carrying the bicubic augmentation and DeiT's $\varepsilon$ and
+floor, so neither delta is a re-run of its predecessor.
 
-\medskip\noindent\textbf{The curves converge; they do not merely end together.}
-The verified path runs half a point behind through warmup, is level by
-epoch~100, and stays within a fifth of a point for the remaining two hundred:
+\medskip\noindent\textbf{Interval or no, these are not the same model.}
+Both runs score the same $50{,}000$ images, so the question can be put
+per image: the reference is right on $2{,}257$ images the verified model
+misses and the verified model on $2{,}438$ the reference misses, and
+McNemar's exact test puts that at $p = 0.009$ ($0.043$ on the live
+weights). The verified checkpoint is ahead on this validation set. With
+one seed per arm that is a statement about two trained models, not about
+the two paths, and the per-shard Mixup draw is the first place to look
+for it; what the pair was rerun to settle is narrower, and settled:
+matched row for row, the verified path does not trail its reference.
+
+\medskip\noindent\textbf{The curves run together, and the verified path
+leads from early on.} The two are tied through epoch~35 --- $13.89$
+against $13.99$ at epoch~5, $48.27$ against $48.24$ at~25 --- and from
+epoch~40 the verified path sits between a tenth and half a point ahead,
+to the end, never reversing:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
 \hline
 epoch & 5 & 50 & 100 & 150 & 200 & 250 & 300 \\
 \hline
-reference (JAX)       & 14.07 & 57.36 & 63.62 & 66.99 & 69.40 & 71.57 & 72.31 \\
-verified path (PJRT)  & 14.32 & 56.86 & 63.63 & 66.86 & 69.31 & 71.36 & 72.35 \\
-$\Delta$              & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21$ & $+0.04$ \\
+reference (JAX)       & 13.99 & 57.05 & 63.15 & 66.31 & 68.75 & 71.02 & 72.07 \\
+verified path (PJRT)  & 13.89 & 57.26 & 63.60 & 66.78 & 69.15 & 71.38 & 72.42 \\
+$\Delta$              & $-0.11$ & $+0.21$ & $+0.45$ & $+0.46$ & $+0.40$ & $+0.36$ & $+0.34$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -13512,11 +13519,11 @@ $\Delta$              & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21
     every axis plot/.append style={line width=1pt, mark size=0.8pt},
 ]
 \addplot[blue, mark=*, mark options={fill=blue}] coordinates {
-(5,14.07) (10,30.64) (15,39.38) (20,44.78) (25,48.44) (30,51.03) (35,53.13) (40,54.89) (45,56.20) (50,57.36) (55,58.29) (60,59.14) (65,59.94) (70,60.61) (75,61.18) (80,61.85) (85,62.30) (90,62.82) (95,63.20) (100,63.62) (105,63.95) (110,64.41) (115,64.80) (120,65.20) (125,65.42) (130,65.74) (135,66.10) (140,66.44) (145,66.77) (150,66.99) (155,67.11) (160,67.49) (165,67.78) (170,68.08) (175,68.31) (180,68.57) (185,68.85) (190,69.04) (195,69.21) (200,69.40) (205,69.59) (210,69.88) (215,70.08) (220,70.30) (225,70.56) (230,70.78) (235,70.98) (240,71.19) (245,71.46) (250,71.57) (255,71.66) (260,71.78) (265,71.91) (270,71.99) (275,72.05) (280,72.12) (285,72.23) (290,72.29) (295,72.29) (300,72.31)
+(5,13.99) (10,30.31) (15,39.23) (20,44.50) (25,48.24) (30,50.67) (35,52.85) (40,54.45) (45,55.77) (50,57.05) (55,58.00) (60,58.74) (65,59.57) (70,60.22) (75,60.78) (80,61.54) (85,62.01) (90,62.41) (95,62.84) (100,63.15) (105,63.50) (110,63.93) (115,64.27) (120,64.60) (125,64.93) (130,65.23) (135,65.49) (140,65.80) (145,66.08) (150,66.31) (155,66.68) (160,66.95) (165,67.16) (170,67.50) (175,67.73) (180,67.93) (185,68.22) (190,68.42) (195,68.58) (200,68.75) (205,69.19) (210,69.33) (215,69.52) (220,69.79) (225,69.95) (230,70.20) (235,70.37) (240,70.58) (245,70.78) (250,71.02) (255,71.14) (260,71.22) (265,71.32) (270,71.52) (275,71.68) (280,71.81) (285,71.95) (290,71.95) (295,71.99) (300,72.07)
 };
 \addlegendentry{reference (JAX)}
 \addplot[red, dashed, mark=o] coordinates {
-(5,14.32) (10,29.97) (15,38.93) (20,44.20) (25,47.74) (30,50.38) (35,52.54) (40,54.36) (45,55.75) (50,56.86) (55,57.77) (60,58.72) (65,59.61) (70,60.36) (75,61.00) (80,61.65) (85,62.22) (90,62.68) (95,63.19) (100,63.63) (105,63.94) (110,64.23) (115,64.72) (120,65.03) (125,65.37) (130,65.62) (135,65.90) (140,66.22) (145,66.51) (150,66.86) (155,67.07) (160,67.35) (165,67.60) (170,67.87) (175,68.20) (180,68.39) (185,68.61) (190,68.90) (195,69.12) (200,69.31) (205,69.52) (210,69.79) (215,69.99) (220,70.12) (225,70.42) (230,70.63) (235,70.79) (240,71.08) (245,71.23) (250,71.36) (255,71.51) (260,71.67) (265,71.81) (270,71.96) (275,72.07) (280,72.17) (285,72.26) (290,72.31) (295,72.32) (300,72.35)
+(5,13.89) (10,30.08) (15,39.11) (20,44.40) (25,48.27) (30,50.81) (35,52.95) (40,54.72) (45,56.07) (50,57.26) (55,58.22) (60,59.20) (65,59.98) (70,60.61) (75,61.34) (80,61.84) (85,62.38) (90,62.69) (95,63.17) (100,63.60) (105,63.93) (110,64.18) (115,64.47) (120,64.87) (125,65.29) (130,65.66) (135,65.91) (140,66.19) (145,66.46) (150,66.78) (155,66.98) (160,67.22) (165,67.54) (170,67.85) (175,68.02) (180,68.27) (185,68.54) (190,68.83) (195,69.07) (200,69.15) (205,69.30) (210,69.58) (215,69.81) (220,70.09) (225,70.40) (230,70.59) (235,70.79) (240,71.01) (245,71.17) (250,71.38) (255,71.54) (260,71.66) (265,71.83) (270,71.98) (275,72.08) (280,72.20) (285,72.32) (290,72.39) (295,72.41) (300,72.42)
 };
 \addlegendentry{verified path (PJRT)}
 \end{axis}
@@ -13526,29 +13533,37 @@ $\Delta$              & $+0.25$ & $-0.50$ & $+0.01$ & $-0.13$ & $-0.09$ & $-0.21
 \noindent One recipe, two paths to XLA, sampled every 5 epochs and scored
 over all $50{,}000$ validation images.
 
-\medskip\noindent\textbf{The remaining $48.0$ against $34.2$ hours is the data
+\medskip\noindent\textbf{The remaining $64.9$ against $45.9$ hours is the data
 feed, not the renderer.} With the shim removed the verified step is
-$153$\,ms --- a $38.5$-hour schedule, within $13\%$ of the reference --- and
-the fed step is $199$. The gap is the tfds shim streaming $602$\,KB per image
-of fp32 through a subprocess pipe, $308$\,MB per step at global $512$, which
-is host work the JAX trainer does in-process. Two knobs close most of it and
-both are throughput-only: producer count, and \texttt{tf.data} op determinism,
-which serializes the augmentation map and costs $5.3\times$ on the producers.
-Turning it off took this run from $69$ to $48$ hours; it moves the order of
-random draws and nothing else, and the reference has never paid it either.
+$153$\,ms --- a $38.5$-hour schedule, under the reference's own ---
+and the fed step is $299$; the graph has not changed since that was
+measured on the first pair's render, which this one matches but for
+$\varepsilon$. The gap is the shim: its producers run the same bicubic
+augmentation that cost the reference $1.34\times$ over its pre-bicubic
+run, out of process, and then stream $602$\,KB per image of fp32 through
+a subprocess pipe, $308$\,MB per step at global $512$, which is host
+work the JAX trainer does in-process. Two knobs close most of the pipe's
+share and both are throughput-only: producer count, and \texttt{tf.data}
+op determinism, which serializes the augmentation map and costs
+$5.3\times$ on the producers; it moves the order of random draws and
+nothing else, and the reference has never paid it either.
 The same accounting holds for every verified ImageNet run in this book,
 and the convnets' gaps are read against it.
 \textbf{[TODO: re-measure the gap on the shim as it stands, which mixes
 in place and writes from its own thread; the uint8 wire does not apply to
 this recipe, and PIL rotate is not built.]}
 
-\medskip\noindent A caution on reading the two side by side: the training
-loss is not the metric to compare. It runs ${\sim}0.47$ apart at epoch 50 where
-top-1 agrees to a tenth of a point, because label-smoothed cross-entropy sums
-$\log p$ over all $1{,}000$ classes and is hypersensitive to the
-small-probability tail, which top-1 cannot see. Held at fixed accuracy, varying
-only that tail moves the reported loss by $0.6$. The validation accuracies are
-the comparison; the loss curves are not.
+\medskip\noindent A note on the training loss, which the first pair could
+not compare: its curves sat ${\sim}0.47$ apart at epoch~50 while top-1
+agreed to a tenth of a point, and that was the smoothing, because
+label-smoothed cross-entropy sums $\log p$ over all $1{,}000$ classes and
+is hypersensitive to the small-probability tail, which top-1 cannot see.
+With the smoothing matched the two curves run within $0.08$ of each other
+for the whole schedule, the verified path's lower on average from the
+third 25-epoch window on and by $0.03$ at the end --- so the model that
+generalizes better here also fits its training stream better, a stream
+that is not quite the reference's, since each producer mixes its own
+$128$ rows. The validation accuracies remain the comparison.
 
 \section{Side quest: scaling to ViT-S and B}
 \label{sec:vit_sb}
