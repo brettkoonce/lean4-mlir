@@ -6882,7 +6882,8 @@ between the blocks, on both paths at once: the 2018 recipe normalizes over
 the global $256$, and A3 over the $512$-image micro-batch its accumulation
 hands each step --- ghost batch norm, on the reference and the verified
 path alike. \textbf{[TODO: rerun both pairs with the head, the $\gamma$
-initialization and the BN decay matched --- fp32, zero, $0.9$.]}
+initialization and the BN decay matched --- fp32, zero, $0.9$ --- and A3 at
+\texttt{timm}'s BCE target threshold of $0.2$, which neither column had.]}
 
 \medskip\noindent\textbf{The two paths agree within $0.21$ points on top-1
 on both recipes}, and within $0.24$ on top-5 --- inside the 95\% Wilson interval, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta replicates}: A3 beats 2018 by
