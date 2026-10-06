@@ -1323,3 +1323,192 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4_train_step.mlir"
   (Proofs.StableHLO.vitAdamTrainStepBText .tanh "vitin_emadp128x4_train_step" "128.0" 4 1000 0.1
     (ema := true) (vbB := 128))
+
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § THE EXACT-GELU RENDERS
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- Every ImageNet render above, again at `GeluForm.erf`: the GELU is the exact `x · Φ(x)` DeiT
+-- trains under (PyTorch's `nn.GELU`; `TrainConfig.geluExact` on the JAX side), emitted through
+-- `chlo.erfc` in `jax.nn.gelu(approximate=False)`'s op order. Each writer is its tanh partner's
+-- call with `.erf` and the marked name, and nothing else: `scripts/regen_verified_mlir.sh check`
+-- compares the two calls and the two artifacts' GELU sites, and fails on an ImageNet render
+-- without a partner. The tanh renders stay; they are what the landed runs trained on.
+--
+-- **The name.** `geluMarker`: `erf` after the ε marker and before `bf16`
+-- (`emadp128x4wxclipdropeps0000001erfbf16`). The form changes no arity, type or region, so the
+-- driver's layout predicates read these names as they read the tanh ones (the `#guard`s below);
+-- `VerifiedVariant.erfOn` reads the marker to pick the forward. A forward with no train-step
+-- variant in its name carries the marker in the same slot: `vitin_erf_fwd`, `vitin_droperf_fwd`.
+--
+-- Imagenette's renders (`vit_*`) have no exact twin: that chapter's reference trains the tanh
+-- form.
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamwxclipdroperf_train_step" "32.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamwxclipdroperfbf16_train_step" "32.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp128x4wxclipdroperf_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_emadp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_emadp128x4wxclipdropeps0000001erfbf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (bf16 := true) (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitin_emadp128x4wxclipdropeps0000001erfbf16_fwd" 1000 (vbB := 256)
+    (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp256x2wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp256x2wxclipdroperf_train_step" "256.0" 2 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 256))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x2wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp128x2wxclipdroperf_train_step" "128.0" 2 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_droperf_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitin_droperf_fwd" 1000 (sd := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitsin_adamdp128x4wxclipdroperf_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_adamdp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitsin_adamdp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitsin_emadp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitsin_emadp128x4wxclipdropeps0000001erfbf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitSDims) (bf16 := true)
+    (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd" 1000
+    (V := Proofs.StableHLO.vitSDims) (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_droperf_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitsin_droperf_fwd" 1000 (sd := true) (V := Proofs.StableHLO.vitSDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitsin_erf_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitsin_erf_fwd" 1000 (V := Proofs.StableHLO.vitSDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_adamdp128x4wxclipdroperf_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adamdp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_adamdp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_emadp128x4wxclipdroperfbf16_train_step" "128.0" 4
+    1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_emadp128x4wxclipdropeps0000001erfbf16_train_step"
+    "128.0" 4 1000 0.1 (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true)
+    (clipStr := "1.0") (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true)
+    (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd" 1000
+    (V := Proofs.StableHLO.vitBDims) (eps := "1.0e-6"))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_adam128wxclipdroperf_train_step" "128.0" 1
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_adam128wxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitbin_adam128wxclipdroperfbf16_train_step" "128.0" 1
+    1000 0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (vbB := 128) (V := Proofs.StableHLO.vitBDims) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/vitbin_erf_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitbin_erf_fwd" 1000 (V := Proofs.StableHLO.vitBDims))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128erf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adam128erf_train_step" "128.0" 1 1000
+    (wdStr := "0.05") (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4erf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp128x4erf_train_step" "128.0" 4 1000
+    (wdStr := "0.05") (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_erf_fwd.mlir"
+  (Proofs.StableHLO.vitFwdRenderB .erf "vitin_erf_fwd" 1000 (vbB := 256))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wxerf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adam128wxerf_train_step" "128.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adam128wxcliperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adam128wxcliperf_train_step" "128.0" 1 1000 0.1
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_adamdp128x4wxcliperf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_adamdp128x4wxcliperf_train_step" "128.0" 4 1000
+    0.1 (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_ema128erf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_ema128erf_train_step" "128.0" 1 1000 0.1
+    (ema := true) (vbB := 128))
+
+#eval IO.FS.writeFile "verified_mlir/vitin_emadp128x4erf_train_step.mlir"
+  (Proofs.StableHLO.vitAdamTrainStepBText .erf "vitin_emadp128x4erf_train_step" "128.0" 4 1000 0.1
+    (ema := true) (vbB := 128))
+
+-- The pair variant's three spellings — path, entry, `LEAN_MLIR_VARIANT` — against the name
+-- functions, and the driver's predicates on the longer name: still EMA, still 24 drop masks, no
+-- `do` / `acc`, the ε marker still read as 1e-6's, and the form read as exact.
+#guard Proofs.StableHLO.geluMarker .tanh == "" && Proofs.StableHLO.geluMarker .erf == "erf"
+#guard "vitin_emadp128x4wxclipdropeps0000001erfbf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ Proofs.StableHLO.geluMarker .erf ++ "bf16" ++ "_train_step"
+#guard "vitin_adamdp128x4wxclipdroperfbf16_train_step" ==
+  "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++
+    Proofs.StableHLO.geluMarker .erf ++ "bf16" ++ "_train_step"
+#guard "emadp128x4wxclipdropeps0000001erfbf16".startsWith "ema"
+#guard !"emadp128x4wxclipdropeps0000001erfbf16".contains "do"
+#guard !"emadp128x4wxclipdropeps0000001erfbf16".contains "acc"
+#guard ("emadp128x4wxclipdropeps0000001erfbf16".splitOn "drop").length == 2
+#guard ("emadp128x4wxclipdropeps0000001erfbf16".splitOn "eps0000001").length == 2
+#guard ("emadp128x4wxclipdropeps0000001erfbf16".splitOn "erf").length == 2
+-- No tanh name reads as exact: `erf` occurs in no other marker and in no concatenation of them.
+#guard !(Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++
+    Proofs.StableHLO.bnEpsMarker "1.0e-6" ++ "bf16").contains "erf"

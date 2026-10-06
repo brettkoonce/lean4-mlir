@@ -266,6 +266,23 @@ NO_PARTNER = {
                            "geometry at DeiT's ε; its only step is bf16 drop at B=128",
 }
 
+
+# ── the exact-GELU twins ──
+# Every ImageNet ViT / ConvNeXt artifact exists at both forms of the GELU, the exact one under the
+# name with `erf` closing the variant, before `bf16` (`geluMarker`). A twin pairs, or has no
+# partner, exactly as its tanh render does, so its row is derived here rather than written twice.
+import re as _re
+GELU_SLUGS = ("vitin", "vitsin", "vitbin", "convnextin", "convnextsin", "convnextbin")
+def erf_twin(f):
+    slug, rest = f.split("_", 1)
+    v, kind = _re.fullmatch(r"(?:(.*)_)?(fwd|train_step)\.mlir", rest).groups()
+    v = v or ""
+    v = v[:-4] + "erfbf16" if v.endswith("bf16") else v + "erf"
+    return f"{slug}_{v}_{kind}.mlir"
+PAIRS += [(erf_twin(f), erf_twin(t)) for f, t in PAIRS if f.startswith(GELU_SLUGS)]
+NO_PARTNER.update({erf_twin(f): why + " (this is its exact-GELU twin)"
+                   for f, why in list(NO_PARTNER.items()) if f.startswith(GELU_SLUGS)})
+
 # ── the ratchet. May SHRINK, never grow: a new entry means a forward and the graph that trains it
 #    drifted apart with this audit green, which is the exact failure §3d(b) is about.
 #    ⚠ NONE of these make a quoted number wrong — traced (§3d(c)) and re-confirmed 2026-08-10 for
@@ -419,6 +436,20 @@ PAIRS = [("resnet34_fwd.mlir",     "resnet34_sgd_train_step.mlir"),
          # renders only the 4×128 DP variant. ConvNeXt-S is unaffected: `cBS` is 32 on both sides.
          # ▶ The fix is a bs-32 ViT-S train step (or a bs-128 SD forward), not an entry here.
 
+# ── the exact-GELU twins ──
+# Every ImageNet ViT / ConvNeXt artifact exists at both forms of the GELU, the exact one under the
+# name with `erf` closing the variant, before `bf16` (`geluMarker`). A twin pairs, or has no
+# partner, exactly as its tanh render does, so its row is derived here rather than written twice.
+import re as _re
+GELU_SLUGS = ("vitin", "vitsin", "vitbin", "convnextin", "convnextsin", "convnextbin")
+def erf_twin(f):
+    slug, rest = f.split("_", 1)
+    v, kind = _re.fullmatch(r"(?:(.*)_)?(fwd|train_step)\.mlir", rest).groups()
+    v = v or ""
+    v = v[:-4] + "erfbf16" if v.endswith("bf16") else v + "erf"
+    return f"{slug}_{v}_{kind}.mlir"
+PAIRS += [(erf_twin(f), erf_twin(t)) for f, t in PAIRS if f.startswith(GELU_SLUGS)]
+
 def body(lines, what):
     """The pretty(AST) body: everything from the first `%v0 = ` definition on.
 
@@ -534,6 +565,20 @@ check_batch_divisor() {
   return $rc
 }
 
+# ── the GELU-form twin audit ──
+# An exact-GELU render must be its tanh twin with the GELU sites swapped and nothing else: the two
+# `#eval`s are one call at `.tanh` and at `.erf`, and a twin whose other arguments drifted would
+# train a different recipe under a name that says only the activation moved. The gate compares the
+# committed bytes with each GELU site collapsed, and fails on an ImageNet ViT / ConvNeXt artifact
+# with no twin. Its control runs here too.
+check_gelu_twins() {
+  echo "── GELU-form twin audit (exact render == tanh render outside the GELU sites) ──"
+  local rc=0
+  python3 scripts/gates/gelu_form_twins.py | sed 's/^/  /' || rc=1
+  python3 scripts/gates/gelu_form_twins.py --control | sed 's/^/  /' || rc=1
+  return $rc
+}
+
 if [ "$WHAT" = "check" ]; then
   rc=0
   check_writers || rc=1
@@ -553,6 +598,8 @@ if [ "$WHAT" = "check" ]; then
   check_zero_bias_decls || rc=1
   echo
   check_batch_divisor || rc=1
+  echo
+  check_gelu_twins || rc=1
   exit $rc
 fi
 

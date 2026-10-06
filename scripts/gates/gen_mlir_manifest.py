@@ -73,6 +73,11 @@ def acc_on(v: str) -> bool:
     return "acc" in v
 
 
+def erf_on(v: str) -> bool:
+    # `VerifiedVariant.erfOn`: the exact GELU `x · Φ(x)`, `geluMarker`'s `erf`
+    return "erf" in v
+
+
 def acc_k(v: str) -> int | None:
     if not acc_on(v):
         return None
@@ -118,6 +123,17 @@ def selftest() -> int:
         ("rmsdp64wxdols0eps0001bf16", batch_shape, "batch 64 per replica", "`eps0001` is not a batch"),
         ("emadp128x4wxclipdropeps0000001bf16", lambda v: decimal_marker(v, "eps"), "0.000001", "LN ε = 1e-6"),
         ("emadp128x4wxclipdropeps0000001bf16", ema_on, True, "`eps` after `drop` leaves `ema` the prefix"),
+    ]
+    # 6. the GELU form: `erf` after `drop` or the ε marker, before `bf16`, and in no other marker.
+    checks += [
+        ("emadpwxclipdroperfbf16", erf_on, True, "`drop`++`erf`: the exact GELU"),
+        ("emadpwxclipdroperfbf16", cd_on, False, "...and `droperf` is not classifier dropout"),
+        ("emadpwxclipdroperfbf16", sd_on, True, "...and it is still stochastic depth"),
+        ("emadp128x4wxclipdropeps0000001erfbf16", lambda v: decimal_marker(v, "eps"), "0.000001",
+         "`eps0000001`++`erf`: the ε digits stop at `erf`"),
+        ("emadp128x4wxclipdropeps0000001erfbf16", batch_shape, "batch 128 per replica × 4 replicas",
+         "`erf` is not a batch"),
+        ("emalambaccdp8x64wxclipdropbcewd001", erf_on, False, "no other marker spells `erf`"),
     ]
     bad = 0
     for v, pred, want, why in checks:
@@ -173,6 +189,8 @@ def decode(variant: str) -> str:
         bits.append("grad clip")
     if "bce" in variant:
         bits.append("BCE loss")
+    if erf_on(variant):
+        bits.append("exact GELU")
     if "bf16" in variant:
         bits.append("bf16")
     if "fp8" in variant:
@@ -346,6 +364,7 @@ def build() -> str:
         "| replicas | `dp<B>x<R>` | `x` is k×B after `acc`, B×replicas after a bare `dp` |",
         "| weight decay | `wd<d…>` | first digit the integer part: `wd005` = 0.05, `wd00` = 0.0 |",
         "| label smoothing | `ls<d…>` | same rule: `ls0` = 0 |",
+        "| GELU form | `erf` | the exact `x · Φ(x)`, before `bf16`; without it the tanh approximation |",
         "",
     ]
 

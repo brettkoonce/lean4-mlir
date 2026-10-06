@@ -105,6 +105,16 @@ def bnEpsMarker (epsStr : String) : String :=
   -- only ViT, which has no BN, uses it, so the two readings never share a variant.
   else if epsStr == "1.0e-6" then "eps0000001" else s!"eps({epsStr})"
 
+/-- The variant marker for the form of the GELU: nothing for the tanh approximation, whose names
+    are the committed ones, and `erf` for the exact `x · Φ(x)`. It sits after the ε marker and before
+    `bf16` (`emadp128x4wxclipdropeps0000001erfbf16`, `emadpwxclipdroperfbf16`). The form is baked
+    into every GELU site of the train step and of the forward, so an exact-GELU train step scores
+    through an exact-GELU forward: its own `<slug>_<variant>_fwd`, else `<slug>_erf_fwd`
+    (`VerifiedVariant.erfOn` reads the marker back, `checkGeluWorld` refuses a mixed pair). -/
+def geluMarker : GeluForm → String
+  | .tanh => ""
+  | .erf => "erf"
+
 /-- `@<slug>_fwd_eval`, or `@<slug>_fwd_eval_<marker>` at a non-default ε (an artifact's entry is its
     file name). -/
 def fwdEvalEntry (slug epsStr : String) : String :=

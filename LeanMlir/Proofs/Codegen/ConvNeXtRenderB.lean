@@ -1190,3 +1190,213 @@ end Proofs.StableHLO
 -- At `bf16 := false` every committed spelling is untouched — byte-identity, stated on the name as
 -- well as on the bytes.
 #guard Proofs.StableHLO.cnxAdamVariant 4 false true true true false == "adamdpwxclipdrop"
+
+-- ════════════════════════════════════════════════════════════════════════════════════════
+-- § THE EXACT-GELU RENDERS
+-- ════════════════════════════════════════════════════════════════════════════════════════
+--
+-- Every ImageNet render above, again at `GeluForm.erf`: the GELU is the exact `x · Φ(x)` ConvNeXt
+-- trains under (PyTorch's `nn.GELU`; `TrainConfig.geluExact` on the JAX side), emitted through
+-- `chlo.erfc` in `jax.nn.gelu(approximate=False)`'s op order. Each writer is its tanh partner's
+-- call with `.erf`, and nothing else: `scripts/regen_verified_mlir.sh check` compares the two
+-- calls and the two artifacts' GELU sites, and fails on an ImageNet render without a partner.
+-- The tanh renders stay; they are what the landed runs trained on.
+--
+-- **The name.** `cnxAdamVariant` spells the form with `geluMarker`: `erf` after `drop` and before
+-- `bf16` (`emadpwxclipdroperfbf16`), so a train step's entry follows from `.erf` and its path is
+-- pinned to it below. The form changes no arity, type or region, so the driver's layout
+-- predicates read these names as they read the tanh ones; `VerifiedVariant.erfOn` reads the
+-- marker to pick the forward. A forward has no train-step variant in its name and carries the
+-- marker in the same slot: `convnextin_erf_fwd`, `convnextin_droperf_fwd`,
+-- `convnextin_erf_fwd_s288`.
+--
+-- Imagenette's renders (`convnext_*`) have no exact twin: that chapter's reference trains the
+-- tanh form.
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_droperf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextin_droperf_fwd" 1000
+    Proofs.StableHLO.cnxDropFwdBanner (sd := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_emawxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_emadpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 1 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 4 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 1 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_adamdpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 4 1000 "convnextsin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_droperf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextsin_droperf_fwd" 1000
+    (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxSmall)
+    (sd := true) (V := Proofs.StableHLO.cnxSmall))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emawxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_emadpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextsin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxSmall) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 1 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 1 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 4 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_adamdpwxclipdroperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" "32.0" 4 1000 "convnextbin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emawxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_emadpwxclipdroperfbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextbin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (V := Proofs.StableHLO.cnxBase) (bf16 := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_droperf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextbin_droperf_fwd" 1000
+    (Proofs.StableHLO.cnxDropFwdBanner Proofs.StableHLO.cnxBase)
+    (sd := true) (V := Proofs.StableHLO.cnxBase))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamerf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (wdStr := "0.05") (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (wdStr := "0.05") (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_erf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextin_erf_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+    (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_erf_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextin_erf_fwd_s288" 1000 Proofs.StableHLO.cnxFwdBanner
+    (bB := cnxInBS) (s := 288))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxerf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamwxcliperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_adamdpwxcliperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_emaerf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin" (ema := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextin_emadperf_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .erf "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin" (ema := true) (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_erf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextsin_erf_fwd" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
+    (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextsin_erf_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextsin_erf_fwd_s288" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxSmall) (V := Proofs.StableHLO.cnxSmall)
+    (bB := cnxInBS) (s := 288))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_erf_fwd.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextbin_erf_fwd" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
+    (bB := cnxInBS))
+
+#eval IO.FS.writeFile "verified_mlir/convnextbin_erf_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB .erf "convnextbin_erf_fwd_s288" 1000
+    (Proofs.StableHLO.cnxFwdBanner Proofs.StableHLO.cnxBase) (V := Proofs.StableHLO.cnxBase)
+    (bB := cnxInBS) (s := 288))
+
+-- The thirteen exact train-step names, each against `cnxAdamVariant` at `.erf` — the entry the
+-- writers above declare. The path literals must stay literals (the writer audit greps them).
+#guard Proofs.StableHLO.geluMarker .tanh == "" && Proofs.StableHLO.geluMarker .erf == "erf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 (gf := .erf) == "adamerf"
+#guard Proofs.StableHLO.cnxAdamVariant 4 (gf := .erf) == "adamdperf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 true (gf := .erf) == "emaerf"
+#guard Proofs.StableHLO.cnxAdamVariant 4 true (gf := .erf) == "emadperf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true (gf := .erf) == "adamwxerf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true true (gf := .erf) == "adamwxcliperf"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true (gf := .erf) == "adamdpwxcliperf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true true true (gf := .erf) == "adamwxclipdroperf"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true true (gf := .erf) == "adamdpwxclipdroperf"
+#guard Proofs.StableHLO.cnxAdamVariant 1 false true true true true .erf == "adamwxclipdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 4 false true true true true .erf == "adamdpwxclipdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 1 true true true true true .erf == "emawxclipdroperfbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf == "emadpwxclipdroperfbf16"
+-- The driver's predicates on the pair variant: still EMA, still 18 drop masks, no `do` / `acc` /
+-- `sd`, and the form read as exact.
+#guard (Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).startsWith "ema"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).contains "do"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).contains "acc"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).contains "sd"
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).splitOn "drop").length == 2
+#guard ((Proofs.StableHLO.cnxAdamVariant 4 true true true true true .erf).splitOn "erf").length == 2
+-- At the tanh form every committed spelling is untouched, and none reads as exact.
+#guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true .tanh == "emadpwxclipdropbf16"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 true true true true true).contains "erf"

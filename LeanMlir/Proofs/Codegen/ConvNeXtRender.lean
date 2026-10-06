@@ -811,7 +811,10 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- THREADING IT INTO THIS SIGNATURE IS HALF THE JOB: a name function that takes the flag but
     -- forgets the `++` on the returned string spells the variant without `bf16` while the artifact
     -- path carries it — the entry-name defect by the route "the name function ignored it".
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- The form of the GELU, defaulted to the tanh form of every committed spelling. Its marker
+    -- (`geluMarker`: `erf` at the exact form) goes before `bf16`, where the ε marker goes on ViT.
+    (gf : GeluForm := .tanh) : String :=
   (if ema then "ema" else "adam") ++ (if replicas ≤ 1 then "" else "dp")
     -- `wx` = timm no_weight_decay; TRAILING, and checked against every CONCATENATION in
     -- `tests/TestVariantPredicates.lean` rather than against the other markers one at a time.
@@ -835,6 +838,10 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     -- Unlike `wx`, this flag is NOT free of the driver: it changes the arity (18 extra inputs and
     -- 18 pass-through outputs), so `tests/TestVariantPredicates.lean` runs every CONCATENATION.
     ++ (if sd then "drop" else "")
+    -- `erf`, the exact GELU: empty at the tanh form, so no committed spelling moves. `drop` ++ `erf`
+    -- spells `droperf`, which holds no "do", "acc", "sd", "rms" or "eps"; the `#guard`s in
+    -- `ConvNeXtRenderB.lean` and `tests/TestVariantPredicates.lean` run the concatenations.
+    ++ geluMarker gf
     -- `bf16` LAST, after even the `drop` marker, for the reason each marker before it is where it
     -- is: appending is the only placement that leaves every committed spelling byte-identical.
     -- Marker-collision check, the `emarms`/`rmsdp`-contains-"sd" hazard one axis on. The driver
@@ -1058,8 +1065,9 @@ def convNextAdamTrainStepText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Stri
   -- ARITY — so a variant name that dropped it would put an 18-input-wider graph behind the plain
   -- `adam` path's artifact name and checkpoint. `#guard`s below pin every spelling.
   -- `bf16` is the FOURTH flag that must reach the variant here, after `wdExclude`, `clip` and
-  -- `sd`.
-  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16}_train_step"
+  -- `sd`, and `gf` the fifth: an exact-GELU graph under a tanh name would overwrite the artifact a
+  -- landed run trained on.
+  let funcName := s!"{slug}_{cnxAdamVariant replicas ema wdExclude clip sd bf16 gf}_train_step"
   return "module @m {\n" ++ s!"  func.func @{funcName}({argSig}) -> ({retTyL}) " ++ "{\n" ++
     "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
     s!"    %bsc = stablehlo.constant dense<{cBS}.0> : {ty [cBS,nClasses]}\n" ++

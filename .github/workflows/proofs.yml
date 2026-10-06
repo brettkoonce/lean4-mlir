@@ -17,6 +17,7 @@ on:
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/train_step_arity.py'
+      - 'scripts/gates/gelu_form_twins.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/certs/_gencheck.py'
@@ -39,6 +40,7 @@ on:
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/train_step_arity.py'
+      - 'scripts/gates/gelu_form_twins.py'
       - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/certs/_gencheck.py'
@@ -361,6 +363,40 @@ jobs:
               verified_mlir/convnextin_emadpwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_adamwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir \
+              verified_mlir/convnextbin_adamdpwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextbin_adamdpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextbin_adamwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextbin_adamwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextbin_droperf_fwd.mlir \
+              verified_mlir/convnextbin_emadpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextbin_emawxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextbin_erf_fwd.mlir \
+              verified_mlir/convnextbin_erf_fwd_s288.mlir \
+              verified_mlir/convnextin_adamdperf_train_step.mlir \
+              verified_mlir/convnextin_adamdpwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextin_adamdpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextin_adamdpwxcliperf_train_step.mlir \
+              verified_mlir/convnextin_adamerf_train_step.mlir \
+              verified_mlir/convnextin_adamwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextin_adamwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextin_adamwxcliperf_train_step.mlir \
+              verified_mlir/convnextin_adamwxerf_train_step.mlir \
+              verified_mlir/convnextin_droperf_fwd.mlir \
+              verified_mlir/convnextin_emadperf_train_step.mlir \
+              verified_mlir/convnextin_emadpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextin_emaerf_train_step.mlir \
+              verified_mlir/convnextin_emawxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextin_erf_fwd.mlir \
+              verified_mlir/convnextin_erf_fwd_s288.mlir \
+              verified_mlir/convnextsin_adamdpwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextsin_adamdpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextsin_adamwxclipdroperf_train_step.mlir \
+              verified_mlir/convnextsin_adamwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextsin_droperf_fwd.mlir \
+              verified_mlir/convnextsin_emadpwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextsin_emawxclipdroperfbf16_train_step.mlir \
+              verified_mlir/convnextsin_erf_fwd.mlir \
+              verified_mlir/convnextsin_erf_fwd_s288.mlir \
             || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }
           # ⭐ EVERY ViT artifact but one, from ViTRenderB — the batched chain. 4c leg 4 moved the
           # nineteen drop-free renders here (2026-09-07) after measuring all nineteen
@@ -415,6 +451,39 @@ jobs:
               verified_mlir/vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir \
               verified_mlir/vitbin_adam128wxclipdrop_train_step.mlir \
               verified_mlir/vitbin_adam128wxclipdropbf16_train_step.mlir \
+              verified_mlir/vitbin_adam128wxclipdroperf_train_step.mlir \
+              verified_mlir/vitbin_adam128wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitbin_adamdp128x4wxclipdroperf_train_step.mlir \
+              verified_mlir/vitbin_adamdp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir \
+              verified_mlir/vitbin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir \
+              verified_mlir/vitbin_emadp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitbin_erf_fwd.mlir \
+              verified_mlir/vitin_adam128erf_train_step.mlir \
+              verified_mlir/vitin_adam128wxcliperf_train_step.mlir \
+              verified_mlir/vitin_adam128wxerf_train_step.mlir \
+              verified_mlir/vitin_adamdp128x2wxclipdroperf_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4erf_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4wxclipdroperf_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitin_adamdp128x4wxcliperf_train_step.mlir \
+              verified_mlir/vitin_adamdp256x2wxclipdroperf_train_step.mlir \
+              verified_mlir/vitin_adamwxclipdroperf_train_step.mlir \
+              verified_mlir/vitin_adamwxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitin_droperf_fwd.mlir \
+              verified_mlir/vitin_ema128erf_train_step.mlir \
+              verified_mlir/vitin_emadp128x4erf_train_step.mlir \
+              verified_mlir/vitin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir \
+              verified_mlir/vitin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir \
+              verified_mlir/vitin_emadp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitin_erf_fwd.mlir \
+              verified_mlir/vitsin_adamdp128x4wxclipdroperf_train_step.mlir \
+              verified_mlir/vitsin_adamdp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitsin_droperf_fwd.mlir \
+              verified_mlir/vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir \
+              verified_mlir/vitsin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir \
+              verified_mlir/vitsin_emadp128x4wxclipdroperfbf16_train_step.mlir \
+              verified_mlir/vitsin_erf_fwd.mlir \
             || { echo "::error::committed verified_mlir/{vit,vitin,vitsin,vitbin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ViTRenderB.lean)"; exit 1; }
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
