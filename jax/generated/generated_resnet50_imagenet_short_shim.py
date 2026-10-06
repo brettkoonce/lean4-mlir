@@ -446,7 +446,11 @@ def _main():
         tm = lam_adj * t + (np.float32(1.0) - lam_adj) * np.flip(t, 0)
         return x, np.ascontiguousarray(tm, dtype=np.float32)
     def _emit(x, y, step):
-        return _mix(_wire_img(x), _targets(y), step)
+        xo, to = _mix(_wire_img(x), _targets(y), step)
+        if not training or nclasses <= 0:
+            return xo, to
+        to = (to > np.float32(0.200000)).astype(np.float32)  # timm --bce-target-thresh
+        return xo, np.ascontiguousarray(to, dtype=np.float32)
     if hash_n:
         h = hashlib.sha256()
         for i, (x, y) in enumerate(it):

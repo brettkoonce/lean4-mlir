@@ -139,7 +139,11 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       useEMA        := false    -- A3: no model EMA
       trainRes      := 160      -- A3: train @160×160
       testCropRatio := 0.95     -- A3: eval @224, center-crop ratio 0.95
-      augBicubic    := false }  -- bilinear geometry, as the landed A3 runs trained (C6 is off for them)
+      augBicubic    := false    -- bilinear geometry, as the landed A3 runs trained (C6 is off for them)
+      -- timm's A3 ran at 0.2 too: "you'll have to add --bce-target-thresh 0.2 as that was
+      -- hardcoded when those runs were done" (rwightman, pytorch-image-models discussion #924).
+      -- The landed A3 pair (78.26 / 78.33) trained without it, on both paths.
+      bceTargetThresh := some 0.2 }
 
 /-- **The 2018 recipe** — the ResNet-50 side of the blueprint's A3-vs-2018 recipe diff
     (`sec:r50_a3_vs_2018`), and the JAX peer of the verified `momdp64` run. It is the

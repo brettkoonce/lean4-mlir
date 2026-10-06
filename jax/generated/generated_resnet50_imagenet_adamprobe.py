@@ -1326,6 +1326,7 @@ def loss_fn(params, bn, x, y, drop_key=None):
         tgt = jax.nn.one_hot(y, 1000)
     else:
         tgt = y
+    tgt = (tgt > 0.200000).astype(tgt.dtype)  # timm --bce-target-thresh
     # stable log-sigmoid via softplus: -log(sig(z))=softplus(-z), -log(1-sig(z))=softplus(z)
     bce = tgt * jax.nn.softplus(-logits) + (1.0 - tgt) * jax.nn.softplus(logits)
     return jnp.mean(bce), _new_bn

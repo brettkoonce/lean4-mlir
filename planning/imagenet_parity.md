@@ -484,7 +484,7 @@ did not move).
 | D11 | MNv2 | depthwise weight decay | TF-slim skips it | decayed, both paths | M (variant + both arms) |
 | D12 | MNv2 | slim inception colour distortion | yes (unverified offline) | none | M |
 | D13 | MNv2, B0 | RMSProp lr placement | TF1: lr inside momentum | outside, both paths | JAX S, verified M; matters only while lr moves |
-| D14 | R50 A3 | BCE target threshold | 0.2 on A2/A1 per timm; A3 UNVERIFIED | none on A3 | S code; if timm's A3 used it, both A3 numbers are off-recipe. Check RSB Table 1 / timm's published args first |
+| D14 | R50 A3 | BCE target threshold | 0.2: rwightman, pytorch-image-models discussion #924, "add `--bce-target-thresh 0.2` as that was hardcoded when those runs were done" | ✅ 2026-10-06: `bceTargetThresh := some 0.2` on `resnet50ImagenetConfigShort` (A3 `short` / `rsb-faithful` trainers + the `short` shim the verified A3 streams); `bce_target_gate.py` gained a `short` case | the landed A3 pair (78.26 / 78.33) trained without it, on both paths; the A3 rerun carries it |
 | D15 | ConvNeXt-T | the EMA pair | — | the 81.53 reference is pre-C6; a verified EMA run today is post-C6 | rerun the JAX T too, or disclose a two-axis pair |
 | D16 | R50 (Imagenette) | zero-γ on the Imagenette R50 | JAX twin zero-inits | verified γ = 1 (X4 left it off) | S; moves that net's landed number |
 | D17 | A2/A1, ViT-S/B, MNv4 `full` | ETA re-probes after X2/X5/X6 (bicubic is the C6 feed cost) | — | conf ETAs are the 10-05 probes | short GPU each |
