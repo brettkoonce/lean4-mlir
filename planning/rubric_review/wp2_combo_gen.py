@@ -147,7 +147,8 @@ CNX_DOC = '''/-- **The emitted ConvNeXt-T step's gradient nodes ARE the loss's g
 
 
 def cnx():
-    bridges = [(f'cnxPre{p} N ε w x', nm, f'cnxPre{p}_apply N ε w x')
+    # every prefix past the stem runs through a block, so it takes the GELU's form `gf`
+    bridges = [(f'cnxPre{p} {"" if p == "S" else "gf "}N ε w x', nm, f'cnxPre{p}_apply N ε w x')
                for p, nm in zip(CNX_PRE, CNX_LETS)]
     eh = len(bridges) - 1
     return gen(CNX_DIR + 'ConvNeXtStepTieGB.lean', 'cnx_net_tiedGB',
@@ -155,10 +156,10 @@ def cnx():
                '(hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1)',
                'let L := smoothedBatchLossDiv N nC α B t',
                'cnx_net_tiedGB N xN epsStr cotN dN aStr negAK bStr logN ohN ε α B w x t',
-               'cnx_net_lossGrad_smoothedCE xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w x t ht',
-               doc=CNX_DOC, pre_re=r'\(cnxPre\w+ N ε w x\)', bridges=bridges,
+               'cnx_net_lossGrad_smoothedCE (gf := gf) xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w x t ht',
+               doc=CNX_DOC, pre_re=r'\(cnxPre\w+ (?:gf )?N ε w x\)', bridges=bridges,
                extra_haves=['have eg : den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN\n'
-                            f'      (cnxNetB N ε w x) t) = g := by rw [← cnx_logitsB_eq, e{eh}]'],
+                            f'      (cnxNetB gf N ε w x) t) = g := by rw [← cnx_logitsB_eq, e{eh}]'],
                unfold_hl='CnxNetLossTiedGB', extra_rw=['eg'])
 
 
@@ -201,7 +202,7 @@ VIT_DOC = '''/-- **The emitted ViT-Tiny step's gradient nodes ARE the loss's gra
 
 
 def vit():
-    pres = ['vitPreE N w img'] + [f'vitPreB{k} N ε w img' for k in range(1, 13)]
+    pres = ['vitPreE N w img'] + [f'vitPreB{k} gf N ε w img' for k in range(1, 13)]
     aps = ['vitPreE_apply N w img'] + [f'vitPreB{k}_apply N ε w img' for k in range(1, 13)]
     lets = [f'ib{k}' for k in range(1, 13)] + ['b12out']
     bridges = list(zip(pres, lets, aps))
@@ -210,11 +211,11 @@ def vit():
                VIT_DIR + 'ViTParamGrad.lean', 'ViTNetLossTiedGB', 'vit_net_tied_lossGrad',
                '(hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1)',
                'let L := smoothedBatchLossDiv N nC α B t',
-               'vit_net_tiedGB N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w img t',
-               'vit_net_lossGrad_smoothedCE xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w img t ht',
-               doc=VIT_DOC, pre_re=r'\(vitPre\w+ N (?:ε )?w img\)', groups=groups, bridges=bridges,
+               'vit_net_tiedGB (gf := gf) N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w img t',
+               'vit_net_lossGrad_smoothedCE (gf := gf) xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w img t ht',
+               doc=VIT_DOC, pre_re=r'\(vitPre\w+ (?:gf )?N (?:ε )?w img\)', groups=groups, bridges=bridges,
                extra_haves=['have eg : den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN\n'
-                            f'      (vitNetB N ε w img) t) = g := by rw [← vit_logitsB_eq, e{len(bridges) - 1}]'],
+                            f'      (vitNetB gf N ε w img) t) = g := by rw [← vit_logitsB_eq, e{len(bridges) - 1}]'],
                unfold_hl='ViTNetLossTiedGB', extra_rw=['eg'])
 
 

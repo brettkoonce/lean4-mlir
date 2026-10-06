@@ -8,14 +8,14 @@ three JAX emitters (`jax/MainConvNeXt{,S,B}Imagenet.lean`, re-emitted from the C
 scratch directory, bf16 dtypes forced to f32, CPU) against timm on one set of weights, at 224 and at
 timm's 288 test size, and compares each forward's drop-path keeps with timm's per-block rates.
 
-The reference computes tanh GELU where timm's ConvNeXt uses erf (`imagenet_parity.md` §5.4, an
-open decision). As in `vit_timm_parity.py`, the gate pins what we compute (timm built with tanh) so
-any OTHER drift is caught; `--paper` reports the distance to timm's own erf GELU.
+The references compute the exact GELU (`TrainConfig.geluExact`), which is timm's ConvNeXt's own,
+and are checked against timm as it ships. `--tanh` measures the distance to timm built with the
+tanh approximation, the GELU these references computed before the flag.
 
 Usage:
-    .venv/bin/python scripts/parity/cnx_timm_parity.py            # batch 2, seed 0, tol 1e-4
-    .venv/bin/python scripts/parity/cnx_timm_parity.py --controls # also RED on erf GELU and on a LayerScale swap
-    .venv/bin/python scripts/parity/cnx_timm_parity.py --paper    # distance to timm's erf GELU
+    .venv/bin/python scripts/parity/cnx_timm_parity.py            # batch 2, seed 0, tol 1e-5
+    .venv/bin/python scripts/parity/cnx_timm_parity.py --controls # also RED on the tanh GELU and on a LayerScale swap
+    .venv/bin/python scripts/parity/cnx_timm_parity.py --tanh     # distance to the tanh approximation
 """
 import argparse, os, re, subprocess, sys, tempfile
 import numpy as np
@@ -39,10 +39,16 @@ def emit(tmp, mod, spec, cfg):
     src = os.path.join(tmp, f"Emit{mod}.lean")
     with open(src, "w") as f:
         f.write(EMIT.format(mod=mod, out=out, spec=spec, cfg=cfg))
+    # `lake env lean` loads whatever .olean is on disk and never rebuilds. A module built before a
+    # `TrainConfig` field was added still loads, and its config then reads back wrong values (a
+    # LayerNorm ε emitted as 0.0, 2026-10-06), so build it first; a no-op when it is current.
+    b = subprocess.run(["lake", "build", mod], cwd=os.path.join(ROOT, "jax"), capture_output=True, text=True)
+    if b.returncode != 0:
+        sys.exit(f"⛔ `cd jax && lake build {mod}` failed\n{b.stdout[-3000:]}{b.stderr[-3000:]}")
     r = subprocess.run(["lake", "env", "lean", src], cwd=os.path.join(ROOT, "jax"),
                        capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(out):
-        sys.exit(f"⛔ emitting {mod} failed (run `cd jax && lake build {mod}` first?)\n{r.stdout}{r.stderr}")
+        sys.exit(f"⛔ emitting {mod} failed\n{r.stdout}{r.stderr}")
     return out
 
 
@@ -90,10 +96,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=2)
     ap.add_argument("--seed", type=int, default=0)
-    # 1e-4: agreement is ~1e-6 at 224; erf against tanh GELU is ~1e-3 over 18–36 blocks
-    ap.add_argument("--tol", type=float, default=1e-4)
+    # 1e-5: agreement is ~1e-6 at both sizes, and the two GELUs are 1.4e-4 apart on T's 18 blocks —
+    # at the 1e-4 this ran at before, the GELU control was red by a factor of 1.4
+    ap.add_argument("--tol", type=float, default=1e-5)
     ap.add_argument("--controls", action="store_true")
-    ap.add_argument("--paper", action="store_true", help="compare against timm's own erf GELU")
+    ap.add_argument("--tanh", action="store_true", help="compare against timm built with the tanh GELU")
     a = ap.parse_args()
     if not os.path.exists(TIMM_PY):
         sys.exit(f"⛔ {TIMM_PY} missing — the pinned timm env (requirements-timm-lock.txt)")
@@ -101,7 +108,7 @@ def main():
     import jax
     jax.config.update("jax_default_matmul_precision", "highest")
 
-    target = ("--gelu", "erf") if a.paper else ()
+    target = ("--gelu", "tanh") if a.tanh else ("--gelu", "erf")
     fails = 0
     with tempfile.TemporaryDirectory() as tmp:
         for label, mod, spec, cfg, model in NETS:
@@ -118,9 +125,9 @@ def main():
             ok = e < 1e-6
             fails += not ok
             print(f"  drop-path ramp: {len(keeps)} keeps, max|Δ drop prob| = {e:.1e}  {'✅' if ok else '⛔'}")
-            if a.controls and label == "T" and not a.paper:
-                for why, dd, swap in (("erf GELU against the reference's tanh",
-                                       timm_dump(tmp, model, a.batch, a.seed, "--gelu", "erf"), False),
+            if a.controls and label == "T" and not a.tanh:
+                for why, dd, swap in (("timm's tanh GELU against the reference's exact one",
+                                       timm_dump(tmp, model, a.batch, a.seed, "--gelu", "tanh"), False),
                                       ("two blocks' LayerScale swapped", d, True)):
                     e = run(fwd, dd, 224, swap)
                     red = e > a.tol
@@ -130,7 +137,7 @@ def main():
     if fails:
         sys.exit(f"⛔ {fails} check(s) failed at tolerance {a.tol}")
     print("✅ the JAX ConvNeXt-T/S/B references compute timm's convnext_{tiny,small,base}"
-          + (" with timm's own erf GELU" if a.paper else " (tanh GELU)"))
+          + (" built with the tanh GELU" if a.tanh else " (the exact GELU, timm's own)"))
 
 
 if __name__ == "__main__":

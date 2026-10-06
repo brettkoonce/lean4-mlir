@@ -17,11 +17,12 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 
 **Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done in
 code and gated, committed on `wp8fg` (aa974a95), not pushed; no run carries it. Item 3 (§3): the
-§3.3 probe and §3.4's proofs are committed (0ce30dc7, not pushed); §3.5's op and §3.6's nets and
-ties are in and gated, staged and not committed — every ViT and ConvNeXt definition and theorem now
-takes the form of the GELU and holds for both. The next step is §3.7, the JAX flag. No runs until
-both items are in the code (§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed
-R34 / R50 reruns and the side-quest queue.
+probe and the proofs (0ce30dc7) and the op, the nets and the ties (10fc13ee) are committed, not
+pushed; §3.7's JAX flag is in, set in the six ImageNet ViT and ConvNeXt configs and gated. The next
+step is §3.8, the committed exact-GELU renders: until it lands the ImageNet references compute the
+exact GELU and the committed ImageNet renders the tanh one. No runs until both items are in the code
+(§5 b), then the ViT-Ti and ConvNeXt-T reruns go first, ahead of the owed R34 / R50 reruns and the
+side-quest queue.
 
 ## 1. Order
 
@@ -133,8 +134,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 
 ## 3. Item 3: the exact-erf GELU
 
-**Status 2026-10-06: §3.3 probed and §3.4 proved (committed 0ce30dc7); §3.5's op and §3.6's nets and
-ties staged; no committed render or JAX flag carries the exact form yet.** Begin at §3.7.
+**Status 2026-10-06: §3.3–§3.6 committed (0ce30dc7, 10fc13ee); §3.7's JAX flag in; no committed
+render carries the exact form yet.** Begin at §3.8.
 
 ### 3.1 Today
 
@@ -230,7 +231,7 @@ modules above `Activations`, so it goes in with the AST change.
 
 ### 3.5 AST, printer, parser, gates: done
 
-**Done 2026-10-06, staged.** The four GELU constructors carry the form, `GeluForm` (`.tanh` or
+**Done 2026-10-06, committed 10fc13ee.** The four GELU constructors carry the form, `GeluForm` (`.tanh` or
 `.erf`, §3.6), rather than doubling: a first cut added `geluErfF` / `geluErfBack` / `geluErf` /
 `geluErfBackB` beside the tanh ones, and §3.6 folded them back, because a selector over two
 constructors makes `den` case on the form and a parameter does not. Every committed render is
@@ -271,7 +272,7 @@ theirs come with §3.6's statements; `tests/ViTRender.lean` is §3.8's.
 
 ### 3.6 The nets and the ties: done
 
-**Done 2026-10-06, staged.** Parametrised, not duplicated; no budget had to move.
+**Done 2026-10-06, committed 10fc13ee.** Parametrised, not duplicated; no budget had to move.
 
 * `Proofs/Architectures/GeluForm.lean`: `inductive GeluForm | tanh | erf`, with `scalar`,
   `scalarDeriv` (a `deriv`), `map`, `pdiv_map`, `hasVJP`, `hasVJP_correct`. At each form they are
@@ -310,11 +311,53 @@ render variant (§3.8's tag), not of the layer list. The sketch had it in the sp
 Left as it fell: the pass pushed 183 more lines past 100 columns in files that already had 838
 such lines; nothing lints line length.
 
-### 3.7 JAX side
+### 3.7 JAX side: done
 
-`TrainConfig.geluExact` → `jax.nn.gelu(x, approximate=False)` at the three sites; set in the ViT
-and ConvNeXt ImageNet configs. The parity gates swap roles: `vit_timm_parity.py --deit` (erf, ε
-1e-6) becomes the check and tanh the red control; `cnx_timm_parity.py --paper` likewise.
+**Done 2026-10-06.**
+
+* `TrainConfig.geluExact` (default off) and `geluPy` in `jax/Jax/Codegen.lean`: the three GELU
+  sites — the transformer MLP, the ConvNeXt block, a `.gelu` activation — emit
+  `jax.nn.gelu(…, approximate=False)`. Set in the six ImageNet base configs
+  (`vit{Tiny,S,B}ImagenetConfig`, `convNeXt{Tiny,S,B}ImagenetConfig`; the derived recipes
+  inherit). Re-emitted: 18 trainers move by their one GELU line, the other 56 files of
+  `jax/generated/` are byte-identical. Imagenette's configs are untouched (§5 a).
+* `vit_timm_parity.py` pins each net at what its config asks for: the ImageNet references at
+  DeiT's own exact GELU and LN ε 1e-6, the Imagenette net at tanh and 1e-5. JAX against timm:
+  5.7e-7 / 9.1e-7 / 1.4e-6 (Ti / S / B) and 4.7e-7 (Imagenette); the verified half renders
+  `vitFwdRenderB .erf` at ε 1e-6 through IREE: 5.7e-7 / 1.1e-6 / 1.8e-6. Controls red: k/v
+  swapped 1.3e-1, timm's tanh GELU 3.7e-5.
+* `cnx_timm_parity.py` checks against timm's ConvNeXt as it ships: 6.5e-7 / 4.7e-7 (T at 224 /
+  288), 6.4e-7 / 5.5e-7 (S), 1.1e-6 / 8.5e-7 (B). Controls red: timm's tanh GELU 1.4e-4, a
+  LayerScale swap 1.1e-2. Its tolerance goes from 1e-4 to 1e-5: at 1e-4 the GELU control was red
+  by a factor of 1.4. `--paper` is now the default and `--tanh` measures the approximation.
+* `pc_gelu` in `scripts/lib/precheck.sh`, called by the five JAX job confs
+  (`vit-default-jax`, `vits-default-jax`, `vitb-accum-jax`, `cnxs-default-jax`,
+  `cnxb-default-jax`): every `jax.nn.gelu(` call in the trainer carries `approximate=False`. The
+  box's pre-flag trainers were refused under `DRY_RUN`; after `regen_jax_generated.sh sync` all
+  five pass. ConvNeXt-T's JAX reference has no job conf (it launched from
+  `jax/scripts/supervise_convnext_t_300ep_3060.sh`), so its rerun has neither `pc_crop` nor
+  `pc_gelu` until it gets one (§3.9).
+* `regen_jax_generated.sh check`, `convention_audit.py --selftest`, the seven timm parity
+  invocations of `jax.yml`, `shim_wiring_gate.py`, target names, repo shape, module refs, comment
+  numbers and `docstring-checkrefs` are green; the default targets, `Apps` and `TestSupport`
+  build.
+
+Two things this step found in the gates.
+
+* **The timm parity gates emitted from stale `.olean`s.** They run `lake env lean`, which never
+  rebuilds. `MainVit` had not been rebuilt since `TrainConfig` gained fields (the crop commit and
+  this one), and its config read back wrong: the Imagenette reference came out with LayerNorm ε
+  `0.0`, and the gate passed anyway at 8.4e-6 under its 1e-5. All six gates now `lake build` the
+  module they emit from first; rebuilt, the Imagenette number is the 4.7e-7 recorded on 09-29.
+* **`convnext_forward_tie.py` cannot see the form of the GELU at its default weight scale.**
+  With the reference at the exact GELU and `verified_mlir/convnextin_fwd.mlir` still the tanh
+  render, it passes at 5.4e-7 (`--scale 0.05`: the pre-activations are too small for the two
+  forms to differ). At `--scale 0.3` it fails at 4.6e-4, as it should. §3.8 points it at the
+  exact render and gives it a scale and a control that see the form.
+
+Also: `planning/rubric_review/wp2_combo_gen.py` spelled the ViT and ConvNeXt prefixes without the
+form and no longer reproduced the two `*_net_tied_lossGrad` theorems after §3.6; it does again
+(0 differing lines on ViT, ConvNeXt and EfficientNet).
 
 ### 3.8 Renders and the artifact gates
 
@@ -324,6 +367,14 @@ Render guard: every new `verified_mlir/` file into `proofs.yml`'s diff list
 (`render-guard-on-new-artifact`); `gen_mlir_manifest.py`; `check_render_coverage.py`; the IREE
 differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/ViTRender.lean`; a
 `chlo.erfc` fixture in the platform suite's tier 0 (§3.3).
+
+From §3.6 and §3.7: the variant tag is where the form lives (the spec language does not carry
+it), so the verified drivers need a `checkLnEpsWorld`-style refusal of a train step at one form
+scored by a forward at the other; `convnext_forward_tie.py` moves to the exact render at a
+weight scale that separates the forms, with the tanh render as its red control; the two
+whole-net tie tests (`vit-fwd-b-tie`, `convnext-fwd-b-tie`) run their batched-against-per-example
+backward check at `.erf` as well as `.tanh`; and the verified ImageNet job confs assert the
+exact render the way the JAX confs now assert the trainer.
 
 ### 3.9 Reruns and the book
 
@@ -345,7 +396,8 @@ differential oracle (`vjp_oracle`) and `grad_tie.py` over the new ops; `tests/Vi
 | 3.4 proofs | done |
 | 3.5 AST / printer / parser / gates | done |
 | 3.6 ties parametrised, rechecked | done |
-| 3.7–3.8 JAX, renders, artifact gates | 1 |
+| 3.7 JAX flag and gates | done |
+| 3.8 renders, artifact gates | ½–1 |
 | 3.9 reruns | ~12 days of the 3060 box, not of a person |
 
 ## 4. Not touched

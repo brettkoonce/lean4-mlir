@@ -959,6 +959,13 @@ structure TrainConfig where
       existing trainer's; DeiT builds its blocks with `partial(nn.LayerNorm, eps=1e-6)`. The
       verified peer is the render's `eps` (`ViTRenderB`, variant marker `eps0000001`). -/
   lnEps : Float := 1e-5
+  /-- The exact GELU `x · Φ(x)` — `jax.nn.gelu(x, approximate=False)`, which is PyTorch's
+      `nn.GELU` and what DeiT and ConvNeXt train under — in place of `jax.nn.gelu`'s default, the
+      tanh approximation, at every GELU the emitter writes (the transformer MLP, the ConvNeXt
+      block, a `.gelu` activation). The two differ by up to 4.7e-4. Off keeps every generated
+      file byte-identical. The verified peer is the render's `GeluForm`, `.erf` for this flag:
+      a different artifact per form, not a host-side knob. -/
+  geluExact : Bool := false
   /-- Stochastic-depth ramp over `i/N` (TF EfficientNet's `drop_rate · idx / len(blocks)`) instead
       of `i/(N−1)` (timm's `linspace(0, rate, depth)`), on the MBConv path only. Off keeps every
       generated file byte-identical. -/

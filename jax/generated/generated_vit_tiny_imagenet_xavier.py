@@ -508,7 +508,7 @@ def transformer_block(params, x, idx, n_heads, drop_key=None, keep_prob=1.0):
     x2 = layer_norm(x, g2, b2)
     w1, b1m = params[idx+6]
     w2, b2m = params[idx+7]
-    h = jax.nn.gelu(mm(x2, w1.T) + b1m)
+    h = jax.nn.gelu(mm(x2, w1.T) + b1m, approximate=False)
     x = x + _drop_branch(mm(h, w2.T) + b2m, km, keep_prob)
     return x
 

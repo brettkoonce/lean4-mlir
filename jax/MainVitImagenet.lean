@@ -53,6 +53,7 @@ def vitTinyImagenetConfig : TrainConfig where
   useRandAugment := true            -- full DeiT RandAugment (color + geometric, below)
   augBicubic     := true    -- PIL-bicubic geometry, as timm
   cropTorchvision := true   -- torchvision RandomResizedCrop, not TF's sampler (bicubic resize, the recipe's)
+  geluExact      := true    -- nn.GELU's exact x·Φ(x), not jax.nn.gelu's tanh default
   randAugmentGeometric := true      -- shear/rotate/translate via ImageProjectiveTransformV3
   randAugmentM   := 9.0
   randAugmentMstd := 0.5            -- DeiT rand-m9-mstd0.5

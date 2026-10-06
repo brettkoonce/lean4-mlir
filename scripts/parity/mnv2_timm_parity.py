@@ -52,10 +52,16 @@ def emit(tmp, mod, spec, cfg, ds):
     src = os.path.join(tmp, f"Emit{mod}.lean")
     with open(src, "w") as f:
         f.write(EMIT.format(mod=mod, out=out, spec=spec, cfg=cfg, ds=ds))
+    # `lake env lean` loads whatever .olean is on disk and never rebuilds. A module built before a
+    # `TrainConfig` field was added still loads, and its config then reads back wrong values (a
+    # LayerNorm ε emitted as 0.0, 2026-10-06), so build it first; a no-op when it is current.
+    b = subprocess.run(["lake", "build", mod], cwd=os.path.join(ROOT, "jax"), capture_output=True, text=True)
+    if b.returncode != 0:
+        sys.exit(f"⛔ `cd jax && lake build {mod}` failed\n{b.stdout[-3000:]}{b.stderr[-3000:]}")
     r = subprocess.run(["lake", "env", "lean", src], cwd=os.path.join(ROOT, "jax"),
                        capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(out):
-        sys.exit(f"⛔ emitting {mod} failed (run `cd jax && lake build {mod}` first?)\n{r.stdout}{r.stderr}")
+        sys.exit(f"⛔ emitting {mod} failed\n{r.stdout}{r.stderr}")
     return out
 
 

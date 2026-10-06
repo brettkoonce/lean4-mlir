@@ -475,7 +475,7 @@ def convnext_block(params, x, idx, drop_key=None, keep_prob=1.0):
     g, b = params[idx+1]
     x = channel_layer_norm(x, g, b)
     w1, b1 = params[idx+2]
-    x = jax.nn.gelu(_conv1x1b(x, w1, b1))
+    x = jax.nn.gelu(_conv1x1b(x, w1, b1), approximate=False)
     w2, b2 = params[idx+3]
     x = _conv1x1b(x, w2, b2)
     (ls,) = params[idx+4]

@@ -141,6 +141,24 @@ pc_crop() {
   return $ok
 }
 
+# pc_gelu FILE KIND — the GELU the trainer FILE computes. KIND `exact`: every `jax.nn.gelu(` call
+# carries `approximate=False` (TrainConfig.geluExact: PyTorch's nn.GELU, which DeiT and ConvNeXt
+# train under; ViT and ConvNeXt on ImageNet). KIND `tanh`: none does (jax.nn.gelu's default).
+# Gates for the function itself: scripts/parity/{vit,cnx}_timm_parity.py --controls.
+pc_gelu() {
+  local f="$1" kind="$2" n e
+  [ -f "$f" ] || { echo "⛔ missing $f — scripts/regen_jax_generated.sh sync"; return 1; }
+  n="$(grep -vE '^[[:space:]]*#' "$f" | grep -c 'jax\.nn\.gelu(')"
+  e="$(grep -vE '^[[:space:]]*#' "$f" | grep 'jax\.nn\.gelu(' | grep -c 'approximate=False')"
+  [ "$n" -ge 1 ] || { echo "⛔ $f calls no jax.nn.gelu — not a GELU net, or the emitter changed"; return 1; }
+  case "$kind" in
+    exact) [ "$e" = "$n" ] || {
+        echo "⛔ $f computes the tanh GELU at $((n - e)) of $n call(s), not the exact one (geluExact) — re-emit"; return 1; } ;;
+    tanh)  [ "$e" = 0 ] || { echo "⛔ $f computes the exact GELU, which this recipe does not"; return 1; } ;;
+    *) echo "⛔ pc_gelu: unknown kind $kind"; return 1 ;;
+  esac
+}
+
 # The CALL lines of FILE that contain the fixed string PAT: `def` lines and comments are dropped, so
 # a helper that is defined in every shim cannot satisfy the check.
 _pc_calls() { grep -F -- "$2" "$1" 2>/dev/null | grep -vE '^[[:space:]]*(def |#)'; }

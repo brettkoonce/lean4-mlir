@@ -76,6 +76,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   useRandAugment       := true   -- ConvNeXt recipe RandAugment...
   augBicubic     := true    -- PIL-bicubic geometry, as timm
   cropTorchvision := true   -- torchvision RandomResizedCrop, not TF's sampler (bicubic resize, the recipe's)
+  geluExact      := true    -- nn.GELU's exact x·Φ(x), not jax.nn.gelu's tanh default
   randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)
   randAugmentMstd := 0.5         -- ConvNeXt rand-m9-mstd0.5
   randAugmentInc  := true        -- ...-inc1 increasing-severity mappings

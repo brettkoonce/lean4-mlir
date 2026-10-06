@@ -12,7 +12,8 @@ runs one forward, and writes the parameters in the JAX reference's `params[k][j]
 timm fuses q/k/v into one `qkv` Linear; its rows are [q; k; v], split here.
 
 `--gelu tanh|erf` and `--ln-eps` pick the activation and LayerNorm ε: DeiT's own net is erf and
-1e-6; the JAX reference (and the verified render) computes tanh and 1e-5 today.
+1e-6, which the ImageNet references and renders compute; the Imagenette chapter's net is tanh
+and 1e-5.
 `--swap-kv` swaps k and v in the dump — a CONTROL the parity script must see red.
 """
 import argparse

@@ -50,6 +50,7 @@ def vitSImagenetConfig : TrainConfig where
   useRandAugment := true
   augBicubic     := true    -- PIL-bicubic geometry, as timm
   cropTorchvision := true   -- torchvision RandomResizedCrop, not TF's sampler (bicubic resize, the recipe's)
+  geluExact      := true    -- nn.GELU's exact x·Φ(x), not jax.nn.gelu's tanh default
   randAugmentGeometric := true
   randAugmentM   := 9.0
   randAugmentMstd := 0.5

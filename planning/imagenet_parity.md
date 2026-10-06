@@ -186,11 +186,15 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
   at the reference's tanh GELU / LN ε 1e-5: Imagenette 4.7e-7, ImageNet 6.9e-7 at tol 1e-5 (tanh vs
   erf is only ~4e-5 of scale, so the CNN gates' 1e-3 would be blind to it); controls red (k/v swapped
   1.3e-1, erf GELU 3.8e-5). `--deit` (erf, 1e-6): 4.6e-5 / 3.9e-5 at random init.
+  Since 2026-10-06 (`geluExact`) the ImageNet references are checked at DeiT's own erf / 1e-6:
+  5.7e-7 / 9.1e-7 / 1.4e-6 (Ti / S / B), Imagenette still at tanh / 1e-5 (4.7e-7); the tanh GELU
+  is the control (3.7e-5).
 * ✅ G3 for R34, R50 and ConvNeXt, and the verified side of ViT (2026-09-29):
   * `resnet_timm_parity.py`: `resnet50` and `resnet34`. Both paths and the drop-path ramp;
     `--break` controls.
   * `cnx_timm_parity.py`: `convnext_{tiny,small,base}` at tanh GELU, 224 and 288. Controls: erf
-    GELU, LayerScale swap. `--paper` measures timm's erf.
+    GELU, LayerScale swap. `--paper` measures timm's erf. Since 2026-10-06 at timm's own erf GELU and
+    tol 1e-5 (6.5e-7 / 4.7e-7 on T); the tanh GELU is the control (1.4e-4), `--tanh` measures it.
   * `vit_timm_parity.py`: the verified `vit{,s,b}in_fwd` through IREE, beside S/B on the JAX side.
   * `convnext_forward_tie.py` compares at f32 (it had compared the render against a bf16 reference).
   * Numbers in `planning/side_quest_runs.md` §3. The verified halves need IREE and the full Lean
@@ -471,7 +475,7 @@ did not move).
 
 | # | net | item | paper / timm | ours | cost |
 |---|---|---|---|---|---|
-| D1 | ConvNeXt, ViT | exact-erf GELU | erf | tanh, both paths | L: erf op + Φ/FTC proof + re-render (`vit_parity_todo.md` P-A); JAX side S. Plan: `gelu_erf_and_torchvision_crop.md` §3 |
+| D1 | ConvNeXt, ViT | exact-erf GELU | erf | tanh, both paths | L: erf op + Φ/FTC proof + re-render (`vit_parity_todo.md` P-A); JAX side S. Plan: `gelu_erf_and_torchvision_crop.md` §3. 2026-10-06: proofs, op, ties and the JAX flag (`geluExact`, on in the six ImageNet configs) are in; the committed renders and the reruns are §3.8–§3.9 there |
 | D2 | ConvNeXt, ViT | grad clip 1.0 | none | 1.0, both paths | S code; ~30 min clip-off JAX probe on ViT first (P-B) |
 | D3 | B0 | strided-depthwise padding | SAME (TF) | symmetric, both paths (0.37 / 0.048 of logit scale, `enet_timm_parity --pad tf`) | JAX S; verified M–L, moves the T2/T3 ties. Parked 09-25 |
 | D4 | MNv2, MNv4, B0 | verified depthwise init | var 2/k² (TF/timm, = JAX) | He fan-out 2/(C·k²): 0.03–0.18× std | S: `dwFanK2` built, off (`init_parity.md` §5). Leading suspect for MNv2's −0.51 |

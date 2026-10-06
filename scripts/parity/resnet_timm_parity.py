@@ -78,6 +78,13 @@ import LeanMlir.Verified.NetsCore
 def lean(src_text, path, cwd):
     with open(path, "w") as f:
         f.write(src_text)
+    # `lake env lean` loads whatever .olean is on disk and never rebuilds. A module built before a
+    # `TrainConfig` field was added still loads, and its config then reads back wrong values, so
+    # build what the source imports first; a no-op when it is current.
+    for mod in re.findall(r"(?m)^import (\S+)", src_text):
+        b = subprocess.run(["lake", "build", mod], cwd=cwd, capture_output=True, text=True)
+        if b.returncode != 0:
+            sys.exit(f"⛔ `lake build {mod}` (in {cwd}) failed\n{b.stdout[-3000:]}{b.stderr[-3000:]}")
     r = subprocess.run(["lake", "env", "lean", path], cwd=cwd, capture_output=True, text=True)
     if r.returncode != 0:
         sys.exit(f"⛔ `lake env lean {path}` failed\n{r.stdout[-3000:]}{r.stderr[-3000:]}")

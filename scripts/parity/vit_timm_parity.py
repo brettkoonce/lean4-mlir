@@ -7,21 +7,23 @@ compare the render against the reference, both built from the same spec. This ru
 (`jax/MainVit.lean`, 10-class; `jax/MainVitImagenet.lean`, 1000-class) — re-emitted from the CURRENT
 source into a scratch directory, bf16 dtypes forced to f32, CPU — against timm's DeiT-Ti.
 
-The reference computes tanh GELU and LayerNorm ε 1e-5 where DeiT uses erf and 1e-6 (§2.1, disclosed).
-The gate pins what we compute (timm built with tanh / 1e-5) so any OTHER drift is caught, and
-`--deit` reports the distance to DeiT's own settings. ViT has no BatchNorm and runs drop-free here,
-so one forward per net is the whole check.
+The three ImageNet references compute DeiT's own net — the exact GELU (`TrainConfig.geluExact`)
+and LayerNorm ε 1e-6 — and are checked against timm at exactly that. The Imagenette chapter's net
+computes the tanh approximation and ε 1e-5 (disclosed), and is pinned at what it computes (timm
+built with tanh / 1e-5) so any OTHER drift is caught; `--deit` measures every net against DeiT's
+settings, which reports that net's distance. ViT has no BatchNorm and runs drop-free here, so one
+forward per net is the whole check.
 
 **The verified half** (2026-09-29): the ImageNet forwards `ViTRenderB` writes (`vitFwdRenderB` at
-`vitTiDims` / `vitSDims` / `vitBDims`, i.e. `vitin_fwd`, `vitsin_fwd`, `vitbin_fwd`) are rendered at
-the gate's batch into the scratch directory and run through iree-compile on CPU against the same
-timm dump. The render stores every Linear as [in, out], CLS as [D] and pos as [197, D]; those are
+`vitTiDims` / `vitSDims` / `vitBDims`) are rendered at the gate's batch, at the same form of the
+GELU and the same ε as the reference, into the scratch directory and run through iree-compile on
+CPU against the same timm dump. The render stores every Linear as [in, out], CLS as [D] and pos as [197, D]; those are
 the only transforms. `--skip-verified` runs the JAX half alone (no IREE).
 
 Usage:
     .venv/bin/python scripts/parity/vit_timm_parity.py              # batch 4, seed 0, tol 1e-5 of max |logit|
-    .venv/bin/python scripts/parity/vit_timm_parity.py --controls   # also RED on k/v swapped and on erf GELU
-    .venv/bin/python scripts/parity/vit_timm_parity.py --deit       # distance to DeiT's erf / 1e-6
+    .venv/bin/python scripts/parity/vit_timm_parity.py --controls   # also RED on k/v swapped and on the tanh GELU
+    .venv/bin/python scripts/parity/vit_timm_parity.py --deit       # every net against DeiT's erf / 1e-6
 """
 import argparse, os, subprocess, sys, tempfile
 import numpy as np
@@ -31,20 +33,30 @@ TIMM_PY = os.path.join(ROOT, ".venv-timm", "bin", "python")
 EMIT = """import {mod}
 #eval IO.FS.writeFile "{out}" (JaxCodegen.generate {spec} {cfg} {ds} "data")
 """
+# What a reference computes: (GELU, LayerNorm ε). TANH is the Imagenette chapter's net; DEIT is
+# DeiT's own, which the ImageNet configs ask for (`geluExact`, `lnEps := 1e-6`).
+TANH = ("tanh", "1e-5")
+DEIT = ("erf", "1e-6")
 NETS = [
-    # (label, module, spec, config, dataset, classes, timm model, verified (slug, VitDims) or None)
-    ("imagenette", "MainVit", "vitTiny", "vitConfig", ".imagenette", 10, "deit_tiny_patch16_224", None),
+    # (label, module, spec, config, dataset, classes, timm model, (gelu, ln ε), verified (slug, VitDims) or None)
+    ("imagenette", "MainVit", "vitTiny", "vitConfig", ".imagenette", 10, "deit_tiny_patch16_224", TANH, None),
     ("imagenet", "MainVitImagenet", "vitTinyImagenet", "vitTinyImagenetConfig", ".imagenet", 1000,
-     "deit_tiny_patch16_224", ("vitin", "vitTiDims")),
+     "deit_tiny_patch16_224", DEIT, ("vitin", "vitTiDims")),
     # the side-quest widths: the same emitter at D = 384 / 768
     ("imagenet-S", "MainVitSImagenet", "vitSImagenet", "vitSImagenetConfig", ".imagenet", 1000,
-     "deit_small_patch16_224", ("vitsin", "vitSDims")),
+     "deit_small_patch16_224", DEIT, ("vitsin", "vitSDims")),
     ("imagenet-B", "MainVitBImagenet", "vitBImagenet", "vitBImagenetConfig", ".imagenet", 1000,
-     "deit_base_patch16_224", ("vitbin", "vitBDims")),
+     "deit_base_patch16_224", DEIT, ("vitbin", "vitBDims")),
 ]
 EMIT_VERIFIED = """import LeanMlir.Proofs.Codegen.ViTRenderB
-#eval IO.FS.writeFile "{out}" (Proofs.StableHLO.vitFwdRenderB "{slug}_fwd" 1000 (vbB := {B}) (V := Proofs.StableHLO.{dims}))
+#eval IO.FS.writeFile "{out}" (Proofs.StableHLO.vitFwdRenderB .{gf} "{slug}_fwd" 1000 (vbB := {B}) (V := Proofs.StableHLO.{dims}) (eps := "{eps}"))
 """
+# the render's ε strings, as `ViTRenderB` spells them (`vEPS` and the `eps0000001` variants)
+EPS_STR = {"1e-5": "1.0e-5", "1e-6": "1.0e-6"}
+
+
+def timm_flags(target):
+    return ("--gelu", target[0], "--ln-eps", target[1])
 
 
 def emit(tmp, mod, spec, cfg, ds):
@@ -52,10 +64,16 @@ def emit(tmp, mod, spec, cfg, ds):
     src = os.path.join(tmp, f"Emit{mod}.lean")
     with open(src, "w") as f:
         f.write(EMIT.format(mod=mod, out=out, spec=spec, cfg=cfg, ds=ds))
+    # `lake env lean` loads whatever .olean is on disk and never rebuilds. A module built before a
+    # `TrainConfig` field was added still loads, and its config then reads back wrong values (a
+    # LayerNorm ε emitted as 0.0, 2026-10-06), so build it first; a no-op when it is current.
+    b = subprocess.run(["lake", "build", mod], cwd=os.path.join(ROOT, "jax"), capture_output=True, text=True)
+    if b.returncode != 0:
+        sys.exit(f"⛔ `cd jax && lake build {mod}` failed\n{b.stdout[-3000:]}{b.stderr[-3000:]}")
     r = subprocess.run(["lake", "env", "lean", src], cwd=os.path.join(ROOT, "jax"),
                        capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(out):
-        sys.exit(f"⛔ emitting {mod} failed (run `cd jax && lake build {mod}` first?)\n{r.stdout}{r.stderr}")
+        sys.exit(f"⛔ emitting {mod} failed\n{r.stdout}{r.stderr}")
     return out
 
 
@@ -92,14 +110,20 @@ def run(fwd, d):
     return float(np.max(np.abs(y - d["y"])) / max(1e-12, np.max(np.abs(d["y"]))))
 
 
-def run_verified(tmp, slug, dims, d, batch):
-    """The render at the dump's batch through IREE on CPU; relative error against timm's logits."""
+def run_verified(tmp, slug, dims, d, batch, target):
+    """The render at the dump's batch, at `target`'s GELU and ε, through IREE on CPU; relative error
+    against timm's logits."""
     sys.path.insert(0, os.path.join(ROOT, "scripts", "lib"))
     import _iree
     mlir = os.path.join(tmp, f"{slug}_fwd.mlir")
     src = os.path.join(tmp, f"Emit_{slug}.lean")
     with open(src, "w") as f:
-        f.write(EMIT_VERIFIED.format(out=mlir, slug=slug, dims=dims, B=batch))
+        f.write(EMIT_VERIFIED.format(out=mlir, slug=slug, dims=dims, B=batch, gf=target[0],
+                                     eps=EPS_STR[target[1]]))
+    b = subprocess.run(["lake", "build", "LeanMlir.Proofs.Codegen.ViTRenderB"], cwd=ROOT,
+                       capture_output=True, text=True)      # the renderer, current (see `emit`)
+    if b.returncode != 0:
+        sys.exit(f"⛔ `lake build LeanMlir.Proofs.Codegen.ViTRenderB` failed\n{b.stdout[-3000:]}{b.stderr[-3000:]}")
     r = subprocess.run(["lake", "env", "lean", src], cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(mlir):
         sys.exit(f"⛔ rendering {slug}_fwd failed\n{r.stdout}{r.stderr}")
@@ -124,11 +148,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--seed", type=int, default=0)
-    # 1e-5, not the CNN gates' 1e-3: agreement is ~7e-7, and tanh vs erf GELU is only ~4e-5 of scale
+    # 1e-5, not the CNN gates' 1e-3: the two GELUs are only ~4e-5 of scale apart
     ap.add_argument("--tol", type=float, default=1e-5)
     ap.add_argument("--controls", action="store_true")
     ap.add_argument("--skip-verified", action="store_true", help="the JAX half only (no IREE)")
-    ap.add_argument("--deit", action="store_true", help="compare against DeiT's erf GELU / LN ε 1e-6")
+    ap.add_argument("--deit", action="store_true", help="compare EVERY net against DeiT's erf GELU / LN ε 1e-6")
     a = ap.parse_args()
     if not os.path.exists(TIMM_PY):
         sys.exit(f"⛔ {TIMM_PY} missing — the pinned timm env (requirements-timm-lock.txt)")
@@ -136,25 +160,28 @@ def main():
     import jax
     jax.config.update("jax_default_matmul_precision", "highest")
 
-    target = ("--gelu", "erf", "--ln-eps", "1e-6") if a.deit else ()
     fails = 0
     with tempfile.TemporaryDirectory() as tmp:
-        for label, mod, spec, cfg, ds, classes, model, verified in NETS:
-            print(f"[{label}] {spec} / {cfg}")
+        for label, mod, spec, cfg, ds, classes, model, target, verified in NETS:
+            if a.deit:
+                target = DEIT
+            print(f"[{label}] {spec} / {cfg} — against timm at GELU {target[0]}, LN ε {target[1]}")
             fwd = load_forward(emit(tmp, mod, spec, cfg, ds))
-            d = timm_dump(tmp, model, classes, a.batch, a.seed, *target)
+            d = timm_dump(tmp, model, classes, a.batch, a.seed, *timm_flags(target))
             e = run(fwd, d)
             ok = e <= a.tol
             fails += not ok
             print(f"  jax      max|Δ|/max|timm| = {e:.3e}  {'✅' if ok else '⛔'}")
             if verified and not a.skip_verified:
-                e = run_verified(tmp, *verified, d, a.batch)
+                e = run_verified(tmp, *verified, d, a.batch, target)
                 ok = e <= a.tol
                 fails += not ok
                 print(f"  verified max|Δ|/max|timm| = {e:.3e}  {'✅' if ok else '⛔'}  ({verified[0]}_fwd, iree llvm-cpu)")
             if a.controls and label == "imagenet":
-                for why, flags in (("k and v swapped", ("--swap-kv",)),
-                                   ("erf GELU against the reference's tanh", ("--gelu", "erf"))):
+                other = ("tanh" if target[0] == "erf" else "erf", target[1])
+                for why, flags in (("k and v swapped", timm_flags(target) + ("--swap-kv",)),
+                                   (f"timm's {other[0]} GELU against the reference's {target[0]}",
+                                    timm_flags(other))):
                     e = run(fwd, timm_dump(tmp, model, classes, a.batch, a.seed, *flags))
                     red = e > a.tol
                     fails += not red
@@ -164,7 +191,8 @@ def main():
         sys.exit(f"⛔ {fails} check(s) failed at tolerance {a.tol}")
     print("✅ the JAX ViT-Ti/S/B references" + ("" if a.skip_verified else " and the verified renders")
           + " compute timm's deit_{tiny,small,base}_patch16_224"
-          + (" at DeiT's own settings" if a.deit else " (tanh GELU, LN ε 1e-5)"))
+          + (" at DeiT's own settings" if a.deit
+             else ": ImageNet at DeiT's erf GELU and LN ε 1e-6, Imagenette at tanh and 1e-5"))
 
 
 if __name__ == "__main__":

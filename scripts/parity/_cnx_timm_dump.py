@@ -13,7 +13,8 @@ and the check nearly blind), and writes, in the JAX reference's `params[k][j]` o
 with logits at 224 and 288 (eval mode: ConvNeXt has no BatchNorm, so there is one forward) and the
 per-block drop-path probabilities timm assigns at the paper's `drop_path_rate` for the size.
 
-`--gelu tanh` (the default) builds timm with the reference's tanh GELU; `--gelu erf` is timm's own.
+`--gelu erf` is timm's own GELU and the reference's; `--gelu tanh` builds timm with the tanh
+approximation (the parity gate's control).
 
 Usage (called by the parity script):
     .venv-timm/bin/python scripts/parity/_cnx_timm_dump.py OUT.npz --model convnext_small --batch 2

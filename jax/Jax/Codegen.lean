@@ -762,6 +762,12 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
     "    while q:\n" ++
     "        yield q.popleft()\n\n"
 
+/-- A GELU call on `arg`: `jax.nn.gelu`'s default tanh approximation, or with
+    `TrainConfig.geluExact` the exact `x · Φ(x)` (`approximate=False`, which JAX computes as
+    `0.5 · x · erfc(−x · √½)`, the arithmetic the verified `.erf` render emits). -/
+private def geluPy (cfg : TrainConfig) (arg : String) : String :=
+  if cfg.geluExact then s!"jax.nn.gelu({arg}, approximate=False)" else s!"jax.nn.gelu({arg})"
+
 private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run do
   let mut code := ""
   if spec.hasConv then
@@ -1444,7 +1450,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    x2 = layer_norm(x, g2, b2)\n" ++
       "    w1, b1m = params[idx+6]\n" ++
       "    w2, b2m = params[idx+7]\n" ++
-      "    h = jax.nn.gelu(mm(x2, w1.T) + b1m)\n" ++
+      "    h = " ++ geluPy cfg "mm(x2, w1.T) + b1m" ++ "\n" ++
       "    x = x + _drop_branch(mm(h, w2.T) + b2m, km, keep_prob)\n" ++
       "    return x\n\n"
   let hasConvNext := spec.layers.any (fun l => match l with
@@ -1471,7 +1477,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    g, b = params[idx+1]\n" ++
       "    x = channel_layer_norm(x, g, b)\n" ++
       "    w1, b1 = params[idx+2]\n" ++
-      "    x = jax.nn.gelu(_conv1x1b(x, w1, b1))\n" ++
+      "    x = " ++ geluPy cfg "_conv1x1b(x, w1, b1)" ++ "\n" ++
       "    w2, b2 = params[idx+3]\n" ++
       "    x = _conv1x1b(x, w2, b2)\n" ++
       "    (ls,) = params[idx+4]\n" ++
@@ -2395,7 +2401,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         | .relu6    => "    x = jnp.minimum(jax.nn.relu(x), 6.0)\n"
         | .swish    => "    x = swish(x)\n"
         | .hSwish   => "    x = x * jnp.minimum(jax.nn.relu(x + 3.0), 6.0) / 6.0\n"
-        | .gelu     => "    x = jax.nn.gelu(x)\n"
+        | .gelu     => "    x = " ++ geluPy cfg "x" ++ "\n"
         | .identity => "")
       pidx := pidx + 1
     | .convNextStage _c nBlocks _ _ =>

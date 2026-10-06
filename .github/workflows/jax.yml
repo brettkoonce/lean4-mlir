@@ -530,14 +530,16 @@ jobs:
     #   MNv4  mobilenetv4_conv_medium
     #   B0    efficientnet_b0 with a SAME stem (the paths' hybrid; `--pad tf` measures TF's net);
     #         controls: symmetric padding, BN ε 1e-5
-    #   ViT   deit_{tiny,small,base}_patch16_224 at tanh GELU / LN ε 1e-5 (`--deit` measures DeiT's);
-    #         controls: k/v swapped, erf GELU
+    #   ViT   deit_{tiny,small,base}_patch16_224: the ImageNet references at DeiT's own exact GELU /
+    #         LN ε 1e-6, the Imagenette net at the tanh GELU / 1e-5 it computes (`--deit` measures
+    #         every net against DeiT's); controls: k/v swapped, the tanh GELU
     #   R50   resnet50 (RSB and 2018), train at 224/160 and eval at 224/288, and the drop-path ramp;
     #   R34   resnet34 (2018), train and eval at 224; control for both: one BN's γ/β swapped.
     #   The ViT and ResNet gates also tie the VERIFIED forwards to timm; that half needs IREE and runs
     #   locally (`--skip-verified` here).
-    #   CNX   convnext_{tiny,small,base} at tanh GELU (`--paper` measures timm's erf), 224 and 288,
-    #         and the drop-path ramp; controls: erf GELU, two LayerScales swapped
+    #   CNX   convnext_{tiny,small,base} at timm's own exact GELU (`--tanh` measures the
+    #         approximation), 224 and 288, and the drop-path ramp; controls: the tanh GELU, two
+    #         LayerScales swapped
     # ⚠ The timm env is its OWN venv with the CPU torch build, installed torch-first from the CPU
     # index as the lockfile says: a plain `-r` resolves torch from PyPI, i.e. the CUDA build.
     needs: build
