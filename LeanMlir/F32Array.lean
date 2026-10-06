@@ -309,6 +309,40 @@ opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
 @[extern "lean_f32_dihedral_gather"]
 opaque dihedralGather (img : @& ByteArray) (idx : @& ByteArray) (count C S : USize) (seed : UInt64) : IO ByteArray
 
+/-- Load Imagenette keeping pixels RAW uint8 (1 byte/element, channel-first), labels i32 — one
+    byte per element where `loadImagenetteSized` holds four, which is what makes Imagenette fit
+    a Jetson's unified memory (deploy/ORIN.md §4). Batches are normalised one at a time
+    by `sliceU8NormPad`. Opt-in via `LEAN_MLIR_IMAGENETTE_U8=1` (see `loadData`). -/
+@[extern "lean_f32_load_imagenette_u8_sized"]
+opaque loadImagenetteU8Sized (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
+
+/-- One batch of raw-uint8 images — `count` records of `pixelsPerImage` bytes starting at
+    `start`, in a dataset of `total` records — as normalised NCHW f32, zero-padded past `total`
+    exactly like `sliceImagesPad`. The normalisation is bit-identical to `loadImagenetteSized`. -/
+@[extern "lean_f32_slice_u8_norm_pad"]
+opaque sliceU8NormPad (images : @& ByteArray) (start count pixelsPerImage total : USize) : IO ByteArray
+
+/-- Imagenette LABELS only (i32 class ids) and the record count, without reading any pixels — the
+    streamed train path (`LEAN_MLIR_IMAGENETTE_STREAM=1`). Rejects a file whose size is not exactly
+    `count` records at `imgSize`. -/
+@[extern "lean_f32_load_imagenette_u8_labels"]
+opaque loadImagenetteU8Labels (path : @& String) (imgSize : USize) : IO (ByteArray × Nat)
+
+/-- `[0, 1, …, n-1]` as little-endian u32: the unshuffled index array for `readU8NormPad`. Shuffle it
+    with `shuffleU8 indices labels n 4 4 seed`, which applies the same permutation `shuffleU8` applies
+    to a resident image buffer. -/
+@[extern "lean_f32_iota_u32"]
+opaque iotaU32 (n : USize) : IO ByteArray
+
+/-- `sliceU8NormPad` without the resident buffer: slot `r` of the batch is record
+    `indices[start + r]` (little-endian u32), read from the Imagenette file at `path` and normalised by
+    the same code. With `indices` shuffled alongside the labels, the batch is byte-identical to
+    slicing the equally-shuffled resident buffer. -/
+@[extern "lean_f32_read_u8_norm_pad"]
+opaque readU8NormPad (path : @& String) (indices : @& ByteArray) (start count pixelsPerImage total : USize) :
+    IO ByteArray
+
+
 /-- Load a BraTS (MSD Task01_BrainTumour) binary file at the given in-plane
     size and channel count. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
     Images are `imgSize`×`imgSize`×`channels`, channel-first: the 4 modalities
@@ -492,6 +526,13 @@ opaque idsToFloats (ids : @& ByteArray) : IO ByteArray
     every epoch. Pass `dio.labelBytesPerRecord`, never a literal. -/
 @[extern "lean_f32_shuffle"]
 opaque shuffle (images : ByteArray) (labels : ByteArray)
+    (n : USize) (pixelsPerImage : USize) (labelBytes : USize) (seed : USize)
+    : IO (ByteArray × ByteArray)
+
+/-- `shuffle` for raw-uint8 image buffers (1 byte per element instead of 4). Same RNG and swap
+    order, so for the same `n` and `seed` it applies the same permutation as `shuffle`. -/
+@[extern "lean_f32_shuffle_u8"]
+opaque shuffleU8 (images : ByteArray) (labels : ByteArray)
     (n : USize) (pixelsPerImage : USize) (labelBytes : USize) (seed : USize)
     : IO (ByteArray × ByteArray)
 

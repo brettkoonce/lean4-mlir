@@ -68,10 +68,11 @@ export PJRT_PLUGIN=$STAGE/pjrt_c_api_gpu_plugin.so
 # cuDNN 9.12 first: the plugin was compiled against it, and JetPack's copy is older.
 export LD_LIBRARY_PATH=$STAGE/cudnn912/lib:/usr/local/cuda/lib64:/usr/lib/aarch64-linux-gnu\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}
 export LEAN_MLIR_LOWERER=xla
-# Unified memory: the device pool and the pinned host staging share one DRAM.
-# Preallocation off is required; the fraction is per model family (deploy/ORIN.md).
-export LEAN_MLIR_PREALLOCATE=0
-export LEAN_MLIR_MEM_FRACTION=\${LEAN_MLIR_MEM_FRACTION:-0.15}
+# Unified memory: the device pool and the pinned host staging share one DRAM. The pool is
+# reserved once (at 0 the per-step arena is freed and re-requested every step, and that
+# request eventually fails); the fraction is per net (deploy/ORIN.md §4).
+export LEAN_MLIR_PREALLOCATE=1
+export LEAN_MLIR_MEM_FRACTION=\${LEAN_MLIR_MEM_FRACTION:-0.25}
 EOF
 echo "wrote $STAGE/orin_env.sh"
 echo

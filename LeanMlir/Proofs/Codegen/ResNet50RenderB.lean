@@ -1896,6 +1896,18 @@ end Proofs.StableHLO
   (Proofs.StableHLO.resnet50TrainStepText 32 10 "1.0e-05" 1
     Proofs.StableHLO.OptRecipe.adamw "resnet50")
 
+-- ⭐ The SAME recipe at micro-batch 16 x k = 2 — effective batch 32, AdamW, identical schedule — for
+-- the Orin Nano, where the bs32 step plans one activation arena larger than the board's run budget
+-- (deploy/ORIN.md §4). Same `.adamwAccum` path as `resnet50in_acc4x64` above; only B, k, nClasses
+-- and the slug differ.
+-- ▶ Run with `LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 LEAN_MLIR_G2_STEPS=590`: 9469/16 = 591
+-- micro-batches is odd, and 590 x 16 = 9440 is exactly the images bs32 takes per epoch (295 x 32).
+-- Eval keeps `resnet50_fwd_eval.mlir` at B = 32; `trainAdamSched` reads its batch off that artifact.
+#eval IO.FS.writeFile "verified_mlir/resnet50_acc2x16_train_step.mlir"
+  (Proofs.StableHLO.resnet50TrainStepText 16 10 "1.0e-05" 1
+    (Proofs.StableHLO.OptRecipe.adamwAccum 2) "resnet50")
+#guard Proofs.StableHLO.r34AdamVariant 16 1 (Proofs.StableHLO.OptRecipe.adamwAccum 2) == "acc2x16"
+
 #eval IO.FS.writeFile "verified_mlir/resnet50_fwd.mlir"
   (Proofs.StableHLO.resnet50FwdText 32 10 "1.0e-05" "resnet50")
 

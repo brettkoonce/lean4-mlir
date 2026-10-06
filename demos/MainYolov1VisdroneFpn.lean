@@ -312,7 +312,12 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   -- Backend-aware: `.vmfb` on IREE, the `.mlir` itself on XLA/PJRT. Without this
   -- the guard below hard-fails on XLA — `infer` would break while `train` worked,
   -- and training is what gets exercised first.
-  let evalVmfb ← NetSpec.graphArtifact spec.buildPrefix "fwd_eval"
+  -- $FPN_EVAL_GRAPH overrides the graph path, so a memory-constrained device can
+  -- run the BATCH-1 render from `emit-deploy` instead of the batch-8 training
+  -- artifact. Unset = the artifact this prefix has always used.
+  let evalVmfb ← match ← IO.getEnv "FPN_EVAL_GRAPH" with
+    | some p => pure p
+    | none   => NetSpec.graphArtifact spec.buildPrefix "fwd_eval"
   let paramsPath := s!"{spec.buildPrefix}_params.bin"
   let bnPath := s!"{spec.buildPrefix}_bn_stats.bin"
   -- Announce WHICH ARM is being evaluated. The arm is selected by FPN_TOWER, and
@@ -333,7 +338,10 @@ def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   let (valImg, _t, nVal) ← F32.loadDetBinFpn (dataDir ++ "/val.bin")
                              spec.imageH.toUSize flat.toUSize
   IO.println s!"  loaded {nVal} val records ({flat}-wide output); dumping logits"
-  let batch : Nat := 8
+  -- Must match the graph's leading dim. 8 is what training emits; the Orin Nano
+  -- cannot hold the batch-8 activations for this net (deploy/ORIN.md §5), so
+  -- $FPN_INFER_BATCH=1 pairs with the batch-1 graph above.
+  let batch : Nat := ((← IO.getEnv "FPN_INFER_BATCH").bind (·.trimAscii.toNat?)).getD 8
   let logitsAll ← spec.evalLogits sess evalParams valImg nVal flat batch
                       (3 * spec.imageH * spec.imageW)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll

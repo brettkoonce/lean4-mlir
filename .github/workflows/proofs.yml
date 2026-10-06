@@ -504,6 +504,7 @@ jobs:
               verified_mlir/resnet50_fwd.mlir \
               verified_mlir/resnet50_fwd_eval.mlir \
               verified_mlir/resnet50_adam_train_step.mlir \
+              verified_mlir/resnet50_acc2x16_train_step.mlir \
               verified_mlir/resnet50in_momdp64bf16_train_step.mlir \
               verified_mlir/resnet50in_emalambaccdp4x128wxclipdropbcebf16_train_step.mlir \
               verified_mlir/resnet50in_lambaccdp4x128wxclipdropbcebf16_train_step.mlir \

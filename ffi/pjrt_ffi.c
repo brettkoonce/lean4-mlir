@@ -562,7 +562,7 @@ static int ensure_client(void) {
   //
   // ▶ Unset leaves BOTH options absent, so the plugin's own defaults apply and
   // every previously-measured figure reproduces. This is opt-in.
-  PJRT_NamedValue copts[2];
+  PJRT_NamedValue copts[4];
   size_t n_copts = 0;
   float mem_fraction = 0.0f;
   {
@@ -594,6 +594,36 @@ static int ensure_client(void) {
       v->bool_value = (atoi(e) != 0);
     }
   }
+  // $LEAN_MLIR_ALLOCATOR names XLA's GPU allocator: "bfc" (the pooled default), "platform"
+  // (plain cudaMalloc/free, no pool) or "cuda_async". On a unified-memory Jetson a capped BFC
+  // pool is the wrong shape — "device" memory is ordinary RAM, and a fixed pool smaller than one
+  // step's largest single allocation fails that step outright (R34 bs32 at memory_fraction 0.30
+  // could not place a 1.02 GiB chunk). Unset leaves the option absent: plugin default.
+  const char* alloc_name = getenv("LEAN_MLIR_ALLOCATOR");
+  if (alloc_name && *alloc_name) {
+    PJRT_NamedValue* v = &copts[n_copts++];
+    memset(v, 0, sizeof(*v));
+    v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+    v->name = "allocator";
+    v->name_size = strlen("allocator");
+    v->type = PJRT_NamedValue_kString;
+    v->string_value = alloc_name;
+    v->value_size = strlen(alloc_name);
+  }
+  // $LEAN_MLIR_STAGE_H2D=0 sets should_stage_host_to_device_transfers=false: with host and device
+  // sharing one DRAM there is nothing to stage through. Unset leaves the plugin default.
+  {
+    const char* e = getenv("LEAN_MLIR_STAGE_H2D");
+    if (e && *e) {
+      PJRT_NamedValue* v = &copts[n_copts++];
+      memset(v, 0, sizeof(*v));
+      v->struct_size = PJRT_NamedValue_STRUCT_SIZE;
+      v->name = "should_stage_host_to_device_transfers";
+      v->name_size = strlen("should_stage_host_to_device_transfers");
+      v->type = PJRT_NamedValue_kBool;
+      v->bool_value = (atoi(e) != 0);
+    }
+  }
 
   PJRT_Client_Create_Args ca = {0};
   ca.struct_size = PJRT_Client_Create_Args_STRUCT_SIZE;
@@ -604,6 +634,7 @@ static int ensure_client(void) {
     // and every "% of budget" number in the tree was taken at the default.
     fprintf(stderr, "[pjrt_ffi] allocator: %zu create option(s)", n_copts);
     if (mem_fraction > 0.0f) fprintf(stderr, ", memory_fraction=%.3f", mem_fraction);
+    if (alloc_name && *alloc_name) fprintf(stderr, ", allocator=%s", alloc_name);
     fprintf(stderr, "\n");
   }
   if (check(g_api->PJRT_Client_Create(&ca), "Client_Create")) return 1;

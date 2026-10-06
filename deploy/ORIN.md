@@ -114,11 +114,24 @@ The env file is the whole contract:
 | `PJRT_PLUGIN` | `~/pjrt/pjrt_c_api_gpu_plugin.so` | the shim dlopens this |
 | `LD_LIBRARY_PATH` | `~/pjrt/cudnn912/lib` first | the plugin was compiled against cuDNN 9.12; JetPack ships 9.3, and XLA refuses an older runtime cuDNN |
 | `LEAN_MLIR_LOWERER` | `xla` | the trainers' backend |
-| `LEAN_MLIR_PREALLOCATE` | `0` | required: device and host share one DRAM |
-| `LEAN_MLIR_MEM_FRACTION` | `0.15` conv models, `0.25` dense | 0.25 starves the host on conv models and 0.10 starves the device (`planning/orin_xla.md` §2, measured on the 0.4.38 plugin) |
+| `LEAN_MLIR_PREALLOCATE` | `1` | the pool is reserved once. At `0` XLA frees a train step's activation arena after every step and asks for it again, and on one shared DRAM that request eventually fails (ResNet-34's ~1 GiB block, 2026-09-13) |
+| `LEAN_MLIR_MEM_FRACTION` | `0.25`; per net in §4 | the pool is a fixed share of the board's one DRAM. It must hold the step's single largest block — XLA plans one activation arena per train step — and leave the process the rest. Below that it fails at step 0 naming the block; too high and the kernel's memory cgroup kills the process |
 
 ⛔ Do not `pip install` jax's CUDA plugin or any `nvidia-cudnn-*` wheel on the board. Those
 are SBSA builds, and with one on the path the convolutions break again.
+
+⛔ The shim must be the one built from this tree. A `ffi/libpjrt_ffi.so` from before the
+allocator knobs ignores all three `LEAN_MLIR_*` allocator variables, and XLA then reserves most
+of the board: that, not unified memory, was the "5 GB floor" of the first sessions. `lake run
+<group>` rebuilds it when `ffi/pjrt_ffi.c` is newer; a binary started from `.lake/build/bin/`
+directly does not, so after a pull run the gcc line in `ffi/README.md` and look for
+`[pjrt_ffi] allocator: N create option(s)` on stderr.
+
+Two more things that have each ended a session: GPU work goes under a memory cap
+(`systemd-run --user --scope -p MemoryMax=5800M -p MemorySwapMax=0 -- <cmd>`), because a process
+that reaches the top of the 8 GB takes tmux down with it, and the cap shows up as a clean
+`NvMapMemAllocInternalTagged … error 12` instead; and `jetson_clocks` does not survive a reboot
+(`cat /sys/class/devfreq/*gpu*/min_freq` reads 918000000 when pinned, 306000000 when not).
 
 For the TensorRT route (§5), also set up `pycuda` in a venv (`~/orinvenv`). `trtexec` is at
 `/usr/src/tensorrt/bin/trtexec`, not on `PATH`.
@@ -139,7 +152,7 @@ scripts/platform/check.sh            # tiers 0-2 → runs/platform/<date>-<host>
 - With one GPU, tier 1's `compile_dp`, `allreduce` and `dp` report SKIP. That is the
   expected result.
 - On a Jetson, `check.sh` defaults `LEAN_MLIR_PREALLOCATE=0` and `LEAN_MLIR_MEM_FRACTION=0.15`
-  when they are unset.
+  when they are unset. The suite's graphs are small; the trainers' recipe is §2's.
 - A test the Orin is known to fail goes in `scripts/platform/expected/cuda-<gpu>.txt`, so it
   reports XFAIL instead of FAIL. The `<gpu>` part is the slug the run prints. Never loosen a
   tolerance in `tolerances.tsv` to get the Orin green.
@@ -158,13 +171,65 @@ lake build cifar-verified     && ./run.sh cifar-verified
 lake run mnist                       # linear, MLP and CNN in sequence
 ```
 
-On record from the 0.4.38 plugin, clocks pinned (`planning/orin_xla.md` §3): mnist-cnn
-98.68% and cifar 64.45% at 10 epochs. `cifar8-bn-verified` was OOM-killed at 5.93 GB
-anonymous RSS on the 8 GB board, against 2.12 GB on x86. Re-test it on the 0.11.1
-plugin (`planning/orin_plugin_rebuild.md` §5).
+On record from the 0.11.1 plugin and the current shim, clocks unpinned (2026-09-13):
+mnist-cnn 98.61% at 10 epochs, cifar 66.51% at 10, cifar8-bn 66.01% at 40; peak anonymous
+RSS 1.1 / 2.6 / 2.1 GB, the last equal to x86's. The earlier OOM kill of `cifar8-bn-verified`
+at 5.93 GB was the stale shim of §2, not the board. The 0.4.38 plugin's numbers
+(`planning/orin_xla.md` §3) stand as the first record: mnist-cnn 98.68%, cifar 64.45%.
 
 ⚠ Run `cifar-verified` for 10 epochs, not its default 40. On the training box it reaches
 68.31% at epoch 14 and drops to chance from epoch 15 (`planning/orin_xla.md` §5).
+
+### Imagenette
+
+Imagenette's f32 loader holds train and val pre-normalised: 9.8 GB on a board with 8. Two
+opt-in loaders in `trainAdamSched` make it fit, and both are bit-identical to the f32 loader
+(`tests/imagenette_u8_tie.sh`: trained state and eval lines, f32 against each):
+
+| variable | what | resident |
+|---|---|---|
+| `LEAN_MLIR_IMAGENETTE_U8=1` | pixels stay the uint8 they are on disk, normalised one batch at a time | 2.45 GB |
+| `LEAN_MLIR_IMAGENETTE_STREAM=1` | train pixels never loaded: labels and a shuffled index array, each batch `pread` from `train.bin`; implies the uint8 val path | val only, 563 MiB |
+
+The streamed loader is the one the board runs. On top of `orin_env.sh`, under the memory cap
+of §2, clocks pinned:
+
+```bash
+export LEAN_MLIR_IMAGENETTE_STREAM=1 LEAN_MLIR_PREALLOCATE=1 LEAN_MLIR_MEM_FRACTION=0.25
+systemd-run --user --scope -p MemoryMax=5800M -p MemorySwapMax=0 -- .lake/build/bin/vit-verified-adam data
+```
+
+The 2026-09-13 sweep, two epochs of every `lake run imagenette` net on that recipe, eval
+every epoch; `non-file peak` is anonymous memory plus NvMap, what the cap counts:
+
+| net | pool fraction | s / epoch | 80 epochs | non-file peak MiB |
+|---|---|---|---|---|
+| `vit-verified-adam` | 0.25 | 88 | ~2.0 h | 3,774 |
+| `mobilenetv2-verified-adam` | 0.25 | 122 | ~2.7 h | 3,866 |
+| `efficientnet-verified-adam` | 0.30 | 150 | ~3.3 h | 3,784 |
+| `mobilenetv4-verified-adam` | 0.25 | 153 | ~3.4 h | 4,194 |
+| `resnet34-verified-adam` | 0.25 | 171 | ~3.8 h | 4,575 |
+| `resnet50-verified-adam`, `acc2x16` | 0.36 | ~305 | ~6.8 h | 5,674 |
+| `convnext-verified-adam` | — | does not fit | | |
+
+Six of the seven, about 22 hours for 80 epochs each. The fractions are the BFC pool, not
+the cgroup: EfficientNet at 0.25 fails at step 0 on one 1.89 GiB block. ResNet-50's batch-32
+step plans a 2.55 GiB arena and does not fit at any fraction, so the board runs the same
+recipe as two accumulated micro-batches of 16, `verified_mlir/resnet50_acc2x16_train_step.mlir`
+(`LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 LEAN_MLIR_G2_STEPS=590`: 590 × 16 is the
+9,440 images a batch-32 epoch takes; eval stays on the batch-32 forward). It sits 126 MiB
+under the cap, so an 80-epoch run of it wants a relaunch loop that resumes from the
+checkpoint. ConvNeXt's renderer hard-codes batch 32; a batch-8 test render trained, but at
+batch 32's learning rate with four times the updates it is a different recipe, and it is not
+committed.
+
+One full run on record: ViT-Tiny, 80 epochs in 1 h 48 m on one attempt, 67.97% / 90.06%
+top-1 / top-5 (best 68.48% at epoch 62), against the desktop's 68.74% / 90.42%
+(`runs/2026-08-12-vit-imagenette-xla-cuda`). The desktop run's seed spread is unmeasured.
+
+⚠ `trainAdamSched` resumes from `.lake/build/<slug>_<variant>_ckpt_xla<TAG>.bin` and its
+`.epoch` marker without asking. Set `LEAN_MLIR_CKPT_TAG` per run, or move the files, before
+a real run; the sweep's test runs write them.
 
 ## §5 The VisDrone detector — TensorRT
 
@@ -172,6 +237,13 @@ The detector does not use the plugin. Its route is ONNX exported on the training
 `trtexec --fp16` on the device. Result on record: 55.9 fps end to end on the u8 engine with
 clocks pinned. `ORIN_SMOKE_TEST.md` is the step-by-step brief with its acceptance numbers,
 and `README.md` in this directory covers the export.
+
+The verified StableHLO forward also runs on the board, through the plugin, and matches the
+frame golden: relative error 1.5e-3, correlation 0.9999996, 231 of 232 detections at
+IoU > 0.5 (2026-09-13). It needs the batch-1 render from `emit-deploy`, because the batch-8
+training artifact's activations do not fit: `FPN_EVAL_GRAPH=<path to the batch-1 fwd_eval>`
+and `FPN_INFER_BATCH=1` on `yolov1-visdrone-fpn infer`. Unset, both are the training
+artifact and batch 8, as everywhere else.
 
 ## §6 Bringing work back
 

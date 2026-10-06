@@ -1059,7 +1059,11 @@ def evalScore (sess : LowererSession) (fn : String) (params shapes : ByteArray) 
     | .held img lbl =>
         -- `evalD0`, not the train width: the val buffer is at the EVAL width (RSB-A3 trains at
         -- 160², evaluates at 224²), and slicing it at the other one strides through it wrongly.
-        xb := F32.sliceImagesPad img (bi * gB) gB evalD0 nEval
+        -- Raw-uint8 Imagenette val (LEAN_MLIR_IMAGENETTE_U8 / _STREAM): normalise just this invoke,
+        -- bit-identically to the f32 loader. Dispatched on the buffer's own size, so f32 can never take it.
+        xb ← if nEval > 0 && img.size == nEval * evalD0 then
+               F32.sliceU8NormPad img (bi * gB).toUSize gB.toUSize evalD0.toUSize nEval.toUSize
+             else pure (F32.sliceImagesPad img (bi * gB) gB evalD0 nEval)
         lb := lbl; real := min gB (nEval - bi * gB); lblBase := bi * gB
     | .stream .. =>
         let some tk := inflight | throw <| IO.userError "val stream: no pull in flight"
@@ -1111,6 +1115,18 @@ refusal, not a number (a producer died, or the block sharding lost a batch)"
   | _ => pure ()
   return (correct, correct5, scored, bits)
 
+/-- `$LEAN_MLIR_IMAGENETTE_STREAM=1`: the Imagenette train split's path, to be READ PER BATCH instead of
+    held resident (`none` = off, or not Imagenette). ONE definition, because `loadData` (which then skips
+    the train pixels) and `trainAdamSched` (which then reads every batch by index) must agree: a loader
+    that skipped the pixels under a trainer that didn't know would slice an empty buffer. -/
+private def imagenetteTrainStream (net : VerifiedNet) (dataDir : String) : IO (Option String) := do
+  match net.data with
+  | .imagenette =>
+    if ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_STREAM").map (· == "1")).getD false then
+      return some (dataDir ++ "/imagenette/train.bin")
+    return none
+  | _ => return none
+
 /-- Load the train + eval splits for a dataset. Returns
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
@@ -1121,7 +1137,7 @@ refusal, not a number (a producer died, or the block sharding lost a batch)"
     and worth having on the others: Imagenette's is 9,469 × 256² × 3 f32 = 7.4 GB read and held for a job that only scores 3,925 val images. `nTrain` comes back 0
     under it, so a caller that starts using it gets a division rather than a plausible epoch. -/
 def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
-    (evalOnly : Bool := false) :
+    (evalOnly : Bool := false) (allowU8 : Bool := false) :
     IO (ByteArray × ByteArray × Nat × ByteArray × ByteArray × Nat × Nat × Bool) := do
   let d0 := net.d0
   -- `evalD0` is the EVAL forward's rendered input width, read off the artifact by the caller. It is
@@ -1138,9 +1154,30 @@ def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
     -- set LEAN_MLIR_IMAGENETTE_TRAIN=224 to load 224²/no-crop (else: "short read").
     -- px also feeds trainPix (3·px²) and crop := (px == 256).
     let px := ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_TRAIN").bind (·.toNat?)).getD 256
+    -- LEAN_MLIR_IMAGENETTE_U8=1 keeps the pixels resident as the raw uint8 they are on disk — one
+    -- byte per element instead of four of pre-normalised f32, which is what lets Imagenette train
+    -- on a Jetson's unified memory (deploy/ORIN.md §4). Batches are normalised one at a time,
+    -- bit-identically to the f32 loader (tests/imagenette_u8_tie.sh). ONLY honoured when the caller
+    -- passes `allowU8 := true` (today: `trainAdamSched`, which dispatches on buffer size): any other
+    -- trainer would stride a uint8 buffer as f32 without a word, so it keeps getting f32 even with
+    -- the variable set.
+    -- LEAN_MLIR_IMAGENETTE_STREAM=1 goes one further: the train PIXELS are never resident, only the
+    -- labels, and `trainAdamSched` reads each batch from train.bin by shuffled index — the resident
+    -- train split gone, which is what ResNet-34 needs on the Orin (deploy/ORIN.md §4). Implies the
+    -- uint8 path for val. Same gate.
+    let stream := allowU8 && !evalOnly && (← imagenetteTrainStream net dataDir).isSome
+    let u8 := allowU8 && (stream || ((← IO.getEnv "LEAN_MLIR_IMAGENETTE_U8").map (· == "1")).getD false)
+    if stream then
+      IO.println "  imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident"
+    else if u8 then IO.println "  imagenette: raw-uint8 resident (LEAN_MLIR_IMAGENETTE_U8=1), normalised per batch"
     let (trI, trL, nTr) ← if evalOnly then pure (ByteArray.empty, ByteArray.empty, 0)
+                          else if stream then
+                            (fun ln => (ByteArray.empty, ln.1, ln.2)) <$>
+                              F32.loadImagenetteU8Labels (idir ++ "/train.bin") px.toUSize
+                          else if u8 then F32.loadImagenetteU8Sized (idir ++ "/train.bin") px.toUSize
                           else F32.loadImagenetteSized (idir ++ "/train.bin") px.toUSize
-    let (evI, evL, nEv) ← F32.loadImagenette (idir ++ "/val.bin")
+    let (evI, evL, nEv) ← if u8 then F32.loadImagenetteU8Sized (idir ++ "/val.bin") 224
+                          else F32.loadImagenette (idir ++ "/val.bin")
     return (trI, trL, nTr, evI, evL, nEv, 3 * px * px, px == 256)
   | .mnist =>
     let (trI, nTr) ← if evalOnly then pure (ByteArray.empty, 0)
@@ -1875,7 +1912,10 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
 @{net.slug}_fwd{if useRunning then "_eval" else ""}"
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     if synth then mkSynthData net.data d0 (bs * replicas)
-    else loadData net dataDir evalD0
+    else loadData net dataDir evalD0 (allowU8 := true)
+  -- LEAN_MLIR_IMAGENETTE_STREAM=1: `loadData` left `trainImg` EMPTY, so every batch must be read from
+  -- this file by index. The same helper decided that inside `loadData`.
+  let trainStream ← if synth then pure none else imagenetteTrainStream net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   -- LEAN_MLIR_G2_STEPS caps batches per epoch for gate G2. Deliberately NOT
   -- LEAN_MLIR_MAX_STEPS: that name already means "time a step window then exit"
@@ -2178,6 +2218,8 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- set per epoch → host OOM partway through a run.
   let mut curImg := trainImg
   let mut curLbl := trainLbl
+  -- Streamed train split: the shuffle permutes this index array instead of `curImg` (which is empty).
+  let mut curIdx ← if trainStream.isSome then F32.iotaU32 nTrain.toUSize else pure ByteArray.empty
   -- The ImageNet train stream: spawned ONCE, not per epoch. The shim's train iterator is
   -- `.shuffle(seed=42, reshuffle_each_iteration=True).repeat()`, so it re-shuffles across the epoch
   -- boundary by itself and never ends — the per-epoch `F32.shuffle` below is skipped for it.
@@ -2419,10 +2461,22 @@ gate's control, not a configuration.")
     -- Skipped when streaming: there is no resident array to shuffle, and tf.data already
     -- re-shuffles each iteration inside the shim.
     if !synth && imgStreams.isEmpty then
-      let (sImg, sLbl) ← F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize
-                           4 -- classification: one f32 class id per record
-                           (ep + 42).toUSize
-      curImg := sImg; curLbl := sLbl
+      if trainStream.isSome then
+        -- Streamed (LEAN_MLIR_IMAGENETTE_STREAM=1): the same swaps, applied to 4-byte indices. The
+        -- RNG and swap order don't depend on the stride, so `curIdx[k]` is the record the resident
+        -- shuffle below would have put in slot k — epoch after epoch, since both accumulate.
+        let (sIdx, sLbl) ← F32.shuffleU8 curIdx curLbl nTrain.toUSize 4 4 (ep + 42).toUSize
+        curIdx := sIdx; curLbl := sLbl
+      else
+        -- Raw-uint8 Imagenette (LEAN_MLIR_IMAGENETTE_U8=1) is one byte per element, not four:
+        -- `shuffleU8` applies the same permutation with a 1-byte image stride. Dispatched on the
+        -- buffer's own size, so an f32 buffer can never take it. Label stride 4 = one f32 class id.
+        let (sImg, sLbl) ←
+          if nTrain > 0 && curImg.size == nTrain * trainPix then
+            F32.shuffleU8 curImg curLbl nTrain.toUSize trainPix.toUSize 4 (ep + 42).toUSize
+          else
+            F32.shuffle curImg curLbl nTrain.toUSize trainPix.toUSize 4 (ep + 42).toUSize
+        curImg := sImg; curLbl := sLbl
     for bi in [0:nb] do
       -- MICRO-STEP vs OPTIMIZER STEP. Without accumulation these are the same number. With it,
       -- `mstep` counts micro-batches (it seeds the augmentation and the drop masks, and it is what
@@ -2643,7 +2697,14 @@ gate's control, not a configuration.")
           let (i, l) ← readShimBatchRR imgStreams (ep * nb + bi) gbs flat shimNC
           xb := i; yb := l
       else
-        let xbRaw := if synth then curImg else F32.sliceImages curImg (bi * gbs) gbs trainPix
+        -- Raw-uint8 Imagenette: normalise just this batch (bit-identical to the f32 loader).
+        let xbRaw ←
+          if synth then pure curImg
+          else if let some path := trainStream then
+            F32.readU8NormPad path curIdx (bi * gbs).toUSize gbs.toUSize trainPix.toUSize nTrain.toUSize
+          else if nTrain > 0 && curImg.size == nTrain * trainPix then
+            F32.sliceU8NormPad curImg (bi * gbs).toUSize gbs.toUSize trainPix.toUSize nTrain.toUSize
+          else pure (F32.sliceImages curImg (bi * gbs) gbs trainPix)
         -- Data-pipeline augmentation (the same FFI the unverified trainer uses;
         -- lives in the data pipeline, not the network): Imagenette = random crop
         -- 256→224 (when the source is 256²) + random hflip; CIFAR = hflip only;

@@ -8,6 +8,9 @@
 #include <string.h>
 #include <math.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/stat.h>
 
 // ---- Read a float32 at element index from ByteArray ----
 LEAN_EXPORT double lean_f32_read(b_lean_obj_arg ba, size_t idx) {
@@ -295,6 +298,173 @@ LEAN_EXPORT lean_obj_res lean_f32_imagenette_labels(b_lean_obj_arg raw_ba, size_
     uint8_t* lbl = lean_sarray_cptr(ba);
     for (size_t i = 0; i < n; i++) { lbl[4*i] = raw[4 + i * rec]; lbl[4*i+1] = lbl[4*i+2] = lbl[4*i+3] = 0; }
     return lean_io_result_mk_ok(ba);
+}
+
+// ─── raw-uint8 Imagenette (LEAN_MLIR_IMAGENETTE_U8=1) ───────────────────────
+// `load_imagenette_sized` expands every record to normalised f32 up front — 4 bytes per
+// element, so train@256² + val@224² is 9.8 GB resident, more than an 8 GB Jetson has.
+// These keep the pixels as the uint8 they are on disk (1 byte per element, CHW: 2.45 GB)
+// and normalise ONE BATCH AT A TIME in `lean_f32_slice_u8_norm_pad`, using the identical
+// expression, so each batch's f32 is bit-for-bit what the resident loader would have
+// produced. Labels are unchanged (i32 class ids).
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_u8_sized(b_lean_obj_arg path_obj, size_t img_size) {
+    FILE* f = fopen(lean_string_cstr(path_obj), "rb");
+    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open imagenette file")));
+    uint32_t count;
+    if (fread(&count, 4, 1, f) != 1) { fclose(f); return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad header"))); }
+    const size_t pix = 3 * img_size * img_size;
+    size_t img_bytes = (size_t)count * pix;
+    size_t lbl_bytes = (size_t)count * 4;
+    lean_object* img_ba = lean_alloc_sarray(1, img_bytes, img_bytes);
+    lean_object* lbl_ba = lean_alloc_sarray(1, lbl_bytes, lbl_bytes);
+    uint8_t* img = lean_sarray_cptr(img_ba);
+    uint8_t* lbl = lean_sarray_cptr(lbl_ba);
+    for (uint32_t i = 0; i < count; i++) {
+        uint8_t label;
+        if (fread(&label, 1, 1, f) != 1 || fread(img + (size_t)i * pix, 1, pix, f) != pix) {
+            fclose(f); lean_dec(img_ba); lean_dec(lbl_ba);
+            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read")));
+        }
+        lbl[i*4] = label; lbl[i*4+1] = 0; lbl[i*4+2] = 0; lbl[i*4+3] = 0;
+    }
+    fclose(f);
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, lbl_ba);
+    lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, img_ba);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
+// One raw-uint8 CHW record (`hw` pixels per channel) → normalised f32. The expression is copied
+// verbatim from `load_imagenette_sized`; the resident (`slice_u8_norm_pad`) and streamed
+// (`read_u8_norm_pad`) batch paths both call THIS, so they cannot drift apart.
+static inline void u8_norm_record(const uint8_t* s0, float* d0, size_t hw) {
+    const float mean[3] = {0.485f, 0.456f, 0.406f};
+    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
+    for (int ch = 0; ch < 3; ch++) {
+        float m = mean[ch], s = istd[ch];
+        for (size_t j = 0; j < hw; j++)
+            d0[ch*hw+j] = (s0[ch*hw+j]/255.0f - m) * s;
+    }
+}
+
+// One batch of raw-uint8 Imagenette → normalised NCHW f32, zero-padded past `total` exactly
+// like `F32.sliceImagesPad` (padded rows are 0.0f, NOT normalised black). Bit-identical to
+// `load_imagenette_sized` (see `u8_norm_record`).
+LEAN_EXPORT lean_obj_res lean_f32_slice_u8_norm_pad(b_lean_obj_arg img_obj, size_t start, size_t count,
+                                                    size_t pix, size_t total) {
+    if (pix == 0 || pix % 3 != 0 || lean_sarray_size(img_obj) != total * pix) {
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+            "lean_f32_slice_u8_norm_pad: buffer must be exactly total * pixelsPerImage raw bytes")));
+    }
+    size_t avail = (start < total) ? (total - start) : 0;
+    if (avail > count) avail = count;
+    const uint8_t* src = lean_sarray_cptr(img_obj);
+    size_t out_bytes = count * pix * 4;
+    lean_object* out = lean_alloc_sarray(1, out_bytes, out_bytes);
+    float* dst = (float*)lean_sarray_cptr(out);
+    memset(dst, 0, out_bytes);
+    for (size_t r = 0; r < avail; r++)
+        u8_norm_record(src + (start + r) * pix, dst + r * pix, pix / 3);
+    return lean_io_result_mk_ok(out);
+}
+
+// ─── streamed raw-uint8 Imagenette (LEAN_MLIR_IMAGENETTE_STREAM=1) ──────────────────────────
+// Even as raw uint8, Imagenette's train split is 1,775 MiB resident, and next to R34's device pool
+// that is more than the 5.8 GB an 8 GB Orin can give a run (memcg OOM, 2026-09-13). Streaming keeps
+// only the labels resident and reads each batch's records from train.bin BY INDEX. The per-epoch
+// shuffle goes to a u32 index array through `shuffleU8` with stride 4 — the RNG and swap sequence do
+// not depend on the stride — so after any number of epochs `indices[k]` is exactly the record the
+// resident `shuffleU8` would have moved to slot k, and `read_u8_norm_pad(indices, start, …)` equals
+// `slice_u8_norm_pad(shuffled, start, …)` byte for byte. File layout: u32 count, then per record
+// [1 label byte][pix uint8 CHW].
+static lean_obj_res io_err(const char* msg) {
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+}
+
+// Labels only (i32 class ids, like the other loaders) + count. Rejects a file whose size is not
+// exactly `count` records at `img_size`, so a wrong size can't stride through the file silently.
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_u8_labels(b_lean_obj_arg path_obj, size_t img_size) {
+    int fd = open(lean_string_cstr(path_obj), O_RDONLY);
+    if (fd < 0) return io_err("cannot open imagenette file");
+    uint32_t count;
+    struct stat st;
+    const uint64_t rec = 1 + 3 * (uint64_t)img_size * img_size;
+    if (pread(fd, &count, 4, 0) != 4 || fstat(fd, &st) != 0) { close(fd); return io_err("bad header"); }
+    if ((uint64_t)st.st_size != 4 + (uint64_t)count * rec) {
+        close(fd);
+        return io_err("lean_f32_load_imagenette_u8_labels: file size is not `count` records at this image size");
+    }
+    size_t lbl_bytes = (size_t)count * 4;
+    lean_object* lbl_ba = lean_alloc_sarray(1, lbl_bytes, lbl_bytes);
+    uint8_t* lbl = lean_sarray_cptr(lbl_ba);
+    for (uint32_t i = 0; i < count; i++) {
+        uint8_t label;
+        if (pread(fd, &label, 1, (off_t)(4 + (uint64_t)i * rec)) != 1) {
+            close(fd); lean_dec(lbl_ba); return io_err("short read");
+        }
+        lbl[i*4] = label; lbl[i*4+1] = 0; lbl[i*4+2] = 0; lbl[i*4+3] = 0;
+    }
+    close(fd);
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, lbl_ba);
+    lean_ctor_set(pair, 1, lean_usize_to_nat((size_t)count));
+    return lean_io_result_mk_ok(pair);
+}
+
+// [0, 1, …, n-1] as little-endian u32 — the unshuffled index array.
+LEAN_EXPORT lean_obj_res lean_f32_iota_u32(size_t n) {
+    if (n > UINT32_MAX) return io_err("lean_f32_iota_u32: n does not fit in u32");
+    lean_object* ba = lean_alloc_sarray(1, n * 4, n * 4);
+    uint8_t* p = lean_sarray_cptr(ba);
+    for (size_t i = 0; i < n; i++) {
+        p[i*4] = (uint8_t)i; p[i*4+1] = (uint8_t)(i >> 8); p[i*4+2] = (uint8_t)(i >> 16); p[i*4+3] = (uint8_t)(i >> 24);
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// `slice_u8_norm_pad`, but slot r of the batch is record `indices[start + r]` read from the file
+// instead of a resident buffer. Same zero padding past `total`.
+LEAN_EXPORT lean_obj_res lean_f32_read_u8_norm_pad(b_lean_obj_arg path_obj, b_lean_obj_arg idx_obj,
+                                                   size_t start, size_t count, size_t pix, size_t total) {
+    if (pix == 0 || pix % 3 != 0 || lean_sarray_size(idx_obj) != total * 4)
+        return io_err("lean_f32_read_u8_norm_pad: indices must be exactly total little-endian u32s");
+    int fd = open(lean_string_cstr(path_obj), O_RDONLY);
+    if (fd < 0) return io_err("cannot open imagenette file");
+    struct stat st;
+    const uint64_t rec = 1 + (uint64_t)pix;
+    if (fstat(fd, &st) != 0 || (uint64_t)st.st_size != 4 + (uint64_t)total * rec) {
+        close(fd);
+        return io_err("lean_f32_read_u8_norm_pad: file size is not `total` records of `pixelsPerImage`");
+    }
+    size_t avail = (start < total) ? (total - start) : 0;
+    if (avail > count) avail = count;
+    const uint8_t* idx = lean_sarray_cptr(idx_obj);
+    size_t out_bytes = count * pix * 4;
+    lean_object* out = lean_alloc_sarray(1, out_bytes, out_bytes);
+    float* dst = (float*)lean_sarray_cptr(out);
+    memset(dst, 0, out_bytes);
+    uint8_t* tmp = (uint8_t*)malloc(pix);
+    const char* fail = NULL;
+    for (size_t r = 0; r < avail && !fail; r++) {
+        const uint8_t* ib = idx + (start + r) * 4;
+        uint32_t k = (uint32_t)ib[0] | (uint32_t)ib[1] << 8 | (uint32_t)ib[2] << 16 | (uint32_t)ib[3] << 24;
+        if (k >= total) { fail = "lean_f32_read_u8_norm_pad: index out of range"; break; }
+        off_t off = (off_t)(4 + (uint64_t)k * rec + 1);   // skip the header and this record's label byte
+        size_t got = 0;
+        while (got < pix) {
+            ssize_t n = pread(fd, tmp + got, pix - got, off + (off_t)got);
+            if (n <= 0) { fail = "short read"; break; }
+            got += (size_t)n;
+        }
+        if (!fail) u8_norm_record(tmp, dst + r * pix, pix / 3);
+    }
+    free(tmp);
+    close(fd);
+    if (fail) { lean_dec(out); return io_err(fail); }
+    return lean_io_result_mk_ok(out);
 }
 
 LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj) {
@@ -1550,6 +1720,49 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
             memcpy(img + i * img_stride, img + j * img_stride, img_stride);
             memcpy(img + j * img_stride, tmp, img_stride);
             // Swap labels -- the SAME permutation, over the whole record
+            memcpy(tmp, lbl + i * label_stride, label_stride);
+            memcpy(lbl + i * label_stride, lbl + j * label_stride, label_stride);
+            memcpy(lbl + j * label_stride, tmp, label_stride);
+        }
+    }
+    free(tmp);
+    lean_object* pair = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pair, 0, img_obj);
+    lean_ctor_set(pair, 1, lbl_obj);
+    return lean_io_result_mk_ok(pair);
+}
+
+// `lean_f32_shuffle` with a 1-byte image stride, for raw-uint8 Imagenette. Deliberately a
+// COPY, not a refactor of that function, which tests/TestShufflePairing.lean pins: the RNG,
+// the swap order and the exact-size guard are identical, so for the same (n, seed) this
+// applies THE SAME permutation the f32 path would.
+LEAN_EXPORT lean_obj_res lean_f32_shuffle_u8(lean_obj_arg img_obj, lean_obj_arg lbl_obj,
+                                             size_t n, size_t pixels_per,
+                                             size_t label_stride, size_t seed) {
+    if (!lean_is_exclusive(img_obj)) img_obj = lean_copy_byte_array(img_obj);
+    if (!lean_is_exclusive(lbl_obj)) lbl_obj = lean_copy_byte_array(lbl_obj);
+    uint8_t* img = lean_sarray_cptr(img_obj);
+    uint8_t* lbl = lean_sarray_cptr(lbl_obj);
+    size_t img_stride = pixels_per;  // 1 byte per element
+    if (n == 0 || label_stride == 0 || img_stride == 0 ||
+        lean_sarray_size(img_obj) != n * img_stride ||
+        lean_sarray_size(lbl_obj) != n * label_stride) {
+        lean_dec(img_obj);
+        lean_dec(lbl_obj);
+        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
+            "lean_f32_shuffle_u8: n, pixelsPerImage and labelBytes must describe the "
+            "buffers exactly (each buffer = n whole records, n > 0)")));
+    }
+    size_t tmp_size = img_stride > label_stride ? img_stride : label_stride;
+    uint8_t* tmp = (uint8_t*)malloc(tmp_size);
+    uint64_t rng = seed ^ 0x5DEECE66DUL;
+    for (size_t i = n - 1; i > 0; i--) {
+        rng = rng * 6364136223846793005UL + 1442695040888963407UL;
+        size_t j = (size_t)((rng >> 16) % (i + 1));
+        if (i != j) {
+            memcpy(tmp, img + i * img_stride, img_stride);
+            memcpy(img + i * img_stride, img + j * img_stride, img_stride);
+            memcpy(img + j * img_stride, tmp, img_stride);
             memcpy(tmp, lbl + i * label_stride, label_stride);
             memcpy(lbl + i * label_stride, lbl + j * label_stride, label_stride);
             memcpy(lbl + j * label_stride, tmp, label_stride);
