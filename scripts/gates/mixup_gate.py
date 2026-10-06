@@ -159,9 +159,14 @@ def check(name, ok, detail=""):
 # ⚠ The digest depends on batch AND batch count, so the check is SKIPPED — loudly — at any other
 #   config rather than silently comparing incomparable numbers. A first version of this gate only
 #   PRINTED the digests, which made it unfalsifiable: it could not fail. §4's rule.
+# ⚠ RE-PINNED 2026-10-06 to R34's shim with torchvision's crop sampler and bilinear resize
+#   (planning/gelu_erf_and_torchvision_crop.md §2). The pre-mixing pins (c375ad0f… / f3a4b2a0…)
+#   no longer reproduced on the shim committed before that change either (8a204cd5… / ad5f9e0b…):
+#   the pipeline moved under them. From here the pin is the off path of the current shim, so a
+#   change to the stream that is not meant to be one still goes red.
 BASELINE = {(8, 3): {
-    "v1":  "c375ad0fb9fcd5b9d34abb5dfacc8fd465c922d82f4352ac1fdd20a115eadfc2",
-    "off": "f3a4b2a005524277af7a227b99fdb81f6469d9f97c16ed9fb99210fdb00b193e"}}
+    "v1":  "b4e78ff11b693864aecf9855c025631776f762dc7dfddf18ad925c89b454f7e6",
+    "off": "93634a004f419e65123deee52f54322fa9397bd87f659b26b707d53132006d53"}}
 
 print("── gate 1: INERT WHEN OFF (the digests must not move at all)")
 d_v1 = digest("v1", A.seed)
@@ -174,8 +179,8 @@ if base is None:
           f"(batch={A.batch}, batches={A.batches}, seed={A.seed}). This gate is VACUOUS at this "
           f"config; run the default, or record a new baseline off the pre-mixing shim.")
 else:
-    check("v1 digest unchanged since before mixing existed", d_v1 == base["v1"])
-    check("v2 digest unchanged since before mixing existed", d_v2 == base["off"])
+    check("v1 digest unchanged since the pin", d_v1 == base["v1"])
+    check("v2 digest unchanged since the pin", d_v2 == base["off"])
 
 # ── gate 1b: the VALIDATION split is never mixed, whatever SHIM_MIX says ───────────────────────
 #

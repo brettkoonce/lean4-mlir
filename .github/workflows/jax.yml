@@ -62,6 +62,7 @@ on:
       - 'scripts/parity/*_timm_parity.py'
       - 'scripts/parity/_*_timm_dump.py'
       - 'scripts/gates/aug_bicubic_pil_check.py'
+      - 'scripts/gates/crop_sampler_gate.py'
       - 'requirements-timm-lock.txt'
   pull_request:
     paths:
@@ -98,6 +99,7 @@ on:
       - 'scripts/parity/*_timm_parity.py'
       - 'scripts/parity/_*_timm_dump.py'
       - 'scripts/gates/aug_bicubic_pil_check.py'
+      - 'scripts/gates/crop_sampler_gate.py'
       - 'requirements-timm-lock.txt'
   workflow_dispatch:
 
@@ -615,6 +617,11 @@ jobs:
           set -o pipefail
           python3 scripts/gates/aug_bicubic_pil_check.py 2>&1 | tee -a /tmp/parity.log
 
+      - name: Train-crop samplers against torchvision (with TF's sampler and a uniform-aspect control)
+        run: |
+          set -o pipefail
+          python3 scripts/gates/crop_sampler_gate.py 2>&1 | tee -a /tmp/parity.log
+
       - name: Summary
         if: always()
         run: |
@@ -623,6 +630,6 @@ jobs:
             echo "## timm parity"
             echo ""
             echo '```'
-            grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|bicubic :|⛔' /tmp/parity.log || true
+            grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|bicubic :|emitted sampler|B0 fallback|⛔' /tmp/parity.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY

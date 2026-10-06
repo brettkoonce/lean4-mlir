@@ -75,6 +75,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   useAutoAugment := true     -- full AutoAugment ImageNet policy (incl. geometric)
   autoAugmentV0  := true     -- TF EfficientNet's policy v0 (timm `v0`), img_mean fill
   augBicubic     := true    -- PIL-bicubic geometry, as timm
+  cropFallbackCenter := true -- EfficientNet: a whole-image draw falls back to the centre crop
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- reaches the MBConv expand/depthwise/project

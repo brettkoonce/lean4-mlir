@@ -54,6 +54,8 @@ def resnet50ImagenetConfig : TrainConfig where
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true     -- random-resized-crop + hflip (the base aug under RA)
+  cropTorchvision := true    -- torchvision RandomResizedCrop (timm's), not TF's sampler
+  trainResize    := .random  -- timm train.py's default interpolation: bilinear or bicubic per image (every RSB tier)
   labelSmoothing := 0.0      -- BCE over mixup/cutmix soft labels subsumes it (RSB)
   lossKind       := some .bce     -- BCE-with-logits, multi-hot (timm --bce-loss)
   useMixup       := true     -- RSB aug pack: Mixup α0.1...
@@ -66,7 +68,7 @@ def resnet50ImagenetConfig : TrainConfig where
   randAugmentM   := 7.0      -- RSB rand-m7-...
   randAugmentMstd := 0.5     -- ...-mstd0.5-...
   randAugmentInc := true     -- ...-inc1 increasing-severity mappings
-  augBicubic     := true     -- PIL-bicubic RandAugment geometry, as timm (the A2/A1 family; A3 pins it off below)
+  augBicubic     := true     -- PIL-bicubic RandAugment geometry, as timm (every RSB tier, A3 included)
   repeatedAug    := 3        -- RSB Repeated Augmentation 3×
   dropPath       := 0.05     -- stochastic depth, RSB-A2 value
   useEMA         := true     -- model EMA; eval + checkpoints use the shadow
@@ -139,7 +141,6 @@ def resnet50ImagenetConfigShort : TrainConfig :=
       useEMA        := false    -- A3: no model EMA
       trainRes      := 160      -- A3: train @160×160
       testCropRatio := 0.95     -- A3: eval @224, center-crop ratio 0.95
-      augBicubic    := false    -- bilinear geometry, as the landed A3 runs trained (C6 is off for them)
       -- timm's A3 ran at 0.2 too: "you'll have to add --bce-target-thresh 0.2 as that was
       -- hardcoded when those runs were done" (rwightman, pytorch-image-models discussion #924).
       -- The landed A3 pair (78.26 / 78.33) trained without it, on both paths.
@@ -181,6 +182,7 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
       dropPath       := 0.0
       useEMA         := false
       trainRes       := 224      -- no FixRes split: train and eval both at 224
+      trainResize    := .bilinear -- torchvision RandomResizedCrop's default (PyTorch examples)
       testCropRatio  := 0.875 }
 
 /-- Optimizer-regime probe (diagnosing why RSB-A3 at bs512 fell far short of the

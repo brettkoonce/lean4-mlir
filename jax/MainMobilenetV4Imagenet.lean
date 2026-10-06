@@ -83,6 +83,8 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   augment              := true
   useRandAugment       := true
   augBicubic     := true    -- PIL-bicubic geometry, as timm
+  cropTorchvision      := true     -- torchvision RandomResizedCrop, not TF's sampler
+  trainResize          := .random  -- timm train.py's default interpolation: bilinear or bicubic per image
   randAugmentGeometric := true     -- full color+geometric sampler
   randAugmentN         := 2
   randAugmentM         := 9.0      -- reduced from paper 15 for the short schedule

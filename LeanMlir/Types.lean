@@ -546,6 +546,18 @@ inductive OptimizerKind where
   | lamb
 deriving Repr, BEq, DecidableEq
 
+/-- The kernel the ImageNet train crop is resized with (`TrainConfig.trainResize`), always
+    antialiased, as PIL is. -/
+inductive TrainResize where
+  /-- Bicubic: DeiT's and ConvNeXt's `--train-interpolation`, and TF EfficientNet's. -/
+  | bicubic
+  /-- Bilinear: torchvision `RandomResizedCrop`'s default, the 2018 PyTorch-examples recipe. -/
+  | bilinear
+  /-- timm's `random`: bilinear or bicubic, a fair coin per image (`train.py`'s default, which
+      the RSB tiers and MobileNetV4 train under). -/
+  | random
+deriving Repr, BEq, DecidableEq
+
 /-- One reference-path training recipe: learning rate, batch size and epochs, the optimizer
     (`optimizer`), the schedule, the loss (`lossKind`), augmentation, weight averaging, precision and the detector knobs. Read by
     `NetSpec.train` / `NetSpec.runTraining` and by the JAX emitter; each field's docstring says
@@ -701,6 +713,19 @@ structure TrainConfig where
       writes PIL's affine sampler out in the TF graph (a = −1, border clamp, truncation) in place of
       `ImageProjectiveTransformV3(BILINEAR)`. Off keeps every generated file byte-identical. -/
   augBicubic : Bool := false
+  /-- torchvision's `RandomResizedCrop.get_params` (timm's `RandomResizedCropAndInterpolation`
+      draws the same) in place of `tf.image.sample_distorted_bounding_box`: area `U(0.08, 1)` with
+      no `min_object_covered` floor, aspect log-uniform on [3/4, 4/3], the first of 10 draws that
+      fits, else a centre crop at the violated ratio bound. Off keeps every generated file byte-identical; the
+      TF-slim and EfficientNet recipes (MobileNetV2, B0) train under TF's sampler and keep it.
+      Gate: `scripts/gates/crop_sampler_gate.py`. -/
+  cropTorchvision : Bool := false
+  /-- With TF's sampler: EfficientNet's fallback, the eval centre crop (224/256 of the shorter
+      side) where the sampler returned the whole image, in place of the whole image. -/
+  cropFallbackCenter : Bool := false
+  /-- The train crop's resize kernel. `.bicubic`, the default, keeps every generated file
+      byte-identical. -/
+  trainResize : TrainResize := .bicubic
   /-- RandAugment-Color (Cubuk et al. 2019, color subset). Applied
       per-image before mixup/cutmix, after crop/hflip. `randAugmentN`
       ops drawn uniformly from {identity, brightness, contrast, color,

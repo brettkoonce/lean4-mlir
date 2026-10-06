@@ -49,6 +49,7 @@ def vitSImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   useRandAugment := true
   augBicubic     := true    -- PIL-bicubic geometry, as timm
+  cropTorchvision := true   -- torchvision RandomResizedCrop, not TF's sampler (bicubic resize, the recipe's)
   randAugmentGeometric := true
   randAugmentM   := 9.0
   randAugmentMstd := 0.5

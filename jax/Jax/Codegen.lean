@@ -374,6 +374,39 @@ private def randAugmentPyAt (p : Float) : String :=
     ("tf.random.uniform([]) < " ++ toString p ++ ",   # each op applied with prob " ++ toString p ++
      " (TrainConfig.randAugmentProb)")
 
+/-- torchvision's `RandomResizedCrop.get_params` at scale (0.08, 1) and ratio (3/4, 4/3)
+    (`TrainConfig.cropTorchvision`): the 10 (area, ratio) draws are made at once and the first that
+    fits is taken, which is the same distribution as the loop. No op-level seeds: only
+    `sample_distorted_bounding_box` demands one under op determinism, and two same-seeded uniform
+    ops would draw the same stream (the flip's included). `tf.round` rounds half to even, as
+    Python's `round` does. Gate: `scripts/gates/crop_sampler_gate.py`. -/
+private def torchvisionRrcPy : String :=
+"# ── torchvision RandomResizedCrop.get_params (timm's RandomResizedCropAndInterpolation draws
+#    the same): area U(0.08, 1) of the image, aspect log-uniform on [3/4, 4/3], the first of 10
+#    draws that fits, offsets uniform over the valid range; else a centre crop at the ratio bound
+#    the image violates, or the whole image. Returns decode_and_crop_jpeg's window [i, j, h, w]. ──
+def _torchvision_rrc(shape):
+    H = shape[0]; W = shape[1]
+    Hf = tf.cast(H, tf.float32); Wf = tf.cast(W, tf.float32)
+    area = tf.random.uniform([10], 0.08, 1.0) * Hf * Wf
+    ar = tf.exp(tf.random.uniform([10], np.log(3. / 4), np.log(4. / 3)))
+    ws = tf.cast(tf.round(tf.sqrt(area * ar)), tf.int32)
+    hs = tf.cast(tf.round(tf.sqrt(area / ar)), tf.int32)
+    ok = (ws > 0) & (ws <= W) & (hs > 0) & (hs <= H)
+    k = tf.argmax(tf.cast(ok, tf.int32))   # the first draw that fits
+    def hit():
+        h = hs[k]; w = ws[k]
+        i = tf.random.uniform([], 0, H - h + 1, dtype=tf.int32)
+        j = tf.random.uniform([], 0, W - w + 1, dtype=tf.int32)
+        return tf.stack([i, j, h, w])
+    def fallback():
+        r = Wf / Hf
+        w = tf.where(r > 4. / 3, tf.cast(tf.round(Hf * (4. / 3)), tf.int32), W)
+        h = tf.where(r < 3. / 4, tf.cast(tf.round(Wf / (3. / 4)), tf.int32), H)
+        return tf.stack([(H - h) // 2, (W - w) // 2, h, w])
+    return tf.cond(tf.reduce_any(ok), hit, fallback)
+"
+
 /-- `u8Wire` is the batch shim's: it adds one trace-time branch to `_pp` (below) and nothing else,
     so the reference trainers, which call this with the default, regenerate byte-identical. -/
 private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Bool := false) : String :=
@@ -495,18 +528,33 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
     (if cfg.useAutoAugment && cfg.autoAugmentV0 then aaV0Py ++ "\n\n" else "") ++
     (if cfg.randAugmentInc then "_RA_INC = True   # timm inc1 (gap D)\n\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then randAugmentPyAt cfg.randAugmentProb ++ "\n" else "") ++
+    (if cfg.cropTorchvision then "\n" ++ torchvisionRrcPy ++ "\n" else "") ++
     "def _imagenet_decode_random_crop_flip(image_bytes):\n" ++
     "    shape = tf.io.extract_jpeg_shape(image_bytes)\n" ++
-    "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++
-    "    bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(\n" ++
-    "        shape, bounding_boxes=bbox,\n" ++
-    "        min_object_covered=0.1, aspect_ratio_range=(3./4, 4./3.),\n" ++
-    "        area_range=(0.08, 1.0), max_attempts=10,\n" ++
-    "        seed=_AUG_SEED,\n" ++
-    "        use_image_if_no_bounding_boxes=True)\n" ++
-    "    oy, ox, _ = tf.unstack(bbox_begin)\n" ++
-    "    th, tw, _ = tf.unstack(bbox_size)\n" ++
-    "    window = tf.stack([oy, ox, th, tw])\n" ++
+    (if cfg.cropTorchvision then
+      "    window = _torchvision_rrc(shape)\n"
+     else
+      "    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])\n" ++
+      "    bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(\n" ++
+      "        shape, bounding_boxes=bbox,\n" ++
+      "        min_object_covered=0.1, aspect_ratio_range=(3./4, 4./3.),\n" ++
+      "        area_range=(0.08, 1.0), max_attempts=10,\n" ++
+      "        seed=_AUG_SEED,\n" ++
+      "        use_image_if_no_bounding_boxes=True)\n" ++
+      "    oy, ox, _ = tf.unstack(bbox_begin)\n" ++
+      "    th, tw, _ = tf.unstack(bbox_size)\n" ++
+      "    window = tf.stack([oy, ox, th, tw])\n" ++
+      (if cfg.cropFallbackCenter then
+        -- EfficientNet's `_decode_and_random_crop`: a crop with the original's shape is replaced
+        -- by `_decode_and_center_crop`'s window, truncated size and `+ 1` offsets as there.
+        "    # EfficientNet: a crop the sampler returned whole becomes the eval centre crop,\n" ++
+        "    # 224/256 of the shorter side, square (`_decode_and_random_crop`'s `bad` branch).\n" ++
+        "    _cs = tf.cast((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *\n" ++
+        "                  tf.cast(tf.minimum(shape[0], shape[1]), tf.float32), tf.int32)\n" ++
+        "    window = tf.cond((th == shape[0]) & (tw == shape[1]),\n" ++
+        "                     lambda: tf.stack([(shape[0] - _cs + 1) // 2, (shape[1] - _cs + 1) // 2, _cs, _cs]),\n" ++
+        "                     lambda: window)\n"
+       else "")) ++
     "    img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)\n" ++
     -- `antialias=True` HERE TOO, and the training side is the half that costs a re-run.
     -- timm's RandomResizedCrop resamples through PIL, which antialiases. Matching
@@ -515,9 +563,21 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) (u8Wire : Boo
     -- Note this only bites on crops that DOWNSCALE to the train resolution. `antialias` is a
     -- no-op when upsampling (measured, `planning/archive/resize_eval_reconciliation.md`), and RandomResizedCrop's area
     -- range reaches down to 0.08, so a fair share of draws are upsamples where nothing changes.
-    "    img = tf.image.resize([img], " ++
-      (if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]") ++ ",\n" ++
-    "                          method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0]\n" ++
+    (let sz := if cfg.trainRes > 0 then "[_TRAIN_SIZE, _TRAIN_SIZE]" else "[_IMG_SIZE, _IMG_SIZE]"
+     match cfg.trainResize with
+     | .bicubic =>
+      "    img = tf.image.resize([img], " ++ sz ++ ",\n" ++
+      "                          method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0]\n"
+     | .bilinear =>
+      "    img = tf.image.resize([img], " ++ sz ++ ",\n" ++
+      "                          method=tf.image.ResizeMethod.BILINEAR, antialias=True)[0]\n"
+     | .random =>
+      "    # timm's train interpolation 'random': bilinear or bicubic, a fair coin per image\n" ++
+      "    img = tf.cond(tf.random.uniform([]) < 0.5,\n" ++
+      "                  lambda: tf.image.resize([img], " ++ sz ++ ",\n" ++
+      "                                          method=tf.image.ResizeMethod.BILINEAR, antialias=True)[0],\n" ++
+      "                  lambda: tf.image.resize([img], " ++ sz ++ ",\n" ++
+      "                                          method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0])\n") ++
     "    img = tf.image.random_flip_left_right(img, seed=_AUG_SEED)\n" ++
     (if cfg.useAutoAugment then "    img = _autoaugment(img)\n" else "") ++
     (if cfg.useRandAugment && cfg.randAugmentGeometric then

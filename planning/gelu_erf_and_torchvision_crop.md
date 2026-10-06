@@ -15,11 +15,17 @@ pair's agreement claim. Both also appear outside chapter 9 — ch 8's ConvNeXt l
 (`content.tex` ~11002–11007), the still-out lists of §8.6 and §9.7, ch 5's A2/A1 ledger (the crop,
 ~7098), appendix A (~17779) — and the same two fixes close every one of those lines.
 
+**Where things are (2026-10-06, end of session).** §5's decisions are made. Item 4 (§2) is done
+in code and gated, staged on `wp8fg` and **not committed**; no run carries it. Item 3 (§3) has not
+started: the next step is §3.3, the `chlo.erf` probe through `ffi/libpjrt_ffi.so` and
+`iree-compile`. No runs until both items are in the code (§5 b), then the ViT-Ti and ConvNeXt-T
+reruns go first, ahead of the owed R34 / R50 reruns and the side-quest queue.
+
 ## 1. Order
 
 **Crop first, GELU second.** The crop is a day of data-side work with no proof, and it has a
 deadline: the R34 / R50-2018 / R50-A3 reruns the book owes (`r34-default-jax-4gpu`,
-`r50-2018-jax-4gpu`, `r50-a3-jax-4gpu` and their verified rows, f19d859a) and the side-quest
+`r50-2018-jax-4gpu`, `r50-a3-jax-4gpu` and their verified rows, de7f7857) and the side-quest
 queue (A2/A1, MNv4 `full`, ConvNeXt-S/B, ViT-S/B; `side_quest_runs.md` §1, ~78 days) have not
 launched. Every one of those that starts before the crop lands needs a third rerun to close
 item 4; every one that starts after carries it for free. The GELU is multi-day and touches the
@@ -27,6 +33,28 @@ proofs; its reruns are ViT and ConvNeXt only, and the S/B jobs in that queue car
 lands before they start.
 
 ## 2. Item 4: torchvision's RandomResizedCrop
+
+**Status 2026-10-06: in the code, no run yet.** `TrainConfig.cropTorchvision`, `trainResize`
+(`.bicubic` / `.bilinear` / `.random`) and `cropFallbackCenter` (§5 c, d). On: R34 and R50-2018
+bilinear; every RSB tier and MNv4 timm's `random`; ConvNeXt T/S/B and ViT Ti/S/B bicubic. B0 takes
+EfficientNet's centre-crop fallback; MNv2 is byte-identical. 70 of the 74 `jax/generated/` files
+move. `scripts/gates/crop_sampler_gate.py`: 200k draws a shape against torchvision 0.28's
+`get_params` at 375², 500×375, 360×640 and 500×200, KS ≤ 0.004 on scale and log aspect, fallback
+rate equal (0.0122 at 2:5); TF's sampler and a uniform-aspect sampler both red; B0's fallback gives
+the centre window on 298 of 300 draws at 120×1600 and never the whole image; TF's antialiased
+bilinear is within 0.13–0.20 mean / 1 max grey level of PIL's. `pc_crop` in
+`scripts/lib/precheck.sh` is in all 39 ImageNet job confs (all pass DRY_RUN; a pre-change shim
+is refused). `mixup_gate.py`'s gate-1 pins re-pinned (they were already stale before the change);
+`bce_target_gate.py` green. `scripts/parity/identity.py`, named in §2.4, does not exist.
+Book lines move when each net's rerun lands (§2.5). The landed B0 runs trained the whole-image
+fallback; B0's chapter says what ran.
+
+Also in this change: the A3 family (`short` and its derivatives) drops its `augBicubic := false`
+pin and trains C6's bicubic RandAugment geometry like A2/A1 (`imagenet_parity.md` X5); the landed
+A3 pair trained bilinear. `aug_bicubic_pil_check.py` green on the A3 trainer; the two A3 rerun
+confs (`r50-a3-jax-4gpu`, `r50-a3-wxclip4x128-bf16-4gpu`) refuse a file without the bicubic warp.
+Not measured: producer throughput under the new sampler and resize kernels (the side-quest ETAs
+predate it, as they predate X2 / X5 / X6; D17).
 
 ### 2.1 What differs
 
@@ -102,6 +130,8 @@ rerun (§3.9), MNv4 Conv-M stays as a disclosed line.
 **Cost: about one day** (template + gate + regen + digests + prechecks), before any run.
 
 ## 3. Item 3: the exact-erf GELU
+
+**Status 2026-10-06: not started.** Begin at §3.3.
 
 ### 3.1 Today
 
@@ -222,6 +252,11 @@ switch, P-D / P-E) and 6 (the smaller things); and G2–G5 between the two arms,
 paper items.
 
 ## 5. Decisions
+
+Decided 2026-10-06: (a) ImageNet ViT and ConvNeXt only; Imagenette stays. (b) The ViT-Ti and
+ConvNeXt-T reruns go ahead of the side-quest queue, after the code for both items is done; no runs
+before then. (c) Taken with the crop flag. (d) Per recipe: bicubic for DeiT / ConvNeXt; `random`
+for RSB and MNv4; bilinear for R34 and R50-2018 (torchvision's default, the PyTorch-examples recipe).
 
 (a) Land both behind flags and flip the ImageNet ViT and ConvNeXt defaults together
 (recommended), or also flip the Imagenette chapters, which re-measures ch 8's and ch 9's chapter

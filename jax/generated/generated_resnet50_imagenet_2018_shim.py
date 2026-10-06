@@ -53,21 +53,38 @@ _AUG_SEED = int(_AUG_SEED) if _AUG_SEED else None
 
 _RA_INC = True   # timm inc1 (gap D)
 
+
+# ── torchvision RandomResizedCrop.get_params (timm's RandomResizedCropAndInterpolation draws
+#    the same): area U(0.08, 1) of the image, aspect log-uniform on [3/4, 4/3], the first of 10
+#    draws that fits, offsets uniform over the valid range; else a centre crop at the ratio bound
+#    the image violates, or the whole image. Returns decode_and_crop_jpeg's window [i, j, h, w]. ──
+def _torchvision_rrc(shape):
+    H = shape[0]; W = shape[1]
+    Hf = tf.cast(H, tf.float32); Wf = tf.cast(W, tf.float32)
+    area = tf.random.uniform([10], 0.08, 1.0) * Hf * Wf
+    ar = tf.exp(tf.random.uniform([10], np.log(3. / 4), np.log(4. / 3)))
+    ws = tf.cast(tf.round(tf.sqrt(area * ar)), tf.int32)
+    hs = tf.cast(tf.round(tf.sqrt(area / ar)), tf.int32)
+    ok = (ws > 0) & (ws <= W) & (hs > 0) & (hs <= H)
+    k = tf.argmax(tf.cast(ok, tf.int32))   # the first draw that fits
+    def hit():
+        h = hs[k]; w = ws[k]
+        i = tf.random.uniform([], 0, H - h + 1, dtype=tf.int32)
+        j = tf.random.uniform([], 0, W - w + 1, dtype=tf.int32)
+        return tf.stack([i, j, h, w])
+    def fallback():
+        r = Wf / Hf
+        w = tf.where(r > 4. / 3, tf.cast(tf.round(Hf * (4. / 3)), tf.int32), W)
+        h = tf.where(r < 3. / 4, tf.cast(tf.round(Wf / (3. / 4)), tf.int32), H)
+        return tf.stack([(H - h) // 2, (W - w) // 2, h, w])
+    return tf.cond(tf.reduce_any(ok), hit, fallback)
+
 def _imagenet_decode_random_crop_flip(image_bytes):
     shape = tf.io.extract_jpeg_shape(image_bytes)
-    bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
-    bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(
-        shape, bounding_boxes=bbox,
-        min_object_covered=0.1, aspect_ratio_range=(3./4, 4./3.),
-        area_range=(0.08, 1.0), max_attempts=10,
-        seed=_AUG_SEED,
-        use_image_if_no_bounding_boxes=True)
-    oy, ox, _ = tf.unstack(bbox_begin)
-    th, tw, _ = tf.unstack(bbox_size)
-    window = tf.stack([oy, ox, th, tw])
+    window = _torchvision_rrc(shape)
     img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)
     img = tf.image.resize([img], [_TRAIN_SIZE, _TRAIN_SIZE],
-                          method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0]
+                          method=tf.image.ResizeMethod.BILINEAR, antialias=True)[0]
     img = tf.image.random_flip_left_right(img, seed=_AUG_SEED)
     return img
 

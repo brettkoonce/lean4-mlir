@@ -48,6 +48,7 @@ def convNeXtBImagenetConfig : TrainConfig where
   augment        := true
   useRandAugment       := true
   augBicubic     := true    -- PIL-bicubic geometry, as timm
+  cropTorchvision := true   -- torchvision RandomResizedCrop, not TF's sampler (bicubic resize, the recipe's)
   randAugmentGeometric := true
   randAugmentMstd := 0.5
   randAugmentInc  := true

@@ -41,6 +41,8 @@ def resnet34ImagenetConfig : TrainConfig where
   cosineDecay    := true
   warmupEpochs   := 5
   augment        := true
+  cropTorchvision := true   -- torchvision RandomResizedCrop (PyTorch examples), not TF's sampler
+  trainResize    := .bilinear -- RandomResizedCrop's default interpolation
   labelSmoothing := 0.1
   -- bf16 mixed precision (incl. bf16 conv): a CUDA/cuDNN recipe, faster than fp32
   -- on the 4060 Ti box. Its full-50k-val result is the note heading

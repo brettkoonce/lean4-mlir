@@ -327,6 +327,13 @@ def _imagenet_decode_random_crop_flip(image_bytes):
     oy, ox, _ = tf.unstack(bbox_begin)
     th, tw, _ = tf.unstack(bbox_size)
     window = tf.stack([oy, ox, th, tw])
+    # EfficientNet: a crop the sampler returned whole becomes the eval centre crop,
+    # 224/256 of the shorter side, square (`_decode_and_random_crop`'s `bad` branch).
+    _cs = tf.cast((_IMG_SIZE / (_IMG_SIZE + _CROP_PADDING)) *
+                  tf.cast(tf.minimum(shape[0], shape[1]), tf.float32), tf.int32)
+    window = tf.cond((th == shape[0]) & (tw == shape[1]),
+                     lambda: tf.stack([(shape[0] - _cs + 1) // 2, (shape[1] - _cs + 1) // 2, _cs, _cs]),
+                     lambda: window)
     img = tf.io.decode_and_crop_jpeg(image_bytes, window, channels=3)
     img = tf.image.resize([img], [_IMG_SIZE, _IMG_SIZE],
                           method=tf.image.ResizeMethod.BICUBIC, antialias=True)[0]

@@ -111,6 +111,36 @@ pc_shim() {
     echo "⛔ $f has no antialiased resize — it predates C3. scripts/regen_jax_generated.sh sync"; return 1; }
 }
 
+# pc_crop FILE KIND [RESIZE] — the train crop FILE (a trainer or a shim) samples with. KIND
+# `torchvision`: `_torchvision_rrc` (TrainConfig.cropTorchvision; R34, R50, MNv4, ConvNeXt, ViT);
+# `tf`: TF's sample_distorted_bounding_box (MNv2); `tf-centre`: that with EfficientNet's centre-crop
+# fallback (B0). RESIZE `bicubic` | `bilinear` | `random` is the train resize kernel (default bicubic).
+# Gate for the samplers themselves: scripts/gates/crop_sampler_gate.py.
+pc_crop() {
+  local f="$1" kind="$2" rs="${3:-bicubic}" ok=0 calls
+  [ -f "$f" ] || { echo "⛔ missing $f — scripts/regen_jax_generated.sh sync"; return 1; }
+  calls="$(grep -vE '^[[:space:]]*#' "$f" | sed -n '/^def _imagenet_decode_random_crop_flip/,/^    return img$/p')"
+  case "$kind" in
+    torchvision) grep -q 'window = _torchvision_rrc(shape)' <<<"$calls" || {
+        echo "⛔ $f does not crop with torchvision's RandomResizedCrop (cropTorchvision) — re-emit"; ok=1; } ;;
+    tf|tf-centre) grep -q 'sample_distorted_bounding_box' <<<"$calls" || {
+        echo "⛔ $f does not crop with TF's sampler, which this recipe trains under"; ok=1; }
+      if [ "$kind" = tf-centre ]; then grep -q '^    _cs = ' <<<"$calls" || {
+        echo "⛔ $f has no EfficientNet centre-crop fallback (cropFallbackCenter) — re-emit"; ok=1; }
+      else grep -q '^    _cs = ' <<<"$calls" && {
+        echo "⛔ $f carries EfficientNet's centre-crop fallback, which this recipe does not"; ok=1; }; fi ;;
+    *) echo "⛔ pc_crop: unknown kind $kind"; return 1 ;;
+  esac
+  local bil bic; bil="$(grep -c 'ResizeMethod.BILINEAR' <<<"$calls")"; bic="$(grep -c 'ResizeMethod.BICUBIC' <<<"$calls")"
+  case "$rs" in
+    bicubic)  [ "$bil" = 0 ] && [ "$bic" -ge 1 ] ;;
+    bilinear) [ "$bil" -ge 1 ] && [ "$bic" = 0 ] ;;
+    random)   [ "$bil" -ge 1 ] && [ "$bic" -ge 1 ] ;;
+    *) false ;;
+  esac || { echo "⛔ $f's train crop does not resize $rs (trainResize) — re-emit"; ok=1; }
+  return $ok
+}
+
 # The CALL lines of FILE that contain the fixed string PAT: `def` lines and comments are dropped, so
 # a helper that is defined in every shim cannot satisfy the check.
 _pc_calls() { grep -F -- "$2" "$1" 2>/dev/null | grep -vE '^[[:space:]]*(def |#)'; }
