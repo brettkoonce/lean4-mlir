@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFoldG
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # The gradient-node fold for ViT-Tiny at the batched index
 
@@ -243,5 +244,32 @@ theorem rowDenseBTiedB_holds {N tk a c : Nat} {cotN : String} {W : Mat a c}
     {x : Vec (N * (tk * a))} {b : Vec c} {dy : Vec (N * (tk * c))} :
     RowDenseBTiedB N tk cotN W x b dy := fun i =>
   rowDenseBiasGradB_den cotN W (fun n => Mat.unflatten (batchSlice N (tk * a) x n)) b dy i
+
+/-- `RowDenseWTiedB` on the renderer's switch (`SHlo.rowDenseWeightGradBAt bf16 id …`): the f32
+    node at `false`, its bf16 peer at `true` — the six per-block dense weight gradients of a bf16
+    ViT step. ViT is the only net that emits this kind, so the predicate lives here rather than in
+    `GradNodesBAt`; it holds at either value through `Bf16Fold.den_rowDenseWeightGradBAt_id`. -/
+def RowDenseWTiedBAt (bf16 : Bool) (N tk : Nat) {a c : Nat} (xN cotN : String) (bb : Vec c)
+    (x : Vec (N * (tk * a))) (W : Mat a c) (dy : Vec (N * (tk * c))) : Prop :=
+  ∀ (i : Fin a) (j : Fin c),
+    den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := tk) (a := a) (c := c) id xN x
+          (.operand cotN dy))
+        (finProdFinEquiv (i, j))
+      = ∑ n : Fin N, ∑ o : Fin (tk * c),
+          pdiv (fun v : Vec (a * c) =>
+                  Mat.flatten (fun r =>
+                    dense (Mat.unflatten v) bb (Mat.unflatten (batchSlice N (tk * a) x n) r)))
+               (Mat.flatten W) (finProdFinEquiv (i, j)) o
+            * batchSlice N (tk * c) dy n o
+
+theorem rowDenseWTiedBAt_false (N tk : Nat) {a c : Nat} (xN cotN : String) (bb : Vec c)
+    (x : Vec (N * (tk * a))) (W : Mat a c) (dy : Vec (N * (tk * c))) :
+    RowDenseWTiedBAt false N tk xN cotN bb x W dy = RowDenseWTiedB N tk xN cotN bb x W dy := rfl
+
+theorem rowDenseWTiedBAt_holds (bf16 : Bool) {N tk a c : Nat} {xN cotN : String} {bb : Vec c}
+    {x : Vec (N * (tk * a))} {W : Mat a c} {dy : Vec (N * (tk * c))} :
+    RowDenseWTiedBAt bf16 N tk xN cotN bb x W dy := fun i j => by
+  rw [Bf16Fold.den_rowDenseWeightGradBAt_id]
+  exact rowDenseWTiedB_holds i j
 
 end Proofs.ViTFoldGB

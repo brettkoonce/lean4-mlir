@@ -2126,6 +2126,7 @@ open Proofs
 #print axioms Proofs.Bf16Fold.denOp_depthwiseStridedAt_id
 #print axioms Proofs.Bf16Fold.denOp_depthwiseStridedXlaAt_id
 #print axioms Proofs.Bf16Fold.denOp_denseRowAt_id
+#print axioms Proofs.Bf16Fold.denOp_patchEmbedAt_id
 #print axioms Proofs.Bf16Fold.denOp_denseRowBackAt_id
 #print axioms Proofs.Bf16Fold.den_flatConvFAt_id
 #print axioms Proofs.Bf16Fold.den_matmulFBAt_id
@@ -2142,6 +2143,7 @@ open Proofs
 #print axioms Proofs.Bf16Fold.den_depthwiseStridedWeightGradBAt_id
 #print axioms Proofs.Bf16Fold.den_depthwiseStridedXlaWeightGradBAt_id
 #print axioms Proofs.Bf16Fold.den_rowDenseWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_patchEmbedWeightGradBAt_id
 -- The tie predicates on the switch, either bf16 (GradNodesBAt.lean): node, loss derivative, collective
 #print axioms Proofs.GradNodeB.convWTiedBAt_holds
 #print axioms Proofs.GradNodeB.convStridedWTiedBAt_holds
@@ -2238,6 +2240,7 @@ open Proofs
 #print axioms Proofs.GradNodeB.denseWTiedB_holds
 #print axioms Proofs.GradNodeB.denseBTiedB_holds
 #print axioms Proofs.ViTFoldGB.rowDenseWTiedB_holds
+#print axioms Proofs.ViTFoldGB.rowDenseWTiedBAt_holds
 #print axioms Proofs.ViTFoldGB.rowDenseBTiedB_holds
 #print axioms Proofs.GradNodeB.vecLNGammaTiedB_holds
 #print axioms Proofs.GradNodeB.vecLNBetaTiedB_holds

@@ -31,10 +31,11 @@ order, with the typed graph's prefixes and shapes, each block reading the previo
 graphs describe; f32 throughout, and for ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M and
 EfficientNet-B0 also bf16: their typed graphs take the renderer's `bf16` flag
 (`StableHLO.PrecisionSwitch`), so their stem, block and (for the three depthwise nets) head rows
-are checked at both values, the bf16 text against the bf16 graph. ConvNeXt's and ViT's bf16 renders swap in
-`…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not select —
-ConvNeXt's typed graph is the per-example `convNextFwdGraphTCh`, whose renderer has no bf16 (the
-batched bf16 chain has no typed graph at either precision), and ViT's is f32;
+are checked at both values, the bf16 text against the bf16 graph. ConvNeXt's bf16 render swaps in
+`…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that its typed graph does not select — that
+graph is the per-example `convNextFwdGraphTCh`, whose renderer has no bf16 (the batched bf16 chain
+has no typed graph at either precision); ViT's batched graph takes the flags but has no text tie
+at either precision (below);
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
@@ -53,7 +54,11 @@ them `b{n}_` across stages, so the two agree block by block, not name by name ac
 Q, K and V feed every head; the first residual feeds LN2 and the second residual), and `pretty`
 shares nothing, so the graph prints them again at every use where the render names each once; the
 render also slices Q, K and V for a head before any of that head's products, where the graph's
-postorder interleaves them. A text tie would need a sharing printer or a reordered render.
+postorder interleaves them. A text tie would need a sharing printer or a reordered render. The
+batched graph the `vitin_*` artifacts' forward is rendered from, `vitFwdGraphBDrop`, has the same
+sharing; it takes the renderer's `bf16` / `bf16Conv` flags and is faithful at every value
+(`vitFwdGraphBDrop_faithful`), so for ViT the bf16 forward is covered by that theorem alone, as
+the f32 one is.
 
 A `#guard` failing here means the emitted text and the proven graph drifted: the graph's operand
 order, a name, a constructor or a shape differs from what the renderer writes. Fix the side that is

@@ -331,6 +331,14 @@ theorem denOp_denseRowBackAt_id (bf16 : Bool) {rows a c : Nat} (wN : String) (W 
   · rfl
   · exact denseRowBackBf16_id wN W
 
+theorem denOp_patchEmbedAt_id (bf16 : Bool) {ic H W P N D : Nat} (wN bN cN pN : String)
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D) :
+    denOp (BatchableOp.patchEmbedAt bf16 (H := H) (W := W) id wN bN cN pN Wc bc cls pos)
+      = denOp (.patchEmbed (H := H) (W := W) wN bN cN pN Wc bc cls pos) := by
+  cases bf16
+  · rfl
+  · exact patchEmbedBf16_id wN bN cN pN Wc bc cls pos
+
 theorem den_flatConvFAt_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic * h * w)) :
     den (SHlo.flatConvFAt bf16 (h := h) (w := w) id wN bN W b e)
@@ -456,5 +464,13 @@ theorem den_rowDenseWeightGradBAt_id (bf16 : Bool) {N tk a c : Nat} (xN : String
   cases bf16
   · rfl
   · exact rowDenseWeightGradBBf16_id xN x e
+
+theorem den_patchEmbedWeightGradBAt_id (bf16 : Bool) {N ic H W P tk D : Nat} (xN : String)
+    (x : Vec (N * (ic * H * W))) (e : SHlo (N * ((tk + 1) * D))) :
+    den (SHlo.patchEmbedWeightGradBAt bf16 (P := P) id xN x e)
+      = den (.patchEmbedWeightGradB (P := P) xN x e) := by
+  cases bf16
+  · rfl
+  · exact patchEmbedWeightGradBBf16_id xN x e
 
 end Proofs.Bf16Fold

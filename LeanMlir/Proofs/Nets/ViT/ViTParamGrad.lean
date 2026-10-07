@@ -40,9 +40,15 @@ per example and lifted once.
 (`biasGradB`) and the CLS token.
 
 **Hypotheses.** `0 < ε` (the LayerNorms' VJPs); no smoothness hypothesis (GELU has no kink). For
-the smoothed loss, every example's target sums to one and `0 < nC`. Drop-path and the bf16 nodes
-are outside this statement, as they are outside the tie. Stated at ViT-Tiny's literal dims, as the
-tie is.
+the smoothed loss, every example's target sums to one and `0 < nC`. Drop-path is outside this
+statement, as it is outside the tie. Stated at ViT-Tiny's literal dims, as the tie is.
+
+**Precision.** As in the tie: every per-token dense weight node is
+`rowDenseWeightGradBAt bf16 id …` and the patch-embed weight node `patchEmbedWeightGradBAt (bf16 &&
+bf16ConvW) id …` (`StableHLO.PrecisionSwitch`), so `bf16 := true` is the kind the `vitin_*bf16`
+artifacts emit, read over ℝ at the identity rounding (`Bf16Erasure`), and `bf16 := false` the f32
+artifacts'. The bias, LayerNorm, CLS, position and classifier nodes carry no flag because no render
+switches them.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -51,7 +57,7 @@ namespace Proofs.ViTTieGB
 
 open scoped BigOperators
 open Proofs.ViTTie (ViTTieWeights)
-open Proofs.ViTFoldGB (rowDenseBTiedB_holds rowDenseWTiedB_holds)
+open Proofs.ViTFoldGB (rowDenseBTiedB_holds rowDenseWTiedBAt_holds)
 open Proofs.GradNodeB (vecLNBetaTiedB_holds vecLNGammaTiedB_holds hasGradAt_constAdd)
 
 -- ════════════════════════════════════════════════════════════════
@@ -653,7 +659,7 @@ end Chain
     ties, at the tie's batched activations and cotangents, `Φ` the loss at the block's output as a
     function of the block's record. -/
 def vitBlockLossTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (p : BlockParamsV (heads * d) mlpDim) (xin : Vec (N * (Np1 * (heads * d))))
+    (p : BlockParamsV (heads * d) mlpDim) (bf16 : Bool) (xin : Vec (N * (Np1 * (heads * d))))
     (Φ : BlockParamsV (heads * d) mlpDim → Vec 1) (dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
   -- forward saves, as the tie reads them
   let ln1B : Vec (N * (Np1 * (heads * d))) := batchMap N (fun x => (blkSaves gf ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.Wfc1 p.bfc1 x).ln1) xin
@@ -677,22 +683,22 @@ def vitBlockLossTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN 
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN cotLn1B))))
   -- Q / K / V / out-projection W, b
   ∧ (HasGradAt (fun θ => Φ { p with Wq := Mat.unflatten θ }) (Mat.flatten p.Wq)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := heads * d) (c := heads * d) xN ln1B
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := heads * d) (c := heads * d) id xN ln1B
           (.operand cotN dQB))))
   ∧ (HasGradAt (fun θ => Φ { p with bq := θ }) p.bq
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN dQB))))
   ∧ (HasGradAt (fun θ => Φ { p with Wk := Mat.unflatten θ }) (Mat.flatten p.Wk)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := heads * d) (c := heads * d) xN ln1B
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := heads * d) (c := heads * d) id xN ln1B
           (.operand cotN dKB))))
   ∧ (HasGradAt (fun θ => Φ { p with bk := θ }) p.bk
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN dKB))))
   ∧ (HasGradAt (fun θ => Φ { p with Wv := Mat.unflatten θ }) (Mat.flatten p.Wv)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := heads * d) (c := heads * d) xN ln1B
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := heads * d) (c := heads * d) id xN ln1B
           (.operand cotN dVB))))
   ∧ (HasGradAt (fun θ => Φ { p with bv := θ }) p.bv
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN dVB))))
   ∧ (HasGradAt (fun θ => Φ { p with Wo := Mat.unflatten θ }) (Mat.flatten p.Wo)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := heads * d) (c := heads * d) xN attB
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := heads * d) (c := heads * d) id xN attB
           (.operand cotN cotHB))))
   ∧ (HasGradAt (fun θ => Φ { p with bo := θ }) p.bo
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN cotHB))))
@@ -704,13 +710,13 @@ def vitBlockLossTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN 
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN cotLn2B))))
   -- fc1 W/b
   ∧ (HasGradAt (fun θ => Φ { p with Wfc1 := Mat.unflatten θ }) (Mat.flatten p.Wfc1)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := heads * d) (c := mlpDim) xN ln2B
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := heads * d) (c := mlpDim) id xN ln2B
           (.operand cotN cotM1B))))
   ∧ (HasGradAt (fun θ => Φ { p with bfc1 := θ }) p.bfc1
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := mlpDim) (.operand cotN cotM1B))))
   -- fc2 W/b
   ∧ (HasGradAt (fun θ => Φ { p with Wfc2 := Mat.unflatten θ }) (Mat.flatten p.Wfc2)
-        (den (SHlo.rowDenseWeightGradB (N := N) (tk := Np1) (a := mlpDim) (c := heads * d) xN gB
+        (den (SHlo.rowDenseWeightGradBAt bf16 (N := N) (tk := Np1) (a := mlpDim) (c := heads * d) id xN gB
           (.operand cotN dyOut))))
   ∧ (HasGradAt (fun θ => Φ { p with bfc2 := θ }) p.bfc2
         (den (SHlo.rowDenseBiasGradB (N := N) (R := Np1) (c := heads * d) (.operand cotN dyOut))))
@@ -739,12 +745,12 @@ private theorem vit_node_lossTied {P N D b m : Nat} {Lb : Vec (N * D) → Vec 1}
     hnode
 
 theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (hε : 0 < ε) (p : BlockParamsV (heads * d) mlpDim) (xin : Vec (N * (Np1 * (heads * d))))
+    (hε : 0 < ε) (p : BlockParamsV (heads * d) mlpDim) (bf16 : Bool) (xin : Vec (N * (Np1 * (heads * d))))
     {Lb : Vec (N * (Np1 * (heads * d))) → Vec 1} {dyOut : Vec (N * (Np1 * (heads * d)))}
     (hLb : HasGradAt Lb (batchMap N (p.fwdO gf ε) xin) dyOut)
     {Φ : BlockParamsV (heads * d) mlpDim → Vec 1}
     (hΦ : ∀ p', Φ p' = Lb (batchMap N (p'.fwdO gf ε) xin)) :
-    vitBlockLossTiedGB gf N xN epsStr cotN ε p xin Φ dyOut := by
+    vitBlockLossTiedGB gf N xN epsStr cotN ε p bf16 xin Φ dyOut := by
   have hG : ∀ {f : Vec (Np1 * (heads * d)) → Vec (Np1 * (heads * d))},
       (∀ y, p.fwdO gf ε y = f y) → HasGradAt Lb (batchMap N f xin) dyOut :=
     fun h => hLb.congr_point (congrArg (batchMap N · xin) (funext h))
@@ -773,7 +779,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- Q b
     exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wq θ (Mat.unflatten x r)))
@@ -796,7 +802,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- K b
     exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wk θ (Mat.unflatten x r)))
@@ -819,7 +825,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- V b
     exact vit_node_lossTied (fun y => Mat.flatten (vitLn1M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wv θ (Mat.unflatten x r)))
@@ -842,7 +848,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- out-projection b
     exact vit_node_lossTied (fun y => Mat.flatten (vitAttM ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wo θ (Mat.unflatten x r)))
@@ -885,7 +891,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun n => batchSlice_batchMapAux _ _ _ n)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- fc1 b
     exact vit_node_lossTied (fun y => Mat.flatten (vitLn2M ε p y))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wfc1 θ (Mat.unflatten x r)))
@@ -907,7 +913,7 @@ theorem vit_block_lossTiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat
       (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)
       (funext fun idx => by
         obtain ⟨⟨i, j⟩, rfl⟩ := finProdFinEquiv.surjective idx
-        exact (rowDenseWTiedB_holds i j).symm)
+        exact (rowDenseWTiedBAt_holds bf16 i j).symm)
   · -- fc2 b
     exact vit_node_lossTied (fun y => Mat.flatten (fun r => gf.map mlpDim (vitM1M ε p y r)))
       (fun θ x => Mat.flatten (fun r => Proofs.dense p.Wfc2 θ (Mat.unflatten x r)))
@@ -1050,12 +1056,12 @@ theorem patchEmbedFlat_pos_differentiable (Wc : Kernel4 192 3 16 16) (bc cls : V
 /-- **Patch embedding, every parameter node a loss derivative** — the four nodes `vitEmbedTiedGB`
     ties (the CLS token's with the batch sum inside `den`). -/
 def vitEmbedLossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192)
-    (pos : Mat 197 192) (img : Vec (N * (3 * 224 * 224)))
+    (pos : Mat 197 192) (bf16 : Bool) (img : Vec (N * (3 * 224 * 224)))
     (Φ : Kernel4 192 3 16 16 → Vec 192 → Vec 192 → Mat 197 192 → Vec 1)
     (dyEmbed : Vec (N * (197 * 192))) : Prop :=
   HasGradAt (fun θ => Φ (Kernel4.unflatten θ) bc cls pos) (Kernel4.flatten Wc)
-      (den (SHlo.patchEmbedWeightGradB (N := N) (ic := 3) (H := 224) (W := 224) (P := 16)
-        (tk := 196) (D := 192) xN img (.operand cotN dyEmbed)))
+      (den (SHlo.patchEmbedWeightGradBAt bf16 (N := N) (ic := 3) (H := 224) (W := 224) (P := 16)
+        (tk := 196) (D := 192) id xN img (.operand cotN dyEmbed)))
   ∧ HasGradAt (fun θ => Φ Wc θ cls pos) bc
       (den (SHlo.patchEmbedBiasGradB (N := N) (tk := 196) (c := 192) (.operand cotN dyEmbed)))
   ∧ HasGradAt (fun θ => Φ Wc bc θ pos) cls
@@ -1065,12 +1071,12 @@ def vitEmbedLossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16 16) (
       (den (SHlo.posEmbedGradB (N := N) (tk := 196) (D := 192) (.operand cotN dyEmbed)))
 
 theorem vit_embed_lossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16 16)
-    (bc cls : Vec 192) (pos : Mat 197 192) (img : Vec (N * (3 * 224 * 224)))
+    (bc cls : Vec 192) (pos : Mat 197 192) (bf16 : Bool) (img : Vec (N * (3 * 224 * 224)))
     {Lb : Vec (N * (197 * 192)) → Vec 1} {dyEmbed : Vec (N * (197 * 192))}
     (hLb : HasGradAt Lb (batchMap N (patchEmbedFlat 3 224 224 16 196 192 Wc bc cls pos) img) dyEmbed)
     {Φ : Kernel4 192 3 16 16 → Vec 192 → Vec 192 → Mat 197 192 → Vec 1}
     (hΦ : ∀ W b c q, Φ W b c q = Lb (batchMap N (patchEmbedFlat 3 224 224 16 196 192 W b c q) img)) :
-    vitEmbedLossTiedGB N xN cotN Wc bc cls pos img Φ dyEmbed := by
+    vitEmbedLossTiedGB N xN cotN Wc bc cls pos bf16 img Φ dyEmbed := by
   rw [show Φ = fun W b c q => Lb (batchMap N (patchEmbedFlat 3 224 224 16 196 192 W b c q) img) from
     funext fun W => funext fun b => funext fun c => funext fun q => hΦ W b c q]
   refine ⟨?_, ?_, ?_, ?_⟩
@@ -1084,6 +1090,7 @@ theorem vit_embed_lossTiedGB (N : Nat) (xN cotN : String) (Wc : Kernel4 192 3 16
     obtain ⟨⟨a, kw⟩, rfl⟩ := finProdFinEquiv.surjective idx
     obtain ⟨⟨b, kh⟩, rfl⟩ := finProdFinEquiv.surjective a
     obtain ⟨⟨dd, c⟩, rfl⟩ := finProdFinEquiv.surjective b
+    rw [Bf16Fold.den_patchEmbedWeightGradBAt_id]
     exact (ViTFoldGB.patchEmbedWeightGradB_den xN cotN bc cls pos img Wc dyEmbed dd c kh kw).symm
   · refine (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => patchEmbedFlat 3 224 224 16 196 192 Wc θ cls pos y)
@@ -1508,7 +1515,7 @@ theorem vitNetB_eq_vitForwardKV {gf : GeluForm} (N : Nat) {nC : Nat} (ε : ℝ) 
     `vit_net_tiedGB` ties, each at the cotangent the tie threads to it from `g`, stated against
     `L` of `vitNetB` with that one parameter varied. -/
 def ViTNetLossTiedGB (gf : GeluForm) (xN aN epsStr cotN : String) (N : Nat) {nC : Nat} (ε : ℝ)
-    (w : ViTTieWeights nC) (img : Vec (N * (3 * 224 * 224))) (L : Vec (N * nC) → Vec 1) (g : Vec (N * nC)) : Prop :=
+    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool) (img : Vec (N * (3 * 224 * 224))) (L : Vec (N * nC) → Vec 1) (g : Vec (N * nC)) : Prop :=
   let dy12 := batchMapAux N (vitCotTowerOutV 196 192 nC ε w.γF w.Wcls) (vitPreB12 gf N ε w img) g
   let dy11 := batchMapAux N (w.b12.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB11 gf N ε w img) dy12
   let dy10 := batchMapAux N (w.b11.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB10 gf N ε w img) dy11
@@ -1522,33 +1529,33 @@ def ViTNetLossTiedGB (gf : GeluForm) (xN aN epsStr cotN : String) (N : Nat) {nC 
   let dy2 := batchMapAux N (w.b3.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB2 gf N ε w img) dy3
   let dy1 := batchMapAux N (w.b2.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreB1 gf N ε w img) dy2
   let dyEmbed := batchMapAux N (w.b1.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) (vitPreE N w img) dy1
-  vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b1 (vitPreE N w img)
+  vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b1 bf16 (vitPreE N w img)
       (fun p => L (vitNetB gf N ε { w with b1 := p } img)) dy1
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b2 (vitPreB1 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b2 bf16 (vitPreB1 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b2 := p } img)) dy2
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b3 (vitPreB2 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b3 bf16 (vitPreB2 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b3 := p } img)) dy3
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b4 (vitPreB3 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b4 bf16 (vitPreB3 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b4 := p } img)) dy4
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b5 (vitPreB4 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b5 bf16 (vitPreB4 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b5 := p } img)) dy5
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b6 (vitPreB5 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b6 bf16 (vitPreB5 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b6 := p } img)) dy6
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b7 (vitPreB6 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b7 bf16 (vitPreB6 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b7 := p } img)) dy7
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b8 (vitPreB7 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b8 bf16 (vitPreB7 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b8 := p } img)) dy8
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b9 (vitPreB8 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b9 bf16 (vitPreB8 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b9 := p } img)) dy9
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b10 (vitPreB9 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b10 bf16 (vitPreB9 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b10 := p } img)) dy10
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b11 (vitPreB10 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b11 bf16 (vitPreB10 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b11 := p } img)) dy11
-  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b12 (vitPreB11 gf N ε w img)
+  ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b12 bf16 (vitPreB11 gf N ε w img)
       (fun p => L (vitNetB gf N ε { w with b12 := p } img)) dy12
   ∧ vitHeadLossTiedGB N xN aN epsStr cotN ε w.γF w.βF w.Wcls w.bcls (vitPreB12 gf N ε w img)
       (fun a b W bb => L (vitNetB gf N ε { w with γF := a, βF := b, Wcls := W, bcls := bb } img)) g
-  ∧ vitEmbedLossTiedGB N xN cotN w.Wc w.bc w.cls w.pos img
+  ∧ vitEmbedLossTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img
       (fun W b c q => L (vitNetB gf N ε { w with Wc := W, bc := b, cls := c, pos := q } img)) dyEmbed
 
 /-- **Every ViT-Tiny parameter gradient node is the derivative of the loss in that parameter.**
@@ -1560,9 +1567,9 @@ def ViTNetLossTiedGB (gf : GeluForm) (xN aN epsStr cotN : String) (N : Nat) {nC 
     Hypothesis: `0 < ε`, the LayerNorms' (the tie itself needs none). The loss enters only through
     `hL`; `vit_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
 theorem vit_net_lossGrad {gf : GeluForm} (xN aN epsStr cotN : String) (N : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε)
-    (w : ViTTieWeights nC) (img : Vec (N * (3 * 224 * 224))) {L : Vec (N * nC) → Vec 1} {g : Vec (N * nC)}
+    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool) (img : Vec (N * (3 * 224 * 224))) {L : Vec (N * nC) → Vec 1} {g : Vec (N * nC)}
     (hL : HasGradAt L (vitNetB gf N ε w img) g) :
-    ViTNetLossTiedGB gf xN aN epsStr cotN N ε w img L g := by
+    ViTNetLossTiedGB gf xN aN epsStr cotN N ε w bf16 bf16ConvW img L g := by
   unfold ViTNetLossTiedGB
   intro dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed
   have hL' : HasGradAt L (batchMap N (vitHeadO ε w.γF w.βF w.Wcls w.bcls) (vitPreB12 gf N ε w img)) g :=
@@ -1593,33 +1600,33 @@ theorem vit_net_lossGrad {gf : GeluForm} (xN aN epsStr cotN : String) (N : Nat) 
     vitBlkB_hasGradAt_comp N (Np1 := 197) (heads := 3) (d := 64) ε hε w.b2 _ (hB2.congr_point (vitPreB2_apply N ε w img))
   have hE : HasGradAt (fun y => L (vitSufE gf N ε w y)) (vitPreE N w img) dyEmbed :=
     vitBlkB_hasGradAt_comp N (Np1 := 197) (heads := 3) (d := 64) ε hε w.b1 _ (hB1.congr_point (vitPreB1_apply N ε w img))
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b1 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b1 bf16 _
       (hB1.congr_point (vitPreB1_apply N ε w img)) (fun p => by rw [vit_factor_b1]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b2 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b2 bf16 _
       (hB2.congr_point (vitPreB2_apply N ε w img)) (fun p => by rw [vit_factor_b2]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b3 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b3 bf16 _
       (hB3.congr_point (vitPreB3_apply N ε w img)) (fun p => by rw [vit_factor_b3]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b4 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b4 bf16 _
       (hB4.congr_point (vitPreB4_apply N ε w img)) (fun p => by rw [vit_factor_b4]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b5 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b5 bf16 _
       (hB5.congr_point (vitPreB5_apply N ε w img)) (fun p => by rw [vit_factor_b5]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b6 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b6 bf16 _
       (hB6.congr_point (vitPreB6_apply N ε w img)) (fun p => by rw [vit_factor_b6]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b7 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b7 bf16 _
       (hB7.congr_point (vitPreB7_apply N ε w img)) (fun p => by rw [vit_factor_b7]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b8 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b8 bf16 _
       (hB8.congr_point (vitPreB8_apply N ε w img)) (fun p => by rw [vit_factor_b8]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b9 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b9 bf16 _
       (hB9.congr_point (vitPreB9_apply N ε w img)) (fun p => by rw [vit_factor_b9]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b10 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b10 bf16 _
       (hB10.congr_point (vitPreB10_apply N ε w img)) (fun p => by rw [vit_factor_b10]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b11 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b11 bf16 _
       (hB11.congr_point (vitPreB11_apply N ε w img)) (fun p => by rw [vit_factor_b11]), ?_⟩
-  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b12 _
+  refine ⟨vit_block_lossTiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε hε w.b12 bf16 _
       (hB12.congr_point (vitPreB12_apply N ε w img)) (fun p => by rw [vit_factor_b12]), ?_⟩
   refine ⟨vit_head_lossTiedGB N xN aN epsStr cotN ε w.γF w.βF w.Wcls w.bcls _ hL'
     (fun a b W bb => by rw [vit_factor_head]), ?_⟩
-  exact vit_embed_lossTiedGB N xN cotN w.Wc w.bc w.cls w.pos img
+  exact vit_embed_lossTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img
     (hE.congr_point (vitPreE_apply N w img)) (fun W b c q => by rw [vit_factor_embed])
 
 /-- **The loss the artifacts ship**: every node is the derivative of the batched label-smoothed
@@ -1627,10 +1634,10 @@ theorem vit_net_lossGrad {gf : GeluForm} (xN aN epsStr cotN : String) (N : Nat) 
     tie's own `g`, whose logits are `vitNetB N ε w img` (`vit_logitsB_eq`). -/
 theorem vit_net_lossGrad_smoothedCE {gf : GeluForm} (xN aN epsStr cotN aStr negAK bStr logN ohN : String)
     (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : ViTTieWeights nC)
-    (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
-    ViTNetLossTiedGB gf xN aN epsStr cotN N ε w img (smoothedBatchLossDiv N nC α B t)
+    (bf16 bf16ConvW : Bool) (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
+    ViTNetLossTiedGB gf xN aN epsStr cotN N ε w bf16 bf16ConvW img (smoothedBatchLossDiv N nC α B t)
       (den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN (vitNetB gf N ε w img) t)) :=
-  vit_net_lossGrad xN aN epsStr cotN N ε hε w img
+  vit_net_lossGrad xN aN epsStr cotN N ε hε w bf16 bf16ConvW img
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
       fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
@@ -1644,7 +1651,7 @@ theorem vit_net_lossGrad_smoothedCE {gf : GeluForm} (xN aN epsStr cotN aStr negA
     lets (`vitPreE_apply`, …) and the loss side's logits into the tie's (`vit_logitsB_eq`). -/
 theorem vit_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    (w : ViTTieWeights nC)
+    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool)
     (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
     (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
@@ -1681,55 +1688,55 @@ theorem vit_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     let dy1    : Vec (N * (197 * 192)) := batchMapAux N (w.b2.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib2 dy2
     let dyEmbed: Vec (N * (197 * 192)) := batchMapAux N (w.b1.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib1 dy1
     let L := smoothedBatchLossDiv N nC α B t
-    (w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b1 ib1
+    (w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib1 dy1
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b1 bf16 ib1
         (fun p => L (vitNetB gf N ε { w with b1 := p } img)) dy1)
-  ∧ (w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b2 ib2
+  ∧ (w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib2 dy2
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b2 bf16 ib2
         (fun p => L (vitNetB gf N ε { w with b2 := p } img)) dy2)
-  ∧ (w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b3 ib3
+  ∧ (w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib3 dy3
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b3 bf16 ib3
         (fun p => L (vitNetB gf N ε { w with b3 := p } img)) dy3)
-  ∧ (w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b4 ib4
+  ∧ (w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib4 dy4
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b4 bf16 ib4
         (fun p => L (vitNetB gf N ε { w with b4 := p } img)) dy4)
-  ∧ (w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b5 ib5
+  ∧ (w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib5 dy5
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b5 bf16 ib5
         (fun p => L (vitNetB gf N ε { w with b5 := p } img)) dy5)
-  ∧ (w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b6 ib6
+  ∧ (w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib6 dy6
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b6 bf16 ib6
         (fun p => L (vitNetB gf N ε { w with b6 := p } img)) dy6)
-  ∧ (w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b7 ib7
+  ∧ (w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib7 dy7
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b7 bf16 ib7
         (fun p => L (vitNetB gf N ε { w with b7 := p } img)) dy7)
-  ∧ (w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b8 ib8
+  ∧ (w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib8 dy8
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b8 bf16 ib8
         (fun p => L (vitNetB gf N ε { w with b8 := p } img)) dy8)
-  ∧ (w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b9 ib9
+  ∧ (w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib9 dy9
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b9 bf16 ib9
         (fun p => L (vitNetB gf N ε { w with b9 := p } img)) dy9)
-  ∧ (w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b10 ib10
+  ∧ (w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib10 dy10
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b10 bf16 ib10
         (fun p => L (vitNetB gf N ε { w with b10 := p } img)) dy10)
-  ∧ (w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b11 ib11
+  ∧ (w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib11 dy11
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b11 bf16 ib11
         (fun p => L (vitNetB gf N ε { w with b11 := p } img)) dy11)
-  ∧ (w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
-      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b12 ib12
+  ∧ (w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib12 dy12
+      ∧ vitBlockLossTiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε w.b12 bf16 ib12
         (fun p => L (vitNetB gf N ε { w with b12 := p } img)) dy12)
   ∧ (vitFinalLNTiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
       ∧ vitHeadTiedGB N aN cotN hnB w.Wcls w.bcls g
       ∧ vitHeadLossTiedGB N xN aN epsStr cotN ε w.γF w.βF w.Wcls w.bcls b12out
         (fun a b W bb => L (vitNetB gf N ε { w with γF := a, βF := b, Wcls := W, bcls := bb } img)) g)
-  ∧ (vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed
-      ∧ vitEmbedLossTiedGB N xN cotN w.Wc w.bc w.cls w.pos img
+  ∧ (vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img dyEmbed
+      ∧ vitEmbedLossTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img
         (fun W b c q => L (vitNetB gf N ε { w with Wc := W, bc := b, cls := c, pos := q } img)) dyEmbed) := by
   intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out flB hnB logitsB g dy12 dy11 dy10
     dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed L
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14⟩ :=
-    vit_net_tiedGB (gf := gf) N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w img t
+    vit_net_tiedGB (gf := gf) N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w bf16 bf16ConvW img t
   have hl :=
-    vit_net_lossGrad_smoothedCE (gf := gf) xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w img t ht
+    vit_net_lossGrad_smoothedCE (gf := gf) xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w bf16 bf16ConvW img t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : vitPreE N w img = ib1 := by rw [vitPreE_apply N w img]
   have e1 : vitPreB1 gf N ε w img = ib2 := by rw [vitPreB1_apply N ε w img, e0]

@@ -785,10 +785,11 @@ theorem chk_cnx_net_lossGrad :
 theorem chk_vit_net_lossGrad :
     ∀ {gf : Proofs.GeluForm} (xN aN epsStr cotN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.ViTTie.ViTTieWeights nC) (img : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
-          {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
+        ∀ (w : Proofs.ViTTie.ViTTieWeights nC) (bf16 bf16ConvW : Bool)
+          (img : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)}
+          {g : Proofs.Vec (N * nC)},
           Proofs.HasGradAt L (Proofs.ViTTieGB.vitNetB gf N ε w img) g →
-            Proofs.ViTTieGB.ViTNetLossTiedGB gf xN aN epsStr cotN N ε w img L g :=
+            Proofs.ViTTieGB.ViTNetLossTiedGB gf xN aN epsStr cotN N ε w bf16 bf16ConvW img L g :=
   Proofs.ViTTieGB.vit_net_lossGrad
 
 /-- `Proofs.LinFold.linear_net_lossGrad` -/

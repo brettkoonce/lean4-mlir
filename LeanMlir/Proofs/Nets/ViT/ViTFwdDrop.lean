@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Foundation.ParamGrad
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # ViT with stochastic depth — the batched forward graph and its faithfulness
 
@@ -28,10 +29,16 @@ example `t`'s input, with example `t`'s mask entries as its drop scalars.**
 
 The graph uses the render's SSA names (`%wConv`, `b<i>_`, `%gF`, `%Wc`, …). Like
 `vitFwdGraphKMHV`, it is not tied to the artifact text: the render names each shared intermediate
-once (LN1's output feeds Q, K and V), where a graph term repeats the subterm. These artifacts are
-f32 where they are forwards; the bf16 train steps' forward differs by the matmul roundings, and
-their backward through the drop sites is outside this statement, as it is outside
-`ViTStepTieGB`.
+once (LN1's output feeds Q, K and V), where a graph term repeats the subterm.
+
+**Precision.** The graph takes the renderer's two forward flags. `bf16` puts the six per-token
+denses and the two SDPA products of every block on the switch (`denseRowAt bf16 id …`,
+`matmulFBAt bf16 id …`; `StableHLO.PrecisionSwitch`) and `bf16 && bf16Conv` the patch embed
+(`patchEmbedAt`), exactly where `ViTRenderB.vitFwd12B` switches; the classifier head stays f32, as it
+does there. Every statement below holds at every value of both flags (`Bf16Erasure`: at the
+identity rounding each bf16 kind denotes what its f32 peer does), so the bf16 train steps' forward,
+read over ℝ, is the same per-example forward. Their backward through the drop sites is outside this
+statement, as it is outside `ViTStepTieGB`.
 
 ## References
 
@@ -288,31 +295,31 @@ lemma scale_flat_pt {m n : Nat} (s : ℝ) (A : Mat m n) (j : Fin (m * n)) :
     `dropPathB` at `mM`, skip `addVB`. -/
 def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε s : ℝ)
-    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B)
+    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 : Bool)
     (x : SHlo (B * (Np1 * ((hm1 + 1) * d)))) : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
   let ln1 : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
     .batchOp (N := B) (.rowBias (m := Np1) s!"%{pfx}bt1" p.β1)
       (.batchOp (N := B) (.rowScale (m := Np1) s!"%{pfx}g1" p.γ1)
         (.batchOp (N := B) (.lnRow (m := Np1) (n := (hm1 + 1) * d) "%one" "%zero" epsStr ε 1 0) x))
   let q : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
-    .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wq" s!"%{pfx}bq" p.Wq p.bq) ln1
+    .batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wq" s!"%{pfx}bq" p.Wq p.bq) ln1
   let k : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
-    .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wk" s!"%{pfx}bk" p.Wk p.bk) ln1
+    .batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wk" s!"%{pfx}bk" p.Wk p.bk) ln1
   let v : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
-    .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wv" s!"%{pfx}bv" p.Wv p.bv) ln1
+    .batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wv" s!"%{pfx}bv" p.Wv p.bv) ln1
   let att : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
     headsSumGB (fun h : Fin (hm1 + 1) =>
       .batchOp (N := B) (.headPad (N := Np1) (heads := hm1 + 1) (d := d) h)
-        (.matmulFB (m := Np1) (k := Np1) (n := d)
+        (.matmulFBAt bf16 (m := Np1) (k := Np1) (n := d) id
           (.batchOp (N := B) (.softmaxRow (m := Np1) (n := Np1))
             (.scaleB sStr s
-              (.matmulFB (m := Np1) (k := d) (n := Np1)
+              (.matmulFBAt bf16 (m := Np1) (k := d) (n := Np1) id
                 (.batchOp (N := B) (.headSlice (N := Np1) (heads := hm1 + 1) (d := d) h) q)
                 (.batchOp (N := B) (.transpose (m := Np1) (n := d))
                   (.batchOp (N := B) (.headSlice (N := Np1) (heads := hm1 + 1) (d := d) h) k)))))
           (.batchOp (N := B) (.headSlice (N := Np1) (heads := hm1 + 1) (d := d) h) v)))
   let o : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
-    .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wo" s!"%{pfx}bo" p.Wo p.bo) att
+    .batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wo" s!"%{pfx}bo" p.Wo p.bo) att
   let hres : SHlo (B * (Np1 * ((hm1 + 1) * d))) := .addVB x (.dropPathB mA a o)
   let ln2 : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
     .batchOp (N := B) (.rowBias (m := Np1) s!"%{pfx}bt2" p.β2)
@@ -320,24 +327,25 @@ def vitBlockGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
         (.batchOp (N := B) (.lnRow (m := Np1) (n := (hm1 + 1) * d) "%one" "%zero" epsStr ε 1 0)
           hres))
   let m2 : SHlo (B * (Np1 * ((hm1 + 1) * d))) :=
-    .batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wfc2" s!"%{pfx}bfc2" p.Wfc2 p.bfc2)
+    .batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wfc2" s!"%{pfx}bfc2" p.Wfc2 p.bfc2)
       (.batchOp (N := B) (.gelu gf (n := Np1 * mlpDim))
-        (.batchOp (N := B) (.denseRow (N := Np1) s!"%{pfx}Wfc1" s!"%{pfx}bfc1" p.Wfc1 p.bfc1) ln2))
+        (.batchOp (N := B) (.denseRowAt bf16 (N := Np1) id s!"%{pfx}Wfc1" s!"%{pfx}bfc1" p.Wfc1 p.bfc1) ln2))
   .addVB hres (.dropPathB mM m m2)
 
 /-- **Example `t` of the batched drop block is the spelled drop block at example `t`'s input and
     mask entries.** -/
 lemma vitBlockGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat}
     (pfx epsStr sStr mA mM : String) (ε : ℝ)
-    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B)
+    (p : BlockParamsV ((hm1 + 1) * d) mlpDim) (a m : Vec B) (bf16 : Bool)
     (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B) (A : Mat Np1 ((hm1 + 1) * d))
     (hA : batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A) :
     batchSlice B (Np1 * ((hm1 + 1) * d))
-        (den (vitBlockGraphBDrop gf pfx epsStr sStr mA mM ε (sdpaScale d) p a m e)) t
+        (den (vitBlockGraphBDrop gf pfx epsStr sStr mA mM ε (sdpaScale d) p a m bf16 e)) t
       = Mat.flatten (vitBlockSpelledMHVDrop gf Np1 (hm1 + 1) d mlpDim ε (a t) (m t) p A) := by
   simp only [vitBlockGraphBDrop, batchSlice_den_addVB, batchSlice_den_dropPathB,
-    batchSlice_den_batchOp, batchSlice_den_matmulFB, batchSlice_den_scaleB,
-    batchSlice_den_headsSumGB, denOp, hA]
+    batchSlice_den_batchOp, Bf16Fold.den_matmulFBAt_id, batchSlice_den_matmulFB,
+    batchSlice_den_scaleB, batchSlice_den_headsSumGB, Bf16Fold.denOp_denseRowAt_id, hA]
+  simp only [denOp]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat, rowDenseFlat_flat,
     headSliceFlat_flat, transposeFlat_flat, matMulFlat_flat, scale_flat_right,
     rowSoftmaxFlat_flat, headPadFlat_flat, flatten_sum, gelu_flat, scale_flat_pt, add_flat_pt]
@@ -347,55 +355,56 @@ lemma vitBlockGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat}
     `b{base+i}_` and reads `%dp<2(base+i)>` / `%dp<2(base+i)+1>`, as `ViTRenderB.vitFwd12B`
     names them (`vitSiteIdx`). -/
 def vitBodyGraphBDrop (gf : GeluForm) {B Np1 hm1 d mlpDim : Nat}
-    (epsStr sStr : String) (ε s : ℝ) :
+    (epsStr sStr : String) (ε s : ℝ) (bf16 : Bool) :
     (base k : Nat) → (Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) →
     (Fin k → Vec B) → (Fin k → Vec B) →
     SHlo (B * (Np1 * ((hm1 + 1) * d))) → SHlo (B * (Np1 * ((hm1 + 1) * d)))
   | _, 0, _, _, _, e => e
   | base, k + 1, ps, sdA, sdM, e =>
-      vitBodyGraphBDrop gf epsStr sStr ε s (base + 1) k
+      vitBodyGraphBDrop gf epsStr sStr ε s bf16 (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ)
         (vitBlockGraphBDrop gf s!"b{base}_" epsStr sStr (dpName (2 * base)) (dpName (2 * base + 1))
-          ε s (ps 0) (sdA 0) (sdM 0) e)
+          ε s (ps 0) (sdA 0) (sdM 0) bf16 e)
 
 /-- Example `t` of the batched tower is the drop tower at example `t`'s input and mask entries —
     by induction on `k`, one `vitBlockGraphBDrop_slice` per block. -/
-lemma vitBodyGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) (ε : ℝ) :
+lemma vitBodyGraphBDrop_slice {gf : GeluForm} {B Np1 hm1 d mlpDim : Nat} (epsStr sStr : String) (ε : ℝ)
+    (bf16 : Bool) :
     ∀ (base k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim)
       (sdA sdM : Fin k → Vec B) (e : SHlo (B * (Np1 * ((hm1 + 1) * d)))) (t : Fin B)
       (A : Mat Np1 ((hm1 + 1) * d)),
       batchSlice B (Np1 * ((hm1 + 1) * d)) (den e) t = Mat.flatten A →
       batchSlice B (Np1 * ((hm1 + 1) * d))
-          (den (vitBodyGraphBDrop gf epsStr sStr ε (sdpaScale d) base k ps sdA sdM e)) t =
+          (den (vitBodyGraphBDrop gf epsStr sStr ε (sdpaScale d) bf16 base k ps sdA sdM e)) t =
         Mat.flatten (vitBodyKVDrop gf Np1 (hm1 + 1) d mlpDim ε k ps (fun i => (sdA i t, sdM i t)) A)
   | _, 0, _, _, _, _, _, _, hA => hA
   | base, k + 1, ps, sdA, sdM, e, t, A, hA => by
       have hb := vitBlockGraphBDrop_slice (gf := gf) s!"b{base}_" epsStr sStr (dpName (2 * base))
-        (dpName (2 * base + 1)) ε (ps 0) (sdA 0) (sdM 0) e t A hA
-      have ih := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε (base + 1) k
+        (dpName (2 * base + 1)) ε (ps 0) (sdA 0) (sdM 0) bf16 e t A hA
+      have ih := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 (base + 1) k
         (fun i => ps i.succ) (fun i => sdA i.succ) (fun i => sdM i.succ) _ t _ hb
       rw [vitBlockSpelledMHVDrop_eq] at ih
       exact ih
 
 /-- **The batched ViT forward graph with stochastic depth** — the typed form of
-    `ViTRenderB.vitFwd12B … (sd := true)` at depth `k`: batched patch embed over `%x`, the
-    drop tower, final vector-LN, CLS slice, dense head. -/
+    `ViTRenderB.vitFwd12B … (sd := true) bf16 bf16Conv` at depth `k`: batched patch embed over `%x`,
+    the drop tower, final vector-LN, CLS slice, dense head. -/
 def vitFwdGraphBDrop (gf : GeluForm) {B ic H W P N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String) (ε s : ℝ)
     (Wc : Kernel4 ((hm1 + 1) * d) ic P P) (bc cls : Vec ((hm1 + 1) * d))
     (pos : Mat (N + 1) ((hm1 + 1) * d))
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
     (x : Vec (B * (ic * H * W))) : SHlo (B * nClasses) :=
   .batchOp (N := B) (.dense "%Wc" "%bc" Wcls bcls)
     (.batchOp (N := B) (.clsSlice (N := N) (D := (hm1 + 1) * d))
       (.batchOp (N := B) (.rowBias (m := N + 1) "%btF" βF)
         (.batchOp (N := B) (.rowScale (m := N + 1) "%gF" γF)
           (.batchOp (N := B) (.lnRow (m := N + 1) (n := (hm1 + 1) * d) "%one" "%zero" epsStr ε 1 0)
-            (vitBodyGraphBDrop gf epsStr sStr ε s 0 k ps sdA sdM
-              (.batchOp (N := B) (.patchEmbed (N := N) "%wConv" "%bConv" "%cls" "%pos"
-                  Wc bc cls pos)
+            (vitBodyGraphBDrop gf epsStr sStr ε s bf16 0 k ps sdA sdM
+              (.batchOp (N := B) (.patchEmbedAt (bf16 && bf16Conv) (N := N) id
+                  "%wConv" "%bConv" "%cls" "%pos" Wc bc cls pos)
                 (.operand "%x" x)))))))
 
 /-- **Example `t` of the batched drop graph is the per-example drop forward at example `t`'s
@@ -407,21 +416,21 @@ theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDi
     (ε : ℝ)
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
     (x : Vec (B * (ic * H * W))) (t : Fin B) :
     batchSlice B nClasses (den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d)
-        Wc bc cls pos k ps sdA sdM γF βF Wcls bcls x)) t
+        Wc bc cls pos k ps sdA sdM γF βF Wcls bcls bf16 bf16Conv x)) t
       = vitForwardKVDrop gf ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps (fun i => (sdA i t, sdM i t)) γF βF Wcls bcls
           (batchSlice B (ic * H * W) x t) := by
   have h0 : batchSlice B ((N + 1) * ((hm1 + 1) * d))
-      (den (.batchOp (N := B) (.patchEmbed (N := N) (P := patchSize) "%wConv" "%bConv" "%cls" "%pos"
-          Wc bc cls pos) (.operand "%x" x))) t
+      (den (.batchOp (N := B) (.patchEmbedAt (bf16 && bf16Conv) (N := N) (P := patchSize) id
+          "%wConv" "%bConv" "%cls" "%pos" Wc bc cls pos) (.operand "%x" x))) t
       = Mat.flatten (Mat.unflatten (patchEmbedFlat ic H W patchSize N ((hm1 + 1) * d)
           Wc bc cls pos (batchSlice B (ic * H * W) x t))) := by
-    rw [batchSlice_den_batchOp, Mat.flatten_unflatten, den_operand]
+    rw [batchSlice_den_batchOp, Bf16Fold.denOp_patchEmbedAt_id, Mat.flatten_unflatten, den_operand]
     rfl
-  have hbody := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε 0 k ps sdA sdM _ t _ h0
+  have hbody := vitBodyGraphBDrop_slice (gf := gf) epsStr sStr ε bf16 0 k ps sdA sdM _ t _ h0
   simp only [vitFwdGraphBDrop, batchSlice_den_batchOp, denOp, hbody]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat]
   unfold vitForwardKVDrop classifierFlat
@@ -429,7 +438,7 @@ theorem vitFwdGraphBDrop_slice {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDi
   rfl
 
 /-- **The batched ViT forward graph with stochastic depth denotes `vitForwardKVDropB`** — at every
-    depth, every pair of mask families and every input. -/
+    depth, every pair of mask families, every input and either precision. -/
 theorem vitFwdGraphBDrop_faithful {gf : GeluForm} {B ic H W patchSize N hm1 d mlpDim nClasses : Nat}
     (epsStr sStr : String)
     (Wc : Kernel4 ((hm1 + 1) * d) ic patchSize patchSize)
@@ -437,14 +446,15 @@ theorem vitFwdGraphBDrop_faithful {gf : GeluForm} {B ic H W patchSize N hm1 d ml
     (ε : ℝ)
     (k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim) (sdA sdM : Fin k → Vec B)
     (γF βF : Vec ((hm1 + 1) * d))
-    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
+    (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses) (bf16 bf16Conv : Bool)
     (x : Vec (B * (ic * H * W))) :
-    den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d) Wc bc cls pos k ps sdA sdM γF βF Wcls bcls x)
+    den (vitFwdGraphBDrop gf epsStr sStr ε (sdpaScale d) Wc bc cls pos k ps sdA sdM γF βF Wcls bcls
+      bf16 bf16Conv x)
       = vitForwardKVDropB gf B ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps sdA sdM γF βF Wcls bcls x := by
   funext idx
   have h := congrFun (vitFwdGraphBDrop_slice (gf := gf) epsStr sStr Wc bc cls pos ε k ps sdA sdM γF βF
-    Wcls bcls x (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
+    Wcls bcls bf16 bf16Conv x (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2
   simp only [batchSlice, Prod.mk.eta, Equiv.apply_symm_apply] at h
   exact h
 

@@ -212,13 +212,8 @@ def vitFwd12B (gf : GeluForm) (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : B
   -- **The 16×16/s16 patchify stem — the ONE `convolution` in this net**, and therefore the one
   -- op here that takes the conv emit shape (bf16-TYPED result + convert) rather than the dot one.
   let (ce, embed) ← pretty vbB (.batchOp (N := vbB)
-      (if bf16 && bf16Conv then
-        .patchEmbedBf16 (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD) zrnd
-          "%wConv" "%bConv" "%cls" "%pos"
-          (0 : Kernel4 vbD 3 16 16) (0 : Vec vbD) (0 : Vec vbD) (0 : Mat vbTok vbD)
-       else
-        .patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
-          "%wConv" "%bConv" "%cls" "%pos"
+      (.patchEmbedAt (bf16 && bf16Conv) (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk)
+          (D := vbD) zrnd "%wConv" "%bConv" "%cls" "%pos"
           (0 : Kernel4 vbD 3 16 16) (0 : Vec vbD) (0 : Vec vbD) (0 : Mat vbTok vbD))
       (.operand "%x" (0 : Vec (vbB*(3*224*224)))))
   let mut code := ce
@@ -533,14 +528,9 @@ def vitBackAllB (gf : GeluForm) (vbB : Nat) (nClasses : Nat) (smooth : Option (S
     -- `patchEmbedBack` in this traversal and therefore no bf16 twin of one: the stem's input is
     -- `%x`, so it has no input gradient. ConvNeXt's `convStride4` exactly, and the reason
     -- this net needs six ops rather than seven.
-    let (cwC, nwConv) ← pretty vbB (if bf16 && bf16ConvW then
-        .patchEmbedWeightGradBBf16 (N := vbB) (ic := 3) (H := 224) (W := 224)
-          (P := 16) (tk := vbTk) (D := vbD) zrnd "%ximg" (0 : Vec (vbB*(3*224*224)))
-          (.operand dcur zTok)
-      else
-        .patchEmbedWeightGradB (N := vbB) (ic := 3) (H := 224) (W := 224)
-          (P := 16) (tk := vbTk) (D := vbD) "%ximg" (0 : Vec (vbB*(3*224*224)))
-          (.operand dcur zTok))
+    let (cwC, nwConv) ← pretty vbB (.patchEmbedWeightGradBAt (bf16 && bf16ConvW) (N := vbB)
+        (ic := 3) (H := 224) (W := 224) (P := 16) (tk := vbTk) (D := vbD) zrnd "%ximg"
+        (0 : Vec (vbB*(3*224*224))) (.operand dcur zTok))
     let (cbC, nbConv) ← pretty vbB (.patchEmbedBiasGradB (N := vbB) (tk := vbTk) (c := vbD)
         (.operand dcur zTok))
     let (cClSl, dclsRow) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))

@@ -9,7 +9,7 @@ every call site. `pretty` evaluates it, so the emitted text is exactly the chose
 A leaf on `Basic`: the renderers (`RenderKit` and the `*Render*` modules) and the typed forward
 graphs in `Nets/` (`r34IdGraphB`, …) both choose the constructor here, so a render and the graph
 its faithfulness theorem is about cannot pick different kinds for the same flag. The renderers
-pass `zrnd = id` (`Pretty.lean`), the graphs pass `id`, and `Foundation/Bf16Erasure.lean` states
+pass `zrnd = id` (`Pretty.lean`), the graphs pass `id`, and `Foundation.Bf16Erasure` states
 each switch at `id` equal to its f32 peer (`denOp_convAt_id`, `den_convBackBatchedAt_id`, …). -/
 
 namespace Proofs.StableHLO
@@ -164,6 +164,20 @@ namespace Proofs.StableHLO
     (rnd : ℝ → ℝ) :
     SHlo (N*(m*k)) → SHlo (N*(k*n)) → SHlo (N*(m*n)) :=
   if bf16 then .matmulFBBf16 rnd  else .matmulFB
+
+/-- `patchEmbed`, or its bf16 peer at rounding `rnd` when `bf16`. -/
+@[reducible] def BatchableOp.patchEmbedAt (bf16 : Bool) {ic H W P N D : Nat}
+    (rnd : ℝ → ℝ) (wName bName clsName posName : String)
+    (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D) :
+    BatchableOp (ic*H*W) ((N+1)*D) :=
+  if bf16 then .patchEmbedBf16 rnd wName bName clsName posName Wc bc cls pos
+  else .patchEmbed wName bName clsName posName Wc bc cls pos
+
+/-- `patchEmbedWeightGradB`, or its bf16 peer at rounding `rnd` when `bf16`. -/
+@[reducible] def SHlo.patchEmbedWeightGradBAt (bf16 : Bool) {N ic H W P tk D : Nat}
+    (rnd : ℝ → ℝ) (xName : String) (x : Vec (N*(ic*H*W))) :
+    SHlo (N*((tk+1)*D)) → SHlo (D*ic*P*P) :=
+  if bf16 then .patchEmbedWeightGradBBf16 rnd xName x else .patchEmbedWeightGradB xName x
 
 /-- `rowDenseWeightGradB`, or its bf16 peer at rounding `rnd` when `bf16`. -/
 @[reducible] def SHlo.rowDenseWeightGradBAt (bf16 : Bool) {N tk a c : Nat}

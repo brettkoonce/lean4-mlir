@@ -14,9 +14,20 @@ per example, at a hard label. This file is that statement re-pointed along the t
 **Axis 1 — the gradient node.** Every conjunct is at the raw gradient node (`*GradB`), which is
 what `vit_adam_train_step.mlir` and every f32 `vitin_*` artifact emit; the fused op appears only
 in the SGD-inline file. The optimizer update that consumes the node (AdamW, the `wx`/`clip`
-variants, EMA) is outside this statement. The bf16 artifacts emit `*GradBBf16` nodes
-(Foundation/Bf16GradNodes.lean) and are not covered. `ViTFoldGB.lean` is the fold each conjunct
-delegates to.
+variants, EMA) is outside this statement. `ViTFoldGB.lean` is the fold each conjunct delegates to.
+
+**Precision is a flag on the statement.** The bf16 artifacts (`vitin_adamwxclipdropbf16` and its
+EMA, data-parallel, ε and exact-GELU twins) emit the bf16 per-token dense weight gradient
+(`rowDenseWeightGradBBf16`) at the six denses of every block, and — only if the render's
+`bf16ConvW` is set, which no shipped artifact does — the bf16 patch-embed weight gradient
+(`Foundation.Bf16GradNodes`). Both are stated on the renderers' switch:
+`ViTFoldGB.RowDenseWTiedBAt bf16` and `patchEmbedWeightGradBAt bf16 id …`
+(`StableHLO.PrecisionSwitch`), `false` the f32 node, `true` the bf16 one. The capstone
+`vit_net_tiedGB` takes the renderer's two backward flags, `bf16` and `bf16ConvW`, and passes
+`bf16 && bf16ConvW` to the embed as `vitBackAllB` does, so at `bf16 := true, bf16ConvW := false`
+it reaches the shipped bf16 artifacts' gradient nodes read over ℝ exactly as it reads the f32 ones
+(`Bf16Erasure`: at the identity rounding the bf16 kind denotes what its f32 peer does). The bias,
+LayerNorm, CLS, position and classifier nodes carry no flag because no render switches them.
 
 **Axis 2 — the loss.** `g` is a binder, instantiated at `smoothedLossCotGraphDiv` — the six-op
 chain `expe → softmaxDiv → subB → scaleB → addVB → shiftB → divConstB` this render emits at the
@@ -62,7 +73,7 @@ namespace Proofs.ViTTieGB
 
 open scoped BigOperators
 open Proofs.ViTTie (vitBlockFwdOMHV vitBlockCotInAtMHV ViTTieWeights)
-open Proofs.ViTFoldGB (rowDenseBTiedB_holds rowDenseWTiedB_holds)
+open Proofs.ViTFoldGB (rowDenseBTiedB_holds rowDenseWTiedBAt_holds)
 open Proofs.GradNodeB (vecLNBetaTiedB_holds vecLNGammaTiedB_holds)
 
 /-! ## Per-example saves and internal cotangents as functions of a block's INPUT
@@ -182,7 +193,7 @@ noncomputable def cM1 (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
 def vitBlockTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
+    (bf16 : Bool) (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
   -- forward saves — each `batchMap N` of the per-example save the emitted node lifts
   let ln1B : Vec (N * (Np1 * (heads * d))) :=
     batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).ln1) xin
@@ -206,38 +217,38 @@ def vitBlockTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsS
   GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β1 xin γ1 cotLn1B
   ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ1 xin β1 cotLn1B
   -- Q dense W/b  (cot = dQB, dense input = ln1B)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bq ln1B Wq dQB
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bq ln1B Wq dQB
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wq ln1B bq dQB
   -- K dense W/b  (cot = dKB)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bk ln1B Wk dKB
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bk ln1B Wk dKB
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wk ln1B bk dKB
   -- V dense W/b  (cot = dVB)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bv ln1B Wv dVB
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bv ln1B Wv dVB
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wv ln1B bv dVB
   -- out-proj dense W/b  (cot = cotHB, dense input = attB)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bo attB Wo cotHB
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bo attB Wo cotHB
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wo attB bo cotHB
   -- LN₂ γ/β  (cot = cotLn2B, LN input = hB)
   ∧GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β2 hB γ2 cotLn2B
   ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ2 hB β2 cotLn2B
   -- fc1 dense W/b  (cot = cotM1B, dense input = ln2B)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bfc1 ln2B Wfc1 cotM1B
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bfc1 ln2B Wfc1 cotM1B
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wfc1 ln2B bfc1 cotM1B
   -- fc2 dense W/b  (cot = dyOut, dense input = gB)
-  ∧ViTFoldGB.RowDenseWTiedB N Np1 xN cotN bfc2 gB Wfc2 dyOut
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bfc2 gB Wfc2 dyOut
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wfc2 gB bfc2 dyOut
 
 theorem vit_block_tiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
+    (bf16 : Bool) (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
     vitBlockTiedGB gf N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2
-      xin dyOut := by
+      bf16 xin dyOut := by
   unfold vitBlockTiedGB
-  exact ⟨vecLNGammaTiedB_holds, vecLNBetaTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds,
-    rowDenseWTiedB_holds, rowDenseBTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds,
-    rowDenseWTiedB_holds, rowDenseBTiedB_holds, vecLNGammaTiedB_holds, vecLNBetaTiedB_holds,
-    rowDenseWTiedB_holds, rowDenseBTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds⟩
+  exact ⟨vecLNGammaTiedB_holds, vecLNBetaTiedB_holds, rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds,
+    rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds, rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds,
+    rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds, vecLNGammaTiedB_holds, vecLNBetaTiedB_holds,
+    rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds, rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds⟩
 
 /-! ## Final LN, classifier and patch embedding — batched -/
 
@@ -290,10 +301,10 @@ theorem vit_head_tiedGB (N : Nat) {nC : Nat} (aN cotN : String)
     per-example capstone made only at `N = 1`. -/
 def vitEmbedTiedGB (N : Nat) (xN cotN : String)
     (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
-    (img : Vec (N * (3 * 224 * 224))) (dyEmbed : Vec (N * (197 * 192))) : Prop :=
+    (bf16 : Bool) (img : Vec (N * (3 * 224 * 224))) (dyEmbed : Vec (N * (197 * 192))) : Prop :=
   (∀ (dd : Fin 192) (c : Fin 3) (kh kw : Fin 16),
-      den (SHlo.patchEmbedWeightGradB (N := N) (ic := 3) (H := 224) (W := 224) (P := 16)
-            (tk := 196) (D := 192) xN img (.operand cotN dyEmbed))
+      den (SHlo.patchEmbedWeightGradBAt bf16 (N := N) (ic := 3) (H := 224) (W := 224) (P := 16)
+            (tk := 196) (D := 192) id xN img (.operand cotN dyEmbed))
           (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (dd, c), kh), kw))
         = ∑ n : Fin N, ∑ o : Fin ((196 + 1) * 192),
             pdiv (fun v : Vec (192 * 3 * 16 * 16) =>
@@ -328,11 +339,12 @@ def vitEmbedTiedGB (N : Nat) (xN cotN : String)
 
 theorem vit_embed_tiedGB (N : Nat) (xN cotN : String)
     (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
-    (img : Vec (N * (3 * 224 * 224))) (dyEmbed : Vec (N * (197 * 192))) :
-    vitEmbedTiedGB N xN cotN Wc bc cls pos img dyEmbed := by
+    (bf16 : Bool) (img : Vec (N * (3 * 224 * 224))) (dyEmbed : Vec (N * (197 * 192))) :
+    vitEmbedTiedGB N xN cotN Wc bc cls pos bf16 img dyEmbed := by
   unfold vitEmbedTiedGB
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro dd c kh kw
+    rw [Bf16Fold.den_patchEmbedWeightGradBAt_id]
     exact ViTFoldGB.patchEmbedWeightGradB_den xN cotN bc cls pos img Wc dyEmbed dd c kh kw
   · intro i; exact ViTFoldGB.patchEmbedBiasGradB_den cotN Wc bc cls pos img dyEmbed i
   · intro i; exact ViTFoldGB.clsGrad_denB cotN Wc bc cls pos img dyEmbed i
@@ -382,15 +394,15 @@ of theirs, `g` is the smoothed loss cotangent at a general target, and every cot
 
 /-- The block's batched tie (`vitBlockTiedGB`), over its `BlockParamsV` record. -/
 abbrev _root_.Proofs.BlockParamsV.TiedGB (gf : GeluForm) {Np1 heads d mlpDim : Nat}
-    (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ)
+    (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (bf16 : Bool)
     (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
   vitBlockTiedGB gf N xN epsStr cotN ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
-    p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 xin dyOut
+    p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 bf16 xin dyOut
 
 theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim : Nat}
-    (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ)
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB gf N xN epsStr cotN ε xin dyOut :=
-  vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut
+    (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (bf16 : Bool)
+    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB gf N xN epsStr cotN ε bf16 xin dyOut :=
+  vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ bf16 xin dyOut
 
 /-- **The whole depth-12 multi-head ViT-Tiny train step, tied at the batched index, the
     gradient nodes and the smoothed loss — all 200 parameters.** The real forward
@@ -401,9 +413,11 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim :
     blocks' 192 params, the final-LN γ/β, the classifier and the patch-embed wConv/bConv/cls/pos
     all denote the certified batched `Σ_n` gradient at their chain cotangent, and each chain
     cotangent is the backward of its stage's lifted certified VJP (`vitCotTowerOutB_eq_vjp`,
-    `vitBlockCotInB_eq_vjp`) — at the `*GradB` nodes `vit_adam_train_step.mlir` and every f32
-    `vitin_*` artifact emit; the bf16 artifacts emit
-    `*GradBBf16` and are not covered. The CLS token's gradient sums over the batch inside `den`,
+    `vitBlockCotInB_eq_vjp`) — at the gradient nodes `vit_adam_train_step.mlir` and every
+    `vitin_*` train step emit: `bf16` selects the per-token dense weight nodes' kind and
+    `bf16 && bf16ConvW` the patch embed's, `false` the f32 artifacts', `true` the `*bf16` ones', read
+    over ℝ at the identity rounding (`Bf16Erasure`); the right-hand side is the same certified
+    gradient at every value. The CLS token's gradient sums over the batch inside `den`,
     which the per-example capstone could state only at `N = 1`.
 
     `N` and `nC` are binders and there is no smoothness hypothesis (GELU, no kink). The batch
@@ -411,7 +425,7 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim :
     statement is at one replica, at the drop-free chain, and at ViT-Tiny's literal dims. -/
 theorem vit_net_tiedGB {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    (w : ViTTieWeights nC)
+    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool)
     (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) :
     let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
     let ib2    : Vec (N * (197 * 192)) := batchMap N (w.b1.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib1
@@ -446,37 +460,37 @@ theorem vit_net_tiedGB {gf : GeluForm} (N : Nat) {nC : Nat}
     let dy2    : Vec (N * (197 * 192)) := batchMapAux N (w.b3.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib3 dy3
     let dy1    : Vec (N * (197 * 192)) := batchMapAux N (w.b2.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib2 dy2
     let dyEmbed: Vec (N * (197 * 192)) := batchMapAux N (w.b1.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib1 dy1
-    w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
-  ∧ w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
-  ∧ w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
-  ∧ w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
-  ∧ w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
-  ∧ w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
-  ∧ w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
-  ∧ w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
-  ∧ w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
-  ∧ w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
-  ∧ w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
-  ∧ w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
+    w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib1 dy1
+  ∧ w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib2 dy2
+  ∧ w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib3 dy3
+  ∧ w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib4 dy4
+  ∧ w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib5 dy5
+  ∧ w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib6 dy6
+  ∧ w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib7 dy7
+  ∧ w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib8 dy8
+  ∧ w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib9 dy9
+  ∧ w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib10 dy10
+  ∧ w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib11 dy11
+  ∧ w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib12 dy12
   ∧ vitFinalLNTiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
   ∧ vitHeadTiedGB N aN cotN hnB w.Wcls w.bcls g
-  ∧ vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed := by
+  ∧ vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img dyEmbed := by
   intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out flB hnB logitsB g dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact w.b1.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
-  · exact w.b2.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
-  · exact w.b3.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
-  · exact w.b4.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
-  · exact w.b5.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
-  · exact w.b6.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
-  · exact w.b7.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
-  · exact w.b8.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
-  · exact w.b9.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
-  · exact w.b10.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
-  · exact w.b11.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
-  · exact w.b12.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
+  · exact w.b1.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib1 dy1
+  · exact w.b2.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib2 dy2
+  · exact w.b3.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib3 dy3
+  · exact w.b4.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib4 dy4
+  · exact w.b5.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib5 dy5
+  · exact w.b6.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib6 dy6
+  · exact w.b7.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib7 dy7
+  · exact w.b8.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib8 dy8
+  · exact w.b9.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib9 dy9
+  · exact w.b10.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib10 dy10
+  · exact w.b11.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib11 dy11
+  · exact w.b12.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib12 dy12
   · exact vit_finalLN_tiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
   · exact vit_head_tiedGB N aN cotN hnB w.Wcls w.bcls g
-  · exact vit_embed_tiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed
+  · exact vit_embed_tiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img dyEmbed
 
 end Proofs.ViTTieGB
