@@ -635,78 +635,241 @@ theorem chk_vit_net_tied_certified :
 theorem chk_cnx_net_tiedGB :
     ∀ {gf : Proofs.GeluForm} (N : ℕ) {nC : ℕ}
       (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ) (w : Proofs.CnxTie.CnxTieWeights nC) (bf16 : Bool)
-      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (t : Proofs.Vec (N * nC)),
+      (sd : Option (Fin (18 : ℕ) → Proofs.Vec N)) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+      (t : Proofs.Vec (N * nC)),
       have ib1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
         Proofs.StableHLO.batchMap N (Proofs.CnxTie.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
-      have ib2 := Proofs.StableHLO.batchMap N (w.b1.fwdO gf ε) ib1;
-      have ib3 := Proofs.StableHLO.batchMap N (w.b2.fwdO gf ε) ib2;
-      have ibD0 := Proofs.StableHLO.batchMap N (w.b3.fwdO gf ε) ib3;
+      have ib2 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b1 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (0 : Fin (18 : ℕ))) n))
+          ib1;
+      have ib3 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b2 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (1 : Fin (18 : ℕ))) n))
+          ib2;
+      have ibD0 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b3 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (2 : Fin (18 : ℕ))) n))
+          ib3;
       have ib4 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) := Proofs.StableHLO.batchMap N (w.d0.fwdO ε) ibD0;
-      have ib5 := Proofs.StableHLO.batchMap N (w.b4.fwdO gf ε) ib4;
-      have ib6 := Proofs.StableHLO.batchMap N (w.b5.fwdO gf ε) ib5;
-      have ibD1 := Proofs.StableHLO.batchMap N (w.b6.fwdO gf ε) ib6;
+      have ib5 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b4 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (3 : Fin (18 : ℕ))) n))
+          ib4;
+      have ib6 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b5 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (4 : Fin (18 : ℕ))) n))
+          ib5;
+      have ibD1 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b6 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (5 : Fin (18 : ℕ))) n))
+          ib6;
       have ib7 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) := Proofs.StableHLO.batchMap N (w.d1.fwdO ε) ibD1;
-      have ib8 := Proofs.StableHLO.batchMap N (w.b7.fwdO gf ε) ib7;
-      have ib9 := Proofs.StableHLO.batchMap N (w.b8.fwdO gf ε) ib8;
-      have ib10 := Proofs.StableHLO.batchMap N (w.b9.fwdO gf ε) ib9;
-      have ib11 := Proofs.StableHLO.batchMap N (w.b10.fwdO gf ε) ib10;
-      have ib12 := Proofs.StableHLO.batchMap N (w.b11.fwdO gf ε) ib11;
-      have ib13 := Proofs.StableHLO.batchMap N (w.b12.fwdO gf ε) ib12;
-      have ib14 := Proofs.StableHLO.batchMap N (w.b13.fwdO gf ε) ib13;
-      have ib15 := Proofs.StableHLO.batchMap N (w.b14.fwdO gf ε) ib14;
-      have ibD2 := Proofs.StableHLO.batchMap N (w.b15.fwdO gf ε) ib15;
+      have ib8 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b7 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (6 : Fin (18 : ℕ))) n))
+          ib7;
+      have ib9 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b8 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (7 : Fin (18 : ℕ))) n))
+          ib8;
+      have ib10 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b9 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (8 : Fin (18 : ℕ))) n))
+          ib9;
+      have ib11 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b10 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (9 : Fin (18 : ℕ))) n))
+          ib10;
+      have ib12 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b11 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (10 : Fin (18 : ℕ))) n))
+          ib11;
+      have ib13 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b12 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (11 : Fin (18 : ℕ))) n))
+          ib12;
+      have ib14 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b13 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (12 : Fin (18 : ℕ))) n))
+          ib13;
+      have ib15 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b14 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (13 : Fin (18 : ℕ))) n))
+          ib14;
+      have ibD2 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b15 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (14 : Fin (18 : ℕ))) n))
+          ib15;
       have ib16 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) := Proofs.StableHLO.batchMap N (w.d2.fwdO ε) ibD2;
-      have ib17 := Proofs.StableHLO.batchMap N (w.b16.fwdO gf ε) ib16;
-      have ib18 := Proofs.StableHLO.batchMap N (w.b17.fwdO gf ε) ib17;
-      have xhead := Proofs.StableHLO.batchMap N (w.b18.fwdO gf ε) ib18;
+      have ib17 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b16 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (15 : Fin (18 : ℕ))) n))
+          ib16;
+      have ib18 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b17 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (16 : Fin (18 : ℕ))) n))
+          ib17;
+      have xhead : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.fwdOD gf w.b18 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (17 : Fin (18 : ℕ))) n))
+          ib18;
       have gapB := Proofs.StableHLO.batchMap N (Proofs.globalAvgPoolFlat (768 : ℕ) (7 : ℕ) (7 : ℕ)) xhead;
       have hnB := Proofs.StableHLO.batchMap N (Proofs.rowLNVecFlat (1 : ℕ) (768 : ℕ) ε w.hG w.hT) gapB;
       have logitsB := Proofs.StableHLO.batchMap N (Proofs.dense w.Wfc w.bfc) hnB;
       have g := Proofs.StableHLO.den (Proofs.smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t);
       have dyO18 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTieGB.cnxHeadDyXheadChN ε w.hG w.hT w.Wfc w.bfc) xhead g;
-      have dyO17 := Proofs.StableHLO.batchMapAux N (w.b18.cotIn gf ε) ib18 dyO18;
-      have dyO16 := Proofs.StableHLO.batchMapAux N (w.b17.cotIn gf ε) ib17 dyO17;
-      have dyD2 := Proofs.StableHLO.batchMapAux N (w.b16.cotIn gf ε) ib16 dyO16;
+      have dyO17 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b18 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (17 : Fin (18 : ℕ))) n))
+          ib18 dyO18;
+      have dyO16 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b17 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (16 : Fin (18 : ℕ))) n))
+          ib17 dyO17;
+      have dyD2 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b16 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (15 : Fin (18 : ℕ))) n))
+          ib16 dyO16;
       have dyO15 := Proofs.StableHLO.batchMapAux N (w.d2.cotIn ε) ibD2 dyD2;
-      have dyO14 := Proofs.StableHLO.batchMapAux N (w.b15.cotIn gf ε) ib15 dyO15;
-      have dyO13 := Proofs.StableHLO.batchMapAux N (w.b14.cotIn gf ε) ib14 dyO14;
-      have dyO12 := Proofs.StableHLO.batchMapAux N (w.b13.cotIn gf ε) ib13 dyO13;
-      have dyO11 := Proofs.StableHLO.batchMapAux N (w.b12.cotIn gf ε) ib12 dyO12;
-      have dyO10 := Proofs.StableHLO.batchMapAux N (w.b11.cotIn gf ε) ib11 dyO11;
-      have dyO9 := Proofs.StableHLO.batchMapAux N (w.b10.cotIn gf ε) ib10 dyO10;
-      have dyO8 := Proofs.StableHLO.batchMapAux N (w.b9.cotIn gf ε) ib9 dyO9;
-      have dyO7 := Proofs.StableHLO.batchMapAux N (w.b8.cotIn gf ε) ib8 dyO8;
-      have dyD1 := Proofs.StableHLO.batchMapAux N (w.b7.cotIn gf ε) ib7 dyO7;
+      have dyO14 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b15 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (14 : Fin (18 : ℕ))) n))
+          ib15 dyO15;
+      have dyO13 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b14 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (13 : Fin (18 : ℕ))) n))
+          ib14 dyO14;
+      have dyO12 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b13 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (12 : Fin (18 : ℕ))) n))
+          ib13 dyO13;
+      have dyO11 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b12 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (11 : Fin (18 : ℕ))) n))
+          ib12 dyO12;
+      have dyO10 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b11 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (10 : Fin (18 : ℕ))) n))
+          ib11 dyO11;
+      have dyO9 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b10 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (9 : Fin (18 : ℕ))) n))
+          ib10 dyO10;
+      have dyO8 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b9 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (8 : Fin (18 : ℕ))) n))
+          ib9 dyO9;
+      have dyO7 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b8 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (7 : Fin (18 : ℕ))) n))
+          ib8 dyO8;
+      have dyD1 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b7 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (6 : Fin (18 : ℕ))) n))
+          ib7 dyO7;
       have dyO6 := Proofs.StableHLO.batchMapAux N (w.d1.cotIn ε) ibD1 dyD1;
-      have dyO5 := Proofs.StableHLO.batchMapAux N (w.b6.cotIn gf ε) ib6 dyO6;
-      have dyO4 := Proofs.StableHLO.batchMapAux N (w.b5.cotIn gf ε) ib5 dyO5;
-      have dyD0 := Proofs.StableHLO.batchMapAux N (w.b4.cotIn gf ε) ib4 dyO4;
+      have dyO5 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b6 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (5 : Fin (18 : ℕ))) n))
+          ib6 dyO6;
+      have dyO4 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b5 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (4 : Fin (18 : ℕ))) n))
+          ib5 dyO5;
+      have dyD0 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b4 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (3 : Fin (18 : ℕ))) n))
+          ib4 dyO4;
       have dyO3 := Proofs.StableHLO.batchMapAux N (w.d0.cotIn ε) ibD0 dyD0;
-      have dyO2 := Proofs.StableHLO.batchMapAux N (w.b3.cotIn gf ε) ib3 dyO3;
-      have dyO1 := Proofs.StableHLO.batchMapAux N (w.b2.cotIn gf ε) ib2 dyO2;
-      have dyStem := Proofs.StableHLO.batchMapAux N (w.b1.cotIn gf ε) ib1 dyO1;
+      have dyO2 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b3 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (2 : Fin (18 : ℕ))) n))
+          ib3 dyO3;
+      have dyO1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b2 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (1 : Fin (18 : ℕ))) n))
+          ib2 dyO2;
+      have dyStem : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
+        Proofs.StableHLO.batchMapAuxIdx N
+          (fun (n : Fin N) =>
+            Proofs.CnxTie.CnxTieBlk.cotInD gf w.b1 ε (Proofs.exampleSite (Proofs.CnxTieGB.cnxSd sd (0 : Fin (18 : ℕ))) n))
+          ib1 dyO1;
       Proofs.CnxTieGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ bf16 x dyStem ∧
-        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b1 N xN epsStr cotN ε bf16 ib1 dyO1 ∧
-          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b2 N xN epsStr cotN ε bf16 ib2 dyO2 ∧
-            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b3 N xN epsStr cotN ε bf16 ib3 dyO3 ∧
+        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b1 N xN epsStr cotN ε bf16 (Proofs.CnxTieGB.cnxSd sd (0 : Fin (18 : ℕ))) ib1
+            dyO1 ∧
+          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b2 N xN epsStr cotN ε bf16 (Proofs.CnxTieGB.cnxSd sd (1 : Fin (18 : ℕ))) ib2
+              dyO2 ∧
+            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b3 N xN epsStr cotN ε bf16 (Proofs.CnxTieGB.cnxSd sd (2 : Fin (18 : ℕ))) ib3
+                dyO3 ∧
               w.d0.TiedGB N xN epsStr cotN ε bf16 ibD0 dyD0 ∧
-                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b4 N xN epsStr cotN ε bf16 ib4 dyO4 ∧
-                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b5 N xN epsStr cotN ε bf16 ib5 dyO5 ∧
-                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b6 N xN epsStr cotN ε bf16 ib6 dyO6 ∧
+                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b4 N xN epsStr cotN ε bf16 (Proofs.CnxTieGB.cnxSd sd (3 : Fin (18 : ℕ)))
+                    ib4 dyO4 ∧
+                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b5 N xN epsStr cotN ε bf16
+                      (Proofs.CnxTieGB.cnxSd sd (4 : Fin (18 : ℕ))) ib5 dyO5 ∧
+                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b6 N xN epsStr cotN ε bf16
+                        (Proofs.CnxTieGB.cnxSd sd (5 : Fin (18 : ℕ))) ib6 dyO6 ∧
                       w.d1.TiedGB N xN epsStr cotN ε bf16 ibD1 dyD1 ∧
-                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b7 N xN epsStr cotN ε bf16 ib7 dyO7 ∧
-                          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b8 N xN epsStr cotN ε bf16 ib8 dyO8 ∧
-                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b9 N xN epsStr cotN ε bf16 ib9 dyO9 ∧
-                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b10 N xN epsStr cotN ε bf16 ib10 dyO10 ∧
-                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b11 N xN epsStr cotN ε bf16 ib11 dyO11 ∧
-                                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b12 N xN epsStr cotN ε bf16 ib12 dyO12 ∧
-                                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b13 N xN epsStr cotN ε bf16 ib13 dyO13 ∧
-                                      Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b14 N xN epsStr cotN ε bf16 ib14 dyO14 ∧
-                                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b15 N xN epsStr cotN ε bf16 ib15 dyO15 ∧
+                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b7 N xN epsStr cotN ε bf16
+                            (Proofs.CnxTieGB.cnxSd sd (6 : Fin (18 : ℕ))) ib7 dyO7 ∧
+                          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b8 N xN epsStr cotN ε bf16
+                              (Proofs.CnxTieGB.cnxSd sd (7 : Fin (18 : ℕ))) ib8 dyO8 ∧
+                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b9 N xN epsStr cotN ε bf16
+                                (Proofs.CnxTieGB.cnxSd sd (8 : Fin (18 : ℕ))) ib9 dyO9 ∧
+                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b10 N xN epsStr cotN ε bf16
+                                  (Proofs.CnxTieGB.cnxSd sd (9 : Fin (18 : ℕ))) ib10 dyO10 ∧
+                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b11 N xN epsStr cotN ε bf16
+                                    (Proofs.CnxTieGB.cnxSd sd (10 : Fin (18 : ℕ))) ib11 dyO11 ∧
+                                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b12 N xN epsStr cotN ε bf16
+                                      (Proofs.CnxTieGB.cnxSd sd (11 : Fin (18 : ℕ))) ib12 dyO12 ∧
+                                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b13 N xN epsStr cotN ε bf16
+                                        (Proofs.CnxTieGB.cnxSd sd (12 : Fin (18 : ℕ))) ib13 dyO13 ∧
+                                      Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b14 N xN epsStr cotN ε bf16
+                                          (Proofs.CnxTieGB.cnxSd sd (13 : Fin (18 : ℕ))) ib14 dyO14 ∧
+                                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b15 N xN epsStr cotN ε bf16
+                                            (Proofs.CnxTieGB.cnxSd sd (14 : Fin (18 : ℕ))) ib15 dyO15 ∧
                                           w.d2.TiedGB N xN epsStr cotN ε bf16 ibD2 dyD2 ∧
-                                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b16 N xN epsStr cotN ε bf16 ib16 dyO16 ∧
-                                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b17 N xN epsStr cotN ε bf16 ib17 dyO17 ∧
-                                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b18 N xN epsStr cotN ε bf16 ib18 dyO18 ∧
+                                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b16 N xN epsStr cotN ε bf16
+                                                (Proofs.CnxTieGB.cnxSd sd (15 : Fin (18 : ℕ))) ib16 dyO16 ∧
+                                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b17 N xN epsStr cotN ε bf16
+                                                  (Proofs.CnxTieGB.cnxSd sd (16 : Fin (18 : ℕ))) ib17 dyO17 ∧
+                                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b18 N xN epsStr cotN ε bf16
+                                                    (Proofs.CnxTieGB.cnxSd sd (17 : Fin (18 : ℕ))) ib18 dyO18 ∧
                                                   Proofs.CnxTieGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
                                                     w.bfc xhead g :=
   Proofs.CnxTieGB.cnx_net_tiedGB
@@ -777,10 +940,11 @@ theorem chk_enet_net_lossGrad :
 theorem chk_cnx_net_lossGrad :
     ∀ {gf : Proofs.GeluForm} (xN epsStr cotN dN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.CnxTie.CnxTieWeights nC) (bf16 : Bool) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
-          {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
-          Proofs.HasGradAt L (Proofs.CnxTieGB.cnxNetB gf N ε w x) g →
-            Proofs.CnxTieGB.CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 x L g :=
+        ∀ (w : Proofs.CnxTie.CnxTieWeights nC) (bf16 : Bool) (sd : Option (Fin (18 : ℕ) → Proofs.Vec N))
+          (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)}
+          {g : Proofs.Vec (N * nC)},
+          Proofs.HasGradAt L (Proofs.CnxTieGB.cnxNetB gf N ε w sd x) g →
+            Proofs.CnxTieGB.CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 sd x L g :=
   Proofs.CnxTieGB.cnx_net_lossGrad
 
 /-- `Proofs.ViTTieGB.vit_net_lossGrad` -/

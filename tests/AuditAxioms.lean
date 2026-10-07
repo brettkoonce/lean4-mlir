@@ -84,6 +84,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtDropBlock
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ViT.ViTDropBlock
 import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
@@ -940,6 +941,13 @@ open Proofs
 #print axioms Proofs.ViTTieGB.vitCotXinV_attn
 #print axioms Proofs.ViTTieGB.vitCotHVD_eq
 #print axioms Proofs.ViTTieGB.cotInD_eq_vjp
+-- One ConvNeXt block with its drop site, per example (Nets/ConvNeXt/ConvNeXtDropBlock.lean)
+#print axioms Proofs.CnxTieGB.fwdOD_none
+#print axioms Proofs.CnxTieGB.cotInD_none
+#print axioms Proofs.CnxTieGB.cotInD_eq_cotIn
+#print axioms Proofs.CnxTieGB.bodyF_back
+#print axioms Proofs.CnxTie.CnxTieBlk.fwdODHasVJP
+#print axioms Proofs.CnxTieGB.cotInD_eq_vjp
 -- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
 #print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
 #print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful

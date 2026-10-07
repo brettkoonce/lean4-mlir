@@ -199,9 +199,9 @@ status:
     - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
     - {declaration: "Proofs.ViTTie.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact, at either precision (ViT-Tiny's twin, also at either precision and at its drop-path sites, is Proofs.ViTTieGB.vit_net_tiedGB)
+    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact, at either precision and at its drop-path sites (ViT-Tiny's twin, also at either precision and at its drop-path sites, is Proofs.ViTTieGB.vit_net_tiedGB)
     - {declaration: "Proofs.CnxTieGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50, MobileNetV2, MobileNetV4, EfficientNet-B0, ConvNeXt-T and ViT-Tiny, every one at either precision (bf16 binder); MobileNetV2's also at its classifier-dropout site (cd binder: none the drop-free artifacts, some the do ones, the loss read at mobilenetv2ForwardBFullDoOpt) and EfficientNet-B0's at both its mask sites (sd, the nine stochastic-depth blocks, and cd; the loss read at efficientnetForwardBFullDrop, a skip block's branch at dropPathOpt s dy); ViT-Tiny's at its 24 stochastic-depth sites (sd, two per block, through the indexed lift batchMapIdx; the loss read at vitNetB sd)
+    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50, MobileNetV2, MobileNetV4, EfficientNet-B0, ConvNeXt-T and ViT-Tiny, every one at either precision (bf16 binder); MobileNetV2's also at its classifier-dropout site (cd binder: none the drop-free artifacts, some the do ones, the loss read at mobilenetv2ForwardBFullDoOpt) and EfficientNet-B0's at both its mask sites (sd, the nine stochastic-depth blocks, and cd; the loss read at efficientnetForwardBFullDrop, a skip block's branch at dropPathOpt s dy); ViT-Tiny's at its 24 stochastic-depth sites and ConvNeXt-T's at its 18 (sd, through the indexed lift batchMapIdx; the loss read at vitNetB sd / cnxNetB sd)
     - {declaration: "Proofs.ResNet34TieB.r34_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.ResNet50TieB.r50_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.MobileNetV2TieB.mnv2_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -485,7 +485,11 @@ fidelity:
        param_batchMapIdx_through, Foundation/Batched/Indexed.lean: example n's block at its own
        mask entries, Nets/ViT/ViTDropBlock.lean the block per example), so
        vitin_emadp128x4wxclipdropeps0000001erfbf16 is reached at its gradient nodes with only its
-       EMA tail outside; ConvNeXt-T's drop-path chain is still outside its ties.
+       EMA tail outside; ConvNeXt-T's the same way (sd, one site per block between
+       LayerScale and the skip add, so the whole branch reads the dropped cotangent;
+       Nets/ConvNeXt/ConvNeXtDropBlock.lean the block per example), so
+       convnextin_adamdpwxclipdroperfbf16 is reached at its gradient nodes. Every masked
+       site of the book's seven jobs is now inside its ties.
 
     4g. THE PROOFS-TIER PORT (2026-09-06 to 09-07), the record the labels 4g-4t used to carry
        here in full; the write-ups are planning/archive/proofs_tier_to_paper_nets.md,

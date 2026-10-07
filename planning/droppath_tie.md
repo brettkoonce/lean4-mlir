@@ -5,48 +5,30 @@ and loss-gradient tie is stated at either precision). The table and site counts 
 against the job confs, the manifest and the renderers; §1 is the first net landed and the recipe
 the rest follow.
 
-## ▶ Start here (next session): the book sentences, then ConvNeXt-T
+## ▶ Start here (next session): the book sentences — the Lean side is DONE
 
-**State (2026-10-07, third pass).** Three of the four masked nets are done on `wp8fg` (not
-pushed): MobileNetV2's classifier dropout (`a442268c`), EfficientNet-B0's nine drop sites +
-dropout (`6316cde4`), and ViT-Tiny's 24 drop sites through the indexed lift (§3, staged).
-`vit_net_tiedGB` / `vit_net_lossGrad` (+ `_smoothedCE`, `vit_net_tied_lossGrad`) take `sd :
-Option (Fin 12 → Vec N × Vec N)` after `bf16ConvW` — `none` the drop-free statements by `rfl`,
-`some` the `*drop*` chains — so `vit-default-emabf16-4gpu` is reached at its gradient nodes with
-only its EMA tail outside. ConvNeXt-T (18 sites) is the last net; the lift it needs is built.
+**State (2026-10-07, fourth pass).** All four masked nets are done on `wp8fg` (not pushed):
+MobileNetV2's classifier dropout (`a442268c`), EfficientNet-B0's nine drop sites + dropout
+(`6316cde4`), ViT-Tiny's 24 drop sites through the indexed lift (`da62e3b4`, §3), ConvNeXt-T's 18
+(§4, staged). Every masked site of the book's seven jobs is inside its ties; what stays outside is
+optimizer tails (EMA, accumulation) and, for MNv4 (side quest, no book job), its masks.
 
-**First, the book (one small commit, preview on :8766).** The Lean moved; these sentences have
-not: MNv2 — `thm:mobilenetv2_step_tie` / `_loss_grad` texts (~7636–7696, "at either precision as
-for ResNet-34" → and at its classifier-dropout site, the loss of `mobilenetv2ForwardBFullDoOpt`),
-`thm:mobilenetv2_sync_tie` (~7801–7826), the run paragraph's "its classifier dropout sits outside
-that statement" (~8363); B0 — the forward sentence stays (~9138), the step-tie text "on the chain
-without stochastic depth or classifier dropout; the optimizer tails … outside" (~9198 → at the
-renderer's two sites, the EMA tail outside), the sync-tie and loss-gradient texts, the run
-paragraph (~9683); ViT — the step-tie / loss-gradient theorem texts and the run paragraph's "the
-drop-path chain" (grep `vit_net_tiedGB`, `vit_net_lossGrad` in content.tex); the trust summary's
-"on the chain without drop-path" (18760, 18802 → "without drop-path" now names ConvNeXt-T only).
-Then blueprint `lean_decls` regenerated + `blueprint_uses.py --check`, `docstring-checkrefs`.
+**The book (one commit, preview on :8766).** Sentences the Lean has outrun: MNv2 —
+`thm:mobilenetv2_step_tie` / `_loss_grad` texts (~7636–7696, add: and at its classifier-dropout
+site, the loss of `mobilenetv2ForwardBFullDoOpt`), `thm:mobilenetv2_sync_tie` (~7801–7826), the run
+paragraph's "its classifier dropout sits outside that statement" (~8363); B0 — the step-tie text
+"on the chain without stochastic depth or classifier dropout; the optimizer tails … outside"
+(~9198 → at the renderer's two sites, the EMA tail outside), the sync-tie and loss-gradient texts,
+the run paragraph (~9683); ViT and ConvNeXt — the step-tie / loss-gradient theorem texts and the
+run paragraphs' "the drop-path chain" (grep `vit_net_tiedGB`, `vit_net_lossGrad`,
+`cnx_net_tiedGB`, `cnx_net_lossGrad` in content.tex); the trust summary's "on the chain without
+drop-path" (18760, 18802 → now nothing; drop the qualifier). Then blueprint `lean_decls`
+regenerated + `blueprint_uses.py --check`, `docstring-checkrefs`.
 
-**Then ConvNeXt-T — cheaper than ViT.** One site per block, between LayerScale and the skip add
-(`ConvNeXtRenderB` forward ~197, backward `bwdBlockB` ~383): the WHOLE branch reads `s ⊙ dy`
-(LayerScale γ's node included — the render's docstring names it as the one gradient that would
-silently miss the scale) and only the skip reads `dy`. So per example every node cotangent is the
-drop-free one at `dropScalarOpt s dy`, and the block is ONE `siteResHasVJP` over the drop-free
-branch. Recipe, from §3:
-1. A per-example drop block file beside `ConvNeXtStepTie` (as `ViTDropBlock`): the block forward
-   with one `Option ℝ` site (`siteScale` before the add, `none` = `fwdO` by `rfl`), `cotInD`
-   (`none` = `cotIn` by `rfl`), the branch's VJP read off the existing block tie minus its skip
-   (`vitAttnBr_back`'s `linarith` pattern), `fwdOD_eq_site`, `fwdODHasVJP` (typed wrappers around
-   `siteResHasVJP`, §3 trap 2), `cotInD_eq_vjp`.
-2. `ConvNeXtStepTieGB`: the block's saves / cotangents on `batchMapIdx` / `batchMapAuxIdx` at
-   `exampleSite s n`, the capstone's `sd : Option (Fin 18 → Vec N)` (the stage blocks; the
-   downsample layers carry no site — check `vitSiteIdx`'s ConvNeXt peer for the numbering), the
-   `CnxTieBlk` record's `TiedGB` with the site.
-3. `ConvNeXtParamGrad`: thread the site through the per-example `cnxPost*` (the site sits at the
-   very end of each, so it is one `hasGradAt_constAdd_site` per block), the bundle on
-   `param_batchMapIdx_through`, the net's prefixes / suffixes / factors. The `@[irreducible]` stem
-   has no site; leave it untouched.
-4. Same discipline: stage, stop for the commit word; comparator + yaml + book move with the Lean.
+**Optional after.** (a) The `some` side of the canonical-forward lemmas: `vitNetB_eq_vitForwardKV`
+and `cnxNetB_eq_convNextForwardTCh` are stated at `none`; at `some` the ViT one would meet
+`ViTFwdDrop`'s `vitForwardKVDropB` (ConvNeXt has no masked forward graph to meet). (b) MNv4 by
+B0's recipe, if the side quest is ever written up.
 
 ## 1. MobileNetV2 classifier dropout — DONE 2026-10-07
 
@@ -206,6 +188,28 @@ Foundation plus a concatenated mask+save slot. `Foundation/Batched/Indexed.lean`
 * Zero proof failures in the bundle (16 nodes) and the Chain section on first compile, after
   scripted threading with count-asserted replacements.
 
+## 4. ConvNeXt-T — 18 drop sites — DONE 2026-10-07
+
+**What landed.** One site per block, between LayerScale and the skip add, so the whole branch
+reads `s ⊙ dy` and the forward saves are untouched.
+* `Nets/ConvNeXt/ConvNeXtDropBlock.lean`: `CnxTieBlk.bodyF` (the branch, `cnxBodyWith` at
+  `toCh`), `fwdOD s x = siteScale s (body x) + x` (`fwdOD_none` `rfl`), `cotInD` (the chain at
+  `dropScalarOpt s dy`, skip raw; `cotInD_none` `rfl`), `cotInD_eq_cotIn` (the drop-free chain at
+  `s ⊙ dy` with the skip swapped back, `ring`), `bodyF_back` (the branch backward = `cotIn − id`,
+  `linarith` off `cnxBlockCotInChAt_eq_vjp`, which MOVED here from `ConvNeXtStepTieGB`, same name),
+  `fwdODHasVJP` (`biPathHasVJP` over `dropScalarOpt s ∘ body` — the skip is on the right here, so not
+  `siteResHasVJP`), `cotInD_eq_vjp`.
+* `ConvNeXtStepTieGB`: `cnxBlockChTiedGB` at `sd : Option (Vec N)` — every node's cotangent at
+  `dropPathOpt N _ sd dyOut` (the saves keep the UNIFORM lift), `cnxSd`, `cnxBlockCotInB_eq_vjp` on
+  the indexed lift, the capstone's `sd : Option (Fin 18 → Vec N)`.
+* `ConvNeXtParamGrad`: `cnxPostP` ends in `siteScale s`, `cnxPost*` / `cnxBlk_hasGradAt` carry the
+  site (every conclusion's cotangent at `dropScalarOpt s dy`), the 9-node bundle on
+  `param_batchMapIdx_through` with the cotangent slices as `have`s (`hCD` … `hCP`:
+  `batchSlice_batchMapAux` then `batchSlice_dropPathOpt`), the net threaded as ViT's;
+  `cnxNetB_eq_convNextForwardTCh` at `none` (the same `hb` bridge).
+* Zero proof failures in the block section and the bundle on first compile; one closer (the
+  `none` forward lemma) needed the bridge, as for ViT.
+
 **The gap.** Every step tie, sync tie and `*_net_lossGrad` is stated on the chain WITHOUT the
 training masks. The book's seven jobs (`content.tex` job table, ~18370; each conf's
 `LEAN_MLIR_VARIANT` names the artifact) train these:
@@ -217,7 +221,7 @@ training masks. The book's seven jobs (`content.tex` job table, ~18370; each con
 | `r50-a3-wxclip4x128-bf16-4gpu` → `resnet50in160_lambaccdp4x128wxclipbcebf16` | — (A3 sets `dropPath := 0.0`, `ResNet50RenderB`; the `*drop*` R50 renders are A2's, no job) | — | accumulation |
 | `mnv2-default-4gpu` → `mobilenetv2in_rmsdp64wxdols0eps0001bf16` | — | 1 (`%do`, per element, before the dense) — DONE, §1 | — |
 | `enet-default-4gpu` → `efficientnetin_emarmsdp64dropdowxeps0001bf16` | 9 (the skip-carrying MBConvs of 16) — DONE, §2 | 1 — DONE, §2 | EMA |
-| `cnx-default-4gpu` → `convnextin_adamdpwxclipdroperfbf16` | 18 (one per block) | — | — |
+| `cnx-default-4gpu` → `convnextin_adamdpwxclipdroperfbf16` | 18 (one per block) — DONE, §4 | — | — |
 | `vit-default-emabf16-4gpu` → `vitin_emadp128x4wxclipdropeps0000001erfbf16` | 24 (two per block) — DONE, §3 | — | EMA |
 
 Side quest, not a book job: MobileNetV4-Conv-M `mnv4in_emaaccdp8x128wxdowd005bf16` (dropout;

@@ -985,8 +985,8 @@ def convnextVerified : VerifiedNetSpec where
     global 256 at four replicas, the reference's batch.
 
     What is proved about it: the train-step capstone `Proofs.CnxTieGB.cnx_net_tiedGB` binds the
-    class count, so it covers this 1000-class head, at one replica, in f32, on the chain without
-    drop-path. The `SpecVJP` ties are stated at 10 classes.
+    class count, so it covers this 1000-class head, at one replica, at either precision, with or
+    without drop-path (its `sd` binder). The `SpecVJP` ties are stated at 10 classes.
 
     `convNeXtTinyImagenetConfig`'s extra knobs — mixup 0.8, cutmix 1.0, stochastic depth 0.1, EMA
     0.9999, grad clip 1.0 and `wdExcludeNormBias` — land as follows:
