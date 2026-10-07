@@ -37,8 +37,10 @@ the repo's rounding model at every integer power of two — so for bf16 (`rndP 7
 
 ## What is NOT claimed
 
-Note: No whole-net statement: there is no single-device bf16 chain for either net to tie a twin to,
-here or in the f32 tier. These are the per-node cases a bf16 twin would walk its chain with.
+Note: No whole-net statement at a real rounding. The whole-net sync ties are stated at either
+precision at the identity rounding the renderers use (`Bf16Erasure`, `GradNodesBAt`); one at
+`rnd := rndP 7` would need a chain threaded with `rnd`, which no net has (planning/bf16_tie.md §4).
+These are the per-node cases such a chain would walk with.
 Note: `rndP` has an unbounded exponent (`RndP.lean`): bf16 overflow and subnormals are
 outside it, where scaling by 4 can move a value across the format's boundary.
 -/

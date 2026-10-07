@@ -7,7 +7,7 @@ the cheap way, by restating each tie at the bf16 artifact with the identity roun
 why that is the same claim the f32 artifacts already carry. It does not change any artifact, any
 run, or the bf16 design.
 
-## ▶ Start here (next session): §3.4, the shared files and the book sentences
+## ▶ Start here (next session): tier A is done; tier B (§4) is the open decision
 
 **State (2026-10-07, end of the second session).** On `wp8fg`, not pushed: the plan (`053baf64`),
 §3.1 the 25 erasure lemmas (`40172103`), §3.2 ResNet-34's typed graphs on the flag (`c27825fc`),
@@ -19,7 +19,7 @@ end to end plus the yaml 4f paragraph (`8b8ae732`), MobileNetV2 end to end (`7de
 the flag in place), MobileNetV4-Conv-M end to end (`3877e3c4`; no shared file touched), and
 ConvNeXt-T's step tie and loss gradient (`6f225059`; no shared file touched; no
 typed-graph step — see below), and ViT-Tiny's batched forward graph, step tie and loss gradient
-(the commit after `6f225059`; `PrecisionSwitch` gained the patch-embed pair — see below). Both ResNets, MobileNetV2, MobileNetV4-Conv-M and B0 now have every tier — graph
+(`32d8cccf`; `PrecisionSwitch` gained the patch-embed pair — see below). Both ResNets, MobileNetV2, MobileNetV4-Conv-M and B0 now have every tier — graph
 (MobileNetV2 also the `do` graph, MobileNetV4 the `do` and `drop` graphs, B0 also the `Drop` graph
 the `dropdo` artifacts use), sync graph, step tie, sync tie, loss gradient — stated at
 `bf16 := true`, the artifacts the book's ImageNet runs train from,
@@ -61,7 +61,7 @@ blocks are postponed, so the `(fun n => by simp only [batchSlice_batchMap]; rfl)
 Also the record wrappers `CnxTieBlk.TiedGB` / `tied_gb` differ in whether `gf` is explicit, so the
 capstone regex needs both shapes.
 
-**ViT, done 2026-10-07** (the commit after `6f225059`). What it took, against the survey:
+**ViT, done 2026-10-07** (`32d8cccf`). What it took, against the survey:
 * *The graph is `vitFwdGraphBDrop`* (`Nets/ViT/ViTFwdDrop.lean`), the batched one the `vitin_*`
   forwards render from; `ViTDepthK`'s `vitFwdGraphKMHV` is per-example (`denseRowF`) and stays f32.
   `vitBlockGraphBDrop` takes `(bf16 : Bool)` before `x`, `vitBodyGraphBDrop` after `(ε s : ℝ)`
@@ -89,10 +89,23 @@ capstone regex needs both shapes.
   graph has the same sharing and is covered by `vitFwdGraphBDrop_faithful` alone), the backward
   graphs stay f32 as every net's did.
 
-**Next: §3.4.** `SyncBf16`'s "No whole-net statement" paragraph (line ~40) and the eight
-`content.tex` sentences (6567, 8361, 9199, 10566, 11137, 12751, 13397, 19153), one chapter per
-commit; then the blueprint `lean_decls` / `blueprint_uses.py --fix --check` pass. Tier B (§4) is
-decided after the book sentence.
+**§3.4, done 2026-10-07** (the commit after `32d8cccf`, one commit at the user's call rather than
+one per chapter). The book's surface was wider than the eight lines listed below: 20 paragraphs —
+the ResNet-34 step tie states the erasure once (`resnet34in_momdp64bf16`, `*GradBBf16` at every conv
+weight gradient, each its f32 peer at the identity rounding) and the other step / sync ties say "at
+either precision" (the R34 and MNv2 sync ties name "its bf16 twin"); B0 / ConvNeXt / ViT lose "in
+f32" and "the bf16 renders are outside it"; the MobileNetV4 dropout graph and ViT's batched drop
+graph are at either precision; the ResNet-34 run paragraph says the tier reaches the render as a
+step with the rounding trusted as at f32; MNv2 / MNv4 / ConvNeXt / ViT run paragraphs keep what
+is still outside (classifier dropout, EMA, accumulation, the drop-path chain); the trust summary
+says "in f32 or bf16"; the precision section names `Bf16Erasure.lean`. `SyncBf16`'s "No whole-net
+statement" paragraph now says "at a real rounding" and points at §4. Gates: blueprint `lean_decls`
+regenerated + `blueprint_uses.py --check` (no edge moved), `docstring-checkrefs`. Reviewed on the
+preview server (diff page).
+
+**Open:** tier B (§4) — decide whether the census-as-a-theorem is worth the `rnd`-threaded chain,
+ResNet-34 pilot only. And the drop-path chain is now the remaining gap between the ties and the
+ConvNeXt / ViT / B0 / R50-A3 artifacts that trained (a separate project, not bf16).
 
 **The recipe, per net** (what §3.2 + §3.3 did for ResNet-34, step 3 repeated verbatim for
 ResNet-50; `git show c27825fc 906bfa44 8b8ae732` are the templates):
@@ -146,7 +159,7 @@ ResNet-50; `git show c27825fc 906bfa44 8b8ae732` are the templates):
 | EfficientNet-B0 — DONE 2026-10-07 (`4c7baba0`) | `conv` ×6, `convStridedXla` ×1 (stem), `depthwise` ×2, `depthwiseStrided` ×1; the SE and head denses are f32 (`DenseWTiedB` ×7, no flag) | nothing new: `DepthwiseStridedWTiedBAt` and its `_hasGradAt` / `Sync` landed with MobileNetV2; the block graph builders are `EfficientNetStagesPC`\'s and took the flag there | graphs `EfficientNetFullB0` (+ `…Drop`, the drop-path forward the `drop` artifacts use; `…Eval` / `…EvalDrop` stay f32), `EfficientNetSyncB`; ties `EfficientNetStepTieG` (`efficientnet_net_tiedG`; binders `(xN vN epsStr cotN dN : String) (N : Nat)`), `EfficientNetSyncStepTieG` (`efficientnet_net_syncTiedG`), `EfficientNetParamGrad` (`enet_net_lossGrad`, 13 nodes, 33 `hasGradAt` calls); comparator rows `enet_net_lossGrad`, `efficientnetFwdGraphSyncFull_shard`, `efficientnet_net_syncTiedG` (`efficientnetInputGradBFull_correct` is the input gradient, untouched); text ties 8 guards |
 | MobileNetV4-Conv-M — DONE 2026-10-07 (`3877e3c4`) | `conv` ×11, `convStrided` ×2 (stem, fused stage), `depthwise` ×4, `depthwiseStrided` ×1; the classifier dense is f32 (no flag) | nothing new: all four predicates were in `GradNodesBAt` | graphs `MobileNetV4FullB` (+ `…Do`, `…Drop`; `…Eval` stays f32), `MobileNetV4SyncB`; ties `MobileNetV4StepTieB` (`mnv4_net_tiedB`), `MobileNetV4SyncStepTieB` (`mnv4_net_syncTiedB`), `MobileNetV4ParamGrad` (`mnv4_net_lossGrad`); comparator rows `mnv4FwdGraphBFull_faithful`, `mnv4FwdGraphSyncFull_shard`, `mnv4_net_syncTiedB`, `mnv4_net_lossGrad` regenerated; text ties 7 → 13 guards (+ 5 at inference, f32) |
 | ConvNeXt-T — DONE 2026-10-07 (`6f225059`) | `conv` ×2 (expand, project), `depthwise` ×1, `convStrided` ×1 (downsample), `convStride4` ×1 (stem); bias nodes, LayerNorm, layer scale and the classifier are f32 (no flag) | nothing new: `ConvWTiedBAt` / `DepthwiseWTiedBAt` / `ConvStridedWTiedBAt` from `GradNodesBAt`; the stem node inline on `convStride4WeightGradBAt` | NO typed-graph step (per-example `convNextFwdGraphTCh`, f32 renderer; the batched bf16 chain has no typed graph); ties `ConvNeXtStepTieGB` (`cnx_net_tiedGB`), `ConvNeXtParamGrad` (`cnx_net_lossGrad`, + `_smoothedCE`, `cnx_net_tied_lossGrad`); no sync tie (LayerNorm net: DP composes through `DataParallel.Node`); comparator rows `cnx_net_tiedGB`, `cnx_net_lossGrad` regenerated; text ties unchanged (the ConvNeXt rows are per-example, f32) |
-| ViT-Tiny — DONE 2026-10-07 (the commit after `6f225059`) | `rowDense` ×6 per block, `patchEmbed` ×1 (stem, f32 in every shipped artifact); the bias, LN, CLS, position and classifier nodes are f32 (no flag) | new: `ViTFoldGB.RowDenseWTiedBAt` (ViT-only kind, so not in `GradNodesBAt`); `PrecisionSwitch` + `Bf16Erasure` gained the patch-embed pair | graph `ViTFwdDrop` (`vitFwdGraphBDrop`, flags `bf16 bf16Conv`); ties `ViTStepTieGB` (`vit_net_tiedGB`), `ViTParamGrad` (`vit_net_lossGrad`, + `_smoothedCE`, `vit_net_tied_lossGrad`), flags `bf16 bf16ConvW`; no sync tie (LayerNorm net); comparator row `vit_net_lossGrad` regenerated; no text tie (DAG) |
+| ViT-Tiny — DONE 2026-10-07 (`32d8cccf`) | `rowDense` ×6 per block, `patchEmbed` ×1 (stem, f32 in every shipped artifact); the bias, LN, CLS, position and classifier nodes are f32 (no flag) | new: `ViTFoldGB.RowDenseWTiedBAt` (ViT-only kind, so not in `GradNodesBAt`); `PrecisionSwitch` + `Bf16Erasure` gained the patch-embed pair | graph `ViTFwdDrop` (`vitFwdGraphBDrop`, flags `bf16 bf16Conv`); ties `ViTStepTieGB` (`vit_net_tiedGB`), `ViTParamGrad` (`vit_net_lossGrad`, + `_smoothedCE`, `vit_net_tied_lossGrad`), flags `bf16 bf16ConvW`; no sync tie (LayerNorm net); comparator row `vit_net_lossGrad` regenerated; no text tie (DAG) |
 
 Then §3.4's book sentences (`content.tex` 6567, 8361, 9199, 10566, 11137, 12751, 13397, 19153 —
 one chapter per commit).

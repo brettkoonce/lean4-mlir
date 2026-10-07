@@ -5659,7 +5659,10 @@ stem's endpoint ties, and each block's backward in its slot; see
   \(N = 64\)) denotes the certified batch gradient
   \(\sum_n \mathrm{Jacobian} \cdot \mathrm{cotangent}\) at the chain cotangent
   of the label-smoothed cross-entropy (\(\alpha_{\mathrm{ls}} = 0.1\), any
-  target), generic in \(N\).
+  target), generic in \(N\). Stated at either precision: the bf16 render
+  \texttt{resnet34in\_momdp64bf16} emits a \texttt{*GradBBf16} node at every
+  convolution's weight gradient, and at the identity rounding the renderers
+  instantiate, each such node denotes its f32 peer.
 \end{theorem}
 
 \begin{proof}
@@ -5726,7 +5729,8 @@ Theorem~\ref{thm:hasGradAt_comp} per stage; see
   denotes the certified batch gradient at the chain cotangent of a loss
   cotangent \(g\) left as a binder, generic in \(N\) and \(q\). Instantiated
   at the label-smoothed cross-entropy and at BCE-with-logits over
-  \(N \cdot K\), the two losses the ResNet-50 artifacts train.
+  \(N \cdot K\), the two losses the ResNet-50 artifacts train. Stated at
+  either precision, as for ResNet-34.
 \end{theorem}
 
 \begin{proof}
@@ -5822,8 +5826,8 @@ As for ResNet-34; see \leandocref{Proofs.R50FullBSeal.sealX\_backward\_nontrivia
           scaled by \(R\) \hfill[\texttt{hgs}]
   \end{enumerate}
   \Prove{} the mean over replicas of each of the 110 all-reduced gradient
-  nodes of the data-parallel render (\texttt{resnet34in\_momdp64} at
-  \(\texttt{replicas} > 1\), loss \(\div B\) per replica) equals the
+  nodes of the data-parallel render (\texttt{resnet34in\_momdp64} and its
+  bf16 twin at \(\texttt{replicas} > 1\), loss \(\div B\) per replica) equals the
   single-device node of Theorem~\ref{thm:resnet34_step_tie} at batch
   \(R \cdot N\) with loss \(\div (R \cdot B)\): the data-parallel step is one
   device's step on the global batch. Instantiated at the label-smoothed
@@ -6562,12 +6566,12 @@ the four replicas, scored over the same $50{,}000$ images.
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
 from the same initialization, the IREE and XLA lowerings of
 this artifact scored $17{,}312$ and $17{,}313$ correct at epoch~5 --- one
-image apart. The proof-carrying tier reaches this render's f32 form,
-\texttt{resnet34in\_momdp64} (Theorems~\ref{thm:resnet34_step_tie} and
-\ref{thm:resnet34_sync_tie}), and stops at its bf16 gradient nodes, which are
-the \texttt{*GradBBf16} kinds tied per operator rather than as a step; so for
-this run the claim is ``one architecture, two independent lowerings,
-agreeing'', not ``proven at ImageNet scale''.
+image apart. The proof-carrying tier reaches this render as a step:
+Theorems~\ref{thm:resnet34_step_tie} and \ref{thm:resnet34_sync_tie} are
+stated at either precision, and read over $\mathbb{R}$ the bf16 text's
+gradient nodes are the certified ones. What they do not reach is the
+rounding: that the hardware rounds where the text says and nowhere else is
+trusted, as it is at every op of an f32 render.
 
 \prosesection{The two paths, side by side}
 
@@ -6612,8 +6616,7 @@ against.
 reference's \texttt{@jit} mesh reduces the batch statistics across its
 shards, and each of the verified render's 36 BatchNorms all-reduces its
 mean and variance across the four replicas --- the data-parallel step
-Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$, on
-the render's f32 form.
+Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
@@ -7549,8 +7552,8 @@ activation; see \leandocref{Proofs.mobilenetv2ForwardBFullHasVJPAt\_correct}.
   input, cotangent and index. With stochastic depth on the residual branch of
   its eighteen skip rows and classifier dropout before the dense, the forward
   graph of the \texttt{dropdo} train steps denotes the masked forward at every
-  pair of masks, in f32 (the committed steps are bf16), and at all-ones masks
-  it is this forward.
+  pair of masks and at either precision, and at all-ones masks it is this
+  forward.
 \end{theorem}
 
 \begin{proof}
@@ -7647,8 +7650,8 @@ As for MobileNetV2; see \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}
   MobileNetV2 step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at
   \(N = 32\), \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) denotes the
   certified batch gradient at the chain cotangent of a loss cotangent left as
-  a binder, generic in \(N\). Instantiated at the label-smoothed
-  cross-entropy.
+  a binder, generic in \(N\), at either precision as for ResNet-34.
+  Instantiated at the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -7710,8 +7713,8 @@ backwards (Theorem~\ref{thm:hasGradAt_comp}, once per stage); see
   \Prove{} each of the 233 parameter gradients of the batched
   MobileNetV4-Conv-M step (\texttt{mnv4in\_adamdp64}) denotes the certified
   batch gradient at the chain cotangent of a loss cotangent left as a binder,
-  generic in \(N\) and in the number of classes. Instantiated at the
-  label-smoothed cross-entropy.
+  generic in \(N\) and in the number of classes, at either precision.
+  Instantiated at the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -7809,7 +7812,7 @@ As for MobileNetV2; see \leandocref{Proofs.Mnv4FullBSeal.sealX\_backward\_nontri
           scaled by \(R\) \hfill[\texttt{hgs}]
   \end{enumerate}
   \Prove{} the mean over replicas of each of the 158 all-reduced gradient
-  nodes of \texttt{mobilenetv2in\_rmsdp64} at \(\texttt{replicas} > 1\)
+  nodes of \texttt{mobilenetv2in\_rmsdp64} and its bf16 twin at \(\texttt{replicas} > 1\)
   (loss \(\div B\) per replica) equals the single-device node of
   Theorem~\ref{thm:mobilenetv2_step_tie} at batch \(R \cdot N\) with loss
   \(\div (R \cdot B)\). Instantiated at the label-smoothed cross-entropy.
@@ -8356,10 +8359,9 @@ the global $256$. The peak and decay rate live in \texttt{mnv2RmsSchedule},
 shared with the Imagenette peer so the two cannot carry different values;
 \texttt{mnv2ImagenetRmsSchedule} adds the staircase and drops the warmup,
 and the optimizer constants are \texttt{mnv2RmsHyper}.
-Theorem~\ref{thm:mobilenetv2_sync_tie} ties the f32 data-parallel render
-(\texttt{mobilenetv2in\_rmsdp64}) to one device's step at the global batch;
-this render's gradient nodes are the bf16 \texttt{*GradBBf16} kinds, tied
-per operator, and its classifier dropout sits outside that statement.
+Theorem~\ref{thm:mobilenetv2_sync_tie} ties this render's bf16 gradient
+nodes to one device's step at the global batch; its classifier dropout sits
+outside that statement.
 \texttt{adam64} is AdamW at $10^{-3}$ instead, the driver's default because
 it matches the other ImageNet drivers. It runs with:
 
@@ -8704,8 +8706,7 @@ new proof chain. The inference graphs, \texttt{mnv4in\_fwd\_eval} and
 final feature size (\texttt{mnv4FwdGraphBFullEval\_faithful}), and their
 block text is \texttt{pretty} of the typed graph at both sizes
 (\texttt{FwdGraphTextTies}); the classifier-dropout forward is stated at
-every mask in f32 (\texttt{mnv4FwdGraphBFullDo\_faithful}), while the
-\texttt{do} renders here are bf16.
+every mask and at either precision (\texttt{mnv4FwdGraphBFullDo\_faithful}).
 
 \textbf{The variant carries the recipe.}
 \texttt{emaaccdp8x128wxdowd005bf16} is the artifact the run below used:
@@ -8716,11 +8717,10 @@ shadow at $0.9999$ with the warmup correction above, bf16 convolution
 under an fp32 classifier head. Each of the 77 BatchNorms all-reduces its mean and
 variance across the four replicas, so the statistic group is the
 $512$-image micro-batch, which is the group the reference's
-accumulation gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the f32
-data-parallel render (\texttt{mnv4in\_adamdp64}) to one device's step at the
-global batch; this render's gradient nodes are the bf16 \texttt{*GradBBf16}
-kinds, tied per operator, and its EMA, gradient accumulation and classifier
-dropout sit outside that statement. It runs with:
+accumulation gives it. Theorem~\ref{thm:mobilenetv4_sync_tie} ties the
+data-parallel render's bf16 gradient nodes to one device's step at the
+global batch; this render's EMA, gradient accumulation and classifier dropout
+sit outside that statement. It runs with:
 
 \begin{verbatim}
 lake run mnv4-default-4gpu
@@ -9191,13 +9191,12 @@ Theorem~\ref{thm:efficientnetFullHasVJP} read stage by stage; see
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Prove{} each of the 213 emitted parameter gradients of the batched
   EfficientNet-B0 step (\texttt{efficientnet\_adam\_train\_step.mlir} and
-  the f32 \texttt{efficientnetin\_*} steps) denotes the certified batch
+  the \texttt{efficientnetin\_*} steps) denotes the certified batch
   gradient at the chain cotangent of the label-smoothed cross-entropy ---
   through swish, the SE gate's fan-in and the batch-BatchNorm backward ---
   with the target and the number of classes binders. Stated at one replica,
-  in f32, on the chain without stochastic depth or classifier dropout; the
-  optimizer tails that consume the nodes, and the bf16 renders, are outside
-  it.
+  at either precision, on the chain without stochastic depth or classifier
+  dropout; the optimizer tails that consume the nodes are outside it.
 \end{theorem}
 
 \begin{proof}
@@ -10561,9 +10560,9 @@ the block's, the downsample's or the head's; see
   per-channel layer scale, GELU) denotes the certified batch gradient at the
   chain cotangent of the label-smoothed cross-entropy, with the batch and the
   number of classes binders: \texttt{convnext\_adam\_train\_step.mlir} and
-  the f32 \texttt{convnextin\_*} steps emit these nodes. Stated at one
-  replica, in f32, on the chain without stochastic depth; the \texttt{drop}
-  and bf16 renders are outside it.
+  the \texttt{convnextin\_*} steps emit these nodes. Stated at one replica,
+  at either precision, on the chain without stochastic depth; the
+  \texttt{drop} renders are outside it.
 \end{theorem}
 
 \begin{proof}
@@ -11132,10 +11131,9 @@ depth and this book's gradient clip are spelled \texttt{wx},
 \texttt{drop} and \texttt{clip}, and
 \texttt{convnextin\_\allowbreak adamdpwxclipdropbf16} carries all three at
 once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
-the run below used; Theorem~\ref{thm:convnext_step_tie} is stated on the f32,
-drop-free chain, and this render's gradient nodes are the bf16
-\texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
-carries the drop-path sites. EMA is rendered too, and
+the run below used; Theorem~\ref{thm:convnext_step_tie} reaches its bf16
+gradient nodes but is stated on the drop-free chain, and this render's
+cotangent chain carries the drop-path sites. EMA is rendered too, and
 \texttt{convnextin\_emadpwxclipdropbf16} carries all four, but it landed
 after this run, which trained \texttt{adamdpwxclipdropbf16} and scores its
 raw weights,
@@ -12637,7 +12635,8 @@ head; see \leandocref{Proofs.vitForwardKVHasVJP\_correct}.
   \Prove{} for every depth \(k\) the typed forward graph
   \texttt{vitFwdGraphKMHV} denotes \texttt{vitForwardKV}; and with stochastic
   depth on both residual branches of every block, the batched graph of the
-  \texttt{drop} renders denotes, at each example, this forward with that
+  \texttt{drop} renders denotes, at either precision and at each example,
+  this forward with that
   example's two mask entries per block as its branch scales --- at all-ones
   masks, \texttt{vitForwardKV} on every example. The emitted ViT text names
   each shared intermediate once and is not tied to this graph by a text
@@ -12746,9 +12745,9 @@ batch; see \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
   certified batch gradient at the chain cotangent of the label-smoothed
   cross-entropy, with the batch and the number of classes binders; the CLS
   gradient is summed over the batch inside the node. Stated at one replica,
-  in f32, on the chain without stochastic depth:
-  \texttt{vit\_adam\_train\_step.mlir} and the f32 \texttt{vitin\_*} steps
-  emit these nodes; the \texttt{drop} and bf16 renders are outside it.
+  at either precision, on the chain without stochastic depth:
+  \texttt{vit\_adam\_train\_step.mlir} and the \texttt{vitin\_*} steps emit
+  these nodes; the \texttt{drop} renders are outside it.
 \end{theorem}
 
 \begin{proof}
@@ -13392,10 +13391,9 @@ field spells the $\varepsilon$). It is the artifact the run used: four
 regions, $[\theta \mid m \mid v \mid \mathrm{ema}]$, 831 operands and
 200 all-reduces, with an fp32 evaluation forward at the same
 $\varepsilon$ beside it.
-Theorem~\ref{thm:vit_step_tie} is stated
-on the f32, drop-free chain; this render's gradient nodes are the bf16
-\texttt{*GradBBf16} kinds, tied per operator, at a cotangent chain that
-carries the drop-path sites. Mixup, CutMix and repeated
+Theorem~\ref{thm:vit_step_tie} reaches its bf16 gradient nodes but is
+stated on the drop-free chain, and this render's cotangent chain carries the
+drop-path sites. Mixup, CutMix and repeated
 augmentation never enter the graph at all, because they are data-side
 and ride the shim. The job:
 
@@ -18759,7 +18757,7 @@ and bounded:
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$ --- at a smooth
-point, at one replica, in f32, on the chain without drop-path --- up to one
+point, at one replica, in f32 or bf16, on the chain without drop-path --- up to one
 printer, one lowerer, the StableHLO semantics the denotation assumes, and
 floating point. Where a conventional generator leaves
 thousands of lines of string-building linked to the proof by nothing at all,
@@ -19151,7 +19149,10 @@ where pure bf16 is not, and it is carried to convolution and depthwise
 convolution in \texttt{ConvMixedFloatBridge.lean},
 \texttt{DepthwiseMixedFloatBridge.lean} and
 \texttt{ConvMixedComposeBridge.lean}. The emitted bf16 graphs are tied at
-their gradient nodes in \texttt{Bf16GradNodes.lean}; \texttt{Bf16Fold.lean}
+their gradient nodes in \texttt{Bf16GradNodes.lean}, and at the identity
+rounding the renderers instantiate each bf16 kind denotes its f32 peer
+(\texttt{Bf16Erasure.lean}), which is how every whole-network step tie is
+stated at either precision; \texttt{Bf16Fold.lean}
 (\texttt{bf16\_render\_faithful}, its emittable form
 \texttt{bf16\_render\_faithful\_emit}, and \texttt{bf16\_render\_faithful\_depth2}
 at two layers) and \texttt{E4M3Fold.lean} prove, for the linear net, that the mixed-precision
