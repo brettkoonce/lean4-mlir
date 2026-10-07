@@ -144,7 +144,11 @@ The CIFAR batched artifacts (`cifar8wb_bf16*`, `cifar8wb_bn_bf16*`) use the same
 
 ### 3.5 Order and cost
 
-1. `Bf16Erasure.lean` and its AuditAxioms lines. Builds alone; half a session.
+1. `Bf16Erasure.lean` and its AuditAxioms lines. Builds alone; half a session. Done 2026-10-07:
+   `Foundation/Bf16Erasure.lean`, the 25 `*_id` lemmas, `den_batchOp_congr` and the two missing
+   splits, every one on the three core axioms; 20 of the 25 are `rfl`, the seven conv / depthwise
+   forwards go through the bias splits, `denseRowBf16` through `rowBiasFlat`. Registered as a
+   `Certs` root (the audit-coverage gate requires it).
 2. ResNet-34 end to end (3.2 and 3.3 for `resnet34in_momdp64bf16`: graph flag, faithful, text
    ties, step tie, sync tie, ParamGrad). The template; one session.
 3. ResNet-50 (same kinds), then MobileNetV2 / V4 / B0 (the depthwise kinds), ConvNeXt, ViT. Script

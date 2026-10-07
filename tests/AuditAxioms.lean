@@ -76,6 +76,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Foundation.Bf16GradNodes
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
@@ -2086,6 +2087,35 @@ open Proofs
 #print axioms Proofs.Bf16Fold.depthwiseStridedXlaWGradBBf16_den
 #print axioms Proofs.Bf16Fold.rowDenseWGradBBf16_den
 #print axioms Proofs.Bf16Fold.patchEmbedWGradBBf16_den
+-- Erasure: every batched bf16 kind is its f32 peer at the identity rounding (Bf16Erasure.lean)
+#print axioms Proofs.Bf16Fold.flatConvStride2_bias_split
+#print axioms Proofs.Bf16Fold.depthwiseStride2FlatXla_bias_split
+#print axioms Proofs.Bf16Fold.den_batchOp_congr
+#print axioms Proofs.Bf16Fold.convBf16_id
+#print axioms Proofs.Bf16Fold.convStridedBf16_id
+#print axioms Proofs.Bf16Fold.convStridedXlaBf16_id
+#print axioms Proofs.Bf16Fold.convStride4Bf16_id
+#print axioms Proofs.Bf16Fold.depthwiseBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedXlaBf16_id
+#print axioms Proofs.Bf16Fold.denseRowBf16_id
+#print axioms Proofs.Bf16Fold.patchEmbedBf16_id
+#print axioms Proofs.Bf16Fold.denseRowBackBf16_id
+#print axioms Proofs.Bf16Fold.matmulFBBf16_id
+#print axioms Proofs.Bf16Fold.convBackBatchedBf16_id
+#print axioms Proofs.Bf16Fold.convStridedBackBatchedBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseBackBatchedBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedBackBatchedBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedXlaBackBatchedBf16_id
+#print axioms Proofs.Bf16Fold.convWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.convStridedWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.convStridedXlaWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.convStride4WeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.depthwiseStridedXlaWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.rowDenseWeightGradBBf16_id
+#print axioms Proofs.Bf16Fold.patchEmbedWeightGradBBf16_id
 
 -- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den

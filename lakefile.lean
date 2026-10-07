@@ -92,6 +92,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.MatBridge,
              `LeanMlir.Proofs.Foundation.IR,
              `LeanMlir.Proofs.Foundation.PairTile,
+             `LeanMlir.Proofs.Foundation.Bf16Erasure,
              `LeanMlir.Proofs.Codegen.StableHLO.Basic,
              `LeanMlir.Proofs.Codegen.StableHLO.Pretty,
              `LeanMlir.Proofs.Codegen.FwdGraphTextTies,
