@@ -28,10 +28,10 @@ outside the guards is the chain's glue: it calls these emitters in the typed gra
 order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
 **Scope.** `convBias := false`, one replica (`sync := false`) — the configuration the typed
-graphs describe; f32 throughout, and for ResNet-34, ResNet-50, MobileNetV2 and EfficientNet-B0 also
-bf16: their typed graphs take the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their
-stem, block and (for the two depthwise nets) head rows are checked at both values, the bf16 text
-against the bf16 graph. The other nets' bf16 renders swap in
+graphs describe; f32 throughout, and for ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M and
+EfficientNet-B0 also bf16: their typed graphs take the renderer's `bf16` flag
+(`StableHLO.PrecisionSwitch`), so their stem, block and (for the three depthwise nets) head rows
+are checked at both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
 `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
@@ -289,73 +289,101 @@ def mnv4UibW0 (s : UibSpec) : UibParams s :=
    DWSlot.ofParams ⟨fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩,
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
 
-/-- `pretty` of the typed graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it: a
-    stride-2 row is `mnv4StridedGraphB` (the post-DW carries the stride; all three of Conv-M's have
+/-- `pretty` of the typed graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it, at
+    the precision `bf16`: a stride-2 row is `mnv4StridedGraphB` (the post-DW carries the stride; all three of Conv-M's have
     a pre-DW); a stride-1 row is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled
     out here because the leaf is width-polymorphic and a skip row has `ic = oc` only numerically).
     A row with no typed graph — an IB block, or a strided row without a pre-DW — prints `""`, so a
     table that grew one fails. With `site := some k` a skip row is instead `mnv4SkipDropGraphB` at
     `dpName k` (`MobileNetV4FullBDrop`); its body is passed as a constant function of the same
     leaf, for the same width reason. -/
-def mnv4RowGraphText (B : Nat) (s : UibSpec) (site : Option Nat := none) : String :=
+def mnv4RowGraphText (B : Nat) (s : UibSpec) (bf16 : Bool) (site : Option Nat := none) : String :=
   if s.stride2 then
     if s.preDWk > 0 then
-      prettyText B (mnv4StridedGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _))
+      prettyText B (mnv4StridedGraphB "1.0e-03" B s (mnv4UibW0 s) bf16 (leaf "%in" _))
     else ""
   else
     let body : SHlo (B * (s.oc * s.h * s.h)) :=
       if s.preDWk > 0 ∧ s.postDWk > 0 then
-        mnv4ExtraDWBodyGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _)
+        mnv4ExtraDWBodyGraphB "1.0e-03" B s (mnv4UibW0 s) bf16 (leaf "%in" _)
       else if s.preDWk > 0 then
-        mnv4ConvNeXtBodyGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _)
+        mnv4ConvNeXtBodyGraphB "1.0e-03" B s (mnv4UibW0 s) bf16 (leaf "%in" _)
       else
-        mnv4FfnBodyGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _)
+        mnv4FfnBodyGraphB "1.0e-03" B s (mnv4UibW0 s) bf16 (leaf "%in" _)
     if s.postDWk > 0 ∧ s.preDWk = 0 then "" else
     match site with
     | none => prettyText B (.addVB body (leaf "%in" _))
     | some k => prettyText B (mnv4SkipDropGraphB (dpName k) (fun _ => 0) (fun _ => body) (leaf "%in" _))
 
--- Stem: 3×3/s2 symmetric, 224 → 112.
+-- Stem: 3×3/s2 symmetric, 224 → 112. At f32 and at bf16.
 #guard textOf (mnv4StemFwdB 2 "1.0e-03") (·.code) ==
   prettyText 2 (mnv4StemGraphB "1.0e-03" 2 112 112 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%x" _))
+#guard textOf (mnv4StemFwdB 2 "1.0e-03" (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv4StemGraphB "1.0e-03" 2 112 112 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%x" _))
 
--- Fused stage 0: 3×3/s2 conv (32 → 128) → BN → relu → 1×1 project (→ 48) → BN, 112² → 56².
+-- Fused stage 0: 3×3/s2 conv (32 → 128) → BN → relu → 1×1 project (→ 48) → BN, 112² → 56². At f32
+-- and at bf16.
 #guard textOf (fusedMbConvFwdStridedB 2 32 48 4 3 56 .train "1.0e-03" "0" "%in") (·.code) ==
   prettyText 2 (mnv4FusedGraphB "1.0e-03" 2 56 56 (ic := 32) (mid := 128) (oc := 48) (kH := 3) (kW := 3)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (fusedMbConvFwdStridedB 2 32 48 4 3 56 .train "1.0e-03" "0" "%in" (bf16 := true))
+    (·.code) ==
+  prettyText 2 (mnv4FusedGraphB "1.0e-03" 2 56 56 (ic := 32) (mid := 128) (oc := 48) (kH := 3) (kW := 3)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%in" _))
 
--- All 21 table rows: the render's dispatch vs the typed graph's, row by row.
+-- All 21 table rows: the render's dispatch vs the typed graph's, row by row, at f32 and at bf16.
 #guard mnv4Blocks.length == 21 && mnv4Blocks.all fun s =>
-  textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in") (·.code) == mnv4RowGraphText 2 s
+  textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in") (·.code) == mnv4RowGraphText 2 s false
+#guard mnv4Blocks.all fun s =>
+  textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in" (bf16 := true)) (·.code) ==
+    mnv4RowGraphText 2 s true
 
 -- All 21 rows with their stochastic-depth sites (`sd := true`, the `drop` train steps): each row
 -- at the site `mnv4FwdChainB` gives it, a `dropPathB` on a skip row's branch before the add, no
--- site on a strided row (`MobileNetV4FullBDrop`).
+-- site on a strided row (`MobileNetV4FullBDrop`). At f32 and at bf16.
 #guard mnv4Blocks.zipIdx.all fun (s, bi) =>
   textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in" (drop := mnv4DropSite bi)) (·.code) ==
-    mnv4RowGraphText 2 s (mnv4DropSite bi)
+    mnv4RowGraphText 2 s false (mnv4DropSite bi)
+#guard mnv4Blocks.zipIdx.all fun (s, bi) =>
+  textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in" (bf16 := true) (drop := mnv4DropSite bi))
+      (·.code) ==
+    mnv4RowGraphText 2 s true (mnv4DropSite bi)
 
 -- The drop graph's site numbering: `mnv4Res28DropGraphB` … `mnv4Res7bDropGraphB` put site `k` on
 -- the `k`-th of rows 2, 4–10, 12–21, which is the renderer's `mnv4DropSites` (0-based block indices).
 #guard mnv4DropSites.map (· + 1) == [2] ++ (List.range' 4 7) ++ (List.range' 12 10)
 
--- Head: 1×1 (256 → 960) → BN → relu → GAP(7²) → 1×1 (→ 1280) → BN → relu → dense(→ 10).
+-- Head: 1×1 (256 → 960) → BN → relu → GAP(7²) → 1×1 (→ 1280) → BN → relu → dense(→ 10). At f32
+-- and at bf16.
 #guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in") (·.code) ==
   prettyText 2 (mnv4HeadGraphB "1.0e-03" 2 7 7 (c := 256) (mid := 960) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
-    (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in" (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv4HeadGraphB "1.0e-03" 2 7 7 (c := 256) (mid := 960) (oc := 1280) (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) true (leaf "%in" _))
 
 -- Head with classifier dropout (`cd := true`, the `%do` train steps): the same head with `dropoutB`
--- on the dense's input.
+-- on the dense's input. At f32 and at bf16.
 #guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in" (cd := true)) (·.code) ==
   prettyText 2 (mnv4HeadGraphBDo "1.0e-03" doName 2 7 7 (c := 256) (mid := 960) (oc := 1280)
     (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
-    (fun _ _ => 0) (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ => 0) (fun _ => 0) false (fun _ => 0) (leaf "%in" _))
+#guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in" (bf16 := true) (cd := true)) (·.code) ==
+  prettyText 2 (mnv4HeadGraphBDo "1.0e-03" doName 2 7 7 (c := 256) (mid := 960) (oc := 1280)
+    (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) true (fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV4-Conv-M at inference — `mnv4FwdChainB … .eval` vs `mnv4FwdGraphBFullEval`

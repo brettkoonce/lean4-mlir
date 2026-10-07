@@ -7,7 +7,7 @@ the cheap way, by restating each tie at the bf16 artifact with the identity roun
 why that is the same claim the f32 artifacts already carry. It does not change any artifact, any
 run, or the bf16 design.
 
-## ▶ Start here (next session): MobileNetV4, then ConvNeXt and ViT
+## ▶ Start here (next session): ConvNeXt, then ViT, then the book sentences
 
 **State (2026-10-07, end of the second session).** On `wp8fg`, not pushed: the plan (`053baf64`),
 §3.1 the 25 erasure lemmas (`40172103`), §3.2 ResNet-34's typed graphs on the flag (`c27825fc`),
@@ -15,11 +15,12 @@ run, or the bf16 design.
 end to end plus the yaml 4f paragraph (`8b8ae732`), MobileNetV2 end to end (`7de4ff73`: `GradNodesBAt` gained the depthwise nets' kinds — `ConvStridedXlaWTiedBAt`,
 `DepthwiseWTiedBAt`, `DepthwiseStridedWTiedBAt`, `DepthwiseStridedXlaWTiedBAt`, their
 `_hasGradAt`s and the `Sync`s for all but the XLA-strided depthwise, which stays local to
-`MobileNetV2SyncStepTieB` as its f32 form did), and EfficientNet-B0 end to end (the commit after
-`7de4ff73`; no shared file touched — its block builders live in `EfficientNetStagesPC`, which took
-the flag in place). Both ResNets, MobileNetV2 and B0 now have every tier — graph (MobileNetV2 also
-the `do` graph, B0 also the `Drop` graph the `dropdo` artifacts use), sync graph, step tie, sync
-tie, loss gradient — stated at `bf16 := true`, the artifacts the book's ImageNet runs train from,
+`MobileNetV2SyncStepTieB` as its f32 form did), and EfficientNet-B0 end to end (`4c7baba0`; no shared file touched — its block builders live in `EfficientNetStagesPC`, which took
+the flag in place), and MobileNetV4-Conv-M end to end (the commit after `4c7baba0`; no shared file
+touched). Both ResNets, MobileNetV2, MobileNetV4-Conv-M and B0 now have every tier — graph
+(MobileNetV2 also the `do` graph, MobileNetV4 the `do` and `drop` graphs, B0 also the `Drop` graph
+the `dropdo` artifacts use), sync graph, step tie, sync tie, loss gradient — stated at
+`bf16 := true`, the artifacts the book's ImageNet runs train from,
 read over ℝ as the f32 ones are. Nothing else changed: no artifact, no run, no book sentence (§3.4's book part is still open;
 the yaml part is done through MobileNetV2).
 
@@ -36,9 +37,15 @@ the cure: its tie files' chain lemmas share the bundles' binder shapes exactly (
 `(hq : p.EpsPos)`, `(γs βs : Vec oc)`, `(Wfc : Mat oc nC)` …), so the binders went in by LINE
 NUMBER with a content assertion, and only the name-anchored sites / nodes / uses by regex; the
 post-hoc "every `(bf16 : Bool)` with its enclosing declaration" listing then came back clean on
-the first pass. MobileNetV4's files are the biggest (`MobileNetV4SyncStepTieB` 1454 lines); use
-the same method, and expect its `MobileNetV4FullB{,Do,Drop}` and the UIB block kinds (`convStrided`
-at the stem and fused stage, `depthwiseStrided`) — all four predicates already exist.
+the first pass. MobileNetV4 (the biggest, `MobileNetV4SyncStepTieB` 1454 lines) went the same way:
+41 binders by line number, the listing clean on the first pass, every regex count as expected, one
+proof fix — the two head graphs' `reindexCLM_apply` has to ride in the second `simp only` with
+`denOp`, because `den_castIdx`'s reindex only matches once `Function.comp_apply` has opened the
+composition (the single-`simp` f32 proofs never showed the order). Next is ConvNeXt
+(`convStride4` stem, `convStrided` downsamples, `depthwise`; the hand-written GAP backward stays a
+carve-out; its fold file is `ConvNeXtFoldGB`), then ViT (the renderer's three flags `bf16` /
+`bf16Conv` / `bf16ConvW` — the shipping variant keeps the patch embed and head f32, so the typed
+graph takes the triple), then §3.4's eight `content.tex` sentences, one chapter per commit.
 
 **The recipe, per net** (what §3.2 + §3.3 did for ResNet-34, step 3 repeated verbatim for
 ResNet-50; `git show c27825fc 906bfa44 8b8ae732` are the templates):
@@ -89,8 +96,8 @@ ResNet-50; `git show c27825fc 906bfa44 8b8ae732` are the templates):
 | net | conv kinds in its ties | shared pieces | notes |
 |---|---|---|---|
 | MobileNetV2 — DONE 2026-10-07 (`7de4ff73`) | `conv` ×6, `convStridedXla` ×1 (stem), `depthwise` ×2, `depthwiseStridedXla` ×1 | all in `GradNodesBAt` now: `ConvStridedXlaWTiedBAt`, `DepthwiseWTiedBAt`, `DepthwiseStridedXlaWTiedBAt` (+ B0\'s `DepthwiseStridedWTiedBAt`), their `_hasGradAt`s and the `Sync`s except the XLA-strided depthwise\'s, which stays `private` in the sync file as `DepthwiseStridedXlaWSyncAt`; what was found: `depthwiseStridedXla` had NO f32 predicate — `MobileNetV2StepTieB.lean:607` states the node inline, `MobileNetV2ParamGrad.lean:299` likewise, and `DepthwiseStridedXlaWSync` is `private` in `MobileNetV2SyncStepTieB.lean:621` with its `_of_scaled` at 631 and a local `den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard` at 602 (`depthwiseStridedXlaW_hasGradAt` exists in `ParamGradNodes`) | graphs `MobileNetV2FullB` (sites: conv 7, convStridedXla 1, depthwise 2, depthwiseStridedXla 1), `MobileNetV2SyncB` (12 / 2 / 4 / 2); flag `mobilenetv2FwdGraphBFullDo` too (the shipping artifact `rmsdp64wxdols0eps0001bf16` is a `do` one); `MobileNetV2FullPaperEval` stays f32 (eval is f32); ties `MobileNetV2StepTieB` (`mnv2_net_tiedB`), `MobileNetV2SyncStepTieB` (`mnv2_net_syncTiedB`), `MobileNetV2ParamGrad` (`mnv2_net_lossGrad`, 11 nodes); comparator rows `mnv2_net_lossGrad`, `mobilenetv2FwdGraphSyncFull_shard`, `mnv2_net_syncTiedB`; text ties 7 guards |
-| EfficientNet-B0 — DONE 2026-10-07 (the commit after `7de4ff73`) | `conv` ×6, `convStridedXla` ×1 (stem), `depthwise` ×2, `depthwiseStrided` ×1; the SE and head denses are f32 (`DenseWTiedB` ×7, no flag) | nothing new: `DepthwiseStridedWTiedBAt` and its `_hasGradAt` / `Sync` landed with MobileNetV2; the block graph builders are `EfficientNetStagesPC`\'s and took the flag there | graphs `EfficientNetFullB0` (+ `…Drop`, the drop-path forward the `drop` artifacts use; `…Eval` / `…EvalDrop` stay f32), `EfficientNetSyncB`; ties `EfficientNetStepTieG` (`efficientnet_net_tiedG`; binders `(xN vN epsStr cotN dN : String) (N : Nat)`), `EfficientNetSyncStepTieG` (`efficientnet_net_syncTiedG`), `EfficientNetParamGrad` (`enet_net_lossGrad`, 13 nodes, 33 `hasGradAt` calls); comparator rows `enet_net_lossGrad`, `efficientnetFwdGraphSyncFull_shard`, `efficientnet_net_syncTiedG` (`efficientnetInputGradBFull_correct` is the input gradient, untouched); text ties 8 guards |
-| MobileNetV4-Conv-M (last: biggest) | `conv` ×11, `convStrided` ×2 (stem, fused stage), `depthwise` ×4, `depthwiseStrided` ×1 | nothing new once the two above landed | graphs `MobileNetV4FullB` (+ `…Do`, `…Drop`; `…Eval` stays f32), `MobileNetV4SyncB`; ties `MobileNetV4StepTieB` (`mnv4_net_tiedB`), `MobileNetV4SyncStepTieB` (1454 lines, `mnv4_net_syncTiedB`), `MobileNetV4ParamGrad` (`mnv4_net_lossGrad`, 19 nodes); comparator rows `mnv4FwdGraphBFull_faithful`, `mnv4FwdGraphSyncFull_shard`, `mnv4_net_syncTiedB`, `mnv4_net_lossGrad`; text ties 7 guards (+ 5 at inference, f32) |
+| EfficientNet-B0 — DONE 2026-10-07 (`4c7baba0`) | `conv` ×6, `convStridedXla` ×1 (stem), `depthwise` ×2, `depthwiseStrided` ×1; the SE and head denses are f32 (`DenseWTiedB` ×7, no flag) | nothing new: `DepthwiseStridedWTiedBAt` and its `_hasGradAt` / `Sync` landed with MobileNetV2; the block graph builders are `EfficientNetStagesPC`\'s and took the flag there | graphs `EfficientNetFullB0` (+ `…Drop`, the drop-path forward the `drop` artifacts use; `…Eval` / `…EvalDrop` stay f32), `EfficientNetSyncB`; ties `EfficientNetStepTieG` (`efficientnet_net_tiedG`; binders `(xN vN epsStr cotN dN : String) (N : Nat)`), `EfficientNetSyncStepTieG` (`efficientnet_net_syncTiedG`), `EfficientNetParamGrad` (`enet_net_lossGrad`, 13 nodes, 33 `hasGradAt` calls); comparator rows `enet_net_lossGrad`, `efficientnetFwdGraphSyncFull_shard`, `efficientnet_net_syncTiedG` (`efficientnetInputGradBFull_correct` is the input gradient, untouched); text ties 8 guards |
+| MobileNetV4-Conv-M — DONE 2026-10-07 (the commit after `4c7baba0`) | `conv` ×11, `convStrided` ×2 (stem, fused stage), `depthwise` ×4, `depthwiseStrided` ×1; the classifier dense is f32 (no flag) | nothing new: all four predicates were in `GradNodesBAt` | graphs `MobileNetV4FullB` (+ `…Do`, `…Drop`; `…Eval` stays f32), `MobileNetV4SyncB`; ties `MobileNetV4StepTieB` (`mnv4_net_tiedB`), `MobileNetV4SyncStepTieB` (`mnv4_net_syncTiedB`), `MobileNetV4ParamGrad` (`mnv4_net_lossGrad`); comparator rows `mnv4FwdGraphBFull_faithful`, `mnv4FwdGraphSyncFull_shard`, `mnv4_net_syncTiedB`, `mnv4_net_lossGrad` regenerated; text ties 7 → 13 guards (+ 5 at inference, f32) |
 
 Then ConvNeXt (`convStride4` stem, `convStrided` downsamples, `depthwise`; the hand-written GAP
 backward stays a carve-out; its fold file is `ConvNeXtFoldGB`) and ViT (`rowDense`, `patchEmbed`;
@@ -311,6 +318,26 @@ The CIFAR batched artifacts (`cifar8wb_bf16*`, `cifar8wb_bn_bf16*`) use the same
    `SpecVJP` passes `false`; `FwdGraphTextTies` checks the stem, the four block kinds, the
    drop-site block, the head and the dropout head at both values (8 → 16 B0 guards). The yaml
    rows and 4f say B0 too. Binders by line number this time (see the brief at the top).
+   MobileNetV4-Conv-M done 2026-10-07, no shared lemma: `mnv4{Stem,Fused,Head}GraphB`, the three
+   body builders `mnv4{ExtraDW,ConvNeXt,Ffn}BodyGraphB`, `mnv4StridedGraphB`, the five private
+   `mnv4Res*GraphB`, `mnv4FwdGraphBFull{,Do}`, `mnv4HeadGraphBDo`, the five `mnv4Res*DropGraphB`
+   and `mnv4FwdGraphBFullDrop` (the `drop` artifacts' forward; the `Eval` graph stays f32) take
+   `(bf16 : Bool)` before `e` (the heads' after `bd`, before `m`), the eight sync builders and
+   `mnv4FwdGraphSyncFull` likewise; `mnv4SkipGraphB` / `mnv4SkipDropGraphB` / `mnv4SkipGraphSync`
+   are generic in the body and carry no flag. The body `_faithful`s split their one `simp only`
+   into the erasure pass and `[denOp, Function.comp_apply]`; the two head graphs' second pass also
+   takes `reindexCLM_apply` (see the brief); each sync shard step erases its `have hXc` with
+   `simp only [Bf16Fold.denOp_<kind>At_id] at hXc` (18 of them, inserted by scanning to the next
+   2-space line, since several `have`s span three lines). `mnv4{ExtraDW,ConvNeXt,Ffn,Strided,Stem,
+   Fused,Head}TiedB`, `mnv4_net_tiedB`, the seven sync bundles, `mnv4NetSyncTiedB`,
+   `mnv4_net_syncTiedB` (+ `_smoothedCE`), the seven `*LossTiedB`, `Mnv4NetLossTiedB`,
+   `mnv4_net_lossGrad` (+ `_smoothedCE`, `mnv4_net_tied_lossGrad`) take it after the row's weight
+   record `(p : UibParams s)` / the stem's `(γs βs : Vec oc)` / the fused and head stages'
+   `(xN cotN vN epsStr : String)` / the capstones' `(w : Mnv4BWeights nCls)` (the head's two 1×1
+   convs switch; the classifier dense does not). `FwdGraphTextTies` checks the stem, the fused
+   stage, all 21 rows, the 21 rows at their drop sites, the head and the dropout head at both
+   values (7 → 13 MobileNetV4 guards; `mnv4RowGraphText` takes the flag before `site`). The yaml
+   rows (the graph row is MobileNetV4's example row) and 4f say MobileNetV4 too.
 4. The shared files (3.4), one commit each.
 
 Each commit staged and shown before it is made.

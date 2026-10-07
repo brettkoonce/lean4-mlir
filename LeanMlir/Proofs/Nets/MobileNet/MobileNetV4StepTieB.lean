@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
@@ -45,9 +46,18 @@ certificate.
 
 **MNv4 emits no conv bias gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
 bias is folded into its BatchNorm and bound to `%zb{c}` — so `convBiasGradB` and its strided peers
-are never emitted and there is nothing to state. Same situation as ResNet-50. The five
-`*GradBBf16` kinds the bf16 artifacts emit are folded in
-[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
+are never emitted and there is nothing to state. Same situation as ResNet-50.
+
+**Precision is a flag on the statement.** The bf16 ImageNet artifacts
+(`mnv4in_emaacc{,dp}8x128wxdowd005bf16`, `mnv4in_acc{,dp}8x128wxdropdowd01bf16`) emit the bf16
+conv and depthwise weight-gradient kinds (`convWeightGradBBf16`, `depthwiseWeightGradBBf16`, …;
+`Foundation.Bf16GradNodes`). Every conv and depthwise weight node below is stated on the renderers'
+switch — `ConvWTiedBAt bf16` / `ConvStridedWTiedBAt bf16` / `DepthwiseWTiedBAt bf16` /
+`DepthwiseStridedWTiedBAt bf16` (`Foundation.GradNodesBAt`): `bf16 := false` is the f32 node,
+`bf16 := true` the bf16 one — and the capstone `mnv4_net_tiedB` takes `bf16`, so it reaches the
+bf16 artifacts' gradient nodes read over ℝ exactly as it reads the f32 ones (`Bf16Erasure`: at the
+identity rounding the bf16 kind denotes what its f32 peer does). BatchNorm's and the classifier's
+nodes carry no flag because no render switches them.
 
 ## Everything here is generic in the row
 
@@ -87,8 +97,8 @@ open Proofs Proofs.StableHLO Proofs.IR Proofs.BackLinks
 namespace Proofs.Mnv4TieB
 
 open scoped BigOperators
-open Proofs.GradNodeB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds
-  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
+open Proofs.GradNodeB (bnPairTiedB_holds convStridedWTiedBAt_holds convWTiedBAt_holds
+  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedBAt_holds depthwiseWTiedBAt_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The ExtraDW block's cotangent chain — 13 of Conv-M's 21 rows
@@ -304,7 +314,8 @@ noncomputable def mnv4SkipCotIn {N n : Nat} (bodyDx dyOut : Vec (N * n)) : Vec (
     There are no conv-bias conjuncts: `MobileNetV4RenderB` has no `convBias` flag, so those ops
     are never emitted and every slot here is exercised by the artifact. -/
 def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
   let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
@@ -319,22 +330,22 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let cotDn := mnv4CotDn N s p xin dyOut
   let cotDc := mnv4CotDc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedBAt bf16 N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
   GradNodeB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
+  GradNodeB.DepthwiseWTiedBAt bf16 N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -342,15 +353,16 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
 /-- **And it holds** — twelve instantiations of the shared `∀ cot` leaf folds with
     the freedom removed: the cotangents are the chain's, not free. -/
 theorem mnv4_extradw_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    mnv4ExtraDWTiedB N s xN cotN vN epsStr p xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    mnv4ExtraDWTiedB N s xN cotN vN epsStr p bf16 xin dyOut := by
   unfold mnv4ExtraDWTiedB
-  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
-    depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨depthwiseWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds,
+    depthwiseWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 
 def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
   let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
@@ -362,32 +374,33 @@ def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : 
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedBAt bf16 N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
   GradNodeB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — nine instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
 theorem mnv4_convnext_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    mnv4ConvNeXtTiedB N s xN cotN vN epsStr p xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    mnv4ConvNeXtTiedB N s xN cotN vN epsStr p bf16 xin dyOut := by
   unfold mnv4ConvNeXtTiedB
-  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
-    convWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨depthwiseWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds,
+    convWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 
 def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    Prop :=
   let qr := (mnv4PreDWSlot (h := s.h) (w := s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
   let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
@@ -396,22 +409,22 @@ def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibPa
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — six instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
 theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    mnv4FfnTiedB N s xN cotN vN epsStr p xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    mnv4FfnTiedB N s xN cotN vN epsStr p bf16 xin dyOut := by
   unfold mnv4FfnTiedB
-  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -428,7 +441,8 @@ theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p :
 
     No skip and no `addVB`: `ic ≠ oc` at all three rows, so the block IS its body. -/
 def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))))
+    (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
   let er := (cbReluLayer (h := 2 * s.h) (w := 2 * s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
   let dr := (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
@@ -443,23 +457,23 @@ def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let cotDn := mnv4SCotDn N s p xin dyOut
   let cotDc := mnv4SCotDc N s p xin dyOut
   let cotPc := mnv4SCotPc N s p xin dyOut
-  GradNodeB.DepthwiseWTiedB N (2 * s.h) (2 * s.h) xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedBAt bf16 N (2 * s.h) (2 * s.h) xN cotN p.bq xin p.Wq cotQc
   ∧
   GradNodeB.BnPairTiedB N s.ic (2 * s.h) (2 * s.h) vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic (2 * s.h) (2 * s.h) qc) (reassocB N s.ic (2 * s.h) (2 * s.h) cotQn)
   ∧
-  GradNodeB.ConvWTiedB N (2 * s.h) (2 * s.h) xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N (2 * s.h) (2 * s.h) xN cotN p.be qr p.We cotEc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) (2 * s.h) (2 * s.h) vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) ec)
       (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) cotEn)
   ∧
-  GradNodeB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
+  GradNodeB.DepthwiseStridedWTiedBAt bf16 N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
   GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedBAt bf16 N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
   GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
@@ -467,11 +481,12 @@ def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
 /-- **And it holds** — twelve instantiations (one at the strided post-DW) of the shared
     `∀ cot` leaf folds with the freedom removed. -/
 theorem mnv4_strided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    mnv4StridedTiedB N s xN cotN vN epsStr p xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))))
+    (dyOut : Vec (N * (s.oc * s.h * s.h))) :
+    mnv4StridedTiedB N s xN cotN vN epsStr p bf16 xin dyOut := by
   unfold mnv4StridedTiedB
-  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
-    depthwiseStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨depthwiseWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds,
+    depthwiseStridedWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stem, the fused stage and the head — the three non-UIB stages
@@ -503,22 +518,22 @@ noncomputable def mnv4StemCotC (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 o
     stem sits outside `MobileNetV4FullB.lean`'s `CertLayer` trunk, and it is B0's situation
     exactly. -/
 def mnv4StemTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) : Prop :=
   let sc := batchMap N (flatConvStride2 Ws bs) x
   let cotN' := mnv4StemCotN N h w Ws bs εs γs βs x dyStem
   let cotC := mnv4StemCotC N h w Ws bs εs γs βs x dyStem
-  GradNodeB.ConvStridedWTiedB N h w xN cotN bs x Ws cotC
+  GradNodeB.ConvStridedWTiedBAt bf16 N h w xN cotN bs x Ws cotC
   ∧
   GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
       (reassocB N oc h w cotN')
 
 theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) :
-    mnv4StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs x dyStem := by
+    mnv4StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs bf16 x dyStem := by
   unfold mnv4StemTiedB
-  exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convStridedWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 /-- Cotangent at the fused stage's project CONV output. `dyF` reaches the project BN's γ/β
     unmasked — the fused stage ends in a BatchNorm with no activation. Feeds `%f0pW`. -/
@@ -562,7 +577,7 @@ noncomputable def mnv4FusedCotIn (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Ker
     symmetric padding, like the stem's. -/
 def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xN cotN vN epsStr : String)
+    (γp βp : Vec oc) (xN cotN vN epsStr : String) (bf16 : Bool)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyF : Vec (N * (oc * h * w))) : Prop :=
   let sw := cbReluStridedB N (h := h) (w := w) Wc bc εc γc βc xin
   let fc := batchMap N (flatConvStride2 Wc bc) xin
@@ -570,23 +585,23 @@ def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH
   let cotN' := mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotC := mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotPc := mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
-  GradNodeB.ConvStridedWTiedB N h w xN cotN bc xin Wc cotC
+  GradNodeB.ConvStridedWTiedBAt bf16 N h w xN cotN bc xin Wc cotC
   ∧
   GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εc γc βc (reassocB N mid h w fc)
       (reassocB N mid h w cotN')
   ∧
-  GradNodeB.ConvWTiedB N h w xN cotN bp sw Wp cotPc
+  GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bp sw Wp cotPc
   ∧
   GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
       (reassocB N oc h w dyF)
 
 theorem mnv4_fused_tiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xN cotN vN epsStr : String)
+    (γp βp : Vec oc) (xN cotN vN epsStr : String) (bf16 : Bool)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyF : Vec (N * (oc * h * w))) :
-    mnv4FusedTiedB N h w Wc bc εc γc βc Wp bp εp γp βp xN cotN vN epsStr xin dyF := by
+    mnv4FusedTiedB N h w Wc bc εc γc βc Wp bp εp γp βp xN cotN vN epsStr bf16 xin dyF := by
   unfold mnv4FusedTiedB
-  exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convStridedWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds⟩
 
 
 /-! The head, timm's order: `cn_960` conv-bn-relu at `h×w`, GAP, `conv_head` conv-bn-relu on the
@@ -672,7 +687,7 @@ noncomputable def mnv4HeadCotIn (N h w : Nat) {c mid oc nCls : Nat}
 def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String) (bf16 : Bool)
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Prop :=
   let pool := mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin
   let feat := mnv4HeadFeat N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 xin
@@ -682,12 +697,12 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
   let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  GradNodeB.ConvWTiedB N h w xN cotN b1 xin W1 cotH1c
+  GradNodeB.ConvWTiedBAt bf16 N h w xN cotN b1 xin W1 cotH1c
   ∧
   GradNodeB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
       (reassocB N mid h w cotH1n)
   ∧
-  GradNodeB.ConvWTiedB N 1 1 xN cotN b2 pool W2 cotHc
+  GradNodeB.ConvWTiedBAt bf16 N 1 1 xN cotN b2 pool W2 cotHc
   ∧
   GradNodeB.BnPairTiedB N oc 1 1 vN epsStr cotN ε2 γ2 β2 (reassocB N oc 1 1 c2)
       (reassocB N oc 1 1 cotHn)
@@ -697,11 +712,11 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
 theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String) (bf16 : Bool)
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) :
-    mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr xin g := by
+    mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr bf16 xin g := by
   unfold mnv4HeadTiedB
-  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+  exact ⟨convWTiedBAt_holds bf16, bnPairTiedB_holds, convWTiedBAt_holds bf16, bnPairTiedB_holds,
     denseWTiedB_holds, denseBTiedB_holds⟩
 
 
@@ -941,13 +956,16 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     **No smoothness hypothesis and no `0 < ε`**, and `N` and `nCls` are both binders. The folds
     are `∀ cot` statements at explicitly constructed cotangents; the kink and positivity conditions
     live in the `CertLayer`s whose `.ok` `MobileNetV4FullBVJP.lean` binds. The statement is at
-    224×224; unlike ResNet-50 there is no resolution binder `q`. One device, f32.
+    224×224; unlike ResNet-50 there is no resolution binder `q`. One device, at either precision:
+    `bf16` selects the conv and depthwise weight nodes' kind — `false` the f32 artifacts', `true`
+    the bf16 ones', read over ℝ (`Bf16Erasure`); the right-hand side is the same certified
+    gradient at either value.
 
     On the data-parallel (sync-BN) artifacts this theorem applies at `N := R·N`: the per-replica
     statement is `MobileNetV4SyncTieB.mnv4_net_syncTiedB`, whose right-hand sides are this
     theorem's nodes at the global batch. The AdamW update that follows is not stated here. -/
 theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (g : Vec (N * nCls)) :
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (x : Vec (N * (3 * 224 * 224))) (g : Vec (N * nCls)) :
   let dy21 := mnv4HeadCotIn N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
                w.Wd w.bd (mnv4Blk21 N w x) g
   let dy20 := mnv4SkipCotIn (mnv4BodyCotIn N mnv4Row21 w.b21 (mnv4Blk20 N w x) dy21) dy21
@@ -973,60 +991,60 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   let dy0 := mnv4SBodyCotIn N mnv4Row1 w.b1 (mnv4Blk0 N w x) dy1
   let dyStem := mnv4FusedCotIn N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
                  w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt (mnv4Pre0 N w x) dy0
-  mnv4StemTiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x dyStem
+  mnv4StemTiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt bf16 x dyStem
   ∧ mnv4FusedTiedB N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
-      w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x) dy0
-  ∧ mnv4StridedTiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1
-  ∧ mnv4ExtraDWTiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x) dy2
-  ∧ mnv4StridedTiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3
-  ∧ mnv4ExtraDWTiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x) dy4
-  ∧ mnv4ExtraDWTiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x) dy5
-  ∧ mnv4ExtraDWTiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x) dy6
-  ∧ mnv4ExtraDWTiedB N mnv4Row7 xN cotN vN epsStr w.b7 (mnv4Blk6 N w x) dy7
-  ∧ mnv4ConvNeXtTiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x) dy8
-  ∧ mnv4FfnTiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x) dy9
-  ∧ mnv4ConvNeXtTiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x) dy10
-  ∧ mnv4StridedTiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11
-  ∧ mnv4ExtraDWTiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x) dy12
-  ∧ mnv4ExtraDWTiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x) dy13
-  ∧ mnv4ExtraDWTiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x) dy14
-  ∧ mnv4FfnTiedB N mnv4Row15 xN cotN vN epsStr w.b15 (mnv4Blk14 N w x) dy15
-  ∧ mnv4ConvNeXtTiedB N mnv4Row16 xN cotN vN epsStr w.b16 (mnv4Blk15 N w x) dy16
-  ∧ mnv4ExtraDWTiedB N mnv4Row17 xN cotN vN epsStr w.b17 (mnv4Blk16 N w x) dy17
-  ∧ mnv4ExtraDWTiedB N mnv4Row18 xN cotN vN epsStr w.b18 (mnv4Blk17 N w x) dy18
-  ∧ mnv4FfnTiedB N mnv4Row19 xN cotN vN epsStr w.b19 (mnv4Blk18 N w x) dy19
-  ∧ mnv4FfnTiedB N mnv4Row20 xN cotN vN epsStr w.b20 (mnv4Blk19 N w x) dy20
-  ∧ mnv4ConvNeXtTiedB N mnv4Row21 xN cotN vN epsStr w.b21 (mnv4Blk20 N w x) dy21
+      w.f0pbt xN cotN vN epsStr bf16 (mnv4Pre0 N w x) dy0
+  ∧ mnv4StridedTiedB N mnv4Row1 xN cotN vN epsStr w.b1 bf16 (mnv4Blk0 N w x) dy1
+  ∧ mnv4ExtraDWTiedB N mnv4Row2 xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N w x) dy2
+  ∧ mnv4StridedTiedB N mnv4Row3 xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N w x) dy3
+  ∧ mnv4ExtraDWTiedB N mnv4Row4 xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N w x) dy4
+  ∧ mnv4ExtraDWTiedB N mnv4Row5 xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N w x) dy5
+  ∧ mnv4ExtraDWTiedB N mnv4Row6 xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N w x) dy6
+  ∧ mnv4ExtraDWTiedB N mnv4Row7 xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N w x) dy7
+  ∧ mnv4ConvNeXtTiedB N mnv4Row8 xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N w x) dy8
+  ∧ mnv4FfnTiedB N mnv4Row9 xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N w x) dy9
+  ∧ mnv4ConvNeXtTiedB N mnv4Row10 xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N w x) dy10
+  ∧ mnv4StridedTiedB N mnv4Row11 xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N w x) dy11
+  ∧ mnv4ExtraDWTiedB N mnv4Row12 xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N w x) dy12
+  ∧ mnv4ExtraDWTiedB N mnv4Row13 xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N w x) dy13
+  ∧ mnv4ExtraDWTiedB N mnv4Row14 xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N w x) dy14
+  ∧ mnv4FfnTiedB N mnv4Row15 xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N w x) dy15
+  ∧ mnv4ConvNeXtTiedB N mnv4Row16 xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N w x) dy16
+  ∧ mnv4ExtraDWTiedB N mnv4Row17 xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N w x) dy17
+  ∧ mnv4ExtraDWTiedB N mnv4Row18 xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N w x) dy18
+  ∧ mnv4FfnTiedB N mnv4Row19 xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N w x) dy19
+  ∧ mnv4FfnTiedB N mnv4Row20 xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N w x) dy20
+  ∧ mnv4ConvNeXtTiedB N mnv4Row21 xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N w x) dy21
   ∧ mnv4HeadTiedB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
-      w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x) g := by
+      w.Wd w.bd xN cotN vN epsStr bf16 (mnv4Blk21 N w x) g := by
   intro dy21 dy20 dy19 dy18 dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3
     dy2 dy1 dy0 dyStem
-  exact ⟨mnv4_stem_tiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x dyStem,
+  exact ⟨mnv4_stem_tiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt bf16 x dyStem,
     mnv4_fused_tiedB N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
-      w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x) dy0,
-    mnv4_strided_tiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1,
-    mnv4_extradw_tiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x) dy2,
-    mnv4_strided_tiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3,
-    mnv4_extradw_tiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x) dy4,
-    mnv4_extradw_tiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x) dy5,
-    mnv4_extradw_tiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x) dy6,
-    mnv4_extradw_tiedB N mnv4Row7 xN cotN vN epsStr w.b7 (mnv4Blk6 N w x) dy7,
-    mnv4_convnext_tiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x) dy8,
-    mnv4_ffn_tiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x) dy9,
-    mnv4_convnext_tiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x) dy10,
-    mnv4_strided_tiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11,
-    mnv4_extradw_tiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x) dy12,
-    mnv4_extradw_tiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x) dy13,
-    mnv4_extradw_tiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x) dy14,
-    mnv4_ffn_tiedB N mnv4Row15 xN cotN vN epsStr w.b15 (mnv4Blk14 N w x) dy15,
-    mnv4_convnext_tiedB N mnv4Row16 xN cotN vN epsStr w.b16 (mnv4Blk15 N w x) dy16,
-    mnv4_extradw_tiedB N mnv4Row17 xN cotN vN epsStr w.b17 (mnv4Blk16 N w x) dy17,
-    mnv4_extradw_tiedB N mnv4Row18 xN cotN vN epsStr w.b18 (mnv4Blk17 N w x) dy18,
-    mnv4_ffn_tiedB N mnv4Row19 xN cotN vN epsStr w.b19 (mnv4Blk18 N w x) dy19,
-    mnv4_ffn_tiedB N mnv4Row20 xN cotN vN epsStr w.b20 (mnv4Blk19 N w x) dy20,
-    mnv4_convnext_tiedB N mnv4Row21 xN cotN vN epsStr w.b21 (mnv4Blk20 N w x) dy21,
+      w.f0pbt xN cotN vN epsStr bf16 (mnv4Pre0 N w x) dy0,
+    mnv4_strided_tiedB N mnv4Row1 xN cotN vN epsStr w.b1 bf16 (mnv4Blk0 N w x) dy1,
+    mnv4_extradw_tiedB N mnv4Row2 xN cotN vN epsStr w.b2 bf16 (mnv4Blk1 N w x) dy2,
+    mnv4_strided_tiedB N mnv4Row3 xN cotN vN epsStr w.b3 bf16 (mnv4Blk2 N w x) dy3,
+    mnv4_extradw_tiedB N mnv4Row4 xN cotN vN epsStr w.b4 bf16 (mnv4Blk3 N w x) dy4,
+    mnv4_extradw_tiedB N mnv4Row5 xN cotN vN epsStr w.b5 bf16 (mnv4Blk4 N w x) dy5,
+    mnv4_extradw_tiedB N mnv4Row6 xN cotN vN epsStr w.b6 bf16 (mnv4Blk5 N w x) dy6,
+    mnv4_extradw_tiedB N mnv4Row7 xN cotN vN epsStr w.b7 bf16 (mnv4Blk6 N w x) dy7,
+    mnv4_convnext_tiedB N mnv4Row8 xN cotN vN epsStr w.b8 bf16 (mnv4Blk7 N w x) dy8,
+    mnv4_ffn_tiedB N mnv4Row9 xN cotN vN epsStr w.b9 bf16 (mnv4Blk8 N w x) dy9,
+    mnv4_convnext_tiedB N mnv4Row10 xN cotN vN epsStr w.b10 bf16 (mnv4Blk9 N w x) dy10,
+    mnv4_strided_tiedB N mnv4Row11 xN cotN vN epsStr w.b11 bf16 (mnv4Blk10 N w x) dy11,
+    mnv4_extradw_tiedB N mnv4Row12 xN cotN vN epsStr w.b12 bf16 (mnv4Blk11 N w x) dy12,
+    mnv4_extradw_tiedB N mnv4Row13 xN cotN vN epsStr w.b13 bf16 (mnv4Blk12 N w x) dy13,
+    mnv4_extradw_tiedB N mnv4Row14 xN cotN vN epsStr w.b14 bf16 (mnv4Blk13 N w x) dy14,
+    mnv4_ffn_tiedB N mnv4Row15 xN cotN vN epsStr w.b15 bf16 (mnv4Blk14 N w x) dy15,
+    mnv4_convnext_tiedB N mnv4Row16 xN cotN vN epsStr w.b16 bf16 (mnv4Blk15 N w x) dy16,
+    mnv4_extradw_tiedB N mnv4Row17 xN cotN vN epsStr w.b17 bf16 (mnv4Blk16 N w x) dy17,
+    mnv4_extradw_tiedB N mnv4Row18 xN cotN vN epsStr w.b18 bf16 (mnv4Blk17 N w x) dy18,
+    mnv4_ffn_tiedB N mnv4Row19 xN cotN vN epsStr w.b19 bf16 (mnv4Blk18 N w x) dy19,
+    mnv4_ffn_tiedB N mnv4Row20 xN cotN vN epsStr w.b20 bf16 (mnv4Blk19 N w x) dy20,
+    mnv4_convnext_tiedB N mnv4Row21 xN cotN vN epsStr w.b21 bf16 (mnv4Blk20 N w x) dy21,
     mnv4_head_tiedB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
-      w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x) g⟩
+      w.Wd w.bd xN cotN vN epsStr bf16 (mnv4Blk21 N w x) g⟩
 
 
 /-- **And the loss cotangent `g` is instantiated: MNv4's is the label-smoothed softmax chain.**

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Foundation.HeadLayers
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # MobileNetV4-Conv-M at batch BatchNorm — the whole net's forward and graph
 
@@ -53,7 +54,7 @@ its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with
 | stride | the three stride-2 rows (1, 3, 11) stride their POST-DW (timm's `dw_mid`); the pre-DW and the expand run at the input resolution |
 | head | 1×1 256 → 960 conv-bn-relu at 7×7, GAP, then `conv_head` 960 → 1280 conv-bn-relu on the pooled `[N, 960, 1, 1]` (its BN over the batch alone), then dense |
 | census | **233** parameter slots at `nCls = 10` (8,447,322 scalars; 9,715,512 at 1000), bias-free by construction |
-| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals `mnv4{,in}_fwd_eval` and the 256×256 `mnv4in_fwd_eval_s256` (stated in `MobileNetV4FullBEval`, at any input size), the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand; bf16, and their f32 form is `mnv4FwdGraphBFullDo` below), and the stochastic-depth train steps `mnv4in_acc{,dp}8x128wxdropdowd01bf16` (a drop-path site on each of the 18 skip rows; bf16, and their f32 forward is `MobileNetV4FullBDrop`'s) |
+| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the 224×224 train steps at either precision — `bf16 := false` for `mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`, `true` for the `*bf16` ones' trunk. Not this graph: the frozen-statistics evals `mnv4{,in}_fwd_eval` and the 256×256 `mnv4in_fwd_eval_s256` (stated in `MobileNetV4FullBEval`, at any input size, f32), the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand; `mnv4FwdGraphBFullDo` below at `bf16 := true`), and the stochastic-depth train steps `mnv4in_acc{,dp}8x128wxdropdowd01bf16` (a drop-path site on each of the 18 skip rows; `MobileNetV4FullBDrop`'s graph at `bf16 := true`) |
 
 `N` stays a binder throughout, as at r34/R50. On the data-parallel artifacts the render's `N` is
 the per-replica batch and BatchNorm is synchronised across replicas; `MobileNetV4SyncB.lean` is
@@ -405,6 +406,12 @@ example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 
 --   `.relu` / `.gap` / `.dense`, `.bnBatchF` for the batch-coupled norm, `.addVB` for the
 --   residual add, and `castIdx` for the head's two `1×1` relabellings (no text).
 --
+--   Every conv and depthwise site is on the renderers' precision switch (`.convAt bf16 id …`,
+--   `StableHLO.PrecisionSwitch`): `bf16 := false` is the f32 artifacts' graph, `true` the bf16
+--   ones' (`mnv4in_emaacc{,dp}8x128wxdowd005bf16`'s trunk among them); the dense carries no flag
+--   because no render switches it. Each `_faithful` holds at either value through `Bf16Erasure`
+--   (`Bf16Fold.denOp_convAt_id`, …), `den` over ℝ at both.
+--
 --   Every SSA name is read off the ROW (`s.p`), never taken as an argument. That is what pins
 --   identity between shape-identical rows: rows 4, 5 and 10 have the same `UibParams` type, so
 --   only `%u4qW` vs `%u5qW` vs `%u10qW` tells them apart, and here those come from the table.
@@ -424,65 +431,68 @@ example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 
     proven lemma, not proving one. `mnv2StemGraphB` and `r50StemGraphB` are generic for the same
     reason, which is easy to read as a stylistic habit and is not. -/
 def mnv4StemGraphB (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-      (.batchOp (N := N) (.convStrided (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e))
+      (.batchOp (N := N) (.convStridedAt bf16 id (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e))
 
 private theorem mnv4StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (mnv4StemGraphB epsStr N h w Ws bs εs γs βs e)
+    den (mnv4StemGraphB epsStr N h w Ws bs εs γs βs bf16 e)
       = mnv4StemB N h w Ws bs εs γs βs (den e) := by
   unfold mnv4StemGraphB
-  simp only [mnv4StemB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+  -- the switch first (`Bf16Erasure`), then the f32 per-kind denotations
+  simp only [mnv4StemB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp,
+    Bf16Fold.denOp_convStridedAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- Fused stage graph: 3×3/s2 symmetric conv → BN → relu → 1×1 project → BN. No skip.
     Generic in the widths, for the reason `mnv4StemGraphB` records. -/
 def mnv4FusedGraphB (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
     (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF "%f0pg" "%f0pbt" epsStr εp γp βp
-    (.batchOp (N := N) (.conv (h := h) (w := w) "%f0pW" s!"%zb{oc}" Wp bp)
+    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%f0pW" s!"%zb{oc}" Wp bp)
       (.batchOp (N := N) (.relu (n := mid * h * w))
         (.bnBatchF "%f0cg" "%f0cbt" epsStr εc γc βc
-          (.batchOp (N := N) (.convStrided (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) e))))
+          (.batchOp (N := N) (.convStridedAt bf16 id (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) e))))
 
 private theorem mnv4FusedGraphB_faithful (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
     (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (hεc : 0 < εc) (γc βc : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (mnv4FusedGraphB epsStr N h w Wc bc εc γc βc Wp bp εp γp βp e)
+    den (mnv4FusedGraphB epsStr N h w Wc bc εc γc βc Wp bp εp γp βp bf16 e)
       = (mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
           (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).fwd (den e) := by
   simp only [mnv4FusedGraphB, mnv4FusedStage, cbReluStridedLayer,
     projLayer, CertLayer.comp_fwd, cbReluStridedB, projB,
-    ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+    ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    Bf16Fold.denOp_convStridedAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **ExtraDW body graph** — both depthwises present, 13 of Conv-M's 21 rows (and all three
     stride-2 ones, whose own builder is below). The BODY only: the identity skip is `.addVB`'d on
     at the call site, which is what keeps the whole-net graph LINEAR instead of duplicating each
     skip's entire input subtree. -/
-def mnv4ExtraDWBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s)
+def mnv4ExtraDWBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s) (bf16 : Bool)
     (e : SHlo (N * (s.ic * s.h * s.h))) : SHlo (N * (s.oc * s.h * s.h)) :=
   .bnBatchF s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr p.ez p.gz p.bz2
-    (.batchOp (N := N) (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
+    (.batchOp (N := N) (.convAt bf16 id (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
         s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz)
       (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
         (.bnBatchF s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr p.ed p.gd p.bd2
-          (.batchOp (N := N) (.depthwise (c := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.batchOp (N := N) (.depthwiseAt bf16 id (c := s.ic * s.expand) (h := s.h) (w := s.h)
               s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd)
             (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
               (.bnBatchF s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr p.ee p.ge p.be2
                 (.batchOp (N := N)
-                  (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+                  (.convAt bf16 id (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
                     s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
                   (.bnBatchF s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr p.eq_ p.gq p.bq2
-                    (.batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
+                    (.batchOp (N := N) (.depthwiseAt bf16 id (c := s.ic) (h := s.h) (w := s.h)
                         s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq)
                       e)))))))))
 
@@ -490,96 +500,100 @@ def mnv4ExtraDWBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibPara
     theorem serves all thirteen. The two hypotheses are exactly the dispatch conditions
     `mnv4PreDWSlot`/`mnv4PostDWSlot` branch on, discharged by `decide` at each concrete row. -/
 theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
-    (p : UibParams s) (hq : s.preDWk ≠ 0) (hd : s.postDWk ≠ 0)
+    (p : UibParams s) (bf16 : Bool) (hq : s.preDWk ≠ 0) (hd : s.postDWk ≠ 0)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
-    den (mnv4ExtraDWBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
+    den (mnv4ExtraDWBodyGraphB epsStr N s p bf16 e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ExtraDWBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_right hq, ite_eq_right hd, mnv4DWBnLayer, mnv4DWReluLayer, cbReluLayer, projLayer,
-    CertLayer.comp_fwd, projB, cbReluB, dwbB, dwbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+    CertLayer.comp_fwd, projB, cbReluB, dwbB, dwbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
+    den_batchOp, Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **ConvNeXt-like body graph** — pre-DW only, `postDWk = 0`, four of Conv-M's rows (8, 10, 16,
     21). The absent depthwise emits no tokens, exactly as `mnv4PostDWSlot` inserts `id'`: the
     `UibParams` record still carries a degenerate `DepthwiseKernel _ 0 0` in that slot and this
     graph simply does not read it. A token stated for an absent depthwise would be a `den` of a
     node the artifact does not have. -/
-def mnv4ConvNeXtBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s)
+def mnv4ConvNeXtBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s) (bf16 : Bool)
     (e : SHlo (N * (s.ic * s.h * s.h))) : SHlo (N * (s.oc * s.h * s.h)) :=
   .bnBatchF s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr p.ez p.gz p.bz2
-    (.batchOp (N := N) (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
+    (.batchOp (N := N) (.convAt bf16 id (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
         s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz)
       (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
         (.bnBatchF s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr p.ee p.ge p.be2
-          (.batchOp (N := N) (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.batchOp (N := N) (.convAt bf16 id (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
               s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
             (.bnBatchF s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr p.eq_ p.gq p.bq2
-              (.batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
+              (.batchOp (N := N) (.depthwiseAt bf16 id (c := s.ic) (h := s.h) (w := s.h)
                   s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq)
                 e))))))
 
 theorem mnv4ConvNeXtBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
-    (p : UibParams s) (hq : s.preDWk ≠ 0) (hd : s.postDWk = 0)
+    (p : UibParams s) (bf16 : Bool) (hq : s.preDWk ≠ 0) (hd : s.postDWk = 0)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
-    den (mnv4ConvNeXtBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
+    den (mnv4ConvNeXtBodyGraphB epsStr N s p bf16 e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4ConvNeXtBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_right hq, ite_eq_left hd, mnv4DWBnLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
     CertLayer.comp_fwd, projB, cbReluB, dwbB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
+    den_batchOp, Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **FFN body graph** — neither depthwise, four of Conv-M's rows (9, 15, 19, 20): expand,
     project, and nothing else. Both slots are `id'`. -/
-def mnv4FfnBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s)
+def mnv4FfnBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s) (bf16 : Bool)
     (e : SHlo (N * (s.ic * s.h * s.h))) : SHlo (N * (s.oc * s.h * s.h)) :=
   .bnBatchF s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr p.ez p.gz p.bz2
-    (.batchOp (N := N) (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
+    (.batchOp (N := N) (.convAt bf16 id (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
         s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz)
       (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
         (.bnBatchF s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr p.ee p.ge p.be2
-          (.batchOp (N := N) (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.batchOp (N := N) (.convAt bf16 id (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
               s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
             e))))
 
 theorem mnv4FfnBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
-    (p : UibParams s) (hq : s.preDWk = 0) (hd : s.postDWk = 0)
+    (p : UibParams s) (bf16 : Bool) (hq : s.preDWk = 0) (hd : s.postDWk = 0)
     (e : SHlo (N * (s.ic * s.h * s.h))) :
-    den (mnv4FfnBodyGraphB epsStr N s p e) = (mnv4BodyOfRow N s p).fwd (den e) := by
+    den (mnv4FfnBodyGraphB epsStr N s p bf16 e) = (mnv4BodyOfRow N s p).fwd (den e) := by
   simp only [mnv4FfnBodyGraphB, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot,
     ite_eq_left hq, ite_eq_left hd, cbReluLayer, projLayer, CertLayer.id'_fwd, CertLayer.comp_fwd,
-    projB, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+    projB, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp,
+    Bf16Fold.denOp_convAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **Strided block graph** — rows 1, 3 and 11, all ExtraDW. timm strides `dw_mid`: the BN-only
     pre-DW and the expand run at the input resolution `2h`, the post-DW (`.depthwiseStrided`,
     symmetric) takes it to `h`, the project runs at `h`. No skip: `ic ≠ oc` at all three, so the
     block IS the body and there is no `.addVB`. -/
-def mnv4StridedGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s)
+def mnv4StridedGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s) (bf16 : Bool)
     (e : SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) : SHlo (N * (s.oc * s.h * s.h)) :=
   .bnBatchF s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr p.ez p.gz p.bz2
-    (.batchOp (N := N) (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
+    (.batchOp (N := N) (.convAt bf16 id (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
         s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz)
       (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
         (.bnBatchF s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr p.ed p.gd p.bd2
-          (.batchOp (N := N) (.depthwiseStrided (c := s.ic * s.expand) (h := s.h) (w := s.h)
+          (.batchOp (N := N) (.depthwiseStridedAt bf16 id (c := s.ic * s.expand) (h := s.h) (w := s.h)
               s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd)
             (.batchOp (N := N) (.relu (n := s.ic * s.expand * (2 * s.h) * (2 * s.h)))
               (.bnBatchF s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr p.ee p.ge p.be2
                 (.batchOp (N := N)
-                  (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
+                  (.convAt bf16 id (ic := s.ic) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
                     s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
                   (.bnBatchF s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr p.eq_ p.gq p.bq2
-                    (.batchOp (N := N) (.depthwise (c := s.ic) (h := 2 * s.h) (w := 2 * s.h)
+                    (.batchOp (N := N) (.depthwiseAt bf16 id (c := s.ic) (h := 2 * s.h) (w := 2 * s.h)
                         s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq)
                       e)))))))))
 
 theorem mnv4StridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
-    (p : UibParams s) (hq : s.preDWk ≠ 0)
+    (p : UibParams s) (bf16 : Bool) (hq : s.preDWk ≠ 0)
     (e : SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
-    den (mnv4StridedGraphB epsStr N s p e) = (mnv4StridedBodyOfRow N s p).fwd (den e) := by
+    den (mnv4StridedGraphB epsStr N s p bf16 e) = (mnv4StridedBodyOfRow N s p).fwd (den e) := by
   simp only [mnv4StridedGraphB, mnv4StridedBodyOfRow, mnv4UibStridedBody, mnv4PreDWSlot,
     ite_eq_right hq, mnv4DWBnLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer,
     CertLayer.comp_fwd, projB, cbReluB, dwbB, dwbReluBstrided, ↓den_batchOp_relu_eq_reluF,
-    reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+    reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id,
+    Bf16Fold.denOp_depthwiseStridedAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **One skip row's graph: its body's, plus the identity skip.** Trivial as a definition; it
     exists as a barrier to unfolding.
@@ -613,32 +627,34 @@ theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n
 def mnv4HeadGraphB (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
     (e : SHlo (N * (c * h * w))) : SHlo (N * nCls) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
     (castIdx (mnv4_pool11 N oc).symm
       (.batchOp (N := N) (.relu (n := oc * 1 * 1))
         (.bnBatchF "%hg" "%hbt" epsStr ε2 γ2 β2
-          (.batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
+          (.batchOp (N := N) (.convAt bf16 id (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
             (castIdx (mnv4_pool11 N mid)
               (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (.bnBatchF "%h1g" "%h1bt" epsStr ε1 γ1 β1
-                    (.batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
+                    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
                       e)))))))))
 
 private theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (e : SHlo (N * (c * h * w))) :
-    den (mnv4HeadGraphB epsStr N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd e)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (e : SHlo (N * (c * h * w))) :
+    den (mnv4HeadGraphB epsStr N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd bf16 e)
       = (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
           (gapLayer N (c := mid) (h := h) (w := w))
           (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2)
           (denseLayer N Wd bd)).fwd (den e) := by
   simp only [mnv4HeadGraphB, mnv4Head, cbReluLayer, gapLayer, castLayer,
     denseLayer, CertLayer.comp_fwd, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
-    den_castIdx, reindexCLM_apply, den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
+    den_castIdx, den_batchOp, Bf16Fold.denOp_convAt_id, den_bnBatchF]
+  -- `reindexCLM_apply` needs the composition opened first, so it rides with `denOp`
+  simp only [denOp, Function.comp_apply, reindexCLM_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness
@@ -646,118 +662,118 @@ private theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid o
 
 /-- Trunk group **Res28**'s graph — rows 1–2: the 56→28 reduction and the block that follows it. -/
 private def mnv4Res28GraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (e : SHlo (N * (48 * 56 * 56))) : SHlo (N * (80 * 28 * 28)) :=
-  mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2)
-      (mnv4StridedGraphB epsStr N mnv4Row1 w.b1
+    (bf16 : Bool) (e : SHlo (N * (48 * 56 * 56))) : SHlo (N * (80 * 28 * 28)) :=
+  mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2 bf16)
+      (mnv4StridedGraphB epsStr N mnv4Row1 w.b1 bf16
       (e))
 
 private theorem mnv4Res28GraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (48 * 56 * 56))) :
-    den (mnv4Res28GraphB N epsStr w e) = (mnv4Res28Layer N w).fwd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (48 * 56 * 56))) :
+    den (mnv4Res28GraphB N epsStr w bf16 e) = (mnv4Res28Layer N w).fwd (den e) := by
   simp only [mnv4Res28GraphB, mnv4Res28Layer, CertLayer.comp_fwd, CertLayer.residual_fwd,
     Function.comp_apply,
-    mnv4StridedGraphB_faithful epsStr N mnv4Row1 w.b1 (by decide),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row2 w.b2 (by decide) (by decide)),]
+    mnv4StridedGraphB_faithful epsStr N mnv4Row1 w.b1 bf16 (by decide),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row2 w.b2 bf16 (by decide) (by decide)),]
 
 /-- Trunk group **Res14a**'s graph — rows 3–6: the 28→14 reduction, then three ExtraDW blocks. -/
 private def mnv4Res14aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (e : SHlo (N * (80 * 28 * 28))) : SHlo (N * (160 * 14 * 14)) :=
-  mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4)
-      (mnv4StridedGraphB epsStr N mnv4Row3 w.b3
+    (bf16 : Bool) (e : SHlo (N * (80 * 28 * 28))) : SHlo (N * (160 * 14 * 14)) :=
+  mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4 bf16)
+      (mnv4StridedGraphB epsStr N mnv4Row3 w.b3 bf16
       (e))))
 
 private theorem mnv4Res14aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (80 * 28 * 28))) :
-    den (mnv4Res14aGraphB N epsStr w e) = (mnv4Res14aLayer N w).fwd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (80 * 28 * 28))) :
+    den (mnv4Res14aGraphB N epsStr w bf16 e) = (mnv4Res14aLayer N w).fwd (den e) := by
   simp only [mnv4Res14aGraphB, mnv4Res14aLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
     Function.comp_apply,
-    mnv4StridedGraphB_faithful epsStr N mnv4Row3 w.b3 (by decide),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row4 w.b4 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row5 w.b5 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row6 w.b6 (by decide) (by decide)),]
+    mnv4StridedGraphB_faithful epsStr N mnv4Row3 w.b3 bf16 (by decide),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row4 w.b4 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row5 w.b5 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row6 w.b6 bf16 (by decide) (by decide)),]
 
 /-- Trunk group **Res14b**'s graph — rows 7–10 at 14×14: ExtraDW, ConvNeXt, FFN, ConvNeXt — three families in four blocks. -/
 private def mnv4Res14bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (160 * 14 * 14)) :=
-  mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10)
-      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9)
-      (mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7)
+    (bf16 : Bool) (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (160 * 14 * 14)) :=
+  mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10 bf16)
+      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9 bf16)
+      (mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7 bf16)
       (e))))
 
 private theorem mnv4Res14bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (160 * 14 * 14))) :
-    den (mnv4Res14bGraphB N epsStr w e) = (mnv4Res14bLayer N w).fwd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (160 * 14 * 14))) :
+    den (mnv4Res14bGraphB N epsStr w bf16 e) = (mnv4Res14bLayer N w).fwd (den e) := by
   simp only [mnv4Res14bGraphB, mnv4Res14bLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
     Function.comp_apply,
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row7 w.b7 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8) _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row8 w.b8 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9) _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row9 w.b9 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10) _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row10 w.b10 (by decide) (by decide)),]
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row7 w.b7 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8 bf16) _
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row8 w.b8 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9 bf16) _
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row9 w.b9 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10 bf16) _
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row10 w.b10 bf16 (by decide) (by decide)),]
 
 /-- Trunk group **Res7a**'s graph — rows 11–15: the last reduction (14→7), then four blocks at 7×7. -/
 private def mnv4Res7aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (256 * 7 * 7)) :=
-  mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12)
-      (mnv4StridedGraphB epsStr N mnv4Row11 w.b11
+    (bf16 : Bool) (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (256 * 7 * 7)) :=
+  mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12 bf16)
+      (mnv4StridedGraphB epsStr N mnv4Row11 w.b11 bf16
       (e)))))
 
 private theorem mnv4Res7aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (160 * 14 * 14))) :
-    den (mnv4Res7aGraphB N epsStr w e) = (mnv4Res7aLayer N w).fwd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (160 * 14 * 14))) :
+    den (mnv4Res7aGraphB N epsStr w bf16 e) = (mnv4Res7aLayer N w).fwd (den e) := by
   simp only [mnv4Res7aGraphB, mnv4Res7aLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
     Function.comp_apply,
-    mnv4StridedGraphB_faithful epsStr N mnv4Row11 w.b11 (by decide),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row12 w.b12 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row13 w.b13 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row14 w.b14 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15) _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row15 w.b15 (by decide) (by decide)),]
+    mnv4StridedGraphB_faithful epsStr N mnv4Row11 w.b11 bf16 (by decide),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row12 w.b12 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row13 w.b13 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row14 w.b14 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15 bf16) _
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row15 w.b15 bf16 (by decide) (by decide)),]
 
 /-- Trunk group **Res7b**'s graph — rows 16–21 at 7×7: the net's tail. -/
 private def mnv4Res7bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (e : SHlo (N * (256 * 7 * 7))) : SHlo (N * (256 * 7 * 7)) :=
-  mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21)
-      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20)
-      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18)
-      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17)
-      (mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16)
+    (bf16 : Bool) (e : SHlo (N * (256 * 7 * 7))) : SHlo (N * (256 * 7 * 7)) :=
+  mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21 bf16)
+      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20 bf16)
+      (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18 bf16)
+      (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17 bf16)
+      (mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16 bf16)
       (e))))))
 
 private theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (256 * 7 * 7))) :
-    den (mnv4Res7bGraphB N epsStr w e) = (mnv4Res7bLayer N w).fwd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (256 * 7 * 7))) :
+    den (mnv4Res7bGraphB N epsStr w bf16 e) = (mnv4Res7bLayer N w).fwd (den e) := by
   simp only [mnv4Res7bGraphB, mnv4Res7bLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
     Function.comp_apply,
-    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16) _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row16 w.b16 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row17 w.b17 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18) _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row18 w.b18 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19) _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row19 w.b19 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20) _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row20 w.b20 (by decide) (by decide)),
-    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21) _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row21 w.b21 (by decide) (by decide)),]
+    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16 bf16) _
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row16 w.b16 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row17 w.b17 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18 bf16) _
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row18 w.b18 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19 bf16) _
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row19 w.b19 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20 bf16) _
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row20 w.b20 bf16 (by decide) (by decide)),
+    mnv4SkipGraphB_faithful (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21 bf16) _
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row21 w.b21 bf16 (by decide) (by decide)),]
 
 /-- The fused stage's graph faithfulness, restated at `mnv4FusedStack` itself.
 
@@ -767,49 +783,51 @@ private theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat
     is the failure the group split above works around. Seven rewrites all of the shape
     `den <subgraph> = <subLayer>.fwd (den ·)` keep every stage opaque. -/
 theorem mnv4FusedStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (32 * 112 * 112))) :
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (32 * 112 * 112))) :
     den (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
-          w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt e)
+          w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt bf16 e)
       = (mnv4FusedStack N w).fwd (den e) :=
   mnv4FusedGraphB_faithful epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.hf0cE w.f0cg w.f0cbt
-    w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt e
+    w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt bf16 e
 
 /-- The head's graph faithfulness, restated at `mnv4HeadStack` itself. Same reason. -/
 private theorem mnv4HeadStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (256 * 7 * 7))) :
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (256 * 7 * 7))) :
     den (mnv4HeadGraphB epsStr N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-          w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd e)
+          w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16 e)
       = (mnv4HeadStack N w).fwd (den e) :=
   mnv4HeadGraphB_faithful epsStr N 7 7 w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt
-    w.hW w.hb w.hE w.hhE w.hg w.hbt w.Wd w.bd e
+    w.hW w.hb w.hE w.hhE w.hg w.hbt w.Wd w.bd bf16 e
 
 /-- The stem's, likewise, at the net's own widths. -/
 theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
-    den (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (3 * 224 * 224))) :
+    den (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt bf16 e)
       = mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt (den e) :=
-  mnv4StemGraphB_faithful epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e
+  mnv4StemGraphB_faithful epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt bf16 e
 
 /-- **The full batch-BN MobileNetV4-Conv-M forward graph**, at `mnv4FwdChainB`'s own tokens
     and its own SSA names, so the typed graph diffs against `mnv4_fwd.mlir` and `mnv4in_fwd.mlir`
     name for name (the artifacts it covers are listed in the module's conventions table). Checked
     against the committed bytes: all 247 names this writes appear in `mnv4_fwd.mlir`, and between
-    them they cover all 233 of its declared parameters.
+    them they cover all 233 of its declared parameters. `bf16` selects the conv and depthwise
+    kinds at every site (`StableHLO.PrecisionSwitch`): `false` is the f32 artifacts' graph, `true`
+    the bf16 ones'; the dense stays f32 in both.
 
     The eighteen skip rows go through `mnv4SkipGraphB`, which is what keeps this term LINEAR in
     the depth — see that combinator's docstring for the failure mode it exists to prevent. -/
-def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (bf16 : Bool)
     (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
   mnv4HeadGraphB epsStr N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd
-    (mnv4Res7bGraphB N epsStr w
-      (mnv4Res7aGraphB N epsStr w
-        (mnv4Res14bGraphB N epsStr w
-          (mnv4Res14aGraphB N epsStr w
-            (mnv4Res28GraphB N epsStr w
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16
+    (mnv4Res7bGraphB N epsStr w bf16
+      (mnv4Res7aGraphB N epsStr w bf16
+        (mnv4Res14bGraphB N epsStr w bf16
+          (mnv4Res14aGraphB N epsStr w bf16
+            (mnv4Res28GraphB N epsStr w bf16
               (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
-                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
-                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
+                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt bf16
+                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt bf16 e)))))))
 
 /-- **The MobileNetV4-Conv-M forward graph at batch BatchNorm denotes the whole-net forward.**
     Seven rewrites — the stem, the fused stage, the five resolution groups and the head — each of
@@ -819,8 +837,8 @@ def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights
     row, so what selects ExtraDW / ConvNeXt / FFN is the TABLE, not this file. A row wired to the
     wrong builder fails to elaborate rather than proving something about a different net. -/
 theorem mnv4FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
-    den (mnv4FwdGraphBFull N epsStr w e) = mobilenetv4ForwardBFull N w (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (e : SHlo (N * (3 * 224 * 224))) :
+    den (mnv4FwdGraphBFull N epsStr w bf16 e) = mobilenetv4ForwardBFull N w (den e) := by
   -- `rw`, NOT `simp only`, and the difference is not cosmetic: the `simp only` spelling of
   -- this same chain elaborates for minutes and then dies in the KERNEL with a deterministic
   -- timeout. `simp only` traverses and rebuilds the whole term at each step, and at MNv4's literal
@@ -945,62 +963,64 @@ theorem mobilenetv4ForwardBFullDo_ones (N : Nat) {nCls : Nat} (w : Mnv4BWeights 
 def mnv4HeadGraphBDo (epsStr mName : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc))
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (m : Vec (N * oc))
     (e : SHlo (N * (c * h * w))) : SHlo (N * nCls) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
     (.dropoutB mName m
       (castIdx (mnv4_pool11 N oc).symm
         (.batchOp (N := N) (.relu (n := oc * 1 * 1))
           (.bnBatchF "%hg" "%hbt" epsStr ε2 γ2 β2
-            (.batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
+            (.batchOp (N := N) (.convAt bf16 id (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
               (castIdx (mnv4_pool11 N mid)
                 (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
                   (.batchOp (N := N) (.relu (n := mid * h * w))
                     (.bnBatchF "%h1g" "%h1bt" epsStr ε1 γ1 β1
-                      (.batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
+                      (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
                         e))))))))))
 
 private theorem mnv4HeadGraphBDo_faithful (epsStr mName : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (c * h * w))) :
-    den (mnv4HeadGraphBDo epsStr mName N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd m e)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (m : Vec (N * oc)) (e : SHlo (N * (c * h * w)))
+    :
+    den (mnv4HeadGraphBDo epsStr mName N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd bf16 m e)
       = batchMap N (dense Wd bd)
           (dropout m (mnv4HeadFeatB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 (den e))) := by
   simp only [mnv4HeadGraphBDo, mnv4HeadFeatB, cbReluB, den_dropoutB,
-    ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_castIdx, reindexCLM_apply, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+    ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_castIdx, den_batchOp,
+    Bf16Fold.denOp_convAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply, reindexCLM_apply]
 
 /-- **The `%do` forward graph**: `mnv4FwdGraphBFull` with the dropout head. -/
 def mnv4FwdGraphBFullDo (N : Nat) (epsStr mName : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
+    (bf16 : Bool) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
   mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m
-    (mnv4Res7bGraphB N epsStr w
-      (mnv4Res7aGraphB N epsStr w
-        (mnv4Res14bGraphB N epsStr w
-          (mnv4Res14aGraphB N epsStr w
-            (mnv4Res28GraphB N epsStr w
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16 m
+    (mnv4Res7bGraphB N epsStr w bf16
+      (mnv4Res7aGraphB N epsStr w bf16
+        (mnv4Res14bGraphB N epsStr w bf16
+          (mnv4Res14aGraphB N epsStr w bf16
+            (mnv4Res28GraphB N epsStr w bf16
               (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
-                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
-                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
+                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt bf16
+                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt bf16 e)))))))
 
 /-- The dropout head's faithfulness at the net's widths — the barrier `mnv4HeadStack_graph_faithful`
     is for the plain head. -/
 theorem mnv4HeadDo_graph_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (256 * 7 * 7))) :
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (m : Vec (N * 1280)) (e : SHlo (N * (256 * 7 * 7))) :
     den (mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-          w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m e)
+          w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16 m e)
       = batchMap N (dense w.Wd w.bd) (dropout m
           (mnv4HeadFeatB N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt (den e))) :=
   mnv4HeadGraphBDo_faithful epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m e
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16 m e
 
 /-- **The `%do` forward graph denotes the dropout forward**, at every mask — the trunk by the
     same group rewrites as `mnv4FwdGraphBFull_faithful`. -/
 theorem mnv4FwdGraphBFullDo_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) :
-    den (mnv4FwdGraphBFullDo N epsStr mName w m e) = mobilenetv4ForwardBFullDo N w m (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) :
+    den (mnv4FwdGraphBFullDo N epsStr mName w bf16 m e) = mobilenetv4ForwardBFullDo N w m (den e) := by
   unfold mnv4FwdGraphBFullDo mobilenetv4ForwardBFullDo
     mnv4Pre6 mnv4Pre5 mnv4Pre4 mnv4Pre3 mnv4Pre2 mnv4Pre1 mnv4Pre0
   rw [mnv4HeadDo_graph_faithful, mnv4Res7bGraphB_faithful, mnv4Res7aGraphB_faithful,

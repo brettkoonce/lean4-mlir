@@ -24,8 +24,10 @@ both regularisers, as the renderer's `uibFwdSkipB … (drop := some k)` and `mnv
   everywhere it is `mobilenetv4ForwardBFull`, exactly (the keep probability is folded into the
   mask, `Training/DropPath`).
 
-Those two artifacts are bf16; this is their f32 form, as `mnv4FwdGraphBFullDo` is for the
-classifier-dropout ones. The train steps' backward through the drop sites is outside this
+Those two artifacts are bf16, and the graph takes the renderers' `bf16` flag through the same
+switch as `MobileNetV4FullB` (`StableHLO.PrecisionSwitch`), so `mnv4FwdGraphBFullDrop … true` is
+their forward read over ℝ (`Bf16Erasure`) and `false` its f32 twin — as `mnv4FwdGraphBFullDo` is
+for the classifier-dropout ones. The train steps' backward through the drop sites is outside this
 statement, as it is outside `MobileNetV4StepTieB`.
 
 **Why a separate file, and why `rw`.** `MobileNetV4FullB`'s group graphs are private and their
@@ -193,110 +195,114 @@ theorem mobilenetv4ForwardBFullDrop_ones (N : Nat) {nCls : Nat} (w : Mnv4BWeight
 
 /-- Trunk group **Res28**'s graph with its drop site. -/
 def mnv4Res28DropGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (e : SHlo (N * (48 * 56 * 56))) : SHlo (N * (80 * 28 * 28)) :=
-  mnv4SkipDropGraphB (dpName 0) (sd 0) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2)
-    (mnv4StridedGraphB epsStr N mnv4Row1 w.b1 e)
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (48 * 56 * 56))) :
+    SHlo (N * (80 * 28 * 28)) :=
+  mnv4SkipDropGraphB (dpName 0) (sd 0) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2 bf16)
+    (mnv4StridedGraphB epsStr N mnv4Row1 w.b1 bf16 e)
 
 theorem mnv4Res28DropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (e : SHlo (N * (48 * 56 * 56))) :
-    den (mnv4Res28DropGraphB N epsStr w sd e) = mnv4Res28Drop N w sd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (48 * 56 * 56))) :
+    den (mnv4Res28DropGraphB N epsStr w bf16 sd e) = mnv4Res28Drop N w sd (den e) := by
   rw [mnv4Res28DropGraphB,
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row2 w.b2 (by decide) (by decide)),
-    mnv4StridedGraphB_faithful epsStr N mnv4Row1 w.b1 (by decide), mnv4Res28Drop]
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row2 w.b2 bf16 (by decide) (by decide)),
+    mnv4StridedGraphB_faithful epsStr N mnv4Row1 w.b1 bf16 (by decide), mnv4Res28Drop]
 
 /-- Trunk group **Res14a**'s graph with its drop sites. -/
 def mnv4Res14aDropGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (e : SHlo (N * (80 * 28 * 28))) : SHlo (N * (160 * 14 * 14)) :=
-  mnv4SkipDropGraphB (dpName 3) (sd 3) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6)
-    (mnv4SkipDropGraphB (dpName 2) (sd 2) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5)
-    (mnv4SkipDropGraphB (dpName 1) (sd 1) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4)
-    (mnv4StridedGraphB epsStr N mnv4Row3 w.b3 e)))
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (80 * 28 * 28))) :
+    SHlo (N * (160 * 14 * 14)) :=
+  mnv4SkipDropGraphB (dpName 3) (sd 3) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6 bf16)
+    (mnv4SkipDropGraphB (dpName 2) (sd 2) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5 bf16)
+    (mnv4SkipDropGraphB (dpName 1) (sd 1) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row4 w.b4 bf16)
+    (mnv4StridedGraphB epsStr N mnv4Row3 w.b3 bf16 e)))
 
 theorem mnv4Res14aDropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (e : SHlo (N * (80 * 28 * 28))) :
-    den (mnv4Res14aDropGraphB N epsStr w sd e) = mnv4Res14aDrop N w sd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (80 * 28 * 28))) :
+    den (mnv4Res14aDropGraphB N epsStr w bf16 sd e) = mnv4Res14aDrop N w sd (den e) := by
   rw [mnv4Res14aDropGraphB,
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row6 w.b6 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row6 w.b6 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row5 w.b5 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row5 w.b5 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row4 w.b4 (by decide) (by decide)),
-    mnv4StridedGraphB_faithful epsStr N mnv4Row3 w.b3 (by decide), mnv4Res14aDrop]
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row4 w.b4 bf16 (by decide) (by decide)),
+    mnv4StridedGraphB_faithful epsStr N mnv4Row3 w.b3 bf16 (by decide), mnv4Res14aDrop]
 
 /-- Trunk group **Res14b**'s graph with its drop sites. -/
 def mnv4Res14bDropGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (160 * 14 * 14)) :=
-  mnv4SkipDropGraphB (dpName 7) (sd 7) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10)
-    (mnv4SkipDropGraphB (dpName 6) (sd 6) (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9)
-    (mnv4SkipDropGraphB (dpName 5) (sd 5) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8)
-    (mnv4SkipDropGraphB (dpName 4) (sd 4) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7) e)))
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
+    SHlo (N * (160 * 14 * 14)) :=
+  mnv4SkipDropGraphB (dpName 7) (sd 7) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10 bf16)
+    (mnv4SkipDropGraphB (dpName 6) (sd 6) (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9 bf16)
+    (mnv4SkipDropGraphB (dpName 5) (sd 5) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row8 w.b8 bf16)
+    (mnv4SkipDropGraphB (dpName 4) (sd 4) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7 bf16) e)))
 
 theorem mnv4Res14bDropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
-    den (mnv4Res14bDropGraphB N epsStr w sd e) = mnv4Res14bDrop N w sd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
+    den (mnv4Res14bDropGraphB N epsStr w bf16 sd e) = mnv4Res14bDrop N w sd (den e) := by
   rw [mnv4Res14bDropGraphB,
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row10 w.b10 (by decide) (by decide)),
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row10 w.b10 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row9 w.b9 (by decide) (by decide)),
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row9 w.b9 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row8 w.b8 (by decide) (by decide)),
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row8 w.b8 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row7 w.b7 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row7 w.b7 bf16 (by decide) (by decide)),
     mnv4Res14bDrop]
 
 /-- Trunk group **Res7a**'s graph with its drop sites. -/
 def mnv4Res7aDropGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (256 * 7 * 7)) :=
-  mnv4SkipDropGraphB (dpName 11) (sd 11) (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15)
-    (mnv4SkipDropGraphB (dpName 10) (sd 10) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14)
-    (mnv4SkipDropGraphB (dpName 9) (sd 9) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13)
-    (mnv4SkipDropGraphB (dpName 8) (sd 8) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12)
-    (mnv4StridedGraphB epsStr N mnv4Row11 w.b11 e))))
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
+    SHlo (N * (256 * 7 * 7)) :=
+  mnv4SkipDropGraphB (dpName 11) (sd 11) (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15 bf16)
+    (mnv4SkipDropGraphB (dpName 10) (sd 10) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14 bf16)
+    (mnv4SkipDropGraphB (dpName 9) (sd 9) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row13 w.b13 bf16)
+    (mnv4SkipDropGraphB (dpName 8) (sd 8) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row12 w.b12 bf16)
+    (mnv4StridedGraphB epsStr N mnv4Row11 w.b11 bf16 e))))
 
 theorem mnv4Res7aDropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
-    den (mnv4Res7aDropGraphB N epsStr w sd e) = mnv4Res7aDrop N w sd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (160 * 14 * 14))) :
+    den (mnv4Res7aDropGraphB N epsStr w bf16 sd e) = mnv4Res7aDrop N w sd (den e) := by
   rw [mnv4Res7aDropGraphB,
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row15 w.b15 (by decide) (by decide)),
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row15 w.b15 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row14 w.b14 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row14 w.b14 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row13 w.b13 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row13 w.b13 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row12 w.b12 (by decide) (by decide)),
-    mnv4StridedGraphB_faithful epsStr N mnv4Row11 w.b11 (by decide), mnv4Res7aDrop]
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row12 w.b12 bf16 (by decide) (by decide)),
+    mnv4StridedGraphB_faithful epsStr N mnv4Row11 w.b11 bf16 (by decide), mnv4Res7aDrop]
 
 /-- Trunk group **Res7b**'s graph with its drop sites. -/
 def mnv4Res7bDropGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (e : SHlo (N * (256 * 7 * 7))) : SHlo (N * (256 * 7 * 7)) :=
-  mnv4SkipDropGraphB (dpName 17) (sd 17) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21)
-    (mnv4SkipDropGraphB (dpName 16) (sd 16) (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20)
-    (mnv4SkipDropGraphB (dpName 15) (sd 15) (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19)
-    (mnv4SkipDropGraphB (dpName 14) (sd 14) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18)
-    (mnv4SkipDropGraphB (dpName 13) (sd 13) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17)
-    (mnv4SkipDropGraphB (dpName 12) (sd 12) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16)
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (256 * 7 * 7))) : SHlo (N * (256 * 7 * 7)) :=
+  mnv4SkipDropGraphB (dpName 17) (sd 17) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21 bf16)
+    (mnv4SkipDropGraphB (dpName 16) (sd 16) (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20 bf16)
+    (mnv4SkipDropGraphB (dpName 15) (sd 15) (mnv4FfnBodyGraphB epsStr N mnv4Row19 w.b19 bf16)
+    (mnv4SkipDropGraphB (dpName 14) (sd 14) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row18 w.b18 bf16)
+    (mnv4SkipDropGraphB (dpName 13) (sd 13) (mnv4ExtraDWBodyGraphB epsStr N mnv4Row17 w.b17 bf16)
+    (mnv4SkipDropGraphB (dpName 12) (sd 12) (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16 bf16)
       e)))))
 
 theorem mnv4Res7bDropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (e : SHlo (N * (256 * 7 * 7))) :
-    den (mnv4Res7bDropGraphB N epsStr w sd e) = mnv4Res7bDrop N w sd (den e) := by
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (e : SHlo (N * (256 * 7 * 7))) :
+    den (mnv4Res7bDropGraphB N epsStr w bf16 sd e) = mnv4Res7bDrop N w sd (den e) := by
   rw [mnv4Res7bDropGraphB,
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row21 w.b21 (by decide) (by decide)),
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row21 w.b21 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row20 w.b20 (by decide) (by decide)),
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row20 w.b20 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row19 w.b19 (by decide) (by decide)),
+      (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row19 w.b19 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row18 w.b18 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row18 w.b18 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row17 w.b17 (by decide) (by decide)),
+      (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row17 w.b17 bf16 (by decide) (by decide)),
     mnv4SkipDropGraphB_faithful _ _ _ _
-      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row16 w.b16 (by decide) (by decide)),
+      (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row16 w.b16 bf16 (by decide) (by decide)),
     mnv4Res7bDrop]
 
 -- ════════════════════════════════════════════════════════════════
@@ -304,29 +310,30 @@ theorem mnv4Res7bDropGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The MobileNetV4-Conv-M forward graph with stochastic depth and classifier dropout** — the
-    f32 typed form of the forward half of `mnv4in_acc{,dp}8x128wxdropdowd01bf16`: each skip row's
+    typed form of the forward half of `mnv4in_acc{,dp}8x128wxdropdowd01bf16` (at `bf16 := true`;
+    `false` is its f32 twin): each skip row's
     drop site reads `%dp<k>` at its site index `k`, the classifier dropout the input `mName` (the
     render's is `doName`). -/
 def mnv4FwdGraphBFullDrop (N : Nat) (epsStr mName : String) {nCls : Nat} (w : Mnv4BWeights nCls)
-    (sd : Fin 18 → Vec N) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) :
+    (bf16 : Bool) (sd : Fin 18 → Vec N) (m : Vec (N * 1280)) (e : SHlo (N * (3 * 224 * 224))) :
     SHlo (N * nCls) :=
   mnv4HeadGraphBDo epsStr mName N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
-    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd m
-    (mnv4Res7bDropGraphB N epsStr w sd
-      (mnv4Res7aDropGraphB N epsStr w sd
-        (mnv4Res14bDropGraphB N epsStr w sd
-          (mnv4Res14aDropGraphB N epsStr w sd
-            (mnv4Res28DropGraphB N epsStr w sd
+    w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd bf16 m
+    (mnv4Res7bDropGraphB N epsStr w bf16 sd
+      (mnv4Res7aDropGraphB N epsStr w bf16 sd
+        (mnv4Res14bDropGraphB N epsStr w bf16 sd
+          (mnv4Res14aDropGraphB N epsStr w bf16 sd
+            (mnv4Res28DropGraphB N epsStr w bf16 sd
               (mnv4FusedGraphB epsStr N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt
-                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
-                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
+                w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt bf16
+                (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt bf16 e)))))))
 
 /-- **The graph denotes the forward, at every pair of masks** — eight outside-in rewrites, as
     `mnv4FwdGraphBFullDo_faithful`. -/
 theorem mnv4FwdGraphBFullDrop_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
-    (w : Mnv4BWeights nCls) (sd : Fin 18 → Vec N) (m : Vec (N * 1280))
+    (w : Mnv4BWeights nCls) (bf16 : Bool) (sd : Fin 18 → Vec N) (m : Vec (N * 1280))
     (e : SHlo (N * (3 * 224 * 224))) :
-    den (mnv4FwdGraphBFullDrop N epsStr mName w sd m e)
+    den (mnv4FwdGraphBFullDrop N epsStr mName w bf16 sd m e)
       = mobilenetv4ForwardBFullDrop N w sd m (den e) := by
   unfold mnv4FwdGraphBFullDrop mobilenetv4ForwardBFullDrop mnv4Pre1 mnv4Pre0
   rw [mnv4HeadDo_graph_faithful, mnv4Res7bDropGraphB_faithful, mnv4Res7aDropGraphB_faithful,
