@@ -8,7 +8,7 @@ scale, its VJP is itself). Whether a site is RENDERED is a renderer flag (`sd`, 
 or chain statement that covers both the drop-free artifact and the `*drop*` / `*do*` one takes
 the site as an `Option`: `none` emits no node and denotes the identity, `some s` emits the
 `dropPathB` / `dropoutB` node at the mask `s`. The forward graphs state their sites this way
-(`Proofs.EfficientNetFullB0Drop`'s `efficientnetFwdGraphBFullDrop`); the step, sync and
+(`LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop`'s `efficientnetFwdGraphBFullDrop`); the step, sync and
 loss-gradient ties thread the same binder through their cotangent chains
 (`Proofs.MobileNetV2TieB`'s classifier dropout first), so the drop-free tie is the `none`
 instance verbatim and the `some` instance is the artifact that trained.

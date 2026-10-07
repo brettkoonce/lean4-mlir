@@ -144,10 +144,10 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `convnextbin_fwd.mlir` | fwd | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 6 |
+| `convnextbin_fwd.mlir` | fwd | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 7 |
 | `convnextbin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_droperf_fwd.mlir` | fwd | `droperf` | stochastic depth, exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextbin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
+| `convnextbin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 4 |
 | `convnextbin_fwd_s288.mlir` | fwd @288px | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_erf_fwd_s288.mlir` | fwd @288px | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_adamdpwxclipdrop_train_step.mlir` | train_step | `adamdpwxclipdrop` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
@@ -158,8 +158,8 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `convnextbin_adamwxclipdropbf16_train_step.mlir` | train_step | `adamwxclipdropbf16` | AdamW, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_adamwxclipdroperf_train_step.mlir` | train_step | `adamwxclipdroperf` | AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU | 2.2 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_adamwxclipdroperfbf16_train_step.mlir` | train_step | `adamwxclipdroperfbf16` | AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextbin_emadpwxclipdropbf16_train_step.mlir` | train_step | `emadpwxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 3 |
-| `convnextbin_emadpwxclipdroperfbf16_train_step.mlir` | train_step | `emadpwxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
+| `convnextbin_emadpwxclipdropbf16_train_step.mlir` | train_step | `emadpwxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 4 |
+| `convnextbin_emadpwxclipdroperfbf16_train_step.mlir` | train_step | `emadpwxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 4 |
 | `convnextbin_emawxclipdropbf16_train_step.mlir` | train_step | `emawxclipdropbf16` | EMA shadow (4-region blob), AdamW, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextbin_emawxclipdroperfbf16_train_step.mlir` | train_step | `emawxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 
@@ -204,10 +204,10 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `convnextsin_fwd.mlir` | fwd | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 5 |
+| `convnextsin_fwd.mlir` | fwd | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 6 |
 | `convnextsin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_droperf_fwd.mlir` | fwd | `droperf` | stochastic depth, exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextsin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
+| `convnextsin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
 | `convnextsin_fwd_s288.mlir` | fwd @288px | `—` | — | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_erf_fwd_s288.mlir` | fwd @288px | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_adamdpwxclipdrop_train_step.mlir` | train_step | `adamdpwxclipdrop` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
@@ -218,8 +218,8 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `convnextsin_adamwxclipdropbf16_train_step.mlir` | train_step | `adamwxclipdropbf16` | AdamW, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.3 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_adamwxclipdroperf_train_step.mlir` | train_step | `adamwxclipdroperf` | AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU | 2.2 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_adamwxclipdroperfbf16_train_step.mlir` | train_step | `adamwxclipdroperfbf16` | AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.2 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
-| `convnextsin_emadpwxclipdropbf16_train_step.mlir` | train_step | `emadpwxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 2 |
-| `convnextsin_emadpwxclipdroperfbf16_train_step.mlir` | train_step | `emadpwxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
+| `convnextsin_emadpwxclipdropbf16_train_step.mlir` | train_step | `emadpwxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 3 |
+| `convnextsin_emadpwxclipdroperfbf16_train_step.mlir` | train_step | `emadpwxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.6 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | 1 |
 | `convnextsin_emawxclipdropbf16_train_step.mlir` | train_step | `emawxclipdropbf16` | EMA shadow (4-region blob), AdamW, stochastic depth, no decay on norm/bias, grad clip, bf16 | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 | `convnextsin_emawxclipdroperfbf16_train_step.mlir` | train_step | `emawxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16 | 2.4 | `LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean` | — |
 
@@ -295,11 +295,11 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `mnv4in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 8 |
-| `mnv4in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 8 |
+| `mnv4in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 9 |
+| `mnv4in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 9 |
 | `mnv4in_fwd_eval_s256.mlir` | fwd_eval @256px | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | — |
 | `mnv4in_acc8x128wxdropdowd01bf16_train_step.mlir` | train_step | `acc8x128wxdropdowd01bf16` | AdamW, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 | 1.6 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | — |
-| `mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir` | train_step | `accdp8x128wxdropdowd01bf16` | AdamW, data-parallel, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 per replica | 1.9 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 5 |
+| `mnv4in_accdp8x128wxdropdowd01bf16_train_step.mlir` | train_step | `accdp8x128wxdropdowd01bf16` | AdamW, data-parallel, grad-accum ×8, stochastic depth, classifier dropout, no decay on norm/bias, bf16, weight decay 0.1, micro-batch 128 per replica | 1.9 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 6 |
 | `mnv4in_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.5 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 7 |
 | `mnv4in_adam64bf16_train_step.mlir` | train_step | `adam64bf16` | AdamW, bf16, batch 64 | 1.6 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 4 |
 | `mnv4in_adamdp64_train_step.mlir` | train_step | `adamdp64` | AdamW, data-parallel, batch 64 per replica | 1.8 | `LeanMlir/Proofs/Codegen/MobileNetV4RenderB.lean` | 6 |
@@ -383,8 +383,8 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet50in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 10 |
-| `resnet50in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 10 |
+| `resnet50in_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
+| `resnet50in_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 12 |
 | `resnet50in_fwd_eval_s288.mlir` | fwd_eval @288px | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in_acc4x64_train_step.mlir` | train_step | `acc4x64` | AdamW, grad-accum ×4, micro-batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 2 |
 | `resnet50in_accdp4x64_train_step.mlir` | train_step | `accdp4x64` | AdamW, data-parallel, grad-accum ×4, micro-batch 64 per replica | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
@@ -403,9 +403,9 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `resnet50in_lamb64_train_step.mlir` | train_step | `lamb64` | LAMB, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in_lamb64bce_train_step.mlir` | train_step | `lamb64bce` | LAMB, BCE loss, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in_lambaccdp4x128wxclipdropbce_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbce` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, micro-batch 128 per replica | 1.6 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
-| `resnet50in_lambaccdp4x128wxclipdropbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbcebf16` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 3 |
+| `resnet50in_lambaccdp4x128wxclipdropbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbcebf16` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
 | `resnet50in_lambaccdp4x128wxclipdropbcewd001_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbcewd001` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, weight decay 0.01, micro-batch 128 per replica | 1.6 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
-| `resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbcewd001bf16` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, bf16, weight decay 0.01, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 3 |
+| `resnet50in_lambaccdp4x128wxclipdropbcewd001bf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipdropbcewd001bf16` | LAMB, data-parallel, grad-accum ×4, stochastic depth, no decay on norm/bias, grad clip, BCE loss, bf16, weight decay 0.01, micro-batch 128 per replica | 1.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
 | `resnet50in_mom256_train_step.mlir` | train_step | `mom256` | momentum, batch 256 | 0.7 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in_momdp64_train_step.mlir` | train_step | `momdp64` | momentum, data-parallel, batch 64 per replica | 0.9 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in_momdp64bf16_train_step.mlir` | train_step | `momdp64bf16` | momentum, data-parallel, bf16, batch 64 per replica | 1.0 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
@@ -456,7 +456,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 |---|---|---|---|---|---|---|
 | `vitbin_fwd.mlir` | fwd | `—` | — | 0.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 4 |
 | `vitbin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
-| `vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitbin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitbin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.6 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitbin_adam128wxclipdrop_train_step.mlir` | train_step | `adam128wxclipdrop` | AdamW, stochastic depth, no decay on norm/bias, grad clip, batch 128 | 2.4 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitbin_adam128wxclipdropbf16_train_step.mlir` | train_step | `adam128wxclipdropbf16` | AdamW, stochastic depth, no decay on norm/bias, grad clip, bf16, batch 128 | 2.7 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
@@ -468,7 +468,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitbin_adamdp128x4wxclipdroperfbf16_train_step.mlir` | train_step | `adamdp128x4wxclipdroperfbf16` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, batch 128 per replica × 4 replicas | 2.8 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitbin_emadp128x4wxclipdropbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, batch 128 per replica × 4 replicas | 2.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitbin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
-| `vitbin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitbin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitbin_emadp128x4wxclipdroperfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, batch 128 per replica × 4 replicas | 2.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 
 ## `vitin` — 36 artifacts, 45.2 MB
@@ -520,7 +520,7 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitsin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitsin_droperf_fwd.mlir` | fwd | `droperf` | stochastic depth, exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitsin_emadp128x4wxclipdropeps0000001bf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
-| `vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitsin_emadp128x4wxclipdropeps0000001erfbf16_fwd.mlir` | fwd | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitsin_erf_fwd.mlir` | fwd | `erf` | exact GELU | 0.3 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitsin_adamdp128x4wxclipdrop_train_step.mlir` | train_step | `adamdp128x4wxclipdrop` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, batch 128 per replica × 4 replicas | 1.9 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
 | `vitsin_adamdp128x4wxclipdropbf16_train_step.mlir` | train_step | `adamdp128x4wxclipdropbf16` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, batch 128 per replica × 4 replicas | 2.0 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
@@ -528,6 +528,6 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 | `vitsin_adamdp128x4wxclipdroperfbf16_train_step.mlir` | train_step | `adamdp128x4wxclipdroperfbf16` | AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, batch 128 per replica × 4 replicas | 2.0 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 | `vitsin_emadp128x4wxclipdropbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, batch 128 per replica × 4 replicas | 2.1 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 2 |
 | `vitsin_emadp128x4wxclipdropeps0000001bf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001bf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.1 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
-| `vitsin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.1 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
+| `vitsin_emadp128x4wxclipdropeps0000001erfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdropeps0000001erfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, norm ε 0.000001, batch 128 per replica × 4 replicas | 2.1 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | 1 |
 | `vitsin_emadp128x4wxclipdroperfbf16_train_step.mlir` | train_step | `emadp128x4wxclipdroperfbf16` | EMA shadow (4-region blob), AdamW, data-parallel, stochastic depth, no decay on norm/bias, grad clip, exact GELU, bf16, batch 128 per replica × 4 replicas | 2.1 | `LeanMlir/Proofs/Codegen/ViTRenderB.lean` | — |
 
