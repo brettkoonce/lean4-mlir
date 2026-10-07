@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
@@ -30,10 +31,16 @@ The batch size is never pinned (the 224-px resolution and the 64…512 widths ar
 data-parallel render (`resnet34in_momdp64` among them) synchronises BatchNorm; its all-reduced
 gradients are `ResNet34SyncStepTieB`'s `r34_net_syncTiedB`: this file's node at `N := R·N`.
 
-**bf16 is outside this statement.** The ImageNet run the book reports trains from
-`resnet34in_momdp64bf16`, which swaps the conv nodes for bf16 kinds
-([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among them). What those kinds
-do under sharding is `DataParallel.SyncBf16`; no whole-net statement covers that step.
+**Precision is a flag on the statement.** The ImageNet run the book reports trains from
+`resnet34in_momdp64bf16`, whose conv weight gradients are the bf16 kinds
+(`convWeightGradBBf16`, …; `Foundation.Bf16GradNodes`). Every conv weight node below is stated
+on the renderers' switch — `ConvWTiedBAt bf16` / `ConvStridedWTiedBAt bf16`
+(`Foundation.GradNodesBAt`): `bf16 := false` is the f32 node, `bf16 := true` the bf16 one — and
+the capstone `r34_net_tiedB` takes `bf16`, so it reaches the bf16 artifacts' gradient nodes read
+over ℝ exactly as it reads the f32 ones (`Bf16Erasure`: at the identity rounding the bf16 kind
+denotes what its f32 peer does). BatchNorm, bias and dense nodes carry no flag because no render
+switches them. What the bf16 weight-gradient kinds do under sharding is `DataParallel.SyncBf16`;
+the data-parallel capstone is `ResNet34SyncStepTieB` at the same flag.
 
 ## The parameter census is 110, not 146
 
@@ -66,7 +73,7 @@ open Proofs.BackLinks
 open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB cInB gapInB)
 open Proofs.GradNodeB (bnPairTiedB_holds convBTiedB_holds convStridedBTiedB_holds
-  convStridedWTiedB_holds convWTiedB_holds denseBTiedB_holds denseWTiedB_holds)
+  convStridedWTiedBAt_holds convWTiedBAt_holds denseBTiedB_holds denseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The identity basic block — the render's cotangent chain, then the 8 parameter folds
@@ -274,7 +281,7 @@ cover the flag. -/
     γ and β — denote the certified batched `Σ_n` gradient at the real forward activations and the
     real backward-chain cotangent driven by `dyOut`. -/
 def r34IdTiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (p : R34IdW c)
-    (xin dyOut : Vec (N * (c * h * w))) : Prop :=
+    (bf16 : Bool) (xin dyOut : Vec (N * (c * h * w))) : Prop :=
   let r1 := cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ xin
   let c1 := batchMap N (flatConv p.W₁ p.b₁) xin
   let c2 := batchMap N (flatConv p.W₂ p.b₂) r1
@@ -283,23 +290,23 @@ def r34IdTiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (p : R34IdW 
   let cotN1 := r34IdCotN1 N h w p xin dyOut
   let cotC1 := r34IdCotC1 N h w p xin dyOut
   -- conv₁ (stride-1, c → c), cot = cotC1
-  GradNodeB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  GradNodeB.ConvWTiedBAt bf16 N h w xN cotN p.b₁ xin p.W₁ cotC1
   ∧ GradNodeB.ConvBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
   -- bn₁ γ/β, cot = cotN1
   ∧ GradNodeB.BnPairTiedB N c h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N c h w c1)
         (reassocB N c h w cotN1)
   -- conv₂ (stride-1, c → c), cot = cotC2
-  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  ∧ GradNodeB.ConvWTiedBAt bf16 N h w xN cotN p.b₂ r1 p.W₂ cotC2
   ∧ GradNodeB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
   -- bn₂ γ/β, cot = cotA (the outer relu's mask — the same node the identity skip carries)
   ∧ GradNodeB.BnPairTiedB N c h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N c h w c2)
         (reassocB N c h w cotA)
 
 theorem r34_idblock_tiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (p : R34IdW c)
-    (xin dyOut : Vec (N * (c * h * w))) :
-    r34IdTiedB N h w xN cotN vN epsStr p xin dyOut := by
+    (bf16 : Bool) (xin dyOut : Vec (N * (c * h * w))) :
+    r34IdTiedB N h w xN cotN vN epsStr p bf16 xin dyOut := by
   unfold r34IdTiedB
-  exact ⟨convWTiedB_holds, convBTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, convBTiedB_holds,
+  exact ⟨convWTiedBAt_holds bf16, convBTiedB_holds, bnPairTiedB_holds, convWTiedBAt_holds bf16, convBTiedB_holds,
     bnPairTiedB_holds⟩
 
 
@@ -308,7 +315,8 @@ theorem r34_idblock_tiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (
     sites are SYMMETRIC padding (`convStrided*GradB`, whose `den` is `flatConvStride2_*`), which is
     ResNet's convention and NOT B0's or MobileNetV2's XLA-`SAME`. -/
 def r34DownTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
+    Prop :=
   let r1 := cbReluStridedB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ xin
   let c1 := batchMap N (flatConvStride2 p.W₁ p.b₁) xin
   let c2 := batchMap N (flatConv p.W₂ p.b₂) r1
@@ -319,51 +327,51 @@ def r34DownTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p : R
   let cotC1 := r34DownCotC1 N h w p xin dyOut
   let cotCp := r34DownCotCp N h w p xin dyOut
   -- STRIDED conv₁ (ic → oc), cot = cotC1
-  GradNodeB.ConvStridedWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  GradNodeB.ConvStridedWTiedBAt bf16 N h w xN cotN p.b₁ xin p.W₁ cotC1
   ∧ GradNodeB.ConvStridedBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N oc h w c1)
         (reassocB N oc h w cotN1)
   -- conv₂ (stride-1, oc → oc), cot = cotC2
-  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  ∧ GradNodeB.ConvWTiedBAt bf16 N h w xN cotN p.b₂ r1 p.W₂ cotC2
   ∧ GradNodeB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N oc h w c2)
         (reassocB N oc h w cotA)
   -- 1×1/s2 projection (ic → oc), cot = cotCp; its BN reads the SHARED cotA
-  ∧ GradNodeB.ConvStridedWTiedB N h w xN cotN p.bp xin p.Wp cotCp
+  ∧ GradNodeB.ConvStridedWTiedBAt bf16 N h w xN cotN p.bp xin p.Wp cotCp
   ∧ GradNodeB.ConvStridedBTiedB N h w cotN p.Wp xin p.bp cotCp
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
         (reassocB N oc h w cotA)
 
 theorem r34_downblock_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
-    (p : R34DownW ic oc) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
+    (p : R34DownW ic oc) (bf16 : Bool) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyOut : Vec (N * (oc * h * w))) :
-    r34DownTiedB N h w xN cotN vN epsStr p xin dyOut := by
+    r34DownTiedB N h w xN cotN vN epsStr p bf16 xin dyOut := by
   unfold r34DownTiedB
-  exact ⟨convStridedWTiedB_holds, convStridedBTiedB_holds, bnPairTiedB_holds, convWTiedB_holds,
-    convBTiedB_holds, bnPairTiedB_holds, convStridedWTiedB_holds, convStridedBTiedB_holds,
+  exact ⟨convStridedWTiedBAt_holds bf16, convStridedBTiedB_holds, bnPairTiedB_holds, convWTiedBAt_holds bf16,
+    convBTiedB_holds, bnPairTiedB_holds, convStridedWTiedBAt_holds bf16, convStridedBTiedB_holds,
     bnPairTiedB_holds⟩
 
 /-- **Stem, tied.** The 7×7/s2 conv's weight and bias and its BatchNorm's γ/β, at the cotangent
     that reaches the stem through block 1's input fan-in and the 3×3/s2 pool's backward. -/
 def r34StemTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
-    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (cotPool : Vec (N * (oc * h * w))) : Prop :=
   let sc := batchMap N (flatConvStride2 Ws bs) x
   let cotN' := r34StemCotN N h w Ws bs εs γs βs x cotPool
   let cotC := r34StemCotC N h w Ws bs εs γs βs x cotPool
-  GradNodeB.ConvStridedWTiedB N (2 * h) (2 * w) xN cotN bs x Ws cotC
+  GradNodeB.ConvStridedWTiedBAt bf16 N (2 * h) (2 * w) xN cotN bs x Ws cotC
   ∧ GradNodeB.ConvStridedBTiedB N (2 * h) (2 * w) cotN Ws x bs cotC
   ∧ GradNodeB.BnPairTiedB N oc (2 * h) (2 * w) vN epsStr cotN εs γs βs
         (reassocB N oc (2 * h) (2 * w) sc) (reassocB N oc (2 * h) (2 * w) cotN')
 
 theorem r34_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
-    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (cotPool : Vec (N * (oc * h * w))) :
-    r34StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs x cotPool := by
+    r34StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs bf16 x cotPool := by
   unfold r34StemTiedB
-  exact ⟨convStridedWTiedB_holds, convStridedBTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convStridedWTiedBAt_holds bf16, convStridedBTiedB_holds, bnPairTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -420,10 +428,12 @@ theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat
 
     One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
     node; `ResNet34SyncTieB.r34_net_syncTiedB` is the data-parallel step, and
-    its right-hand sides are this theorem's nodes at `N := R·N`. The nodes are f32:
-    `resnet34in_momdp64bf16` emits the `*GradBBf16` kinds and is outside this statement. -/
+    its right-hand sides are this theorem's nodes at `N := R·N`. `bf16` selects the conv weight
+    nodes' kind: `false` is the f32 artifacts' node, `true` the bf16 kind
+    `resnet34in_momdp64bf16` emits (`convWeightGradBBf16`), read over ℝ at the identity rounding
+    (`Bf16Erasure`); the right-hand side is the same certified gradient at either value. -/
 theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
+    (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls) (bf16 : Bool)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls))) :
     -- the label-smoothed loss cotangent at the real logits and a general target
     let g : Vec (N * nCls) :=
@@ -447,42 +457,42 @@ theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     let dyA1 := r34IdCotIn N 56 56 w.a2 (r34Pre2 N w x) dyA2
     let dyA0 := r34IdCotIn N 56 56 w.a1 (r34Pre1 N w x) dyA1
     let cotPool := r34IdCotIn N 56 56 w.a0 (r34Pre0 N w x) dyA0
-    r34StemTiedB N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool
-  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a0 (r34Pre0 N w x) dyA0
-  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a1 (r34Pre1 N w x) dyA1
-  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a2 (r34Pre2 N w x) dyA2
-  ∧ r34DownTiedB N 28 28 xN cotN vN epsStr w.d2 (r34Pre3 N w x) dyD2
-  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b0 (r34Pre4 N w x) dyB0
-  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b1 (r34Pre5 N w x) dyB1
-  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b2 (r34Pre6 N w x) dyB2
-  ∧ r34DownTiedB N 14 14 xN cotN vN epsStr w.d3 (r34Pre7 N w x) dyD3
-  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c0 (r34Pre8 N w x) dyC0
-  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c1 (r34Pre9 N w x) dyC1
-  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c2 (r34Pre10 N w x) dyC2
-  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c3 (r34Pre11 N w x) dyC3
-  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c4 (r34Pre12 N w x) dyC4
-  ∧ r34DownTiedB N 7 7 xN cotN vN epsStr w.d4 (r34Pre13 N w x) dyD4
-  ∧ r34IdTiedB N 7 7 xN cotN vN epsStr w.e0 (r34Pre14 N w x) dyE0
-  ∧ r34IdTiedB N 7 7 xN cotN vN epsStr w.e1 (r34Pre15 N w x) dyE1
+    r34StemTiedB N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotPool
+  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a0 bf16 (r34Pre0 N w x) dyA0
+  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a1 bf16 (r34Pre1 N w x) dyA1
+  ∧ r34IdTiedB N 56 56 xN cotN vN epsStr w.a2 bf16 (r34Pre2 N w x) dyA2
+  ∧ r34DownTiedB N 28 28 xN cotN vN epsStr w.d2 bf16 (r34Pre3 N w x) dyD2
+  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b0 bf16 (r34Pre4 N w x) dyB0
+  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b1 bf16 (r34Pre5 N w x) dyB1
+  ∧ r34IdTiedB N 28 28 xN cotN vN epsStr w.b2 bf16 (r34Pre6 N w x) dyB2
+  ∧ r34DownTiedB N 14 14 xN cotN vN epsStr w.d3 bf16 (r34Pre7 N w x) dyD3
+  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c0 bf16 (r34Pre8 N w x) dyC0
+  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c1 bf16 (r34Pre9 N w x) dyC1
+  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c2 bf16 (r34Pre10 N w x) dyC2
+  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c3 bf16 (r34Pre11 N w x) dyC3
+  ∧ r34IdTiedB N 14 14 xN cotN vN epsStr w.c4 bf16 (r34Pre12 N w x) dyC4
+  ∧ r34DownTiedB N 7 7 xN cotN vN epsStr w.d4 bf16 (r34Pre13 N w x) dyD4
+  ∧ r34IdTiedB N 7 7 xN cotN vN epsStr w.e0 bf16 (r34Pre14 N w x) dyE0
+  ∧ r34IdTiedB N 7 7 xN cotN vN epsStr w.e1 bf16 (r34Pre15 N w x) dyE1
   ∧ r34HeadTiedB N 7 7 xN cotN w.Wd w.bd (r34Pre16 N w x) g := by
   intro g dyE1 dyE0 dyD4 dyC4 dyC3 dyC2 dyC1 dyC0 dyD3 dyB2 dyB1 dyB0 dyD2 dyA2 dyA1 dyA0 cotPool
-  exact ⟨r34_stem_tiedB N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool,
-    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a0 (r34Pre0 N w x) dyA0,
-    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a1 (r34Pre1 N w x) dyA1,
-    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a2 (r34Pre2 N w x) dyA2,
-    r34_downblock_tiedB N 28 28 xN cotN vN epsStr w.d2 (r34Pre3 N w x) dyD2,
-    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b0 (r34Pre4 N w x) dyB0,
-    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b1 (r34Pre5 N w x) dyB1,
-    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b2 (r34Pre6 N w x) dyB2,
-    r34_downblock_tiedB N 14 14 xN cotN vN epsStr w.d3 (r34Pre7 N w x) dyD3,
-    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c0 (r34Pre8 N w x) dyC0,
-    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c1 (r34Pre9 N w x) dyC1,
-    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c2 (r34Pre10 N w x) dyC2,
-    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c3 (r34Pre11 N w x) dyC3,
-    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c4 (r34Pre12 N w x) dyC4,
-    r34_downblock_tiedB N 7 7 xN cotN vN epsStr w.d4 (r34Pre13 N w x) dyD4,
-    r34_idblock_tiedB N 7 7 xN cotN vN epsStr w.e0 (r34Pre14 N w x) dyE0,
-    r34_idblock_tiedB N 7 7 xN cotN vN epsStr w.e1 (r34Pre15 N w x) dyE1,
+  exact ⟨r34_stem_tiedB N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotPool,
+    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a0 bf16 (r34Pre0 N w x) dyA0,
+    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a1 bf16 (r34Pre1 N w x) dyA1,
+    r34_idblock_tiedB N 56 56 xN cotN vN epsStr w.a2 bf16 (r34Pre2 N w x) dyA2,
+    r34_downblock_tiedB N 28 28 xN cotN vN epsStr w.d2 bf16 (r34Pre3 N w x) dyD2,
+    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b0 bf16 (r34Pre4 N w x) dyB0,
+    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b1 bf16 (r34Pre5 N w x) dyB1,
+    r34_idblock_tiedB N 28 28 xN cotN vN epsStr w.b2 bf16 (r34Pre6 N w x) dyB2,
+    r34_downblock_tiedB N 14 14 xN cotN vN epsStr w.d3 bf16 (r34Pre7 N w x) dyD3,
+    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c0 bf16 (r34Pre8 N w x) dyC0,
+    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c1 bf16 (r34Pre9 N w x) dyC1,
+    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c2 bf16 (r34Pre10 N w x) dyC2,
+    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c3 bf16 (r34Pre11 N w x) dyC3,
+    r34_idblock_tiedB N 14 14 xN cotN vN epsStr w.c4 bf16 (r34Pre12 N w x) dyC4,
+    r34_downblock_tiedB N 7 7 xN cotN vN epsStr w.d4 bf16 (r34Pre13 N w x) dyD4,
+    r34_idblock_tiedB N 7 7 xN cotN vN epsStr w.e0 bf16 (r34Pre14 N w x) dyE0,
+    r34_idblock_tiedB N 7 7 xN cotN vN epsStr w.e1 bf16 (r34Pre15 N w x) dyE1,
     r34_head_tiedB N 7 7 xN cotN w.Wd w.bd (r34Pre16 N w x) g⟩
 
 

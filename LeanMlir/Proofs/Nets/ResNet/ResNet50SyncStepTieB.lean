@@ -836,7 +836,7 @@ def r50NetSyncTiedB (R : Nat) (hR : 0 < R) (N q : Nat) {nCls : Nat} (xN cotN vN 
   let ePool := r50ProjSyncCotIn R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0
     (r50Pre0 (R * N) q w X) e1
   r34StemSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr
-      w.sW w.sb w.sε w.sγ w.sβ X ePool cotPool
+      w.sW w.sb w.sε w.sγ w.sβ false X ePool cotPool
   ∧ r50ProjSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) "s1b0" xN cotN vN epsStr
       w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1
   ∧ r50IdSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) "s1b1" xN cotN vN epsStr
@@ -931,7 +931,7 @@ theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat
   have sPool := r50ProjSyncCotIn_scaled R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
     w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1 s1
   exact ⟨r34_stem_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-      xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X ePool _ sPool,
+      xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false X ePool _ sPool,
     r50_projblock_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
       "s1b0" xN cotN vN epsStr w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1 s1,
     r50_idblock_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8

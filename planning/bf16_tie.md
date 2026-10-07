@@ -165,6 +165,22 @@ The CIFAR batched artifacts (`cifar8wb_bf16*`, `cifar8wb_bn_bf16*`) use the same
    downsample rows at both values. `ResNet50FullB` / `ResNet50SyncB` (borrowing the R34 stem) and
    `SpecVJP` pass `false` until their own steps. The comparator tier's
    `resnet34FwdGraphSyncFull_shard` statement gains the binder and is regenerated.
+   3.3 done 2026-10-07: the flagged tie predicates live in one new file above `Bf16Erasure` and
+   `SyncKit`, `Foundation/GradNodesBAt.lean` (`ConvWTiedBAt bf16` / `ConvStridedWTiedBAt bf16`
+   with `_holds`, `convWAt_hasGradAt` / `convStridedWAt_hasGradAt`, `ConvWSyncAt bf16` /
+   `ConvStridedWSyncAt bf16` with `_of_scaled`; each `= ` its f32 original at `false` by `rfl`),
+   so neither `GradNodesB` nor `SyncKit` nor `ParamGradNodes` changes and their cones do not
+   rebuild; the sync `_of_scaled` is the f32 lemma under `simp only [den_allReduceMeanF,
+   den_convWeightGradBAt_id] at h ⊢`. In the R34 files the flag is in place (no outside users of
+   the identity / downsample bundles): `r34{Id,Down,Stem}TiedB`, `r34_net_tiedB`, the sync
+   bundles and `r34_net_syncTiedB` (+ `_smoothedCE`), `r34{Id,Down}LossTiedB`,
+   `r34StemLossTiedAtB` / `r34StemLossTiedB` and the pool-selector lemmas through them,
+   `R34NetLossTiedB`, `r34_net_lossGrad` (+ `_smoothedCE`, `_stemSelect`),
+   `r34_net_tied_lossGrad` — the flag sits after the weights, before the input; ResNet-50's
+   borrowed stem bundles pass `false` at seven sites until step 3. Bias, BatchNorm and dense
+   nodes carry no flag. Comparator regenerated (`r34_net_lossGrad`, `r34_net_syncTiedB`,
+   `r50_net_tiedB`'s borrowed stem). The three files' "bf16 is outside this statement"
+   paragraphs now state the flag; the book's sentences are §3.4.
 3. ResNet-50 (same kinds), then MobileNetV2 / V4 / B0 (the depthwise kinds), ConvNeXt, ViT. Script
    the binder threading (the cone-parametrisation method); compile and fix.
 4. The shared files (3.4), one commit each.

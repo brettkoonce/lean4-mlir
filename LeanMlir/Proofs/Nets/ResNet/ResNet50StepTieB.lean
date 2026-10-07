@@ -533,7 +533,7 @@ theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     let dy2 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x) dy3
     let dy1 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x) dy2
     let cotPool := r50ProjCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x) dy1
-    r34StemTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool
+    r34StemTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x cotPool
   ∧ r50ProjTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b0 (r50Pre0 N q w x) dy1
   ∧ r50IdTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b1 (r50Pre1 N q w x) dy2
   ∧ r50IdTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b2 (r50Pre2 N q w x) dy3
@@ -552,7 +552,7 @@ theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   ∧ r50IdTiedB N q q xN cotN vN epsStr w.s4b2 (r50Pre15 N q w x) dy16
   ∧ r34HeadTiedB N q q xN cotN w.Wd w.bd (r50Pre16 N q w x) g := by
   intro dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotPool
-  exact ⟨r34_stem_tiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool,
+  exact ⟨r34_stem_tiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x cotPool,
     r50_projblock_tiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b0 (r50Pre0 N q w x) dy1,
     r50_idblock_tiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b1 (r50Pre1 N q w x) dy2,
     r50_idblock_tiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b2 (r50Pre2 N q w x) dy3,

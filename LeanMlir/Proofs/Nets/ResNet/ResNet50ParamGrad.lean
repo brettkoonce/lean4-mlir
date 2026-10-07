@@ -601,7 +601,7 @@ def R50NetLossTiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : R
     let dy2 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x) dy3
     let dy1 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x) dy2
     let cotPool := r50ProjCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x) dy1
-    r34StemLossTiedB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x
+    r34StemLossTiedB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x
       (fun W b γ β => L (resnet50ForwardBFull N q { w with sW := W, sb := b, sγ := γ, sβ := β } x))
       cotPool
   ∧ r50ProjLossTiedB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr w.s1b0 (r50Pre0 N q w x)
@@ -729,7 +729,7 @@ theorem r50_net_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   have h0 : HasGradAt (fun y => L (r50SufStem N q w y)) (r50Pre0 N q w x) cotPool :=
     r50ProjB_hasGradAt_comp w.s1b0 hp.s1b0 _ hx.s1b0 (h1.congr_point (r50Pre1_apply N q w x))
   refine ⟨r34_stem_lossTiedB xN cotN vN epsStr
-      w.sW w.sb w.sε hp.s w.sγ w.sβ x hx.stem hx.pool (h0.congr_point (r50Pre0_apply N q w x))
+      w.sW w.sb w.sε hp.s w.sγ w.sβ false x hx.stem hx.pool (h0.congr_point (r50Pre0_apply N q w x))
       (fun W b γ β => by rw [r50_factor_stem]), ?_⟩
   refine ⟨r50_projblock_lossTiedB xN cotN vN epsStr w.s1b0 hp.s1b0 _ hx.s1b0
       (h1.congr_point (r50Pre1_apply N q w x)) (fun p => by rw [r50_factor_s1b0]), ?_⟩
@@ -797,7 +797,7 @@ theorem r50_net_lossGrad_stemSelect (N q : Nat) {nCls : Nat} (xN cotN vN epsStr 
     let dy1 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x) dy2
     let cotPool := r50ProjCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x) dy1
     r34StemLossTiedAtB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr
-      w.sW w.sb w.sε w.sγ w.sβ x
+      w.sW w.sb w.sε w.sγ w.sβ false x
       (fun W b γ β => L (resnet50ForwardBFull N q { w with sW := W, sb := b, sγ := γ, sβ := β } x))
       (r34StemCotCAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool)
       (r34StemCotNAt σ w.sW w.sb w.sε w.sγ w.sβ x cotPool) := by
@@ -866,8 +866,8 @@ theorem r50_net_tied_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : Stri
     let dy2 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x) dy3
     let dy1 := r50IdCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x) dy2
     let cotPool := r50ProjCotIn N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x) dy1
-    (r34StemTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool
-      ∧ r34StemLossTiedB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x
+    (r34StemTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x cotPool
+      ∧ r34StemLossTiedB (N := N) (h := (2 * (2 * (2 * q)))) (w := (2 * (2 * (2 * q)))) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x
         (fun W b γ β => L (resnet50ForwardBFull N q { w with sW := W, sb := b, sγ := γ, sβ := β } x))
         cotPool)
   ∧ (r50ProjTiedB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr w.s1b0 (r50Pre0 N q w x) dy1

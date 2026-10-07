@@ -210,7 +210,7 @@ theorem chk_r50_net_tiedB :
         Proofs.ResNet50TieB.r50ProjCotIn N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))
           w.s1b0 (Proofs.r50Pre0 N q w x) dy1;
       Proofs.ResNet34TieB.r34StemTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN cotN
-          vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotPool ∧
+          vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x cotPool ∧
         Proofs.ResNet50TieB.r50ProjTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
             cotN vN epsStr w.s1b0 (Proofs.r50Pre0 N q w x) dy1 ∧
           Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
@@ -713,11 +713,12 @@ theorem chk_cnx_net_tiedGB :
 theorem chk_r34_net_lossGrad :
     ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R34BWeights nCls),
       Proofs.R34PosB w →
-        ∀ (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))))),
+        ∀ (bf16 : Bool)
+          (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))))),
           Proofs.ResNet34TieB.R34LossSmoothAtB N w x →
             ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
               Proofs.HasGradAt L (Proofs.resnet34ForwardBFull N w x) g →
-                Proofs.ResNet34TieB.R34NetLossTiedB N xN cotN vN epsStr w x L g :=
+                Proofs.ResNet34TieB.R34NetLossTiedB N xN cotN vN epsStr w bf16 x L g :=
   Proofs.ResNet34TieB.r34_net_lossGrad
 
 /-- `Proofs.ResNet50TieB.r50_net_lossGrad` -/
@@ -1016,11 +1017,11 @@ theorem chk_resnet34FwdGraphSyncFull_shard :
 theorem chk_r34_net_syncTiedB :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R34BWeights nCls)
+        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R34BWeights nCls) (bf16 : Bool)
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
           (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
           (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-            Proofs.ResNet34SyncTieB.r34NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
+            Proofs.ResNet34SyncTieB.r34NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X G gs :=
   Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 
 /-- `Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard` -/

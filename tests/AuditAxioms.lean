@@ -77,6 +77,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Foundation.Bf16GradNodes
 import LeanMlir.Proofs.Foundation.Bf16Erasure
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
@@ -2141,6 +2142,13 @@ open Proofs
 #print axioms Proofs.Bf16Fold.den_depthwiseStridedWeightGradBAt_id
 #print axioms Proofs.Bf16Fold.den_depthwiseStridedXlaWeightGradBAt_id
 #print axioms Proofs.Bf16Fold.den_rowDenseWeightGradBAt_id
+-- The tie predicates on the switch, either bf16 (GradNodesBAt.lean): node, loss derivative, collective
+#print axioms Proofs.GradNodeB.convWTiedBAt_holds
+#print axioms Proofs.GradNodeB.convStridedWTiedBAt_holds
+#print axioms Proofs.GradNodeB.convWAt_hasGradAt
+#print axioms Proofs.GradNodeB.convStridedWAt_hasGradAt
+#print axioms Proofs.SyncKit.convWSyncAt_of_scaled
+#print axioms Proofs.SyncKit.convStridedWSyncAt_of_scaled
 
 -- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den
