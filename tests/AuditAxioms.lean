@@ -35,6 +35,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
+import LeanMlir.Proofs.Foundation.DropSites
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
@@ -890,6 +891,14 @@ open Proofs
 #print axioms Proofs.StableHLO.headGraphBEvalDo_faithful
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful
+-- Optional drop sites: the site as an Option, its graph node, VJP, homogeneity and shard (Foundation/DropSites.lean)
+#print axioms Proofs.StableHLO.den_dropPathOptG
+#print axioms Proofs.StableHLO.den_dropoutOptG
+#print axioms Proofs.dropoutOptHasVJP
+#print axioms Proofs.dropPathOptHasVJP
+#print axioms Proofs.dropoutOpt_differentiable
+#print axioms Proofs.dropoutOpt_smul
+#print axioms Proofs.dropoutOpt_shard
 -- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
 #print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
 #print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful
@@ -898,6 +907,8 @@ open Proofs
 -- Classifier dropout (the `%do` form) on MobileNetV2 and MobileNetV4
 #print axioms Proofs.mobilenetv2ForwardBFullDo_ones
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphBFullDo_faithful
+#print axioms Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOpt_eq_chain
+#print axioms Proofs.MobileNetV2TieB.mnv2HeadBDoOptHasVJPAt
 #print axioms Proofs.StableHLO.mobilenetv4ForwardBFullDo_ones
 #print axioms Proofs.StableHLO.mnv4FwdGraphBFullDo_faithful
 -- Stochastic depth (the `%dp` sites) on MobileNetV4 (MobileNetV4FullBDrop.lean) and ViT (ViTFwdDrop.lean)
@@ -2438,6 +2449,7 @@ open Proofs
 #print axioms Proofs.StableHLO.mnv2StridedGraphSync_shard
 #print axioms Proofs.StableHLO.mnv2HeadGraphSync_shard
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard
+#print axioms Proofs.StableHLO.mobilenetv2FwdGraphSyncFullDo_shard
 #print axioms Proofs.SyncKit.relu6MaskB_smul
 #print axioms Proofs.SyncKit.depthwiseStridedXlaWeightGradB_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpCotIn_smul

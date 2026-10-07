@@ -67,8 +67,16 @@ takes `bf16`, so it covers the f32 DP artifacts (`mobilenetv2_adamdp`, `mobilene
 identity rounding (`Bf16Erasure`), where each bf16 collective is `1/R` of the batch-`R·N` bf16
 node exactly as at f32. At a real rounding the bf16 weight-gradient collective differs from the
 single-device node by the per-replica rounding of each partial sum, which `DataParallel.SyncBf16`
-states and this file does not model, as the f32 tie does not model f32 rounding. Classifier
-dropout (`*do*`) keeps its present scope.
+states and this file does not model, as the f32 tie does not model f32 rounding.
+
+**Classifier dropout is an optional site on the statement**, as in `MobileNetV2StepTieB`: the
+capstone takes `cd : Option (Vec ((R * N) * 1280))`, the GLOBAL mask, and replica `r` runs its
+chain at `batchShard r` of it — which is what the DP render's per-replica `%do` input is. `none`
+is the drop-free DP artifacts' statement exactly as it was; `some M` reaches
+`mobilenetv2in_rmsdp64wxdols0eps0001bf16`'s head: the site is linear in the cotangent
+(`dropoutOpt_smul`) and commutes with the batch cut (`dropoutOpt_shard`, `Foundation.DropSites`),
+so the four steps above are unchanged, and the dense collective reads the dropped activation on
+every replica. The forward half with the site is `StableHLO.mobilenetv2FwdGraphSyncFullDo_shard`.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -188,26 +196,31 @@ private theorem mnv2StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel
   intro s dy
   unfold mnv2StemCotC; rw [mnv2StemCotN_smul, bnInB_smul]
 
-private theorem mnv2HeadCotHr_smul (N h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) :
-    IsHomog (mnv2HeadCotHr N h w Wd) := by
+private theorem mnv2HeadCotHr_smul (N h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
+    (cd : Option (Vec (N * oc))) :
+    IsHomog (mnv2HeadCotHr N h w Wd cd) := by
   intro s g
-  unfold mnv2HeadCotHr mnv2HeadCotGapIn; rw [rowDenseBackFlat_smul, gapInB_smul]
+  unfold mnv2HeadCotHr mnv2HeadCotGapIn
+  rw [rowDenseBackFlat_smul, dropoutOpt_smul, gapInB_smul]
 
 private theorem mnv2HeadCotHn_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
-    IsHomog (mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin) := by
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotHn N h w Wh bh εh γh βh Wd cd xin) := by
   intro s g
   unfold mnv2HeadCotHn; rw [mnv2HeadCotHr_smul, relu6MaskB_smul]
 
 private theorem mnv2HeadCotHc_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
-    IsHomog (mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin) := by
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotHc N h w Wh bh εh γh βh Wd cd xin) := by
   intro s g
   unfold mnv2HeadCotHc; rw [mnv2HeadCotHn_smul, bnInB_smul]
 
 theorem mnv2HeadCotBlk_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
-    IsHomog (mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin) := by
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotBlk N h w Wh bh εh γh βh Wd cd xin) := by
   intro s g
   unfold mnv2HeadCotBlk; rw [mnv2HeadCotHc_smul, cInB_smul]
 
@@ -221,12 +234,15 @@ private theorem dStridedXlaInB_shard {R N : Nat} {c h w kH kW : Nat} (W : Depthw
       = batchShard R N (c * (2 * h) * (2 * w)) (dStridedXlaInB (R * N) (h := h) (w := w) W b DY) r :=
   (batchShard_batchMap _ DY r).symm
 
+/-- The head's GAP backward, through replica `r`'s shard of the dropout mask, is shard `r` of
+    the global one through the global mask (`dropoutOpt_shard` between the two per-example
+    lifts). -/
 private theorem mnv2HeadCotHr_shard {R N : Nat} (h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
-    (G : Vec ((R * N) * nCls)) (r : Fin R) :
-    mnv2HeadCotHr N h w Wd (batchShard R N nCls G r)
-      = batchShard R N (oc * h * w) (mnv2HeadCotHr (R * N) h w Wd G) r := by
+    (cd : Option (Vec ((R * N) * oc))) (G : Vec ((R * N) * nCls)) (r : Fin R) :
+    mnv2HeadCotHr N h w Wd (cd.map fun M => batchShard R N oc M r) (batchShard R N nCls G r)
+      = batchShard R N (oc * h * w) (mnv2HeadCotHr (R * N) h w Wd cd G) r := by
   unfold mnv2HeadCotHr mnv2HeadCotGapIn
-  rw [rowDenseBackFlat_shard, gapInB_shard]
+  rw [rowDenseBackFlat_shard, dropoutOpt_shard, gapInB_shard]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3. The replica chain, block by block, and its shard lemmas
@@ -552,56 +568,59 @@ end StemShard
 
 section Head
 variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-  (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
+  (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec ((R * N) * oc)))
   (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls))
 
 /-- Head, replica `r`: the head relu6's mask of the GAP backward of the classifier's input-VJP of
-    this replica's loss cotangent. Feeds `hg`/`hbt`. -/
+    this replica's loss cotangent, through replica `r`'s shard of the dropout mask when the site
+    is rendered (the render's per-replica `%do`). Feeds `hg`/`hbt`. -/
 private noncomputable def mnv2HeadSyncCotHn (r : Fin R) : Vec (N * (oc * h * w)) :=
   relu6MaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (bnBatchLA (R * N) oc h w εh γh βh (batchMap (R * N) (flatConv Wh bh) XIN)) r)
-    (mnv2HeadCotHr N h w Wd (gs r))
+    (mnv2HeadCotHr N h w Wd (cd.map fun M => batchShard R N oc M r) (gs r))
 
 /-- Head, replica `r`: the head BatchNorm's sync backward. Feeds `hW`. -/
 private noncomputable def mnv2HeadSyncCotHc (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w εh γh
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv Wh bh) XIN) r)
-    (mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd XIN gs) r
+    (mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd cd XIN gs) r
 
 /-- Head, replica `r`: the cotangent handed to `b17`. -/
 noncomputable def mnv2HeadSyncCotBlk (r : Fin R) : Vec (N * (ic * h * w)) :=
-  cInB N Wh bh (mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd XIN gs r)
+  cInB N Wh bh (mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd cd XIN gs r)
 
 end Head
 
 section HeadShard
 variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat} (hN : 0 < N) (hh : 0 < h)
   (hw : 0 < w) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-  (Wd : Mat oc nCls) (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls))
+  (Wd : Mat oc nCls) (cd : Option (Vec ((R * N) * oc))) (XIN : Vec ((R * N) * (ic * h * w)))
+  (gs : Fin R → Vec (N * nCls))
   (G : Vec ((R * N) * nCls)) (hgs : ∀ r, gs r = batchShard R N nCls G r)
 include hgs
 
 private theorem mnv2HeadSyncCotHn_shard (r : Fin R) :
-    mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd XIN gs r
-      = batchShard R N (oc * h * w) (mnv2HeadCotHn (R * N) h w Wh bh εh γh βh Wd XIN G) r := by
+    mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd cd XIN gs r
+      = batchShard R N (oc * h * w) (mnv2HeadCotHn (R * N) h w Wh bh εh γh βh Wd cd XIN G) r := by
   unfold mnv2HeadSyncCotHn
   rw [hgs, mnv2HeadCotHr_shard]
   rfl
 
 include hN hh hw in
 private theorem mnv2HeadSyncCotHc_shard (r : Fin R) :
-    mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd XIN gs r
-      = batchShard R N (oc * h * w) (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd XIN G) r :=
+    mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd cd XIN gs r
+      = batchShard R N (oc * h * w) (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd cd XIN G) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
-    _ _ _ _ _ _ (fun _ => rfl) (mnv2HeadSyncCotHn_shard R N h w Wh bh εh γh βh Wd XIN gs G hgs) r
+    _ _ _ _ _ _ (fun _ => rfl)
+    (mnv2HeadSyncCotHn_shard R N h w Wh bh εh γh βh Wd cd XIN gs G hgs) r
 
 include hN hh hw in
 theorem mnv2HeadSyncCotBlk_shard (r : Fin R) :
-    mnv2HeadSyncCotBlk R hR N h w Wh bh εh γh βh Wd XIN gs r
-      = batchShard R N (ic * h * w) (mnv2HeadCotBlk (R * N) h w Wh bh εh γh βh Wd XIN G) r := by
+    mnv2HeadSyncCotBlk R hR N h w Wh bh εh γh βh Wd cd XIN gs r
+      = batchShard R N (ic * h * w) (mnv2HeadCotBlk (R * N) h w Wh bh εh γh βh Wd cd XIN G) r := by
   unfold mnv2HeadSyncCotBlk
-  rw [mnv2HeadSyncCotHc_shard R hR N h w hN hh hw Wh bh εh γh βh Wd XIN gs G hgs, cInB_shard]
+  rw [mnv2HeadSyncCotHc_shard R hR N h w hN hh hw Wh bh εh γh βh Wd cd XIN gs G hgs, cInB_shard]
   rfl
 
 end HeadShard
@@ -873,49 +892,52 @@ private theorem mnv2_stride2_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic 
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Head, DP-tied** — the 1x1 conv weight, its BatchNorm's γ and β, and the classifier's weight
-    and bias at the GAP output. -/
+    and bias at the dense's input: the GAP output through the dropout site when it is rendered,
+    replica `r` reading shard `r` of `dropoutOpt cd a` (its own mask on its own pooled
+    activation, `dropoutOpt_shard`). -/
 private def mnv2HeadSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
     (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bf16 : Bool)
+    (Wd : Mat oc nCls) (bf16 : Bool) (cd : Option (Vec ((R * N) * oc)))
     (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls))
     (G : Vec ((R * N) * nCls)) : Prop :=
   let hc := batchMap (R * N) (flatConv Wh bh) XIN
   let hr := cbrB (R * N) (h := h) (w := w) Wh bh εh γh βh XIN
-  let a := batchMap (R * N) (globalAvgPoolFlat oc h w) hr
+  let a := dropoutOpt cd (batchMap (R * N) (globalAvgPoolFlat oc h w) hr)
   ConvWSyncAt bf16 R hR N h w "hW" xN cotN bh XIN Wh
-      (mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd XIN gs)
-      (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd XIN G)
+      (mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd cd XIN gs)
+      (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd cd XIN G)
   ∧ BnSync R hR N oc h w "hg" "hbt" vN epsStr cotN εh hc
-      (mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd XIN gs)
-      (mnv2HeadCotHn (R * N) h w Wh bh εh γh βh Wd XIN G)
+      (mnv2HeadSyncCotHn R N h w Wh bh εh γh βh Wd cd XIN gs)
+      (mnv2HeadCotHn (R * N) h w Wh bh εh γh βh Wd cd XIN G)
   ∧ DenseSync R hR N "Wd" "bd" xN cotN a gs G
 
 /-- The head's cotangent handed to `b17` on a replica, at `R ×` the shards of `G`, is `R ×` the
     shard of the single-device one. -/
 private theorem mnv2HeadSyncCotBlk_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (Wd : Mat oc nCls) (XIN : Vec ((R * N) * (ic * h * w)))
+    (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (ic * h * w)))
     (gs : Fin R → Vec (N * nCls)) (G : Vec ((R * N) * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) (r : Fin R) :
-    mnv2HeadSyncCotBlk R hR N h w Wh bh εh γh βh Wd XIN gs r
+    mnv2HeadSyncCotBlk R hR N h w Wh bh εh γh βh Wd cd XIN gs r
       = batchShard R N (ic * h * w)
-          (fun i => (R : ℝ) * mnv2HeadCotBlk (R * N) h w Wh bh εh γh βh Wd XIN G i) r := by
-  rw [mnv2HeadSyncCotBlk_shard R hR N h w hN hh hw Wh bh εh γh βh Wd XIN gs _ hgs,
+          (fun i => (R : ℝ) * mnv2HeadCotBlk (R * N) h w Wh bh εh γh βh Wd cd XIN G i) r := by
+  rw [mnv2HeadSyncCotBlk_shard R hR N h w hN hh hw Wh bh εh γh βh Wd cd XIN gs _ hgs,
     mnv2HeadCotBlk_smul]
 
 private theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr : String)
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
-    (bf16 : Bool)
+    (bf16 : Bool) (cd : Option (Vec ((R * N) * oc)))
     (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls)) (G : Vec ((R * N) * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
-    mnv2HeadSyncTiedB R hR N h w xN cotN vN epsStr Wh bh εh γh βh Wd bf16 XIN gs G := by
+    mnv2HeadSyncTiedB R hR N h w xN cotN vN epsStr Wh bh εh γh βh Wd bf16 cd XIN gs G := by
   refine ⟨?_, ?_, ?_⟩
   · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
-      rw [mnv2HeadSyncCotHc_shard R hR N h w hN hh hw Wh bh εh γh βh Wd XIN gs _ hgs,
+      rw [mnv2HeadSyncCotHc_shard R hR N h w hN hh hw Wh bh εh γh βh Wd cd XIN gs _ hgs,
         mnv2HeadCotHc_smul])
   · exact bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) _ _ _ _ _ _ _ _ _ (fun r => by
-      rw [mnv2HeadSyncCotHn_shard R N h w Wh bh εh γh βh Wd XIN gs _ hgs, mnv2HeadCotHn_smul])
+      rw [mnv2HeadSyncCotHn_shard R N h w Wh bh εh γh βh Wd cd XIN gs _ hgs, mnv2HeadCotHn_smul])
   · exact denseSync_of_scaled R hR N _ _ _ _ _ gs G hgs
 
 -- ════════════════════════════════════════════════════════════════
@@ -928,10 +950,12 @@ private theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc 
     replicas' sync-BN chain, driven by the family `gs`; the 19 conjuncts are one per stage, every
     emitted parameter collective against `mnv2_net_tiedB`'s node at the global batch. -/
 def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : MNV2BWeights nCls) (bf16 : Bool) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (w : MNV2BWeights nCls) (bf16 : Bool) (cd : Option (Vec ((R * N) * 1280)))
+    (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N` (`mnv2_net_tiedB`'s), driven by `G` ──
-  let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 (R * N) w X) G
+  let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd
+    (mnv2PreB17 (R * N) w X) G
   let dy16 := mnv2CotInBody (R * N) 7 7 w.b17 (mnv2PreB16 (R * N) w X) dy17
   let dy15 := mnv2ResidCotIn (R * N) 7 7 w.b16 (mnv2PreB15 (R * N) w X) dy16
   let dy14 := mnv2ResidCotIn (R * N) 7 7 w.b15 (mnv2PreB14 (R * N) w X) dy15
@@ -950,7 +974,7 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
   let dy1 := mnv2StridedCotIn (R * N) 56 56 w.b2 (mnv2PreB1 (R * N) w X) dy2
   let cotStem := mnv2NoExpCotIn (R * N) 112 112 w.b1 (mnv2PreB0 (R * N) w X) dy1
   -- ── the replicas' sync-BN chain, driven by the family `gs` ──
-  let e17 := mnv2HeadSyncCotBlk R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW
+  let e17 := mnv2HeadSyncCotBlk R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd
     (mnv2PreB17 (R * N) w X) gs
   let e16 := mnv2SyncCotInBody R hR N 7 7 w.b17 (mnv2PreB16 (R * N) w X) e17
   let e15 := mnv2ResidSyncCotIn R hR N 7 7 w.b16 (mnv2PreB15 (R * N) w X) e16
@@ -995,7 +1019,7 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
       e16 dy16
   ∧ mnv2Stride1SyncTiedB R hR N 7 7 "17" xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 (R * N) w X)
       e17 dy17
-  ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW bf16
+  ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW bf16 cd
       (mnv2PreB17 (R * N) w X) gs G
 
 /-- **The synchronised-BN data-parallel MobileNetV2 step is the single-device step at the
@@ -1012,17 +1036,20 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
     DP render emits is the global-batch step's gradient node. `bf16` selects the conv and
     depthwise weight collectives' kind on both sides — `true` is the `*bf16` renders', read at
     the identity rounding (`Bf16Erasure`). The optimizer update that follows
-    (RMSProp/AdamW) is not stated here. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
-    label-smoothed chain the artifacts emit.
+    (RMSProp/AdamW) is not stated here. `cd` is the classifier-dropout site, the global mask
+    replica `r` runs at shard `r` of — `none` the drop-free DP artifacts, `some M`
+    `mobilenetv2in_rmsdp64wxdols0eps0001bf16` (the module's Scope). `mnv2_net_syncTiedB_smoothedCE`
+    discharges the hypothesis for the label-smoothed chain the artifacts emit.
 
     With per-replica BatchNorm the corresponding statement is false in general;
     `DataParallel.dpMeanGrad_ne_globalBatchGrad` is a two-replica counterexample. -/
 theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (w : MNV2BWeights nCls) (bf16 : Bool)
+    (cd : Option (Vec ((R * N) * 1280)))
     (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112)))) (G : Vec ((R * N) * nCls))
     (gs : Fin R → Vec (N * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
-    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X G gs := by
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 cd X G gs := by
   unfold mnv2NetSyncTiedB
   intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
     e17 e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 eStem
@@ -1032,7 +1059,7 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
   have h14 : 0 < 14 := by norm_num
   have h7 : 0 < 7 := by norm_num
   -- the scaled-shard invariant, block by block down the chain
-  have s17 := mnv2HeadSyncCotBlk_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε w.hγ w.hβ w.fcW
+  have s17 := mnv2HeadSyncCotBlk_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd
     (mnv2PreB17 (R * N) w X) gs G hgs
   have s16 := mnv2SyncCotInBody_scaled R hR N 7 7 hN h7 h7 w.b17 (mnv2PreB16 (R * N) w X)
     e17 dy17 s17
@@ -1105,7 +1132,7 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "17" xN cotN vN epsStr w.b17 bf16
       (mnv2PreB16 (R * N) w X) e17 dy17 s17,
     mnv2_head_syncTiedB R hR N 7 7 hN h7 h7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW bf16
-      (mnv2PreB17 (R * N) w X) gs G hgs⟩
+      cd (mnv2PreB17 (R * N) w X) gs G hgs⟩
 
 /-- **…and at the loss the artifacts emit.** `mnv2_net_syncTiedB` with its cotangent hypothesis
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
@@ -1115,15 +1142,16 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     loss divided by `R·B`. -/
 theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (w : MNV2BWeights nCls) (bf16 : Bool) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (w : MNV2BWeights nCls) (bf16 : Bool) (cd : Option (Vec ((R * N) * 1280)))
+    (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (T : Vec ((R * N) * (1 * nCls))) :
-    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 cd X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
-        bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardBFull (R * N) w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardBFullDoOpt (R * N) w cd X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardBFull (R * N) w X) r))
+        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardBFullDoOpt (R * N) w cd X) r))
         (batchShard R N (1 * nCls) T r)))) :=
-  mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w bf16 X _ _
+  mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w bf16 cd X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 end Proofs.MobileNetV2SyncTieB

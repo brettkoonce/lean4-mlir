@@ -2,6 +2,7 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Foundation.DropSites
 
 /-! # MobileNetV2's train-step tie at batch BatchNorm — the un-fused, batched whole-net thread
 
@@ -51,7 +52,20 @@ conv and depthwise weight node below is stated on the renderers' switch — `Con
 the capstone `mnv2_net_tiedB` takes `bf16`, so it reaches the bf16 artifacts' gradient nodes read
 over ℝ exactly as it reads the f32 ones (`Bf16Erasure`: at the identity rounding the bf16 kind
 denotes what its f32 peer does). BatchNorm, bias and dense nodes carry no flag because no render
-switches them. Classifier dropout (`*do*`) keeps its present scope.
+switches them.
+
+**Classifier dropout is an optional site on the statement.** `mobilenetv2in_rmsdp64wxdols0eps0001bf16`
+is a `*do*` artifact: `MobileNetV2RenderB` emits `dropoutB` on the driver's per-element mask `%do`
+between the GAP and the dense in the forward, reads the DROPPED activation at the classifier
+weight gradient (its `cin`), and applies the same mask to the dense's input-VJP before the GAP
+backward (`Proofs.dropout_vjp_is_self`). The head chain, the head bundle and the capstone take the
+site as `cd : Option (Vec (N * 1280))` (`Proofs.Foundation.DropSites`): `none` is the drop-free
+artifacts' chain — the statement exactly as it was — and `some m` the `*do*` artifacts', where
+`mnv2HeadCotGapIn` is `dropout m` of the classifier's input-VJP and the dense weight node reads
+`dropout m` of the pooled activation (the content of the `dropout-tie` gate's W,
+[`tests/TestDropoutTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropoutTie.lean)).
+The head is stated at `mnv2HeadBDoOpt` — `mnv2HeadB` at `none`, `mnv2HeadBDo` at `some m`, both by
+`rfl` — and the net at `mobilenetv2ForwardBFullDoOpt`, likewise.
 
 **`bnInB` and `bnInB_eq_bnBackB` are ResNet-34's, imported rather than copied.** They are the
 batched BatchNorm input-cotangent written as the `den` of the emitted backward op, and its identity
@@ -430,51 +444,150 @@ Unlike ResNet-34's, this head is not `batchMap` of a smooth per-example map — 
 1x1 conv-BN-relu6 in front of the pool — so the chain is spelled here as `den`s, exactly as
 `EfficientNetStepTie.enetHeadTied` spells B0's identically-shaped head. -/
 
-/-- Cotangent at the GAP output — the classifier's input-VJP. -/
+-- ════════════════════════════════════════════════════════════════
+-- § The head at an optional classifier-dropout site
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The head with its classifier-dropout site as an `Option`**: `none` is `mnv2HeadB` (the
+    drop-free artifacts), `some m` is `mnv2HeadBDo … m` (the `*do*` artifacts: `dropout m` between
+    the GAP and the dense) — both by `rfl`. The ties are stated at this head so one statement
+    covers both artifact families. -/
+@[reducible] noncomputable def mnv2HeadBDoOpt (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc))) :
+    Vec (N * (ic * h * w)) → Vec (N * nCls) :=
+  StableHLO.batchMap N (dense Wd bd) ∘ dropoutOpt cd ∘
+    StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘ StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh
+
+theorem mnv2HeadBDoOpt_none (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) :
+    mnv2HeadBDoOpt N h w Wh bh εh γh βh Wd bd none = mnv2HeadB N h w Wh bh εh γh βh Wd bd := rfl
+
+theorem mnv2HeadBDoOpt_some (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) :
+    mnv2HeadBDoOpt N h w Wh bh εh γh βh Wd bd (some m) = mnv2HeadBDo N h w Wh bh εh γh βh Wd bd m :=
+  rfl
+
+/-- **The net at the optional site** — `mobilenetv2ForwardBFull`'s nested form with the head at
+    `cd`: `mobilenetv2ForwardBFull` at `none`, `mobilenetv2ForwardBFullDo` at `some m`, both `rfl`.
+    The loss-gradient capstone reads its loss here. -/
+noncomputable def mobilenetv2ForwardBFullDoOpt (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Vec (N * nCls) :=
+  mnv2HeadBDoOpt N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd
+    (mnv2ExpOnlyB N 7 7 w.b17
+      (mnv2ResidB N 7 7 w.b16
+        (mnv2ResidB N 7 7 w.b15
+          (mnv2StridedB N 7 7 w.b14
+            (mnv2ResidB N 14 14 w.b13
+              (mnv2ResidB N 14 14 w.b12
+                (mnv2ExpOnlyB N 14 14 w.b11
+                  (mnv2ResidB N 14 14 w.b10
+                    (mnv2ResidB N 14 14 w.b9
+                      (mnv2ResidB N 14 14 w.b8
+                        (mnv2StridedB N 14 14 w.b7
+                          (mnv2ResidB N 28 28 w.b6
+                            (mnv2ResidB N 28 28 w.b5
+                              (mnv2StridedB N 28 28 w.b4
+                                (mnv2ResidB N 56 56 w.b3
+                                  (mnv2StridedB N 56 56 w.b2
+                                    (mnv2NoExpB N 112 112 w.b1
+                                      (mnv2StemB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x))))))))))))))))))
+
+theorem mobilenetv2ForwardBFullDoOpt_none (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
+    mobilenetv2ForwardBFullDoOpt N w none x = mobilenetv2ForwardBFull N w x := rfl
+
+theorem mobilenetv2ForwardBFullDoOpt_some (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (m : Vec (N * 1280)) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
+    mobilenetv2ForwardBFullDoOpt N w (some m) x = mobilenetv2ForwardBFullDo N w m x := rfl
+
+/-- `mobilenetv2ForwardBFull_eq_chain` at the site: the nested form is the head after the trunk. -/
+theorem mobilenetv2ForwardBFullDoOpt_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
+    mobilenetv2ForwardBFullDoOpt N w cd x
+      = (mnv2HeadBDoOpt N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd ∘ mnv2PreB17 N w) x := by
+  rw [mobilenetv2ForwardBFullDoOpt, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]
+
+/-- `mnv2HeadBHasVJPAt` at the site: the dropout's VJP (`dropoutOptHasVJP`, its backward the op
+    itself) composed between the dense's and the GAP's. -/
+noncomputable def mnv2HeadBDoOptHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (cd : Option (Vec (N * oc))) (v : Vec (N * (ic * h * w)))
+    (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) :
+    HasVJPAt (mnv2HeadBDoOpt N h w Wh bh εh γh βh Wd bd cd) v := by
+  have c_vjp := StableHLO.cbrBHasVJPAt N Wh bh εh hεh γh βh v hs
+  have c_diff := StableHLO.cbrB_differentiableAt N Wh bh εh hεh γh βh v hs
+  have g_vjp : HasVJPAt (StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
+      StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
+    vjpCompAt _ _ v c_diff
+      ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _) c_vjp
+      ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
+        (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
+  have g_diff : DifferentiableAt ℝ (StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
+      StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
+    ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _).comp v c_diff
+  have d_vjp : HasVJPAt (dropoutOpt cd ∘ StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
+      StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
+    vjpCompAt _ _ v g_diff ((dropoutOpt_differentiable cd) _) g_vjp
+      ((dropoutOptHasVJP cd).toHasVJPAt _)
+  have d_diff : DifferentiableAt ℝ (dropoutOpt cd ∘ StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
+      StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
+    ((dropoutOpt_differentiable cd) _).comp v g_diff
+  exact vjpCompAt _ (StableHLO.batchMap N (dense Wd bd)) v d_diff
+    ((batchMap_differentiable _ (dense_differentiable Wd bd)) _) d_vjp
+    ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
+
+/-- Cotangent at the GAP output — the classifier's input-VJP, through the classifier-dropout site
+    when it is rendered: the `*do*` artifacts' backward applies the mask `%do` to the dense's
+    input-VJP before the GAP backward (`Proofs.dropout_vjp_is_self`); `none` is the drop-free
+    chain. -/
 noncomputable def mnv2HeadCotGapIn (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
-    (g : Vec (N * nCls)) : Vec (N * oc) :=
-  rowDenseBackFlat N oc nCls Wd g
+    (cd : Option (Vec (N * oc))) (g : Vec (N * nCls)) : Vec (N * oc) :=
+  dropoutOpt cd (rowDenseBackFlat N oc nCls Wd g)
 
 /-- Cotangent at the head relu6's output — the GAP backward. -/
 noncomputable def mnv2HeadCotHr (N h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
-    (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
-  gapInB N oc h w (mnv2HeadCotGapIn N Wd g)
+    (cd : Option (Vec (N * oc))) (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
+  gapInB N oc h w (mnv2HeadCotGapIn N Wd cd g)
 
 /-- Cotangent at the head BN's output — the head relu6's mask. Feeds `hg`/`hbt`. -/
 noncomputable def mnv2HeadCotHn (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
+    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
   relu6MaskB (N * (oc * h * w))
     (bnBatchLA N oc h w εh γh βh (batchMap N (flatConv Wh bh) xin))
-    (mnv2HeadCotHr N h w Wd g)
+    (mnv2HeadCotHr N h w Wd cd g)
 
 /-- Cotangent at the head conv's output. Feeds `hW`/`hb`. -/
 noncomputable def mnv2HeadCotHc (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
+    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
   bnInB N oc h w εh γh (batchMap N (flatConv Wh bh) xin)
-    (mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin g)
+    (mnv2HeadCotHn N h w Wh bh εh γh βh Wd cd xin g)
 
 /-- **The cotangent the head hands to `b17`** — the head conv's backward. -/
 noncomputable def mnv2HeadCotBlk (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
+    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) : Vec (N * (ic * h * w)) :=
-  cInB N Wh bh (mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin g)
+  cInB N Wh bh (mnv2HeadCotHc N h w Wh bh εh γh βh Wd cd xin g)
 
 /-- **The cotangent the head hands to `b17` is the certified head VJP's backward**, at any loss
-    cotangent `g` and a trunk output with `MNV2HeadSmoothAtB`: the conv-BN-relu6 stage by
-    `cbrBackBatchedGraph_faithful`, the GAP and dense backwards definitionally. -/
+    cotangent `g`, either value of the site and a trunk output with `MNV2HeadSmoothAtB`: the
+    conv-BN-relu6 stage by `cbrBackBatchedGraph_faithful`, the GAP, dropout and dense backwards
+    definitionally (`dropoutOptHasVJP`'s backward IS `dropoutOpt cd`). -/
 theorem mnv2HeadCotBlk_eq_vjp (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
     (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls)
-    (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls))
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls))
     (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh xin) :
-    mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin g
-      = (mnv2HeadBHasVJPAt N h w Wh bh εh hεh γh βh Wd bd xin hs).backward g := by
+    mnv2HeadCotBlk N h w Wh bh εh γh βh Wd cd xin g
+      = (mnv2HeadBDoOptHasVJPAt N h w Wh bh εh hεh γh βh Wd bd cd xin hs).backward g := by
   have hc := cbrBackBatchedGraph_faithful Wh bh εh hεh γh βh xin
-    (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd g))) hs
-  calc mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin g
+    (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd cd g))) hs
+  calc mnv2HeadCotBlk N h w Wh bh εh γh βh Wd cd xin g
       = den (cbrBackBatchedGraph Wh bh εh γh βh xin
-          (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd g)))) := rfl
+          (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd cd g)))) := rfl
     _ = _ := hc
     _ = _ := rfl
 
@@ -654,18 +767,21 @@ theorem mnv2_stride2_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : 
   · exact bnPairTiedB_holds
 
 /-- **Head, tied.** The 1x1 conv's weight and bias, its BatchNorm's γ/β, and the classifier's
-    weight and bias, at the loss cotangent `g` and the chain it drives. The dense-bias conjunct's
-    Jacobian witness carries a zero activation: `dense`'s derivative in `b` is the identity whatever
-    `x` is, so the statement is `x`-free (the shape `EfficientNetStepTie`'s bias conjuncts take). -/
+    weight and bias, at the loss cotangent `g` and the chain it drives — through the classifier-
+    dropout site `cd` when it is rendered: the dense weight node reads the DROPPED activation
+    `dropoutOpt cd a` (the render's `cin`), and every node above the site reads a cotangent that
+    passed through the mask. The dense-bias conjunct's Jacobian witness carries a zero activation:
+    `dense`'s derivative in `b` is the identity whatever `x` is, so the statement is `x`-free (the
+    shape `EfficientNetStepTie`'s bias conjuncts take). -/
 def mnv2HeadTiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) : Prop :=
   let hc := batchMap N (flatConv Wh bh) xin
   let hr := cbrB N (h := h) (w := w) Wh bh εh γh βh xin
-  let a := batchMap N (globalAvgPoolFlat oc h w) hr
-  let cotHn := mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin g
-  let cotHc := mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin g
+  let a := dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) hr)
+  let cotHn := mnv2HeadCotHn N h w Wh bh εh γh βh Wd cd xin g
+  let cotHc := mnv2HeadCotHc N h w Wh bh εh γh βh Wd cd xin g
   GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bh xin Wh cotHc
   ∧ GradNodeB.ConvBTiedB N h w cotN Wh xin bh cotHc
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
@@ -675,9 +791,9 @@ def mnv2HeadTiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
 
 theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (cd : Option (Vec (N * oc)))
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) :
-    mnv2HeadTiedB N h w xN cotN vN epsStr Wh bh εh γh βh Wd bd bf16 xin g := by
+    mnv2HeadTiedB N h w xN cotN vN epsStr Wh bh εh γh βh Wd bd bf16 cd xin g := by
   unfold mnv2HeadTiedB
   exact ⟨convWTiedBAt_holds bf16, convBTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
     denseBTiedB_holds⟩
@@ -695,7 +811,10 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
     no symbolic cotangent below the loss. One device; `bf16` selects the conv and depthwise weight
     nodes' kind — `false` the f32 artifacts', `true` the bf16 kinds
     `mobilenetv2in_rmsdp64wxdols0eps0001bf16` emits, read over ℝ at the identity rounding
-    (`Bf16Erasure`); the right-hand side is the same certified gradient at either value.
+    (`Bf16Erasure`); the right-hand side is the same certified gradient at either value. `cd`
+    selects the classifier-dropout site — `none` the drop-free artifacts, `some m` the `*do*`
+    ones, `mobilenetv2in_rmsdp64wxdols0eps0001bf16` among them: the dense weight node reads the
+    dropped activation and the chain above the site runs through the mask (the module's Scope).
 
     **`g` is a binder.** The loss chain is not part of this statement;
     `mnv2_lossCot_is_smoothedCE_grad` instantiates it at the label-smoothed softmax cotangent the
@@ -715,10 +834,10 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
     statement is `MobileNetV2SyncTieB.mnv2_net_syncTiedB`, whose right-hand sides are this theorem's
     nodes at the global batch. -/
 theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : MNV2BWeights nCls) (bf16 : Bool)
+    (w : MNV2BWeights nCls) (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (g : Vec (N * nCls)) :
     -- the backward chain: the head's own four nodes, then the seventeen certified block backwards
-    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 N w x) g
+    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd (mnv2PreB17 N w x) g
     let dy16 := mnv2CotInBody N 7 7 w.b17 (mnv2PreB16 N w x) dy17
     let dy15 := mnv2ResidCotIn N 7 7 w.b16 (mnv2PreB15 N w x) dy16
     let dy14 := mnv2ResidCotIn N 7 7 w.b15 (mnv2PreB14 N w x) dy15
@@ -754,7 +873,7 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   ∧ mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 N w x) dy15
   ∧ mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 N w x) dy16
   ∧ mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 N w x) dy17
-  ∧ mnv2HeadTiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+  ∧ mnv2HeadTiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
       (mnv2PreB17 N w x) g := by
   intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
   exact ⟨mnv2_stem_tiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotStem,
@@ -775,7 +894,7 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     mnv2_stride1_tiedB N 7 7 xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 N w x) dy15,
     mnv2_stride1_tiedB N 7 7 xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 N w x) dy16,
     mnv2_stride1_tiedB N 7 7 xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 N w x) dy17,
-    mnv2_head_tiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+    mnv2_head_tiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
       (mnv2PreB17 N w x) g⟩
 
 
@@ -789,17 +908,18 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     ResNet-34 through [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean), at a general target. -/
 theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
+    (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (mobilenetv2ForwardBFull N w x)) t)
+          (rowB N nCls (mobilenetv2ForwardBFullDoOpt N w cd x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (mobilenetv2ForwardBFull N w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (mobilenetv2ForwardBFullDoOpt N w cd x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.MobileNetV2TieB

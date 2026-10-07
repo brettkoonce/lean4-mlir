@@ -19,9 +19,13 @@ move**: the right-hand side is the committed `mobilenetv2ForwardBFull`, at `N :=
 not move with the precision either: `bf16` selects the conv and depthwise kinds at every site
 (`.convAt` / `.convStridedXlaAt` / `.depthwiseAt` / `.depthwiseStridedXlaAt`, as
 `MobileNetV2FullB`), `bf16 := true` being the kinds the `*bf16` DP renders emit —
-`mobilenetv2in_rmsdp64wxdols0eps0001bf16`, the run the book reports, among them (its classifier
-dropout is outside this graph, as it is at f32); each conv's shard step erases the switch through
-`Bf16Erasure` (`Bf16Fold.denOp_convAt_id`, …) and the rest of the proof is the f32 one.
+`mobilenetv2in_rmsdp64wxdols0eps0001bf16`, the run the book reports, among them; each conv's
+shard step erases the switch through `Bf16Erasure` (`Bf16Fold.denOp_convAt_id`, …) and the rest
+of the proof is the f32 one. The `*do*` DP artifacts' forward — that run's — is
+`mobilenetv2FwdGraphSyncFullDo`: the same graph with replica `r`'s `dropoutB` at its own mask
+`%do` between the GAP and the dense, and `mobilenetv2FwdGraphSyncFullDo_shard` says it denotes
+shard `r` of `mobilenetv2ForwardBFullDo` at the global batch and the global mask the replicas'
+masks are the shards of.
 
 ## How it is proved
 
@@ -262,6 +266,55 @@ theorem mnv2HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
   have hg := den_batchOp_shard (N := N) (.gap (c := oc) (h := h) (w := w)) _ _ hr
   exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hg r
 
+/-- `mnv2HeadGraphSync` with the classifier-dropout site: replica `r`'s `dropoutB` at its own mask
+    `ms r` (the render's per-replica `%do` input) between the GAP and the dense —
+    `mnv2HeadGraphBDo` over the replica family. -/
+def mnv2HeadGraphSyncDo (epsStr mName : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
+    {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (ms : Fin R → Vec (N * oc))
+    (e : Fin R → SHlo (N * (ic * h * w))) : Fin R → SHlo (N * nCls) :=
+  fun r => .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
+    (.dropoutB mName (ms r)
+      (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
+        (.batchOp (N := N) (.relu6 (n := oc * h * w))
+          (bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc] R hR εh γh βh
+            (fun r => .batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh)
+              (e r)) r))))
+
+/-- With the replicas' masks the shards of one global mask `M`, replica `r`'s dropout head is
+    shard `r` of the global `mnv2HeadBDo` — the site's step is `batchShard_zipWith` at the
+    multiply, the rest `mnv2HeadGraphSync_shard`'s. -/
+theorem mnv2HeadGraphSyncDo_shard (epsStr mName : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
+    {ic oc nCls : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (ms : Fin R → Vec (N * oc))
+    (M : Vec ((R * N) * oc)) (hm : ∀ r, ms r = batchShard R N oc M r)
+    (e : Fin R → SHlo (N * (ic * h * w)))
+    (X : Vec ((R * N) * (ic * h * w))) (he : ∀ r, den (e r) = batchShard R N (ic * h * w) X r)
+    (r : Fin R) :
+    den (mnv2HeadGraphSyncDo epsStr mName R hR N h w Wh bh εh γh βh Wd bd bf16 ms e r)
+      = batchShard R N nCls (mnv2HeadBDo (R * N) h w Wh bh εh γh βh Wd bd M X) r := by
+  have hnz := nhw_ne_zero hN hh hw
+  have hc := den_batchOp_shard (N := N) (.convAt bf16 id (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e X he
+  simp only [Bf16Fold.denOp_convAt_id] at hc
+  have hn := den_bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc]
+    R hR hnz εh γh βh _ _ hc
+  have hr := den_relu6_shard _ _ hn
+  have hg := den_batchOp_shard (N := N) (.gap (c := oc) (h := h) (w := w)) _ _ hr
+  have hd : ∀ r, den (SHlo.dropoutB (N := N) (n := oc) mName (ms r)
+        (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
+          (.batchOp (N := N) (.relu6 (n := oc * h * w))
+            (bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc] R hR εh γh βh
+              (fun r => .batchOp (N := N)
+                (.convAt bf16 id (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) (e r)) r))))
+      = batchShard R N oc (dropout M (batchMap (R * N) (globalAvgPoolFlat oc h w)
+          (cbrB (R * N) (h := h) (w := w) Wh bh εh γh βh X))) r := by
+    intro r
+    rw [den_dropoutB, hg r, hm r]
+    rfl
+  unfold mnv2HeadBDo
+  exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hd r
+
 -- ════════════════════════════════════════════════════════════════
 -- § The whole net
 -- ════════════════════════════════════════════════════════════════
@@ -331,6 +384,72 @@ theorem mobilenetv2FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN :
   have s17 := mnv2ExpOnlyGraphSync_shard "17" epsStr R hR N 7 7 hN h7 h7 w.b17 bf16 _ _ s16
   exact mnv2HeadGraphSync_shard epsStr R hR N 7 7 hN h7 h7
     w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 _ _ s17 r
+
+/-- **The sync-BN data-parallel MobileNetV2 forward graph with classifier dropout**, over the
+    replica family — `mobilenetv2FwdGraphSyncFull` with `mnv2HeadGraphSyncDo` as its head, replica
+    `r` at its mask `ms r`; the forward of the `*do*` DP train steps. -/
+def mobilenetv2FwdGraphSyncFullDo (R : Nat) (hR : 0 < R) (N : Nat) (epsStr mName : String)
+    {nCls : Nat} (w : MNV2BWeights nCls) (bf16 : Bool) (ms : Fin R → Vec (N * 1280))
+    (e : Fin R → SHlo (N * (3 * (2 * 112) * (2 * 112)))) : Fin R → SHlo (N * nCls) :=
+  mnv2HeadGraphSyncDo epsStr mName R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 ms
+    (mnv2ExpOnlyGraphSync "17" epsStr R hR N 7 7 w.b17 bf16
+      (mnv2ResidGraphSync "16" epsStr R hR N 7 7 w.b16 bf16
+        (mnv2ResidGraphSync "15" epsStr R hR N 7 7 w.b15 bf16
+          (mnv2StridedGraphSync "14" epsStr R hR N 7 7 w.b14 bf16
+            (mnv2ResidGraphSync "13" epsStr R hR N 14 14 w.b13 bf16
+              (mnv2ResidGraphSync "12" epsStr R hR N 14 14 w.b12 bf16
+                (mnv2ExpOnlyGraphSync "11" epsStr R hR N 14 14 w.b11 bf16
+                  (mnv2ResidGraphSync "10" epsStr R hR N 14 14 w.b10 bf16
+                    (mnv2ResidGraphSync "9" epsStr R hR N 14 14 w.b9 bf16
+                      (mnv2ResidGraphSync "8" epsStr R hR N 14 14 w.b8 bf16
+                        (mnv2StridedGraphSync "7" epsStr R hR N 14 14 w.b7 bf16
+                          (mnv2ResidGraphSync "6" epsStr R hR N 28 28 w.b6 bf16
+                            (mnv2ResidGraphSync "5" epsStr R hR N 28 28 w.b5 bf16
+                              (mnv2StridedGraphSync "4" epsStr R hR N 28 28 w.b4 bf16
+                                (mnv2ResidGraphSync "3" epsStr R hR N 56 56 w.b3 bf16
+                                  (mnv2StridedGraphSync "2" epsStr R hR N 56 56 w.b2 bf16
+                                    (mnv2NoExpGraphSync "1" epsStr R hR N 112 112 w.b1 bf16
+                                      (mnv2StemGraphSync epsStr R hR N 112 112
+                                        w.sW w.sb w.sε w.sγ w.sβ bf16 e))))))))))))))))))
+
+/-- `mobilenetv2FwdGraphSyncFull_shard` at the site: with the replicas' inputs the shards of one
+    batch `X` and their masks the shards of one mask `M`, replica `r`'s dropout forward denotes
+    shard `r` of `mobilenetv2ForwardBFullDo (R * N) w M X`. -/
+theorem mobilenetv2FwdGraphSyncFullDo_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+    (epsStr mName : String) {nCls : Nat} (w : MNV2BWeights nCls) (bf16 : Bool)
+    (ms : Fin R → Vec (N * 1280)) (M : Vec ((R * N) * 1280))
+    (hm : ∀ r, ms r = batchShard R N 1280 M r)
+    (e : Fin R → SHlo (N * (3 * (2 * 112) * (2 * 112))))
+    (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (he : ∀ r, den (e r) = batchShard R N (3 * (2 * 112) * (2 * 112)) X r) (r : Fin R) :
+    den (mobilenetv2FwdGraphSyncFullDo R hR N epsStr mName w bf16 ms e r)
+      = batchShard R N nCls (mobilenetv2ForwardBFullDo (R * N) w M X) r := by
+  have h112 : 0 < 112 := by norm_num
+  have h56 : 0 < 56 := by norm_num
+  have h28 : 0 < 28 := by norm_num
+  have h14 : 0 < 14 := by norm_num
+  have h7 : 0 < 7 := by norm_num
+  have s0 := mnv2StemGraphSync_shard epsStr R hR N 112 112 hN h112 h112
+    w.sW w.sb w.sε w.sγ w.sβ bf16 e X he
+  have s1 := mnv2NoExpGraphSync_shard "1" epsStr R hR N 112 112 hN h112 h112 w.b1 bf16 _ _ s0
+  have s2 := mnv2StridedGraphSync_shard "2" epsStr R hR N 56 56 hN h56 h56 w.b2 bf16 _ _ s1
+  have s3 := mnv2ResidGraphSync_shard "3" epsStr R hR N 56 56 hN h56 h56 w.b3 bf16 _ _ s2
+  have s4 := mnv2StridedGraphSync_shard "4" epsStr R hR N 28 28 hN h28 h28 w.b4 bf16 _ _ s3
+  have s5 := mnv2ResidGraphSync_shard "5" epsStr R hR N 28 28 hN h28 h28 w.b5 bf16 _ _ s4
+  have s6 := mnv2ResidGraphSync_shard "6" epsStr R hR N 28 28 hN h28 h28 w.b6 bf16 _ _ s5
+  have s7 := mnv2StridedGraphSync_shard "7" epsStr R hR N 14 14 hN h14 h14 w.b7 bf16 _ _ s6
+  have s8 := mnv2ResidGraphSync_shard "8" epsStr R hR N 14 14 hN h14 h14 w.b8 bf16 _ _ s7
+  have s9 := mnv2ResidGraphSync_shard "9" epsStr R hR N 14 14 hN h14 h14 w.b9 bf16 _ _ s8
+  have s10 := mnv2ResidGraphSync_shard "10" epsStr R hR N 14 14 hN h14 h14 w.b10 bf16 _ _ s9
+  have s11 := mnv2ExpOnlyGraphSync_shard "11" epsStr R hR N 14 14 hN h14 h14 w.b11 bf16 _ _ s10
+  have s12 := mnv2ResidGraphSync_shard "12" epsStr R hR N 14 14 hN h14 h14 w.b12 bf16 _ _ s11
+  have s13 := mnv2ResidGraphSync_shard "13" epsStr R hR N 14 14 hN h14 h14 w.b13 bf16 _ _ s12
+  have s14 := mnv2StridedGraphSync_shard "14" epsStr R hR N 7 7 hN h7 h7 w.b14 bf16 _ _ s13
+  have s15 := mnv2ResidGraphSync_shard "15" epsStr R hR N 7 7 hN h7 h7 w.b15 bf16 _ _ s14
+  have s16 := mnv2ResidGraphSync_shard "16" epsStr R hR N 7 7 hN h7 h7 w.b16 bf16 _ _ s15
+  have s17 := mnv2ExpOnlyGraphSync_shard "17" epsStr R hR N 7 7 hN h7 h7 w.b17 bf16 _ _ s16
+  exact mnv2HeadGraphSyncDo_shard epsStr mName R hR N 7 7 hN h7 h7
+    w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 ms M hm _ _ s17 r
 
 end StableHLO
 

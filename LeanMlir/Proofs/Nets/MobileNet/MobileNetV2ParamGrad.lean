@@ -17,7 +17,11 @@ the renderers' switch (`convWeightGradBAt bf16 id …`, `depthwiseWeightGradBAt 
 `Foundation.GradNodesBAt`), so `bf16 := true` is the bf16 kind the `mobilenetv2*bf16` artifacts
 emit — `mobilenetv2in_rmsdp64wxdols0eps0001bf16`, the book's ImageNet run, among them — read over ℝ
 at the identity rounding (`Bf16Erasure`), and `bf16 := false` the f32 artifacts'. Classifier
-dropout (`*do*`) is outside this statement. Sync-BN data parallelism is reached by composition: `mnv2_net_syncTiedB` says each all-reduced
+dropout is an optional site on the statement, as in `MobileNetV2StepTieB`: `cd : Option (Vec
+(N * 1280))`, `none` the drop-free artifacts and `some m` the `*do*` ones, the loss read at
+`mobilenetv2ForwardBFullDoOpt` (the net with the site), the dense weight node reading the dropped
+activation and the chain above the site pulled back through the mask (`dropoutOptHasVJP`).
+Sync-BN data parallelism is reached by composition: `mnv2_net_syncTiedB` says each all-reduced
 gradient is this net's tied node at `N := R·N`, which this file's capstone makes the loss's
 gradient at the global batch.
 
@@ -365,23 +369,24 @@ variable {N h w ic oc nCls : Nat}
     the loss as a function of `(hW, hb, hγ, hβ, Wd, bd)`. -/
 def mnv2HeadLossTiedB (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
     (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
-    (v : Vec (N * (ic * h * w)))
+    (cd : Option (Vec (N * oc))) (v : Vec (N * (ic * h * w)))
     (Φ : Kernel4 oc ic 1 1 → Vec oc → Vec oc → Vec oc → Mat oc nCls → Vec nCls → Vec 1)
     (g : Vec (N * nCls)) : Prop :=
   let hc := batchMap N (flatConv Wh bh) v
-  let a := batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v)
+  let a := dropoutOpt cd
+    (batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
   (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) bh γh βh Wd bd) (Kernel4.flatten Wh)
         (den (SHlo.convWeightGradBAt bf16 id xN bh v Wh
-          (.operand cotN (mnv2HeadCotHc N h w Wh bh εh γh βh Wd v g)))))
+          (.operand cotN (mnv2HeadCotHc N h w Wh bh εh γh βh Wd cd v g)))))
   ∧ (HasGradAt (fun θ => Φ Wh θ γh βh Wd bd) bh
         (den (SHlo.convBiasGradB (h := h) (w := w) Wh v bh
-          (.operand cotN (mnv2HeadCotHc N h w Wh bh εh γh βh Wd v g)))))
+          (.operand cotN (mnv2HeadCotHc N h w Wh bh εh γh βh Wd cd v g)))))
   ∧ (HasGradAt (fun θ => Φ Wh bh θ βh Wd bd) γh
         (den (SHlo.bnGammaGradB vN epsStr εh (reassocB N oc h w hc)
-          (.operand cotN (reassocB N oc h w (mnv2HeadCotHn N h w Wh bh εh γh βh Wd v g))))))
+          (.operand cotN (reassocB N oc h w (mnv2HeadCotHn N h w Wh bh εh γh βh Wd cd v g))))))
   ∧ (HasGradAt (fun θ => Φ Wh bh γh θ Wd bd) βh
         (den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
-          (.operand cotN (reassocB N oc h w (mnv2HeadCotHn N h w Wh bh εh γh βh Wd v g))))))
+          (.operand cotN (reassocB N oc h w (mnv2HeadCotHn N h w Wh bh εh γh βh Wd cd v g))))))
   ∧ (HasGradAt (fun θ => Φ Wh bh γh βh (Mat.unflatten θ) bd) (Mat.flatten Wd)
         (den (SHlo.denseWeightGradB (c := nCls) xN a (.operand cotN g))))
   ∧ (HasGradAt (fun θ => Φ Wh bh γh βh Wd θ) bd
@@ -389,22 +394,27 @@ def mnv2HeadLossTiedB (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1) (bh 
 
 theorem mnv2_head_lossTiedB (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
     (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (cd : Option (Vec (N * oc)))
     (v : Vec (N * (ic * h * w))) (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
-    (hL : HasGradAt L (mnv2HeadB N h w Wh bh εh γh βh Wd bd v) g)
+    (hL : HasGradAt L (mnv2HeadBDoOpt N h w Wh bh εh γh βh Wd bd cd v) g)
     {Φ : Kernel4 oc ic 1 1 → Vec oc → Vec oc → Vec oc → Mat oc nCls → Vec nCls → Vec 1}
-    (hΦ : ∀ W b γ β Wd' bd', Φ W b γ β Wd' bd' = L (mnv2HeadB N h w W b εh γ β Wd' bd' v)) :
-    mnv2HeadLossTiedB xN cotN vN epsStr Wh bh εh γh βh Wd bd bf16 v Φ g := by
-  rw [show Φ = fun W b γ β Wd' bd' => L (mnv2HeadB N h w W b εh γ β Wd' bd' v) from
+    (hΦ : ∀ W b γ β Wd' bd', Φ W b γ β Wd' bd' = L (mnv2HeadBDoOpt N h w W b εh γ β Wd' bd' cd v)) :
+    mnv2HeadLossTiedB xN cotN vN epsStr Wh bh εh γh βh Wd bd bf16 cd v Φ g := by
+  rw [show Φ = fun W b γ β Wd' bd' => L (mnv2HeadBDoOpt N h w W b εh γ β Wd' bd' cd v) from
     funext fun W => funext fun b => funext fun γ => funext fun β => funext fun Wd' =>
       funext fun bd' => hΦ W b γ β Wd' bd']
-  -- back through the classifier and the GAP, then the head's relu6 and BN
+  -- back through the classifier, the dropout site and the GAP, then the head's relu6 and BN
   have hA := HasGradAt.comp (f := batchMap N (dense Wd bd))
-    (x := batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
+    (x := dropoutOpt cd
+      (batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v)))
     hL ((batchMap_differentiable _ (dense_differentiable Wd bd)) _)
     ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
+  have hD := HasGradAt.comp (f := dropoutOpt cd)
+    (x := batchMap N (globalAvgPoolFlat oc h w) (cbrB N (h := h) (w := w) Wh bh εh γh βh v))
+    hA ((dropoutOpt_differentiable cd) _) ((dropoutOptHasVJP cd).toHasVJPAt _)
   have hR := HasGradAt.comp (f := batchMap N (globalAvgPoolFlat oc h w))
-    (x := cbrB N (h := h) (w := w) Wh bh εh γh βh v) hA
+    (x := cbrB N (h := h) (w := w) Wh bh εh γh βh v) hD
     ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _)
     ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
       (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
@@ -468,208 +478,208 @@ theorem mnv2StridedB_hasGradAt_comp {N h w ic mid oc : Nat} (p : IVW ic mid oc) 
     (mnv2StridedBHasVJPAt N h w p hq v hs)).of_eq (mnv2StridedCotIn_eq_vjp N h w p hq v dy hs).symm
 
 /-- The net after block `b17` — the head. -/
-noncomputable def mnv2SufB17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (320 * 7 * 7)) → Vec (N * nCls) :=
-  mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
+  mnv2HeadBDoOpt N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd
 
 /-- The net after block `b16`: block `b17`, then the rest. -/
-noncomputable def mnv2SufB16 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB16 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (160 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => mnv2SufB17 N w (mnv2ExpOnlyB N 7 7 w.b17 y)
+  fun y => mnv2SufB17 N w cd (mnv2ExpOnlyB N 7 7 w.b17 y)
 
 /-- The net after block `b15`: block `b16`, then the rest. -/
-noncomputable def mnv2SufB15 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB15 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (160 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => mnv2SufB16 N w (mnv2ResidB N 7 7 w.b16 y)
+  fun y => mnv2SufB16 N w cd (mnv2ResidB N 7 7 w.b16 y)
 
 /-- The net after block `b14`: block `b15`, then the rest. -/
-noncomputable def mnv2SufB14 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB14 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (160 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => mnv2SufB15 N w (mnv2ResidB N 7 7 w.b15 y)
+  fun y => mnv2SufB15 N w cd (mnv2ResidB N 7 7 w.b15 y)
 
 /-- The net after block `b13`: block `b14`, then the rest. -/
-noncomputable def mnv2SufB13 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB13 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (96 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB14 N w (mnv2StridedB N 7 7 w.b14 y)
+  fun y => mnv2SufB14 N w cd (mnv2StridedB N 7 7 w.b14 y)
 
 /-- The net after block `b12`: block `b13`, then the rest. -/
-noncomputable def mnv2SufB12 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB12 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (96 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB13 N w (mnv2ResidB N 14 14 w.b13 y)
+  fun y => mnv2SufB13 N w cd (mnv2ResidB N 14 14 w.b13 y)
 
 /-- The net after block `b11`: block `b12`, then the rest. -/
-noncomputable def mnv2SufB11 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB11 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (96 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB12 N w (mnv2ResidB N 14 14 w.b12 y)
+  fun y => mnv2SufB12 N w cd (mnv2ResidB N 14 14 w.b12 y)
 
 /-- The net after block `b10`: block `b11`, then the rest. -/
-noncomputable def mnv2SufB10 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB10 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (64 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB11 N w (mnv2ExpOnlyB N 14 14 w.b11 y)
+  fun y => mnv2SufB11 N w cd (mnv2ExpOnlyB N 14 14 w.b11 y)
 
 /-- The net after block `b9`: block `b10`, then the rest. -/
-noncomputable def mnv2SufB9 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB9 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (64 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB10 N w (mnv2ResidB N 14 14 w.b10 y)
+  fun y => mnv2SufB10 N w cd (mnv2ResidB N 14 14 w.b10 y)
 
 /-- The net after block `b8`: block `b9`, then the rest. -/
-noncomputable def mnv2SufB8 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB8 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (64 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB9 N w (mnv2ResidB N 14 14 w.b9 y)
+  fun y => mnv2SufB9 N w cd (mnv2ResidB N 14 14 w.b9 y)
 
 /-- The net after block `b7`: block `b8`, then the rest. -/
-noncomputable def mnv2SufB7 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB7 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (64 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => mnv2SufB8 N w (mnv2ResidB N 14 14 w.b8 y)
+  fun y => mnv2SufB8 N w cd (mnv2ResidB N 14 14 w.b8 y)
 
 /-- The net after block `b6`: block `b7`, then the rest. -/
-noncomputable def mnv2SufB6 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB6 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (32 * 28 * 28)) → Vec (N * nCls) :=
-  fun y => mnv2SufB7 N w (mnv2StridedB N 14 14 w.b7 y)
+  fun y => mnv2SufB7 N w cd (mnv2StridedB N 14 14 w.b7 y)
 
 /-- The net after block `b5`: block `b6`, then the rest. -/
-noncomputable def mnv2SufB5 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB5 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (32 * 28 * 28)) → Vec (N * nCls) :=
-  fun y => mnv2SufB6 N w (mnv2ResidB N 28 28 w.b6 y)
+  fun y => mnv2SufB6 N w cd (mnv2ResidB N 28 28 w.b6 y)
 
 /-- The net after block `b4`: block `b5`, then the rest. -/
-noncomputable def mnv2SufB4 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB4 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (32 * 28 * 28)) → Vec (N * nCls) :=
-  fun y => mnv2SufB5 N w (mnv2ResidB N 28 28 w.b5 y)
+  fun y => mnv2SufB5 N w cd (mnv2ResidB N 28 28 w.b5 y)
 
 /-- The net after block `b3`: block `b4`, then the rest. -/
-noncomputable def mnv2SufB3 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB3 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (24 * 56 * 56)) → Vec (N * nCls) :=
-  fun y => mnv2SufB4 N w (mnv2StridedB N 28 28 w.b4 y)
+  fun y => mnv2SufB4 N w cd (mnv2StridedB N 28 28 w.b4 y)
 
 /-- The net after block `b2`: block `b3`, then the rest. -/
-noncomputable def mnv2SufB2 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB2 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (24 * 56 * 56)) → Vec (N * nCls) :=
-  fun y => mnv2SufB3 N w (mnv2ResidB N 56 56 w.b3 y)
+  fun y => mnv2SufB3 N w cd (mnv2ResidB N 56 56 w.b3 y)
 
 /-- The net after block `b1`: block `b2`, then the rest. -/
-noncomputable def mnv2SufB1 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufB1 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (16 * 112 * 112)) → Vec (N * nCls) :=
-  fun y => mnv2SufB2 N w (mnv2StridedB N 56 56 w.b2 y)
+  fun y => mnv2SufB2 N w cd (mnv2StridedB N 56 56 w.b2 y)
 
 /-- The net after the stem: block `b1`, then the rest. -/
-noncomputable def mnv2SufStem (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
+noncomputable def mnv2SufStem (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (32 * 112 * 112)) → Vec (N * nCls) :=
-  fun y => mnv2SufB1 N w (mnv2NoExpB N 112 112 w.b1 y)
+  fun y => mnv2SufB1 N w cd (mnv2NoExpB N 112 112 w.b1 y)
 
 /-- **The net with the stem's parameters varied** is the suffix after the stem at the varied stem. -/
-theorem mnv2_factor_stem (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
+theorem mnv2_factor_stem (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280)))
     (W : Kernel4 32 3 3 3) (b γ β : Vec 32) :
-    mobilenetv2ForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x
-      = mnv2SufStem N w (mnv2StemB N 112 112 W b w.sε γ β x) := rfl
+    mobilenetv2ForwardBFullDoOpt N { w with sW := W, sb := b, sγ := γ, sβ := β } cd x
+      = mnv2SufStem N w cd (mnv2StemB N 112 112 W b w.sε γ β x) := rfl
 
 /-- **The net with block `b1`'s weights varied** is the suffix after `b1` at the varied block. -/
-theorem mnv2_factor_b1 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVWNoExp 32 16) :
-    mobilenetv2ForwardBFull N { w with b1 := p } x
-      = mnv2SufB1 N w (mnv2NoExpB N 112 112 p (mnv2PreB0 N w x)) := by
+theorem mnv2_factor_b1 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVWNoExp 32 16) :
+    mobilenetv2ForwardBFullDoOpt N { w with b1 := p } cd x
+      = mnv2SufB1 N w cd (mnv2NoExpB N 112 112 p (mnv2PreB0 N w x)) := by
   rw [mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b2`'s weights varied** is the suffix after `b2` at the varied block. -/
-theorem mnv2_factor_b2 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 16 96 24) :
-    mobilenetv2ForwardBFull N { w with b2 := p } x
-      = mnv2SufB2 N w (mnv2StridedB N 56 56 p (mnv2PreB1 N w x)) := by
+theorem mnv2_factor_b2 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 16 96 24) :
+    mobilenetv2ForwardBFullDoOpt N { w with b2 := p } cd x
+      = mnv2SufB2 N w cd (mnv2StridedB N 56 56 p (mnv2PreB1 N w x)) := by
   rw [mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b3`'s weights varied** is the suffix after `b3` at the varied block. -/
-theorem mnv2_factor_b3 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 24 144 24) :
-    mobilenetv2ForwardBFull N { w with b3 := p } x
-      = mnv2SufB3 N w (mnv2ResidB N 56 56 p (mnv2PreB2 N w x)) := by
+theorem mnv2_factor_b3 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 24 144 24) :
+    mobilenetv2ForwardBFullDoOpt N { w with b3 := p } cd x
+      = mnv2SufB3 N w cd (mnv2ResidB N 56 56 p (mnv2PreB2 N w x)) := by
   rw [mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b4`'s weights varied** is the suffix after `b4` at the varied block. -/
-theorem mnv2_factor_b4 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 24 144 32) :
-    mobilenetv2ForwardBFull N { w with b4 := p } x
-      = mnv2SufB4 N w (mnv2StridedB N 28 28 p (mnv2PreB3 N w x)) := by
+theorem mnv2_factor_b4 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 24 144 32) :
+    mobilenetv2ForwardBFullDoOpt N { w with b4 := p } cd x
+      = mnv2SufB4 N w cd (mnv2StridedB N 28 28 p (mnv2PreB3 N w x)) := by
   rw [mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b5`'s weights varied** is the suffix after `b5` at the varied block. -/
-theorem mnv2_factor_b5 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 32 192 32) :
-    mobilenetv2ForwardBFull N { w with b5 := p } x
-      = mnv2SufB5 N w (mnv2ResidB N 28 28 p (mnv2PreB4 N w x)) := by
+theorem mnv2_factor_b5 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 32 192 32) :
+    mobilenetv2ForwardBFullDoOpt N { w with b5 := p } cd x
+      = mnv2SufB5 N w cd (mnv2ResidB N 28 28 p (mnv2PreB4 N w x)) := by
   rw [mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b6`'s weights varied** is the suffix after `b6` at the varied block. -/
-theorem mnv2_factor_b6 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 32 192 32) :
-    mobilenetv2ForwardBFull N { w with b6 := p } x
-      = mnv2SufB6 N w (mnv2ResidB N 28 28 p (mnv2PreB5 N w x)) := by
+theorem mnv2_factor_b6 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 32 192 32) :
+    mobilenetv2ForwardBFullDoOpt N { w with b6 := p } cd x
+      = mnv2SufB6 N w cd (mnv2ResidB N 28 28 p (mnv2PreB5 N w x)) := by
   rw [mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b7`'s weights varied** is the suffix after `b7` at the varied block. -/
-theorem mnv2_factor_b7 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 32 192 64) :
-    mobilenetv2ForwardBFull N { w with b7 := p } x
-      = mnv2SufB7 N w (mnv2StridedB N 14 14 p (mnv2PreB6 N w x)) := by
+theorem mnv2_factor_b7 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 32 192 64) :
+    mobilenetv2ForwardBFullDoOpt N { w with b7 := p } cd x
+      = mnv2SufB7 N w cd (mnv2StridedB N 14 14 p (mnv2PreB6 N w x)) := by
   rw [mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b8`'s weights varied** is the suffix after `b8` at the varied block. -/
-theorem mnv2_factor_b8 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 64 384 64) :
-    mobilenetv2ForwardBFull N { w with b8 := p } x
-      = mnv2SufB8 N w (mnv2ResidB N 14 14 p (mnv2PreB7 N w x)) := by
+theorem mnv2_factor_b8 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 64 384 64) :
+    mobilenetv2ForwardBFullDoOpt N { w with b8 := p } cd x
+      = mnv2SufB8 N w cd (mnv2ResidB N 14 14 p (mnv2PreB7 N w x)) := by
   rw [mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b9`'s weights varied** is the suffix after `b9` at the varied block. -/
-theorem mnv2_factor_b9 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 64 384 64) :
-    mobilenetv2ForwardBFull N { w with b9 := p } x
-      = mnv2SufB9 N w (mnv2ResidB N 14 14 p (mnv2PreB8 N w x)) := by
+theorem mnv2_factor_b9 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 64 384 64) :
+    mobilenetv2ForwardBFullDoOpt N { w with b9 := p } cd x
+      = mnv2SufB9 N w cd (mnv2ResidB N 14 14 p (mnv2PreB8 N w x)) := by
   rw [mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b10`'s weights varied** is the suffix after `b10` at the varied block. -/
-theorem mnv2_factor_b10 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 64 384 64) :
-    mobilenetv2ForwardBFull N { w with b10 := p } x
-      = mnv2SufB10 N w (mnv2ResidB N 14 14 p (mnv2PreB9 N w x)) := by
+theorem mnv2_factor_b10 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 64 384 64) :
+    mobilenetv2ForwardBFullDoOpt N { w with b10 := p } cd x
+      = mnv2SufB10 N w cd (mnv2ResidB N 14 14 p (mnv2PreB9 N w x)) := by
   rw [mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b11`'s weights varied** is the suffix after `b11` at the varied block. -/
-theorem mnv2_factor_b11 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 64 384 96) :
-    mobilenetv2ForwardBFull N { w with b11 := p } x
-      = mnv2SufB11 N w (mnv2ExpOnlyB N 14 14 p (mnv2PreB10 N w x)) := by
+theorem mnv2_factor_b11 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 64 384 96) :
+    mobilenetv2ForwardBFullDoOpt N { w with b11 := p } cd x
+      = mnv2SufB11 N w cd (mnv2ExpOnlyB N 14 14 p (mnv2PreB10 N w x)) := by
   rw [mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b12`'s weights varied** is the suffix after `b12` at the varied block. -/
-theorem mnv2_factor_b12 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 96 576 96) :
-    mobilenetv2ForwardBFull N { w with b12 := p } x
-      = mnv2SufB12 N w (mnv2ResidB N 14 14 p (mnv2PreB11 N w x)) := by
+theorem mnv2_factor_b12 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 96 576 96) :
+    mobilenetv2ForwardBFullDoOpt N { w with b12 := p } cd x
+      = mnv2SufB12 N w cd (mnv2ResidB N 14 14 p (mnv2PreB11 N w x)) := by
   rw [mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b13`'s weights varied** is the suffix after `b13` at the varied block. -/
-theorem mnv2_factor_b13 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 96 576 96) :
-    mobilenetv2ForwardBFull N { w with b13 := p } x
-      = mnv2SufB13 N w (mnv2ResidB N 14 14 p (mnv2PreB12 N w x)) := by
+theorem mnv2_factor_b13 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 96 576 96) :
+    mobilenetv2ForwardBFullDoOpt N { w with b13 := p } cd x
+      = mnv2SufB13 N w cd (mnv2ResidB N 14 14 p (mnv2PreB12 N w x)) := by
   rw [mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b14`'s weights varied** is the suffix after `b14` at the varied block. -/
-theorem mnv2_factor_b14 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 96 576 160) :
-    mobilenetv2ForwardBFull N { w with b14 := p } x
-      = mnv2SufB14 N w (mnv2StridedB N 7 7 p (mnv2PreB13 N w x)) := by
+theorem mnv2_factor_b14 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 96 576 160) :
+    mobilenetv2ForwardBFullDoOpt N { w with b14 := p } cd x
+      = mnv2SufB14 N w cd (mnv2StridedB N 7 7 p (mnv2PreB13 N w x)) := by
   rw [mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b15`'s weights varied** is the suffix after `b15` at the varied block. -/
-theorem mnv2_factor_b15 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 160 960 160) :
-    mobilenetv2ForwardBFull N { w with b15 := p } x
-      = mnv2SufB15 N w (mnv2ResidB N 7 7 p (mnv2PreB14 N w x)) := by
+theorem mnv2_factor_b15 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 160 960 160) :
+    mobilenetv2ForwardBFullDoOpt N { w with b15 := p } cd x
+      = mnv2SufB15 N w cd (mnv2ResidB N 7 7 p (mnv2PreB14 N w x)) := by
   rw [mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b16`'s weights varied** is the suffix after `b16` at the varied block. -/
-theorem mnv2_factor_b16 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 160 960 160) :
-    mobilenetv2ForwardBFull N { w with b16 := p } x
-      = mnv2SufB16 N w (mnv2ResidB N 7 7 p (mnv2PreB15 N w x)) := by
+theorem mnv2_factor_b16 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 160 960 160) :
+    mobilenetv2ForwardBFullDoOpt N { w with b16 := p } cd x
+      = mnv2SufB16 N w cd (mnv2ResidB N 7 7 p (mnv2PreB15 N w x)) := by
   rw [mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with block `b17`'s weights varied** is the suffix after `b17` at the varied block. -/
-theorem mnv2_factor_b17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (p : IVW 160 960 320) :
-    mobilenetv2ForwardBFull N { w with b17 := p } x
-      = mnv2SufB17 N w (mnv2ExpOnlyB N 7 7 p (mnv2PreB16 N w x)) := by
+theorem mnv2_factor_b17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280))) (p : IVW 160 960 320) :
+    mobilenetv2ForwardBFullDoOpt N { w with b17 := p } cd x
+      = mnv2SufB17 N w cd (mnv2ExpOnlyB N 7 7 p (mnv2PreB16 N w x)) := by
   rw [mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **The net with the head varied** is the head at the varied parameters. -/
-theorem mnv2_factor_head (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
+theorem mnv2_factor_head (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (cd : Option (Vec (N * 1280)))
     (W : Kernel4 1280 320 1 1) (b γ β : Vec 1280) (Wd : Mat 1280 nCls) (bd : Vec nCls) :
-    mobilenetv2ForwardBFull N { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x
-      = mnv2HeadB N 7 7 W b w.hε γ β Wd bd (mnv2PreB17 N w x) := by
+    mobilenetv2ForwardBFullDoOpt N { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } cd x
+      = mnv2HeadBDoOpt N 7 7 W b w.hε γ β Wd bd cd (mnv2PreB17 N w x) := by
   rw [mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]; rfl
 
 /-- **Every MobileNetV2 parameter gradient node is the derivative of `L` in that parameter**, for a
@@ -677,9 +687,9 @@ theorem mnv2_factor_head (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec
     `mnv2_net_tiedB` ties, each at the cotangent the emitted chain threads to it, stated against `L`
     of `mobilenetv2ForwardBFull` with that one parameter varied. -/
 def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MNV2BWeights nCls)
-    (bf16 : Bool)
+    (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (L : Vec (N * nCls) → Vec 1) (g : Vec (N * nCls)) : Prop :=
-    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 N w x) g
+    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd (mnv2PreB17 N w x) g
     let dy16 := mnv2CotInBody N 7 7 w.b17 (mnv2PreB16 N w x) dy17
     let dy15 := mnv2ResidCotIn N 7 7 w.b16 (mnv2PreB15 N w x) dy16
     let dy14 := mnv2ResidCotIn N 7 7 w.b15 (mnv2PreB14 N w x) dy15
@@ -698,46 +708,46 @@ def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MN
     let dy1 := mnv2StridedCotIn N 56 56 w.b2 (mnv2PreB1 N w x) dy2
     let cotStem := mnv2NoExpCotIn N 112 112 w.b1 (mnv2PreB0 N w x) dy1
     mnv2StemLossTiedB (N := N) (h := 112) (w := 112) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x
-      (fun W b γ β => L (mobilenetv2ForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+      (fun W b γ β => L (mobilenetv2ForwardBFullDoOpt N { w with sW := W, sb := b, sγ := γ, sβ := β } cd x))
       cotStem
   ∧ mnv2NoExpLossTiedB (N := N) (h := 112) (w := 112) xN cotN vN epsStr w.b1 bf16 (mnv2PreB0 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b1 := p } x)) dy1
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b1 := p } cd x)) dy1
   ∧ mnv2Stride2LossTiedB (N := N) (h := 56) (w := 56) xN cotN vN epsStr w.b2 bf16 (mnv2PreB1 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b2 := p } x)) dy2
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b2 := p } cd x)) dy2
   ∧ mnv2Stride1LossTiedB (N := N) (h := 56) (w := 56) xN cotN vN epsStr w.b3 bf16 (mnv2PreB2 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b3 := p } x)) dy3
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b3 := p } cd x)) dy3
   ∧ mnv2Stride2LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b4 bf16 (mnv2PreB3 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b4 := p } x)) dy4
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b4 := p } cd x)) dy4
   ∧ mnv2Stride1LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b5 bf16 (mnv2PreB4 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b5 := p } x)) dy5
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b5 := p } cd x)) dy5
   ∧ mnv2Stride1LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b6 bf16 (mnv2PreB5 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b6 := p } x)) dy6
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b6 := p } cd x)) dy6
   ∧ mnv2Stride2LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b7 bf16 (mnv2PreB6 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b7 := p } x)) dy7
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b7 := p } cd x)) dy7
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b8 bf16 (mnv2PreB7 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b8 := p } x)) dy8
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b8 := p } cd x)) dy8
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b9 bf16 (mnv2PreB8 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b9 := p } x)) dy9
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b9 := p } cd x)) dy9
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b10 bf16 (mnv2PreB9 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b10 := p } x)) dy10
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b10 := p } cd x)) dy10
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b11 bf16 (mnv2PreB10 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b11 := p } x)) dy11
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b11 := p } cd x)) dy11
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b12 bf16 (mnv2PreB11 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b12 := p } x)) dy12
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b12 := p } cd x)) dy12
   ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b13 bf16 (mnv2PreB12 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b13 := p } x)) dy13
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b13 := p } cd x)) dy13
   ∧ mnv2Stride2LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b14 bf16 (mnv2PreB13 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b14 := p } x)) dy14
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b14 := p } cd x)) dy14
   ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b15 := p } x)) dy15
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b15 := p } cd x)) dy15
   ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b16 := p } x)) dy16
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b16 := p } cd x)) dy16
   ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 N w x)
-      (fun p => L (mobilenetv2ForwardBFull N { w with b17 := p } x)) dy17
-  ∧ mnv2HeadLossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+      (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b17 := p } cd x)) dy17
+  ∧ mnv2HeadLossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
       (mnv2PreB17 N w x)
-      (fun W b γ β Wd bd => L (mobilenetv2ForwardBFull N
-        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x)) g
+      (fun W b γ β Wd bd => L (mobilenetv2ForwardBFullDoOpt N
+        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } cd x)) g
 
 /-- **Every MobileNetV2 parameter gradient node is the derivative of the loss in that
     parameter.** For any loss `L` of the logits with gradient `g` at the net's output, each of the
@@ -750,56 +760,58 @@ def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MN
     `mnv2_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship.
     One replica; `bf16` selects the conv and depthwise weight nodes' kind (the module's Scope). -/
 theorem mnv2_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : MNV2BWeights nCls) (hq : MNV2PosB w) (bf16 : Bool)
+    (w : MNV2BWeights nCls) (hq : MNV2PosB w) (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}
-    (hL : HasGradAt L (mobilenetv2ForwardBFull N w x) g) :
-    MNV2NetLossTiedB N xN cotN vN epsStr w bf16 x L g := by
+    (hL : HasGradAt L (mobilenetv2ForwardBFullDoOpt N w cd x) g) :
+    MNV2NetLossTiedB N xN cotN vN epsStr w bf16 cd x L g := by
   unfold MNV2NetLossTiedB
   intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
-  have hL' : HasGradAt L (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb (mnv2PreB17 N w x)) g :=
-    hL.congr_point (by rw [mobilenetv2ForwardBFull_eq_chain, Function.comp_apply])
-  have h17 : HasGradAt (fun y => L (mnv2SufB17 N w y)) (mnv2PreB17 N w x) dy17 :=
-    (HasGradAt.comp (f := mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb)
+  have hL' : HasGradAt L
+      (mnv2HeadBDoOpt N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd (mnv2PreB17 N w x)) g :=
+    hL.congr_point (by rw [mobilenetv2ForwardBFullDoOpt_eq_chain, Function.comp_apply])
+  have h17 : HasGradAt (fun y => L (mnv2SufB17 N w cd y)) (mnv2PreB17 N w x) dy17 :=
+    (HasGradAt.comp (f := mnv2HeadBDoOpt N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd)
       (x := mnv2PreB17 N w x) hL'
       (((batchMap_differentiable _ (dense_differentiable w.fcW w.fcb)) _).comp _
-        (((batchMap_differentiable _ (globalAvgPoolFlat_differentiable 1280 7 7)) _).comp _
-          (StableHLO.cbrB_differentiableAt N w.hW w.hb w.hε hq.h w.hγ w.hβ _ hx.head)))
-      (mnv2HeadBHasVJPAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head)).of_eq
-      (mnv2HeadCotBlk_eq_vjp N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ g hx.head).symm
-  have h16 : HasGradAt (fun y => L (mnv2SufB16 N w y)) (mnv2PreB16 N w x) dy16 :=
+        (((dropoutOpt_differentiable cd) _).comp _
+          (((batchMap_differentiable _ (globalAvgPoolFlat_differentiable 1280 7 7)) _).comp _
+            (StableHLO.cbrB_differentiableAt N w.hW w.hb w.hε hq.h w.hγ w.hβ _ hx.head))))
+      (mnv2HeadBDoOptHasVJPAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb cd _ hx.head)).of_eq
+      (mnv2HeadCotBlk_eq_vjp N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb cd _ g hx.head).symm
+  have h16 : HasGradAt (fun y => L (mnv2SufB16 N w cd y)) (mnv2PreB16 N w x) dy16 :=
     mnv2ExpOnlyB_hasGradAt_comp w.b17 hq.b17 _ hx.b17 (h17.congr_point (mnv2PreB17_apply N w x))
-  have h15 : HasGradAt (fun y => L (mnv2SufB15 N w y)) (mnv2PreB15 N w x) dy15 :=
+  have h15 : HasGradAt (fun y => L (mnv2SufB15 N w cd y)) (mnv2PreB15 N w x) dy15 :=
     mnv2ResidB_hasGradAt_comp w.b16 hq.b16 _ hx.b16 (h16.congr_point (mnv2PreB16_apply N w x))
-  have h14 : HasGradAt (fun y => L (mnv2SufB14 N w y)) (mnv2PreB14 N w x) dy14 :=
+  have h14 : HasGradAt (fun y => L (mnv2SufB14 N w cd y)) (mnv2PreB14 N w x) dy14 :=
     mnv2ResidB_hasGradAt_comp w.b15 hq.b15 _ hx.b15 (h15.congr_point (mnv2PreB15_apply N w x))
-  have h13 : HasGradAt (fun y => L (mnv2SufB13 N w y)) (mnv2PreB13 N w x) dy13 :=
+  have h13 : HasGradAt (fun y => L (mnv2SufB13 N w cd y)) (mnv2PreB13 N w x) dy13 :=
     mnv2StridedB_hasGradAt_comp w.b14 hq.b14 _ hx.b14 (h14.congr_point (mnv2PreB14_apply N w x))
-  have h12 : HasGradAt (fun y => L (mnv2SufB12 N w y)) (mnv2PreB12 N w x) dy12 :=
+  have h12 : HasGradAt (fun y => L (mnv2SufB12 N w cd y)) (mnv2PreB12 N w x) dy12 :=
     mnv2ResidB_hasGradAt_comp w.b13 hq.b13 _ hx.b13 (h13.congr_point (mnv2PreB13_apply N w x))
-  have h11 : HasGradAt (fun y => L (mnv2SufB11 N w y)) (mnv2PreB11 N w x) dy11 :=
+  have h11 : HasGradAt (fun y => L (mnv2SufB11 N w cd y)) (mnv2PreB11 N w x) dy11 :=
     mnv2ResidB_hasGradAt_comp w.b12 hq.b12 _ hx.b12 (h12.congr_point (mnv2PreB12_apply N w x))
-  have h10 : HasGradAt (fun y => L (mnv2SufB10 N w y)) (mnv2PreB10 N w x) dy10 :=
+  have h10 : HasGradAt (fun y => L (mnv2SufB10 N w cd y)) (mnv2PreB10 N w x) dy10 :=
     mnv2ExpOnlyB_hasGradAt_comp w.b11 hq.b11 _ hx.b11 (h11.congr_point (mnv2PreB11_apply N w x))
-  have h9 : HasGradAt (fun y => L (mnv2SufB9 N w y)) (mnv2PreB9 N w x) dy9 :=
+  have h9 : HasGradAt (fun y => L (mnv2SufB9 N w cd y)) (mnv2PreB9 N w x) dy9 :=
     mnv2ResidB_hasGradAt_comp w.b10 hq.b10 _ hx.b10 (h10.congr_point (mnv2PreB10_apply N w x))
-  have h8 : HasGradAt (fun y => L (mnv2SufB8 N w y)) (mnv2PreB8 N w x) dy8 :=
+  have h8 : HasGradAt (fun y => L (mnv2SufB8 N w cd y)) (mnv2PreB8 N w x) dy8 :=
     mnv2ResidB_hasGradAt_comp w.b9 hq.b9 _ hx.b9 (h9.congr_point (mnv2PreB9_apply N w x))
-  have h7 : HasGradAt (fun y => L (mnv2SufB7 N w y)) (mnv2PreB7 N w x) dy7 :=
+  have h7 : HasGradAt (fun y => L (mnv2SufB7 N w cd y)) (mnv2PreB7 N w x) dy7 :=
     mnv2ResidB_hasGradAt_comp w.b8 hq.b8 _ hx.b8 (h8.congr_point (mnv2PreB8_apply N w x))
-  have h6 : HasGradAt (fun y => L (mnv2SufB6 N w y)) (mnv2PreB6 N w x) dy6 :=
+  have h6 : HasGradAt (fun y => L (mnv2SufB6 N w cd y)) (mnv2PreB6 N w x) dy6 :=
     mnv2StridedB_hasGradAt_comp w.b7 hq.b7 _ hx.b7 (h7.congr_point (mnv2PreB7_apply N w x))
-  have h5 : HasGradAt (fun y => L (mnv2SufB5 N w y)) (mnv2PreB5 N w x) dy5 :=
+  have h5 : HasGradAt (fun y => L (mnv2SufB5 N w cd y)) (mnv2PreB5 N w x) dy5 :=
     mnv2ResidB_hasGradAt_comp w.b6 hq.b6 _ hx.b6 (h6.congr_point (mnv2PreB6_apply N w x))
-  have h4 : HasGradAt (fun y => L (mnv2SufB4 N w y)) (mnv2PreB4 N w x) dy4 :=
+  have h4 : HasGradAt (fun y => L (mnv2SufB4 N w cd y)) (mnv2PreB4 N w x) dy4 :=
     mnv2ResidB_hasGradAt_comp w.b5 hq.b5 _ hx.b5 (h5.congr_point (mnv2PreB5_apply N w x))
-  have h3 : HasGradAt (fun y => L (mnv2SufB3 N w y)) (mnv2PreB3 N w x) dy3 :=
+  have h3 : HasGradAt (fun y => L (mnv2SufB3 N w cd y)) (mnv2PreB3 N w x) dy3 :=
     mnv2StridedB_hasGradAt_comp w.b4 hq.b4 _ hx.b4 (h4.congr_point (mnv2PreB4_apply N w x))
-  have h2 : HasGradAt (fun y => L (mnv2SufB2 N w y)) (mnv2PreB2 N w x) dy2 :=
+  have h2 : HasGradAt (fun y => L (mnv2SufB2 N w cd y)) (mnv2PreB2 N w x) dy2 :=
     mnv2ResidB_hasGradAt_comp w.b3 hq.b3 _ hx.b3 (h3.congr_point (mnv2PreB3_apply N w x))
-  have h1 : HasGradAt (fun y => L (mnv2SufB1 N w y)) (mnv2PreB1 N w x) dy1 :=
+  have h1 : HasGradAt (fun y => L (mnv2SufB1 N w cd y)) (mnv2PreB1 N w x) dy1 :=
     mnv2StridedB_hasGradAt_comp w.b2 hq.b2 _ hx.b2 (h2.congr_point (mnv2PreB2_apply N w x))
-  have h0 : HasGradAt (fun y => L (mnv2SufStem N w y)) (mnv2PreB0 N w x) cotStem :=
+  have h0 : HasGradAt (fun y => L (mnv2SufStem N w cd y)) (mnv2PreB0 N w x) cotStem :=
     mnv2NoExpB_hasGradAt_comp w.b1 hq.b1 _ hx.b1 (h1.congr_point (mnv2PreB1_apply N w x))
   refine ⟨mnv2_stem_lossTiedB xN cotN vN epsStr w.sW w.sb w.sε hq.s w.sγ w.sβ bf16 x hx.stem
       (h0.congr_point (mnv2PreB0_apply N w x)) (fun W b γ β => by rw [mnv2_factor_stem]), ?_⟩
@@ -837,20 +849,20 @@ theorem mnv2_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       (h16.congr_point (mnv2PreB16_apply N w x)) (fun p => by rw [mnv2_factor_b16]), ?_⟩
   refine ⟨mnv2_stride1_lossTiedB xN cotN vN epsStr w.b17 bf16 hq.b17 _ hx.b17
       (h17.congr_point (mnv2PreB17_apply N w x)) (fun p => by rw [mnv2_factor_b17]), ?_⟩
-  exact mnv2_head_lossTiedB xN cotN vN epsStr w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb bf16 _ hx.head hL'
-    (fun W b γ β Wd bd => by rw [mnv2_factor_head])
+  exact mnv2_head_lossTiedB xN cotN vN epsStr w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb bf16 cd _
+    hx.head hL' (fun W b γ β Wd bd => by rw [mnv2_factor_head])
 
 /-- **The loss the artifacts ship**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits. -/
 theorem mnv2_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
-    (hq : MNV2PosB w) (bf16 : Bool)
+    (hq : MNV2PosB w) (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) (t : Vec (N * (1 * nCls)))
     (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
-    MNV2NetLossTiedB N xN cotN vN epsStr w bf16 x (smoothedBatchLoss N nCls α B t)
+    MNV2NetLossTiedB N xN cotN vN epsStr w bf16 cd x (smoothedBatchLoss N nCls α B t)
       (unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (mobilenetv2ForwardBFull N w x)) t))) :=
-  mnv2_net_lossGrad N xN cotN vN epsStr w hq bf16 x hx
+        (rowB N nCls (mobilenetv2ForwardBFullDoOpt N w cd x)) t))) :=
+  mnv2_net_lossGrad N xN cotN vN epsStr w hq bf16 cd x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
@@ -863,12 +875,12 @@ theorem mnv2_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     theorems each state the chain; this one states it once, so an edit to either chain breaks its
     proof. -/
 theorem mnv2_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : MNV2BWeights nCls) (bf16 : Bool)
+    (w : MNV2BWeights nCls) (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (g : Vec (N * nCls))
     (hq : MNV2PosB w) (hx : MNV2SmoothAtB N w x) {L : Vec (N * nCls) → Vec 1}
-    (hL : HasGradAt L (mobilenetv2ForwardBFull N w x) g) :
+    (hL : HasGradAt L (mobilenetv2ForwardBFullDoOpt N w cd x) g) :
     -- the backward chain: the head's own four nodes, then the seventeen certified block backwards
-    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 N w x) g
+    let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd (mnv2PreB17 N w x) g
     let dy16 := mnv2CotInBody N 7 7 w.b17 (mnv2PreB16 N w x) dy17
     let dy15 := mnv2ResidCotIn N 7 7 w.b16 (mnv2PreB15 N w x) dy16
     let dy14 := mnv2ResidCotIn N 7 7 w.b15 (mnv2PreB14 N w x) dy15
@@ -888,70 +900,70 @@ theorem mnv2_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : Strin
     let cotStem := mnv2NoExpCotIn N 112 112 w.b1 (mnv2PreB0 N w x) dy1
     (mnv2StemTiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotStem
       ∧ mnv2StemLossTiedB (N := N) (h := 112) (w := 112) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x
-        (fun W b γ β => L (mobilenetv2ForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+        (fun W b γ β => L (mobilenetv2ForwardBFullDoOpt N { w with sW := W, sb := b, sγ := γ, sβ := β } cd x))
         cotStem)
   ∧ (mnv2NoExpTiedB N 112 112 xN cotN vN epsStr w.b1 bf16 (mnv2PreB0 N w x) dy1
       ∧ mnv2NoExpLossTiedB (N := N) (h := 112) (w := 112) xN cotN vN epsStr w.b1 bf16 (mnv2PreB0 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b1 := p } x)) dy1)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b1 := p } cd x)) dy1)
   ∧ (mnv2Stride2TiedB N 56 56 xN cotN vN epsStr w.b2 bf16 (mnv2PreB1 N w x) dy2
       ∧ mnv2Stride2LossTiedB (N := N) (h := 56) (w := 56) xN cotN vN epsStr w.b2 bf16 (mnv2PreB1 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b2 := p } x)) dy2)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b2 := p } cd x)) dy2)
   ∧ (mnv2Stride1TiedB N 56 56 xN cotN vN epsStr w.b3 bf16 (mnv2PreB2 N w x) dy3
       ∧ mnv2Stride1LossTiedB (N := N) (h := 56) (w := 56) xN cotN vN epsStr w.b3 bf16 (mnv2PreB2 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b3 := p } x)) dy3)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b3 := p } cd x)) dy3)
   ∧ (mnv2Stride2TiedB N 28 28 xN cotN vN epsStr w.b4 bf16 (mnv2PreB3 N w x) dy4
       ∧ mnv2Stride2LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b4 bf16 (mnv2PreB3 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b4 := p } x)) dy4)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b4 := p } cd x)) dy4)
   ∧ (mnv2Stride1TiedB N 28 28 xN cotN vN epsStr w.b5 bf16 (mnv2PreB4 N w x) dy5
       ∧ mnv2Stride1LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b5 bf16 (mnv2PreB4 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b5 := p } x)) dy5)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b5 := p } cd x)) dy5)
   ∧ (mnv2Stride1TiedB N 28 28 xN cotN vN epsStr w.b6 bf16 (mnv2PreB5 N w x) dy6
       ∧ mnv2Stride1LossTiedB (N := N) (h := 28) (w := 28) xN cotN vN epsStr w.b6 bf16 (mnv2PreB5 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b6 := p } x)) dy6)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b6 := p } cd x)) dy6)
   ∧ (mnv2Stride2TiedB N 14 14 xN cotN vN epsStr w.b7 bf16 (mnv2PreB6 N w x) dy7
       ∧ mnv2Stride2LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b7 bf16 (mnv2PreB6 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b7 := p } x)) dy7)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b7 := p } cd x)) dy7)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b8 bf16 (mnv2PreB7 N w x) dy8
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b8 bf16 (mnv2PreB7 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b8 := p } x)) dy8)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b8 := p } cd x)) dy8)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b9 bf16 (mnv2PreB8 N w x) dy9
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b9 bf16 (mnv2PreB8 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b9 := p } x)) dy9)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b9 := p } cd x)) dy9)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b10 bf16 (mnv2PreB9 N w x) dy10
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b10 bf16 (mnv2PreB9 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b10 := p } x)) dy10)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b10 := p } cd x)) dy10)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b11 bf16 (mnv2PreB10 N w x) dy11
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b11 bf16 (mnv2PreB10 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b11 := p } x)) dy11)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b11 := p } cd x)) dy11)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b12 bf16 (mnv2PreB11 N w x) dy12
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b12 bf16 (mnv2PreB11 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b12 := p } x)) dy12)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b12 := p } cd x)) dy12)
   ∧ (mnv2Stride1TiedB N 14 14 xN cotN vN epsStr w.b13 bf16 (mnv2PreB12 N w x) dy13
       ∧ mnv2Stride1LossTiedB (N := N) (h := 14) (w := 14) xN cotN vN epsStr w.b13 bf16 (mnv2PreB12 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b13 := p } x)) dy13)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b13 := p } cd x)) dy13)
   ∧ (mnv2Stride2TiedB N 7 7 xN cotN vN epsStr w.b14 bf16 (mnv2PreB13 N w x) dy14
       ∧ mnv2Stride2LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b14 bf16 (mnv2PreB13 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b14 := p } x)) dy14)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b14 := p } cd x)) dy14)
   ∧ (mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 N w x) dy15
       ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b15 := p } x)) dy15)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b15 := p } cd x)) dy15)
   ∧ (mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 N w x) dy16
       ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b16 := p } x)) dy16)
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b16 := p } cd x)) dy16)
   ∧ (mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 N w x) dy17
       ∧ mnv2Stride1LossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 N w x)
-        (fun p => L (mobilenetv2ForwardBFull N { w with b17 := p } x)) dy17)
-  ∧ (mnv2HeadTiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+        (fun p => L (mobilenetv2ForwardBFullDoOpt N { w with b17 := p } cd x)) dy17)
+  ∧ (mnv2HeadTiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
         (mnv2PreB17 N w x) g
-      ∧ mnv2HeadLossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+      ∧ mnv2HeadLossTiedB (N := N) (h := 7) (w := 7) xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
         (mnv2PreB17 N w x)
-        (fun W b γ β Wd bd => L (mobilenetv2ForwardBFull N
-        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x)) g) := by
+        (fun W b γ β Wd bd => L (mobilenetv2ForwardBFullDoOpt N
+        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } cd x)) g) := by
   intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18⟩ :=
-    mnv2_net_tiedB N xN cotN vN epsStr w bf16 x g
+    mnv2_net_tiedB N xN cotN vN epsStr w bf16 cd x g
   have hl :=
-    mnv2_net_lossGrad N xN cotN vN epsStr w hq bf16 x hx hL
+    mnv2_net_lossGrad N xN cotN vN epsStr w hq bf16 cd x hx hL
   obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17, l18⟩ := hl
   exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
     ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, l12⟩, ⟨t13, l13⟩, ⟨t14, l14⟩, ⟨t15, l15⟩, ⟨t16, l16⟩,

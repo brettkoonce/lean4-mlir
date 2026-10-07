@@ -740,11 +740,12 @@ theorem chk_mnv2_net_lossGrad :
     ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
       (w : Proofs.MNV2BWeights nCls),
       Proofs.MNV2PosB w →
-        ∀ (bf16 : Bool) (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
+        ∀ (bf16 : Bool) (cd : Option (Proofs.Vec (N * (1280 : ℕ))))
+          (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
           Proofs.MNV2SmoothAtB N w x →
             ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
-              Proofs.HasGradAt L (Proofs.mobilenetv2ForwardBFull N w x) g →
-                Proofs.MobileNetV2TieB.MNV2NetLossTiedB N xN cotN vN epsStr w bf16 x L g := by sorry
+              Proofs.HasGradAt L (Proofs.MobileNetV2TieB.mobilenetv2ForwardBFullDoOpt N w cd x) g →
+                Proofs.MobileNetV2TieB.MNV2NetLossTiedB N xN cotN vN epsStr w bf16 cd x L g := by sorry
 
 /-- `Proofs.Mnv4TieB.mnv4_net_lossGrad` -/
 theorem chk_mnv4_net_lossGrad :
@@ -1022,10 +1023,11 @@ theorem chk_mnv2_net_syncTiedB :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.MNV2BWeights nCls) (bf16 : Bool)
+          (cd : Option (Proofs.Vec (R * N * (1280 : ℕ))))
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ)))))
           (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
           (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-            Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X G gs := by sorry
+            Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 cd X G gs := by sorry
 
 /-- `Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard` -/
 theorem chk_efficientnetFwdGraphSyncFull_shard :

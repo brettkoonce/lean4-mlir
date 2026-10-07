@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.Proofs.Foundation.DropSites
 
 /-! # EfficientNet-B0 with stochastic depth and classifier dropout — forward, graph, faithfulness
 
@@ -24,6 +25,8 @@ statement covers `efficientnet_drop_fwd` (`sd` only), `efficientnet_do_fwd` (`cd
   the all-ones masks the driver passes at eval, the forward IS `efficientnetForwardBFull` (likewise
   the eval twins, `efficientnetForwardBFullEvalDrop_none` / `efficientnetForwardBFullEvalDrop_ones`).
   The identity is exact: the keep probability is folded into the mask (`Training/DropPath`).
+  The `Option` sites, their graph nodes and their VJPs are `Proofs.Foundation.DropSites`', shared
+  with the ties that thread the same binder.
 
 The residual-block-with-drop and the dropout head are text-guarded against the renderer in
 `Codegen/FwdGraphTextTies` at training BatchNorm; the eval graphs use the render's names too, and
@@ -44,28 +47,6 @@ backward through the drop sites is outside this statement, as it is outside
 namespace Proofs
 
 open scoped BigOperators
-
--- ════════════════════════════════════════════════════════════════
--- § Optional drop sites — `none` is the identity, as the renderer emits nothing
--- ════════════════════════════════════════════════════════════════
-
-/-- Drop-path at a site that may be absent: `none` is the identity. -/
-noncomputable def dropPathOpt (N n : Nat) : Option (Vec N) → Vec (N * n) → Vec (N * n)
-  | none => id
-  | some s => dropPath N n s
-
-/-- Dropout at a site that may be absent: `none` is the identity. -/
-noncomputable def dropoutOpt {m : Nat} : Option (Vec m) → Vec m → Vec m
-  | none => id
-  | some mk => dropout mk
-
-/-- At the all-ones scale drop-path is the identity. -/
-theorem dropPathOpt_ones (N n : Nat) : dropPathOpt N n (some fun _ => 1) = id :=
-  funext (dropPath_ones_id N n)
-
-/-- At the all-ones mask dropout is the identity. -/
-theorem dropoutOpt_ones {m : Nat} : dropoutOpt (some (fun _ => 1 : Vec m)) = id :=
-  funext dropout_ones_id
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two sites, at training BatchNorm
@@ -244,28 +225,6 @@ theorem efficientnetForwardBFullEvalDrop_ones (N : Nat) (ε : ℝ) {nCls : Nat}
   rfl
 
 namespace StableHLO
-
--- ════════════════════════════════════════════════════════════════
--- § The graphs — a `dropPathB` / `dropoutB` node exactly where the site is `some`
--- ════════════════════════════════════════════════════════════════
-
-/-- A `dropPathB` node when the site is rendered, nothing otherwise. -/
-def dropPathOptG (mN : String) {N n : Nat} : Option (Vec N) → SHlo (N * n) → SHlo (N * n)
-  | none, e => e
-  | some s, e => .dropPathB mN s e
-
-theorem den_dropPathOptG (mN : String) {N n : Nat} (s : Option (Vec N)) (e : SHlo (N * n)) :
-    den (dropPathOptG mN s e) = dropPathOpt N n s (den e) := by
-  cases s <;> rfl
-
-/-- A `dropoutB` node when the site is rendered, nothing otherwise. -/
-def dropoutOptG (mN : String) {N n : Nat} : Option (Vec (N * n)) → SHlo (N * n) → SHlo (N * n)
-  | none, e => e
-  | some m, e => .dropoutB mN m e
-
-theorem den_dropoutOptG (mN : String) {N n : Nat} (m : Option (Vec (N * n))) (e : SHlo (N * n)) :
-    den (dropoutOptG mN m e) = dropoutOpt m (den e) := by
-  cases m <;> rfl
 
 /-- **Residual MBConv6 with its drop site**: `mbResidGraphB` with `dropPathOptG` on the branch
     before the `addVB` — the node sequence `eFwd … (drop := some i)` emits. -/
