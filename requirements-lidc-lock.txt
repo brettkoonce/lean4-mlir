@@ -1,0 +1,17 @@
+# requirements-lidc-lock.txt — the CT denoising demo's environment (.venv-lidc)
+#
+# planning/demo_slate.md §3 (LIDC-IDRI low-dose CT denoising). Built 2026-10-07 on Python 3.12 with
+#   uv venv .venv-lidc --python 3.12 && uv pip install --python .venv-lidc/bin/python pydicom numpy scipy scikit-image
+# then frozen (uv pip freeze). Never install any of this into the pinned .venv: the JAX reference's
+# cuDNN stack is pinned there and scikit-image's scipy would move it.
+
+imageio==2.38.0
+lazy-loader==0.6
+networkx==3.7
+numpy==2.5.3
+packaging==26.3
+pillow==12.3.0
+pydicom==3.0.2
+scikit-image==0.26.0
+scipy==1.18.1
+tifffile==2026.9.20
