@@ -5,25 +5,26 @@ and loss-gradient tie is stated at either precision). The table and site counts 
 against the job confs, the manifest and the renderers; §1 is the first net landed and the recipe
 the rest follow.
 
-## ▶ Start here (next session): the book sentences — the Lean side is DONE
+## ▶ State (2026-10-07, fifth pass): the thread is CLOSED on `wp8fg` (not pushed)
 
-**State (2026-10-07, fourth pass).** All four masked nets are done on `wp8fg` (not pushed):
-MobileNetV2's classifier dropout (`a442268c`), EfficientNet-B0's nine drop sites + dropout
-(`6316cde4`), ViT-Tiny's 24 drop sites through the indexed lift (`da62e3b4`, §3), ConvNeXt-T's 18
-(§4, staged). Every masked site of the book's seven jobs is inside its ties; what stays outside is
-optimizer tails (EMA, accumulation) and, for MNv4 (side quest, no book job), its masks.
+**Lean.** All four masked nets are done (§1–§4): MobileNetV2's classifier dropout (`a442268c`),
+EfficientNet-B0's nine drop sites + dropout (`6316cde4`), ViT-Tiny's 24 drop sites through the
+indexed lift (`da62e3b4`), ConvNeXt-T's 18 (`f2a1b638`). Every masked site of the book's seven jobs
+is inside its ties; what stays outside is optimizer tails (EMA, accumulation) and, for MNv4 (side
+quest, no book job), its masks.
 
-**The book (one commit, preview on :8766).** Sentences the Lean has outrun: MNv2 —
-`thm:mobilenetv2_step_tie` / `_loss_grad` texts (~7636–7696, add: and at its classifier-dropout
-site, the loss of `mobilenetv2ForwardBFullDoOpt`), `thm:mobilenetv2_sync_tie` (~7801–7826), the run
-paragraph's "its classifier dropout sits outside that statement" (~8363); B0 — the step-tie text
-"on the chain without stochastic depth or classifier dropout; the optimizer tails … outside"
-(~9198 → at the renderer's two sites, the EMA tail outside), the sync-tie and loss-gradient texts,
-the run paragraph (~9683); ViT and ConvNeXt — the step-tie / loss-gradient theorem texts and the
-run paragraphs' "the drop-path chain" (grep `vit_net_tiedGB`, `vit_net_lossGrad`,
-`cnx_net_tiedGB`, `cnx_net_lossGrad` in content.tex); the trust summary's "on the chain without
-drop-path" (18760, 18802 → now nothing; drop the qualifier). Then blueprint `lean_decls`
-regenerated + `blueprint_uses.py --check`, `docstring-checkrefs`.
+**Book (the commit after `f2a1b638`).** The sentences the Lean had outrun, rewritten in
+`content.tex`: MNv2's step-tie / loss-gradient / sync-tie theorem texts and its run paragraph
+("its classifier dropout sits outside" → "inside the statement"); B0's step-tie ("on the chain
+without stochastic depth or classifier dropout" → the two sites as optional masks, the optimizer
+tails still outside), loss-gradient and sync-tie texts; ConvNeXt's and ViT's step-tie / loss-gradient
+texts and run paragraphs ("stated on the drop-free chain" → "at its eighteen / twenty-four drop-path
+sites"); the trust summary's two "on the chain without drop-path" qualifiers dropped (the second also
+said "f32" — the loss-gradient ties have taken `bf16` since bf16_tie tier A). Statement shape in
+prose: `none` the drop-free artifacts' chain, `some` the masked renders', where a masked block's
+nodes read the cotangent through its site and the skip reads it raw. `blueprint_uses.py --fix`
+moved six `\uses` lines (`biPathHasVJP` / `identityHasVJP` edges the drop VJPs added) on
+regenerated `lean_deps`; `--check` clean. Reviewed on the preview diff page.
 
 **Optional after.** (a) The `some` side of the canonical-forward lemmas: `vitNetB_eq_vitForwardKV`
 and `cnxNetB_eq_convNextForwardTCh` are stated at `none`; at `some` the ViT one would meet

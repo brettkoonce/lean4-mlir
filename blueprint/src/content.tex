@@ -7650,7 +7650,12 @@ As for MobileNetV2; see \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}
   MobileNetV2 step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at
   \(N = 32\), \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) denotes the
   certified batch gradient at the chain cotangent of a loss cotangent left as
-  a binder, generic in \(N\), at either precision as for ResNet-34.
+  a binder, generic in \(N\), at either precision as for ResNet-34, and
+  with the classifier dropout as an optional mask: at \texttt{none} the
+  chain is the drop-free artifacts', at \texttt{some} the \texttt{do}
+  renders' --- \texttt{mobilenetv2in\_rmsdp64wxdols0eps0001bf16} among them
+  --- where the dense weight node reads the dropped activation and the
+  cotangent handed down to the pooling passes through the mask.
   Instantiated at the label-smoothed cross-entropy.
 \end{theorem}
 
@@ -7684,9 +7689,10 @@ of the four block kinds, the stem and the head; see
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:mobilenetv2_step_tie}, the node
   at the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
-  \texttt{mobilenetv2ForwardBFull} with that one parameter varied, at any
-  batch and number of classes. Instantiated at the label-smoothed
-  cross-entropy.
+  the forward at the same mask (\texttt{mobilenetv2ForwardBFullDoOpt};
+  \texttt{mobilenetv2ForwardBFull} at \texttt{none}) with that one
+  parameter varied, at any batch and number of classes. Instantiated at
+  the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -7812,10 +7818,13 @@ As for MobileNetV2; see \leandocref{Proofs.Mnv4FullBSeal.sealX\_backward\_nontri
           scaled by \(R\) \hfill[\texttt{hgs}]
   \end{enumerate}
   \Prove{} the mean over replicas of each of the 158 all-reduced gradient
-  nodes of \texttt{mobilenetv2in\_rmsdp64} and its bf16 twin at \(\texttt{replicas} > 1\)
-  (loss \(\div B\) per replica) equals the single-device node of
-  Theorem~\ref{thm:mobilenetv2_step_tie} at batch \(R \cdot N\) with loss
-  \(\div (R \cdot B)\). Instantiated at the label-smoothed cross-entropy.
+  nodes of \texttt{mobilenetv2in\_rmsdp64}, its bf16 twin and their
+  \texttt{do} renders at \(\texttt{replicas} > 1\) (loss \(\div B\) per
+  replica; each replica's classifier-dropout mask the shard of one global
+  mask) equals the single-device node of
+  Theorem~\ref{thm:mobilenetv2_step_tie} at batch \(R \cdot N\) and that
+  global mask, with loss \(\div (R \cdot B)\). Instantiated at the
+  label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -8360,8 +8369,8 @@ shared with the Imagenette peer so the two cannot carry different values;
 \texttt{mnv2ImagenetRmsSchedule} adds the staircase and drops the warmup,
 and the optimizer constants are \texttt{mnv2RmsHyper}.
 Theorem~\ref{thm:mobilenetv2_sync_tie} ties this render's bf16 gradient
-nodes to one device's step at the global batch; its classifier dropout sits
-outside that statement.
+nodes to one device's step at the global batch, its classifier dropout
+inside the statement.
 \texttt{adam64} is AdamW at $10^{-3}$ instead, the driver's default because
 it matches the other ImageNet drivers. It runs with:
 
@@ -9185,9 +9194,9 @@ Theorem~\ref{thm:efficientnetFullHasVJP} read stage by stage; see
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
-      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
-      def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct,
-      thm:denseHasVJP, thm:denseWeightGrad_correct, thm:residualHasVJP,
+      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
+      def:hasvjpmat, thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:identityHasVJP, thm:residualHasVJP,
       thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Prove{} each of the 213 emitted parameter gradients of the batched
   EfficientNet-B0 step (\texttt{efficientnet\_adam\_train\_step.mlir} and
@@ -9195,8 +9204,14 @@ Theorem~\ref{thm:efficientnetFullHasVJP} read stage by stage; see
   gradient at the chain cotangent of the label-smoothed cross-entropy ---
   through swish, the SE gate's fan-in and the batch-BatchNorm backward ---
   with the target and the number of classes binders. Stated at one replica,
-  at either precision, on the chain without stochastic depth or classifier
-  dropout; the optimizer tails that consume the nodes are outside it.
+  at either precision, with stochastic depth on the nine skip-carrying
+  blocks and the classifier dropout as optional masks: at \texttt{none} the
+  chain is the drop-free artifacts', at \texttt{some} the \texttt{drop},
+  \texttt{do} and \texttt{dropdo} renders' ---
+  \texttt{efficientnetin\_emarmsdp64dropdowxeps0001bf16} among them ---
+  where a masked block's nodes read the cotangent through its site and the
+  skip reads it raw, and the dense weight node reads the dropped
+  activation; the optimizer tails that consume the nodes are outside it.
 \end{theorem}
 
 \begin{proof}
@@ -9226,9 +9241,10 @@ backwards; see \leandocref{Proofs.EnetTieG.efficientnet\_net\_tiedG}.
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:efficientnet_step_tie}, the
   node at the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of
-  \texttt{efficientnetForwardBFull} with that one parameter varied, at any
-  batch and number of classes. Instantiated at the label-smoothed
-  cross-entropy.
+  the forward at the same masks (\texttt{efficientnetForwardBFullDrop};
+  \texttt{efficientnetForwardBFull} at \texttt{none}) with that one
+  parameter varied, at any batch and number of classes. Instantiated at
+  the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -9244,8 +9260,8 @@ backwards (Theorem~\ref{thm:hasGradAt_comp}, once per stage); see
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:conv2d, ax:conv2dHasVJP3,
       ax:conv2dWeightGradHasVJP, ax:depthwiseConv2d, ax:depthwiseHasVJP3,
-      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp,
-      def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP,
+      ax:depthwiseWeightGradHasVJP3, ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3,
+      def:hasvjpmat, thm:bnHasVJP, thm:denseHasVJP, thm:identityHasVJP,
       thm:residualHasVJP, thm:rowwiseHasVJPMat, thm:seBlockHasVJP, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
@@ -9256,9 +9272,11 @@ backwards (Theorem~\ref{thm:hasGradAt_comp}, once per stage); see
           scaled by \(R\) \hfill[\texttt{hgs}]
   \end{enumerate}
   \Prove{} the mean over replicas of each of the 213 all-reduced gradient
-  nodes (loss \(\div B\) per replica) equals the single-device node of
-  Theorem~\ref{thm:efficientnet_step_tie} at batch \(R \cdot N\), loss
-  \(\div (R \cdot B)\). Instantiated at the label-smoothed cross-entropy.
+  nodes (loss \(\div B\) per replica; each replica's stochastic-depth and
+  dropout masks the shards of global ones) equals the single-device node of
+  Theorem~\ref{thm:efficientnet_step_tie} at batch \(R \cdot N\) and those
+  global masks, loss \(\div (R \cdot B)\). Instantiated at the
+  label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -10552,17 +10570,21 @@ the block's, the downsample's or the head's; see
       ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP, ax:depthwiseBiasGradHasVJP,
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
       ax:geluScalar, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_reindex,
-      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
-      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
-      thm:layerNormVecHasVJP, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+      def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:biPathHasVJP, thm:bnHasVJP,
+      thm:chanLNTensor3HasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:identityHasVJP, thm:layerNormVecHasVJP,
+      thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
   \Prove{} each of the 182 parameter gradients of the batched ConvNeXt-T
   step (\([3, 3, 9, 3]\) blocks, channel-LayerNorm at twenty-two sites,
   per-channel layer scale, GELU) denotes the certified batch gradient at the
   chain cotangent of the label-smoothed cross-entropy, with the batch and the
   number of classes binders: \texttt{convnext\_adam\_train\_step.mlir} and
   the \texttt{convnextin\_*} steps emit these nodes. Stated at one replica,
-  at either precision, on the chain without stochastic depth; the
-  \texttt{drop} renders are outside it.
+  at either precision, with stochastic depth as an optional mask at each
+  block's one site, between the layer scale and the skip: at \texttt{none}
+  the chain is the drop-free artifacts', at \texttt{some} the \texttt{drop}
+  renders', where every node of a block reads the cotangent scaled by its
+  example's mask and the skip reads it raw.
 \end{theorem}
 
 \begin{proof}
@@ -10582,10 +10604,10 @@ downsample and head backwards; see
       ax:depthwiseConv2d, ax:depthwiseHasVJP3, ax:depthwiseWeightGradHasVJP3,
       ax:geluScalar, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_const, ax:pdiv_mul,
       ax:pdiv_reindex, ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjp3,
-      def:hasvjpmat, thm:bnHasVJP, thm:chanLNTensor3HasVJP, thm:convnext_step_tie,
-      thm:denseBiasGrad_correct, thm:denseHasVJP, thm:denseWeightGrad_correct,
-      thm:hasGradAt_comp, thm:identityHasVJP, thm:layerNormVecHasVJP,
-      thm:pdiv_finset_sum, thm:residualHasVJP, thm:transposeHasVJP, thm:vjpComp}
+      def:hasvjpmat, thm:biPathHasVJP, thm:bnHasVJP, thm:chanLNTensor3HasVJP,
+      thm:convnext_step_tie, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:hasGradAt_comp, thm:identityHasVJP,
+      thm:layerNormVecHasVJP, thm:pdiv_finset_sum, thm:transposeHasVJP, thm:vjpComp}
   \Assume{}
   \begin{enumerate}
     \item \(\varepsilon > 0\) at the LayerNorms \hfill[\texttt{h\(\varepsilon\)}]
@@ -10594,9 +10616,10 @@ downsample and head backwards; see
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:convnext_step_tie}, the node at
   the chain cotangent from \(g\) is \(\partial L/\partial\theta\) of the
-  batched ConvNeXt-T forward (\texttt{convNextForwardTCh} applied per
-  example) with that one parameter varied, for every batch and number of
-  classes. Instantiated at the label-smoothed cross-entropy.
+  batched ConvNeXt-T forward at the same mask (\texttt{cnxNetB}; at
+  \texttt{none}, \texttt{convNextForwardTCh} applied per example) with that
+  one parameter varied, for every batch and number of classes.
+  Instantiated at the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -11132,8 +11155,7 @@ depth and this book's gradient clip are spelled \texttt{wx},
 \texttt{convnextin\_\allowbreak adamdpwxclipdropbf16} carries all three at
 once on top of AdamW, bf16 and the four-way all-reduce. It is the artifact
 the run below used; Theorem~\ref{thm:convnext_step_tie} reaches its bf16
-gradient nodes but is stated on the drop-free chain, and this render's
-cotangent chain carries the drop-path sites. EMA is rendered too, and
+gradient nodes at its eighteen drop-path sites. EMA is rendered too, and
 \texttt{convnextin\_emadpwxclipdropbf16} carries all four, but it landed
 after this run, which trained \texttt{adamdpwxclipdropbf16} and scores its
 raw weights,
@@ -12735,19 +12757,23 @@ batch; see \leandocref{Proofs.vitTinyInputGradB\_eq\_vitTiny\_vjp}.
   \leanok
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
       ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_reindex,
-      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
-      thm:denseWeightGrad_correct, thm:identityMatHasVJP, thm:layerNormVecHasVJP,
-      thm:rowwiseHasVJPMat, thm:sdpaBackK_correct, thm:sdpaBackQ_correct,
-      thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat, thm:vjpComp, thm:vjpMatComp}
+      ax:rowSoftmax_flat_differentiable, def:hasvjp, def:hasvjpmat, thm:biPathHasVJP,
+      thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      thm:denseWeightGrad_correct, thm:identityHasVJP, thm:identityMatHasVJP,
+      thm:layerNormVecHasVJP, thm:rowwiseHasVJPMat, thm:sdpaBackK_correct,
+      thm:sdpaBackQ_correct, thm:sdpaBackV_correct, thm:transformerMlpHasVJPMat,
+      thm:vjpComp, thm:vjpMatComp}
   \Prove{} each of the 200 parameter gradients of the batched ViT-Tiny step
   (three heads of 64, depth 12, \(16 \times 16\) patches) denotes the
   certified batch gradient at the chain cotangent of the label-smoothed
   cross-entropy, with the batch and the number of classes binders; the CLS
   gradient is summed over the batch inside the node. Stated at one replica,
-  at either precision, on the chain without stochastic depth:
-  \texttt{vit\_adam\_train\_step.mlir} and the \texttt{vitin\_*} steps emit
-  these nodes; the \texttt{drop} renders are outside it.
+  at either precision, with stochastic depth as an optional mask at each
+  block's two sites: \texttt{vit\_adam\_train\_step.mlir} and the
+  \texttt{vitin\_*} steps emit these nodes, and at \texttt{some} the chain
+  is the \texttt{drop} renders', where a block's out-projection and fc2
+  nodes read the cotangent scaled by its example's mask and both skips read
+  it raw.
 \end{theorem}
 
 \begin{proof}
@@ -12765,8 +12791,8 @@ of the lifted block and the head; see
   \uses{ax:bnIstdBroadcast_differentiable, ax:geluScalar, ax:mhsaHasVJPMat,
       ax:mhsaLayer_flat_differentiable, ax:pdiv, ax:pdiv_add, ax:pdiv_comp,
       ax:pdiv_const, ax:pdiv_mul, ax:pdiv_reindex, ax:rowSoftmax_flat_differentiable,
-      ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjpmat, thm:biPathMatHasVJP,
-      thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
+      ax:softmaxCE_grad, def:hasgradat, def:hasvjp, def:hasvjpmat, thm:biPathHasVJP,
+      thm:biPathMatHasVJP, thm:bnHasVJP, thm:denseBiasGrad_correct, thm:denseHasVJP,
       thm:densePerTokenHasVJPMat, thm:denseWeightGrad_correct,
       thm:geluPerTokenHasVJPMat, thm:hasGradAt_comp, thm:identityHasVJP,
       thm:identityMatHasVJP, thm:layerNormVecHasVJP, thm:pdiv_finset_sum,
@@ -12781,9 +12807,10 @@ of the lifted block and the head; see
   \end{enumerate}
   \Prove{} for each node of Theorem~\ref{thm:vit_step_tie}, the node at the
   chain cotangent from \(g\) is \(\partial L/\partial\theta\) of the batched
-  ViT-Tiny forward (\texttt{vitForwardKV} applied per example) with that one
-  parameter varied, for every batch and number of classes. Instantiated at
-  the label-smoothed cross-entropy.
+  ViT-Tiny forward at the same mask (\texttt{vitNetB}; at \texttt{none},
+  \texttt{vitForwardKV} applied per example) with that one parameter
+  varied, for every batch and number of classes. Instantiated at the
+  label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -13391,9 +13418,9 @@ field spells the $\varepsilon$). It is the artifact the run used: four
 regions, $[\theta \mid m \mid v \mid \mathrm{ema}]$, 831 operands and
 200 all-reduces, with an fp32 evaluation forward at the same
 $\varepsilon$ beside it.
-Theorem~\ref{thm:vit_step_tie} reaches its bf16 gradient nodes but is
-stated on the drop-free chain, and this render's cotangent chain carries the
-drop-path sites. Mixup, CutMix and repeated
+Theorem~\ref{thm:vit_step_tie} reaches its bf16 gradient nodes at its
+twenty-four drop-path sites, with only the EMA tail outside it. Mixup,
+CutMix and repeated
 augmentation never enter the graph at all, because they are data-side
 and ride the shim. The job:
 
@@ -18757,7 +18784,7 @@ and bounded:
 \end{itemize}
 So the gradient the GPU computes is, by a machine-checked theorem, the
 network's exact reverse-mode derivative over $\mathbb{R}$ --- at a smooth
-point, at one replica, in f32 or bf16, on the chain without drop-path --- up to one
+point, at one replica, in f32 or bf16 --- up to one
 printer, one lowerer, the StableHLO semantics the denotation assumes, and
 floating point. Where a conventional generator leaves
 thousands of lines of string-building linked to the proof by nothing at all,
@@ -18799,7 +18826,7 @@ the tie's own cotangent, every parameter gradient node is
 $\partial L/\partial\theta$ of the whole network, for any loss $L$ with a
 gradient at the logits and in particular for the label-smoothed cross-entropy
 the artifacts emit (\texttt{r34\_net\_lossGrad} and its peers; one replica,
-f32, the chain without drop-path). The axiom
+either precision). The axiom
 audit re-derives every tie under the same three axioms, and CI prints a green
 cell for a network only when its tie capstone is in that closure, so the
 scorecard cannot claim more than the kernel checked. What stays trusted is
