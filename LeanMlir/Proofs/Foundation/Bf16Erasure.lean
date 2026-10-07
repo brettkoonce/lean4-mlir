@@ -1,13 +1,14 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Basic
+import LeanMlir.Proofs.Codegen.StableHLO.PrecisionSwitch
 import LeanMlir.Proofs.Foundation.ParamGradNodes
 
 /-! # Erasure — every batched bf16 kind is its f32 peer at the identity rounding
 
-`flatConvFBf16_id` (`StableHLO/Basic.lean`) says of the per-example CIFAR conv that the bf16 op
+`flatConvFBf16_id` (`StableHLO.Basic`) says of the per-example CIFAR conv that the bf16 op
 "adds ROUNDING and nothing else — no reassociation, no dropped bias, no moved padding". This file
 says it of the twenty-five batched kinds the ImageNet renders emit: for each, `den` (or `denOp`)
 at `rnd := id` is the f32 constructor's `den`, named against its own peer. The renderers pass
-`zrnd = id` (`StableHLO/Pretty.lean`), so these are the equalities the rendered bf16 ASTs satisfy,
+`zrnd = id` (`StableHLO.Pretty`), so these are the equalities the rendered bf16 ASTs satisfy,
 and they are what lets a whole-net statement at the f32 nodes be restated at the bf16 artifact
 (planning/bf16_tie.md §3).
 
@@ -25,6 +26,13 @@ mismatched pairing fails to prove — which is the check.
 
 Two bias splits the suite did not have (`flatConvStride2`, `depthwiseStride2FlatXla`) are proved
 here beside their siblings' pattern from `ParamGradNodes`.
+
+The last section states the same thing of the renderers' switches (`StableHLO.PrecisionSwitch`):
+`denOp (.convAt bf16 id …) = denOp (.conv …)` for either `bf16`, one lemma per switch. A typed
+forward graph built on the switches (`r34IdGraphB`, …) is then faithful at either precision by the
+f32 proof with these rewrites in front of it — `simp only […, denOp_convAt_id]` before `denOp`,
+since on a symbolic `bf16` the `denOp` equations are stuck on the `if` and simp would otherwise
+unfold it to a stuck `match`.
 
 Nothing here says how large the rounding is; `rnd` is a binder everywhere else and `id` here.
 -/
@@ -246,5 +254,207 @@ theorem patchEmbedWeightGradBBf16_id {N ic H W P tk D : Nat} (xN : String)
     (x : Vec (N * (ic * H * W))) (e : SHlo (N * ((tk + 1) * D))) :
     den (.patchEmbedWeightGradBBf16 (P := P) id xN x e)
       = den (.patchEmbedWeightGradB (P := P) xN x e) := rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The renderers' switches at `id` — either `bf16`, the f32 peer
+--   `cases bf16`: `false` is the f32 branch by reduction, `true` the erasure above.
+-- ════════════════════════════════════════════════════════════════
+
+theorem denOp_convAt_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    denOp (BatchableOp.convAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.conv (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact convBf16_id wN bN W b
+
+theorem denOp_convStridedAt_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    denOp (BatchableOp.convStridedAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.convStrided (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact convStridedBf16_id wN bN W b
+
+theorem denOp_convStridedXlaAt_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    denOp (BatchableOp.convStridedXlaAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.convStridedXla (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact convStridedXlaBf16_id wN bN W b
+
+theorem denOp_convStride4At_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    denOp (BatchableOp.convStride4At bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.convStride4 (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact convStride4Bf16_id wN bN W b
+
+theorem denOp_depthwiseAt_id (bf16 : Bool) {c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    denOp (BatchableOp.depthwiseAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.depthwise (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact depthwiseBf16_id wN bN W b
+
+theorem denOp_depthwiseStridedAt_id (bf16 : Bool) {c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    denOp (BatchableOp.depthwiseStridedAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.depthwiseStrided (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedBf16_id wN bN W b
+
+theorem denOp_depthwiseStridedXlaAt_id (bf16 : Bool) {c h w kH kW : Nat} (wN bN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    denOp (BatchableOp.depthwiseStridedXlaAt bf16 (h := h) (w := w) id wN bN W b)
+      = denOp (.depthwiseStridedXla (h := h) (w := w) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedXlaBf16_id wN bN W b
+
+theorem denOp_denseRowAt_id (bf16 : Bool) {N a c : Nat} (wN bN : String) (W : Mat a c)
+    (b : Vec c) :
+    denOp (BatchableOp.denseRowAt bf16 (N := N) id wN bN W b)
+      = denOp (.denseRow (N := N) wN bN W b) := by
+  cases bf16
+  · rfl
+  · exact denseRowBf16_id wN bN W b
+
+theorem denOp_denseRowBackAt_id (bf16 : Bool) {rows a c : Nat} (wN : String) (W : Mat a c) :
+    denOp (BatchableOp.denseRowBackAt bf16 (rows := rows) id wN W)
+      = denOp (.denseRowBack (rows := rows) wN W) := by
+  cases bf16
+  · rfl
+  · exact denseRowBackBf16_id wN W
+
+theorem den_flatConvFAt_id (bf16 : Bool) {ic oc h w kH kW : Nat} (wN bN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic * h * w)) :
+    den (SHlo.flatConvFAt bf16 (h := h) (w := w) id wN bN W b e)
+      = den (.flatConvF (h := h) (w := w) wN bN W b e) := by
+  cases bf16
+  · rfl
+  · exact flatConvFBf16_id wN bN W b e
+
+theorem den_matmulFBAt_id (bf16 : Bool) {N m k n : Nat} (a : SHlo (N * (m * k)))
+    (b : SHlo (N * (k * n))) :
+    den (SHlo.matmulFBAt bf16 id a b) = den (.matmulFB a b) := by
+  cases bf16
+  · rfl
+  · exact matmulFBBf16_id a b
+
+theorem den_convBackBatchedAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat} (wN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convBackBatchedAt bf16 (ic := ic) (h := h) (w := w) id wN W b e)
+      = den (.convBackBatched (ic := ic) (h := h) (w := w) wN W b e) := by
+  cases bf16
+  · rfl
+  · exact convBackBatchedBf16_id wN W b e
+
+theorem den_convStridedBackBatchedAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat} (wN : String)
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convStridedBackBatchedAt bf16 (ic := ic) (h := h) (w := w) id wN W b e)
+      = den (.convStridedBackBatched (ic := ic) (h := h) (w := w) wN W b e) := by
+  cases bf16
+  · rfl
+  · exact convStridedBackBatchedBf16_id wN W b e
+
+theorem den_depthwiseBackBatchedAt_id (bf16 : Bool) {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseBackBatchedAt bf16 (h := h) (w := w) id wN W b e)
+      = den (.depthwiseBackBatched (h := h) (w := w) wN W b e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseBackBatchedBf16_id wN W b e
+
+theorem den_depthwiseStridedBackBatchedAt_id (bf16 : Bool) {N c h w kH kW : Nat} (wN : String)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedBackBatchedAt bf16 (h := h) (w := w) id wN W b e)
+      = den (.depthwiseStridedBackBatched (h := h) (w := w) wN W b e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedBackBatchedBf16_id wN W b e
+
+theorem den_depthwiseStridedXlaBackBatchedAt_id (bf16 : Bool) {N c h w kH kW : Nat}
+    (wN : String) (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedXlaBackBatchedAt bf16 (h := h) (w := w) id wN W b e)
+      = den (.depthwiseStridedXlaBackBatched (h := h) (w := w) wN W b e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedXlaBackBatchedBf16_id wN W b e
+
+theorem den_convWeightGradBAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat} (xN : String)
+    (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW)
+    (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.convWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact convWeightGradBBf16_id xN b x W e
+
+theorem den_convStridedWeightGradBAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat} (xN : String)
+    (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+    (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convStridedWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.convStridedWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact convStridedWeightGradBBf16_id xN b x W e
+
+theorem den_convStridedXlaWeightGradBAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat}
+    (xN : String) (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
+    (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convStridedXlaWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.convStridedXlaWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact convStridedXlaWeightGradBBf16_id xN b x W e
+
+theorem den_convStride4WeightGradBAt_id (bf16 : Bool) {N ic oc h w kH kW : Nat} (xN : String)
+    (b : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (W : Kernel4 oc ic kH kW)
+    (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.convStride4WeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.convStride4WeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact convStride4WeightGradBBf16_id xN b x W e
+
+theorem den_depthwiseWeightGradBAt_id (bf16 : Bool) {N c h w kH kW : Nat} (xN : String)
+    (b : Vec c) (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW)
+    (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.depthwiseWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseWeightGradBBf16_id xN b x W e
+
+theorem den_depthwiseStridedWeightGradBAt_id (bf16 : Bool) {N c h w kH kW : Nat} (xN : String)
+    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.depthwiseStridedWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedWeightGradBBf16_id xN b x W e
+
+theorem den_depthwiseStridedXlaWeightGradBAt_id (bf16 : Bool) {N c h w kH kW : Nat}
+    (xN : String) (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (e : SHlo (N * (c * h * w))) :
+    den (SHlo.depthwiseStridedXlaWeightGradBAt bf16 (h := h) (w := w) id xN b x W e)
+      = den (.depthwiseStridedXlaWeightGradB (h := h) (w := w) xN b x W e) := by
+  cases bf16
+  · rfl
+  · exact depthwiseStridedXlaWeightGradBBf16_id xN b x W e
+
+theorem den_rowDenseWeightGradBAt_id (bf16 : Bool) {N tk a c : Nat} (xN : String)
+    (x : Vec (N * (tk * a))) (e : SHlo (N * (tk * c))) :
+    den (SHlo.rowDenseWeightGradBAt bf16 (a := a) id xN x e)
+      = den (.rowDenseWeightGradB (a := a) xN x e) := by
+  cases bf16
+  · rfl
+  · exact rowDenseWeightGradBBf16_id xN x e
 
 end Proofs.Bf16Fold

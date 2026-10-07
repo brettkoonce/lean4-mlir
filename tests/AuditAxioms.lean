@@ -2116,6 +2116,31 @@ open Proofs
 #print axioms Proofs.Bf16Fold.depthwiseStridedXlaWeightGradBBf16_id
 #print axioms Proofs.Bf16Fold.rowDenseWeightGradBBf16_id
 #print axioms Proofs.Bf16Fold.patchEmbedWeightGradBBf16_id
+-- …and the renderers' switches at `id`, either `bf16` (StableHLO/PrecisionSwitch.lean)
+#print axioms Proofs.Bf16Fold.denOp_convAt_id
+#print axioms Proofs.Bf16Fold.denOp_convStridedAt_id
+#print axioms Proofs.Bf16Fold.denOp_convStridedXlaAt_id
+#print axioms Proofs.Bf16Fold.denOp_convStride4At_id
+#print axioms Proofs.Bf16Fold.denOp_depthwiseAt_id
+#print axioms Proofs.Bf16Fold.denOp_depthwiseStridedAt_id
+#print axioms Proofs.Bf16Fold.denOp_depthwiseStridedXlaAt_id
+#print axioms Proofs.Bf16Fold.denOp_denseRowAt_id
+#print axioms Proofs.Bf16Fold.denOp_denseRowBackAt_id
+#print axioms Proofs.Bf16Fold.den_flatConvFAt_id
+#print axioms Proofs.Bf16Fold.den_matmulFBAt_id
+#print axioms Proofs.Bf16Fold.den_convBackBatchedAt_id
+#print axioms Proofs.Bf16Fold.den_convStridedBackBatchedAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseBackBatchedAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseStridedBackBatchedAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseStridedXlaBackBatchedAt_id
+#print axioms Proofs.Bf16Fold.den_convWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_convStridedWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_convStridedXlaWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_convStride4WeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseStridedWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_depthwiseStridedXlaWeightGradBAt_id
+#print axioms Proofs.Bf16Fold.den_rowDenseWeightGradBAt_id
 
 -- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den

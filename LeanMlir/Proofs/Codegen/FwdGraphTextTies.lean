@@ -27,8 +27,11 @@ repeating it emits nothing — exactly what the chain does when it names the inp
 outside the guards is the chain's glue: it calls these emitters in the typed graph's nesting
 order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
-**Scope.** f32, `convBias := false`, one replica (`sync := false`) — the configuration the typed
-graphs describe. The bf16 renders swap in `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`);
+**Scope.** `convBias := false`, one replica (`sync := false`) — the configuration the typed
+graphs describe; f32 throughout, and for ResNet-34 also bf16: its typed graphs take the renderer's
+`bf16` flag (`StableHLO.PrecisionSwitch`), so the stem, identity and downsample rows are
+checked at both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
+`…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
@@ -84,18 +87,25 @@ def r34DownW0 (ic oc : Nat) : R34DownW ic oc :=
    fun _ _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0,
    fun _ _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0⟩
 
--- Stem: `r34StemFwdB` = `pretty (r34StemGraphB …)` on `%x`.
+-- Stem: `r34StemFwdB` = `pretty (r34StemGraphB …)` on `%x`, at f32 and at bf16.
 #guard textOf (r34StemFwdB 2 "1.0e-05" false) (·.code) ==
   prettyText 2 (r34StemGraphB "1.0e-05" 2 56 56 (ic := 3) (oc := 64)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%x" _))
+#guard textOf (r34StemFwdB 2 "1.0e-05" false (bf16 := true)) (·.code) ==
+  prettyText 2 (r34StemGraphB "1.0e-05" 2 56 56 (ic := 3) (oc := 64)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%x" _))
 
--- Identity block (`s1b0`, 64 ch at 56²).
+-- Identity block (`s1b0`, 64 ch at 56²), at f32 and at bf16.
 #guard textOf (idFwdB 2 64 56 "1.0e-05" "s1b0" "%in" false) (·.code) ==
-  prettyText 2 (r34IdGraphB "s1b0" "1.0e-05" 2 56 56 (r34IdW0 64) (leaf "%in" _))
+  prettyText 2 (r34IdGraphB "s1b0" "1.0e-05" 2 56 56 (r34IdW0 64) false (leaf "%in" _))
+#guard textOf (idFwdB 2 64 56 "1.0e-05" "s1b0" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (r34IdGraphB "s1b0" "1.0e-05" 2 56 56 (r34IdW0 64) true (leaf "%in" _))
 
--- Downsample block (`d2`, 64 → 128, 56² → 28²).
+-- Downsample block (`d2`, 64 → 128, 56² → 28²), at f32 and at bf16.
 #guard textOf (downFwdB 2 64 128 28 "1.0e-05" "d2" "%in" false) (·.code) ==
-  prettyText 2 (r34DownGraphB "d2" "1.0e-05" 2 28 28 (r34DownW0 64 128) (leaf "%in" _))
+  prettyText 2 (r34DownGraphB "d2" "1.0e-05" 2 28 28 (r34DownW0 64 128) false (leaf "%in" _))
+#guard textOf (downFwdB 2 64 128 28 "1.0e-05" "d2" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (r34DownGraphB "d2" "1.0e-05" 2 28 28 (r34DownW0 64 128) true (leaf "%in" _))
 
 -- Head: GAP(7²) → dense(512 → 10).
 #guard textOf (r34HeadFwdB 2 10 "%in") (·.1) ==

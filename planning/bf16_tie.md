@@ -150,7 +150,21 @@ The CIFAR batched artifacts (`cifar8wb_bf16*`, `cifar8wb_bn_bf16*`) use the same
    forwards go through the bias splits, `denseRowBf16` through `rowBiasFlat`. Registered as a
    `Certs` root (the audit-coverage gate requires it).
 2. ResNet-34 end to end (3.2 and 3.3 for `resnet34in_momdp64bf16`: graph flag, faithful, text
-   ties, step tie, sync tie, ParamGrad). The template; one session.
+   ties, step tie, sync tie, ParamGrad). The template; one session. 3.2 done 2026-10-07: the
+   24 `XAt` switches moved out of `RenderKit` into `StableHLO/PrecisionSwitch.lean` (a leaf on
+   `Basic`, so `Nets/` can import it without the printer); `Bf16Erasure` gained one lemma per
+   switch at `id` for either `bf16` (`denOp_convAt_id`, `den_convBackBatchedAt_id`, …; `cases
+   bf16`, `rfl` / the kind's `_id`); `r34{Id,Down,Stem}GraphB`, `resnet34FwdGraphBFull` and the
+   four sync twins take `(bf16 : Bool)` right before the input `e` (the sync builders are applied
+   to the replica index after `e`, so a trailing default was not available; the B family matches
+   for symmetry), and every `_faithful` / `_shard` is stated for either value — the proofs are the
+   f32 ones with the switch erased first: `simp only […, Bf16Fold.denOp_convAt_id]` BEFORE the
+   `denOp` equations (on a symbolic `bf16` those are stuck on the `if`, and simp otherwise unfolds
+   `denOp` to a stuck `match`), and in the sync shard proofs `simp only [Bf16Fold.denOp_convAt_id]
+   at hc` right after each `den_batchOp_shard`. `FwdGraphTextTies` checks the stem, identity and
+   downsample rows at both values. `ResNet50FullB` / `ResNet50SyncB` (borrowing the R34 stem) and
+   `SpecVJP` pass `false` until their own steps. The comparator tier's
+   `resnet34FwdGraphSyncFull_shard` statement gains the binder and is regenerated.
 3. ResNet-50 (same kinds), then MobileNetV2 / V4 / B0 (the depthwise kinds), ConvNeXt, ViT. Script
    the binder threading (the cone-parametrisation method); compile and fix.
 4. The shared files (3.4), one commit each.

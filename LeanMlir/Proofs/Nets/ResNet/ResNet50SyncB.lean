@@ -276,7 +276,7 @@ def resnet50FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String
                                   (r50ProjGraphSync "s1b0" epsStr R hR N (2 * (2 * (2 * q)))
                                       (2 * (2 * (2 * q))) w.s1b0
                                     (r34StemGraphSync epsStr R hR N (2 * (2 * (2 * q)))
-                                        (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ
+                                        (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ false
                                       e)))))))))))))))))
 
 /-- **Forward-graph faithfulness at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
@@ -300,7 +300,7 @@ theorem resnet50FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 
   have h4 : 0 < 2 * (2 * q) := by omega
   have h8 : 0 < 2 * (2 * (2 * q)) := by omega
   have s0 := r34StemGraphSync_shard epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-    w.sW w.sb w.sε w.sγ w.sβ e X he
+    w.sW w.sb w.sε w.sγ w.sβ false e X he
   have s1 := r50ProjGraphSync_shard "s1b0" epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
     hN h8 h8 w.s1b0 _ _ s0
   have s2 := r50IdGraphSync_shard "s1b1" epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))

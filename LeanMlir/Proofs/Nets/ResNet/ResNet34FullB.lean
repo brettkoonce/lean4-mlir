@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # ResNet-34 at TRUE BATCH-NORM — the whole net's forward and graph
 
@@ -25,6 +26,15 @@ downsample `conv1`s and the three 1x1 projections are all `flatConvStride2`.
 
 **The stem pool is 3x3/s2 (`maxPool3s2Flat`), not 2x2.** Same type, different function, so a
 swap type-checks.
+
+**Precision is a flag on the graph.** Every conv site is `.convAt bf16 id …` / `.convStridedAt
+bf16 id …` (`StableHLO.PrecisionSwitch`, the renderers' own switch), so one builder describes
+the f32 artifact (`bf16 := false`) and the bf16 one (`bf16 := true`, the kinds
+`resnet34in_momdp64bf16` emits); BatchNorm, relu, pool and head carry no flag because no render
+switches them. The faithfulness theorems hold at either value through `Bf16Erasure`
+(`Bf16Fold.denOp_convAt_id`: the bf16 kind at the identity rounding is its f32 peer), so the typed graph
+denotes `resnet34ForwardBFull` whichever precision the text declares. The rounding itself is not
+modelled here, as it is not at f32: `den` is over ℝ at both values.
 
 ## Conventions this net runs at
 
@@ -226,23 +236,24 @@ namespace StableHLO
 /-- Identity basic-block graph: `relu(addV(bn(conv(relu(bn(conv e)))), e))`. The skip reuses the
     block-input subtree `e` in both `addV` operands, as the render does. -/
 def r34IdGraphB (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R34IdW c)
-    (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   .batchOp (N := N) (.relu (n := c * h * w))
     (.addVB
       (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" c) pw.W₂ pw.b₂)
+        (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" c) pw.W₂ pw.b₂)
           (.batchOp (N := N) (.relu (n := c * h * w))
             (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
-              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" c) pw.W₁ pw.b₁) e)))))
+              (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" c) pw.W₁ pw.b₁) e)))))
       e)
 
 theorem r34IdGraphB_faithful (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R34IdW c)
-    (e : SHlo (N * (c * h * w))) :
-    den (r34IdGraphB p epsStr N h w pw e) = r34IdB N h w pw (den e) := by
+    (bf16 : Bool) (e : SHlo (N * (c * h * w))) :
+    den (r34IdGraphB p epsStr N h w pw bf16 e) = r34IdB N h w pw (den e) := by
   unfold r34IdGraphB r34IdB projB cbReluB residual biPath
-  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
-    den_addVB,
-    Function.comp_apply]
+  -- the switch first (`Bf16Erasure`), then the f32 per-kind denotations
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    den_bnBatchF, den_addVB]
+  simp only [denOp, Function.comp_apply]
 
 /-- Downsample basic-block graph: `relu(addVB(body, projection))` — body first, the order the
     render emits (so `pretty` of this graph is the rendered block's text); `residualProj proj body`
@@ -250,42 +261,44 @@ theorem r34IdGraphB_faithful (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R
     branches read the block-input subtree `e`; both stride-2 convs are `.convStrided` (symmetric
     padding). -/
 def r34DownGraphB (p epsStr : String) (N h w : Nat) {ic oc : Nat} (pw : R34DownW ic oc)
-    (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" oc) pw.W₂ pw.b₂)
+        (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" oc) pw.W₂ pw.b₂)
           (.batchOp (N := N) (.relu (n := oc * h * w))
             (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
               (.batchOp (N := N)
-                (.convStrided (h := h) (w := w) s!"%{p}W1" (biasName false "" oc) pw.W₁ pw.b₁) e)))))
+                (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" oc) pw.W₁ pw.b₁) e)))))
       (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
-        (.batchOp (N := N) (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
+        (.batchOp (N := N) (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
 
 theorem r34DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic oc : Nat}
-    (pw : R34DownW ic oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (r34DownGraphB p epsStr N h w pw e) = r34DownB N h w pw (den e) := by
+    (pw : R34DownW ic oc) (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
+    den (r34DownGraphB p epsStr N h w pw bf16 e) = r34DownB N h w pw (den e) := by
   unfold r34DownGraphB r34DownB projB projStridedB cbReluStridedB residualProj biPath
-  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, den_addVB, Function.comp_apply, add_comm]
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    Bf16Fold.denOp_convStridedAt_id, den_bnBatchF, den_addVB]
+  simp only [denOp, Function.comp_apply, add_comm]
 
 /-- Stem graph: 7x7/s2 conv -> bn -> relu -> 3x3/s2 max-pool. -/
 def r34StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
-    (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.maxPool3s2 (c := oc) (h := h) (w := w))
     (.batchOp (N := N) (.relu (n := oc * (2 * h) * (2 * w)))
       (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-        (.batchOp (N := N) (.convStrided (h := 2 * h) (w := 2 * w) "%sW" (biasName false "" oc) Ws bs) e)))
+        (.batchOp (N := N) (.convStridedAt bf16 id (h := 2 * h) (w := 2 * w) "%sW" (biasName false "" oc) Ws bs) e)))
 
 theorem r34StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
-    (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
-    den (r34StemGraphB epsStr N h w Ws bs εs γs βs e)
+    (bf16 : Bool) (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
+    den (r34StemGraphB epsStr N h w Ws bs εs γs βs bf16 e)
       = r34StemB N h w Ws bs εs γs βs (den e) := by
   unfold r34StemGraphB r34StemB cbReluStridedB
-  simp only [den_batchOp, denOp, ↓den_batchOp_relu_eq_reluF, reluF_faithful, den_bnBatchF,
-    Function.comp_apply]
+  simp only [den_batchOp, Bf16Fold.denOp_convStridedAt_id, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
+    den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- Head graph: GAP then dense. -/
 def r34HeadGraphB (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
@@ -305,34 +318,36 @@ theorem r34HeadGraphB_faithful (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (b
 
 /-- **The full batch-BN ResNet-34 forward graph.** Block prefixes are the render's
     (`s1b0`/`d2`/`s2b0`/... ), so the typed graph diffs against `resnet34_fwd`'s batched peers
-    name for name. -/
+    name for name. `bf16` selects the conv kinds at every site (`.convAt` / `.convStridedAt`). -/
 def resnet34FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : R34BWeights nCls)
-    (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : SHlo (N * nCls) :=
+    (bf16 : Bool) (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : SHlo (N * nCls) :=
   r34HeadGraphB N 7 7 w.Wd w.bd
-    (r34IdGraphB "s4b1" epsStr N 7 7 w.e1
-      (r34IdGraphB "s4b0" epsStr N 7 7 w.e0
-        (r34DownGraphB "d4" epsStr N 7 7 w.d4
-          (r34IdGraphB "s3b4" epsStr N 14 14 w.c4
-            (r34IdGraphB "s3b3" epsStr N 14 14 w.c3
-              (r34IdGraphB "s3b2" epsStr N 14 14 w.c2
-                (r34IdGraphB "s3b1" epsStr N 14 14 w.c1
-                  (r34IdGraphB "s3b0" epsStr N 14 14 w.c0
-                    (r34DownGraphB "d3" epsStr N 14 14 w.d3
-                      (r34IdGraphB "s2b2" epsStr N 28 28 w.b2
-                        (r34IdGraphB "s2b1" epsStr N 28 28 w.b1
-                          (r34IdGraphB "s2b0" epsStr N 28 28 w.b0
-                            (r34DownGraphB "d2" epsStr N 28 28 w.d2
-                              (r34IdGraphB "s1b2" epsStr N 56 56 w.a2
-                                (r34IdGraphB "s1b1" epsStr N 56 56 w.a1
-                                  (r34IdGraphB "s1b0" epsStr N 56 56 w.a0
-                                    (r34StemGraphB epsStr N 56 56 w.sW w.sb w.sε w.sγ w.sβ
+    (r34IdGraphB "s4b1" epsStr N 7 7 w.e1 bf16
+      (r34IdGraphB "s4b0" epsStr N 7 7 w.e0 bf16
+        (r34DownGraphB "d4" epsStr N 7 7 w.d4 bf16
+          (r34IdGraphB "s3b4" epsStr N 14 14 w.c4 bf16
+            (r34IdGraphB "s3b3" epsStr N 14 14 w.c3 bf16
+              (r34IdGraphB "s3b2" epsStr N 14 14 w.c2 bf16
+                (r34IdGraphB "s3b1" epsStr N 14 14 w.c1 bf16
+                  (r34IdGraphB "s3b0" epsStr N 14 14 w.c0 bf16
+                    (r34DownGraphB "d3" epsStr N 14 14 w.d3 bf16
+                      (r34IdGraphB "s2b2" epsStr N 28 28 w.b2 bf16
+                        (r34IdGraphB "s2b1" epsStr N 28 28 w.b1 bf16
+                          (r34IdGraphB "s2b0" epsStr N 28 28 w.b0 bf16
+                            (r34DownGraphB "d2" epsStr N 28 28 w.d2 bf16
+                              (r34IdGraphB "s1b2" epsStr N 56 56 w.a2 bf16
+                                (r34IdGraphB "s1b1" epsStr N 56 56 w.a1 bf16
+                                  (r34IdGraphB "s1b0" epsStr N 56 56 w.a0 bf16
+                                    (r34StemGraphB epsStr N 56 56 w.sW w.sb w.sε w.sγ w.sβ bf16
                                       e)))))))))))))))))
 
 /-- **Forward-graph faithfulness for ResNet-34 at batch BN**: the typed graph denotes the
-    whole-net forward. -/
+    whole-net forward, at either precision — `bf16 := false` is the f32 artifacts' graph,
+    `bf16 := true` the bf16 ones' (`resnet34in_momdp64bf16`'s kinds), and the right-hand side is
+    the same `resnet34ForwardBFull`. -/
 theorem resnet34FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : R34BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    den (resnet34FwdGraphBFull N epsStr w e) = resnet34ForwardBFull N w (den e) := by
+    (w : R34BWeights nCls) (bf16 : Bool) (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
+    den (resnet34FwdGraphBFull N epsStr w bf16 e) = resnet34ForwardBFull N w (den e) := by
   -- one `rw` per block over the eighteen per-kind faithfulness lemmas
   unfold resnet34FwdGraphBFull resnet34ForwardBFull
   rw [r34HeadGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful, r34DownGraphB_faithful,

@@ -327,9 +327,9 @@ open Proofs.StableHLO in
     `resnet34FwdGraphBFull_faithful` composed with the tie. -/
 theorem resnet34VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : R34BWeights 10)
     (e : SHlo (N * (3 * 224 * 224))) :
-    den (resnet34FwdGraphBFull N epsStr w e)
+    den (resnet34FwdGraphBFull N epsStr w false e)
       = denoteR34FullB N resnet34Verified.layers w (den e) :=
-  (resnet34FwdGraphBFull_faithful N epsStr w e).trans
+  (resnet34FwdGraphBFull_faithful N epsStr w false e).trans
     (congrFun (resnet34VerifiedB_denote_eq N w).symm (den e))
 
 -- ── EfficientNet-B0 (FULL, batched): the committed 21-entry spec ↔ efficientnetForwardBFull ──

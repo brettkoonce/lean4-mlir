@@ -426,14 +426,14 @@ theorem r50DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
 def r50StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) : SHlo (N * (oc * h * w)) :=
-  r34StemGraphB epsStr N h w Ws bs εs γs βs e
+  r34StemGraphB epsStr N h w Ws bs εs γs βs false e
 
 theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     den (r50StemGraphB epsStr N h w Ws bs εs γs βs e)
       = r34StemB N h w Ws bs εs γs βs (den e) :=
-  r34StemGraphB_faithful epsStr N h w Ws bs εs γs βs e
+  r34StemGraphB_faithful epsStr N h w Ws bs εs γs βs false e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness

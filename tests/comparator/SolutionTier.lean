@@ -999,7 +999,7 @@ theorem chk_den_allReduceMeanF_convWeightGradBBf16_sub_global :
 theorem chk_resnet34FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R34BWeights nCls)
+        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R34BWeights nCls) (bf16 : Bool)
           (e :
             Fin R →
               Proofs.StableHLO.SHlo (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
@@ -1008,7 +1008,7 @@ theorem chk_resnet34FwdGraphSyncFull_shard :
               Proofs.StableHLO.den (e r) =
                 Proofs.batchShard R N ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.resnet34FwdGraphSyncFull R hR N epsStr w e r) =
+              Proofs.StableHLO.den (Proofs.StableHLO.resnet34FwdGraphSyncFull R hR N epsStr w bf16 e r) =
                 Proofs.batchShard R N nCls (Proofs.resnet34ForwardBFull (R * N) w X) r :=
   Proofs.StableHLO.resnet34FwdGraphSyncFull_shard
 
