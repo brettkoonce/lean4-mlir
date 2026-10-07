@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
-import LeanMlir.Proofs.Foundation.ParamGradNodes
 import LeanMlir.Proofs.Training.BatchSealKit
 
 /-! # ResNet-34 — every parameter gradient node IS the loss's derivative in that parameter

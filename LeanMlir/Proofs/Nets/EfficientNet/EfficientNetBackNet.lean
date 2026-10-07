@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Foundation.Batched.BackLinks
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # EfficientNet's MBConv1 and head backward graphs

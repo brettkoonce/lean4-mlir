@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Codegen.StableHLO.PrecisionSwitch
 import LeanMlir.Proofs.Foundation.ParamGradNodes
 

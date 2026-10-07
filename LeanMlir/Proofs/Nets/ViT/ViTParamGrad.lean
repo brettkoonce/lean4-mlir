@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
-import LeanMlir.Proofs.Foundation.ParamGradNodes
 
 /-! # ViT-Tiny — every parameter gradient node IS the loss's derivative in that parameter
 

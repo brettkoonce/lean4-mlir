@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
-import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 import LeanMlir.Proofs.Foundation.GradNodesBAt
 
 /-! # EfficientNet-B0's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`

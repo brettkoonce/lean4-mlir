@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
-import LeanMlir.Proofs.Foundation.ParamGradNodes
-import LeanMlir.Proofs.Foundation.GradNodesBAt
 
 /-! # MobileNetV4-Conv-M — every parameter gradient node IS the loss's derivative in that parameter
 

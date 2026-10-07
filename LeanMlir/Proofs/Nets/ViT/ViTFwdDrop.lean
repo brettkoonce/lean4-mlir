@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
-import LeanMlir.Proofs.Foundation.ParamGrad
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Proofs.Foundation.Bf16Erasure
 

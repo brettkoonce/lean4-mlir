@@ -1,5 +1,3 @@
-import LeanMlir.Proofs.Foundation.Batched.Stages
-import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # The BATCHED EfficientNet-B0 block forwards and graphs (true batch-norm, matches the render)

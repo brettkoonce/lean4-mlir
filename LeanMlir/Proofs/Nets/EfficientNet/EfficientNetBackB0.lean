@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Foundation.Batched.BackLinks
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 

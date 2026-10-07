@@ -1,7 +1,4 @@
-import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.GradNodesBAt
-import LeanMlir.Proofs.Foundation.SmoothedLossCot
-import LeanMlir.Proofs.Foundation.Batched.BackLinks
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 
 /-! # EfficientNet-B0's step tie at the un-fused gradient and the smoothed loss

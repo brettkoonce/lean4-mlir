@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
-import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # ConvNeXt-T — every parameter gradient node IS the loss's derivative in that parameter
 

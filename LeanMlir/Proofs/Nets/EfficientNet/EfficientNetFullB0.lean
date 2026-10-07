@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
-import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # The FULL EfficientNet-B0 — all 16 MBConv blocks, batched forward graph + faithfulness
 

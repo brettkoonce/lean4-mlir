@@ -1,7 +1,5 @@
-import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
-import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # ResNet-34's step TIE at TRUE BATCH-NORM — the un-fused, batched whole-net thread
 
