@@ -172,6 +172,7 @@ theorem chk_smoothedCE_grad :
 /-- `Proofs.ResNet50TieB.r50_net_tiedB` -/
 theorem chk_r50_net_tiedB :
     ∀ (N q : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls)
+      (bf16 : Bool)
       (x :
         Proofs.Vec
           (N *
@@ -210,38 +211,38 @@ theorem chk_r50_net_tiedB :
         Proofs.ResNet50TieB.r50ProjCotIn N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))
           w.s1b0 (Proofs.r50Pre0 N q w x) dy1;
       Proofs.ResNet34TieB.r34StemTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN cotN
-          vN epsStr w.sW w.sb w.sε w.sγ w.sβ false x cotPool ∧
+          vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 x cotPool ∧
         Proofs.ResNet50TieB.r50ProjTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-            cotN vN epsStr w.s1b0 (Proofs.r50Pre0 N q w x) dy1 ∧
+            cotN vN epsStr w.s1b0 bf16 (Proofs.r50Pre0 N q w x) dy1 ∧
           Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-              cotN vN epsStr w.s1b1 (Proofs.r50Pre1 N q w x) dy2 ∧
+              cotN vN epsStr w.s1b1 bf16 (Proofs.r50Pre1 N q w x) dy2 ∧
             Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) xN
-                cotN vN epsStr w.s1b2 (Proofs.r50Pre2 N q w x) dy3 ∧
+                cotN vN epsStr w.s1b2 bf16 (Proofs.r50Pre2 N q w x) dy3 ∧
               Proofs.ResNet50TieB.r50DownTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                  w.s2b0 (Proofs.r50Pre3 N q w x) dy4 ∧
+                  w.s2b0 bf16 (Proofs.r50Pre3 N q w x) dy4 ∧
                 Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                    w.s2b1 (Proofs.r50Pre4 N q w x) dy5 ∧
+                    w.s2b1 bf16 (Proofs.r50Pre4 N q w x) dy5 ∧
                   Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                      w.s2b2 (Proofs.r50Pre5 N q w x) dy6 ∧
+                      w.s2b2 bf16 (Proofs.r50Pre5 N q w x) dy6 ∧
                     Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) xN cotN vN epsStr
-                        w.s2b3 (Proofs.r50Pre6 N q w x) dy7 ∧
-                      Proofs.ResNet50TieB.r50DownTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b0
+                        w.s2b3 bf16 (Proofs.r50Pre6 N q w x) dy7 ∧
+                      Proofs.ResNet50TieB.r50DownTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b0 bf16
                           (Proofs.r50Pre7 N q w x) dy8 ∧
-                        Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b1
+                        Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b1 bf16
                             (Proofs.r50Pre8 N q w x) dy9 ∧
-                          Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b2
+                          Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b2 bf16
                               (Proofs.r50Pre9 N q w x) dy10 ∧
-                            Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b3
+                            Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b3 bf16
                                 (Proofs.r50Pre10 N q w x) dy11 ∧
-                              Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b4
+                              Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b4 bf16
                                   (Proofs.r50Pre11 N q w x) dy12 ∧
-                                Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b5
+                                Proofs.ResNet50TieB.r50IdTiedB N ((2 : ℕ) * q) ((2 : ℕ) * q) xN cotN vN epsStr w.s3b5 bf16
                                     (Proofs.r50Pre12 N q w x) dy13 ∧
-                                  Proofs.ResNet50TieB.r50DownTiedB N q q xN cotN vN epsStr w.s4b0 (Proofs.r50Pre13 N q w x)
-                                      dy14 ∧
-                                    Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b1 (Proofs.r50Pre14 N q w x)
-                                        dy15 ∧
-                                      Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b2
+                                  Proofs.ResNet50TieB.r50DownTiedB N q q xN cotN vN epsStr w.s4b0 bf16
+                                      (Proofs.r50Pre13 N q w x) dy14 ∧
+                                    Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b1 bf16
+                                        (Proofs.r50Pre14 N q w x) dy15 ∧
+                                      Proofs.ResNet50TieB.r50IdTiedB N q q xN cotN vN epsStr w.s4b2 bf16
                                           (Proofs.r50Pre15 N q w x) dy16 ∧
                                         Proofs.ResNet34TieB.r34HeadTiedB N q q xN cotN w.Wd w.bd (Proofs.r50Pre16 N q w x) g :=
   Proofs.ResNet50TieB.r50_net_tiedB
@@ -726,7 +727,7 @@ theorem chk_r50_net_lossGrad :
     ∀ (N q : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
       (w : Proofs.R50BWeights nCls),
       Proofs.R50PosB w →
-        ∀
+        ∀ (bf16 : Bool)
           (x :
             Proofs.Vec
               (N *
@@ -735,7 +736,7 @@ theorem chk_r50_net_lossGrad :
           Proofs.ResNet50TieB.R50LossSmoothAtB N q w x →
             ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
               Proofs.HasGradAt L (Proofs.resnet50ForwardBFull N q w x) g →
-                Proofs.ResNet50TieB.R50NetLossTiedB N q xN cotN vN epsStr w x L g :=
+                Proofs.ResNet50TieB.R50NetLossTiedB N q xN cotN vN epsStr w bf16 x L g :=
   Proofs.ResNet50TieB.r50_net_lossGrad
 
 /-- `Proofs.MobileNetV2TieB.mnv2_net_lossGrad` -/
@@ -1080,7 +1081,7 @@ theorem chk_resnet50FwdGraphSyncFull_shard :
       (0 : ℕ) < N →
         ∀ (q : ℕ),
           (0 : ℕ) < q →
-            ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R50BWeights nCls)
+            ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R50BWeights nCls) (bf16 : Bool)
               (e :
                 Fin R →
                   Proofs.StableHLO.SHlo
@@ -1099,7 +1100,7 @@ theorem chk_resnet50FwdGraphSyncFull_shard :
                         ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))
                       X r) →
                 ∀ (r : Fin R),
-                  Proofs.StableHLO.den (Proofs.StableHLO.resnet50FwdGraphSyncFull R hR N q epsStr w e r) =
+                  Proofs.StableHLO.den (Proofs.StableHLO.resnet50FwdGraphSyncFull R hR N q epsStr w bf16 e r) =
                     Proofs.batchShard R N nCls (Proofs.resnet50ForwardBFull (R * N) q w X) r :=
   Proofs.StableHLO.resnet50FwdGraphSyncFull_shard
 
@@ -1109,7 +1110,7 @@ theorem chk_r50_net_syncTiedB :
       (0 : ℕ) < N →
         ∀ (q : ℕ),
           (0 : ℕ) < q →
-            ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls)
+            ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R50BWeights nCls) (bf16 : Bool)
               (X :
                 Proofs.Vec
                   (R * N *
@@ -1117,7 +1118,7 @@ theorem chk_r50_net_syncTiedB :
                       ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
               (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
               (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-                Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w X G gs :=
+                Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 X G gs :=
   Proofs.ResNet50SyncTieB.r50_net_syncTiedB
 
 /-- `Proofs.StableHLO.mnv4FwdGraphSyncFull_shard` -/

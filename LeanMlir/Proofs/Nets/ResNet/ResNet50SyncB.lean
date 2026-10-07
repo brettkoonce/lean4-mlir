@@ -10,7 +10,7 @@ then `bnSyncF` — so the statistics each replica normalises by are the GLOBAL b
 that theorem's data-parallel twin: that forward graph, stated as a family over the `R` replicas, denotes on
 replica `r` exactly `batchShard r` of the single-device forward at the global batch `R·N`.
 
-    den (resnet50FwdGraphSyncFull R hR N q epsStr w e r)
+    den (resnet50FwdGraphSyncFull R hR N q epsStr w bf16 e r)
       = batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r
 
 given that each replica's input is its shard of one global batch `X`. **The spec does not
@@ -46,7 +46,9 @@ The conv/relu chain runs at the left-assoc index `N·(c·h·w)`; `bnSyncF` and i
 ## What is NOT claimed here
 
 No stochastic depth: the graph is the drop-path-free forward, as the single-device graph is. The
-f32 nodes — the bf16 conv twins are not this statement. The DP artifacts run with no conv biases;
+nodes at either precision — `bf16` selects the conv kinds at every site, as `ResNet34SyncB`,
+`true` being the bf16 DP artifacts' graph (`resnet50in160_lambaccdp4x128wxclipbcebf16`, …), read
+at the identity rounding (`Bf16Erasure`). The DP artifacts run with no conv biases;
 the bias operand is `biasName false "" c`, the render's own function, and the bias fields stay
 `∀`-quantified as in `ResNet50FullB`. The backward and the parameter collectives are
 `ResNet50SyncTieB.r50_net_syncTiedB`'s. That the `R` replicas' inputs ARE the shards of one batch
@@ -70,23 +72,24 @@ namespace StableHLO
     `relu(addVB(bn₃(conv₃(relu(bn₂(conv₂(relu(bn₁(conv₁ e))))))), e))`, every BatchNorm a
     `bnSyncSiteLA`. The single-device `r50IdGraphB` with the three sites swapped. -/
 def r50IdGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat}
-    (pw : R50IdW mid oc) (e : Fin R → SHlo (N * (oc * h * w))) : Fin R → SHlo (N * (oc * h * w)) :=
+    (pw : R50IdW mid oc) (bf16 : Bool) (e : Fin R → SHlo (N * (oc * h * w))) :
+    Fin R → SHlo (N * (oc * h * w)) :=
   fun r => .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc] R hR
         pw.ε₃ pw.γ₃ pw.β₃
         (fun r => .batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid] R hR
               pw.ε₂ pw.γ₂ pw.β₂
               (fun r => .batchOp (N := N)
-                (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
                     R hR pw.ε₁ pw.γ₁ pw.β₁
                     (fun r => .batchOp (N := N)
-                      (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
+                      (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
                       (e r))
                     r)))
               r)))
@@ -94,24 +97,27 @@ def r50IdGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {mid
       (e r))
 
 theorem r50IdGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
-    {mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50IdW mid oc)
+    {mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50IdW mid oc) (bf16 : Bool)
     (e : Fin R → SHlo (N * (oc * h * w))) (X : Vec ((R * N) * (oc * h * w)))
     (he : ∀ r, den (e r) = batchShard R N (oc * h * w) X r) (r : Fin R) :
-    den (r50IdGraphSync p epsStr R hR N h w pw e r)
+    den (r50IdGraphSync p epsStr R hR N h w pw bf16 e r)
       = batchShard R N (oc * h * w) (r50IdB (R * N) h w pw X) r := by
   have hm := nhw_ne_zero hN hh hw
   have hc1 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+  simp only [Bf16Fold.denOp_convAt_id] at hc1
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
     R hR hm pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+  simp only [Bf16Fold.denOp_convAt_id] at hc2
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
     R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+  simp only [Bf16Fold.denOp_convAt_id] at hc3
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
     R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have ha := den_addVB_shard _ e _ X hn3 he
@@ -121,24 +127,24 @@ theorem r50IdGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w :
     plus a 1×1 conv → sync-BN skip at unchanged resolution, added in the render's order
     `addVB(body, projection)`. Four sync sites. -/
 def r50ProjGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pw : R50ProjW ic mid oc) (e : Fin R → SHlo (N * (ic * h * w))) :
+    (pw : R50ProjW ic mid oc) (bf16 : Bool) (e : Fin R → SHlo (N * (ic * h * w))) :
     Fin R → SHlo (N * (oc * h * w)) :=
   fun r => .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc] R hR
         pw.ε₃ pw.γ₃ pw.β₃
         (fun r => .batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid] R hR
               pw.ε₂ pw.γ₂ pw.β₂
               (fun r => .batchOp (N := N)
-                (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
                     R hR pw.ε₁ pw.γ₁ pw.β₁
                     (fun r => .batchOp (N := N)
-                      (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
+                      (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
                       (e r))
                     r)))
               r)))
@@ -146,32 +152,36 @@ def r50ProjGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {i
       (bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc] R hR
         pw.εp pw.γp pw.βp
         (fun r => .batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) (e r))
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) (e r))
         r))
 
 theorem r50ProjGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
-    {ic mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50ProjW ic mid oc)
+    {ic mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50ProjW ic mid oc) (bf16 : Bool)
     (e : Fin R → SHlo (N * (ic * h * w))) (X : Vec ((R * N) * (ic * h * w)))
     (he : ∀ r, den (e r) = batchShard R N (ic * h * w) X r) (r : Fin R) :
-    den (r50ProjGraphSync p epsStr R hR N h w pw e r)
+    den (r50ProjGraphSync p epsStr R hR N h w pw bf16 e r)
       = batchShard R N (oc * h * w) (r50ProjB (R * N) h w pw X) r := by
   have hm := nhw_ne_zero hN hh hw
   have hc1 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+  simp only [Bf16Fold.denOp_convAt_id] at hc1
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
     R hR hm pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+  simp only [Bf16Fold.denOp_convAt_id] at hc2
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
     R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+  simp only [Bf16Fold.denOp_convAt_id] at hc3
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
     R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have hcp := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
+  simp only [Bf16Fold.denOp_convAt_id] at hcp
   have hnp := den_bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc]
     R hR hm pw.εp pw.γp pw.βp _ _ hcp
   have ha := den_addVB_shard_comm _ _ _ _ hn3 hnp
@@ -182,24 +192,24 @@ theorem r50ProjGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
     `2h × 2w` — that site's statistics reduce over `N·(2h)·(2w)` per replica. Four sync sites,
     added in the render's order `addVB(body, projection)`. -/
 def r50DownGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pw : R50ProjW ic mid oc) (e : Fin R → SHlo (N * (ic * (2 * h) * (2 * w)))) :
+    (pw : R50ProjW ic mid oc) (bf16 : Bool) (e : Fin R → SHlo (N * (ic * (2 * h) * (2 * w)))) :
     Fin R → SHlo (N * (oc * h * w)) :=
   fun r => .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc] R hR
         pw.ε₃ pw.γ₃ pw.β₃
         (fun r => .batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid] R hR
               pw.ε₂ pw.γ₂ pw.β₂
               (fun r => .batchOp (N := N)
-                (.convStrided (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * (2 * h) * (2 * w)))
                   (bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
                     R hR pw.ε₁ pw.γ₁ pw.β₁
                     (fun r => .batchOp (N := N)
-                      (.conv (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid)
+                      (.convAt bf16 id (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid)
                         pw.W₁ pw.b₁)
                       (e r))
                     r)))
@@ -208,36 +218,40 @@ def r50DownGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {i
       (bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc] R hR
         pw.εp pw.γp pw.βp
         (fun r => .batchOp (N := N)
-          (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) (e r))
+          (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) (e r))
         r))
 
 theorem r50DownGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
-    {ic mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50ProjW ic mid oc)
+    {ic mid oc : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pw : R50ProjW ic mid oc) (bf16 : Bool)
     (e : Fin R → SHlo (N * (ic * (2 * h) * (2 * w))))
     (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (he : ∀ r, den (e r) = batchShard R N (ic * (2 * h) * (2 * w)) X r) (r : Fin R) :
-    den (r50DownGraphSync p epsStr R hR N h w pw e r)
+    den (r50DownGraphSync p epsStr R hR N h w pw bf16 e r)
       = batchShard R N (oc * h * w) (r50DownB (R * N) h w pw X) r := by
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
   have hm2 := nhw_ne_zero hN h2h h2w
   have hc1 := den_batchOp_shard (N := N)
-    (.conv (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+    (.convAt bf16 id (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
+  simp only [Bf16Fold.denOp_convAt_id] at hc1
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
     R hR hm2 pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
-    (.convStrided (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+    (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
+  simp only [Bf16Fold.denOp_convStridedAt_id] at hc2
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
     R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
-    (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+    (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
+  simp only [Bf16Fold.denOp_convAt_id] at hc3
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
     R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have hcp := den_batchOp_shard (N := N)
-    (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
+    (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
+  simp only [Bf16Fold.denOp_convStridedAt_id] at hcp
   have hnp := den_bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc]
     R hR hm pw.εp pw.γp pw.βp _ _ hcp
   have ha := den_addVB_shard_comm _ _ _ _ hn3 hnp
@@ -252,31 +266,31 @@ theorem r50DownGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
     prefixes (`s1b0` … `s4b2`) and collective tags are the render's. The stem and head are
     ResNet-34's sync graphs, whose names R50 shares. -/
 def resnet50FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String) {nCls : Nat}
-    (w : R50BWeights nCls)
+    (w : R50BWeights nCls) (bf16 : Bool)
     (e : Fin R → SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     Fin R → SHlo (N * nCls) :=
   r34HeadGraphSync N q q w.Wd w.bd
-    (r50IdGraphSync "s4b2" epsStr R hR N q q w.s4b2
-      (r50IdGraphSync "s4b1" epsStr R hR N q q w.s4b1
-        (r50DownGraphSync "s4b0" epsStr R hR N q q w.s4b0
-          (r50IdGraphSync "s3b5" epsStr R hR N (2 * q) (2 * q) w.s3b5
-            (r50IdGraphSync "s3b4" epsStr R hR N (2 * q) (2 * q) w.s3b4
-              (r50IdGraphSync "s3b3" epsStr R hR N (2 * q) (2 * q) w.s3b3
-                (r50IdGraphSync "s3b2" epsStr R hR N (2 * q) (2 * q) w.s3b2
-                  (r50IdGraphSync "s3b1" epsStr R hR N (2 * q) (2 * q) w.s3b1
-                    (r50DownGraphSync "s3b0" epsStr R hR N (2 * q) (2 * q) w.s3b0
-                      (r50IdGraphSync "s2b3" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b3
-                        (r50IdGraphSync "s2b2" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b2
-                          (r50IdGraphSync "s2b1" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b1
-                            (r50DownGraphSync "s2b0" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b0
+    (r50IdGraphSync "s4b2" epsStr R hR N q q w.s4b2 bf16
+      (r50IdGraphSync "s4b1" epsStr R hR N q q w.s4b1 bf16
+        (r50DownGraphSync "s4b0" epsStr R hR N q q w.s4b0 bf16
+          (r50IdGraphSync "s3b5" epsStr R hR N (2 * q) (2 * q) w.s3b5 bf16
+            (r50IdGraphSync "s3b4" epsStr R hR N (2 * q) (2 * q) w.s3b4 bf16
+              (r50IdGraphSync "s3b3" epsStr R hR N (2 * q) (2 * q) w.s3b3 bf16
+                (r50IdGraphSync "s3b2" epsStr R hR N (2 * q) (2 * q) w.s3b2 bf16
+                  (r50IdGraphSync "s3b1" epsStr R hR N (2 * q) (2 * q) w.s3b1 bf16
+                    (r50DownGraphSync "s3b0" epsStr R hR N (2 * q) (2 * q) w.s3b0 bf16
+                      (r50IdGraphSync "s2b3" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 bf16
+                        (r50IdGraphSync "s2b2" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 bf16
+                          (r50IdGraphSync "s2b1" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 bf16
+                            (r50DownGraphSync "s2b0" epsStr R hR N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 bf16
                               (r50IdGraphSync "s1b2" epsStr R hR N (2 * (2 * (2 * q)))
-                                  (2 * (2 * (2 * q))) w.s1b2
+                                  (2 * (2 * (2 * q))) w.s1b2 bf16
                                 (r50IdGraphSync "s1b1" epsStr R hR N (2 * (2 * (2 * q)))
-                                    (2 * (2 * (2 * q))) w.s1b1
+                                    (2 * (2 * (2 * q))) w.s1b1 bf16
                                   (r50ProjGraphSync "s1b0" epsStr R hR N (2 * (2 * (2 * q)))
-                                      (2 * (2 * (2 * q))) w.s1b0
+                                      (2 * (2 * (2 * q))) w.s1b0 bf16
                                     (r34StemGraphSync epsStr R hR N (2 * (2 * (2 * q)))
-                                        (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ false
+                                        (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ bf16
                                       e)))))))))))))))))
 
 /-- **Forward-graph faithfulness at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
@@ -287,62 +301,62 @@ def resnet50FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String
     hypothesis threaded from each into the next. `0 < q` is what makes every BatchNorm's reduction
     width nonzero. -/
 theorem resnet50FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
-    (hq : 0 < q) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
+    (hq : 0 < q) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls) (bf16 : Bool)
     (e : Fin R → SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (he : ∀ r, den (e r)
       = batchShard R N (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))) X r)
     (r : Fin R) :
-    den (resnet50FwdGraphSyncFull R hR N q epsStr w e r)
+    den (resnet50FwdGraphSyncFull R hR N q epsStr w bf16 e r)
       = batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r := by
   have h1 : 0 < q := hq
   have h2 : 0 < 2 * q := by omega
   have h4 : 0 < 2 * (2 * q) := by omega
   have h8 : 0 < 2 * (2 * (2 * q)) := by omega
   have s0 := r34StemGraphSync_shard epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-    w.sW w.sb w.sε w.sγ w.sβ false e X he
+    w.sW w.sb w.sε w.sγ w.sβ bf16 e X he
   have s1 := r50ProjGraphSync_shard "s1b0" epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
-    hN h8 h8 w.s1b0 _ _ s0
+    hN h8 h8 w.s1b0 bf16 _ _ s0
   have s2 := r50IdGraphSync_shard "s1b1" epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
-    hN h8 h8 w.s1b1 _ _ s1
+    hN h8 h8 w.s1b1 bf16 _ _ s1
   have s3 := r50IdGraphSync_shard "s1b2" epsStr R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
-    hN h8 h8 w.s1b2 _ _ s2
+    hN h8 h8 w.s1b2 bf16 _ _ s2
   have s4 := r50DownGraphSync_shard "s2b0" epsStr R hR N (2 * (2 * q)) (2 * (2 * q))
-    hN h4 h4 w.s2b0 _ _ s3
+    hN h4 h4 w.s2b0 bf16 _ _ s3
   have s5 := r50IdGraphSync_shard "s2b1" epsStr R hR N (2 * (2 * q)) (2 * (2 * q))
-    hN h4 h4 w.s2b1 _ _ s4
+    hN h4 h4 w.s2b1 bf16 _ _ s4
   have s6 := r50IdGraphSync_shard "s2b2" epsStr R hR N (2 * (2 * q)) (2 * (2 * q))
-    hN h4 h4 w.s2b2 _ _ s5
+    hN h4 h4 w.s2b2 bf16 _ _ s5
   have s7 := r50IdGraphSync_shard "s2b3" epsStr R hR N (2 * (2 * q)) (2 * (2 * q))
-    hN h4 h4 w.s2b3 _ _ s6
-  have s8 := r50DownGraphSync_shard "s3b0" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b0 _ _ s7
-  have s9 := r50IdGraphSync_shard "s3b1" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b1 _ _ s8
-  have s10 := r50IdGraphSync_shard "s3b2" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b2 _ _ s9
-  have s11 := r50IdGraphSync_shard "s3b3" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b3 _ _ s10
-  have s12 := r50IdGraphSync_shard "s3b4" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b4 _ _ s11
-  have s13 := r50IdGraphSync_shard "s3b5" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b5 _ _ s12
-  have s14 := r50DownGraphSync_shard "s4b0" epsStr R hR N q q hN h1 h1 w.s4b0 _ _ s13
-  have s15 := r50IdGraphSync_shard "s4b1" epsStr R hR N q q hN h1 h1 w.s4b1 _ _ s14
-  have s16 := r50IdGraphSync_shard "s4b2" epsStr R hR N q q hN h1 h1 w.s4b2 _ _ s15
+    hN h4 h4 w.s2b3 bf16 _ _ s6
+  have s8 := r50DownGraphSync_shard "s3b0" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b0 bf16 _ _ s7
+  have s9 := r50IdGraphSync_shard "s3b1" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b1 bf16 _ _ s8
+  have s10 := r50IdGraphSync_shard "s3b2" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b2 bf16 _ _ s9
+  have s11 := r50IdGraphSync_shard "s3b3" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b3 bf16 _ _ s10
+  have s12 := r50IdGraphSync_shard "s3b4" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b4 bf16 _ _ s11
+  have s13 := r50IdGraphSync_shard "s3b5" epsStr R hR N (2 * q) (2 * q) hN h2 h2 w.s3b5 bf16 _ _ s12
+  have s14 := r50DownGraphSync_shard "s4b0" epsStr R hR N q q hN h1 h1 w.s4b0 bf16 _ _ s13
+  have s15 := r50IdGraphSync_shard "s4b1" epsStr R hR N q q hN h1 h1 w.s4b1 bf16 _ _ s14
+  have s16 := r50IdGraphSync_shard "s4b2" epsStr R hR N q q hN h1 h1 w.s4b2 bf16 _ _ s15
   exact r34HeadGraphSync_shard N q q w.Wd w.bd _ _ s16 r
 
 -- `q = 7` IS the 224-px net and `q = 5` the 160-px one: the capstone at each, the input bound at
 -- the literal shape. Instantiation only — the statement is proved once, at the variable `q`.
 example (R N : Nat) (hR : 0 < R) (hN : 0 < N) (epsStr : String) {nCls : Nat}
-    (w : R50BWeights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224)))
+    (w : R50BWeights nCls) (bf16 : Bool) (e : Fin R → SHlo (N * (3 * 224 * 224)))
     (X : Vec ((R * N) * (3 * 224 * 224)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 224 * 224) X r) (r : Fin R) :
-    den (resnet50FwdGraphSyncFull R hR N 7 epsStr w e r)
+    den (resnet50FwdGraphSyncFull R hR N 7 epsStr w bf16 e r)
       = batchShard R N nCls (resnet50ForwardBFull (R * N) 7 w X) r :=
-  resnet50FwdGraphSyncFull_shard R hR N hN 7 (by norm_num) epsStr w e X he r
+  resnet50FwdGraphSyncFull_shard R hR N hN 7 (by norm_num) epsStr w bf16 e X he r
 
 example (R N : Nat) (hR : 0 < R) (hN : 0 < N) (epsStr : String) {nCls : Nat}
-    (w : R50BWeights nCls) (e : Fin R → SHlo (N * (3 * 160 * 160)))
+    (w : R50BWeights nCls) (bf16 : Bool) (e : Fin R → SHlo (N * (3 * 160 * 160)))
     (X : Vec ((R * N) * (3 * 160 * 160)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 160 * 160) X r) (r : Fin R) :
-    den (resnet50FwdGraphSyncFull R hR N 5 epsStr w e r)
+    den (resnet50FwdGraphSyncFull R hR N 5 epsStr w bf16 e r)
       = batchShard R N nCls (resnet50ForwardBFull (R * N) 5 w X) r :=
-  resnet50FwdGraphSyncFull_shard R hR N hN 5 (by norm_num) epsStr w e X he r
+  resnet50FwdGraphSyncFull_shard R hR N hN 5 (by norm_num) epsStr w bf16 e X he r
 
 end StableHLO
 

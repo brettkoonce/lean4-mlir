@@ -182,7 +182,17 @@ The CIFAR batched artifacts (`cifar8wb_bf16*`, `cifar8wb_bn_bf16*`) use the same
    `r50_net_tiedB`'s borrowed stem). The three files' "bf16 is outside this statement"
    paragraphs now state the flag; the book's sentences are §3.4.
 3. ResNet-50 (same kinds), then MobileNetV2 / V4 / B0 (the depthwise kinds), ConvNeXt, ViT. Script
-   the binder threading (the cone-parametrisation method); compile and fix.
+   the binder threading (the cone-parametrisation method); compile and fix. ResNet-50 done
+   2026-10-07, the R34 recipe verbatim: `r50{Id,Proj,Down}GraphB`, `resnet50FwdGraphBFull`, the
+   sync twins (the resolution examples at `q = 7` / `q = 5` generic in the flag), `r50{Id,Proj,
+   Down}TiedB`, `r50_net_tiedB`, the sync bundles, `r50_net_syncTiedB` (+ `_smoothedCE`, `_bce`),
+   `r50{Id,Proj,Down}LossTiedB`, `R50NetLossTiedB`, `r50_net_lossGrad` (+ `_smoothedCE`, `_bce`,
+   `_stemSelect`, `r50_net_tied_lossGrad`) take `bf16`; the seven borrowed R34 stem bundles pass it
+   through instead of `false`; `FwdGraphTextTies` checks the R50 stem and three block rows at both
+   values. No new shared lemma: R50's kinds are `conv` and `convStrided`, already in
+   `GradNodesBAt`. Count trap: the strided bottleneck's `W₁` is a plain conv at the input grid,
+   so the plain-conv sites are 8 per file, not 9. The yaml's 4f paragraph and the R34/R50 row
+   comments now say "at either precision" (the §3.4 yaml part).
 4. The shared files (3.4), one commit each.
 
 Each commit staged and shown before it is made.

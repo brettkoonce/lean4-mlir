@@ -325,29 +325,30 @@ namespace StableHLO
     The skip reuses the block-input subtree `e` in both `addVB` operands, as the render does, and
     the operand ORDER is the render's (body first) — which is also `residual`'s. -/
 def r50IdGraphB (p epsStr : String) (N h w : Nat) {mid oc : Nat} (pw : R50IdW mid oc)
-    (e : SHlo (N * (oc * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (oc * h * w))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (.bnBatchF s!"%{p}g3" s!"%{p}bt3" epsStr pw.ε₃ pw.γ₃ pw.β₃
         (.batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
               (.batchOp (N := N)
-                (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
                     (.batchOp (N := N)
-                      (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
+                      (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
                       e))))))))
       e)
 
 theorem r50IdGraphB_faithful (p epsStr : String) (N h w : Nat) {mid oc : Nat} (pw : R50IdW mid oc)
-    (e : SHlo (N * (oc * h * w))) :
-    den (r50IdGraphB p epsStr N h w pw e) = r50IdB N h w pw (den e) := by
+    (bf16 : Bool) (e : SHlo (N * (oc * h * w))) :
+    den (r50IdGraphB p epsStr N h w pw bf16 e) = r50IdB N h w pw (den e) := by
   unfold r50IdGraphB r50IdB projB cbReluB residual biPath
-  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
-    den_addVB, Function.comp_apply]
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    den_bnBatchF, den_addVB]
+  simp only [denOp, Function.comp_apply]
 
 /-- Stride-1 projection bottleneck graph — stage 1 block 0. The skip is a plain `1×1` conv → BN
     (`.conv`, NOT `.convStrided`), which is the whole point of this form. Both `addVB` operands are
@@ -358,31 +359,32 @@ theorem r50IdGraphB_faithful (p epsStr : String) (N h w : Nat) {mid oc : Nat} (p
     `add_comm`. The alternative, writing the graph in `residualProj`'s order, would make `den`
     close by `rfl` and the emitted operand order wrong. -/
 def r50ProjGraphB (p epsStr : String) (N h w : Nat) {ic mid oc : Nat} (pw : R50ProjW ic mid oc)
-    (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (.bnBatchF s!"%{p}g3" s!"%{p}bt3" epsStr pw.ε₃ pw.γ₃ pw.β₃
         (.batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
               (.batchOp (N := N)
-                (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
                     (.batchOp (N := N)
-                      (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
+                      (.convAt bf16 id (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁)
                       e))))))))
       (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
         (.batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
 
 theorem r50ProjGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Nat}
-    (pw : R50ProjW ic mid oc) (e : SHlo (N * (ic * h * w))) :
-    den (r50ProjGraphB p epsStr N h w pw e) = r50ProjB N h w pw (den e) := by
+    (pw : R50ProjW ic mid oc) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (r50ProjGraphB p epsStr N h w pw bf16 e) = r50ProjB N h w pw (den e) := by
   unfold r50ProjGraphB r50ProjB projB cbReluB residualProj biPath
-  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
-    den_addVB, Function.comp_apply]
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    den_bnBatchF, den_addVB]
+  simp only [denOp, Function.comp_apply]
   congr 1
   funext i
   ring
@@ -391,32 +393,33 @@ theorem r50ProjGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
     the **3×3** and at the 1×1 skip, and `conv1`/`bn1`/`relu1` run at the input resolution
     `2h × 2w`. Both stride-2 sites are SYMMETRIC padding (`.convStrided`, not `.convStridedXla`). -/
 def r50DownGraphB (p epsStr : String) (N h w : Nat) {ic mid oc : Nat} (pw : R50ProjW ic mid oc)
-    (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
       (.bnBatchF s!"%{p}g3" s!"%{p}bt3" epsStr pw.ε₃ pw.γ₃ pw.β₃
         (.batchOp (N := N)
-          (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
+          (.convAt bf16 id (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃)
           (.batchOp (N := N) (.relu (n := mid * h * w))
             (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
               (.batchOp (N := N)
-                (.convStrided (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
+                (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂)
                 (.batchOp (N := N) (.relu (n := mid * (2 * h) * (2 * w)))
                   (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
                     (.batchOp (N := N)
-                      (.conv (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid)
+                      (.convAt bf16 id (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid)
                         pw.W₁ pw.b₁)
                       e))))))))
       (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
         (.batchOp (N := N)
-          (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
+          (.convStridedAt bf16 id (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
 
 theorem r50DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Nat}
-    (pw : R50ProjW ic mid oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (r50DownGraphB p epsStr N h w pw e) = r50DownB N h w pw (den e) := by
+    (pw : R50ProjW ic mid oc) (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
+    den (r50DownGraphB p epsStr N h w pw bf16 e) = r50DownB N h w pw (den e) := by
   unfold r50DownGraphB r50DownB projB projStridedB cbReluB cbReluStridedB residualProj biPath
-  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
-    den_addVB, Function.comp_apply]
+  simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, Bf16Fold.denOp_convAt_id,
+    Bf16Fold.denOp_convStridedAt_id, den_bnBatchF, den_addVB]
+  simp only [denOp, Function.comp_apply]
   congr 1
   funext i
   ring
@@ -424,16 +427,16 @@ theorem r50DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
 /-- Stem graph: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 max-pool — ResNet-34's
     `r34StemGraphB`, token for token (both name the bias operand `biasName false "" oc`). -/
 def r50StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}
-    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) : SHlo (N * (oc * h * w)) :=
-  r34StemGraphB epsStr N h w Ws bs εs γs βs false e
+  r34StemGraphB epsStr N h w Ws bs εs γs βs bf16 e
 
 theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
-    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
-    den (r50StemGraphB epsStr N h w Ws bs εs γs βs e)
+    den (r50StemGraphB epsStr N h w Ws bs εs γs βs bf16 e)
       = r34StemB N h w Ws bs εs γs βs (den e) :=
-  r34StemGraphB_faithful epsStr N h w Ws bs εs γs βs false e
+  r34StemGraphB_faithful epsStr N h w Ws bs εs γs βs bf16 e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness
@@ -442,34 +445,40 @@ theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
 /-- **The full batch-BN ResNet-50 forward graph.** Block prefixes are `ResNet50RenderB`'s own
     (`s1b0` … `s4b2`) and the head's are `%Wd`/`%bd`, so the typed graph diffs against
     `resnet50_fwd` and its ImageNet twins name for name. The head graph is ResNet-34's,
-    unchanged: `r34HeadGraphB` is generic in `{c nCls}` and emits the same two tokens. -/
+    unchanged: `r34HeadGraphB` is generic in `{c nCls}` and emits the same two tokens. `bf16`
+    selects the conv kinds at every site (`.convAt` / `.convStridedAt`, `StableHLO.PrecisionSwitch`),
+    as `resnet34FwdGraphBFull` does: `false` is the f32 artifacts' graph, `true` the bf16 ones'
+    (`resnet50in_momdp64bf16`, `resnet50in160_lambaccdp4x128wxclipbcebf16`, …). -/
 def resnet50FwdGraphBFull (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
+    (bf16 : Bool)
     (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : SHlo (N * nCls) :=
   r34HeadGraphB N q q w.Wd w.bd
-    (r50IdGraphB "s4b2" epsStr N q q w.s4b2
-      (r50IdGraphB "s4b1" epsStr N q q w.s4b1
-        (r50DownGraphB "s4b0" epsStr N q q w.s4b0
-          (r50IdGraphB "s3b5" epsStr N (2 * q) (2 * q) w.s3b5
-            (r50IdGraphB "s3b4" epsStr N (2 * q) (2 * q) w.s3b4
-              (r50IdGraphB "s3b3" epsStr N (2 * q) (2 * q) w.s3b3
-                (r50IdGraphB "s3b2" epsStr N (2 * q) (2 * q) w.s3b2
-                  (r50IdGraphB "s3b1" epsStr N (2 * q) (2 * q) w.s3b1
-                    (r50DownGraphB "s3b0" epsStr N (2 * q) (2 * q) w.s3b0
-                      (r50IdGraphB "s2b3" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b3
-                        (r50IdGraphB "s2b2" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b2
-                          (r50IdGraphB "s2b1" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b1
-                            (r50DownGraphB "s2b0" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b0
-                              (r50IdGraphB "s1b2" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2
-                                (r50IdGraphB "s1b1" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1
-                                  (r50ProjGraphB "s1b0" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0
-                                    (r50StemGraphB epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ
+    (r50IdGraphB "s4b2" epsStr N q q w.s4b2 bf16
+      (r50IdGraphB "s4b1" epsStr N q q w.s4b1 bf16
+        (r50DownGraphB "s4b0" epsStr N q q w.s4b0 bf16
+          (r50IdGraphB "s3b5" epsStr N (2 * q) (2 * q) w.s3b5 bf16
+            (r50IdGraphB "s3b4" epsStr N (2 * q) (2 * q) w.s3b4 bf16
+              (r50IdGraphB "s3b3" epsStr N (2 * q) (2 * q) w.s3b3 bf16
+                (r50IdGraphB "s3b2" epsStr N (2 * q) (2 * q) w.s3b2 bf16
+                  (r50IdGraphB "s3b1" epsStr N (2 * q) (2 * q) w.s3b1 bf16
+                    (r50DownGraphB "s3b0" epsStr N (2 * q) (2 * q) w.s3b0 bf16
+                      (r50IdGraphB "s2b3" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 bf16
+                        (r50IdGraphB "s2b2" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 bf16
+                          (r50IdGraphB "s2b1" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 bf16
+                            (r50DownGraphB "s2b0" epsStr N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 bf16
+                              (r50IdGraphB "s1b2" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 bf16
+                                (r50IdGraphB "s1b1" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 bf16
+                                  (r50ProjGraphB "s1b0" epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 bf16
+                                    (r50StemGraphB epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ bf16
                                       e)))))))))))))))))
 
 /-- **Forward-graph faithfulness for ResNet-50 at batch BN**: the typed graph denotes the
-    whole-net forward. -/
+    whole-net forward, at either precision (`Bf16Erasure`: the bf16 kind at the identity rounding
+    is its f32 peer, so the right-hand side does not move with the flag). -/
 theorem resnet50FwdGraphBFull_faithful (N q : Nat) (epsStr : String) {nCls : Nat}
-    (w : R50BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    den (resnet50FwdGraphBFull N q epsStr w e) = resnet50ForwardBFull N q w (den e) := by
+    (w : R50BWeights nCls) (bf16 : Bool)
+    (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
+    den (resnet50FwdGraphBFull N q epsStr w bf16 e) = resnet50ForwardBFull N q w (den e) := by
   -- one `rw` per block over the per-kind faithfulness lemmas
   unfold resnet50FwdGraphBFull resnet50ForwardBFull
   rw [r34HeadGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50ProjGraphB_faithful,

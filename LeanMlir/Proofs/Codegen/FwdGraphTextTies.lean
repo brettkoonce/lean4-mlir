@@ -28,9 +28,9 @@ outside the guards is the chain's glue: it calls these emitters in the typed gra
 order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
 **Scope.** `convBias := false`, one replica (`sync := false`) — the configuration the typed
-graphs describe; f32 throughout, and for ResNet-34 also bf16: its typed graphs take the renderer's
-`bf16` flag (`StableHLO.PrecisionSwitch`), so the stem, identity and downsample rows are
-checked at both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
+graphs describe; f32 throughout, and for ResNet-34 and ResNet-50 also bf16: their typed graphs take
+the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their stem and block rows are checked at
+both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
 `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
@@ -127,22 +127,31 @@ def r50ProjW0 (ic mid oc : Nat) : R50ProjW ic mid oc :=
    fun _ _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0,
    fun _ _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0⟩
 
--- Stem at q = 7: 224 → 112 → 56.
+-- Stem at q = 7: 224 → 112 → 56, at f32 and at bf16.
 #guard textOf (r50StemFwdB 2 7 "1.0e-05") (·.code) ==
   prettyText 2 (r50StemGraphB "1.0e-05" 2 56 56 (ic := 3) (oc := 64)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%x" _))
+#guard textOf (r50StemFwdB 2 7 "1.0e-05" (bf16 := true)) (·.code) ==
+  prettyText 2 (r50StemGraphB "1.0e-05" 2 56 56 (ic := 3) (oc := 64)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%x" _))
 
--- Identity bottleneck (`s2b1`, 512 → 128 → 512 at 28²).
+-- Identity bottleneck (`s2b1`, 512 → 128 → 512 at 28²), at f32 and at bf16.
 #guard textOf (bnkIdFwdB 2 128 512 28 "1.0e-05" "s2b1" "%in") (·.code) ==
-  prettyText 2 (r50IdGraphB "s2b1" "1.0e-05" 2 28 28 (r50IdW0 128 512) (leaf "%in" _))
+  prettyText 2 (r50IdGraphB "s2b1" "1.0e-05" 2 28 28 (r50IdW0 128 512) false (leaf "%in" _))
+#guard textOf (bnkIdFwdB 2 128 512 28 "1.0e-05" "s2b1" "%in" (bf16 := true)) (·.code) ==
+  prettyText 2 (r50IdGraphB "s2b1" "1.0e-05" 2 28 28 (r50IdW0 128 512) true (leaf "%in" _))
 
--- Stride-1 projection bottleneck (`s1b0`, 64 → 64 → 256 at 56²).
+-- Stride-1 projection bottleneck (`s1b0`, 64 → 64 → 256 at 56²), at f32 and at bf16.
 #guard textOf (bnkProjFwdB 2 64 64 256 56 "1.0e-05" "s1b0" "%in") (·.code) ==
-  prettyText 2 (r50ProjGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) (leaf "%in" _))
+  prettyText 2 (r50ProjGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) false (leaf "%in" _))
+#guard textOf (bnkProjFwdB 2 64 64 256 56 "1.0e-05" "s1b0" "%in" (bf16 := true)) (·.code) ==
+  prettyText 2 (r50ProjGraphB "s1b0" "1.0e-05" 2 56 56 (r50ProjW0 64 64 256) true (leaf "%in" _))
 
--- Strided projection bottleneck (`s3b0`, 512 → 256 → 1024, 28² → 14²).
+-- Strided projection bottleneck (`s3b0`, 512 → 256 → 1024, 28² → 14²), at f32 and at bf16.
 #guard textOf (bnkStridedFwdB 2 512 256 1024 14 "1.0e-05" "s3b0" "%in") (·.code) ==
-  prettyText 2 (r50DownGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) (leaf "%in" _))
+  prettyText 2 (r50DownGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) false (leaf "%in" _))
+#guard textOf (bnkStridedFwdB 2 512 256 1024 14 "1.0e-05" "s3b0" "%in" (bf16 := true)) (·.code) ==
+  prettyText 2 (r50DownGraphB "s3b0" "1.0e-05" 2 14 14 (r50ProjW0 512 256 1024) true (leaf "%in" _))
 
 -- Head: GAP(7²) → dense(2048 → 10) — ResNet-34's head graph at c = 2048.
 #guard textOf (r50HeadFwdB 2 7 10 "%in") (·.1) ==

@@ -55,8 +55,11 @@ The chain runs at `N·(c·h·w)`, the BN nodes at `N·(c·(h·w))`; the replica 
 The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (r50Pre_k (R*N) q w X)`); that the sync forward graph computes exactly those is
 `StableHLO.resnet50FwdGraphSyncFull_shard`, the forward half. No stochastic depth (drop-path):
-the chain is the drop-free one, as `r50_net_tiedB`'s is. The f32 nodes — the bf16 conv twins are not this
-statement. The render has no conv-bias gradient ops, so there are none here. That the replicas'
+the chain is the drop-free one, as `r50_net_tiedB`'s is. The nodes are at either precision:
+`bf16` selects the conv weight collectives' kind on both sides (`ConvWSyncAt bf16` /
+`ConvStridedWSyncAt bf16`, `Foundation.GradNodesBAt`), `true` being the bf16 DP artifacts'
+(`resnet50in160_lambaccdp4x128wxclipbcebf16`, …), read at the identity rounding (`Bf16Erasure`,
+as `ResNet34SyncStepTieB`). The render has no conv-bias gradient ops, so there are none here. That the replicas'
 inputs are the shards of one batch is the driver's. The gradient accumulator and the optimizers
 run after the collective, so this is per micro-step. The lowerer's `all_reduce` is trusted as
 every other op's lowering is.
@@ -590,22 +593,23 @@ end DownBlockShard
     cotangents are `R ×` its shards. Each BN's γ/β reads the cotangent at THAT BN's output
     (`N1`, `N2`, `A`), each conv the one at the conv's output (`C1`, `C2`, `C3`) — `r50IdTiedB`'s wiring. -/
 def r50IdSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : R50IdW mid oc) (XIN : Vec ((R * N) * (oc * h * w)))
+    (pfx xN cotN vN epsStr : String) (p : R50IdW mid oc) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (oc * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let r1 := cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN
   let r2 := cbReluB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ r1
   let c1 := batchMap (R * N) (flatConv p.W₁ p.b₁) XIN
   let c2 := batchMap (R * N) (flatConv p.W₂ p.b₂) r1
   let c3 := batchMap (R * N) (flatConv p.W₃ p.b₃) r2
-  ConvWSync R hR N h w s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
+  ConvWSyncAt bf16 R hR N h w s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
       (r50IdSyncCotC1 R hR N h w p XIN dys) (r50IdCotC1 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}g1" s!"{pfx}bt1" vN epsStr cotN p.ε₁ c1
       (r50IdSyncCotN1 R hR N h w p XIN dys) (r50IdCotN1 (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
       (r50IdSyncCotC2 R hR N h w p XIN dys) (r50IdCotC2 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}g2" s!"{pfx}bt2" vN epsStr cotN p.ε₂ c2
       (r50IdSyncCotN2 R hR N h w p XIN dys) (r50IdCotN2 (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
       (r50IdSyncCotC3 R hR N h w p XIN dys) (r50IdCotC3 (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"{pfx}g3" s!"{pfx}bt3" vN epsStr cotN p.ε₃ c3
       (r50IdSyncCotA R N h w p XIN dys) (r50IdCotA (R * N) h w p XIN DY)
@@ -621,22 +625,22 @@ theorem r50IdSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat
   rw [r50IdSyncCotIn_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotIn_smul]
 
 theorem r50_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : R50IdW mid oc)
+    (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : R50IdW mid oc) (bf16 : Bool)
     (XIN : Vec ((R * N) * (oc * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    r50IdSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    r50IdSyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC1_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotN1_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC2_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotN2_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC3_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotA_shard R N h w p XIN dys _ hdys, r50IdCotA_smul])
@@ -645,7 +649,8 @@ theorem r50_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat
     identity bottleneck's nine plus the stride-1 1×1 skip's weight (an ORDINARY `ConvWSync`) and
     its BatchNorm's γ and β, which read `A`, the post-relu cotangent. -/
 def r50ProjSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : R50ProjW ic mid oc) (XIN : Vec ((R * N) * (ic * h * w)))
+    (pfx xN cotN vN epsStr : String) (p : R50ProjW ic mid oc) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (ic * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let r1 := cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN
   let r2 := cbReluB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ r1
@@ -653,19 +658,19 @@ def r50ProjSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
   let c2 := batchMap (R * N) (flatConv p.W₂ p.b₂) r1
   let c3 := batchMap (R * N) (flatConv p.W₃ p.b₃) r2
   let cp := batchMap (R * N) (flatConv p.Wp p.bp) XIN
-  ConvWSync R hR N h w s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
+  ConvWSyncAt bf16 R hR N h w s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
       (r50ProjSyncCotC1 R hR N h w p XIN dys) (r50ProjCotC1 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}g1" s!"{pfx}bt1" vN epsStr cotN p.ε₁ c1
       (r50ProjSyncCotN1 R hR N h w p XIN dys) (r50ProjCotN1 (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
       (r50ProjSyncCotC2 R hR N h w p XIN dys) (r50ProjCotC2 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}g2" s!"{pfx}bt2" vN epsStr cotN p.ε₂ c2
       (r50ProjSyncCotN2 R hR N h w p XIN dys) (r50ProjCotN2 (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
       (r50ProjSyncCotC3 R hR N h w p XIN dys) (r50ProjCotC3 (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"{pfx}g3" s!"{pfx}bt3" vN epsStr cotN p.ε₃ c3
       (r50ProjSyncCotA R N h w p XIN dys) (r50ProjCotA (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}Wp" xN cotN p.bp XIN p.Wp
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}Wp" xN cotN p.bp XIN p.Wp
       (r50ProjSyncCotCp R hR N h w p XIN dys) (r50ProjCotCp (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"{pfx}gp" s!"{pfx}btp" vN epsStr cotN p.εp cp
       (r50ProjSyncCotA R N h w p XIN dys) (r50ProjCotA (R * N) h w p XIN DY)
@@ -681,25 +686,25 @@ theorem r50ProjSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
 
 theorem r50_projblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
-    (p : R50ProjW ic mid oc) (XIN : Vec ((R * N) * (ic * h * w)))
+    (p : R50ProjW ic mid oc) (bf16 : Bool) (XIN : Vec ((R * N) * (ic * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    r50ProjSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    r50ProjSyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC1_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotN1_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC2_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotN2_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC3_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotA_shard R N h w p XIN dys _ hdys, r50ProjCotA_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotCp_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotCp_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotA_shard R N h w p XIN dys _ hdys, r50ProjCotA_smul])
@@ -708,7 +713,7 @@ theorem r50_projblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
     `W₁` is an ordinary `ConvWSync` at the INPUT grid `2h × 2w` and bn₁'s γ/β reduce there; only
     `W₂` (the 3×3) and `Wp` (the 1×1 skip) are `ConvStridedWSync`. -/
 def r50DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)
+    (pfx xN cotN vN epsStr : String) (p : R50ProjW ic mid oc) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let r1 := cbReluB (R * N) (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN
@@ -717,19 +722,19 @@ def r50DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
   let c2 := batchMap (R * N) (flatConvStride2 p.W₂ p.b₂) r1
   let c3 := batchMap (R * N) (flatConv p.W₃ p.b₃) r2
   let cp := batchMap (R * N) (flatConvStride2 p.Wp p.bp) XIN
-  ConvWSync R hR N (2 * h) (2 * w) s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
+  ConvWSyncAt bf16 R hR N (2 * h) (2 * w) s!"{pfx}W1" xN cotN p.b₁ XIN p.W₁
       (r50DownSyncCotC1 R hR N h w p XIN dys) (r50DownCotC1 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid (2 * h) (2 * w) s!"{pfx}g1" s!"{pfx}bt1" vN epsStr cotN p.ε₁ c1
       (r50DownSyncCotN1 R hR N h w p XIN dys) (r50DownCotN1 (R * N) h w p XIN DY)
-  ∧ ConvStridedWSync R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
+  ∧ ConvStridedWSyncAt bf16 R hR N h w s!"{pfx}W2" xN cotN p.b₂ r1 p.W₂
       (r50DownSyncCotC2 R hR N h w p XIN dys) (r50DownCotC2 (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}g2" s!"{pfx}bt2" vN epsStr cotN p.ε₂ c2
       (r50DownSyncCotN2 R hR N h w p XIN dys) (r50DownCotN2 (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}W3" xN cotN p.b₃ r2 p.W₃
       (r50DownSyncCotC3 R hR N h w p XIN dys) (r50DownCotC3 (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"{pfx}g3" s!"{pfx}bt3" vN epsStr cotN p.ε₃ c3
       (r50DownSyncCotA R N h w p XIN dys) (r50DownCotA (R * N) h w p XIN DY)
-  ∧ ConvStridedWSync R hR N h w s!"{pfx}Wp" xN cotN p.bp XIN p.Wp
+  ∧ ConvStridedWSyncAt bf16 R hR N h w s!"{pfx}Wp" xN cotN p.bp XIN p.Wp
       (r50DownSyncCotCp R hR N h w p XIN dys) (r50DownCotCp (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"{pfx}gp" s!"{pfx}btp" vN epsStr cotN p.εp cp
       (r50DownSyncCotA R N h w p XIN dys) (r50DownCotA (R * N) h w p XIN DY)
@@ -746,27 +751,27 @@ theorem r50DownSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
 
 theorem r50_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
-    (p : R50ProjW ic mid oc) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
+    (p : R50ProjW ic mid oc) (bf16 : Bool) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    r50DownSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    r50DownSyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC1_smul])
   · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotN1_smul])
-  · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convStridedWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC2_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotN2_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC3_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotA_shard R N h w p XIN dys _ hdys, r50DownCotA_smul])
-  · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convStridedWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotCp_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotCp_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotA_shard R N h w p XIN dys _ hdys, r50DownCotA_smul])
@@ -789,7 +794,7 @@ theorem r50_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
     stem 3, twelve identity bottlenecks × 9, four projection bottlenecks × 12, dense 2 — each
     equal to the single-device gradient node at `N := R·N`. -/
 def r50NetSyncTiedB (R : Nat) (hR : 0 < R) (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : R50BWeights nCls)
+    (w : R50BWeights nCls) (bf16 : Bool)
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N`, from `G` ──
@@ -836,36 +841,36 @@ def r50NetSyncTiedB (R : Nat) (hR : 0 < R) (N q : Nat) {nCls : Nat} (xN cotN vN 
   let ePool := r50ProjSyncCotIn R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0
     (r50Pre0 (R * N) q w X) e1
   r34StemSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) xN cotN vN epsStr
-      w.sW w.sb w.sε w.sγ w.sβ false X ePool cotPool
+      w.sW w.sb w.sε w.sγ w.sβ bf16 X ePool cotPool
   ∧ r50ProjSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) "s1b0" xN cotN vN epsStr
-      w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1
+      w.s1b0 bf16 (r50Pre0 (R * N) q w X) e1 dy1
   ∧ r50IdSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) "s1b1" xN cotN vN epsStr
-      w.s1b1 (r50Pre1 (R * N) q w X) e2 dy2
+      w.s1b1 bf16 (r50Pre1 (R * N) q w X) e2 dy2
   ∧ r50IdSyncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) "s1b2" xN cotN vN epsStr
-      w.s1b2 (r50Pre2 (R * N) q w X) e3 dy3
+      w.s1b2 bf16 (r50Pre2 (R * N) q w X) e3 dy3
   ∧ r50DownSyncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) "s2b0" xN cotN vN epsStr
-      w.s2b0 (r50Pre3 (R * N) q w X) e4 dy4
+      w.s2b0 bf16 (r50Pre3 (R * N) q w X) e4 dy4
   ∧ r50IdSyncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) "s2b1" xN cotN vN epsStr
-      w.s2b1 (r50Pre4 (R * N) q w X) e5 dy5
+      w.s2b1 bf16 (r50Pre4 (R * N) q w X) e5 dy5
   ∧ r50IdSyncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) "s2b2" xN cotN vN epsStr
-      w.s2b2 (r50Pre5 (R * N) q w X) e6 dy6
+      w.s2b2 bf16 (r50Pre5 (R * N) q w X) e6 dy6
   ∧ r50IdSyncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) "s2b3" xN cotN vN epsStr
-      w.s2b3 (r50Pre6 (R * N) q w X) e7 dy7
+      w.s2b3 bf16 (r50Pre6 (R * N) q w X) e7 dy7
   ∧ r50DownSyncTiedB R hR N (2 * q) (2 * q) "s3b0" xN cotN vN epsStr
-      w.s3b0 (r50Pre7 (R * N) q w X) e8 dy8
+      w.s3b0 bf16 (r50Pre7 (R * N) q w X) e8 dy8
   ∧ r50IdSyncTiedB R hR N (2 * q) (2 * q) "s3b1" xN cotN vN epsStr
-      w.s3b1 (r50Pre8 (R * N) q w X) e9 dy9
+      w.s3b1 bf16 (r50Pre8 (R * N) q w X) e9 dy9
   ∧ r50IdSyncTiedB R hR N (2 * q) (2 * q) "s3b2" xN cotN vN epsStr
-      w.s3b2 (r50Pre9 (R * N) q w X) e10 dy10
+      w.s3b2 bf16 (r50Pre9 (R * N) q w X) e10 dy10
   ∧ r50IdSyncTiedB R hR N (2 * q) (2 * q) "s3b3" xN cotN vN epsStr
-      w.s3b3 (r50Pre10 (R * N) q w X) e11 dy11
+      w.s3b3 bf16 (r50Pre10 (R * N) q w X) e11 dy11
   ∧ r50IdSyncTiedB R hR N (2 * q) (2 * q) "s3b4" xN cotN vN epsStr
-      w.s3b4 (r50Pre11 (R * N) q w X) e12 dy12
+      w.s3b4 bf16 (r50Pre11 (R * N) q w X) e12 dy12
   ∧ r50IdSyncTiedB R hR N (2 * q) (2 * q) "s3b5" xN cotN vN epsStr
-      w.s3b5 (r50Pre12 (R * N) q w X) e13 dy13
-  ∧ r50DownSyncTiedB R hR N q q "s4b0" xN cotN vN epsStr w.s4b0 (r50Pre13 (R * N) q w X) e14 dy14
-  ∧ r50IdSyncTiedB R hR N q q "s4b1" xN cotN vN epsStr w.s4b1 (r50Pre14 (R * N) q w X) e15 dy15
-  ∧ r50IdSyncTiedB R hR N q q "s4b2" xN cotN vN epsStr w.s4b2 (r50Pre15 (R * N) q w X) e16 dy16
+      w.s3b5 bf16 (r50Pre12 (R * N) q w X) e13 dy13
+  ∧ r50DownSyncTiedB R hR N q q "s4b0" xN cotN vN epsStr w.s4b0 bf16 (r50Pre13 (R * N) q w X) e14 dy14
+  ∧ r50IdSyncTiedB R hR N q q "s4b1" xN cotN vN epsStr w.s4b1 bf16 (r50Pre14 (R * N) q w X) e15 dy15
+  ∧ r50IdSyncTiedB R hR N q q "s4b2" xN cotN vN epsStr w.s4b2 bf16 (r50Pre15 (R * N) q w X) e16 dy16
   ∧ r34HeadSyncTiedB R hR N q q xN cotN (r50Pre16 (R * N) q w X) gs G
 
 /-- **The synchronised-BN data-parallel ResNet-50 step IS the single-device step at the global
@@ -885,11 +890,11 @@ def r50NetSyncTiedB (R : Nat) (hR : 0 < R) (N q : Nat) {nCls : Nat} (xN cotN vN 
     statement covers the 224-px (`q = 7`) and 160-px (`q = 5`) artifacts; `0 < q` makes every
     BatchNorm's reduction width nonzero. -/
 theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat) (hq : 0 < q)
-    {nCls : Nat} (xN cotN vN epsStr : String) (w : R50BWeights nCls)
+    {nCls : Nat} (xN cotN vN epsStr : String) (w : R50BWeights nCls) (bf16 : Bool)
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
-    r50NetSyncTiedB R hR N q xN cotN vN epsStr w X G gs := by
+    r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 X G gs := by
   unfold r50NetSyncTiedB
   intro dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotPool
     e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 ePool
@@ -931,39 +936,39 @@ theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat
   have sPool := r50ProjSyncCotIn_scaled R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
     w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1 s1
   exact ⟨r34_stem_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-      xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ false X ePool _ sPool,
+      xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 X ePool _ sPool,
     r50_projblock_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-      "s1b0" xN cotN vN epsStr w.s1b0 (r50Pre0 (R * N) q w X) e1 dy1 s1,
+      "s1b0" xN cotN vN epsStr w.s1b0 bf16 (r50Pre0 (R * N) q w X) e1 dy1 s1,
     r50_idblock_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-      "s1b1" xN cotN vN epsStr w.s1b1 (r50Pre1 (R * N) q w X) e2 dy2 s2,
+      "s1b1" xN cotN vN epsStr w.s1b1 bf16 (r50Pre1 (R * N) q w X) e2 dy2 s2,
     r50_idblock_syncTiedB R hR N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) hN h8 h8
-      "s1b2" xN cotN vN epsStr w.s1b2 (r50Pre2 (R * N) q w X) e3 dy3 s3,
+      "s1b2" xN cotN vN epsStr w.s1b2 bf16 (r50Pre2 (R * N) q w X) e3 dy3 s3,
     r50_downblock_syncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) hN h4 h4
-      "s2b0" xN cotN vN epsStr w.s2b0 (r50Pre3 (R * N) q w X) e4 dy4 s4,
+      "s2b0" xN cotN vN epsStr w.s2b0 bf16 (r50Pre3 (R * N) q w X) e4 dy4 s4,
     r50_idblock_syncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) hN h4 h4
-      "s2b1" xN cotN vN epsStr w.s2b1 (r50Pre4 (R * N) q w X) e5 dy5 s5,
+      "s2b1" xN cotN vN epsStr w.s2b1 bf16 (r50Pre4 (R * N) q w X) e5 dy5 s5,
     r50_idblock_syncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) hN h4 h4
-      "s2b2" xN cotN vN epsStr w.s2b2 (r50Pre5 (R * N) q w X) e6 dy6 s6,
+      "s2b2" xN cotN vN epsStr w.s2b2 bf16 (r50Pre5 (R * N) q w X) e6 dy6 s6,
     r50_idblock_syncTiedB R hR N (2 * (2 * q)) (2 * (2 * q)) hN h4 h4
-      "s2b3" xN cotN vN epsStr w.s2b3 (r50Pre6 (R * N) q w X) e7 dy7 s7,
+      "s2b3" xN cotN vN epsStr w.s2b3 bf16 (r50Pre6 (R * N) q w X) e7 dy7 s7,
     r50_downblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b0" xN cotN vN epsStr w.s3b0 (r50Pre7 (R * N) q w X) e8 dy8 s8,
+      "s3b0" xN cotN vN epsStr w.s3b0 bf16 (r50Pre7 (R * N) q w X) e8 dy8 s8,
     r50_idblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b1" xN cotN vN epsStr w.s3b1 (r50Pre8 (R * N) q w X) e9 dy9 s9,
+      "s3b1" xN cotN vN epsStr w.s3b1 bf16 (r50Pre8 (R * N) q w X) e9 dy9 s9,
     r50_idblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b2" xN cotN vN epsStr w.s3b2 (r50Pre9 (R * N) q w X) e10 dy10 s10,
+      "s3b2" xN cotN vN epsStr w.s3b2 bf16 (r50Pre9 (R * N) q w X) e10 dy10 s10,
     r50_idblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b3" xN cotN vN epsStr w.s3b3 (r50Pre10 (R * N) q w X) e11 dy11 s11,
+      "s3b3" xN cotN vN epsStr w.s3b3 bf16 (r50Pre10 (R * N) q w X) e11 dy11 s11,
     r50_idblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b4" xN cotN vN epsStr w.s3b4 (r50Pre11 (R * N) q w X) e12 dy12 s12,
+      "s3b4" xN cotN vN epsStr w.s3b4 bf16 (r50Pre11 (R * N) q w X) e12 dy12 s12,
     r50_idblock_syncTiedB R hR N (2 * q) (2 * q) hN h2 h2
-      "s3b5" xN cotN vN epsStr w.s3b5 (r50Pre12 (R * N) q w X) e13 dy13 s13,
+      "s3b5" xN cotN vN epsStr w.s3b5 bf16 (r50Pre12 (R * N) q w X) e13 dy13 s13,
     r50_downblock_syncTiedB R hR N q q hN h1 h1
-      "s4b0" xN cotN vN epsStr w.s4b0 (r50Pre13 (R * N) q w X) e14 dy14 s14,
+      "s4b0" xN cotN vN epsStr w.s4b0 bf16 (r50Pre13 (R * N) q w X) e14 dy14 s14,
     r50_idblock_syncTiedB R hR N q q hN h1 h1
-      "s4b1" xN cotN vN epsStr w.s4b1 (r50Pre14 (R * N) q w X) e15 dy15 s15,
+      "s4b1" xN cotN vN epsStr w.s4b1 bf16 (r50Pre14 (R * N) q w X) e15 dy15 s15,
     r50_idblock_syncTiedB R hR N q q hN h1 h1
-      "s4b2" xN cotN vN epsStr w.s4b2 (r50Pre15 (R * N) q w X) e16 dy16 s16,
+      "s4b2" xN cotN vN epsStr w.s4b2 bf16 (r50Pre15 (R * N) q w X) e16 dy16 s16,
     r34_head_syncTiedB R hR N q q xN cotN (r50Pre16 (R * N) q w X) gs G hgs⟩
 
 -- ════════════════════════════════════════════════════════════════
@@ -999,16 +1004,16 @@ theorem replicaBceLossCot_eq (R N nCls : Nat) (hR : 0 < R) (bk : ℝ) (bStr logN
     Replicas divide by `B`, the global step by `R·B`; `replicaLossCot_eq` discharges `hgs`. -/
 theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
     (hq : 0 < q) {nCls : Nat} (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String)
-    (α B : ℝ) (w : R50BWeights nCls)
+    (α B : ℝ) (w : R50BWeights nCls) (bf16 : Bool)
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (T : Vec ((R * N) * (1 * nCls))) :
-    r50NetSyncTiedB R hR N q xN cotN vN epsStr w X
+    r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
         bStr logN ohN (rowB (R * N) nCls (resnet50ForwardBFull (R * N) q w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (rowB N nCls (batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
-  r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w X _ _
+  r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w bf16 X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 /-- **The sync-BN DP step at BCE-with-logits, at the COMMITTED divisors** — every `bce := true`
@@ -1018,10 +1023,10 @@ theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < 
     `N := R·N`. `replicaBceLossCot_eq` discharges `hgs` once `(R·N)·K = R·(N·K)`. -/
 theorem r50_net_syncTiedB_bce (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
     (hq : 0 < q) {nCls : Nat} (xN cotN vN epsStr : String) (bStr logN ohN : String)
-    (w : R50BWeights nCls)
+    (w : R50BWeights nCls) (bf16 : Bool)
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (T : Vec ((R * N) * (1 * nCls))) :
-    r50NetSyncTiedB R hR N q xN cotN vN epsStr w X
+    r50NetSyncTiedB R hR N q xN cotN vN epsStr w bf16 X
       (unrowB (R * N) nCls (den (bceLossCotGraph (R * N) nCls (((R * N : Nat) : ℝ) * (nCls : ℝ))
         bStr logN ohN (rowB (R * N) nCls (resnet50ForwardBFull (R * N) q w X)) T)))
       (fun r => unrowB N nCls (den (bceLossCotGraph N nCls ((N : ℝ) * (nCls : ℝ)) bStr logN ohN
@@ -1030,7 +1035,7 @@ theorem r50_net_syncTiedB_bce (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q :
   have hdiv : ((R * N : Nat) : ℝ) * (nCls : ℝ) = (R : ℝ) * ((N : ℝ) * (nCls : ℝ)) := by
     push_cast; ring
   rw [hdiv]
-  exact r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w X _ _
+  exact r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w bf16 X _ _
     (fun r => replicaBceLossCot_eq R N nCls hR _ bStr logN ohN _ T r)
 
 end Proofs.ResNet50SyncTieB
