@@ -1,0 +1,20 @@
+1791346410.944722469	MobileNetV4-Conv-M (ImageNet, bf16) · Lean 4 → JAX
+1791346410.946375744	  Conv(3→32,3x3/2)+BN → FMB1(32→48,e4,k3,s2,relu) → UIB(48→80,e4,s2,dw3/5) → UIB(80→80,e2,s1,dw3/3) → UIB(80→160,e6,s2,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/5) → UIB(160→160,e4,s1,dw3/3) → UIB(160→160,e4,s1,dw3/0) → UIB(160→160,e2,s1,dw0/0) → UIB(160→160,e4,s1,dw3/0) → UIB(160→256,e6,s2,dw5/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw3/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw3/0) → UIB(256→256,e2,s1,dw3/5) → UIB(256→256,e4,s1,dw5/5) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e4,s1,dw0/0) → UIB(256→256,e2,s1,dw5/0) → Conv(256→960,1x1/1)+BN → GAP → Conv(960→1280,1x1/1)+BN → 1280→1000
+1791346410.947390582	
+1791346410.948388228	ImageNet (1000-class) — tfds streaming pipeline
+1791346410.949345547	lr=0.004000  batch_size=4096 (4 devices x 1024)  epochs=500  params=9715512
+1791346410.950181527	steps_per_epoch=312  total_steps=156000
+1791346410.951034399	grad-accum=8x  micro_batch=512 (4 devices x 128)  -> effective_batch=4096  (LR targets effective)
+1791346410.952017557	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791346410.952978764	Starting training...
+1791346422.873072403	WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+1791346422.874909075	W0000 00:00:1791346422.870311 1250219 cpu_allocator_impl.cc:82] Allocation of 2466250752 exceeds 10% of free system memory.
+1791346425.309799720	W0000 00:00:1791346425.306609 1250206 cpu_allocator_impl.cc:82] Allocation of 2466250752 exceeds 10% of free system memory.
+1791346429.638105873	W0000 00:00:1791346429.629795 1250208 cpu_allocator_impl.cc:82] Allocation of 2466250752 exceeds 10% of free system memory.
+1791346432.463304915	W0000 00:00:1791346432.457578 1250214 cpu_allocator_impl.cc:82] Allocation of 2466250752 exceeds 10% of free system memory.
+1791346435.046125780	W0000 00:00:1791346435.042967 1250215 cpu_allocator_impl.cc:82] Allocation of 2466250752 exceeds 10% of free system memory.
+1791346720.747827979	  step 100/156000  loss=6.9554  lr=0.00026  (2988.0ms/step avg)
+1791346977.904532679	  step 200/156000  loss=6.8325  lr=0.00051  (2780.0ms/step avg)
+1791347235.514861503	  step 300/156000  loss=6.6068  lr=0.00077  (2712.0ms/step avg)
+1791347266.350638277	[Epoch 1] lr=0.0008 loss(train_avg)=6.8783  [844.3s train, val skipped]
+1791347492.839792782	  step 400/156000  loss=6.4181  lr=0.00103  (2677.0ms/step avg)

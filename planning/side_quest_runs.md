@@ -17,42 +17,52 @@ then its verified pass. Running a side quest does not promote it into the Track-
 
 ## 1. Schedule
 
-Measured 2026-10-05 on this box with the DIMM fans in (§5.2): every row is the job's own trainer on
-all four cards, no stall in any window. JAX = 100-step windows from the trainer's own step lines;
-verified = the §3a smoke's MEAN over steps 201–600. Every job takes all four cards, so the queue is
-sequential. Per-epoch evals (a few hours per run) are not included.
+Measured 2026-10-07 on this box (`runs/2026-10-07-d17-reprobe/`, the D17 re-probe after X2 / X5 / X6,
+torchvision's crop, the exact GELU and the uint8 wire; D4 / D5 init in the tree): every row is the
+job's own trainer on all four cards, no stall in any window, no DIMM above 54 °C. JAX = 100-step
+windows from the trainer's own step lines; verified = the §3a smoke's MEAN over optimizer steps
+201–600. Every job takes all four cards, so the queue is sequential. Per-epoch evals (a few hours
+per run) are not included. The 2026-10-05 numbers stand in parentheses.
 
 | batch | runs (hours) | total | days 24/7 |
 |---|---|---|---|
-| 1, JAX | R50 A2 76 · MNv4 `full` 500 ep ~100–105 · ViT-S 72 | ~250 | ~10.4 |
-| 2, verified | R50 A2 93 · MNv4 500 ep 100 · ViT-S 79 | ~272 | ~11.3 |
-| 3, JAX | R50 A1 153 · ViT-B 148 · ConvNeXt-S 127 | ~428 | ~17.8 |
-| 4, verified | R50 A1 185 · ViT-B 185 · ConvNeXt-S 156 | ~526 | ~21.9 |
-| 5 | ConvNeXt-B JAX 167, then verified 216 | ~383 | ~16 |
-| total | | ~1,860 | ~77.5 |
+| 1, JAX | R50 A2 75 · MNv4 `full` 500 ep 112 · ViT-S 71 | ~258 (250) | ~10.7 |
+| 2, verified | R50 A2 99 · MNv4 500 ep 95 · ViT-S 71 | ~265 (272) | ~11.0 |
+| 3, JAX | R50 A1 150 · ViT-B 154 · ConvNeXt-S 122 | ~426 (428) | ~17.8 |
+| 4, verified | R50 A1 193 · ViT-B 183 · ConvNeXt-S 133 | ~509 (526) | ~21.2 |
+| 5 | ConvNeXt-B JAX 167, then verified 201 | ~368 (383) | ~15.3 |
+| total | | ~1,826 (1,860) | ~76 |
 
-The rates behind each row (`runs/2026-10-04-dimm-fan-thermal/`):
+The rates behind each row:
 
-| run | step | steps/epoch × epochs | ms/step | bound |
+| run | step | steps/epoch × epochs | ms/step (10-05) | bound |
 |---|---|---|---|---|
-| A2 JAX | optimizer (512 × 4) | 625 × 300 | 1,467 | compute, flat |
-| A1 JAX | optimizer (512 × 4) | 625 × 600 | 1,469 | compute, flat |
-| ViT-S JAX | 512 | 2,502 × 300 | 344 | tf.data, flat 343–346 |
-| ViT-B JAX | 512 | 2,502 × 300 | 708 | compute, flat |
-| ConvNeXt-S JAX | 256 | 5,004 × 300 | 304 | compute, flat |
-| ConvNeXt-B JAX | 256 | 5,004 × 300 | 401 | compute, flat |
-| MNv4 `full` JAX | optimizer (512 × 8) | 312 × 500 | 2,543 → 2,386 → 2,303 | still falling at 20 min |
-| ViT-S verified | 512 | 2,502 × 300 | 379 (med 381, min 302); 609 before the shim fix | shim: 79 ms starved (was 305) |
-| ViT-B verified | 512 | 2,502 × 300 | 887 (med 884, min 839) | compute |
-| A2 verified | micro (4 × 128) | 2,500 × 300 | 446 (med 446, min 415) | compute |
-| A1 verified | micro (4 × 128) | 2,500 × 600 | 444 (med 444, min 412) | compute |
-| ConvNeXt-S verified | 256 | 5,004 × 300 | 373 (med 372, min 355) | compute |
-| ConvNeXt-B verified | 256 | 5,004 × 300 | 518 (med 518, min 507) | compute |
-| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 290 (med 290, min 233) on the uint8 wire; 318 / 329 before | shim CPU: 57 ms starved |
+| A2 JAX | optimizer (512 × 4) | 625 × 300 | 1,440 (1,467) | compute, flat |
+| A1 JAX | optimizer (512 × 4) | 625 × 600 | 1,441 (1,469) | compute, flat |
+| ViT-S JAX | 512 | 2,502 × 300 | 341 (344) | tf.data, flat 338–351 |
+| ViT-B JAX | 512 | 2,502 × 300 | 739 (708) | compute, flat; the f32 patch embed / head (X2) and the exact GELU |
+| ConvNeXt-S JAX | 256 | 5,004 × 300 | 293 (304) | compute, flat |
+| ConvNeXt-B JAX | 256 | 5,004 × 300 | 400 (401) | compute, flat |
+| MNv4 `full` JAX | optimizer (512 × 8) | 312 × 500 | 2,573 (2,543 → 2,303) | compute, flat over the 20-min window |
+| ViT-S verified | 512 | 2,502 × 300 | 339 (med 332, min 314); 379 on 10-05, 609 before the shim fix | shim: 18 ms starved (was 79) |
+| ViT-B verified | 512 | 2,502 × 300 | 876 (med 876, min 863); 887 | compute |
+| A2 verified | micro (4 × 128) | 2,500 × 300 | 476 (med 474, min 432); 446 | shim: 42 ms starved — X5's bicubic RandAugment geometry |
+| A1 verified | micro (4 × 128) | 2,500 × 600 | 463 (med 460, min 425); 444 | shim: 35 ms starved — the same |
+| ConvNeXt-S verified | 256 | 5,004 × 300 | 318 (med 318, min 315); 373 | compute; its tanh twin 320 the same hour |
+| ConvNeXt-B verified | 256 | 5,004 × 300 | 482 (med 482, min 478) at `LEAN_MLIR_MEM_FRACTION=0.90`; 652 at the default arena; 518 | compute — see below |
+| MNv4 verified | micro (4 × 128) | 2,496 × 500 | 274 (med 275, min 240) on the uint8 wire; 290 | shim CPU: 35 ms starved (was 57) |
 
-Against the 09-29 table: ConvNeXt-B verified is 37 h shorter (253 modelled), ConvNeXt-S JAX 17 h
-longer (110 was a compute probe), and MNv4 verified is the one big miss left (100 against ~90, after §4.5). ViT-S
-verified was 127 h until the shim fix in §4.4 (in-place mixing, a writer thread); it is 79 now.
+What moved since 10-05: the crop and the exact GELU cost nothing measurable on the JAX side except
+ViT-B's +4%; X5's bicubic RandAugment geometry costs the A2 / A1 shims ~35–40 ms of starvation
+(+7% / +4%); ViT-S verified is 71 h now that the shim starves it by 18 ms rather than 79; MNv4
+verified is 95 h. **ConvNeXt-B's exact-GELU render ran 652 ms/step at the 11.68 GiB default arena
+against its tanh twin's 490 the same hour** — not the erfc arithmetic (ViT-B's exact render and the
+JAX side pay nothing; ConvNeXt-S's exact render runs 318 against its tanh twin's 320) but XLA
+working around memory pressure on B's 64×512×56×56 f32 GELU tensors, where the tanh render already
+peaked at 9.53 GiB. At `LEAN_MLIR_MEM_FRACTION=0.90` (14.0 GiB) it runs 482, and a smoke with
+`LEAN_MLIR_G2_STEPS=300` took five epoch boundaries and the epoch-5 streamed eval without the
+OUT_OF_MEMORY-in-d2h that 0.97 produced in August; `cnxb-default-emabf16-4gpu` sets 0.90 and its
+precheck requires it. Every conf's `ETA=` string carries the 10-07 numbers.
 
 **In the book (2026-10-05):** each side-quest section carries the rates above for both paths, as a
 "full schedule" table with a reference (JAX) and a verified (PJRT) column: A2 / A1 per optimizer

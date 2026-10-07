@@ -1,0 +1,23 @@
+1791345534.148550044	ConvNeXt-B (ImageNet, bf16) · Lean 4 → JAX
+1791345534.150226997	  CNXStem(3→128,4x4)+LN → ConvNeXt3(c=128) → CNXDown(128→256) → ConvNeXt3(c=256) → CNXDown(256→512) → ConvNeXt27(c=512) → CNXDown(512→1024) → ConvNeXt3(c=1024) → GAP → LN(1024) → 1024→1000
+1791345534.151266968	
+1791345534.152314404	ImageNet (1000-class) — tfds streaming pipeline
+1791345534.153223879	lr=0.000250  batch_size=256 (4 devices x 64)  epochs=300  params=88591464
+1791345534.154223965	steps_per_epoch=5004  total_steps=1501200
+1791345534.155264638	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791345534.156269583	Starting training...
+1791345691.016645693	  step 100/1501200  loss=7.0909  lr=0.0  (1470.0ms/step avg)
+1791345730.980757507	  step 200/1501200  loss=7.1468  lr=0.0  (935.0ms/step avg)
+1791345770.963836442	  step 300/1501200  loss=7.0535  lr=0.0  (757.0ms/step avg)
+1791345810.979997217	  step 400/1501200  loss=7.0256  lr=0.0  (668.0ms/step avg)
+1791345850.990850389	  step 500/1501200  loss=6.9957  lr=0.0  (614.0ms/step avg)
+1791345891.094415390	  step 600/1501200  loss=6.9774  lr=0.0  (579.0ms/step avg)
+1791345931.109453365	  step 700/1501200  loss=7.0347  lr=0.0  (553.0ms/step avg)
+1791345971.119115041	  step 800/1501200  loss=6.973  lr=0.0  (534.0ms/step avg)
+1791346011.131072845	  step 900/1501200  loss=7.0048  lr=0.0  (519.0ms/step avg)
+1791346051.145268612	  step 1000/1501200  loss=6.99  lr=0.0  (507.0ms/step avg)
+1791346091.198920788	  step 1100/1501200  loss=6.9916  lr=0.0  (497.0ms/step avg)
+1791346131.301271892	  step 1200/1501200  loss=6.9745  lr=0.0  (489.0ms/step avg)
+1791346171.336444194	  step 1300/1501200  loss=6.9384  lr=0.0  (483.0ms/step avg)
+1791346211.348393908	  step 1400/1501200  loss=6.9198  lr=0.0  (477.0ms/step avg)
+1791346251.344128909	  step 1500/1501200  loss=6.9583  lr=0.0  (472.0ms/step avg)

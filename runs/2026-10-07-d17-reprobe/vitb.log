@@ -1,0 +1,19 @@
+1791343779.960659827	ViT-B/16 (ImageNet, bf16) · Lean 4 → JAX
+1791343779.962008373	  Patch(3→768,16x16) → Trans(12x[12h,768]) → 768→1000
+1791343779.963531480	
+1791343779.964560570	ImageNet (1000-class) — tfds streaming pipeline
+1791343779.965398148	lr=0.000500  batch_size=512 (4 devices x 128)  epochs=300  params=86567656
+1791343779.966352487	steps_per_epoch=2502  total_steps=750600
+1791343779.967384272	grad-accum=4x  micro_batch=128 (4 devices x 32)  -> effective_batch=512  (LR targets effective)
+1791343779.968256365	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791343779.969225412	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791343779.970497423	Starting training...
+1791343902.072627024	  step 100/750600  loss=6.9922  lr=0.0  (1152.0ms/step avg)
+1791343975.924290542	  step 200/750600  loss=6.9015  lr=1e-05  (945.0ms/step avg)
+1791344049.843307990	  step 300/750600  loss=6.8867  lr=1e-05  (877.0ms/step avg)
+1791344123.742444906	  step 400/750600  loss=6.8877  lr=2e-05  (842.0ms/step avg)
+1791344197.655503993	  step 500/750600  loss=6.8567  lr=2e-05  (822.0ms/step avg)
+1791344271.546264711	  step 600/750600  loss=6.8638  lr=2e-05  (808.0ms/step avg)
+1791344345.454142789	  step 700/750600  loss=6.848  lr=3e-05  (798.0ms/step avg)
+1791344419.354123617	  step 800/750600  loss=6.7593  lr=3e-05  (791.0ms/step avg)
+1791344493.243461090	  step 900/750600  loss=6.8507  lr=4e-05  (785.0ms/step avg)

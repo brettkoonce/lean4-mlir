@@ -1,0 +1,28 @@
+1791342902.102650259	ViT-S/16 (ImageNet, bf16) · Lean 4 → JAX
+1791342902.103860095	  Patch(3→384,16x16) → Trans(12x[6h,384]) → 384→1000
+1791342902.104911102	
+1791342902.105966937	ImageNet (1000-class) — tfds streaming pipeline
+1791342902.106907384	lr=0.000500  batch_size=512 (4 devices x 128)  epochs=300  params=22050664
+1791342902.107884551	steps_per_epoch=2502  total_steps=750600
+1791342902.108923114	backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+1791342902.109877978	repeated-aug=3x (RSB / timm RASampler approximation: stream-level repeat+shuffle)
+1791342902.110844995	Starting training...
+1791342985.153299027	  step 100/750600  loss=6.9572  lr=0.0  (766.0ms/step avg)
+1791343019.815754961	  step 200/750600  loss=6.9026  lr=1e-05  (556.0ms/step avg)
+1791343054.431148296	  step 300/750600  loss=6.9021  lr=1e-05  (486.0ms/step avg)
+1791343088.920667438	  step 400/750600  loss=6.8674  lr=2e-05  (451.0ms/step avg)
+1791343123.572168291	  step 500/750600  loss=6.8947  lr=2e-05  (430.0ms/step avg)
+1791343158.291870699	  step 600/750600  loss=6.8695  lr=2e-05  (416.0ms/step avg)
+1791343193.269182627	  step 700/750600  loss=6.8676  lr=3e-05  (407.0ms/step avg)
+1791343228.221288454	  step 800/750600  loss=6.7944  lr=3e-05  (400.0ms/step avg)
+1791343263.326002733	  step 900/750600  loss=6.8522  lr=4e-05  (394.0ms/step avg)
+1791343297.743426126	  step 1000/750600  loss=6.826  lr=4e-05  (389.0ms/step avg)
+1791343331.871487877	  step 1100/750600  loss=6.8442  lr=4e-05  (385.0ms/step avg)
+1791343365.936900409	  step 1200/750600  loss=6.7816  lr=5e-05  (381.0ms/step avg)
+1791343400.009357121	  step 1300/750600  loss=6.7745  lr=5e-05  (378.0ms/step avg)
+1791343433.804432952	  step 1400/750600  loss=6.798  lr=6e-05  (375.0ms/step avg)
+1791343467.592200591	  step 1500/750600  loss=6.7076  lr=6e-05  (373.0ms/step avg)
+1791343501.661593876	  step 1600/750600  loss=6.7586  lr=6e-05  (371.0ms/step avg)
+1791343535.602519457	  step 1700/750600  loss=6.6651  lr=7e-05  (369.0ms/step avg)
+1791343569.668163912	  step 1800/750600  loss=6.7108  lr=7e-05  (367.0ms/step avg)
+1791343603.499541910	  step 1900/750600  loss=6.7457  lr=8e-05  (366.0ms/step avg)

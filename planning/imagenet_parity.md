@@ -491,7 +491,7 @@ did not move).
 | D14 | R50 A3 | BCE target threshold | 0.2: rwightman, pytorch-image-models discussion #924, "add `--bce-target-thresh 0.2` as that was hardcoded when those runs were done" | ✅ 2026-10-06: `bceTargetThresh := some 0.2` on `resnet50ImagenetConfigShort` (A3 `short` / `rsb-faithful` trainers + the `short` shim the verified A3 streams); `bce_target_gate.py` gained a `short` case | the landed A3 pair (78.26 / 78.33) trained without it, on both paths; the A3 rerun carries it |
 | D15 | ConvNeXt-T | the EMA pair | — | the 81.53 reference is pre-C6; a verified EMA run today is post-C6 | rerun the JAX T too, or disclose a two-axis pair |
 | D16 | R50 (Imagenette) | zero-γ on the Imagenette R50 | JAX twin zero-inits | verified γ = 1 (X4 left it off) | S; moves that net's landed number |
-| D17 | A2/A1, ViT-S/B, MNv4 `full` | ETA re-probes after X2/X5/X6 (bicubic is the C6 feed cost) | — | conf ETAs are the 10-05 probes | short GPU each |
+| D17 | A2/A1, ViT-S/B, MNv4 `full` | ETA re-probes after X2/X5/X6 (bicubic is the C6 feed cost) | — | conf ETAs are the 10-05 probes | ✅ 2026-10-07, all 14 side-quest rows (+ ConvNeXt-S/B, which the exact GELU and the crop moved too): `runs/2026-10-07-d17-reprobe/`, `side_quest_runs.md` §1, every conf's `ETA=`. Found on the way: ConvNeXt-B's exact-GELU render needs `LEAN_MLIR_MEM_FRACTION=0.90` (652 → 482 ms/step; memory pressure, not erfc) |
 | D18 | MNv4 (100-ep pair), ConvNeXt-T | timm-protocol score (256/1.0, 288/1.0) of the landed checkpoints | user rule §5.6 | none exists | S, minutes each, no rerun (CNX-T checkpoints are on the 3060 box) |
 | D19 | ViT | score the live weights beside the EMA (DeiT scores live) | — | EMA only | S, no training change (P-C) |
 
