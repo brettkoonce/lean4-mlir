@@ -143,8 +143,8 @@ def quantPackedParams (params : ByteArray) (specs : Array (Array Nat × Nat)) : 
     let n := dims.foldl (· * ·) 1
     let slot := params.extract (off * 4) ((off + n) * 4)
     let q :=
-      if spec.2 == 0 && dims.size == 2 then
-        quantPerColumn slot dims[0]! dims[1]!                       -- dense [ic, oc]
+      if (spec.2 == 0 || spec.2 == 7) && dims.size == 2 then
+        quantPerColumn slot dims[0]! dims[1]!                       -- dense [ic, oc] (7 = SE FC)
       else if spec.2 == 0 && dims.size == 4 then
         quantPerLeadingBlock slot dims[0]! (dims[1]! * dims[2]! * dims[3]!)  -- conv [oc, ic, k, k]
       else

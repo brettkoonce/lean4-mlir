@@ -35,6 +35,12 @@ def mobilenetv2ImagenetConfig : VerifiedConfig where
   -- TF-slim's BN decay, the reference's `bnMomentum` (host-side EMA, no render).
   -- It applies to every variant this driver runs, the older 1e-5 renders included.
   bnMomentum := 0.997
+  -- **Depthwise fan = k², as the JAX reference.** Every JAX depthwise emitter hard-codes
+  -- fan = k² (TF/timm's `variance_scaling` on a `(k,k,C,1)` kernel); `mkParam`'s He fan-out gave
+  -- `2/(C·k²)`, 0.03–0.18× the reference's std on the 17 depthwise kernels (planning/init_parity.md §2a,
+  -- imagenet_parity.md D4). Host-side, no re-render. On since 2026-10-07; verified runs before it
+  -- started at the narrow fan, and `LEAN_MLIR_DW_FAN_K2=0` reproduces those from their seed.
+  dwFanK2 := true
 
 /-- Entry point. Defaults to the single-device `adam64` variant, matching the other four ImageNet
     drivers — a DP default dies at the first step on a replica-count refusal, which reads as a

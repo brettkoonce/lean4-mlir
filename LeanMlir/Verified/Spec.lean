@@ -217,7 +217,9 @@ private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat ×
     and ViT overrides), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ, the ConvNeXt
     paper's value and the JAX reference's `emitLayerScaleInit`), 4 = zero-γ (the residual-closing
     BN of a bottleneck: 0 under `zeroGammaInit`, else ones; only `bottleneckStage` emits it),
-    5 = embedding (ViT CLS / pos: σ = 0.02 under `vitInit`, else zeros; only `param` emits it)). -/
+    5 = embedding (ViT CLS / pos: σ = 0.02 under `vitInit`, else zeros; only `param` emits it),
+    7 = squeeze-excite FC (`[in,out]`, standing for the reference's 1×1 conv: var 2/out under
+    `seFanOutInit`, else kind 0's Glorot; only `mbConvSE` / `mbConvSENB` emit it)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
   | convBnNB ic oc k _      => convBnNBSpec ic oc k
@@ -242,12 +244,12 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
   | mbConvSE ic mid oc r k =>                        -- (expand if t≠1) | depthwise k×k | SE | project, +BN
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],2),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[mid,1,k,k],0),(#[mid],2),(#[mid],1),(#[mid],2),
-      (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
+      (#[mid,r],7),(#[r],2),(#[r,mid],7),(#[mid],2),    -- SE FCs: kind 7 (conv fan-out under seFanOutInit)
       (#[oc,mid,1,1],0),(#[oc],2),(#[oc],1),(#[oc],2)]
   | mbConvSENB ic mid oc r k =>                      -- as above, minus the BN-followed convs' biases;
     (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- SE's two KEEP theirs
     #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),
-      (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),
+      (#[mid,r],7),(#[r],2),(#[r,mid],7),(#[mid],2),    -- SE FCs: kind 7 (conv fan-out under seFanOutInit)
       (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
   | uib ic oc expand _stride preDWk postDWk =>       -- (pre-DW if k≠0) | expand 1×1 | (post-DW if k≠0) | project 1×1, each +BN, all bias-free
     let mid := ic * expand

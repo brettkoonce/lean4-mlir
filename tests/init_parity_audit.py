@@ -46,9 +46,10 @@ PAIRS = {
     # MainResnet50Imagenet's config sets zeroGammaInit (every recipe, 224 and 160).
     "resnet50in":     ("generated_resnet50_imagenet_2018.py", {"zeroGamma": True}),
     "resnet50in160":  ("generated_resnet50_imagenet_rsbfaithful.py", {"zeroGamma": True}),
-    "mobilenetv2in":  ("generated_mobilenet_v2_imagenet_full.py", {}),
-    "efficientnetin": ("generated_efficientnet_b0_imagenet_full.py", {}),
-    "mnv4in":         ("generated_mobilenet_v4_imagenet.py", {}),
+    # The three depthwise drivers set dwFanK2 since 2026-10-07 (imagenet_parity.md D4).
+    "mobilenetv2in":  ("generated_mobilenet_v2_imagenet_full.py", {"dwFanK2": True}),
+    "efficientnetin": ("generated_efficientnet_b0_imagenet_full.py", {"dwFanK2": True, "seFanOut": True}),
+    "mnv4in":         ("generated_mobilenet_v4_imagenet.py", {"dwFanK2": True}),
     "convnextin":     ("generated_convnext_tiny_imagenet_full.py", {"cnxInit": True}),
     "vitin":          ("generated_vit_tiny_imagenet.py", {"vitInit": True}),   # `default` carries DeiT init
 }
@@ -66,6 +67,8 @@ def verified_moments(dims, kind, flags):
         return (0.0, 0.0) if flags.get("zeroGamma") else (1.0, 0.0)
     if kind == 5:   # embedding (ViT CLS / pos): σ 0.02 under vitInit, zeros without it
         return (0.0, 0.0004) if flags.get("vitInit") else (0.0, 0.0)
+    if kind == 7 and flags.get("seFanOut") and len(dims) == 2:   # SE FC: the reference's 1×1-conv fan-out
+        return 0.0, 2.0 / dims[1]
     if flags.get("cnxInit"):
         return 0.0, 0.0004
     if flags.get("vitInit"):

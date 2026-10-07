@@ -191,6 +191,24 @@ every net whose flag is on.
 
 ## 5. Decisions for Brett
 
+**Taken 2026-10-07 ("flip on the constructors"):** `dwFanK2 := true` in `mobilenetv2ImagenetConfig`,
+`mnv4ImagenetConfig` and `efficientnetImagenetConfig` (verified moves, as recommended in 1.);
+`LEAN_MLIR_DW_FAN_K2` gained a `=0` off-switch (the zero-γ pattern) so every landed run still
+reproduces from its seed. The audit, re-run on the flipped flags: MNv2 0/158, MNv4 0/233,
+EfficientNet-B0 17/213 — the 17 are §2b's SE FCs (`imagenet_parity.md` D5), the one depthwise-net
+init item left. No run yet; the MNv2 / MNv4 `full` / B0 reruns carry it (`imagenet_parity.md` §7 R4/R5,
+side_quest_runs.md batch 1).
+
+**D5 taken the same day ("d5 please"):** §3a's kind 7, exactly as proposed — `VLayer.mbConvSE` /
+`mbConvSENB` emit the two SE FCs at kind 7, `EfficientNetLayout.specs` moves in lockstep (the
+`#guard` holds), `mkParam` gives kind 7 variance 2/out (`dims[1]` of the `[in,out]` dense, the
+reference's `variance_scaling(2, fan_out)` on its 1×1 conv) under `VerifiedConfig.seFanOutInit`,
+which the ImageNet B0 driver sets; off, kind 7 falls through to Glorot, so the Imagenette B0 and every
+gate are byte-identical to their kind-0 past. `LEAN_MLIR_SE_FAN_OUT=0|1` overrides at launch.
+`E4M3Quant.quantPackedParams` treats kind 7 as a weight (it keyed weights off kind 0). Kind 6
+(depthwise) is NOT introduced: `dwFanK2`'s shape test covers those 63 tensors and is already on.
+Expected audit after the rebuild: B0 0/213. No run yet.
+
 1. **Which side moves.** Recommend verified → JAX, per the padding precedent.
 2. **Kinds (§3a) vs flags.** Recommend kinds. `dwFanK2` alone covers 63 of 68 MNv2/MNv4/ENet
    tensors, but not ENet's SE, R50's zero-γ or ViT's embeddings.

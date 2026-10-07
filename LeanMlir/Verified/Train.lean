@@ -60,7 +60,8 @@ structure VerifiedNet where
   /-- `(dims, initKind)` per param, in func-arg order — the matching `XLayout.specs`.
       `initKind`: 0 = random weight (conv: He fan-out; dense: Glorot; see `mkParam`), 1 = ones (γ),
       2 = zeros (β / bias), 3 = 1e-6 (layer scale), 4 = zero-γ (0 under `zeroGammaInit`, else 1),
-      5 = embedding (σ 0.02 under `vitInit`, else 0). -/
+      5 = embedding (σ 0.02 under `vitInit`, else 0), 7 = SE FC (var 2/out under `seFanOutInit`,
+      else Glorot). -/
   specs    : Array (Array Nat × Nat)
   /-- Per-example flattened input width (e.g. `3 * 224 * 224`). -/
   d0       : Nat
@@ -183,10 +184,12 @@ structure VerifiedConfig where
       the relative step scales as 1/‖W‖² until weight decay equilibrates the norm.
 
       Detection is `dims[1] = 1 ∧ dims[0] > 1`, i.e. a depthwise kernel; a 1-input-channel stem
-      would match too, and no net that sets this flag has one. Host-side, no re-render. Off by
-      default, so every recorded verified number reproduces from its seed;
-      `LEAN_MLIR_DW_FAN_K2=1` turns it on at launch. `tests/init_parity_audit.py` measures init
-      parity per tensor against each net's JAX reference. -/
+      would match too, and no net that sets this flag has one. Host-side, no re-render. Off in the
+      structure; the three depthwise ImageNet drivers (MobileNetV2, MobileNetV4, EfficientNet-B0)
+      set it since 2026-10-07, so their verified runs before that date reproduce from their seed
+      under `LEAN_MLIR_DW_FAN_K2=0`, and `=1` turns it on for a driver that leaves it off.
+      `tests/init_parity_audit.py` measures init parity per tensor against each net's JAX
+      reference. -/
   dwFanK2   : Bool := false
   /-- **Zero-γ on every residual-closing BN — the JAX reference's ResNet-50 init.** Each
       bottleneck's last BN γ is init kind 4 (`VLayer.bottleneckStage`); the reference starts it at 0
@@ -197,6 +200,17 @@ structure VerifiedConfig where
       Host-side, no re-render. Off by default, so every other driver and every gate that inits
       through `mkParam` is byte-identical; `LEAN_MLIR_ZERO_GAMMA=0|1` overrides it at launch. -/
   zeroGammaInit : Bool := false
+  /-- **Squeeze-excite FCs at the reference's fan — EfficientNet's init.** The verified net carries
+      each SE squeeze/excite as a rank-2 dense `[in,out]` (init kind 7, `VLayer.mbConvSE`); the
+      JAX reference emits them as 1×1 convs under TF's `variance_scaling(2, fan_out)`, i.e.
+      `U(±√(6/out))`, variance **2/out**. Glorot's 2/(in+out) is ~0.2× that std on every reduce FC
+      (`[480,20]`: 2/500 vs 2/20), and unlike a BN-followed conv the SE FC is not scale-invariant —
+      it feeds a sigmoid gate, so a 0.2× reduce FC starts every gate near σ(0) = 0.5
+      (`planning/init_parity.md` §2b, the audit's 17/213; `imagenet_parity.md` D5). Only the 17
+      kind-7 tensors move, each on its own seed. Host-side, no re-render. Off by default, so the
+      Imagenette B0 driver and every gate are byte-identical; the ImageNet B0 driver sets it
+      (2026-10-07), and `LEAN_MLIR_SE_FAN_OUT=0|1` overrides it at launch. -/
+  seFanOutInit : Bool := false
   /-- BatchNorm running-statistic **decay** — the verified peer of `TrainConfig.bnMomentum`,
       and the same TF sense: the weight on the OLD estimate, so timm's PyTorch
       `momentum = 0.1` is `0.9` here. That field's docstring carries the per-net table and
@@ -477,6 +491,9 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
         (`planning/init_parity.md` §2c)
       * embedding (kind 5: ViT's CLS token and positional embedding) → σ = 0.02 under `vitInit`,
         0 otherwise (`planning/init_parity.md` §2d, §3a)
+      * SE FC (kind 7: EfficientNet's squeeze / excite dense `[in,out]`) → variance `2/out`
+        under `seFanOut`, the reference's 1×1-conv fan-out; Glorot otherwise
+        (`planning/init_parity.md` §2b)
 
     The weight variances are those of
     [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean):
@@ -496,7 +513,7 @@ def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
 def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
     (vitInit : Bool := false) (biasSigma : Option Float := none)
     (heFanIn : Bool := false) (cnxInit : Bool := false) (dwFanK2 : Bool := false)
-    (zeroGamma : Bool := false) :
+    (zeroGamma : Bool := false) (seFanOut : Bool := false) :
     IO ByteArray := do
   let n := dims.foldl (· * ·) 1
   match kind with
@@ -548,7 +565,12 @@ def mkParam (seed : Nat) (dims : Array Nat) (kind : Nat)
       -- `kind` 1/2/3 above (LayerNorm γ=1, biases 0, LayerScale γ=1e-6) and already match the
       -- reference, so this branch is the whole of the difference.
       -- FIRST, so it cannot be silently overridden by a rank test below it.
-      if cnxInit then 0.0004                                                      -- 0.02²
+      -- **Kind 7 = a squeeze-excite FC** (`VerifiedConfig.seFanOutInit`): the reference's 1×1 conv
+      -- under TF fan-out, variance 2/out on the `[in,out]` dense; without the flag it falls through
+      -- to the Glorot rule below, byte-identical to its kind-0 past. No net sets this with cnxInit
+      -- or vitInit, so the order among the three is moot.
+      if kind == 7 && seFanOut && dims.size == 2 then 2.0 / (dims[1]!).toFloat
+      else if cnxInit then 0.0004                                                 -- 0.02²
       else if vitInit then
         if dims.size == 4 then 1.0 / (3.0 * (dims[1]! * dims[2]! * dims[3]!).toFloat)  -- Conv2d dflt
         else 0.0004                                                                     -- 0.02²
@@ -2129,7 +2151,10 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- here.
   if cfg.cnxInit then
     IO.println "  ▸ INIT: ConvNeXt _init_weights (σ=0.02 on every conv AND the head; biases 0, LN γ 1, LayerScale γ 1e-6)"
-  let dwFanK2 := cfg.dwFanK2 || (← IO.getEnv "LEAN_MLIR_DW_FAN_K2") == some "1"
+  let dwFanK2 := match (← IO.getEnv "LEAN_MLIR_DW_FAN_K2") with
+    | some "1" => true
+    | some "0" => false
+    | _        => cfg.dwFanK2
   if dwFanK2 then
     IO.println "  ▸ INIT: depthwise fan = k² (the JAX reference's rule), not He fan-out C·k²"
   let zeroGamma := match (← IO.getEnv "LEAN_MLIR_ZERO_GAMMA") with
@@ -2138,9 +2163,15 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
     | _        => cfg.zeroGammaInit
   if zeroGamma && net.specs.any (·.2 == 4) then
     IO.println s!"  ▸ INIT: zero-γ on {(net.specs.filter (·.2 == 4)).size} residual-closing BNs (the JAX reference's zero_init_last)"
+  let seFanOut := match (← IO.getEnv "LEAN_MLIR_SE_FAN_OUT") with
+    | some "1" => true
+    | some "0" => false
+    | _        => cfg.seFanOutInit
+  if seFanOut && net.specs.any (·.2 == 7) then
+    IO.println s!"  ▸ INIT: SE FC fan = out on {(net.specs.filter (·.2 == 7)).size} squeeze-excite denses (the JAX reference's 1×1-conv fan-out), not Glorot"
   for spec in net.specs do
     parts := parts.push (← mkParam seed spec.1 spec.2 cfg.vitInit (cnxInit := cfg.cnxInit)
-      (dwFanK2 := dwFanK2) (zeroGamma := zeroGamma))
+      (dwFanK2 := dwFanK2) (zeroGamma := zeroGamma) (seFanOut := seFanOut))
     seed := seed + 1
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
   -- norm r, before any training. This is the CONDITIONING probe for gate G2: if an r that is

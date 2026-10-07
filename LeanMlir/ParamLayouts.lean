@@ -112,13 +112,14 @@ namespace EfficientNetLayout
     BN, so nothing absorbs them and the reference carries them. Spatial
     224→112→56→28→14→7 (stride-2 stem, 4 strided stages). The `(dims, initKind)` order MUST match
     `@efficientnet_train_step`'s signature, rendered by Proofs/Codegen/EfficientNetRender/Basic.lean.
-    `initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias). -/
+    `initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias),
+    7 = SE FC (var 2/out under `seFanOutInit`, the reference's 1×1-conv fan-out; else Glorot). -/
 private def stages : Array (Nat × Nat × Nat × Nat × Nat) :=
   #[(1,16,1,1,3),(6,24,2,2,3),(6,40,2,2,5),(6,80,3,2,3),(6,112,3,1,5),(6,192,4,2,5),(6,320,1,1,3)]
 private def mbBlk (ic mid oc r k : Nat) : Array (Array Nat × Nat) :=
   (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand (skip if t=1)
   #[(#[mid,1,k,k],0),(#[mid],1),(#[mid],2),               -- depthwise k×k (stride 1 or 2)
-    (#[mid,r],0),(#[r],2),(#[r,mid],0),(#[mid],2),        -- squeeze-excite dense₁/dense₂ — biases KEPT
+    (#[mid,r],7),(#[r],2),(#[r,mid],7),(#[mid],2),        -- squeeze-excite dense₁/dense₂ (kind 7) — biases KEPT
     (#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]                -- project 1×1
 /-- `(dims, initKind)` for every param, in func-arg order — generated from the B0 stage
     spec exactly as tests/TestEfficientNet*.lean `blocks` (stem out 32, prev threading). -/
