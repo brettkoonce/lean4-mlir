@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # ConvNeXt-T — every parameter gradient node IS the loss's derivative in that parameter
 
@@ -32,8 +33,16 @@ reads no input; its Jacobian in the bias is the channel indicator whatever the c
 patchify conv's (`GradNodeB.pdiv_flatConvStride4_bias_eq_conv2d`), as in the tie.
 
 **Hypotheses.** `0 < ε` (the LayerNorms' VJPs); no smoothness hypothesis. For the smoothed loss,
-every example's target sums to one and `0 < nC`. Drop-path and the bf16 nodes are outside this
-statement, as they are outside the tie.
+every example's target sums to one and `0 < nC`. Drop-path is outside this statement, as it is
+outside the tie.
+
+**Scope.** One replica, at either precision: every conv, depthwise, strided-conv and patchify
+weight node is stated on the renderers' switch (`convWeightGradBAt bf16 id …`,
+`depthwiseWeightGradBAt bf16 id …`, `convStridedWeightGradBAt bf16 id …`,
+`convStride4WeightGradBAt bf16 id …`; `StableHLO.PrecisionSwitch`), so `bf16 := true` is the bf16
+kind the `convnextin_*bf16` artifacts emit, read over ℝ at the identity rounding (`Bf16Erasure`),
+and `bf16 := false` the f32 artifacts'. The bias, LayerNorm, layer-scale and classifier nodes carry
+no flag because no render switches them.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -179,8 +188,8 @@ theorem cnxBlk_hasGradAt {gf : GeluForm} {h w : Nat} (ε : ℝ) (hε : 0 < ε) (
     `cnxBlockChTiedGB` ties, at the tie's batched activations and cotangents, `Φ` the loss at the
     block's output as a function of the block's weight record. -/
 def cnxBlockLossTiedGB (gf : GeluForm) (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (p : CnxTieBlk c cExp) (xin : Vec (N * (c * h * w))) (Φ : CnxTieBlk c cExp → Vec 1)
-    (dyOut : Vec (N * (c * h * w))) : Prop :=
+    (p : CnxTieBlk c cExp) (bf16 : Bool) (xin : Vec (N * (c * h * w)))
+    (Φ : CnxTieBlk c cExp → Vec 1) (dyOut : Vec (N * (c * h * w))) : Prop :=
   let γlsB : Vec (c * h * w) := fun k => p.sL (chanIdx c h w k)
   -- forward activations
   let dB  : Vec (N * (c * h * w))    := batchMap N (depthwiseFlat (h := h) (w := w) p.aW p.aB) xin
@@ -198,7 +207,7 @@ def cnxBlockLossTiedGB (gf : GeluForm) (N : Nat) {h w : Nat} (xN epsStr cotN : S
     batchMapAux N (blkCotD gf ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL) xin dyOut
   -- depthwise 7×7 W/b
   (HasGradAt (fun θ => Φ { p with aW := Tensor3.unflatten θ }) (Tensor3.flatten p.aW)
-        (den (SHlo.depthwiseWeightGradB xN p.aB xin p.aW (.operand cotN cotDB))))
+        (den (SHlo.depthwiseWeightGradBAt bf16 id xN p.aB xin p.aW (.operand cotN cotDB))))
   ∧ (HasGradAt (fun θ => Φ { p with aB := θ }) p.aB
         (den (SHlo.depthwiseBiasGradB p.aW xin p.aB (.operand cotN cotDB))))
   -- channel-LN γ/β
@@ -211,12 +220,12 @@ def cnxBlockLossTiedGB (gf : GeluForm) (N : Nat) {h w : Nat} (xN epsStr cotN : S
           (.operand cotN (batchMap N (chanLNRows c h w) cotNB)))))
   -- expand 1×1 conv W/b
   ∧ (HasGradAt (fun θ => Φ { p with eW := Kernel4.unflatten θ }) (Kernel4.flatten p.eW)
-        (den (SHlo.convWeightGradB xN p.eB nlB p.eW (.operand cotN cotEB))))
+        (den (SHlo.convWeightGradBAt bf16 id xN p.eB nlB p.eW (.operand cotN cotEB))))
   ∧ (HasGradAt (fun θ => Φ { p with eB := θ }) p.eB
         (den (SHlo.convBiasGradB (h := h) (w := w) p.eW nlB p.eB (.operand cotN cotEB))))
   -- project 1×1 conv W/b
   ∧ (HasGradAt (fun θ => Φ { p with pW := Kernel4.unflatten θ }) (Kernel4.flatten p.pW)
-        (den (SHlo.convWeightGradB xN p.pB gB p.pW (.operand cotN cotPB))))
+        (den (SHlo.convWeightGradBAt bf16 id xN p.pB gB p.pW (.operand cotN cotPB))))
   ∧ (HasGradAt (fun θ => Φ { p with pB := θ }) p.pB
         (den (SHlo.convBiasGradB (h := h) (w := w) p.pW gB p.pB (.operand cotN cotPB))))
   -- per-channel layer-scale γ
@@ -225,12 +234,12 @@ def cnxBlockLossTiedGB (gf : GeluForm) (N : Nat) {h w : Nat} (xN epsStr cotN : S
           (.operand cotN dyOut))))
 
 theorem cnx_block_lossTiedGB {gf : GeluForm} (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (hε : 0 < ε) (p : CnxTieBlk c cExp) (xin : Vec (N * (c * h * w)))
+    (hε : 0 < ε) (p : CnxTieBlk c cExp) (bf16 : Bool) (xin : Vec (N * (c * h * w)))
     {Lb : Vec (N * (c * h * w)) → Vec 1} {dyOut : Vec (N * (c * h * w))}
     (hLb : HasGradAt Lb (batchMap N (p.fwdO gf (h := h) (w := w) ε) xin) dyOut)
     {Φ : CnxTieBlk c cExp → Vec 1}
     (hΦ : ∀ p', Φ p' = Lb (batchMap N (p'.fwdO gf (h := h) (w := w) ε) xin)) :
-    cnxBlockLossTiedGB gf N xN epsStr cotN ε p xin Φ dyOut := by
+    cnxBlockLossTiedGB gf N xN epsStr cotN ε p bf16 xin Φ dyOut := by
   rw [show Φ = fun p' => Lb (batchMap N (p'.fwdO gf (h := h) (w := w) ε) xin) from funext hΦ]
   have hc := fun y dy => cnxBlk_hasGradAt (gf := gf) (h := h) (w := w) ε hε p y dy (hasGradAt_linLoss dy _)
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -242,7 +251,8 @@ theorem cnx_block_lossTiedGB {gf : GeluForm} (N : Nat) {h w : Nat} (xN epsStr co
         (fun y => cnxPostD_differentiable h w ε hε p y)
         (fun y dy => by rw [Tensor3.unflatten_flatten]; exact (hc y dy).2.2.2.2)
         xin _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun idx => (GradNodeB.depthwiseWGradB_den xN cotN p.aB xin p.aW _ idx).symm)
+      ((funext fun idx => (GradNodeB.depthwiseWGradB_den xN cotN p.aB xin p.aW _ idx).symm).trans
+        (Bf16Fold.den_depthwiseWeightGradBAt_id bf16 xN _ _ _ _).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => y)
         (fun θ y => depthwiseFlat (h := h) (w := w) p.aW θ y)
         (cnxPostD gf h w ε p) (fun y dy => blkCotD gf ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
@@ -279,7 +289,8 @@ theorem cnx_block_lossTiedGB {gf : GeluForm} (N : Nat) {h w : Nat} (xN epsStr co
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact (hc y dy).2.2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
         (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun idx => (GradNodeB.convWGradB_den xN cotN p.eB _ p.eW _ idx).symm)
+      ((funext fun idx => (GradNodeB.convWGradB_den xN cotN p.eB _ p.eW _ idx).symm).trans
+        (Bf16Fold.den_convWeightGradBAt_id bf16 xN _ _ _ _).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => cnxActNl h w ε p y)
         (fun θ nl => flatConv (h := h) (w := w) p.eW θ nl)
         (cnxPostE gf h w p) (fun y dy => blkCotE gf ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL y dy)
@@ -299,7 +310,8 @@ theorem cnx_block_lossTiedGB {gf : GeluForm} (N : Nat) {h w : Nat} (xN epsStr co
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact (hc y dy).2.1)
         _ _ (fun n => by simp only [batchSlice_batchMap]; rfl)
         (fun n => batchSlice_batchMap _ _ n)).of_eq
-      (funext fun idx => (GradNodeB.convWGradB_den xN cotN p.pB _ p.pW _ idx).symm)
+      ((funext fun idx => (GradNodeB.convWGradB_den xN cotN p.pB _ p.pW _ idx).symm).trans
+        (Bf16Fold.den_convWeightGradBAt_id bf16 xN _ _ _ _).symm)
   · exact (HasGradAt.param_batchMap_through (fun y => cnxActG gf h w ε p y)
         (fun θ g => flatConv (h := h) (w := w) p.pW θ g)
         (cnxPostP h w p) (fun _ dy => cnxCotP (fun k => p.sL (chanIdx c h w k)) dy)
@@ -332,7 +344,7 @@ variable {ci co : Nat}
 /-- **Downsample, every parameter node a loss derivative** — the four nodes `cnxDownChTiedGB`
     ties. -/
 def cnxDownLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (p : CnxTieDown ci co) (xin : Vec (N * (ci * (2 * h) * (2 * w))))
+    (p : CnxTieDown ci co) (bf16 : Bool) (xin : Vec (N * (ci * (2 * h) * (2 * w))))
     (Φ : CnxTieDown ci co → Vec 1) (dyOut : Vec (N * (co * h * w))) : Prop :=
   let nB : Vec (N * (ci * (2 * h) * (2 * w))) :=
     batchMap N (chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T) xin
@@ -346,17 +358,17 @@ def cnxDownLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
         (den (SHlo.rowDenseBiasGradB (N := N) (R := (2 * h) * (2 * w)) (c := ci)
           (.operand cotN (batchMap N (chanLNRows ci (2 * h) (2 * w)) cotNB)))))
   ∧ (HasGradAt (fun θ => Φ { p with W := Kernel4.unflatten θ }) (Kernel4.flatten p.W)
-        (den (SHlo.convStridedWeightGradB xN p.B nB p.W (.operand cotN dyOut))))
+        (den (SHlo.convStridedWeightGradBAt bf16 id xN p.B nB p.W (.operand cotN dyOut))))
   ∧ (HasGradAt (fun θ => Φ { p with B := θ }) p.B
         (den (SHlo.convStridedBiasGradB (h := h) (w := w) p.W nB p.B (.operand cotN dyOut))))
 
 theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (p : CnxTieDown ci co) (xin : Vec (N * (ci * (2 * h) * (2 * w))))
+    (p : CnxTieDown ci co) (bf16 : Bool) (xin : Vec (N * (ci * (2 * h) * (2 * w))))
     {Lb : Vec (N * (co * h * w)) → Vec 1} {dyOut : Vec (N * (co * h * w))}
     (hLb : HasGradAt Lb (batchMap N (p.fwdO (h := h) (w := w) ε) xin) dyOut)
     {Φ : CnxTieDown ci co → Vec 1}
     (hΦ : ∀ p', Φ p' = Lb (batchMap N (p'.fwdO (h := h) (w := w) ε) xin)) :
-    cnxDownLossTiedGB N xN epsStr cotN ε p xin Φ dyOut := by
+    cnxDownLossTiedGB N xN epsStr cotN ε p bf16 xin Φ dyOut := by
   rw [show Φ = fun p' => Lb (batchMap N (p'.fwdO (h := h) (w := w) ε) xin) from funext hΦ]
   have hc : ∀ (y : Vec (ci * (2 * h) * (2 * w))) (dy : Vec (co * h * w)),
       HasGradAt (fun u => linLoss dy (flatConvStride2 (h := h) (w := w) p.W p.B u))
@@ -389,7 +401,8 @@ theorem cnx_down_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
         (fun y => (GradNodeB.flatConvStride2_weight_differentiable p.B y) _)
         (fun _ => differentiable_id) (fun _ dy => hasGradAt_linLoss dy _)
         _ _ (fun n => batchSlice_batchMap _ _ n) (fun _ => rfl)).of_eq
-      (funext fun idx => (GradNodeB.convStridedWGradB_den xN cotN p.B _ p.W _ idx).symm)
+      ((funext fun idx => (GradNodeB.convStridedWGradB_den xN cotN p.B _ p.W _ idx).symm).trans
+        (Bf16Fold.den_convStridedWeightGradBAt_id bf16 xN _ _ _ _).symm)
   · exact (HasGradAt.param_batchMap_through
         (fun y => chanLNTensor3 ci (2 * h) (2 * w) ε p.G p.T y)
         (fun θ n => flatConvStride2 (h := h) (w := w) p.W θ n)
@@ -411,7 +424,8 @@ variable {c : Nat}
 /-- **Stem, every parameter node a loss derivative** — the four nodes `cnxStemChTiedGB` ties. The
     bias node is the emitted stride-1 `convBiasGradB`, which reads no input (stated at zero). -/
 def cnxStemLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
-    (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
+    (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (bf16 : Bool)
+    (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
     (Φ : Kernel4 c 3 4 4 → Vec c → Vec c → Vec c → Vec 1)
     (dyStem : Vec (N * (c * h * w))) : Prop :=
   let patchB : Vec (N * (c * h * w)) := batchMap N (flatConvStride4 Wst psb) x
@@ -428,16 +442,17 @@ def cnxStemLossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
         (den (SHlo.convBiasGradB (N := N) (ic := 3) (oc := c) (h := h) (w := w) (kH := 4) (kW := 4)
           Wst 0 psb (.operand cotN cotPatchB))))
   ∧ (HasGradAt (fun θ => Φ (Kernel4.unflatten θ) psb psng psnbt) (Kernel4.flatten Wst)
-        (den (SHlo.convStride4WeightGradB xN psb x Wst (.operand cotN cotPatchB))))
+        (den (SHlo.convStride4WeightGradBAt bf16 id xN psb x Wst (.operand cotN cotPatchB))))
 
 theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε : ℝ) (hε : 0 < ε)
-    (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
+    (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c) (bf16 : Bool)
+    (x : Vec (N * (3 * (2 * (2 * h)) * (2 * (2 * w)))))
     {Lb : Vec (N * (c * h * w)) → Vec 1}
     {dyStem : Vec (N * (c * h * w))}
     (hLb : HasGradAt Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε Wst psb psng psnbt) x) dyStem)
     {Φ : Kernel4 c 3 4 4 → Vec c → Vec c → Vec c → Vec 1}
     (hΦ : ∀ W b γ β, Φ W b γ β = Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε W b γ β) x)) :
-    cnxStemLossTiedGB N xN epsStr cotN ε Wst psb psng psnbt x Φ dyStem := by
+    cnxStemLossTiedGB N xN epsStr cotN ε Wst psb psng psnbt bf16 x Φ dyStem := by
   rw [show Φ = fun W b γ β => Lb (batchMap N (cnxStemFwdO (h := h) (w := w) ε W b γ β) x) from
     funext fun W => funext fun b => funext fun γ => funext fun β => hΦ W b γ β]
   have hc : ∀ (y : Vec (3 * (2 * (2 * h)) * (2 * (2 * w)))) (dy : Vec (c * h * w)),
@@ -484,7 +499,8 @@ theorem cnx_stem_lossTiedGB (N : Nat) {h w : Nat} (xN epsStr cotN : String) (ε 
         (fun _ => chanLNTensor3_differentiable c h w ε psng psnbt hε)
         (fun y dy => by rw [Kernel4.unflatten_flatten]; exact hc y dy)
         x _ (fun _ => rfl) (fun n => batchSlice_batchMapAux _ _ _ n)).of_eq
-      (funext fun idx => (GradNodeB.psWGradB_den xN cotN psb x Wst _ idx).symm)
+      ((funext fun idx => (GradNodeB.psWGradB_den xN cotN psb x Wst _ idx).symm).trans
+        (Bf16Fold.den_convStride4WeightGradBAt_id bf16 xN _ _ _ _).symm)
 
 end Stem
 
@@ -1170,7 +1186,7 @@ theorem cnxNetB_eq_convNextForwardTCh {gf : GeluForm} (N : Nat) {nC : Nat} (ε :
     `cnx_net_tiedGB` ties, each at the cotangent the tie threads to it from `g`, stated against
     `L` of `cnxNetB` with that one parameter varied. -/
 def CnxNetLossTiedGB (gf : GeluForm) (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ)
-    (w : CnxTieWeights nC) (x : Vec (N * (3 * 224 * 224)))
+    (w : CnxTieWeights nC) (bf16 : Bool) (x : Vec (N * (3 * 224 * 224)))
     (L : Vec (N * nC) → Vec 1) (g : Vec (N * nC)) : Prop :=
   let dyO18 := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc)
     (cnxPreB18 gf N ε w x) g
@@ -1195,49 +1211,49 @@ def CnxNetLossTiedGB (gf : GeluForm) (xN epsStr cotN dN : String) (N : Nat) {nC 
   let dyO2 := batchMapAux N (w.b3.cotIn gf (h := 56) (w := 56) ε) (cnxPreB2 gf N ε w x) dyO3
   let dyO1 := batchMapAux N (w.b2.cotIn gf (h := 56) (w := 56) ε) (cnxPreB1 gf N ε w x) dyO2
   let dyStem := batchMapAux N (w.b1.cotIn gf (h := 56) (w := 56) ε) (cnxPreS N ε w x) dyO1
-  cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x
+  cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ bf16 x
       (fun W b γ β => L (cnxNetB gf N ε { w with sW := W, sb := b, sγ := γ, sβ := β } x)) dyStem
-  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b1 (cnxPreS N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b1 bf16 (cnxPreS N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b1 := p } x)) dyO1
-  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b2 (cnxPreB1 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b2 bf16 (cnxPreB1 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b2 := p } x)) dyO2
-  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b3 (cnxPreB2 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b3 bf16 (cnxPreB2 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b3 := p } x)) dyO3
-  ∧ cnxDownLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 (cnxPreB3 gf N ε w x)
+  ∧ cnxDownLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 bf16 (cnxPreB3 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with d0 := p } x)) dyD0
-  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b4 (cnxPreD0 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b4 bf16 (cnxPreD0 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b4 := p } x)) dyO4
-  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b5 (cnxPreB4 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b5 bf16 (cnxPreB4 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b5 := p } x)) dyO5
-  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b6 (cnxPreB5 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b6 bf16 (cnxPreB5 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b6 := p } x)) dyO6
-  ∧ cnxDownLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 (cnxPreB6 gf N ε w x)
+  ∧ cnxDownLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 bf16 (cnxPreB6 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with d1 := p } x)) dyD1
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b7 (cnxPreD1 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b7 bf16 (cnxPreD1 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b7 := p } x)) dyO7
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b8 (cnxPreB7 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b8 bf16 (cnxPreB7 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b8 := p } x)) dyO8
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b9 (cnxPreB8 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b9 bf16 (cnxPreB8 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b9 := p } x)) dyO9
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b10 (cnxPreB9 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b10 bf16 (cnxPreB9 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b10 := p } x)) dyO10
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b11 (cnxPreB10 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b11 bf16 (cnxPreB10 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b11 := p } x)) dyO11
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b12 (cnxPreB11 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b12 bf16 (cnxPreB11 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b12 := p } x)) dyO12
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b13 (cnxPreB12 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b13 bf16 (cnxPreB12 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b13 := p } x)) dyO13
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b14 (cnxPreB13 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b14 bf16 (cnxPreB13 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b14 := p } x)) dyO14
-  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b15 (cnxPreB14 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b15 bf16 (cnxPreB14 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b15 := p } x)) dyO15
-  ∧ cnxDownLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 (cnxPreB15 gf N ε w x)
+  ∧ cnxDownLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 bf16 (cnxPreB15 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with d2 := p } x)) dyD2
-  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b16 (cnxPreD2 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b16 bf16 (cnxPreD2 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b16 := p } x)) dyO16
-  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b17 (cnxPreB16 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b17 bf16 (cnxPreB16 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b17 := p } x)) dyO17
-  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b18 (cnxPreB17 gf N ε w x)
+  ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b18 bf16 (cnxPreB17 gf N ε w x)
       (fun p => L (cnxNetB gf N ε { w with b18 := p } x)) dyO18
   ∧ cnxHeadLossTiedGB N (h := 7) (w := 7) xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc (cnxPreB18 gf N ε w x)
       (fun a b W bb => L (cnxNetB gf N ε { w with hG := a, hT := b, Wfc := W, bfc := bb } x)) g
@@ -1251,9 +1267,9 @@ def CnxNetLossTiedGB (gf : GeluForm) (xN epsStr cotN dN : String) (N : Nat) {nC 
     Hypothesis: `0 < ε`, the LayerNorms' (the tie itself needs none). The loss enters only through
     `hL`; `cnx_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
 theorem cnx_net_lossGrad {gf : GeluForm} (xN epsStr cotN dN : String) (N : Nat) {nC : Nat} (ε : ℝ) (hε : 0 < ε)
-    (w : CnxTieWeights nC) (x : Vec (N * (3 * 224 * 224)))
+    (w : CnxTieWeights nC) (bf16 : Bool) (x : Vec (N * (3 * 224 * 224)))
     {L : Vec (N * nC) → Vec 1} {g : Vec (N * nC)} (hL : HasGradAt L (cnxNetB gf N ε w x) g) :
-    CnxNetLossTiedGB gf xN epsStr cotN dN N ε w x L g := by
+    CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 x L g := by
   unfold CnxNetLossTiedGB
   intro dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   have hL' : HasGradAt L (batchMap N (cnxHeadO 7 7 ε w.hG w.hT w.Wfc w.bfc) (cnxPreB18 gf N ε w x)) g :=
@@ -1302,49 +1318,49 @@ theorem cnx_net_lossGrad {gf : GeluForm} (xN epsStr cotN dN : String) (N : Nat) 
     cnxBlkB_hasGradAt_comp N (h := 56) (w := 56) ε hε w.b2 _ (hB2.congr_point (cnxPreB2_apply N ε w x))
   have hS : HasGradAt (fun y => L (cnxSufS gf N ε w y)) (cnxPreS N ε w x) dyStem :=
     cnxBlkB_hasGradAt_comp N (h := 56) (w := 56) ε hε w.b1 _ (hB1.congr_point (cnxPreB1_apply N ε w x))
-  refine ⟨cnx_stem_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.sW w.sb w.sγ w.sβ x
+  refine ⟨cnx_stem_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.sW w.sb w.sγ w.sβ bf16 x
       (hS.congr_point (cnxPreS_apply N ε w x)) (fun W b γ β => by rw [cnx_factor_stem]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b1 _
+  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b1 bf16 _
       (hB1.congr_point (cnxPreB1_apply N ε w x)) (fun p => by rw [cnx_factor_b1]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b2 _
+  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b2 bf16 _
       (hB2.congr_point (cnxPreB2_apply N ε w x)) (fun p => by rw [cnx_factor_b2]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b3 _
+  refine ⟨cnx_block_lossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε hε w.b3 bf16 _
       (hB3.congr_point (cnxPreB3_apply N ε w x)) (fun p => by rw [cnx_factor_b3]), ?_⟩
-  refine ⟨cnx_down_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 _
+  refine ⟨cnx_down_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 bf16 _
       (hD0.congr_point (cnxPreD0_apply N ε w x)) (fun p => by rw [cnx_factor_d0]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b4 _
+  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b4 bf16 _
       (hB4.congr_point (cnxPreB4_apply N ε w x)) (fun p => by rw [cnx_factor_b4]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b5 _
+  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b5 bf16 _
       (hB5.congr_point (cnxPreB5_apply N ε w x)) (fun p => by rw [cnx_factor_b5]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b6 _
+  refine ⟨cnx_block_lossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε hε w.b6 bf16 _
       (hB6.congr_point (cnxPreB6_apply N ε w x)) (fun p => by rw [cnx_factor_b6]), ?_⟩
-  refine ⟨cnx_down_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 _
+  refine ⟨cnx_down_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 bf16 _
       (hD1.congr_point (cnxPreD1_apply N ε w x)) (fun p => by rw [cnx_factor_d1]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b7 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b7 bf16 _
       (hB7.congr_point (cnxPreB7_apply N ε w x)) (fun p => by rw [cnx_factor_b7]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b8 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b8 bf16 _
       (hB8.congr_point (cnxPreB8_apply N ε w x)) (fun p => by rw [cnx_factor_b8]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b9 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b9 bf16 _
       (hB9.congr_point (cnxPreB9_apply N ε w x)) (fun p => by rw [cnx_factor_b9]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b10 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b10 bf16 _
       (hB10.congr_point (cnxPreB10_apply N ε w x)) (fun p => by rw [cnx_factor_b10]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b11 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b11 bf16 _
       (hB11.congr_point (cnxPreB11_apply N ε w x)) (fun p => by rw [cnx_factor_b11]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b12 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b12 bf16 _
       (hB12.congr_point (cnxPreB12_apply N ε w x)) (fun p => by rw [cnx_factor_b12]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b13 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b13 bf16 _
       (hB13.congr_point (cnxPreB13_apply N ε w x)) (fun p => by rw [cnx_factor_b13]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b14 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b14 bf16 _
       (hB14.congr_point (cnxPreB14_apply N ε w x)) (fun p => by rw [cnx_factor_b14]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b15 _
+  refine ⟨cnx_block_lossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε hε w.b15 bf16 _
       (hB15.congr_point (cnxPreB15_apply N ε w x)) (fun p => by rw [cnx_factor_b15]), ?_⟩
-  refine ⟨cnx_down_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 _
+  refine ⟨cnx_down_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 bf16 _
       (hD2.congr_point (cnxPreD2_apply N ε w x)) (fun p => by rw [cnx_factor_d2]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b16 _
+  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b16 bf16 _
       (hB16.congr_point (cnxPreB16_apply N ε w x)) (fun p => by rw [cnx_factor_b16]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b17 _
+  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b17 bf16 _
       (hB17.congr_point (cnxPreB17_apply N ε w x)) (fun p => by rw [cnx_factor_b17]), ?_⟩
-  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b18 _
+  refine ⟨cnx_block_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε hε w.b18 bf16 _
       (hB18.congr_point (cnxPreB18_apply N ε w x)) (fun p => by rw [cnx_factor_b18]), ?_⟩
   exact cnx_head_lossTiedGB N (h := 7) (w := 7) xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc _ hL'
     (fun a b W bb => by rw [cnx_factor_head])
@@ -1353,12 +1369,12 @@ theorem cnx_net_lossGrad {gf : GeluForm} (xN epsStr cotN dN : String) (N : Nat) 
     cross-entropy `smoothedBatchLossDiv`, `g` the `softmaxDiv` cotangent the render emits — the
     tie's own `g`, whose logits are `cnxNetB N ε w x` (`cnx_logitsB_eq`). -/
 theorem cnx_net_lossGrad_smoothedCE {gf : GeluForm} (xN epsStr cotN dN aStr negAK bStr logN ohN : String)
-    (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : CnxTieWeights nC)
+    (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : CnxTieWeights nC) (bf16 : Bool)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
     (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
-    CnxNetLossTiedGB gf xN epsStr cotN dN N ε w x (smoothedBatchLossDiv N nC α B t)
+    CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 x (smoothedBatchLossDiv N nC α B t)
       (den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN (cnxNetB gf N ε w x) t)) :=
-  cnx_net_lossGrad xN epsStr cotN dN N ε hε w x
+  cnx_net_lossGrad xN epsStr cotN dN N ε hε w bf16 x
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
       fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
@@ -1371,7 +1387,7 @@ theorem cnx_net_lossGrad_smoothedCE {gf : GeluForm} (xN epsStr cotN dN aStr negA
     lets (`cnxPreS_apply`, …) and the loss side's logits into the tie's (`cnx_logitsB_eq`). -/
 theorem cnx_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    (w : CnxTieWeights nC)
+    (w : CnxTieWeights nC) (bf16 : Bool)
     (x : Vec (N * (3*224*224))) (t : Vec (N * nC))
     (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     -- forward block inputs (the prefixes of the committed render's forward)
@@ -1429,71 +1445,71 @@ theorem cnx_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn gf ε) ib1 dyO1
     let L := smoothedBatchLossDiv N nC α B t
     -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
-    (cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem
-      ∧ cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x
+    (cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ bf16 x dyStem
+      ∧ cnxStemLossTiedGB N (h := 56) (w := 56) xN epsStr cotN ε w.sW w.sb w.sγ w.sβ bf16 x
         (fun W b γ β => L (cnxNetB gf N ε { w with sW := W, sb := b, sγ := γ, sβ := β } x)) dyStem)
-  ∧ (w.b1.TiedGB gf N xN epsStr cotN ε ib1 dyO1
-      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b1 ib1
+  ∧ (w.b1.TiedGB gf N xN epsStr cotN ε bf16 ib1 dyO1
+      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b1 bf16 ib1
         (fun p => L (cnxNetB gf N ε { w with b1 := p } x)) dyO1)
-  ∧ (w.b2.TiedGB gf N xN epsStr cotN ε ib2 dyO2
-      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b2 ib2
+  ∧ (w.b2.TiedGB gf N xN epsStr cotN ε bf16 ib2 dyO2
+      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b2 bf16 ib2
         (fun p => L (cnxNetB gf N ε { w with b2 := p } x)) dyO2)
-  ∧ (w.b3.TiedGB gf N xN epsStr cotN ε ib3 dyO3
-      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b3 ib3
+  ∧ (w.b3.TiedGB gf N xN epsStr cotN ε bf16 ib3 dyO3
+      ∧ cnxBlockLossTiedGB gf N (h := 56) (w := 56) xN epsStr cotN ε w.b3 bf16 ib3
         (fun p => L (cnxNetB gf N ε { w with b3 := p } x)) dyO3)
-  ∧ (w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0
-      ∧ cnxDownLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 ibD0
+  ∧ (w.d0.TiedGB N xN epsStr cotN ε bf16 ibD0 dyD0
+      ∧ cnxDownLossTiedGB N (h := 28) (w := 28) xN epsStr cotN ε w.d0 bf16 ibD0
         (fun p => L (cnxNetB gf N ε { w with d0 := p } x)) dyD0)
-  ∧ (w.b4.TiedGB gf N xN epsStr cotN ε ib4 dyO4
-      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b4 ib4
+  ∧ (w.b4.TiedGB gf N xN epsStr cotN ε bf16 ib4 dyO4
+      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b4 bf16 ib4
         (fun p => L (cnxNetB gf N ε { w with b4 := p } x)) dyO4)
-  ∧ (w.b5.TiedGB gf N xN epsStr cotN ε ib5 dyO5
-      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b5 ib5
+  ∧ (w.b5.TiedGB gf N xN epsStr cotN ε bf16 ib5 dyO5
+      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b5 bf16 ib5
         (fun p => L (cnxNetB gf N ε { w with b5 := p } x)) dyO5)
-  ∧ (w.b6.TiedGB gf N xN epsStr cotN ε ib6 dyO6
-      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b6 ib6
+  ∧ (w.b6.TiedGB gf N xN epsStr cotN ε bf16 ib6 dyO6
+      ∧ cnxBlockLossTiedGB gf N (h := 28) (w := 28) xN epsStr cotN ε w.b6 bf16 ib6
         (fun p => L (cnxNetB gf N ε { w with b6 := p } x)) dyO6)
-  ∧ (w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1
-      ∧ cnxDownLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 ibD1
+  ∧ (w.d1.TiedGB N xN epsStr cotN ε bf16 ibD1 dyD1
+      ∧ cnxDownLossTiedGB N (h := 14) (w := 14) xN epsStr cotN ε w.d1 bf16 ibD1
         (fun p => L (cnxNetB gf N ε { w with d1 := p } x)) dyD1)
-  ∧ (w.b7.TiedGB gf N xN epsStr cotN ε ib7 dyO7
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b7 ib7
+  ∧ (w.b7.TiedGB gf N xN epsStr cotN ε bf16 ib7 dyO7
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b7 bf16 ib7
         (fun p => L (cnxNetB gf N ε { w with b7 := p } x)) dyO7)
-  ∧ (w.b8.TiedGB gf N xN epsStr cotN ε ib8 dyO8
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b8 ib8
+  ∧ (w.b8.TiedGB gf N xN epsStr cotN ε bf16 ib8 dyO8
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b8 bf16 ib8
         (fun p => L (cnxNetB gf N ε { w with b8 := p } x)) dyO8)
-  ∧ (w.b9.TiedGB gf N xN epsStr cotN ε ib9 dyO9
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b9 ib9
+  ∧ (w.b9.TiedGB gf N xN epsStr cotN ε bf16 ib9 dyO9
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b9 bf16 ib9
         (fun p => L (cnxNetB gf N ε { w with b9 := p } x)) dyO9)
-  ∧ (w.b10.TiedGB gf N xN epsStr cotN ε ib10 dyO10
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b10 ib10
+  ∧ (w.b10.TiedGB gf N xN epsStr cotN ε bf16 ib10 dyO10
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b10 bf16 ib10
         (fun p => L (cnxNetB gf N ε { w with b10 := p } x)) dyO10)
-  ∧ (w.b11.TiedGB gf N xN epsStr cotN ε ib11 dyO11
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b11 ib11
+  ∧ (w.b11.TiedGB gf N xN epsStr cotN ε bf16 ib11 dyO11
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b11 bf16 ib11
         (fun p => L (cnxNetB gf N ε { w with b11 := p } x)) dyO11)
-  ∧ (w.b12.TiedGB gf N xN epsStr cotN ε ib12 dyO12
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b12 ib12
+  ∧ (w.b12.TiedGB gf N xN epsStr cotN ε bf16 ib12 dyO12
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b12 bf16 ib12
         (fun p => L (cnxNetB gf N ε { w with b12 := p } x)) dyO12)
-  ∧ (w.b13.TiedGB gf N xN epsStr cotN ε ib13 dyO13
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b13 ib13
+  ∧ (w.b13.TiedGB gf N xN epsStr cotN ε bf16 ib13 dyO13
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b13 bf16 ib13
         (fun p => L (cnxNetB gf N ε { w with b13 := p } x)) dyO13)
-  ∧ (w.b14.TiedGB gf N xN epsStr cotN ε ib14 dyO14
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b14 ib14
+  ∧ (w.b14.TiedGB gf N xN epsStr cotN ε bf16 ib14 dyO14
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b14 bf16 ib14
         (fun p => L (cnxNetB gf N ε { w with b14 := p } x)) dyO14)
-  ∧ (w.b15.TiedGB gf N xN epsStr cotN ε ib15 dyO15
-      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b15 ib15
+  ∧ (w.b15.TiedGB gf N xN epsStr cotN ε bf16 ib15 dyO15
+      ∧ cnxBlockLossTiedGB gf N (h := 14) (w := 14) xN epsStr cotN ε w.b15 bf16 ib15
         (fun p => L (cnxNetB gf N ε { w with b15 := p } x)) dyO15)
-  ∧ (w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2
-      ∧ cnxDownLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 ibD2
+  ∧ (w.d2.TiedGB N xN epsStr cotN ε bf16 ibD2 dyD2
+      ∧ cnxDownLossTiedGB N (h := 7) (w := 7) xN epsStr cotN ε w.d2 bf16 ibD2
         (fun p => L (cnxNetB gf N ε { w with d2 := p } x)) dyD2)
-  ∧ (w.b16.TiedGB gf N xN epsStr cotN ε ib16 dyO16
-      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b16 ib16
+  ∧ (w.b16.TiedGB gf N xN epsStr cotN ε bf16 ib16 dyO16
+      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b16 bf16 ib16
         (fun p => L (cnxNetB gf N ε { w with b16 := p } x)) dyO16)
-  ∧ (w.b17.TiedGB gf N xN epsStr cotN ε ib17 dyO17
-      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b17 ib17
+  ∧ (w.b17.TiedGB gf N xN epsStr cotN ε bf16 ib17 dyO17
+      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b17 bf16 ib17
         (fun p => L (cnxNetB gf N ε { w with b17 := p } x)) dyO17)
-  ∧ (w.b18.TiedGB gf N xN epsStr cotN ε ib18 dyO18
-      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b18 ib18
+  ∧ (w.b18.TiedGB gf N xN epsStr cotN ε bf16 ib18 dyO18
+      ∧ cnxBlockLossTiedGB gf N (h := 7) (w := 7) xN epsStr cotN ε w.b18 bf16 ib18
         (fun p => L (cnxNetB gf N ε { w with b18 := p } x)) dyO18)
   ∧ (cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
       ∧ cnxHeadLossTiedGB N (h := 7) (w := 7) xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead
@@ -1503,9 +1519,10 @@ theorem cnx_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem L
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17, t18, t19,
     t20, t21, t22⟩ :=
-    cnx_net_tiedGB N xN epsStr cotN dN aStr negAK bStr logN ohN ε α B w x t
+    cnx_net_tiedGB N xN epsStr cotN dN aStr negAK bStr logN ohN ε α B w bf16 x t
   have hl :=
-    cnx_net_lossGrad_smoothedCE (gf := gf) xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w x t ht
+    cnx_net_lossGrad_smoothedCE (gf := gf) xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w
+      bf16 x t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : cnxPreS N ε w x = ib1 := by rw [cnxPreS_apply N ε w x]
   have e1 : cnxPreB1 gf N ε w x = ib2 := by rw [cnxPreB1_apply N ε w x, e0]

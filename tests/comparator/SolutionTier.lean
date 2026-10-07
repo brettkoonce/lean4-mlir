@@ -634,7 +634,7 @@ theorem chk_vit_net_tied_certified :
 /-- `Proofs.CnxTieGB.cnx_net_tiedGB` -/
 theorem chk_cnx_net_tiedGB :
     ∀ {gf : Proofs.GeluForm} (N : ℕ) {nC : ℕ}
-      (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ) (w : Proofs.CnxTie.CnxTieWeights nC)
+      (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ) (w : Proofs.CnxTie.CnxTieWeights nC) (bf16 : Bool)
       (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (t : Proofs.Vec (N * nC)),
       have ib1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
         Proofs.StableHLO.batchMap N (Proofs.CnxTie.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
@@ -685,28 +685,28 @@ theorem chk_cnx_net_tiedGB :
       have dyO2 := Proofs.StableHLO.batchMapAux N (w.b3.cotIn gf ε) ib3 dyO3;
       have dyO1 := Proofs.StableHLO.batchMapAux N (w.b2.cotIn gf ε) ib2 dyO2;
       have dyStem := Proofs.StableHLO.batchMapAux N (w.b1.cotIn gf ε) ib1 dyO1;
-      Proofs.CnxTieGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x dyStem ∧
-        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b1 N xN epsStr cotN ε ib1 dyO1 ∧
-          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b2 N xN epsStr cotN ε ib2 dyO2 ∧
-            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b3 N xN epsStr cotN ε ib3 dyO3 ∧
-              w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0 ∧
-                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b4 N xN epsStr cotN ε ib4 dyO4 ∧
-                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b5 N xN epsStr cotN ε ib5 dyO5 ∧
-                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b6 N xN epsStr cotN ε ib6 dyO6 ∧
-                      w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1 ∧
-                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b7 N xN epsStr cotN ε ib7 dyO7 ∧
-                          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b8 N xN epsStr cotN ε ib8 dyO8 ∧
-                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b9 N xN epsStr cotN ε ib9 dyO9 ∧
-                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b10 N xN epsStr cotN ε ib10 dyO10 ∧
-                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b11 N xN epsStr cotN ε ib11 dyO11 ∧
-                                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b12 N xN epsStr cotN ε ib12 dyO12 ∧
-                                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b13 N xN epsStr cotN ε ib13 dyO13 ∧
-                                      Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b14 N xN epsStr cotN ε ib14 dyO14 ∧
-                                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b15 N xN epsStr cotN ε ib15 dyO15 ∧
-                                          w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2 ∧
-                                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b16 N xN epsStr cotN ε ib16 dyO16 ∧
-                                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b17 N xN epsStr cotN ε ib17 dyO17 ∧
-                                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b18 N xN epsStr cotN ε ib18 dyO18 ∧
+      Proofs.CnxTieGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ bf16 x dyStem ∧
+        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b1 N xN epsStr cotN ε bf16 ib1 dyO1 ∧
+          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b2 N xN epsStr cotN ε bf16 ib2 dyO2 ∧
+            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b3 N xN epsStr cotN ε bf16 ib3 dyO3 ∧
+              w.d0.TiedGB N xN epsStr cotN ε bf16 ibD0 dyD0 ∧
+                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b4 N xN epsStr cotN ε bf16 ib4 dyO4 ∧
+                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b5 N xN epsStr cotN ε bf16 ib5 dyO5 ∧
+                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b6 N xN epsStr cotN ε bf16 ib6 dyO6 ∧
+                      w.d1.TiedGB N xN epsStr cotN ε bf16 ibD1 dyD1 ∧
+                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b7 N xN epsStr cotN ε bf16 ib7 dyO7 ∧
+                          Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b8 N xN epsStr cotN ε bf16 ib8 dyO8 ∧
+                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b9 N xN epsStr cotN ε bf16 ib9 dyO9 ∧
+                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b10 N xN epsStr cotN ε bf16 ib10 dyO10 ∧
+                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b11 N xN epsStr cotN ε bf16 ib11 dyO11 ∧
+                                  Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b12 N xN epsStr cotN ε bf16 ib12 dyO12 ∧
+                                    Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b13 N xN epsStr cotN ε bf16 ib13 dyO13 ∧
+                                      Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b14 N xN epsStr cotN ε bf16 ib14 dyO14 ∧
+                                        Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b15 N xN epsStr cotN ε bf16 ib15 dyO15 ∧
+                                          w.d2.TiedGB N xN epsStr cotN ε bf16 ibD2 dyD2 ∧
+                                            Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b16 N xN epsStr cotN ε bf16 ib16 dyO16 ∧
+                                              Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b17 N xN epsStr cotN ε bf16 ib17 dyO17 ∧
+                                                Proofs.CnxTie.CnxTieBlk.TiedGB gf w.b18 N xN epsStr cotN ε bf16 ib18 dyO18 ∧
                                                   Proofs.CnxTieGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
                                                     w.bfc xhead g :=
   Proofs.CnxTieGB.cnx_net_tiedGB
@@ -775,10 +775,10 @@ theorem chk_enet_net_lossGrad :
 theorem chk_cnx_net_lossGrad :
     ∀ {gf : Proofs.GeluForm} (xN epsStr cotN dN : String) (N : ℕ) {nC : ℕ} (ε : ℝ),
       (0 : ℝ) < ε →
-        ∀ (w : Proofs.CnxTie.CnxTieWeights nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+        ∀ (w : Proofs.CnxTie.CnxTieWeights nC) (bf16 : Bool) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
           {L : Proofs.Vec (N * nC) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nC)},
           Proofs.HasGradAt L (Proofs.CnxTieGB.cnxNetB gf N ε w x) g →
-            Proofs.CnxTieGB.CnxNetLossTiedGB gf xN epsStr cotN dN N ε w x L g :=
+            Proofs.CnxTieGB.CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 x L g :=
   Proofs.CnxTieGB.cnx_net_lossGrad
 
 /-- `Proofs.ViTTieGB.vit_net_lossGrad` -/

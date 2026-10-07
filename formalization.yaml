@@ -199,9 +199,9 @@ status:
     - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
     - {declaration: "Proofs.ViTTie.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTieGB.vit_net_tiedGB)
+    # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact, at either precision (ViT-Tiny's twin is Proofs.ViTTieGB.vit_net_tiedGB)
     - {declaration: "Proofs.CnxTieGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50, MobileNetV2, MobileNetV4 and EfficientNet-B0 at either precision (bf16 binder), the rest f32
+    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50, MobileNetV2, MobileNetV4, EfficientNet-B0 and ConvNeXt-T at either precision (bf16 binder), the rest f32
     - {declaration: "Proofs.ResNet34TieB.r34_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.ResNet50TieB.r50_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.MobileNetV2TieB.mnv2_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -460,11 +460,13 @@ fidelity:
        (`Bf16GradNodes`). At the identity rounding every bf16 kind denotes its f32 peer
        (`Bf16Erasure`, one lemma per kind), the renderers instantiate the rounding binder with the
        identity, and from 2026-10-07 the ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M
-       and EfficientNet-B0 typed graphs, step ties, sync ties and loss-gradient capstones take
-       the renderers' `bf16` flag through the same switch (`PrecisionSwitch`, `GradNodesBAt`):
-       stated at either precision, `true` being the bf16 artifacts the book's ImageNet runs
-       train from, read over the reals as the f32 ones are. ConvNeXt and ViT's capstones are
-       still stated at the f32 node (planning/bf16_tie.md).
+       and EfficientNet-B0 typed graphs, step ties, sync ties and loss-gradient capstones, and
+       ConvNeXt-T's step tie and loss-gradient capstone, take the renderers' `bf16` flag through
+       the same switch (`PrecisionSwitch`, `GradNodesBAt`): stated at either precision, `true`
+       being the bf16 artifacts the book's ImageNet runs train from, read over the reals as the
+       f32 ones are. ConvNeXt's typed forward graph is the per-example one (its renderer has no
+       bf16; the batched bf16 chain has no typed graph at either precision), and ViT's capstone
+       is still stated at the f32 node (planning/bf16_tie.md).
 
     4g. THE PROOFS-TIER PORT (2026-09-06 to 09-07), the record the labels 4g-4t used to carry
        here in full; the write-ups are planning/archive/proofs_tier_to_paper_nets.md,

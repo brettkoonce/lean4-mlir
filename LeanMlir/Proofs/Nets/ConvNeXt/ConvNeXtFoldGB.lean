@@ -36,7 +36,9 @@ slice.
 **The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
 constructors, not these nodes**: their `den` rounds the operands and the result once, outside the
 batch sum. Those are their own op kinds, folded once for every net in
-[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
+[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean);
+`CnxTieGB.cnx_net_tiedGB` and `cnx_net_lossGrad` reach them through the renderers' switch
+(`GradNodesBAt`, `Bf16Erasure`: at the identity rounding each bf16 kind denotes its f32 peer here).
 
 **One lemma per f32 node kind.** Every lemma is `∀ cot`, so it holds at whichever cotangent
 the chain delivers: the f32 AdamW, `wx`/`clip`, EMA, drop-path and data-parallel artifacts all

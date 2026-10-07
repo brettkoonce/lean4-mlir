@@ -31,8 +31,10 @@ order, with the typed graph's prefixes and shapes, each block reading the previo
 graphs describe; f32 throughout, and for ResNet-34, ResNet-50, MobileNetV2, MobileNetV4-Conv-M and
 EfficientNet-B0 also bf16: their typed graphs take the renderer's `bf16` flag
 (`StableHLO.PrecisionSwitch`), so their stem, block and (for the three depthwise nets) head rows
-are checked at both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
-`…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
+are checked at both values, the bf16 text against the bf16 graph. ConvNeXt's and ViT's bf16 renders swap in
+`…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not select —
+ConvNeXt's typed graph is the per-example `convNextFwdGraphTCh`, whose renderer has no bf16 (the
+batched bf16 chain has no typed graph at either precision), and ViT's is f32;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
 each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
