@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 `ViTDepthK` states the ViT forward one example at a time (`vitFwdGraphKMHV_faithful`). The
 `*drop*` artifacts — `vit_drop_fwd`, `vitin_drop_fwd`, `vitsin_drop_fwd` and the forward half of
-every `*drop*` train step, the book's `vitin_emadp128x4wxclipdropbf16` among them — add
+every `*drop*` train step, the book's `vitin_emadp128x4wxclipdropeps0000001erfbf16` among them — add
 **stochastic depth**: two `%dp<i>` mask inputs per block, a per-example scale `dropPath` on the
 attention branch (after the out-dense, before the first skip add) and on the MLP branch (after
 fc2, before the second), as `ViTRenderB.vBlockFwdB` emits them. Block `i`'s attention site is
@@ -36,8 +36,8 @@ denses and the two SDPA products of every block on the switch (`denseRowAt bf16 
 (`patchEmbedAt`), exactly where `ViTRenderB.vitFwd12B` switches; the classifier head stays f32, as it
 does there. Every statement below holds at every value of both flags (`Bf16Erasure`: at the
 identity rounding each bf16 kind denotes what its f32 peer does), so the bf16 train steps' forward,
-read over ℝ, is the same per-example forward. Their backward through the drop sites is outside this
-statement, as it is outside `ViTStepTieGB`.
+read over ℝ, is the same per-example forward. Their backward through the drop sites is
+`ViTStepTieGB`'s and `ViTParamGrad`'s (the `sd` binder; per example, `ViTDropBlock`).
 
 ## References
 

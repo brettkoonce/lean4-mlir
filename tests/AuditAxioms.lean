@@ -36,6 +36,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 import LeanMlir.Proofs.Foundation.DropSites
+import LeanMlir.Proofs.Foundation.Batched.Indexed
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBDrop
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
@@ -84,6 +85,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
+import LeanMlir.Proofs.Nets.ViT.ViTDropBlock
 import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
 import LeanMlir.Proofs.Foundation.DataParallel.Basic
 import LeanMlir.Proofs.Foundation.DataParallel.Node
@@ -908,6 +910,36 @@ open Proofs
 #print axioms Proofs.dropPath_shard
 #print axioms Proofs.dropPathOptFam_shard
 #print axioms Proofs.dropPathOptFam_scaled
+-- The indexed lift: a different per-example map at every example, and one example's drop site
+-- (Foundation/Batched/Indexed.lean)
+#print axioms Proofs.StableHLO.batchSlice_batchMapIdx
+#print axioms Proofs.StableHLO.batchSlice_batchMapAuxIdx
+#print axioms Proofs.StableHLO.batchMapIdx_comp
+#print axioms Proofs.batchMapIdx_differentiableAt
+#print axioms Proofs.pdiv_batchMapIdx_at
+#print axioms Proofs.batchMapIdxHasVJPAt
+#print axioms Proofs.batchMapIdxHasVJP
+#print axioms Proofs.batchMapAuxIdx_eq_batchMapIdxHasVJPAt
+#print axioms Proofs.HasGradAt.param_batchMapIdx
+#print axioms Proofs.HasGradAt.param_batchMapIdx_through
+#print axioms Proofs.dropScalarOptHasVJP
+#print axioms Proofs.dropScalarOpt_smul
+#print axioms Proofs.batchSlice_dropPathOpt
+#print axioms Proofs.siteResHasVJP
+#print axioms Proofs.StableHLO.batchShard_batchMapIdx
+#print axioms Proofs.StableHLO.batchShard_batchMapAuxIdx
+#print axioms Proofs.batchMapIdx_smul
+#print axioms Proofs.batchMapAuxIdx_smul
+-- One ViT block with its two drop sites, per example (Nets/ViT/ViTDropBlock.lean)
+#print axioms Proofs.ViTTieGB.fwdOD_none
+#print axioms Proofs.ViTTieGB.cotInD_none
+#print axioms Proofs.ViTTieGB.vitAttnBr_back
+#print axioms Proofs.ViTTieGB.vitMlpBr_back
+#print axioms Proofs.ViTTieGB.fwdOD_eq_sites
+#print axioms Proofs.BlockParamsV.fwdODHasVJP
+#print axioms Proofs.ViTTieGB.vitCotXinV_attn
+#print axioms Proofs.ViTTieGB.vitCotHVD_eq
+#print axioms Proofs.ViTTieGB.cotInD_eq_vjp
 -- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
 #print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
 #print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful
@@ -1230,7 +1262,9 @@ open Proofs
 #print axioms Proofs.ViTTieGB.attnCoreKHasVJPMat
 #print axioms Proofs.ViTTieGB.attnCoreVHasVJPMat
 #print axioms Proofs.ViTTieGB.attnCoreQ_backward
-#print axioms Proofs.ViTTieGB.vitMlpSub_hasGradAt
+#print axioms Proofs.ViTTieGB.vitMlpSite_hasGradAt
+#print axioms Proofs.ViTTieGB.hasGradAt_constAdd_site
+#print axioms Proofs.ViTTieGB.vitPostF2_hasGradAt
 #print axioms Proofs.ViTTieGB.vitPostQ_hasGradAt
 #print axioms Proofs.ViTTieGB.vitPostL1_hasGradAt
 #print axioms Proofs.ViTTieGB.vitPostL2_hasGradAt

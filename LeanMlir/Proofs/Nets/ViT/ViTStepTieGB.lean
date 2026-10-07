@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
-import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
+import LeanMlir.Proofs.Nets.ViT.ViTDropBlock
 
 /-! # ViT-Tiny's step tie at the batched index, the un-fused gradient and the smoothed loss
 
@@ -32,12 +32,23 @@ chain `expe → softmaxDiv → subB → scaleB → addVB → shiftB → divConst
 plain width `N·K`, at a GENERAL target arriving as `%onehot`. The fused file pins it to
 `softmax − oneHot`.
 
-**Axis 3 — the index.** `N` is a binder. Every activation is `batchMap N` of the per-example
-prefix the fused file threads (`patchEmbedFlat`, `vitBlockFwdOMHV`, the final LN, `clsSliceFlat`)
-and every cotangent is `batchMapAux N` of the per-example chain (`vitCotTowerOutV`,
-`vitBlockCotInAtMHV`, the `vitCot*` family). The lift is exact for this net because no ViT op
-couples examples — LayerNorm, attention, GELU and the denses are all per-example, and the `*B`
-constructors' `den` arms say so. `nC` is a binder too (10 on Imagenette, 1000 on ImageNet).
+**Axis 3 — the index.** `N` is a binder. Every activation is a per-example lift of the prefix
+the fused file threads (`patchEmbedFlat`, the block forward, the final LN, `clsSliceFlat`) and
+every cotangent a per-example lift of the chain (`vitCotTowerOutV`, the block's input cotangent,
+the `vitCot*` family). The lift is exact for this net because no ViT op couples examples —
+LayerNorm, attention, GELU and the denses are all per-example, and the `*B` constructors' `den`
+arms say so. A block's lift is the INDEXED one (`batchMapIdx` / `batchMapAuxIdx`,
+`Foundation.Batched.Indexed`): with stochastic depth example `n` runs the block at its own mask
+entries. `nC` is a binder too (10 on Imagenette, 1000 on ImageNet).
+
+**Stochastic depth is a binder.** `sd : Option (Fin 12 → Vec N × Vec N)` is the render's `drop`
+flag: `none` the drop-free artifacts' chain — every family constant, so the lifts are `batchMap` /
+`batchMapAux` and the statement is the drop-free one by `rfl` — and `some` the `*drop*` artifacts',
+the book's `vitin_emadp128x4wxclipdropeps0000001erfbf16` among them: block `k`'s two sites (`vitSdA` / `vitSdM`,
+the `%dp<2k>` / `%dp<2k+1>` inputs) scale the out-projection's and fc2's outputs by example `n`'s
+entries (`BlockParamsV.fwdOD`), the out-projection and fc2 weight and bias nodes read the dropped
+cotangent (`dropPathOpt`, where `ViTRenderB` emits `dropPathB` on it), and both skip fan-ins read
+the raw one (`BlockParamsV.cotInD`, `ViTDropBlock`).
 
 **The CLS-token conjunct.** The CLS token is one
 shared `[192]` vector; its gradient is the sum of every example's CLS-row cotangent. The fused
@@ -50,8 +61,9 @@ of the embed cotangent, with the batch sum inside `den`.
 
 Every save, every chain cotangent and every Jacobian witness is `ViTStepTie.lean`'s, lifted; every
 conjunct's proof is one `ViTFoldGB.*_den` lemma. The per-example saves and internal cotangents are
-repackaged as functions of the block INPUT (`blkSaves`, `cAtt` … `cM1`) so that `batchMapAux` has
-something to lift — the `let` chains of `vitBlockTiedAtMHV` and `vitBlockCotInAtMHV`, verbatim.
+repackaged as functions of the block INPUT and its two sites (`blkSaves`, `cAtt` … `cM1`) so that
+the indexed lift has something to lift — the `let` chains of `vitBlockTiedAtMHV` and
+`vitBlockCotInAtMHV` with the sites in.
 ViT has no `*BackBatchedGraph_faithful` family and needs none here: the `batchMap` lift is the
 batched statement, as it was for ConvNeXt.
 
@@ -61,8 +73,7 @@ smoothness hypothesis anywhere). Stated at ViT-Tiny's literal dims; S and B are 
 
 **Scope.** One replica: in `vitin_adamdp128x4*` (four replicas of 128) every gradient node feeds
 `allReduceMeanF`, and `DataParallel.Node` composes the per-replica statement with the replica
-mean. The drop-free chain: the `*drop*` artifacts' cotangent chains carry `dropPathB` sites not
-stated here.
+mean.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -96,7 +107,7 @@ structure BlkSaves (Np1 heads d mlpDim : Nat) where
 /-- The saves from the block input — `vitBlockTiedAtMHV`'s `let` chain, verbatim. -/
 noncomputable def blkSaves (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
-    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim)
+    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (sA : Option ℝ)
     (xin : Vec (Np1 * (heads * d))) : BlkSaves Np1 heads d mlpDim :=
   let X    : Mat Np1 (heads * d) := Mat.unflatten xin
   let ln1  : Mat Np1 (heads * d) := fun r kk => layerScale γ1 (fun s => layerNormForward (heads * d) ε 1 0 (X r) s) kk + β1 kk
@@ -107,7 +118,7 @@ noncomputable def blkSaves (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (Mat.mul (rowSoftmax (fun i j => sdpaScale d *
         Mat.mul (headSliceMat Np1 heads d hh Q) (Mat.transpose (headSliceMat Np1 heads d hh K)) i j))
       (headSliceMat Np1 heads d hh V))
-  let h    : Mat Np1 (heads * d) := fun r s => X r s + dense Wo bo (att r) s
+  let h    : Mat Np1 (heads * d) := fun r s => X r s + siteScale sA (dense Wo bo (att r) s)
   let ln2  : Mat Np1 (heads * d) := fun r kk => layerScale γ2 (fun s => layerNormForward (heads * d) ε 1 0 (h r) s) kk + β2 kk
   let m1   : Mat Np1 mlpDim := fun r => dense Wfc1 bfc1 (ln2 r)
   let g    : Mat Np1 mlpDim := fun r => gf.map mlpDim (m1 r)
@@ -118,99 +129,103 @@ noncomputable def blkSaves (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
 noncomputable def cAtt (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut
 
 /-- Per example, the Q cotangent, per head (`vitCotDQmh`), from the block input and output cotangent. -/
 noncomputable def cQ (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotDQmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut)
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotDQmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut)
 
 /-- Per example, the K cotangent, per head, from the block input and output cotangent. -/
 noncomputable def cK (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotDKmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut)
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotDKmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut)
 
 /-- Per example, the V cotangent, per head, from the block input and output cotangent. -/
 noncomputable def cV (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut)
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut)
 
 /-- Per example, the LN₁-output cotangent: the three-way Q/K/V fan-in (`vitCotLn1`), from the block input and output cotangent. -/
 noncomputable def cLn1 (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
   vitCotLn1 Wq Wk Wv
-    (vitCotDQmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut))
-    (vitCotDKmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut))
-    (vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttV gf ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut))
+    (vitCotDQmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut))
+    (vitCotDKmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut))
+    (vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttVD gf ε γ2 Wo Wfc1 Wfc2 sA sM s.h s.m1 dyOut))
 
 /-- Per example, the MLP-residual fan-in at `h` (`vitCotHV`), from the block input and output cotangent. -/
 noncomputable def cH (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotHV gf ε γ2 Wfc1 Wfc2 s.h s.m1 dyOut
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotHVD gf ε γ2 Wfc1 Wfc2 sM s.h s.m1 dyOut
 
 /-- Per example, the LN₂-output cotangent (`vitCotLn2`), from the block input and output cotangent. -/
 noncomputable def cLn2 (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotLn2 gf Wfc1 Wfc2 s.m1 dyOut
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotLn2 gf Wfc1 Wfc2 s.m1 (dropScalarOpt sM dyOut)
 
 /-- Per example, the fc1-output cotangent through the GELU mask (`vitCotM1`), from the block input and output cotangent. -/
 noncomputable def cM1 (gf : GeluForm) {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
-    (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * mlpDim) :=
-  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 xin
-  vitCotM1 gf Wfc2 s.m1 dyOut
+    (sA sM : Option ℝ) (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * mlpDim) :=
+  let s := blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 sA xin
+  vitCotM1 gf Wfc2 s.m1 (dropScalarOpt sM dyOut)
 
 /-! ## The multi-head block — all 16 gradient nodes, batched -/
 
 /-- **One multi-head vector-LN transformer block, tied at the batched gradient nodes.** Every one of
-    the block's 16 params, fed `batchMapAux N` of the cotangent the real backward chain delivers at
-    its site, `den`otes the certified `Σ_n` gradient — the MLP-residual and attention-residual
+    the block's 16 params, fed the indexed lift of the cotangent the real backward chain delivers
+    at its site, `den`otes the certified `Σ_n` gradient — the MLP-residual and attention-residual
     fan-ins and the three-way LN₁ fan-in, per head, exactly as `vitBlockTiedMHV` has them per
-    example. -/
+    example. At the two drop sites `sA sM` the out-projection's and fc2's nodes read the dropped
+    cotangent (`dropPathOpt`); `none none` is the drop-free block. -/
 def vitBlockTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (bf16 : Bool) (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
-  -- forward saves — each `batchMap N` of the per-example save the emitted node lifts
+    (bf16 : Bool) (sA sM : Option (Vec N)) (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
+  -- forward saves — each the indexed lift of the per-example save the emitted node lifts
   let ln1B : Vec (N * (Np1 * (heads * d))) :=
-    batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).ln1) xin
+    batchMapIdx N (fun n x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 (exampleSite sA n) x).ln1) xin
   let attB : Vec (N * (Np1 * (heads * d))) :=
-    batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).att) xin
+    batchMapIdx N (fun n x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 (exampleSite sA n) x).att) xin
   let hB   : Vec (N * (Np1 * (heads * d))) :=
-    batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).h) xin
+    batchMapIdx N (fun n x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 (exampleSite sA n) x).h) xin
   let ln2B : Vec (N * (Np1 * (heads * d))) :=
-    batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).ln2) xin
+    batchMapIdx N (fun n x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 (exampleSite sA n) x).ln2) xin
   let gB   : Vec (N * (Np1 * mlpDim)) :=
-    batchMap N (fun x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 x).g) xin
-  -- backward chain cotangents — `batchMapAux N` of the per-example chain
-  let cotLn1B : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cLn1 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let dQB     : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cQ gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let dKB     : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cK gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let dVB     : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cV gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let cotHB   : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cH gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let cotLn2B : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cLn2 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
-  let cotM1B  : Vec (N * (Np1 * mlpDim))      := batchMapAux N (cM1 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
+    batchMapIdx N (fun n x => (blkSaves gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 (exampleSite sA n) x).g) xin
+  -- backward chain cotangents — the indexed lift of the per-example chain
+  let cotLn1B : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cLn1 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let dQB     : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cQ gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let dKB     : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cK gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let dVB     : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cV gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let cotHB   : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cH gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let cotLn2B : Vec (N * (Np1 * (heads * d))) := batchMapAuxIdx N (fun n => cLn2 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  let cotM1B  : Vec (N * (Np1 * mlpDim))      := batchMapAuxIdx N (fun n => cM1 gf ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 (exampleSite sA n) (exampleSite sM n)) xin dyOut
+  -- the two sites on the branch cotangents (the skips read the raw ones)
+  let cotOB   : Vec (N * (Np1 * (heads * d))) := dropPathOpt N (Np1 * (heads * d)) sA cotHB
+  let dyOutD  : Vec (N * (Np1 * (heads * d))) := dropPathOpt N (Np1 * (heads * d)) sM dyOut
   -- LN₁ γ/β  (cot = cotLn1B, LN input = xin)
   GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β1 xin γ1 cotLn1B
   ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ1 xin β1 cotLn1B
@@ -223,25 +238,25 @@ def vitBlockTiedGB (gf : GeluForm) (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsS
   -- V dense W/b  (cot = dVB)
   ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bv ln1B Wv dVB
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wv ln1B bv dVB
-  -- out-proj dense W/b  (cot = cotHB, dense input = attB)
-  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bo attB Wo cotHB
-  ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wo attB bo cotHB
+  -- out-proj dense W/b  (cot = sA ⊙ cotHB, dense input = attB)
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bo attB Wo cotOB
+  ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wo attB bo cotOB
   -- LN₂ γ/β  (cot = cotLn2B, LN input = hB)
   ∧GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β2 hB γ2 cotLn2B
   ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ2 hB β2 cotLn2B
   -- fc1 dense W/b  (cot = cotM1B, dense input = ln2B)
   ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bfc1 ln2B Wfc1 cotM1B
   ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wfc1 ln2B bfc1 cotM1B
-  -- fc2 dense W/b  (cot = dyOut, dense input = gB)
-  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bfc2 gB Wfc2 dyOut
-  ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wfc2 gB bfc2 dyOut
+  -- fc2 dense W/b  (cot = sM ⊙ dyOut, dense input = gB)
+  ∧ViTFoldGB.RowDenseWTiedBAt bf16 N Np1 xN cotN bfc2 gB Wfc2 dyOutD
+  ∧ViTFoldGB.RowDenseBTiedB N Np1 cotN Wfc2 gB bfc2 dyOutD
 
 theorem vit_block_tiedGB {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (bf16 : Bool) (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
+    (bf16 : Bool) (sA sM : Option (Vec N)) (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
     vitBlockTiedGB gf N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2
-      bf16 xin dyOut := by
+      bf16 sA sM xin dyOut := by
   unfold vitBlockTiedGB
   exact ⟨vecLNGammaTiedB_holds, vecLNBetaTiedB_holds, rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds,
     rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds, rowDenseWTiedBAt_holds bf16, rowDenseBTiedB_holds,
@@ -350,25 +365,23 @@ theorem vit_embed_tiedGB (N : Nat) (xN cotN : String)
 
 /-! ## Every cotangent the capstone threads is a certified VJP backward
 
-The capstone below threads `batchMapAux N` of two per-example constructors: the head's
-`vitCotTowerOutV` and each block's `vitBlockCotInAtMHV`. Their per-example ties to the certified
-VJPs are `ViTStepTie`'s `vitCotTowerOutV_eq_vjp` and `vitBlockCotInAtMHV_eq_vjp`; the two
-lemmas below lift them over the batch. -/
+The capstone below threads two per-example constructors: the head's `vitCotTowerOutV`
+(`batchMapAux N`) and each block's `cotInD` at its sites (`batchMapAuxIdx N`). Their per-example
+ties to the certified VJPs are `ViTStepTie`'s `vitCotTowerOutV_eq_vjp` and `ViTDropBlock`'s
+`cotInD_eq_vjp`; the two lemmas below lift them over the batch. -/
 
-/-- **Batched: a block's `batchMapAux` cotangent is the lifted block VJP's backward.** -/
+/-- **Batched: a block's cotangent at its sites is the lifted block VJP's backward.** Example `n`
+    runs the block at its own two mask entries, so the lift is the indexed one; `cotInD_eq_vjp` per
+    example. At `none none` it is the drop-free block's (`cotInD_none`, `fwdOD_none`). -/
 theorem vitBlockCotInB_eq_vjp {gf : GeluForm} (N : Nat) {Np1 heads d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
-    (p : BlockParamsV (heads * d) mlpDim) (xin : Vec (N * (Np1 * (heads * d)))) :
-    StableHLO.batchMapAux N (p.cotIn gf (Np1 := Np1) ε) xin
-      = (batchMapHasVJPAt (fun v : Vec (Np1 * (heads * d)) => Mat.flatten
-            (transformerBlockV gf Np1 heads d mlpDim ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
-              p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 (Mat.unflatten v))) xin
-          (fun _ => (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat gf Np1 heads d mlpDim ε
-            p.γ1 p.β1 hε p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2
-            p.Wfc1 p.bfc1 p.Wfc2 p.bfc2)).toHasVJPAt _)
-          (fun _ => (transformerBlockV_flat_differentiable Np1 heads d mlpDim ε p.γ1 p.β1 hε
-            p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) _)).backward :=
-  batchMapAux_eq_batchMapHasVJPAt _ _ xin _ _ fun _ => by
-    funext dy; exact vitBlockCotInAtMHV_eq_vjp ε hε p _ dy
+    (p : BlockParamsV (heads * d) mlpDim) (sA sM : Option (Vec N))
+    (xin : Vec (N * (Np1 * (heads * d)))) :
+    StableHLO.batchMapAuxIdx N (fun n => p.cotInD gf (Np1 := Np1) ε (exampleSite sA n) (exampleSite sM n)) xin
+      = (batchMapIdxHasVJPAt (fun n => p.fwdOD gf (Np1 := Np1) ε (exampleSite sA n) (exampleSite sM n)) xin
+          (fun n => (p.fwdODHasVJP gf ε hε (exampleSite sA n) (exampleSite sM n)).toHasVJPAt _)
+          (fun _ => fwdOD_differentiable ε hε p _ _ _)).backward :=
+  batchMapAuxIdx_eq_batchMapIdxHasVJPAt _ _ xin _ _ fun _ => by
+    funext dy; exact cotInD_eq_vjp ε hε p _ _ _ dy
 
 /-- **Batched: the head's `batchMapAux` cotangent is the lifted head VJP's backward.** -/
 theorem vitCotTowerOutB_eq_vjp (N : Nat) {n D nC : Nat} (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
@@ -385,28 +398,44 @@ theorem vitCotTowerOutB_eq_vjp (N : Nat) {n D nC : Nat} (ε : ℝ) (hε : 0 < ε
 /-! ## The whole-net capstone — all 200 params through the REAL batched forward + composed cotangent
 
 The fused file's thread, lifted: `ib1` is `batchMap N` of the patch embedding, `ib_{k+1}` is
-`batchMap N` of the multi-head block forward, the final LN / CLS slice / dense head are `batchMap N`
-of theirs, `g` is the smoothed loss cotangent at a general target, and every cotangent is
-`batchMapAux N` of the per-example chain — `vitCotTowerOutV` at the top, then twelve
-`vitBlockCotInAtMHV` attention-residual fan-ins down to the embed-output cotangent. -/
+`batchMapIdx N` of the multi-head block forward at block `k`'s sites, the final LN / CLS slice /
+dense head are `batchMap N` of theirs, `g` is the smoothed loss cotangent at a general target, and
+every cotangent is the lift of the per-example chain — `vitCotTowerOutV` at the top, then twelve
+`cotInD` attention-residual fan-ins down to the embed-output cotangent. -/
+
+/-- Block `k`'s attention-site masks, when the render carries stochastic depth: the first of the
+    pair the `*drop*` artifacts feed block `k` (`%dp<2k>`, `ViTRenderB.vitSiteIdx k 0`). -/
+def vitSdA {N L : Nat} (sd : Option (Fin L → Vec N × Vec N)) (k : Fin L) : Option (Vec N) :=
+  sd.map fun f => (f k).1
+
+/-- Block `k`'s MLP-site masks (`%dp<2k+1>`). -/
+def vitSdM {N L : Nat} (sd : Option (Fin L → Vec N × Vec N)) (k : Fin L) : Option (Vec N) :=
+  sd.map fun f => (f k).2
+
+@[simp] theorem vitSdA_none {N L : Nat} (k : Fin L) :
+    vitSdA (none : Option (Fin L → Vec N × Vec N)) k = none := rfl
+
+@[simp] theorem vitSdM_none {N L : Nat} (k : Fin L) :
+    vitSdM (none : Option (Fin L → Vec N × Vec N)) k = none := rfl
 
 /-- The block's batched tie (`vitBlockTiedGB`), over its `BlockParamsV` record. -/
 abbrev _root_.Proofs.BlockParamsV.TiedGB (gf : GeluForm) {Np1 heads d mlpDim : Nat}
     (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (bf16 : Bool)
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
+    (sA sM : Option (Vec N)) (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
   vitBlockTiedGB gf N xN epsStr cotN ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
-    p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 bf16 xin dyOut
+    p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 bf16 sA sM xin dyOut
 
 theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim : Nat}
     (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (bf16 : Bool)
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB gf N xN epsStr cotN ε bf16 xin dyOut :=
-  vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ bf16 xin dyOut
+    (sA sM : Option (Vec N)) (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
+    p.TiedGB gf N xN epsStr cotN ε bf16 sA sM xin dyOut :=
+  vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ bf16 sA sM xin dyOut
 
 /-- **The whole depth-12 multi-head ViT-Tiny train step, tied at the batched index, the
     gradient nodes and the smoothed loss — all 200 parameters.** The real forward
     `patchEmbed → 12 multi-head vector-LN blocks → final vector-LN → CLS-slice → dense head` as
-    `batchMap N` of the per-example prefixes, the smoothed loss cotangent at a general target `t`,
-    and the backward chain as `batchMapAux N` of the per-example one (the per-block multi-head
+    per-example lifts of the prefixes, the smoothed loss cotangent at a general target `t`,
+    and the backward chain as the lift of the per-example one (the per-block multi-head
     fan-ins, `vitCotTowerOutV` at the top, the embed-output cotangent at the bottom): the twelve
     blocks' 192 params, the final-LN γ/β, the classifier and the patch-embed wConv/bConv/cls/pos
     all denote the certified batched `Σ_n` gradient at their chain cotangent, and each chain
@@ -418,26 +447,31 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {gf : GeluForm} {Np1 heads d mlpDim :
     gradient at every value. The CLS token's gradient sums over the batch inside `den`,
     which the per-example capstone could state only at `N = 1`.
 
+    `sd` is stochastic depth: `none` the drop-free artifacts' chain, `some` the `*drop*`
+    artifacts' — `vitin_emadp128x4wxclipdropeps0000001erfbf16`'s, the book's run — each block's out-projection
+    and fc2 nodes at the dropped cotangent and both skips at the raw one, so the book's ViT job is
+    reached at every gradient node with only its EMA tail outside.
+
     `N` and `nC` are binders and there is no smoothness hypothesis (GELU, no kink). The batch
-    enters only through `batchMap`/`batchMapAux`, because no ViT op couples examples. The
-    statement is at one replica, at the drop-free chain, and at ViT-Tiny's literal dims. -/
+    enters only through the per-example lifts, because no ViT op couples examples. The statement
+    is at one replica and at ViT-Tiny's literal dims. -/
 theorem vit_net_tiedGB {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool)
+    (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool) (sd : Option (Fin 12 → Vec N × Vec N))
     (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) :
     let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
-    let ib2    : Vec (N * (197 * 192)) := batchMap N (w.b1.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib1
-    let ib3    : Vec (N * (197 * 192)) := batchMap N (w.b2.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib2
-    let ib4    : Vec (N * (197 * 192)) := batchMap N (w.b3.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib3
-    let ib5    : Vec (N * (197 * 192)) := batchMap N (w.b4.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib4
-    let ib6    : Vec (N * (197 * 192)) := batchMap N (w.b5.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib5
-    let ib7    : Vec (N * (197 * 192)) := batchMap N (w.b6.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib6
-    let ib8    : Vec (N * (197 * 192)) := batchMap N (w.b7.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib7
-    let ib9    : Vec (N * (197 * 192)) := batchMap N (w.b8.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib8
-    let ib10   : Vec (N * (197 * 192)) := batchMap N (w.b9.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib9
-    let ib11   : Vec (N * (197 * 192)) := batchMap N (w.b10.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib10
-    let ib12   : Vec (N * (197 * 192)) := batchMap N (w.b11.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib11
-    let b12out : Vec (N * (197 * 192)) := batchMap N (w.b12.fwdO gf (Np1 := 197) (heads := 3) (d := 64) ε) ib12
+    let ib2    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b1.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 0) n) (exampleSite (vitSdM sd 0) n)) ib1
+    let ib3    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b2.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 1) n) (exampleSite (vitSdM sd 1) n)) ib2
+    let ib4    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b3.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 2) n) (exampleSite (vitSdM sd 2) n)) ib3
+    let ib5    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b4.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 3) n) (exampleSite (vitSdM sd 3) n)) ib4
+    let ib6    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b5.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 4) n) (exampleSite (vitSdM sd 4) n)) ib5
+    let ib7    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b6.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 5) n) (exampleSite (vitSdM sd 5) n)) ib6
+    let ib8    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b7.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 6) n) (exampleSite (vitSdM sd 6) n)) ib7
+    let ib9    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b8.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 7) n) (exampleSite (vitSdM sd 7) n)) ib8
+    let ib10   : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b9.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 8) n) (exampleSite (vitSdM sd 8) n)) ib9
+    let ib11   : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b10.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 9) n) (exampleSite (vitSdM sd 9) n)) ib10
+    let ib12   : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b11.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 10) n) (exampleSite (vitSdM sd 10) n)) ib11
+    let b12out : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b12.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 11) n) (exampleSite (vitSdM sd 11) n)) ib12
     -- final LN → CLS row → dense head, then the SMOOTHED loss cotangent at a general target `t`
     let flB     : Vec (N * (197 * 192)) :=
       batchMap N (fun b => Mat.flatten (fun r => layerNormVec 192 ε w.γF w.βF (Mat.unflatten b r))) b12out
@@ -446,47 +480,47 @@ theorem vit_net_tiedGB {gf : GeluForm} (N : Nat) {nC : Nat}
     let g       : Vec (N * nC)  :=
       den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t)
     let dy12    : Vec (N * (197 * 192)) := batchMapAux N (vitCotTowerOutV 196 192 nC ε w.γF w.Wcls) b12out g
-    let dy11   : Vec (N * (197 * 192)) := batchMapAux N (w.b12.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib12 dy12
-    let dy10   : Vec (N * (197 * 192)) := batchMapAux N (w.b11.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib11 dy11
-    let dy9    : Vec (N * (197 * 192)) := batchMapAux N (w.b10.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib10 dy10
-    let dy8    : Vec (N * (197 * 192)) := batchMapAux N (w.b9.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib9 dy9
-    let dy7    : Vec (N * (197 * 192)) := batchMapAux N (w.b8.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib8 dy8
-    let dy6    : Vec (N * (197 * 192)) := batchMapAux N (w.b7.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib7 dy7
-    let dy5    : Vec (N * (197 * 192)) := batchMapAux N (w.b6.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib6 dy6
-    let dy4    : Vec (N * (197 * 192)) := batchMapAux N (w.b5.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib5 dy5
-    let dy3    : Vec (N * (197 * 192)) := batchMapAux N (w.b4.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib4 dy4
-    let dy2    : Vec (N * (197 * 192)) := batchMapAux N (w.b3.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib3 dy3
-    let dy1    : Vec (N * (197 * 192)) := batchMapAux N (w.b2.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib2 dy2
-    let dyEmbed: Vec (N * (197 * 192)) := batchMapAux N (w.b1.cotIn gf (Np1 := 197) (heads := 3) (d := 64) ε) ib1 dy1
-    w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib1 dy1
-  ∧ w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib2 dy2
-  ∧ w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib3 dy3
-  ∧ w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib4 dy4
-  ∧ w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib5 dy5
-  ∧ w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib6 dy6
-  ∧ w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib7 dy7
-  ∧ w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib8 dy8
-  ∧ w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib9 dy9
-  ∧ w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib10 dy10
-  ∧ w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib11 dy11
-  ∧ w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib12 dy12
+    let dy11   : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b12.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 11) n) (exampleSite (vitSdM sd 11) n)) ib12 dy12
+    let dy10   : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b11.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 10) n) (exampleSite (vitSdM sd 10) n)) ib11 dy11
+    let dy9    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b10.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 9) n) (exampleSite (vitSdM sd 9) n)) ib10 dy10
+    let dy8    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b9.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 8) n) (exampleSite (vitSdM sd 8) n)) ib9 dy9
+    let dy7    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b8.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 7) n) (exampleSite (vitSdM sd 7) n)) ib8 dy8
+    let dy6    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b7.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 6) n) (exampleSite (vitSdM sd 6) n)) ib7 dy7
+    let dy5    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b6.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 5) n) (exampleSite (vitSdM sd 5) n)) ib6 dy6
+    let dy4    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b5.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 4) n) (exampleSite (vitSdM sd 4) n)) ib5 dy5
+    let dy3    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b4.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 3) n) (exampleSite (vitSdM sd 3) n)) ib4 dy4
+    let dy2    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b3.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 2) n) (exampleSite (vitSdM sd 2) n)) ib3 dy3
+    let dy1    : Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b2.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 1) n) (exampleSite (vitSdM sd 1) n)) ib2 dy2
+    let dyEmbed: Vec (N * (197 * 192)) := batchMapAuxIdx N (fun n => w.b1.cotInD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 0) n) (exampleSite (vitSdM sd 0) n)) ib1 dy1
+    w.b1.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 0) (vitSdM sd 0) ib1 dy1
+  ∧ w.b2.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 1) (vitSdM sd 1) ib2 dy2
+  ∧ w.b3.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 2) (vitSdM sd 2) ib3 dy3
+  ∧ w.b4.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 3) (vitSdM sd 3) ib4 dy4
+  ∧ w.b5.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 4) (vitSdM sd 4) ib5 dy5
+  ∧ w.b6.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 5) (vitSdM sd 5) ib6 dy6
+  ∧ w.b7.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 6) (vitSdM sd 6) ib7 dy7
+  ∧ w.b8.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 7) (vitSdM sd 7) ib8 dy8
+  ∧ w.b9.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 8) (vitSdM sd 8) ib9 dy9
+  ∧ w.b10.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 9) (vitSdM sd 9) ib10 dy10
+  ∧ w.b11.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 10) (vitSdM sd 10) ib11 dy11
+  ∧ w.b12.TiedGB gf N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 11) (vitSdM sd 11) ib12 dy12
   ∧ vitFinalLNTiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
   ∧ vitHeadTiedGB N aN cotN hnB w.Wcls w.bcls g
   ∧ vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img dyEmbed := by
   intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out flB hnB logitsB g dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact w.b1.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib1 dy1
-  · exact w.b2.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib2 dy2
-  · exact w.b3.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib3 dy3
-  · exact w.b4.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib4 dy4
-  · exact w.b5.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib5 dy5
-  · exact w.b6.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib6 dy6
-  · exact w.b7.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib7 dy7
-  · exact w.b8.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib8 dy8
-  · exact w.b9.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib9 dy9
-  · exact w.b10.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib10 dy10
-  · exact w.b11.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib11 dy11
-  · exact w.b12.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 ib12 dy12
+  · exact w.b1.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 0) (vitSdM sd 0) ib1 dy1
+  · exact w.b2.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 1) (vitSdM sd 1) ib2 dy2
+  · exact w.b3.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 2) (vitSdM sd 2) ib3 dy3
+  · exact w.b4.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 3) (vitSdM sd 3) ib4 dy4
+  · exact w.b5.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 4) (vitSdM sd 4) ib5 dy5
+  · exact w.b6.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 5) (vitSdM sd 5) ib6 dy6
+  · exact w.b7.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 6) (vitSdM sd 6) ib7 dy7
+  · exact w.b8.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 7) (vitSdM sd 7) ib8 dy8
+  · exact w.b9.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 8) (vitSdM sd 8) ib9 dy9
+  · exact w.b10.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 9) (vitSdM sd 9) ib10 dy10
+  · exact w.b11.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 10) (vitSdM sd 10) ib11 dy11
+  · exact w.b12.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε bf16 (vitSdA sd 11) (vitSdM sd 11) ib12 dy12
   · exact vit_finalLN_tiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
   · exact vit_head_tiedGB N aN cotN hnB w.Wcls w.bcls g
   · exact vit_embed_tiedGB N xN cotN w.Wc w.bc w.cls w.pos (bf16 && bf16ConvW) img dyEmbed

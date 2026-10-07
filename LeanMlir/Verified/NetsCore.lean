@@ -1228,12 +1228,12 @@ def vitVerified : VerifiedNetSpec where
     augmentation at all — one definition of the transform, and it is the reference's.
 
     What is proved about it: the train-step capstone `Proofs.ViTTieGB.vit_net_tiedGB` binds the
-    class count, so it covers this 1000-class head, at one replica, in f32, on the chain without
-    drop-path. `vitVerified_denote_eq`, `vitVerifiedHasVJP` and `vitVerified_fwd_faithful` are
+    class count, so it covers this 1000-class head, at one replica, at either precision, with or
+    without drop-path (its `sd` binder). `vitVerified_denote_eq`, `vitVerifiedHasVJP` and `vitVerified_fwd_faithful` are
     stated at 10 classes. The matched-pair reference is [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean).
 
     The recipe follows the variant. The shipping `emadp128x4wxclipdropbf16` (bf16, with drop-path,
-    so outside the capstone's scope) carries the rest of `vitTinyImagenetConfig`: EMA, grad clip
+    both inside the capstone's scope) carries the rest of `vitTinyImagenetConfig`: EMA, grad clip
     1.0, drop-path (24 host-drawn masks), weight decay off norm/bias, and mixup/cutmix, which ride
     the producer's `SHIM_MIX` (this shim bakes `both`) as soft targets on the wire; the render's
     cotangent smooths that mixed target (α = 0.1). The pipeline-level augmentations (RandAugment,

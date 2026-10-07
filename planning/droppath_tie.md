@@ -5,17 +5,15 @@ and loss-gradient tie is stated at either precision). The table and site counts 
 against the job confs, the manifest and the renderers; §1 is the first net landed and the recipe
 the rest follow.
 
-## ▶ Start here (next session): the indexed lift for ViT and ConvNeXt
+## ▶ Start here (next session): the book sentences, then ConvNeXt-T
 
-**State (2026-10-07).** The two batched-chain nets are done on `wp8fg` (not pushed):
-MobileNetV2's classifier dropout (`a442268c`) and EfficientNet-B0's nine drop sites + dropout (the
-commit after it). `mnv2_net_tiedB` / `_syncTiedB` / `mnv2_net_lossGrad` take `cd`, and
-`efficientnet_net_tiedG` / `efficientnet_net_syncTiedG` / `enet_net_lossGrad` take `sd : Option
-(Fin 9 → Vec N)` and `cd : Option (Vec (N * 1280))` — `none` the statements exactly as they were,
-`some` the `*do*` / `dropdo` chains the book's runs trained — so `mnv2-default-4gpu` is reached at
-its gradient nodes with nothing of its render outside and `enet-default-4gpu` with only its EMA
-tail outside. §1 and §2 record what the two steps took, including the two mask-SPELLING traps
-(§2) that apply to every net from here on.
+**State (2026-10-07, third pass).** Three of the four masked nets are done on `wp8fg` (not
+pushed): MobileNetV2's classifier dropout (`a442268c`), EfficientNet-B0's nine drop sites +
+dropout (`6316cde4`), and ViT-Tiny's 24 drop sites through the indexed lift (§3, staged).
+`vit_net_tiedGB` / `vit_net_lossGrad` (+ `_smoothedCE`, `vit_net_tied_lossGrad`) take `sd :
+Option (Fin 12 → Vec N × Vec N)` after `bf16ConvW` — `none` the drop-free statements by `rfl`,
+`some` the `*drop*` chains — so `vit-default-emabf16-4gpu` is reached at its gradient nodes with
+only its EMA tail outside. ConvNeXt-T (18 sites) is the last net; the lift it needs is built.
 
 **First, the book (one small commit, preview on :8766).** The Lean moved; these sentences have
 not: MNv2 — `thm:mobilenetv2_step_tie` / `_loss_grad` texts (~7636–7696, "at either precision as
@@ -24,44 +22,31 @@ for ResNet-34" → and at its classifier-dropout site, the loss of `mobilenetv2F
 that statement" (~8363); B0 — the forward sentence stays (~9138), the step-tie text "on the chain
 without stochastic depth or classifier dropout; the optimizer tails … outside" (~9198 → at the
 renderer's two sites, the EMA tail outside), the sync-tie and loss-gradient texts, the run
-paragraph (~9683); the trust summary's "on the chain without drop-path" (18760, 18802 → "without
-drop-path" now names ViT-Tiny and ConvNeXt-T only). Then blueprint `lean_decls` regenerated +
-`blueprint_uses.py --check`, `docstring-checkrefs`.
+paragraph (~9683); ViT — the step-tie / loss-gradient theorem texts and the run paragraph's "the
+drop-path chain" (grep `vit_net_tiedGB`, `vit_net_lossGrad` in content.tex); the trust summary's
+"on the chain without drop-path" (18760, 18802 → "without drop-path" now names ConvNeXt-T only).
+Then blueprint `lean_decls` regenerated + `blueprint_uses.py --check`, `docstring-checkrefs`.
 
-**Then the thread's one piece of new Foundation: the indexed lift.** ViT's and ConvNeXt's ties
-are lifts of ONE per-example map — `batchMap N f` for the forwards, `batchMapAux N f saved` for the
-cotangents (`Foundation/Batched/Basic.lean`), `HasGradAt.param_batchMap_through`
-(`Foundation/ParamGrad.lean`) for the loss gradient, `batchShard_batchMap` / `_batchMapAux`
-(`DataParallel/Sync.lean`) for sharding — and a drop mask makes example `t`'s block a DIFFERENT
-map (`blockVDrop … (sdA i t) (sdM i t)`). What exists on the masked side: ViT's forward
-`vitForwardKVDropB` is defined pointwise (`fun x idx => let p := …; … (fun i => (sdA i p.1, sdM i
-p.1)) …`), `vitFwdGraphBDrop_faithful` proves the typed graph denotes it, and
-`batchSlice_den_dropPathB` is the per-example reading of the node; ConvNeXt has no masked forward
-at all (and no typed batched forward, bf16_tie.md's note (a)).
-
-1. Read, in this order: `Batched/Basic.lean` (the two lifts and their `batchSlice_*` peels),
-   `ParamGrad.lean` (`param_batchMap_through` — what the loss capstone threads through a lift),
-   `DataParallel/Sync.lean` §`batchShard_batchMap`, `Nets/ViT/ViTFwdDrop.lean` §2,
-   `ViTStepTieGB.lean` (`vit_net_tiedGB`: the `ib_k := batchMap N (w.bk.fwdO …)` and `dy_k :=
-   batchMapAux N (w.bk.cotIn …) ib_k dy_{k+1}` lets), `ViTParamGrad.lean` (`vit_net_lossGrad`'s
-   `param_batchMap_through` calls), and the two drop sites in `Codegen/ViTRenderB.lean` (forward
-   163 / 181, backward 341–377: `dropPathB` on the branch cotangent, the skip raw).
-2. Decide the lift. (a) **`batchMapIdx N (f : Fin N → Vec a → Vec b)`** (and `batchMapAuxIdx`),
-   with `batchSlice_batchMapIdx`, differentiability, a `HasVJP`, `param_batchMapIdx_through` and
-   `batchShard_batchMapIdx` (shard `r`'s index map is `fun n => f (finProdFinEquiv (r, n))`) — the
-   honest shape, `batchMap N f = batchMapIdx N (fun _ => f)` by `rfl`, so the drop-free ties are
-   the constant-index instance; or (b) **the mask rides in `batchMapAux`'s saved slot**: the
-   example's two scalars as a `Vec 2` beside its saved activation, no new lift — cheaper if
-   `batchMapAux`'s own `HasGradAt` through-lemma exists, otherwise (a) is less work. Check what
-   `batchMapAux` has before choosing; write the chosen lift's lemmas in a leaf file
-   (`Foundation/Batched/Indexed.lean`, imported by the ViT and ConvNeXt ties only).
-3. Pilot on ONE ViT block: `vitBlockTiedGB` (`ViTStepTieGB`) with `(sdA sdM : Vec N)` for the
-   block, the cotangent chain's `cotIn` through `dropPath` at `mA` / `mM`, then the capstone with
-   `sd : Option (Fin 12 → Vec N × Vec N)`-shaped sites (24 scalars per example), `vit_net_lossGrad`
-   through the indexed `_through`. ConvNeXt after (18 sites, `cnxBlockChTiedGB`, the
-   `@[irreducible]` stem untouched). Spell every mask `fun f => f i` (§2).
-4. Same discipline: stage per net, stop for the commit word; comparator + yaml + book move with
-   the Lean.
+**Then ConvNeXt-T — cheaper than ViT.** One site per block, between LayerScale and the skip add
+(`ConvNeXtRenderB` forward ~197, backward `bwdBlockB` ~383): the WHOLE branch reads `s ⊙ dy`
+(LayerScale γ's node included — the render's docstring names it as the one gradient that would
+silently miss the scale) and only the skip reads `dy`. So per example every node cotangent is the
+drop-free one at `dropScalarOpt s dy`, and the block is ONE `siteResHasVJP` over the drop-free
+branch. Recipe, from §3:
+1. A per-example drop block file beside `ConvNeXtStepTie` (as `ViTDropBlock`): the block forward
+   with one `Option ℝ` site (`siteScale` before the add, `none` = `fwdO` by `rfl`), `cotInD`
+   (`none` = `cotIn` by `rfl`), the branch's VJP read off the existing block tie minus its skip
+   (`vitAttnBr_back`'s `linarith` pattern), `fwdOD_eq_site`, `fwdODHasVJP` (typed wrappers around
+   `siteResHasVJP`, §3 trap 2), `cotInD_eq_vjp`.
+2. `ConvNeXtStepTieGB`: the block's saves / cotangents on `batchMapIdx` / `batchMapAuxIdx` at
+   `exampleSite s n`, the capstone's `sd : Option (Fin 18 → Vec N)` (the stage blocks; the
+   downsample layers carry no site — check `vitSiteIdx`'s ConvNeXt peer for the numbering), the
+   `CnxTieBlk` record's `TiedGB` with the site.
+3. `ConvNeXtParamGrad`: thread the site through the per-example `cnxPost*` (the site sits at the
+   very end of each, so it is one `hasGradAt_constAdd_site` per block), the bundle on
+   `param_batchMapIdx_through`, the net's prefixes / suffixes / factors. The `@[irreducible]` stem
+   has no site; leave it untouched.
+4. Same discipline: stage, stop for the commit word; comparator + yaml + book move with the Lean.
 
 ## 1. MobileNetV2 classifier dropout — DONE 2026-10-07
 
@@ -172,6 +157,55 @@ and replica `r` runs at `exampleShard` / `batchShard` of them.
   stayed `rfl`; the VJP witnesses' backwards are the chain links by definition.
 
 
+## 3. ViT-Tiny — the indexed lift and the 24 drop sites — DONE 2026-10-07
+
+**The lift decided: (a), `batchMapIdx`.** `batchMapAux` had no `HasGradAt` through-lemma and no
+VJP of its own (only `batchMapAux_eq_batchMapHasVJPAt`), so (b) would have needed as much new
+Foundation plus a concatenated mask+save slot. `Foundation/Batched/Indexed.lean` (leaf on
+`ParamGrad`, `BatchMapVJPAt`, `DropSites`; imported by the ViT ties only):
+* `batchMapIdx N (f : Fin N → Vec a → Vec b)` / `batchMapAuxIdx`; `batchMap N f = batchMapIdx N
+  (fun _ => f)` and `batchMapAux … = batchMapAuxIdx … (fun _ => f)` by `rfl`; `batchSlice_*`,
+  `batchMapIdx_comp`, `_differentiableAt`, `pdiv_batchMapIdx_at` (from `pdivMat_rowIndep_perRow_at`,
+  which already allowed a map per row), `batchMapIdxHasVJPAt` (field-built, as `batchMapHasVJPAt`),
+  `batchMapIdxHasVJP`, `batchMapAuxIdx_eq_batchMapIdxHasVJPAt`, `HasGradAt.param_batchMapIdx` /
+  `_through` (the shared op `per` uniform; `pre` / `post` / `cot` indexed), `batchShard_batchMapIdx`
+  / `_AuxIdx`, `_smul`s.
+* One example's site: `siteScale : Option ℝ → ℝ → ℝ` and `dropScalarOpt s v := fun i => siteScale s
+  (v i)` — POINTWISE, so a site reads the same on a flat vector and on a row of its matrix and the
+  spelled block stays `rfl`-close to the drop-free one (`none` is `fun x => x`, eta). `exampleSite sd
+  n` (NAMED, never `sd.map fun v => v n` spelled at use sites — §2 trap 1), `batchSlice_dropPathOpt`
+  (the batched site at one example), `siteResHasVJP` (`v ↦ v + s ⊙ br v`, backward `dy + br.back (s
+  ⊙ dy)` by definition, `siteResHasVJP_backward` `rfl`).
+* `Nets/ViT/ViTDropBlock.lean` — the block per example at `sA sM : Option ℝ`: `fwdOD` (the spelled
+  block with `siteScale` on the out-projection's and fc2's outputs; `fwdOD_none` `rfl`), `cotInD`
+  (`vitBlockCotInAtMHV`'s `let` chain with `vitCotHVD` / `sA ⊙ cotH`; `cotInD_none` `rfl`), the two
+  branch VJPs read off `attnSubFlat_tie_v` / `mlpSubFlat_tie_v` minus the skip (`linarith` after
+  unfolding `preLNResHasVJPMat` / `biPathMatHasVJP` at the hypothesis), `fwdOD_eq_sites`,
+  `fwdODHasVJP`, `cotInD_eq_vjp` (closes by `rfl` after `vitCotXinV_attn` / `vitCotHVD_eq` and
+  `mhsaLayer_spelled`).
+* `ViTStepTieGB`: `blkSaves` / `cAtt` … `cM1` take the sites in place; `vitBlockTiedGB` at `sA sM :
+  Option (Vec N)` with the out-projection's and fc2's nodes at `dropPathOpt` of the cotangent (what
+  `ViTRenderB` emits); `vitSdA` / `vitSdM` read block `k`'s masks off the capstone's `sd`.
+* `ViTParamGrad`: the Chain section threaded in place (`vitHM` at `siteScale sA`, the MLP sublayer
+  is `vitMlpSiteF`, `vitPostO` / `L2` / `F1` / `F2` end in `dropScalarOpt sM`;
+  `hasGradAt_constAdd_site`); the bundle's 16 nodes on `param_batchMapIdx_through` (the out-proj
+  nodes' `hC` through `batchSlice_dropPathOpt`); the net's prefixes / suffixes / factors carry `sd`;
+  `vitNetB_eq_vitForwardKV` is stated at `none` (its closing `rfl` blew `maxRecDepth`; `simp only`
+  with `vitSdA_none` / `vitSdM_none` and a per-block `rfl` bridge `hb` does it).
+* The import-audit cleanup rode along: the 33 implied imports deleted (closures unchanged, build
+  green), so `import_audit.py implied` is clean.
+
+**What the step taught.**
+* The per-example block is the whole cost; the batched layer is mechanical once the Foundation has
+  the indexed peers of every uniform-lift lemma the ties call.
+* ⛔ `vjpComp` / `biPathHasVJP` at a function given as a `fun` while the expected type names a
+  def (`vitAttnSiteF`) fails the instance-transparency type check ("not type-correct under the
+  implicit transparency level"); a named wrapper typed at the def (`vitAttnSiteHasVJP`) fixes it.
+* A site after the parameterised op is just one more `HasGradAt.comp` (`dropScalarOptHasVJP`),
+  whose backward is the site — every `rfl` / `of_eq` closer at the drop-free chain stayed one.
+* Zero proof failures in the bundle (16 nodes) and the Chain section on first compile, after
+  scripted threading with count-asserted replacements.
+
 **The gap.** Every step tie, sync tie and `*_net_lossGrad` is stated on the chain WITHOUT the
 training masks. The book's seven jobs (`content.tex` job table, ~18370; each conf's
 `LEAN_MLIR_VARIANT` names the artifact) train these:
@@ -184,7 +218,7 @@ training masks. The book's seven jobs (`content.tex` job table, ~18370; each con
 | `mnv2-default-4gpu` → `mobilenetv2in_rmsdp64wxdols0eps0001bf16` | — | 1 (`%do`, per element, before the dense) — DONE, §1 | — |
 | `enet-default-4gpu` → `efficientnetin_emarmsdp64dropdowxeps0001bf16` | 9 (the skip-carrying MBConvs of 16) — DONE, §2 | 1 — DONE, §2 | EMA |
 | `cnx-default-4gpu` → `convnextin_adamdpwxclipdroperfbf16` | 18 (one per block) | — | — |
-| `vit-default-emabf16-4gpu` → `vitin_emadp128x4wxclipdropeps0000001erfbf16` | 24 (two per block) | — | EMA |
+| `vit-default-emabf16-4gpu` → `vitin_emadp128x4wxclipdropeps0000001erfbf16` | 24 (two per block) — DONE, §3 | — | EMA |
 
 Side quest, not a book job: MobileNetV4-Conv-M `mnv4in_emaaccdp8x128wxdowd005bf16` (dropout;
 EMA, accumulation) and its `*wxdropdowd01bf16` axis sibling (drop-path + dropout).
