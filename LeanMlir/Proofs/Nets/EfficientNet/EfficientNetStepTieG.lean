@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.Batched.BackLinks
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
@@ -14,8 +15,19 @@ what `efficientnet_adam_train_step.mlir` and the f32 `efficientnetin_*` artifact
 appears only in the SGD-inline file. The optimizer update that consumes the node (Adam, RMSProp,
 EMA, clipping) is outside this statement. The threaded forward is `efficientnetForwardBFull`,
 without drop-path and without classifier dropout, so the `*drop*` / `*do*` train steps are not
-covered (their forwards are, in `EfficientNetFullB0Drop`); the bf16 artifacts emit `*GradBBf16` nodes and are not covered either. `GradNodesB` is
-the fold each conjunct delegates to.
+covered (their forwards are, in `EfficientNetFullB0Drop`). `GradNodesB` is the fold each conjunct
+delegates to.
+
+**Precision is a flag on the statement.** The ImageNet run the book reports trains from
+`efficientnetin_emarmsdp64dropdowxeps0001bf16`, whose conv and depthwise weight gradients are the
+bf16 kinds (`convWeightGradBBf16`, `depthwiseWeightGradBBf16`, …; `Foundation.Bf16GradNodes`).
+Every conv and depthwise weight node below is stated on the renderers' switch — `ConvWTiedBAt bf16`
+/ `ConvStridedXlaWTiedBAt bf16` / `DepthwiseWTiedBAt bf16` / `DepthwiseStridedWTiedBAt bf16`
+(`Foundation.GradNodesBAt`): `bf16 := false` is the f32 node, `bf16 := true` the bf16 one — and
+the capstone `efficientnet_net_tiedG` takes `bf16`, so it reaches the bf16 artifacts' gradient
+nodes read over ℝ exactly as it reads the f32 ones (`Bf16Erasure`: at the identity rounding the
+bf16 kind denotes what its f32 peer does). The squeeze-excite and classifier denses, BatchNorm and
+the bias nodes carry no flag because no render switches them.
 
 **Axis 2 — the loss.** The capstone's top-of-chain cotangent is `smoothedLossCotGraph`'s
 (Foundation/SmoothedLossCot.lean), at a general target: the six-op chain
@@ -53,8 +65,8 @@ namespace Proofs.EnetTieG
 open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
-open Proofs.GradNodeB (bnPairTiedB_holds convStridedXlaWTiedB_holds convWTiedB_holds
-  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
+open Proofs.GradNodeB (bnPairTiedB_holds convStridedXlaWTiedBAt_holds convWTiedBAt_holds
+  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedBAt_holds depthwiseWTiedBAt_holds)
 
 /-- **A conv or depthwise bias, tied.** A bias gradient is the channel sum of the conv-output
     cotangent `cot` (network layout), which is what the emitted `bnBetaGradB` node computes; the
@@ -78,7 +90,7 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd γd βd : Vec mid)
     (Wz1 : Mat mid r) (bz1 : Vec r) (Wz2 : Mat r mid) (bz2 : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   -- forward activations
   let ec : Vec (N * (mid * h * w)) := batchMap N (flatConv We be) xin
@@ -107,12 +119,12 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * h * w)) := swBackB (N * (mid * h * w)) en cotEr
   let cotEc : Vec (N * (mid * h * w)) := bnBackB N mid h w εe hεe γe βe ec cotEn
   -- expand 1×1 conv (c → mid), cot = cotEc
-  GradNodeB.ConvWTiedB N h w xN cotN be xin We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N h w xN cotN be xin We cotEc
   ∧ ConvBBetaTiedB N h w cotN εe be cotEc
   ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εe γe βe (reassocB N mid h w ec)
         (reassocB N mid h w cotEn)
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
-  ∧ GradNodeB.DepthwiseWTiedB N h w xN cotN bd er Wd cotDc
+  ∧ GradNodeB.DepthwiseWTiedBAt bf16 N h w xN cotN bd er Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
@@ -122,7 +134,7 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
   ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
   ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
@@ -133,14 +145,14 @@ theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd γd βd : Vec mid)
     (Wz1 : Mat mid r) (bz1 : Vec r) (Wz2 : Mat r mid) (bz2 : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     enetExpTiedG xN vN epsStr cotN εe hεe εd hεd εp hεp
-      We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
+      We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp bf16 xin dyOut := by
   unfold enetExpTiedG
-  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseWTiedB_holds,
+  exact ⟨convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseWTiedBAt_holds bf16,
     convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds, denseBTiedB_holds,
-    denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
+    denseWTiedB_holds, denseBTiedB_holds, convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## Strided downsampling MBConv block — all 16 params tied (b2/b4/b6/b12)
 
@@ -156,7 +168,7 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd γd βd : Vec mid)
     (Wz1 : Mat mid r) (bz1 : Vec r) (Wz2 : Mat r mid) (bz2 : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   -- forward activations (expand at 2h×2w, depthwise downsamples to h×w)
   let ec : Vec (N * (mid * (2 * h) * (2 * w))) := batchMap N (flatConv We be) xin
@@ -185,12 +197,12 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * (2 * h) * (2 * w))) := swBackB (N * (mid * (2 * h) * (2 * w))) en cotEr
   let cotEc : Vec (N * (mid * (2 * h) * (2 * w))) := bnBackB N mid (2 * h) (2 * w) εe hεe γe βe ec cotEn
   -- expand 1×1 conv (ic → mid, at 2h×2w), cot = cotEc
-  GradNodeB.ConvWTiedB N (2 * h) (2 * w) xN cotN be xin We cotEc
+  GradNodeB.ConvWTiedBAt bf16 N (2 * h) (2 * w) xN cotN be xin We cotEc
   ∧ ConvBBetaTiedB N (2 * h) (2 * w) cotN εe be cotEc
   ∧ GradNodeB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN εe γe βe
         (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
   -- strided depthwise (kHd×kWd, 2h→h), cot = cotDc
-  ∧ GradNodeB.DepthwiseStridedWTiedB N h w xN cotN bd er Wd cotDc
+  ∧ GradNodeB.DepthwiseStridedWTiedBAt bf16 N h w xN cotN bd er Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
@@ -200,7 +212,7 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
   ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
   ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
@@ -211,14 +223,14 @@ theorem enet_strided_tiedG {N ic mid oc h w r kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd γd βd : Vec mid)
     (Wz1 : Mat mid r) (bz1 : Vec r) (Wz2 : Mat r mid) (bz2 : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
     enetStridedTiedG xN vN epsStr cotN εe hεe εd hεd εp hεp
-      We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
+      We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp bf16 xin dyOut := by
   unfold enetStridedTiedG
-  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseStridedWTiedB_holds,
+  exact ⟨convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseStridedWTiedBAt_holds bf16,
     convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds, denseBTiedB_holds,
-    denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
+    denseWTiedB_holds, denseBTiedB_holds, convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## No-expand MBConv block (b1, t=1) — all 12 params tied (depthwise on `ic` → SE → project)
 
@@ -231,7 +243,7 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
     (εd : ℝ) (hεd : 0 < εd) (εp : ℝ) (hεp : 0 < εp)
     (Wd : DepthwiseKernel ic kHd kWd) (bd γd βd : Vec ic)
     (Wz1 : Mat ic r) (bz1 : Vec r) (Wz2 : Mat r ic) (bz2 : Vec ic)
-    (Wp : Kernel4 oc ic 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc ic 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   -- forward activations (depthwise on the block input ic, no expand)
   let dc : Vec (N * (ic * h * w)) := batchMap N (depthwiseFlat Wd bd) xin
@@ -254,7 +266,7 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
   let cotDn : Vec (N * (ic * h * w)) := swBackB (N * (ic * h * w)) dn cotDxSe
   let cotDc : Vec (N * (ic * h * w)) := bnBackB N ic h w εd hεd γd βd dc cotDn
   -- depthwise (stride-1, kHd×kWd, on ic), cot = cotDc
-  GradNodeB.DepthwiseWTiedB N h w xN cotN bd xin Wd cotDc
+  GradNodeB.DepthwiseWTiedBAt bf16 N h w xN cotN bd xin Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ GradNodeB.BnPairTiedB N ic h w vN epsStr cotN εd γd βd (reassocB N ic h w dc)
         (reassocB N ic h w cotDn)
@@ -264,7 +276,7 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
   ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
   ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2
   -- project 1×1 conv (ic → oc), cot = cotPbn
-  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
@@ -274,13 +286,13 @@ theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
     (εd : ℝ) (hεd : 0 < εd) (εp : ℝ) (hεp : 0 < εp)
     (Wd : DepthwiseKernel ic kHd kWd) (bd γd βd : Vec ic)
     (Wz1 : Mat ic r) (bz1 : Vec r) (Wz2 : Mat r ic) (bz2 : Vec ic)
-    (Wp : Kernel4 oc ic 1 1) (bp γp βp : Vec oc)
+    (Wp : Kernel4 oc ic 1 1) (bp γp βp : Vec oc) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     enetNoExpTiedG xN vN epsStr cotN εd hεd εp hεp
-      Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
+      Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp bf16 xin dyOut := by
   unfold enetNoExpTiedG
-  exact ⟨depthwiseWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
-    denseBTiedB_holds, denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds,
+  exact ⟨depthwiseWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
+    denseBTiedB_holds, denseWTiedB_holds, denseBTiedB_holds, convWTiedBAt_holds bf16, convBBetaTiedB_holds,
     bnPairTiedB_holds⟩
 
 /-! ## Stem — the 3×3/s2 conv-bn-swish (4 params), feeding block 1
@@ -294,24 +306,24 @@ past `%x`). 4 params. -/
     the cotangent through the stem swish (no maxpool, no conv-back). -/
 def enetStemTiedG {N ic oc h w kHs kWs : Nat}
     (xN vN epsStr cotN : String) (εs : ℝ) (hεs : 0 < εs)
-    (Ws : Kernel4 oc ic kHs kWs) (bs γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kHs kWs) (bs γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) : Prop :=
   let stc : Vec (N * (oc * h * w)) := batchMap N (flatConvStride2Xla Ws bs) x
   let stn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εs γs βs stc
   let cotBnS : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) stn dyStem
   let cotStc : Vec (N * (oc * h * w)) := bnBackB N oc h w εs hεs γs βs stc cotBnS
-  GradNodeB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotStc
+  GradNodeB.ConvStridedXlaWTiedBAt bf16 N h w xN cotN bs x Ws cotStc
   ∧ ConvBBetaTiedB N h w cotN εs bs cotStc
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w stc)
         (reassocB N oc h w cotBnS)
 
 theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
     (xN vN epsStr cotN : String) (εs : ℝ) (hεs : 0 < εs)
-    (Ws : Kernel4 oc ic kHs kWs) (bs γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kHs kWs) (bs γs βs : Vec oc) (bf16 : Bool)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) :
-    enetStemTiedG xN vN epsStr cotN εs hεs Ws bs γs βs x dyStem := by
+    enetStemTiedG xN vN epsStr cotN εs hεs Ws bs γs βs bf16 x dyStem := by
   unfold enetStemTiedG
-  exact ⟨convStridedXlaWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convStridedXlaWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## Head — the 1×1 conv-bn-swish (4 params) → GAP → dense (Wfc/bfc), + the loss cotangent
 
@@ -325,7 +337,7 @@ tie at `g` directly. -/
     taken as a parameter. -/
 def enetHeadTiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
-    (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
+    (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
     (xhead : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Prop :=
   let hc : Vec (N * (oc * h * w)) := batchMap N (flatConv Wh bh) xhead
   let hn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εh γh βh hc
@@ -338,7 +350,7 @@ def enetHeadTiedG {N c oc h w nC : Nat}
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
   -- head 1×1 conv (c → oc), cot = cotHbn
-  GradNodeB.ConvWTiedB N h w xN cotN bh xhead Wh cotHbn
+  GradNodeB.ConvWTiedBAt bf16 N h w xN cotN bh xhead Wh cotHbn
   ∧ ConvBBetaTiedB N h w cotN εh bh cotHbn
   ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHsw)
@@ -348,11 +360,11 @@ def enetHeadTiedG {N c oc h w nC : Nat}
 
 theorem enet_head_tiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
-    (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
+    (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
     (xhead : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
-    enetHeadTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc xhead g := by
+    enetHeadTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc bf16 xhead g := by
   unfold enetHeadTiedG
-  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
+  exact ⟨convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
     denseBTiedB_holds⟩
 
 /-! ## Bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
@@ -362,45 +374,46 @@ downstream cotangent `dyOut`, and delegates to the per-block-type tie. -/
 
 def enetExpTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
+    (bf16 : Bool) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetExpTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
-    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 private theorem enet_exp_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
-    enetExpTiedGAt xN vN epsStr cotN h w p he hd hp xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
+    enetExpTiedGAt xN vN epsStr cotN h w p he hd hp bf16 xin dyOut := by
   unfold enetExpTiedGAt
   exact enet_exp_tiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
-    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 def enetStridedTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (bf16 : Bool)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetStridedTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
-    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 private theorem enet_strided_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
-    enetStridedTiedGAt xN vN epsStr cotN h w p he hd hp xin dyOut := by
+    (bf16 : Bool) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
+    enetStridedTiedGAt xN vN epsStr cotN h w p he hd hp bf16 xin dyOut := by
   unfold enetStridedTiedGAt
   exact enet_strided_tiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
-    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 def enetNoExpTiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
-    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetNoExpTiedG xN vN epsStr cotN p.dε hd p.pε hp
-    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 private theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
-    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε) (bf16 : Bool)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
-    enetNoExpTiedGAt xN vN epsStr cotN h w p hd hp xin dyOut := by
+    enetNoExpTiedGAt xN vN epsStr cotN h w p hd hp bf16 xin dyOut := by
   unfold enetNoExpTiedGAt
   exact enet_noexp_tiedG xN vN epsStr cotN p.dε hd p.pε hp
-    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
+    p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied at the gradient nodes and the
     smoothed loss.** Threading the batched (batch-BN + SE) forward `efficientnetForwardBFull` —
@@ -409,10 +422,13 @@ private theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw
     folded into the block VJPs), every gradient node of the stem, all 16 MBConv blocks, the
     conv-bn-swish head and the dense head denotes the certified batched gradient `Σ_n Σ pdiv · cot`
     at the cotangent that chain delivers, the chain's top being `smoothedLossCotGraph` at the
-    target `t`. The statement is at one replica's `*GradB` nodes; the optimizer update and the
-    bf16 `*GradBBf16` nodes are outside it. -/
+    target `t`. The statement is at one replica's nodes; `bf16` selects the conv and depthwise
+    weight nodes' kind — `false` the f32 artifacts', `true` the bf16 kinds
+    `efficientnetin_emarmsdp64dropdowxeps0001bf16` emits, read over ℝ at the identity rounding
+    (`Bf16Erasure`); the right-hand side is the same certified gradient at either value. The
+    optimizer update is outside it. -/
 theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
-    (hεw : w.EpsPos)
+    (hεw : w.EpsPos) (bf16 : Bool)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls))) :
     -- forward block inputs (the prefixes of efficientnetForwardBFull)
@@ -456,44 +472,44 @@ theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls :
     let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
     let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     -- every block + stem + head tied at its real input + threaded output cotangent
-    enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0
-  ∧ enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 dy2
-  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 dy3
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 dy4
-  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 dy5
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 dy6
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 dy7
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 dy8
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 dy9
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 dy10
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 dy11
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 dy12
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 dy13
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 dy14
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 dy15
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
-  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g := by
+    enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x dy0
+  ∧ enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p bf16 a0 dy1
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 dy2
+  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 dy3
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 dy4
+  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 dy5
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 dy6
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 dy7
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 dy8
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 dy9
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 dy10
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 dy11
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 dy12
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 dy13
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 dy14
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 dy15
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 dy16
+  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 a16 g := by
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
         g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact enet_stem_tiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0
-  · exact enet_noexp_tiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 dy2
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 dy3
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 dy4
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 dy5
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 dy6
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 dy7
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 dy8
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 dy9
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 dy10
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 dy11
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 dy12
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 dy13
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 dy14
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 dy15
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
-  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g
+  · exact enet_stem_tiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x dy0
+  · exact enet_noexp_tiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p bf16 a0 dy1
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 dy2
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 dy3
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 dy4
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 dy5
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 dy6
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 dy7
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 dy8
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 dy9
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 dy10
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 dy11
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 dy12
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 dy13
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 dy14
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 dy15
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 dy16
+  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 a16 g
 
 end Proofs.EnetTieG

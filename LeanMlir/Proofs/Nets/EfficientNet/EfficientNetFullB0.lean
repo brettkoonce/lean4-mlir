@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # The FULL EfficientNet-B0 — all 16 MBConv blocks, batched forward graph + faithfulness
 
@@ -23,6 +24,15 @@ Per-block (ic, mid=t·ic, oc, r=⌈ic/4⌉, k, spatial, kind):
 Padding: the 3×3/s2 stem pads at the XLA-`SAME` phase; the four strided depthwises (b2, b4, b6,
 b12) pad symmetrically, not TF `SAME`. So the spec is neither timm's `efficientnet_b0` nor
 `tf_efficientnet_b0` at those four layers.
+
+**Precision is a flag on the graph.** The block builders (`EfficientNetStagesPC`, `mbExpGraphB`
+here) choose every conv and depthwise constructor through the renderers' switch
+(`StableHLO.PrecisionSwitch`), so one graph describes the f32 artifacts (`bf16 := false`) and the
+bf16 ones (`bf16 := true`, the kinds `efficientnetin_emarmsdp64dropdowxeps0001bf16` emits); the
+squeeze-excite denses, BatchNorm, swish, GAP and the classifier carry no flag because no render
+switches them. `efficientnetFwdGraphBFull_faithful` holds at either value through `Bf16Erasure`
+(the bf16 kind at the identity rounding is its f32 peer); the rounding itself is not modelled, as
+it is not at f32: `den` is over ℝ at both values.
 
 ## References
 
@@ -148,29 +158,30 @@ def mbExpGraphB (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF s!"%{p}pg" s!"%{p}pbt" epsStr εp γp βp
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
+    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
       (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
           Wz₁ bz₁ Wz₂ bz₂)
         (.batchOp (N := N) .swish (.bnBatchF s!"%{p}dg" s!"%{p}dbt" epsStr εd γd βd
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+          (.batchOp (N := N) (.depthwiseAt bf16 id (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
             (.batchOp (N := N) .swish (.bnBatchF s!"%{p}eg" s!"%{p}ebt" epsStr εe γe βe
-              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be) e))))))))
+              (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be) e))))))))
 
 theorem mbExpGraphB_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
+    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * h * w))) :
-    den (mbExpGraphB p epsStr We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp e)
+    den (mbExpGraphB p epsStr We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp bf16 e)
       = mbExpFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂
           Wp bp εp γp βp (den e) := by
   unfold mbExpGraphB mbExpFwdB projB seB dwbsB cbsB
-  simp only [den_batchOp, denOp, den_bnBatchF,
-             ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF,
+    ↓den_batchOp_swish_eq_swishF, swishF_faithful]
+  simp only [denOp, Function.comp_apply]
 
 end StableHLO
 
@@ -275,48 +286,49 @@ namespace StableHLO
 -- § Weight-bundle wrappers (graph) + faithfulness (each = the per-block lemma at the bundle's fields)
 
 def mbNoExpGraphW (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
-    (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   mbNoExpGraphB pfx epsStr (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2
-    p.pW p.pb p.pε p.pγ p.pβ e
+    p.pW p.pb p.pε p.pγ p.pβ bf16 e
 theorem mbNoExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic oc kh kw r : Nat}
-    (p : MBWNoExp ic oc r kh kw) (e : SHlo (N * (ic * h * w))) :
-    den (mbNoExpGraphW pfx epsStr N h w p e) = mbNoExpW N h w p (den e) := by
+    (p : MBWNoExp ic oc r kh kw) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (mbNoExpGraphW pfx epsStr N h w p bf16 e) = mbNoExpW N h w p (den e) := by
   unfold mbNoExpGraphW mbNoExpW
   exact mbNoExpGraphB_faithful pfx epsStr p.dW p.db p.dε p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2
-    p.pW p.pb p.pε p.pγ p.pβ e
+    p.pW p.pb p.pε p.pγ p.pβ bf16 e
 
 def mbStridedGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
-    (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
+    (p : MBW ic mid oc r kh kw) (bf16 : Bool)
+    (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   mbStridedGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 theorem mbStridedGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
-    (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (mbStridedGraphW pfx epsStr N h w p e) = mbStridedW N h w p (den e) := by
+    (p : MBW ic mid oc r kh kw) (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
+    den (mbStridedGraphW pfx epsStr N h w p bf16 e) = mbStridedW N h w p (den e) := by
   unfold mbStridedGraphW mbStridedW
   exact mbStridedGraphB_faithful pfx epsStr p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 
 def mbResidGraphW (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
-    (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   mbResidGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 theorem mbResidGraphW_faithful (pfx epsStr : String) (N h w : Nat) {c mid kh kw r : Nat}
-    (p : MBW c mid c r kh kw) (e : SHlo (N * (c * h * w))) :
-    den (mbResidGraphW pfx epsStr N h w p e) = mbResidW N h w p (den e) := by
+    (p : MBW c mid c r kh kw) (bf16 : Bool) (e : SHlo (N * (c * h * w))) :
+    den (mbResidGraphW pfx epsStr N h w p bf16 e) = mbResidW N h w p (den e) := by
   unfold mbResidGraphW mbResidW
   exact mbResidGraphB_faithful pfx epsStr p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 
 def mbExpGraphW (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
-    (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   mbExpGraphB pfx epsStr (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh kw r : Nat}
-    (p : MBW ic mid oc r kh kw) (e : SHlo (N * (ic * h * w))) :
-    den (mbExpGraphW pfx epsStr N h w p e) = mbExpW N h w p (den e) := by
+    (p : MBW ic mid oc r kh kw) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (mbExpGraphW pfx epsStr N h w p bf16 e) = mbExpW N h w p (den e) := by
   unfold mbExpGraphW mbExpW
   exact mbExpGraphB_faithful pfx epsStr p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 e
 
 -- ════════════════════════════════════════════════════════════════
 -- § The full B0 batched forward graph + faithfulness (all 16 MBConv blocks)
@@ -324,27 +336,30 @@ theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh k
 
 /-- The full **batched EfficientNet-B0 forward graph** at the batched index `N·(c·h·w)`: stem → 16
     MBConv blocks (the real `[t,c,n,s,k]` spec, 3×3 and 5×5 depthwise, true batch-norm, squeeze-excite,
-    4 stride-2 downsamples, identity residuals where `s=1 ∧ ic=oc`) → head → GAP → dense. -/
+    4 stride-2 downsamples, identity residuals where `s=1 ∧ ic=oc`) → head → GAP → dense. `bf16`
+    selects the conv and depthwise kinds at every site (`.convAt` / `.convStridedXlaAt` /
+    `.depthwiseAt` / `.depthwiseStridedAt`, `StableHLO.PrecisionSwitch`): `false` is the f32
+    artifacts' graph, `true` the bf16 ones'; the squeeze-excite and the dense stay f32 in both. -/
 def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : B0Weights nCls)
-    (x : Vec (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
-  headGraphB epsStr (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
-    (mbExpGraphW "b16" epsStr N 7 7 w.b16
-      (mbResidGraphW "b15" epsStr N 7 7 w.b15
-        (mbResidGraphW "b14" epsStr N 7 7 w.b14
-          (mbResidGraphW "b13" epsStr N 7 7 w.b13
-            (mbStridedGraphW "b12" epsStr N 7 7 w.b12
-              (mbResidGraphW "b11" epsStr N 14 14 w.b11
-                (mbResidGraphW "b10" epsStr N 14 14 w.b10
-                  (mbExpGraphW "b9" epsStr N 14 14 w.b9
-                    (mbResidGraphW "b8" epsStr N 14 14 w.b8
-                      (mbResidGraphW "b7" epsStr N 14 14 w.b7
-                        (mbStridedGraphW "b6" epsStr N 14 14 w.b6
-                          (mbResidGraphW "b5" epsStr N 28 28 w.b5
-                            (mbStridedGraphW "b4" epsStr N 28 28 w.b4
-                              (mbResidGraphW "b3" epsStr N 56 56 w.b3
-                                (mbStridedGraphW "b2" epsStr N 56 56 w.b2
-                                  (mbNoExpGraphW "b1" epsStr N 112 112 w.b1
-                                    (stemGraphB epsStr (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ
+    (bf16 : Bool) (x : Vec (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
+  headGraphB epsStr (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+    (mbExpGraphW "b16" epsStr N 7 7 w.b16 bf16
+      (mbResidGraphW "b15" epsStr N 7 7 w.b15 bf16
+        (mbResidGraphW "b14" epsStr N 7 7 w.b14 bf16
+          (mbResidGraphW "b13" epsStr N 7 7 w.b13 bf16
+            (mbStridedGraphW "b12" epsStr N 7 7 w.b12 bf16
+              (mbResidGraphW "b11" epsStr N 14 14 w.b11 bf16
+                (mbResidGraphW "b10" epsStr N 14 14 w.b10 bf16
+                  (mbExpGraphW "b9" epsStr N 14 14 w.b9 bf16
+                    (mbResidGraphW "b8" epsStr N 14 14 w.b8 bf16
+                      (mbResidGraphW "b7" epsStr N 14 14 w.b7 bf16
+                        (mbStridedGraphW "b6" epsStr N 14 14 w.b6 bf16
+                          (mbResidGraphW "b5" epsStr N 28 28 w.b5 bf16
+                            (mbStridedGraphW "b4" epsStr N 28 28 w.b4 bf16
+                              (mbResidGraphW "b3" epsStr N 56 56 w.b3 bf16
+                                (mbStridedGraphW "b2" epsStr N 56 56 w.b2 bf16
+                                  (mbNoExpGraphW "b1" epsStr N 112 112 w.b1 bf16
+                                    (stemGraphB epsStr (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ bf16
                                       (.operand "%x" x))))))))))))))))))
 
 /-- **Full batched EfficientNet-B0 forward faithfulness.** The full 16-MBConv batched graph (true
@@ -352,8 +367,8 @@ def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : B0We
     lemmas (one `rw` per block, outermost→innermost), then a structural `rfl` (the forward is
     nested-application form, blocks opaque). -/
 theorem efficientnetFwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat} (w : B0Weights nCls)
-    (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphBFull N epsStr w x) = efficientnetForwardBFull N w x := by
+    (bf16 : Bool) (x : Vec (N * (3 * 224 * 224))) :
+    den (efficientnetFwdGraphBFull N epsStr w bf16 x) = efficientnetForwardBFull N w x := by
   rw [efficientnetFwdGraphBFull, headGraphB_faithful,
       mbExpGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful,
       mbStridedGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful, mbExpGraphW_faithful,

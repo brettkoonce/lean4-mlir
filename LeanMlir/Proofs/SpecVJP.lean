@@ -364,9 +364,9 @@ open Proofs.StableHLO in
     the committed spec's function: `efficientnetFwdGraphBFull_faithful` ∘ the tie. -/
 theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Weights 10)
     (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphBFull N epsStr w x)
+    den (efficientnetFwdGraphBFull N epsStr w false x)
       = denoteEfficientnetB0 N efficientnetVerified.layers w x :=
-  (efficientnetFwdGraphBFull_faithful N epsStr w x).trans
+  (efficientnetFwdGraphBFull_faithful N epsStr w false x).trans
     (congrFun (efficientnetVerified_denote_eq N w).symm x)
 
 -- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTCh ──

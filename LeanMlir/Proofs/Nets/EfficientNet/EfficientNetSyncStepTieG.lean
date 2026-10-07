@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
 import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 
 /-! # EfficientNet-B0's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 
@@ -56,9 +57,20 @@ that the sync forward graph computes exactly those is `EfficientNetSyncB`'s
 shards of one batch is the driver's. Note: the single-device tie states the chain without stochastic
 depth or classifier dropout, so this does too: the `drop` / `dropdo` DP variants add a `dropPathB`
 on each residual branch and a `dropoutB` before the classifier — per-example diagonal scalings,
-which shard and are linear, but whose chain neither file states. The `bf16` DP variants emit
-different gradient nodes and are not covered. Note: the lowerer's `all_reduce` is trusted as every
-other op's lowering is.
+which shard and are linear, but whose chain neither file states. Note: the lowerer's `all_reduce`
+is trusted as every other op's lowering is.
+
+**Precision is a flag on the statement.** The ImageNet run the book reports trains from
+`efficientnetin_emarmsdp64dropdowxeps0001bf16`, whose conv and depthwise weight gradients are the
+bf16 kinds. Every conv and depthwise weight collective below is stated on the renderers' switch —
+`ConvWSyncAt bf16` / `ConvStridedXlaWSyncAt bf16` / `DepthwiseWSyncAt bf16` /
+`DepthwiseStridedWSyncAt bf16` (`Foundation.GradNodesBAt`): the replicas' nodes and the
+batch-`R·N` node are the f32 kind at `false` and the bf16 kind at `true` — and the capstone takes
+`bf16`, so it covers the f32 DP artifacts and the `*bf16` ones' step read over ℝ at the identity
+rounding (`Bf16Erasure`), where each bf16 collective is `1/R` of the batch-`R·N` bf16 node exactly
+as at f32. At a real rounding the bf16 weight-gradient collective differs from the single-device
+node by the per-replica rounding of each partial sum, which `DataParallel.SyncBf16` states and
+this file does not model, as the f32 tie does not model f32 rounding.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -995,7 +1007,7 @@ end
     Each equals the single-device gradient node at the global batch, at the single-device tie's
     chain cotangents. -/
 def tailSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (pfx xN cotN vN epsStr : String) (t : EnTail mid oc rd) (hp : 0 < t.pε)
+    (pfx xN cotN vN epsStr : String) (t : EnTail mid oc rd) (hp : 0 < t.pε) (bf16 : Bool)
     (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   BnSync R hR N mid h w s!"{pfx}dg" s!"{pfx}dbt" vN epsStr cotN t.dε DC
@@ -1004,16 +1016,17 @@ def tailSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
       (tsCotE1 R hR N h w t DC dys) (tCotE1 (R * N) h w t hp DC DY)
   ∧ DenseSync R hR N s!"{pfx}zW2" s!"{pfx}zb2" xN cotN (tZ (R * N) h w t DC)
       (tsCotE2 R hR N h w t DC dys) (tCotE2 (R * N) h w t hp DC DY)
-  ∧ ConvWSync R hR N h w s!"{pfx}pW" xN cotN t.pb (tSe (R * N) h w t DC) t.pW
+  ∧ ConvWSyncAt bf16 R hR N h w s!"{pfx}pW" xN cotN t.pb (tSe (R * N) h w t DC) t.pW
       (tsCotPbn R hR N h w t DC dys) (tCotPbn (R * N) h w t hp DC DY)
   ∧ BnSync R hR N oc h w s!"{pfx}pg" s!"{pfx}pbt" vN epsStr cotN t.pε (tPc (R * N) h w t DC) dys DY
 
 theorem tail_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (t : EnTail mid oc rd)
-    (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (hp : 0 < t.pε) (bf16 : Bool)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    tailSyncTiedG R hR N h w pfx xN cotN vN epsStr t hp DC dys DY := by
+    tailSyncTiedG R hR N h w pfx xN cotN vN epsStr t hp bf16 DC dys DY := by
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
@@ -1022,7 +1035,7 @@ theorem tail_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (h
       rw [tsCotE1_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotE1_smul])
   · exact denseSync_of_scaled R hR N _ _ _ _ _ _ _ (fun r => by
       rw [tsCotE2_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotE2_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotPbn_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotPbn_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
@@ -1032,109 +1045,110 @@ theorem tail_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (h
     lives in the cotangent thread (`rsCotIn`). -/
 def expSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (pfx xN cotN vN epsStr : String) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (hp : 0 < p.pε) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
-  ConvWSync R hR N h w s!"{pfx}eW" xN cotN p.eb XIN p.eW
+  ConvWSyncAt bf16 R hR N h w s!"{pfx}eW" xN cotN p.eb XIN p.eW
       (xsCotEc R hR N h w p XIN dys) (xCotEc (R * N) h w p he hd hp XIN DY)
   ∧ BnSync R hR N mid h w s!"{pfx}eg" s!"{pfx}ebt" vN epsStr cotN p.eε (xEc (R * N) h w p XIN)
       (xsCotEn R hR N h w p XIN dys) (xCotEn (R * N) h w p hd hp XIN DY)
-  ∧ DepthwiseWSync R hR N h w s!"{pfx}dW" xN cotN p.db (xEr (R * N) h w p XIN) p.dW
+  ∧ DepthwiseWSyncAt bf16 R hR N h w s!"{pfx}dW" xN cotN p.db (xEr (R * N) h w p XIN) p.dW
       (tsCotDc R hR N h w p.toEnTail (xDc (R * N) h w p XIN) dys)
       (tCotDc (R * N) h w p.toEnTail hd hp (xDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (xDc (R * N) h w p XIN) dys DY
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp bf16 (xDc (R * N) h w p XIN) dys DY
 
 theorem exp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
-    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    expSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp XIN dys DY := by
+    expSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp bf16 XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _
+  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp bf16 _
     dys DY hdys⟩
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, xCotEc_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, xCotEn_smul])
-  · exact depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact depthwiseWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul])
 
 /-- **A strided MBConv6 block, DP-tied** (b2, b4, b6, b12) — thirteen collectives, the expand pair
     at the input grid `2h×2w` and the depthwise strided. -/
 def stridedSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (pfx xN cotN vN epsStr : String) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
+    (hp : 0 < p.pε) (bf16 : Bool) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
-  ConvWSync R hR N (2 * h) (2 * w) s!"{pfx}eW" xN cotN p.eb XIN p.eW
+  ConvWSyncAt bf16 R hR N (2 * h) (2 * w) s!"{pfx}eW" xN cotN p.eb XIN p.eW
       (ssCotEc R hR N h w p XIN dys) (sCotEc (R * N) h w p he hd hp XIN DY)
   ∧ BnSync R hR N mid (2 * h) (2 * w) s!"{pfx}eg" s!"{pfx}ebt" vN epsStr cotN p.eε
       (sEc (R * N) h w p XIN) (ssCotEn R hR N h w p XIN dys) (sCotEn (R * N) h w p hd hp XIN DY)
-  ∧ DepthwiseStridedWSync R hR N h w s!"{pfx}dW" xN cotN p.db (sEr (R * N) h w p XIN) p.dW
+  ∧ DepthwiseStridedWSyncAt bf16 R hR N h w s!"{pfx}dW" xN cotN p.db (sEr (R * N) h w p XIN) p.dW
       (tsCotDc R hR N h w p.toEnTail (sDc (R * N) h w p XIN) dys)
       (tCotDc (R * N) h w p.toEnTail hd hp (sDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (sDc (R * N) h w p XIN) dys DY
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp bf16 (sDc (R * N) h w p XIN) dys DY
 
 theorem strided_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
-    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    stridedSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp XIN dys DY := by
+    stridedSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp bf16 XIN dys DY := by
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
-  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _
+  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp bf16 _
     dys DY hdys⟩
-  · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, sCotEc_smul])
   · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, sCotEn_smul])
-  · exact depthwiseStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact depthwiseStridedWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul])
 
 /-- **The MBConv1 block, DP-tied** (b1) — ten collectives: the depthwise weight, then the tail's
     nine. -/
 def noExpSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
     (pfx xN cotN vN epsStr : String) (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (bf16 : Bool) (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
-  DepthwiseWSync R hR N h w s!"{pfx}dW" xN cotN p.db XIN p.dW
+  DepthwiseWSyncAt bf16 R hR N h w s!"{pfx}dW" xN cotN p.db XIN p.dW
       (tsCotDc R hR N h w p.toEnTail (nDc (R * N) h w p XIN) dys)
       (tCotDc (R * N) h w p.toEnTail hd hp (nDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (nDc (R * N) h w p XIN)
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp bf16 (nDc (R * N) h w p XIN)
       dys DY
 
 theorem noExp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
-    (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    noExpSyncTiedG R hR N h w pfx xN cotN vN epsStr p hd hp XIN dys DY :=
-  ⟨depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+    noExpSyncTiedG R hR N h w pfx xN cotN vN epsStr p hd hp bf16 XIN dys DY :=
+  ⟨depthwiseWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul]),
-    tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _ dys DY hdys⟩
+    tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp bf16 _ dys DY hdys⟩
 
 /-- **The stem, DP-tied** — three collectives: the 3×3/s2 XLA-`SAME` conv weight and its
     BatchNorm's γ and β. -/
 def stemSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Nat}
     (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kHs kWs) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs)
-    (γs βs : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
+    (γs βs : Vec oc) (bf16 : Bool) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
-  ConvStridedXlaWSync R hR N h w "sW" xN cotN bs X Ws
+  ConvStridedXlaWSyncAt bf16 R hR N h w "sW" xN cotN bs X Ws
       (stsCotStc R hR N h w Ws bs εs γs βs X dys) (stCotStc (R * N) h w Ws bs εs hεs γs βs X DY)
   ∧ BnSync R hR N oc h w "sg" "sbt" vN epsStr cotN εs (stStc (R * N) h w Ws bs X)
       (stsCotBnS R N h w Ws bs εs γs βs X dys) (stCotBnS (R * N) h w Ws bs εs γs βs X DY)
 
 theorem stem_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) (bf16 : Bool)
     (X : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    stemSyncTiedG R hR N h w xN cotN vN epsStr Ws bs εs hεs γs βs X dys DY :=
-  ⟨convStridedXlaWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+    stemSyncTiedG R hR N h w xN cotN vN epsStr Ws bs εs hεs γs βs bf16 X dys DY :=
+  ⟨convStridedXlaWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [stsCotStc_shard R hR N h w hN hh hw Ws bs εs hεs γs βs X dys _ hdys r, stCotStc_smul]),
     bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
       _ _ _ _ _ _ _ _ _ (fun r => by
@@ -1144,9 +1158,9 @@ theorem stem_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Nat
     classifier's weight and bias, the last two at the loss cotangent itself. -/
 def headSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat}
     (xN cotN vN epsStr dN : String) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (bf16 : Bool) (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC)) : Prop :=
-  ConvWSync R hR N h w "hW" xN cotN bh XIN Wh
+  ConvWSyncAt bf16 R hR N h w "hW" xN cotN bh XIN Wh
       (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs)
       (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G)
   ∧ BnSync R hR N oc h w "hg" "hbt" vN epsStr cotN εh (hdHc (R * N) h w Wh bh XIN)
@@ -1155,11 +1169,11 @@ def headSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat}
 
 theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr dN : String) (Wh : Kernel4 oc c 1 1)
-    (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (bf16 : Bool)
     (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC (fun i => (R : ℝ) * G i) r) :
-    headSyncTiedG R hR N h w xN cotN vN epsStr dN Wh bh εh hεh γh βh Wfc XIN gs G :=
-  ⟨convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+    headSyncTiedG R hR N h w xN cotN vN epsStr dN Wh bh εh hεh γh βh Wfc bf16 XIN gs G :=
+  ⟨convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
         hdCotHbn_smul]),
     bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
@@ -1177,7 +1191,8 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
     `N := R·N`, driven by the global cotangent `g`; `e16 … e0` are the replicas' sync-BN chain,
     driven by the family `gs`; the 18 conjuncts are one per stage. -/
 def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : String)
-    {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (x : Vec ((R * N) * (3 * 224 * 224)))
+    {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+    (x : Vec ((R * N) * (3 * 224 * 224)))
     (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N` (T3's), driven by `g` ──
   let a0  : Vec ((R * N) * (32 * 112 * 112)) :=
@@ -1251,24 +1266,24 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
   let e1  := ssCotIn R hR N 56 56 w.b2 a1 e2
   let e0  := nsCotIn R hR N 112 112 w.b1 a0 e1
   -- ── every collective the render emits IS the single-device node ──
-  stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0 dy0
-  ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1
-  ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2
-  ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3
-  ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4
-  ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5
-  ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6
-  ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7
-  ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8
-  ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9
-  ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10
-  ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11
-  ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12
-  ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13
-  ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14
-  ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15
-  ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16
-  ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g
+  stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ bf16 x e0 dy0
+  ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p bf16 a0 e1 dy1
+  ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 e2 dy2
+  ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 e3 dy3
+  ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 e4 dy4
+  ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 e5 dy5
+  ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 e6 dy6
+  ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 e7 dy7
+  ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 e8 dy8
+  ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 e9 dy9
+  ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 e10 dy10
+  ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 e11 dy11
+  ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 e12 dy12
+  ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 e13 dy13
+  ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 e14 dy14
+  ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 e15 dy15
+  ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 e16 dy16
+  ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 a16 gs g
 
 /-- **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
     global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
@@ -1288,12 +1303,13 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
 
     The left-hand chain is the replicas' own: sync-BN backward at every one of the 49
     BatchNorms (`bnSyncInB`, a collective each), per-example conv / depthwise / squeeze-excite /
-    swish / head links. -/
+    swish / head links. `bf16` selects the conv and depthwise weight collectives' kind on both
+    sides — `true` is the `*bf16` renders', read at the identity rounding (`Bf16Erasure`). -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos)
+    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
     (x : Vec ((R * N) * (3 * 224 * 224))) (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * g i) r) :
-    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs := by
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 x g gs := by
   unfold enetNetSyncTiedG
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
     dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
@@ -1321,46 +1337,47 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
   have s2 := rsCotIn_scaled R hR N 56 56 hN h56 h56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3
   have s1 := ssCotIn_scaled R hR N 56 56 hN h56 h56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2 s2
   have s0 := nsCotIn_scaled R hR N 112 112 hN h112 h112 w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1 s1
-  exact ⟨stem_syncTiedG R hR N 112 112 hN h112 h112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ
+  exact ⟨stem_syncTiedG R hR N 112 112 hN h112 h112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ bf16
       x e0 dy0 s0,
-    noExp_syncTiedG R hR N 112 112 hN h112 h112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1 s1,
-    strided_syncTiedG R hR N 56 56 hN h56 h56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2 s2,
-    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3,
-    strided_syncTiedG R hR N 28 28 hN h28 h28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4 s4,
-    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5 s5,
-    strided_syncTiedG R hR N 14 14 hN h14 h14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6 s6,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7 s7,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8 s8,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9 s9,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10
+    noExp_syncTiedG R hR N 112 112 hN h112 h112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p bf16 a0 e1 dy1 s1,
+    strided_syncTiedG R hR N 56 56 hN h56 h56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 e2 dy2 s2,
+    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 e3 dy3 s3,
+    strided_syncTiedG R hR N 28 28 hN h28 h28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 e4 dy4 s4,
+    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 e5 dy5 s5,
+    strided_syncTiedG R hR N 14 14 hN h14 h14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 e6 dy6 s6,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 e7 dy7 s7,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 e8 dy8 s8,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 e9 dy9 s9,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 e10
       dy10 s10,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 e11
       dy11 s11,
-    strided_syncTiedG R hR N 7 7 hN h7 h7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12
+    strided_syncTiedG R hR N 7 7 hN h7 h7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 e12
       dy12 s12,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 s13,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16,
-    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 e13 dy13 s13,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 e14 dy14 s14,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 e15 dy15 s15,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 e16 dy16 s16,
+    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 a16
       gs g hgs⟩
 
 /-- **…and at the loss the artifacts emit.** `efficientnet_net_syncTiedG` with its cotangent
     hypothesis discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
-    gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
+    gradient the DP render emits, at either precision, IS the single-device node at batch `R·N`,
+    loss divided by `R·B`. -/
 theorem efficientnet_net_syncTiedG_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos)
+    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * nCls))) :
-    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 x
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK bStr
         logN ohN (rowB (R * N) nCls (efficientnetForwardBFull (R * N) w x)) t)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (rowB N nCls (batchShard R N nCls (efficientnetForwardBFull (R * N) w x) r))
         (batchShard R N (1 * nCls) t r)))) :=
-  efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw x _ _
+  efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw bf16 x _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ t r)
 
 end Proofs.EnetSyncTieG

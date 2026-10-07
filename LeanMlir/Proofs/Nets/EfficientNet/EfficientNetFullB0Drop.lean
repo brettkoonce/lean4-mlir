@@ -27,7 +27,11 @@ statement covers `efficientnet_drop_fwd` (`sd` only), `efficientnet_do_fwd` (`cd
 
 The residual-block-with-drop and the dropout head are text-guarded against the renderer in
 `Codegen/FwdGraphTextTies` at training BatchNorm; the eval graphs use the render's names too, and
-their drop-free blocks are guarded at inference BatchNorm. These artifacts are f32. The train steps'
+their drop-free blocks are guarded at inference BatchNorm. The training graph takes the renderers'
+`bf16` flag through the same switch as `EfficientNetFullB0` (`StableHLO.PrecisionSwitch`), so
+`efficientnetFwdGraphBFullDrop … true` is the forward of the `*bf16` train steps —
+`efficientnetin_emarmsdp64dropdowxeps0001bf16`, the run the book reports, among them — read over
+ℝ as the f32 one is; the eval graphs stay f32, as the eval artifacts are. The train steps'
 backward through the drop sites is outside this statement, as it is outside
 `EfficientNetStepTieG`.
 
@@ -269,18 +273,19 @@ def mbResidDropGraphB (p epsStr mN : String) {N c mid h w kHd kWd r : Nat}
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c) (s : Option (Vec N))
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c) (bf16 : Bool)
+    (s : Option (Vec N))
     (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   .addVB
     (dropPathOptG mN s
       (.bnBatchF s!"%{p}pg" s!"%{p}pbt" epsStr εp γp βp
-        (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" c) Wp bp)
+        (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}pW" (biasName false "" c) Wp bp)
           (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
               Wz₁ bz₁ Wz₂ bz₂)
             (.batchOp (N := N) .swish (.bnBatchF s!"%{p}dg" s!"%{p}dbt" epsStr εd γd βd
-              (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+              (.batchOp (N := N) (.depthwiseAt bf16 id (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
                 (.batchOp (N := N) .swish (.bnBatchF s!"%{p}eg" s!"%{p}ebt" epsStr εe γe βe
-                  (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be)
+                  (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be)
                     e)))))))))) e
 
 /-- With no drop site it is `mbResidGraphB`. -/
@@ -288,44 +293,48 @@ theorem mbResidDropGraphB_none (p epsStr mN : String) {N c mid h w kHd kWd r : N
     (We : Kernel4 mid c 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
     (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c) (e : SHlo (N * (c * h * w))) :
-    mbResidDropGraphB p epsStr mN We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp none e
-      = mbResidGraphB p epsStr We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp e := rfl
+    (Wp : Kernel4 c mid 1 1) (bp : Vec c) (εp : ℝ) (γp βp : Vec c) (bf16 : Bool)
+    (e : SHlo (N * (c * h * w))) :
+    mbResidDropGraphB p epsStr mN We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp bf16 none e
+      = mbResidGraphB p epsStr We be εe γe βe Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp bf16 e := rfl
 
 /-- The graph with its drop site as a weight-bundle wrapper. -/
 def mbResidDropGraphW (pfx epsStr mN : String) (N h w : Nat) {c mid kh kw r : Nat}
-    (p : MBW c mid c r kh kw) (s : Option (Vec N)) (e : SHlo (N * (c * h * w))) :
+    (p : MBW c mid c r kh kw) (bf16 : Bool) (s : Option (Vec N)) (e : SHlo (N * (c * h * w))) :
     SHlo (N * (c * h * w)) :=
   mbResidDropGraphB pfx epsStr mN (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ p.dW p.db p.dε p.dγ p.dβ
-    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ s e
+    p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε p.pγ p.pβ bf16 s e
 
 theorem mbResidDropGraphW_faithful (pfx epsStr mN : String) (N h w : Nat) {c mid kh kw r : Nat}
-    (p : MBW c mid c r kh kw) (s : Option (Vec N)) (e : SHlo (N * (c * h * w))) :
-    den (mbResidDropGraphW pfx epsStr mN N h w p s e) = mbResidDropW N h w p s (den e) := by
+    (p : MBW c mid c r kh kw) (bf16 : Bool) (s : Option (Vec N)) (e : SHlo (N * (c * h * w))) :
+    den (mbResidDropGraphW pfx epsStr mN N h w p bf16 s e) = mbResidDropW N h w p s (den e) := by
   unfold mbResidDropGraphW mbResidDropGraphB mbResidDropW projB seB dwbsB cbsB residual biPath
-  simp only [den_addVB, den_dropPathOptG, den_batchOp, denOp, den_bnBatchF,
-    ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
+  simp only [den_addVB, den_dropPathOptG, den_batchOp, Bf16Fold.denOp_convAt_id,
+    Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF, ↓den_batchOp_swish_eq_swishF, swishF_faithful]
+  simp only [denOp, Function.comp_apply]
 
 /-- **Head with classifier dropout**: `headGraphB` with `dropoutOptG` between the GAP and the
     dense, its mask the input `mN` (the renderer's is `doName`). -/
 def headGraphBDo (epsStr mN : String) {N c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wfc : Mat oc nC) (bfc : Vec nC) (m : Option (Vec (N * oc)))
+    (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool) (m : Option (Vec (N * oc)))
     (e : SHlo (N * (c * h * w))) : SHlo (N * nC) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wfc bfc)
     (dropoutOptG mN m
       (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
         (.batchOp (N := N) .swish (.bnBatchF "%hg" "%hbt" epsStr εh γh βh
-          (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" (biasName false "" oc) Wh bh) e)))))
+          (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%hW" (biasName false "" oc) Wh bh) e)))))
 
 theorem headGraphBDo_faithful (epsStr mN : String) {N c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wfc : Mat oc nC) (bfc : Vec nC) (m : Option (Vec (N * oc))) (e : SHlo (N * (c * h * w))) :
-    den (headGraphBDo epsStr mN Wh bh εh γh βh Wfc bfc m e)
+    (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
+    (m : Option (Vec (N * oc))) (e : SHlo (N * (c * h * w))) :
+    den (headGraphBDo epsStr mN Wh bh εh γh βh Wfc bfc bf16 m e)
       = headDoFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc m (den e) := by
   unfold headGraphBDo headDoFwdB cbsB
-  simp only [den_batchOp, denOp, den_dropoutOptG, den_bnBatchF, ↓den_batchOp_swish_eq_swishF,
-    swishF_faithful, Function.comp_apply]
+  simp only [den_batchOp, Bf16Fold.denOp_convAt_id, den_dropoutOptG, den_bnBatchF,
+    ↓den_batchOp_swish_eq_swishF, swishF_faithful]
+  simp only [denOp, Function.comp_apply]
 
 /-- `mbResidDropGraphB` at inference BatchNorm (`mbResidGraphBEval`'s nodes). -/
 def mbResidDropGraphBEval (p epsStr mN : String) {N c mid h w kHd kWd r : Nat} (ε : ℝ)
@@ -393,32 +402,33 @@ theorem headGraphBEvalDo_faithful (epsStr mN : String) {N c oc h w nC : Nat} (ε
     `efficientnet_drop_fwd` / `efficientnet_do_fwd` / `efficientnetin_dropdo_fwd`: each skip
     block's drop site reads `%dp<i>` at its BLOCK index `i`, the classifier dropout `%do`. -/
 def efficientnetFwdGraphBFullDrop (N : Nat) (epsStr : String) {nCls : Nat} (w : B0Weights nCls)
+    (bf16 : Bool)
     (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) (x : Vec (N * (3 * 224 * 224))) :
     SHlo (N * nCls) :=
-  headGraphBDo epsStr doName (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd
-    (mbExpGraphW "b16" epsStr N 7 7 w.b16
-      (mbResidDropGraphW "b15" epsStr (dpName 14) N 7 7 w.b15 (sd.map (· 8))
-      (mbResidDropGraphW "b14" epsStr (dpName 13) N 7 7 w.b14 (sd.map (· 7))
-      (mbResidDropGraphW "b13" epsStr (dpName 12) N 7 7 w.b13 (sd.map (· 6))
-      (mbStridedGraphW "b12" epsStr N 7 7 w.b12
-      (mbResidDropGraphW "b11" epsStr (dpName 10) N 14 14 w.b11 (sd.map (· 5))
-      (mbResidDropGraphW "b10" epsStr (dpName 9) N 14 14 w.b10 (sd.map (· 4))
-      (mbExpGraphW "b9" epsStr N 14 14 w.b9
-      (mbResidDropGraphW "b8" epsStr (dpName 7) N 14 14 w.b8 (sd.map (· 3))
-      (mbResidDropGraphW "b7" epsStr (dpName 6) N 14 14 w.b7 (sd.map (· 2))
-      (mbStridedGraphW "b6" epsStr N 14 14 w.b6
-      (mbResidDropGraphW "b5" epsStr (dpName 4) N 28 28 w.b5 (sd.map (· 1))
-      (mbStridedGraphW "b4" epsStr N 28 28 w.b4
-      (mbResidDropGraphW "b3" epsStr (dpName 2) N 56 56 w.b3 (sd.map (· 0))
-      (mbStridedGraphW "b2" epsStr N 56 56 w.b2
-      (mbNoExpGraphW "b1" epsStr N 112 112 w.b1
-      (stemGraphB epsStr (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ (.operand "%x" x))))))))))))))))))
+  headGraphBDo epsStr doName (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 cd
+    (mbExpGraphW "b16" epsStr N 7 7 w.b16 bf16
+      (mbResidDropGraphW "b15" epsStr (dpName 14) N 7 7 w.b15 bf16 (sd.map (· 8))
+      (mbResidDropGraphW "b14" epsStr (dpName 13) N 7 7 w.b14 bf16 (sd.map (· 7))
+      (mbResidDropGraphW "b13" epsStr (dpName 12) N 7 7 w.b13 bf16 (sd.map (· 6))
+      (mbStridedGraphW "b12" epsStr N 7 7 w.b12 bf16
+      (mbResidDropGraphW "b11" epsStr (dpName 10) N 14 14 w.b11 bf16 (sd.map (· 5))
+      (mbResidDropGraphW "b10" epsStr (dpName 9) N 14 14 w.b10 bf16 (sd.map (· 4))
+      (mbExpGraphW "b9" epsStr N 14 14 w.b9 bf16
+      (mbResidDropGraphW "b8" epsStr (dpName 7) N 14 14 w.b8 bf16 (sd.map (· 3))
+      (mbResidDropGraphW "b7" epsStr (dpName 6) N 14 14 w.b7 bf16 (sd.map (· 2))
+      (mbStridedGraphW "b6" epsStr N 14 14 w.b6 bf16
+      (mbResidDropGraphW "b5" epsStr (dpName 4) N 28 28 w.b5 bf16 (sd.map (· 1))
+      (mbStridedGraphW "b4" epsStr N 28 28 w.b4 bf16
+      (mbResidDropGraphW "b3" epsStr (dpName 2) N 56 56 w.b3 bf16 (sd.map (· 0))
+      (mbStridedGraphW "b2" epsStr N 56 56 w.b2 bf16
+      (mbNoExpGraphW "b1" epsStr N 112 112 w.b1 bf16
+      (stemGraphB epsStr (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ bf16 (.operand "%x" x))))))))))))))))))
 
 /-- **The graph denotes the forward, at every mask** — one `rw` per block, then `rfl`. -/
 theorem efficientnetFwdGraphBFullDrop_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
+    (w : B0Weights nCls) (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphBFullDrop N epsStr w sd cd x) = efficientnetForwardBFullDrop N w sd cd x := by
+    den (efficientnetFwdGraphBFullDrop N epsStr w bf16 sd cd x) = efficientnetForwardBFullDrop N w sd cd x := by
   rw [efficientnetFwdGraphBFullDrop, headGraphBDo_faithful,
       mbExpGraphW_faithful, mbResidDropGraphW_faithful, mbResidDropGraphW_faithful, mbResidDropGraphW_faithful, mbStridedGraphW_faithful, mbResidDropGraphW_faithful, mbResidDropGraphW_faithful, mbExpGraphW_faithful, mbResidDropGraphW_faithful, mbResidDropGraphW_faithful, mbStridedGraphW_faithful, mbResidDropGraphW_faithful, mbStridedGraphW_faithful, mbResidDropGraphW_faithful, mbStridedGraphW_faithful, mbNoExpGraphW_faithful,
       stemGraphB_faithful, den_operand]

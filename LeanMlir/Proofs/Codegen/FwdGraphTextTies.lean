@@ -28,10 +28,10 @@ outside the guards is the chain's glue: it calls these emitters in the typed gra
 order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
 **Scope.** `convBias := false`, one replica (`sync := false`) — the configuration the typed
-graphs describe; f32 throughout, and for ResNet-34, ResNet-50 and MobileNetV2 also bf16: their typed
-graphs take the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their stem, block and (for
-MobileNetV2) head rows are checked at both values, the bf16 text against the bf16 graph. The other
-nets' bf16 renders swap in
+graphs describe; f32 throughout, and for ResNet-34, ResNet-50, MobileNetV2 and EfficientNet-B0 also
+bf16: their typed graphs take the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their
+stem, block and (for the two depthwise nets) head rows are checked at both values, the bf16 text
+against the bf16 graph. The other nets' bf16 renders swap in
 `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
@@ -415,58 +415,96 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
 -- § EfficientNet-B0 — `enetFwdChain` vs `efficientnetFwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
 
--- Stem: 3×3/s2 XLA-SAME (3 → 32, 224 → 112) → BN → swish.
+-- Stem: 3×3/s2 XLA-SAME (3 → 32, 224 → 112) → BN → swish, at f32 and at bf16.
 #guard textOf (enetStemFwdB 2 .train "1.0e-03" false) (·.code) ==
   prettyText 2 (stemGraphB "1.0e-03" (N := 2) (ic := 3) (oc := 32) (h := 112) (w := 112)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%x" _))
+#guard textOf (enetStemFwdB 2 .train "1.0e-03" false (bf16 := true)) (·.code) ==
+  prettyText 2 (stemGraphB "1.0e-03" (N := 2) (ic := 3) (oc := 32) (h := 112) (w := 112)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%x" _))
 
--- MBConv1, no expand (b1: 32 → 16 at 112², 3×3, SE r = 8).
+-- MBConv1, no expand (b1: 32 → 16 at 112², 3×3, SE r = 8), at f32 and at bf16.
 #guard textOf (eFwdNoExp 2 32 16 112 3 8 .train "1.0e-03" "b1" "%in" false) (·.code) ==
   prettyText 2 (mbNoExpGraphB "b1" "1.0e-03" (N := 2) (ic := 32) (oc := 16) (h := 112) (w := 112)
     (kHd := 3) (kWd := 3) (r := 8)
     (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (eFwdNoExp 2 32 16 112 3 8 .train "1.0e-03" "b1" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mbNoExpGraphB "b1" "1.0e-03" (N := 2) (ic := 32) (oc := 16) (h := 112) (w := 112)
+    (kHd := 3) (kWd := 3) (r := 8)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%in" _))
 
--- Strided MBConv6 (b4: 24 → 144 → 40, 56² → 28², 5×5, SE r = 6).
+-- Strided MBConv6 (b4: 24 → 144 → 40, 56² → 28², 5×5, SE r = 6), at f32 and at bf16.
 #guard textOf (eFwdStrided 2 24 144 40 28 5 6 .train "1.0e-03" "b4" "%in" false) (·.code) ==
   prettyText 2 (mbStridedGraphB "b4" "1.0e-03" (N := 2) (ic := 24) (mid := 144) (oc := 40) (h := 28)
     (w := 28) (kHd := 5) (kWd := 5) (r := 6)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (eFwdStrided 2 24 144 40 28 5 6 .train "1.0e-03" "b4" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mbStridedGraphB "b4" "1.0e-03" (N := 2) (ic := 24) (mid := 144) (oc := 40) (h := 28)
+    (w := 28) (kHd := 5) (kWd := 5) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%in" _))
 
--- Residual MBConv6 (b3: 24 → 144 → 24 at 56², 3×3, SE r = 6), no drop site.
+-- Residual MBConv6 (b3: 24 → 144 → 24 at 56², 3×3, SE r = 6), no drop site, at f32 and at bf16.
 #guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false) (·.code) ==
   prettyText 2 (mbResidGraphB "b3" "1.0e-03" (N := 2) (c := 24) (mid := 144) (h := 56) (w := 56)
     (kHd := 3) (kWd := 3) (r := 6)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mbResidGraphB "b3" "1.0e-03" (N := 2) (c := 24) (mid := 144) (h := 56) (w := 56)
+    (kHd := 3) (kWd := 3) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%in" _))
 
 -- Residual MBConv6 with its stochastic-depth site (`sd := true`, b3 = block index 2): `dropPathB`
--- on the branch, then the skip add (`EfficientNetFullB0Drop`).
+-- on the branch, then the skip add (`EfficientNetFullB0Drop`); at f32 and at bf16.
 #guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false (some 2)) (·.code) ==
   prettyText 2 (mbResidDropGraphB "b3" "1.0e-03" (dpName 2) (N := 2) (c := 24) (mid := 144) (h := 56)
     (w := 56) (kHd := 3) (kWd := 3) (r := 6)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (some fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (some fun _ => 0) (leaf "%in" _))
+#guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false (bf16 := true) (some 2)) (·.code) ==
+  prettyText 2 (mbResidDropGraphB "b3" "1.0e-03" (dpName 2) (N := 2) (c := 24) (mid := 144) (h := 56)
+    (w := 56) (kHd := 3) (kWd := 3) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (some fun _ => 0) (leaf "%in" _))
 
--- Expand, no skip (b9: 80 → 480 → 112 at 14², 5×5, SE r = 20).
+-- Expand, no skip (b9: 80 → 480 → 112 at 14², 5×5, SE r = 20), at f32 and at bf16.
 #guard textOf (eFwdNoSkip 2 80 480 112 14 5 20 .train "1.0e-03" "b9" "%in" false) (·.code) ==
   prettyText 2 (mbExpGraphB "b9" "1.0e-03" (N := 2) (ic := 80) (mid := 480) (oc := 112) (h := 14)
     (w := 14) (kHd := 5) (kWd := 5) (r := 20)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%in" _))
+#guard textOf (eFwdNoSkip 2 80 480 112 14 5 20 .train "1.0e-03" "b9" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mbExpGraphB "b9" "1.0e-03" (N := 2) (ic := 80) (mid := 480) (oc := 112) (h := 14)
+    (w := 14) (kHd := 5) (kWd := 5) (r := 20)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%in" _))
 
--- Head: 1×1 (320 → 1280) → BN → swish → GAP(7²) → dense(1280 → 10). The chain's classifier dropout
--- sits between the GAP and the dense and is off in the typed graphs' configuration (`cd := false`).
+-- Head: 1×1 (320 → 1280) → BN → swish → GAP(7²) → dense(1280 → 10), at f32 and at bf16 (the 1×1
+-- conv switches; the dense stays f32 in both). The chain's classifier dropout sits between the GAP
+-- and the dense and is off in the typed graphs' configuration (`cd := false`).
 #guard textOf (do
     let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false
     let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
@@ -474,10 +512,19 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
     pure (hd.code ++ c)) id ==
   prettyText 2 (headGraphB "1.0e-03" (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7) (nC := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (leaf "%in" _))
+    false (leaf "%in" _))
+#guard textOf (do
+    let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false (bf16 := true)
+    let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
+      (.operand hd.gap (fun _ => 0 : Vec (2 * 1280))))
+    pure (hd.code ++ c)) id ==
+  prettyText 2 (headGraphB "1.0e-03" (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7) (nC := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    true (leaf "%in" _))
 
 -- Head with classifier dropout (`cd := true`, the `%do` renders): `dropoutB` between the GAP and
--- the dense, as `enetFwdChain` emits it.
+-- the dense, as `enetFwdChain` emits it, at f32 and at bf16 (the shipping
+-- `efficientnetin_emarmsdp64dropdowxeps0001bf16` is a `dropdo` one).
 #guard textOf (do
     let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false
     let (cDo, nCin) ← pretty 2 (.dropoutB (N := 2) (n := 1280) doName (fun _ => 0 : Vec (2 * 1280))
@@ -487,7 +534,17 @@ def mnv4RowGraphTextEval (B : Nat) (s : UibSpec) (h : Nat) : String :=
     pure (hd.code ++ cDo ++ c)) id ==
   prettyText 2 (headGraphBDo "1.0e-03" doName (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7)
     (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (some fun _ => 0) (leaf "%in" _))
+    false (some fun _ => 0) (leaf "%in" _))
+#guard textOf (do
+    let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false (bf16 := true)
+    let (cDo, nCin) ← pretty 2 (.dropoutB (N := 2) (n := 1280) doName (fun _ => 0 : Vec (2 * 1280))
+      (.operand hd.gap (fun _ => 0 : Vec (2 * 1280))))
+    let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
+      (.operand nCin (fun _ => 0 : Vec (2 * 1280))))
+    pure (hd.code ++ cDo ++ c)) id ==
+  prettyText 2 (headGraphBDo "1.0e-03" doName (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7)
+    (nC := 10) (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    true (some fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § EfficientNet-B0 at inference — `enetFwdChain … .eval` vs `efficientnetFwdGraphBFullEval`
