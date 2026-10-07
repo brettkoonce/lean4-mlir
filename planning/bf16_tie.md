@@ -7,7 +7,12 @@ the cheap way, by restating each tie at the bf16 artifact with the identity roun
 why that is the same claim the f32 artifacts already carry. It does not change any artifact, any
 run, or the bf16 design.
 
-## ▶ Start here (next session): tier A is done; tier B (§4) is the open decision
+## ▶ Start here (next session): tier A is done — the next thread is planning/droppath_tie.md
+
+Tier A is done (every whole-net tie at either precision, book included, `9ab52e3b`). The next
+proof thread is the mask chain — drop-path and classifier dropout, the remaining gap between the
+ties and the artifacts four of the seven ImageNet jobs trained: **planning/droppath_tie.md**.
+Tier B (§4) stays an optional, undecided follow-on here.
 
 **State (2026-10-07, end of the second session).** On `wp8fg`, not pushed: the plan (`053baf64`),
 §3.1 the 25 erasure lemmas (`40172103`), §3.2 ResNet-34's typed graphs on the flag (`c27825fc`),
@@ -25,8 +30,8 @@ the `dropdo` artifacts use), sync graph, step tie, sync tie, loss gradient — s
 `bf16 := true`, the artifacts the book's ImageNet runs train from,
 read over ℝ as the f32 ones are; ConvNeXt-T and ViT-Tiny have every tier they have at f32. Every
 whole-net capstone in the tier is now stated at either precision. Nothing else changed: no
-artifact, no run, no book sentence (§3.4's book part is still open; the yaml part is done for all
-seven nets).
+artifact, no run, no book sentence (§3.4's yaml part; its book part landed after this paragraph was
+written — `9ab52e3b`, below).
 
 **What the MobileNetV2 step taught** (the recipe below holds; two additions): the binder-threading
 regexes over-match the cotangent CHAIN definitions (`mnv2NoExpCotPc … (p : IVWNoExp ic oc)\n (xin`,
@@ -104,8 +109,10 @@ regenerated + `blueprint_uses.py --check` (no edge moved), `docstring-checkrefs`
 preview server (diff page).
 
 **Open:** tier B (§4) — decide whether the census-as-a-theorem is worth the `rnd`-threaded chain,
-ResNet-34 pilot only. And the drop-path chain is now the remaining gap between the ties and the
-ConvNeXt / ViT / B0 / R50-A3 artifacts that trained (a separate project, not bf16).
+ResNet-34 pilot only. And the mask chain — drop-path and classifier dropout — is now the remaining
+gap between the ties and the ConvNeXt / ViT / B0 / MobileNetV2 artifacts that trained
+(planning/droppath_tie.md; a separate project, not bf16). ResNet-50 A3's
+`resnet50in160_lambaccdp4x128wxclipbcebf16` carries neither mask.
 
 **The recipe, per net** (what §3.2 + §3.3 did for ResNet-34, step 3 repeated verbatim for
 ResNet-50; `git show c27825fc 906bfa44 8b8ae732` are the templates):
