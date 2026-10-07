@@ -201,7 +201,7 @@ status:
     - {declaration: "Proofs.ViTTie.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact (ViT-Tiny's twin is Proofs.ViTTieGB.vit_net_tiedGB)
     - {declaration: "Proofs.CnxTieGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50 at either precision (bf16 binder), the rest f32
+    # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50 and MobileNetV2 at either precision (bf16 binder), the rest f32
     - {declaration: "Proofs.ResNet34TieB.r34_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.ResNet50TieB.r50_net_lossGrad", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     - {declaration: "Proofs.MobileNetV2TieB.mnv2_net_lossGrad", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2ParamGrad.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -234,9 +234,9 @@ status:
     - {declaration: "Proofs.StableHLO.resnet34FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 110 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B, at either precision
     - {declaration: "Proofs.ResNet34SyncTieB.r34_net_syncTiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # MobileNetV2's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
+    # MobileNetV2's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N, at either precision
     - {declaration: "Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # ...and its 158 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B
+    # ...and its 158 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B, at either precision
     - {declaration: "Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # EfficientNet-B0's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
     - {declaration: "Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
@@ -459,11 +459,12 @@ fidelity:
        and the result once outside the batch sum, and those carry their own lemmas
        (`Bf16GradNodes`). At the identity rounding every bf16 kind denotes its f32 peer
        (`Bf16Erasure`, one lemma per kind), the renderers instantiate the rounding binder with the
-       identity, and from 2026-10-07 the ResNet-34 and ResNet-50 typed graphs, step ties, sync
-       ties and loss-gradient capstones take the renderers' `bf16` flag through the same switch
-       (`PrecisionSwitch`, `GradNodesBAt`): stated at either precision, `true` being the bf16
-       artifacts the book's ImageNet runs train from, read over the reals as the f32 ones are.
-       The other five nets' capstones are still stated at the f32 node (planning/bf16_tie.md).
+       identity, and from 2026-10-07 the ResNet-34, ResNet-50 and MobileNetV2 typed graphs, step
+       ties, sync ties and loss-gradient capstones take the renderers' `bf16` flag through the
+       same switch (`PrecisionSwitch`, `GradNodesBAt`): stated at either precision, `true` being
+       the bf16 artifacts the book's ImageNet runs train from, read over the reals as the f32 ones
+       are. The other four nets' capstones are still stated at the f32 node
+       (planning/bf16_tie.md).
 
     4g. THE PROOFS-TIER PORT (2026-09-06 to 09-07), the record the labels 4g-4t used to carry
        here in full; the write-ups are planning/archive/proofs_tier_to_paper_nets.md,

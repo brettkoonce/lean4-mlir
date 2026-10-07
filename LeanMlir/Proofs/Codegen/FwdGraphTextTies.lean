@@ -28,9 +28,10 @@ outside the guards is the chain's glue: it calls these emitters in the typed gra
 order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
 **Scope.** `convBias := false`, one replica (`sync := false`) — the configuration the typed
-graphs describe; f32 throughout, and for ResNet-34 and ResNet-50 also bf16: their typed graphs take
-the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their stem and block rows are checked at
-both values, the bf16 text against the bf16 graph. The other nets' bf16 renders swap in
+graphs describe; f32 throughout, and for ResNet-34, ResNet-50 and MobileNetV2 also bf16: their typed
+graphs take the renderer's `bf16` flag (`StableHLO.PrecisionSwitch`), so their stem, block and (for
+MobileNetV2) head rows are checked at both values, the bf16 text against the bf16 graph. The other
+nets' bf16 renders swap in
 `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`) that their typed graphs do not yet select;
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
 ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
@@ -171,38 +172,59 @@ def mnv2NoExpW0 (ic oc : Nat) : IVWNoExp ic oc :=
   ⟨fun _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0,
    fun _ _ _ _ => 0, fun _ => 0, 0, fun _ => 0, fun _ => 0⟩
 
--- Stem: 3×3/s2 SAME, 224 → 112.
+-- Stem: 3×3/s2 SAME, 224 → 112, at f32 and at bf16.
 #guard textOf (mnv2StemFwdB 2 "1.0e-03" false) (·.code) ==
   prettyText 2 (mnv2StemGraphB "1.0e-03" 2 112 112 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
-    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) false (leaf "%x" _))
+#guard textOf (mnv2StemFwdB 2 "1.0e-03" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2StemGraphB "1.0e-03" 2 112 112 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) true (leaf "%x" _))
 
--- `t = 1` block (b1, 32 → 16 at 112²).
+-- `t = 1` block (b1, 32 → 16 at 112²), at f32 and at bf16.
 #guard textOf (irFwdNoExpB 2 32 16 112 "1.0e-03" "1" "%in" false) (·.code) ==
-  prettyText 2 (mnv2NoExpGraphB "1" "1.0e-03" 2 112 112 (mnv2NoExpW0 32 16) (leaf "%in" _))
+  prettyText 2 (mnv2NoExpGraphB "1" "1.0e-03" 2 112 112 (mnv2NoExpW0 32 16) false (leaf "%in" _))
+#guard textOf (irFwdNoExpB 2 32 16 112 "1.0e-03" "1" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2NoExpGraphB "1" "1.0e-03" 2 112 112 (mnv2NoExpW0 32 16) true (leaf "%in" _))
 
--- Strided block (b2, 16 → 96 → 24, 112² → 56²).
+-- Strided block (b2, 16 → 96 → 24, 112² → 56²), at f32 and at bf16.
 #guard textOf (irFwdStridedB 2 16 96 24 56 "1.0e-03" "2" "%in" false) (·.code) ==
-  prettyText 2 (mnv2StridedGraphB "2" "1.0e-03" 2 56 56 (mnv2IVW0 16 96 24) (leaf "%in" _))
+  prettyText 2 (mnv2StridedGraphB "2" "1.0e-03" 2 56 56 (mnv2IVW0 16 96 24) false (leaf "%in" _))
+#guard textOf (irFwdStridedB 2 16 96 24 56 "1.0e-03" "2" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2StridedGraphB "2" "1.0e-03" 2 56 56 (mnv2IVW0 16 96 24) true (leaf "%in" _))
 
--- Skip block (b3, 24 → 144 → 24 at 56²).
+-- Skip block (b3, 24 → 144 → 24 at 56²), at f32 and at bf16.
 #guard textOf (irFwdSkipB 2 24 144 24 56 "1.0e-03" "3" "%in" false) (·.code) ==
-  prettyText 2 (mnv2ResidGraphB "3" "1.0e-03" 2 56 56 (mnv2IVW0 24 144 24) (leaf "%in" _))
+  prettyText 2 (mnv2ResidGraphB "3" "1.0e-03" 2 56 56 (mnv2IVW0 24 144 24) false (leaf "%in" _))
+#guard textOf (irFwdSkipB 2 24 144 24 56 "1.0e-03" "3" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2ResidGraphB "3" "1.0e-03" 2 56 56 (mnv2IVW0 24 144 24) true (leaf "%in" _))
 
--- Expand, no skip (b11, 64 → 384 → 96 at 14²).
+-- Expand, no skip (b11, 64 → 384 → 96 at 14²), at f32 and at bf16.
 #guard textOf (irFwdNoSkipB 2 64 384 96 14 "1.0e-03" "11" "%in" false) (·.code) ==
-  prettyText 2 (mnv2ExpOnlyGraphB "11" "1.0e-03" 2 14 14 (mnv2IVW0 64 384 96) (leaf "%in" _))
+  prettyText 2 (mnv2ExpOnlyGraphB "11" "1.0e-03" 2 14 14 (mnv2IVW0 64 384 96) false (leaf "%in" _))
+#guard textOf (irFwdNoSkipB 2 64 384 96 14 "1.0e-03" "11" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2ExpOnlyGraphB "11" "1.0e-03" 2 14 14 (mnv2IVW0 64 384 96) true (leaf "%in" _))
 
--- Head: 1×1 (320 → 1280) → BN → relu6 → GAP(7²) → dense(1280 → 10).
+-- Head: 1×1 (320 → 1280) → BN → relu6 → GAP(7²) → dense(1280 → 10), at f32 and at bf16 (the 1×1
+-- conv switches; the dense stays f32 in both).
 #guard textOf (mnv2HeadFwdB 2 10 "1.0e-03" "%in" false) (·.code) ==
   prettyText 2 (mnv2HeadGraphB "1.0e-03" 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (leaf "%in" _))
+    false (leaf "%in" _))
+#guard textOf (mnv2HeadFwdB 2 10 "1.0e-03" "%in" false (bf16 := true)) (·.code) ==
+  prettyText 2 (mnv2HeadGraphB "1.0e-03" 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    true (leaf "%in" _))
 
--- Head with classifier dropout (`cd := true`, the `%do` train steps): `dropoutB` between GAP and dense.
+-- Head with classifier dropout (`cd := true`, the `%do` train steps): `dropoutB` between GAP and
+-- dense, at f32 and at bf16 (the shipping `mobilenetv2in_rmsdp64wxdols0eps0001bf16` is a `do` one).
 #guard textOf (mnv2HeadFwdB 2 10 "1.0e-03" "%in" false (cd := true)) (·.code) ==
   prettyText 2 (mnv2HeadGraphBDo "1.0e-03" doName 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
-    (fun _ => 0) (leaf "%in" _))
+    false (fun _ => 0) (leaf "%in" _))
+#guard textOf (mnv2HeadFwdB 2 10 "1.0e-03" "%in" false (bf16 := true) (cd := true)) (·.code) ==
+  prettyText 2 (mnv2HeadGraphBDo "1.0e-03" doName 2 7 7 (ic := 320) (oc := 1280) (nCls := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    true (fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § MobileNetV2 at inference — `mnv2FwdChain`'s pieces vs `mobilenetv2FwdGraphPaperEval`'s

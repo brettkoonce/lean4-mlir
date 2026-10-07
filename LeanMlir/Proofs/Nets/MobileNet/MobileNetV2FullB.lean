@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
+import LeanMlir.Proofs.Foundation.Bf16Erasure
 
 /-! # MobileNetV2 at batch BatchNorm — the whole net's forward and graph
 
@@ -29,6 +30,16 @@ emitted shapes, so only the certificate distinguishes them, and MobileNetV2 is t
 **There is no max-pool.** MobileNetV2's stem is conv-BN-relu6 and downsamples once; r34's stem is
 conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPAt`.
 
+**Precision is a flag on the graph.** Every conv and depthwise site is `.convAt bf16 id …` /
+`.convStridedXlaAt …` / `.depthwiseAt …` / `.depthwiseStridedXlaAt …` (`StableHLO.PrecisionSwitch`,
+the renderers' own switch), so one builder describes the f32 artifacts (`bf16 := false`) and the
+bf16 ones (`bf16 := true`, the kinds `mobilenetv2in_rmsdp64wxdols0eps0001bf16` emits); BatchNorm,
+relu6, GAP and the dense carry no flag because no render switches them. The faithfulness theorems
+hold at either value through `Bf16Erasure` (`Bf16Fold.denOp_convAt_id`, …: the bf16 kind at the
+identity rounding is its f32 peer), so the typed graph denotes `mobilenetv2ForwardBFull` whichever
+precision the text declares. The rounding itself is not modelled here, as it is not at f32: `den`
+is over ℝ at both values.
+
 ## Conventions this net runs at
 
 | | |
@@ -39,7 +50,7 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPA
 | stride-2 padding | XLA-`SAME` at all five sites |
 | stem | 3x3/s2 conv-bn-relu6, 3 to 32, 224 to 112 (NO pool) |
 | head | 1x1 conv-bn-relu6 320 to 1280, then GAP and dense, generic in the class count |
-| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand; bf16, and their f32 form is `mobilenetv2FwdGraphBFullDo` below, which at the all-ones mask is this net's forward, `mobilenetv2ForwardBFullDo_ones`) |
+| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the train steps at either precision (`bf16` selects the conv / depthwise kinds); the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` are `mobilenetv2FwdGraphBFullDo` below (a `%do` operand; at the all-ones mask this net's forward, `mobilenetv2ForwardBFullDo_ones`). Not this graph: the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) |
 
 The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `mobilenetv2in` ones.
@@ -248,68 +259,72 @@ namespace StableHLO
 
 /-- Stem graph: 3x3/s2 XLA-`SAME` conv -> batch BN -> relu6. -/
 def mnv2StemGraphB (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu6 (n := oc * h * w))
     (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
-      (.batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e))
+      (.batchOp (N := N) (.convStridedXlaAt bf16 id (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e))
 
 theorem mnv2StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (mnv2StemGraphB epsStr N h w Ws bs εs γs βs e)
+    den (mnv2StemGraphB epsStr N h w Ws bs εs γs βs bf16 e)
       = mnv2StemB N h w Ws bs εs γs βs (den e) := by
   unfold mnv2StemGraphB mnv2StemB
-  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp,
-    den_bnBatchF, Function.comp_apply]
+  -- the switch first (`Bf16Erasure`), then the f32 per-kind denotations
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp,
+    Bf16Fold.denOp_convStridedXlaAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- `t = 1` bottleneck graph (b1): depthwise -> BN -> relu6 -> project 1x1 -> BN. -/
 def mnv2NoExpGraphB (pfx epsStr : String) (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr p.pε p.pγ p.pβ
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
+    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
       (.batchOp (N := N) (.relu6 (n := ic * h * w))
         (.bnBatchF s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr p.dε p.dγ p.dβ
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{ic}" p.dW p.db)
+          (.batchOp (N := N) (.depthwiseAt bf16 id (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{ic}" p.dW p.db)
             e))))
 
 theorem mnv2NoExpGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic oc : Nat}
-    (p : IVWNoExp ic oc) (e : SHlo (N * (ic * h * w))) :
-    den (mnv2NoExpGraphB pfx epsStr N h w p e) = mnv2NoExpB N h w p (den e) := by
+    (p : IVWNoExp ic oc) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (mnv2NoExpGraphB pfx epsStr N h w p bf16 e) = mnv2NoExpB N h w p (den e) := by
   unfold mnv2NoExpGraphB mnv2NoExpB projB dwbrB
-  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
-    Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp,
+    Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- Stride-1 no-skip bottleneck graph (b11, b17): expand -> depthwise -> project, batch BN after
     each, relu6 after the first two. -/
 def mnv2ExpOnlyGraphB (pfx epsStr : String) (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr p.pε p.pγ p.pβ
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
+    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
       (.batchOp (N := N) (.relu6 (n := mid * h * w))
         (.bnBatchF s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr p.dε p.dγ p.dβ
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db)
+          (.batchOp (N := N) (.depthwiseAt bf16 id (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db)
             (.batchOp (N := N) (.relu6 (n := mid * h * w))
               (.bnBatchF s!"%b{pfx}eg" s!"%b{pfx}ebt" epsStr p.eε p.eγ p.eβ
                 (.batchOp (N := N)
-                  (.conv (h := h) (w := w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb) e)))))))
+                  (.convAt bf16 id (h := h) (w := w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb) e)))))))
 
 theorem mnv2ExpOnlyGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc : Nat}
-    (p : IVW ic mid oc) (e : SHlo (N * (ic * h * w))) :
-    den (mnv2ExpOnlyGraphB pfx epsStr N h w p e) = mnv2ExpOnlyB N h w p (den e) := by
+    (p : IVW ic mid oc) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (mnv2ExpOnlyGraphB pfx epsStr N h w p bf16 e) = mnv2ExpOnlyB N h w p (den e) := by
   unfold mnv2ExpOnlyGraphB mnv2ExpOnlyB projB dwbrB cbrB
-  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
-    Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp,
+    Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- Stride-1 skip bottleneck graph: the body plus the `addVB` identity skip, the block-input
     subtree `e` shared between both arms as the render emits it. -/
 def mnv2ResidGraphB (pfx epsStr : String) (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
-    (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
-  .addVB (mnv2ExpOnlyGraphB pfx epsStr N h w p e) e
+    (bf16 : Bool) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
+  .addVB (mnv2ExpOnlyGraphB pfx epsStr N h w p bf16 e) e
 
 theorem mnv2ResidGraphB_faithful (pfx epsStr : String) (N h w : Nat) {c mid : Nat}
-    (p : IVW c mid c) (e : SHlo (N * (c * h * w))) :
-    den (mnv2ResidGraphB pfx epsStr N h w p e) = mnv2ResidB N h w p (den e) := by
+    (p : IVW c mid c) (bf16 : Bool) (e : SHlo (N * (c * h * w))) :
+    den (mnv2ResidGraphB pfx epsStr N h w p bf16 e) = mnv2ResidB N h w p (den e) := by
   unfold mnv2ResidGraphB mnv2ResidB
   simp only [den_addVB, mnv2ExpOnlyGraphB_faithful]
   funext k
@@ -318,44 +333,47 @@ theorem mnv2ResidGraphB_faithful (pfx epsStr : String) (N h w : Nat) {c mid : Na
 /-- Stride-2 downsampling bottleneck graph: expand at `2h x 2w`, XLA-`SAME` strided depthwise,
     project at `h x w`. -/
 def mnv2StridedGraphB (pfx epsStr : String) (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
+    (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr p.pε p.pγ p.pβ
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
+    (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb)
       (.batchOp (N := N) (.relu6 (n := mid * h * w))
         (.bnBatchF s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr p.dε p.dγ p.dβ
           (.batchOp (N := N)
-            (.depthwiseStridedXla (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db)
+            (.depthwiseStridedXlaAt bf16 id (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db)
             (.batchOp (N := N) (.relu6 (n := mid * (2 * h) * (2 * w)))
               (.bnBatchF s!"%b{pfx}eg" s!"%b{pfx}ebt" epsStr p.eε p.eγ p.eβ
                 (.batchOp (N := N)
-                  (.conv (h := 2 * h) (w := 2 * w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb)
+                  (.convAt bf16 id (h := 2 * h) (w := 2 * w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb)
                   e)))))))
 
 theorem mnv2StridedGraphB_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc : Nat}
-    (p : IVW ic mid oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
-    den (mnv2StridedGraphB pfx epsStr N h w p e) = mnv2StridedB N h w p (den e) := by
+    (p : IVW ic mid oc) (bf16 : Bool) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
+    den (mnv2StridedGraphB pfx epsStr N h w p bf16 e) = mnv2StridedB N h w p (den e) := by
   unfold mnv2StridedGraphB mnv2StridedB projB dwbrBstrided cbrB
-  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp, denOp, den_bnBatchF,
-    Function.comp_apply]
+  simp only [↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_batchOp,
+    Bf16Fold.denOp_convAt_id, Bf16Fold.denOp_depthwiseStridedXlaAt_id, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- Head graph: 1x1 conv -> batch BN -> relu6 -> GAP -> dense. -/
 def mnv2HeadGraphB (epsStr : String) (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (e : SHlo (N * (ic * h * w))) : SHlo (N * nCls) :=
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (e : SHlo (N * (ic * h * w))) : SHlo (N * nCls) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
     (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
       (.batchOp (N := N) (.relu6 (n := oc * h * w))
         (.bnBatchF "%hg" "%hbt" epsStr εh γh βh
-          (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e))))
+          (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e))))
 
 theorem mnv2HeadGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (e : SHlo (N * (ic * h * w))) :
-    den (mnv2HeadGraphB epsStr N h w Wh bh εh γh βh Wd bd e)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool) (e : SHlo (N * (ic * h * w))) :
+    den (mnv2HeadGraphB epsStr N h w Wh bh εh γh βh Wd bd bf16 e)
       = mnv2HeadB N h w Wh bh εh γh βh Wd bd (den e) := by
   unfold mnv2HeadGraphB mnv2HeadB cbrB
-  simp only [den_batchOp, denOp, ↓den_batchOp_relu6_eq_relu6F, relu6F_faithful, den_bnBatchF,
-    Function.comp_apply]
+  simp only [den_batchOp, Bf16Fold.denOp_convAt_id, ↓den_batchOp_relu6_eq_relu6F, relu6F_faithful,
+    den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole graph + faithfulness
@@ -363,35 +381,37 @@ theorem mnv2HeadGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc nCls : Na
 
 /-- **The full batch-BN MobileNetV2 forward graph.** Block prefixes are the render's (`b1` … `b17`,
     each parameter `%b{k}{e,d,p}{W,g,bt}`), so the typed graph diffs against
-    `mobilenetv2_adam_train_step`'s forward half name for name. -/
+    `mobilenetv2_adam_train_step`'s forward half name for name. `bf16` selects the conv and
+    depthwise kinds at every site (`.convAt` / `.convStridedXlaAt` / `.depthwiseAt` /
+    `.depthwiseStridedXlaAt`). -/
 def mobilenetv2FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : MNV2BWeights nCls)
-    (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) : SHlo (N * nCls) :=
-  mnv2HeadGraphB epsStr N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
-    (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17
-      (mnv2ResidGraphB "16" epsStr N 7 7 w.b16
-        (mnv2ResidGraphB "15" epsStr N 7 7 w.b15
-          (mnv2StridedGraphB "14" epsStr N 7 7 w.b14
-            (mnv2ResidGraphB "13" epsStr N 14 14 w.b13
-              (mnv2ResidGraphB "12" epsStr N 14 14 w.b12
-                (mnv2ExpOnlyGraphB "11" epsStr N 14 14 w.b11
-                  (mnv2ResidGraphB "10" epsStr N 14 14 w.b10
-                    (mnv2ResidGraphB "9" epsStr N 14 14 w.b9
-                      (mnv2ResidGraphB "8" epsStr N 14 14 w.b8
-                        (mnv2StridedGraphB "7" epsStr N 14 14 w.b7
-                          (mnv2ResidGraphB "6" epsStr N 28 28 w.b6
-                            (mnv2ResidGraphB "5" epsStr N 28 28 w.b5
-                              (mnv2StridedGraphB "4" epsStr N 28 28 w.b4
-                                (mnv2ResidGraphB "3" epsStr N 56 56 w.b3
-                                  (mnv2StridedGraphB "2" epsStr N 56 56 w.b2
-                                    (mnv2NoExpGraphB "1" epsStr N 112 112 w.b1
-                                      (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ
+    (bf16 : Bool) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) : SHlo (N * nCls) :=
+  mnv2HeadGraphB epsStr N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16
+    (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17 bf16
+      (mnv2ResidGraphB "16" epsStr N 7 7 w.b16 bf16
+        (mnv2ResidGraphB "15" epsStr N 7 7 w.b15 bf16
+          (mnv2StridedGraphB "14" epsStr N 7 7 w.b14 bf16
+            (mnv2ResidGraphB "13" epsStr N 14 14 w.b13 bf16
+              (mnv2ResidGraphB "12" epsStr N 14 14 w.b12 bf16
+                (mnv2ExpOnlyGraphB "11" epsStr N 14 14 w.b11 bf16
+                  (mnv2ResidGraphB "10" epsStr N 14 14 w.b10 bf16
+                    (mnv2ResidGraphB "9" epsStr N 14 14 w.b9 bf16
+                      (mnv2ResidGraphB "8" epsStr N 14 14 w.b8 bf16
+                        (mnv2StridedGraphB "7" epsStr N 14 14 w.b7 bf16
+                          (mnv2ResidGraphB "6" epsStr N 28 28 w.b6 bf16
+                            (mnv2ResidGraphB "5" epsStr N 28 28 w.b5 bf16
+                              (mnv2StridedGraphB "4" epsStr N 28 28 w.b4 bf16
+                                (mnv2ResidGraphB "3" epsStr N 56 56 w.b3 bf16
+                                  (mnv2StridedGraphB "2" epsStr N 56 56 w.b2 bf16
+                                    (mnv2NoExpGraphB "1" epsStr N 112 112 w.b1 bf16
+                                      (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ bf16
                                         e))))))))))))))))))
 
 /-- **The MobileNetV2 forward graph at batch BN denotes the whole-net forward.** One `rw`
     per block over the six per-kind faithfulness lemmas. -/
 theorem mobilenetv2FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
-    (w : MNV2BWeights nCls) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
-    den (mobilenetv2FwdGraphBFull N epsStr w e) = mobilenetv2ForwardBFull N w (den e) := by
+    (w : MNV2BWeights nCls) (bf16 : Bool) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
+    den (mobilenetv2FwdGraphBFull N epsStr w bf16 e) = mobilenetv2ForwardBFull N w (den e) := by
   unfold mobilenetv2FwdGraphBFull mobilenetv2ForwardBFull
   rw [mnv2HeadGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2ResidGraphB_faithful,
@@ -409,54 +429,59 @@ theorem mobilenetv2FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Na
     its mask the input `mName` (the render's is `doName`). -/
 def mnv2HeadGraphBDo (epsStr mName : String) (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
     SHlo (N * nCls) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
     (.dropoutB mName m
       (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
         (.batchOp (N := N) (.relu6 (n := oc * h * w))
           (.bnBatchF "%hg" "%hbt" epsStr εh γh βh
-            (.batchOp (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e)))))
+            (.batchOp (N := N) (.convAt bf16 id (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e)))))
 
 theorem mnv2HeadGraphBDo_faithful (epsStr mName : String) (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
-    den (mnv2HeadGraphBDo epsStr mName N h w Wh bh εh γh βh Wd bd m e)
+    (Wd : Mat oc nCls) (bd : Vec nCls) (bf16 : Bool)
+    (m : Vec (N * oc)) (e : SHlo (N * (ic * h * w))) :
+    den (mnv2HeadGraphBDo epsStr mName N h w Wh bh εh γh βh Wd bd bf16 m e)
       = mnv2HeadBDo N h w Wh bh εh γh βh Wd bd m (den e) := by
   unfold mnv2HeadGraphBDo mnv2HeadBDo cbrB
-  simp only [den_batchOp, denOp, den_dropoutB, ↓den_batchOp_relu6_eq_relu6F, relu6F_faithful,
-    den_bnBatchF, Function.comp_apply]
+  simp only [den_batchOp, Bf16Fold.denOp_convAt_id, den_dropoutB, ↓den_batchOp_relu6_eq_relu6F,
+    relu6F_faithful, den_bnBatchF]
+  simp only [denOp, Function.comp_apply]
 
 /-- **The `%do` forward graph**: `mobilenetv2FwdGraphBFull` with the dropout head. -/
 def mobilenetv2FwdGraphBFullDo (N : Nat) (epsStr mName : String) {nCls : Nat}
-    (w : MNV2BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
+    (w : MNV2BWeights nCls) (bf16 : Bool)
+    (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
     SHlo (N * nCls) :=
-  mnv2HeadGraphBDo epsStr mName N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb m
-    (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17
-      (mnv2ResidGraphB "16" epsStr N 7 7 w.b16
-        (mnv2ResidGraphB "15" epsStr N 7 7 w.b15
-          (mnv2StridedGraphB "14" epsStr N 7 7 w.b14
-            (mnv2ResidGraphB "13" epsStr N 14 14 w.b13
-              (mnv2ResidGraphB "12" epsStr N 14 14 w.b12
-                (mnv2ExpOnlyGraphB "11" epsStr N 14 14 w.b11
-                  (mnv2ResidGraphB "10" epsStr N 14 14 w.b10
-                    (mnv2ResidGraphB "9" epsStr N 14 14 w.b9
-                      (mnv2ResidGraphB "8" epsStr N 14 14 w.b8
-                        (mnv2StridedGraphB "7" epsStr N 14 14 w.b7
-                          (mnv2ResidGraphB "6" epsStr N 28 28 w.b6
-                            (mnv2ResidGraphB "5" epsStr N 28 28 w.b5
-                              (mnv2StridedGraphB "4" epsStr N 28 28 w.b4
-                                (mnv2ResidGraphB "3" epsStr N 56 56 w.b3
-                                  (mnv2StridedGraphB "2" epsStr N 56 56 w.b2
-                                    (mnv2NoExpGraphB "1" epsStr N 112 112 w.b1
-                                      (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ
+  mnv2HeadGraphBDo epsStr mName N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb bf16 m
+    (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17 bf16
+      (mnv2ResidGraphB "16" epsStr N 7 7 w.b16 bf16
+        (mnv2ResidGraphB "15" epsStr N 7 7 w.b15 bf16
+          (mnv2StridedGraphB "14" epsStr N 7 7 w.b14 bf16
+            (mnv2ResidGraphB "13" epsStr N 14 14 w.b13 bf16
+              (mnv2ResidGraphB "12" epsStr N 14 14 w.b12 bf16
+                (mnv2ExpOnlyGraphB "11" epsStr N 14 14 w.b11 bf16
+                  (mnv2ResidGraphB "10" epsStr N 14 14 w.b10 bf16
+                    (mnv2ResidGraphB "9" epsStr N 14 14 w.b9 bf16
+                      (mnv2ResidGraphB "8" epsStr N 14 14 w.b8 bf16
+                        (mnv2StridedGraphB "7" epsStr N 14 14 w.b7 bf16
+                          (mnv2ResidGraphB "6" epsStr N 28 28 w.b6 bf16
+                            (mnv2ResidGraphB "5" epsStr N 28 28 w.b5 bf16
+                              (mnv2StridedGraphB "4" epsStr N 28 28 w.b4 bf16
+                                (mnv2ResidGraphB "3" epsStr N 56 56 w.b3 bf16
+                                  (mnv2StridedGraphB "2" epsStr N 56 56 w.b2 bf16
+                                    (mnv2NoExpGraphB "1" epsStr N 112 112 w.b1 bf16
+                                      (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ bf16
                                         e))))))))))))))))))
 
 /-- **The `%do` forward graph denotes the dropout forward**, at every mask — the trunk by the same
     per-block rewrites as `mobilenetv2FwdGraphBFull_faithful`. -/
 theorem mobilenetv2FwdGraphBFullDo_faithful (N : Nat) (epsStr mName : String) {nCls : Nat}
-    (w : MNV2BWeights nCls) (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
-    den (mobilenetv2FwdGraphBFullDo N epsStr mName w m e)
+    (w : MNV2BWeights nCls) (bf16 : Bool)
+    (m : Vec (N * 1280)) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
+    den (mobilenetv2FwdGraphBFullDo N epsStr mName w bf16 m e)
       = mobilenetv2ForwardBFullDo N w m (den e) := by
   unfold mobilenetv2FwdGraphBFullDo mobilenetv2ForwardBFullDo
   rw [mnv2HeadGraphBDo_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
+import LeanMlir.Proofs.Foundation.GradNodesBAt
 
 /-! # MobileNetV2's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 
@@ -52,11 +53,22 @@ are not tied here (`mnv2_net_tiedB` keeps them for the flag).
 The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv2PreB{k} (R*N) w X)`); that the sync forward graph computes exactly those is
 `StableHLO.mobilenetv2FwdGraphSyncFull_shard`, the forward half. That the replicas' inputs are
-the shards of one batch is the driver's. The statement is at the f32 nodes, so it covers the four
-f32 DP artifacts (`mobilenetv2_adamdp`, `mobilenetv2in_adamdp64`, `mobilenetv2in_rmsdp64`,
-`mobilenetv2in_rmsdp128`). The four `*bf16` DP artifacts emit bf16 nodes, whose weight gradients
-are rounded per replica and are not sharding-invariant (`DataParallel.SyncBf16`); they are outside
-it. The lowerer's `all_reduce` is trusted as every other op's lowering is.
+the shards of one batch is the driver's. The lowerer's `all_reduce` is trusted as every other
+op's lowering is.
+
+**Precision is a flag on the statement.** The ImageNet run the book reports trains from
+`mobilenetv2in_rmsdp64wxdols0eps0001bf16`, whose conv and depthwise weight gradients are the bf16
+kinds. Every conv and depthwise weight collective below is stated on the renderers' switch —
+`ConvWSyncAt bf16` / `ConvStridedXlaWSyncAt bf16` / `DepthwiseWSyncAt bf16`
+(`Foundation.GradNodesBAt`) and this file's `DepthwiseStridedXlaWSyncAt bf16`: the replicas' nodes
+and the batch-`R·N` node are the f32 kind at `false` and the bf16 kind at `true` — and the capstone
+takes `bf16`, so it covers the f32 DP artifacts (`mobilenetv2_adamdp`, `mobilenetv2in_adamdp64`,
+`mobilenetv2in_rmsdp64`, `mobilenetv2in_rmsdp128`) and the `*bf16` ones' step read over ℝ at the
+identity rounding (`Bf16Erasure`), where each bf16 collective is `1/R` of the batch-`R·N` bf16
+node exactly as at f32. At a real rounding the bf16 weight-gradient collective differs from the
+single-device node by the per-replica rounding of each partial sum, which `DataParallel.SyncBf16`
+states and this file does not model, as the f32 tie does not model f32 rounding. Classifier
+dropout (`*do*`) keeps its present scope.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -639,6 +651,31 @@ private theorem depthwiseStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w
       (fun i => (R : ℝ) * COT i) (fun r => .operand cotN (cots r)) (fun r => hc r) idx,
     depthwiseStridedXlaWeightGradB_smul, inv_mul_R R hR]
 
+/-- `DepthwiseStridedXlaWSync` on the switch — `GradNodesBAt`'s pattern (`ConvWSyncAt`, …) for the
+    one kind that is MobileNetV2's alone, so its collective stays local: the f32 lemma under
+    `Bf16Erasure` (`den_depthwiseStridedXlaWeightGradBAt_id`). -/
+private def DepthwiseStridedXlaWSyncAt (bf16 : Bool) (R : Nat) (hR : 0 < R) (N h w : Nat)
+    {c kH kW : Nat} (t xN cotN : String) (b : Vec c)
+    (X : Vec ((R * N) * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (cots : Fin R → Vec (N * (c * h * w))) (COT : Vec ((R * N) * (c * h * w))) : Prop :=
+  ∀ idx : Fin (c * kH * kW),
+    den (.allReduceMeanF R hR t [c, 1, kH, kW] (fun r =>
+          SHlo.depthwiseStridedXlaWeightGradBAt bf16 (h := h) (w := w) id xN b
+            (batchShard R N (c * (2 * h) * (2 * w)) X r) W (.operand cotN (cots r)))) idx
+      = den (SHlo.depthwiseStridedXlaWeightGradBAt bf16 (h := h) (w := w) id xN b X W
+          (.operand cotN COT)) idx
+
+private theorem depthwiseStridedXlaWSyncAt_of_scaled (bf16 : Bool) (R : Nat) (hR : 0 < R)
+    (N h w : Nat) {c kH kW : Nat} (t xN cotN : String) (b : Vec c)
+    (X : Vec ((R * N) * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (cots : Fin R → Vec (N * (c * h * w))) (COT : Vec ((R * N) * (c * h * w)))
+    (hc : ∀ r, cots r = batchShard R N (c * h * w) (fun i => (R : ℝ) * COT i) r) :
+    DepthwiseStridedXlaWSyncAt bf16 R hR N h w t xN cotN b X W cots COT := by
+  intro idx
+  have h := depthwiseStridedXlaWSync_of_scaled R hR N h w t xN cotN b X W cots COT hc idx
+  simp only [den_allReduceMeanF, Bf16Fold.den_depthwiseStridedXlaWeightGradBAt_id] at h ⊢
+  exact h
+
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The per-block DP ties
 --   Parameter tags are the render's names without `%` (`b{k}eW`, `b{k}eg`, …); a BatchNorm's
@@ -648,9 +685,9 @@ private theorem depthwiseStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w
 /-- **Stem, DP-tied** — the 3x3/s2 XLA-`SAME` conv weight and its BatchNorm's γ and β. -/
 private def mnv2StemSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
     (xN cotN vN epsStr : String) (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ)
-    (γs βs : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
+    (γs βs : Vec oc) (bf16 : Bool) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
-  ConvStridedXlaWSync R hR N h w "sW" xN cotN bs X Ws
+  ConvStridedXlaWSyncAt bf16 R hR N h w "sW" xN cotN bs X Ws
       (mnv2StemSyncCotC R hR N h w Ws bs εs γs βs X dys)
       (mnv2StemCotC (R * N) h w Ws bs εs γs βs X DY)
   ∧ BnSync R hR N oc h w "sg" "sbt" vN epsStr cotN εs
@@ -660,13 +697,13 @@ private def mnv2StemSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW 
 
 private theorem mnv2_stem_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr : String)
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
+    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (bf16 : Bool)
     (X : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    mnv2StemSyncTiedB R hR N h w xN cotN vN epsStr Ws bs εs γs βs X dys DY := by
+    mnv2StemSyncTiedB R hR N h w xN cotN vN epsStr Ws bs εs γs βs bf16 X dys DY := by
   refine ⟨?_, ?_⟩
-  · exact convStridedXlaWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convStridedXlaWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2StemSyncCotC_shard R hR N h w hN hh hw Ws bs εs γs βs X dys _ hdys,
         mnv2StemCotC_smul])
   · exact bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) _ _ _ _ _ _ _ _ _ (fun r => by
@@ -675,16 +712,17 @@ private theorem mnv2_stem_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc 
 /-- **`t = 1` block (b1), DP-tied** — its six emitted collectives: the depthwise weight, the
     depthwise BatchNorm's γ and β, the project weight, the project BatchNorm's γ and β. -/
 private def mnv2NoExpSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : IVWNoExp ic oc) (XIN : Vec ((R * N) * (ic * h * w)))
+    (pfx xN cotN vN epsStr : String) (p : IVWNoExp ic oc) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (ic * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let dc := batchMap (R * N) (depthwiseFlat p.dW p.db) XIN
   let dr := dwbrB (R * N) (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ XIN
   let pc := batchMap (R * N) (flatConv p.pW p.pb) dr
-  DepthwiseWSync R hR N h w s!"b{pfx}dW" xN cotN p.db XIN p.dW
+  DepthwiseWSyncAt bf16 R hR N h w s!"b{pfx}dW" xN cotN p.db XIN p.dW
       (mnv2NoExpSyncCotDc R hR N h w p XIN dys) (mnv2NoExpCotDc (R * N) h w p XIN DY)
   ∧ BnSync R hR N ic h w s!"b{pfx}dg" s!"b{pfx}dbt" vN epsStr cotN p.dε dc
       (mnv2NoExpSyncCotDn R hR N h w p XIN dys) (mnv2NoExpCotDn (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
+  ∧ ConvWSyncAt bf16 R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
       (mnv2NoExpSyncCotPc R hR N h w p XIN dys) (mnv2NoExpCotPc (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"b{pfx}pg" s!"b{pfx}pbt" vN epsStr cotN p.pε pc dys DY
 
@@ -699,18 +737,18 @@ private theorem mnv2NoExpSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {
   rw [mnv2NoExpSyncCotIn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2NoExpCotIn_smul]
 
 private theorem mnv2_noexp_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : IVWNoExp ic oc)
+    (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : IVWNoExp ic oc) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    mnv2NoExpSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    mnv2NoExpSyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_⟩
-  · exact depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact depthwiseWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2NoExpSyncCotDc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2NoExpCotDc_smul])
   · exact bnSync_of_scaled R hR N ic h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2NoExpSyncCotDn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2NoExpCotDn_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2NoExpSyncCotPc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2NoExpCotPc_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
@@ -719,22 +757,23 @@ private theorem mnv2_noexp_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc
     `mnv2Stride1TiedB` is: the identity skip changes only the cotangent handed to the previous
     block, never a parameter's. -/
 private def mnv2Stride1SyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc) (XIN : Vec ((R * N) * (ic * h * w)))
+    (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (ic * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let ec := batchMap (R * N) (flatConv p.eW p.eb) XIN
   let er := mnv2XE (R * N) h w p XIN
   let dc := batchMap (R * N) (depthwiseFlat p.dW p.db) er
   let dr := dwbrB (R * N) (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ er
   let pc := batchMap (R * N) (flatConv p.pW p.pb) dr
-  ConvWSync R hR N h w s!"b{pfx}eW" xN cotN p.eb XIN p.eW
+  ConvWSyncAt bf16 R hR N h w s!"b{pfx}eW" xN cotN p.eb XIN p.eW
       (mnv2SyncCotEc R hR N h w p XIN dys) (mnv2CotEc (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"b{pfx}eg" s!"b{pfx}ebt" vN epsStr cotN p.eε ec
       (mnv2SyncCotEn R hR N h w p XIN dys) (mnv2CotEn (R * N) h w p XIN DY)
-  ∧ DepthwiseWSync R hR N h w s!"b{pfx}dW" xN cotN p.db er p.dW
+  ∧ DepthwiseWSyncAt bf16 R hR N h w s!"b{pfx}dW" xN cotN p.db er p.dW
       (mnv2SyncCotDc R hR N h w p XIN dys) (mnv2CotDc (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"b{pfx}dg" s!"b{pfx}dbt" vN epsStr cotN p.dε dc
       (mnv2SyncCotDn R hR N h w p XIN dys) (mnv2CotDn (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
+  ∧ ConvWSyncAt bf16 R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
       (mnv2SyncCotPc R hR N h w p XIN dys) (mnv2CotPc (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"b{pfx}pg" s!"b{pfx}pbt" vN epsStr cotN p.pε pc dys DY
 
@@ -758,28 +797,28 @@ private theorem mnv2ResidSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {
 
 private theorem mnv2_stride1_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc)
-    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (bf16 : Bool) (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    mnv2Stride1SyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    mnv2Stride1SyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SyncCotEc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2CotEc_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SyncCotEn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2CotEn_smul])
-  · exact depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact depthwiseWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SyncCotDc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2CotDc_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SyncCotDn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2CotDn_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SyncCotPc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2CotPc_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Stride-2 downsampling block, DP-tied — its nine emitted collectives** (`b2`, `b4`, `b7`,
     `b14`): the expand half at the `2h x 2w` input grid, the XLA-`SAME` strided depthwise. -/
 private def mnv2Stride2SyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
-    (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc)
+    (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc) (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   let ec := batchMap (R * N) (flatConv p.eW p.eb) XIN
@@ -787,15 +826,15 @@ private def mnv2Stride2SyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc
   let dc := batchMap (R * N) (depthwiseStride2FlatXla p.dW p.db) er
   let dr := dwbrBstrided (R * N) (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ er
   let pc := batchMap (R * N) (flatConv p.pW p.pb) dr
-  ConvWSync R hR N (2 * h) (2 * w) s!"b{pfx}eW" xN cotN p.eb XIN p.eW
+  ConvWSyncAt bf16 R hR N (2 * h) (2 * w) s!"b{pfx}eW" xN cotN p.eb XIN p.eW
       (mnv2SSyncCotEc R hR N h w p XIN dys) (mnv2SCotEc (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid (2 * h) (2 * w) s!"b{pfx}eg" s!"b{pfx}ebt" vN epsStr cotN p.eε ec
       (mnv2SSyncCotEn R hR N h w p XIN dys) (mnv2SCotEn (R * N) h w p XIN DY)
-  ∧ DepthwiseStridedXlaWSync R hR N h w s!"b{pfx}dW" xN cotN p.db er p.dW
+  ∧ DepthwiseStridedXlaWSyncAt bf16 R hR N h w s!"b{pfx}dW" xN cotN p.db er p.dW
       (mnv2SSyncCotDc R hR N h w p XIN dys) (mnv2SCotDc (R * N) h w p XIN DY)
   ∧ BnSync R hR N mid h w s!"b{pfx}dg" s!"b{pfx}dbt" vN epsStr cotN p.dε dc
       (mnv2SSyncCotDn R hR N h w p XIN dys) (mnv2SCotDn (R * N) h w p XIN DY)
-  ∧ ConvWSync R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
+  ∧ ConvWSyncAt bf16 R hR N h w s!"b{pfx}pW" xN cotN p.pb dr p.pW
       (mnv2SSyncCotPc R hR N h w p XIN dys) (mnv2SCotPc (R * N) h w p XIN DY)
   ∧ BnSync R hR N oc h w s!"b{pfx}pg" s!"b{pfx}pbt" vN epsStr cotN p.pε pc dys DY
 
@@ -812,23 +851,24 @@ private theorem mnv2StridedSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat)
 
 private theorem mnv2_stride2_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : IVW ic mid oc)
+    (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
-    mnv2Stride2SyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
+    mnv2Stride2SyncTiedB R hR N h w pfx xN cotN vN epsStr p bf16 XIN dys DY := by
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SSyncCotEc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2SCotEc_smul])
   · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SSyncCotEn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2SCotEn_smul])
-  · exact depthwiseStridedXlaWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact depthwiseStridedXlaWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SSyncCotDc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2SCotDc_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SSyncCotDn_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2SCotDn_smul])
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2SSyncCotPc_shard R hR N h w hN hh hw p XIN dys _ hdys, mnv2SCotPc_smul])
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
@@ -836,12 +876,13 @@ private theorem mnv2_stride2_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic 
     and bias at the GAP output. -/
 private def mnv2HeadSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
     (xN cotN vN epsStr : String) (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
-    (Wd : Mat oc nCls) (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls))
+    (Wd : Mat oc nCls) (bf16 : Bool)
+    (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls))
     (G : Vec ((R * N) * nCls)) : Prop :=
   let hc := batchMap (R * N) (flatConv Wh bh) XIN
   let hr := cbrB (R * N) (h := h) (w := w) Wh bh εh γh βh XIN
   let a := batchMap (R * N) (globalAvgPoolFlat oc h w) hr
-  ConvWSync R hR N h w "hW" xN cotN bh XIN Wh
+  ConvWSyncAt bf16 R hR N h w "hW" xN cotN bh XIN Wh
       (mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd XIN gs)
       (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd XIN G)
   ∧ BnSync R hR N oc h w "hg" "hbt" vN epsStr cotN εh hc
@@ -865,11 +906,12 @@ private theorem mnv2HeadSyncCotBlk_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {
 private theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr : String)
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
+    (bf16 : Bool)
     (XIN : Vec ((R * N) * (ic * h * w))) (gs : Fin R → Vec (N * nCls)) (G : Vec ((R * N) * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
-    mnv2HeadSyncTiedB R hR N h w xN cotN vN epsStr Wh bh εh γh βh Wd XIN gs G := by
+    mnv2HeadSyncTiedB R hR N h w xN cotN vN epsStr Wh bh εh γh βh Wd bf16 XIN gs G := by
   refine ⟨?_, ?_, ?_⟩
-  · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
+  · exact convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv2HeadSyncCotHc_shard R hR N h w hN hh hw Wh bh εh γh βh Wd XIN gs _ hgs,
         mnv2HeadCotHc_smul])
   · exact bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) _ _ _ _ _ _ _ _ _ (fun r => by
@@ -886,7 +928,7 @@ private theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc 
     replicas' sync-BN chain, driven by the family `gs`; the 19 conjuncts are one per stage, every
     emitted parameter collective against `mnv2_net_tiedB`'s node at the global batch. -/
 def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (w : MNV2BWeights nCls) (bf16 : Bool) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N` (`mnv2_net_tiedB`'s), driven by `G` ──
   let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 (R * N) w X) G
@@ -927,33 +969,33 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
   let e2 := mnv2ResidSyncCotIn R hR N 56 56 w.b3 (mnv2PreB2 (R * N) w X) e3
   let e1 := mnv2StridedSyncCotIn R hR N 56 56 w.b2 (mnv2PreB1 (R * N) w X) e2
   let eStem := mnv2NoExpSyncCotIn R hR N 112 112 w.b1 (mnv2PreB0 (R * N) w X) e1
-  mnv2StemSyncTiedB R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X eStem cotStem
-  ∧ mnv2NoExpSyncTiedB R hR N 112 112 "1" xN cotN vN epsStr w.b1 (mnv2PreB0 (R * N) w X) e1 dy1
-  ∧ mnv2Stride2SyncTiedB R hR N 56 56 "2" xN cotN vN epsStr w.b2 (mnv2PreB1 (R * N) w X) e2 dy2
-  ∧ mnv2Stride1SyncTiedB R hR N 56 56 "3" xN cotN vN epsStr w.b3 (mnv2PreB2 (R * N) w X) e3 dy3
-  ∧ mnv2Stride2SyncTiedB R hR N 28 28 "4" xN cotN vN epsStr w.b4 (mnv2PreB3 (R * N) w X) e4 dy4
-  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "5" xN cotN vN epsStr w.b5 (mnv2PreB4 (R * N) w X) e5 dy5
-  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "6" xN cotN vN epsStr w.b6 (mnv2PreB5 (R * N) w X) e6 dy6
-  ∧ mnv2Stride2SyncTiedB R hR N 14 14 "7" xN cotN vN epsStr w.b7 (mnv2PreB6 (R * N) w X) e7 dy7
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "8" xN cotN vN epsStr w.b8 (mnv2PreB7 (R * N) w X) e8 dy8
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "9" xN cotN vN epsStr w.b9 (mnv2PreB8 (R * N) w X) e9 dy9
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "10" xN cotN vN epsStr w.b10 (mnv2PreB9 (R * N) w X)
+  mnv2StemSyncTiedB R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ bf16 X eStem cotStem
+  ∧ mnv2NoExpSyncTiedB R hR N 112 112 "1" xN cotN vN epsStr w.b1 bf16 (mnv2PreB0 (R * N) w X) e1 dy1
+  ∧ mnv2Stride2SyncTiedB R hR N 56 56 "2" xN cotN vN epsStr w.b2 bf16 (mnv2PreB1 (R * N) w X) e2 dy2
+  ∧ mnv2Stride1SyncTiedB R hR N 56 56 "3" xN cotN vN epsStr w.b3 bf16 (mnv2PreB2 (R * N) w X) e3 dy3
+  ∧ mnv2Stride2SyncTiedB R hR N 28 28 "4" xN cotN vN epsStr w.b4 bf16 (mnv2PreB3 (R * N) w X) e4 dy4
+  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "5" xN cotN vN epsStr w.b5 bf16 (mnv2PreB4 (R * N) w X) e5 dy5
+  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "6" xN cotN vN epsStr w.b6 bf16 (mnv2PreB5 (R * N) w X) e6 dy6
+  ∧ mnv2Stride2SyncTiedB R hR N 14 14 "7" xN cotN vN epsStr w.b7 bf16 (mnv2PreB6 (R * N) w X) e7 dy7
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "8" xN cotN vN epsStr w.b8 bf16 (mnv2PreB7 (R * N) w X) e8 dy8
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "9" xN cotN vN epsStr w.b9 bf16 (mnv2PreB8 (R * N) w X) e9 dy9
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "10" xN cotN vN epsStr w.b10 bf16 (mnv2PreB9 (R * N) w X)
       e10 dy10
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "11" xN cotN vN epsStr w.b11 (mnv2PreB10 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "11" xN cotN vN epsStr w.b11 bf16 (mnv2PreB10 (R * N) w X)
       e11 dy11
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "12" xN cotN vN epsStr w.b12 (mnv2PreB11 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "12" xN cotN vN epsStr w.b12 bf16 (mnv2PreB11 (R * N) w X)
       e12 dy12
-  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "13" xN cotN vN epsStr w.b13 (mnv2PreB12 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "13" xN cotN vN epsStr w.b13 bf16 (mnv2PreB12 (R * N) w X)
       e13 dy13
-  ∧ mnv2Stride2SyncTiedB R hR N 7 7 "14" xN cotN vN epsStr w.b14 (mnv2PreB13 (R * N) w X)
+  ∧ mnv2Stride2SyncTiedB R hR N 7 7 "14" xN cotN vN epsStr w.b14 bf16 (mnv2PreB13 (R * N) w X)
       e14 dy14
-  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "15" xN cotN vN epsStr w.b15 (mnv2PreB14 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "15" xN cotN vN epsStr w.b15 bf16 (mnv2PreB14 (R * N) w X)
       e15 dy15
-  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "16" xN cotN vN epsStr w.b16 (mnv2PreB15 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "16" xN cotN vN epsStr w.b16 bf16 (mnv2PreB15 (R * N) w X)
       e16 dy16
-  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "17" xN cotN vN epsStr w.b17 (mnv2PreB16 (R * N) w X)
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "17" xN cotN vN epsStr w.b17 bf16 (mnv2PreB16 (R * N) w X)
       e17 dy17
-  ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
+  ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW bf16
       (mnv2PreB17 (R * N) w X) gs G
 
 /-- **The synchronised-BN data-parallel MobileNetV2 step is the single-device step at the
@@ -966,20 +1008,21 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
     The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per
     BN layer), per-example conv / depthwise / relu6 / GAP / dense links. The right-hand chain is
     `mnv2_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone ties to the certified
-    gradient at its chain cotangent — so this and it together say every all-reduced gradient an
-    f32 DP render emits is the global-batch step's gradient node (the `*bf16` renders are
-    outside). The optimizer update that follows
+    gradient at its chain cotangent — so this and it together say every all-reduced gradient a
+    DP render emits is the global-batch step's gradient node. `bf16` selects the conv and
+    depthwise weight collectives' kind on both sides — `true` is the `*bf16` renders', read at
+    the identity rounding (`Bf16Erasure`). The optimizer update that follows
     (RMSProp/AdamW) is not stated here. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
     label-smoothed chain the artifacts emit.
 
     With per-replica BatchNorm the corresponding statement is false in general;
     `DataParallel.dpMeanGrad_ne_globalBatchGrad` is a two-replica counterexample. -/
 theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
-    (xN cotN vN epsStr : String) (w : MNV2BWeights nCls)
+    (xN cotN vN epsStr : String) (w : MNV2BWeights nCls) (bf16 : Bool)
     (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112)))) (G : Vec ((R * N) * nCls))
     (gs : Fin R → Vec (N * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
-    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X G gs := by
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X G gs := by
   unfold mnv2NetSyncTiedB
   intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
     e17 e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 eStem
@@ -1026,60 +1069,61 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
   have sStem := mnv2NoExpSyncCotIn_scaled R hR N 112 112 hN h112 h112 w.b1
     (mnv2PreB0 (R * N) w X) e1 dy1 s1
   exact ⟨mnv2_stem_syncTiedB R hR N 112 112 hN h112 h112 xN cotN vN epsStr
-      w.sW w.sb w.sε w.sγ w.sβ X eStem _ sStem,
-    mnv2_noexp_syncTiedB R hR N 112 112 hN h112 h112 "1" xN cotN vN epsStr w.b1
+      w.sW w.sb w.sε w.sγ w.sβ bf16 X eStem _ sStem,
+    mnv2_noexp_syncTiedB R hR N 112 112 hN h112 h112 "1" xN cotN vN epsStr w.b1 bf16
       (mnv2PreB0 (R * N) w X) e1 dy1 s1,
-    mnv2_stride2_syncTiedB R hR N 56 56 hN h56 h56 "2" xN cotN vN epsStr w.b2
+    mnv2_stride2_syncTiedB R hR N 56 56 hN h56 h56 "2" xN cotN vN epsStr w.b2 bf16
       (mnv2PreB1 (R * N) w X) e2 dy2 s2,
-    mnv2_stride1_syncTiedB R hR N 56 56 hN h56 h56 "3" xN cotN vN epsStr w.b3
+    mnv2_stride1_syncTiedB R hR N 56 56 hN h56 h56 "3" xN cotN vN epsStr w.b3 bf16
       (mnv2PreB2 (R * N) w X) e3 dy3 s3,
-    mnv2_stride2_syncTiedB R hR N 28 28 hN h28 h28 "4" xN cotN vN epsStr w.b4
+    mnv2_stride2_syncTiedB R hR N 28 28 hN h28 h28 "4" xN cotN vN epsStr w.b4 bf16
       (mnv2PreB3 (R * N) w X) e4 dy4 s4,
-    mnv2_stride1_syncTiedB R hR N 28 28 hN h28 h28 "5" xN cotN vN epsStr w.b5
+    mnv2_stride1_syncTiedB R hR N 28 28 hN h28 h28 "5" xN cotN vN epsStr w.b5 bf16
       (mnv2PreB4 (R * N) w X) e5 dy5 s5,
-    mnv2_stride1_syncTiedB R hR N 28 28 hN h28 h28 "6" xN cotN vN epsStr w.b6
+    mnv2_stride1_syncTiedB R hR N 28 28 hN h28 h28 "6" xN cotN vN epsStr w.b6 bf16
       (mnv2PreB5 (R * N) w X) e6 dy6 s6,
-    mnv2_stride2_syncTiedB R hR N 14 14 hN h14 h14 "7" xN cotN vN epsStr w.b7
+    mnv2_stride2_syncTiedB R hR N 14 14 hN h14 h14 "7" xN cotN vN epsStr w.b7 bf16
       (mnv2PreB6 (R * N) w X) e7 dy7 s7,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "8" xN cotN vN epsStr w.b8
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "8" xN cotN vN epsStr w.b8 bf16
       (mnv2PreB7 (R * N) w X) e8 dy8 s8,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "9" xN cotN vN epsStr w.b9
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "9" xN cotN vN epsStr w.b9 bf16
       (mnv2PreB8 (R * N) w X) e9 dy9 s9,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "10" xN cotN vN epsStr w.b10
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "10" xN cotN vN epsStr w.b10 bf16
       (mnv2PreB9 (R * N) w X) e10 dy10 s10,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "11" xN cotN vN epsStr w.b11
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "11" xN cotN vN epsStr w.b11 bf16
       (mnv2PreB10 (R * N) w X) e11 dy11 s11,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "12" xN cotN vN epsStr w.b12
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "12" xN cotN vN epsStr w.b12 bf16
       (mnv2PreB11 (R * N) w X) e12 dy12 s12,
-    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "13" xN cotN vN epsStr w.b13
+    mnv2_stride1_syncTiedB R hR N 14 14 hN h14 h14 "13" xN cotN vN epsStr w.b13 bf16
       (mnv2PreB12 (R * N) w X) e13 dy13 s13,
-    mnv2_stride2_syncTiedB R hR N 7 7 hN h7 h7 "14" xN cotN vN epsStr w.b14
+    mnv2_stride2_syncTiedB R hR N 7 7 hN h7 h7 "14" xN cotN vN epsStr w.b14 bf16
       (mnv2PreB13 (R * N) w X) e14 dy14 s14,
-    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "15" xN cotN vN epsStr w.b15
+    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "15" xN cotN vN epsStr w.b15 bf16
       (mnv2PreB14 (R * N) w X) e15 dy15 s15,
-    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "16" xN cotN vN epsStr w.b16
+    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "16" xN cotN vN epsStr w.b16 bf16
       (mnv2PreB15 (R * N) w X) e16 dy16 s16,
-    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "17" xN cotN vN epsStr w.b17
+    mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "17" xN cotN vN epsStr w.b17 bf16
       (mnv2PreB16 (R * N) w X) e17 dy17 s17,
-    mnv2_head_syncTiedB R hR N 7 7 hN h7 h7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
+    mnv2_head_syncTiedB R hR N 7 7 hN h7 h7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW bf16
       (mnv2PreB17 (R * N) w X) gs G hgs⟩
 
 /-- **…and at the loss the artifacts emit.** `mnv2_net_syncTiedB` with its cotangent hypothesis
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
-    gradient an f32 DP render emits is the single-device node at batch `R·N`, loss divided by `R·B`. -/
+    gradient a DP render emits, at either precision, is the single-device node at batch `R·N`,
+    loss divided by `R·B`. -/
 theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (w : MNV2BWeights nCls) (bf16 : Bool) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (T : Vec ((R * N) * (1 * nCls))) :
-    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
         bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardBFull (R * N) w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardBFull (R * N) w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
-  mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
+  mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w bf16 X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 end Proofs.MobileNetV2SyncTieB

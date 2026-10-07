@@ -2149,6 +2149,18 @@ open Proofs
 #print axioms Proofs.GradNodeB.convStridedWAt_hasGradAt
 #print axioms Proofs.SyncKit.convWSyncAt_of_scaled
 #print axioms Proofs.SyncKit.convStridedWSyncAt_of_scaled
+-- …the depthwise nets' kinds: XLA-SAME stem, depthwise, symmetric and XLA-SAME strided depthwise
+#print axioms Proofs.GradNodeB.convStridedXlaWTiedBAt_holds
+#print axioms Proofs.GradNodeB.depthwiseWTiedBAt_holds
+#print axioms Proofs.GradNodeB.depthwiseStridedWTiedBAt_holds
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaWTiedBAt_holds
+#print axioms Proofs.GradNodeB.convStridedXlaWAt_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseWAt_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseStridedWAt_hasGradAt
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaWAt_hasGradAt
+#print axioms Proofs.SyncKit.convStridedXlaWSyncAt_of_scaled
+#print axioms Proofs.SyncKit.depthwiseWSyncAt_of_scaled
+#print axioms Proofs.SyncKit.depthwiseStridedWSyncAt_of_scaled
 
 -- MobileNetV2 at 17 blocks
 #print axioms Proofs.GradNodeB.convStridedXlaBGradB_den

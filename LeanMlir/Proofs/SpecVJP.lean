@@ -283,9 +283,9 @@ open Proofs.StableHLO in
     `mobilenetv2FwdGraphBFull_faithful` composed with the tie. -/
 theorem mobilenetv2VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : MNV2BWeights 10)
     (e : SHlo (N * (3 * 224 * 224))) :
-    den (mobilenetv2FwdGraphBFull N epsStr w e)
+    den (mobilenetv2FwdGraphBFull N epsStr w false e)
       = denoteMobilenetB N mobilenetv2Verified.layers w (den e) :=
-  (mobilenetv2FwdGraphBFull_faithful N epsStr w e).trans
+  (mobilenetv2FwdGraphBFull_faithful N epsStr w false e).trans
     (congrFun (mobilenetv2VerifiedB_denote_eq N w).symm (den e))
 
 

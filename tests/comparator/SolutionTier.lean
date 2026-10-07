@@ -744,11 +744,11 @@ theorem chk_mnv2_net_lossGrad :
     ∀ (N : ℕ) {nCls : ℕ} (xN cotN vN epsStr : String)
       (w : Proofs.MNV2BWeights nCls),
       Proofs.MNV2PosB w →
-        ∀ (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
+        ∀ (bf16 : Bool) (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
           Proofs.MNV2SmoothAtB N w x →
             ∀ {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
               Proofs.HasGradAt L (Proofs.mobilenetv2ForwardBFull N w x) g →
-                Proofs.MobileNetV2TieB.MNV2NetLossTiedB N xN cotN vN epsStr w x L g :=
+                Proofs.MobileNetV2TieB.MNV2NetLossTiedB N xN cotN vN epsStr w bf16 x L g :=
   Proofs.MobileNetV2TieB.mnv2_net_lossGrad
 
 /-- `Proofs.Mnv4TieB.mnv4_net_lossGrad` -/
@@ -1029,14 +1029,14 @@ theorem chk_r34_net_syncTiedB :
 theorem chk_mobilenetv2FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.MNV2BWeights nCls)
+        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.MNV2BWeights nCls) (bf16 : Bool)
           (e : Fin R → Proofs.StableHLO.SHlo (N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ)))))
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
           (∀ (r : Fin R),
               Proofs.StableHLO.den (e r) =
                 Proofs.batchShard R N ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.mobilenetv2FwdGraphSyncFull R hR N epsStr w e r) =
+              Proofs.StableHLO.den (Proofs.StableHLO.mobilenetv2FwdGraphSyncFull R hR N epsStr w bf16 e r) =
                 Proofs.batchShard R N nCls (Proofs.mobilenetv2ForwardBFull (R * N) w X) r :=
   Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard
 
@@ -1044,11 +1044,11 @@ theorem chk_mobilenetv2FwdGraphSyncFull_shard :
 theorem chk_mnv2_net_syncTiedB :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.MNV2BWeights nCls)
+        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.MNV2BWeights nCls) (bf16 : Bool)
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ)))))
           (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
           (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
-            Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
+            Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w bf16 X G gs :=
   Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
 
 /-- `Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard` -/
