@@ -26,7 +26,8 @@ statement covers `efficientnet_drop_fwd` (`sd` only), `efficientnet_do_fwd` (`cd
   the eval twins, `efficientnetForwardBFullEvalDrop_none` / `efficientnetForwardBFullEvalDrop_ones`).
   The identity is exact: the keep probability is folded into the mask (`Training/DropPath`).
   The `Option` sites, their graph nodes and their VJPs are `Proofs.Foundation.DropSites`', shared
-  with the ties that thread the same binder.
+  with the ties that thread the same binder; the block's and the head's VJPs with the sites
+  (`mbResidDropWHasVJP`, `headDoFwdBHasVJP`) are here, the forward's peers.
 
 The residual-block-with-drop and the dropout head are text-guarded against the renderer in
 `Codegen/FwdGraphTextTies` at training BatchNorm; the eval graphs use the render's names too, and
@@ -35,8 +36,7 @@ their drop-free blocks are guarded at inference BatchNorm. The training graph ta
 `efficientnetFwdGraphBFullDrop … true` is the forward of the `*bf16` train steps —
 `efficientnetin_emarmsdp64dropdowxeps0001bf16`, the run the book reports, among them — read over
 ℝ as the f32 one is; the eval graphs stay f32, as the eval artifacts are. The train steps'
-backward through the drop sites is outside this statement, as it is outside
-`EfficientNetStepTieG`.
+backward through the drop sites is `EfficientNetStepTieG`'s, at the same `sd` / `cd` binders.
 
 ## References
 
@@ -92,6 +92,65 @@ theorem headDoFwdB_ones (N : Nat) {c oc h w nC : Nat}
     headDoFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc (some fun _ => 1)
       = headFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc := by
   rw [headDoFwdB, dropoutOpt_ones]; rfl
+
+-- ════════════════════════════════════════════════════════════════
+-- § The VJPs with the sites — what the ties thread
+--   The drop's backward is the forward at the same mask (`dropPathOptHasVJP`,
+--   `dropoutOptHasVJP`): `mbResidDropW`'s VJP is `residualHasVJP` over the branch's with the
+--   site composed on, so its backward is `body.back x (dropPathOpt s dy) + dy` — the branch's
+--   parameter gradients see the dropped signal, the skip keeps the raw one (`eBack`'s rule);
+--   the head's puts `dropoutOpt` between the dense's input-VJP and the GAP backward.
+-- ════════════════════════════════════════════════════════════════
+
+theorem mbResidDropW_differentiable (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
+    (s : Option (Vec N)) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) :
+    Differentiable ℝ (mbResidDropW N h w p s) := by
+  show Differentiable ℝ (fun x => (dropPathOpt N (c * h * w) s ∘ mbExpW N h w p) x + x)
+  exact Differentiable.add
+    ((dropPathOpt_differentiable N (c * h * w) s).comp (mbExpW_differentiable N h w p he hd hp))
+    differentiable_id
+
+/-- **The residual block's VJP through its drop site**: `residualHasVJP` over the branch's
+    (`mbExpWHasVJP`) with the site's composed on — the backward is
+    `branch.back x (dropPathOpt s dy) + dy`, definitionally. -/
+noncomputable def mbResidDropWHasVJP (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
+    (s : Option (Vec N)) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) :
+    HasVJP (mbResidDropW N h w p s) :=
+  residualHasVJP (dropPathOpt N (c * h * w) s ∘ mbExpW N h w p)
+    ((dropPathOpt_differentiable N (c * h * w) s).comp (mbExpW_differentiable N h w p he hd hp))
+    (vjpComp (mbExpW N h w p) (dropPathOpt N (c * h * w) s)
+      (mbExpW_differentiable N h w p he hd hp) (dropPathOpt_differentiable N (c * h * w) s)
+      (mbExpWHasVJP N h w p he hd hp) (dropPathOptHasVJP N (c * h * w) s))
+
+theorem headDoFwdB_differentiable (N : Nat) {c oc h w nC : Nat}
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
+    (Wfc : Mat oc nC) (bfc : Vec nC) (m : Option (Vec (N * oc))) :
+    Differentiable ℝ (headDoFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc m) :=
+  (batchMap_differentiable (N := N) (dense Wfc bfc) (dense_differentiable Wfc bfc)).comp
+    ((dropoutOpt_differentiable m).comp
+      ((batchMap_differentiable (N := N) (globalAvgPoolFlat oc h w)
+          (globalAvgPoolFlat_differentiable oc h w)).comp
+        (cbsB_differentiable N (h := h) (w := w) Wh bh εh hεh γh βh)))
+
+/-- **The head's VJP through its dropout site**: `headFwdBHasVJP` with `dropoutOptHasVJP`
+    composed between the GAP's and the dense's. -/
+noncomputable def headDoFwdBHasVJP (N : Nat) {c oc h w nC : Nat}
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
+    (Wfc : Mat oc nC) (bfc : Vec nC) (m : Option (Vec (N * oc))) :
+    HasVJP (headDoFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc m) := by
+  unfold headDoFwdB
+  have dCbs := cbsB_differentiable N (h := h) (w := w) Wh bh εh hεh γh βh
+  have dGap := batchMap_differentiable (N := N) (globalAvgPoolFlat oc h w)
+    (globalAvgPoolFlat_differentiable oc h w)
+  have vGap := batchMapHasVJP (N := N) (globalAvgPoolFlat oc h w) (globalAvgPoolFlatHasVJP oc h w)
+    (globalAvgPoolFlat_differentiable oc h w)
+  have dDo := dropoutOpt_differentiable m
+  exact vjpComp _ _ (dDo.comp (dGap.comp dCbs))
+    (batchMap_differentiable (N := N) (dense Wfc bfc) (dense_differentiable Wfc bfc))
+    (vjpComp _ _ (dGap.comp dCbs) dDo
+      (vjpComp _ _ dCbs dGap (cbsBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh) vGap)
+      (dropoutOptHasVJP m))
+    (batchMapHasVJP (N := N) (dense Wfc bfc) (denseHasVJP Wfc bfc) (dense_differentiable Wfc bfc))
 
 -- ════════════════════════════════════════════════════════════════
 -- § The two sites, at inference BatchNorm

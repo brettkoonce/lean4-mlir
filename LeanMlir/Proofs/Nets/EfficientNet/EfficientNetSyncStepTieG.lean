@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 import LeanMlir.Proofs.Foundation.GradNodesBAt
 
@@ -54,11 +55,22 @@ conjuncts, one per conv bias (a `bnBetaGradB` at the conv-output cotangent), for
 Note: the replicas' saved forward activations enter as the shards of the single-device forward's;
 that the sync forward graph computes exactly those is `EfficientNetSyncB`'s
 `efficientnetFwdGraphSyncFull_shard`, the forward half. Note: that the replicas' inputs are the
-shards of one batch is the driver's. Note: the single-device tie states the chain without stochastic
-depth or classifier dropout, so this does too: the `drop` / `dropdo` DP variants add a `dropPathB`
-on each residual branch and a `dropoutB` before the classifier — per-example diagonal scalings,
-which shard and are linear, but whose chain neither file states. Note: the lowerer's `all_reduce`
-is trusted as every other op's lowering is.
+shards of one batch is the driver's. Note: the lowerer's `all_reduce` is trusted as every other
+op's lowering is.
+
+**The training masks are optional sites on the statement**, as in `EfficientNetStepTieG`: the
+capstone takes the GLOBAL masks `sd : Option (Fin 9 → Vec (R * N))` (stochastic depth, nine
+blocks) and `cd : Option (Vec ((R * N) * 1280))` (classifier dropout), and replica `r` runs its
+chain at shard `r` of each — `exampleShard` of a per-example scale, `batchShard` of the
+per-element mask — which is what the DP render's per-replica `%dp<i>` / `%do` inputs are. `none`
+is the drop-free DP artifacts' statement exactly as it was; `some` reaches
+`efficientnetin_emarmsdp64dropdowxeps0001bf16`'s chain. Each site is linear in the cotangent and
+commutes with the batch cut (`dropPathOpt_smul` / `_shard`, `dropoutOpt_smul` / `_shard`,
+`Foundation.DropSites`), so the five steps are unchanged: a residual block's replica chain feeds
+its branch the family `dropPathOptFam` and the single-device one `dropPathOpt … dy`, the invariant
+passing the site by `dropPathOptFam_scaled`; the head's dense collective reads the dropped
+activation on every replica. The forward half with the sites is
+`StableHLO.efficientnetFwdGraphSyncFullDrop_shard`.
 
 **Precision is a flag on the statement.** The ImageNet run the book reports trains from
 `efficientnetin_emarmsdp64dropdowxeps0001bf16`, whose conv and depthwise weight gradients are the
@@ -200,11 +212,12 @@ noncomputable def xCotIn (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
 
 end
 
-/-- The residual block's input cotangent — the body's, plus the identity skip. -/
+/-- The residual block's input cotangent — the body's at the branch cotangent (the block-output
+    cotangent through the drop site when it is rendered), plus the identity skip's raw one. -/
 noncomputable def rCotIn (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin dy : Vec (N * (c * h * w))) :
-    Vec (N * (c * h * w)) :=
-  fun i => xCotIn N h w p he hd hp xin dy i + dy i
+    (s : Option (Vec N)) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin dy : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) :=
+  fun i => xCotIn N h w p he hd hp xin (dropPathOpt N (c * h * w) s dy) i + dy i
 
 /-! The strided front (b2, b4, b6, b12): expand at the input grid `2h×2w`. -/
 
@@ -297,26 +310,30 @@ private noncomputable def hdGap (εh : ℝ) (γh βh : Vec oc) (xin : Vec (N * (
 
 end
 
-private noncomputable def hdCotHr (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC) (g : Vec (N * nC)) :
-    Vec (N * (oc * h * w)) :=
-  gapInB N oc h w (rowDenseBackFlat N oc nC Wfc g)
+/-- The head's GAP backward of the classifier's input-VJP, through the dropout site when it is
+    rendered. -/
+private noncomputable def hdCotHr (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC)
+    (cd : Option (Vec (N * oc))) (g : Vec (N * nC)) : Vec (N * (oc * h * w)) :=
+  gapInB N oc h w (dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g))
 
 section
 variable (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
 
-private noncomputable def hdCotHsw (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w)))
-    (g : Vec (N * nC)) :
+private noncomputable def hdCotHsw (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
     Vec (N * (oc * h * w)) :=
-  swBackB (N * (oc * h * w)) (hdHn N h w Wh bh εh γh βh xin) (hdCotHr N h w Wfc g)
+  swBackB (N * (oc * h * w)) (hdHn N h w Wh bh εh γh βh xin) (hdCotHr N h w Wfc cd g)
 
 private noncomputable def hdCotHbn (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Vec (N * (oc * h * w)) :=
-  bnBackB N oc h w εh hεh γh βh (hdHc N h w Wh bh xin) (hdCotHsw N h w Wh bh εh γh βh Wfc xin g)
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
+    Vec (N * (oc * h * w)) :=
+  bnBackB N oc h w εh hεh γh βh (hdHc N h w Wh bh xin) (hdCotHsw N h w Wh bh εh γh βh Wfc cd xin g)
 
 /-- The head's input cotangent — the 1×1 conv's input-VJP. -/
 noncomputable def hdCotIn (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Vec (N * (c * h * w)) :=
-  cInB N (h := h) (w := w) Wh bh (hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin g)
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
+    Vec (N * (c * h * w)) :=
+  cInB N (h := h) (w := w) Wh bh (hdCotHbn N h w Wh bh εh hεh γh βh Wfc cd xin g)
 
 end
 
@@ -340,16 +357,15 @@ theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid o
   rfl
 
 theorem rCotIn_eq_vjp (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin dy : Vec (N * (c * h * w))) :
-    (mbResidWHasVJP N h w p he hd hp).backward xin dy = rCotIn N h w p he hd hp xin dy := by
-  rw [HasVJP.backward_unique (mbResidWHasVJP N h w p he hd hp)
-    (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
-      p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  -- the witness is `residualHasVJP` of the expand body's: the skip adds its cotangent
-  have hc : (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
-      p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
+    (s : Option (Vec N)) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin dy : Vec (N * (c * h * w))) :
+    (mbResidDropWHasVJP N h w p s he hd hp).backward xin dy = rCotIn N h w p s he hd hp xin dy := by
+  -- the witness is `residualHasVJP` of the branch's with the site composed on: the branch's
+  -- backward at the dropped cotangent, plus the skip's raw one
+  have hc : (mbResidDropWHasVJP N h w p s he hd hp).backward xin dy
       = fun i => (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε
-          hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy i
+          hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin
+          (dropPathOpt N (c * h * w) s dy) i
         + dy i := rfl
   rw [hc]
   simp only [mbExpFwdBHasVJP, vjpComp_backward]
@@ -379,13 +395,15 @@ theorem nCotIn_eq_vjp (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc r
 
 theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
     (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
-    (headFwdBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward xin g
-      = hdCotIn N h w Wh bh εh hεh γh βh Wfc xin g := by
-  have hg := headBackBatchedGraph_faithful Wh bh εh hεh γh βh Wfc bfc xin (.operand "" g)
-  rw [den_operand] at hg
-  rw [← hg, headBackBatchedGraph, cbsBackBatchedGraph, den_convBackBatched_eq_cInB,
-    bnBatchLABack_faithful (β := βh) (hε := hεh)]
+    (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
+    (headDoFwdBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc cd).backward xin g
+      = hdCotIn N h w Wh bh εh hεh γh βh Wfc cd xin g := by
+  -- the witness is the stage VJPs composed: the dense's, the site's and the GAP's backwards are
+  -- the chain's links by definition, the conv stage's by `cbsB_back_eq`
+  have hc : (headDoFwdBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc cd).backward xin g
+      = (cbsBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh).backward xin
+          (gapInB N oc h w (dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g))) := rfl
+  rw [hc, cbsB_back_eq]
   rfl
 
 -- § 1–2 (each link B0 adds to ResNet-34's is linear in its cotangent, and shards) live in
@@ -496,20 +514,22 @@ private theorem stCotStc_smul (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 
   intro s dy
   unfold stCotStc; rw [stCotBnS_smul, bnBackB_smul]
 
-private theorem hdCotHr_smul (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC) :
-    IsHomog (hdCotHr N h w Wfc) := by
+private theorem hdCotHr_smul (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC)
+    (cd : Option (Vec (N * oc))) :
+    IsHomog (hdCotHr N h w Wfc cd) := by
   intro s g
-  unfold hdCotHr; rw [rowDenseBackFlat_smul, gapInB_smul]
+  unfold hdCotHr; rw [rowDenseBackFlat_smul, dropoutOpt_smul, gapInB_smul]
 
 private theorem hdCotHsw_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) :
-    IsHomog (hdCotHsw N h w Wh bh εh γh βh Wfc xin) := by
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec (N * oc))) (xin : Vec (N * (c * h * w))) :
+    IsHomog (hdCotHsw N h w Wh bh εh γh βh Wfc cd xin) := by
   intro s g
   unfold hdCotHsw; rw [hdCotHr_smul, swBackB_smul]
 
 private theorem hdCotHbn_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) :
-    IsHomog (hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin) := by
+    (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec (N * oc)))
+    (xin : Vec (N * (c * h * w))) :
+    IsHomog (hdCotHbn N h w Wh bh εh hεh γh βh Wfc cd xin) := by
   intro s g
   unfold hdCotHbn; rw [hdCotHsw_smul, bnBackB_smul]
 
@@ -681,11 +701,14 @@ noncomputable def xsCotIn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw
     Vec (N * (ic * h * w)) :=
   cInB N (h := h) (w := w) p.eW p.eb (xsCotEc R hR N h w p XIN dys r)
 
-/-- A replica's input cotangent at a residual block — the body's plus the skip's. -/
+/-- A replica's input cotangent at a residual block — the body's at the branch cotangents (each
+    replica's block-output cotangent through its shard of the site's mask, `dropPathOptFam`) plus
+    the skip's raw one. -/
 noncomputable def rsCotIn {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
+    (s : Option (Vec (R * N)))
     (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w))) (r : Fin R) :
     Vec (N * (c * h * w)) :=
-  fun i => xsCotIn R hR N h w p XIN dys r i + dys r i
+  fun i => xsCotIn R hR N h w p XIN (dropPathOptFam R N (c * h * w) s dys) r i + dys r i
 
 private noncomputable def ssCotEr {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
@@ -734,27 +757,30 @@ private noncomputable def stsCotStc (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc 
     (stsCotBnS R N h w Ws bs εs γs βs X dys) r
 
 private noncomputable def hdsCotHsw (R N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (r : Fin R) : Vec (N * (oc * h * w)) :=
   swBackB (N * (oc * h * w)) (batchShard R N (oc * h * w) (hdHn (R * N) h w Wh bh εh γh βh XIN) r)
-    (hdCotHr N h w Wfc (gs r))
+    (hdCotHr N h w Wfc (cd.map fun M => batchShard R N oc M r) (gs r))
 
 section
 variable (R : Nat) (hR : 0 < R) (N h w : Nat)
 
 private noncomputable def hdsCotHbn {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (r : Fin R) :
     Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w εh γh (fun r => batchShard R N (oc * h * w) (hdHc (R * N) h w Wh bh XIN) r)
-    (hdsCotHsw R N h w Wh bh εh γh βh Wfc XIN gs) r
+    (hdsCotHsw R N h w Wh bh εh γh βh Wfc cd XIN gs) r
 
 /-- A replica's input cotangent at the head. -/
 noncomputable def hdsCotIn {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (r : Fin R) :
     Vec (N * (c * h * w)) :=
-  cInB N (h := h) (w := w) Wh bh (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs r)
+  cInB N (h := h) (w := w) Wh bh (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc cd XIN gs r)
 
 section
 variable {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
@@ -802,14 +828,16 @@ private theorem xsCotIn_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
 end
 
 private theorem rsCotIn_shard {c mid rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
-    (p : MBW c mid c rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (p : MBW c mid c rd kh kw) (s : Option (Vec (R * N))) (he : 0 < p.eε) (hd : 0 < p.dε)
+    (hp : 0 < p.pε)
     (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
     (DY : Vec ((R * N) * (c * h * w))) (hdys : ∀ r, dys r = batchShard R N (c * h * w) DY r)
     (r : Fin R) :
-    rsCotIn R hR N h w p XIN dys r
-      = batchShard R N (c * h * w) (rCotIn (R * N) h w p he hd hp XIN DY) r := by
+    rsCotIn R hR N h w p s XIN dys r
+      = batchShard R N (c * h * w) (rCotIn (R * N) h w p s he hd hp XIN DY) r := by
   unfold rsCotIn
-  rw [xsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys DY hdys r, hdys r]
+  rw [xsCotIn_shard R hR N h w hN hh hw p he hd hp XIN (dropPathOptFam R N (c * h * w) s dys)
+    (dropPathOpt (R * N) (c * h * w) s DY) (dropPathOptFam_shard s dys DY hdys) r, hdys r]
   rfl
 
 section
@@ -894,18 +922,19 @@ private theorem stsCotStc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs 
     (stsCotBnS_shard R N h w Ws bs εs γs βs X dys DY hdys) r
 
 private theorem hdCotHr_shard {R N : Nat} (h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC)
-    (G : Vec ((R * N) * nC)) (r : Fin R) :
-    hdCotHr N h w Wfc (batchShard R N nC G r)
-      = batchShard R N (oc * h * w) (hdCotHr (R * N) h w Wfc G) r := by
+    (cd : Option (Vec ((R * N) * oc))) (G : Vec ((R * N) * nC)) (r : Fin R) :
+    hdCotHr N h w Wfc (cd.map fun M => batchShard R N oc M r) (batchShard R N nC G r)
+      = batchShard R N (oc * h * w) (hdCotHr (R * N) h w Wfc cd G) r := by
   unfold hdCotHr
-  rw [rowDenseBackFlat_shard, gapInB_shard]
+  rw [rowDenseBackFlat_shard, dropoutOpt_shard, gapInB_shard]
 
 private theorem hdsCotHsw_shard (R N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
-    hdsCotHsw R N h w Wh bh εh γh βh Wfc XIN gs r
-      = batchShard R N (oc * h * w) (hdCotHsw (R * N) h w Wh bh εh γh βh Wfc XIN G) r := by
+    hdsCotHsw R N h w Wh bh εh γh βh Wfc cd XIN gs r
+      = batchShard R N (oc * h * w) (hdCotHsw (R * N) h w Wh bh εh γh βh Wfc cd XIN G) r := by
   unfold hdsCotHsw
   rw [hgs r, hdCotHr_shard, swBackB_shard]
   rfl
@@ -915,21 +944,23 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat)
 
 private theorem hdsCotHbn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (cd : Option (Vec ((R * N) * oc)))
     (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
-    hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs r
-      = batchShard R N (oc * h * w) (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G) r :=
+    hdsCotHbn R hR N h w Wh bh εh γh βh Wfc cd XIN gs r
+      = batchShard R N (oc * h * w) (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc cd XIN G) r :=
   bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw) εh hεh γh βh _ _ _ _ (fun _ => rfl)
-    (hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc XIN gs G hgs) r
+    (hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc cd XIN gs G hgs) r
 
 private theorem hdsCotIn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (cd : Option (Vec ((R * N) * oc)))
     (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
-    hdsCotIn R hR N h w Wh bh εh γh βh Wfc XIN gs r
-      = batchShard R N (c * h * w) (hdCotIn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G) r := by
+    hdsCotIn R hR N h w Wh bh εh γh βh Wfc cd XIN gs r
+      = batchShard R N (c * h * w) (hdCotIn (R * N) h w Wh bh εh hεh γh βh Wfc cd XIN G) r := by
   unfold hdsCotIn
-  rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs G hgs r, cInB_shard]
+  rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc cd XIN gs G hgs r, cInB_shard]
   rfl
 
 /-! ### The scaled-shard invariant across each block
@@ -950,14 +981,15 @@ theorem xsCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw 
     HasVJP.backward_smul]
 
 theorem rsCotIn_scaled {c mid rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
-    (p : MBW c mid c rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (p : MBW c mid c rd kh kw) (s : Option (Vec (R * N))) (he : 0 < p.eε) (hd : 0 < p.dε)
+    (hp : 0 < p.pε)
     (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
     (DY : Vec ((R * N) * (c * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (c * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
-    rsCotIn R hR N h w p XIN dys r
+    rsCotIn R hR N h w p s XIN dys r
       = batchShard R N (c * h * w)
-          (fun i => (R : ℝ) * (mbResidWHasVJP (R * N) h w p he hd hp).backward XIN DY i) r := by
-  rw [rsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← rCotIn_eq_vjp,
+          (fun i => (R : ℝ) * (mbResidDropWHasVJP (R * N) h w p s he hd hp).backward XIN DY i) r := by
+  rw [rsCotIn_shard R hR N h w hN hh hw p s he hd hp XIN dys _ hdys r, ← rCotIn_eq_vjp,
     HasVJP.backward_smul]
 
 theorem ssCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
@@ -984,14 +1016,15 @@ theorem nsCotIn_scaled {ic oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 
 
 theorem hdsCotIn_scaled {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
-    (bfc : Vec nC) (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC))
+    (bfc : Vec nC) (cd : Option (Vec ((R * N) * oc))) (XIN : Vec ((R * N) * (c * h * w)))
+    (gs : Fin R → Vec (N * nC))
     (G : Vec ((R * N) * nC)) (hgs : ∀ r, gs r = batchShard R N nC (fun i => (R : ℝ) * G i) r)
     (r : Fin R) :
-    hdsCotIn R hR N h w Wh bh εh γh βh Wfc XIN gs r
+    hdsCotIn R hR N h w Wh bh εh γh βh Wfc cd XIN gs r
       = batchShard R N (c * h * w) (fun i => (R : ℝ) *
-          (headFwdBHasVJP (R * N) (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward XIN G i)
+          (headDoFwdBHasVJP (R * N) (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc cd).backward XIN G i)
           r := by
-  rw [hdsCotIn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
+  rw [hdsCotIn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc cd XIN gs _ hgs r,
     ← hdCotIn_eq_vjp (bfc := bfc), HasVJP.backward_smul]
 
 end
@@ -1158,27 +1191,31 @@ theorem stem_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Nat
     classifier's weight and bias, the last two at the loss cotangent itself. -/
 def headSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat}
     (xN cotN vN epsStr dN : String) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (bf16 : Bool) (XIN : Vec ((R * N) * (c * h * w)))
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (bf16 : Bool) (cd : Option (Vec ((R * N) * oc)))
+    (XIN : Vec ((R * N) * (c * h * w)))
     (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC)) : Prop :=
   ConvWSyncAt bf16 R hR N h w "hW" xN cotN bh XIN Wh
-      (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs)
-      (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G)
+      (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc cd XIN gs)
+      (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc cd XIN G)
   ∧ BnSync R hR N oc h w "hg" "hbt" vN epsStr cotN εh (hdHc (R * N) h w Wh bh XIN)
-      (hdsCotHsw R N h w Wh bh εh γh βh Wfc XIN gs) (hdCotHsw (R * N) h w Wh bh εh γh βh Wfc XIN G)
-  ∧ DenseSync R hR N "Wd" "bd" dN cotN (hdGap (R * N) h w Wh bh εh γh βh XIN) gs G
+      (hdsCotHsw R N h w Wh bh εh γh βh Wfc cd XIN gs)
+      (hdCotHsw (R * N) h w Wh bh εh γh βh Wfc cd XIN G)
+  -- the dense's input on every replica: shard `r` of the GAP output through the global mask
+  ∧ DenseSync R hR N "Wd" "bd" dN cotN (dropoutOpt cd (hdGap (R * N) h w Wh bh εh γh βh XIN)) gs G
 
 theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (xN cotN vN epsStr dN : String) (Wh : Kernel4 oc c 1 1)
     (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (bf16 : Bool)
+    (cd : Option (Vec ((R * N) * oc)))
     (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC (fun i => (R : ℝ) * G i) r) :
-    headSyncTiedG R hR N h w xN cotN vN epsStr dN Wh bh εh hεh γh βh Wfc bf16 XIN gs G :=
+    headSyncTiedG R hR N h w xN cotN vN epsStr dN Wh bh εh hεh γh βh Wfc bf16 cd XIN gs G :=
   ⟨convWSyncAt_of_scaled bf16 R hR N h w _ _ _ _ _ _ _ _ (fun r => by
-      rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
+      rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc cd XIN gs _ hgs r,
         hdCotHbn_smul]),
     bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
       _ _ _ _ _ _ _ _ _ (fun r => by
-      rw [hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc XIN gs _ hgs r, hdCotHsw_smul]),
+      rw [hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc cd XIN gs _ hgs r, hdCotHsw_smul]),
     denseSync_of_scaled R hR N _ _ _ _ _ gs G hgs⟩
 
 -- ════════════════════════════════════════════════════════════════
@@ -1192,6 +1229,7 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
     driven by the family `gs`; the 18 conjuncts are one per stage. -/
 def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : String)
     {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+    (sd : Option (Fin 9 → Vec (R * N))) (cd : Option (Vec ((R * N) * 1280)))
     (x : Vec ((R * N) * (3 * 224 * 224)))
     (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N` (T3's), driven by `g` ──
@@ -1199,91 +1237,100 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
     stemB (R * N) (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
   let a1  : Vec ((R * N) * (16 * 112 * 112)) := mbNoExpW (R * N) 112 112 w.b1 a0
   let a2  : Vec ((R * N) * (24 * 56 * 56))   := mbStridedW (R * N) 56 56 w.b2 a1
-  let a3  : Vec ((R * N) * (24 * 56 * 56))   := mbResidW (R * N) 56 56 w.b3 a2
+  let a3  : Vec ((R * N) * (24 * 56 * 56))   := mbResidDropW (R * N) 56 56 w.b3 (sd.map fun f => f 0) a2
   let a4  : Vec ((R * N) * (40 * 28 * 28))   := mbStridedW (R * N) 28 28 w.b4 a3
-  let a5  : Vec ((R * N) * (40 * 28 * 28))   := mbResidW (R * N) 28 28 w.b5 a4
+  let a5  : Vec ((R * N) * (40 * 28 * 28))   := mbResidDropW (R * N) 28 28 w.b5 (sd.map fun f => f 1) a4
   let a6  : Vec ((R * N) * (80 * 14 * 14))   := mbStridedW (R * N) 14 14 w.b6 a5
-  let a7  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b7 a6
-  let a8  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b8 a7
+  let a7  : Vec ((R * N) * (80 * 14 * 14))   := mbResidDropW (R * N) 14 14 w.b7 (sd.map fun f => f 2) a6
+  let a8  : Vec ((R * N) * (80 * 14 * 14))   := mbResidDropW (R * N) 14 14 w.b8 (sd.map fun f => f 3) a7
   let a9  : Vec ((R * N) * (112 * 14 * 14))  := mbExpW (R * N) 14 14 w.b9 a8
-  let a10 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b10 a9
-  let a11 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b11 a10
+  let a10 : Vec ((R * N) * (112 * 14 * 14))  := mbResidDropW (R * N) 14 14 w.b10 (sd.map fun f => f 4) a9
+  let a11 : Vec ((R * N) * (112 * 14 * 14))  := mbResidDropW (R * N) 14 14 w.b11 (sd.map fun f => f 5) a10
   let a12 : Vec ((R * N) * (192 * 7 * 7))    := mbStridedW (R * N) 7 7 w.b12 a11
-  let a13 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b13 a12
-  let a14 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b14 a13
-  let a15 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b15 a14
+  let a13 : Vec ((R * N) * (192 * 7 * 7))    := mbResidDropW (R * N) 7 7 w.b13 (sd.map fun f => f 6) a12
+  let a14 : Vec ((R * N) * (192 * 7 * 7))    := mbResidDropW (R * N) 7 7 w.b14 (sd.map fun f => f 7) a13
+  let a15 : Vec ((R * N) * (192 * 7 * 7))    := mbResidDropW (R * N) 7 7 w.b15 (sd.map fun f => f 8) a14
   let a16 : Vec ((R * N) * (320 * 7 * 7))    := mbExpW (R * N) 7 7 w.b16 a15
-  let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdBHasVJP (R * N) (h := 7) (w := 7)
-    w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+  let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headDoFwdBHasVJP (R * N) (h := 7) (w := 7)
+    w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd).backward a16 g
   let dy15 : Vec ((R * N) * (192 * 7 * 7))   :=
     (mbExpWHasVJP (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
   let dy14 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidWHasVJP (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    (mbResidDropWHasVJP (R * N) 7 7 w.b15 (sd.map fun f => f 8) hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
   let dy13 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidWHasVJP (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    (mbResidDropWHasVJP (R * N) 7 7 w.b14 (sd.map fun f => f 7) hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
   let dy12 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidWHasVJP (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    (mbResidDropWHasVJP (R * N) 7 7 w.b13 (sd.map fun f => f 6) hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
   let dy11 : Vec ((R * N) * (112 * 14 * 14)) :=
     (mbStridedWHasVJP (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
   let dy10 : Vec ((R * N) * (112 * 14 * 14)) :=
-    (mbResidWHasVJP (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    (mbResidDropWHasVJP (R * N) 14 14 w.b11 (sd.map fun f => f 5) hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
   let dy9  : Vec ((R * N) * (112 * 14 * 14)) :=
-    (mbResidWHasVJP (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    (mbResidDropWHasVJP (R * N) 14 14 w.b10 (sd.map fun f => f 4) hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
   let dy8  : Vec ((R * N) * (80 * 14 * 14))  :=
     (mbExpWHasVJP (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
   let dy7  : Vec ((R * N) * (80 * 14 * 14))  :=
-    (mbResidWHasVJP (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    (mbResidDropWHasVJP (R * N) 14 14 w.b8 (sd.map fun f => f 3) hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
   let dy6  : Vec ((R * N) * (80 * 14 * 14))  :=
-    (mbResidWHasVJP (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    (mbResidDropWHasVJP (R * N) 14 14 w.b7 (sd.map fun f => f 2) hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
   let dy5  : Vec ((R * N) * (40 * 28 * 28))  :=
     (mbStridedWHasVJP (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
   let dy4  : Vec ((R * N) * (40 * 28 * 28))  :=
-    (mbResidWHasVJP (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    (mbResidDropWHasVJP (R * N) 28 28 w.b5 (sd.map fun f => f 1) hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
   let dy3  : Vec ((R * N) * (24 * 56 * 56))  :=
     (mbStridedWHasVJP (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
   let dy2  : Vec ((R * N) * (24 * 56 * 56))  :=
-    (mbResidWHasVJP (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    (mbResidDropWHasVJP (R * N) 56 56 w.b3 (sd.map fun f => f 0) hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
   let dy1  : Vec ((R * N) * (16 * 112 * 112)) :=
     (mbStridedWHasVJP (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
   let dy0  : Vec ((R * N) * (32 * 112 * 112)) :=
     (mbNoExpWHasVJP (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
   -- ── the replicas' sync-BN chain, driven by the family `gs` ──
-  let e16 := hdsCotIn R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW a16 gs
+  let e16 := hdsCotIn R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW cd a16 gs
   let e15 := xsCotIn R hR N 7 7 w.b16 a15 e16
-  let e14 := rsCotIn R hR N 7 7 w.b15 a14 e15
-  let e13 := rsCotIn R hR N 7 7 w.b14 a13 e14
-  let e12 := rsCotIn R hR N 7 7 w.b13 a12 e13
+  let e14 := rsCotIn R hR N 7 7 w.b15 (sd.map fun f => f 8) a14 e15
+  let e13 := rsCotIn R hR N 7 7 w.b14 (sd.map fun f => f 7) a13 e14
+  let e12 := rsCotIn R hR N 7 7 w.b13 (sd.map fun f => f 6) a12 e13
   let e11 := ssCotIn R hR N 7 7 w.b12 a11 e12
-  let e10 := rsCotIn R hR N 14 14 w.b11 a10 e11
-  let e9  := rsCotIn R hR N 14 14 w.b10 a9 e10
+  let e10 := rsCotIn R hR N 14 14 w.b11 (sd.map fun f => f 5) a10 e11
+  let e9  := rsCotIn R hR N 14 14 w.b10 (sd.map fun f => f 4) a9 e10
   let e8  := xsCotIn R hR N 14 14 w.b9 a8 e9
-  let e7  := rsCotIn R hR N 14 14 w.b8 a7 e8
-  let e6  := rsCotIn R hR N 14 14 w.b7 a6 e7
+  let e7  := rsCotIn R hR N 14 14 w.b8 (sd.map fun f => f 3) a7 e8
+  let e6  := rsCotIn R hR N 14 14 w.b7 (sd.map fun f => f 2) a6 e7
   let e5  := ssCotIn R hR N 14 14 w.b6 a5 e6
-  let e4  := rsCotIn R hR N 28 28 w.b5 a4 e5
+  let e4  := rsCotIn R hR N 28 28 w.b5 (sd.map fun f => f 1) a4 e5
   let e3  := ssCotIn R hR N 28 28 w.b4 a3 e4
-  let e2  := rsCotIn R hR N 56 56 w.b3 a2 e3
+  let e2  := rsCotIn R hR N 56 56 w.b3 (sd.map fun f => f 0) a2 e3
   let e1  := ssCotIn R hR N 56 56 w.b2 a1 e2
   let e0  := nsCotIn R hR N 112 112 w.b1 a0 e1
   -- ── every collective the render emits IS the single-device node ──
   stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ bf16 x e0 dy0
   ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p bf16 a0 e1 dy1
   ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 e2 dy2
-  ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 e3 dy3
+  ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 (dropPathOptFam R N (24 * 56 * 56) (sd.map fun f => f 0) e3)
+      (dropPathOpt (R * N) (24 * 56 * 56) (sd.map fun f => f 0) dy3)
   ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 e4 dy4
-  ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 e5 dy5
+  ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 (dropPathOptFam R N (40 * 28 * 28) (sd.map fun f => f 1) e5)
+      (dropPathOpt (R * N) (40 * 28 * 28) (sd.map fun f => f 1) dy5)
   ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 e6 dy6
-  ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 e7 dy7
-  ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 e8 dy8
+  ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 (dropPathOptFam R N (80 * 14 * 14) (sd.map fun f => f 2) e7)
+      (dropPathOpt (R * N) (80 * 14 * 14) (sd.map fun f => f 2) dy7)
+  ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 (dropPathOptFam R N (80 * 14 * 14) (sd.map fun f => f 3) e8)
+      (dropPathOpt (R * N) (80 * 14 * 14) (sd.map fun f => f 3) dy8)
   ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 e9 dy9
-  ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 e10 dy10
-  ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 e11 dy11
+  ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 (dropPathOptFam R N (112 * 14 * 14) (sd.map fun f => f 4) e10)
+      (dropPathOpt (R * N) (112 * 14 * 14) (sd.map fun f => f 4) dy10)
+  ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 (dropPathOptFam R N (112 * 14 * 14) (sd.map fun f => f 5) e11)
+      (dropPathOpt (R * N) (112 * 14 * 14) (sd.map fun f => f 5) dy11)
   ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 e12 dy12
-  ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 e13 dy13
-  ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 e14 dy14
-  ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 e15 dy15
+  ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 (dropPathOptFam R N (192 * 7 * 7) (sd.map fun f => f 6) e13)
+      (dropPathOpt (R * N) (192 * 7 * 7) (sd.map fun f => f 6) dy13)
+  ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 (dropPathOptFam R N (192 * 7 * 7) (sd.map fun f => f 7) e14)
+      (dropPathOpt (R * N) (192 * 7 * 7) (sd.map fun f => f 7) dy14)
+  ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 (dropPathOptFam R N (192 * 7 * 7) (sd.map fun f => f 8) e15)
+      (dropPathOpt (R * N) (192 * 7 * 7) (sd.map fun f => f 8) dy15)
   ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 e16 dy16
-  ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 a16 gs g
+  ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 cd a16 gs g
 
 /-- **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
     global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
@@ -1297,7 +1344,9 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
     certified block VJPs' `.backward`; by `rfl` for the in-block cotangents, which are this file's
     named chain. That capstone ties those nodes to the certified gradient, so the two together say
     the DP step's update is the certified gradient of the global-batch step. It takes `hεw`
-    (`w.EpsPos`), because the single-device chain does.
+    (`w.EpsPos`), because the single-device chain does, and the global masks `sd` / `cd` of the
+    two optional sites (the module's Scope), `none` the drop-free DP artifacts and `some` the
+    `dropdo` one the book's run trains.
     `efficientnet_net_syncTiedG_smoothedCE` discharges the hypothesis for the label-smoothed chain
     the artifacts emit.
 
@@ -1307,9 +1356,10 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
     sides — `true` is the `*bf16` renders', read at the identity rounding (`Bf16Erasure`). -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+    (sd : Option (Fin 9 → Vec (R * N))) (cd : Option (Vec ((R * N) * 1280)))
     (x : Vec ((R * N) * (3 * 224 * 224))) (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls))
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * g i) r) :
-    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 x g gs := by
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 sd cd x g gs := by
   unfold enetNetSyncTiedG
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
     dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
@@ -1320,46 +1370,54 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
   have h14 : 0 < 14 := by norm_num
   have h7 : 0 < 7 := by norm_num
   -- the scaled-shard invariant, block by block down the chain
-  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb a16 gs g hgs
+  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd a16 gs g
+    hgs
   have s15 := xsCotIn_scaled R hR N 7 7 hN h7 h7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16
-  have s14 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15
-  have s13 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14
-  have s12 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 s13
+  have s14 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b15 (sd.map fun f : Fin 9 → Vec (R * N) => f 8) hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15
+  have s13 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b14 (sd.map fun f : Fin 9 → Vec (R * N) => f 7) hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14
+  have s12 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b13 (sd.map fun f : Fin 9 → Vec (R * N) => f 6) hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 s13
   have s11 := ssCotIn_scaled R hR N 7 7 hN h7 h7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12 s12
-  have s10 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11 s11
-  have s9 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10 s10
+  have s10 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b11 (sd.map fun f : Fin 9 → Vec (R * N) => f 5) hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11 s11
+  have s9 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b10 (sd.map fun f : Fin 9 → Vec (R * N) => f 4) hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10 s10
   have s8 := xsCotIn_scaled R hR N 14 14 hN h14 h14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9 s9
-  have s7 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8 s8
-  have s6 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7 s7
+  have s7 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b8 (sd.map fun f : Fin 9 → Vec (R * N) => f 3) hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8 s8
+  have s6 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b7 (sd.map fun f : Fin 9 → Vec (R * N) => f 2) hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7 s7
   have s5 := ssCotIn_scaled R hR N 14 14 hN h14 h14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6 s6
-  have s4 := rsCotIn_scaled R hR N 28 28 hN h28 h28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5 s5
+  have s4 := rsCotIn_scaled R hR N 28 28 hN h28 h28 w.b5 (sd.map fun f : Fin 9 → Vec (R * N) => f 1) hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5 s5
   have s3 := ssCotIn_scaled R hR N 28 28 hN h28 h28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4 s4
-  have s2 := rsCotIn_scaled R hR N 56 56 hN h56 h56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3
+  have s2 := rsCotIn_scaled R hR N 56 56 hN h56 h56 w.b3 (sd.map fun f : Fin 9 → Vec (R * N) => f 0) hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3
   have s1 := ssCotIn_scaled R hR N 56 56 hN h56 h56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2 s2
   have s0 := nsCotIn_scaled R hR N 112 112 hN h112 h112 w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1 s1
   exact ⟨stem_syncTiedG R hR N 112 112 hN h112 h112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ bf16
       x e0 dy0 s0,
     noExp_syncTiedG R hR N 112 112 hN h112 h112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p bf16 a0 e1 dy1 s1,
     strided_syncTiedG R hR N 56 56 hN h56 h56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 e2 dy2 s2,
-    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 e3 dy3 s3,
+    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 0) e3 dy3 s3),
     strided_syncTiedG R hR N 28 28 hN h28 h28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 e4 dy4 s4,
-    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 e5 dy5 s5,
+    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 1) e5 dy5 s5),
     strided_syncTiedG R hR N 14 14 hN h14 h14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 e6 dy6 s6,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 e7 dy7 s7,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 e8 dy8 s8,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 2) e7 dy7 s7),
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 3) e8 dy8 s8),
     exp_syncTiedG R hR N 14 14 hN h14 h14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 e9 dy9 s9,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 e10
-      dy10 s10,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 e11
-      dy11 s11,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 4) e10 dy10 s10),
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 5) e11 dy11 s11),
     strided_syncTiedG R hR N 7 7 hN h7 h7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 e12
       dy12 s12,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 e13 dy13 s13,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 e14 dy14 s14,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 e15 dy15 s15,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 6) e13 dy13 s13),
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 7) e14 dy14 s14),
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 _ _
+      (dropPathOptFam_scaled (sd.map fun f : Fin 9 → Vec (R * N) => f 8) e15 dy15 s15),
     exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 e16 dy16 s16,
-    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 a16
-      gs g hgs⟩
+    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW bf16 cd
+      a16 gs g hgs⟩
 
 /-- **…and at the loss the artifacts emit.** `efficientnet_net_syncTiedG` with its cotangent
     hypothesis discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
@@ -1369,15 +1427,16 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     loss divided by `R·B`. -/
 theorem efficientnet_net_syncTiedG_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+    (sd : Option (Fin 9 → Vec (R * N))) (cd : Option (Vec ((R * N) * 1280)))
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * nCls))) :
-    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 x
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 sd cd x
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK bStr
-        logN ohN (rowB (R * N) nCls (efficientnetForwardBFull (R * N) w x)) t)))
+        logN ohN (rowB (R * N) nCls (efficientnetForwardBFullDrop (R * N) w sd cd x)) t)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (efficientnetForwardBFull (R * N) w x) r))
+        (rowB N nCls (batchShard R N nCls (efficientnetForwardBFullDrop (R * N) w sd cd x) r))
         (batchShard R N (1 * nCls) t r)))) :=
-  efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw bf16 x _ _
+  efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw bf16 sd cd x _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ t r)
 
 end Proofs.EnetSyncTieG

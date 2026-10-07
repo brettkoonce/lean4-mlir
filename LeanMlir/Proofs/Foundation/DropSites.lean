@@ -22,7 +22,10 @@ instance verbatim and the `some` instance is the artifact that trained.
   differentiability each tie's `HasGradAt.comp` needs beside it.
 * `dropoutOpt_smul`, `dropoutOpt_shard` — what a data-parallel tie needs: the site is linear in
   the cotangent and commutes with the batch cut when replica `r` holds shard `r` of the mask, as
-  the DP renders' per-replica `%do` inputs are.
+  the DP renders' per-replica `%do` inputs are. `dropPathOpt_smul`, `dropPathOpt_shard` are the
+  per-example-mask peers: a stochastic-depth mask is a `Vec N` of scalars, cut by `exampleShard`
+  (`batchShard`'s cut at width one), and `dropPathOptFam` is the replica family a DP chain feeds
+  a drop site, with its `_shard` and `_scaled` (the invariant the sync ties carry block to block).
 -/
 
 namespace Proofs
@@ -124,6 +127,67 @@ theorem dropoutOpt_shard {R N a : Nat} (cd : Option (Vec ((R * N) * a))) (X : Ve
     dropoutOpt (cd.map fun M => batchShard R N a M r) (batchShard R N a X r)
       = batchShard R N a (dropoutOpt cd X) r := by
   cases cd <;> rfl
+
+/-- Replica `r`'s block of a per-example scalar family laid out `[R·N]`: example `(r, n)` of the
+    global batch is example `n` of shard `r` — `batchShard`'s cut at width one, for the
+    stochastic-depth masks (`Vec N` per site, not `Vec (N * 1)`). The DP renders' per-replica
+    `%dp<i>` inputs are these. -/
+noncomputable def exampleShard (R N : Nat) (S : Vec (R * N)) (r : Fin R) : Vec N :=
+  fun n => S (finProdFinEquiv (r, n))
+
+/-- The per-example site is linear in what flows through it. -/
+theorem dropPathOpt_smul (N n : Nat) (sd : Option (Vec N)) : IsHomog (dropPathOpt N n sd) := by
+  intro s v
+  cases sd with
+  | none => rfl
+  | some sc =>
+    funext i
+    show sc (finProdFinEquiv.symm i).1 * (s * v i) = s * (sc (finProdFinEquiv.symm i).1 * v i)
+    ring
+
+/-- Replica `r` scaling ITS shard of a value by ITS shard of the per-example mask is shard `r` of
+    the global site: the example a cell belongs to is the same on both sides of the cut
+    (`Equiv.symm_apply_apply` at `batchShard`'s index). -/
+theorem dropPathOpt_shard {R N n : Nat} (sd : Option (Vec (R * N))) (X : Vec ((R * N) * n))
+    (r : Fin R) :
+    dropPathOpt N n (sd.map fun S => exampleShard R N S r) (batchShard R N n X r)
+      = batchShard R N n (dropPathOpt (R * N) n sd X) r := by
+  cases sd with
+  | none => rfl
+  | some S =>
+    funext i
+    simp only [Option.map_some, dropPathOpt_some, dropPath_apply, batchShard, exampleShard,
+      Equiv.symm_apply_apply]
+
+/-- `dropPathOpt_shard` at a rendered site. -/
+theorem dropPath_shard {R N n : Nat} (S : Vec (R * N)) (X : Vec ((R * N) * n)) (r : Fin R) :
+    dropPath N n (exampleShard R N S r) (batchShard R N n X r)
+      = batchShard R N n (dropPath (R * N) n S X) r :=
+  dropPathOpt_shard (some S) X r
+
+/-- The replica family a data-parallel chain feeds a drop site: replica `r`'s cotangent through
+    replica `r`'s shard of the mask. -/
+noncomputable def dropPathOptFam (R N n : Nat) (sd : Option (Vec (R * N)))
+    (dys : Fin R → Vec (N * n)) : Fin R → Vec (N * n) :=
+  fun r => dropPathOpt N n (sd.map fun S => exampleShard R N S r) (dys r)
+
+theorem dropPathOptFam_shard {R N n : Nat} (sd : Option (Vec (R * N))) (dys : Fin R → Vec (N * n))
+    (DY : Vec ((R * N) * n)) (hdys : ∀ r, dys r = batchShard R N n DY r) :
+    ∀ r, dropPathOptFam R N n sd dys r = batchShard R N n (dropPathOpt (R * N) n sd DY) r := by
+  intro r
+  unfold dropPathOptFam
+  rw [hdys r, dropPathOpt_shard]
+
+/-- **The scaled-shard invariant passes a drop site**: replicas at `R ×` the shards of a global
+    cotangent hand the branch `R ×` the shards of the global branch cotangent. -/
+theorem dropPathOptFam_scaled {R N n : Nat} (sd : Option (Vec (R * N))) (dys : Fin R → Vec (N * n))
+    (DY : Vec ((R * N) * n))
+    (hdys : ∀ r, dys r = batchShard R N n (fun i => (R : ℝ) * DY i) r) :
+    ∀ r, dropPathOptFam R N n sd dys r
+      = batchShard R N n (fun i => (R : ℝ) * dropPathOpt (R * N) n sd DY i) r := by
+  intro r
+  unfold dropPathOptFam
+  rw [hdys r, dropPathOpt_shard, dropPathOpt_smul]
 
 end Proofs
 

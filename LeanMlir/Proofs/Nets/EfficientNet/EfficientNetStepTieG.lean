@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.GradNodesBAt
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Foundation.Batched.BackLinks
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Drop
 
 /-! # EfficientNet-B0's step tie at the un-fused gradient and the smoothed loss
 
@@ -13,10 +13,8 @@ chain delivers. This file is that statement re-pointed along two axes.
 **Axis 1 — the gradient node.** Every conjunct is at the raw gradient node (`*GradB`), which is
 what `efficientnet_adam_train_step.mlir` and the f32 `efficientnetin_*` artifacts emit; the fused op
 appears only in the SGD-inline file. The optimizer update that consumes the node (Adam, RMSProp,
-EMA, clipping) is outside this statement. The threaded forward is `efficientnetForwardBFull`,
-without drop-path and without classifier dropout, so the `*drop*` / `*do*` train steps are not
-covered (their forwards are, in `EfficientNetFullB0Drop`). `GradNodesB` is the fold each conjunct
-delegates to.
+EMA, clipping) is outside this statement. The threaded forward is `efficientnetForwardBFullDrop`
+at the renderer's two optional sites (below). `GradNodesB` is the fold each conjunct delegates to.
 
 **Precision is a flag on the statement.** The ImageNet run the book reports trains from
 `efficientnetin_emarmsdp64dropdowxeps0001bf16`, whose conv and depthwise weight gradients are the
@@ -28,6 +26,20 @@ the capstone `efficientnet_net_tiedG` takes `bf16`, so it reaches the bf16 artif
 nodes read over ℝ exactly as it reads the f32 ones (`Bf16Erasure`: at the identity rounding the
 bf16 kind denotes what its f32 peer does). The squeeze-excite and classifier denses, BatchNorm and
 the bias nodes carry no flag because no render switches them.
+
+**The training masks are optional sites on the statement.** `efficientnetin_emarmsdp64dropdowxeps0001bf16`
+is a `dropdo` artifact: stochastic depth on the nine skip-carrying blocks (`b3 b5 b7 b8 b10 b11
+b13 b14 b15`, the renderer's `enetDropIdxs`, a per-example scale `%dp<i>` on the residual branch
+before the skip add) and classifier dropout (`%do`, per element, between the GAP and the dense).
+The capstone takes them as `sd : Option (Fin 9 → Vec N)` and `cd : Option (Vec (N * 1280))`
+(`Proofs.Foundation.DropSites`; the forward is `efficientnetForwardBFullDrop` at the same binders):
+`none` is the drop-free artifacts' chain — the statement exactly as it was — and `some` the
+`*drop*` / `*do*` / `dropdo` artifacts'. At a drop site the backward applies the same scale to the
+block-output cotangent on its way into the BRANCH and leaves the skip's raw (`eBack`'s rule,
+`Proofs.dropPath_vjp_is_self`): the block's parameter nodes are tied at `dropPathOpt … dy`, and the
+block VJP that threads the chain is `mbResidDropWHasVJP`, whose backward is that by definition. At
+the head the dense weight node reads the DROPPED activation and the classifier's input-VJP passes
+through the mask before the GAP backward (`headDoFwdBHasVJP`), as `MobileNetV2StepTieB`'s does.
 
 **Axis 2 — the loss.** The capstone's top-of-chain cotangent is `smoothedLossCotGraph`'s
 (Foundation/SmoothedLossCot.lean), at a general target: the six-op chain
@@ -55,7 +67,7 @@ hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs.
 
 **One replica.** Every statement here is at one replica's node. Every B0 data-parallel render
 synchronises BatchNorm; its all-reduced gradients are `efficientnet_net_syncTiedG`
-(`EfficientNetSyncStepTieG.lean`): this file's node at `N := R·N`, without drop-path and dropout.
+(`EfficientNetSyncStepTieG.lean`): this file's node at `N := R·N`, at the same mask sites.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -338,14 +350,16 @@ tie at `g` directly. -/
 def enetHeadTiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
     (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
+    (cd : Option (Vec (N * oc)))
     (xhead : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Prop :=
   let hc : Vec (N * (oc * h * w)) := batchMap N (flatConv Wh bh) xhead
   let hn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εh γh βh hc
   let hr : Vec (N * (oc * h * w)) := swish (N * (oc * h * w)) hn
-  let a_gap : Vec (N * oc) := batchMap N (globalAvgPoolFlat oc h w) hr
+  -- the dense's input: the GAP output through the dropout site when it is rendered (`cin`)
+  let a_gap : Vec (N * oc) := dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) hr)
   -- the logits are not read here: `g` is a parameter (axis 2 in the module doc).
   let _logits : Vec (N * nC) := batchMap N (dense Wfc bfc) a_gap
-  let cotGapIn : Vec (N * oc) := rowDenseBackFlat N oc nC Wfc g
+  let cotGapIn : Vec (N * oc) := dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g)
   let cotHr : Vec (N * (oc * h * w)) := gapInB N oc h w cotGapIn
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
@@ -361,8 +375,9 @@ def enetHeadTiedG {N c oc h w nC : Nat}
 theorem enet_head_tiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
     (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
+    (cd : Option (Vec (N * oc)))
     (xhead : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
-    enetHeadTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc bf16 xhead g := by
+    enetHeadTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc bf16 cd xhead g := by
   unfold enetHeadTiedG
   exact ⟨convWTiedBAt_holds bf16, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
     denseBTiedB_holds⟩
@@ -416,10 +431,12 @@ private theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ bf16 xin dyOut
 
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied at the gradient nodes and the
-    smoothed loss.** Threading the batched (batch-BN + SE) forward `efficientnetForwardBFull` —
-    without drop-path or classifier dropout — and the backward cotangent chain built from the block
-    witnesses' `.backward`s (swish masks, the SE gate fan-in, batch-BN backs, the residual fan-in
-    folded into the block VJPs), every gradient node of the stem, all 16 MBConv blocks, the
+    smoothed loss.** Threading the batched (batch-BN + SE) forward `efficientnetForwardBFullDrop` —
+    at the optional sites `sd` (stochastic depth, nine blocks) and `cd` (classifier dropout), `none`
+    the drop-free artifacts and `some` the `dropdo` one the book's run trains — and the backward
+    cotangent chain built from the block witnesses' `.backward`s (swish masks, the SE gate fan-in,
+    batch-BN backs, the residual fan-in and the drop site folded into the block VJPs), every
+    gradient node of the stem, all 16 MBConv blocks, the
     conv-bn-swish head and the dense head denotes the certified batched gradient `Σ_n Σ pdiv · cot`
     at the cotangent that chain delivers, the chain's top being `smoothedLossCotGraph` at the
     target `t`. The statement is at one replica's nodes; `bf16` selects the conv and depthwise
@@ -428,88 +445,88 @@ private theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw
     (`Bf16Erasure`); the right-hand side is the same certified gradient at either value. The
     optimizer update is outside it. -/
 theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
-    (hεw : w.EpsPos) (bf16 : Bool)
+    (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls))) :
-    -- forward block inputs (the prefixes of efficientnetForwardBFull)
+    -- forward block inputs (the prefixes of efficientnetForwardBFullDrop)
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
     let a2  : Vec (N * (24 * 56 * 56))   := mbStridedW N 56 56 w.b2 a1
-    let a3  : Vec (N * (24 * 56 * 56))   := mbResidW N 56 56 w.b3 a2
+    let a3  : Vec (N * (24 * 56 * 56))   := mbResidDropW N 56 56 w.b3 (sd.map fun f => f 0) a2
     let a4  : Vec (N * (40 * 28 * 28))   := mbStridedW N 28 28 w.b4 a3
-    let a5  : Vec (N * (40 * 28 * 28))   := mbResidW N 28 28 w.b5 a4
+    let a5  : Vec (N * (40 * 28 * 28))   := mbResidDropW N 28 28 w.b5 (sd.map fun f => f 1) a4
     let a6  : Vec (N * (80 * 14 * 14))   := mbStridedW N 14 14 w.b6 a5
-    let a7  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b7 a6
-    let a8  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b8 a7
+    let a7  : Vec (N * (80 * 14 * 14))   := mbResidDropW N 14 14 w.b7 (sd.map fun f => f 2) a6
+    let a8  : Vec (N * (80 * 14 * 14))   := mbResidDropW N 14 14 w.b8 (sd.map fun f => f 3) a7
     let a9  : Vec (N * (112 * 14 * 14))  := mbExpW N 14 14 w.b9 a8
-    let a10 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b10 a9
-    let a11 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b11 a10
+    let a10 : Vec (N * (112 * 14 * 14))  := mbResidDropW N 14 14 w.b10 (sd.map fun f => f 4) a9
+    let a11 : Vec (N * (112 * 14 * 14))  := mbResidDropW N 14 14 w.b11 (sd.map fun f => f 5) a10
     let a12 : Vec (N * (192 * 7 * 7))    := mbStridedW N 7 7 w.b12 a11
-    let a13 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b13 a12
-    let a14 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b14 a13
-    let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
+    let a13 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b13 (sd.map fun f => f 6) a12
+    let a14 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b14 (sd.map fun f => f 7) a13
+    let a15 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b15 (sd.map fun f => f 8) a14
     let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
     -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
     let g    : Vec (N * nCls) :=
       Proofs.BackLinks.unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (Proofs.BackLinks.rowB N nCls
-          (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
-    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+          (headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd a16)) t))
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headDoFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd).backward a16 g
     let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
-    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
-    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
-    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b15 (sd.map fun f => f 8) hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b14 (sd.map fun f => f 7) hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b13 (sd.map fun f => f 6) hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
     let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
-    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
-    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidDropWHasVJP N 14 14 w.b11 (sd.map fun f => f 5) hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidDropWHasVJP N 14 14 w.b10 (sd.map fun f => f 4) hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
     let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
-    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
-    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidDropWHasVJP N 14 14 w.b8 (sd.map fun f => f 3) hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidDropWHasVJP N 14 14 w.b7 (sd.map fun f => f 2) hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
     let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
-    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidDropWHasVJP N 28 28 w.b5 (sd.map fun f => f 1) hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
     let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
-    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidDropWHasVJP N 56 56 w.b3 (sd.map fun f => f 0) hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
     let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
     let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     -- every block + stem + head tied at its real input + threaded output cotangent
     enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x dy0
   ∧ enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p bf16 a0 dy1
   ∧ enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 dy2
-  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 dy3
+  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 (dropPathOpt N (24 * 56 * 56) (sd.map fun f => f 0) dy3)
   ∧ enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 dy4
-  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 dy5
+  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 (dropPathOpt N (40 * 28 * 28) (sd.map fun f => f 1) dy5)
   ∧ enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 dy6
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 dy7
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 dy8
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 2) dy7)
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 3) dy8)
   ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 dy9
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 dy10
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 dy11
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 4) dy10)
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 5) dy11)
   ∧ enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 dy12
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 dy13
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 dy14
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 dy15
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 6) dy13)
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 7) dy14)
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 8) dy15)
   ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 dy16
-  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 a16 g := by
+  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 cd a16 g := by
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
         g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact enet_stem_tiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x dy0
   · exact enet_noexp_tiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p bf16 a0 dy1
   · exact enet_strided_tiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 dy2
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 dy3
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 _
   · exact enet_strided_tiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 dy4
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 dy5
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 _
   · exact enet_strided_tiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 dy6
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 dy7
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 dy8
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 _
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 _
   · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 dy9
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 dy10
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 dy11
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 _
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 _
   · exact enet_strided_tiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 dy12
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 dy13
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 dy14
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 dy15
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 _
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 _
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 _
   · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 dy16
-  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 a16 g
+  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 cd a16 g
 
 end Proofs.EnetTieG

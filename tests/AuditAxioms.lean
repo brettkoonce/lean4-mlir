@@ -891,6 +891,10 @@ open Proofs
 #print axioms Proofs.StableHLO.headGraphBEvalDo_faithful
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullDrop_faithful
 #print axioms Proofs.StableHLO.efficientnetFwdGraphBFullEvalDrop_faithful
+#print axioms Proofs.mbResidDropW_differentiable
+#print axioms Proofs.mbResidDropWHasVJP
+#print axioms Proofs.headDoFwdB_differentiable
+#print axioms Proofs.headDoFwdBHasVJP
 -- Optional drop sites: the site as an Option, its graph node, VJP, homogeneity and shard (Foundation/DropSites.lean)
 #print axioms Proofs.StableHLO.den_dropPathOptG
 #print axioms Proofs.StableHLO.den_dropoutOptG
@@ -899,6 +903,11 @@ open Proofs
 #print axioms Proofs.dropoutOpt_differentiable
 #print axioms Proofs.dropoutOpt_smul
 #print axioms Proofs.dropoutOpt_shard
+#print axioms Proofs.dropPathOpt_smul
+#print axioms Proofs.dropPathOpt_shard
+#print axioms Proofs.dropPath_shard
+#print axioms Proofs.dropPathOptFam_shard
+#print axioms Proofs.dropPathOptFam_scaled
 -- The MobileNetV4-Conv-M INFERENCE forward and its graph, at any input size
 #print axioms Proofs.StableHLO.mnv4BodyGraphBEval_faithful
 #print axioms Proofs.StableHLO.mnv4StridedGraphBEval_faithful
@@ -2478,6 +2487,9 @@ open Proofs
 #print axioms Proofs.StableHLO.stemGraphSync_shard
 #print axioms Proofs.StableHLO.headGraphSync_shard
 #print axioms Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard
+#print axioms Proofs.StableHLO.mbResidDropGraphSync_shard
+#print axioms Proofs.StableHLO.headGraphSyncDo_shard
+#print axioms Proofs.StableHLO.efficientnetFwdGraphSyncFullDrop_shard
 -- T3 twin: each block's input cotangent IS its certified VJP (T3 threads `.backward`)
 #print axioms Proofs.EnetSyncTieG.xCotIn_eq_vjp
 #print axioms Proofs.EnetSyncTieG.rCotIn_eq_vjp

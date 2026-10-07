@@ -34,8 +34,12 @@ the artifacts ship.
   weights by a standalone `enet_factor_*` theorem.
 
 **Hypotheses.** `B0Weights.EpsPos` (every BN `ε > 0`), as in the tie; there is no smoothness
-hypothesis. For the smoothed loss, every example's target sums to one and `0 < nCls`. Drop-path
-and classifier dropout are outside this statement, as they are outside the tie.
+hypothesis. For the smoothed loss, every example's target sums to one and `0 < nCls`. Stochastic
+depth and classifier dropout are the tie's optional sites `sd` / `cd` here too (`EfficientNetStepTieG`'s
+Scope): the loss is read at `efficientnetForwardBFullDrop`, a skip block's body sees the loss
+`u ↦ Gn (dropPathOpt s u + v)` whose gradient at the body output is `dropPathOpt s dyOut`
+(`enet_resid_lossTiedG`), the chain threads `mbResidDropWHasVJP`, and the head reads the dropped
+activation at the dense and pulls `g` back through the mask (`headDoFwdBHasVJP`).
 
 **Scope.** One replica, at either precision: every conv and depthwise weight node is stated on the
 renderers' switch (`convWeightGradBAt bf16 id …`, `depthwiseWeightGradBAt bf16 id …`, …;
@@ -407,16 +411,21 @@ theorem enet_exp_lossTiedG (xN vN epsStr cotN : String) (p : MBW ic mid oc r kh 
     GradNodeB.bnGamma_hasGradAt vN epsStr cotN p.pε p.pγ p.pβ _ hGb,
     GradNodeB.bnBeta_hasGradAt cotN p.pε p.pγ p.pβ _ hGb⟩
 
-/-- **A skip block's thirteen nodes.** The identity skip is a constant once a body parameter
-    varies, so the loss at the body output has gradient `dyOut` there and the body bundle
-    applies. -/
+/-- **A skip block's thirteen nodes, through its drop site.** The identity skip is a constant once
+    a body parameter varies, so the loss at the branch output `u ↦ Gn (dropPathOpt s u + v)` has
+    gradient `dropPathOpt s dyOut` at the body output (the site's VJP is itself) and the body
+    bundle applies there; `none` is the drop-free block at `dyOut`. -/
 theorem enet_resid_lossTiedG {c : Nat} (xN vN epsStr cotN : String) (p : MBW c mid c r kh kw)
-    (hq : p.EpsPos) (bf16 : Bool) (v : Vec (N * (c * h * w))) {Gn : Vec (N * (c * h * w)) → Vec 1}
-    {dy : Vec (N * (c * h * w))} (hGn : HasGradAt Gn (mbResidW N h w p v) dy)
-    {Φ : MBW c mid c r kh kw → Vec 1} (hΦ : ∀ p', Φ p' = Gn (mbResidW N h w p' v)) :
-    enetExpLossTiedG xN vN epsStr cotN p hq bf16 v Φ dy :=
+    (hq : p.EpsPos) (bf16 : Bool) (s : Option (Vec N)) (v : Vec (N * (c * h * w)))
+    {Gn : Vec (N * (c * h * w)) → Vec 1}
+    {dy : Vec (N * (c * h * w))} (hGn : HasGradAt Gn (mbResidDropW N h w p s v) dy)
+    {Φ : MBW c mid c r kh kw → Vec 1} (hΦ : ∀ p', Φ p' = Gn (mbResidDropW N h w p' s v)) :
+    enetExpLossTiedG xN vN epsStr cotN p hq bf16 v Φ (dropPathOpt N (c * h * w) s dy) :=
   enet_exp_lossTiedG xN vN epsStr cotN p hq bf16 v
-    (GradNodeB.hasGradAt_addConst (mbExpW N h w p v) v hGn) (fun p' => hΦ p')
+    (HasGradAt.comp_global (f := dropPathOpt N (c * h * w) s)
+      (GradNodeB.hasGradAt_addConst (dropPathOpt N (c * h * w) s (mbExpW N h w p v)) v hGn)
+      (dropPathOpt_differentiable N (c * h * w) s) (dropPathOptHasVJP N (c * h * w) s))
+    (fun p' => hΦ p')
 
 end Exp
 
@@ -711,14 +720,14 @@ variable {N h w c oc nC : Nat}
     loss cotangent `g`, `Φ` the loss as a function of `(hW, hb, hγ, hβ, Wfc, bfc)`. -/
 def enetHeadLossTiedG (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
     (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
-    (xhead : Vec (N * (c * h * w)))
+    (cd : Option (Vec (N * oc))) (xhead : Vec (N * (c * h * w)))
     (Φ : Kernel4 oc c 1 1 → Vec oc → Vec oc → Vec oc → Mat oc nC → Vec nC → Vec 1)
     (g : Vec (N * nC)) : Prop :=
   let hc : Vec (N * (oc * h * w)) := batchMap N (flatConv Wh bh) xhead
   let hn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εh γh βh hc
   let hr : Vec (N * (oc * h * w)) := swish (N * (oc * h * w)) hn
-  let a_gap : Vec (N * oc) := batchMap N (globalAvgPoolFlat oc h w) hr
-  let cotGapIn : Vec (N * oc) := rowDenseBackFlat N oc nC Wfc g
+  let a_gap : Vec (N * oc) := dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) hr)
+  let cotGapIn : Vec (N * oc) := dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g)
   let cotHr : Vec (N * (oc * h * w)) := gapInB N oc h w cotGapIn
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
@@ -742,23 +751,31 @@ def enetHeadLossTiedG (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < ε
 
 theorem enet_head_lossTiedG (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
     (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (bf16 : Bool)
+    (cd : Option (Vec (N * oc)))
     (xhead : Vec (N * (c * h * w))) {L : Vec (N * nC) → Vec 1} {g : Vec (N * nC)}
-    (hL : HasGradAt L (headFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc xhead) g)
+    (hL : HasGradAt L (headDoFwdB N (h := h) (w := w) Wh bh εh γh βh Wfc bfc cd xhead) g)
     {Φ : Kernel4 oc c 1 1 → Vec oc → Vec oc → Vec oc → Mat oc nC → Vec nC → Vec 1}
-    (hΦ : ∀ W b γ β Wd bd, Φ W b γ β Wd bd = L (headFwdB N (h := h) (w := w) W b εh γ β Wd bd xhead)) :
-    enetHeadLossTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc bf16 xhead Φ g := by
-  rw [show Φ = fun W b γ β Wd bd => L (headFwdB N (h := h) (w := w) W b εh γ β Wd bd xhead) from
+    (hΦ : ∀ W b γ β Wd bd,
+      Φ W b γ β Wd bd = L (headDoFwdB N (h := h) (w := w) W b εh γ β Wd bd cd xhead)) :
+    enetHeadLossTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc bf16 cd xhead Φ g := by
+  rw [show Φ = fun W b γ β Wd bd => L (headDoFwdB N (h := h) (w := w) W b εh γ β Wd bd cd xhead) from
     funext fun W => funext fun b => funext fun γ => funext fun β => funext fun Wd =>
       funext fun bd => hΦ W b γ β Wd bd]
   let hr := cbsB N (h := h) (w := w) Wh bh εh γh βh xhead
   have hA : HasGradAt (fun a => L (batchMap N (dense Wfc bfc) a))
-      (batchMap N (globalAvgPoolFlat oc h w) hr) (rowDenseBackFlat N oc nC Wfc g) :=
-    HasGradAt.comp (f := batchMap N (dense Wfc bfc)) (x := batchMap N (globalAvgPoolFlat oc h w) hr)
+      (dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) hr)) (rowDenseBackFlat N oc nC Wfc g) :=
+    HasGradAt.comp (f := batchMap N (dense Wfc bfc))
+      (x := dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) hr))
       hL ((batchMap_differentiable _ (dense_differentiable Wfc bfc)) _)
       ((batchMapHasVJP _ (denseHasVJP Wfc bfc) (dense_differentiable Wfc bfc)).toHasVJPAt _)
-  have hR : HasGradAt (fun u => L (batchMap N (dense Wfc bfc) (batchMap N (globalAvgPoolFlat oc h w) u)))
-      hr (gapInB N oc h w (rowDenseBackFlat N oc nC Wfc g)) :=
-    HasGradAt.comp (f := batchMap N (globalAvgPoolFlat oc h w)) (x := hr) hA
+  have hD : HasGradAt (fun a => L (batchMap N (dense Wfc bfc) (dropoutOpt cd a)))
+      (batchMap N (globalAvgPoolFlat oc h w) hr) (dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g)) :=
+    HasGradAt.comp (f := dropoutOpt cd) (x := batchMap N (globalAvgPoolFlat oc h w) hr) hA
+      ((dropoutOpt_differentiable cd) _) ((dropoutOptHasVJP cd).toHasVJPAt _)
+  have hR : HasGradAt
+      (fun u => L (batchMap N (dense Wfc bfc) (dropoutOpt cd (batchMap N (globalAvgPoolFlat oc h w) u))))
+      hr (gapInB N oc h w (dropoutOpt cd (rowDenseBackFlat N oc nC Wfc g))) :=
+    HasGradAt.comp (f := batchMap N (globalAvgPoolFlat oc h w)) (x := hr) hD
       ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _)
       ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
         (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
@@ -798,15 +815,16 @@ theorem enetStridedW_hasGradAt_comp {N h w ic mid oc r kh kw : Nat} (p : MBW ic 
     ((mbStridedW_differentiable N h w p hq.e hq.d hq.p) v)
     ((mbStridedWHasVJP N h w p hq.e hq.d hq.p).toHasVJPAt v)
 
-/-- …through a skip block. -/
+/-- …through a skip block, at its drop site. -/
 theorem enetResidW_hasGradAt_comp {N h w c mid r kh kw : Nat} (p : MBW c mid c r kh kw)
-    (hq : p.EpsPos) (v : Vec (N * (c * h * w))) {G : Vec (N * (c * h * w)) → Vec 1}
-    {dy : Vec (N * (c * h * w))} (hG : HasGradAt G (mbResidW N h w p v) dy) :
-    HasGradAt (fun y => G (mbResidW N h w p y)) v
-      ((mbResidWHasVJP N h w p hq.e hq.d hq.p).backward v dy) :=
-  HasGradAt.comp (f := mbResidW N h w p) (x := v) hG
-    ((mbResidW_differentiable N h w p hq.e hq.d hq.p) v)
-    ((mbResidWHasVJP N h w p hq.e hq.d hq.p).toHasVJPAt v)
+    (hq : p.EpsPos) (s : Option (Vec N)) (v : Vec (N * (c * h * w)))
+    {G : Vec (N * (c * h * w)) → Vec 1}
+    {dy : Vec (N * (c * h * w))} (hG : HasGradAt G (mbResidDropW N h w p s v) dy) :
+    HasGradAt (fun y => G (mbResidDropW N h w p s y)) v
+      ((mbResidDropWHasVJP N h w p s hq.e hq.d hq.p).backward v dy) :=
+  HasGradAt.comp (f := mbResidDropW N h w p s) (x := v) hG
+    ((mbResidDropW_differentiable N h w p s hq.e hq.d hq.p) v)
+    ((mbResidDropWHasVJP N h w p s hq.e hq.d hq.p).toHasVJPAt v)
 
 /-- …and through a widening block. -/
 theorem enetExpW_hasGradAt_comp {N h w ic mid oc r kh kw : Nat} (p : MBW ic mid oc r kh kw)
@@ -834,74 +852,74 @@ noncomputable def enetPreB2 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
   mbStridedW N 56 56 w.b2 ∘ enetPreB1 N w
 
 /-- Block `b3`'s output (the tie's `a3`). -/
-noncomputable def enetPreB3 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB3 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (24 * 56 * 56)) :=
-  mbResidW N 56 56 w.b3 ∘ enetPreB2 N w
+  mbResidDropW N 56 56 w.b3 (sd.map fun f => f 0) ∘ enetPreB2 N w
 
 /-- Block `b4`'s output (the tie's `a4`). -/
-noncomputable def enetPreB4 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB4 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (40 * 28 * 28)) :=
-  mbStridedW N 28 28 w.b4 ∘ enetPreB3 N w
+  mbStridedW N 28 28 w.b4 ∘ enetPreB3 N w sd
 
 /-- Block `b5`'s output (the tie's `a5`). -/
-noncomputable def enetPreB5 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB5 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (40 * 28 * 28)) :=
-  mbResidW N 28 28 w.b5 ∘ enetPreB4 N w
+  mbResidDropW N 28 28 w.b5 (sd.map fun f => f 1) ∘ enetPreB4 N w sd
 
 /-- Block `b6`'s output (the tie's `a6`). -/
-noncomputable def enetPreB6 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB6 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (80 * 14 * 14)) :=
-  mbStridedW N 14 14 w.b6 ∘ enetPreB5 N w
+  mbStridedW N 14 14 w.b6 ∘ enetPreB5 N w sd
 
 /-- Block `b7`'s output (the tie's `a7`). -/
-noncomputable def enetPreB7 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB7 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (80 * 14 * 14)) :=
-  mbResidW N 14 14 w.b7 ∘ enetPreB6 N w
+  mbResidDropW N 14 14 w.b7 (sd.map fun f => f 2) ∘ enetPreB6 N w sd
 
 /-- Block `b8`'s output (the tie's `a8`). -/
-noncomputable def enetPreB8 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB8 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (80 * 14 * 14)) :=
-  mbResidW N 14 14 w.b8 ∘ enetPreB7 N w
+  mbResidDropW N 14 14 w.b8 (sd.map fun f => f 3) ∘ enetPreB7 N w sd
 
 /-- Block `b9`'s output (the tie's `a9`). -/
-noncomputable def enetPreB9 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB9 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (112 * 14 * 14)) :=
-  mbExpW N 14 14 w.b9 ∘ enetPreB8 N w
+  mbExpW N 14 14 w.b9 ∘ enetPreB8 N w sd
 
 /-- Block `b10`'s output (the tie's `a10`). -/
-noncomputable def enetPreB10 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB10 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (112 * 14 * 14)) :=
-  mbResidW N 14 14 w.b10 ∘ enetPreB9 N w
+  mbResidDropW N 14 14 w.b10 (sd.map fun f => f 4) ∘ enetPreB9 N w sd
 
 /-- Block `b11`'s output (the tie's `a11`). -/
-noncomputable def enetPreB11 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB11 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (112 * 14 * 14)) :=
-  mbResidW N 14 14 w.b11 ∘ enetPreB10 N w
+  mbResidDropW N 14 14 w.b11 (sd.map fun f => f 5) ∘ enetPreB10 N w sd
 
 /-- Block `b12`'s output (the tie's `a12`). -/
-noncomputable def enetPreB12 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB12 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (192 * 7 * 7)) :=
-  mbStridedW N 7 7 w.b12 ∘ enetPreB11 N w
+  mbStridedW N 7 7 w.b12 ∘ enetPreB11 N w sd
 
 /-- Block `b13`'s output (the tie's `a13`). -/
-noncomputable def enetPreB13 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB13 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (192 * 7 * 7)) :=
-  mbResidW N 7 7 w.b13 ∘ enetPreB12 N w
+  mbResidDropW N 7 7 w.b13 (sd.map fun f => f 6) ∘ enetPreB12 N w sd
 
 /-- Block `b14`'s output (the tie's `a14`). -/
-noncomputable def enetPreB14 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB14 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (192 * 7 * 7)) :=
-  mbResidW N 7 7 w.b14 ∘ enetPreB13 N w
+  mbResidDropW N 7 7 w.b14 (sd.map fun f => f 7) ∘ enetPreB13 N w sd
 
 /-- Block `b15`'s output (the tie's `a15`). -/
-noncomputable def enetPreB15 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB15 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (192 * 7 * 7)) :=
-  mbResidW N 7 7 w.b15 ∘ enetPreB14 N w
+  mbResidDropW N 7 7 w.b15 (sd.map fun f => f 8) ∘ enetPreB14 N w sd
 
 /-- Block `b16`'s output (the tie's `a16`). -/
-noncomputable def enetPreB16 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetPreB16 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) :
     Vec (N * (3 * 224 * 224)) → Vec (N * (320 * 7 * 7)) :=
-  mbExpW N 7 7 w.b16 ∘ enetPreB15 N w
+  mbExpW N 7 7 w.b16 ∘ enetPreB15 N w sd
 
 theorem enetPreB0_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
     enetPreB0 N w x = stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x := by
@@ -915,276 +933,295 @@ theorem enetPreB2_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N 
     enetPreB2 N w x = mbStridedW N 56 56 w.b2 (enetPreB1 N w x) := by
   rw [enetPreB2, Function.comp_apply]
 
-theorem enetPreB3_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB3 N w x = mbResidW N 56 56 w.b3 (enetPreB2 N w x) := by
+theorem enetPreB3_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB3 N w sd x = mbResidDropW N 56 56 w.b3 (sd.map fun f => f 0) (enetPreB2 N w x) := by
   rw [enetPreB3, Function.comp_apply]
 
-theorem enetPreB4_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB4 N w x = mbStridedW N 28 28 w.b4 (enetPreB3 N w x) := by
+theorem enetPreB4_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB4 N w sd x = mbStridedW N 28 28 w.b4 (enetPreB3 N w sd x) := by
   rw [enetPreB4, Function.comp_apply]
 
-theorem enetPreB5_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB5 N w x = mbResidW N 28 28 w.b5 (enetPreB4 N w x) := by
+theorem enetPreB5_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB5 N w sd x = mbResidDropW N 28 28 w.b5 (sd.map fun f => f 1) (enetPreB4 N w sd x) := by
   rw [enetPreB5, Function.comp_apply]
 
-theorem enetPreB6_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB6 N w x = mbStridedW N 14 14 w.b6 (enetPreB5 N w x) := by
+theorem enetPreB6_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB6 N w sd x = mbStridedW N 14 14 w.b6 (enetPreB5 N w sd x) := by
   rw [enetPreB6, Function.comp_apply]
 
-theorem enetPreB7_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB7 N w x = mbResidW N 14 14 w.b7 (enetPreB6 N w x) := by
+theorem enetPreB7_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB7 N w sd x = mbResidDropW N 14 14 w.b7 (sd.map fun f => f 2) (enetPreB6 N w sd x) := by
   rw [enetPreB7, Function.comp_apply]
 
-theorem enetPreB8_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB8 N w x = mbResidW N 14 14 w.b8 (enetPreB7 N w x) := by
+theorem enetPreB8_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB8 N w sd x = mbResidDropW N 14 14 w.b8 (sd.map fun f => f 3) (enetPreB7 N w sd x) := by
   rw [enetPreB8, Function.comp_apply]
 
-theorem enetPreB9_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB9 N w x = mbExpW N 14 14 w.b9 (enetPreB8 N w x) := by
+theorem enetPreB9_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB9 N w sd x = mbExpW N 14 14 w.b9 (enetPreB8 N w sd x) := by
   rw [enetPreB9, Function.comp_apply]
 
-theorem enetPreB10_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB10 N w x = mbResidW N 14 14 w.b10 (enetPreB9 N w x) := by
+theorem enetPreB10_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB10 N w sd x = mbResidDropW N 14 14 w.b10 (sd.map fun f => f 4) (enetPreB9 N w sd x) := by
   rw [enetPreB10, Function.comp_apply]
 
-theorem enetPreB11_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB11 N w x = mbResidW N 14 14 w.b11 (enetPreB10 N w x) := by
+theorem enetPreB11_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB11 N w sd x = mbResidDropW N 14 14 w.b11 (sd.map fun f => f 5) (enetPreB10 N w sd x) := by
   rw [enetPreB11, Function.comp_apply]
 
-theorem enetPreB12_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB12 N w x = mbStridedW N 7 7 w.b12 (enetPreB11 N w x) := by
+theorem enetPreB12_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB12 N w sd x = mbStridedW N 7 7 w.b12 (enetPreB11 N w sd x) := by
   rw [enetPreB12, Function.comp_apply]
 
-theorem enetPreB13_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB13 N w x = mbResidW N 7 7 w.b13 (enetPreB12 N w x) := by
+theorem enetPreB13_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB13 N w sd x = mbResidDropW N 7 7 w.b13 (sd.map fun f => f 6) (enetPreB12 N w sd x) := by
   rw [enetPreB13, Function.comp_apply]
 
-theorem enetPreB14_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB14 N w x = mbResidW N 7 7 w.b14 (enetPreB13 N w x) := by
+theorem enetPreB14_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB14 N w sd x = mbResidDropW N 7 7 w.b14 (sd.map fun f => f 7) (enetPreB13 N w sd x) := by
   rw [enetPreB14, Function.comp_apply]
 
-theorem enetPreB15_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB15 N w x = mbResidW N 7 7 w.b15 (enetPreB14 N w x) := by
+theorem enetPreB15_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB15 N w sd x = mbResidDropW N 7 7 w.b15 (sd.map fun f => f 8) (enetPreB14 N w sd x) := by
   rw [enetPreB15, Function.comp_apply]
 
-theorem enetPreB16_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    enetPreB16 N w x = mbExpW N 7 7 w.b16 (enetPreB15 N w x) := by
+theorem enetPreB16_apply (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (x : Vec (N * (3 * 224 * 224))) :
+    enetPreB16 N w sd x = mbExpW N 7 7 w.b16 (enetPreB15 N w sd x) := by
   rw [enetPreB16, Function.comp_apply]
 
 /-- The net after block `b16` — the head. -/
-noncomputable def enetSufB16 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB16 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (320 * 7 * 7)) → Vec (N * nCls) :=
-  headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
+  headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd
 
 /-- The net after block `b15`: block `b16`, then the rest. -/
-noncomputable def enetSufB15 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB15 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (cd : Option (Vec (N * 1280))) :
     Vec (N * (192 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => enetSufB16 N w (mbExpW N 7 7 w.b16 y)
+  fun y => enetSufB16 N w cd (mbExpW N 7 7 w.b16 y)
 
 /-- The net after block `b14`: block `b15`, then the rest. -/
-noncomputable def enetSufB14 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB14 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (192 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => enetSufB15 N w (mbResidW N 7 7 w.b15 y)
+  fun y => enetSufB15 N w cd (mbResidDropW N 7 7 w.b15 (sd.map fun f => f 8) y)
 
 /-- The net after block `b13`: block `b14`, then the rest. -/
-noncomputable def enetSufB13 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB13 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (192 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => enetSufB14 N w (mbResidW N 7 7 w.b14 y)
+  fun y => enetSufB14 N w sd cd (mbResidDropW N 7 7 w.b14 (sd.map fun f => f 7) y)
 
 /-- The net after block `b12`: block `b13`, then the rest. -/
-noncomputable def enetSufB12 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB12 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (192 * 7 * 7)) → Vec (N * nCls) :=
-  fun y => enetSufB13 N w (mbResidW N 7 7 w.b13 y)
+  fun y => enetSufB13 N w sd cd (mbResidDropW N 7 7 w.b13 (sd.map fun f => f 6) y)
 
 /-- The net after block `b11`: block `b12`, then the rest. -/
-noncomputable def enetSufB11 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB11 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (112 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB12 N w (mbStridedW N 7 7 w.b12 y)
+  fun y => enetSufB12 N w sd cd (mbStridedW N 7 7 w.b12 y)
 
 /-- The net after block `b10`: block `b11`, then the rest. -/
-noncomputable def enetSufB10 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB10 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (112 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB11 N w (mbResidW N 14 14 w.b11 y)
+  fun y => enetSufB11 N w sd cd (mbResidDropW N 14 14 w.b11 (sd.map fun f => f 5) y)
 
 /-- The net after block `b9`: block `b10`, then the rest. -/
-noncomputable def enetSufB9 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB9 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (112 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB10 N w (mbResidW N 14 14 w.b10 y)
+  fun y => enetSufB10 N w sd cd (mbResidDropW N 14 14 w.b10 (sd.map fun f => f 4) y)
 
 /-- The net after block `b8`: block `b9`, then the rest. -/
-noncomputable def enetSufB8 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB8 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (80 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB9 N w (mbExpW N 14 14 w.b9 y)
+  fun y => enetSufB9 N w sd cd (mbExpW N 14 14 w.b9 y)
 
 /-- The net after block `b7`: block `b8`, then the rest. -/
-noncomputable def enetSufB7 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB7 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (80 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB8 N w (mbResidW N 14 14 w.b8 y)
+  fun y => enetSufB8 N w sd cd (mbResidDropW N 14 14 w.b8 (sd.map fun f => f 3) y)
 
 /-- The net after block `b6`: block `b7`, then the rest. -/
-noncomputable def enetSufB6 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB6 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (80 * 14 * 14)) → Vec (N * nCls) :=
-  fun y => enetSufB7 N w (mbResidW N 14 14 w.b7 y)
+  fun y => enetSufB7 N w sd cd (mbResidDropW N 14 14 w.b7 (sd.map fun f => f 2) y)
 
 /-- The net after block `b5`: block `b6`, then the rest. -/
-noncomputable def enetSufB5 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB5 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (40 * 28 * 28)) → Vec (N * nCls) :=
-  fun y => enetSufB6 N w (mbStridedW N 14 14 w.b6 y)
+  fun y => enetSufB6 N w sd cd (mbStridedW N 14 14 w.b6 y)
 
 /-- The net after block `b4`: block `b5`, then the rest. -/
-noncomputable def enetSufB4 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB4 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (40 * 28 * 28)) → Vec (N * nCls) :=
-  fun y => enetSufB5 N w (mbResidW N 28 28 w.b5 y)
+  fun y => enetSufB5 N w sd cd (mbResidDropW N 28 28 w.b5 (sd.map fun f => f 1) y)
 
 /-- The net after block `b3`: block `b4`, then the rest. -/
-noncomputable def enetSufB3 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB3 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (24 * 56 * 56)) → Vec (N * nCls) :=
-  fun y => enetSufB4 N w (mbStridedW N 28 28 w.b4 y)
+  fun y => enetSufB4 N w sd cd (mbStridedW N 28 28 w.b4 y)
 
 /-- The net after block `b2`: block `b3`, then the rest. -/
-noncomputable def enetSufB2 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB2 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (24 * 56 * 56)) → Vec (N * nCls) :=
-  fun y => enetSufB3 N w (mbResidW N 56 56 w.b3 y)
+  fun y => enetSufB3 N w sd cd (mbResidDropW N 56 56 w.b3 (sd.map fun f => f 0) y)
 
 /-- The net after block `b1`: block `b2`, then the rest. -/
-noncomputable def enetSufB1 (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufB1 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (16 * 112 * 112)) → Vec (N * nCls) :=
-  fun y => enetSufB2 N w (mbStridedW N 56 56 w.b2 y)
+  fun y => enetSufB2 N w sd cd (mbStridedW N 56 56 w.b2 y)
 
 /-- The net after the stem: block `b1`, then the rest. -/
-noncomputable def enetSufStem (N : Nat) {nCls : Nat} (w : B0Weights nCls) :
+noncomputable def enetSufStem (N : Nat) {nCls : Nat} (w : B0Weights nCls) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
     Vec (N * (32 * 112 * 112)) → Vec (N * nCls) :=
-  fun y => enetSufB1 N w (mbNoExpW N 112 112 w.b1 y)
+  fun y => enetSufB1 N w sd cd (mbNoExpW N 112 112 w.b1 y)
 
 /-- **The net with the stem's parameters varied** is the suffix after the stem at the varied stem. -/
 theorem enet_factor_stem (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (W : Kernel4 32 3 3 3) (b γ β : Vec 32) :
-    efficientnetForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x
-      = enetSufStem N w (stemB N (h := 112) (w := 112) W b w.sε γ β x) := rfl
+    efficientnetForwardBFullDrop N { w with sW := W, sb := b, sγ := γ, sβ := β } sd cd x
+      = enetSufStem N w sd cd (stemB N (h := 112) (w := 112) W b w.sε γ β x) := rfl
 
 /-- **The net with block `b1`'s weights varied** is the suffix after `b1` at the varied block. -/
 theorem enet_factor_b1 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBWNoExp 32 16 8 3 3) :
-    efficientnetForwardBFull N { w with b1 := p } x
-      = enetSufB1 N w (mbNoExpW N 112 112 p (enetPreB0 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b1 := p } sd cd x
+      = enetSufB1 N w sd cd (mbNoExpW N 112 112 p (enetPreB0 N w x)) := by
   rw [enetPreB0_apply]; rfl
 
 /-- **The net with block `b2`'s weights varied** is the suffix after `b2` at the varied block. -/
 theorem enet_factor_b2 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 16 96 24 4 3 3) :
-    efficientnetForwardBFull N { w with b2 := p } x
-      = enetSufB2 N w (mbStridedW N 56 56 p (enetPreB1 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b2 := p } sd cd x
+      = enetSufB2 N w sd cd (mbStridedW N 56 56 p (enetPreB1 N w x)) := by
   rw [enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b3`'s weights varied** is the suffix after `b3` at the varied block. -/
 theorem enet_factor_b3 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 24 144 24 6 3 3) :
-    efficientnetForwardBFull N { w with b3 := p } x
-      = enetSufB3 N w (mbResidW N 56 56 p (enetPreB2 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b3 := p } sd cd x
+      = enetSufB3 N w sd cd (mbResidDropW N 56 56 p (sd.map fun f => f 0) (enetPreB2 N w x)) := by
   rw [enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b4`'s weights varied** is the suffix after `b4` at the varied block. -/
 theorem enet_factor_b4 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 24 144 40 6 5 5) :
-    efficientnetForwardBFull N { w with b4 := p } x
-      = enetSufB4 N w (mbStridedW N 28 28 p (enetPreB3 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b4 := p } sd cd x
+      = enetSufB4 N w sd cd (mbStridedW N 28 28 p (enetPreB3 N w sd x)) := by
   rw [enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b5`'s weights varied** is the suffix after `b5` at the varied block. -/
 theorem enet_factor_b5 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 40 240 40 10 5 5) :
-    efficientnetForwardBFull N { w with b5 := p } x
-      = enetSufB5 N w (mbResidW N 28 28 p (enetPreB4 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b5 := p } sd cd x
+      = enetSufB5 N w sd cd (mbResidDropW N 28 28 p (sd.map fun f => f 1) (enetPreB4 N w sd x)) := by
   rw [enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b6`'s weights varied** is the suffix after `b6` at the varied block. -/
 theorem enet_factor_b6 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 40 240 80 10 3 3) :
-    efficientnetForwardBFull N { w with b6 := p } x
-      = enetSufB6 N w (mbStridedW N 14 14 p (enetPreB5 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b6 := p } sd cd x
+      = enetSufB6 N w sd cd (mbStridedW N 14 14 p (enetPreB5 N w sd x)) := by
   rw [enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b7`'s weights varied** is the suffix after `b7` at the varied block. -/
 theorem enet_factor_b7 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 80 480 80 20 3 3) :
-    efficientnetForwardBFull N { w with b7 := p } x
-      = enetSufB7 N w (mbResidW N 14 14 p (enetPreB6 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b7 := p } sd cd x
+      = enetSufB7 N w sd cd (mbResidDropW N 14 14 p (sd.map fun f => f 2) (enetPreB6 N w sd x)) := by
   rw [enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b8`'s weights varied** is the suffix after `b8` at the varied block. -/
 theorem enet_factor_b8 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 80 480 80 20 3 3) :
-    efficientnetForwardBFull N { w with b8 := p } x
-      = enetSufB8 N w (mbResidW N 14 14 p (enetPreB7 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b8 := p } sd cd x
+      = enetSufB8 N w sd cd (mbResidDropW N 14 14 p (sd.map fun f => f 3) (enetPreB7 N w sd x)) := by
   rw [enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b9`'s weights varied** is the suffix after `b9` at the varied block. -/
 theorem enet_factor_b9 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 80 480 112 20 5 5) :
-    efficientnetForwardBFull N { w with b9 := p } x
-      = enetSufB9 N w (mbExpW N 14 14 p (enetPreB8 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b9 := p } sd cd x
+      = enetSufB9 N w sd cd (mbExpW N 14 14 p (enetPreB8 N w sd x)) := by
   rw [enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b10`'s weights varied** is the suffix after `b10` at the varied block. -/
 theorem enet_factor_b10 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 112 672 112 28 5 5) :
-    efficientnetForwardBFull N { w with b10 := p } x
-      = enetSufB10 N w (mbResidW N 14 14 p (enetPreB9 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b10 := p } sd cd x
+      = enetSufB10 N w sd cd (mbResidDropW N 14 14 p (sd.map fun f => f 4) (enetPreB9 N w sd x)) := by
   rw [enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b11`'s weights varied** is the suffix after `b11` at the varied block. -/
 theorem enet_factor_b11 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 112 672 112 28 5 5) :
-    efficientnetForwardBFull N { w with b11 := p } x
-      = enetSufB11 N w (mbResidW N 14 14 p (enetPreB10 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b11 := p } sd cd x
+      = enetSufB11 N w sd cd (mbResidDropW N 14 14 p (sd.map fun f => f 5) (enetPreB10 N w sd x)) := by
   rw [enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b12`'s weights varied** is the suffix after `b12` at the varied block. -/
 theorem enet_factor_b12 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 112 672 192 28 5 5) :
-    efficientnetForwardBFull N { w with b12 := p } x
-      = enetSufB12 N w (mbStridedW N 7 7 p (enetPreB11 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b12 := p } sd cd x
+      = enetSufB12 N w sd cd (mbStridedW N 7 7 p (enetPreB11 N w sd x)) := by
   rw [enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b13`'s weights varied** is the suffix after `b13` at the varied block. -/
 theorem enet_factor_b13 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 192 1152 192 48 5 5) :
-    efficientnetForwardBFull N { w with b13 := p } x
-      = enetSufB13 N w (mbResidW N 7 7 p (enetPreB12 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b13 := p } sd cd x
+      = enetSufB13 N w sd cd (mbResidDropW N 7 7 p (sd.map fun f => f 6) (enetPreB12 N w sd x)) := by
   rw [enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b14`'s weights varied** is the suffix after `b14` at the varied block. -/
 theorem enet_factor_b14 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 192 1152 192 48 5 5) :
-    efficientnetForwardBFull N { w with b14 := p } x
-      = enetSufB14 N w (mbResidW N 7 7 p (enetPreB13 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b14 := p } sd cd x
+      = enetSufB14 N w sd cd (mbResidDropW N 7 7 p (sd.map fun f => f 7) (enetPreB13 N w sd x)) := by
   rw [enetPreB13_apply, enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b15`'s weights varied** is the suffix after `b15` at the varied block. -/
 theorem enet_factor_b15 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 192 1152 192 48 5 5) :
-    efficientnetForwardBFull N { w with b15 := p } x
-      = enetSufB15 N w (mbResidW N 7 7 p (enetPreB14 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b15 := p } sd cd x
+      = enetSufB15 N w cd (mbResidDropW N 7 7 p (sd.map fun f => f 8) (enetPreB14 N w sd x)) := by
   rw [enetPreB14_apply, enetPreB13_apply, enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with block `b16`'s weights varied** is the suffix after `b16` at the varied block. -/
 theorem enet_factor_b16 (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (p : MBW 192 1152 320 48 3 3) :
-    efficientnetForwardBFull N { w with b16 := p } x
-      = enetSufB16 N w (mbExpW N 7 7 p (enetPreB15 N w x)) := by
+    efficientnetForwardBFullDrop N { w with b16 := p } sd cd x
+      = enetSufB16 N w cd (mbExpW N 7 7 p (enetPreB15 N w sd x)) := by
   rw [enetPreB15_apply, enetPreB14_apply, enetPreB13_apply, enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **The net with the head varied** is the head at the varied parameters. -/
 theorem enet_factor_head (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (W : Kernel4 1280 320 1 1) (b γ β : Vec 1280) (Wd : Mat 1280 nCls) (bd : Vec nCls) :
-    efficientnetForwardBFull N { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x
-      = headFwdB N (h := 7) (w := 7) W b w.hε γ β Wd bd (enetPreB16 N w x) := by
+    efficientnetForwardBFullDrop N { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } sd cd x
+      = headDoFwdB N (h := 7) (w := 7) W b w.hε γ β Wd bd cd (enetPreB16 N w sd x) := by
   rw [enetPreB16_apply, enetPreB15_apply, enetPreB14_apply, enetPreB13_apply, enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- The net's output is the head at block `b16`'s output. -/
-theorem enet_forward_eq_head (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    efficientnetForwardBFull N w x
-      = headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb (enetPreB16 N w x) := by
+theorem enet_forward_eq_head (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Vec (N * (3 * 224 * 224)))
+    (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280))) :
+    efficientnetForwardBFullDrop N w sd cd x
+      = headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd (enetPreB16 N w sd x) := by
   rw [enetPreB16_apply, enetPreB15_apply, enetPreB14_apply, enetPreB13_apply, enetPreB12_apply, enetPreB11_apply, enetPreB10_apply, enetPreB9_apply, enetPreB8_apply, enetPreB7_apply, enetPreB6_apply, enetPreB5_apply, enetPreB4_apply, enetPreB3_apply, enetPreB2_apply, enetPreB1_apply, enetPreB0_apply]; rfl
 
 /-- **Every EfficientNet-B0 parameter gradient node is the derivative of `L` in that parameter**,
@@ -1192,65 +1229,65 @@ theorem enet_forward_eq_head (N : Nat) {nCls : Nat} (w : B0Weights nCls) (x : Ve
     `efficientnet_net_tiedG` ties, each at the cotangent the certified block VJPs thread to it from
     `g`, stated against `L` of `efficientnetForwardBFull` with that one parameter varied. -/
 def EnetNetLossTiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
-    (hεw : w.EpsPos) (bf16 : Bool)
+    (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * 224 * 224))) (L : Vec (N * nCls) → Vec 1) (g : Vec (N * nCls)) : Prop :=
-    let dy16 := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward
-        (enetPreB16 N w x) g
-    let dy15 := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward (enetPreB15 N w x) dy16
-    let dy14 := (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward (enetPreB14 N w x) dy15
-    let dy13 := (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward (enetPreB13 N w x) dy14
-    let dy12 := (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward (enetPreB12 N w x) dy13
-    let dy11 := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward (enetPreB11 N w x) dy12
-    let dy10 := (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward (enetPreB10 N w x) dy11
-    let dy9 := (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward (enetPreB9 N w x) dy10
-    let dy8 := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward (enetPreB8 N w x) dy9
-    let dy7 := (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward (enetPreB7 N w x) dy8
-    let dy6 := (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward (enetPreB6 N w x) dy7
-    let dy5 := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward (enetPreB5 N w x) dy6
-    let dy4 := (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward (enetPreB4 N w x) dy5
-    let dy3 := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward (enetPreB3 N w x) dy4
-    let dy2 := (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward (enetPreB2 N w x) dy3
+    let dy16 := (headDoFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd).backward
+        (enetPreB16 N w sd x) g
+    let dy15 := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward (enetPreB15 N w sd x) dy16
+    let dy14 := (mbResidDropWHasVJP N 7 7 w.b15 (sd.map fun f => f 8) hεw.b15.e hεw.b15.d hεw.b15.p).backward (enetPreB14 N w sd x) dy15
+    let dy13 := (mbResidDropWHasVJP N 7 7 w.b14 (sd.map fun f => f 7) hεw.b14.e hεw.b14.d hεw.b14.p).backward (enetPreB13 N w sd x) dy14
+    let dy12 := (mbResidDropWHasVJP N 7 7 w.b13 (sd.map fun f => f 6) hεw.b13.e hεw.b13.d hεw.b13.p).backward (enetPreB12 N w sd x) dy13
+    let dy11 := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward (enetPreB11 N w sd x) dy12
+    let dy10 := (mbResidDropWHasVJP N 14 14 w.b11 (sd.map fun f => f 5) hεw.b11.e hεw.b11.d hεw.b11.p).backward (enetPreB10 N w sd x) dy11
+    let dy9 := (mbResidDropWHasVJP N 14 14 w.b10 (sd.map fun f => f 4) hεw.b10.e hεw.b10.d hεw.b10.p).backward (enetPreB9 N w sd x) dy10
+    let dy8 := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward (enetPreB8 N w sd x) dy9
+    let dy7 := (mbResidDropWHasVJP N 14 14 w.b8 (sd.map fun f => f 3) hεw.b8.e hεw.b8.d hεw.b8.p).backward (enetPreB7 N w sd x) dy8
+    let dy6 := (mbResidDropWHasVJP N 14 14 w.b7 (sd.map fun f => f 2) hεw.b7.e hεw.b7.d hεw.b7.p).backward (enetPreB6 N w sd x) dy7
+    let dy5 := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward (enetPreB5 N w sd x) dy6
+    let dy4 := (mbResidDropWHasVJP N 28 28 w.b5 (sd.map fun f => f 1) hεw.b5.e hεw.b5.d hεw.b5.p).backward (enetPreB4 N w sd x) dy5
+    let dy3 := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward (enetPreB3 N w sd x) dy4
+    let dy2 := (mbResidDropWHasVJP N 56 56 w.b3 (sd.map fun f => f 0) hεw.b3.e hεw.b3.d hεw.b3.p).backward (enetPreB2 N w x) dy3
     let dy1 := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward (enetPreB1 N w x) dy2
     let dy0 := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward (enetPreB0 N w x) dy1
     enetStemLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x
-      (fun W b γ β => L (efficientnetForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+      (fun W b γ β => L (efficientnetForwardBFullDrop N { w with sW := W, sb := b, sγ := γ, sβ := β } sd cd x))
       dy0
   ∧ enetNoExpLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.b1 hεw.b1 bf16 (enetPreB0 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b1 := p } x)) dy1
+      (fun p => L (efficientnetForwardBFullDrop N { w with b1 := p } sd cd x)) dy1
   ∧ enetStridedLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b2 hεw.b2 bf16 (enetPreB1 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b2 := p } x)) dy2
+      (fun p => L (efficientnetForwardBFullDrop N { w with b2 := p } sd cd x)) dy2
   ∧ enetExpLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b3 hεw.b3 bf16 (enetPreB2 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b3 := p } x)) dy3
-  ∧ enetStridedLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b4 hεw.b4 bf16 (enetPreB3 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b4 := p } x)) dy4
-  ∧ enetExpLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b5 hεw.b5 bf16 (enetPreB4 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b5 := p } x)) dy5
-  ∧ enetStridedLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b6 hεw.b6 bf16 (enetPreB5 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b6 := p } x)) dy6
-  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b7 hεw.b7 bf16 (enetPreB6 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b7 := p } x)) dy7
-  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b8 hεw.b8 bf16 (enetPreB7 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b8 := p } x)) dy8
-  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b9 hεw.b9 bf16 (enetPreB8 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b9 := p } x)) dy9
-  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b10 hεw.b10 bf16 (enetPreB9 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b10 := p } x)) dy10
-  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b11 hεw.b11 bf16 (enetPreB10 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b11 := p } x)) dy11
-  ∧ enetStridedLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b12 hεw.b12 bf16 (enetPreB11 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b12 := p } x)) dy12
-  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b13 hεw.b13 bf16 (enetPreB12 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b13 := p } x)) dy13
-  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b14 hεw.b14 bf16 (enetPreB13 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b14 := p } x)) dy14
-  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b15 hεw.b15 bf16 (enetPreB14 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b15 := p } x)) dy15
-  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b16 hεw.b16 bf16 (enetPreB15 N w x)
-      (fun p => L (efficientnetForwardBFull N { w with b16 := p } x)) dy16
+      (fun p => L (efficientnetForwardBFullDrop N { w with b3 := p } sd cd x)) (dropPathOpt N (24 * 56 * 56) (sd.map fun f => f 0) dy3)
+  ∧ enetStridedLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b4 hεw.b4 bf16 (enetPreB3 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b4 := p } sd cd x)) dy4
+  ∧ enetExpLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b5 hεw.b5 bf16 (enetPreB4 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b5 := p } sd cd x)) (dropPathOpt N (40 * 28 * 28) (sd.map fun f => f 1) dy5)
+  ∧ enetStridedLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b6 hεw.b6 bf16 (enetPreB5 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b6 := p } sd cd x)) dy6
+  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b7 hεw.b7 bf16 (enetPreB6 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b7 := p } sd cd x)) (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 2) dy7)
+  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b8 hεw.b8 bf16 (enetPreB7 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b8 := p } sd cd x)) (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 3) dy8)
+  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b9 hεw.b9 bf16 (enetPreB8 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b9 := p } sd cd x)) dy9
+  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b10 hεw.b10 bf16 (enetPreB9 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b10 := p } sd cd x)) (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 4) dy10)
+  ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b11 hεw.b11 bf16 (enetPreB10 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b11 := p } sd cd x)) (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 5) dy11)
+  ∧ enetStridedLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b12 hεw.b12 bf16 (enetPreB11 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b12 := p } sd cd x)) dy12
+  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b13 hεw.b13 bf16 (enetPreB12 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b13 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 6) dy13)
+  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b14 hεw.b14 bf16 (enetPreB13 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b14 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 7) dy14)
+  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b15 hεw.b15 bf16 (enetPreB14 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b15 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 8) dy15)
+  ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b16 hεw.b16 bf16 (enetPreB15 N w sd x)
+      (fun p => L (efficientnetForwardBFullDrop N { w with b16 := p } sd cd x)) dy16
   ∧ enetHeadLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ
-      w.fcW w.fcb bf16 (enetPreB16 N w x)
-      (fun W b γ β Wd bd => L (efficientnetForwardBFull N
-        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x)) g
+      w.fcW w.fcb bf16 cd (enetPreB16 N w sd x)
+      (fun W b γ β Wd bd => L (efficientnetForwardBFullDrop N
+        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } sd cd x)) g
 
 /-- **Every EfficientNet-B0 parameter gradient node is the derivative of the loss in that
     parameter.** For any loss `L` of the logits with gradient `g` at the net's output, each of the
@@ -1261,50 +1298,65 @@ def EnetNetLossTiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w :
     Hypothesis: every BN `ε` positive (`B0Weights.EpsPos`), as in the tie. The loss enters only
     through `hL`; `enet_net_lossGrad_smoothedCE` discharges it for the loss the artifacts ship. -/
 theorem enet_net_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat}
-    (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+    (w : B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin 9 → Vec N))
+    (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * 224 * 224))) {L : Vec (N * nCls) → Vec 1}
-    {g : Vec (N * nCls)} (hL : HasGradAt L (efficientnetForwardBFull N w x) g) :
-    EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 x L g := by
+    {g : Vec (N * nCls)} (hL : HasGradAt L (efficientnetForwardBFullDrop N w sd cd x) g) :
+    EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 sd cd x L g := by
   unfold EnetNetLossTiedG
   intro dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
-  have hL' : HasGradAt L (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
-      (enetPreB16 N w x)) g := hL.congr_point (enet_forward_eq_head N w x)
-  have h16 : HasGradAt (fun y => L (enetSufB16 N w y)) (enetPreB16 N w x) dy16 :=
-    HasGradAt.comp_global (f := headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb)
-      (x := enetPreB16 N w x) hL'
-      (headFwdB_differentiable N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb)
-      (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb)
-  have h15 : HasGradAt (fun y => L (enetSufB15 N w y)) (enetPreB15 N w x) dy15 :=
-    enetExpW_hasGradAt_comp w.b16 hεw.b16 _ (h16.congr_point (enetPreB16_apply N w x))
-  have h14 : HasGradAt (fun y => L (enetSufB14 N w y)) (enetPreB14 N w x) dy14 :=
-    enetResidW_hasGradAt_comp w.b15 hεw.b15 _ (h15.congr_point (enetPreB15_apply N w x))
-  have h13 : HasGradAt (fun y => L (enetSufB13 N w y)) (enetPreB13 N w x) dy13 :=
-    enetResidW_hasGradAt_comp w.b14 hεw.b14 _ (h14.congr_point (enetPreB14_apply N w x))
-  have h12 : HasGradAt (fun y => L (enetSufB12 N w y)) (enetPreB12 N w x) dy12 :=
-    enetResidW_hasGradAt_comp w.b13 hεw.b13 _ (h13.congr_point (enetPreB13_apply N w x))
-  have h11 : HasGradAt (fun y => L (enetSufB11 N w y)) (enetPreB11 N w x) dy11 :=
-    enetStridedW_hasGradAt_comp w.b12 hεw.b12 _ (h12.congr_point (enetPreB12_apply N w x))
-  have h10 : HasGradAt (fun y => L (enetSufB10 N w y)) (enetPreB10 N w x) dy10 :=
-    enetResidW_hasGradAt_comp w.b11 hεw.b11 _ (h11.congr_point (enetPreB11_apply N w x))
-  have h9 : HasGradAt (fun y => L (enetSufB9 N w y)) (enetPreB9 N w x) dy9 :=
-    enetResidW_hasGradAt_comp w.b10 hεw.b10 _ (h10.congr_point (enetPreB10_apply N w x))
-  have h8 : HasGradAt (fun y => L (enetSufB8 N w y)) (enetPreB8 N w x) dy8 :=
-    enetExpW_hasGradAt_comp w.b9 hεw.b9 _ (h9.congr_point (enetPreB9_apply N w x))
-  have h7 : HasGradAt (fun y => L (enetSufB7 N w y)) (enetPreB7 N w x) dy7 :=
-    enetResidW_hasGradAt_comp w.b8 hεw.b8 _ (h8.congr_point (enetPreB8_apply N w x))
-  have h6 : HasGradAt (fun y => L (enetSufB6 N w y)) (enetPreB6 N w x) dy6 :=
-    enetResidW_hasGradAt_comp w.b7 hεw.b7 _ (h7.congr_point (enetPreB7_apply N w x))
-  have h5 : HasGradAt (fun y => L (enetSufB5 N w y)) (enetPreB5 N w x) dy5 :=
-    enetStridedW_hasGradAt_comp w.b6 hεw.b6 _ (h6.congr_point (enetPreB6_apply N w x))
-  have h4 : HasGradAt (fun y => L (enetSufB4 N w y)) (enetPreB4 N w x) dy4 :=
-    enetResidW_hasGradAt_comp w.b5 hεw.b5 _ (h5.congr_point (enetPreB5_apply N w x))
-  have h3 : HasGradAt (fun y => L (enetSufB3 N w y)) (enetPreB3 N w x) dy3 :=
-    enetStridedW_hasGradAt_comp w.b4 hεw.b4 _ (h4.congr_point (enetPreB4_apply N w x))
-  have h2 : HasGradAt (fun y => L (enetSufB2 N w y)) (enetPreB2 N w x) dy2 :=
-    enetResidW_hasGradAt_comp w.b3 hεw.b3 _ (h3.congr_point (enetPreB3_apply N w x))
-  have h1 : HasGradAt (fun y => L (enetSufB1 N w y)) (enetPreB1 N w x) dy1 :=
+  have hL' : HasGradAt L (headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd
+      (enetPreB16 N w sd x)) g := hL.congr_point (enet_forward_eq_head N w x sd cd)
+  have h16 : HasGradAt (fun y => L (enetSufB16 N w cd y)) (enetPreB16 N w sd x) dy16 :=
+    HasGradAt.comp_global (f := headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd)
+      (x := enetPreB16 N w sd x) hL'
+      (headDoFwdB_differentiable N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd)
+      (headDoFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd)
+  have h15 : HasGradAt (fun y => L (enetSufB15 N w cd y)) (enetPreB15 N w sd x) dy15 :=
+    enetExpW_hasGradAt_comp w.b16 hεw.b16 _ (h16.congr_point (enetPreB16_apply N w sd x))
+  -- The masks are spelled `fun f => f i`, never `(· i)`: a dot-lambda's binder is hygienic, so
+  -- the tie's and this file's lets would differ by a name and `enet_net_tied_lossGrad`'s
+  -- `extract_lets` would not merge them; in these steps the binder also carries its type, since
+  -- `Option.map`'s function is elaborated before `sd` and an untyped lambda is postponed into
+  -- the expected-type unification, which then unfolds the whole block around a metavariable.
+  have h14 : HasGradAt (fun y => L (enetSufB14 N w sd cd y)) (enetPreB14 N w sd x) dy14 :=
+    enetResidW_hasGradAt_comp w.b15 hεw.b15 (sd.map fun f : Fin 9 → Vec N => f 8) _
+      (h15.congr_point (enetPreB15_apply N w sd x))
+  have h13 : HasGradAt (fun y => L (enetSufB13 N w sd cd y)) (enetPreB13 N w sd x) dy13 :=
+    enetResidW_hasGradAt_comp w.b14 hεw.b14 (sd.map fun f : Fin 9 → Vec N => f 7) _
+      (h14.congr_point (enetPreB14_apply N w sd x))
+  have h12 : HasGradAt (fun y => L (enetSufB12 N w sd cd y)) (enetPreB12 N w sd x) dy12 :=
+    enetResidW_hasGradAt_comp w.b13 hεw.b13 (sd.map fun f : Fin 9 → Vec N => f 6) _
+      (h13.congr_point (enetPreB13_apply N w sd x))
+  have h11 : HasGradAt (fun y => L (enetSufB11 N w sd cd y)) (enetPreB11 N w sd x) dy11 :=
+    enetStridedW_hasGradAt_comp w.b12 hεw.b12 _ (h12.congr_point (enetPreB12_apply N w sd x))
+  have h10 : HasGradAt (fun y => L (enetSufB10 N w sd cd y)) (enetPreB10 N w sd x) dy10 :=
+    enetResidW_hasGradAt_comp w.b11 hεw.b11 (sd.map fun f : Fin 9 → Vec N => f 5) _
+      (h11.congr_point (enetPreB11_apply N w sd x))
+  have h9 : HasGradAt (fun y => L (enetSufB9 N w sd cd y)) (enetPreB9 N w sd x) dy9 :=
+    enetResidW_hasGradAt_comp w.b10 hεw.b10 (sd.map fun f : Fin 9 → Vec N => f 4) _
+      (h10.congr_point (enetPreB10_apply N w sd x))
+  have h8 : HasGradAt (fun y => L (enetSufB8 N w sd cd y)) (enetPreB8 N w sd x) dy8 :=
+    enetExpW_hasGradAt_comp w.b9 hεw.b9 _ (h9.congr_point (enetPreB9_apply N w sd x))
+  have h7 : HasGradAt (fun y => L (enetSufB7 N w sd cd y)) (enetPreB7 N w sd x) dy7 :=
+    enetResidW_hasGradAt_comp w.b8 hεw.b8 (sd.map fun f : Fin 9 → Vec N => f 3) _
+      (h8.congr_point (enetPreB8_apply N w sd x))
+  have h6 : HasGradAt (fun y => L (enetSufB6 N w sd cd y)) (enetPreB6 N w sd x) dy6 :=
+    enetResidW_hasGradAt_comp w.b7 hεw.b7 (sd.map fun f : Fin 9 → Vec N => f 2) _
+      (h7.congr_point (enetPreB7_apply N w sd x))
+  have h5 : HasGradAt (fun y => L (enetSufB5 N w sd cd y)) (enetPreB5 N w sd x) dy5 :=
+    enetStridedW_hasGradAt_comp w.b6 hεw.b6 _ (h6.congr_point (enetPreB6_apply N w sd x))
+  have h4 : HasGradAt (fun y => L (enetSufB4 N w sd cd y)) (enetPreB4 N w sd x) dy4 :=
+    enetResidW_hasGradAt_comp w.b5 hεw.b5 (sd.map fun f : Fin 9 → Vec N => f 1) _
+      (h5.congr_point (enetPreB5_apply N w sd x))
+  have h3 : HasGradAt (fun y => L (enetSufB3 N w sd cd y)) (enetPreB3 N w sd x) dy3 :=
+    enetStridedW_hasGradAt_comp w.b4 hεw.b4 _ (h4.congr_point (enetPreB4_apply N w sd x))
+  have h2 : HasGradAt (fun y => L (enetSufB2 N w sd cd y)) (enetPreB2 N w x) dy2 :=
+    enetResidW_hasGradAt_comp w.b3 hεw.b3 (sd.map fun f : Fin 9 → Vec N => f 0) _
+      (h3.congr_point (enetPreB3_apply N w sd x))
+  have h1 : HasGradAt (fun y => L (enetSufB1 N w sd cd y)) (enetPreB1 N w x) dy1 :=
     enetStridedW_hasGradAt_comp w.b2 hεw.b2 _ (h2.congr_point (enetPreB2_apply N w x))
-  have h0 : HasGradAt (fun y => L (enetSufStem N w y)) (enetPreB0 N w x) dy0 :=
+  have h0 : HasGradAt (fun y => L (enetSufStem N w sd cd y)) (enetPreB0 N w x) dy0 :=
     enetNoExpW_hasGradAt_comp w.b1 hεw.b1 _ (h1.congr_point (enetPreB1_apply N w x))
   refine ⟨enet_stem_lossTiedG (h := 112) (w := 112) xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ
       w.sβ bf16 x
@@ -1313,48 +1365,49 @@ theorem enet_net_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat}
       (h1.congr_point (enetPreB1_apply N w x)) (fun p => by rw [enet_factor_b1]), ?_⟩
   refine ⟨enet_strided_lossTiedG xN vN epsStr cotN w.b2 hεw.b2 bf16 _
       (h2.congr_point (enetPreB2_apply N w x)) (fun p => by rw [enet_factor_b2]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b3 hεw.b3 bf16 _
-      (h3.congr_point (enetPreB3_apply N w x)) (fun p => by rw [enet_factor_b3]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b3 hεw.b3 bf16 (sd.map fun f : Fin 9 → Vec N => f 0) _
+      (h3.congr_point (enetPreB3_apply N w sd x)) (fun p => by rw [enet_factor_b3]), ?_⟩
   refine ⟨enet_strided_lossTiedG xN vN epsStr cotN w.b4 hεw.b4 bf16 _
-      (h4.congr_point (enetPreB4_apply N w x)) (fun p => by rw [enet_factor_b4]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b5 hεw.b5 bf16 _
-      (h5.congr_point (enetPreB5_apply N w x)) (fun p => by rw [enet_factor_b5]), ?_⟩
+      (h4.congr_point (enetPreB4_apply N w sd x)) (fun p => by rw [enet_factor_b4]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b5 hεw.b5 bf16 (sd.map fun f : Fin 9 → Vec N => f 1) _
+      (h5.congr_point (enetPreB5_apply N w sd x)) (fun p => by rw [enet_factor_b5]), ?_⟩
   refine ⟨enet_strided_lossTiedG xN vN epsStr cotN w.b6 hεw.b6 bf16 _
-      (h6.congr_point (enetPreB6_apply N w x)) (fun p => by rw [enet_factor_b6]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b7 hεw.b7 bf16 _
-      (h7.congr_point (enetPreB7_apply N w x)) (fun p => by rw [enet_factor_b7]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b8 hεw.b8 bf16 _
-      (h8.congr_point (enetPreB8_apply N w x)) (fun p => by rw [enet_factor_b8]), ?_⟩
+      (h6.congr_point (enetPreB6_apply N w sd x)) (fun p => by rw [enet_factor_b6]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b7 hεw.b7 bf16 (sd.map fun f : Fin 9 → Vec N => f 2) _
+      (h7.congr_point (enetPreB7_apply N w sd x)) (fun p => by rw [enet_factor_b7]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b8 hεw.b8 bf16 (sd.map fun f : Fin 9 → Vec N => f 3) _
+      (h8.congr_point (enetPreB8_apply N w sd x)) (fun p => by rw [enet_factor_b8]), ?_⟩
   refine ⟨enet_exp_lossTiedG xN vN epsStr cotN w.b9 hεw.b9 bf16 _
-      (h9.congr_point (enetPreB9_apply N w x)) (fun p => by rw [enet_factor_b9]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b10 hεw.b10 bf16 _
-      (h10.congr_point (enetPreB10_apply N w x)) (fun p => by rw [enet_factor_b10]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b11 hεw.b11 bf16 _
-      (h11.congr_point (enetPreB11_apply N w x)) (fun p => by rw [enet_factor_b11]), ?_⟩
+      (h9.congr_point (enetPreB9_apply N w sd x)) (fun p => by rw [enet_factor_b9]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b10 hεw.b10 bf16 (sd.map fun f : Fin 9 → Vec N => f 4) _
+      (h10.congr_point (enetPreB10_apply N w sd x)) (fun p => by rw [enet_factor_b10]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b11 hεw.b11 bf16 (sd.map fun f : Fin 9 → Vec N => f 5) _
+      (h11.congr_point (enetPreB11_apply N w sd x)) (fun p => by rw [enet_factor_b11]), ?_⟩
   refine ⟨enet_strided_lossTiedG xN vN epsStr cotN w.b12 hεw.b12 bf16 _
-      (h12.congr_point (enetPreB12_apply N w x)) (fun p => by rw [enet_factor_b12]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b13 hεw.b13 bf16 _
-      (h13.congr_point (enetPreB13_apply N w x)) (fun p => by rw [enet_factor_b13]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b14 hεw.b14 bf16 _
-      (h14.congr_point (enetPreB14_apply N w x)) (fun p => by rw [enet_factor_b14]), ?_⟩
-  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b15 hεw.b15 bf16 _
-      (h15.congr_point (enetPreB15_apply N w x)) (fun p => by rw [enet_factor_b15]), ?_⟩
+      (h12.congr_point (enetPreB12_apply N w sd x)) (fun p => by rw [enet_factor_b12]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b13 hεw.b13 bf16 (sd.map fun f : Fin 9 → Vec N => f 6) _
+      (h13.congr_point (enetPreB13_apply N w sd x)) (fun p => by rw [enet_factor_b13]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b14 hεw.b14 bf16 (sd.map fun f : Fin 9 → Vec N => f 7) _
+      (h14.congr_point (enetPreB14_apply N w sd x)) (fun p => by rw [enet_factor_b14]), ?_⟩
+  refine ⟨enet_resid_lossTiedG xN vN epsStr cotN w.b15 hεw.b15 bf16 (sd.map fun f : Fin 9 → Vec N => f 8) _
+      (h15.congr_point (enetPreB15_apply N w sd x)) (fun p => by rw [enet_factor_b15]), ?_⟩
   refine ⟨enet_exp_lossTiedG xN vN epsStr cotN w.b16 hεw.b16 bf16 _
-      (h16.congr_point (enetPreB16_apply N w x)) (fun p => by rw [enet_factor_b16]), ?_⟩
-  exact enet_head_lossTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 _ hL'
-    (fun W b γ β Wd bd => by rw [enet_factor_head])
+      (h16.congr_point (enetPreB16_apply N w sd x)) (fun p => by rw [enet_factor_b16]), ?_⟩
+  exact enet_head_lossTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 cd _
+    hL' (fun W b γ β Wd bd => by rw [enet_factor_head])
 
 /-- **The loss the artifacts ship**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits — the tie's own
-    `g`, whose logits `headFwdB … a16` are `efficientnetForwardBFull N w x`. -/
+    `g`, whose logits `headFwdB … a16` are `efficientnetForwardBFullDrop N w sd cd x`. -/
 theorem enet_net_lossGrad_smoothedCE (xN vN epsStr cotN dN aStr negAK bStr logN ohN : String)
     (N : Nat) {nCls : Nat} (hK : 0 < nCls) (α B : ℝ) (w : B0Weights nCls) (hεw : w.EpsPos)
-    (bf16 : Bool) (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
+    (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
+    (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
     (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
-    EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 x (smoothedBatchLoss N nCls α B t)
+    EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 sd cd x (smoothedBatchLoss N nCls α B t)
       (unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (efficientnetForwardBFull N w x)) t))) :=
-  enet_net_lossGrad xN vN epsStr cotN dN N w hεw bf16 x
+        (rowB N nCls (efficientnetForwardBFullDrop N w sd cd x)) t))) :=
+  enet_net_lossGrad xN vN epsStr cotN dN N w hεw bf16 sd cd x
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
       fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
 
@@ -1367,7 +1420,7 @@ theorem enet_net_lossGrad_smoothedCE (xN vN epsStr cotN dN aStr negAK bStr logN 
     rewrites the loss side's `enetPre*` into those lets (`enetPreB0_apply`, …) and the loss side's
     logits into the tie's (`enet_forward_eq_head`). -/
 theorem enet_net_tied_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
-    (hεw : w.EpsPos) (bf16 : Bool)
+    (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
     (hK : 0 < nCls) (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
@@ -1375,130 +1428,130 @@ theorem enet_net_tied_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls :
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
     let a2  : Vec (N * (24 * 56 * 56))   := mbStridedW N 56 56 w.b2 a1
-    let a3  : Vec (N * (24 * 56 * 56))   := mbResidW N 56 56 w.b3 a2
+    let a3  : Vec (N * (24 * 56 * 56))   := mbResidDropW N 56 56 w.b3 (sd.map fun f => f 0) a2
     let a4  : Vec (N * (40 * 28 * 28))   := mbStridedW N 28 28 w.b4 a3
-    let a5  : Vec (N * (40 * 28 * 28))   := mbResidW N 28 28 w.b5 a4
+    let a5  : Vec (N * (40 * 28 * 28))   := mbResidDropW N 28 28 w.b5 (sd.map fun f => f 1) a4
     let a6  : Vec (N * (80 * 14 * 14))   := mbStridedW N 14 14 w.b6 a5
-    let a7  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b7 a6
-    let a8  : Vec (N * (80 * 14 * 14))   := mbResidW N 14 14 w.b8 a7
+    let a7  : Vec (N * (80 * 14 * 14))   := mbResidDropW N 14 14 w.b7 (sd.map fun f => f 2) a6
+    let a8  : Vec (N * (80 * 14 * 14))   := mbResidDropW N 14 14 w.b8 (sd.map fun f => f 3) a7
     let a9  : Vec (N * (112 * 14 * 14))  := mbExpW N 14 14 w.b9 a8
-    let a10 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b10 a9
-    let a11 : Vec (N * (112 * 14 * 14))  := mbResidW N 14 14 w.b11 a10
+    let a10 : Vec (N * (112 * 14 * 14))  := mbResidDropW N 14 14 w.b10 (sd.map fun f => f 4) a9
+    let a11 : Vec (N * (112 * 14 * 14))  := mbResidDropW N 14 14 w.b11 (sd.map fun f => f 5) a10
     let a12 : Vec (N * (192 * 7 * 7))    := mbStridedW N 7 7 w.b12 a11
-    let a13 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b13 a12
-    let a14 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b14 a13
-    let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
+    let a13 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b13 (sd.map fun f => f 6) a12
+    let a14 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b14 (sd.map fun f => f 7) a13
+    let a15 : Vec (N * (192 * 7 * 7))    := mbResidDropW N 7 7 w.b15 (sd.map fun f => f 8) a14
     let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
     -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
     let g    : Vec (N * nCls) :=
       Proofs.BackLinks.unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
         (Proofs.BackLinks.rowB N nCls
-          (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
-    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+          (headDoFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb cd a16)) t))
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headDoFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb cd).backward a16 g
     let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
-    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
-    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
-    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b15 (sd.map fun f => f 8) hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b14 (sd.map fun f => f 7) hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidDropWHasVJP N 7 7 w.b13 (sd.map fun f => f 6) hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
     let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
-    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
-    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidDropWHasVJP N 14 14 w.b11 (sd.map fun f => f 5) hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidDropWHasVJP N 14 14 w.b10 (sd.map fun f => f 4) hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
     let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
-    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
-    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidDropWHasVJP N 14 14 w.b8 (sd.map fun f => f 3) hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidDropWHasVJP N 14 14 w.b7 (sd.map fun f => f 2) hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
     let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
-    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidDropWHasVJP N 28 28 w.b5 (sd.map fun f => f 1) hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
     let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
-    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidDropWHasVJP N 56 56 w.b3 (sd.map fun f => f 0) hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
     let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
     let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     let L := smoothedBatchLoss N nCls α B t
     -- every block + stem + head tied at its real input + threaded output cotangent
     (enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x dy0
       ∧ enetStemLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ bf16 x
-        (fun W b γ β => L (efficientnetForwardBFull N { w with sW := W, sb := b, sγ := γ, sβ := β } x))
+        (fun W b γ β => L (efficientnetForwardBFullDrop N { w with sW := W, sb := b, sγ := γ, sβ := β } sd cd x))
         dy0)
   ∧ (enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p bf16 a0 dy1
       ∧ enetNoExpLossTiedG (N := N) (h := 112) (w := 112) xN vN epsStr cotN w.b1 hεw.b1 bf16 a0
-        (fun p => L (efficientnetForwardBFull N { w with b1 := p } x)) dy1)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b1 := p } sd cd x)) dy1)
   ∧ (enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p bf16 a1 dy2
       ∧ enetStridedLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b2 hεw.b2 bf16 a1
-        (fun p => L (efficientnetForwardBFull N { w with b2 := p } x)) dy2)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 dy3
+        (fun p => L (efficientnetForwardBFullDrop N { w with b2 := p } sd cd x)) dy2)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p bf16 a2 (dropPathOpt N (24 * 56 * 56) (sd.map fun f => f 0) dy3)
       ∧ enetExpLossTiedG (N := N) (h := 56) (w := 56) xN vN epsStr cotN w.b3 hεw.b3 bf16 a2
-        (fun p => L (efficientnetForwardBFull N { w with b3 := p } x)) dy3)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b3 := p } sd cd x)) (dropPathOpt N (24 * 56 * 56) (sd.map fun f => f 0) dy3))
   ∧ (enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p bf16 a3 dy4
       ∧ enetStridedLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b4 hεw.b4 bf16 a3
-        (fun p => L (efficientnetForwardBFull N { w with b4 := p } x)) dy4)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 dy5
+        (fun p => L (efficientnetForwardBFullDrop N { w with b4 := p } sd cd x)) dy4)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p bf16 a4 (dropPathOpt N (40 * 28 * 28) (sd.map fun f => f 1) dy5)
       ∧ enetExpLossTiedG (N := N) (h := 28) (w := 28) xN vN epsStr cotN w.b5 hεw.b5 bf16 a4
-        (fun p => L (efficientnetForwardBFull N { w with b5 := p } x)) dy5)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b5 := p } sd cd x)) (dropPathOpt N (40 * 28 * 28) (sd.map fun f => f 1) dy5))
   ∧ (enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p bf16 a5 dy6
       ∧ enetStridedLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b6 hεw.b6 bf16 a5
-        (fun p => L (efficientnetForwardBFull N { w with b6 := p } x)) dy6)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 dy7
+        (fun p => L (efficientnetForwardBFullDrop N { w with b6 := p } sd cd x)) dy6)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p bf16 a6 (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 2) dy7)
       ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b7 hεw.b7 bf16 a6
-        (fun p => L (efficientnetForwardBFull N { w with b7 := p } x)) dy7)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 dy8
+        (fun p => L (efficientnetForwardBFullDrop N { w with b7 := p } sd cd x)) (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 2) dy7))
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p bf16 a7 (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 3) dy8)
       ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b8 hεw.b8 bf16 a7
-        (fun p => L (efficientnetForwardBFull N { w with b8 := p } x)) dy8)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b8 := p } sd cd x)) (dropPathOpt N (80 * 14 * 14) (sd.map fun f => f 3) dy8))
   ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p bf16 a8 dy9
       ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b9 hεw.b9 bf16 a8
-        (fun p => L (efficientnetForwardBFull N { w with b9 := p } x)) dy9)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 dy10
+        (fun p => L (efficientnetForwardBFullDrop N { w with b9 := p } sd cd x)) dy9)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p bf16 a9 (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 4) dy10)
       ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b10 hεw.b10 bf16 a9
-        (fun p => L (efficientnetForwardBFull N { w with b10 := p } x)) dy10)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 dy11
+        (fun p => L (efficientnetForwardBFullDrop N { w with b10 := p } sd cd x)) (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 4) dy10))
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p bf16 a10 (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 5) dy11)
       ∧ enetExpLossTiedG (N := N) (h := 14) (w := 14) xN vN epsStr cotN w.b11 hεw.b11 bf16 a10
-        (fun p => L (efficientnetForwardBFull N { w with b11 := p } x)) dy11)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b11 := p } sd cd x)) (dropPathOpt N (112 * 14 * 14) (sd.map fun f => f 5) dy11))
   ∧ (enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p bf16 a11 dy12
       ∧ enetStridedLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b12 hεw.b12 bf16 a11
-        (fun p => L (efficientnetForwardBFull N { w with b12 := p } x)) dy12)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 dy13
+        (fun p => L (efficientnetForwardBFullDrop N { w with b12 := p } sd cd x)) dy12)
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p bf16 a12 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 6) dy13)
       ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b13 hεw.b13 bf16 a12
-        (fun p => L (efficientnetForwardBFull N { w with b13 := p } x)) dy13)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 dy14
+        (fun p => L (efficientnetForwardBFullDrop N { w with b13 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 6) dy13))
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p bf16 a13 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 7) dy14)
       ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b14 hεw.b14 bf16 a13
-        (fun p => L (efficientnetForwardBFull N { w with b14 := p } x)) dy14)
-  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 dy15
+        (fun p => L (efficientnetForwardBFullDrop N { w with b14 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 7) dy14))
+  ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p bf16 a14 (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 8) dy15)
       ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b15 hεw.b15 bf16 a14
-        (fun p => L (efficientnetForwardBFull N { w with b15 := p } x)) dy15)
+        (fun p => L (efficientnetForwardBFullDrop N { w with b15 := p } sd cd x)) (dropPathOpt N (192 * 7 * 7) (sd.map fun f => f 8) dy15))
   ∧ (enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p bf16 a15 dy16
       ∧ enetExpLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN w.b16 hεw.b16 bf16 a15
-        (fun p => L (efficientnetForwardBFull N { w with b16 := p } x)) dy16)
-  ∧ (enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 a16 g
+        (fun p => L (efficientnetForwardBFullDrop N { w with b16 := p } sd cd x)) dy16)
+  ∧ (enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb bf16 cd a16 g
       ∧ enetHeadLossTiedG (N := N) (h := 7) (w := 7) xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ
-        w.fcW w.fcb bf16 a16
-        (fun W b γ β Wd bd => L (efficientnetForwardBFull N
-        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } x)) g) := by
+        w.fcW w.fcb bf16 cd a16
+        (fun W b γ β Wd bd => L (efficientnetForwardBFullDrop N
+        { w with hW := W, hb := b, hγ := γ, hβ := β, fcW := Wd, fcb := bd } sd cd x)) g) := by
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 g dy16 dy15 dy14 dy13 dy12 dy11
     dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0 L
   have htie :=
-    efficientnet_net_tiedG xN vN epsStr cotN dN N w hεw bf16 aStr negAK bStr logN ohN α B x t
+    efficientnet_net_tiedG xN vN epsStr cotN dN N w hεw bf16 sd cd aStr negAK bStr logN ohN α B x t
   extract_lets at htie
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17⟩ := htie
   have hl :=
-    enet_net_lossGrad_smoothedCE xN vN epsStr cotN dN aStr negAK bStr logN ohN N hK α B w hεw bf16 x t ht
+    enet_net_lossGrad_smoothedCE xN vN epsStr cotN dN aStr negAK bStr logN ohN N hK α B w hεw bf16 sd cd x t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : enetPreB0 N w x = a0 := by rw [enetPreB0_apply N w x]
   have e1 : enetPreB1 N w x = a1 := by rw [enetPreB1_apply N w x, e0]
   have e2 : enetPreB2 N w x = a2 := by rw [enetPreB2_apply N w x, e1]
-  have e3 : enetPreB3 N w x = a3 := by rw [enetPreB3_apply N w x, e2]
-  have e4 : enetPreB4 N w x = a4 := by rw [enetPreB4_apply N w x, e3]
-  have e5 : enetPreB5 N w x = a5 := by rw [enetPreB5_apply N w x, e4]
-  have e6 : enetPreB6 N w x = a6 := by rw [enetPreB6_apply N w x, e5]
-  have e7 : enetPreB7 N w x = a7 := by rw [enetPreB7_apply N w x, e6]
-  have e8 : enetPreB8 N w x = a8 := by rw [enetPreB8_apply N w x, e7]
-  have e9 : enetPreB9 N w x = a9 := by rw [enetPreB9_apply N w x, e8]
-  have e10 : enetPreB10 N w x = a10 := by rw [enetPreB10_apply N w x, e9]
-  have e11 : enetPreB11 N w x = a11 := by rw [enetPreB11_apply N w x, e10]
-  have e12 : enetPreB12 N w x = a12 := by rw [enetPreB12_apply N w x, e11]
-  have e13 : enetPreB13 N w x = a13 := by rw [enetPreB13_apply N w x, e12]
-  have e14 : enetPreB14 N w x = a14 := by rw [enetPreB14_apply N w x, e13]
-  have e15 : enetPreB15 N w x = a15 := by rw [enetPreB15_apply N w x, e14]
-  have e16 : enetPreB16 N w x = a16 := by rw [enetPreB16_apply N w x, e15]
+  have e3 : enetPreB3 N w sd x = a3 := by rw [enetPreB3_apply N w sd x, e2]
+  have e4 : enetPreB4 N w sd x = a4 := by rw [enetPreB4_apply N w sd x, e3]
+  have e5 : enetPreB5 N w sd x = a5 := by rw [enetPreB5_apply N w sd x, e4]
+  have e6 : enetPreB6 N w sd x = a6 := by rw [enetPreB6_apply N w sd x, e5]
+  have e7 : enetPreB7 N w sd x = a7 := by rw [enetPreB7_apply N w sd x, e6]
+  have e8 : enetPreB8 N w sd x = a8 := by rw [enetPreB8_apply N w sd x, e7]
+  have e9 : enetPreB9 N w sd x = a9 := by rw [enetPreB9_apply N w sd x, e8]
+  have e10 : enetPreB10 N w sd x = a10 := by rw [enetPreB10_apply N w sd x, e9]
+  have e11 : enetPreB11 N w sd x = a11 := by rw [enetPreB11_apply N w sd x, e10]
+  have e12 : enetPreB12 N w sd x = a12 := by rw [enetPreB12_apply N w sd x, e11]
+  have e13 : enetPreB13 N w sd x = a13 := by rw [enetPreB13_apply N w sd x, e12]
+  have e14 : enetPreB14 N w sd x = a14 := by rw [enetPreB14_apply N w sd x, e13]
+  have e15 : enetPreB15 N w sd x = a15 := by rw [enetPreB15_apply N w sd x, e14]
+  have e16 : enetPreB16 N w sd x = a16 := by rw [enetPreB16_apply N w sd x, e15]
   have eg : unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-      (rowB N nCls (efficientnetForwardBFull N w x)) t)) = g := by
-    rw [enet_forward_eq_head, e16]
+      (rowB N nCls (efficientnetForwardBFullDrop N w sd cd x)) t)) = g := by
+    rw [enet_forward_eq_head N w x sd cd, e16]
   unfold EnetNetLossTiedG at hl
   rw [eg, e16, e15, e14, e13, e12, e11, e10, e9, e8, e7, e6, e5, e4, e3, e2, e1, e0] at hl
   extract_lets at hl

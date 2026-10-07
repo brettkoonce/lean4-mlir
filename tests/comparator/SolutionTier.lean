@@ -766,10 +766,11 @@ theorem chk_mnv4_net_lossGrad :
 /-- `Proofs.EnetTieG.enet_net_lossGrad` -/
 theorem chk_enet_net_lossGrad :
     ∀ (xN vN epsStr cotN dN : String) (N : ℕ) {nCls : ℕ} (w : Proofs.B0Weights nCls)
-      (hεw : w.EpsPos) (bf16 : Bool) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
-      {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)} {g : Proofs.Vec (N * nCls)},
-      Proofs.HasGradAt L (Proofs.efficientnetForwardBFull N w x) g →
-        Proofs.EnetTieG.EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 x L g :=
+      (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin (9 : ℕ) → Proofs.Vec N)) (cd : Option (Proofs.Vec (N * (1280 : ℕ))))
+      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) {L : Proofs.Vec (N * nCls) → Proofs.Vec (1 : ℕ)}
+      {g : Proofs.Vec (N * nCls)},
+      Proofs.HasGradAt L (Proofs.efficientnetForwardBFullDrop N w sd cd x) g →
+        Proofs.EnetTieG.EnetNetLossTiedG xN vN epsStr cotN dN N w hεw bf16 sd cd x L g :=
   Proofs.EnetTieG.enet_net_lossGrad
 
 /-- `Proofs.CnxTieGB.cnx_net_lossGrad` -/
@@ -1073,10 +1074,11 @@ theorem chk_efficientnet_net_syncTiedG :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (xN vN epsStr cotN dN : String) {nCls : ℕ} (w : Proofs.B0Weights nCls) (hεw : w.EpsPos) (bf16 : Bool)
+          (sd : Option (Fin (9 : ℕ) → Proofs.Vec (R * N))) (cd : Option (Proofs.Vec (R * N * (1280 : ℕ))))
           (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (g : Proofs.Vec (R * N * nCls))
           (gs : Fin R → Proofs.Vec (N * nCls)),
           (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * g i) r) →
-            Proofs.EnetSyncTieG.enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 x g gs :=
+            Proofs.EnetSyncTieG.enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw bf16 sd cd x g gs :=
   Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 
 /-- `Proofs.StableHLO.resnet50FwdGraphSyncFull_shard` -/
