@@ -63,7 +63,7 @@ def mnv4ImagenetConfig : VerifiedConfig where
   batchSize := 64
   -- **Depthwise fan = k², as the JAX reference.** Every JAX depthwise emitter hard-codes
   -- fan = k² (TF/timm's `variance_scaling` on a `(k,k,C,1)` kernel); `mkParam`'s He fan-out gave
-  -- `2/(C·k²)`, 0.03–0.18× the reference's std on the 30 depthwise kernels (planning/init_parity.md §2a,
+  -- `2/(C·k²)`, a fraction of the reference's std on the 30 depthwise kernels (planning/init_parity.md §2a,
   -- imagenet_parity.md D4). Host-side, no re-render. On since 2026-10-07; verified runs before it
   -- started at the narrow fan, and `LEAN_MLIR_DW_FAN_K2=0` reproduces those from their seed.
   dwFanK2 := true

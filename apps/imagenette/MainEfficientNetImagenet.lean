@@ -35,12 +35,12 @@ def efficientnetImagenetConfig : VerifiedConfig where
   batchSize := 64
   -- **Depthwise fan = k², as the JAX reference.** Every JAX depthwise emitter hard-codes
   -- fan = k² (TF/timm's `variance_scaling` on a `(k,k,C,1)` kernel); `mkParam`'s He fan-out gave
-  -- `2/(C·k²)`, 0.03–0.18× the reference's std on the 16 depthwise kernels (planning/init_parity.md §2a,
+  -- `2/(C·k²)`, a fraction of the reference's std on the 16 depthwise kernels (planning/init_parity.md §2a,
   -- imagenet_parity.md D4). Host-side, no re-render. On since 2026-10-07; verified runs before it
   -- started at the narrow fan, and `LEAN_MLIR_DW_FAN_K2=0` reproduces those from their seed.
   dwFanK2 := true
   -- **SE FCs at the reference's fan.** The 17 squeeze / excite denses are kind 7; the JAX
-  -- reference inits them as 1×1 convs at var 2/out (TF fan-out), where Glorot gave ~0.2× the std
+  -- reference inits them as 1×1 convs at var 2/out (TF fan-out), where Glorot gave a fraction of the std
   -- on every reduce FC and so started every SE gate near σ(0) (planning/init_parity.md §2b,
   -- imagenet_parity.md D5). Host-side. On since 2026-10-07; `LEAN_MLIR_SE_FAN_OUT=0` reproduces
   -- the runs before it from their seed.

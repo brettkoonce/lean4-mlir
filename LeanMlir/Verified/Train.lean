@@ -203,9 +203,9 @@ structure VerifiedConfig where
   /-- **Squeeze-excite FCs at the reference's fan — EfficientNet's init.** The verified net carries
       each SE squeeze/excite as a rank-2 dense `[in,out]` (init kind 7, `VLayer.mbConvSE`); the
       JAX reference emits them as 1×1 convs under TF's `variance_scaling(2, fan_out)`, i.e.
-      `U(±√(6/out))`, variance **2/out**. Glorot's 2/(in+out) is ~0.2× that std on every reduce FC
+      `U(±√(6/out))`, variance **2/out**. Glorot's 2/(in+out) is a fraction of that std on every reduce FC
       (`[480,20]`: 2/500 vs 2/20), and unlike a BN-followed conv the SE FC is not scale-invariant —
-      it feeds a sigmoid gate, so a 0.2× reduce FC starts every gate near σ(0) = 0.5
+      it feeds a sigmoid gate, so a narrow reduce FC starts every gate near σ(0) = 0.5
       (`planning/init_parity.md` §2b, the audit's 17/213; `imagenet_parity.md` D5). Only the 17
       kind-7 tensors move, each on its own seed. Host-side, no re-render. Off by default, so the
       Imagenette B0 driver and every gate are byte-identical; the ImageNet B0 driver sets it
