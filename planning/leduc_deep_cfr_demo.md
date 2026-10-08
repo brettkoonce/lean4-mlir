@@ -258,10 +258,18 @@ topic); a verified-render tier for the dense stack.
 ## 10. Open questions
 
 - The worst-hand definition for the bluff column: "loses to every holding a showdown can
-  produce except a tie" (J/Q, J/K at r = 3; J in round 1). Check it reads sensibly at r = 13
-  before the scale arm reports it.
+  produce except a tie" (J/Q, J/K at r = 3; J in round 1). It also picks Q/J (a Q under a
+  public J loses to the pair and to K), which the equilibrium raises at 0.0%, so the r = 3
+  cells are the two the plan names. At r = 13 it reads sensibly but the equilibrium is NOT
+  pinned there: the worst-hand raise ranges over {CFR+, DCFR} × inits are wide (round-1 open
+  with the bottom rank 32–47%, bottom rank under public 1 62–96%), against under one point at
+  r = 3 — the scale arm's bluff column must be a range, or the section states the reference
+  solver it reads.
 - Whether the strategy net or SD-CFR is the demo's headline row. Decide on the Phase 3
   numbers; SD-CFR is the better algorithm on paper and the cheaper one here.
+- The equilibrium reference row: CFR+ at 1,000 iterations as planned (2.4e-4 at r = 3,
+  3.7e-4 at r = 13) or DCFR (1.5e-4 / 7.0e-5), which beats CFR+ at every checkpoint. The
+  tables agree to the fourth decimal everywhere the section quotes a frequency.
 
 ## 11. Work log
 
@@ -269,3 +277,27 @@ topic); a verified-render tier for the dense stack.
   1,000 iterations, game value −0.0856, uniform 2.3736, worst-hand raise 19.5% (J/Q). First
   prototype bug worth keeping: summing instead of averaging over the public card stalls CFR
   at 0.33 exploitability with nothing else looking wrong — Gate 0's value check catches it.
+- 2026-10-07/08: Phases 0 and 1 landed. The instrument is C at RANK level (6r + 30r² sets;
+  288 at r = 3, 1,116 at r = 6, 5,148 at r = 13; OpenSpiel's 936 suit-aware sets fold onto the
+  288 one-to-one), vector-form CFR over the public tree with an r × r matrix of private ranks
+  per node, so CFR+ / DCFR at 1,000 iterations is 25 ms at r = 3 and 0.75 s at r = 13. Gate 0
+  passes on both sides: the Lean `step` / `payoff` equals the C tree on every one of the 5,520
+  terminal histories (704,600 at r = 13), and `scripts/demos/leduc_gate0_openspiel.py`
+  (OpenSpiel 2.0.2 in `.venv-poker`, `requirements-poker-lock.txt`) reproduces every payoff on
+  OpenSpiel's own histories (its card index is rank = card // 2), lifts our tables onto its 936
+  states and scores the uniform policy at 2.373611111 and the CFR+ table at 2.382023532e-4 —
+  the C instrument's readings to ten digits. 9,451 history nodes at r = 3 (the 9,450 above plus
+  the root chance node). Measured at r = 3: CFR+ 10 / 100 / 300 / 1,000 → 0.610 / 1.34e-2 /
+  2.33e-3 / 2.38e-4, game value −0.085594; DCFR 1.54e-4 at 1,000; bluffs J open 7.3%, J/Q
+  19.5%, J/K 7.5%; the non-uniqueness range J/Q 18.6–19.5% (narrow at r = 3, wide at r = 13 —
+  §10); price of honesty 0.1856 (the bluffs moved to call) with −0.0115/hand head-to-head;
+  scripted honest 1.050 and −0.123/hand; ES-MCCFR 1e3 … 1e8 nodes → 3.18 / 2.29 / 0.455 /
+  0.106 / 0.0281 / 0.0088 (1.2 s at 1e8). r = 6: value −0.1045, price of honesty 0.160.
+  r = 13: value −0.0927, price of honesty 0.087, ES-MCCFR 1e8 → 0.0135. Offline before the
+  landing (C driver, not in the tree): a tabular Gate B loop (σ from accumulated sampled
+  regrets through the trainer's own traversal, T = 200, K = 100) reproduced ES-MCCFR's curve,
+  1.08 → 0.174 over 42k → 840k nodes; `lean_leduc_targets`' block gradient matched
+  w ⊙ m ⊙ (out − target) to 1.2e-6; SD-CFR's own-reach average of the CFR+ current profiles
+  scored 5.02e-3 against the CFR+ average's 5.02e-3 at T = 200. The trainer
+  (`demos/MainDeepCfrLeduc.lean`) builds; Phase 2 next.
+

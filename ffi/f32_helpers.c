@@ -4882,3 +4882,1251 @@ LEAN_EXPORT lean_obj_res lean_casp_accumulate(lean_obj_arg acc_ba, lean_obj_arg 
     lean_ctor_set(pair, 1, cnt_ba);
     return lean_io_result_mk_ok(pair);
 }
+
+// ============================================================
+// Leduc hold'em: the game, the exact instrument and the samplers (planning/leduc_deep_cfr_demo.md §1)
+// ============================================================
+//
+// Rules as OpenSpiel's `leduc_poker` spells them (Southey et al. 2005): 2r cards, r ranks × 2
+// suits (r = 3 is Leduc), ante 1 each, one private card each, two betting rounds, bet 2 then 4,
+// at most two raises per round, fold legal only when facing a bet, P0 acts first in both
+// rounds, one public card between the rounds; showdown: a pair with the public card wins, else
+// the higher rank, equal ranks split. Suits never matter (no flushes), so everything here is at
+// RANK level with chance weights: a deal of ranks (a, b) has 2·2 cards behind it when a ≠ b and
+// 2·1 when a = b; a public rank has 2 − [pub = a] − [pub = b] cards left. OpenSpiel's 936
+// suit-aware information sets fold onto the 288 rank-level ones (6r + 30r²); the strategy on a
+// suit-aware set is the strategy on its rank-level set, and every exact number (best response,
+// exploitability, head-to-head) is identical in both pictures — Gate 0 checks that against
+// OpenSpiel to 1e-6.
+//
+// One betting round is a six-state automaton over the action strings "", "c", "r", "cr", "rr",
+// "crr" (the decision states; call closes the round from any state but "", raise moves forward,
+// fold is terminal), with five closings "cc", "rc", "crc", "rrc", "crrc". An information set is
+// (round-1 state, private rank) in round 1 and (round-1 closing, round-2 state, private rank,
+// public rank) in round 2; its index is laid out in that order (`ld_info_index`), so a strategy
+// is a dense [nInfo, 3] table over slots fold / call / raise with illegal slots ignored.
+//
+// Every exact walk is over the PUBLIC tree with an r × r matrix over the two private ranks at
+// each node (vector-form CFR): the public tree has a few hundred nodes at any r, so CFR+, DCFR,
+// the best response and head-to-head are milliseconds at r = 13. The samplers (ES-MCCFR and Deep
+// CFR's traversal) walk concrete histories and count the nodes they touch — the budget axis of
+// the scale arm.
+
+
+#define LD_MAXR 13
+#define LD_MAXPOT 13.0   /* ante 1 + two raises of 2 + two raises of 4 */
+
+enum { LD_FOLD = 0, LD_CALL = 1, LD_RAISE = 2 };
+
+/* the betting-round automaton */
+static const int LD_ACTOR[6]  = {0, 1, 1, 0, 0, 1};   /* who acts at "", "c", "r", "cr", "rr", "crr" */
+static const int LD_FACING[6] = {0, 0, 1, 1, 1, 1};
+static const int LD_NRAISE[6] = {0, 0, 1, 1, 2, 2};
+static const int LD_NEXT_CALL[6]  = {1, -1, -2, -3, -4, -5};   /* ≥ 0 a state, < 0 closing −(k+1) */
+static const int LD_NEXT_RAISE[6] = {2, 3, 4, 5, -100, -100}; /* −100 illegal */
+static const char* LD_STATE_STR[6]   = {"", "c", "r", "cr", "rr", "crr"};
+static const char* LD_CLOSING_STR[5] = {"cc", "rc", "crc", "rrc", "crrc"};
+
+typedef struct {
+    int r, nInfo, F;
+} ld_game;
+
+static void ld_game_init(ld_game* g, int r) {
+    g->r = r;
+    g->nInfo = 6 * r + 30 * r * r;
+    g->F = 2 * r + 24;
+}
+
+static inline int ld_legal(int s, int a) {
+    if (a == LD_FOLD) return LD_FACING[s];
+    if (a == LD_CALL) return 1;
+    return LD_NRAISE[s] < 2;
+}
+
+/* information-set index; `pub` ignored in round 0 */
+static inline int ld_info_index(const ld_game* g, int round, int closing, int s, int a, int pub) {
+    if (round == 0) return s * g->r + a;
+    return 6 * g->r + (((closing * 6 + s) * g->r + a) * g->r + pub);
+}
+
+/* the inverse: round, closing (−1 in round 0), state, private rank, public rank (−1 in round 0) */
+static void ld_info_decode(const ld_game* g, int idx, int* round, int* closing, int* s, int* a, int* pub) {
+    const int r = g->r;
+    if (idx < 6 * r) { *round = 0; *closing = -1; *s = idx / r; *a = idx % r; *pub = -1; return; }
+    idx -= 6 * r;
+    *round = 1;
+    *pub = idx % r; idx /= r;
+    *a = idx % r; idx /= r;
+    *s = idx % 6; idx /= 6;
+    *closing = idx;
+}
+
+static inline int ld_info_player(const ld_game* g, int idx) {
+    int round, closing, s, a, pub;
+    ld_info_decode(g, idx, &round, &closing, &s, &a, &pub);
+    return LD_ACTOR[s];
+}
+
+/* chance: P(deal ranks a, b) and P(public rank | a, b) */
+static inline double ld_p_deal(int r, int a, int b) {
+    return (a == b ? 2.0 : 4.0) / (double)(2 * r * (2 * r - 1));
+}
+static inline double ld_p_pub(int r, int a, int b, int pub) {
+    return (2.0 - (pub == a) - (pub == b)) / (double)(2 * r - 2);
+}
+
+/* showdown payoff to P0 given both ranks, the public rank and the contributions */
+static inline double ld_showdown(int a, int b, int pub, int c0, int c1) {
+    int s0 = a == pub ? 100 + a : a, s1 = b == pub ? 100 + b : b;
+    return s0 > s1 ? (double)c1 : (s1 > s0 ? -(double)c0 : 0.0);
+}
+
+/* the feature row of an information set (planning §2): private one-hot + scalar, public
+   one-hot (slot r = not dealt) + scalar, pair flag, private-above-public flag, per round 4
+   action slots × {call, raise}, round flag, the two contributions / max pot */
+static void ld_features(const ld_game* g, int idx, int c0, int c1, float* f) {
+    const int r = g->r;
+    int round, closing, s, a, pub;
+    ld_info_decode(g, idx, &round, &closing, &s, &a, &pub);
+    memset(f, 0, sizeof(float) * (size_t)g->F);
+    f[a] = 1.0f;
+    f[r] = r > 1 ? (float)a / (float)(r - 1) : 0.0f;
+    int o = r + 1;
+    f[o + (pub < 0 ? r : pub)] = 1.0f;
+    o += r + 1;
+    f[o++] = pub < 0 ? 0.0f : (r > 1 ? (float)pub / (float)(r - 1) : 0.0f);
+    f[o++] = (pub >= 0 && pub == a) ? 1.0f : 0.0f;
+    f[o++] = (pub >= 0 && a > pub) ? 1.0f : 0.0f;
+    const char* r1 = round == 0 ? LD_STATE_STR[s] : LD_CLOSING_STR[closing];
+    const char* r2 = round == 0 ? "" : LD_STATE_STR[s];
+    for (int i = 0; r1[i] && i < 4; i++) f[o + 2 * i + (r1[i] == 'r')] = 1.0f;
+    o += 8;
+    for (int i = 0; r2[i] && i < 4; i++) f[o + 2 * i + (r2[i] == 'r')] = 1.0f;
+    o += 8;
+    f[o++] = (float)round;
+    f[o++] = (float)c0 / (float)LD_MAXPOT;
+    f[o++] = (float)c1 / (float)LD_MAXPOT;
+}
+
+/* the contributions on reaching a state of a round, from the contributions at the round's
+   start: replay the state's action string */
+static void ld_replay(const char* str, int round, int* c0, int* c1) {
+    const int size = round == 0 ? 2 : 4;
+    int p = 0;
+    for (int i = 0; str[i]; i++) {
+        int mx = *c0 > *c1 ? *c0 : *c1;
+        if (str[i] == 'c') { if (p == 0) *c0 = mx; else *c1 = mx; }
+        else { if (p == 0) *c0 = mx + size; else *c1 = mx + size; }
+        p = 1 - p;
+    }
+}
+
+/* contributions at an information set */
+static void ld_info_contrib(const ld_game* g, int idx, int* c0, int* c1) {
+    int round, closing, s, a, pub;
+    ld_info_decode(g, idx, &round, &closing, &s, &a, &pub);
+    *c0 = 1; *c1 = 1;
+    if (round == 0) { ld_replay(LD_STATE_STR[s], 0, c0, c1); return; }
+    ld_replay(LD_CLOSING_STR[closing], 0, c0, c1);
+    ld_replay(LD_STATE_STR[s], 1, c0, c1);
+}
+
+/* legal mask [nInfo, 3] and feature rows [nInfo, F] for every information set */
+static void ld_enumerate(const ld_game* g, float* feats, float* mask) {
+    for (int i = 0; i < g->nInfo; i++) {
+        int round, closing, s, a, pub, c0, c1;
+        ld_info_decode(g, i, &round, &closing, &s, &a, &pub);
+        ld_info_contrib(g, i, &c0, &c1);
+        if (feats) ld_features(g, i, c0, c1, feats + (size_t)i * g->F);
+        if (mask) for (int x = 0; x < 3; x++) mask[i * 3 + x] = ld_legal(s, x) ? 1.0f : 0.0f;
+    }
+}
+
+/* regret matching on the positive part over the legal slots; uniform over legal if none */
+static void ld_regret_match(const double* R, int s, double* sigma) {
+    double sum = 0; int nl = 0;
+    for (int x = 0; x < 3; x++) { sigma[x] = 0; if (ld_legal(s, x)) { nl++; if (R[x] > 0) sum += R[x]; } }
+    for (int x = 0; x < 3; x++) if (ld_legal(s, x)) sigma[x] = sum > 0 ? (R[x] > 0 ? R[x] / sum : 0.0) : 1.0 / nl;
+}
+
+/* a strategy table [nInfo, 3] from a sum table (the average strategy); uniform where the sum is 0 */
+static void ld_normalize(const ld_game* g, const double* S, double* sigma) {
+    for (int i = 0; i < g->nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(g, i, &round, &closing, &s, &a, &pub);
+        double sum = 0; int nl = 0;
+        for (int x = 0; x < 3; x++) if (ld_legal(s, x)) { sum += S[i * 3 + x]; nl++; }
+        for (int x = 0; x < 3; x++)
+            sigma[i * 3 + x] = !ld_legal(s, x) ? 0.0 : (sum > 0 ? S[i * 3 + x] / sum : 1.0 / nl);
+    }
+}
+
+static void ld_uniform(const ld_game* g, double* sigma) {
+    double* S = (double*)calloc((size_t)g->nInfo * 3, sizeof(double));
+    ld_normalize(g, S, sigma);
+    free(S);
+}
+
+// ---- The public-tree walks: an r × r matrix (P0's rank, P1's rank) per node ----
+
+typedef struct {
+    int round, closing, s, c0, c1, pub;   /* pub = −1 in round 0 */
+} ld_node;
+
+static ld_node ld_root(void) { ld_node n = {0, -1, 0, 1, 1, -1}; return n; }
+
+/* the child of a node under action x; returns 0 fold-terminal (by the actor), 1 decision node,
+   2 chance node (the public card is next), 3 showdown */
+static int ld_child(const ld_node* n, int x, ld_node* c) {
+    *c = *n;
+    const int q = LD_ACTOR[n->s];
+    const int size = n->round == 0 ? 2 : 4;
+    const int mx = n->c0 > n->c1 ? n->c0 : n->c1;
+    if (x == LD_FOLD) return 0;
+    if (x == LD_CALL) {
+        if (q == 0) c->c0 = mx; else c->c1 = mx;
+        int nx = LD_NEXT_CALL[n->s];
+        if (nx >= 0) { c->s = nx; return 1; }
+        int closing = -nx - 1;
+        if (n->round == 0) { c->round = 1; c->closing = closing; c->s = 0; return 2; }
+        return 3;
+    }
+    if (q == 0) c->c0 = mx + size; else c->c1 = mx + size;
+    c->s = LD_NEXT_RAISE[n->s];
+    return 1;
+}
+
+/* fold payoff to P0 when `q` folds */
+static inline double ld_fold_payoff(const ld_node* n, int q) {
+    return q == 0 ? -(double)n->c0 : (double)n->c1;
+}
+
+#define M(a, b) ((a) * r + (b))
+
+/* CFR pass for the updating player `p` at iteration t. reach0[a], reach1[b] are the players'
+   own reach of this node; chance[a][b] the chance probability so far. Writes u[a][b], the
+   expected payoff to P0 of the subtree under the current σ (regret matching on R), and
+   updates R / S for p's information sets. mode 0 = CFR+ (clamp at zero, linear averaging),
+   mode 1 = DCFR (no clamp; the discounts are applied between iterations), mode 2 = vanilla. */
+static void ld_cfr_rec(const ld_game* g, const ld_node* n, int p, double t, int mode,
+                       const double* reach0, const double* reach1, const double* chance,
+                       double* R, double* S, double* u) {
+    const int r = g->r;
+    const int q = LD_ACTOR[n->s];
+    double ux[3][LD_MAXR * LD_MAXR];
+    double sig[LD_MAXR][3];
+    for (int k = 0; k < r; k++) {
+        int idx = ld_info_index(g, n->round, n->closing, n->s, k, n->pub);
+        ld_regret_match(R + idx * 3, n->s, sig[k]);
+    }
+    double r0[LD_MAXR], r1[LD_MAXR];
+    for (int x = 0; x < 3; x++) {
+        if (!ld_legal(n->s, x)) continue;
+        ld_node c;
+        int kind = ld_child(n, x, &c);
+        /* the acting player's reach under x */
+        for (int k = 0; k < r; k++) { r0[k] = reach0[k]; r1[k] = reach1[k]; }
+        if (q == 0) for (int k = 0; k < r; k++) r0[k] *= sig[k][x];
+        else        for (int k = 0; k < r; k++) r1[k] *= sig[k][x];
+        if (kind == 0) {
+            double v = ld_fold_payoff(n, q);
+            for (int i = 0; i < r * r; i++) ux[x][i] = v;
+        } else if (kind == 3) {
+            for (int a = 0; a < r; a++) for (int b = 0; b < r; b++)
+                ux[x][M(a, b)] = ld_showdown(a, b, c.pub, c.c0, c.c1);
+        } else if (kind == 1) {
+            ld_cfr_rec(g, &c, p, t, mode, r0, r1, chance, R, S, ux[x]);
+        } else {
+            double ch[LD_MAXR * LD_MAXR], up[LD_MAXR * LD_MAXR];
+            for (int i = 0; i < r * r; i++) ux[x][i] = 0;
+            for (int pub = 0; pub < r; pub++) {
+                ld_node cp = c; cp.pub = pub;
+                for (int a = 0; a < r; a++) for (int b = 0; b < r; b++)
+                    ch[M(a, b)] = chance[M(a, b)] * ld_p_pub(r, a, b, pub);
+                ld_cfr_rec(g, &cp, p, t, mode, r0, r1, ch, R, S, up);
+                for (int a = 0; a < r; a++) for (int b = 0; b < r; b++)
+                    ux[x][M(a, b)] += ld_p_pub(r, a, b, pub) * up[M(a, b)];
+            }
+        }
+    }
+    /* the node's value under σ */
+    for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) {
+        const int k = q == 0 ? a : b;
+        double v = 0;
+        for (int x = 0; x < 3; x++) if (ld_legal(n->s, x)) v += sig[k][x] * ux[x][M(a, b)];
+        u[M(a, b)] = v;
+    }
+    if (q != p) return;
+    /* counterfactual regrets for p's r information sets at this node */
+    const double sign = p == 0 ? 1.0 : -1.0;
+    for (int k = 0; k < r; k++) {
+        int idx = ld_info_index(g, n->round, n->closing, n->s, k, n->pub);
+        double cfv[3] = {0, 0, 0}, v = 0;
+        for (int o = 0; o < r; o++) {
+            const int a = p == 0 ? k : o, b = p == 0 ? o : k;
+            const double w = chance[M(a, b)] * (p == 0 ? reach1[b] : reach0[a]);
+            for (int x = 0; x < 3; x++) if (ld_legal(n->s, x)) cfv[x] += w * sign * ux[x][M(a, b)];
+            v += w * sign * u[M(a, b)];
+        }
+        const double own = p == 0 ? reach0[k] : reach1[k];
+        for (int x = 0; x < 3; x++) {
+            if (!ld_legal(n->s, x)) continue;
+            R[idx * 3 + x] += cfv[x] - v;
+            if (mode == 0 && R[idx * 3 + x] < 0) R[idx * 3 + x] = 0;
+            S[idx * 3 + x] += (mode == 2 ? 1.0 : t) * own * sig[k][x];
+        }
+    }
+}
+
+typedef struct {
+    ld_game g;
+    double* R;
+    double* S;
+    int t;        /* iterations done */
+    int mode;
+} ld_cfr;
+
+static void ld_cfr_init(ld_cfr* c, int r, int mode, uint64_t seed, double eps) {
+    ld_game_init(&c->g, r);
+    c->R = (double*)calloc((size_t)c->g.nInfo * 3, sizeof(double));
+    c->S = (double*)calloc((size_t)c->g.nInfo * 3, sizeof(double));
+    c->t = 0; c->mode = mode;
+    /* a random positive start (the non-uniqueness check runs two of these per solver) */
+    if (eps > 0) {
+        uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ull;
+        for (int i = 0; i < c->g.nInfo * 3; i++) {
+            s ^= s << 13; s ^= s >> 7; s ^= s << 17;
+            c->R[i] = eps * (double)(s >> 11) / 9007199254740992.0;
+        }
+    }
+}
+static void ld_cfr_free(ld_cfr* c) { free(c->R); free(c->S); }
+
+static void ld_cfr_iterate(ld_cfr* c, int iters) {
+    const int r = c->g.r;
+    double reach0[LD_MAXR], reach1[LD_MAXR], chance[LD_MAXR * LD_MAXR], u[LD_MAXR * LD_MAXR];
+    for (int k = 0; k < r; k++) reach0[k] = reach1[k] = 1.0;
+    for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) chance[M(a, b)] = ld_p_deal(r, a, b);
+    for (int it = 0; it < iters; it++) {
+        c->t++;
+        const double t = (double)c->t;
+        ld_node root = ld_root();
+        for (int p = 0; p < 2; p++)
+            ld_cfr_rec(&c->g, &root, p, t, c->mode, reach0, reach1, chance, c->R, c->S, u);
+        if (c->mode == 1) {
+            /* DCFR (Brown & Sandholm 2019): α = 1.5, β = 0, γ = 2 */
+            const double ta = pow(t, 1.5), fpos = ta / (ta + 1.0), fneg = 0.5, fs = (t / (t + 1.0)) * (t / (t + 1.0));
+            for (int i = 0; i < c->g.nInfo * 3; i++) {
+                c->R[i] *= c->R[i] > 0 ? fpos : fneg;
+                c->S[i] *= fs;
+            }
+        }
+    }
+}
+
+static void ld_cfr_average(const ld_cfr* c, double* sigma) { ld_normalize(&c->g, c->S, sigma); }
+
+/* the current (not average) profile — what the traversal plays against at one iteration */
+static void ld_cfr_current(const ld_cfr* c, double* sigma) {
+    for (int i = 0; i < c->g.nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(&c->g, i, &round, &closing, &s, &a, &pub);
+        ld_regret_match(c->R + i * 3, s, sigma + i * 3);
+    }
+}
+
+/* head-to-head: expected payoff to P0 of σ0 (P0's rows) against σ1 (P1's rows) */
+static void ld_ev_rec(const ld_game* g, const ld_node* n, const double* sig0, const double* sig1, double* u) {
+    const int r = g->r;
+    const int q = LD_ACTOR[n->s];
+    const double* sig = q == 0 ? sig0 : sig1;
+    double ux[LD_MAXR * LD_MAXR], up[LD_MAXR * LD_MAXR];
+    for (int i = 0; i < r * r; i++) u[i] = 0;
+    for (int x = 0; x < 3; x++) {
+        if (!ld_legal(n->s, x)) continue;
+        ld_node c;
+        int kind = ld_child(n, x, &c);
+        if (kind == 0) { double v = ld_fold_payoff(n, q); for (int i = 0; i < r * r; i++) ux[i] = v; }
+        else if (kind == 3) {
+            for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) ux[M(a, b)] = ld_showdown(a, b, c.pub, c.c0, c.c1);
+        } else if (kind == 1) ld_ev_rec(g, &c, sig0, sig1, ux);
+        else {
+            for (int i = 0; i < r * r; i++) ux[i] = 0;
+            for (int pub = 0; pub < r; pub++) {
+                ld_node cp = c; cp.pub = pub;
+                ld_ev_rec(g, &cp, sig0, sig1, up);
+                for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) ux[M(a, b)] += ld_p_pub(r, a, b, pub) * up[M(a, b)];
+            }
+        }
+        for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) {
+            const int k = q == 0 ? a : b;
+            u[M(a, b)] += sig[ld_info_index(g, n->round, n->closing, n->s, k, n->pub) * 3 + x] * ux[M(a, b)];
+        }
+    }
+}
+
+static double ld_head_to_head(const ld_game* g, const double* sig0, const double* sig1) {
+    const int r = g->r;
+    double u[LD_MAXR * LD_MAXR];
+    ld_node root = ld_root();
+    ld_ev_rec(g, &root, sig0, sig1, u);
+    double v = 0;
+    for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) v += ld_p_deal(r, a, b) * u[M(a, b)];
+    return v;
+}
+
+/* best response of player `brp` to σ (the opponent's rows are read). w[a][b] = chance × the
+   opponent's reach; writes v[a][b], the payoff to brp, and (if `br` is given) the pure best
+   response into brp's rows of `br`. */
+static void ld_br_rec(const ld_game* g, const ld_node* n, int brp, const double* sigma,
+                      const double* w, double* v, double* br) {
+    const int r = g->r;
+    const int q = LD_ACTOR[n->s];
+    const double sign = brp == 0 ? 1.0 : -1.0;
+    double vx[3][LD_MAXR * LD_MAXR], wx[LD_MAXR * LD_MAXR], vp[LD_MAXR * LD_MAXR];
+    for (int x = 0; x < 3; x++) {
+        if (!ld_legal(n->s, x)) continue;
+        ld_node c;
+        int kind = ld_child(n, x, &c);
+        /* the weights below: the opponent's reach picks up σ(x) at the opponent's nodes */
+        for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) {
+            wx[M(a, b)] = w[M(a, b)];
+            if (q != brp) {
+                const int k = q == 0 ? a : b;
+                wx[M(a, b)] *= sigma[ld_info_index(g, n->round, n->closing, n->s, k, n->pub) * 3 + x];
+            }
+        }
+        if (kind == 0) { double val = sign * ld_fold_payoff(n, q); for (int i = 0; i < r * r; i++) vx[x][i] = val; }
+        else if (kind == 3) {
+            for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) vx[x][M(a, b)] = sign * ld_showdown(a, b, c.pub, c.c0, c.c1);
+        } else if (kind == 1) ld_br_rec(g, &c, brp, sigma, wx, vx[x], br);
+        else {
+            double wp[LD_MAXR * LD_MAXR];
+            for (int i = 0; i < r * r; i++) vx[x][i] = 0;
+            for (int pub = 0; pub < r; pub++) {
+                ld_node cp = c; cp.pub = pub;
+                for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) wp[M(a, b)] = wx[M(a, b)] * ld_p_pub(r, a, b, pub);
+                ld_br_rec(g, &cp, brp, sigma, wp, vp, br);
+                for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) vx[x][M(a, b)] += ld_p_pub(r, a, b, pub) * vp[M(a, b)];
+            }
+        }
+    }
+    if (q == brp) {
+        /* per own rank, the action with the largest reach-weighted value over the opponent's ranks */
+        for (int k = 0; k < r; k++) {
+            double best = -1e300; int bx = -1;
+            for (int x = 0; x < 3; x++) {
+                if (!ld_legal(n->s, x)) continue;
+                double s = 0;
+                for (int o = 0; o < r; o++) {
+                    const int a = brp == 0 ? k : o, b = brp == 0 ? o : k;
+                    s += w[M(a, b)] * vx[x][M(a, b)];
+                }
+                if (s > best + 1e-15) { best = s; bx = x; }
+            }
+            for (int o = 0; o < r; o++) {
+                const int a = brp == 0 ? k : o, b = brp == 0 ? o : k;
+                v[M(a, b)] = vx[bx][M(a, b)];
+            }
+            if (br) {
+                int idx = ld_info_index(g, n->round, n->closing, n->s, k, n->pub);
+                for (int x = 0; x < 3; x++) br[idx * 3 + x] = x == bx ? 1.0 : 0.0;
+            }
+        }
+    } else {
+        for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) {
+            const int k = q == 0 ? a : b;
+            const double* sg = sigma + ld_info_index(g, n->round, n->closing, n->s, k, n->pub) * 3;
+            double s = 0;
+            for (int x = 0; x < 3; x++) if (ld_legal(n->s, x)) s += sg[x] * vx[x][M(a, b)];
+            v[M(a, b)] = s;
+        }
+    }
+}
+
+/* the value to brp of best-responding to σ; `br` (optional) receives the pure best response */
+static double ld_best_response(const ld_game* g, int brp, const double* sigma, double* br) {
+    const int r = g->r;
+    double w[LD_MAXR * LD_MAXR], v[LD_MAXR * LD_MAXR];
+    memset(w, 0, sizeof w);
+    for (int a = 0; a < r; a++) for (int b = 0; b < r; b++) w[M(a, b)] = ld_p_deal(r, a, b);
+    ld_node root = ld_root();
+    ld_br_rec(g, &root, brp, sigma, w, v, br);
+    double val = 0;
+    for (int i = 0; i < r * r; i++) val += w[i] * v[i];
+    return val;
+}
+
+/* exploitability = (BR value as P0 + BR value as P1) / 2 — NashConv / 2, OpenSpiel's convention */
+static double ld_exploitability(const ld_game* g, const double* sigma, double* br0, double* br1) {
+    double b0 = ld_best_response(g, 0, sigma, NULL), b1 = ld_best_response(g, 1, sigma, NULL);
+    if (br0) *br0 = b0;
+    if (br1) *br1 = b1;
+    return 0.5 * (b0 + b1);
+}
+
+// ---- Scripted arms and the bluff column ----
+
+/* "honest": raise with a pair or the top rank, fold the bottom rank to a bet, call otherwise */
+static void ld_scripted_honest(const ld_game* g, double* sigma) {
+    const int r = g->r;
+    for (int i = 0; i < g->nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(g, i, &round, &closing, &s, &a, &pub);
+        int strong = a == r - 1 || (pub >= 0 && pub == a);
+        int x;
+        if (strong && ld_legal(s, LD_RAISE)) x = LD_RAISE;
+        else if (a == 0 && ld_legal(s, LD_FOLD) && !(pub >= 0 && pub == a)) x = LD_FOLD;
+        else x = LD_CALL;
+        for (int y = 0; y < 3; y++) sigma[i * 3 + y] = y == x ? 1.0 : 0.0;
+    }
+}
+
+/* the worst hand at an information set: a holding that beats nothing a showdown can produce
+   except a tie — in round 2 the lowest rank other than the public rank; in round 1 the bottom
+   rank (planning §10 keeps the definition open) */
+static int ld_worst_hand(const ld_game* g, int idx) {
+    int round, closing, s, a, pub;
+    ld_info_decode(g, idx, &round, &closing, &s, &a, &pub);
+    if (round == 0) return a == 0;
+    int lowest = pub == 0 ? 1 : 0;
+    return a == lowest;
+}
+
+/* the same profile with the bluffs removed: the worst hand's raise mass moves to call */
+static void ld_remove_bluffs(const ld_game* g, const double* in, double* out) {
+    memcpy(out, in, sizeof(double) * (size_t)g->nInfo * 3);
+    for (int i = 0; i < g->nInfo; i++) {
+        if (!ld_worst_hand(g, i)) continue;
+        out[i * 3 + LD_CALL] += out[i * 3 + LD_RAISE];
+        out[i * 3 + LD_RAISE] = 0;
+    }
+}
+
+// ---- The samplers: concrete histories, counted ----
+
+typedef struct {
+    uint64_t s;
+} ld_rng;
+static inline uint64_t ld_next(ld_rng* g) { uint64_t x = g->s; x ^= x << 13; x ^= x >> 7; x ^= x << 17; g->s = x; return x; }
+static inline double ld_unit(ld_rng* g) { return (double)(ld_next(g) >> 11) / 9007199254740992.0; }
+static inline int ld_sample(ld_rng* g, const double* p) {
+    double u = ld_unit(g), c = 0;
+    for (int x = 0; x < 3; x++) { c += p[x]; if (u < c) return x; }
+    for (int x = 2; x >= 0; x--) if (p[x] > 0) return x;
+    return LD_CALL;
+}
+/* a deal of two cards (rank level, by the card counts) */
+static void ld_sample_deal(ld_rng* g, int r, int* a, int* b) {
+    int c0 = (int)(ld_next(g) % (uint64_t)(2 * r));
+    int c1 = (int)(ld_next(g) % (uint64_t)(2 * r - 1));
+    if (c1 >= c0) c1++;
+    *a = c0 / 2; *b = c1 / 2;
+}
+static int ld_sample_pub(ld_rng* g, int r, int a, int b) {
+    /* draw a card among the 2r − 2 not held */
+    int left[2 * LD_MAXR], n = 0;
+    int ca = 2 * a, cb = 2 * b + (a == b ? 1 : 0);
+    for (int c = 0; c < 2 * r; c++) if (c != ca && c != cb) left[n++] = c;
+    return left[ld_next(g) % (uint64_t)n] / 2;
+}
+
+typedef struct {
+    ld_game g;
+    double* R;
+    double* S;
+    uint8_t* visited;
+    uint64_t nodes;
+    ld_rng rng;
+} ld_es;
+
+static void ld_es_init(ld_es* e, int r, uint64_t seed) {
+    ld_game_init(&e->g, r);
+    e->R = (double*)calloc((size_t)e->g.nInfo * 3, sizeof(double));
+    e->S = (double*)calloc((size_t)e->g.nInfo * 3, sizeof(double));
+    e->visited = (uint8_t*)calloc((size_t)e->g.nInfo, 1);
+    e->nodes = 0;
+    e->rng.s = seed ? seed * 0x9E3779B97F4A7C15ull : 0x9E3779B97F4A7C15ull;
+}
+static void ld_es_free(ld_es* e) { free(e->R); free(e->S); free(e->visited); }
+
+/* external-sampling MCCFR (Lanctot et al. 2009): the traverser's actions enumerated, chance and
+   the opponent sampled; returns the payoff to p */
+static double ld_es_rec(ld_es* e, const ld_node* n, int a, int b, int p) {
+    const ld_game* g = &e->g;
+    e->nodes++;
+    const int q = LD_ACTOR[n->s];
+    const int k = q == 0 ? a : b;
+    const int idx = ld_info_index(g, n->round, n->closing, n->s, k, n->pub);
+    e->visited[idx] = 1;
+    double sig[3];
+    ld_regret_match(e->R + idx * 3, n->s, sig);
+    const double sign = p == 0 ? 1.0 : -1.0;
+    if (q == p) {
+        double vx[3] = {0, 0, 0}, v = 0;
+        for (int x = 0; x < 3; x++) {
+            if (!ld_legal(n->s, x)) continue;
+            ld_node c; int kind = ld_child(n, x, &c);
+            if (kind == 0) { e->nodes++; vx[x] = sign * ld_fold_payoff(n, q); }
+            else if (kind == 3) { e->nodes++; vx[x] = sign * ld_showdown(a, b, c.pub, c.c0, c.c1); }
+            else if (kind == 1) vx[x] = ld_es_rec(e, &c, a, b, p);
+            else { e->nodes++; c.pub = ld_sample_pub(&e->rng, g->r, a, b); vx[x] = ld_es_rec(e, &c, a, b, p); }
+            v += sig[x] * vx[x];
+        }
+        for (int x = 0; x < 3; x++) if (ld_legal(n->s, x)) e->R[idx * 3 + x] += vx[x] - v;
+        return v;
+    }
+    for (int x = 0; x < 3; x++) e->S[idx * 3 + x] += sig[x];
+    int x = ld_sample(&e->rng, sig);
+    ld_node c; int kind = ld_child(n, x, &c);
+    if (kind == 0) { e->nodes++; return sign * ld_fold_payoff(n, q); }
+    if (kind == 3) { e->nodes++; return sign * ld_showdown(a, b, c.pub, c.c0, c.c1); }
+    if (kind == 2) { e->nodes++; c.pub = ld_sample_pub(&e->rng, g->r, a, b); }
+    return ld_es_rec(e, &c, a, b, p);
+}
+
+/* run until at least `budget` nodes have been touched in total; returns the iterations run */
+static uint64_t ld_es_run(ld_es* e, uint64_t budget) {
+    uint64_t it = 0;
+    while (e->nodes < budget) {
+        for (int p = 0; p < 2; p++) {
+            int a, b;
+            ld_sample_deal(&e->rng, e->g.r, &a, &b);
+            e->nodes++;   /* the deal */
+            ld_node root = ld_root();
+            ld_es_rec(e, &root, a, b, p);
+        }
+        it++;
+    }
+    return it;
+}
+
+static double ld_es_coverage(const ld_es* e) {
+    int n = 0;
+    for (int i = 0; i < e->g.nInfo; i++) n += e->visited[i];
+    return (double)n / (double)e->g.nInfo;
+}
+
+/* a reservoir of rows [features F, target 3, mask 3, t, information-set index] with capacity `cap` */
+typedef struct {
+    int F, stride;
+    uint64_t cap, seen;
+    float* rows;
+} ld_reservoir;
+
+static void ld_reservoir_init(ld_reservoir* r, int F, uint64_t cap) {
+    r->F = F; r->stride = F + 8; r->cap = cap; r->seen = 0;
+    r->rows = (float*)calloc((size_t)cap * (size_t)r->stride, sizeof(float));
+}
+static void ld_reservoir_free(ld_reservoir* r) { free(r->rows); }
+static inline uint64_t ld_reservoir_size(const ld_reservoir* r) { return r->seen < r->cap ? r->seen : r->cap; }
+
+static void ld_reservoir_insert(ld_reservoir* r, ld_rng* rng, const float* feats, const double* target,
+                                const float* mask, double t, int idx) {
+    uint64_t slot;
+    if (r->seen < r->cap) slot = r->seen;
+    else { slot = ld_next(rng) % (r->seen + 1); if (slot >= r->cap) { r->seen++; return; } }
+    r->seen++;
+    float* row = r->rows + slot * (uint64_t)r->stride;
+    memcpy(row, feats, sizeof(float) * (size_t)r->F);
+    for (int x = 0; x < 3; x++) { row[r->F + x] = (float)target[x]; row[r->F + 3 + x] = mask[x]; }
+    row[r->F + 6] = (float)t;
+    row[r->F + 7] = (float)idx;
+}
+
+/* Deep CFR's traversal (Brown et al. 2019, Algorithm 1) for traverser p against the tables
+   sig0 / sig1 (the nets' regret-matched advantages, one row per information set): at p's nodes
+   every action is taken and the instantaneous regrets go to p's advantage reservoir; at the
+   opponent's nodes σ goes to the strategy reservoir and one action is sampled. */
+typedef struct {
+    const ld_game* g;
+    const double* sig0;
+    const double* sig1;
+    const float* feats;   /* [nInfo, F] */
+    const float* mask;    /* [nInfo, 3] */
+    ld_reservoir* adv;
+    ld_reservoir* strat;
+    ld_rng rng;
+    uint64_t nodes;
+    double t;
+} ld_trav;
+
+static double ld_trav_rec(ld_trav* T, const ld_node* n, int a, int b, int p) {
+    const ld_game* g = T->g;
+    T->nodes++;
+    const int q = LD_ACTOR[n->s];
+    const int k = q == 0 ? a : b;
+    const int idx = ld_info_index(g, n->round, n->closing, n->s, k, n->pub);
+    const double* sig = (q == 0 ? T->sig0 : T->sig1) + idx * 3;
+    const double sign = p == 0 ? 1.0 : -1.0;
+    if (q == p) {
+        double vx[3] = {0, 0, 0}, v = 0;
+        for (int x = 0; x < 3; x++) {
+            if (!ld_legal(n->s, x)) continue;
+            ld_node c; int kind = ld_child(n, x, &c);
+            if (kind == 0) { T->nodes++; vx[x] = sign * ld_fold_payoff(n, q); }
+            else if (kind == 3) { T->nodes++; vx[x] = sign * ld_showdown(a, b, c.pub, c.c0, c.c1); }
+            else if (kind == 1) vx[x] = ld_trav_rec(T, &c, a, b, p);
+            else { T->nodes++; c.pub = ld_sample_pub(&T->rng, g->r, a, b); vx[x] = ld_trav_rec(T, &c, a, b, p); }
+            v += sig[x] * vx[x];
+        }
+        double reg[3];
+        for (int x = 0; x < 3; x++) reg[x] = ld_legal(n->s, x) ? vx[x] - v : 0.0;
+        ld_reservoir_insert(T->adv, &T->rng, T->feats + (size_t)idx * g->F, reg, T->mask + idx * 3, T->t, idx);
+        return v;
+    }
+    ld_reservoir_insert(T->strat, &T->rng, T->feats + (size_t)idx * g->F, sig, T->mask + idx * 3, T->t, idx);
+    int x = ld_sample(&T->rng, sig);
+    ld_node c; int kind = ld_child(n, x, &c);
+    if (kind == 0) { T->nodes++; return sign * ld_fold_payoff(n, q); }
+    if (kind == 3) { T->nodes++; return sign * ld_showdown(a, b, c.pub, c.c0, c.c1); }
+    if (kind == 2) { T->nodes++; c.pub = ld_sample_pub(&T->rng, g->r, a, b); }
+    return ld_trav_rec(T, &c, a, b, p);
+}
+
+/* K traversals for traverser p at iteration t; returns the nodes touched */
+static uint64_t ld_traverse(const ld_game* g, const double* sig0, const double* sig1, const float* feats,
+                            const float* mask, int p, int K, double t, uint64_t seed,
+                            ld_reservoir* adv, ld_reservoir* strat) {
+    ld_trav T = {g, sig0, sig1, feats, mask, adv, strat, {seed ? seed * 0x9E3779B97F4A7C15ull : 1}, 0, t};
+    for (int i = 0; i < K; i++) {
+        int a, b;
+        ld_sample_deal(&T.rng, g->r, &a, &b);
+        T.nodes++;
+        ld_node root = ld_root();
+        ld_trav_rec(&T, &root, a, b, p);
+    }
+    return T.nodes;
+}
+
+/* σ from a net's advantages [nInfo, 3]: regret matching on the positive part; the argmax of
+   the advantages when none is positive (the paper's rule, not uniform) */
+static void ld_sigma_from_advantages(const ld_game* g, const float* adv, double* sigma) {
+    for (int i = 0; i < g->nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(g, i, &round, &closing, &s, &a, &pub);
+        double sum = 0; int bx = -1; double best = -1e300;
+        for (int x = 0; x < 3; x++) {
+            sigma[i * 3 + x] = 0;
+            if (!ld_legal(s, x)) continue;
+            if (adv[i * 3 + x] > 0) sum += adv[i * 3 + x];
+            if (adv[i * 3 + x] > best) { best = adv[i * 3 + x]; bx = x; }
+        }
+        if (sum > 0) { for (int x = 0; x < 3; x++) if (ld_legal(s, x) && adv[i * 3 + x] > 0) sigma[i * 3 + x] = adv[i * 3 + x] / sum; }
+        else sigma[i * 3 + bx] = 1.0;
+    }
+}
+
+/* σ from the strategy net's output [nInfo, 3]: the positive part normalised over legal slots */
+static void ld_sigma_from_strategy_net(const ld_game* g, const float* out, double* sigma) {
+    double* S = (double*)calloc((size_t)g->nInfo * 3, sizeof(double));
+    for (int i = 0; i < g->nInfo * 3; i++) S[i] = out[i] > 0 ? out[i] : 0.0;
+    ld_normalize(g, S, sigma);
+    free(S);
+}
+
+/* the MSE block's target for a weighted, masked squared error (planning §3): with the block's
+   gradient 2(out − y)/(nOut·B), y = out − scale·g and g = w ⊙ m ⊙ (out − target) makes the
+   block's gradient g/B at scale = nOut/2; w = t / mean(t) over the batch. Returns the mean
+   weighted masked squared error. */
+static double ld_targets(const float* out, const float* rows, int stride, int F, size_t B, double scale, float* y) {
+    double tsum = 0;
+    for (size_t i = 0; i < B; i++) tsum += rows[i * (size_t)stride + F + 6];
+    const double tmean = B ? tsum / (double)B : 1.0;
+    double loss = 0;
+    for (size_t i = 0; i < B; i++) {
+        const float* row = rows + i * (size_t)stride;
+        const double w = tmean > 0 ? row[F + 6] / tmean : 1.0;
+        for (int x = 0; x < 3; x++) {
+            const double d = (double)out[i * 3 + x] - row[F + x];
+            const double gx = w * row[F + 3 + x] * d;
+            y[i * 3 + x] = (float)((double)out[i * 3 + x] - scale * gx);
+            loss += 0.5 * w * row[F + 3 + x] * d * d;
+        }
+    }
+    return B ? loss / (double)B : 0.0;
+}
+
+/* a batch drawn with replacement from a reservoir: rows copied in reservoir layout */
+static void ld_reservoir_sample(const ld_reservoir* r, ld_rng* rng, size_t B, float* rows) {
+    const uint64_t n = ld_reservoir_size(r);
+    for (size_t i = 0; i < B; i++) {
+        uint64_t j = n ? ld_next(rng) % n : 0;
+        memcpy(rows + i * (size_t)r->stride, r->rows + j * (uint64_t)r->stride, sizeof(float) * (size_t)r->stride);
+    }
+}
+
+/* the acting player's own reach of every information set under `sig` (a product of σ over the
+   player's earlier actions on the way to it) */
+static void ld_own_reach(const ld_game* g, const double* sig, double* reach) {
+    for (int i = 0; i < g->nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(g, i, &round, &closing, &s, &a, &pub);
+        const int me = LD_ACTOR[s];
+        double rch = 1.0;
+        /* round 1's string: the state string in round 1, the closing in round 2 */
+        const char* r1 = round == 0 ? LD_STATE_STR[s] : LD_CLOSING_STR[closing];
+        int st = 0;
+        for (int k = 0; r1[k]; k++) {
+            if (LD_ACTOR[st] == me) rch *= sig[ld_info_index(g, 0, -1, st, a, -1) * 3 + (r1[k] == 'c' ? LD_CALL : LD_RAISE)];
+            st = r1[k] == 'c' ? LD_NEXT_CALL[st] : LD_NEXT_RAISE[st];
+            if (st < 0) break;
+        }
+        if (round == 1) {
+            const char* r2 = LD_STATE_STR[s];
+            st = 0;
+            for (int k = 0; r2[k]; k++) {
+                if (LD_ACTOR[st] == me) rch *= sig[ld_info_index(g, 1, closing, st, a, pub) * 3 + (r2[k] == 'c' ? LD_CALL : LD_RAISE)];
+                st = r2[k] == 'c' ? LD_NEXT_CALL[st] : LD_NEXT_RAISE[st];
+            }
+        }
+        reach[i] = rch;
+    }
+}
+
+#undef M
+
+// ---- Lean bindings for the Leduc instrument: `lean_leduc_*` (LeanMlir/Leduc.lean) ----
+// Pasted after the core into ffi/f32_helpers.c. Tables are f32 [nInfo, 3] ByteArrays at the Lean
+// boundary and doubles inside; the solver, sampler and reservoir states are Lean-owned
+// ByteArray arenas with a small header, the MCTS arena's idiom (`lean_mcts_*`).
+//
+// Standalone compile check: gcc -c -I$LEAN_INCLUDE leduc_lean_wrappers.c (with LEDUC_WRAPPERS_STANDALONE)
+
+
+static lean_obj_res ld_err(const char* msg) {
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+}
+static lean_object* ld_f32_array(size_t n) { return lean_alloc_sarray(1, n * 4, n * 4); }
+static lean_object* ld_u64_array(size_t n) { return lean_alloc_sarray(1, n * 8, n * 8); }
+static lean_object* ld_pair(lean_object* a, lean_object* b) {
+    lean_object* pr = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(pr, 0, a);
+    lean_ctor_set(pr, 1, b);
+    return pr;
+}
+static int ld_check_r(size_t r) { return r >= 2 && r <= LD_MAXR; }
+
+/* a table ByteArray → doubles (caller frees); NULL on a size mismatch */
+static double* ld_table_in(const ld_game* g, b_lean_obj_arg ba) {
+    if (lean_sarray_size(ba) != (size_t)g->nInfo * 12) return NULL;
+    const float* f = (const float*)lean_sarray_cptr(ba);
+    double* d = (double*)malloc(sizeof(double) * (size_t)g->nInfo * 3);
+    for (int i = 0; i < g->nInfo * 3; i++) d[i] = f[i];
+    return d;
+}
+static lean_object* ld_table_out(const ld_game* g, const double* d) {
+    lean_object* ba = ld_f32_array((size_t)g->nInfo * 3);
+    float* f = (float*)lean_sarray_cptr(ba);
+    for (int i = 0; i < g->nInfo * 3; i++) f[i] = (float)d[i];
+    return ba;
+}
+
+// ---- Counts: u64 [information sets, F, suit-aware history nodes] ----
+static uint64_t ld_count_nodes_rec(const ld_node* n, int r, int c0, int c1) {
+    uint64_t cnt = 1;
+    for (int x = 0; x < 3; x++) {
+        if (!ld_legal(n->s, x)) continue;
+        ld_node c; int kind = ld_child(n, x, &c);
+        if (kind == 0 || kind == 3) cnt += 1;
+        else if (kind == 1) cnt += ld_count_nodes_rec(&c, r, c0, c1);
+        else {
+            cnt += 1;
+            for (int card = 0; card < 2 * r; card++) {
+                if (card == c0 || card == c1) continue;
+                ld_node cp = c; cp.pub = card / 2;
+                cnt += ld_count_nodes_rec(&cp, r, c0, c1);
+            }
+        }
+    }
+    return cnt;
+}
+LEAN_EXPORT lean_obj_res lean_leduc_counts(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    uint64_t nodes = 1;
+    for (int c0 = 0; c0 < 2 * (int)r; c0++) for (int c1 = 0; c1 < 2 * (int)r; c1++) {
+        if (c0 == c1) continue;
+        ld_node root = ld_root();
+        nodes += ld_count_nodes_rec(&root, (int)r, c0, c1);
+    }
+    lean_object* ba = ld_u64_array(3);
+    uint64_t* o = (uint64_t*)lean_sarray_cptr(ba);
+    o[0] = (uint64_t)g.nInfo; o[1] = (uint64_t)g.F; o[2] = nodes;
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Every information set: (features f32 [nInfo, F], legal mask f32 [nInfo, 3]) ----
+LEAN_EXPORT lean_obj_res lean_leduc_enumerate(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    lean_object* fb = ld_f32_array((size_t)g.nInfo * g.F);
+    lean_object* mb = ld_f32_array((size_t)g.nInfo * 3);
+    ld_enumerate(&g, (float*)lean_sarray_cptr(fb), (float*)lean_sarray_cptr(mb));
+    return lean_io_result_mk_ok(ld_pair(fb, mb));
+}
+
+// ---- Every information set's key: u8 [nInfo, 6] = player, round, closing (255 in round 1),
+// state, private rank, public rank (255 in round 1) ----
+LEAN_EXPORT lean_obj_res lean_leduc_keys(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    lean_object* ba = lean_alloc_sarray(1, (size_t)g.nInfo * 6, (size_t)g.nInfo * 6);
+    uint8_t* o = lean_sarray_cptr(ba);
+    for (int i = 0; i < g.nInfo; i++) {
+        int round, closing, s, a, pub;
+        ld_info_decode(&g, i, &round, &closing, &s, &a, &pub);
+        o[i * 6] = (uint8_t)LD_ACTOR[s]; o[i * 6 + 1] = (uint8_t)round;
+        o[i * 6 + 2] = closing < 0 ? 255 : (uint8_t)closing; o[i * 6 + 3] = (uint8_t)s;
+        o[i * 6 + 4] = (uint8_t)a; o[i * 6 + 5] = pub < 0 ? 255 : (uint8_t)pub;
+    }
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Every terminal history's payoff to P0 in canonical order (P0's card, P1's card, actions
+// fold < call < raise depth-first, public cards ascending): f32 [count]. The Lean game walks the
+// same order and must produce the same list — Gate 0's payoff check. ----
+static void ld_payoffs_rec(const ld_node* n, int r, int c0, int c1, float** out, size_t* cnt, size_t* cap) {
+    const int a = c0 / 2, b = c1 / 2;
+    for (int x = 0; x < 3; x++) {
+        if (!ld_legal(n->s, x)) continue;
+        ld_node c; int kind = ld_child(n, x, &c);
+        if (kind == 0 || kind == 3) {
+            if (*cnt == *cap) { *cap *= 2; *out = (float*)realloc(*out, sizeof(float) * *cap); }
+            (*out)[(*cnt)++] = (float)(kind == 0 ? ld_fold_payoff(n, LD_ACTOR[n->s]) : ld_showdown(a, b, c.pub, c.c0, c.c1));
+        } else if (kind == 1) ld_payoffs_rec(&c, r, c0, c1, out, cnt, cap);
+        else for (int card = 0; card < 2 * r; card++) {
+            if (card == c0 || card == c1) continue;
+            ld_node cp = c; cp.pub = card / 2;
+            ld_payoffs_rec(&cp, r, c0, c1, out, cnt, cap);
+        }
+    }
+}
+LEAN_EXPORT lean_obj_res lean_leduc_payoffs(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    size_t cnt = 0, cap = 1 << 14;
+    float* out = (float*)malloc(sizeof(float) * cap);
+    for (int c0 = 0; c0 < 2 * (int)r; c0++) for (int c1 = 0; c1 < 2 * (int)r; c1++) {
+        if (c0 == c1) continue;
+        ld_node root = ld_root();
+        ld_payoffs_rec(&root, (int)r, c0, c1, &out, &cnt, &cap);
+    }
+    lean_object* ba = ld_f32_array(cnt);
+    memcpy(lean_sarray_cptr(ba), out, cnt * 4);
+    free(out);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Fixed tables: uniform, the scripted "honest" arm, a profile with its bluffs removed ----
+LEAN_EXPORT lean_obj_res lean_leduc_uniform(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* d = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_uniform(&g, d);
+    lean_object* ba = ld_table_out(&g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_scripted_honest(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* d = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_scripted_honest(&g, d);
+    lean_object* ba = ld_table_out(&g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_remove_bluffs(size_t r, b_lean_obj_arg tbl) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* in = ld_table_in(&g, tbl);
+    if (!in) return ld_err("leduc_remove_bluffs: table size");
+    double* out = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_remove_bluffs(&g, in, out);
+    lean_object* ba = ld_table_out(&g, out);
+    free(in); free(out);
+    return lean_io_result_mk_ok(ba);
+}
+/* u8 [nInfo]: 1 where the information set holds the worst hand (planning §10's definition) */
+LEAN_EXPORT lean_obj_res lean_leduc_worst_hands(size_t r) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    lean_object* ba = lean_alloc_sarray(1, (size_t)g.nInfo, (size_t)g.nInfo);
+    uint8_t* o = lean_sarray_cptr(ba);
+    for (int i = 0; i < g.nInfo; i++) o[i] = (uint8_t)ld_worst_hand(&g, i);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- The exact instrument ----
+/* f32 [exploitability, BR value as P0, BR value as P1] */
+LEAN_EXPORT lean_obj_res lean_leduc_exploitability(size_t r, b_lean_obj_arg tbl) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* d = ld_table_in(&g, tbl);
+    if (!d) return ld_err("leduc_exploitability: table size");
+    double b0, b1, e = ld_exploitability(&g, d, &b0, &b1);
+    free(d);
+    lean_object* ba = ld_f32_array(3);
+    float* o = (float*)lean_sarray_cptr(ba);
+    o[0] = (float)e; o[1] = (float)b0; o[2] = (float)b1;
+    return lean_io_result_mk_ok(ba);
+}
+/* the pure best response to `tbl` for both seats, as a table (each seat's rows its own BR) */
+LEAN_EXPORT lean_obj_res lean_leduc_best_response(size_t r, b_lean_obj_arg tbl) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* d = ld_table_in(&g, tbl);
+    if (!d) return ld_err("leduc_best_response: table size");
+    double* br = (double*)calloc((size_t)g.nInfo * 3, sizeof(double));
+    ld_best_response(&g, 0, d, br);
+    ld_best_response(&g, 1, d, br);
+    lean_object* ba = ld_table_out(&g, br);
+    free(d); free(br);
+    return lean_io_result_mk_ok(ba);
+}
+/* expected payoff to P0 when `a` plays P0's rows and `b` plays P1's */
+LEAN_EXPORT double lean_leduc_head_to_head(size_t r, b_lean_obj_arg a, b_lean_obj_arg b) {
+    if (!ld_check_r(r)) return 0.0 / 0.0;
+    ld_game g; ld_game_init(&g, (int)r);
+    double* da = ld_table_in(&g, a);
+    double* db = ld_table_in(&g, b);
+    double v = (da && db) ? ld_head_to_head(&g, da, db) : 0.0 / 0.0;
+    free(da); free(db);
+    return v;
+}
+
+// ---- The tabular solvers as Lean-owned arenas ----
+typedef struct { int32_t r, nInfo, t, mode; uint64_t rng; } ld_cfr_hdr;   /* then R, S doubles */
+static int ld_cfr_view(b_lean_obj_arg arena, ld_cfr* c) {
+    ld_cfr_hdr* h = (ld_cfr_hdr*)lean_sarray_cptr(arena);
+    if (lean_sarray_size(arena) < sizeof(ld_cfr_hdr)) return 0;
+    ld_game_init(&c->g, h->r);
+    if (lean_sarray_size(arena) != sizeof(ld_cfr_hdr) + sizeof(double) * (size_t)c->g.nInfo * 6) return 0;
+    c->R = (double*)(h + 1);
+    c->S = c->R + (size_t)c->g.nInfo * 3;
+    c->t = h->t; c->mode = h->mode;
+    return 1;
+}
+/* mode 0 CFR+, 1 DCFR, 2 vanilla; eps > 0 starts from random positive regrets (seeded) */
+LEAN_EXPORT lean_obj_res lean_leduc_cfr_alloc(size_t r, uint8_t mode, uint64_t seed, double eps) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_cfr c; ld_cfr_init(&c, (int)r, (int)mode, seed, eps);
+    size_t bytes = sizeof(ld_cfr_hdr) + sizeof(double) * (size_t)c.g.nInfo * 6;
+    lean_object* ba = lean_alloc_sarray(1, bytes, bytes);
+    ld_cfr_hdr* h = (ld_cfr_hdr*)lean_sarray_cptr(ba);
+    h->r = (int32_t)r; h->nInfo = c.g.nInfo; h->t = 0; h->mode = (int32_t)mode; h->rng = seed;
+    memcpy(h + 1, c.R, sizeof(double) * (size_t)c.g.nInfo * 3);
+    memcpy((double*)(h + 1) + (size_t)c.g.nInfo * 3, c.S, sizeof(double) * (size_t)c.g.nInfo * 3);
+    ld_cfr_free(&c);
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_cfr_iterate(b_lean_obj_arg arena, size_t iters) {
+    ld_cfr c;
+    if (!ld_cfr_view(arena, &c)) return ld_err("leduc_cfr_iterate: not a solver arena");
+    ld_cfr_iterate(&c, (int)iters);
+    ((ld_cfr_hdr*)lean_sarray_cptr(arena))->t = c.t;
+    return lean_io_result_mk_ok(lean_box(0));
+}
+LEAN_EXPORT lean_obj_res lean_leduc_cfr_average(b_lean_obj_arg arena) {
+    ld_cfr c;
+    if (!ld_cfr_view(arena, &c)) return ld_err("leduc_cfr_average: not a solver arena");
+    double* d = (double*)malloc(sizeof(double) * (size_t)c.g.nInfo * 3);
+    ld_cfr_average(&c, d);
+    lean_object* ba = ld_table_out(&c.g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_cfr_current(b_lean_obj_arg arena) {
+    ld_cfr c;
+    if (!ld_cfr_view(arena, &c)) return ld_err("leduc_cfr_current: not a solver arena");
+    double* d = (double*)malloc(sizeof(double) * (size_t)c.g.nInfo * 3);
+    ld_cfr_current(&c, d);
+    lean_object* ba = ld_table_out(&c.g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+
+typedef struct { int32_t r, nInfo; uint64_t nodes, rng, iters; } ld_es_hdr;   /* then R, S doubles, visited bytes */
+static int ld_es_view(b_lean_obj_arg arena, ld_es* e) {
+    ld_es_hdr* h = (ld_es_hdr*)lean_sarray_cptr(arena);
+    if (lean_sarray_size(arena) < sizeof(ld_es_hdr)) return 0;
+    ld_game_init(&e->g, h->r);
+    size_t need = sizeof(ld_es_hdr) + sizeof(double) * (size_t)e->g.nInfo * 6 + (size_t)e->g.nInfo;
+    if (lean_sarray_size(arena) != need) return 0;
+    e->R = (double*)(h + 1);
+    e->S = e->R + (size_t)e->g.nInfo * 3;
+    e->visited = (uint8_t*)(e->S + (size_t)e->g.nInfo * 3);
+    e->nodes = h->nodes; e->rng.s = h->rng;
+    return 1;
+}
+LEAN_EXPORT lean_obj_res lean_leduc_es_alloc(size_t r, uint64_t seed) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    size_t bytes = sizeof(ld_es_hdr) + sizeof(double) * (size_t)g.nInfo * 6 + (size_t)g.nInfo;
+    lean_object* ba = lean_alloc_sarray(1, bytes, bytes);
+    memset(lean_sarray_cptr(ba), 0, bytes);
+    ld_es_hdr* h = (ld_es_hdr*)lean_sarray_cptr(ba);
+    h->r = (int32_t)r; h->nInfo = g.nInfo; h->nodes = 0; h->iters = 0;
+    h->rng = seed ? seed * 0x9E3779B97F4A7C15ull : 0x9E3779B97F4A7C15ull;
+    return lean_io_result_mk_ok(ba);
+}
+/* run until `budget` nodes have been touched in total; u64 [nodes, iterations, sets visited] */
+LEAN_EXPORT lean_obj_res lean_leduc_es_run(b_lean_obj_arg arena, uint64_t budget) {
+    ld_es e;
+    if (!ld_es_view(arena, &e)) return ld_err("leduc_es_run: not a sampler arena");
+    uint64_t it = ld_es_run(&e, budget);
+    ld_es_hdr* h = (ld_es_hdr*)lean_sarray_cptr(arena);
+    h->nodes = e.nodes; h->rng = e.rng.s; h->iters += it;
+    int visited = 0;
+    for (int i = 0; i < e.g.nInfo; i++) visited += e.visited[i];
+    lean_object* ba = ld_u64_array(3);
+    uint64_t* o = (uint64_t*)lean_sarray_cptr(ba);
+    o[0] = e.nodes; o[1] = h->iters; o[2] = (uint64_t)visited;
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_es_average(b_lean_obj_arg arena) {
+    ld_es e;
+    if (!ld_es_view(arena, &e)) return ld_err("leduc_es_average: not a sampler arena");
+    double* d = (double*)malloc(sizeof(double) * (size_t)e.g.nInfo * 3);
+    ld_normalize(&e.g, e.S, d);
+    lean_object* ba = ld_table_out(&e.g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- Deep CFR's reservoirs and traversal ----
+typedef struct { int32_t F, stride; uint64_t cap, seen; } ld_res_hdr;   /* then float rows */
+static int ld_res_view(b_lean_obj_arg ba, ld_reservoir* r) {
+    ld_res_hdr* h = (ld_res_hdr*)lean_sarray_cptr(ba);
+    if (lean_sarray_size(ba) < sizeof(ld_res_hdr)) return 0;
+    if (lean_sarray_size(ba) != sizeof(ld_res_hdr) + sizeof(float) * (size_t)h->cap * (size_t)h->stride) return 0;
+    r->F = h->F; r->stride = h->stride; r->cap = h->cap; r->seen = h->seen;
+    r->rows = (float*)(h + 1);
+    return 1;
+}
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_alloc(size_t F, uint64_t cap) {
+    size_t stride = F + 8;
+    size_t bytes = sizeof(ld_res_hdr) + sizeof(float) * (size_t)cap * stride;
+    lean_object* ba = lean_alloc_sarray(1, bytes, bytes);
+    memset(lean_sarray_cptr(ba), 0, bytes);
+    ld_res_hdr* h = (ld_res_hdr*)lean_sarray_cptr(ba);
+    h->F = (int32_t)F; h->stride = (int32_t)stride; h->cap = cap; h->seen = 0;
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_reset(b_lean_obj_arg ba) {
+    ld_reservoir r;
+    if (!ld_res_view(ba, &r)) return ld_err("leduc_reservoir_reset: not a reservoir");
+    ((ld_res_hdr*)lean_sarray_cptr(ba))->seen = 0;
+    return lean_io_result_mk_ok(lean_box(0));
+}
+/* u64 [rows held, rows seen] */
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_stats(b_lean_obj_arg ba) {
+    ld_reservoir r;
+    if (!ld_res_view(ba, &r)) return ld_err("leduc_reservoir_stats: not a reservoir");
+    lean_object* o = ld_u64_array(2);
+    ((uint64_t*)lean_sarray_cptr(o))[0] = ld_reservoir_size(&r);
+    ((uint64_t*)lean_sarray_cptr(o))[1] = r.seen;
+    return lean_io_result_mk_ok(o);
+}
+/* K external-sampling traversals for traverser p at iteration t against the tables sig0 / sig1;
+   advantage rows into `adv`, strategy rows into `strat`; returns the nodes touched */
+LEAN_EXPORT lean_obj_res lean_leduc_traverse(size_t r, b_lean_obj_arg sig0, b_lean_obj_arg sig1,
+                                             b_lean_obj_arg feats, b_lean_obj_arg mask,
+                                             size_t p, size_t K, double t, uint64_t seed,
+                                             b_lean_obj_arg adv, b_lean_obj_arg strat) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    double* s0 = ld_table_in(&g, sig0);
+    double* s1 = ld_table_in(&g, sig1);
+    ld_reservoir ra, rs;
+    if (!s0 || !s1 || !ld_res_view(adv, &ra) || !ld_res_view(strat, &rs) ||
+        lean_sarray_size(feats) != (size_t)g.nInfo * g.F * 4 || lean_sarray_size(mask) != (size_t)g.nInfo * 12 ||
+        ra.F != g.F || rs.F != g.F) {
+        free(s0); free(s1);
+        return ld_err("leduc_traverse: argument sizes");
+    }
+    uint64_t nodes = ld_traverse(&g, s0, s1, (const float*)lean_sarray_cptr(feats), (const float*)lean_sarray_cptr(mask),
+                                 (int)p, (int)K, t, seed, &ra, &rs);
+    ((ld_res_hdr*)lean_sarray_cptr(adv))->seen = ra.seen;
+    ((ld_res_hdr*)lean_sarray_cptr(strat))->seen = rs.seen;
+    free(s0); free(s1);
+    return lean_io_result_mk_ok(lean_box_uint64(nodes));
+}
+/* a batch with replacement: (x f32 [B, F], tail f32 [B, 8] = target 3, mask 3, t, set index) */
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_sample(b_lean_obj_arg ba, size_t B, uint64_t seed) {
+    ld_reservoir r;
+    if (!ld_res_view(ba, &r)) return ld_err("leduc_reservoir_sample: not a reservoir");
+    float* rows = (float*)malloc(sizeof(float) * B * (size_t)r.stride);
+    ld_rng rng = {seed ? seed * 0x9E3779B97F4A7C15ull : 1};
+    ld_reservoir_sample(&r, &rng, B, rows);
+    lean_object* xb = ld_f32_array(B * (size_t)r.F);
+    lean_object* tb = ld_f32_array(B * 8);
+    float* x = (float*)lean_sarray_cptr(xb);
+    float* tl = (float*)lean_sarray_cptr(tb);
+    for (size_t i = 0; i < B; i++) {
+        memcpy(x + i * (size_t)r.F, rows + i * (size_t)r.stride, sizeof(float) * (size_t)r.F);
+        memcpy(tl + i * 8, rows + i * (size_t)r.stride + r.F, sizeof(float) * 8);
+    }
+    free(rows);
+    return lean_io_result_mk_ok(ld_pair(xb, tb));
+}
+/* the MSE block's target for the weighted masked squared error on a logits block [B, 3] and a
+   batch tail [B, 8]; scale = nOut / 2 delivers the batch-mean gradient (planning §3).
+   Returns (y [B, 3], [mean weighted loss]). */
+LEAN_EXPORT lean_obj_res lean_leduc_targets(b_lean_obj_arg out, b_lean_obj_arg tail, size_t B, double scale) {
+    if (lean_sarray_size(out) != B * 12 || lean_sarray_size(tail) != B * 32) return ld_err("leduc_targets: sizes");
+    /* ld_targets reads rows of stride F + 8 with the tail at offset F: F = 0 here */
+    lean_object* yb = ld_f32_array(B * 3);
+    double loss = ld_targets((const float*)lean_sarray_cptr(out), (const float*)lean_sarray_cptr(tail), 8, 0, B, scale,
+                             (float*)lean_sarray_cptr(yb));
+    lean_object* lb = ld_f32_array(1);
+    *(float*)lean_sarray_cptr(lb) = (float)loss;
+    return lean_io_result_mk_ok(ld_pair(yb, lb));
+}
+/* σ tables from a net's output over every information set [nInfo, 3] */
+LEAN_EXPORT lean_obj_res lean_leduc_sigma_from_advantages(size_t r, b_lean_obj_arg adv) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    if (lean_sarray_size(adv) != (size_t)g.nInfo * 12) return ld_err("leduc_sigma_from_advantages: size");
+    double* d = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_sigma_from_advantages(&g, (const float*)lean_sarray_cptr(adv), d);
+    lean_object* ba = ld_table_out(&g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+LEAN_EXPORT lean_obj_res lean_leduc_sigma_from_strategy_net(size_t r, b_lean_obj_arg out) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    if (lean_sarray_size(out) != (size_t)g.nInfo * 12) return ld_err("leduc_sigma_from_strategy_net: size");
+    double* d = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_sigma_from_strategy_net(&g, (const float*)lean_sarray_cptr(out), d);
+    lean_object* ba = ld_table_out(&g, d);
+    free(d);
+    return lean_io_result_mk_ok(ba);
+}
+
+// ---- SD-CFR (Steinberger 2019): the exact average of T stored profiles, each weighted by its
+// iteration and by its own reach of the information set: σ̄(I) ∝ Σ_t t · π_t^p(I) · σ_t(I) ----
+/* tables f32 [T, nInfo, 3], weights f32 [T] (the iteration numbers) → the average table */
+LEAN_EXPORT lean_obj_res lean_leduc_sdcfr_average(size_t r, b_lean_obj_arg tables, b_lean_obj_arg weights, size_t T) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    if (lean_sarray_size(tables) != T * (size_t)g.nInfo * 12 || lean_sarray_size(weights) != T * 4)
+        return ld_err("leduc_sdcfr_average: sizes");
+    const float* tb = (const float*)lean_sarray_cptr(tables);
+    const float* w = (const float*)lean_sarray_cptr(weights);
+    double* S = (double*)calloc((size_t)g.nInfo * 3, sizeof(double));
+    double* sig = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    double* reach = (double*)malloc(sizeof(double) * (size_t)g.nInfo);
+    for (size_t t = 0; t < T; t++) {
+        for (int i = 0; i < g.nInfo * 3; i++) sig[i] = tb[t * (size_t)g.nInfo * 3 + i];
+        ld_own_reach(&g, sig, reach);
+        for (int i = 0; i < g.nInfo; i++) for (int x = 0; x < 3; x++)
+            S[i * 3 + x] += (double)w[t] * reach[i] * sig[i * 3 + x];
+    }
+    double* avg = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    ld_normalize(&g, S, avg);
+    lean_object* ba = ld_table_out(&g, avg);
+    free(S); free(sig); free(reach); free(avg);
+    return lean_io_result_mk_ok(ba);
+}

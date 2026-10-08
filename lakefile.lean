@@ -749,6 +749,17 @@ lean_exe «alphazero-ttt» where
   root := `demos.MainAlphaZeroTtt
   moreLinkArgs := lowererLink
 
+-- Leduc hold'em: the game, the exact instrument (best response, exploitability, CFR+ / DCFR,
+-- ES-MCCFR, all in C) and the scripted arms, with Gate 0. No stack, no GPU.
+lean_exe «leduc-env» where
+  root := `demos.MainLeducEnv
+
+-- Deep CFR on the Lean Leduc: regret regression through the rank-2 DDPM MSE block (zero new
+-- codegen), every arm scored by exact exploitability. `r=` is the deck.
+lean_exe «deep-cfr-leduc» where
+  root := `demos.MainDeepCfrLeduc
+  moreLinkArgs := lowererLink
+
 -- The gravitational-wave detection demo: a chapter
 -- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
 -- `scripts/demos/gw_metrics.py` against the matched filter's closed form. Zero new codegen.

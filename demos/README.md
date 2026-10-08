@@ -861,6 +861,9 @@ lake exe pong-dqn mode=pixels k=4         # DQN from frames; mode=state is the c
 lake exe ttt-env n=4                      # the solved game: counts, scripted pairings, the solver's gates
 lake exe alphazero-ttt n=3                # 20 iterations, 2.5 min on one card
 lake exe alphazero-ttt n=4 iters=40 sims=100 sweep=50000 epochs=5    # the same binary, 10 min
+lake exe leduc-env                        # Leduc hold'em: the exact instrument, CFR+ / DCFR, the arms, ES-MCCFR, Gate 0 (seconds, no GPU)
+lake exe leduc-env r=13                   # the same instrument on a 26-card deck
+lake exe deep-cfr-leduc                   # Deep CFR, scored by exact exploitability; r=, T=, K=, seed=, tag=
 ```
 
 The environment, the DP instrument and tabular Q live in
@@ -1074,6 +1077,8 @@ demos/
 ├── MainPongDqn.lean                       # DQN from the six-number state or 84×84 frames on that Pong (RL rung 3)
 ├── MainTttEnv.lean                        # tic-tac-toe n×n: the solved game, scripted players, the solver's gates (RL rung 4, no GPU)
 ├── MainAlphaZeroTtt.lean                  # AlphaZero self-play + PUCT on that game, scored against the solved game (RL rung 4)
+├── MainLeducEnv.lean                      # Leduc hold'em: the exact instrument (best response, CFR+ / DCFR, ES-MCCFR), the scripted arms, Gate 0 (env in LeanMlir/Leduc.lean, no GPU)
+├── MainDeepCfrLeduc.lean                  # Deep CFR on that game through the DDPM MSE block, every arm scored by exact exploitability
 │
 ├── probes/                                # gates and tools, not demos — these RUN IN CI
 │   ├── MainFpnLossProbe.lean              #   finite-difference gate on the detector loss

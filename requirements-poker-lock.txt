@@ -1,0 +1,11 @@
+# The Leduc demo's OpenSpiel cross-check (scripts/demos/leduc_gate0_openspiel.py), pinned
+# 2026-10-07 on python 3.12 (the system python3 is 3.10: no open_spiel wheel). Its own venv:
+# python3.12 -m venv .venv-poker &&
+# .venv-poker/bin/pip install -r requirements-poker-lock.txt
+absl-py==2.5.0
+attrs==26.1.0
+ml_collections==1.1.0
+numpy==2.5.3
+open-spiel==2.0.2
+PyYAML==6.0.3
+scipy==1.18.1

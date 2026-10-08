@@ -17,7 +17,7 @@ formalization.yaml
 lake-manifest.json
 lakefile.lean
 lean-toolchain
-requirements-{gw,rs,timm}-lock.txt
+requirements-{gw,poker,rs,timm}-lock.txt
 run.sh
 .githooks/pre-commit
 .github/workflows/*.yml
