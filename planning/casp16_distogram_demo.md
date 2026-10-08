@@ -11,6 +11,17 @@ https://claude.ai/artifact/TFoTN9GQvcEHe5eBkwYBvK, panel g already real). This d
 plan after the feasibility pass against the repo, with the four changes of §1 and the scoring
 recipe of §5 validated.
 
+Status 2026-10-08: the book section is §10.3.7, `sec:bestiary_structure` in `blueprint/src/content.tex`
+(the Evoformer bestiary entry sits under it), with one figure (`demos/figures/casp16_distogram.png`,
+the trio T1271s6-D1 / T1295-D3 / T1228v1-D3 on the book run's ω/φ fold), the twelve-row ablation chart
+(`casp16_ablation.png`; `--full` keeps the 23-arm version as `casp16_ablation_full.png`) and the bracket
+table (one-hot, the 3B head, the 650M baseline, the book run, ESMFold, the field median). `layer:pairTile`
+is defined in §10.1, `thm:pairTile_vjp` cites the four VJP witnesses, `Proofs.pdiv_tileWPair` is a
+formalization.yaml row and in the comparator tier, Appendix A has the CASP16 + PDB rows, README and
+demos/README their entries. The headline row is the 100-epoch run; the 30-epoch row is its schedule
+check. `casp16_esmfold.py --window` folds T1218 / T1269 per unit from an 800-residue window (written,
+not yet run — §9). The text below is the record as it was written.
+
 Status 2026-10-02 18:40: the whole pipeline runs and the ablation table (§10) is filled
 (§11 is the handoff: what is running, where, and what to do when it finishes; §10a the night's
 findings). Data, `pairTile` + its VJP lemma, trainer, fold, scoring all landed (commits bc09c154
@@ -268,6 +279,13 @@ distance map, two pair histograms); (c) the CASP16 strip for the three EUs with 
 model 1 at CA-lDDT and our dot. Table: per EU, top-L/5 long-range precision, CA-lDDT,
 TM-score, GDT_TS for ours; field median and best; the three ablation rows of §4.
 
+Landed 2026-10-08 as §10.3.7: the figure is `casp16_figure.py <book run dir> --metric tm --all-units
+--fold orient --eus T1271s6-D1 T1295-D3 T1228v1-D3 --panel-a T1271s6-D1` (panel (a) the contact map, (b)
+predicted against measured distances, (c) the CASP16 strip at TM-score with all 78 units in a fourth
+row); the second figure is the ablation chart cut to twelve rows (Brett: "like the second graphic but
+chop the number of ablations in half"); the table is the bracket, not the ladder — the chart carries the
+levers.
+
 ## 7. Gates
 
 - G0 (done): scoring reproduces the official table on nine models (§5).
@@ -309,6 +327,12 @@ Every launch is asked for first.
 - CASP17 after the December 2026 conference.
 - The MSA route (§11a, parked 2026-10-04): go or no-go after its half-day probe; a source for the alignments of
   T1214, T1228 and T1239, which MassiveFold's release does not cover.
+- ESMFold on the targets over 1,000 residues: done 2026-10-08 (`runs/2026-10-02-distogram-ablations/esmfold_window.sh`,
+  GPU 0, 25 min incl. the rescore; log `esmfold_window.log`, `esmfold_rescore.log`): the 78-unit row reproduces from
+  the script to the digit (0.751 / 0.778, better on 71); the paired interval is now the one `casp16_table.py` prints,
+  [+0.103, +0.167] (the plan's [+0.101, +0.165] was a scratchpad draw).
+- Decided 2026-10-08: the featured trio is T1271s6-D1 / T1295-D3 / T1228v1-D3; the headline row is the
+  100-epoch run, the 30-epoch row its schedule check.
 
 ## 10. The ablation table (decided 2026-10-02 with Brett: "poke at it a few different ways")
 
@@ -318,7 +342,7 @@ fold Cβ-lDDT / TM over the folded EUs · GPU-hours. Rows and their state:
 | row | isolates | state |
 |---|---|---|
 | ESM-2 35M contact head | the LM without us | done: 0.474 |
-| ESMFold v1 (`scripts/demos/casp16_esmfold.py`) | the same LM (ESM-2 3B) under its published folding trunk and structure module: the single-sequence reference for everything downstream of the LM | done 2026-10-04: fold **0.751 / 0.778** over the 78 against the book run's 0.627 / 0.646 — paired TM +0.132 [+0.101, +0.165], better on 71 of 78. On the 73 units folded from the full target sequence 0.770 against 0.647, +0.123 [+0.093, +0.157]; T1218 and T1269 (over 1,000 residues) do not fit a 16 GB card at any chunk size, and their five units are folded from an 800-residue window of the target (a sensitivity run outside the script: 0.84 / 0.91 / 0.91 / 0.88 / 0.93) |
+| ESMFold v1 (`scripts/demos/casp16_esmfold.py`) | the same LM (ESM-2 3B) under its published folding trunk and structure module: the single-sequence reference for everything downstream of the LM | done 2026-10-04, re-run 2026-10-08 with `--window 800`: fold **0.751 / 0.778** over the 78 against the book run's 0.627 / 0.646 — paired TM +0.132 [+0.103, +0.167] (`casp16_table.py` prints it per arm: seed 0, 2,000 resamples), better on 71 of 78. On the 73 units folded from the full target sequence 0.770 against 0.647, +0.123 [+0.093, +0.157]; T1218 and T1269 (1,164 and 1,410 residues) do not fit a 16 GB card at any chunk size, so their five units are folded from an 800-residue window centred on each unit (T1218-D2/D3 share 365–1164: 0.836 / 0.911; T1269-D1/D2/D3 from 1–800 / 160–959 / 559–1358: 0.912 / 0.881 / 0.926), the model renumbered to the target and `fold_scores.csv` carrying a `window` column; T1220s1 and T1210 (1,711 and 1,770 residues) are windowed the same way for units outside the 78 |
 | one-hot residues, no LM (`fs=onehot`, dim 30) | the ResNet without the LM | done: val 17.1 %, EUs 0.252 (0.27 / 0.24 / 0.17), fold 0.319 / 0.228, hand a coin flip (39 of 78 mirrors better) |
 | 64 ch · headline / purged / seed 2 | noise, templates | done: 0.585 / 0.599 / 0.597 |
 | 128 ch · 30 ep | capacity | done: 0.629 |
@@ -1117,3 +1141,41 @@ Day 6–7: the fold; the section + figure + wiring (§6, §9) with the proposed 
   untouched). Working tree only: nothing staged, nothing committed. All four cards idle.
 - 2026-10-04 (late): the MSA route parked (Brett: "we'll come back to it"); §11a carries it as a resumable
   plan — the decision, the measured coverage, the unchecked items, six steps in order, the constraints.
+- 2026-10-08: the section. Audit first (the demo existed only in this plan: no book section, no yaml row, no
+  README rows, figures from 10-03, 33 untracked logs); then, Brett: "let's land this stuff + do the latex
+  bits … 10.3.7 is where I'll have you put it / pull the alphafold bestiary entry into there", "any code you
+  think we need let's do that + will need an appendix a entry", "like the second graphic but chop the number
+  of ablations in half". Book: §10.3.7 `sec:bestiary_structure` (intro, the net and the three changes
+  against the segmentation demo, figure, the bracket table, the lever paragraph, the twelve-row ablation
+  chart, the gap, what it is not, four gates, `thm:pairTile_vjp`, the Evoformer entry moved under it);
+  §10.1 `layer:pairTile` (counts 25 / 23 / three codegen-backed); the §10.3 and NQS intros; Appendix A's
+  item and two table rows. Repo: `casp16_ablation_figure.py` default = twelve rows, `--full` = all 23;
+  `casp16_esmfold.py --window`; `formalization.yaml` row + alignment statement (87 → 88); the comparator
+  tier regenerated with `pdiv_tileWPair`; README row (and the chapter-10 numbers, which still had the games
+  in 10.3); demos/README section + layout line; `demo_slate.md` rows; the untracked logs and run dirs
+  tracked; figures regenerated on the book run and copied to `blueprint/src/figures/demos/`.
+- 2026-10-08 (review round): Brett: "chop the Theorem / don't need a definition in there + can you explicitly link
+  the Ch5 resnet (see how other demos do it) + what would you say to a 'Building the CASP16 dataset' section".
+  `thm:pairTile_vjp` removed (the section and Definition 157 name `Proofs/Foundation/PairTile.lean` instead; the
+  yaml row and the comparator entry stay); the net sentence now reads "Chapter~\ref{chap:residual}'s ResNet with its
+  strides removed --- sixteen of its basic blocks at 128 channels, `residualBlock 128 128 16 1`"; Appendix A gains
+  "Building the CASP16 dataset." after the GWOSC note (sources, the chain list and the purge decision, fetch, labels,
+  the language-model pass, packing and its gate, the units' census, the scorer's validation, the venv, 67 GB); the
+  Appendix A item now says the fetched field models are for the three targets the scorer is validated on (not the
+  featured trio, which changed on 10-02).
+- 2026-10-08 (prune, Brett: "do the prune"): the 34 `.lake/build/distogram_*_targets` dirs held no accumulators
+  (finish_run.sh drops them) — the 48 GB was 2,688 `*.pred.npz`, the assembled per-unit maps. Deleted the 2,520 outside
+  the book run (e100) and its 30-epoch twin (queue22): 45 GB back, the tree is 4.9 GB, every arm's `table.csv` /
+  `fold_scores*.csv` / `map_scores.csv` and fold PDBs stay, the 12-row and 23-row charts regenerate byte-identical from
+  them, and every arm's `_params.bin` / `_bn_stats.bin` is still in `.lake/build`, so `distogram-casp predict` rebuilds
+  any arm's maps in about a minute if a re-fold is ever wanted. The two 35M-era arms never folded (purged, seed 2) and
+  the two ensembles have no `map_scores.csv`; nothing reads them.
+- 2026-10-08 (ESMFold window run; Brett: "that's fine you can run it / might as well do it right"): all four cards
+  were idle, so `esmfold_window.sh` ran `casp16_esmfold.py --window 800` on GPU 0 — T1218, T1269, T1220s1 and T1210
+  fail at every chunk size and fold per unit from centred 800-residue windows (182 s each), every unit rescored (82
+  rows, `window` column). First pass scored T1269-D2 from the 1–800 window (the first covering file, 0.870); the
+  script now takes the covering window centred nearest the unit (160–959, 0.881) and `--score-only` rescored. Over
+  the 78: 0.751 / 0.778 vs 0.627 / 0.646, +0.132 [+0.103, +0.167], better on 71 — the §10 row to the digit, the
+  interval's digits now from `casp16_table.py` (paired ESMFold line per arm, seed 0 / 2,000 resamples; its ESMFold
+  summary row now counts the units every arm folded, 78, not the union, 80). Book, demos/README and §10/§11 carry
+  [+0.103, +0.167].

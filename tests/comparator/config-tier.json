@@ -3,6 +3,7 @@
     "solution_module": "SolutionTier",
     "theorem_names": [
         "chk_bn_input_grad_correct",
+        "chk_pdiv_tileWPair",
         "chk_resnet50ForwardBFullHasVJPAt_correct",
         "chk_vitTinyHasVJP_correct",
         "chk_mnv4FwdGraphBFull_faithful",

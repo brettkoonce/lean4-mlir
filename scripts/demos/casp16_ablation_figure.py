@@ -4,8 +4,10 @@ mean paired difference to the baseline (ESM-2 650M · 64 ch · crop 64 · 30 ep)
 units, with a 95 % bootstrap interval over units, in three columns — top-L/5 long-range contact
 precision over the 84 units, and the fold's Cβ-lDDT and TM-score over the 78 units folded by every
 arm (≤ 512 residues). Arms whose fold used the orientation restraints say so. Rows whose
-prediction directory is missing are skipped (an arm still training).
-  .venv-casp/bin/python scripts/demos/casp16_ablation_figure.py [out.png]"""
+prediction directory is missing are skipped (an arm still training). The default is the book's
+twelve rows, the chain of levers from the baseline to the book run and the swaps beneath it;
+`--full` draws every arm of the plan's §10 table.
+  .venv-casp/bin/python scripts/demos/casp16_ablation_figure.py [out.png] [--full]"""
 import csv, sys
 from pathlib import Path
 import numpy as np
@@ -18,6 +20,20 @@ BLUE, INK, MUTED, PAPER = "#2a78d6", "#1f1e1b", "#6b6963", "#fbfbf8"
 BASE = "r16x64_esm650_train_full_e30-esm650"
 # label, prediction dir (under .lake/build/distogram_<…>_targets), fold file
 ROWS = [
+    ("the book run: the row below at 100 epochs",      "r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
+    ("3B + plane + 128 ch + crop 96 + heads, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e30-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
+    ("3B + plane + 128 ch + crop 96, no heads",         "r16x128_esm3b_pair1_train_full_e30-esm3b-crop96-pair1", "fold_scores.csv"),
+    ("3B + 128 ch + crop 96, no plane",                 "r16x128_esm3b_train_full_e30-esm3b-crop96", "fold_scores.csv"),
+    ("3B + the 3B contact head's plane, 64 ch",         "r16x64_esm3b_pair1_train_full_e30-esm3b-pair1", "fold_scores.csv"),
+    ("+ 128 ch + crop 96",                              "r16x128_esm650_train_full_e30-esm650-crop96", "fold_scores.csv"),
+    ("+ the 650M contact head's plane",                 "r16x64_esm650_pair1_train_full_e30-esm650-pair1", "fold_scores.csv"),
+    ("Baseline: ESM-2 650M · 64 ch · crop 64 · 30 ep", BASE, "fold_scores.csv"),
+    ("seed 2",                                         "r16x64_esm650_train_full_e30-esm650-s2", "fold_scores.csv"),
+    ("ESM-2 3B in place of 650M",                      "r16x64_esm3b_train_full_e30-esm3b", "fold_scores.csv"),
+    ("ESM-2 35M in place of 650M",                     "r16x64_train_full_e30", "fold_scores.csv"),
+    ("one-hot residues, no language model",            "r16x64_onehot_train_full_e30-onehot", "fold_scores.csv"),
+]
+ROWS_FULL = [
     ("the same at 100 epochs: the book run, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e100-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
     ("3B + plane + 128 ch + crop 96 + heads, ω/φ fold", "r16x128_esm3b_orient_pair1_train_full_e30-esm3b-crop96-pair1-orient", "fold_scores_orient.csv"),
     ("3B + plane + 128 ch + crop 96", "r16x128_esm3b_pair1_train_full_e30-esm3b-crop96-pair1", "fold_scores.csv"),
@@ -69,7 +85,9 @@ def paired(a, b, rng, n=2000):
 
 
 if __name__ == "__main__":
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "demos/figures/casp16_ablation.png")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    out = Path(args[0] if args else "demos/figures/casp16_ablation.png")
+    ROWS = ROWS_FULL if "--full" in sys.argv else ROWS
     rng = np.random.RandomState(0)
     base_prec, base_fold = load(BASE, "fold_scores.csv")
     base_l = {k: v[0] for k, v in base_fold.items()}; base_t = {k: v[1] for k, v in base_fold.items()}

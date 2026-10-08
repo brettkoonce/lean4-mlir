@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Architectures.BatchNorm
+import LeanMlir.Proofs.Foundation.PairTile
 import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP
 import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
@@ -82,6 +83,14 @@ theorem chk_bn_input_grad_correct :
       (0 : ℝ) < ε →
         ∀ (x dy : Proofs.Vec n) (i : Fin n),
           Proofs.bnGradInput n ε γ x dy i = ∑ j : Fin n, Proofs.pdiv (Proofs.bnForward n ε γ β) x i j * dy j := by sorry
+
+/-- `Proofs.PairTile.pdiv_tileWPair` -/
+theorem chk_pdiv_tileWPair :
+    ∀ {L D C K : ℕ} (Xi Xj : Proofs.Mat L D) (Wj : Proofs.Mat D C)
+      (P : Proofs.Vec (L * (L * K))) (v : Proofs.Vec (D * C)) (k : Fin (D * C)) (o : Fin (L * (L * C) + L * (L * K))),
+      Proofs.pdiv (Proofs.PairTile.tileWPair Xi Xj Wj P) v k o =
+        Sum.elim (fun (t : Fin (L * (L * C))) => Proofs.pdiv (Proofs.PairTile.tileW Xi Xj Wj) v k t)
+          (fun (_ : Fin (L * (L * K))) => (0 : ℝ)) ((Equiv.symm finSumFinEquiv) o) := by sorry
 
 /-- `Proofs.resnet50ForwardBFullHasVJPAt_correct` -/
 theorem chk_resnet50ForwardBFullHasVJPAt_correct :

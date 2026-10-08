@@ -127,11 +127,24 @@ if __name__ == "__main__":
             m = by_diff(rows, "esm_p")
             print(f"{head:44s} {'':>5s} {m[0]:6.3f} {m[1]:5.3f} {m[2]:5.3f} {m[3]:5.3f} |{nomap}")
     ef = ROOT / "esmfold" / "fold_scores.csv"
+    esm_tm = {}
     if ef.exists():
-        folded = {r["eu"] for f in glob.glob(".lake/build/distogram_*_targets/fold_scores*.csv") for r in csv.DictReader(open(f))}
+        sets = [{r["eu"] for r in csv.DictReader(open(f))} for f in glob.glob(".lake/build/distogram_*_targets/fold_scores*.csv")]
+        folded = set.intersection(*sets) if sets else set()   # the units every arm folded (≤ 512 residues)
         rows = [r for r in csv.DictReader(open(ef)) if not folded or r["eu"] in folded]
+        esm_tm = {r["eu"]: float(r["tm"]) for r in csv.DictReader(open(ef))}
         print(f"{'ESMFold v1 (ESM-2 3B under its own trunk)':44s} {'':>5s} {'':>6s} {'':>5s} {'':>5s} {'':>5s} |{nomap}"
               f" {np.mean([float(r['cb_lddt']) for r in rows]):12.3f} {np.mean([float(r['tm']) for r in rows]):6.3f} {len(rows):3d} |")
+
+    def vs_esmfold(rows):
+        """ESMFold's TM minus the arm's, paired over the units both folded: mean, a 95 % bootstrap interval
+        over units (seed 0, 2,000 resamples, as the ablation chart), and how many units ESMFold wins."""
+        d = np.array([esm_tm[r["eu"]] - float(r["tm"]) for r in rows if r["eu"] in esm_tm])
+        if len(d) == 0:
+            return ""
+        rng = np.random.RandomState(0)
+        bs = np.array([d[rng.randint(0, len(d), len(d))].mean() for _ in range(2000)])
+        return f"ESMFold − this fold, TM {d.mean():+.3f} [{np.percentile(bs, 2.5):+.3f}, {np.percentile(bs, 97.5):+.3f}] over {len(d)}, ESMFold better on {(d > 0).sum()}"
     for d in sorted(glob.glob(".lake/build/distogram_*_targets")):
         d = Path(d); pfx = str(d)[:-len("_targets")]
         arm = d.name[len("distogram_"):-len("_targets")]
@@ -146,6 +159,7 @@ if __name__ == "__main__":
         ms = map_scores(d)
         col = lambda k: np.mean([float(r[k]) for r in ms if r[k] != ""])
         line += f" {col('map_lddt'):8.3f} {col('recall'):6.3f} {col('top_l'):5.3f} |" if ms else nomap
+        esm_lines = []
         for sfx in ("", "_orient"):
             ff = d / f"fold_scores{sfx}.csv"
             if ff.exists():
@@ -153,10 +167,14 @@ if __name__ == "__main__":
                 if rows and "cb_lddt" in rows[0]:
                     line += f" {np.mean([float(r['cb_lddt']) for r in rows]):12.3f} {np.mean([float(r['tm']) for r in rows]):6.3f} {len(rows):3d}" + (" (orient)" if sfx else "")
                     if not sfx: line += " |"
+                    if esm_tm:
+                        esm_lines.append(f"    {'fold' + sfx:12s} {vs_esmfold(rows)}")
         acc = orient_acc(d)
         if acc is not None:
             line += f"  {acc[0]:.2f} / {acc[1]:.2f} / {acc[2]:.2f}"
         print(line)
+        for l in esm_lines:
+            print(l)
         if a.field:
             for sfx in ("", "_orient"):
                 if (d / f"fold_scores{sfx}.csv").exists():

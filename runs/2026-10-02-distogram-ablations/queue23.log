@@ -1,0 +1,8 @@
+[06:42] 3B × 64 ch × 100 ep, pair=1, on GPU 0
+[11:01] trained: trained: 82200 steps in 15523 s -> .lake/build/distogram_r16x64_esm3b_pair1_train_full_e100-esm3b-pair1_params.bin
+medium: Cβ-lDDT mean 0.608 median 0.600  TM mean 0.584 median 0.605  (44 EUs, mirror better on 4)
+hard  : Cβ-lDDT mean 0.462 median 0.409  TM mean 0.496 median 0.444  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.612 median 0.630  TM mean 0.617 median 0.678  (78 EUs, mirror better on 6)
+-> .lake/build/distogram_r16x64_esm3b_pair1_train_full_e100-esm3b-pair1_targets/fold_scores.csv
+[11:26] done .lake/build/distogram_r16x64_esm3b_pair1_train_full_e100-esm3b-pair1_targets
+[11:26] queue23 done

@@ -1,0 +1,31 @@
+pool: 27690 chains, 6,442,867 residues, width 2569 -> (no features) + contact planes -> data/casp16/packed/pool_pair_esm3b.bin; 0 done, 27690 to embed in shard 0/1
+  1069/27690  4261 tok/s  eta 6 min
+  2052/27690  4274 tok/s  eta 6 min
+  3039/27690  4255 tok/s  eta 7 min
+  4003/27690  4237 tok/s  eta 7 min
+  5008/27690  4212 tok/s  eta 8 min
+  6000/27690  4184 tok/s  eta 8 min
+  7003/27690  4152 tok/s  eta 8 min
+  8007/27690  4127 tok/s  eta 8 min
+  9001/27690  4097 tok/s  eta 8 min
+  10013/27690  4066 tok/s  eta 8 min
+  11005/27690  4034 tok/s  eta 8 min
+  12006/27690  4000 tok/s  eta 8 min
+  13003/27690  3956 tok/s  eta 8 min
+  14001/27690  3913 tok/s  eta 8 min
+  15003/27690  3868 tok/s  eta 8 min
+  16000/27690  3821 tok/s  eta 7 min
+/home/skoonce/lean/klawd_max_power/lean4-jax-mlir/scripts/datasets/casp16_embed.py:58: RuntimeWarning: invalid value encountered in cast
+  return np.clip(np.rint(128 + 16 * (np.log(p) - np.log1p(-p))), 0, 255).astype(np.uint8)
+  17003/27690  3772 tok/s  eta 7 min
+  18003/27690  3725 tok/s  eta 7 min
+  19003/27690  3681 tok/s  eta 7 min
+  20003/27690  3629 tok/s  eta 6 min
+  21002/27690  3580 tok/s  eta 6 min
+  22001/27690  3531 tok/s  eta 5 min
+  23000/27690  3473 tok/s  eta 4 min
+  24000/27690  3426 tok/s  eta 4 min
+  25000/27690  3359 tok/s  eta 3 min
+  26000/27690  3293 tok/s  eta 2 min
+  27000/27690  3262 tok/s  eta 1 min
+27690 chains, 6442867 residues in 1989 s -> data/casp16/packed/pool_pair_esm3b.bin (1.89 GB)

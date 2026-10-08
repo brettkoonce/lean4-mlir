@@ -1,0 +1,12 @@
+pool: 27690 chains, 6,442,867 residues, width 1289 -> (no features) + contact planes -> data/casp16/packed/pool_pair_esm650.bin; 6530 done, 10580 to embed in shard 0/2
+  1013/10580  5110 tok/s  eta 4 min
+  2008/10580  5100 tok/s  eta 4 min
+  3009/10580  5050 tok/s  eta 4 min
+  4004/10580  4988 tok/s  eta 4 min
+  5002/10580  4909 tok/s  eta 4 min
+  6003/10580  4826 tok/s  eta 3 min
+  7001/10580  4740 tok/s  eta 3 min
+  8000/10580  4657 tok/s  eta 2 min
+  9000/10580  4559 tok/s  eta 1 min
+  10000/10580  4440 tok/s  eta 1 min
+10580 chains, 2922042 residues in 664 s -> data/casp16/packed/pool_pair_esm650.bin (1.89 GB)

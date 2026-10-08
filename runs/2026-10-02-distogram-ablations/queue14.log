@@ -1,0 +1,25 @@
+[20:29] 3B chain; 135 GB free
+[20:29] embed 3B -> pool in four shards; the EUs on the CPU
+  shard 0: 6923 chains, 1611586 residues in 430 s -> data/casp16/packed/pool_esm3b_feat.bin (33.10 GB)
+  shard 1: 6923 chains, 1620250 residues in 433 s -> data/casp16/packed/pool_esm3b_feat.bin (33.10 GB)
+  shard 2: 6922 chains, 1611817 residues in 425 s -> data/casp16/packed/pool_esm3b_feat.bin (33.10 GB)
+  shard 3: 6922 chains, 1599214 residues in 427 s -> data/casp16/packed/pool_esm3b_feat.bin (33.10 GB)
+  targets: all 84 EUs: mean 0.759, median 0.828; residues observed 0.982; name mismatches 0
+[20:37] pack esm3b targets + valsub
+targets: 84 EUs (skipped ['T1249v2-D1'])
+valsub: 24 val chains of 80–200 residues in the targets format
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/packed: 64.25 GB in 1 s; feature set esm3b, width 2569, label classes 66, index row = 4 × i64 (feat off, lab off, L, csv row)
+[20:37] train esm3b: 64 ch on GPU 0, 128 ch × crop 96 on GPU 1
+[21:55] trained 64 ch: trained: 24660 steps in 4632 s -> .lake/build/distogram_r16x64_esm3b_train_full_e30-esm3b_params.bin
+medium: Cβ-lDDT mean 0.576 median 0.559  TM mean 0.547 median 0.516  (44 EUs, mirror better on 2)
+hard  : Cβ-lDDT mean 0.438 median 0.391  TM mean 0.471 median 0.430  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.581 median 0.592  TM mean 0.583 median 0.617  (78 EUs, mirror better on 3)
+-> .lake/build/distogram_r16x64_esm3b_train_full_e30-esm3b_targets/fold_scores.csv
+[22:19] done .lake/build/distogram_r16x64_esm3b_train_full_e30-esm3b_targets
+[03:00] trained 128 ch × crop 96: trained: 49320 steps in 22972 s -> .lake/build/distogram_r16x128_esm3b_train_full_e30-esm3b-crop96_params.bin
+medium: Cβ-lDDT mean 0.605 median 0.595  TM mean 0.574 median 0.535  (44 EUs, mirror better on 4)
+hard  : Cβ-lDDT mean 0.456 median 0.398  TM mean 0.485 median 0.446  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.609 median 0.629  TM mean 0.611 median 0.666  (78 EUs, mirror better on 7)
+-> .lake/build/distogram_r16x128_esm3b_train_full_e30-esm3b-crop96_targets/fold_scores.csv
+[03:26] done .lake/build/distogram_r16x128_esm3b_train_full_e30-esm3b-crop96_targets
+[03:26] queue14 done

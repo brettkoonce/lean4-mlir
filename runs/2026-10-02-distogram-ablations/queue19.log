@@ -1,0 +1,14 @@
+[23:50] 3B × 64 ch × 30 ep, pair=1 orient=1, on GPU 3
+[01:09] trained: trained: 24660 steps in 4683 s -> .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_params.bin
+medium: Cβ-lDDT mean 0.588 median 0.592  TM mean 0.574 median 0.534  (44 EUs, mirror better on 3)
+hard  : Cβ-lDDT mean 0.445 median 0.378  TM mean 0.489 median 0.419  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.594 median 0.612  TM mean 0.611 median 0.671  (78 EUs, mirror better on 4)
+-> .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_targets/fold_scores.csv
+[01:36] done .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_targets
+[01:36] ω/φ fold .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_targets
+easy  : Cβ-lDDT mean 0.632 median 0.699  TM mean 0.700 median 0.770  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.598 median 0.596  TM mean 0.595 median 0.603  (44 EUs, mirror better on 1)
+hard  : Cβ-lDDT mean 0.455 median 0.385  TM mean 0.502 median 0.423  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.602 median 0.619  TM mean 0.628 median 0.692  (78 EUs, mirror better on 2)
+-> .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_targets/fold_scores_orient.csv
+[01:51] queue19 done

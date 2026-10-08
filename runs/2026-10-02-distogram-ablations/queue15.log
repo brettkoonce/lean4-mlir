@@ -1,0 +1,14 @@
+[20:41] 650M contact-head planes -> pool_pair_esm650.bin, two shards on GPUs 2, 3
+  shard 0: 10580 chains, 2922042 residues in 664 s -> data/casp16/packed/pool_pair_esm650.bin (1.89 GB)
+  shard 1: 10580 chains, 2912958 residues in 670 s -> data/casp16/packed/pool_pair_esm650.bin (1.89 GB)
+[20:52] pack the EUs' and valsub's planes
+    with open(out / f"targets_pair{sfx}.bin", "wb") as f:
+NameError: name 'sfx' is not defined
+[20:52] train 650M × 64 ch × 30 ep, pair=1, on GPU 2
+[22:03] trained: trained: 24660 steps in 4199 s -> .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_params.bin
+medium: Cβ-lDDT mean 0.579 median 0.589  TM mean 0.544 median 0.512  (44 EUs, mirror better on 6)
+hard  : Cβ-lDDT mean 0.437 median 0.371  TM mean 0.464 median 0.413  (5 EUs, mirror better on 1)
+all   : Cβ-lDDT mean 0.584 median 0.610  TM mean 0.582 median 0.621  (78 EUs, mirror better on 8)
+-> .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets/fold_scores.csv
+[22:28] done .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets
+[22:28] queue15 done

@@ -1,0 +1,8 @@
+pool: 27690 chains, 6,442,867 residues, width 2569 -> data/casp16/packed/pool_esm3b_feat.bin; 0 done, 6923 to embed in shard 0/4
+  1065/6923  4284 tok/s  eta 2 min
+  2009/6923  4234 tok/s  eta 2 min
+  3011/6923  4207 tok/s  eta 2 min
+  4030/6923  4112 tok/s  eta 2 min
+  5011/6923  4012 tok/s  eta 1 min
+  6003/6923  3890 tok/s  eta 1 min
+6923 chains, 1611586 residues in 430 s -> data/casp16/packed/pool_esm3b_feat.bin (33.10 GB)

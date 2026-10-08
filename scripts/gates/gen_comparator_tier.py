@@ -43,6 +43,7 @@ OUT  = os.path.join(ROOT, 'tests', 'comparator')
 # relative to an implicit `open Proofs`), which is why this list is not read from it.
 DECLS = [
     "Proofs.bn_input_grad_correct",
+    "Proofs.PairTile.pdiv_tileWPair",
     "Proofs.resnet50ForwardBFullHasVJPAt_correct",
     "Proofs.vitTinyHasVJP_correct",
     "Proofs.StableHLO.mnv4FwdGraphBFull_faithful",
@@ -99,6 +100,7 @@ DECLS = [
 ]
 MODULES = [
     "LeanMlir.Proofs.Architectures.BatchNorm",
+    "LeanMlir.Proofs.Foundation.PairTile",
     "LeanMlir.Proofs.Certificates.LipschitzCert.Basic",
     "LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP",
     "LeanMlir.Proofs.Certificates.Smoothing.Gaussian",

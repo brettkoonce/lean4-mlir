@@ -9,7 +9,7 @@ demo that gets built gets its own plan.
 
 | slot | today | proposed | state |
 |---|---|---|---|
-| Beyond vision | NQS on the Ising chain | CASP16 distogram | `casp16_distogram_demo.md`; the section still has to be written |
+| Beyond vision | NQS on the Ising chain, then CASP16 as §10.3.7 (landed 2026-10-08) | — | `casp16_distogram_demo.md`; the Evoformer entry moved under §10.3.7; whether NQS stays here or moves to Physics is the open row below |
 | Player of games | blackjack, Pong, tic-tac-toe | Pong, **Leduc poker**, tic-tac-toe | `leduc_deep_cfr_demo.md`; blackjack is deleted once poker lands (its §8) |
 | Image generation | no demo (VAE/DCGAN/Pix2Pix/CycleGAN entries only) | LIDC-IDRI low-dose CT denoising | idea, §3 |
 | Quantum computing (new subsection) | — | surface-code decoder: a CNN against matching and the exact optimum | idea, §4 |
@@ -23,9 +23,10 @@ Decisions taken 2026-10-05:
   instrument stays in the section through tic-tac-toe, and poker adds exploitability.
 - **The third game is imperfect information** (Leduc, Deep CFR), not a cart-pole-style control task
   (PPO against LQR was considered; the user: "have seen a few times").
-- **CASP16 replaces NQS** in Beyond vision. Its section leads with the bracket — the 650M and
-  3B contact heads, the net, ESMFold, the CASP16 field — as GW leads with the matched
-  filter, because the net sits at 0.646 against ESMFold's 0.778.
+- **CASP16 joins Beyond vision** — 2026-10-08: added as §10.3.7 after NQS rather than in its place
+  (Brett: "10.3.7 is where I'll have you put it"). Its section leads with the bracket — the 3B
+  contact head, the net, ESMFold, the CASP16 field — as GW leads with the matched filter, because
+  the net sits at 0.646 against ESMFold's 0.778. Whether NQS then moves to Physics is still open.
 
 Cross-references the swaps break (`content.tex` lines as of 2026-10-05): NQS is cited at
 :17216 (tic-tac-toe) and :17699; NQS cites blackjack at :16757. The host-weight trick (target

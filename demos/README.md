@@ -4,7 +4,8 @@ Trainers and inference exes that ride on the chapter nets. The top-level `Main*T
 are the chapters themselves (MLP, CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT); these
 extend the same codegen path into the domains Chapter 10 of the book walks — recognition first
 (detection, industrial inspection, people, agriculture, segmentation), then beyond it
-(language, diffusion, physics, signal processing, a quantum ground state), and last the games
+(language, diffusion, physics, signal processing, a quantum ground state, a protein's
+shape), and last the games
 (blackjack, Pong, tic-tac-toe, the book's closing section) — in the chapter's order, each under
 the chapter's figure. Nothing here changes the codegen: every
 demo is the ordinary train step on a new input, loss or host loop.
@@ -842,6 +843,99 @@ draw. Numbers, gates, every arm's log and the h = 0.8 investigation are in
 
 ---
 
+## Structure — a distogram ResNet against the CASP16 field
+
+The pre-AlphaFold-2 recipe end to end, on a single sequence. A frozen protein language model
+(ESM-2 3B) supplies per-residue features and its own contact map; `pairTile` — two dense maps
+and an outer sum, the AlphaFold-1 / trRosetta stem as one `Layer`, K host pair planes
+concatenated behind its channels — tiles them into an L×L pair map; the chapter residual body
+at stride 1 (16 units, 128 ch) predicts a 66-bin Cβ–Cβ distance histogram per pair and
+trRosetta's three orientation heads (`perPixelMultiCE`: K masked per-pixel CE heads over one
+output, the labels packed mixed-radix into the segmentation ABI's one int32 plane);
+`casp16_fold.py` descends the histograms into a pseudo-Cβ trace, both hands, the hand by
+energy; and `casp16_score.py` scores it the way CASP16 scored the field — OpenStructure's
+lDDT and US-align's TM-score reproduce the official table to the printed digit on nine
+models. Training data is every PDB chain released before CASP16 opened (2024-05-01), one
+representative per 40 % cluster, 26,310 chains; the targets are CASP16's 84 Phase-1
+evaluation units, 78 of them folded. **The gap to the field is the story**: fold TM 0.646
+against ESMFold's 0.778 on the same language model and the field's median model at 0.892.
+
+`MainDistogramCasp.lean`; data `scripts/datasets/casp16_*.py` + `download_casp16.sh`; fold,
+score, table and figures `scripts/demos/casp16_*.py`; everything Python in `.venv-casp`. Plan:
+`planning/casp16_distogram_demo.md` (§10 the 30-arm ablation table, §11 the review, §11a the
+parked MSA route). One new layer and one new proof item
+(`LeanMlir/Proofs/Foundation/PairTile.lean`: the two weight VJPs, with and without host
+planes); no input gradient — the language model is outside the proof.
+
+```bash
+P=.venv-casp/bin/python
+scripts/datasets/download_casp16.sh                                   # sequences, structures, the score table, US-align, OST
+$P scripts/datasets/casp16_chain_list.py search && $P scripts/datasets/casp16_chain_list.py fetch \
+  && $P scripts/datasets/casp16_chain_list.py cluster && $P scripts/datasets/casp16_chain_list.py purge
+$P scripts/datasets/casp16_fetch_chains.py                            # backbones + Cβ per chain → data/casp16/pdb/
+$P scripts/datasets/casp16_labels.py --orient                         # 66-class distances + ω/θ/φ planes
+$P scripts/datasets/casp16_embed.py --model esm2_t36_3B_UR50D --out emb3b --half --pool-out --shard 0/4   # × 4 cards, 7 min
+$P scripts/datasets/casp16_embed.py --model esm2_t36_3B_UR50D --out emb3b --half --pair-out --max-pairs 400000
+$P scripts/datasets/casp16_targets.py --model esm2_t36_3B_UR50D --out targets_esm3b --device cpu
+$P scripts/datasets/casp16_pack.py --features esm3b --sets targets,valsub && $P scripts/datasets/casp16_pack.py --features esm3b --pair-only
+lake exe distogram-casp smoke                                         # FD check on the pair tile + eval ≡ train
+lake exe distogram-casp train list=train_full fs=esm3b dim=2569 epochs=100 batch=16 ch=128 units=16 crop=96 pair=1 orient=1 seed=1 tag=e100-esm3b-crop96-pair1-orient   # 21 h, one 4060 Ti
+runs/2026-10-02-distogram-ablations/finish_run.sh 0 list=train_full fs=esm3b dim=2569 crop=96 ch=128 units=16 pair=1 orient=1 tag=e100-esm3b-crop96-pair1-orient   # predict → assemble → fold → score
+$P scripts/demos/casp16_fold.py <targets dir> --orient --device cuda --max-len 512 && $P scripts/demos/casp16_fold_score.py <targets dir> --suffix orient   # the ω/φ fold
+$P scripts/demos/casp16_esmfold.py --window 800                       # the ESMFold reference row (fp16 LM; targets over 1,000 residues per unit from an 800-residue window)
+$P scripts/demos/casp16_table.py --field                              # the ablation table, each arm placed in the field
+$P scripts/demos/casp16_figure.py <targets dir> demos/figures/casp16_distogram.png --metric tm --all-units --fold orient --eus T1271s6-D1 T1295-D3 T1228v1-D3 --panel-a T1271s6-D1
+$P scripts/demos/casp16_ablation_figure.py                            # the twelve-row chart; --full for every arm
+```
+
+![A distogram ResNet against the CASP16 field](figures/casp16_distogram.png)
+
+Top-L/5 long-range contact precision over the 84 units; long-range recall at P > 0.5; the
+fold's Cβ-lDDT / TM over the 78 (the ω/φ-restrained fold where the arm has the heads):
+
+| arm | precision | recall | Cβ-lDDT | TM |
+|---|---:|---:|---:|---:|
+| one-hot residues, no language model, 64 ch | 0.252 | 0.001 | 0.319 | 0.228 |
+| ESM-2 35M / 150M / 650M / 3B contact head, nothing trained | 0.474 / 0.623 / 0.754 / 0.759 | | | |
+| ESM-2 650M features, 64 ch, crop 64, 30 ep (baseline) | 0.838 | 0.387 | 0.569 | 0.572 |
+| + the 650M contact head's plane (`pair=1`) | 0.856 | | 0.584 | 0.582 |
+| 3B + its plane, 128 ch, crop 96, 30 ep | 0.880 | 0.471 | 0.622 | 0.632 |
+| + orientation heads, ω/φ fold (the book config, 30 ep) | 0.877 | 0.474 | 0.628 | 0.645 |
+| **the same at 100 ep — the book run** | 0.873 | 0.476 | **0.627** | **0.646** |
+| ESMFold v1 (ESM-2 3B under its own trunk) | | | 0.751 | 0.778 |
+| CASP16 field, median first model per unit | | | | 0.892 |
+
+![What each lever buys](figures/casp16_ablation.png)
+
+⭐ **The language model is the lever** (35M 0.585 → 150M 0.735 → 650M 0.838 → 3B 0.840 at
+64 ch × 30 ep, each LM's own head 0.08–0.11 below the net), the LM's own contact map as a pair
+channel is the cheapest one (+0.018, +0.09 on the hard class, no cost per step), width and
+crop 96 stack on it, the orientation heads cost 0.003 of precision and buy +0.013 TM through
+the ω/φ fold, and the 100-epoch schedule buys nothing over 30 (paired differences −0.004 /
+−0.001 / +0.001, every CI across zero). Seeds move an arm by ≤ 0.002, ensembles add nothing,
+templates in the training set are worth nothing (purged list 0.841 vs 0.838), and the fold is
+converged — the true trace has *higher* energy than our fold under our own potential on 78/78
+units, so the map is the ceiling, not the optimizer. `casp16_ablation_full.png` has all 23 arms.
+
+⚠ **The gap.** TM 0.646 is the field's 3rd percentile (median model 0.892; per class
+0.945 / 0.883 / 0.656 vs ours 0.716 / 0.617 / 0.495). Sixteen units with top-L/5 precision
+< 0.85 fold to 0.34 vs the field's 0.83 (41 % of the gap; four are "easy" = a template
+exists, invisible to a single-sequence model); the other 62 fold to 0.72 vs 0.91. ESMFold —
+the same LM under its own trunk — is +0.132 TM [+0.103, +0.167], better on 71/78: 0.84 vs
+0.72 where our top contacts are right, 0.53 vs 0.34 where they are not. The head is the
+larger half of the gap; the alignment (what the field reads and ESMFold does not) is the
+other. The MSA route is planned and parked (plan §11a, OpenProteinSet for the alignments).
+
+Gates: the scorer reproduces the official lDDT / TM to the printed digit on nine field models
+(GDT_TS within a point); folding T1235-D1's *true* distogram gives TM 0.9999 and its mirror
+0.34 (lDDT 1.00 for both — lDDT is mirror-blind, TM is not); the packed pools are checked
+against the per-chain files and a 64-chain memorization probe must leave the separation
+prior; `smoke` finite-differences the pair tile's gradient against the step's first Adam
+moment and checks eval ≡ train. Queue scripts and every arm's logs:
+`runs/2026-10-02-distogram-ablations/`, `runs/2026-10-0{1,2,3}-distogram-*/`.
+
+---
+
 ## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, Deep CFR on Leduc poker, and AlphaZero on tic-tac-toe
 
 Four games written in Lean, each with its own exact instrument — the book's closing
@@ -1136,6 +1230,7 @@ demos/
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
 ├── MainGwDetect.lean                      # chapter-4 CNN vs the matched filter on LIGO O3a strain (signal processing)
 ├── MainNqsIsing.lean                      # neural quantum states: MLP/ViT/GPT wavefunctions on the Ising chain
+├── MainDistogramCasp.lean                 # distogram ResNet on frozen ESM-2 features, scored against the CASP16 field (structure)
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)
 ├── MainBlackjackEnv.lean                  # blackjack tables, play/dump/curve modes (RL rung 1; env in LeanMlir/Blackjack.lean)

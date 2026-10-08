@@ -1,0 +1,48 @@
+distogram r16x64-esm3b-orient-pair1: PairTile(L=64,2569→64+1pair) → Conv(65→64,1x1/1)+BN → Res16(64→64,s1) → Conv(64→132,1x1); 33 BN layers; list train_full, 30 epochs, batch 32, lr 0.001000, 1 crop(s) per chain per epoch, seed 1
+I1002 23:50:19.448435 3633577 service.cc:154] XLA service 0x7cebd4008390 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1002 23:50:19.448481 3633577 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1002 23:50:19.449978 3633577 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1002 23:50:19.450022 3633577 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1002 23:50:19.458263 3633577 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled .lake/build/distogram_r16x64_esm3b_orient_pair1_train_step.mlir (@main, 376 outputs, 1 replica) in 4418 ms
+[pjrt_ffi] compiled .lake/build/distogram_r16x64_esm3b_orient_pair1_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 239 ms
+  1525444 params (1525444 by NetSpec.totalParams), 4224 BN stat floats
+  26310 train chains, 1380 val chains; features 33103 MB, labels 1888 MB (66111 ms)
+    step 0: loss 39.224900 (810 ms so far)
+    step 1: loss 39.742700 (1018 ms so far)
+    step 2: loss 38.392000 (1182 ms so far)
+  epoch 1/30: loss 9.680100  val CE 2.471700  val top-L/5 LR precision 49.030000%  (146 s train, 6283 ms val, 177.900000 ms/step)
+  epoch 2/30: loss 5.961400  val CE 2.335900  val top-L/5 LR precision 50.920000%  (145 s train, 6034 ms val, 177.200000 ms/step)
+  epoch 3/30: loss 5.627800  val CE 2.270500  val top-L/5 LR precision 51.620000%  (145 s train, 5882 ms val, 177.200000 ms/step)
+  epoch 4/30: loss 5.466400  val CE 2.252400  val top-L/5 LR precision 51.960000%  (145 s train, 5931 ms val, 177.400000 ms/step)
+  epoch 5/30: loss 5.356100  val CE 2.266100  val top-L/5 LR precision 52.480000%  (145 s train, 6020 ms val, 176.800000 ms/step)
+  epoch 6/30: loss 5.283400  val CE 2.216200  val top-L/5 LR precision 52.710000%  (146 s train, 5946 ms val, 177.600000 ms/step)
+  epoch 7/30: loss 5.221900  val CE 2.181700  val top-L/5 LR precision 53.090000%  (146 s train, 5918 ms val, 177.800000 ms/step)
+  epoch 8/30: loss 5.197500  val CE 2.175500  val top-L/5 LR precision 53.240000%  (145 s train, 5980 ms val, 177.300000 ms/step)
+  epoch 9/30: loss 5.128700  val CE 2.164700  val top-L/5 LR precision 53.510000%  (145 s train, 5981 ms val, 177.600000 ms/step)
+  epoch 10/30: loss 5.111100  val CE 2.152300  val top-L/5 LR precision 53.430000%  (145 s train, 5983 ms val, 177.500000 ms/step)
+  epoch 11/30: loss 5.090200  val CE 2.157600  val top-L/5 LR precision 53.540000%  (146 s train, 6030 ms val, 177.700000 ms/step)
+  epoch 12/30: loss 5.048700  val CE 2.151200  val top-L/5 LR precision 53.630000%  (145 s train, 5894 ms val, 176.900000 ms/step)
+  epoch 13/30: loss 5.019400  val CE 2.132600  val top-L/5 LR precision 53.790000%  (150 s train, 6207 ms val, 182.800000 ms/step)
+  epoch 14/30: loss 5.007100  val CE 2.134400  val top-L/5 LR precision 53.800000%  (152 s train, 6077 ms val, 185.900000 ms/step)
+  epoch 15/30: loss 4.988000  val CE 2.125400  val top-L/5 LR precision 53.770000%  (153 s train, 5960 ms val, 186.900000 ms/step)
+  epoch 16/30: loss 4.957600  val CE 2.124200  val top-L/5 LR precision 53.940000%  (152 s train, 6115 ms val, 185.500000 ms/step)
+  epoch 17/30: loss 4.943700  val CE 2.136300  val top-L/5 LR precision 53.850000%  (153 s train, 6157 ms val, 187.200000 ms/step)
+  epoch 18/30: loss 4.926600  val CE 2.117600  val top-L/5 LR precision 54.190000%  (152 s train, 5971 ms val, 185.600000 ms/step)
+  epoch 19/30: loss 4.910700  val CE 2.113500  val top-L/5 LR precision 54.190000%  (152 s train, 6122 ms val, 185.900000 ms/step)
+  epoch 20/30: loss 4.889100  val CE 2.128000  val top-L/5 LR precision 54.200000%  (152 s train, 6044 ms val, 185.900000 ms/step)
+  epoch 21/30: loss 4.872100  val CE 2.104200  val top-L/5 LR precision 54.120000%  (152 s train, 6044 ms val, 185.500000 ms/step)
+  epoch 22/30: loss 4.873100  val CE 2.103600  val top-L/5 LR precision 54.320000%  (153 s train, 6240 ms val, 186.200000 ms/step)
+  epoch 23/30: loss 4.849700  val CE 2.100500  val top-L/5 LR precision 54.230000%  (152 s train, 6167 ms val, 185.600000 ms/step)
+  epoch 24/30: loss 4.841400  val CE 2.100800  val top-L/5 LR precision 54.260000%  (152 s train, 5951 ms val, 185.500000 ms/step)
+  epoch 25/30: loss 4.835000  val CE 2.101500  val top-L/5 LR precision 54.200000%  (153 s train, 6149 ms val, 186.500000 ms/step)
+  epoch 26/30: loss 4.830100  val CE 2.097100  val top-L/5 LR precision 54.210000%  (153 s train, 6162 ms val, 186.600000 ms/step)
+  epoch 27/30: loss 4.837500  val CE 2.096200  val top-L/5 LR precision 54.280000%  (152 s train, 6016 ms val, 185.800000 ms/step)
+  epoch 28/30: loss 4.831400  val CE 2.095700  val top-L/5 LR precision 54.240000%  (153 s train, 6082 ms val, 187.000000 ms/step)
+  epoch 29/30: loss 4.819300  val CE 2.095300  val top-L/5 LR precision 54.240000%  (153 s train, 6104 ms val, 187.000000 ms/step)
+  epoch 30/30: loss 4.814900  val CE 2.095000  val top-L/5 LR precision 54.230000%  (152 s train, 5978 ms val, 185.500000 ms/step)
+predict: lake exe distogram-casp predict list=train_full fs=esm3b dim=2569 ch=64 units=16 pair=1 orient=1 tag=e30-esm3b-pair1-orient
+trained: 24660 steps in 4683 s -> .lake/build/distogram_r16x64_esm3b_orient_pair1_train_full_e30-esm3b-pair1-orient_params.bin

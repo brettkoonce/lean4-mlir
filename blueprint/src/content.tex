@@ -13834,12 +13834,13 @@ asymptote we don't approach.
 \section{Bestiary-only \texttt{Layer} primitives}
 \label{sec:bestiary_primitives}
 
-Twenty-four \texttt{Layer} constructors exist only for the bestiary. The two
+Twenty-five \texttt{Layer} constructors exist only for the bestiary. The two
 plain ones, \texttt{.separableConv} (Xception, QANet) and
 \texttt{.fireModule} (SqueezeNet), are described in their entries; the
-twenty-two bundled ones are defined here. Two of these are codegen-backed,
+twenty-three bundled ones are defined here. Three of these are codegen-backed,
 \texttt{.unetDown} and \texttt{.unetUp}, which the segmentation and diffusion
-demos train through; the rest have no emitter, the reference codegen refuses a spec
+demos train through, and \texttt{.pairTile}, the structure demo's stem; the rest
+have no emitter, the reference codegen refuses a spec
 that contains one, and their goal
 is pedagogical shape and parameter accounting, not training runs.
 
@@ -14023,6 +14024,22 @@ is pedagogical shape and parameter accounting, not training runs.
   $2 \times$ \texttt{(conv3$\times$3 + BN + ReLU)}. Signature:
   \texttt{unetUp (ic oc : Nat)}, where \texttt{oc} is both the output
   channel count and the expected skip width.
+\end{definition}
+
+\begin{definition}[Pair tile]
+  \label{layer:pairTile}
+  \lean{Layer.pairTile}
+  \leanok
+  The AlphaFold-1 / trRosetta stem as one layer: the two per-residue
+  blocks of a crop, $[B, 2 \cdot L \cdot D]$ on the host, through two
+  dense maps $D \to C$ (one parameter group, no bias --- the
+  \texttt{convBn} after it carries the pair map's bias) and outer-summed
+  into the $[B, C, L, L]$ pair map; $K$ host pair planes --- a language
+  model's contact map, a template distogram --- ride behind the blocks and
+  are concatenated as the map's last $K$ channels. Codegen-backed: the
+  structure demo trains through it, and its two weight VJPs are
+  \texttt{Proofs/Foundation/PairTile.lean}. Signature: \texttt{pairTile (seqLen inDim outDim : Nat)
+  (pairIn : Nat := 0)}.
 \end{definition}
 
 \begin{definition}[Atrous Spatial Pyramid Pooling]
@@ -15799,10 +15816,11 @@ def samEncoderH : NetSpec where
 \label{sec:bestiary_beyond_recognition}
 
 The training signal stops being a label. It is the next token, the noise
-added to an image, a density, a chirp buried in detector noise, an energy
---- and where the field has an exact answer, quadrature, the matched
-filter's closed form, a solved spin chain, the demo is scored against it
-rather than against a held-out set. The networks are the same kit; what
+added to an image, a density, a chirp buried in detector noise, an energy,
+the distance between two residues of a protein --- and where the field has
+an exact answer, quadrature, the matched filter's closed form, a solved spin
+chain, or a blind competition's table, the demo is scored against it rather
+than against a held-out set. The networks are the same kit; what
 changes is the outer loop, and the catalogue beside each demo is that
 domain's architectures. The games, whose signal is a reward and whose
 answers are theorems about the rules, are \S~\ref{sec:bestiary_game_theory}.
@@ -16896,11 +16914,11 @@ def whisperSmall : NetSpec where
 \label{sec:bestiary_beyond}
 
 Architectures where the task domain is neither a 2D image nor a token
-sequence: a wavefunction, a radiance field, a shared embedding space, a
-protein. The demo points Chapter~\ref{chap:attention}'s transformer, as an
+sequence: a wavefunction, a radiance field, a shared embedding space.
+The demo points Chapter~\ref{chap:attention}'s transformer, as an
 encoder and as a decoder, at a quantum ground state, where there is no
 dataset at all and the ceiling is a solved model; the entries after it
-(NeRF, CLIP, LLaVA, the Evoformer) make the same point from the other side
+(NeRF, CLIP, LLaVA) make the same point from the other side
 --- several have essentially no architectural novelty, and the interesting
 work lives in the data, loss, or training procedure.
 
@@ -17147,6 +17165,214 @@ def llava15Projector : NetSpec where
     .dense 4096 4096 .identity
   ]
 \end{verbatim}
+
+\subsection{Structure --- demo: a distogram ResNet against the CASP16 field}
+\label{sec:bestiary_structure}
+
+Networks whose input is a protein's sequence and whose output is its
+shape. The demo is the recipe that held the field from 2018 to 2020 --- a
+deep two-dimensional residual network predicting a histogram of distances
+for every pair of residues, and a fold obtained by descending that
+histogram's negative log-likelihood --- with a frozen protein language
+model in place of the multiple-sequence alignment those methods read,
+scored on CASP16's targets beside the groups that predicted them blind.
+The entry after it is the architecture that ended that era.
+
+\paragraph{A residual network on residue pairs.} A protein is a string
+over twenty letters, and its fold is set by which residues end up near
+each other. Write the distance between the $\beta$-carbons of residues $i$
+and $j$ as a histogram over 64 bins from 2 to 22\,Å, one per pair:
+that $L \times L$ array of histograms is the \emph{distogram}, and
+AlphaFold~1 (Senior et al.\ 2020,
+\href{https://doi.org/10.1038/s41586-019-1923-7}{Nature 577, 706}) and
+trRosetta (Yang et al.\ 2020,
+\href{https://doi.org/10.1073/pnas.1914677117}{PNAS 117, 1496}) were
+exactly this shape: per-residue features tiled into an $L \times L$ pair
+tensor, a deep 2D ResNet, a histogram per pair, and a fold by gradient
+descent on the histogram's negative log-likelihood over coordinates. Those
+methods read a multiple-sequence alignment; here the per-residue features
+are the final-layer representation of ESM-2 (Lin et al.\ 2023,
+\href{https://doi.org/10.1126/science.ade2574}{Science 379, 1123}), a
+protein language model trained on sequences alone, frozen, $2{,}560$ wide
+at its 3B-parameter size, with the model's own contact map --- a logistic
+regression on its attention heads --- riding along as one pair channel.
+The input is a single sequence, and the language model runs once, outside
+the proof. The network is Chapter~\ref{chap:residual}'s ResNet with its strides
+removed --- sixteen of its basic blocks at 128 channels,
+\texttt{residualBlock 128 128 16 1} --- with one new layer in front (the pair
+tile, \S~\ref{layer:pairTile}: two dense maps and an outer sum) and a
+$1 \times 1$ head of 132 channels --- the 66-class distance head, which is
+the 64 bins, a ``beyond 22\,Å'' class and an ``unobserved'' class at
+weight zero, how a missing residue leaves the loss, and trRosetta's three
+orientation heads, the dihedrals $\omega$ and $\theta$ and the angle
+$\varphi$ between the two residues' $\mathrm{C}_\alpha$--$\mathrm{C}_\beta$
+bonds in $15^\circ$ bins. $5{,}418{,}244$ parameters. Training reads every
+protein chain the PDB released before CASP16 opened on 2024-05-01, one
+representative per 40\,\% sequence cluster, $26{,}310$ chains, as random
+$96 \times 96$ windows of their pair maps, 100 epochs in 21 hours on one
+RTX 4060 Ti; inference tiles the same window over a target at stride 32
+and averages the logits, so the trained artifact is the one that is
+scored. The fold is Adam on the smoothed negative log-likelihood of the
+predicted distances and angles over one pseudo-$\mathrm{C}_\beta$ point
+per residue, with a chain term and a clash term, from a classical-MDS
+start, in both mirror images. Three things change relative to the
+segmentation demo:
+
+\begin{itemize}
+  \item \textbf{The input is a pair map built on the host from a frozen
+    model's output.} The pair tile takes the two residue blocks of a crop,
+    $2 L D$ numbers per example, projects each through its own
+    $D \to C$ map and outer-sums them into the $[C, L, L]$ map; $K$ host
+    pair planes are concatenated behind the tile's channels. It is the one
+    new layer and the one new proof item,
+    \texttt{Proofs/Foundation/\allowbreak PairTile.lean}: the backward in each weight is the cotangent summed over the broadcast
+    axis, then contracted with the block --- the two \texttt{reduce} +
+    \texttt{dot\_general} pairs the emitter writes --- and there is no
+    input gradient, because the blocks are the language model's and it is
+    not trained. Everything downstream of the tile is the chapter's; the
+    demo's gradient evidence is the finite-difference check on the tile's
+    weights and the eval $\equiv$ train identity, not a whole-net step tie.
+  \item \textbf{The loss has four heads and the label is packed.}
+    \texttt{perPixelMultiCE} is the segmentation demo's weighted per-pixel
+    cross-entropy summed over $K$ heads of one output tensor, the $K$
+    labels carried mixed-radix in the one \texttt{int32} plane the
+    segmentation ABI already passes, each head's ``unobserved'' class at
+    weight zero. One sentence the fold needs: lDDT is a distance score and
+    cannot see a mirror image, TM-score superposes with a proper rotation
+    and can, and a fold from distances alone has that ambiguity --- the
+    true trace of T1235-D1 and its mirror both score a $\mathrm{C}_\beta$-lDDT of 1.00, at
+    TM-scores of 1.00 and 0.34. The $\omega$ dihedral is chiral, so with
+    the orientation heads the hand is the lower-energy one.
+  \item \textbf{The instrument is the field.} CASP16's Phase-1 targets ---
+    84 evaluation units whose experimental structures were released after
+    the predictions were in --- scored the way CASP scored them:
+    OpenStructure's lDDT and US-align's TM-score reproduce the official
+    table to the printed digit on nine field models, and our fold and
+    every group's model are reduced to the same pseudo-$\mathrm{C}_\beta$
+    atom before they are compared. The training set is the information the
+    field had, a date cut; purging the 82 chains homologous to a target is
+    an ablation, and is worth nothing. The single-sequence reference is
+    ESMFold, the same language model under the folding trunk its authors
+    trained for it.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/casp16_distogram.png}
+\caption{A distogram ResNet against the CASP16 field. (a) What the network
+is asked to find: the contact map of T1271s6-D1, a 93-residue target,
+black where two residues' $\beta$-carbons are within 8\,Å in the
+experimental structure. (b) The check: the expected distance of the
+predicted 64-bin histogram above the diagonal against the measured
+distance below it; the top-$L/5$ long-range contacts are all right on this
+unit. (c) The result: the TM-score of our fold on the three featured units
+beside every CASP16 group's first model, AF3-server, MULTICOM and ColabFold
+marked, and in the last row all 78 units, ours against the field's median
+model per unit.}
+\label{fig:casp16_distogram}
+\end{figure}
+
+\paragraph{The bracket on the CASP16 targets.} Top-$L/5$ long-range
+contact precision over the 84 evaluation units (a long-range pair is 24 or
+more residues apart; the number is the fraction of the $L/5$ most confident
+such pairs that are within 8\,Å), the recall of the true long-range
+contacts at $P > 0.5$, and the fold's $\mathrm{C}_\beta$-lDDT and TM-score over the 78
+units the fold and the field both cover:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l r r r r@{}}
+\hline
+arm & precision & recall & $\mathrm{C}_\beta$-lDDT & TM \\
+\hline
+one-hot residues, no language model, 64 ch         & 0.252 & 0.001 & 0.319 & 0.228 \\
+ESM-2 3B's own contact head, nothing trained       & 0.759 &       &       &       \\
+ESM-2 650M features, 64 ch, crop 64, 30 epochs     & 0.838 & 0.387 & 0.569 & 0.572 \\
+the book run: 3B, its plane, 128 ch, crop 96, heads, 100 epochs & $\mathbf{0.873}$ & $\mathbf{0.476}$ & $\mathbf{0.627}$ & $\mathbf{0.646}$ \\
+ESMFold v1: ESM-2 3B under its own trunk           &       &       & 0.751 & 0.778 \\
+CASP16 field, the median first model per unit      &       &       &       & 0.892 \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent The language model is the lever and the ladder says by how much:
+at 64 channels and 30 epochs the precision runs $0.585 \to 0.735 \to 0.838
+\to 0.840$ from ESM-2's 35M to its 150M, 650M and 3B sizes, each model's
+own contact head $0.474 \to 0.623 \to 0.754 \to 0.759$ beneath it, so the
+network adds 0.08 to 0.11 on every language model and the ladder is flat
+on precision past 650M, where the 3B step shows in the fold ($+0.012$). On
+top of 650M each of width (128 channels), a 96-residue crop and the model's
+contact map as a pair channel is worth $+0.01$ to $+0.02$ of precision and
+the three add, the plane giving the hard class the most ($+0.09$ on its
+own); with the 3B features they reach $0.880 / 0.622 / 0.632$ at 30
+epochs, and the orientation heads cost 0.003 of precision and buy $+0.013$
+of TM-score through the $\omega/\varphi$ restraints. The book run is that
+configuration at 100 epochs, and the schedule bought nothing: against its
+30-epoch twin ($0.877 / 0.628 / 0.645$) the paired differences over units
+are $-0.004$, $-0.001$ and $+0.001$ with every 95\,\% interval across zero,
+and validation precision is level from epoch 20. A second seed moves any
+arm by at most 0.002 on any column, an ensemble of five arms does not beat
+its best member, and the fold is converged: under its own potential the
+experimental trace has higher energy than our fold on 78 of 78 units, the
+map's own mean distances score an lDDT of 0.615 against the fold's 0.627,
+and the two correlate at 0.90, so what the fold realises is the map.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/casp16_ablation.png}
+\caption{What each lever buys. Mean paired difference to the ESM-2 650M
+baseline (64 channels, 64-residue crop, 30 epochs) over the evaluation
+units, with a 95\,\% bootstrap interval over units: top-$L/5$ long-range
+precision over the 84 units, the fold's $\mathrm{C}_\beta$-lDDT and TM-score over the 78.
+The axis is broken where the language-model swaps sit. ``Plane'' is the
+language model's own contact map as a pair channel, ``heads'' the
+orientation heads with the $\omega/\varphi$-restrained fold; the rows
+above the baseline stack those levers up to the book run.}
+\label{fig:casp16_ablation}
+\end{figure}
+
+The gap is the story. Our TM-score of 0.646 sits at the field's third
+percentile; the median first model is 0.892 over the same 78 units, $0.945
+/ 0.883 / 0.656$ on the easy, medium and hard classes against our $0.716 /
+0.617 / 0.495$, and OpenComplex, the lowest of the thirty groups that
+predicted all 78, is at 0.768. Two readings, from the units themselves.
+Sixteen units have top-$L/5$ precision under 0.85 and fold to 0.34 where
+the field's median is 0.83 --- four of them ``easy'', which in CASP's
+vocabulary means a template exists in the PDB, something a
+single-sequence model cannot see --- and they are two fifths of the
+distance; the other 62 fold to 0.72 against 0.91, and there the top $L/5$
+pairs are right, the next $L$ are half wrong and the recall at $P > 0.5$ is
+0.49. ESMFold places the two halves: the same language model under the
+trunk and structure module its authors trained for it folds the 78 to
+$0.751 / 0.778$, $+0.132$ of TM-score over our head with a 95\,\% interval
+of $[+0.103, +0.167]$ and better on 71, 0.84 against 0.72 on the 62 units
+where our top contacts are right and 0.53 against 0.34 on the 16 where
+they are not. So the head is the larger half of the gap and the input is
+the other: an alignment is what the field's models read and ESMFold does
+not, and half of the sixteen are blind to the language model too.
+
+What this is not: a 5.4M-parameter network on a single sequence, 65
+residues of receptive field in a 96-residue window, folded as one point
+per residue. The field's models read alignments and templates and build an
+all-atom chain through a structure module; the architecture that does so
+is the entry below, and AlphaFold~2's distogram head is this demo's
+network grown into a 48-block pair stack with the alignment beside it.
+
+Four gates sit under the table. The scorer reproduces CASP16's official
+lDDT and TM-score to the printed digit on nine field models --- AF3-server,
+MULTICOM and ColabFold on three targets --- and GDT\_TS within a point.
+Folding a target's true distogram recovers its structure (TM-score 0.9999
+on T1235-D1) and the mirror scores 0.34. The packed training pools are
+checked against the per-chain files before any run, and a 64-chain
+memorization probe must leave the separation prior. And \texttt{lake exe
+distogram-casp smoke} finite-differences the emitted gradient of the pair
+tile's weights, a body weight and each head's bias against the step's own
+first Adam moment, and checks that the evaluation forward's loss at one
+batch's statistics is the training step's. The trainer is
+\texttt{demos/MainDistogramCasp.lean}; the chain list, labels, embeddings
+and packing are \texttt{scripts/datasets/\allowbreak casp16\_*.py}, the
+fold, scoring, table and figures \texttt{scripts/demos/\allowbreak
+casp16\_*.py}.
 
 \subsubsection*{AlphaFold 2 Evoformer (\texttt{Bestiary/Evoformer.lean})}
 \emph{Two} new primitives (\S~\ref{layer:evoformerBlock},
@@ -18040,6 +18266,20 @@ physics, and each has a dataset of its own:
     local energies, and the closed forms it is scored against ---
     enumeration at $N = 12$, Jordan--Wigner at $N = 64$, Lanczos for the
     $J_1$--$J_2$ chain --- come from \texttt{scripts/demos/\allowbreak nqs\_metrics.py}.
+  \item \textbf{CASP16 and the PDB} are the structure demo's pair. The
+    targets are CASP16's Phase-1 sequences, the 159 domain-trimmed
+    experimental structures and the $50{,}157$-row table of every group's
+    scores from \nolinkurl{predictioncenter.org}, with every group's
+    models for the three targets the scorer is validated on; the training set is every protein
+    entity the PDB released before CASP16 opened on 2024-05-01, X-ray or
+    EM at 3\,Å or better, 40--512 residues, one representative per
+    RCSB 40\,\% sequence cluster --- $26{,}310$ chains, their backbones
+    from the RCSB CDN. ESM-2's per-residue representations and contact
+    maps are computed from the sequences by \texttt{casp16\_embed.py}, and
+    the scorers, US-align and OpenStructure, come with the CASP16 fetch. The
+    distogram network of \S\ref{sec:bestiary_structure}
+    (\texttt{distogram-casp}) trains on the chains and is scored on the
+    targets.
 \end{itemize}
 
 \noindent Same fetch-and-unpack story as the table above, with one extra
@@ -18093,7 +18333,13 @@ GWOSC O3a strain & GWOSC & Abbott et al., 2023 &
   \texttt{preprocess\_gw.py} $\to$ \texttt{data/gw/}  \\[2pt]
 Ising chain & TFIM & Pfeuty, 1970 &
   \texttt{scripts/demos/\allowbreak nqs\_metrics.py}\newline (closed forms, no download) &
-  ---  \\
+  ---  \\[2pt]
+CASP16, Phase 1 & CASP16 & Kryshtafovych et al., 2025 &
+  \href{https://predictioncenter.org/casp16/}{\nolinkurl{predictioncenter.org/casp16}} &
+  \texttt{download\_casp16.sh}\newline $\to$ \texttt{data/casp16/raw/}  \\[2pt]
+PDB, pre-CASP16 chains & PDB & Berman et al., 2000 &
+  \href{https://www.rcsb.org/}{\nolinkurl{rcsb.org}} &
+  \texttt{casp16\_chain\_list.py},\newline \texttt{casp16\_fetch\_chains.py}\newline $\to$ \texttt{data/casp16/}  \\
 \hline
 \end{tabular}
 \end{center}
@@ -18345,6 +18591,78 @@ gaps away from the event, and the \texttt{gwosc} client names the run
 \emph{Reference:} Abbott et al., \emph{Open Data from the Third Observing Run
 of LIGO, Virgo, KAGRA, and GEO}, ApJS~267, 29 (2023).
 
+\medskip\noindent\textbf{Building the CASP16 dataset.} Two sources, both
+public and neither gated. The targets come from the Protein Structure
+Prediction Center's download area (\nolinkurl{predictioncenter.org}, plain
+HTTPS): the 62 Phase-1 target sequences, the 159 domain-trimmed experimental
+structures the assessors released after the predictions were in, the domain
+table that cuts each target into evaluation units and labels them easy,
+medium or hard, the group list, and the $50{,}157$-row score table of every
+group's five models per unit. \texttt{download\_casp16.sh} fetches all of
+it, about 60\,MB, with every group's models for the three targets the scorer
+is validated on, builds US-align from source and pulls the OpenStructure
+docker image the official lDDT is computed with. The training set comes from
+the PDB through RCSB's APIs: \texttt{casp16\_chain\_list.py} searches for
+every protein entity released before CASP16 opened on 2024-05-01, X-ray or
+EM at 3\,Å or better, 40--512 residues --- $230{,}942$ of them, 18 minutes of
+paging the data API for sequence, chains, resolution and release date ---
+and keeps one representative per RCSB 40\,\% sequence cluster (the
+precomputed \texttt{clusters-by-entity-40.txt}, best resolution wins, entities
+with over 5\,\% unknown residues dropped): $27{,}690$ chains, median length
+214, $6.4$\,M residues, 90\,\% X-ray at a median $1.9$\,Å. MMseqs2 then
+searches the 85 unit sequences against them at 30\,\% identity over half the
+chain and finds 84 hits on 15 targets --- templates the field was allowed to
+use, 3BVF at 100\,\% over a third of T1295 --- so the date cut alone is the
+headline list ($26{,}310$ chains, the information the field had) and the
+purged list ($26{,}228$) the ``no templates'' ablation; 5\,\% of the clusters
+are validation ($1{,}380$ chains). None of the 21 PDB entries behind the unit
+table was released before the cutoff, so the date cut alone excludes every
+target structure. \texttt{casp16\_fetch\_chains.py} reads each entry's mmCIF
+from the RCSB CDN with gemmi and keeps the entity's first chain's backbone
+and $\mathrm{C}_\beta$ keyed by \texttt{label\_seq\_id}, which agrees with
+the canonical sequence on all but 12 of $37{,}672$ residues checked, every
+one a modified residue, so the labels need no alignment: four chains a
+second per core, $3.6$\,GB.
+
+\texttt{casp16\_labels.py} writes the 66-class pair plane per chain --- 64
+bins over 2--22\,Å on the $\mathrm{C}_\beta$ distance ($\mathrm{C}_\alpha$
+for glycine), a ``beyond 22\,Å'' class and an ``unobserved'' class for any
+pair with a missing residue, 8.5\,\% of residues --- and, with
+\texttt{--orient}, the three orientation planes, with a virtual
+$\mathrm{C}_\beta$ built from N, $\mathrm{C}_\alpha$ and C where none is
+deposited. \texttt{casp16\_embed.py} runs the frozen language model over
+every chain, ESM-2 at 35M, 150M, 650M or 3B parameters, and writes the
+final-layer representation per residue in fp16 with the contact head's logit
+per pair as a byte; the 3B model runs in fp16 on a 16\,GB card, checked
+against fp32 on the CPU (embedding cosine $1.0000$, contact map within
+$0.024$), the $27{,}690$ chains in seven minutes across four cards, and its
+contact-head pass caps a batch at $400$k pairs because the published head
+keeps about five copies of its attention maps. \texttt{casp16\_pack.py} lays
+features, labels, planes and an index into flat pool files the trainer's C
+gather reads --- 33\,GB for the 3B features --- after checking 300 random
+chains and every target against their per-chain files, the gate under the
+64-chain memorization probe of \S\ref{sec:bestiary_structure}.
+\texttt{casp16\_targets.py} does the same for the units from the
+domain-trimmed structures, the language model run on the full target
+sequence and sliced by the unit's segments: 85 units in the table, 84 with a
+structure (T1249v2-D1 has none), 83 with Phase-1 rows in the score table, and
+the v2 units are a v1 sequence in a second conformation. The scorer,
+\texttt{casp16\_score.py}, reproduces the official table before anything of
+ours is scored: CASP's model files carry a \texttt{PFRMAT} header and blank
+chain identifiers that OpenStructure refuses, so they are rewritten ATOM-only
+as chain A trimmed to the unit's ranges; \texttt{ost compare-structures
+--lddt} then returns the LDDT column to the printed digit, \texttt{USalign
+-TMscore 1} the TMscore column (residue-index superposition --- TM-align
+reads $0.03$ high on poor models), and OST's rigid GDT\_TS within a point of
+LGA's. Everything Python lives in \texttt{.venv-casp} (numpy, pandas, gemmi,
+torch, fair-esm, and \texttt{transformers} for the ESMFold row); 67\,GB on
+disk with all four language models' pools. \emph{References:} Kryshtafovych
+et al., \emph{Critical assessment of methods of protein structure prediction
+(CASP) --- Round XVI}, Proteins (2025); Berman et al., \emph{The Protein Data
+Bank}, Nucleic Acids Res.~28, 235 (2000); Lin et al., \emph{Evolutionary-scale
+prediction of atomic-level protein structure with a language model},
+Science~379, 1123 (2023).
+
 \chapter{Getting started}
 \label{app:getting_started}
 
@@ -18403,7 +18721,7 @@ else, and Appendix~\ref{app:verification} is the accounting.
 \texttt{\#print axioms} and \texttt{lake build} both run through Lean's
 elaborator, so they share a trust path with whatever the elaborator did.
 \texttt{tests/comparator/} re-runs Lean's kernel typechecker independently over
-87 theorems, sandboxed, verifying each one's axiom closure statically:
+88 theorems, sandboxed, verifying each one's axiom closure statically:
 
 \begin{verbatim}
 tests/comparator/run.sh
@@ -18834,7 +19152,7 @@ and the empirical layer are for.
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 87 theorems (the foundation rules,
+zero project axioms. It runs 88 theorems (the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*HasVJP\_correct} wrappers, three smooth-point
 pointwise variants (\texttt{reluHasVJPAt\_correct},

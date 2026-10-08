@@ -1,0 +1,145 @@
+Loading weights:   0%|          | 0/4498 [00:00<?, ?it/s]Loading weights:   0%|          | 18/4498 [00:00<01:51, 40.04it/s]Loading weights:  18%|█▊        | 810/4498 [00:00<00:01, 1940.22it/s]Loading weights:  85%|████████▍ | 3806/4498 [00:00<00:00, 9119.16it/s]Loading weights: 100%|██████████| 4498/4498 [00:00<00:00, 6709.11it/s]
+[transformers] [1mEsmForProteinFolding LOAD REPORT[0m from: facebook/esmfold_v1
+Key                                | Status  | 
+-----------------------------------+---------+-
+esm.contact_head.regression.bias   | MISSING | 
+esm.contact_head.regression.weight | MISSING | 
+
+Notes:
+- MISSING:	those params were newly initialized because missing from the checkpoint. Consider training on your downstream task.
+T1235      L  115  pLDDT  54.6  chunk 64     1.8 s
+T1284      L  120  pLDDT  80.4  chunk 64     1.3 s
+T1226      L  123  pLDDT  53.6  chunk 64     1.3 s
+T1245s2    L  134  pLDDT  50.8  chunk 64     1.8 s
+T1231      L  142  pLDDT  32.3  chunk 64     2.0 s
+T1207      L  144  pLDDT  52.3  chunk 64     2.0 s
+T1244s1    L  157  pLDDT  89.2  chunk 64     2.5 s
+T1274      L  167  pLDDT  87.1  chunk 64     2.9 s
+T1299      L  168  pLDDT  91.7  chunk 64     3.0 s
+T1246      L  168  pLDDT  88.1  chunk 64     3.0 s
+T1245s1    L  183  pLDDT  64.5  chunk 64     3.8 s
+T1276      L  196  pLDDT  40.5  chunk 64     4.6 s
+T1292      L  196  pLDDT  89.4  chunk 64     4.6 s
+T1201      L  210  pLDDT  46.4  chunk 64     5.5 s
+T1294v1    L  214  pLDDT  95.2  chunk 64     5.7 s
+T1271s8    L  218  pLDDT  55.5  chunk 64     6.0 s
+T1206      L  237  pLDDT  27.4  chunk 64     7.5 s
+T1280      L  237  pLDDT  94.0  chunk 64     7.5 s
+T1272s9    L  238  pLDDT  82.6  chunk 64     7.6 s
+T1259      L  243  pLDDT  86.3  chunk 64     8.0 s
+T1243      L  293  pLDDT  96.8  chunk 64    12.7 s
+T1208s2    L  318  pLDDT  77.0  chunk 64    15.3 s
+T1208s1    L  328  pLDDT  77.7  chunk 64    16.4 s
+T1266      L  336  pLDDT  67.7  chunk 64    17.5 s
+T1298      L  342  pLDDT  75.4  chunk 64    18.3 s
+T1272s2    L  363  pLDDT  77.0  chunk 64    21.1 s
+T1271s4    L  368  pLDDT  66.0  chunk 64    21.8 s
+T1278      L  380  pLDDT  89.3  chunk 64    23.6 s
+T1271s3    L  384  pLDDT  56.9  chunk 64    24.2 s
+T1271s7    L  393  pLDDT  70.1  chunk 64    26.3 s
+T1234      L  413  pLDDT  88.5  chunk 64    29.7 s
+T1271s2    L  414  pLDDT  59.5  chunk 64    29.8 s
+T1227s1    L  427  pLDDT  90.5  chunk 64    32.2 s
+T1279      L  428  pLDDT  75.3  chunk 64    32.3 s
+T1270      L  437  pLDDT  85.7  chunk 64    34.1 s
+T1267s1    L  444  pLDDT  82.5  chunk 64    35.4 s
+T1212      L  466  pLDDT  83.3  chunk 64    39.9 s
+T1295      L  469  pLDDT  79.3  chunk 64    40.5 s
+T1267s2    L  482  pLDDT  88.7  chunk 64    43.4 s
+T1249v1    L  488  pLDDT  36.6  chunk 64    44.8 s
+T1237      L  488  pLDDT  92.7  chunk 64    44.8 s
+T1228v1    L  545  pLDDT  92.9  chunk 64    66.3 s
+T1271s6    L  587  pLDDT  51.8  chunk 64    81.2 s
+T1239v1    L  620  pLDDT  86.7  chunk 64    93.0 s
+T1272s6    L  624  pLDDT  75.8  chunk 64    94.3 s
+T1240      L  653  pLDDT  81.7  chunk 64   107.7 s
+T1214      L  677  pLDDT  86.3  chunk 64   117.4 s
+T1271s5    L  762  pLDDT  42.3  chunk 64   158.7 s
+T1230s1    L  788  pLDDT  86.4  chunk 64   175.3 s
+T1271s1    L  818  pLDDT  35.8  chunk 64   192.6 s
+T1272s8    L  818  pLDDT  57.0  chunk 64   192.6 s
+T1218      L 1164  does not fit the card at chunk 4 — fold it with --device cpu --only T1218
+T1257      L 1263  does not fit the card at chunk 4 — fold it with --device cpu --only T1257
+T1269      L 1410  does not fit the card at chunk 4 — fold it with --device cpu --only T1269
+T1220s1    L 1711  does not fit the card at chunk 4 — fold it with --device cpu --only T1220s1
+T1210      L 1770  does not fit the card at chunk 4 — fold it with --device cpu --only T1210
+T1201-D1     L  201 medium Cβ-lDDT 0.521 TM 0.408 pLDDT  45.9
+T1206-D1     L  230 easy   Cβ-lDDT 0.196 TM 0.184 pLDDT  27.2
+T1207-D1     L  133 hard   Cβ-lDDT 0.556 TM 0.599 pLDDT  53.7
+T1208s1-D1   L  312 easy   Cβ-lDDT 0.734 TM 0.776 pLDDT  78.5
+T1208s2-D1   L  307 easy   Cβ-lDDT 0.722 TM 0.867 pLDDT  77.2
+T1212-D1     L  466 medium Cβ-lDDT 0.713 TM 0.817 pLDDT  83.3
+T1214-D1     L  661 easy   Cβ-lDDT 0.853 TM 0.974 pLDDT  87.4
+T1226-D1     L  123 hard   Cβ-lDDT 0.365 TM 0.356 pLDDT  53.6
+T1227s1-D1   L  392 medium Cβ-lDDT 0.864 TM 0.948 pLDDT  92.3
+T1228v1-D1   L  164 medium Cβ-lDDT 0.854 TM 0.914 pLDDT  95.4
+T1228v1-D2   L  136 easy   Cβ-lDDT 0.912 TM 0.927 pLDDT  96.2
+T1228v1-D3   L  169 hard   Cβ-lDDT 0.674 TM 0.702 pLDDT  89.1
+T1228v1-D4   L   66 medium Cβ-lDDT 0.743 TM 0.655 pLDDT  93.3
+T1228v2-D1   L  164 medium Cβ-lDDT 0.843 TM 0.930 pLDDT  95.4
+T1228v2-D2   L  136 easy   Cβ-lDDT 0.916 TM 0.930 pLDDT  96.2
+T1228v2-D3   L  169 hard   Cβ-lDDT 0.661 TM 0.698 pLDDT  89.1
+T1228v2-D4   L   66 medium Cβ-lDDT 0.736 TM 0.658 pLDDT  93.3
+T1230s1-D1   L  701 medium Cβ-lDDT 0.858 TM 0.966 pLDDT  90.8
+T1231-D1     L  142 easy   Cβ-lDDT 0.278 TM 0.223 pLDDT  32.3
+T1234-D1     L  377 easy   Cβ-lDDT 0.867 TM 0.956 pLDDT  91.2
+T1235-D1     L  106 easy   Cβ-lDDT 0.533 TM 0.574 pLDDT  55.3
+T1237-D1     L  482 medium Cβ-lDDT 0.916 TM 0.822 pLDDT  93.1
+T1239v1-D1   L  164 medium Cβ-lDDT 0.869 TM 0.911 pLDDT  95.1
+T1239v1-D2   L  136 easy   Cβ-lDDT 0.908 TM 0.925 pLDDT  95.7
+T1239v1-D3   L  254 medium Cβ-lDDT 0.561 TM 0.539 pLDDT  75.0
+T1239v1-D4   L   66 easy   Cβ-lDDT 0.752 TM 0.685 pLDDT  92.4
+T1239v2-D1   L  164 medium Cβ-lDDT 0.870 TM 0.912 pLDDT  95.1
+T1239v2-D2   L  136 easy   Cβ-lDDT 0.908 TM 0.925 pLDDT  95.7
+T1239v2-D3   L  254 medium Cβ-lDDT 0.561 TM 0.539 pLDDT  75.0
+T1239v2-D4   L   66 easy   Cβ-lDDT 0.752 TM 0.685 pLDDT  92.4
+T1240-D1     L  104 easy   Cβ-lDDT 0.884 TM 0.897 pLDDT  88.1
+T1240-D2     L  149 medium Cβ-lDDT 0.853 TM 0.957 pLDDT  92.6
+T1243-D1     L  266 medium Cβ-lDDT 0.898 TM 0.921 pLDDT  97.6
+T1244s1-D1   L   85 medium Cβ-lDDT 0.944 TM 0.968 pLDDT  87.2
+T1245s1-D1   L  170 easy   Cβ-lDDT 0.595 TM 0.604 pLDDT  65.6
+T1245s2-D1   L  116 easy   Cβ-lDDT 0.609 TM 0.694 pLDDT  51.0
+T1246-D1     L  168 easy   Cβ-lDDT 0.882 TM 0.921 pLDDT  88.1
+T1249v1-D1   L  354 medium Cβ-lDDT 0.200 TM 0.157 pLDDT  28.7
+T1259-D1     L  204 easy   Cβ-lDDT 0.905 TM 0.927 pLDDT  89.1
+T1266-D1     L  295 medium Cβ-lDDT 0.632 TM 0.610 pLDDT  69.4
+T1267s1-D1   L  157 medium Cβ-lDDT 0.675 TM 0.760 pLDDT  82.8
+T1267s1-D2   L  275 medium Cβ-lDDT 0.786 TM 0.836 pLDDT  82.5
+T1267s2-D1   L  480 medium Cβ-lDDT 0.782 TM 0.925 pLDDT  88.7
+T1270-D1     L  229 medium Cβ-lDDT 0.874 TM 0.947 pLDDT  87.3
+T1270-D2     L  200 medium Cβ-lDDT 0.775 TM 0.877 pLDDT  83.9
+T1271s1-D1   L  421 hard   Cβ-lDDT 0.463 TM 0.444 pLDDT  43.1
+T1271s2-D1   L  276 medium Cβ-lDDT 0.714 TM 0.697 pLDDT  69.3
+T1271s3-D1   L  259 medium Cβ-lDDT 0.647 TM 0.624 pLDDT  64.9
+T1271s4-D1   L  316 medium Cβ-lDDT 0.629 TM 0.665 pLDDT  66.8
+T1271s5-D1   L   80 medium Cβ-lDDT 0.651 TM 0.584 pLDDT  58.2
+T1271s5-D2   L  138 medium Cβ-lDDT 0.789 TM 0.784 pLDDT  64.3
+T1271s6-D1   L   93 easy   Cβ-lDDT 0.874 TM 0.881 pLDDT  81.8
+T1271s7-D1   L  108 medium Cβ-lDDT 0.849 TM 0.850 pLDDT  86.1
+T1271s8-D1   L   37 medium Cβ-lDDT 0.411 TM 0.335 pLDDT  37.0
+T1271s8-D2   L  153 medium Cβ-lDDT 0.600 TM 0.598 pLDDT  64.2
+T1272s2-D1   L  227 medium Cβ-lDDT 0.811 TM 0.912 pLDDT  86.1
+T1272s6-D1   L  159 medium Cβ-lDDT 0.848 TM 0.907 pLDDT  88.0
+T1272s8-D1   L  291 medium Cβ-lDDT 0.843 TM 0.944 pLDDT  84.4
+T1272s9-D1   L  175 medium Cβ-lDDT 0.796 TM 0.837 pLDDT  87.1
+T1274-D1     L   91 easy   Cβ-lDDT 0.942 TM 0.964 pLDDT  88.3
+T1276-D1     L  194 easy   Cβ-lDDT 0.353 TM 0.267 pLDDT  40.7
+T1278-D1     L  337 easy   Cβ-lDDT 0.904 TM 0.977 pLDDT  91.6
+T1279-D1     L  120 easy   Cβ-lDDT 0.774 TM 0.843 pLDDT  73.2
+T1279-D2     L  260 medium Cβ-lDDT 0.876 TM 0.919 pLDDT  81.5
+T1280-D1     L  236 easy   Cβ-lDDT 0.961 TM 0.987 pLDDT  94.2
+T1284-D1     L  119 medium Cβ-lDDT 0.837 TM 0.872 pLDDT  80.5
+T1292-D1     L  193 easy   Cβ-lDDT 0.953 TM 0.957 pLDDT  90.2
+T1294v1-D1   L  207 easy   Cβ-lDDT 0.899 TM 0.953 pLDDT  95.2
+T1294v2-D1   L  207 easy   Cβ-lDDT 0.895 TM 0.953 pLDDT  95.2
+T1295-D1     L  160 medium Cβ-lDDT 0.687 TM 0.799 pLDDT  72.0
+T1295-D2     L  138 easy   Cβ-lDDT 0.872 TM 0.929 pLDDT  79.5
+T1295-D3     L  156 medium Cβ-lDDT 0.859 TM 0.933 pLDDT  89.0
+T1298-D1     L  119 medium Cβ-lDDT 0.874 TM 0.902 pLDDT  81.4
+T1298-D2     L  221 medium Cβ-lDDT 0.766 TM 0.840 pLDDT  72.5
+T1299-D1     L  168 easy   Cβ-lDDT 0.917 TM 0.960 pLDDT  91.7
+easy  : Cβ-lDDT mean 0.778 median 0.874  TM mean 0.805 median 0.925  (29 EUs)
+medium: Cβ-lDDT mean 0.752 median 0.789  TM mean 0.780 median 0.840  (41 EUs)
+hard  : Cβ-lDDT mean 0.544 median 0.556  TM mean 0.560 median 0.599  (5 EUs)
+all   : Cβ-lDDT mean 0.748 median 0.796  TM mean 0.775 median 0.867  (75 EUs)
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/esmfold/fold_scores.csv

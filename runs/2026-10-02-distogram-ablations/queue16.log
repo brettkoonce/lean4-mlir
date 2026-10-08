@@ -1,0 +1,13 @@
+[21:33] 3B contact-head planes -> pool_pair_esm3b.bin (fp16, GPU 3)
+  27690 chains, 6442867 residues in 1989 s -> data/casp16/packed/pool_pair_esm3b.bin (1.89 GB)
+[22:07] pack the EUs' (npz, fp32) and valsub's (pool, fp16) planes
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/packed/targets_pair_esm3b.bin: 11.6 MB over 84 EUs
+-> /home/skoonce/lean/klawd_max_power/lean4-jax-mlir/data/casp16/packed/valsub_pair_esm3b.bin: 0.5 MB over 24 chains
+[22:07] train 3B × 64 ch × 30 ep, pair=1, on GPU 3
+[23:24] trained: trained: 24660 steps in 4646 s -> .lake/build/distogram_r16x64_esm3b_pair1_train_full_e30-esm3b-pair1_params.bin
+medium: Cβ-lDDT mean 0.599 median 0.588  TM mean 0.576 median 0.568  (44 EUs, mirror better on 5)
+hard  : Cβ-lDDT mean 0.452 median 0.404  TM mean 0.494 median 0.444  (5 EUs, mirror better on 0)
+all   : Cβ-lDDT mean 0.603 median 0.618  TM mean 0.612 median 0.684  (78 EUs, mirror better on 7)
+-> .lake/build/distogram_r16x64_esm3b_pair1_train_full_e30-esm3b-pair1_targets/fold_scores.csv
+[23:49] done .lake/build/distogram_r16x64_esm3b_pair1_train_full_e30-esm3b-pair1_targets
+[23:49] queue16 done

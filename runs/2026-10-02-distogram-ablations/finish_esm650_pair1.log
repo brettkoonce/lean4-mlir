@@ -1,0 +1,14 @@
+predicted 84 EUs, 10703 windows in 50 s -> .lake/build/distogram_r16x64_esm650_pair1_train_ful[22:04] assemble -> .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets
+T1299-D1      168      1.000      0.618  easy
+easy  : ours 0.858  ESM-2 head 0.533  (30 EUs)
+medium: ours 0.880  ESM-2 head 0.478  (46 EUs)
+hard  : ours 0.710  ESM-2 head 0.233  (8 EUs)
+all   : ours 0.856  ESM-2 head 0.474  (84 EUs) -> .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets/table.csv
+[22:05] fold
+[22:28] score
+easy  : Cβ-lDDT mean 0.617 median 0.666  TM mean 0.662 median 0.745  (29 EUs, mirror better on 1)
+medium: Cβ-lDDT mean 0.579 median 0.589  TM mean 0.544 median 0.512  (44 EUs, mirror better on 6)
+hard  : Cβ-lDDT mean 0.437 median 0.371  TM mean 0.464 median 0.413  (5 EUs, mirror better on 1)
+all   : Cβ-lDDT mean 0.584 median 0.610  TM mean 0.582 median 0.621  (78 EUs, mirror better on 8)
+-> .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets/fold_scores.csv
+[22:28] done .lake/build/distogram_r16x64_esm650_pair1_train_full_e30-esm650-pair1_targets
