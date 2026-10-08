@@ -842,15 +842,16 @@ draw. Numbers, gates, every arm's log and the h = 0.8 investigation are in
 
 ---
 
-## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, and AlphaZero on tic-tac-toe
+## Reinforcement learning — blackjack from tabular Q to DQN, the Pong environment, Deep CFR on Leduc poker, and AlphaZero on tic-tac-toe
 
-Three games written in Lean, each with its own exact instrument — the book's closing
+Four games written in Lean, each with its own exact instrument — the book's closing
 section, Bestiary entries: game theory. They are the reinforcement-learning
 ladder of `planning/blackjack_dqn_demo.md`,
-`planning/pong_dqn_demo.md` and `planning/alphazero_ttt_demo.md`: rung 1 tabular Q on
-blackjack, rung 2 the blackjack DQN, rung 3 DQN from pixels on Pong, rung 4 self-play
-and tree search on tic-tac-toe — every trained rung through the stack on the rank-2
-DDPM MSE block, zero new codegen.
+`planning/pong_dqn_demo.md`, `planning/leduc_deep_cfr_demo.md` and
+`planning/alphazero_ttt_demo.md`: rung 1 tabular Q on blackjack, rung 2 the blackjack
+DQN, rung 3 DQN from pixels on Pong, rung 4 regret minimisation under hidden information
+on Leduc hold'em, rung 5 self-play and tree search on tic-tac-toe — every trained rung
+through the stack on the rank-2 DDPM MSE block, zero new codegen.
 
 ```bash
 lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
@@ -1043,6 +1044,72 @@ statistics over nine binary cells are a liability — a channel whose batch vari
 vanishes is divided by √1e-5 — and with BN the eval forward the loss trick reads and the
 train step's forward are different functions. Blackjack and Pong made the same call.
 
+### Deep CFR on Leduc hold'em, scored by exact exploitability
+
+`MainDeepCfrLeduc.lean` is Brown, Lerer, Gross & Sandholm's loop (Deep CFR, ICML 2019) on
+Leduc hold'em written in Lean (`LeanMlir/Leduc.lean`): a two-player, fixed-limit, one-card
+poker — r ranks × 2 suits (3 is the classic J Q K deck), ante 1, two betting rounds with bets
+of 2 then 4 and at most two raises each, one public card between the rounds, a pair beats a
+higher rank — the smallest game with the thing blackjack and tic-tac-toe lack, *hidden
+information*, and so the first game here where the answer is not a move but a mixed
+strategy: an equilibrium raises a jack it knows is losing about a fifth of the time, because
+never bluffing is exploitable. Each iteration and player, one batched forward of the
+player's advantage net over **every** information set gives the current strategy as a table
+(regret matching on the positive advantages), K = 1,000 external-sampling traversals in C
+write instantaneous regrets to the player's advantage reservoir and the opponent's strategy
+to a strategy reservoir (reservoir sampling, 1M rows each), and the advantage net is
+re-initialised and retrained from scratch on its reservoir — 1,000 Adam steps at batch 512.
+After T = 100 iterations the strategy net is trained on the strategy reservoir; SD-CFR
+(Steinberger 2019) comes for free, the exact own-reach-weighted average of the hundred
+stored profiles, no strategy net. The net is the Leduc papers' three dense layers of 64
+(`Bestiary/DeepCFR.lean`, 10.5k params), and the loss — a weighted squared error on the
+legal slots — goes through the DDPM MSE block as a host-built target (`lean_leduc_targets`),
+the tic-tac-toe demo's move.
+
+The instrument is exact. Suits never matter in Leduc (no flushes), so the game is solved at
+rank level — 6r + 30r² information sets, 288 at r = 3 against OpenSpiel's 936 suit-aware
+ones, which fold onto them one-to-one — by vector-form CFR over the public tree with an
+r × r matrix of private ranks at each node: the best response, exploitability (the best
+responder's winnings per hand averaged over the two seats, NashConv / 2), head-to-head and
+CFR+ / DCFR to 1,000 iterations are 25 ms at r = 3 and 0.75 s at r = 13. `leduc-env` runs Gate
+0 before anything trains: the Lean game equals the C tree on every terminal history (5,520 at
+r = 3), and `scripts/demos/leduc_gate0_openspiel.py` (OpenSpiel 2.0.2 in `.venv-poker`,
+`requirements-poker-lock.txt`, python 3.12) reproduces every payoff on OpenSpiel's own
+histories and scores our tables with OpenSpiel's exploitability to 1e-6. Two more gates fail
+loudly: `mode=tabular` runs the trainer's own traversal with a lookup table in the net's
+place and must reproduce ES-MCCFR's curve (it does: 0.21 at 836k nodes against 0.45 at 100k
+and 0.10 at 1M), and a non-finite advantage throws rather than folding silently. Run logs,
+curves and tables are in `runs/2026-10-08-deep-cfr-leduc/`; `scripts/demos/leduc_figure.py`
+draws the figure.
+
+![One hand of Leduc with the trained profile on round 2's edges; exploitability against nodes touched; raise probability per private and public card beside CFR+](figures/deep_cfr_leduc.png)
+
+Every arm is a strategy table scored by the exact instrument, three seeds for the learned
+rows (r = 3, chips per hand, ante 1; head-to-head is the value an ordinary opponent would
+see, exploitability the worst case):
+
+| arm | exploitability | head-to-head vs CFR+, seat-averaged | raise with J under Q after check-check |
+|---|---|---|---|
+| uniform random | 2.3736 | −0.707 | 50% |
+| scripted honest (raise a pair or a K, fold J to a bet, else call) | 1.050 | −0.123 | 0% |
+| CFR+ with its bluffs removed — **the price of honesty** | 0.1856 | −0.0115 | 0% |
+| Deep CFR, strategy net (4.1M nodes) | 0.229 / 0.185 / 0.152 | −0.055 / −0.039 / −0.050 | |
+| Deep CFR, SD-CFR average (4.1M nodes) | 0.127 / 0.150 / 0.109 | −0.022 / −0.031 / −0.020 | 0% (seed 1) |
+| tabular ES-MCCFR at the same 4.1M nodes | 0.038 / 0.043 / 0.041 | | |
+| CFR+, 1,000 iterations | 0.00024 | 0 | 19.5% (18.6–19.5% over solvers × inits) |
+
+Deep CFR's exploitability falls from 1.4 at iteration 5 to 0.11–0.15 at 100 and ends
+under the honest arm and the bluffs-removed arm; it is at the published curve (Steinberger
+2019 Fig. 1a reads ~150–200 milli-antes per game at 100 iterations; ours is 109–150). It
+does not beat a sampled table at the same budget at the classic deck, and the scale arm —
+the same recipe at r = 6 (1,116 sets) and r = 13 (5,148) — is where the comparison turns:
+the table is 3.1× less exploitable at r = 3, 2.0× at r = 6 (SD-CFR 0.112 / 0.123 / 0.113
+against 0.053 / 0.066 / 0.058 at 3.6M nodes) and 1.0× at r = 13 (0.099 / 0.120 / 0.106
+against 0.113 / 0.107 / 0.102 at 3.4M), where the net is the better head-to-head
+(−0.028 against −0.035 per hand). The net's error does not grow with the number of sets
+and the table's noise at a fixed budget does. 5.8 minutes a seed on one 4060 Ti at every r
+(the C traversal is not the cost; the 200k Adam steps are).
+
 ## Layout
 
 The demos above are the maintained set. Everything else lives in one of two
@@ -1075,10 +1142,10 @@ demos/
 ├── MainBlackjackDqn.lean                  # DQN on blackjack through the DDPM MSE block, scored exactly (RL rung 2)
 ├── MainPongEnv.lean                       # Pong in Lean, 84×84 frames, scripted opponent (RL rung 3, Phase 0)
 ├── MainPongDqn.lean                       # DQN from the six-number state or 84×84 frames on that Pong (RL rung 3)
-├── MainTttEnv.lean                        # tic-tac-toe n×n: the solved game, scripted players, the solver's gates (RL rung 4, no GPU)
-├── MainAlphaZeroTtt.lean                  # AlphaZero self-play + PUCT on that game, scored against the solved game (RL rung 4)
-├── MainLeducEnv.lean                      # Leduc hold'em: the exact instrument (best response, CFR+ / DCFR, ES-MCCFR), the scripted arms, Gate 0 (env in LeanMlir/Leduc.lean, no GPU)
-├── MainDeepCfrLeduc.lean                  # Deep CFR on that game through the DDPM MSE block, every arm scored by exact exploitability
+├── MainTttEnv.lean                        # tic-tac-toe n×n: the solved game, scripted players, the solver's gates (RL rung 5, no GPU)
+├── MainAlphaZeroTtt.lean                  # AlphaZero self-play + PUCT on that game, scored against the solved game (RL rung 5)
+├── MainLeducEnv.lean                      # Leduc hold'em: the exact instrument (best response, CFR+ / DCFR, ES-MCCFR), the scripted arms, Gate 0 (RL rung 4; env in LeanMlir/Leduc.lean, no GPU)
+├── MainDeepCfrLeduc.lean                  # Deep CFR on that game through the DDPM MSE block, every arm scored by exact exploitability (RL rung 4)
 │
 ├── probes/                                # gates and tools, not demos — these RUN IN CI
 │   ├── MainFpnLossProbe.lean              #   finite-difference gate on the detector loss

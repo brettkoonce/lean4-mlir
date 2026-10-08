@@ -6084,6 +6084,54 @@ LEAN_EXPORT lean_obj_res lean_leduc_targets(b_lean_obj_arg out, b_lean_obj_arg t
     return lean_io_result_mk_ok(ld_pair(yb, lb));
 }
 /* σ tables from a net's output over every information set [nInfo, 3] */
+/* Gate B's table in the net's place (planning/leduc_deep_cfr_demo.md §7): the summed sampled
+   regrets of an advantage reservoir per information set, regret-matched — ES-MCCFR's current
+   strategy. Every row must still be held, so the reservoir must not have overflowed. */
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_sigma(size_t r, b_lean_obj_arg ba) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    ld_reservoir res;
+    if (!ld_res_view(ba, &res)) return ld_err("leduc_reservoir_sigma: not a reservoir");
+    if (res.F != g.F) return ld_err("leduc_reservoir_sigma: the reservoir's F is not the game's");
+    if (res.seen > res.cap) return ld_err("leduc_reservoir_sigma: the reservoir overflowed; the tabular reading needs every row");
+    double* R = (double*)calloc((size_t)g.nInfo * 3, sizeof(double));
+    double* sigma = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    for (uint64_t j = 0; j < ld_reservoir_size(&res); j++) {
+        const float* row = res.rows + j * (uint64_t)res.stride;
+        int idx = (int)row[g.F + 7];
+        if (idx < 0 || idx >= g.nInfo) continue;
+        for (int x = 0; x < 3; x++) R[idx * 3 + x] += row[g.F + x];
+    }
+    for (int i = 0; i < g.nInfo; i++) {
+        int round, closing, st, a, pub; ld_info_decode(&g, i, &round, &closing, &st, &a, &pub);
+        ld_regret_match(R + i * 3, st, sigma + i * 3);
+    }
+    lean_object* out = ld_table_out(&g, sigma);
+    free(R); free(sigma);
+    return lean_io_result_mk_ok(out);
+}
+/* the t-weighted average of a strategy reservoir's σ rows per information set — ES-MCCFR's
+   average strategy when every row is held; a set never written is uniform over its legal slots */
+LEAN_EXPORT lean_obj_res lean_leduc_reservoir_average(size_t r, b_lean_obj_arg ba) {
+    if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
+    ld_game g; ld_game_init(&g, (int)r);
+    ld_reservoir res;
+    if (!ld_res_view(ba, &res)) return ld_err("leduc_reservoir_average: not a reservoir");
+    if (res.F != g.F) return ld_err("leduc_reservoir_average: the reservoir's F is not the game's");
+    if (res.seen > res.cap) return ld_err("leduc_reservoir_average: the reservoir overflowed; the tabular reading needs every row");
+    double* S = (double*)calloc((size_t)g.nInfo * 3, sizeof(double));
+    double* sigma = (double*)malloc(sizeof(double) * (size_t)g.nInfo * 3);
+    for (uint64_t j = 0; j < ld_reservoir_size(&res); j++) {
+        const float* row = res.rows + j * (uint64_t)res.stride;
+        int idx = (int)row[g.F + 7];
+        if (idx < 0 || idx >= g.nInfo) continue;
+        for (int x = 0; x < 3; x++) S[idx * 3 + x] += (double)row[g.F + 6] * row[g.F + x];
+    }
+    ld_normalize(&g, S, sigma);
+    lean_object* out = ld_table_out(&g, sigma);
+    free(S); free(sigma);
+    return lean_io_result_mk_ok(out);
+}
 LEAN_EXPORT lean_obj_res lean_leduc_sigma_from_advantages(size_t r, b_lean_obj_arg adv) {
     if (!ld_check_r(r)) return ld_err("leduc: need 2 <= r <= 13");
     ld_game g; ld_game_init(&g, (int)r);

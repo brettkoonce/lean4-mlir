@@ -300,4 +300,35 @@ topic); a verified-render tier for the dense stack.
   w ⊙ m ⊙ (out − target) to 1.2e-6; SD-CFR's own-reach average of the CFR+ current profiles
   scored 5.02e-3 against the CFR+ average's 5.02e-3 at T = 200. The trainer
   (`demos/MainDeepCfrLeduc.lean`) builds; Phase 2 next.
+- 2026-10-08, Phase 2 (r = 3, three seeds, `runs/2026-10-08-deep-cfr-leduc/`): T = 100,
+  K = 1,000, reservoirs 1M, 1,000 Adam steps at batch 512 per advantage net, 4,000 for the
+  strategy net — 4.1M nodes touched, 5.7 min a seed on one 4060 Ti. Exploitability: strategy
+  net 0.229 / 0.185 / 0.152, SD-CFR 0.127 / 0.150 / 0.109, tabular ES-MCCFR at the same 4.1M
+  nodes 0.038 / 0.043 / 0.041, CFR+ 2.4e-4; head-to-head vs CFR+ −0.04 to −0.06 (strategy net)
+  and −0.02 to −0.03 (SD-CFR). Gate C holds (SD-CFR falls 1.4 → 0.13, ends under the honest
+  1.05 and the bluffs-removed 0.19); the sampled table wins at r = 3 by 3×, §5's prediction.
+  The published bar, read from Steinberger 2019 Fig. 1a (Leduc, mA/g against iterations at 1,500
+  traversals per iteration, 3 × 64 nets): ~150–200 mA/g at 100 iterations, 60–80 at 5,000; ours
+  at 100 iterations is 109–150 (SD-CFR) and 152–229 (strategy net), at the curve; the figure's
+  total-or-average convention is unstated. Brown et al. 2019 has no Leduc Deep CFR curve (its
+  Leduc number is NFSP's 37 mbb/g, a footnote). Gate B is in the tree as `mode=tabular`
+  (the trainer's loop with a lookup table in the net's place, CPU, 0.2 s): 0.21 at 836k
+  nodes, on ES-MCCFR's 0.45 at 100k / 0.10 at 1M. Gate A rests on the offline check of
+  `lean_leduc_targets` (block gradient = w ⊙ m ⊙ (out − target) to 1.2e-6) and the MSE
+  block's identity the tic-tac-toe demo verified. The trainer prints the matched-budget
+  ES-MCCFR row itself; `leduc-env budget=<nodes> esSeeds=3` gives it for any budget.
+- 2026-10-08, Phase 3 (r = 6 / 13, three seeds each, same recipe, `runs/2026-10-08-deep-cfr-leduc/`):
+  SD-CFR 0.112 / 0.123 / 0.113 at r = 6 against tabular ES-MCCFR 0.053 / 0.066 / 0.058 at the
+  same 3.6M nodes; 0.099 / 0.120 / 0.106 at r = 13 against 0.113 / 0.107 / 0.102 at 3.4M —
+  table over net 3.1× / 2.0× / 1.0× at r = 3 / 6 / 13, §5's prediction, with the net the better
+  head-to-head at r = 13 (−0.028 vs −0.035). Coverage is 1.000 at every budget, so the
+  mechanism is not uniform-where-unvisited; it is the table's per-set noise at a fixed budget.
+  Strategy net 0.113–0.157 (r = 6), 0.115–0.168 (r = 13): SD-CFR is the headline row (§10
+  resolved). Gate B at r = 6 / 13: 0.36 at 364k, 0.43 at 338k, on the ES curves. 5.8 min a
+  seed. The first r = 6 launch was lost to a Lean scoping bug — a closure made before the loop
+  held the initial `let mut params` binding, every forward read the He init, exploitability
+  froze at the always-fold 4.4 from iteration 1 — found by dumping outputs and parameters per
+  iteration, fixed by passing the parameters in; the trainer now throws on a non-finite
+  advantage. Phase 4 (figure, section, bestiary `Bestiary/DeepCFR.lean`, README) in the same
+  commit.
 

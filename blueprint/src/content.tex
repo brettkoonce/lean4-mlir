@@ -17207,15 +17207,17 @@ and \S~\ref{layer:structureModule} document the bundling explicitly.
 \section{Bestiary entries: game theory}
 \label{sec:bestiary_game_theory}
 
-Three games written in Lean, each with its own exact instrument, on one loop: the
+Four games written in Lean, each with its own exact instrument, on one loop: the
 reward is the game's, the data is manufactured by playing it, the target is the model's
 own later estimate, and the ceiling is exact where the game allows it --- blackjack's
-by value iteration over its 200 states, tic-tac-toe's by the solved game --- and, for
-Pong, a twin fed the six numbers the renderer draws from. The ladder runs tabular Q,
-then a DQN on a table's worth of states, then the same DQN from pixels, then self-play
-and tree search; every trained rung goes through the squared-error block of the
-diffusion demo with a host-built target, and none of it is new codegen. The catalogue
-beside the demos is the AlphaGo family, the same loop at the scale that made it famous.
+by value iteration over its 200 states, poker's by the best response to the trained
+strategy, tic-tac-toe's by the solved game --- and, for Pong, a twin fed the six
+numbers the renderer draws from. The ladder runs tabular Q, then a DQN on a table's
+worth of states, then the same DQN from pixels, then regret minimisation under hidden
+information, then self-play and tree search; every trained rung goes through the
+squared-error block of the diffusion demo with a host-built target, and none of it is
+new codegen. The catalogue beside the demos is the AlphaGo family and Deep CFR, the
+same loops at the scale that made them famous.
 
 \subsection{Blackjack --- DQN against value iteration}
 \label{sec:bestiary_rl}
@@ -17382,6 +17384,119 @@ was 24 milliseconds, twenty of them the shim re-pushing 20~MB of parameters and 
 moments every step; with that state resident on the device
 (\texttt{trainStepAdamF32DdpmR}) it is 14.6, and a pixel run 27 minutes on one card.
 
+\subsection{Poker --- Deep CFR against the exact best response}
+\label{sec:game_leduc}
+
+\texttt{demos/MainDeepCfrLeduc.lean} is Brown, Lerer, Gross and Sandholm's loop (Deep CFR,
+ICML 2019, \href{https://arxiv.org/abs/1811.00164}{arXiv:1811.00164}) on Leduc hold'em
+written in Lean (\texttt{LeanMlir/Leduc.lean}): a two-player, fixed-limit, one-card poker
+--- $r$ ranks in two suits, three for the classic jack--queen--king deck, an ante of one,
+two betting rounds with bets of two then four and at most two raises each, one public
+card between the rounds, a pair beats a higher rank --- and the first game in this
+section with hidden information. The answer is therefore not a move but a mixed
+strategy: an equilibrium raises a jack it knows is losing about a fifth of the time,
+because a player who never bluffs can be read. Each iteration and player, one batched
+forward of the player's advantage network over \emph{every} information set gives the
+current strategy as a table (regret matching on the positive advantages), a thousand
+external-sampling traversals in C write instantaneous regrets to the player's advantage
+reservoir and the opponent's strategy to a strategy reservoir (reservoir sampling, a
+million rows each), and the advantage network is re-initialised and retrained from
+scratch on its reservoir, a thousand Adam steps at batch 512. After a hundred iterations
+the strategy network is trained on the strategy reservoir; Single Deep CFR (Steinberger
+2019, \href{https://arxiv.org/abs/1901.07621}{arXiv:1901.07621}) comes for free, the
+exact average of the hundred stored profiles weighted by iteration and by each profile's
+own reach, no strategy network. The network is the Leduc papers' three dense layers of
+64 (\texttt{Bestiary/DeepCFR.lean}, 10.5k parameters, no BatchNorm), and the loss --- a
+weighted squared error on the legal slots --- goes through the squared-error block as a
+host-built target, tic-tac-toe's move. Two things change relative to the three games
+around it:
+
+\begin{itemize}
+  \item \textbf{The instrument is the best response, and it is exact.} Suits never matter
+    in Leduc (there are no flushes), so the game is solved at rank level --- $6r + 30r^2$
+    information sets, 288 at $r = 3$ against OpenSpiel's 936 suit-aware ones, which fold
+    onto them one-to-one --- by vector-form CFR over the public tree with an $r \times r$
+    matrix of private ranks at each node: the best response, exploitability (the best
+    responder's winnings per hand averaged over the two seats, OpenSpiel's convention),
+    head-to-head and CFR+ to a thousand iterations are 25 milliseconds at $r = 3$ and
+    under a second at $r = 13$. Zero is Nash; CFR+ reaches $2.4 \times 10^{-4}$. Before
+    anything trains, the Lean game is checked against the C tree on every terminal
+    history and both against OpenSpiel's \texttt{leduc\_poker}: every payoff on
+    OpenSpiel's own histories, and our tables scored by OpenSpiel's exploitability to
+    $10^{-6}$ (\texttt{scripts/demos/leduc\_gate0\_openspiel.py}).
+  \item \textbf{The sampled table is the bracket, at the same budget.} A table is enough
+    at every $r$ here, so the comparison is the Deep CFR paper's own axis: exploitability
+    against nodes touched, external-sampling MCCFR on a table against the network, at
+    $r = 3$, 6 and 13. The trainer's own traversal with a lookup table in the network's
+    place must reproduce that curve before the network is trusted
+    (\texttt{mode=tabular}), and does.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/deep_cfr_leduc.png}
+\caption{Left: one hand --- the six cards, P0 holding a jack under a public queen ---
+and round 2's betting tree after check-check from P0's seat, with the trained profile's
+probability on each of P0's edges; the red edge is the bluff, raising the worst hand,
+which this profile never takes. Middle: exploitability against nodes touched, log--log
+--- tabular ES-MCCFR, Deep CFR as SD-CFR's average after every iteration (mean of three
+seeds), the strategy network's final point, CFR+ and the uniform policy as lines; $r = 3$
+solid, $r = 13$ faded. Right: raise probability at round 2's first decision after
+check-check per private and public card, the trained profile beside CFR+, the worst-hand
+cells ringed.}
+\label{fig:deep_cfr_leduc}
+\end{figure}
+
+\paragraph{Every arm against the best response.} Exploitability in chips per hand (ante
+one; a thousandth of a chip is a milli-ante per game, the Leduc papers' unit) and
+head-to-head against CFR+ averaged over the two seats, three seeds for the learned rows;
+the last column is the bluff, the raise frequency opening round 2 with a jack under a
+queen:
+
+\begin{center}
+\small
+\begin{tabular}{@{}l l l l@{}}
+\hline
+arm & exploitability & vs CFR+ & bluff \\
+\hline
+uniform random                                   & 2.374 & $-0.707$ & 50\% \\
+scripted honest: raise a pair or a king, fold a jack to a bet & 1.050 & $-0.123$ & 0\% \\
+CFR+ with its bluffs moved to call --- the price of honesty & 0.186 & $-0.012$ & 0\% \\
+Deep CFR, strategy network, 4.1M nodes          & 0.229 / 0.185 / 0.152 & $-0.055$ / $-0.039$ / $-0.050$ & \\
+Deep CFR, SD-CFR average, 4.1M nodes            & $\mathbf{0.127}$ / $\mathbf{0.150}$ / $\mathbf{0.109}$ & $-0.022$ / $-0.031$ / $-0.020$ & 0\% \\
+tabular ES-MCCFR, the same 4.1M nodes            & 0.038 / 0.043 / 0.041 & & \\
+CFR+, a thousand iterations                     & 0.00024 & 0 & 19.5\% \\
+\hline
+\end{tabular}
+\end{center}
+
+\noindent Six minutes a seed on one card. Deep CFR's exploitability falls from 1.4 at
+iteration 5 to 0.11--0.15 at a hundred and ends under the honest arm and under the
+equilibrium with its bluffs removed; at a hundred iterations it is where the Single
+Deep CFR paper's Leduc curves are (150--200 milli-antes per game read from its Figure
+1a, at 1,500 traversals an iteration to our thousand). It does not beat a sampled table
+at the same budget on the classic deck: the table is three times less exploitable at
+4.1M nodes. The scale arm is where that turns. The same recipe at $r = 6$ (1,116 sets)
+and $r = 13$ (5,148): SD-CFR 0.112 / 0.123 / 0.113 against the table's 0.053 / 0.066 /
+0.058 at 3.6M nodes, then 0.099 / 0.120 / 0.106 against 0.113 / 0.107 / 0.102 at 3.4M ---
+the table's lead is $3.1\times$, $2.0\times$, $1.0\times$, and at $r = 13$ the network is
+the better head-to-head ($-0.028$ against $-0.035$ a hand). The table visits all but a
+set or two at these budgets, so the mechanism is not what it never saw; its estimate of each set
+is noisier as the sets multiply at a fixed budget, and the network's error does not grow
+with them. The bluff column is the finding a reader can check on the figure: the
+trained profile that is 0.13 exploitable raises the losing jack under a queen 0\% of
+the time where the equilibrium raises it 19.5\% (18.6--19.5\% over two solvers and
+three initialisations --- the frequency is pinned at $r = 3$, and is not at $r = 13$,
+where the same cell ranges over tens of points), and it bluffs elsewhere instead, a jack
+under a king 12\%. Honesty's price is exact: moving the equilibrium's worst-hand raises
+to call costs 0.186 of exploitability.
+
+What this is not: a two-player, fixed-limit, one-card game, solved at rank level. The
+scale of the Deep CFR paper is heads-up flop and limit hold'em, where no exact best
+response exists to score against and the paper's numbers are against abstractions and
+head-to-head; no-limit and multi-way poker (Pluribus) are another scale again, and
+exploitability is not computable there.
+
 \subsection{Tic-tac-toe --- AlphaZero against the solved game}
 \label{sec:game_ttt}
 
@@ -17497,6 +17612,34 @@ second player's games, and it has not closed them yet.
 The entries below are the same loop at the scale that made it famous: the network is
 a residual tower, the game is Go or chess, and the target is still the model's own
 later estimate.
+
+\subsubsection*{Deep CFR (\texttt{Bestiary/DeepCFR.lean})}
+\emph{Zero} new primitives. Counterfactual regret minimisation with the two tables
+replaced by networks (Brown, Lerer, Gross and Sandholm 2019): an advantage network per
+player regresses the sampled counterfactual regrets of an information set and regret
+matching on its positive outputs is the current strategy; an average-strategy network
+regresses the strategies played, or, in Single Deep CFR (Steinberger 2019), the stored
+advantage networks are averaged exactly instead. The paper's network is two branches ---
+summed card embeddings through three dense layers, bet flags and sizes through two ---
+concatenated into three more with skips where the widths agree and a normalisation of
+the last layer's features, 98,948 parameters for heads-up flop hold'em; its Leduc
+experiments and ours use three dense layers of 64. The architecture is not the point and
+the paper says so; the loop is, and \S~\ref{sec:game_leduc} trains it.
+
+\begin{verbatim}
+def deepCfrLeducNet (r : Nat := 3) : NetSpec where
+  name   := s!"Deep CFR Leduc r{r}"
+  imageH := 1
+  imageW := 1
+  layers := [
+    -- 2r + 24 features: one-hot cards with rank scalars, pair and
+    -- above-public flags, the betting history, the round, the pot.
+    .dense (2 * r + 24) 64 .relu,
+    .dense 64 64 .relu,
+    .dense 64 64 .relu,
+    .dense 64 3 .identity          -- fold, call, raise
+  ]
+\end{verbatim}
 
 \subsubsection*{AlphaGo (\texttt{Bestiary/AlphaGo.lean})}
 \emph{Zero} new primitives. The original 2016 Lee Sedol system

@@ -52,6 +52,10 @@ bestiary-dcgan:
   "DCGAN discriminator (64×64 RGB → 1)": 11036417
   "tiny-DCGAN generator (32×32)": 173027
   "tiny-DCGAN discriminator (32×32)": 167873
+bestiary-deepcfr:
+  "Deep CFR Leduc r3": 10499
+  "Deep CFR Leduc r13": 11779
+  "Deep CFR trunk dim256": 263683
 bestiary-deeplab:
   "DeepLab v3+ (ResNet-101 backbone)": 59222869
   "DeepLab v3+ (MobileNet v2 backbone)": 5705749

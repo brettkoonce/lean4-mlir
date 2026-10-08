@@ -3,7 +3,7 @@ import LeanMlir.F32Array
 import LeanMlir.CliArgs
 
 /-! Leduc hold'em: the exact instrument, the tabular solvers and the scripted arms, no stack,
-    no GPU. `lake exe leduc-env [r=3] [iters=1000] [seeds=2] [budget=100000000]` prints the
+    no GPU. `lake exe leduc-env [r=3] [iters=1000] [seeds=2] [budget=100000000] [esSeeds=1]` prints the
     counts, solves the game with CFR+ and DCFR (exploitability at checkpoints, the game value),
     scores every scripted arm — uniform, honest, the equilibrium with its bluffs removed (the
     price of honesty) — by exploitability and head-to-head, reports the worst-hand raise
@@ -50,6 +50,7 @@ def main (args : List String) : IO Unit := do
   let iters := natArg "iters" 1000
   let seeds := natArg "seeds" 2
   let budget := natArg "budget" 100000000
+  let esSeeds := natArg "esSeeds" 1
   let t0 ← IO.monoMsNow
   let cnt ← counts r.toUSize
   let nI := readU64 cnt 0
@@ -115,6 +116,10 @@ def main (args : List String) : IO Unit := do
     IO.FS.writeFile s!".lake/build/leduc_r{r}_{name}.txt" s
   dumpTable "cfrplus" eq
   dumpTable "dcfr" tables[1]!
+  -- the trainer's inputs, for inspection: f32 [nInfo, F] features and [nInfo, 3] legal masks
+  let (feats, masks) ← enumerate r.toUSize
+  IO.FS.writeBinFile s!".lake/build/leduc_r{r}_features.bin" feats
+  IO.FS.writeBinFile s!".lake/build/leduc_r{r}_mask.bin" masks
   if r == 3 then
     IO.FS.writeFile ".lake/build/leduc_r3_payoffs.txt"
       ("\n".intercalate ((allTerminals r).map State.historyLine).toList ++ "\n")
@@ -150,15 +155,24 @@ def main (args : List String) : IO Unit := do
     let lo := fs.foldl min 1.0
     let hi := fs.foldl max 0.0
     say s!"    {name.pushn ' ' (28 - name.length)} {fmt (100.0 * lo) 1}% – {fmt (100.0 * hi) 1}%"
-  -- ES-MCCFR: exploitability against nodes touched
-  say "  ES-MCCFR (seed 1): nodes touched, exploitability, coverage"
-  let es ← esAlloc r.toUSize 1
-  let mut b := 1000
-  while b <= budget do
-    let st ← esRun es b.toUInt64
-    let e ← exploitability r (← esAverage es)
-    say s!"    {readU64 st 0} nodes ({readU64 st 1} iterations): {e}, coverage {fmt ((readU64 st 2).toFloat / nI.toFloat) 3}"
-    b := b * 10
+  -- ES-MCCFR: exploitability against nodes touched, by decades up to `budget` and at `budget`
+  -- itself (a trainer's node count, for the matched-budget row), `esSeeds` seeds
+  let mut esCsv := "seed,nodes,iterations,exploitability,coverage\n"
+  for esSeed in [1:esSeeds + 1] do
+    say s!"  ES-MCCFR (seed {esSeed}): nodes touched, exploitability, coverage"
+    let es ← esAlloc r.toUSize esSeed.toUInt64
+    let mut b := 1000
+    let mut last := 0
+    while b <= budget || last < budget do
+      let target := if b <= budget then b else budget   -- the decades, then `budget` itself
+      let st ← esRun es target.toUInt64
+      let e ← exploitability r (← esAverage es)
+      let cov := (readU64 st 2).toFloat / nI.toFloat
+      say s!"    {readU64 st 0} nodes ({readU64 st 1} iterations): {e}, coverage {fmt cov 3}"
+      esCsv := esCsv ++ s!"{esSeed},{readU64 st 0},{readU64 st 1},{e},{fmt cov 4}\n"
+      last := readU64 st 0
+      b := b * 10
+  IO.FS.writeFile s!".lake/build/leduc_r{r}_esmccfr.csv" esCsv
   if !ok then throw <| IO.userError "leduc gates failed"
   say s!"gates: the Lean game is the C tree, the information-set count is {nInfo r}\
 {if r == 3 then ", uniform and the game value are OpenSpiel's" else ""} ({(← IO.monoMsNow) - t0} ms)"

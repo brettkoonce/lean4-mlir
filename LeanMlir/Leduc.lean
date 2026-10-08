@@ -281,6 +281,16 @@ opaque traverse (r : USize) (sig0 sig1 feats mask : @& ByteArray) (p K : USize) 
 @[extern "lean_leduc_reservoir_sample"]
 opaque reservoirSample (res : @& ByteArray) (B : USize) (seed : UInt64) : IO (ByteArray × ByteArray)
 
+/-- Gate B's table in the net's place: the summed sampled regrets of an advantage reservoir
+    per set, regret-matched — ES-MCCFR's current strategy. Every row must still be held. -/
+@[extern "lean_leduc_reservoir_sigma"]
+opaque reservoirSigma (r : USize) (res : @& ByteArray) : IO ByteArray
+
+/-- The t-weighted average of a strategy reservoir's σ rows per set — ES-MCCFR's average
+    strategy when every row is held. -/
+@[extern "lean_leduc_reservoir_average"]
+opaque reservoirAverage (r : USize) (res : @& ByteArray) : IO ByteArray
+
 /-- The MSE block's target for the weighted, masked squared error on a logits block `[B, 3]`:
     `y = out − scale · g`, `g = w ⊙ m ⊙ (out − target)`, `w = t / mean t`; at `scale = nOut / 2`
     the block's gradient is `g / B`. Returns `(y [B, 3], [mean weighted loss])`. -/

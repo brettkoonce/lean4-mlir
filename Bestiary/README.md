@@ -89,6 +89,7 @@ in the outer loop.
 | `AlphaGo.lean`   | AlphaGo (2016)            | policy + value + rollout + tiny | Three separate nets, 48 hand-crafted features; the pre-Zero original |
 | `AlphaZero.lean` | AlphaZero / AlphaGo Zero  | original Go, chess, tiny | Two-headed (policy + value); the self-play loop is trained on tic-tac-toe in `demos/MainAlphaZeroTtt.lean`, with `AlphaGo.lean`'s plain conv stack rather than this tower |
 | `MuZero.lean`    | MuZero                    | Go / Atari / tiny | AlphaZero + learned dynamics; three networks (rep + dyn + pred) |
+| `DeepCFR.lean`   | Deep CFR / SD-CFR         | Leduc net, paper trunk | Advantage + strategy nets in place of CFR's tables; the loop is trained on Leduc hold'em in `demos/MainDeepCfrLeduc.lean`, scored by exact exploitability |
 
 ## Beyond vision
 

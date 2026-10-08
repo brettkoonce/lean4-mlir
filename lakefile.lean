@@ -2007,6 +2007,9 @@ lean_exe «bestiary-cyclegan» where
 lean_exe «bestiary-alphago» where
   root := `Bestiary.AlphaGo
 
+lean_exe «bestiary-deepcfr» where
+  root := `Bestiary.DeepCFR
+
 lean_exe «bestiary-pix2pix» where
   root := `Bestiary.Pix2Pix
 
