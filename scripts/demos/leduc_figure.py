@@ -63,13 +63,13 @@ def rows(name):
 
 plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 9, "axes.titlesize": 9.5,
                      "axes.labelsize": 9, "legend.fontsize": 7.5, "xtick.labelsize": 8, "ytick.labelsize": 8})
-fig = plt.figure(figsize=(12.6, 4.1), constrained_layout=True)
-gs = gridspec.GridSpec(1, 3, figure=fig, width_ratios=[1.25, 1.2, 1.0])
+fig = plt.figure(figsize=(13.0, 4.1), constrained_layout=True)
+gs = gridspec.GridSpec(1, 3, figure=fig, width_ratios=[1.3, 1.1, 1.12])
 
 # ── (a) the hand and round 2's tree ──
 net = load_table(table_name)
 ax = fig.add_subplot(gs[0, 0])
-ax.set_xlim(0, 10.6); ax.set_ylim(-1.1, 10); ax.axis("off")
+ax.set_xlim(0, 11.6); ax.set_ylim(-1.35, 10); ax.axis("off")
 ax.set_title("(a) one hand: P0 holds J under a public Q — round 2 after check-check", loc="left")
 cards = [("J", "♠"), ("J", "♥"), ("Q", "♠"), ("Q", "♥"), ("K", "♠"), ("K", "♥")]
 for i, (rk, su) in enumerate(cards):
@@ -86,46 +86,54 @@ ax.text(7.2, 8.95, "P1: one of the\nother four", ha="left", va="center", fontsiz
 # P0's sets in this round: (closing cc, state s, private J, public Q)
 def p0(s):
     return net[info_index(1, 0, STATES[s], 0, 1)]
-# nodes: name -> (x, y, who)
-nodes = {"": (0.8, 4.3, 0), "c": (3.4, 6.2, 1), "r": (3.4, 2.4, 1), "cr": (6.0, 5.2, 0),
-         "rr": (6.0, 1.4, 0), "crr": (8.6, 4.4, 1),
-         "cc": (6.0, 7.2, None), "rc": (6.0, 3.3, None), "crc": (8.6, 6.0, None),
-         "rrc": (8.6, 2.3, None), "fold-r": (6.0, 0.5, None), "fold-cr": (8.6, 7.1, None),
-         "fold-rr": (8.6, 1.0, None), "fold-crr": (10.0, 4.9, None), "crrc": (10.0, 3.8, None)}
-labels = {"cc": "check-check:\nshowdown 1+1", "rc": "call: showdown 5+5", "crc": "call: showdown 5+5",
-          "rrc": "call: showdown 9+9", "crrc": "call: 9+9", "fold-r": "P1 folds: +1", "fold-cr": "fold: −1",
-          "fold-rr": "fold: −5", "fold-crr": "P1 folds: +5"}
+# decision nodes: name -> (x, y, who); terminals: name -> (x, y) of the label's left edge
+nodes = {"": (0.7, 4.0, 0), "c": (3.0, 5.9, 1), "r": (3.0, 2.0, 1), "cr": (5.4, 5.0, 0),
+         "rr": (5.4, 0.9, 0), "crr": (7.8, 4.0, 1)}
+terms = {"cc": (5.4, 7.1), "fold-cr": (7.8, 6.3), "crc": (7.8, 5.2), "fold-crr": (9.7, 4.5),
+         "crrc": (9.7, 3.5), "fold-r": (5.4, 3.1), "rc": (5.4, 2.1), "fold-rr": (7.8, 1.6), "rrc": (7.8, 0.3)}
+# the opponent's terminals say what P1 did; P0's carry the trained profile's probability
+ACT = {"f": 0, "c": 1, "r": 2}
+NAME = {"f": "fold", "c": "call", "r": "raise"}
+outcome = {"cc": "P1 checks: showdown 1+1", "fold-cr": "−1", "crc": "showdown 5+5", "fold-crr": "P1 folds: +5",
+           "crrc": "P1 calls: showdown 9+9", "fold-r": "P1 folds: +1", "rc": "P1 calls: showdown 5+5",
+           "fold-rr": "−5", "rrc": "showdown 9+9"}
+# (from, to, action, who moves); a decision-node destination gets a mid-edge label, a terminal gets its label at the tip
 edges = [("", "c", "c", 0), ("", "r", "r", 0), ("c", "cc", "c", 1), ("c", "cr", "r", 1),
          ("r", "fold-r", "f", 1), ("r", "rc", "c", 1), ("r", "rr", "r", 1),
          ("cr", "fold-cr", "f", 0), ("cr", "crc", "c", 0), ("cr", "crr", "r", 0),
          ("rr", "fold-rr", "f", 0), ("rr", "rrc", "c", 0),
          ("crr", "fold-crr", "f", 1), ("crr", "crrc", "c", 1)]
-ACT = {"f": 0, "c": 1, "r": 2}
 for a, b, act, who in edges:
-    (x0, y0, _), (x1, y1, _) = nodes[a], nodes[b]
+    x0, y0, _ = nodes[a]
+    terminal = b in terms
+    x1, y1 = terms[b] if terminal else nodes[b][:2]
     bluff = (a == "" and act == "r")
     col = BLUFF if bluff else (INK if who == 0 else GREY)
     ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
                 arrowprops=dict(arrowstyle="-|>", color=col, lw=1.8 if bluff else (1.1 if who == 0 else 0.8),
-                                shrinkA=9, shrinkB=9))
-    xm, ym = x0 + 0.42 * (x1 - x0), y0 + 0.42 * (y1 - y0)
-    if who == 0:
-        p = p0(a)[ACT[act]]
-        txt = f"{act} {p:.2f}" + ("  bluff" if bluff else "")
-        dy, va = {"f": (0.26, "bottom"), "c": (-0.3, "top"), "r": (0.26, "bottom")}[act][0], {"f": "bottom", "c": "top", "r": "bottom"}[act]
-        ax.text(xm, ym + dy, txt, ha="center", va=va, fontsize=7.5, color=col,
-                fontweight="bold" if bluff else "normal",
-                bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.85))
+                                shrinkA=9, shrinkB=3 if terminal else 9))
+    if terminal:
+        if who == 0:
+            txt = f"{NAME[act]} {p0(a)[ACT[act]]:.2f}: {outcome[b]}"
+        else:
+            txt = outcome[b]
+        ax.text(x1 + 0.1, y1, txt, ha="left", va="center", fontsize=6.8, color=INK if who == 0 else GREY,
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none"))
     else:
-        ax.text(xm, ym + 0.22, act, ha="center", va="bottom", fontsize=7, color=GREY)
+        xm, ym = x0 + 0.45 * (x1 - x0), y0 + 0.45 * (y1 - y0)
+        if who == 0:
+            p = p0(a)[ACT[act]]
+            txt = f"{'check' if (a == '' and act == 'c') else NAME[act]} {p:.2f}" + ("  bluff" if bluff else "")
+            above = (act == "c")          # the root's check (no bet to call yet) rides above its edge, every raise below
+            ax.text(xm, ym + (0.28 if above else -0.28), txt, ha="center", va="bottom" if above else "top",
+                    fontsize=7.5, color=col, fontweight="bold" if bluff else "normal",
+                    bbox=dict(boxstyle="round,pad=0.12", fc="white", ec="none", alpha=0.85))
+        else:
+            ax.text(xm, ym - 0.24, "P1 raises", ha="center", va="top", fontsize=6.8, color=GREY)
 for name, (x, y, who) in nodes.items():
-    if who is None:
-        ax.text(x + 0.05, y, labels[name], ha="left" if x > 9 else "center", va="center", fontsize=6.8, color=GREY,
-                bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none"))
-    else:
-        ax.add_patch(plt.Circle((x, y), 0.32, fc="white" if who == 0 else "#f0f0f0", ec=INK if who == 0 else GREY, lw=1.2))
-        ax.text(x, y, f"P{who}", ha="center", va="center", fontsize=7.5, color=INK if who == 0 else GREY)
-ax.text(0.3, -1.0, "P0's edges carry the trained profile's probabilities (SD-CFR, seed 1); P1's are the opponent's.\nContributions 1+1 after round 1's check-check; a round-2 raise is 4; showdown and fold payoffs to P0.",
+    ax.add_patch(plt.Circle((x, y), 0.32, fc="white" if who == 0 else "#f0f0f0", ec=INK if who == 0 else GREY, lw=1.2))
+    ax.text(x, y, f"P{who}", ha="center", va="center", fontsize=7.5, color=INK if who == 0 else GREY)
+ax.text(0.3, -1.3, "P0's edges carry the trained profile's probabilities (SD-CFR, seed 1); P1's are the opponent's.\nContributions 1+1 after round 1's check-check; a round-2 raise is 4; showdown and fold payoffs to P0.",
         fontsize=6.8, color=GREY, va="bottom")
 
 # ── (b) exploitability against nodes touched ──
@@ -176,10 +184,10 @@ ax.axhline(2.38e-4, ls="--", color=EQ, lw=0.9); ax.text(1.2e3, 3.0e-4, "CFR+, 1,
 ax.set_xscale("log"); ax.set_yscale("log")
 ax.set_xlabel("nodes touched"); ax.set_ylabel("exploitability (chips / hand)")
 ax.set_ylim(1e-4, 5); ax.grid(True, which="major", alpha=0.25)
-ax.legend(loc="upper right", frameon=False)
+ax.legend(loc="lower left", bbox_to_anchor=(0.0, 0.13), frameon=False)
 
 # ── (c) raise probability at round 2's first decision after check-check ──
-sub = gs[0, 2].subgridspec(1, 2, wspace=0.08)
+sub = gs[0, 2].subgridspec(1, 2, wspace=0.1)
 cfr = load_txt_table("r3_cfrplus.txt")
 def raise_grid(tab):
     g = np.full((R, R), np.nan)

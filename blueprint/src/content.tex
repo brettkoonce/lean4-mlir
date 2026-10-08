@@ -17449,9 +17449,11 @@ cells ringed.}
 
 \paragraph{Every arm against the best response.} Exploitability in chips per hand (ante
 one; a thousandth of a chip is a milli-ante per game, the Leduc papers' unit) and
-head-to-head against CFR+ averaged over the two seats, three seeds for the learned rows;
-the last column is the bluff, the raise frequency opening round 2 with a jack under a
-queen:
+head-to-head against CFR+ averaged over the two seats. The scripted honest arm raises a
+pair or a king and folds a jack to a bet; the price-of-honesty arm is CFR+ with its
+worst-hand raises moved to call; the two Deep CFR rows and the sampled table are at the
+same 4.1M nodes, three seeds each. The last column is the bluff, the raise frequency
+opening round 2 with a jack under a queen:
 
 \begin{center}
 \small
@@ -17459,13 +17461,13 @@ queen:
 \hline
 arm & exploitability & vs CFR+ & bluff \\
 \hline
-uniform random                                   & 2.374 & $-0.707$ & 50\% \\
-scripted honest: raise a pair or a king, fold a jack to a bet & 1.050 & $-0.123$ & 0\% \\
-CFR+ with its bluffs moved to call --- the price of honesty & 0.186 & $-0.012$ & 0\% \\
-Deep CFR, strategy network, 4.1M nodes          & 0.229 / 0.185 / 0.152 & $-0.055$ / $-0.039$ / $-0.050$ & \\
-Deep CFR, SD-CFR average, 4.1M nodes            & $\mathbf{0.127}$ / $\mathbf{0.150}$ / $\mathbf{0.109}$ & $-0.022$ / $-0.031$ / $-0.020$ & 0\% \\
-tabular ES-MCCFR, the same 4.1M nodes            & 0.038 / 0.043 / 0.041 & & \\
-CFR+, a thousand iterations                     & 0.00024 & 0 & 19.5\% \\
+uniform random              & 2.374 & $-0.707$ & 50\% \\
+scripted honest             & 1.050 & $-0.123$ & 0\% \\
+CFR+, bluffs moved to call  & 0.186 & $-0.012$ & 0\% \\
+Deep CFR, strategy network  & 0.229 / 0.185 / 0.152 & $-0.055$ / $-0.039$ / $-0.050$ & \\
+Deep CFR, SD-CFR average    & $\mathbf{0.127}$ / $\mathbf{0.150}$ / $\mathbf{0.109}$ & $-0.022$ / $-0.031$ / $-0.020$ & 0\% \\
+tabular ES-MCCFR            & 0.038 / 0.043 / 0.041 & & \\
+CFR+, a thousand iterations & 0.00024 & 0 & 19.5\% \\
 \hline
 \end{tabular}
 \end{center}
