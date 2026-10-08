@@ -1,5 +1,4 @@
 import LeanMlir.Leduc
-import LeanMlir.F32Array
 import LeanMlir.CliArgs
 
 /-! Leduc hold'em: the exact instrument, the tabular solvers and the scripted arms, no stack,
