@@ -2406,7 +2406,8 @@ script «vitb-default-emabf16-4gpu» (args) do runJobScript "vitb-default-emabf1
     through `scripts/supervise.sh` in order and stops at the first failure; a row whose checkpoint
     is complete exits 0 at once, so re-invoking resumes where it left off. `lake run imagenet
     start cnx vit` (job-name prefixes) runs a subset. Rows are sequential by construction: every
-    job claims all four cards. -/
+    job claims all four cards. `lake build imagenet` builds every row's trainer first, so the
+    plan's binary-freshness checks have nothing to warn about. -/
 script imagenet (args) do
   let (go, only) := match args with
     | "start" :: rest => (true, rest)
@@ -2437,6 +2438,18 @@ script imagenet (args) do
       IO.eprintln s!"⛔ {j} did not complete — the tier stops here; re-run to resume"
       return 1
   return 0
+
+-- `imagenet` the script owns the root name, hence the namespace; the target's name is still `imagenet`.
+namespace ImagenetBuild
+/-- `lake build imagenet` — every trainer the ImageNet rows run, each built once, so a
+    `lake run imagenet` plan afterwards reads current binaries. -/
+target imagenet : Array System.FilePath := do
+  let exes := imagenetRows.foldl (fun acc (_, e, _) => if acc.contains e then acc else acc.push e) #[]
+  let jobs ← exes.mapM fun e => do
+    let some exe ← findLeanExe? (Lean.Name.mkSimple e) | error s!"imagenetRows names an unknown exe: {e}"
+    exe.fetch
+  return Job.collectArray jobs "imagenet"
+end ImagenetBuild
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- `lake run download` — fetch the core datasets the verified trainers + the
