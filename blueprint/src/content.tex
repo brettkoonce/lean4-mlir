@@ -19069,7 +19069,13 @@ The proofs in this book compile with \textbf{zero \texttt{sorry}s}.
 Every VJP correctness theorem is machine-checked by Lean's type system,
 and that covers dense layers, convolution, batch normalization, residual
 connections, depthwise convolution, squeeze-and-excitation, layer
-normalization, and self-attention. If it builds, it's correct.
+normalization, and self-attention. If it builds, the gradients are
+right. What the proofs do not say is that training converges, or how
+well: an optimizer handed the exact gradient can still diverge, plateau
+or overfit, and that is a theorem in no framework. Every accuracy in
+this book is a measurement, and the measurement is sharper for the
+proof: when a verified run matches its JAX reference, or misses it, a
+wrong gradient is not among the explanations.
 
 But ``it builds'' is only the first of three kinds of certainty,
 and they are not the same kind. \textbf{Proven} (deductive): in Lean,
