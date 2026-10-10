@@ -9272,7 +9272,9 @@ backwards (Theorem~\ref{thm:hasGradAt_comp}, once per stage); see
           scaled by \(R\) \hfill[\texttt{hgs}]
   \end{enumerate}
   \Prove{} the mean over replicas of each of the 213 all-reduced gradient
-  nodes (loss \(\div B\) per replica; each replica's stochastic-depth and
+  nodes of the data-parallel renders at either precision
+  (\texttt{efficientnetin\_emarmsdp64dropdowxeps0001bf16} among them, at
+  \(\texttt{replicas} > 1\); loss \(\div B\) per replica; each replica's stochastic-depth and
   dropout masks the shards of global ones) equals the single-device node of
   Theorem~\ref{thm:efficientnet_step_tie} at batch \(R \cdot N\) and those
   global masks, loss \(\div (R \cdot B)\). Instantiated at the

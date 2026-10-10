@@ -40,11 +40,11 @@ One device: every ResNet-50 data-parallel render synchronises BatchNorm, and its
 `ResNet50SyncStepTieB`'s. It is about the INPUT gradient; the 161 parameter gradients are
 `ResNet50StepTieB.lean`'s tie.
 
-**bf16 is outside this statement.** The ImageNet runs the book reports train from
-`resnet50in_momdp64bf16` and `resnet50in160_lambaccdp4x128wxclipbcebf16`, which swap the conv
-nodes for bf16 kinds ([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among
-them). What those kinds do under sharding is `DataParallel.SyncBf16`; no whole-net statement
-covers that step.
+**This statement takes no precision flag.** The ImageNet runs the book reports train from
+`resnet50in_momdp64bf16` and `resnet50in160_lambaccdp4x128wxclipbcebf16`, whose conv weight
+gradients are the bf16 kinds (`Foundation.Bf16GradNodes`); those runs' steps are
+`ResNet50StepTieB`'s and, data-parallel, `ResNet50SyncStepTieB`'s, both stated on the renderers'
+`bf16` switch at the identity rounding (`Bf16Erasure`).
 -/
 
 -- Build note: the blocks stay opaque and there is no `backward_unique` step, for the reason

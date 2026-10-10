@@ -43,10 +43,11 @@ two relu clauses are the caller's, inside that witness). One device: the data-pa
 collectives included, is `ResNet34SyncStepTieB`'s. It is about the INPUT gradient; the parameter
 gradients are `ResNet34StepTieB`'s tie.
 
-**bf16 is outside this statement.** The ImageNet run the book reports trains from
-`resnet34in_momdp64bf16`, which swaps the conv nodes for bf16 kinds
-([`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean), the `*GradBBf16` weight gradients among them). What those kinds
-do under sharding is `DataParallel.SyncBf16`; no whole-net statement covers that step.
+**This statement takes no precision flag.** The ImageNet run the book reports trains from
+`resnet34in_momdp64bf16`, whose conv weight gradients are the bf16 kinds
+(`Foundation.Bf16GradNodes`); that run's step is `ResNet34StepTieB`'s and, data-parallel,
+`ResNet34SyncStepTieB`'s, both stated on the renderers' `bf16` switch at the identity rounding
+(`Bf16Erasure`).
 -/
 
 -- Build notes (two walls, both measured):
