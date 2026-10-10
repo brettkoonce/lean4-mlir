@@ -372,7 +372,7 @@ opaque loadBrats (path : @& String) (imgSize : USize) (channels : USize := 4) :
     Each record on disk holds the scanned slice, `realisations` simulated quarter-dose
     copies of it and the readers' nodule mask; `pairing` picks the pair:
     `0` = supervised (input = low copy `realisation`, target = the scanned slice),
-    `1` = Noise2Noise (input = low copy 0, target = low copy 1).
+    `1` = Noise2Noise (input = low copy 0, target = low copy 1), `2` = the same pairs reversed.
     Pixels are `(HU + 1024) / 4096`, linear in HU and exact (no windowing).
     The record size is not in the header, so the loader checks the file length against
     `count · (3 + 2·realisations) · imgSize²` and refuses a mismatch. -/

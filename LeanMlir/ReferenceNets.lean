@@ -88,9 +88,10 @@ def unetBrats : NetSpec where
     is `low − 100·out` HU (residual learning, as RED-CNN and DnCNN do). Fully convolutional: the
     trainer renders it at `S = 256` patches, the scorer at `S = 512` slices, and both read one
     checkpoint, so the name does not carry `S` (the train-step and eval artifacts take different
-    suffixes under the one `buildPrefix`). -/
-def unetCtDenoise (S : Nat := 256) : NetSpec where
-  name := "UNet CT denoiser (LIDC, 1-channel HU to noise)"
+    suffixes under the one `buildPrefix`). `arm` (empty for the smoke fit) names a run apart, so
+    concurrent arms never share a train-step artifact or a checkpoint. -/
+def unetCtDenoise (S : Nat := 256) (arm : String := "") : NetSpec where
+  name := "UNet CT denoiser (LIDC, 1-channel HU to noise)" ++ (if arm.isEmpty then "" else s!" {arm}")
   imageH := S
   imageW := S
   layers := [

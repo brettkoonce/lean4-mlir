@@ -205,3 +205,14 @@ each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-or
   by a one-volume net: SSIM dips. Not a result, only the gate. XLA logs "Can't reduce memory
   use below 11.8 GiB … only reduced to 24.4 GiB" compiling the 512² eval at batch 4 and at 1;
   it runs and scores at either, so the message is the autotuner's, not a failure.
+- 2026-10-10: **runs prepped.** `lidc-denoise-train` takes `--arm=mse|n2n` (N2N: target = the
+  other low copy, both directions via the loader's pairings 1 and 2; the scanned slice is never
+  seen), `--seed`, `--cosine`, checkpoints `[θ, m, v, BN, step]` every 1,000 steps to
+  `data/lidc/out/<arm>/` and resumes from them (tested: a 60-step run resumed at 60), writes the
+  loss curve to `<out>/curve.csv`; the arm and seed are in the net's name, so the two arms'
+  artifacts and checkpoints never collide. N2N smoke fit, same 1,500 steps on 0002: body RMSE
+  40.67 → 19.68 (MSE 20.25), unseen 0007 97.64 → 74.11 (MSE 74.39) — the classic N2N ≈ MSE.
+  `runs/2026-10-10-lidc-denoise/launch.sh`: loader gate on `val.bin`, both GPUs idle, then MSE on
+  device 0 and N2N on device 1 (N2N after MSE's data is resident), 30,000 steps of 8 × 256²,
+  Adam 5e-4 cosine, seed 0; each arm scores the val split and runs the Python scorer
+  (`score.txt`, `figure.png`). Budget ≈ 3.3 h at 0.4 s/step, ≈ 5.4 h at 0.65 s/step.

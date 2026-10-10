@@ -571,6 +571,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
 // target an S*S f32 image per record instead of a class label. `pairing` picks the arm:
 //   0  supervised    input = low[realisation], target = full   (the MSE UNet, the diffusion condition)
 //   1  noise2noise   input = low[0],           target = low[1] (needs N >= 2)
+//   2  noise2noise   input = low[1],           target = low[0] (the same pairs reversed)
 // Both images are scaled x = (HU + 1024) / 4096 = stored / 4096: linear in HU, so a
 // denoiser's MSE is HU² up to one constant, and exact (every stored value is a multiple of 1/4096).
 // No windowing here: the soft-tissue window is a display and scoring choice, not the net's input.
@@ -599,9 +600,9 @@ static FILE* ct_open(const char* path, size_t S, size_t N, uint32_t* count, cons
 LEAN_EXPORT lean_obj_res lean_f32_load_ct_pair(b_lean_obj_arg path_obj, size_t S, size_t N,
                                                size_t pairing, size_t realisation) {
     if (S == 0 || N == 0) return ct_err("lidc: size and realisations must be positive");
-    if (pairing > 1) return ct_err("lidc: pairing must be 0 (supervised) or 1 (noise2noise)");
+    if (pairing > 2) return ct_err("lidc: pairing must be 0 (supervised) or 1, 2 (noise2noise)");
     if (pairing == 0 && realisation >= N) return ct_err("lidc: realisation index out of range");
-    if (pairing == 1 && N < 2) return ct_err("lidc: noise2noise needs two realisations");
+    if (pairing >= 1 && N < 2) return ct_err("lidc: noise2noise needs two realisations");
     uint32_t count; const char* err = NULL;
     FILE* f = ct_open(lean_string_cstr(path_obj), S, N, &count, &err);
     if (!f) return ct_err(err);
@@ -615,8 +616,8 @@ LEAN_EXPORT lean_obj_res lean_f32_load_ct_pair(b_lean_obj_arg path_obj, size_t S
     uint8_t* buf = (uint8_t*)malloc(rec);
     if (!buf) { fclose(f); lean_dec(in_ba); lean_dec(tgt_ba); return ct_err("lidc: malloc failed"); }
     // Image k of a record (0 = full, 1 + r = low realisation r) starts at byte 2*k*hw.
-    const size_t in_img  = pairing == 0 ? 1 + realisation : 1;
-    const size_t tgt_img = pairing == 0 ? 0 : 2;
+    const size_t in_img  = pairing == 0 ? 1 + realisation : pairing == 1 ? 1 : 2;
+    const size_t tgt_img = pairing == 0 ? 0 : pairing == 1 ? 2 : 1;
     const float inv = 1.0f / CT_SCALE;
     for (uint32_t i = 0; i < count; i++) {
         if (fread(buf, 1, rec, f) != rec) {
