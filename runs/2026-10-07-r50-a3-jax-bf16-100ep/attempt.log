@@ -1,0 +1,1045 @@
+[jax] fresh start
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1791394744.246606 2605907 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1791394745.284992 2605907 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+ResNet-50 (ImageNet) · Lean 4 → JAX
+  Conv(3→64,7x7/2)+BN → Pool(3x3) → BN3(64→256,s1) → BN4(256→512,s2) → BN6(512→1024,s2) → BN3(1024→2048,s2) → GAP → 2048→1000
+
+ImageNet (1000-class) — tfds streaming pipeline
+lr=0.008000  batch_size=2048 (4 devices x 512)  epochs=100  params=25557032
+steps_per_epoch=625  total_steps=62500
+grad-accum=4x  micro_batch=512 (4 devices x 128)  -> effective_batch=2048  (LR targets effective)
+backend=gpu  devices=[CudaDevice(id=0), CudaDevice(id=1), CudaDevice(id=2), CudaDevice(id=3)]
+Starting training...
+W1007 17:39:28.030130 2606113 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1007 17:39:28.136069 2606113 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+  step 100/62500  loss=0.5727  lr=0.00026  (1260.0ms/step avg)
+  step 200/62500  loss=0.1847  lr=0.00051  (1042.0ms/step avg)
+  step 300/62500  loss=0.0174  lr=0.00077  (969.0ms/step avg)
+  step 400/62500  loss=0.0146  lr=0.00102  (933.0ms/step avg)
+  step 500/62500  loss=0.0144  lr=0.00128  (911.0ms/step avg)
+  step 600/62500  loss=0.0143  lr=0.00154  (896.0ms/step avg)
+  Running validation ...
+[Epoch 1] lr=0.0016 loss(train_avg)=0.186 val_top1=866/50000 (0.0173) val_top5=0.0594 val_loss=6.2984  [558.2s train, 21.8s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e1.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e1.state.npz (590 arrays, step=625)
+  step 700/62500  loss=0.0141  lr=0.00179  (917.0ms/step avg)
+  step 800/62500  loss=0.0072  lr=0.00205  (905.0ms/step avg)
+  step 900/62500  loss=0.0137  lr=0.0023  (896.0ms/step avg)
+  step 1000/62500  loss=0.014  lr=0.00256  (889.0ms/step avg)
+  step 1100/62500  loss=0.0137  lr=0.00282  (883.0ms/step avg)
+  step 1200/62500  loss=0.0138  lr=0.00307  (878.0ms/step avg)
+  Running validation ...
+[Epoch 2] lr=0.0032 loss(train_avg)=0.0098 val_top1=2546/50000 (0.0509) val_top5=0.148 val_loss=5.6659  [513.9s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e2.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e2.state.npz (590 arrays, step=1250)
+  step 1300/62500  loss=0.0137  lr=0.00333  (887.0ms/step avg)
+  step 1400/62500  loss=0.0067  lr=0.00358  (883.0ms/step avg)
+  step 1500/62500  loss=0.0136  lr=0.00384  (879.0ms/step avg)
+  step 1600/62500  loss=0.0137  lr=0.0041  (875.0ms/step avg)
+  step 1700/62500  loss=0.0134  lr=0.00435  (872.0ms/step avg)
+  step 1800/62500  loss=0.0134  lr=0.00461  (869.0ms/step avg)
+  Running validation ...
+[Epoch 3] lr=0.0048 loss(train_avg)=0.0095 val_top1=5108/50000 (0.1022) val_top5=0.263 val_loss=4.9473  [514.1s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e3.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e3.state.npz (590 arrays, step=1875)
+  step 1900/62500  loss=0.0132  lr=0.00486  (876.0ms/step avg)
+  step 2000/62500  loss=0.0064  lr=0.00512  (874.0ms/step avg)
+  step 2100/62500  loss=0.0133  lr=0.00538  (871.0ms/step avg)
+  step 2200/62500  loss=0.0129  lr=0.00563  (869.0ms/step avg)
+  step 2300/62500  loss=0.0061  lr=0.00589  (867.0ms/step avg)
+  step 2400/62500  loss=0.0127  lr=0.00614  (865.0ms/step avg)
+  step 2500/62500  loss=0.0057  lr=0.0064  (863.0ms/step avg)
+  Running validation ...
+[Epoch 4] lr=0.0064 loss(train_avg)=0.009 val_top1=6197/50000 (0.1239) val_top5=0.2948 val_loss=4.8587  [514.2s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e4.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e4.state.npz (590 arrays, step=2500)
+  step 2600/62500  loss=0.0127  lr=0.00666  (869.0ms/step avg)
+  step 2700/62500  loss=0.013  lr=0.00691  (867.0ms/step avg)
+  step 2800/62500  loss=0.0059  lr=0.00717  (865.0ms/step avg)
+  step 2900/62500  loss=0.0126  lr=0.00742  (864.0ms/step avg)
+  step 3000/62500  loss=0.0054  lr=0.00768  (862.0ms/step avg)
+  step 3100/62500  loss=0.0057  lr=0.00794  (861.0ms/step avg)
+  Running validation ...
+[Epoch 5] lr=0.008 loss(train_avg)=0.0084 val_top1=7294/50000 (0.1459) val_top5=0.3291 val_loss=4.5862  [513.7s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e5.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e5.state.npz (590 arrays, step=3125)
+  step 3200/62500  loss=0.0123  lr=0.008  (865.0ms/step avg)
+  step 3300/62500  loss=0.0122  lr=0.008  (864.0ms/step avg)
+  step 3400/62500  loss=0.0131  lr=0.008  (863.0ms/step avg)
+  step 3500/62500  loss=0.0125  lr=0.008  (862.0ms/step avg)
+  step 3600/62500  loss=0.0121  lr=0.008  (861.0ms/step avg)
+  step 3700/62500  loss=0.0118  lr=0.008  (860.0ms/step avg)
+  Running validation ...
+[Epoch 6] lr=0.007998 loss(train_avg)=0.0082 val_top1=12523/50000 (0.2505) val_top5=0.4958 val_loss=3.7074  [513.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e6.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e6.state.npz (590 arrays, step=3750)
+  step 3800/62500  loss=0.012  lr=0.008  (863.0ms/step avg)
+  step 3900/62500  loss=0.0117  lr=0.008  (862.0ms/step avg)
+  step 4000/62500  loss=0.0119  lr=0.008  (861.0ms/step avg)
+  step 4100/62500  loss=0.0117  lr=0.00799  (860.0ms/step avg)
+  step 4200/62500  loss=0.0118  lr=0.00799  (859.0ms/step avg)
+  step 4300/62500  loss=0.0126  lr=0.00799  (858.0ms/step avg)
+  Running validation ...
+[Epoch 7] lr=0.007991 loss(train_avg)=0.0079 val_top1=14655/50000 (0.2931) val_top5=0.5542 val_loss=3.4375  [513.2s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e7.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e7.state.npz (590 arrays, step=4375)
+  step 4400/62500  loss=0.0115  lr=0.00799  (862.0ms/step avg)
+  step 4500/62500  loss=0.0116  lr=0.00799  (861.0ms/step avg)
+  step 4600/62500  loss=0.0115  lr=0.00799  (860.0ms/step avg)
+  step 4700/62500  loss=0.0122  lr=0.00799  (859.0ms/step avg)
+  step 4800/62500  loss=0.0113  lr=0.00798  (858.0ms/step avg)
+  step 4900/62500  loss=0.0114  lr=0.00798  (857.0ms/step avg)
+  step 5000/62500  loss=0.0113  lr=0.00798  (857.0ms/step avg)
+  Running validation ...
+[Epoch 8] lr=0.00798 loss(train_avg)=0.0076 val_top1=15027/50000 (0.3005) val_top5=0.5526 val_loss=3.4324  [512.9s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e8.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e8.state.npz (590 arrays, step=5000)
+  step 5100/62500  loss=0.0111  lr=0.00798  (859.0ms/step avg)
+  step 5200/62500  loss=0.0049  lr=0.00798  (859.0ms/step avg)
+  step 5300/62500  loss=0.0116  lr=0.00797  (858.0ms/step avg)
+  step 5400/62500  loss=0.011  lr=0.00797  (857.0ms/step avg)
+  step 5500/62500  loss=0.011  lr=0.00797  (857.0ms/step avg)
+  step 5600/62500  loss=0.0112  lr=0.00797  (856.0ms/step avg)
+  Running validation ...
+[Epoch 9] lr=0.007965 loss(train_avg)=0.0074 val_top1=16401/50000 (0.328) val_top5=0.5864 val_loss=3.2891  [512.6s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e9.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e9.state.npz (590 arrays, step=5625)
+  step 5700/62500  loss=0.0111  lr=0.00796  (858.0ms/step avg)
+  step 5800/62500  loss=0.011  lr=0.00796  (858.0ms/step avg)
+  step 5900/62500  loss=0.0045  lr=0.00796  (857.0ms/step avg)
+  step 6000/62500  loss=0.0113  lr=0.00795  (857.0ms/step avg)
+  step 6100/62500  loss=0.0051  lr=0.00795  (856.0ms/step avg)
+  step 6200/62500  loss=0.0047  lr=0.00795  (855.0ms/step avg)
+  Running validation ...
+[Epoch 10] lr=0.007945 loss(train_avg)=0.0071 val_top1=17912/50000 (0.3582) val_top5=0.6168 val_loss=3.2027  [513.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e10.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e10.state.npz (590 arrays, step=6250)
+  step 6300/62500  loss=0.0045  lr=0.00794  (858.0ms/step avg)
+  step 6400/62500  loss=0.0107  lr=0.00794  (857.0ms/step avg)
+  step 6500/62500  loss=0.0108  lr=0.00794  (857.0ms/step avg)
+  step 6600/62500  loss=0.0106  lr=0.00793  (856.0ms/step avg)
+  step 6700/62500  loss=0.0107  lr=0.00793  (856.0ms/step avg)
+  step 6800/62500  loss=0.0048  lr=0.00792  (855.0ms/step avg)
+  Running validation ...
+[Epoch 11] lr=0.007922 loss(train_avg)=0.0072 val_top1=16802/50000 (0.336) val_top5=0.5874 val_loss=3.2327  [513.3s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e11.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e11.state.npz (590 arrays, step=6875)
+  step 6900/62500  loss=0.0111  lr=0.00792  (857.0ms/step avg)
+  step 7000/62500  loss=0.0106  lr=0.00792  (857.0ms/step avg)
+  step 7100/62500  loss=0.011  lr=0.00791  (856.0ms/step avg)
+  step 7200/62500  loss=0.0106  lr=0.00791  (856.0ms/step avg)
+  step 7300/62500  loss=0.0109  lr=0.0079  (855.0ms/step avg)
+  step 7400/62500  loss=0.0104  lr=0.0079  (855.0ms/step avg)
+  step 7500/62500  loss=0.0109  lr=0.00789  (854.0ms/step avg)
+  Running validation ...
+[Epoch 12] lr=0.007893 loss(train_avg)=0.0071 val_top1=19129/50000 (0.3826) val_top5=0.6395 val_loss=3.1116  [513.0s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e12.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e12.state.npz (590 arrays, step=7500)
+  step 7600/62500  loss=0.0049  lr=0.00789  (856.0ms/step avg)
+  step 7700/62500  loss=0.0046  lr=0.00788  (856.0ms/step avg)
+  step 7800/62500  loss=0.0107  lr=0.00788  (855.0ms/step avg)
+  step 7900/62500  loss=0.0103  lr=0.00787  (855.0ms/step avg)
+  step 8000/62500  loss=0.0108  lr=0.00787  (854.0ms/step avg)
+  step 8100/62500  loss=0.0044  lr=0.00786  (854.0ms/step avg)
+  Running validation ...
+[Epoch 13] lr=0.007861 loss(train_avg)=0.0068 val_top1=18047/50000 (0.3609) val_top5=0.6181 val_loss=3.1896  [513.3s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e13.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e13.state.npz (590 arrays, step=8125)
+  step 8200/62500  loss=0.0107  lr=0.00786  (856.0ms/step avg)
+  step 8300/62500  loss=0.0103  lr=0.00785  (855.0ms/step avg)
+  step 8400/62500  loss=0.0103  lr=0.00785  (855.0ms/step avg)
+  step 8500/62500  loss=0.0103  lr=0.00784  (855.0ms/step avg)
+  step 8600/62500  loss=0.0107  lr=0.00783  (854.0ms/step avg)
+  step 8700/62500  loss=0.0044  lr=0.00783  (854.0ms/step avg)
+  Running validation ...
+[Epoch 14] lr=0.007824 loss(train_avg)=0.0067 val_top1=21875/50000 (0.4375) val_top5=0.6946 val_loss=2.8103  [513.3s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e14.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e14.state.npz (590 arrays, step=8750)
+  step 8800/62500  loss=0.0047  lr=0.00782  (855.0ms/step avg)
+  step 8900/62500  loss=0.004  lr=0.00781  (855.0ms/step avg)
+  step 9000/62500  loss=0.0106  lr=0.00781  (855.0ms/step avg)
+  step 9100/62500  loss=0.0101  lr=0.0078  (854.0ms/step avg)
+  step 9200/62500  loss=0.01  lr=0.0078  (854.0ms/step avg)
+  step 9300/62500  loss=0.01  lr=0.00779  (854.0ms/step avg)
+  Running validation ...
+[Epoch 15] lr=0.007783 loss(train_avg)=0.0066 val_top1=17881/50000 (0.3576) val_top5=0.6068 val_loss=3.2651  [513.4s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e15.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e15.state.npz (590 arrays, step=9375)
+  step 9400/62500  loss=0.0044  lr=0.00778  (855.0ms/step avg)
+  step 9500/62500  loss=0.004  lr=0.00777  (855.0ms/step avg)
+  step 9600/62500  loss=0.0106  lr=0.00777  (854.0ms/step avg)
+  step 9700/62500  loss=0.0039  lr=0.00776  (854.0ms/step avg)
+  step 9800/62500  loss=0.0102  lr=0.00775  (854.0ms/step avg)
+  step 9900/62500  loss=0.0111  lr=0.00775  (853.0ms/step avg)
+  step 10000/62500  loss=0.01  lr=0.00774  (853.0ms/step avg)
+  Running validation ...
+[Epoch 16] lr=0.007738 loss(train_avg)=0.0067 val_top1=20288/50000 (0.4058) val_top5=0.6584 val_loss=3.2226  [513.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e16.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e16.state.npz (590 arrays, step=10000)
+  step 10100/62500  loss=0.0105  lr=0.00773  (855.0ms/step avg)
+  step 10200/62500  loss=0.0043  lr=0.00772  (854.0ms/step avg)
+  step 10300/62500  loss=0.0102  lr=0.00772  (854.0ms/step avg)
+  step 10400/62500  loss=0.0043  lr=0.00771  (854.0ms/step avg)
+  step 10500/62500  loss=0.0102  lr=0.0077  (853.0ms/step avg)
+  step 10600/62500  loss=0.0044  lr=0.00769  (853.0ms/step avg)
+  Running validation ...
+[Epoch 17] lr=0.007689 loss(train_avg)=0.0066 val_top1=22065/50000 (0.4413) val_top5=0.6947 val_loss=2.8079  [513.4s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e17.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e17.state.npz (590 arrays, step=10625)
+  step 10700/62500  loss=0.0101  lr=0.00768  (854.0ms/step avg)
+  step 10800/62500  loss=0.0103  lr=0.00767  (854.0ms/step avg)
+  step 10900/62500  loss=0.0099  lr=0.00767  (854.0ms/step avg)
+  step 11000/62500  loss=0.0103  lr=0.00766  (854.0ms/step avg)
+  step 11100/62500  loss=0.01  lr=0.00765  (853.0ms/step avg)
+  step 11200/62500  loss=0.0107  lr=0.00764  (853.0ms/step avg)
+  Running validation ...
+[Epoch 18] lr=0.007636 loss(train_avg)=0.0063 val_top1=22991/50000 (0.4598) val_top5=0.7182 val_loss=2.685  [512.9s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e18.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e18.state.npz (590 arrays, step=11250)
+  step 11300/62500  loss=0.0098  lr=0.00763  (854.0ms/step avg)
+  step 11400/62500  loss=0.0097  lr=0.00762  (854.0ms/step avg)
+  step 11500/62500  loss=0.0099  lr=0.00761  (854.0ms/step avg)
+  step 11600/62500  loss=0.0037  lr=0.0076  (853.0ms/step avg)
+  step 11700/62500  loss=0.0038  lr=0.0076  (853.0ms/step avg)
+  step 11800/62500  loss=0.0096  lr=0.00759  (853.0ms/step avg)
+  Running validation ...
+[Epoch 19] lr=0.007579 loss(train_avg)=0.0063 val_top1=22640/50000 (0.4528) val_top5=0.7037 val_loss=2.7009  [513.0s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e19.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e19.state.npz (590 arrays, step=11875)
+  step 11900/62500  loss=0.0096  lr=0.00758  (854.0ms/step avg)
+  step 12000/62500  loss=0.0105  lr=0.00757  (854.0ms/step avg)
+  step 12100/62500  loss=0.0038  lr=0.00756  (853.0ms/step avg)
+  step 12200/62500  loss=0.0096  lr=0.00755  (853.0ms/step avg)
+  step 12300/62500  loss=0.0097  lr=0.00754  (853.0ms/step avg)
+  step 12400/62500  loss=0.0094  lr=0.00753  (853.0ms/step avg)
+  step 12500/62500  loss=0.0096  lr=0.00752  (852.0ms/step avg)
+  Running validation ...
+[Epoch 20] lr=0.007518 loss(train_avg)=0.0064 val_top1=25014/50000 (0.5003) val_top5=0.7508 val_loss=2.3814  [513.2s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e20.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e20.state.npz (590 arrays, step=12500)
+  step 12600/62500  loss=0.0103  lr=0.00751  (854.0ms/step avg)
+  step 12700/62500  loss=0.01  lr=0.0075  (853.0ms/step avg)
+  step 12800/62500  loss=0.0097  lr=0.00749  (853.0ms/step avg)
+  step 12900/62500  loss=0.0039  lr=0.00748  (853.0ms/step avg)
+  step 13000/62500  loss=0.0103  lr=0.00747  (853.0ms/step avg)
+  step 13100/62500  loss=0.0099  lr=0.00746  (852.0ms/step avg)
+  Running validation ...
+[Epoch 21] lr=0.007453 loss(train_avg)=0.0063 val_top1=20722/50000 (0.4144) val_top5=0.6598 val_loss=3.0916  [513.0s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e21.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e21.state.npz (590 arrays, step=13125)
+  step 13200/62500  loss=0.0043  lr=0.00745  (853.0ms/step avg)
+  step 13300/62500  loss=0.0097  lr=0.00743  (853.0ms/step avg)
+  step 13400/62500  loss=0.0037  lr=0.00742  (853.0ms/step avg)
+  step 13500/62500  loss=0.0094  lr=0.00741  (853.0ms/step avg)
+  step 13600/62500  loss=0.0097  lr=0.0074  (852.0ms/step avg)
+  step 13700/62500  loss=0.0096  lr=0.00739  (852.0ms/step avg)
+  Running validation ...
+[Epoch 22] lr=0.007384 loss(train_avg)=0.0062 val_top1=18189/50000 (0.3638) val_top5=0.6032 val_loss=3.2482  [512.4s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e22.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e22.state.npz (590 arrays, step=13750)
+  step 13800/62500  loss=0.0035  lr=0.00738  (853.0ms/step avg)
+  step 13900/62500  loss=0.0102  lr=0.00737  (853.0ms/step avg)
+  step 14000/62500  loss=0.0107  lr=0.00736  (853.0ms/step avg)
+  step 14100/62500  loss=0.0098  lr=0.00734  (853.0ms/step avg)
+  step 14200/62500  loss=0.0102  lr=0.00733  (852.0ms/step avg)
+  step 14300/62500  loss=0.0097  lr=0.00732  (852.0ms/step avg)
+  Running validation ...
+[Epoch 23] lr=0.007312 loss(train_avg)=0.0061 val_top1=22375/50000 (0.4475) val_top5=0.7025 val_loss=2.6598  [512.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e23.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e23.state.npz (590 arrays, step=14375)
+  step 14400/62500  loss=0.0096  lr=0.00731  (853.0ms/step avg)
+  step 14500/62500  loss=0.0101  lr=0.0073  (853.0ms/step avg)
+  step 14600/62500  loss=0.0095  lr=0.00729  (853.0ms/step avg)
+  step 14700/62500  loss=0.0042  lr=0.00727  (852.0ms/step avg)
+  step 14800/62500  loss=0.0095  lr=0.00726  (852.0ms/step avg)
+  step 14900/62500  loss=0.0038  lr=0.00725  (852.0ms/step avg)
+  step 15000/62500  loss=0.0096  lr=0.00724  (852.0ms/step avg)
+  Running validation ...
+[Epoch 24] lr=0.007236 loss(train_avg)=0.006 val_top1=22926/50000 (0.4585) val_top5=0.7079 val_loss=2.7256  [512.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e24.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e24.state.npz (590 arrays, step=15000)
+  step 15100/62500  loss=0.0041  lr=0.00722  (853.0ms/step avg)
+  step 15200/62500  loss=0.0093  lr=0.00721  (853.0ms/step avg)
+  step 15300/62500  loss=0.0039  lr=0.0072  (852.0ms/step avg)
+  step 15400/62500  loss=0.0093  lr=0.00719  (852.0ms/step avg)
+  step 15500/62500  loss=0.0035  lr=0.00717  (852.0ms/step avg)
+  step 15600/62500  loss=0.0094  lr=0.00716  (852.0ms/step avg)
+  Running validation ...
+[Epoch 25] lr=0.007157 loss(train_avg)=0.0062 val_top1=24549/50000 (0.491) val_top5=0.7395 val_loss=2.5503  [512.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e25.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e25.state.npz (590 arrays, step=15625)
+  step 15700/62500  loss=0.0039  lr=0.00715  (853.0ms/step avg)
+  step 15800/62500  loss=0.0095  lr=0.00713  (852.0ms/step avg)
+  step 15900/62500  loss=0.0036  lr=0.00712  (852.0ms/step avg)
+  step 16000/62500  loss=0.0033  lr=0.00711  (852.0ms/step avg)
+  step 16100/62500  loss=0.0102  lr=0.00709  (852.0ms/step avg)
+  step 16200/62500  loss=0.0098  lr=0.00708  (852.0ms/step avg)
+  Running validation ...
+[Epoch 26] lr=0.007074 loss(train_avg)=0.006 val_top1=25581/50000 (0.5116) val_top5=0.7583 val_loss=2.4162  [512.5s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e26.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e26.state.npz (590 arrays, step=16250)
+  step 16300/62500  loss=0.0093  lr=0.00707  (853.0ms/step avg)
+  step 16400/62500  loss=0.0034  lr=0.00705  (852.0ms/step avg)
+  step 16500/62500  loss=0.004  lr=0.00704  (852.0ms/step avg)
+  step 16600/62500  loss=0.0041  lr=0.00703  (852.0ms/step avg)
+  step 16700/62500  loss=0.0034  lr=0.00701  (852.0ms/step avg)
+  step 16800/62500  loss=0.0093  lr=0.007  (852.0ms/step avg)
+  Running validation ...
+[Epoch 27] lr=0.006987 loss(train_avg)=0.006 val_top1=25849/50000 (0.517) val_top5=0.7586 val_loss=2.5756  [513.1s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e27.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e27.state.npz (590 arrays, step=16875)
+  step 16900/62500  loss=0.0092  lr=0.00698  (853.0ms/step avg)
+  step 17000/62500  loss=0.0035  lr=0.00697  (852.0ms/step avg)
+  step 17100/62500  loss=0.0093  lr=0.00696  (852.0ms/step avg)
+  step 17200/62500  loss=0.0048  lr=0.00694  (852.0ms/step avg)
+  step 17300/62500  loss=0.0098  lr=0.00693  (852.0ms/step avg)
+  step 17400/62500  loss=0.0095  lr=0.00691  (852.0ms/step avg)
+  step 17500/62500  loss=0.0088  lr=0.0069  (851.0ms/step avg)
+  Running validation ...
+[Epoch 28] lr=0.006898 loss(train_avg)=0.0061 val_top1=25109/50000 (0.5022) val_top5=0.749 val_loss=2.489  [513.1s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e28.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e28.state.npz (590 arrays, step=17500)
+  step 17600/62500  loss=0.0034  lr=0.00688  (852.0ms/step avg)
+  step 17700/62500  loss=0.0095  lr=0.00687  (852.0ms/step avg)
+  step 17800/62500  loss=0.0034  lr=0.00685  (852.0ms/step avg)
+  step 17900/62500  loss=0.0095  lr=0.00684  (852.0ms/step avg)
+  step 18000/62500  loss=0.0094  lr=0.00682  (852.0ms/step avg)
+  step 18100/62500  loss=0.0097  lr=0.00681  (851.0ms/step avg)
+  Running validation ...
+[Epoch 29] lr=0.006805 loss(train_avg)=0.006 val_top1=25401/50000 (0.508) val_top5=0.7499 val_loss=2.5732  [512.4s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e29.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e29.state.npz (590 arrays, step=18125)
+  step 18200/62500  loss=0.0096  lr=0.00679  (852.0ms/step avg)
+  step 18300/62500  loss=0.0038  lr=0.00678  (852.0ms/step avg)
+  step 18400/62500  loss=0.0091  lr=0.00676  (852.0ms/step avg)
+  step 18500/62500  loss=0.0033  lr=0.00675  (852.0ms/step avg)
+  step 18600/62500  loss=0.0099  lr=0.00673  (852.0ms/step avg)
+  step 18700/62500  loss=0.0042  lr=0.00672  (851.0ms/step avg)
+  Running validation ...
+[Epoch 30] lr=0.006709 loss(train_avg)=0.0059 val_top1=25834/50000 (0.5167) val_top5=0.7608 val_loss=2.3264  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e30.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e30.state.npz (590 arrays, step=18750)
+  step 18800/62500  loss=0.0089  lr=0.0067  (852.0ms/step avg)
+  step 18900/62500  loss=0.0095  lr=0.00669  (852.0ms/step avg)
+  step 19000/62500  loss=0.0038  lr=0.00667  (852.0ms/step avg)
+  step 19100/62500  loss=0.009  lr=0.00665  (852.0ms/step avg)
+  step 19200/62500  loss=0.0095  lr=0.00664  (851.0ms/step avg)
+  step 19300/62500  loss=0.0094  lr=0.00662  (851.0ms/step avg)
+  Running validation ...
+[Epoch 31] lr=0.006611 loss(train_avg)=0.0057 val_top1=26073/50000 (0.5215) val_top5=0.765 val_loss=2.5111  [512.4s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e31.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e31.state.npz (590 arrays, step=19375)
+  step 19400/62500  loss=0.0038  lr=0.00661  (852.0ms/step avg)
+  step 19500/62500  loss=0.0091  lr=0.00659  (852.0ms/step avg)
+  step 19600/62500  loss=0.009  lr=0.00657  (852.0ms/step avg)
+  step 19700/62500  loss=0.0089  lr=0.00656  (852.0ms/step avg)
+  step 19800/62500  loss=0.0033  lr=0.00654  (851.0ms/step avg)
+  step 19900/62500  loss=0.0095  lr=0.00653  (851.0ms/step avg)
+  step 20000/62500  loss=0.0098  lr=0.00651  (851.0ms/step avg)
+  Running validation ...
+[Epoch 32] lr=0.006509 loss(train_avg)=0.0059 val_top1=25270/50000 (0.5054) val_top5=0.7484 val_loss=2.4674  [512.7s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e32.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e32.state.npz (590 arrays, step=20000)
+  step 20100/62500  loss=0.009  lr=0.00649  (852.0ms/step avg)
+  step 20200/62500  loss=0.0032  lr=0.00648  (852.0ms/step avg)
+  step 20300/62500  loss=0.0094  lr=0.00646  (851.0ms/step avg)
+  step 20400/62500  loss=0.0088  lr=0.00644  (851.0ms/step avg)
+  step 20500/62500  loss=0.0044  lr=0.00643  (851.0ms/step avg)
+  step 20600/62500  loss=0.0032  lr=0.00641  (851.0ms/step avg)
+  Running validation ...
+[Epoch 33] lr=0.006404 loss(train_avg)=0.0057 val_top1=23511/50000 (0.4702) val_top5=0.7134 val_loss=2.7623  [512.4s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e33.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e33.state.npz (590 arrays, step=20625)
+  step 20700/62500  loss=0.0094  lr=0.00639  (852.0ms/step avg)
+  step 20800/62500  loss=0.0092  lr=0.00637  (852.0ms/step avg)
+  step 20900/62500  loss=0.0087  lr=0.00636  (851.0ms/step avg)
+  step 21000/62500  loss=0.0097  lr=0.00634  (851.0ms/step avg)
+  step 21100/62500  loss=0.0098  lr=0.00632  (851.0ms/step avg)
+  step 21200/62500  loss=0.0037  lr=0.00631  (851.0ms/step avg)
+  Running validation ...
+[Epoch 34] lr=0.006297 loss(train_avg)=0.0058 val_top1=28989/50000 (0.5798) val_top5=0.8136 val_loss=2.2335  [512.2s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e34.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e34.state.npz (590 arrays, step=21250)
+  step 21300/62500  loss=0.0036  lr=0.00629  (852.0ms/step avg)
+  step 21400/62500  loss=0.0092  lr=0.00627  (852.0ms/step avg)
+  step 21500/62500  loss=0.0033  lr=0.00625  (851.0ms/step avg)
+  step 21600/62500  loss=0.0033  lr=0.00624  (851.0ms/step avg)
+  step 21700/62500  loss=0.0031  lr=0.00622  (851.0ms/step avg)
+  step 21800/62500  loss=0.0101  lr=0.0062  (851.0ms/step avg)
+  Running validation ...
+[Epoch 35] lr=0.006188 loss(train_avg)=0.0055 val_top1=24808/50000 (0.4962) val_top5=0.7387 val_loss=2.7885  [512.3s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e35.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e35.state.npz (590 arrays, step=21875)
+  step 21900/62500  loss=0.0089  lr=0.00618  (852.0ms/step avg)
+  step 22000/62500  loss=0.0096  lr=0.00617  (851.0ms/step avg)
+  step 22100/62500  loss=0.0086  lr=0.00615  (851.0ms/step avg)
+  step 22200/62500  loss=0.0089  lr=0.00613  (851.0ms/step avg)
+  step 22300/62500  loss=0.0095  lr=0.00611  (851.0ms/step avg)
+  step 22400/62500  loss=0.0088  lr=0.00609  (851.0ms/step avg)
+  step 22500/62500  loss=0.0089  lr=0.00608  (851.0ms/step avg)
+  Running validation ...
+[Epoch 36] lr=0.006076 loss(train_avg)=0.0056 val_top1=28903/50000 (0.5781) val_top5=0.8139 val_loss=2.0287  [512.4s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e36.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e36.state.npz (590 arrays, step=22500)
+  step 22600/62500  loss=0.0086  lr=0.00606  (851.0ms/step avg)
+  step 22700/62500  loss=0.0094  lr=0.00604  (851.0ms/step avg)
+  step 22800/62500  loss=0.0098  lr=0.00602  (851.0ms/step avg)
+  step 22900/62500  loss=0.0031  lr=0.006  (851.0ms/step avg)
+  step 23000/62500  loss=0.01  lr=0.00598  (851.0ms/step avg)
+  step 23100/62500  loss=0.0088  lr=0.00597  (851.0ms/step avg)
+  Running validation ...
+[Epoch 37] lr=0.005962 loss(train_avg)=0.0056 val_top1=27808/50000 (0.5562) val_top5=0.7921 val_loss=2.1585  [512.3s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e37.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e37.state.npz (590 arrays, step=23125)
+  step 23200/62500  loss=0.0097  lr=0.00595  (851.0ms/step avg)
+  step 23300/62500  loss=0.0032  lr=0.00593  (851.0ms/step avg)
+  step 23400/62500  loss=0.0086  lr=0.00591  (851.0ms/step avg)
+  step 23500/62500  loss=0.0085  lr=0.00589  (851.0ms/step avg)
+  step 23600/62500  loss=0.0042  lr=0.00587  (851.0ms/step avg)
+  step 23700/62500  loss=0.0088  lr=0.00585  (851.0ms/step avg)
+  Running validation ...
+[Epoch 38] lr=0.005846 loss(train_avg)=0.0057 val_top1=27967/50000 (0.5593) val_top5=0.8021 val_loss=1.9971  [512.3s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e38.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e38.state.npz (590 arrays, step=23750)
+  step 23800/62500  loss=0.0093  lr=0.00584  (851.0ms/step avg)
+  step 23900/62500  loss=0.0031  lr=0.00582  (851.0ms/step avg)
+  step 24000/62500  loss=0.0089  lr=0.0058  (851.0ms/step avg)
+  step 24100/62500  loss=0.0086  lr=0.00578  (851.0ms/step avg)
+  step 24200/62500  loss=0.0089  lr=0.00576  (851.0ms/step avg)
+  step 24300/62500  loss=0.0085  lr=0.00574  (851.0ms/step avg)
+  Running validation ...
+[Epoch 39] lr=0.005727 loss(train_avg)=0.0056 val_top1=27018/50000 (0.5404) val_top5=0.7827 val_loss=2.3903  [511.4s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e39.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e39.state.npz (590 arrays, step=24375)
+  step 24400/62500  loss=0.0035  lr=0.00572  (851.0ms/step avg)
+  step 24500/62500  loss=0.0031  lr=0.0057  (851.0ms/step avg)
+  step 24600/62500  loss=0.0087  lr=0.00568  (851.0ms/step avg)
+  step 24700/62500  loss=0.0091  lr=0.00566  (851.0ms/step avg)
+  step 24800/62500  loss=0.0089  lr=0.00565  (851.0ms/step avg)
+  step 24900/62500  loss=0.009  lr=0.00563  (851.0ms/step avg)
+  step 25000/62500  loss=0.0088  lr=0.00561  (850.0ms/step avg)
+  Running validation ...
+[Epoch 40] lr=0.005607 loss(train_avg)=0.0055 val_top1=26164/50000 (0.5233) val_top5=0.76 val_loss=2.4957  [511.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e40.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e40.state.npz (590 arrays, step=25000)
+  step 25100/62500  loss=0.0032  lr=0.00559  (851.0ms/step avg)
+  step 25200/62500  loss=0.0088  lr=0.00557  (851.0ms/step avg)
+  step 25300/62500  loss=0.0085  lr=0.00555  (851.0ms/step avg)
+  step 25400/62500  loss=0.003  lr=0.00553  (851.0ms/step avg)
+  step 25500/62500  loss=0.0091  lr=0.00551  (851.0ms/step avg)
+  step 25600/62500  loss=0.0088  lr=0.00549  (850.0ms/step avg)
+  Running validation ...
+[Epoch 41] lr=0.005485 loss(train_avg)=0.0056 val_top1=27728/50000 (0.5546) val_top5=0.7924 val_loss=2.1969  [511.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e41.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e41.state.npz (590 arrays, step=25625)
+  step 25700/62500  loss=0.0085  lr=0.00547  (851.0ms/step avg)
+  step 25800/62500  loss=0.0029  lr=0.00545  (851.0ms/step avg)
+  step 25900/62500  loss=0.0086  lr=0.00543  (851.0ms/step avg)
+  step 26000/62500  loss=0.003  lr=0.00541  (851.0ms/step avg)
+  step 26100/62500  loss=0.0086  lr=0.00539  (850.0ms/step avg)
+  step 26200/62500  loss=0.0088  lr=0.00537  (850.0ms/step avg)
+  Running validation ...
+[Epoch 42] lr=0.005361 loss(train_avg)=0.0056 val_top1=29085/50000 (0.5817) val_top5=0.8157 val_loss=2.1889  [511.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e42.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e42.state.npz (590 arrays, step=26250)
+  step 26300/62500  loss=0.0088  lr=0.00535  (851.0ms/step avg)
+  step 26400/62500  loss=0.0091  lr=0.00533  (851.0ms/step avg)
+  step 26500/62500  loss=0.0087  lr=0.00531  (851.0ms/step avg)
+  step 26600/62500  loss=0.0034  lr=0.00529  (851.0ms/step avg)
+  step 26700/62500  loss=0.0086  lr=0.00527  (850.0ms/step avg)
+  step 26800/62500  loss=0.0087  lr=0.00525  (850.0ms/step avg)
+  Running validation ...
+[Epoch 43] lr=0.005236 loss(train_avg)=0.0054 val_top1=29102/50000 (0.582) val_top5=0.8139 val_loss=2.1964  [511.6s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e43.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e43.state.npz (590 arrays, step=26875)
+  step 26900/62500  loss=0.0084  lr=0.00523  (851.0ms/step avg)
+  step 27000/62500  loss=0.0031  lr=0.00521  (851.0ms/step avg)
+  step 27100/62500  loss=0.0084  lr=0.00519  (851.0ms/step avg)
+  step 27200/62500  loss=0.0083  lr=0.00517  (850.0ms/step avg)
+  step 27300/62500  loss=0.0032  lr=0.00515  (850.0ms/step avg)
+  step 27400/62500  loss=0.0098  lr=0.00513  (850.0ms/step avg)
+  step 27500/62500  loss=0.0086  lr=0.00511  (850.0ms/step avg)
+  Running validation ...
+[Epoch 44] lr=0.00511 loss(train_avg)=0.0053 val_top1=29581/50000 (0.5916) val_top5=0.8248 val_loss=2.0746  [511.8s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e44.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e44.state.npz (590 arrays, step=27500)
+  step 27600/62500  loss=0.0084  lr=0.00509  (851.0ms/step avg)
+  step 27700/62500  loss=0.0084  lr=0.00507  (851.0ms/step avg)
+  step 27800/62500  loss=0.0091  lr=0.00505  (850.0ms/step avg)
+  step 27900/62500  loss=0.0035  lr=0.00503  (850.0ms/step avg)
+  step 28000/62500  loss=0.0084  lr=0.00501  (850.0ms/step avg)
+  step 28100/62500  loss=0.0087  lr=0.00499  (850.0ms/step avg)
+  Running validation ...
+[Epoch 45] lr=0.004982 loss(train_avg)=0.0055 val_top1=28710/50000 (0.5742) val_top5=0.8051 val_loss=2.0992  [511.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e45.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e45.state.npz (590 arrays, step=28125)
+  step 28200/62500  loss=0.0028  lr=0.00497  (851.0ms/step avg)
+  step 28300/62500  loss=0.0031  lr=0.00495  (851.0ms/step avg)
+  step 28400/62500  loss=0.0085  lr=0.00493  (850.0ms/step avg)
+  step 28500/62500  loss=0.0081  lr=0.00491  (850.0ms/step avg)
+  step 28600/62500  loss=0.0084  lr=0.00488  (850.0ms/step avg)
+  step 28700/62500  loss=0.0086  lr=0.00486  (850.0ms/step avg)
+  Running validation ...
+[Epoch 46] lr=0.004853 loss(train_avg)=0.0054 val_top1=30358/50000 (0.6072) val_top5=0.8331 val_loss=2.1243  [511.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e46.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e46.state.npz (590 arrays, step=28750)
+  step 28800/62500  loss=0.0083  lr=0.00484  (851.0ms/step avg)
+  step 28900/62500  loss=0.0083  lr=0.00482  (850.0ms/step avg)
+  step 29000/62500  loss=0.0033  lr=0.0048  (850.0ms/step avg)
+  step 29100/62500  loss=0.0031  lr=0.00478  (850.0ms/step avg)
+  step 29200/62500  loss=0.0027  lr=0.00476  (850.0ms/step avg)
+  step 29300/62500  loss=0.0081  lr=0.00474  (850.0ms/step avg)
+  Running validation ...
+[Epoch 47] lr=0.004724 loss(train_avg)=0.0052 val_top1=28342/50000 (0.5668) val_top5=0.8004 val_loss=2.0802  [511.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e47.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e47.state.npz (590 arrays, step=29375)
+  step 29400/62500  loss=0.008  lr=0.00472  (851.0ms/step avg)
+  step 29500/62500  loss=0.0082  lr=0.0047  (850.0ms/step avg)
+  step 29600/62500  loss=0.0082  lr=0.00468  (850.0ms/step avg)
+  step 29700/62500  loss=0.008  lr=0.00466  (850.0ms/step avg)
+  step 29800/62500  loss=0.0084  lr=0.00464  (850.0ms/step avg)
+  step 29900/62500  loss=0.0083  lr=0.00461  (850.0ms/step avg)
+  step 30000/62500  loss=0.0086  lr=0.00459  (850.0ms/step avg)
+  Running validation ...
+[Epoch 48] lr=0.004593 loss(train_avg)=0.0054 val_top1=27955/50000 (0.5591) val_top5=0.7938 val_loss=2.198  [511.8s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e48.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e48.state.npz (590 arrays, step=30000)
+  step 30100/62500  loss=0.0079  lr=0.00457  (850.0ms/step avg)
+  step 30200/62500  loss=0.0082  lr=0.00455  (850.0ms/step avg)
+  step 30300/62500  loss=0.0029  lr=0.00453  (850.0ms/step avg)
+  step 30400/62500  loss=0.0031  lr=0.00451  (850.0ms/step avg)
+  step 30500/62500  loss=0.0082  lr=0.00449  (850.0ms/step avg)
+  step 30600/62500  loss=0.0081  lr=0.00447  (850.0ms/step avg)
+  Running validation ...
+[Epoch 49] lr=0.004462 loss(train_avg)=0.0051 val_top1=30575/50000 (0.6115) val_top5=0.8352 val_loss=1.8943  [512.2s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e49.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e49.state.npz (590 arrays, step=30625)
+  step 30700/62500  loss=0.0082  lr=0.00445  (850.0ms/step avg)
+  step 30800/62500  loss=0.0031  lr=0.00443  (850.0ms/step avg)
+  step 30900/62500  loss=0.0028  lr=0.0044  (850.0ms/step avg)
+  step 31000/62500  loss=0.0077  lr=0.00438  (850.0ms/step avg)
+  step 31100/62500  loss=0.008  lr=0.00436  (850.0ms/step avg)
+  step 31200/62500  loss=0.0082  lr=0.00434  (850.0ms/step avg)
+  Running validation ...
+[Epoch 50] lr=0.004331 loss(train_avg)=0.0053 val_top1=28839/50000 (0.5768) val_top5=0.8048 val_loss=2.2658  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e50.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e50.state.npz (590 arrays, step=31250)
+  step 31300/62500  loss=0.0083  lr=0.00432  (850.0ms/step avg)
+  step 31400/62500  loss=0.0029  lr=0.0043  (850.0ms/step avg)
+  step 31500/62500  loss=0.0079  lr=0.00428  (850.0ms/step avg)
+  step 31600/62500  loss=0.003  lr=0.00426  (850.0ms/step avg)
+  step 31700/62500  loss=0.0083  lr=0.00424  (850.0ms/step avg)
+  step 31800/62500  loss=0.0078  lr=0.00421  (850.0ms/step avg)
+  Running validation ...
+[Epoch 51] lr=0.004199 loss(train_avg)=0.0051 val_top1=31284/50000 (0.6257) val_top5=0.8461 val_loss=1.8084  [512.3s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e51.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e51.state.npz (590 arrays, step=31875)
+  step 31900/62500  loss=0.0082  lr=0.00419  (850.0ms/step avg)
+  step 32000/62500  loss=0.0086  lr=0.00417  (850.0ms/step avg)
+  step 32100/62500  loss=0.008  lr=0.00415  (850.0ms/step avg)
+  step 32200/62500  loss=0.0079  lr=0.00413  (850.0ms/step avg)
+  step 32300/62500  loss=0.0078  lr=0.00411  (850.0ms/step avg)
+  step 32400/62500  loss=0.0085  lr=0.00409  (850.0ms/step avg)
+  step 32500/62500  loss=0.0027  lr=0.00407  (850.0ms/step avg)
+  Running validation ...
+[Epoch 52] lr=0.004066 loss(train_avg)=0.0052 val_top1=30565/50000 (0.6113) val_top5=0.8325 val_loss=1.8893  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e52.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e52.state.npz (590 arrays, step=32500)
+  step 32600/62500  loss=0.0031  lr=0.00405  (850.0ms/step avg)
+  step 32700/62500  loss=0.0027  lr=0.00402  (850.0ms/step avg)
+  step 32800/62500  loss=0.008  lr=0.004  (850.0ms/step avg)
+  step 32900/62500  loss=0.0079  lr=0.00398  (850.0ms/step avg)
+  step 33000/62500  loss=0.0077  lr=0.00396  (850.0ms/step avg)
+  step 33100/62500  loss=0.0029  lr=0.00394  (850.0ms/step avg)
+  Running validation ...
+[Epoch 53] lr=0.003934 loss(train_avg)=0.0049 val_top1=30313/50000 (0.6063) val_top5=0.831 val_loss=1.9  [512.2s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e53.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e53.state.npz (590 arrays, step=33125)
+  step 33200/62500  loss=0.0083  lr=0.00392  (850.0ms/step avg)
+  step 33300/62500  loss=0.0077  lr=0.0039  (850.0ms/step avg)
+  step 33400/62500  loss=0.0078  lr=0.00388  (850.0ms/step avg)
+  step 33500/62500  loss=0.0081  lr=0.00385  (850.0ms/step avg)
+  step 33600/62500  loss=0.0085  lr=0.00383  (850.0ms/step avg)
+  step 33700/62500  loss=0.0026  lr=0.00381  (850.0ms/step avg)
+  Running validation ...
+[Epoch 54] lr=0.003802 loss(train_avg)=0.0049 val_top1=32765/50000 (0.6553) val_top5=0.8656 val_loss=1.7071  [512.3s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e54.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e54.state.npz (590 arrays, step=33750)
+  step 33800/62500  loss=0.0082  lr=0.00379  (850.0ms/step avg)
+  step 33900/62500  loss=0.008  lr=0.00377  (850.0ms/step avg)
+  step 34000/62500  loss=0.008  lr=0.00375  (850.0ms/step avg)
+  step 34100/62500  loss=0.0093  lr=0.00373  (850.0ms/step avg)
+  step 34200/62500  loss=0.0028  lr=0.00371  (850.0ms/step avg)
+  step 34300/62500  loss=0.0028  lr=0.00369  (850.0ms/step avg)
+  Running validation ...
+[Epoch 55] lr=0.00367 loss(train_avg)=0.0049 val_top1=33286/50000 (0.6657) val_top5=0.8727 val_loss=1.5333  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e55.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e55.state.npz (590 arrays, step=34375)
+  step 34400/62500  loss=0.0078  lr=0.00366  (850.0ms/step avg)
+  step 34500/62500  loss=0.0081  lr=0.00364  (850.0ms/step avg)
+  step 34600/62500  loss=0.0085  lr=0.00362  (850.0ms/step avg)
+  step 34700/62500  loss=0.0025  lr=0.0036  (850.0ms/step avg)
+  step 34800/62500  loss=0.0085  lr=0.00358  (850.0ms/step avg)
+  step 34900/62500  loss=0.0033  lr=0.00356  (850.0ms/step avg)
+  step 35000/62500  loss=0.0076  lr=0.00354  (850.0ms/step avg)
+  Running validation ...
+[Epoch 56] lr=0.003538 loss(train_avg)=0.0051 val_top1=32647/50000 (0.6529) val_top5=0.8618 val_loss=1.7124  [512.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e56.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e56.state.npz (590 arrays, step=35000)
+  step 35100/62500  loss=0.0082  lr=0.00352  (850.0ms/step avg)
+  step 35200/62500  loss=0.008  lr=0.0035  (850.0ms/step avg)
+  step 35300/62500  loss=0.0079  lr=0.00348  (850.0ms/step avg)
+  step 35400/62500  loss=0.0076  lr=0.00345  (850.0ms/step avg)
+  step 35500/62500  loss=0.0077  lr=0.00343  (850.0ms/step avg)
+  step 35600/62500  loss=0.0076  lr=0.00341  (850.0ms/step avg)
+  Running validation ...
+[Epoch 57] lr=0.003407 loss(train_avg)=0.0049 val_top1=31846/50000 (0.6369) val_top5=0.8518 val_loss=1.8161  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e57.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e57.state.npz (590 arrays, step=35625)
+  step 35700/62500  loss=0.0076  lr=0.00339  (850.0ms/step avg)
+  step 35800/62500  loss=0.0075  lr=0.00337  (850.0ms/step avg)
+  step 35900/62500  loss=0.0078  lr=0.00335  (850.0ms/step avg)
+  step 36000/62500  loss=0.0082  lr=0.00333  (850.0ms/step avg)
+  step 36100/62500  loss=0.0027  lr=0.00331  (850.0ms/step avg)
+  step 36200/62500  loss=0.0025  lr=0.00329  (850.0ms/step avg)
+  Running validation ...
+[Epoch 58] lr=0.003277 loss(train_avg)=0.0047 val_top1=34100/50000 (0.682) val_top5=0.8825 val_loss=1.6197  [512.4s train, 20.7s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e58.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e58.state.npz (590 arrays, step=36250)
+  step 36300/62500  loss=0.0074  lr=0.00327  (850.0ms/step avg)
+  step 36400/62500  loss=0.0079  lr=0.00325  (850.0ms/step avg)
+  step 36500/62500  loss=0.0081  lr=0.00322  (850.0ms/step avg)
+  step 36600/62500  loss=0.0078  lr=0.0032  (850.0ms/step avg)
+  step 36700/62500  loss=0.003  lr=0.00318  (850.0ms/step avg)
+  step 36800/62500  loss=0.0077  lr=0.00316  (850.0ms/step avg)
+  Running validation ...
+[Epoch 59] lr=0.003147 loss(train_avg)=0.0047 val_top1=32306/50000 (0.6461) val_top5=0.8579 val_loss=1.8361  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e59.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e59.state.npz (590 arrays, step=36875)
+  step 36900/62500  loss=0.0075  lr=0.00314  (850.0ms/step avg)
+  step 37000/62500  loss=0.0077  lr=0.00312  (850.0ms/step avg)
+  step 37100/62500  loss=0.0078  lr=0.0031  (850.0ms/step avg)
+  step 37200/62500  loss=0.0075  lr=0.00308  (850.0ms/step avg)
+  step 37300/62500  loss=0.0075  lr=0.00306  (850.0ms/step avg)
+  step 37400/62500  loss=0.0075  lr=0.00304  (850.0ms/step avg)
+  step 37500/62500  loss=0.0026  lr=0.00302  (850.0ms/step avg)
+  Running validation ...
+[Epoch 60] lr=0.003018 loss(train_avg)=0.0048 val_top1=33686/50000 (0.6737) val_top5=0.8785 val_loss=1.6075  [512.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e60.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e60.state.npz (590 arrays, step=37500)
+  step 37600/62500  loss=0.0073  lr=0.003  (850.0ms/step avg)
+  step 37700/62500  loss=0.0029  lr=0.00298  (850.0ms/step avg)
+  step 37800/62500  loss=0.008  lr=0.00296  (850.0ms/step avg)
+  step 37900/62500  loss=0.007  lr=0.00294  (850.0ms/step avg)
+  step 38000/62500  loss=0.0086  lr=0.00292  (850.0ms/step avg)
+  step 38100/62500  loss=0.0077  lr=0.0029  (850.0ms/step avg)
+  Running validation ...
+[Epoch 61] lr=0.002891 loss(train_avg)=0.0048 val_top1=34386/50000 (0.6877) val_top5=0.8865 val_loss=1.5791  [512.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e61.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e61.state.npz (590 arrays, step=38125)
+  step 38200/62500  loss=0.0079  lr=0.00288  (850.0ms/step avg)
+  step 38300/62500  loss=0.0077  lr=0.00286  (850.0ms/step avg)
+  step 38400/62500  loss=0.0073  lr=0.00283  (850.0ms/step avg)
+  step 38500/62500  loss=0.0073  lr=0.00281  (850.0ms/step avg)
+  step 38600/62500  loss=0.0026  lr=0.00279  (850.0ms/step avg)
+  step 38700/62500  loss=0.0029  lr=0.00277  (850.0ms/step avg)
+  Running validation ...
+[Epoch 62] lr=0.002764 loss(train_avg)=0.0046 val_top1=33921/50000 (0.6784) val_top5=0.8797 val_loss=1.4912  [512.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e62.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e62.state.npz (590 arrays, step=38750)
+  step 38800/62500  loss=0.0073  lr=0.00275  (850.0ms/step avg)
+  step 38900/62500  loss=0.0074  lr=0.00273  (850.0ms/step avg)
+  step 39000/62500  loss=0.0073  lr=0.00271  (850.0ms/step avg)
+  step 39100/62500  loss=0.0023  lr=0.00269  (850.0ms/step avg)
+  step 39200/62500  loss=0.0073  lr=0.00267  (850.0ms/step avg)
+  step 39300/62500  loss=0.0027  lr=0.00265  (850.0ms/step avg)
+  Running validation ...
+[Epoch 63] lr=0.002639 loss(train_avg)=0.0046 val_top1=32954/50000 (0.6591) val_top5=0.8672 val_loss=1.8082  [512.2s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e63.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e63.state.npz (590 arrays, step=39375)
+  step 39400/62500  loss=0.0074  lr=0.00263  (850.0ms/step avg)
+  step 39500/62500  loss=0.0024  lr=0.00261  (850.0ms/step avg)
+  step 39600/62500  loss=0.0072  lr=0.00259  (850.0ms/step avg)
+  step 39700/62500  loss=0.0079  lr=0.00257  (850.0ms/step avg)
+  step 39800/62500  loss=0.0075  lr=0.00255  (850.0ms/step avg)
+  step 39900/62500  loss=0.003  lr=0.00254  (850.0ms/step avg)
+  step 40000/62500  loss=0.0075  lr=0.00252  (850.0ms/step avg)
+  Running validation ...
+[Epoch 64] lr=0.002515 loss(train_avg)=0.0046 val_top1=32723/50000 (0.6545) val_top5=0.8623 val_loss=1.9376  [512.2s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e64.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e64.state.npz (590 arrays, step=40000)
+  step 40100/62500  loss=0.0071  lr=0.0025  (850.0ms/step avg)
+  step 40200/62500  loss=0.0071  lr=0.00248  (850.0ms/step avg)
+  step 40300/62500  loss=0.0069  lr=0.00246  (850.0ms/step avg)
+  step 40400/62500  loss=0.0075  lr=0.00244  (850.0ms/step avg)
+  step 40500/62500  loss=0.0024  lr=0.00242  (850.0ms/step avg)
+  step 40600/62500  loss=0.0027  lr=0.0024  (850.0ms/step avg)
+  Running validation ...
+[Epoch 65] lr=0.002393 loss(train_avg)=0.0044 val_top1=34245/50000 (0.6849) val_top5=0.8844 val_loss=1.4774  [512.1s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e65.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e65.state.npz (590 arrays, step=40625)
+  step 40700/62500  loss=0.0074  lr=0.00238  (850.0ms/step avg)
+  step 40800/62500  loss=0.0072  lr=0.00236  (850.0ms/step avg)
+  step 40900/62500  loss=0.0028  lr=0.00234  (850.0ms/step avg)
+  step 41000/62500  loss=0.0069  lr=0.00232  (850.0ms/step avg)
+  step 41100/62500  loss=0.0072  lr=0.0023  (850.0ms/step avg)
+  step 41200/62500  loss=0.0023  lr=0.00228  (850.0ms/step avg)
+  Running validation ...
+[Epoch 66] lr=0.002273 loss(train_avg)=0.0045 val_top1=34900/50000 (0.698) val_top5=0.8909 val_loss=1.5402  [512.0s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e66.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e66.state.npz (590 arrays, step=41250)
+  step 41300/62500  loss=0.0071  lr=0.00226  (850.0ms/step avg)
+  step 41400/62500  loss=0.0023  lr=0.00224  (850.0ms/step avg)
+  step 41500/62500  loss=0.0067  lr=0.00223  (850.0ms/step avg)
+  step 41600/62500  loss=0.0079  lr=0.00221  (850.0ms/step avg)
+  step 41700/62500  loss=0.0022  lr=0.00219  (850.0ms/step avg)
+  step 41800/62500  loss=0.0073  lr=0.00217  (850.0ms/step avg)
+  Running validation ...
+[Epoch 67] lr=0.002155 loss(train_avg)=0.0045 val_top1=35162/50000 (0.7032) val_top5=0.8969 val_loss=1.4868  [512.7s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e67.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e67.state.npz (590 arrays, step=41875)
+  step 41900/62500  loss=0.0073  lr=0.00215  (850.0ms/step avg)
+  step 42000/62500  loss=0.0084  lr=0.00213  (850.0ms/step avg)
+  step 42100/62500  loss=0.0067  lr=0.00211  (850.0ms/step avg)
+  step 42200/62500  loss=0.0073  lr=0.00209  (850.0ms/step avg)
+  step 42300/62500  loss=0.0023  lr=0.00208  (850.0ms/step avg)
+  step 42400/62500  loss=0.0031  lr=0.00206  (850.0ms/step avg)
+  step 42500/62500  loss=0.0023  lr=0.00204  (850.0ms/step avg)
+  Running validation ...
+[Epoch 68] lr=0.002038 loss(train_avg)=0.0043 val_top1=34234/50000 (0.6847) val_top5=0.8832 val_loss=1.5377  [512.9s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e68.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e68.state.npz (590 arrays, step=42500)
+  step 42600/62500  loss=0.0021  lr=0.00202  (850.0ms/step avg)
+  step 42700/62500  loss=0.0071  lr=0.002  (850.0ms/step avg)
+  step 42800/62500  loss=0.0072  lr=0.00198  (850.0ms/step avg)
+  step 42900/62500  loss=0.0075  lr=0.00197  (850.0ms/step avg)
+  step 43000/62500  loss=0.0022  lr=0.00195  (850.0ms/step avg)
+  step 43100/62500  loss=0.0076  lr=0.00193  (850.0ms/step avg)
+  Running validation ...
+[Epoch 69] lr=0.001924 loss(train_avg)=0.0043 val_top1=34152/50000 (0.683) val_top5=0.8817 val_loss=1.5252  [512.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e69.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e69.state.npz (590 arrays, step=43125)
+  step 43200/62500  loss=0.0027  lr=0.00191  (850.0ms/step avg)
+  step 43300/62500  loss=0.0071  lr=0.00189  (850.0ms/step avg)
+  step 43400/62500  loss=0.0069  lr=0.00187  (850.0ms/step avg)
+  step 43500/62500  loss=0.0069  lr=0.00186  (850.0ms/step avg)
+  step 43600/62500  loss=0.0068  lr=0.00184  (850.0ms/step avg)
+  step 43700/62500  loss=0.0071  lr=0.00182  (850.0ms/step avg)
+  Running validation ...
+[Epoch 70] lr=0.001812 loss(train_avg)=0.0043 val_top1=35955/50000 (0.7191) val_top5=0.9058 val_loss=1.4656  [513.1s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e70.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e70.state.npz (590 arrays, step=43750)
+  step 43800/62500  loss=0.0072  lr=0.0018  (850.0ms/step avg)
+  step 43900/62500  loss=0.007  lr=0.00179  (850.0ms/step avg)
+  step 44000/62500  loss=0.0074  lr=0.00177  (850.0ms/step avg)
+  step 44100/62500  loss=0.007  lr=0.00175  (850.0ms/step avg)
+  step 44200/62500  loss=0.0022  lr=0.00173  (850.0ms/step avg)
+  step 44300/62500  loss=0.0072  lr=0.00172  (850.0ms/step avg)
+  Running validation ...
+[Epoch 71] lr=0.001703 loss(train_avg)=0.0043 val_top1=36017/50000 (0.7203) val_top5=0.9059 val_loss=1.2685  [513.2s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e71.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e71.state.npz (590 arrays, step=44375)
+  step 44400/62500  loss=0.0067  lr=0.0017  (850.0ms/step avg)
+  step 44500/62500  loss=0.0068  lr=0.00168  (850.0ms/step avg)
+  step 44600/62500  loss=0.0071  lr=0.00166  (850.0ms/step avg)
+  step 44700/62500  loss=0.002  lr=0.00165  (850.0ms/step avg)
+  step 44800/62500  loss=0.0073  lr=0.00163  (850.0ms/step avg)
+  step 44900/62500  loss=0.0064  lr=0.00161  (850.0ms/step avg)
+  step 45000/62500  loss=0.0072  lr=0.0016  (850.0ms/step avg)
+  Running validation ...
+[Epoch 72] lr=0.001596 loss(train_avg)=0.0042 val_top1=35201/50000 (0.704) val_top5=0.894 val_loss=1.3822  [513.0s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e72.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e72.state.npz (590 arrays, step=45000)
+  step 45100/62500  loss=0.0067  lr=0.00158  (850.0ms/step avg)
+  step 45200/62500  loss=0.0023  lr=0.00156  (850.0ms/step avg)
+  step 45300/62500  loss=0.0067  lr=0.00155  (850.0ms/step avg)
+  step 45400/62500  loss=0.0066  lr=0.00153  (850.0ms/step avg)
+  step 45500/62500  loss=0.0072  lr=0.00151  (850.0ms/step avg)
+  step 45600/62500  loss=0.0101  lr=0.0015  (850.0ms/step avg)
+  Running validation ...
+[Epoch 73] lr=0.001491 loss(train_avg)=0.0043 val_top1=36590/50000 (0.7318) val_top5=0.912 val_loss=1.3836  [513.0s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e73.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e73.state.npz (590 arrays, step=45625)
+  step 45700/62500  loss=0.0067  lr=0.00148  (850.0ms/step avg)
+  step 45800/62500  loss=0.002  lr=0.00146  (850.0ms/step avg)
+  step 45900/62500  loss=0.0022  lr=0.00145  (850.0ms/step avg)
+  step 46000/62500  loss=0.0033  lr=0.00143  (850.0ms/step avg)
+  step 46100/62500  loss=0.0021  lr=0.00141  (850.0ms/step avg)
+  step 46200/62500  loss=0.0069  lr=0.0014  (850.0ms/step avg)
+  Running validation ...
+[Epoch 74] lr=0.00139 loss(train_avg)=0.0041 val_top1=36934/50000 (0.7387) val_top5=0.9159 val_loss=1.2669  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e74.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e74.state.npz (590 arrays, step=46250)
+  step 46300/62500  loss=0.0067  lr=0.00138  (850.0ms/step avg)
+  step 46400/62500  loss=0.0068  lr=0.00137  (850.0ms/step avg)
+  step 46500/62500  loss=0.0062  lr=0.00135  (850.0ms/step avg)
+  step 46600/62500  loss=0.0067  lr=0.00133  (850.0ms/step avg)
+  step 46700/62500  loss=0.0067  lr=0.00132  (850.0ms/step avg)
+  step 46800/62500  loss=0.0067  lr=0.0013  (850.0ms/step avg)
+  Running validation ...
+[Epoch 75] lr=0.001291 loss(train_avg)=0.0041 val_top1=36671/50000 (0.7334) val_top5=0.9136 val_loss=1.4139  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e75.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e75.state.npz (590 arrays, step=46875)
+  step 46900/62500  loss=0.0022  lr=0.00129  (850.0ms/step avg)
+  step 47000/62500  loss=0.0064  lr=0.00127  (850.0ms/step avg)
+  step 47100/62500  loss=0.0063  lr=0.00126  (850.0ms/step avg)
+  step 47200/62500  loss=0.0021  lr=0.00124  (850.0ms/step avg)
+  step 47300/62500  loss=0.0021  lr=0.00123  (850.0ms/step avg)
+  step 47400/62500  loss=0.0068  lr=0.00121  (850.0ms/step avg)
+  step 47500/62500  loss=0.0065  lr=0.0012  (849.0ms/step avg)
+  Running validation ...
+[Epoch 76] lr=0.001195 loss(train_avg)=0.004 val_top1=37258/50000 (0.7452) val_top5=0.9198 val_loss=1.2152  [512.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e76.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e76.state.npz (590 arrays, step=47500)
+  step 47600/62500  loss=0.0063  lr=0.00118  (850.0ms/step avg)
+  step 47700/62500  loss=0.0067  lr=0.00117  (850.0ms/step avg)
+  step 47800/62500  loss=0.002  lr=0.00115  (850.0ms/step avg)
+  step 47900/62500  loss=0.002  lr=0.00114  (850.0ms/step avg)
+  step 48000/62500  loss=0.0064  lr=0.00112  (850.0ms/step avg)
+  step 48100/62500  loss=0.0065  lr=0.00111  (849.0ms/step avg)
+  Running validation ...
+[Epoch 77] lr=0.001102 loss(train_avg)=0.0041 val_top1=37112/50000 (0.7422) val_top5=0.9182 val_loss=1.3504  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e77.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e77.state.npz (590 arrays, step=48125)
+  step 48200/62500  loss=0.0027  lr=0.00109  (850.0ms/step avg)
+  step 48300/62500  loss=0.0074  lr=0.00108  (850.0ms/step avg)
+  step 48400/62500  loss=0.0064  lr=0.00106  (850.0ms/step avg)
+  step 48500/62500  loss=0.007  lr=0.00105  (850.0ms/step avg)
+  step 48600/62500  loss=0.002  lr=0.00103  (850.0ms/step avg)
+  step 48700/62500  loss=0.0067  lr=0.00102  (849.0ms/step avg)
+  Running validation ...
+[Epoch 78] lr=0.001013 loss(train_avg)=0.004 val_top1=37466/50000 (0.7493) val_top5=0.9218 val_loss=1.2917  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e78.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e78.state.npz (590 arrays, step=48750)
+  step 48800/62500  loss=0.0073  lr=0.00101  (850.0ms/step avg)
+  step 48900/62500  loss=0.0069  lr=0.00099  (850.0ms/step avg)
+  step 49000/62500  loss=0.007  lr=0.00098  (850.0ms/step avg)
+  step 49100/62500  loss=0.0065  lr=0.00096  (850.0ms/step avg)
+  step 49200/62500  loss=0.0063  lr=0.00095  (850.0ms/step avg)
+  step 49300/62500  loss=0.0066  lr=0.00094  (849.0ms/step avg)
+  Running validation ...
+[Epoch 79] lr=0.000927 loss(train_avg)=0.0039 val_top1=37517/50000 (0.7503) val_top5=0.9223 val_loss=1.1327  [512.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e79.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e79.state.npz (590 arrays, step=49375)
+  step 49400/62500  loss=0.0067  lr=0.00092  (850.0ms/step avg)
+  step 49500/62500  loss=0.0064  lr=0.00091  (850.0ms/step avg)
+  step 49600/62500  loss=0.0064  lr=0.0009  (850.0ms/step avg)
+  step 49700/62500  loss=0.0062  lr=0.00088  (850.0ms/step avg)
+  step 49800/62500  loss=0.0068  lr=0.00087  (850.0ms/step avg)
+  step 49900/62500  loss=0.003  lr=0.00086  (850.0ms/step avg)
+  step 50000/62500  loss=0.0063  lr=0.00084  (849.0ms/step avg)
+  Running validation ...
+[Epoch 80] lr=0.000844 loss(train_avg)=0.004 val_top1=37318/50000 (0.7464) val_top5=0.9211 val_loss=1.2084  [512.8s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e80.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e80.state.npz (590 arrays, step=50000)
+  step 50100/62500  loss=0.0063  lr=0.00083  (850.0ms/step avg)
+  step 50200/62500  loss=0.0062  lr=0.00082  (850.0ms/step avg)
+  step 50300/62500  loss=0.0021  lr=0.0008  (850.0ms/step avg)
+  step 50400/62500  loss=0.0018  lr=0.00079  (850.0ms/step avg)
+  step 50500/62500  loss=0.0019  lr=0.00078  (850.0ms/step avg)
+  step 50600/62500  loss=0.0019  lr=0.00077  (849.0ms/step avg)
+  Running validation ...
+[Epoch 81] lr=0.000764 loss(train_avg)=0.0039 val_top1=37742/50000 (0.7548) val_top5=0.9251 val_loss=1.1908  [512.6s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e81.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e81.state.npz (590 arrays, step=50625)
+  step 50700/62500  loss=0.0062  lr=0.00075  (850.0ms/step avg)
+  step 50800/62500  loss=0.0021  lr=0.00074  (850.0ms/step avg)
+  step 50900/62500  loss=0.0019  lr=0.00073  (850.0ms/step avg)
+  step 51000/62500  loss=0.0064  lr=0.00072  (850.0ms/step avg)
+  step 51100/62500  loss=0.0062  lr=0.00071  (850.0ms/step avg)
+  step 51200/62500  loss=0.0059  lr=0.00069  (849.0ms/step avg)
+  Running validation ...
+[Epoch 82] lr=0.000688 loss(train_avg)=0.0038 val_top1=37650/50000 (0.753) val_top5=0.9219 val_loss=1.2319  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e82.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e82.state.npz (590 arrays, step=51250)
+  step 51300/62500  loss=0.0064  lr=0.00068  (850.0ms/step avg)
+  step 51400/62500  loss=0.0063  lr=0.00067  (850.0ms/step avg)
+  step 51500/62500  loss=0.0019  lr=0.00066  (850.0ms/step avg)
+  step 51600/62500  loss=0.0061  lr=0.00065  (850.0ms/step avg)
+  step 51700/62500  loss=0.0066  lr=0.00064  (850.0ms/step avg)
+  step 51800/62500  loss=0.0064  lr=0.00062  (849.0ms/step avg)
+  Running validation ...
+[Epoch 83] lr=0.000616 loss(train_avg)=0.0038 val_top1=37858/50000 (0.7572) val_top5=0.9264 val_loss=1.2574  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e83.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e83.state.npz (590 arrays, step=51875)
+  step 51900/62500  loss=0.0066  lr=0.00061  (850.0ms/step avg)
+  step 52000/62500  loss=0.0062  lr=0.0006  (850.0ms/step avg)
+  step 52100/62500  loss=0.0063  lr=0.00059  (850.0ms/step avg)
+  step 52200/62500  loss=0.0065  lr=0.00058  (850.0ms/step avg)
+  step 52300/62500  loss=0.0058  lr=0.00057  (850.0ms/step avg)
+  step 52400/62500  loss=0.0017  lr=0.00056  (849.0ms/step avg)
+  step 52500/62500  loss=0.0062  lr=0.00055  (849.0ms/step avg)
+  Running validation ...
+[Epoch 84] lr=0.000547 loss(train_avg)=0.004 val_top1=38084/50000 (0.7617) val_top5=0.9288 val_loss=1.1905  [512.7s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e84.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e84.state.npz (590 arrays, step=52500)
+  step 52600/62500  loss=0.0067  lr=0.00054  (850.0ms/step avg)
+  step 52700/62500  loss=0.0066  lr=0.00053  (850.0ms/step avg)
+  step 52800/62500  loss=0.0019  lr=0.00052  (850.0ms/step avg)
+  step 52900/62500  loss=0.0019  lr=0.00051  (850.0ms/step avg)
+  step 53000/62500  loss=0.0067  lr=0.00049  (849.0ms/step avg)
+  step 53100/62500  loss=0.002  lr=0.00048  (849.0ms/step avg)
+  Running validation ...
+[Epoch 85] lr=0.000482 loss(train_avg)=0.0036 val_top1=38337/50000 (0.7667) val_top5=0.9299 val_loss=1.067  [512.6s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e85.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e85.state.npz (590 arrays, step=53125)
+  step 53200/62500  loss=0.0061  lr=0.00047  (850.0ms/step avg)
+  step 53300/62500  loss=0.0062  lr=0.00046  (850.0ms/step avg)
+  step 53400/62500  loss=0.006  lr=0.00045  (850.0ms/step avg)
+  step 53500/62500  loss=0.0065  lr=0.00045  (850.0ms/step avg)
+  step 53600/62500  loss=0.002  lr=0.00044  (849.0ms/step avg)
+  step 53700/62500  loss=0.002  lr=0.00043  (849.0ms/step avg)
+  Running validation ...
+[Epoch 86] lr=0.000421 loss(train_avg)=0.0038 val_top1=38375/50000 (0.7675) val_top5=0.9315 val_loss=1.0412  [512.5s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e86.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e86.state.npz (590 arrays, step=53750)
+  step 53800/62500  loss=0.0062  lr=0.00042  (850.0ms/step avg)
+  step 53900/62500  loss=0.0063  lr=0.00041  (850.0ms/step avg)
+  step 54000/62500  loss=0.006  lr=0.0004  (850.0ms/step avg)
+  step 54100/62500  loss=0.0063  lr=0.00039  (850.0ms/step avg)
+  step 54200/62500  loss=0.0058  lr=0.00038  (849.0ms/step avg)
+  step 54300/62500  loss=0.0058  lr=0.00037  (849.0ms/step avg)
+  Running validation ...
+[Epoch 87] lr=0.000364 loss(train_avg)=0.0037 val_top1=38322/50000 (0.7664) val_top5=0.9306 val_loss=1.0784  [512.5s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e87.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e87.state.npz (590 arrays, step=54375)
+  step 54400/62500  loss=0.006  lr=0.00036  (850.0ms/step avg)
+  step 54500/62500  loss=0.0063  lr=0.00035  (850.0ms/step avg)
+  step 54600/62500  loss=0.006  lr=0.00034  (850.0ms/step avg)
+  step 54700/62500  loss=0.0018  lr=0.00034  (850.0ms/step avg)
+  step 54800/62500  loss=0.0063  lr=0.00033  (849.0ms/step avg)
+  step 54900/62500  loss=0.0067  lr=0.00032  (849.0ms/step avg)
+  step 55000/62500  loss=0.0018  lr=0.00031  (849.0ms/step avg)
+  Running validation ...
+[Epoch 88] lr=0.000311 loss(train_avg)=0.0036 val_top1=38568/50000 (0.7714) val_top5=0.933 val_loss=1.0204  [512.7s train, 17.6s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e88.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e88.state.npz (590 arrays, step=55000)
+  step 55100/62500  loss=0.0066  lr=0.0003  (850.0ms/step avg)
+  step 55200/62500  loss=0.0017  lr=0.00029  (850.0ms/step avg)
+  step 55300/62500  loss=0.0062  lr=0.00029  (850.0ms/step avg)
+  step 55400/62500  loss=0.0061  lr=0.00028  (850.0ms/step avg)
+  step 55500/62500  loss=0.0068  lr=0.00027  (849.0ms/step avg)
+  step 55600/62500  loss=0.006  lr=0.00026  (849.0ms/step avg)
+  Running validation ...
+[Epoch 89] lr=0.000262 loss(train_avg)=0.0036 val_top1=38568/50000 (0.7714) val_top5=0.9339 val_loss=1.1161  [514.0s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e89.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e89.state.npz (590 arrays, step=55625)
+  step 55700/62500  loss=0.0018  lr=0.00026  (850.0ms/step avg)
+  step 55800/62500  loss=0.0059  lr=0.00025  (850.0ms/step avg)
+  step 55900/62500  loss=0.0024  lr=0.00024  (850.0ms/step avg)
+  step 56000/62500  loss=0.0055  lr=0.00023  (850.0ms/step avg)
+  step 56100/62500  loss=0.0062  lr=0.00023  (849.0ms/step avg)
+  step 56200/62500  loss=0.0018  lr=0.00022  (849.0ms/step avg)
+  Running validation ...
+[Epoch 90] lr=0.000217 loss(train_avg)=0.0036 val_top1=38624/50000 (0.7725) val_top5=0.9339 val_loss=1.0232  [514.0s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e90.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e90.state.npz (590 arrays, step=56250)
+  step 56300/62500  loss=0.006  lr=0.00021  (850.0ms/step avg)
+  step 56400/62500  loss=0.0063  lr=0.00021  (850.0ms/step avg)
+  step 56500/62500  loss=0.0024  lr=0.0002  (850.0ms/step avg)
+  step 56600/62500  loss=0.0064  lr=0.00019  (850.0ms/step avg)
+  step 56700/62500  loss=0.0018  lr=0.00019  (850.0ms/step avg)
+  step 56800/62500  loss=0.0019  lr=0.00018  (849.0ms/step avg)
+  Running validation ...
+[Epoch 91] lr=0.000176 loss(train_avg)=0.0037 val_top1=38705/50000 (0.7741) val_top5=0.9342 val_loss=1.0654  [513.9s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e91.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e91.state.npz (590 arrays, step=56875)
+  step 56900/62500  loss=0.0017  lr=0.00017  (850.0ms/step avg)
+  step 57000/62500  loss=0.0066  lr=0.00017  (850.0ms/step avg)
+  step 57100/62500  loss=0.0016  lr=0.00016  (850.0ms/step avg)
+  step 57200/62500  loss=0.0059  lr=0.00016  (850.0ms/step avg)
+  step 57300/62500  loss=0.006  lr=0.00015  (850.0ms/step avg)
+  step 57400/62500  loss=0.0056  lr=0.00014  (849.0ms/step avg)
+  step 57500/62500  loss=0.0058  lr=0.00014  (849.0ms/step avg)
+  Running validation ...
+[Epoch 92] lr=0.000139 loss(train_avg)=0.0039 val_top1=38584/50000 (0.7717) val_top5=0.9346 val_loss=1.1312  [514.1s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e92.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e92.state.npz (590 arrays, step=57500)
+  step 57600/62500  loss=0.0058  lr=0.00013  (850.0ms/step avg)
+  step 57700/62500  loss=0.0019  lr=0.00013  (850.0ms/step avg)
+  step 57800/62500  loss=0.0016  lr=0.00012  (850.0ms/step avg)
+  step 57900/62500  loss=0.0022  lr=0.00012  (850.0ms/step avg)
+  step 58000/62500  loss=0.0017  lr=0.00011  (850.0ms/step avg)
+  step 58100/62500  loss=0.0066  lr=0.00011  (849.0ms/step avg)
+  Running validation ...
+[Epoch 93] lr=0.000107 loss(train_avg)=0.0037 val_top1=38678/50000 (0.7736) val_top5=0.935 val_loss=1.1162  [513.9s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e93.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e93.state.npz (590 arrays, step=58125)
+  step 58200/62500  loss=0.0062  lr=0.0001  (850.0ms/step avg)
+  step 58300/62500  loss=0.0057  lr=0.0001  (850.0ms/step avg)
+  step 58400/62500  loss=0.0064  lr=9e-05  (850.0ms/step avg)
+  step 58500/62500  loss=0.0062  lr=9e-05  (850.0ms/step avg)
+  step 58600/62500  loss=0.0022  lr=8e-05  (850.0ms/step avg)
+  step 58700/62500  loss=0.006  lr=8e-05  (849.0ms/step avg)
+  Running validation ...
+[Epoch 94] lr=7.9e-05 loss(train_avg)=0.0037 val_top1=38789/50000 (0.7758) val_top5=0.936 val_loss=1.0595  [513.9s train, 17.6s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e94.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e94.state.npz (590 arrays, step=58750)
+  step 58800/62500  loss=0.0065  lr=8e-05  (850.0ms/step avg)
+  step 58900/62500  loss=0.0058  lr=7e-05  (850.0ms/step avg)
+  step 59000/62500  loss=0.0059  lr=7e-05  (850.0ms/step avg)
+  step 59100/62500  loss=0.0021  lr=6e-05  (850.0ms/step avg)
+  step 59200/62500  loss=0.0062  lr=6e-05  (850.0ms/step avg)
+  step 59300/62500  loss=0.0023  lr=6e-05  (850.0ms/step avg)
+  Running validation ...
+[Epoch 95] lr=5.5e-05 loss(train_avg)=0.0036 val_top1=38839/50000 (0.7768) val_top5=0.9363 val_loss=1.0202  [513.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e95.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e95.state.npz (590 arrays, step=59375)
+  step 59400/62500  loss=0.0023  lr=5e-05  (850.0ms/step avg)
+  step 59500/62500  loss=0.0061  lr=5e-05  (850.0ms/step avg)
+  step 59600/62500  loss=0.0062  lr=5e-05  (850.0ms/step avg)
+  step 59700/62500  loss=0.006  lr=4e-05  (850.0ms/step avg)
+  step 59800/62500  loss=0.0063  lr=4e-05  (850.0ms/step avg)
+  step 59900/62500  loss=0.0058  lr=4e-05  (850.0ms/step avg)
+  step 60000/62500  loss=0.0066  lr=3e-05  (849.0ms/step avg)
+  Running validation ...
+[Epoch 96] lr=3.5e-05 loss(train_avg)=0.0036 val_top1=38805/50000 (0.7761) val_top5=0.9357 val_loss=1.1349  [513.8s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e96.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e96.state.npz (590 arrays, step=60000)
+  step 60100/62500  loss=0.0017  lr=3e-05  (850.0ms/step avg)
+  step 60200/62500  loss=0.006  lr=3e-05  (850.0ms/step avg)
+  step 60300/62500  loss=0.0019  lr=3e-05  (850.0ms/step avg)
+  step 60400/62500  loss=0.0059  lr=2e-05  (850.0ms/step avg)
+  step 60500/62500  loss=0.0018  lr=2e-05  (850.0ms/step avg)
+  step 60600/62500  loss=0.0059  lr=2e-05  (850.0ms/step avg)
+  Running validation ...
+[Epoch 97] lr=2e-05 loss(train_avg)=0.0036 val_top1=38900/50000 (0.778) val_top5=0.9367 val_loss=1.0058  [513.7s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e97.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e97.state.npz (590 arrays, step=60625)
+  step 60700/62500  loss=0.006  lr=2e-05  (850.0ms/step avg)
+  step 60800/62500  loss=0.0066  lr=2e-05  (850.0ms/step avg)
+  step 60900/62500  loss=0.007  lr=1e-05  (850.0ms/step avg)
+  step 61000/62500  loss=0.0019  lr=1e-05  (850.0ms/step avg)
+  step 61100/62500  loss=0.0068  lr=1e-05  (850.0ms/step avg)
+  step 61200/62500  loss=0.0059  lr=1e-05  (850.0ms/step avg)
+  Running validation ...
+[Epoch 98] lr=9e-06 loss(train_avg)=0.0035 val_top1=38849/50000 (0.777) val_top5=0.9366 val_loss=1.0533  [513.9s train, 17.4s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e98.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e98.state.npz (590 arrays, step=61250)
+  step 61300/62500  loss=0.0059  lr=1e-05  (850.0ms/step avg)
+  step 61400/62500  loss=0.0019  lr=1e-05  (850.0ms/step avg)
+  step 61500/62500  loss=0.0057  lr=1e-05  (850.0ms/step avg)
+  step 61600/62500  loss=0.006  lr=0.0  (850.0ms/step avg)
+  step 61700/62500  loss=0.0062  lr=0.0  (850.0ms/step avg)
+  step 61800/62500  loss=0.0018  lr=0.0  (850.0ms/step avg)
+  Running validation ...
+[Epoch 99] lr=2e-06 loss(train_avg)=0.0037 val_top1=38821/50000 (0.7764) val_top5=0.9357 val_loss=1.1575  [513.8s train, 17.5s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e99.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e99.state.npz (590 arrays, step=61875)
+  step 61900/62500  loss=0.0065  lr=0.0  (850.0ms/step avg)
+  step 62000/62500  loss=0.0019  lr=0.0  (850.0ms/step avg)
+  step 62100/62500  loss=0.006  lr=0.0  (850.0ms/step avg)
+  step 62200/62500  loss=0.0058  lr=0.0  (850.0ms/step avg)
+  step 62300/62500  loss=0.0059  lr=0.0  (850.0ms/step avg)
+  step 62400/62500  loss=0.0061  lr=0.0  (850.0ms/step avg)
+  step 62500/62500  loss=0.0018  lr=0.0  (850.0ms/step avg)
+  Running validation ...
+[Epoch 100] lr=0.0 loss(train_avg)=0.0037 val_top1=38871/50000 (0.7774) val_top5=0.9365 val_loss=1.0448  [513.3s train, 17.3s val]
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e100.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful_e100.state.npz (590 arrays, step=62500)
+saved 54 param-groups to /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful.bin (102228128 bytes)
+  saved full train state -> /home/skoonce/r50_a3_jax_2610/resnet50_imagenet_rsbfaithful.state.npz (590 arrays, step=62500)
+
+Done. Total time: 53113.6s
