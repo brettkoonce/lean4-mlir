@@ -1920,6 +1920,17 @@ lean_exe «test-dataset-record-sizes» where
   root := `tests.TestDatasetRecordSizes
   moreLinkArgs := lowererLink
 
+-- LIDC CT denoiser, MSE arm: patch training + whole-slice scoring (planning/lidc_ct_denoising_demo.md).
+lean_exe «lidc-denoise-train» where
+  root := `demos.MainLidcDenoiseTrain
+  moreLinkArgs := lowererLink
+
+-- LIDC pair loader: integer statistics of loaded records, compared exactly against a numpy
+-- decode by scripts/probes/lidc_loader_check.py.
+lean_exe «test-lidc-loader» where
+  root := `tests.TestLidcLoader
+  moreLinkArgs := lowererLink
+
 lean_exe «test-unet-forward» where
   root := `tests.TestUnetForward
 

@@ -1,0 +1,63 @@
+UNet CT denoiser (LIDC, 1-channel HU to noise): 7849025 params; 1500 steps of 8 × 256², lr 0.000500
+train: 184 (slice, realisation) pairs from /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/e33bf04e-43a6-48c3-a027-10923701e74a/scratchpad/lidc/smoke5/val.bin
+I1010 17:47:48.359644 2375821 service.cc:154] XLA service 0x7cb2c4021e10 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1010 17:47:48.359954 2375821 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1010 17:47:48.410705 2375821 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1010 17:47:48.411774 2375821 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1010 17:47:48.447875 2375821 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+
+
+
+
+
+
+
+
+[pjrt_ffi] compiled .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__train_step.mlir (@main, 205 outputs, 1 replica) in 54783 ms
+  step 1/1500: loss 2.345185 (rms 153.139970 HU), 3121 ms/step
+  step 2/1500: loss 1.846859 (rms 135.899177 HU), 1895 ms/step
+  step 3/1500: loss 1.322446 (rms 114.997652 HU), 1578 ms/step
+  step 100/1500: loss 0.143925 (rms 37.937471 HU), 741 ms/step
+  step 200/1500: loss 0.062117 (rms 24.923228 HU), 731 ms/step
+  step 300/1500: loss 0.051842 (rms 22.768765 HU), 736 ms/step
+  step 400/1500: loss 0.048806 (rms 22.092177 HU), 736 ms/step
+  step 500/1500: loss 0.047449 (rms 21.782749 HU), 739 ms/step
+  step 600/1500: loss 0.044840 (rms 21.175361 HU), 745 ms/step
+  step 700/1500: loss 0.044812 (rms 21.168879 HU), 747 ms/step
+  step 800/1500: loss 0.043589 (rms 20.877991 HU), 749 ms/step
+  step 900/1500: loss 0.042968 (rms 20.728624 HU), 733 ms/step
+  step 1000/1500: loss 0.042328 (rms 20.573831 HU), 701 ms/step
+  step 1100/1500: loss 0.041816 (rms 20.449056 HU), 675 ms/step
+  step 1200/1500: loss 0.044435 (rms 21.079583 HU), 657 ms/step
+  step 1300/1500: loss 0.042103 (rms 20.519077 HU), 641 ms/step
+  step 1400/1500: loss 0.041535 (rms 20.380098 HU), 628 ms/step
+  step 1500/1500: loss 0.040815 (rms 20.202805 HU), 617 ms/step
+saved .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__params.bin + _bn_stats.bin
+I1010 18:04:10.519596 2375821 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1010 18:04:10.526465 2375821 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+W1010 18:04:12.571119 2380518 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.81GiB (12683776491 bytes) by rematerialization; only reduced to 24.39GiB (26184187936 bytes), down from 24.39GiB (26184187936 bytes) originally
+
+
+
+
+W1010 18:04:18.304121 2380495 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.82GiB (12690477547 bytes) by rematerialization; only reduced to 24.48GiB (26285965344 bytes), down from 24.48GiB (26285965344 bytes) originally
+
+
+
+
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+
+[pjrt_ffi] compiled .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__fwd_eval512.mlir (@forward_eval, 1 outputs, 1 replica) in 33020 ms
+rmse HU vs the scanned slice: low-dose floor → denoised
+  /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/e33bf04e-43a6-48c3-a027-10923701e74a/scratchpad/lidc/smoke5/val.bin (92 slices): whole 33.434900 → 16.608702, body 40.665699 → 20.249378
+  /tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax-mlir/e33bf04e-43a6-48c3-a027-10923701e74a/scratchpad/lidc/smoke5/train.bin (2 slices): whole 71.930661 → 56.547944, body 97.640943 → 74.394000

@@ -1,8 +1,10 @@
 # lidc_ct_denoising_demo.md — low-dose CT denoising on LIDC-IDRI (Image generation)
 
 Scoped 2026-10-07 on ares from `planning/demo_slate.md` §3. Status log at the bottom (§9).
-Branch `lidc-denoising` (off `wp8fg` 3d189316): these scripts and this doc live there until the
-demo lands, so the shared checkout stays clear for the ImageNet work.
+Branch `lidc-denoising` (rebased onto `origin/main` 026f9974 on 2026-10-10), checked out in the
+worktree `../lean4-jax-mlir-lidc` (its `.lake/packages` and `data` are symlinks into the main
+checkout): these scripts, the loader and this doc live there until the demo lands, so the shared
+checkout stays clear for the ImageNet work.
 
 ## 0. The one-paragraph version
 
@@ -126,9 +128,18 @@ nodule-bearing slice plus every 4th slice (the nodules are the instrument; the s
 for PSNR/SSIM). 300 patients → ≈ 9,600 train + ≈ 5,000 val records ≈ 27 GB; the build is
 ≈ 12 s per slice per core, ≈ 1.7 h on 30 cores.
 
-Lean (next): `lean_f32_load_ct_pair(path, S, N)` in `ffi/f32_helpers.c` after `lean_f32_load_brats`
-— returns (full f32, low f32 × N, mask u8, count), checks the file length, scales HU to the
-net's input (decide: (HU + 1024)/4096, or a soft-tissue window); a `DatasetKind.lidc` beside
+Loader (built 2026-10-10): `F32.loadCtPair path S N pairing r` (`lean_f32_load_ct_pair` in
+`ffi/f32_helpers.c`, after the BraTS loader) returns the `DatasetIO` 3-tuple (input f32, target
+f32, count), one S² image each: pairing 0 = (low copy r, scanned slice), pairing 1 = (low copy 0,
+low copy 1) for Noise2Noise. Pixels are (HU + 1024)/4096: linear in HU, so MSE is HU² up to a
+constant, and exact. `F32.loadCtMask` returns the reader-count masks for scoring. Both check
+the file length against count·(3 + 2N)·S². Gate: `scripts/probes/lidc_loader_check.py <bin>`
+runs `test-lidc-loader` and requires its integer statistics (Σ input, Σ target, Σ squared
+difference, mask sums, all on the 1/4096 grid) to equal a numpy decode exactly; the data is also
+a case in `test-dataset-record-sizes`. Memory: one pairing of the full train file is ≈ 19 GB
+host-resident (9.6k records × 2 × 1 MiB).
+
+Next: a `DatasetKind.lidc` beside
 `brats224`; `unetCtDenoise (S : Nat)` — `unetBrats`'s layers at 1 → 1 channel with `imageH := S`
 (zero new codegen); the DDPM trainer's per-pixel MSE for the regression arms (check
 `Train.lean`: the ε-loss path is exactly this); patch training at 256², scoring at 512.
@@ -137,8 +148,8 @@ net's input (decide: (HU + 1024)/4096, or a soft-tissue window); a `DatasetKind.
 
 | phase | what | gate |
 |---|---|---|
-| 0 | data path (fetch, XML, simulator, calibration, Mayo check) | **done 2026-10-07**; the 300-patient build is one command away (§9) |
-| 1 | loader + `DatasetKind.lidc` + a render of `unetCtDenoise`; a 1-patient sanity fit | the net overfits one volume; low→full PSNR rises above the floor |
+| 0 | data path (fetch, XML, simulator, calibration, Mayo check) | **done 2026-10-07**; the 300-patient build ran 2026-10-10 (§9) |
+| 1 | loader + `unetCtDenoise` + `lidc-denoise-train` (**done 2026-10-10**, §9; `DatasetKind.lidc` not needed: the demo trainer drives the DDPM ε-loss step directly) + a render of `unetCtDenoise`; a 1-patient sanity fit | the net overfits one volume; low→full PSNR rises above the floor |
 | 2 | MSE UNet, patch-trained on the 240 train patients; scoring script (PSNR/SSIM + nodule CNR by size) | beats the floor and BM3D on PSNR; the nodule table exists |
 | 3 | Noise2Noise with the same net | within ~0.3 dB of phase 2 (the classic result) |
 | 4 | conditional diffusion (the DDPM UNet, SR3 form), sampling strip | nodule CNR in the <6 mm bins beats MSE; the hallucination rate is measured (nodule-sized objects where no reader drew one) |
@@ -170,3 +181,27 @@ each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-or
   with `./scripts/datasets/download_lidc.sh` (idempotent: skips the fetched patients, then
   `preprocess_lidc.py` with the §5 defaults) — `nice -n 19` and `--workers 8` beside a live
   run (≈ 6 h), 30 workers on an idle box (≈ 1.7 h).
+- 2026-10-10: 145 GB freed (the duplicate ImageNet tarballs); the branch rebased onto
+  `origin/main` and given its own worktree. The full build launched on the idle box with 30
+  workers (`preprocess_lidc.py data/lidc/dicom data/lidc/xml data/lidc --workers 30`, log
+  `data/lidc/preprocess.log`). Loader + gate written and passing on the 4-patient smoke file
+  (92 val records, every statistic equal).
+- 2026-10-10: **phase 1 gate passes.** `unetCtDenoise` (`ReferenceNets`, `unetBrats`'s layers at
+  1 → 1 channel, 7,849,025 params) trained by `lidc-denoise-train` (`demos/MainLidcDenoiseTrain.lean`):
+  input HU/1000, target the noise (low − full)/100 HU, the DDPM trainer's per-pixel MSE step
+  (`useDdpm`), 8 × 256² crops cut by one seed from input and target, both realisations; scored on
+  whole 512² slices by the eval forward at batch 1. 1,500 steps (≈ 0.65 s/step on one 4060 Ti
+  beside the 30-worker data build) on the smoke file's one volume (LIDC-IDRI-0002, 92 slices),
+  scored on that volume and on the 2 slices of an unseen patient (0007):
+
+  | | body RMSE (HU) | PSNR (dB) | SSIM (soft tissue) |
+  |---|---|---|---|
+  | 0002, fitted: floor → denoised | 40.67 → 20.25 | 42.27 → 48.16 | 0.837 → 0.905 |
+  | 0007, unseen: floor → denoised | 97.64 → 74.39 | 35.29 → 37.36 | 0.891 → 0.881 |
+
+  `scripts/probes/lidc_denoise_score.py` recomputes the RMSE from the dumped outputs and
+  matches the trainer's to 0.01 HU; figures and log in `runs/2026-10-10-lidc-denoise-smoke/`. The unseen
+  patient is the 2-slice smoke train file, noisier (floor 98 HU) and over-smoothed in the lung
+  by a one-volume net: SSIM dips. Not a result, only the gate. XLA logs "Can't reduce memory
+  use below 11.8 GiB … only reduced to 24.4 GiB" compiling the 512² eval at batch 4 and at 1;
+  it runs and scores at either, so the message is the autotuner's, not a failure.

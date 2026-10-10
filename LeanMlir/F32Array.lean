@@ -367,6 +367,25 @@ opaque readU8NormPad (path : @& String) (indices : @& ByteArray) (start count pi
 opaque loadBrats (path : @& String) (imgSize : USize) (channels : USize := 4) :
     IO (ByteArray × ByteArray × Nat)
 
+/-- Load an LIDC-IDRI low-dose CT pair file (`scripts/datasets/preprocess_lidc.py`) as
+    `(inputs f32, targets f32, count)`, one `imgSize`×`imgSize` single-channel image each.
+    Each record on disk holds the scanned slice, `realisations` simulated quarter-dose
+    copies of it and the readers' nodule mask; `pairing` picks the pair:
+    `0` = supervised (input = low copy `realisation`, target = the scanned slice),
+    `1` = Noise2Noise (input = low copy 0, target = low copy 1).
+    Pixels are `(HU + 1024) / 4096`, linear in HU and exact (no windowing).
+    The record size is not in the header, so the loader checks the file length against
+    `count · (3 + 2·realisations) · imgSize²` and refuses a mismatch. -/
+@[extern "lean_f32_load_ct_pair"]
+opaque loadCtPair (path : @& String) (imgSize : USize := 512) (realisations : USize := 2)
+    (pairing : USize := 0) (realisation : USize := 0) : IO (ByteArray × ByteArray × Nat)
+
+/-- The reader-count nodule masks of an LIDC pair file, `count · imgSize²` uint8 (0–4 of the
+    four readers drew a nodule at the pixel), record for record with `loadCtPair`. -/
+@[extern "lean_f32_load_ct_mask"]
+opaque loadCtMask (path : @& String) (imgSize : USize := 512) (realisations : USize := 2) :
+    IO ByteArray
+
 /-- YOLOv1 detection-bin loader (target+mask format, 224 input / 7×7 grid). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes
     per image: 30×7×7 float32 target (5880), then 7×7 float32 mask (196),

@@ -83,6 +83,30 @@ def unetBrats : NetSpec where
     .conv2d 32 4 1 .same .identity
   ]
 
+/-- The LIDC low-dose CT denoiser: `unetBrats`'s layers at one channel in and one out. Input is
+    the low-dose slice in HU/1000; output is the noise it carries in HU/100, so the denoised slice
+    is `low − 100·out` HU (residual learning, as RED-CNN and DnCNN do). Fully convolutional: the
+    trainer renders it at `S = 256` patches, the scorer at `S = 512` slices, and both read one
+    checkpoint, so the name does not carry `S` (the train-step and eval artifacts take different
+    suffixes under the one `buildPrefix`). -/
+def unetCtDenoise (S : Nat := 256) : NetSpec where
+  name := "UNet CT denoiser (LIDC, 1-channel HU to noise)"
+  imageH := S
+  imageW := S
+  layers := [
+    .unetDown 1   32,
+    .unetDown 32  64,
+    .unetDown 64  128,
+    .unetDown 128 256,
+    .convBn 256 512 3 1 .same,
+    .convBn 512 512 3 1 .same,
+    .unetUp 512 256,
+    .unetUp 256 128,
+    .unetUp 128 64,
+    .unetUp 64  32,
+    .conv2d 32 1 1 .same .identity
+  ]
+
 /-- R34 encoder (stride /32, as pretrained) + a UNet decoder, with or without skip
     connections, on BraTS at 224×224 — the segmentation demo's anchor
     ([`demos/MainUnetBratsR34.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/demos/MainUnetBratsR34.lean)),

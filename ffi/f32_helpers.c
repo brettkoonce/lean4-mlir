@@ -558,6 +558,108 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
     return lean_io_result_mk_ok(outer);
 }
 
+// ---- LIDC-IDRI low-dose CT pair loader ----
+// Binary format (written by scripts/datasets/preprocess_lidc.py):
+//   Header: 4-byte LE uint32 count
+//   Per record, S = image size, N = low-dose realisations:
+//     full : S*S uint16 LE   the scanned slice, HU + 1024, clipped to 0..4095
+//     low  : N * S*S uint16  N independent simulated quarter-dose realisations, same encoding
+//     mask : S*S uint8       reader count 0..4 (how many of the four LIDC readers drew a nodule there)
+//   (3 + 2N) * S*S bytes per record: 1,835,008 at S = 512, N = 2.
+//
+// Returns (input f32, target f32, count): the 3-tuple every DatasetIO loader returns, with the
+// target an S*S f32 image per record instead of a class label. `pairing` picks the arm:
+//   0  supervised    input = low[realisation], target = full   (the MSE UNet, the diffusion condition)
+//   1  noise2noise   input = low[0],           target = low[1] (needs N >= 2)
+// Both images are scaled x = (HU + 1024) / 4096 = stored / 4096: linear in HU, so a
+// denoiser's MSE is HU² up to one constant, and exact (every stored value is a multiple of 1/4096).
+// No windowing here: the soft-tissue window is a display and scoring choice, not the net's input.
+#define CT_SCALE 4096.0f
+
+static lean_obj_res ct_err(const char* msg) {
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+}
+
+// Opens `path`, reads the count and checks the file length against count * (3 + 2N) * S*S.
+static FILE* ct_open(const char* path, size_t S, size_t N, uint32_t* count, const char** err) {
+    FILE* f = fopen(path, "rb");
+    if (!f) { *err = "lidc: cannot open file"; return NULL; }
+    if (fread(count, 4, 1, f) != 1) { fclose(f); *err = "lidc: bad header"; return NULL; }
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); *err = "lidc: cannot seek"; return NULL; }
+    long end = ftell(f);
+    fseek(f, 4, SEEK_SET);
+    if (end < 0 || (size_t)end != 4 + (size_t)*count * (3 + 2 * N) * S * S) {
+        fclose(f);
+        *err = "lidc: file size does not match count * (3 + 2N) * S*S — wrong size or realisation count for this build";
+        return NULL;
+    }
+    return f;
+}
+
+LEAN_EXPORT lean_obj_res lean_f32_load_ct_pair(b_lean_obj_arg path_obj, size_t S, size_t N,
+                                               size_t pairing, size_t realisation) {
+    if (S == 0 || N == 0) return ct_err("lidc: size and realisations must be positive");
+    if (pairing > 1) return ct_err("lidc: pairing must be 0 (supervised) or 1 (noise2noise)");
+    if (pairing == 0 && realisation >= N) return ct_err("lidc: realisation index out of range");
+    if (pairing == 1 && N < 2) return ct_err("lidc: noise2noise needs two realisations");
+    uint32_t count; const char* err = NULL;
+    FILE* f = ct_open(lean_string_cstr(path_obj), S, N, &count, &err);
+    if (!f) return ct_err(err);
+    const size_t hw = S * S;
+    const size_t rec = (3 + 2 * N) * hw;
+    const size_t out_bytes = (size_t)count * hw * 4;
+    lean_object* in_ba  = lean_alloc_sarray(1, out_bytes, out_bytes);
+    lean_object* tgt_ba = lean_alloc_sarray(1, out_bytes, out_bytes);
+    float* in  = (float*)lean_sarray_cptr(in_ba);
+    float* tgt = (float*)lean_sarray_cptr(tgt_ba);
+    uint8_t* buf = (uint8_t*)malloc(rec);
+    if (!buf) { fclose(f); lean_dec(in_ba); lean_dec(tgt_ba); return ct_err("lidc: malloc failed"); }
+    // Image k of a record (0 = full, 1 + r = low realisation r) starts at byte 2*k*hw.
+    const size_t in_img  = pairing == 0 ? 1 + realisation : 1;
+    const size_t tgt_img = pairing == 0 ? 0 : 2;
+    const float inv = 1.0f / CT_SCALE;
+    for (uint32_t i = 0; i < count; i++) {
+        if (fread(buf, 1, rec, f) != rec) {
+            free(buf); fclose(f); lean_dec(in_ba); lean_dec(tgt_ba); return ct_err("lidc: short read"); }
+        const uint8_t* a = buf + 2 * in_img * hw;
+        const uint8_t* b = buf + 2 * tgt_img * hw;
+        float* di = in + (size_t)i * hw;
+        float* dt = tgt + (size_t)i * hw;
+        for (size_t j = 0; j < hw; j++) {
+            di[j] = (float)(uint16_t)(a[2 * j] | (a[2 * j + 1] << 8)) * inv;
+            dt[j] = (float)(uint16_t)(b[2 * j] | (b[2 * j + 1] << 8)) * inv;
+        }
+    }
+    free(buf); fclose(f);
+    lean_object* inner = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(inner, 0, tgt_ba);
+    lean_ctor_set(inner, 1, lean_usize_to_nat((size_t)count));
+    lean_object* outer = lean_alloc_ctor(0, 2, 0);
+    lean_ctor_set(outer, 0, in_ba);
+    lean_ctor_set(outer, 1, inner);
+    return lean_io_result_mk_ok(outer);
+}
+
+// The reader-count masks alone, count * S*S uint8, for the nodule scoring: the training pairs
+// do not carry them. Same file checks as lean_f32_load_ct_pair.
+LEAN_EXPORT lean_obj_res lean_f32_load_ct_mask(b_lean_obj_arg path_obj, size_t S, size_t N) {
+    if (S == 0 || N == 0) return ct_err("lidc: size and realisations must be positive");
+    uint32_t count; const char* err = NULL;
+    FILE* f = ct_open(lean_string_cstr(path_obj), S, N, &count, &err);
+    if (!f) return ct_err(err);
+    const size_t hw = S * S;
+    const size_t skip = (1 + N) * 2 * hw;
+    const size_t bytes = (size_t)count * hw;
+    lean_object* ba = lean_alloc_sarray(1, bytes, bytes);
+    uint8_t* m = lean_sarray_cptr(ba);
+    for (uint32_t i = 0; i < count; i++) {
+        if (fseek(f, (long)skip, SEEK_CUR) != 0 || fread(m + (size_t)i * hw, 1, hw, f) != hw) {
+            fclose(f); lean_dec(ba); return ct_err("lidc: short read"); }
+    }
+    fclose(f);
+    return lean_io_result_mk_ok(ba);
+}
+
 // ---- VOC 2007 YOLOv1 binary loader ----
 // Binary format (written by preprocess_voc.py — Phase 3b layout, 157,728
 // bytes/record):

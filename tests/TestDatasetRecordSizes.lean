@@ -103,6 +103,10 @@ def main : IO UInt32 := do
     { name := "brats224c3 2.5D (val)", path := "data/brats224c3/val.bin"
       pixels := 12 * 224 * 224, labelBytes := 224 * 224
       load := F32.loadBrats "data/brats224c3/val.bin" 224 12 },
+    -- LIDC low-dose CT pairs: the target is an f32 image (the scanned slice), so S² · 4.
+    { name := "lidc ct pair 512 (val)", path := "data/lidc/val.bin"
+      pixels := 512 * 512, labelBytes := 512 * 512 * 4
+      load := F32.loadCtPair "data/lidc/val.bin" 512 2 },
     -- Detection: f32 target tensors.
     { name := "visdrone yolov1 224 (val)", path := "data/visdrone/val.bin"
       pixels := 3 * 224 * 224, labelBytes := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20
