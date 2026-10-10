@@ -414,15 +414,15 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `resnet50in160_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 2 |
-| `resnet50in160_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 2 |
+| `resnet50in160_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
+| `resnet50in160_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
 | `resnet50in160_lamb64bce_train_step.mlir` | train_step | `lamb64bce` | LAMB, BCE loss, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc4x64bce_train_step.mlir` | train_step | `lambacc4x64bce` | LAMB, grad-accum ×4, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 1 |
 | `resnet50in160_lambacc8x64bce_train_step.mlir` | train_step | `lambacc8x64bce` | LAMB, grad-accum ×8, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxbce_train_step.mlir` | train_step | `lambacc8x64wxbce` | LAMB, grad-accum ×8, no decay on norm/bias, BCE loss, micro-batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxclipbce_train_step.mlir` | train_step | `lambacc8x64wxclipbce` | LAMB, grad-accum ×8, no decay on norm/bias, grad clip, BCE loss, micro-batch 64 | 1.4 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambacc8x64wxclipbcebf16_train_step.mlir` | train_step | `lambacc8x64wxclipbcebf16` | LAMB, grad-accum ×8, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 64 | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
-| `resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipbcebf16` | LAMB, data-parallel, grad-accum ×4, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.6 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 2 |
+| `resnet50in160_lambaccdp4x128wxclipbcebf16_train_step.mlir` | train_step | `lambaccdp4x128wxclipbcebf16` | LAMB, data-parallel, grad-accum ×4, no decay on norm/bias, grad clip, BCE loss, bf16, micro-batch 128 per replica | 1.6 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | 4 |
 | `resnet50in160_lambaccdp8x128bce_train_step.mlir` | train_step | `lambaccdp8x128bce` | LAMB, data-parallel, grad-accum ×8, BCE loss, micro-batch 128 per replica | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambaccdp8x64bce_train_step.mlir` | train_step | `lambaccdp8x64bce` | LAMB, data-parallel, grad-accum ×8, BCE loss, micro-batch 64 per replica | 1.5 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
 | `resnet50in160_lambaccdp8x64wxbce_train_step.mlir` | train_step | `lambaccdp8x64wxbce` | LAMB, data-parallel, grad-accum ×8, no decay on norm/bias, BCE loss, micro-batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/ResNet50RenderB.lean` | — |
