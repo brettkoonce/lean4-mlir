@@ -1,0 +1,24 @@
+[sup] 2026-10-07 02:49:10 START job=r34-default-jax-4gpu devs=0,1,2,3 epochs=90 rest_after=[none] temp_max=0 stall=1800s logs=runs/2026-10-07-r34-jax-bf16-90ep
+[sup] 2026-10-07 02:49:10 cmd: bash -c 
+  set -u
+  base=/home/skoonce/r34_2018_jax_2610/resnet34_imagenet
+  last=""; n=0
+  for f in "${base}"_e*.state.npz; do
+    [ -e "$f" ] || continue
+    k="${f##*_e}"; k="${k%.state.npz}"
+    [ "$k" -gt "$n" ] && { n="$k"; last="$f"; }
+  done
+  resume=()
+  if [ -n "$last" ]; then echo "[jax] resuming from epoch $n ($last)"; resume=(LEAN_MLIR_RESUME="$last")
+  else echo "[jax] fresh start"; fi
+  cd jax || exit 1
+  exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
+    LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
+    TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
+    "${resume[@]}" /home/skoonce/.venv-cuda/bin/python3 -u .lake/build/generated_resnet34_imagenet.py
+
+[sup] 2026-10-07 02:49:10 eta: ~13.3 h for 90 ep on 4x 4060 Ti (median 527 s/epoch incl. eval; the 2026-08 run, /home/skoonce/r34_2018_90ep)
+[sup] 2026-10-07 02:49:10 attempt 1: resuming at epoch 0/90 (next rest: 999)
+[sup] 2026-10-07 02:49:10   launched PID=2370654 PGID=2370654
+[sup]   last line: Done. Total time: 53326.1s
+[sup] 2026-10-07 17:38:07 ✅ COMPLETE — 90/90 epochs
