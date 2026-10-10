@@ -1,0 +1,7 @@
+[sup] 2026-10-09 10:16:32 START job=r50-a3-wxclip4x128-bf16-4gpu devs=0,1,2,3 epochs=100 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-10-09-r50-a3-verified-bf16-100ep
+[sup] 2026-10-09 10:16:32 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-10-09 10:16:32 eta: bf16 ~22 h on 4x 4060 Ti at the median (282-285 ms/step fed, 232 synth, 2500 steps/ep + ~92 s eval/ckpt, 100 ep); the 09-21 stall tail (means 404-546) was the DIMM throttle, gone since the 10-05 fans; 3060 box unmeasured, peak 4.39 GiB fits its arena
+[sup] 2026-10-09 10:16:32 attempt 1: resuming at epoch 0/100 (next rest: 999)
+[sup] 2026-10-09 10:16:32   launched PID=3231558 PGID=3231558
+[sup]   last line: done (trained ResNet-50 (ImageNet-1k, 160² train) lambaccdp4x128wxclipbcebf16 + cosine/warmup via packed threading).
+[sup] 2026-10-10 07:13:06 ✅ COMPLETE — 100/100 epochs

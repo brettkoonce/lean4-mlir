@@ -1,0 +1,29 @@
+=== RUN ENDED at 2026-10-10 07:16:45 UTC ===
+[sup] 2026-10-09 10:16:32 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-10-09 10:16:32 eta: bf16 ~22 h on 4x 4060 Ti at the median (282-285 ms/step fed, 232 synth, 2500 steps/ep + ~92 s eval/ckpt, 100 ep); the 09-21 stall tail (means 404-546) was the DIMM throttle, gone since the 10-05 fans; 3060 box unmeasured, peak 4.39 GiB fits its arena
+[sup] 2026-10-09 10:16:32 attempt 1: resuming at epoch 0/100 (next rest: 999)
+[sup] 2026-10-09 10:16:32   launched PID=3231558 PGID=3231558
+[sup]   last line: done (trained ResNet-50 (ImageNet-1k, 160² train) lambaccdp4x128wxclipbcebf16 + cosine/warmup via packed threading).
+[sup] 2026-10-10 07:13:06 ✅ COMPLETE — 100/100 epochs
+--- final evals ---
+  epoch 98: test_acc = 38954/50000 = 77.908000%  top5 = 46840/50000 = 93.680000%  [95% CI 77.54–78.27]
+  epoch 99: test_acc = 38947/50000 = 77.894000%  top5 = 46862/50000 = 93.724000%  [95% CI 77.53–78.26]
+  epoch 100: test_acc = 38957/50000 = 77.914000%  top5 = 46856/50000 = 93.712000%  [95% CI 77.55–78.28]
+--- loaders at end ---
+  pid 3234721  age   1.9 h  rss  5.78 GiB  arena  4.36 GiB  maps 424
+  pid 3234827  age   3.9 h  rss  7.41 GiB  arena  5.97 GiB  maps 413
+  pid 3235016  age   6.0 h  rss  9.16 GiB  arena  7.17 GiB  maps 451
+  pid 3235212  age   8.1 h  rss  9.37 GiB  arena  7.89 GiB  maps 408
+  pid 3235412  age  10.2 h  rss 10.06 GiB  arena  8.20 GiB  maps 427
+  pid 3235609  age  12.3 h  rss  9.96 GiB  arena  8.69 GiB  maps 432
+  pid 3235793  age  14.4 h  rss 10.21 GiB  arena  8.37 GiB  maps 433
+  pid 3236038  age  16.5 h  rss  9.80 GiB  arena  7.98 GiB  maps 428
+  pid 3278895  age  16.5 h  rss 10.98 GiB  arena  8.92 GiB  maps 473
+  pid 3320447  age  16.6 h  rss 10.47 GiB  arena  8.94 GiB  maps 478
+  pid 3362729  age  14.6 h  rss 10.60 GiB  arena  8.64 GiB  maps 454
+  pid 3406373  age  12.4 h  rss  9.20 GiB  arena  7.51 GiB  maps 436
+  pid 3449492  age  10.3 h  rss 10.18 GiB  arena  8.10 GiB  maps 439
+  pid 3492575  age   8.2 h  rss  7.99 GiB  arena  5.94 GiB  maps 399
+  pid 3535657  age   6.1 h  rss  6.59 GiB  arena  4.54 GiB  maps 378
+  pid 3578260  age   4.0 h  rss  6.14 GiB  arena  4.48 GiB  maps 393
+  pid 3621288  age   1.9 h  rss  5.96 GiB  arena  4.36 GiB  maps 425
