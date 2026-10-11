@@ -2,14 +2,18 @@
 
   .venv-lidc/bin/python scripts/probes/lidc_classical.py <train.bin> <val.bin> <method> <out.eps.f32> [--workers 30]
 
-<method> is gauss | tv | bm3d. Each filter has one strength knob, chosen on 48 slices of
+<method> is gauss | tv | bm3d | bm3dpsd. Each filter has one strength knob, chosen on 48 slices of
 <train.bin> (equally spaced through the file, so spread over its patients) by the body RMSE the
 nets are trained and scored on (scanned HU >= -950); the grid's table goes to stdout, and a best
 value at the grid's edge is flagged. The chosen filter is then run on every record of <val.bin>
 (realisation 0, the nets' scored input) and written as `lidc-denoise-train`'s dump format —
 the noise (low - denoised) in HU/100, S^2 f32 per record — so `lidc_denoise_score.py` scores
 it unchanged. Filters work on HU/1000; the knob is in those units (BM3D's sigma, TV's weight)
-or in pixels (the Gaussian's sigma).
+or in pixels (the Gaussian's sigma). `bm3dpsd` is BM3D told the noise's measured power
+spectrum instead of a white-noise sigma: E|fft2(low₀ − full)|² over 128 train slices that the
+tuning does not use (bm3d's convention, so white noise of std σ would read σ²·S²; the DC bin replaced, see
+measure_psd), written beside
+<out> as `.psd.npy`; its knob multiplies that spectrum.
 """
 import argparse
 import os
@@ -19,13 +23,18 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
 import numpy as np  # noqa: E402
 
+if not hasattr(np, "trapz"):  # bm4d 4.2.5's colored-noise path still calls np.trapz (removed in numpy 2.4)
+    np.trapz = np.trapezoid
+
 S, N = 512, 2
 HW = S * S
 GRIDS = {
     "gauss": [0.3, 0.4, 0.5, 0.6, 0.75, 1.0, 1.5],
     "tv": [0.01, 0.02, 0.03, 0.05, 0.08, 0.12],
     "bm3d": [0.04, 0.06, 0.08, 0.10, 0.13, 0.16, 0.20, 0.25],
+    "bm3dpsd": [0.5, 0.75, 1.0, 1.5, 2.0, 3.0],
 }
+_psd = {}
 
 
 def records(path):
@@ -51,8 +60,25 @@ def denoise(method, knob, low):
         import bm3d
         pro = bm3d.BM3DProfile()
         pro.num_threads = 1  # one per worker (its default is every core), and deterministic
-        y = bm3d.bm3d(x, knob, profile=pro)
+        y = bm3d.bm3d(x, knob if method == "bm3d" else knob * _psd["psd"], profile=pro)
     return 1000.0 * y
+
+
+def measure_psd(path, picks):
+    acc = np.zeros((S, S))
+    for k in picks:
+        full, low = decode(path, int(k))
+        acc += np.abs(np.fft.fft2((low - full) / 1000.0)) ** 2
+    acc /= len(picks)
+    # The DC bin is the slice-mean offset low − full (≈ 6 HU, the low-count log bias), ~1,700× the
+    # mean bin: a bias no filter removes, and it skews bm4d's PSD-shape estimate. Its neighbours stand in.
+    acc[0, 0] = (acc[0, 1] + acc[1, 0] + acc[0, -1] + acc[-1, 0]) / 4
+    return acc
+
+
+def init_worker(psd_path):
+    if psd_path:
+        _psd["psd"] = np.load(psd_path)
 
 
 def tune_one(args):
@@ -82,7 +108,17 @@ def main():
     ntrain, _ = records(a.train)
     picks = np.linspace(0, ntrain - 1, a.tune_slices).round().astype(int)
     grid = GRIDS[a.method]
-    with Pool(a.workers) as pool:
+    psd_path = None
+    if a.method == "bm3dpsd":
+        rest = np.setdiff1d(np.arange(ntrain), picks)
+        held = rest[np.linspace(0, len(rest) - 1, min(128, len(rest))).round().astype(int)] if len(rest) else picks
+        psd = measure_psd(a.train, held)
+        psd_path = os.path.splitext(a.out)[0] + ".psd.npy"
+        os.makedirs(os.path.dirname(os.path.abspath(psd_path)), exist_ok=True)
+        np.save(psd_path, psd)
+        print(f"noise PSD from {len(held)} train slices: std {np.sqrt(psd.mean()) / S * 1000:.1f} HU "
+              f"(white would be flat; peak/mean {psd.max() / psd.mean():.1f}) → {psd_path}")
+    with Pool(a.workers, initializer=init_worker, initargs=(psd_path,)) as pool:
         res = pool.map(tune_one, [(a.train, int(k), a.method) for k in picks])
         nb = sum(r[0] for r in res)
         rmse = np.sqrt(np.sum([r[1] for r in res], axis=0) / nb)

@@ -1,0 +1,4 @@
+< 3 mm nodule: record 2002 (LIDC-IDRI-0522), kept TV 79%, BM3D 76%, MSE UNet 95%, Noise2Noise 95% (row medians 79%, 76%, 98%, 97%)
+large nodule: 32.1 mm, record 219 (LIDC-IDRI-0061)
+ground-glass nodule: 9.9 mm, record 381 (LIDC-IDRI-0111), 4.0 readers at its centre
+→ runs/2026-10-11-lidc-nodules/figure_draft.png

@@ -158,12 +158,13 @@ Next: a `DatasetKind.lidc` beside
 ## 7. Open decisions
 
 - Input scaling for the net (window vs. linear HU); residual vs. direct prediction.
-- Classical arm: ~~BM3D vs. TV~~ both run, with a Gaussian beside them (2026-10-11, §9). Open:
-  BM3D with the noise's measured power spectrum (`sigma_psd`) instead of a white-noise sigma.
+- Classical arm: ~~BM3D vs. TV~~ both run, with a Gaussian beside them, and BM3D with the
+  measured noise spectrum (2026-10-11, §9). Its knob was chosen at its grid's edge (3× the
+  spectrum); a wider grid would smooth more and keep less nodule contrast.
 - Diffusion sampling budget (DDIM steps) and whether to report the posterior std as an
   uncertainty map beside the sample.
-- Whether the <3 mm nodules (29 of 44 rows in the smoke build — most of LIDC) are scored on
-  their 3 mm stand-in disks or dropped: they are the bin the question is about.
+- ~~Whether the <3 mm nodules are scored on their 3 mm stand-in disks or dropped~~: scored, as a
+  row of their own (242 of the 395 val nodules; 2026-10-11, §9).
 
 ## 8. Disk
 
@@ -258,3 +259,37 @@ each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-or
   blur (its figure: the vessels and the nodule's texture gone). The pooled body RMSE and the
   per-slice-mean PSNR rank the three filters differently, so no one classical number is "the"
   baseline; BM3D with the measured noise PSD is the fair form and is still open (§7).
+- 2026-10-11: **BM3D with the measured noise spectrum** (`lidc_classical.py … bm3dpsd`,
+  `run_bm3dpsd.sh`): E|fft2(low₀ − full)|² over 128 held-out train slices (std 78 HU; the DC bin,
+  a ≈ 6 HU slice-mean offset, replaced by its neighbours), its knob a multiplier on that
+  spectrum, chosen 3.0 **at the grid's edge**. Val body RMSE 58.04 HU, PSNR 41.48, SSIM 0.768:
+  no better than the white-noise σ (58.64). Tuned for body RMSE, every filter is pushed to
+  smooth harder than the noise, which is what costs the nodules below.
+- 2026-10-11: **the nodule table** (`scripts/demos/lidc_nodules.py`, `runs/2026-10-11-lidc-nodules/`).
+  A nodule on a slice = a region of >= 2 readers' agreement, matched to `nodules.json` for size
+  and texture; contrast = mean HU inside − mean of a 2–6 px lung ring; **kept** = the arm's
+  contrast over the full dose's, pooled over the nodule's slices; medians over nodules, 95%
+  bootstrap intervals. 395 val nodules (11 regions left out: 2 thin ring, 9 unmatched), 242 of
+  them the < 3 mm marks. Contrast kept, median %:
+
+  | | n | quarter | Gauss | TV | BM3D | BM3D-PSD | MSE | N2N |
+  |---|---|---|---|---|---|---|---|---|
+  | < 3 mm (stand-in disks) | 242 | 100.5 | 91.0 | 79.1 | 75.6 | 69.2 | 97.8 | 97.2 |
+  | subsolid 3–6 / 6–10 / >10 mm | 9 / 10 / 3 | 96–100 | 91–96 | 77–88 | 82–95 | 78–93 | 98 / 98 / 93 | 97 / 98 / 92 |
+  | solid 3–6 mm | 52 | 99.7 | 94.9 | 85.8 | 90.6 | 87.2 | 98.9 | 98.7 |
+  | solid 6–10 mm | 52 | 100.0 | 96.7 | 90.0 | 94.3 | 92.8 | 99.4 | 99.4 |
+  | solid > 10 mm | 27 | 100.0 | 98.6 | 95.6 | 98.5 | 98.0 | 99.8 | 99.8 |
+  | all | 395 | 100.0 | 93.4 | 83.0 | 85.1 | 80.2 | 98.7 | 98.6 |
+
+  The size gradient the question predicted is there — in the **filters**: TV keeps 96% of a
+  > 10 mm solid nodule and 79% of a < 3 mm one, BM3D-PSD 98% and 69%. The nets keep ≥ 97% in
+  every bin with more than 3 nodules; their one dip is the 3 large subsolid nodules (92–93%,
+  intervals to 89–99). So §0's expectation — "an MSE UNet erases small, low-contrast nodules" —
+  does not hold at this dose for this net: the regression-to-the-mean cost is the texture (the
+  soft-tissue grain, a nodule's inside), not the nodule. CNR is in `table.txt` and ranks BM3D
+  first — it rewards a flat ring, as the script's docstring warns; contrast kept is the column.
+- 2026-10-11: **draft figure** (`scripts/demos/lidc_figure.py <nodules.json>`,
+  `runs/2026-10-11-lidc-nodules/figure_draft.png`): (a) a full-dose slice, the nodule boxed;
+  (b) a < 3 mm nodule (the row's most typical by contrast kept: TV 79%, BM3D 76%, nets 95%),
+  a 10 mm ground-glass one, the split's largest (32 mm), in full / quarter / TV / BM3D / MSE /
+  N2N; (c) HU profiles through the first two. Every nodule is chosen by a rule in the script.

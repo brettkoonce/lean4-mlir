@@ -1,0 +1,10 @@
+noise PSD from 128 train slices: std 78.0 HU (white would be flat; peak/mean 42.9) → data/lidc/out/bm3dpsd/val.eps.psd.npy
+bm3dpsd: tuned on 48 slices of data/lidc/train.bin (body RMSE, floor 85.68 HU)
+  0.5      69.69 HU
+  0.75     65.20 HU
+  1.0      62.10 HU
+  1.5      58.39 HU
+  2.0      56.57 HU
+  3.0      55.57 HU
+  chosen 3.0 ⚠ at the grid's edge
+  4282 val records → data/lidc/out/bm3dpsd/val.eps.f32
