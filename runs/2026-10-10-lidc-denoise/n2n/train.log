@@ -1,0 +1,472 @@
+UNet CT denoiser (LIDC, 1-channel HU to noise) n2n s0: 7849025 params; arm n2n, seed 0; 30000 steps of 8 × 256², lr 0.000500 cosine
+train: 19200 (input, target) pairs from data/lidc/train.bin
+I1010 21:22:27.738852 2424837 service.cc:154] XLA service 0x7fc6f8021e10 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1010 21:22:27.738896 2424837 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1010 21:22:27.740878 2424837 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1010 21:22:27.740912 2424837 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1010 21:22:27.748285 2424837 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1010 21:22:28.701744 2425600 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 48 bytes spill stores, 48 bytes spill loads
+
+I1010 21:22:29.135067 2425587 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_8', 8944 bytes spill stores, 8968 bytes spill loads
+
+I1010 21:22:29.673890 2425589 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 28 bytes spill stores, 28 bytes spill loads
+
+I1010 21:22:30.353112 2425613 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 8408 bytes spill stores, 8372 bytes spill loads
+
+I1010 21:22:30.405582 2425611 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 892 bytes spill stores, 892 bytes spill loads
+
+I1010 21:22:30.424880 2425617 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 536 bytes spill stores, 536 bytes spill loads
+
+I1010 21:22:30.641372 2425606 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 32 bytes spill stores, 32 bytes spill loads
+
+I1010 21:22:31.122136 2425606 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 48 bytes spill stores, 48 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__n2n_s0_train_step.mlir (@main, 205 outputs, 1 replica) in 9667 ms
+  step 1/30000: loss 3.871562 (rms 196.762840 HU), lr 0.000500, 5307 ms/step
+  step 2/30000: loss 5.662200 (rms 237.953786 HU), lr 0.000500, 143 ms/step
+  step 3/30000: loss 4.008790 (rms 200.219630 HU), lr 0.000500, 139 ms/step
+  step 100/30000: loss 1.501271 (rms 122.526360 HU), lr 0.000500, 150 ms/step
+  step 200/30000: loss 1.303811 (rms 114.184526 HU), lr 0.000500, 147 ms/step
+  step 300/30000: loss 1.183810 (rms 108.803013 HU), lr 0.000500, 150 ms/step
+  step 400/30000: loss 1.344338 (rms 115.945598 HU), lr 0.000500, 150 ms/step
+  step 500/30000: loss 1.204752 (rms 109.761199 HU), lr 0.000500, 151 ms/step
+  step 600/30000: loss 1.214228 (rms 110.192020 HU), lr 0.000500, 150 ms/step
+  step 700/30000: loss 1.126362 (rms 106.130208 HU), lr 0.000499, 151 ms/step
+  step 800/30000: loss 1.281471 (rms 113.202097 HU), lr 0.000499, 152 ms/step
+  step 900/30000: loss 1.257491 (rms 112.137916 HU), lr 0.000499, 150 ms/step
+  step 1000/30000: loss 1.319209 (rms 114.856827 HU), lr 0.000499, 150 ms/step
+  step 1100/30000: loss 1.126988 (rms 106.159711 HU), lr 0.000498, 151 ms/step
+  step 1200/30000: loss 1.180299 (rms 108.641573 HU), lr 0.000498, 152 ms/step
+  step 1300/30000: loss 1.147886 (rms 107.139425 HU), lr 0.000498, 151 ms/step
+  step 1400/30000: loss 1.208862 (rms 109.948278 HU), lr 0.000497, 152 ms/step
+  step 1500/30000: loss 1.239068 (rms 111.313422 HU), lr 0.000497, 151 ms/step
+  step 1600/30000: loss 1.168522 (rms 108.098201 HU), lr 0.000496, 151 ms/step
+  step 1700/30000: loss 1.165901 (rms 107.976900 HU), lr 0.000496, 151 ms/step
+  step 1800/30000: loss 1.219816 (rms 110.445294 HU), lr 0.000496, 151 ms/step
+  step 1900/30000: loss 1.167754 (rms 108.062687 HU), lr 0.000495, 151 ms/step
+  step 2000/30000: loss 1.342934 (rms 115.885041 HU), lr 0.000495, 151 ms/step
+  step 2100/30000: loss 1.197851 (rms 109.446387 HU), lr 0.000494, 154 ms/step
+  step 2200/30000: loss 1.209595 (rms 109.981578 HU), lr 0.000493, 152 ms/step
+  step 2300/30000: loss 1.171380 (rms 108.230293 HU), lr 0.000493, 151 ms/step
+  step 2400/30000: loss 1.118796 (rms 105.773150 HU), lr 0.000492, 151 ms/step
+  step 2500/30000: loss 1.227650 (rms 110.799349 HU), lr 0.000491, 203 ms/step
+  step 2600/30000: loss 1.195841 (rms 109.354493 HU), lr 0.000491, 151 ms/step
+  step 2700/30000: loss 1.190758 (rms 109.121872 HU), lr 0.000490, 151 ms/step
+  step 2800/30000: loss 1.275109 (rms 112.920718 HU), lr 0.000489, 151 ms/step
+  step 2900/30000: loss 1.096915 (rms 104.733699 HU), lr 0.000489, 152 ms/step
+  step 3000/30000: loss 1.271074 (rms 112.741904 HU), lr 0.000488, 152 ms/step
+  step 3100/30000: loss 1.111900 (rms 105.446656 HU), lr 0.000487, 152 ms/step
+  step 3200/30000: loss 1.163871 (rms 107.882871 HU), lr 0.000486, 151 ms/step
+  step 3300/30000: loss 1.295466 (rms 113.818523 HU), lr 0.000485, 152 ms/step
+  step 3400/30000: loss 1.334294 (rms 115.511666 HU), lr 0.000484, 150 ms/step
+  step 3500/30000: loss 1.241945 (rms 111.442599 HU), lr 0.000483, 152 ms/step
+  step 3600/30000: loss 1.192813 (rms 109.215996 HU), lr 0.000482, 152 ms/step
+  step 3700/30000: loss 1.180365 (rms 108.644592 HU), lr 0.000481, 150 ms/step
+  step 3800/30000: loss 1.201292 (rms 109.603452 HU), lr 0.000480, 151 ms/step
+  step 3900/30000: loss 1.103031 (rms 105.025298 HU), lr 0.000479, 152 ms/step
+  step 4000/30000: loss 1.259574 (rms 112.230753 HU), lr 0.000478, 151 ms/step
+  step 4100/30000: loss 1.205781 (rms 109.808079 HU), lr 0.000477, 153 ms/step
+  step 4200/30000: loss 1.194403 (rms 109.288738 HU), lr 0.000476, 152 ms/step
+  step 4300/30000: loss 1.209312 (rms 109.968713 HU), lr 0.000475, 152 ms/step
+  step 4400/30000: loss 1.196663 (rms 109.392084 HU), lr 0.000474, 152 ms/step
+  step 4500/30000: loss 1.209012 (rms 109.955084 HU), lr 0.000473, 151 ms/step
+  step 4600/30000: loss 1.104841 (rms 105.111420 HU), lr 0.000472, 152 ms/step
+  step 4700/30000: loss 1.156777 (rms 107.553567 HU), lr 0.000470, 152 ms/step
+  step 4800/30000: loss 1.119032 (rms 105.784290 HU), lr 0.000469, 152 ms/step
+  step 4900/30000: loss 1.177230 (rms 108.500208 HU), lr 0.000468, 203 ms/step
+  step 5000/30000: loss 1.193900 (rms 109.265744 HU), lr 0.000467, 152 ms/step
+  step 5100/30000: loss 1.261502 (rms 112.316594 HU), lr 0.000465, 154 ms/step
+  step 5200/30000: loss 1.239516 (rms 111.333547 HU), lr 0.000464, 151 ms/step
+  step 5300/30000: loss 1.171348 (rms 108.228825 HU), lr 0.000462, 151 ms/step
+  step 5400/30000: loss 1.216681 (rms 110.303283 HU), lr 0.000461, 151 ms/step
+  step 5500/30000: loss 1.176965 (rms 108.488035 HU), lr 0.000460, 151 ms/step
+  step 5600/30000: loss 1.375659 (rms 117.288494 HU), lr 0.000458, 151 ms/step
+  step 5700/30000: loss 1.177972 (rms 108.534432 HU), lr 0.000457, 152 ms/step
+  step 5800/30000: loss 1.236129 (rms 111.181338 HU), lr 0.000455, 152 ms/step
+  step 5900/30000: loss 1.201562 (rms 109.615796 HU), lr 0.000454, 152 ms/step
+  step 6000/30000: loss 1.249442 (rms 111.778440 HU), lr 0.000452, 152 ms/step
+  step 6100/30000: loss 1.272178 (rms 112.790880 HU), lr 0.000451, 152 ms/step
+  step 6200/30000: loss 1.120566 (rms 105.856812 HU), lr 0.000449, 151 ms/step
+  step 6300/30000: loss 1.147428 (rms 107.118064 HU), lr 0.000448, 151 ms/step
+  step 6400/30000: loss 1.057315 (rms 102.825839 HU), lr 0.000446, 151 ms/step
+  step 6500/30000: loss 1.086988 (rms 104.258735 HU), lr 0.000444, 151 ms/step
+  step 6600/30000: loss 1.228349 (rms 110.830887 HU), lr 0.000443, 151 ms/step
+  step 6700/30000: loss 1.092789 (rms 104.536559 HU), lr 0.000441, 150 ms/step
+  step 6800/30000: loss 1.230789 (rms 110.940952 HU), lr 0.000439, 152 ms/step
+  step 6900/30000: loss 1.230022 (rms 110.906361 HU), lr 0.000438, 152 ms/step
+  step 7000/30000: loss 1.252700 (rms 111.924094 HU), lr 0.000436, 151 ms/step
+  step 7100/30000: loss 1.154349 (rms 107.440656 HU), lr 0.000434, 154 ms/step
+  step 7200/30000: loss 1.045433 (rms 102.246438 HU), lr 0.000432, 151 ms/step
+  step 7300/30000: loss 1.318669 (rms 114.833322 HU), lr 0.000430, 203 ms/step
+  step 7400/30000: loss 1.223438 (rms 110.609134 HU), lr 0.000429, 151 ms/step
+  step 7500/30000: loss 1.196660 (rms 109.391947 HU), lr 0.000427, 151 ms/step
+  step 7600/30000: loss 1.231513 (rms 110.973572 HU), lr 0.000425, 152 ms/step
+  step 7700/30000: loss 1.123338 (rms 105.987653 HU), lr 0.000423, 151 ms/step
+  step 7800/30000: loss 1.194103 (rms 109.275022 HU), lr 0.000421, 152 ms/step
+  step 7900/30000: loss 1.204417 (rms 109.745957 HU), lr 0.000419, 151 ms/step
+  step 8000/30000: loss 1.139695 (rms 106.756484 HU), lr 0.000417, 153 ms/step
+  step 8100/30000: loss 1.088482 (rms 104.330361 HU), lr 0.000415, 153 ms/step
+  step 8200/30000: loss 1.156890 (rms 107.558818 HU), lr 0.000413, 151 ms/step
+  step 8300/30000: loss 1.187742 (rms 108.983588 HU), lr 0.000411, 151 ms/step
+  step 8400/30000: loss 1.174829 (rms 108.389517 HU), lr 0.000409, 151 ms/step
+  step 8500/30000: loss 1.196799 (rms 109.398312 HU), lr 0.000407, 151 ms/step
+  step 8600/30000: loss 1.197955 (rms 109.451146 HU), lr 0.000405, 153 ms/step
+  step 8700/30000: loss 1.271205 (rms 112.747732 HU), lr 0.000403, 151 ms/step
+  step 8800/30000: loss 1.203138 (rms 109.687635 HU), lr 0.000401, 152 ms/step
+  step 8900/30000: loss 1.086747 (rms 104.247141 HU), lr 0.000399, 153 ms/step
+  step 9000/30000: loss 1.121203 (rms 105.886889 HU), lr 0.000397, 151 ms/step
+  step 9100/30000: loss 1.129439 (rms 106.275047 HU), lr 0.000395, 154 ms/step
+  step 9200/30000: loss 1.183780 (rms 108.801665 HU), lr 0.000393, 151 ms/step
+  step 9300/30000: loss 1.204269 (rms 109.739189 HU), lr 0.000391, 150 ms/step
+  step 9400/30000: loss 1.254919 (rms 112.023189 HU), lr 0.000388, 151 ms/step
+  step 9500/30000: loss 1.163398 (rms 107.860915 HU), lr 0.000386, 152 ms/step
+  step 9600/30000: loss 1.175711 (rms 108.430218 HU), lr 0.000384, 153 ms/step
+  step 9700/30000: loss 1.101636 (rms 104.958837 HU), lr 0.000382, 203 ms/step
+  step 9800/30000: loss 1.041659 (rms 102.061683 HU), lr 0.000380, 151 ms/step
+  step 9900/30000: loss 1.230801 (rms 110.941458 HU), lr 0.000377, 151 ms/step
+  step 10000/30000: loss 1.135025 (rms 106.537531 HU), lr 0.000375, 152 ms/step
+  step 10100/30000: loss 1.202813 (rms 109.672833 HU), lr 0.000373, 153 ms/step
+  step 10200/30000: loss 1.199661 (rms 109.529059 HU), lr 0.000370, 152 ms/step
+  step 10300/30000: loss 1.119351 (rms 105.799373 HU), lr 0.000368, 151 ms/step
+  step 10400/30000: loss 1.144028 (rms 106.959235 HU), lr 0.000366, 152 ms/step
+  step 10500/30000: loss 1.180769 (rms 108.663188 HU), lr 0.000363, 151 ms/step
+  step 10600/30000: loss 1.195402 (rms 109.334457 HU), lr 0.000361, 151 ms/step
+  step 10700/30000: loss 1.345172 (rms 115.981534 HU), lr 0.000359, 151 ms/step
+  step 10800/30000: loss 1.311915 (rms 114.538843 HU), lr 0.000356, 152 ms/step
+  step 10900/30000: loss 1.178145 (rms 108.542375 HU), lr 0.000354, 152 ms/step
+  step 11000/30000: loss 1.082018 (rms 104.020071 HU), lr 0.000352, 151 ms/step
+  step 11100/30000: loss 1.103885 (rms 105.065925 HU), lr 0.000349, 153 ms/step
+  step 11200/30000: loss 1.254315 (rms 111.996215 HU), lr 0.000347, 151 ms/step
+  step 11300/30000: loss 1.204125 (rms 109.732650 HU), lr 0.000344, 151 ms/step
+  step 11400/30000: loss 1.202638 (rms 109.664853 HU), lr 0.000342, 152 ms/step
+  step 11500/30000: loss 1.114268 (rms 105.558902 HU), lr 0.000340, 151 ms/step
+  step 11600/30000: loss 1.224568 (rms 110.660211 HU), lr 0.000337, 151 ms/step
+  step 11700/30000: loss 1.193926 (rms 109.266942 HU), lr 0.000335, 151 ms/step
+  step 11800/30000: loss 1.130982 (rms 106.347643 HU), lr 0.000332, 151 ms/step
+  step 11900/30000: loss 1.257611 (rms 112.143258 HU), lr 0.000330, 152 ms/step
+  step 12000/30000: loss 1.166078 (rms 107.985109 HU), lr 0.000327, 152 ms/step
+  step 12100/30000: loss 1.072007 (rms 103.537788 HU), lr 0.000325, 211 ms/step
+  step 12200/30000: loss 1.202574 (rms 109.661954 HU), lr 0.000322, 151 ms/step
+  step 12300/30000: loss 1.178097 (rms 108.540163 HU), lr 0.000320, 152 ms/step
+  step 12400/30000: loss 1.173361 (rms 108.321786 HU), lr 0.000317, 152 ms/step
+  step 12500/30000: loss 1.197719 (rms 109.440362 HU), lr 0.000315, 151 ms/step
+  step 12600/30000: loss 1.108351 (rms 105.278251 HU), lr 0.000312, 151 ms/step
+  step 12700/30000: loss 1.192135 (rms 109.184916 HU), lr 0.000310, 151 ms/step
+  step 12800/30000: loss 1.286569 (rms 113.427030 HU), lr 0.000307, 151 ms/step
+  step 12900/30000: loss 1.231107 (rms 110.955247 HU), lr 0.000305, 151 ms/step
+  step 13000/30000: loss 1.398944 (rms 118.276958 HU), lr 0.000302, 151 ms/step
+  step 13100/30000: loss 1.195021 (rms 109.317027 HU), lr 0.000299, 153 ms/step
+  step 13200/30000: loss 1.201812 (rms 109.627177 HU), lr 0.000297, 151 ms/step
+  step 13300/30000: loss 1.106724 (rms 105.200959 HU), lr 0.000294, 150 ms/step
+  step 13400/30000: loss 1.312237 (rms 114.552930 HU), lr 0.000292, 151 ms/step
+  step 13500/30000: loss 1.144716 (rms 106.991385 HU), lr 0.000289, 152 ms/step
+  step 13600/30000: loss 1.087909 (rms 104.302882 HU), lr 0.000287, 150 ms/step
+  step 13700/30000: loss 1.104803 (rms 105.109627 HU), lr 0.000284, 151 ms/step
+  step 13800/30000: loss 1.083946 (rms 104.112727 HU), lr 0.000281, 151 ms/step
+  step 13900/30000: loss 1.156889 (rms 107.558777 HU), lr 0.000279, 151 ms/step
+  step 14000/30000: loss 1.131428 (rms 106.368612 HU), lr 0.000276, 152 ms/step
+  step 14100/30000: loss 1.199297 (rms 109.512409 HU), lr 0.000274, 153 ms/step
+  step 14200/30000: loss 1.070463 (rms 103.463189 HU), lr 0.000271, 150 ms/step
+  step 14300/30000: loss 1.221458 (rms 110.519595 HU), lr 0.000268, 151 ms/step
+  step 14400/30000: loss 1.160109 (rms 107.708341 HU), lr 0.000266, 151 ms/step
+  step 14500/30000: loss 1.179892 (rms 108.622815 HU), lr 0.000263, 204 ms/step
+  step 14600/30000: loss 1.242279 (rms 111.457576 HU), lr 0.000260, 152 ms/step
+  step 14700/30000: loss 1.210309 (rms 110.014044 HU), lr 0.000258, 151 ms/step
+  step 14800/30000: loss 1.207586 (rms 109.890227 HU), lr 0.000255, 151 ms/step
+  step 14900/30000: loss 1.171866 (rms 108.252747 HU), lr 0.000253, 151 ms/step
+  step 15000/30000: loss 1.183485 (rms 108.788113 HU), lr 0.000250, 151 ms/step
+  step 15100/30000: loss 1.234488 (rms 111.107527 HU), lr 0.000247, 153 ms/step
+  step 15200/30000: loss 1.199712 (rms 109.531378 HU), lr 0.000245, 150 ms/step
+  step 15300/30000: loss 1.117169 (rms 105.696215 HU), lr 0.000242, 151 ms/step
+  step 15400/30000: loss 1.109702 (rms 105.342407 HU), lr 0.000240, 151 ms/step
+  step 15500/30000: loss 1.092486 (rms 104.522042 HU), lr 0.000237, 151 ms/step
+  step 15600/30000: loss 1.272353 (rms 112.798639 HU), lr 0.000234, 151 ms/step
+  step 15700/30000: loss 1.224809 (rms 110.671095 HU), lr 0.000232, 152 ms/step
+  step 15800/30000: loss 1.273540 (rms 112.851244 HU), lr 0.000229, 151 ms/step
+  step 15900/30000: loss 1.264262 (rms 112.439414 HU), lr 0.000226, 151 ms/step
+  step 16000/30000: loss 1.068753 (rms 103.380527 HU), lr 0.000224, 150 ms/step
+  step 16100/30000: loss 1.089409 (rms 104.374746 HU), lr 0.000221, 153 ms/step
+  step 16200/30000: loss 1.150260 (rms 107.250174 HU), lr 0.000219, 152 ms/step
+  step 16300/30000: loss 1.063872 (rms 103.144177 HU), lr 0.000216, 151 ms/step
+  step 16400/30000: loss 1.158211 (rms 107.620223 HU), lr 0.000213, 151 ms/step
+  step 16500/30000: loss 1.159150 (rms 107.663848 HU), lr 0.000211, 151 ms/step
+  step 16600/30000: loss 1.115020 (rms 105.594500 HU), lr 0.000208, 151 ms/step
+  step 16700/30000: loss 1.260500 (rms 112.271985 HU), lr 0.000206, 151 ms/step
+  step 16800/30000: loss 1.194288 (rms 109.283490 HU), lr 0.000203, 151 ms/step
+  step 16900/30000: loss 1.257154 (rms 112.122890 HU), lr 0.000201, 202 ms/step
+  step 17000/30000: loss 1.330662 (rms 115.354336 HU), lr 0.000198, 152 ms/step
+  step 17100/30000: loss 1.211867 (rms 110.084840 HU), lr 0.000195, 153 ms/step
+  step 17200/30000: loss 1.250636 (rms 111.831845 HU), lr 0.000193, 152 ms/step
+  step 17300/30000: loss 1.281874 (rms 113.219896 HU), lr 0.000190, 151 ms/step
+  step 17400/30000: loss 1.151179 (rms 107.293025 HU), lr 0.000188, 151 ms/step
+  step 17500/30000: loss 1.168980 (rms 108.119396 HU), lr 0.000185, 151 ms/step
+  step 17600/30000: loss 1.318059 (rms 114.806768 HU), lr 0.000183, 150 ms/step
+  step 17700/30000: loss 1.161964 (rms 107.794457 HU), lr 0.000180, 152 ms/step
+  step 17800/30000: loss 1.101148 (rms 104.935618 HU), lr 0.000178, 151 ms/step
+  step 17900/30000: loss 1.192017 (rms 109.179548 HU), lr 0.000175, 150 ms/step
+  step 18000/30000: loss 1.095694 (rms 104.675389 HU), lr 0.000173, 151 ms/step
+  step 18100/30000: loss 1.153796 (rms 107.414895 HU), lr 0.000170, 153 ms/step
+  step 18200/30000: loss 1.208883 (rms 109.949215 HU), lr 0.000168, 151 ms/step
+  step 18300/30000: loss 1.092720 (rms 104.533251 HU), lr 0.000165, 151 ms/step
+  step 18400/30000: loss 1.187849 (rms 108.988482 HU), lr 0.000163, 151 ms/step
+  step 18500/30000: loss 1.087771 (rms 104.296241 HU), lr 0.000160, 152 ms/step
+  step 18600/30000: loss 1.039672 (rms 101.964283 HU), lr 0.000158, 151 ms/step
+  step 18700/30000: loss 1.188754 (rms 109.030018 HU), lr 0.000156, 150 ms/step
+  step 18800/30000: loss 1.303395 (rms 114.166334 HU), lr 0.000153, 152 ms/step
+  step 18900/30000: loss 1.137366 (rms 106.647360 HU), lr 0.000151, 151 ms/step
+  step 19000/30000: loss 1.106277 (rms 105.179719 HU), lr 0.000148, 151 ms/step
+  step 19100/30000: loss 1.103015 (rms 105.024524 HU), lr 0.000146, 153 ms/step
+  step 19200/30000: loss 1.079155 (rms 103.882380 HU), lr 0.000144, 151 ms/step
+  step 19300/30000: loss 1.091291 (rms 104.464862 HU), lr 0.000141, 202 ms/step
+  step 19400/30000: loss 1.338472 (rms 115.692355 HU), lr 0.000139, 152 ms/step
+  step 19500/30000: loss 1.251084 (rms 111.851865 HU), lr 0.000137, 152 ms/step
+  step 19600/30000: loss 1.055879 (rms 102.755980 HU), lr 0.000134, 153 ms/step
+  step 19700/30000: loss 1.193066 (rms 109.227578 HU), lr 0.000132, 151 ms/step
+  step 19800/30000: loss 1.151683 (rms 107.316513 HU), lr 0.000130, 151 ms/step
+  step 19900/30000: loss 1.146128 (rms 107.057374 HU), lr 0.000127, 150 ms/step
+  step 20000/30000: loss 1.235576 (rms 111.156448 HU), lr 0.000125, 152 ms/step
+  step 20100/30000: loss 1.226837 (rms 110.762669 HU), lr 0.000123, 152 ms/step
+  step 20200/30000: loss 1.126178 (rms 106.121550 HU), lr 0.000120, 151 ms/step
+  step 20300/30000: loss 1.130038 (rms 106.303249 HU), lr 0.000118, 151 ms/step
+  step 20400/30000: loss 1.193009 (rms 109.224932 HU), lr 0.000116, 151 ms/step
+  step 20500/30000: loss 1.164607 (rms 107.916952 HU), lr 0.000114, 151 ms/step
+  step 20600/30000: loss 1.250679 (rms 111.833751 HU), lr 0.000112, 151 ms/step
+  step 20700/30000: loss 1.095722 (rms 104.676737 HU), lr 0.000109, 151 ms/step
+  step 20800/30000: loss 1.171268 (rms 108.225117 HU), lr 0.000107, 151 ms/step
+  step 20900/30000: loss 1.160634 (rms 107.732705 HU), lr 0.000105, 151 ms/step
+  step 21000/30000: loss 1.168791 (rms 108.110616 HU), lr 0.000103, 151 ms/step
+  step 21100/30000: loss 1.156769 (rms 107.553218 HU), lr 0.000101, 153 ms/step
+  step 21200/30000: loss 1.057108 (rms 102.815759 HU), lr 0.000099, 152 ms/step
+  step 21300/30000: loss 1.180870 (rms 108.667848 HU), lr 0.000097, 151 ms/step
+  step 21400/30000: loss 1.203974 (rms 109.725737 HU), lr 0.000095, 151 ms/step
+  step 21500/30000: loss 1.121649 (rms 105.907912 HU), lr 0.000093, 151 ms/step
+  step 21600/30000: loss 1.286085 (rms 113.405690 HU), lr 0.000091, 151 ms/step
+  step 21700/30000: loss 1.190496 (rms 109.109837 HU), lr 0.000089, 203 ms/step
+  step 21800/30000: loss 1.186376 (rms 108.920893 HU), lr 0.000087, 150 ms/step
+  step 21900/30000: loss 1.213337 (rms 110.151574 HU), lr 0.000085, 151 ms/step
+  step 22000/30000: loss 1.059482 (rms 102.931134 HU), lr 0.000083, 153 ms/step
+  step 22100/30000: loss 1.253669 (rms 111.967362 HU), lr 0.000081, 151 ms/step
+  step 22200/30000: loss 1.089097 (rms 104.359797 HU), lr 0.000079, 151 ms/step
+  step 22300/30000: loss 1.114135 (rms 105.552612 HU), lr 0.000077, 151 ms/step
+  step 22400/30000: loss 1.293349 (rms 113.725508 HU), lr 0.000075, 151 ms/step
+  step 22500/30000: loss 1.161601 (rms 107.777573 HU), lr 0.000073, 150 ms/step
+  step 22600/30000: loss 1.257054 (rms 112.118404 HU), lr 0.000071, 151 ms/step
+  step 22700/30000: loss 1.164575 (rms 107.915482 HU), lr 0.000070, 150 ms/step
+  step 22800/30000: loss 1.166349 (rms 107.997655 HU), lr 0.000068, 152 ms/step
+  step 22900/30000: loss 1.058898 (rms 102.902782 HU), lr 0.000066, 152 ms/step
+  step 23000/30000: loss 1.125928 (rms 106.109734 HU), lr 0.000064, 152 ms/step
+  step 23100/30000: loss 1.137189 (rms 106.639057 HU), lr 0.000062, 153 ms/step
+  step 23200/30000: loss 1.146683 (rms 107.083307 HU), lr 0.000061, 151 ms/step
+  step 23300/30000: loss 1.131378 (rms 106.366236 HU), lr 0.000059, 151 ms/step
+  step 23400/30000: loss 1.147155 (rms 107.105339 HU), lr 0.000057, 151 ms/step
+  step 23500/30000: loss 1.165980 (rms 107.980544 HU), lr 0.000056, 151 ms/step
+  step 23600/30000: loss 1.193645 (rms 109.254051 HU), lr 0.000054, 151 ms/step
+  step 23700/30000: loss 1.145574 (rms 107.031482 HU), lr 0.000052, 151 ms/step
+  step 23800/30000: loss 1.216711 (rms 110.304645 HU), lr 0.000051, 151 ms/step
+  step 23900/30000: loss 1.330719 (rms 115.356795 HU), lr 0.000049, 151 ms/step
+  step 24000/30000: loss 1.149493 (rms 107.214426 HU), lr 0.000048, 152 ms/step
+  step 24100/30000: loss 1.249750 (rms 111.792212 HU), lr 0.000046, 203 ms/step
+  step 24200/30000: loss 1.227764 (rms 110.804521 HU), lr 0.000045, 151 ms/step
+  step 24300/30000: loss 1.179304 (rms 108.595755 HU), lr 0.000043, 151 ms/step
+  step 24400/30000: loss 1.233807 (rms 111.076885 HU), lr 0.000042, 151 ms/step
+  step 24500/30000: loss 1.277475 (rms 113.025460 HU), lr 0.000040, 151 ms/step
+  step 24600/30000: loss 1.114706 (rms 105.579636 HU), lr 0.000039, 150 ms/step
+  step 24700/30000: loss 1.238499 (rms 111.287856 HU), lr 0.000038, 150 ms/step
+  step 24800/30000: loss 1.135543 (rms 106.561863 HU), lr 0.000036, 151 ms/step
+  step 24900/30000: loss 1.277881 (rms 113.043419 HU), lr 0.000035, 151 ms/step
+  step 25000/30000: loss 1.112743 (rms 105.486642 HU), lr 0.000033, 151 ms/step
+  step 25100/30000: loss 1.347838 (rms 116.096429 HU), lr 0.000032, 152 ms/step
+  step 25200/30000: loss 1.120232 (rms 105.840998 HU), lr 0.000031, 151 ms/step
+  step 25300/30000: loss 1.128480 (rms 106.229922 HU), lr 0.000030, 151 ms/step
+  step 25400/30000: loss 1.271225 (rms 112.748601 HU), lr 0.000028, 151 ms/step
+  step 25500/30000: loss 1.083647 (rms 104.098377 HU), lr 0.000027, 151 ms/step
+  step 25600/30000: loss 1.167986 (rms 108.073382 HU), lr 0.000026, 150 ms/step
+  step 25700/30000: loss 1.163106 (rms 107.847413 HU), lr 0.000025, 152 ms/step
+  step 25800/30000: loss 1.142200 (rms 106.873754 HU), lr 0.000024, 152 ms/step
+  step 25900/30000: loss 1.139552 (rms 106.749786 HU), lr 0.000023, 150 ms/step
+  step 26000/30000: loss 1.029326 (rms 101.455727 HU), lr 0.000022, 151 ms/step
+  step 26100/30000: loss 1.054464 (rms 102.687087 HU), lr 0.000021, 153 ms/step
+  step 26200/30000: loss 1.122492 (rms 105.947705 HU), lr 0.000020, 151 ms/step
+  step 26300/30000: loss 1.193658 (rms 109.254640 HU), lr 0.000019, 151 ms/step
+  step 26400/30000: loss 1.173601 (rms 108.332872 HU), lr 0.000018, 150 ms/step
+  step 26500/30000: loss 1.149318 (rms 107.206242 HU), lr 0.000017, 203 ms/step
+  step 26600/30000: loss 1.131404 (rms 106.367498 HU), lr 0.000016, 150 ms/step
+  step 26700/30000: loss 1.171454 (rms 108.233746 HU), lr 0.000015, 151 ms/step
+  step 26800/30000: loss 1.348907 (rms 116.142452 HU), lr 0.000014, 150 ms/step
+  step 26900/30000: loss 1.014143 (rms 100.704676 HU), lr 0.000013, 151 ms/step
+  step 27000/30000: loss 1.177463 (rms 108.510948 HU), lr 0.000012, 153 ms/step
+  step 27100/30000: loss 1.102419 (rms 104.996164 HU), lr 0.000011, 152 ms/step
+  step 27200/30000: loss 1.242645 (rms 111.474000 HU), lr 0.000011, 151 ms/step
+  step 27300/30000: loss 1.225993 (rms 110.724556 HU), lr 0.000010, 151 ms/step
+  step 27400/30000: loss 1.060118 (rms 102.962019 HU), lr 0.000009, 151 ms/step
+  step 27500/30000: loss 1.215166 (rms 110.234577 HU), lr 0.000009, 151 ms/step
+  step 27600/30000: loss 1.156163 (rms 107.525007 HU), lr 0.000008, 151 ms/step
+  step 27700/30000: loss 1.254633 (rms 112.010422 HU), lr 0.000007, 151 ms/step
+  step 27800/30000: loss 1.078592 (rms 103.855269 HU), lr 0.000007, 151 ms/step
+  step 27900/30000: loss 1.177969 (rms 108.534295 HU), lr 0.000006, 151 ms/step
+  step 28000/30000: loss 1.329263 (rms 115.293678 HU), lr 0.000005, 151 ms/step
+  step 28100/30000: loss 1.049904 (rms 102.464802 HU), lr 0.000005, 153 ms/step
+  step 28200/30000: loss 1.215265 (rms 110.239069 HU), lr 0.000004, 151 ms/step
+  step 28300/30000: loss 1.143540 (rms 106.936419 HU), lr 0.000004, 151 ms/step
+  step 28400/30000: loss 1.085458 (rms 104.185296 HU), lr 0.000004, 151 ms/step
+  step 28500/30000: loss 1.157763 (rms 107.599382 HU), lr 0.000003, 151 ms/step
+  step 28600/30000: loss 1.142947 (rms 106.908687 HU), lr 0.000003, 150 ms/step
+  step 28700/30000: loss 1.131412 (rms 106.367844 HU), lr 0.000002, 151 ms/step
+  step 28800/30000: loss 1.149022 (rms 107.192453 HU), lr 0.000002, 151 ms/step
+  step 28900/30000: loss 1.187126 (rms 108.955315 HU), lr 0.000002, 203 ms/step
+  step 29000/30000: loss 1.314872 (rms 114.667855 HU), lr 0.000001, 151 ms/step
+  step 29100/30000: loss 1.123936 (rms 106.015835 HU), lr 0.000001, 152 ms/step
+  step 29200/30000: loss 1.151686 (rms 107.316625 HU), lr 0.000001, 152 ms/step
+  step 29300/30000: loss 1.224676 (rms 110.665095 HU), lr 0.000001, 150 ms/step
+  step 29400/30000: loss 1.207219 (rms 109.873501 HU), lr 0.000000, 151 ms/step
+  step 29500/30000: loss 1.003531 (rms 100.176397 HU), lr 0.000000, 152 ms/step
+  step 29600/30000: loss 1.190162 (rms 109.094563 HU), lr 0.000000, 151 ms/step
+  step 29700/30000: loss 1.140824 (rms 106.809375 HU), lr 0.000000, 151 ms/step
+  step 29800/30000: loss 1.074287 (rms 103.647807 HU), lr 0.000000, 150 ms/step
+  step 29900/30000: loss 1.155630 (rms 107.500222 HU), lr 0.000000, 151 ms/step
+  step 30000/30000: loss 0.983287 (rms 99.160854 HU), lr 0.000000, 151 ms/step
+saved .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__n2n_s0_params.bin + _bn_stats.bin
+I1010 22:40:03.294517 2424837 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1010 22:40:03.294858 2424837 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+W1010 22:40:03.597626 2440655 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.81GiB (12683776491 bytes) by rematerialization; only reduced to 24.39GiB (26184187936 bytes), down from 24.39GiB (26184187936 bytes) originally
+I1010 22:40:03.876343 2440662 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 48 bytes spill stores, 48 bytes spill loads
+
+I1010 22:40:04.264600 2440654 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 32 bytes spill stores, 32 bytes spill loads
+
+I1010 22:40:04.352720 2440639 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 788 bytes spill stores, 788 bytes spill loads
+
+W1010 22:40:04.506796 2440642 hlo_rematerialization.cc:3282] Can't reduce memory use below 11.82GiB (12690477547 bytes) by rematerialization; only reduced to 24.48GiB (26285965344 bytes), down from 24.48GiB (26285965344 bytes) originally
+I1010 22:40:04.655084 2440648 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 56 bytes spill stores, 56 bytes spill loads
+
+I1010 22:40:04.742917 2440657 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 892 bytes spill stores, 892 bytes spill loads
+
+I1010 22:40:04.846039 2440647 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 536 bytes spill stores, 536 bytes spill loads
+
+I1010 22:40:04.956501 2440660 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 28 bytes spill stores, 28 bytes spill loads
+
+I1010 22:40:05.187387 2440661 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_7', 9108 bytes spill stores, 9120 bytes spill loads
+
+W1010 22:40:14.419469 2440645 bfc_allocator.cc:590] Allocator (GPU_0_bfc) ran out of memory trying to allocate 24.38GiB (rounded to 26175799808) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+I1010 22:40:14.419551 2440645 bfc_allocator.cc:1375] BFCAllocator dump for GPU_0_bfc
+I1010 22:40:14.419560 2440645 bfc_allocator.cc:1382] Bin (256): 	Total Chunks: 2, Chunks in use: 2. 512B allocated for chunks. 512B in use in bin. 32B client-requested in use in bin.
+I1010 22:40:14.419570 2440645 bfc_allocator.cc:1382] Bin (512): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419578 2440645 bfc_allocator.cc:1382] Bin (1024): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419586 2440645 bfc_allocator.cc:1382] Bin (2048): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419593 2440645 bfc_allocator.cc:1382] Bin (4096): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419600 2440645 bfc_allocator.cc:1382] Bin (8192): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419608 2440645 bfc_allocator.cc:1382] Bin (16384): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419615 2440645 bfc_allocator.cc:1382] Bin (32768): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419622 2440645 bfc_allocator.cc:1382] Bin (65536): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419629 2440645 bfc_allocator.cc:1382] Bin (131072): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419637 2440645 bfc_allocator.cc:1382] Bin (262144): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419644 2440645 bfc_allocator.cc:1382] Bin (524288): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419652 2440645 bfc_allocator.cc:1382] Bin (1048576): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419659 2440645 bfc_allocator.cc:1382] Bin (2097152): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419666 2440645 bfc_allocator.cc:1382] Bin (4194304): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419673 2440645 bfc_allocator.cc:1382] Bin (8388608): 	Total Chunks: 2, Chunks in use: 2. 16.00MiB allocated for chunks. 16.00MiB in use in bin. 16.00MiB client-requested in use in bin.
+I1010 22:40:14.419682 2440645 bfc_allocator.cc:1382] Bin (16777216): 	Total Chunks: 1, Chunks in use: 1. 17.69MiB allocated for chunks. 17.69MiB in use in bin. 17.69MiB client-requested in use in bin.
+I1010 22:40:14.419708 2440645 bfc_allocator.cc:1382] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 40.00MiB allocated for chunks. 40.00MiB in use in bin. 40.00MiB client-requested in use in bin.
+I1010 22:40:14.419715 2440645 bfc_allocator.cc:1382] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419720 2440645 bfc_allocator.cc:1382] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419725 2440645 bfc_allocator.cc:1382] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:14.419730 2440645 bfc_allocator.cc:1398] Bin for 24.38GiB was 256.00MiB, Chunk State: 
+I1010 22:40:14.419736 2440645 bfc_allocator.cc:1411] Next region of size 12543066112
+I1010 22:40:14.419743 2440645 bfc_allocator.cc:1437] InUse at 302000000 of size 41943040 tag lower next 1
+I1010 22:40:14.419748 2440645 bfc_allocator.cc:1437] InUse at 304800000 of size 18546688 tag lower next 2
+I1010 22:40:14.419752 2440645 bfc_allocator.cc:1437] InUse at 3059b0000 of size 8388608 tag lower next 3
+I1010 22:40:14.419757 2440645 bfc_allocator.cc:1437] InUse at 3061b0000 of size 256 tag lower next 4
+I1010 22:40:14.419761 2440645 bfc_allocator.cc:1437] InUse at 3061b0100 of size 8388608 tag lower next 5
+I1010 22:40:14.419765 2440645 bfc_allocator.cc:1437] InUse at 3069b0100 of size 256 tag lower next 6
+I1010 22:40:14.419770 2440645 bfc_allocator.cc:1437] Free  at 3069b0200 of size 12465798656 tag central_gap next 18446744073709551615
+I1010 22:40:14.419774 2440645 bfc_allocator.cc:1442]      Summary of in-use Chunks by size: 
+I1010 22:40:14.419778 2440645 bfc_allocator.cc:1445] 2 Chunks of size 256 totalling 512B
+I1010 22:40:14.419784 2440645 bfc_allocator.cc:1445] 2 Chunks of size 8388608 totalling 16.00MiB
+I1010 22:40:14.419789 2440645 bfc_allocator.cc:1445] 1 Chunks of size 18546688 totalling 17.69MiB
+I1010 22:40:14.419794 2440645 bfc_allocator.cc:1445] 1 Chunks of size 41943040 totalling 40.00MiB
+I1010 22:40:14.419799 2440645 bfc_allocator.cc:1465] Sum Total of in-use chunks: 73.69MiB
+I1010 22:40:14.419803 2440645 bfc_allocator.cc:1467] Allocator memory summary: rounded request 24.38GiB, total free in pool 11.61GiB, largest free chunk usable by lower end 11.61GiB, unallocated bytes 0B, pool size 11.68GiB, pool limit 11.68GiB
+I1010 22:40:14.419830 2440645 bfc_allocator.cc:1478] Spatial partitioning summary for lower end: central gap 11.61GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+I1010 22:40:14.419840 2440645 bfc_allocator.cc:1489] Allocator region growth hint: next region allocation target 23.36GiB (growth disabled; fixed-size pool; not an attempted allocation).
+I1010 22:40:14.419845 2440645 bfc_allocator.cc:1498] Stats: 
+Limit:                        11.68GiB
+InUse:                        73.69MiB
+MaxInUse:                      4.11GiB
+NumAllocs:                         654
+MaxAllocSize:                  4.06GiB
+Reserved:                           0B
+PeakReserved:                       0B
+PeakAllocated:                          0B
+LargestFreeBlock:             11.61GiB
+
+W1010 22:40:14.419854 2440645 bfc_allocator.cc:601] *___________________________________________________________________________________________________
+W1010 22:40:24.798338 2440643 bfc_allocator.cc:590] Allocator (GPU_0_bfc) ran out of memory trying to allocate 24.48GiB (rounded to 26281771520) from the lower end requested by op 
+If this is caused by memory fragmentation, the environment variable 'TF_GPU_ALLOCATOR=cuda_malloc_async' may improve the situation.
+Current allocation summary follows.
+I1010 22:40:24.798407 2440643 bfc_allocator.cc:1375] BFCAllocator dump for GPU_0_bfc
+I1010 22:40:24.798437 2440643 bfc_allocator.cc:1382] Bin (256): 	Total Chunks: 3, Chunks in use: 3. 768B allocated for chunks. 768B in use in bin. 48B client-requested in use in bin.
+I1010 22:40:24.798445 2440643 bfc_allocator.cc:1382] Bin (512): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798451 2440643 bfc_allocator.cc:1382] Bin (1024): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798456 2440643 bfc_allocator.cc:1382] Bin (2048): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798461 2440643 bfc_allocator.cc:1382] Bin (4096): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798466 2440643 bfc_allocator.cc:1382] Bin (8192): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798472 2440643 bfc_allocator.cc:1382] Bin (16384): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798477 2440643 bfc_allocator.cc:1382] Bin (32768): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798482 2440643 bfc_allocator.cc:1382] Bin (65536): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798487 2440643 bfc_allocator.cc:1382] Bin (131072): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798492 2440643 bfc_allocator.cc:1382] Bin (262144): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798497 2440643 bfc_allocator.cc:1382] Bin (524288): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798502 2440643 bfc_allocator.cc:1382] Bin (1048576): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798507 2440643 bfc_allocator.cc:1382] Bin (2097152): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798512 2440643 bfc_allocator.cc:1382] Bin (4194304): 	Total Chunks: 2, Chunks in use: 2. 8.00MiB allocated for chunks. 8.00MiB in use in bin. 8.00MiB client-requested in use in bin.
+I1010 22:40:24.798519 2440643 bfc_allocator.cc:1382] Bin (8388608): 	Total Chunks: 1, Chunks in use: 1. 8.00MiB allocated for chunks. 8.00MiB in use in bin. 8.00MiB client-requested in use in bin.
+I1010 22:40:24.798525 2440643 bfc_allocator.cc:1382] Bin (16777216): 	Total Chunks: 1, Chunks in use: 1. 28.00MiB allocated for chunks. 28.00MiB in use in bin. 28.00MiB client-requested in use in bin.
+I1010 22:40:24.798531 2440643 bfc_allocator.cc:1382] Bin (33554432): 	Total Chunks: 1, Chunks in use: 1. 37.69MiB allocated for chunks. 37.69MiB in use in bin. 22.75MiB client-requested in use in bin.
+I1010 22:40:24.798537 2440643 bfc_allocator.cc:1382] Bin (67108864): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798542 2440643 bfc_allocator.cc:1382] Bin (134217728): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798547 2440643 bfc_allocator.cc:1382] Bin (268435456): 	Total Chunks: 0, Chunks in use: 0. 0B allocated for chunks. 0B in use in bin. 0B client-requested in use in bin.
+I1010 22:40:24.798552 2440643 bfc_allocator.cc:1398] Bin for 24.48GiB was 256.00MiB, Chunk State: 
+I1010 22:40:24.798558 2440643 bfc_allocator.cc:1411] Next region of size 12543066112
+I1010 22:40:24.798565 2440643 bfc_allocator.cc:1437] InUse at 302000000 of size 29360128 tag lower next 1
+I1010 22:40:24.798577 2440643 bfc_allocator.cc:1437] InUse at 303c00000 of size 39518464 tag lower next 4
+I1010 22:40:24.798581 2440643 bfc_allocator.cc:1437] InUse at 3061b0100 of size 8388608 tag lower next 5
+I1010 22:40:24.798586 2440643 bfc_allocator.cc:1437] InUse at 3069b0100 of size 256 tag lower next 6
+I1010 22:40:24.798590 2440643 bfc_allocator.cc:1437] InUse at 3069b0200 of size 4194304 tag lower next 2
+I1010 22:40:24.798594 2440643 bfc_allocator.cc:1437] InUse at 306db0200 of size 256 tag lower next 3
+I1010 22:40:24.798599 2440643 bfc_allocator.cc:1437] InUse at 306db0300 of size 4194304 tag lower next 7
+I1010 22:40:24.798603 2440643 bfc_allocator.cc:1437] InUse at 3071b0300 of size 256 tag lower next 8
+I1010 22:40:24.798608 2440643 bfc_allocator.cc:1437] Free  at 3071b0400 of size 12457409536 tag central_gap next 18446744073709551615
+I1010 22:40:24.798612 2440643 bfc_allocator.cc:1442]      Summary of in-use Chunks by size: 
+I1010 22:40:24.798616 2440643 bfc_allocator.cc:1445] 3 Chunks of size 256 totalling 768B
+I1010 22:40:24.798622 2440643 bfc_allocator.cc:1445] 2 Chunks of size 4194304 totalling 8.00MiB
+I1010 22:40:24.798627 2440643 bfc_allocator.cc:1445] 1 Chunks of size 8388608 totalling 8.00MiB
+I1010 22:40:24.798632 2440643 bfc_allocator.cc:1445] 1 Chunks of size 29360128 totalling 28.00MiB
+I1010 22:40:24.798637 2440643 bfc_allocator.cc:1445] 1 Chunks of size 39518464 totalling 37.69MiB
+I1010 22:40:24.798642 2440643 bfc_allocator.cc:1465] Sum Total of in-use chunks: 81.69MiB
+I1010 22:40:24.798646 2440643 bfc_allocator.cc:1467] Allocator memory summary: rounded request 24.48GiB, total free in pool 11.60GiB, largest free chunk usable by lower end 11.60GiB, unallocated bytes 0B, pool size 11.68GiB, pool limit 11.68GiB
+I1010 22:40:24.798653 2440643 bfc_allocator.cc:1478] Spatial partitioning summary for lower end: central gap 11.60GiB, largest same-end binned free chunk 0B, largest binned free chunk from any end 0B. The central gap is shared by lower/upper allocations and is not inserted into a bin.
+I1010 22:40:24.798659 2440643 bfc_allocator.cc:1489] Allocator region growth hint: next region allocation target 23.36GiB (growth disabled; fixed-size pool; not an attempted allocation).
+I1010 22:40:24.798665 2440643 bfc_allocator.cc:1498] Stats: 
+Limit:                        11.68GiB
+InUse:                        81.69MiB
+MaxInUse:                      4.11GiB
+NumAllocs:                        1132
+MaxAllocSize:                  4.06GiB
+Reserved:                           0B
+PeakReserved:                       0B
+PeakAllocated:                          0B
+LargestFreeBlock:             11.60GiB
+
+W1010 22:40:24.798674 2440643 bfc_allocator.cc:601] *___________________________________________________________________________________________________
+E1010 22:40:25.223840 2440641 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+E1010 22:40:26.176312 2440635 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled .lake/build/unet_ct_denoiser__lidc__1_channel_hu_to_noise__n2n_s0_fwd_eval512.mlir (@forward_eval, 1 outputs, 1 replica) in 23781 ms
+rmse HU vs the scanned slice: low-dose floor → denoised (n2n, seed 0, step 30000)
+  data/lidc/val.bin (4282 slices): whole 70.519976 → 37.240631, body 83.014977 → 42.941473

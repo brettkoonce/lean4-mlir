@@ -1,0 +1,3 @@
+Build completed successfully (6588 jobs).
+launched mse on GPU 0 → runs/2026-10-10-lidc-denoise/mse/train.log
+launched n2n on GPU 1 → runs/2026-10-10-lidc-denoise/n2n/train.log

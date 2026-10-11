@@ -1,0 +1,9 @@
+tv: tuned on 48 slices of data/lidc/train.bin (body RMSE, floor 85.68 HU)
+  0.01     76.20 HU
+  0.02     69.05 HU
+  0.03     63.88 HU
+  0.05     57.99 HU
+  0.08     55.79 HU
+  0.12     58.85 HU
+  chosen 0.08
+  4282 val records → data/lidc/out/tv/val.eps.f32

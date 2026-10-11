@@ -150,15 +150,16 @@ Next: a `DatasetKind.lidc` beside
 |---|---|---|
 | 0 | data path (fetch, XML, simulator, calibration, Mayo check) | **done 2026-10-07**; the 300-patient build ran 2026-10-10 (§9) |
 | 1 | loader + `unetCtDenoise` + `lidc-denoise-train` (**done 2026-10-10**, §9; `DatasetKind.lidc` not needed: the demo trainer drives the DDPM ε-loss step directly) + a render of `unetCtDenoise`; a 1-patient sanity fit | the net overfits one volume; low→full PSNR rises above the floor |
-| 2 | MSE UNet, patch-trained on the 240 train patients; scoring script (PSNR/SSIM + nodule CNR by size) | beats the floor and BM3D on PSNR; the nodule table exists |
-| 3 | Noise2Noise with the same net | within ~0.3 dB of phase 2 (the classic result) |
+| 2 | MSE UNet, patch-trained on the 240 train patients (**run 2026-10-10**, §9); scoring script (PSNR/SSIM + nodule CNR by size) | beats the floor and BM3D on PSNR; the nodule table exists |
+| 3 | Noise2Noise with the same net (**done 2026-10-10**: 44.55 vs 44.60 dB, §9) | within ~0.3 dB of phase 2 (the classic result) |
 | 4 | conditional diffusion (the DDPM UNet, SR3 form), sampling strip | nodule CNR in the <6 mm bins beats MSE; the hallucination rate is measured (nodule-sized objects where no reader drew one) |
 | 5 | the section: one figure (a nodule, five arms), one table (PSNR/SSIM + CNR by size) | the user's one-figure-one-table rule |
 
 ## 7. Open decisions
 
 - Input scaling for the net (window vs. linear HU); residual vs. direct prediction.
-- Classical arm: BM3D (needs a package) vs. TV (scikit-image has it, slower, weaker).
+- Classical arm: ~~BM3D vs. TV~~ both run, with a Gaussian beside them (2026-10-11, §9). Open:
+  BM3D with the noise's measured power spectrum (`sigma_psd`) instead of a white-noise sigma.
 - Diffusion sampling budget (DDIM steps) and whether to report the posterior std as an
   uncertainty map beside the sample.
 - Whether the <3 mm nodules (29 of 44 rows in the smoke build — most of LIDC) are scored on
@@ -216,3 +217,44 @@ each; `~/hallway-2023` 129 GB; the old `../lean4-jax` checkout 55 GB; `../jax-or
   device 0 and N2N on device 1 (N2N after MSE's data is resident), 30,000 steps of 8 × 256²,
   Adam 5e-4 cosine, seed 0; each arm scores the val split and runs the Python scorer
   (`score.txt`, `figure.png`). Budget ≈ 3.3 h at 0.4 s/step, ≈ 5.4 h at 0.65 s/step.
+- 2026-10-10: **the 300-patient build** finished in 240 min (30 workers): 300 of 300 patients,
+  no skips, no unmatched XML; `train.bin` 240 patients / 9,600 records (17.6 GB), `val.bin`
+  60 patients / 4,282 records (7.9 GB); 13,623 of 13,882 slices calibrated, achieved / target
+  noise median 1.000 (0.884–1.186). `launch.sh` started both arms at 21:20.
+- 2026-10-10: **phases 2–3 trained.** Both arms 30,000 steps, ≈ 150 ms/step on an idle 4060 Ti
+  (80 min each), scored on all 4,282 val slices (60 patients never trained on); the Lean and
+  Python RMSEs agree:
+
+  | | body RMSE (HU) | whole RMSE (HU) | PSNR (dB) | SSIM (soft tissue) |
+  |---|---|---|---|---|
+  | low-dose floor | 83.01 | 70.52 | 37.95 | 0.7722 |
+  | MSE UNet | 43.27 | 36.90 | 44.60 | 0.8560 |
+  | Noise2Noise | 42.94 | 37.24 | 44.55 | 0.8564 |
+
+  Phase 3's gate passes (0.05 dB apart). The figures (`runs/2026-10-10-lidc-denoise/{mse,n2n}/figure.png`,
+  val record 483, the split's largest nodule) are near-identical between the arms: the nodule's
+  outline and the lung vessels kept, the soft-tissue grain and the nodule's inner texture
+  smoothed below the full-dose image's. Phase 2's gate still needs the classical arm and the
+  nodule table. Checkpoints in `data/lidc/out/{mse,n2n}/`.
+- 2026-10-11: **the classical arm.** `scripts/probes/lidc_classical.py <train.bin> <val.bin>
+  gauss|tv|bm3d <out.eps.f32>`: each filter's one knob chosen on 48 train slices by body RMSE
+  (none at its grid's edge), then run on the val split's realisation 0 and written in the
+  trainer's dump format, so `lidc_denoise_score.py` scores it unchanged. BM3D is `bm3d` 4.0.3
+  (free for non-commercial use; `.venv-lidc` only, in its lock file), one thread per worker:
+  ≈ 10 s a slice, 43 min on 30 cores. Runs in `runs/2026-10-11-lidc-classical/`:
+
+  | | knob | body RMSE (HU) | whole RMSE (HU) | PSNR (dB) | SSIM (soft tissue) |
+  |---|---|---|---|---|---|
+  | low-dose floor | | 83.01 | 70.52 | 37.95 | 0.7722 |
+  | Gaussian | σ 0.6 px | 57.44 | 49.68 | 41.18 | 0.8213 |
+  | TV (Chambolle) | weight 0.08 | 55.63 | 48.05 | 41.51 | 0.8000 |
+  | BM3D (white) | σ 160 HU | 58.64 | 50.35 | 41.78 | 0.7758 |
+  | MSE UNet | | 43.27 | 36.90 | 44.60 | 0.8560 |
+  | Noise2Noise | | 42.94 | 37.24 | 44.55 | 0.8564 |
+
+  Every filter is 12–16 HU and ≥ 2.8 dB behind both nets. BM3D's tuned σ is twice the
+  simulated noise's ≈ 80 HU: the projection-domain noise is streaked and correlated, which a
+  white-noise σ under-describes, so the filter needs a larger one and smooths the image to a
+  blur (its figure: the vessels and the nodule's texture gone). The pooled body RMSE and the
+  per-slice-mean PSNR rank the three filters differently, so no one classical number is "the"
+  baseline; BM3D with the measured noise PSD is the fair form and is still open (§7).
