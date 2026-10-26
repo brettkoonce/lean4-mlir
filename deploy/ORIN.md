@@ -132,7 +132,8 @@ Two more things that have each ended a session: GPU work goes under a memory cap
 (`systemd-run --user --scope -p MemoryMax=5800M -p MemorySwapMax=0 -- <cmd>`), because a process
 that reaches the top of the 8 GB takes tmux down with it, and the cap shows up as a clean
 `NvMapMemAllocInternalTagged … error 12` instead; and `jetson_clocks` does not survive a reboot
-(`cat /sys/class/devfreq/*gpu*/min_freq` reads 918000000 when pinned, 306000000 when not).
+(`cat /sys/class/devfreq/*gpu*/min_freq` equals `max_freq` when pinned — 918000000 at 15 W,
+1020000000 on a Super in MAXN — and reads 306000000 when not).
 
 For the TensorRT route (§5), also set up `pycuda` in a venv (`~/orinvenv`). `trtexec` is at
 `/usr/src/tensorrt/bin/trtexec`, not on `PATH`.

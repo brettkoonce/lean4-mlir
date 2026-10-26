@@ -69,12 +69,14 @@ export PJRT_PLUGIN=$PLATFORM_PLUGIN
 tegra=0; [ "$PLATFORM_KIND" = tegra ] && tegra=1
 clocks=""
 if [ "$tegra" = 1 ]; then
+  # jetson_clocks raises min_freq to max_freq, whatever the power mode makes that (918 MHz at 15 W,
+  # 1020 MHz on a Super in MAXN)
   f=$(cat /sys/class/devfreq/*gpu*/min_freq 2>/dev/null | head -1)
-  case "$f" in
-    918000000) clocks="pinned" ;;
-    "")        clocks="unknown" ;;
-    *)         clocks="NOT pinned (min_freq $f) — sudo jetson_clocks; unpinned timings are ~2x pessimistic" ;;
-  esac
+  fmax=$(cat /sys/class/devfreq/*gpu*/max_freq 2>/dev/null | head -1)
+  if [ -z "$f" ]; then clocks="unknown"
+  elif [ "$f" = "$fmax" ]; then clocks="pinned ($((f / 1000000)) MHz)"
+  else clocks="NOT pinned (min_freq $f, max $fmax) — sudo jetson_clocks; unpinned timings are ~2x pessimistic"
+  fi
 fi
 wrap=()
 if [ "$MEMCAP" != 0 ]; then

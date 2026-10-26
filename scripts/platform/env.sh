@@ -25,6 +25,8 @@
 #   PLATFORM_PY       the python the JAX reference side runs with ("" on a box with no JAX)
 #   PLATFORM_SHIMPY   array, SHIM_PYTHON=<py> where the trainers' shim python is not .venv's
 #   PLATFORM_RUNBOOK  the deploy/ page for this platform ("" for the training boxes)
+#   PLATFORM_TEST_TIMEOUT  seconds the suite gives one test (300; 900 on a Jetson, whose six A78AE
+#                     cores take ~265 s to compile the bf16 MobileNetV2 step alone, clocks pinned or not)
 # and on a Jetson, when unset, the unified-memory allocator recipe the runbook arrived at:
 #   LEAN_MLIR_PREALLOCATE=1  LEAN_MLIR_MEM_FRACTION=0.25        (deploy/ORIN.md §2; per net, §4)
 # and on a Mac, when unset, the client options jax-graft's own python passes (deploy/MAC.md):
@@ -52,6 +54,7 @@ fi
 
 _platform_slug () { tr 'A-Z' 'a-z' | sed -E 's/nvidia geforce |nvidia |amd radeon |intel\(r\) |jetson | developer kit//g; s/[^a-z0-9]+/-/g; s/^-|-$//g'; }
 PLATFORM_PY=""; PLATFORM_SHIMPY=(); PLATFORM_RUNBOOK=""; PLATFORM_GPU=${PLATFORM_GPU:-}
+PLATFORM_TEST_TIMEOUT=${PLATFORM_TEST_TIMEOUT:-300}
 case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
   cuda:tegra)
     # A Jetson. The plugin is the sm_87 build deploy/orin_setup.sh stages under ~/pjrt, with the
@@ -59,6 +62,7 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
     PLATFORM_HOST=orin
     PLATFORM_DEVVAR=CUDA_VISIBLE_DEVICES
     PLATFORM_RUNBOOK=deploy/ORIN.md
+    [ "$PLATFORM_TEST_TIMEOUT" = 300 ] && PLATFORM_TEST_TIMEOUT=900
     if [ -z "${PJRT_PLUGIN:-}" ] && [ -f "$HOME/pjrt/orin_env.sh" ]; then . "$HOME/pjrt/orin_env.sh"; fi
     PLATFORM_PLUGIN=${PJRT_PLUGIN:-$HOME/pjrt/pjrt_c_api_gpu_plugin.so}
     [ -z "$PLATFORM_GPU" ] && [ -r /proc/device-tree/model ] && PLATFORM_GPU=$(tr -d '\0' < /proc/device-tree/model | _platform_slug) || true
@@ -194,4 +198,4 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
     ;;
 esac
 unset _ares _3060 _p _v _nvenv
-export PLATFORM_BACKEND PLATFORM_KIND PLATFORM_HOST PLATFORM_GPU PLATFORM_DEVVAR PLATFORM_PLUGIN PLATFORM_PY PLATFORM_RUNBOOK
+export PLATFORM_BACKEND PLATFORM_KIND PLATFORM_HOST PLATFORM_GPU PLATFORM_DEVVAR PLATFORM_PLUGIN PLATFORM_PY PLATFORM_RUNBOOK PLATFORM_TEST_TIMEOUT

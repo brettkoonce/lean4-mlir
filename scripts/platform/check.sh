@@ -95,9 +95,10 @@ record() {  # record <test> <tier> <rc> <detail>   (rc: 0 pass, 77 skip, else fa
   printf '  %-16s %-5s %s\n' "$t" "$st" "$detail"
 }
 # run <test> <tier> <ok-regex> <cmd...>: pass = exit 0 AND the known-answer line printed.
-# CHECK_TIMEOUT (seconds, default 300) caps each test; on Neuron a test includes neuronx-cc
-# compiling its graph, minutes to hours on a trn1.2xlarge's 8 vCPU (deploy/TRAINIUM.md §2).
-CHECK_TIMEOUT=${CHECK_TIMEOUT:-300}
+# CHECK_TIMEOUT (seconds) caps each test; it defaults to the platform's PLATFORM_TEST_TIMEOUT
+# from env.sh (300; 900 on a Jetson). On Neuron a test includes neuronx-cc compiling its
+# graph, minutes to hours on a trn1.2xlarge's 8 vCPU (deploy/TRAINIUM.md §2).
+CHECK_TIMEOUT=${CHECK_TIMEOUT:-${PLATFORM_TEST_TIMEOUT:-300}}
 run() {
   local t=$1 tier=$2 ok=$3; shift 3
   if [ "$(expected_status "$t")" = SKIP ]; then

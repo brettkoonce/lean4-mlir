@@ -1,0 +1,4 @@
+# Known failures on CUDA / Jetson Orin Nano 8 GB Super (sm_87, JetPack 6.2, the jax 0.11.1 plugin
+# orin_setup.sh stages), deqp-runner style: `<test> FAIL|FLAKE  # why`. A FAIL listed here reports
+# as XFAIL; if it then passes it reports as XPASS, and the line should go.
+convnext_adam_train_step FAIL  # the batch-32 step asks for one 3.25 GiB block: past the 0.25 pool, and ConvNeXt does not fit the 8 GB board at any fraction (deploy/ORIN.md §4)
