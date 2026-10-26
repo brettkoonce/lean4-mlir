@@ -2,7 +2,7 @@
 # Platform integration suite: does THIS GPU platform run THIS build?
 # Design and the tier table: planning/platform_integration.md.
 #
-#   scripts/platform/check.sh [--tier 0|1] [--backend cuda|rocm|xpu] [--plan] [--out DIR]
+#   scripts/platform/check.sh [--tier 0|1] [--backend cuda|rocm|xpu|neuron] [--plan] [--out DIR]
 #
 #   --tier N     run tiers 0..N (default 2). Tier 3 (training) is not written yet.
 #   --backend    default: whichever vendor SMI is on PATH.
@@ -47,6 +47,7 @@ case "$BACKEND" in
         else SMI=(nvidia-smi --query-gpu=index,name,driver_version,memory.total --format=csv,noheader); fi ;;
   rocm) SMI=(rocm-smi --showproductname --showdriverversion) ;;
   xpu)  SMI=(xpu-smi discovery) ;;
+  neuron) SMI=(neuron-ls) ;;
 esac
 command -v "${SMI[0]}" >/dev/null || { echo "backend $BACKEND: no ${SMI[0]} on PATH" >&2; exit 2; }
 PLUGIN=$PLATFORM_PLUGIN
@@ -73,7 +74,8 @@ BUILD=$(cd "$OUT/build" && pwd); LOGS=$OUT/logs
 RESULTS=$OUT/results.tsv
 printf 'test\ttier\tstatus\tdetail\n' > "$RESULTS"
 
-# expected/<backend>-<gpu>.txt: `<test> FAIL|FLAKE  # why`, Mesa deqp-runner style. The slug
+# expected/<backend>-<gpu>.txt: `<test> FAIL|FLAKE|SKIP  # why`, Mesa deqp-runner style; SKIP is
+# not run at all (a graph known not to compile, whose compile alone costs hours). The slug
 # is env.sh's PLATFORM_GPU (nvidia-smi's name, or the device-tree model on a Jetson).
 GPU_SLUG=${PLATFORM_GPU:-unknown}
 EXPECTED=scripts/platform/expected/$BACKEND-$GPU_SLUG.txt
@@ -93,13 +95,20 @@ record() {  # record <test> <tier> <rc> <detail>   (rc: 0 pass, 77 skip, else fa
   printf '  %-16s %-5s %s\n' "$t" "$st" "$detail"
 }
 # run <test> <tier> <ok-regex> <cmd...>: pass = exit 0 AND the known-answer line printed.
+# CHECK_TIMEOUT (seconds, default 300) caps each test; on Neuron a test includes neuronx-cc
+# compiling its graph, minutes to hours on a trn1.2xlarge's 8 vCPU (deploy/TRAINIUM.md §2).
+CHECK_TIMEOUT=${CHECK_TIMEOUT:-300}
 run() {
   local t=$1 tier=$2 ok=$3; shift 3
-  timeout 300 "$@" > "$LOGS/$t.log" 2>&1; local rc=$?
+  if [ "$(expected_status "$t")" = SKIP ]; then
+    record "$t" "$tier" 77 "listed SKIP in $EXPECTED: $(awk -v t="$t" '$1==t {sub(/^[^#]*#[ ]*/, ""); print; exit}' "$EXPECTED")"
+    return
+  fi
+  timeout "$CHECK_TIMEOUT" "$@" > "$LOGS/$t.log" 2>&1; local rc=$?
   if [ $rc = 0 ] && ! grep -qE "$ok" "$LOGS/$t.log"; then rc=1; fi
   local detail
   if [ $rc = 0 ]; then detail=$(grep -E "$ok" "$LOGS/$t.log" | tail -1)
-  elif [ $rc = 124 ]; then detail="timed out after 300 s"
+  elif [ $rc = 124 ]; then detail="timed out after $CHECK_TIMEOUT s"
   else detail=$(grep -E 'FAIL|error|Error|✗|WRONG' "$LOGS/$t.log" | head -1); [ -z "$detail" ] && detail="exit $rc"; fi
   record "$t" "$tier" "$rc" "${detail:0:160}"
 }
@@ -165,7 +174,9 @@ fi
 [ "$TIER" -lt 2 ] && finish
 
 echo "tier 2 — ops vs XLA:CPU goldens:"
-PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python   # numpy only; no JAX needed here
+# numpy only; no JAX needed here. A box without the pinned .venv (Trainium, the Arc) has numpy in
+# its platform venv, which a bare system python3 may lack.
+PY=python3; if [ -x .venv/bin/python ]; then PY=.venv/bin/python; elif [ -n "$PLATFORM_PY" ]; then PY=$PLATFORM_PY; fi
 while IFS=$'\t' read -r name family dtype; do
   case "$name" in ''|'#'*) continue ;; esac
   run "$name" 2 '^OK ' env PJRT_PLUGIN="$PLUGIN" "$PY" scripts/platform/tier2.py run "$name" \

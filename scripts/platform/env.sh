@@ -12,14 +12,14 @@
 # Safe under `set -eu -o pipefail` (run.sh sources it so). What it sets (every one overridable by
 # exporting it first; $PJRT_PLUGIN and $IREE_BACKEND are
 # honoured as the older spellings of the plugin and the backend):
-#   PLATFORM_BACKEND  cuda | rocm | xpu | metal — metal on macOS, else the vendor SMI on PATH
-#                     decides, nvidia first
+#   PLATFORM_BACKEND  cuda | rocm | xpu | neuron | metal — metal on macOS, else the vendor SMI on
+#                     PATH decides, nvidia first (neuron: a /dev/neuron0 device)
 #   PLATFORM_KIND     desktop | tegra — a Jetson shares one DRAM between host and device
 #   PLATFORM_HOST     ares | 3060 | orin | <hostname> — the box profile the job confs key on
 #   PLATFORM_GPU      the slug the suite's baselines and PLATFORMS.md are keyed by (rtx-4060-ti,
 #                     orin-nano, …), "" when no tool on the box can name the device
-#   PLATFORM_DEVVAR   CUDA_VISIBLE_DEVICES | HIP_VISIBLE_DEVICES | ZE_AFFINITY_MASK | "" (metal:
-#                     one GPU, nothing to select)
+#   PLATFORM_DEVVAR   CUDA_VISIBLE_DEVICES | HIP_VISIBLE_DEVICES | ZE_AFFINITY_MASK |
+#                     NEURON_RT_VISIBLE_CORES | "" (metal: one GPU, nothing to select)
 #   PLATFORM_PLUGIN   the PJRT plugin .so the shim dlopens ("" when the platform has none installed)
 #   PLATFORM_PY       the python the JAX reference side runs with ("" on a box with no JAX)
 #   PLATFORM_SHIMPY   array, SHIM_PYTHON=<py> where the trainers' shim python is not .venv's
@@ -44,6 +44,7 @@ if [ -z "${PLATFORM_BACKEND:-}" ]; then
   elif [ "$PLATFORM_KIND" = tegra ] || command -v nvidia-smi > /dev/null 2>&1; then PLATFORM_BACKEND=cuda
   elif command -v rocm-smi > /dev/null 2>&1; then PLATFORM_BACKEND=rocm
   elif command -v xpu-smi > /dev/null 2>&1; then PLATFORM_BACKEND=xpu
+  elif [ -e /dev/neuron0 ]; then PLATFORM_BACKEND=neuron
   else PLATFORM_BACKEND=cuda
   fi
 fi
@@ -115,6 +116,39 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
     [ -z "$PLATFORM_GPU" ] && command -v xpu-smi > /dev/null 2>&1 && \
       PLATFORM_GPU=$(xpu-smi discovery 2>/dev/null | sed -n 's/.*Device Name:[[:space:]]*//p' | head -1 | _platform_slug) || true
     ;;
+  neuron:*)
+    # AWS Trainium: Neuron's PJRT plugin (libneuronxla's libneuronpjrt.so) in .venv-neuron, which
+    # deploy/trainium_setup.sh makes, else in a Neuron DLAMI's JAX venv. The plugin links the Neuron
+    # runtime (libnrt.so.1, the aws-neuronx-runtime-lib apt package, in /opt/aws/neuron/lib) and
+    # compiles by running `neuronx-cc` from PATH, so both go on here. It serves several PJRT C-API
+    # versions and picks one from NEURON_INTERNAL_PJRT_C_API_VERSION: 0.90 is ffi/pjrt_c_api.h's.
+    # NEURON_CC_FLAGS=--auto-cast=none keeps an f32 graph f32 — the compiler's default casts f32
+    # matmuls to bf16, which the suite's f32 tolerances would catch as a wrong answer. The device
+    # index is a NeuronCore, NEURON_RT_VISIBLE_CORES (run.sh): a trn1 chip is two of them. The slug
+    # is the instance type (trn1-2xlarge), keying scripts/platform/expected/neuron-<slug>.txt.
+    # deploy/TRAINIUM.md is the runbook.
+    PLATFORM_HOST=$(hostname -s 2>/dev/null || echo neuron)
+    PLATFORM_DEVVAR=NEURON_RT_VISIBLE_CORES
+    PLATFORM_RUNBOOK=deploy/TRAINIUM.md
+    _nvenv=""
+    for _v in .venv-neuron /opt/aws_neuronx_venv_jax*; do
+      for _p in "$_v"/lib/python3.*/site-packages/libneuronxla/libneuronpjrt.so; do
+        [ -f "$_p" ] && { _nvenv=$_v; [ -z "${PJRT_PLUGIN:-}" ] && { PJRT_PLUGIN=$_p; export PJRT_PLUGIN; }; break 2; }
+      done
+    done
+    PLATFORM_PLUGIN=${PJRT_PLUGIN:-}
+    if [ -n "$_nvenv" ]; then
+      [ -x "$_nvenv/bin/python3" ] && PLATFORM_PY=$_nvenv/bin/python3
+      case "$_nvenv" in /*) ;; *) _nvenv=$PWD/$_nvenv ;; esac
+      export PATH="$_nvenv/bin:$PATH"
+    fi
+    [ -d /opt/aws/neuron/lib ] && export LD_LIBRARY_PATH="/opt/aws/neuron/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    [ -d /opt/aws/neuron/bin ] && export PATH="$PATH:/opt/aws/neuron/bin"
+    export NEURON_INTERNAL_PJRT_C_API_VERSION=${NEURON_INTERNAL_PJRT_C_API_VERSION:-0.90} \
+           NEURON_CC_FLAGS=${NEURON_CC_FLAGS:---auto-cast=none}
+    [ -z "$PLATFORM_GPU" ] && [ -r /sys/class/dmi/id/product_name ] && \
+      PLATFORM_GPU=$(_platform_slug < /sys/class/dmi/id/product_name) || true
+    ;;
   metal:*)
     # An Apple Silicon Mac: jax-graft's Metal PJRT plugin (the `metal-pjrt-core` wheel) in the
     # repo's .venv, which deploy/mac_setup.sh makes. One GPU, so no device variable. The plugin is
@@ -140,9 +174,9 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
            LEAN_MLIR_STAGE_H2D=${LEAN_MLIR_STAGE_H2D:-0}
     ;;
   *)
-    echo "scripts/platform/env.sh: unknown backend '$PLATFORM_BACKEND' (cuda | rocm | xpu | metal)" >&2
+    echo "scripts/platform/env.sh: unknown backend '$PLATFORM_BACKEND' (cuda | rocm | xpu | neuron | metal)" >&2
     return 2 2>/dev/null || exit 2
     ;;
 esac
-unset _ares _3060 _p
+unset _ares _3060 _p _v _nvenv
 export PLATFORM_BACKEND PLATFORM_KIND PLATFORM_HOST PLATFORM_GPU PLATFORM_DEVVAR PLATFORM_PLUGIN PLATFORM_PY PLATFORM_RUNBOOK

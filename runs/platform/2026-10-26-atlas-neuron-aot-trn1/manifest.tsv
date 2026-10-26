@@ -1,0 +1,5 @@
+neuronx-cc	2.28.7631.0+8f7b0cf5
+target	trn1
+flags	--auto-cast=none 
+host	atlas (88 cores)
+repo	744f4958
