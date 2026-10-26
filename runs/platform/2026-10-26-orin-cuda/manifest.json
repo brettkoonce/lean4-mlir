@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-26T16:33:28Z",
+  "run": "2026-10-26-orin-cuda",
+  "core": {
+    "repo_sha": "e985c139a25ce6ac9f892b784d56083c06e2d3f5",
+    "repo_dirty": true,
+    "lean_toolchain": "leanprover/lean4:v4.35.0",
+    "shim_source_sha": "d8d048279e12fa99",
+    "shim_binary_sha": "eefc60919cf28657",
+    "compile_options_sha": "9ddc8f10e5ae1519",
+    "pjrt_api_header": "0.90",
+    "verified_mlir_manifest_sha": "8cd680fbc4f93521",
+    "suite_sha": "c808a23fb1e933f8",
+    "tier": 2
+  },
+  "platform": {
+    "backend": "cuda",
+    "host": "orin",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "Orin (nvgpu)",
+        "memory": "[N/A]",
+        "driver": "540.4.0"
+      }
+    ],
+    "gpu_count_visible": 1,
+    "visible_devices": null,
+    "driver": "540.4.0",
+    "runtime": {
+      "driver": "12.6.0[540.4.0]",
+      "runtime": "12.6.0",
+      "toolkit": "12.6.0",
+      "dnn": "9.12.0"
+    },
+    "plugin_path": "/home/skoonce/pjrt/pjrt_c_api_gpu_plugin.so",
+    "plugin_package": null,
+    "plugin_sha": "4276de19d34e8987",
+    "pjrt_api_plugin": "0.114",
+    "platform_name": "cuda",
+    "platform_version": "cuda 12060",
+    "kernel": "5.15.148-tegra",
+    "cc": "gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0"
+  }
+}
