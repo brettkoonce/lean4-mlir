@@ -9,6 +9,9 @@ has run which rung of the ladder, suite → mnist → cifar → imagenette → i
 platform runs a build at all is [`scripts/platform/check.sh`](../scripts/platform/check.sh).
 A platform that needs nothing beyond the environment — a desktop CUDA or ROCm card — has no
 page here: it runs `lake run mnist | cifar | imagenette` as the README's tour has them.
+A new platform is a row in `support.tsv`, an arm in `env.sh`, an expected file under
+`scripts/platform/expected/` and a page here; `check.sh` regenerates `PLATFORMS.md` and the
+book's platforms table (Appendix A) from the row, so the book's prose never counts platforms.
 
 | page | platform | what it covers |
 |---|---|---|

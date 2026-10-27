@@ -2429,7 +2429,7 @@ script «imagenette-orin» (args) do
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
-    `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
+    `imagenette` convention): (job config, the exe it runs, the book's row). The seven imagenet-tier
     rows are the ones with chapter numbers; the seven side-quest rows are the verified halves of
     `planning/side_quest_runs.md`'s queue (their JAX peers, the `*-jax-4gpu` confs, stay
     `scripts/supervise.sh`-only). Each conf carries its own `ETA` line, dated and naming the box
@@ -2446,7 +2446,7 @@ script «imagenette-orin» (args) do
     `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only. The CX-4
     ConvNeXt-S/B f32 confs (`cnxs-default-4gpu`, `cnxb-default-4gpu`) were retired 2026-10-19.
     `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` were written
-    for the 4× 3060 box and are named by the book's Track-4 table as the jobs behind their rows;
+    for the 4× 3060 box and are named by the book's Appendix C table as the jobs behind their rows;
     their PRECHECK passes on either box (`_box.sh` picks the plugin). R34's ETA is the 3060
     box's; the two R50 confs quote the 4060 Ti box's. -/
 private def imagenetRows : List (String × String × String) :=
@@ -3257,7 +3257,7 @@ ch.9 has no {ref.lowerer} reference and prints n/a."
       IO.eprintln "  (reported above). No estimate produced."
     else
       IO.eprintln "\n  probe failed — need data (`lake run download`) and the IREE venv from"
-      IO.eprintln "  Track 2. No estimate produced."
+      IO.eprintln "  historical/IREE_BUILD.md. No estimate produced."
     return 1
 
 /-- `lake run benchmark` — probe this GPU on the **IREE** path, print a per-chapter

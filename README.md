@@ -28,33 +28,33 @@ Nature) as the follow-up to
 |---|---|---|
 | read it | the [book](https://lean.brettkoonce.com/blueprint/) ([PDF](https://lean.brettkoonce.com/blueprint.pdf)), or the [API docs](https://lean.brettkoonce.com/docs/) | a browser |
 | check the proofs | `lake exe cache get && lake build ProofsMinimal` (~1 min), then `lake build Certs` for all of them; [The proofs](#the-proofs) below | Lean 4, no GPU |
-| train a net | the four setup lines in [the tour](#the-tour), then `lake run mnist` (~1 min) | an NVIDIA, AMD or Apple Silicon GPU |
+| train a net | the four setup lines in [the tour](#the-tour), then `lake run mnist` (~1 min) | an NVIDIA, AMD, Intel or Apple Silicon GPU |
 
 ## The tour
 
-Four commands, one per scale, in the order the book meets the nets, then the demos. The numbers
+Four commands, one per rung of the ladder, in the order the book meets the nets, then the demos. The numbers
 are the book's, from the verified XLA path on one RTX 4060 Ti unless the row says otherwise; the
 two Imagenette side quests the book does not quote (ResNet-50, MobileNetV4) are medians of five
 seeds. Setup is the book's
 [Getting started](https://lean.brettkoonce.com/blueprint/app-getting_started.html),
-one track per tier; the short form is
+one command per rung; the short form is
 
 ```bash
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
 python3 -m venv .venv && . .venv/bin/activate && pip install jax-cuda12-pjrt          # the XLA plugin only (jax-rocm7-pjrt on AMD)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so                        # the shim; needs nothing but libc
-lake exe cache get && ./scripts/datasets/download_mnist.sh && lake run mnist           # Mathlib oleans, MNIST, tier 1
+lake exe cache get && ./scripts/datasets/download_mnist.sh && lake run mnist           # Mathlib oleans, MNIST, the mnist rung
 ```
 
-(On an Apple Silicon Mac, `deploy/mac_setup.sh` is those four lines on Metal; the platforms and
-their pins are [PLATFORMS.md](PLATFORMS.md).)
+(On an Apple Silicon Mac, `deploy/mac_setup.sh` is those four lines on Metal; the platforms, their
+pins and how far up the ladder each has run are [PLATFORMS.md](PLATFORMS.md).)
 
-| tier | command | trains | the number | chapter |
-|---|---|---|---|---|
-| 1 | `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://lean.brettkoonce.com/blueprint/chap-tensor.html) · [2](https://lean.brettkoonce.com/blueprint/chap-mlp.html) · [3](https://lean.brettkoonce.com/blueprint/chap-cnn.html) |
-| 2 | `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~5 min) | 77.4 % — BN + momentum, median of five | [4](https://lean.brettkoonce.com/blueprint/chap-bn.html) |
-| 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~6 h) | R34 89.99 (mean of five seeds) · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 90.04 · ConvNeXt-T 82.27 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
-| 4 | `lake run imagenet` | the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.14 · R50 78.08 on RSB-A3 and 77.09 on the 2018 recipe · MNv2 71.12 · MNv4-Conv-M 77.42 (side quest) · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 71.61 % on the verified path, none more than 0.51 from its JAX reference | [Track 4](https://lean.brettkoonce.com/blueprint/app-getting_started.html) |
+| command | trains | the number | chapter |
+|---|---|---|---|
+| `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://lean.brettkoonce.com/blueprint/chap-tensor.html) · [2](https://lean.brettkoonce.com/blueprint/chap-mlp.html) · [3](https://lean.brettkoonce.com/blueprint/chap-cnn.html) |
+| `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~5 min) | 77.4 % — BN + momentum, median of five | [4](https://lean.brettkoonce.com/blueprint/chap-bn.html) |
+| `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~6 h) | R34 89.99 (mean of five seeds) · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 90.04 · ConvNeXt-T 82.27 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
+| `lake run imagenet` | the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.14 · R50 78.08 on RSB-A3 and 77.09 on the 2018 recipe · MNv2 71.12 · MNv4-Conv-M 77.42 (side quest) · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 71.61 % on the verified path, none more than 0.51 from its JAX reference | [Appendix C](https://lean.brettkoonce.com/blueprint/app-imagenet_tier.html) |
 
 The demos ride on the chapter nets, in the order the bestiary (Chapters 11–13) meets them — recognition, then
 beyond it, then the games; [demos/README.md](demos/README.md) has the command, the figure and the reasoning for
