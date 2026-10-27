@@ -137,3 +137,24 @@ scorecards and their CI in `Certs` beside descent; the TRUST.md hypothesis row s
 descent row. Nothing enters the book beyond, at most, one paragraph in Appendix B framing the
 scorecard as the one bridge from the Measured row to the Proven row (a decided binomial tail per
 image), with the sentence that this is the other meaning of "verified". Not a section.
+
+## 6. Landed (2026-10-27)
+
+* Step 1, `support.tsv` reconciled: 4dd620ad. The Mac's mnist record (2026-10-14), the mars
+  and minerva suite cells from their manifests (`auto:`), the Orin without queue prose, ROCm
+  named by its last box, IREE as a row with the records it has (mnist 2026-04-21 traces, cifar
+  2026-04 IREE era, imagenette 2026-05-27 ConvNeXt-T; the `-iree` twins have not been run as
+  such since). The cell grammar `DATE · WHERE (TAG); more` is in the header.
+* Step 2, `platforms_md.py --tex`: eeece9d6. `blueprint/src/figures/platforms.tex`, the suite as
+  its own column (§4's first question, yes), `--check` on both outputs in the blueprint
+  workflow.
+* Steps 4 and 5 (README, home page, lakefile comments, deploy index): committed with the
+  smoothing cut of §5 (`convnext-smooth`, its driver, three logs, the frontier figure).
+* Step 3 and §5's book half are in the working tree, uncommitted, for the preview: Table A-1 is
+  the ladder, the platforms float `\input`s the generated table, "The second lowerer" is the
+  IREE row plus one paragraph under the table, its argument sits in Appendix B directly before
+  the `llvm-cpu` miscompile, the tier rule and the scorecard paragraph follow the chapter
+  tally, Appendix C and the preamble are in rung names, `\sqstatus` is gone.
+* Open after this: the TPU row's imagenet cell (§4's third question) is still a question for
+  when it exists; `repo_shape.txt` has no line for `runs/platform/*/manifest.tsv` (the three
+  atlas neuron dirs of 3f9039d7 fail the gate today, before this work).

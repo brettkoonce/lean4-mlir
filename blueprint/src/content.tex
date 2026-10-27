@@ -20,14 +20,13 @@ stands only on what every chapter uses hangs from the figure's shared box, which
 says where those statements live; every box is a link.}
 
 % Side-quest furniture. A "side quest" is a variant a chapter renders but does
-% not carry as a Track-4 row (MobileNetV4's has run, as a consistency check;
+% not carry as an imagenet-tier row (MobileNetV4's has run, as a consistency check;
 % the rest will run eventually), and the heading says which of the three kinds it
 % is: a RECIPE (§\ref{sec:r50_a2_a1_cost}), a SIZE (§\ref{sec:convnext_sb},
 % §\ref{sec:vit_sb}), or an ARCHITECTURE the book reaches for once
 % (§\ref{sec:mnv4_side_quest}). The two size sections run the same five beats in
 % the same order --- axis, cost table, renderer cost, bf16, schedule --- and then
 % close with these two, so a reader who has read one can skim the other.
-\newcommand{\sqstatus}{\medskip\noindent \textbf{Status: rendered, not trained.}}
 \newcommand{\evalckptnote}{$37.5$\,s per epoch of evaluation and checkpointing}
 
 \chapter*{Introduction}
@@ -330,7 +329,7 @@ Chapter~\ref{chap:bestiary_beyond}. A closing chapter on game theory
 trains Pong, Leduc poker and tic-tac-toe against their exact solutions,
 with the AlphaGo family and Deep CFR as its catalogue.
 
-\textbf{Appendices.} The rest of the toolchain and the six GPU platforms
+\textbf{Appendices.} The rest of the toolchain and the GPU platforms
 (A), how every claim is checked, with the tally of what each chapter
 proves (B), the ImageNet tier (C), and data availability (D).
 
@@ -418,8 +417,8 @@ cites \(\to\) move on.'' The dependency DAG is your friend.
 Install first, read while it downloads. Five steps put a trained network on
 your GPU, and after that every chapter opens with a command you can run. This
 is the default path, XLA through PJRT, and the one every number in this book
-was measured on. There is no compiler to build. The proofs-only track, the
-six GPU platforms, the second lowerer and troubleshooting are
+was measured on. There is no compiler to build. The proofs rung, the
+GPU platforms with the second lowerer among them, and troubleshooting are
 Appendix~\ref{app:getting_started}; ImageNet-1k is
 Appendix~\ref{app:imagenet_tier}.
 
@@ -20008,35 +20007,40 @@ def muZeroGoPredictionValue : NetSpec where
 
 \emph{Getting started}, at the front of the book, is the smallest path from
 zero to a trained model. This appendix is the rest of the toolchain: the
-proofs-only track, the six GPU platforms, troubleshooting, and the second
-lowerer.
+proofs rung, the GPU platforms and the second lowerer, and troubleshooting.
 
-Table~\ref{tab:getting_started_tracks} is the scale. What you install depends on
-how far up it you want to go, and the steps are not evenly spaced.
+Table~\ref{tab:getting_started_tracks} is the ladder, each rung named by the
+command that climbs it. What you install depends on how far up it you want
+to go, and the rungs are not evenly spaced.
 
 \begin{table}[H]
 \centering
-\caption{The four tracks: what each lets you do and what it needs.}
+\caption{The ladder: each rung, the command that climbs it, what it needs, and where it is in the book.}
 \label{tab:getting_started_tracks}
-\begin{tabular}{@{}llll@{}}
-\textbf{What you want} & \textbf{What you need} & \textbf{Track} & \textbf{Where} \\[2pt]
+\small
+\begin{tabular}{@{}lp{0.34\textwidth}p{0.26\textwidth}l@{}}
+\textbf{Rung} & \textbf{Command} & \textbf{Needs} & \textbf{Where} \\[2pt]
 \hline \\[-6pt]
-Read and check the proofs      & Lean. No GPU.                    & 1    & below \\
-MNIST / CIFAR / Imagenette     & Lean + one plugin file.          & 2, 3 & \emph{Getting started} \\
-Full ImageNet-1k               & the above, plus Python + tfds.   & 4    & Appendix~\ref{app:imagenet_tier} \\
+proofs     & \cellleft \texttt{lake build Proofs}, \texttt{Certs}; \texttt{tests/comparator/run.sh} & \cellleft Lean; no GPU & below \\[4pt]
+suite      & \cellleft \texttt{scripts/platform/check.sh} & \cellleft the plugin and the shim; no Lean build & \emph{Platforms}, below \\[4pt]
+mnist      & \cellleft \texttt{lake run mnist}       & \cellleft Lean and one plugin file & \emph{Getting started} \\[4pt]
+cifar      & \cellleft \texttt{lake run cifar}       & \cellleft the same & \emph{Getting started} \\[4pt]
+imagenette & \cellleft \texttt{lake run imagenette}; \texttt{imagenette-orin} on the Jetson  & \cellleft the same & \emph{Getting started} \\[4pt]
+imagenet   & \cellleft \texttt{lake run imagenet}    & \cellleft four cards, Python and tfds & Appendix~\ref{app:imagenet_tier} \\
 \end{tabular}
 \end{table}
 
-Everything in Part 1 of this book is the middle row. Nothing runs through an
+Everything in Part 1 of this book is the MNIST, CIFAR and Imagenette rungs.
+Nothing runs through an
 interpreter at training time: you download one shared library and run a Lean
 binary. Python appears twice before that, as the \texttt{pip} that fetches
 the plugin wheel and in the Imagenette download script, which resizes with
 Pillow; the shim is one \texttt{gcc} line. Only the ImageNet tier streams its
 data through Python, and it has Appendix~\ref{app:imagenet_tier} to itself.
 
-\section*{Track 1: Proofs only (no GPU needed)}
+\section*{Proofs only (no GPU needed)}
 
-Read, build, and check the proofs without running any training. This track
+Read, build, and check the proofs without running any training. This rung
 needs neither lowerer: the theorems are about the emitted graph, not about
 anything that executes it. It comes at three levels, each asking you to trust
 less than the last.
@@ -20082,31 +20086,24 @@ in Appendix~\ref{app:verification}.
 \section*{Platforms}
 \label{sec:getting_started_platforms}
 
-The target is the middle row of Table~\ref{tab:getting_started_tracks} --- MNIST,
-CIFAR and Imagenette, Tracks 2 and 3 --- on the six GPU platforms of
+The target is the mnist, cifar and imagenette rungs of
+Table~\ref{tab:getting_started_tracks} on the GPU platforms of
 Table~\ref{tab:platforms}, each one plugin file and (off the Mac) one device
 variable away from the same Lean binaries, the plugin pinned per platform.
+The table is generated from the record behind \texttt{PLATFORMS.md}, one
+cell per rung: what has run on it on that platform, a dash where nothing
+has, which is not a failure, and n/a where nothing can.
 
 \begin{table}[H]
 \centering
-\caption{The GPU platforms, the plugin each is pinned to, and where each stands.}
+\caption{The GPU platforms and the second lowerer: the plugin each is pinned to, and what has run on each rung of each.}
 \label{tab:platforms}
-\small
-\begin{tabular}{@{}p{0.24\textwidth}p{0.34\textwidth}p{0.36\textwidth}@{}}
-\textbf{Platform} & \textbf{Plugin, pinned} & \textbf{Where it stands} \\[2pt]
-\hline \\[-6pt]
-\cellleft NVIDIA, CUDA 12 & \cellleft \texttt{jax-cuda12-pjrt} 0.11.0 (CUDA 12.9, cuDNN 9.23) & \cellleft the book's numbers; Tracks 1--4 \\[4pt]
-\cellleft NVIDIA, CUDA 13 & \cellleft \texttt{jax-cuda13-pjrt} 0.11.1 (CUDA 13.3, cuDNN 9.24) & \cellleft Track 4 on record: the four-card ImageNet runs \\[4pt]
-\cellleft AMD, ROCm 7.2 & \cellleft \texttt{jax-rocm7-pjrt} 0.11.0 (the second \texttt{pip} line of \emph{Getting started}) & \cellleft in the code (\texttt{HIP\_VISIBLE\_DEVICES}, the suite's \texttt{--backend rocm}) \\[4pt]
-\cellleft Jetson Orin Nano 8\,GB, JetPack 6.2 & \cellleft jax 0.11.1 built for sm\_87 against cuDNN 9.12, per \texttt{deploy/ORIN.md} & \cellleft Track 2 on record, and of Track 3 the MNIST CNN, the CIFAR tier and ViT-Tiny over 80 epochs; \texttt{lake run imagenette-orin}, the six-row Imagenette tier at the board's memory, is the next run \\[4pt]
-\cellleft Apple Silicon, Metal (M1 MacBook Air, 16\,GB, macOS 26) & \cellleft \texttt{jax-graft} 0.0.5 (\texttt{metal-pjrt-core}, platform \texttt{mtl}: jaxlib 0.11.2's XLA with a Metal backend), per \texttt{deploy/MAC.md} & \cellleft Track 2 and the MNIST tier of Track 3 on record in \texttt{deploy/MAC.md} (92.10 / 97.79 / 98.71\%, against CUDA's medians 92.10 / 97.78 / 98.78); CIFAR and ResNet-34 train, their full runs to come \\[4pt]
-\cellleft Intel Arc Pro B50, oneAPI (16\,GB, Battlemage, kernel 7.0) & \cellleft \texttt{jax-oneapi-pjrt} 0.11.2 (Intel's OpenXLA plugin, platform \texttt{oneapi}, its oneAPI runtime as wheels), per \texttt{deploy/ARC\_B50.md} & \cellleft Track 2 and the MNIST and CIFAR tiers of Track 3 on record, matching CUDA (92.10 / 97.83 / 98.66\%; CIFAR 76.24\%), bf16 included; all seven Imagenette nets' 80 epochs on record (the slot at PCIe Gen3), each inside CUDA's five-seed range or within two images of it \\
-\end{tabular}
+\input{figures/platforms}
 \end{table}
 
 The CUDA 12 and ROCm pins are the lock files under \texttt{jax/}; the CUDA
 13 box's is \texttt{scripts/jobs/\_box.sh}, the Orin's its build script, the
-Mac's and the Arc's their setup scripts. Three of the six are there to make
+Mac's and the Arc's their setup scripts. Three of the rows are there to make
 a point. The Orin is the core sequence on a commodity computer rather than a
 training box --- the board, a plugin built for it and the tier's memory
 recipe, nothing else --- and \texttt{deploy/ORIN.md} is its runbook. The Mac
@@ -20118,9 +20115,27 @@ else from this side, with one shim workaround for a race in Intel's SYCL
 runtime, and \texttt{deploy/ARC\_B50.md} is its runbook. A new box is
 admitted by \texttt{scripts/\allowbreak platform/\allowbreak check.sh}: the
 plugin loads, the shim's guards hold and the committed artifacts match
-XLA:CPU goldens, in minutes and without Lean. \texttt{PLATFORMS.md} is the
-support matrix, the last run of each tier on each box; where a cell is
-empty, as the Mac's are, the runbook is the record.
+XLA:CPU goldens, in minutes and without Lean; that is the suite rung, and
+the same run regenerates \texttt{PLATFORMS.md} and Table~\ref{tab:platforms}.
+\texttt{PLATFORMS.md} has each cell's date and a link to its record; where
+a cell is a dash, as the Mac's are above mnist, the runbook says what has
+been tried.
+
+\medskip\noindent The last row is not a card but the second lowerer,
+\textbf{IREE}, which compiles every kernel itself and so runs where no
+vendor library exists. \texttt{LEAN\_MLIR\_LOWERER=iree} selects it, and
+every rung of \emph{Getting started} has an \texttt{-iree} twin that does so
+(\texttt{lake run mnist-iree}, and so on); the Imagenette twin runs five of
+the seven nets, since ResNet-50 and MobileNetV4 have no IREE driver. It
+needs \texttt{iree-compile} on \texttt{\$PATH}, the runtime built per
+\texttt{historical/\allowbreak IREE\_BUILD.md}, and
+\texttt{ffi/\allowbreak libiree\_ffi.so}; having no plugin to load, it is
+admitted by its twins rather than by the suite. Collectives exist only on
+the PJRT path, so the imagenet rung is XLA-only. On the CPU, IREE 3.11's
+\texttt{llvm-cpu} miscompiles the pooled train steps, and the CPU gradient
+gate runs on \texttt{vmvx} instead. What the second lowerer is for, which
+is not that you might train on it, is \S\ref{sec:jax_pipeline} in
+Appendix~\ref{app:verification}.
 
 \section*{Common troubleshooting}
 
@@ -20155,42 +20170,6 @@ empty, as the Mac's are, the runbook is the record.
     render's, and a regenerated render trips it. \texttt{lake build <exe>}
     clears it; a bare \texttt{lake run <job>} builds first and never sees it.
 \end{itemize}
-
-\section*{The second lowerer}
-
-Everything above runs on XLA, which is the default and needs nothing from this
-section. There is a second trusted lowerer, \textbf{IREE}, and the reason to
-know it exists is not that you might train on it.
-
-\medskip\noindent Both consume the same proven StableHLO and sit in the same
-trusted tier; neither is verified, and swapping them changes nothing about what
-is proved. XLA is faster here --- $2.3\times$ on the MNIST linear net,
-$4.9\times$ on the CNN --- because it dispatches to the vendor's hand-tuned
-kernels, where IREE generates every kernel itself. That is also why IREE's
-runtime is $392\times$ smaller, $1.3$\,MB against the XLA plugin's $505$\,MB.
-\textbf{The size gap is not a trust gap}: most of the plugin is vendor kernel
-libraries it calls, where IREE generates the equivalent, and both bodies
-of code are unverified. Choosing the small runtime relocates the trusted base
-rather than shrinking it.
-
-\medskip\noindent \textbf{What IREE is for here is the oracles.} The
-differential checks of \S\ref{sec:jax_pipeline} lower the Lean side through IREE
-and compare against a JAX reference running through XLA, and it is the fact that
-those are two independent compilers --- different code generation, different
-runtime, different kernels --- that makes agreement between them evidence of
-anything. Some oracle binaries are IREE-only for that reason and refuse to start
-on the XLA backend. So a training run wants one lowerer and a full verification
-run wants both, and \S\ref{sec:jax_pipeline} is where the second one earns its
-place.
-
-\medskip\noindent Selecting it is \texttt{LEAN\_MLIR\_LOWERER=iree}, and every
-tier of \emph{Getting started} has an \texttt{-iree} twin that does so (\texttt{lake run}
-\texttt{mnist-iree}, and so on); the Imagenette twin runs five of the seven
-nets, since ResNet-50 and MobileNetV4 have no IREE driver. It additionally
-needs \texttt{iree-compile} on \texttt{\$PATH}, the runtime built per
-\texttt{historical/\allowbreak IREE\_BUILD.md}, and
-\texttt{ffi/\allowbreak libiree\_ffi.so}. Data-parallel runs are XLA-only --- collectives
-exist only on the PJRT path --- so the ImageNet tier is not available on it.
 
 
 \chapter{On Verification}
@@ -20307,6 +20286,35 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 \hline
 \end{tabular}
 \end{table}
+
+\medskip\noindent\textbf{Two regimes, one boundary.} The ladder of
+Table~\ref{tab:getting_started_tracks} has two regimes, and the boundary is
+the cifar rung. At and below it, the shallow nets carry the theorem families
+that need the whole training story: the SGD descent lemmas (the linear net,
+the MLP, the CNN, CIFAR) and the randomized-smoothing scorecards (the MLP,
+the CNN, the CIFAR CNN). Above it, from ResNet-34 on, a net carries its VJP
+contracts, its step tie and the JAX cross-check, and nothing more. The
+second lowerer has a line of its own one rung higher, at imagenet, where
+collectives exist only on the PJRT path (Table~\ref{tab:platforms}).
+Descent, smoothing and the IREE row each stop where a line sits, and none
+needs its own excuse.
+
+\medskip\noindent\textbf{The scorecard is the one place a measurement
+becomes a theorem.} The smoothing driver takes the first hundred test
+images, draws $n = 10112$ Gaussian forwards per image at $\sigma = 0.5$
+through the net's committed forward, and counts the votes for the top
+class. That count is the hypothesis of a kernel-checked binomial-tail lemma
+(\texttt{binomTail\_le\_of\_kernel\_check}, one per image, decided at
+$\alpha = 10^{-3}$), whose conclusion is a lower confidence bound $q_0$ on
+the top class's probability; a second lemma per image proves a decimal lower
+bound on the radius $\sigma\,\Phi^{-1}(q_0)$ that randomized smoothing
+assigns to it. 99, 100 and 80 of the hundred get a radius on the MLP, the
+CNN and the CIFAR CNN, 99, 100 and 60 of those at the right label. What
+stays a hypothesis is that the driver's checkpoint is the classifier the
+radius theorem is about, and \texttt{TRUST.md} lists it as one. That is the
+bridge from a measured count to a proved bound, and the other meaning of
+``verified'': not that the gradient is right, but that the number reported
+is the one the theorem decides.
 
 Every chapter's theorems section opens with its own dependency graph,
 every box a Lean theorem and a link, and each chapter names its contracts
@@ -20694,8 +20702,7 @@ lowers through IREE, and the reference pipeline is JAX, which lowers through XLA
 Different code generation, different runtime, different kernels, and different
 authors. Agreement between them is evidence precisely because a bug would have
 to occur twice, in the same direction, in two unrelated compilers; that is
-what the second lowerer is for (Appendix~\ref{app:getting_started},
-\emph{The second lowerer}).
+what the second lowerer is for (\S\ref{sec:jax_pipeline}).
 
 \subsection{Finite-difference gradient checks}
 
@@ -20787,6 +20794,23 @@ variance over \(\sim 100\)k elements, since JAX on CPU and JAX on CUDA
 disagree with each other by the same amount at that step. The traces are
 committed as JSON-Lines, with
 \texttt{historical/traces/CROSS\_BACKEND\_RESULTS.md} the summary.
+
+\medskip\noindent\textbf{Why a second lowerer.} Both consume the same
+proven StableHLO and sit in the same trusted tier; neither is verified, and
+swapping them changes nothing about what is proved. XLA is faster ---
+$2.3\times$ on the MNIST linear net, $4.9\times$ on the CNN --- because it
+dispatches to the vendor's hand-tuned kernels, where IREE generates every
+kernel itself. That is also why IREE's runtime is $392\times$ smaller,
+$1.3$\,MB against the XLA plugin's $505$\,MB. \textbf{The size gap is not a
+trust gap}: most of the plugin is vendor kernel libraries it calls, where
+IREE generates the equivalent, and both bodies of code are unverified.
+Choosing the small runtime relocates the trusted base rather than shrinking
+it. What the second lowerer buys is the rows above: two compilers with
+different code generation, different runtime and different kernels, so that
+agreement between them is evidence of anything, and some oracle binaries are
+IREE-only for that reason and refuse to start on the XLA backend. A training
+run wants one lowerer and a full verification run wants both; selecting the
+second, and where it runs, is the last row of Table~\ref{tab:platforms}.
 
 \medskip\noindent One fault in the CPU target is worth keeping in view.
 IREE 3.11's \texttt{llvm-cpu} miscompiles the
@@ -21008,7 +21032,7 @@ are what training actually looks like.
 \label{app:imagenet_tier}
 \label{sec:getting_started_track4}
 
-Track 4 of Table~\ref{tab:getting_started_tracks}, the scale tier. Six
+The imagenet rung of Table~\ref{tab:getting_started_tracks}, the scale tier. Six
 networks train on full ImageNet-1k off the same certified renderer as their
 Imagenette counterparts, in the chapter order the \texttt{imagenette} tier uses. Every row trains
 on four 16\,GB cards; a 12\,GB card runs all but ConvNeXt-B and ViT-B, whose
@@ -21018,7 +21042,7 @@ the job's own name.
 
 \begin{table}[H]
 \centering
-\caption{The Track~4 ImageNet-1k targets, their recipes and their job configs.}
+\caption{The imagenet tier's ImageNet-1k targets, their recipes and their job configs.}
 \label{tab:track4_runners}
 \begin{tabular}{@{}lll@{}}
 \textbf{Target} & \textbf{Recipe} & \textbf{Job config} \\[2pt]
@@ -21113,7 +21137,7 @@ lake run imagenet                # every row's plan, in chapter order; runs noth
 lake run imagenet start          # the rows in order, each resuming from its checkpoint
 \end{verbatim}
 
-\noindent \texttt{lake run imagenet} is the tier itself, the fourth of the four.
+\noindent \texttt{lake run imagenet} is the tier itself, the ladder's top rung.
 Bare, it only plans, because its fourteen rows --- the seven of
 Table~\ref{tab:track4_runners} and seven of the eight side quests of
 Table~\ref{tab:track4_side_quests} --- are weeks of four-card time;
@@ -21121,12 +21145,12 @@ Table~\ref{tab:track4_side_quests} --- are weeks of four-card time;
 
 \section*{Side quests}
 
-Several chapters end in a variant that is rendered but is not a Track-4 runner,
+Several chapters end in a variant that is rendered but is not an imagenet-tier runner,
 and the section heading says which of three kinds it is: a second recipe, a
 wider or deeper size, or an architecture the book reaches for once. They are
 collected here rather than in Table~\ref{tab:track4_runners} because they are
 side quests, not because they cannot start. All eight have job configs and
-launch like any Track-4 row. Seven ride in \texttt{lake run imagenet} right
+launch like any imagenet-tier row. Seven ride in \texttt{lake run imagenet} right
 after their chapter's row; the 100-epoch MobileNetV4 job has no lake script
 of its own and launches as \texttt{scripts/supervise.sh mnv4-full-e100-4gpu}.
 Each row's section says where it stands.
