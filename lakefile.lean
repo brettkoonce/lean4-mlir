@@ -2366,7 +2366,7 @@ private def orinRows : List (String × String × List (String × String)) :=
     ("resnet50-verified-adam",     "0.36", [("LEAN_MLIR_VARIANT", "acc2x16"), ("LEAN_MLIR_BATCH", "16"),
                                             ("LEAN_MLIR_G2_STEPS", "590")]),
     ("mobilenetv2-verified-adam",  "0.25", []),
-    ("mobilenetv4-verified-adam",  "0.25", []),
+    ("mobilenetv4-verified-adam",  "0.25", [("SLUG", "mnv4")]),   -- its checkpoint is mnv4_…, not the exe's first field
     ("efficientnet-verified-adam", "0.30", []),
     ("vit-verified-adam",          "0.25", []) ]
 
