@@ -79,10 +79,17 @@ def convnextAdamConfig : VerifiedConfig where
       `drop-shard-check` — whose known answer is exact only at two (f32 addition is commutative;
       above two the collective is a tree and associativity does not hold).
 
-    No `LEAN_MLIR_BATCH` here, unlike EfficientNet: the batch is baked into the graph and bs32 is
-    the only ConvNeXt render that exists, so the knob could only ever produce a shape error. -/
+    * **`acc4x`** — the same AdamW recipe at micro-batch 8 × k = 4, effective batch 32, for the
+      Orin Nano, where the bs32 step does not fit (`ConvNeXtRenderB`, beside `ema`). Run it with
+      `LEAN_MLIR_BATCH=8 LEAN_MLIR_G2_STEPS=1180` (1,183 micro-batches is not a multiple of 4).
+
+    `LEAN_MLIR_BATCH` overrides the batch and **must match the batch the variant was rendered at**
+    — 32 for every render but `acc4x` — since the batch is baked into the graph and a mismatch is a
+    shape error at the first invoke. The eval forward stays at 32; the driver reads its batch off
+    `convnext_fwd.mlir`. -/
 def runConvNeXtAdam (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam"
+  let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD convnextAdamConfig.batchSize
   -- `ema`/`emadp` select the EMA-shadow render: same AdamW graph plus a 4th
   -- `[θ|m|v|ema]` blob region updated by `adamMNextF` at `(β₁ := d)`, with EVAL AND THE CHECKPOINT
   -- scoring the shadow. ConvNeXt is the right first net for it — LayerNorm means there is no
@@ -115,7 +122,7 @@ def runConvNeXtAdam (argv : List String) : IO Unit := do
     | some u => { convnextVerified.toNet with
                   dropKeeps := convnextVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => convnextVerified.toNet
-  dropNet.trainAdamSched convnextAdamConfig
+  dropNet.trainAdamSched { convnextAdamConfig with batchSize := bs }
     (argv.head?.getD "data") 0.001 0.9 0.999 3 variant 0.0 1.0 emaDecay
 
 def main (argv : List String) : IO Unit := runConvNeXtAdam argv

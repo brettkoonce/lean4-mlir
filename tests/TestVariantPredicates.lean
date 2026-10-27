@@ -152,6 +152,9 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- suffix, so `16x` meets `wx` directly — `accK` ends at the FIRST `x` and `wx`'s cannot reach it.
   , ("emaaccdp16xwxdroperfbf16", true, false, true)
   , ("emaaccdp16xwxdropbf16", true, false, true)
+    -- ConvNeXt-T on the Orin Nano (2026-10-27): plain AdamW at 8 × 4 = 32, one device — nothing
+    -- after `4x`, so k ends at the string's only `x`.
+  , ("acc4x", false, false, false)
     -- MobileNetV2's reference recipe: RMSProp × `wx` × dropout × α = 0 × bf16.
     -- `do` is followed by `ls0`, and `rms` ++ `dp` must still not read as stochastic depth.
   , ("rmsdp64wxdols0bf16", false, true, false)
@@ -409,6 +412,8 @@ private def accumSpellings : List String :=
    "emaaccdp2x128x4wxdropbf16",
    -- ConvNeXt's official batch, 16 × (4 × 64), at both GELU forms
    "emaaccdp16xwxdroperfbf16", "emaaccdp16xwxdropbf16",
+   -- ConvNeXt-T on the Orin Nano, 8 × 4
+   "acc4x",
    "accdp8x128wxdropdowd01bf16", "acc8x128wxdropdowd01bf16"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
 -- MobileNetV4's recipe: k = 8 read back past `dp`, and nothing else read into it
@@ -421,6 +426,7 @@ private def accumSpellings : List String :=
 #guard accK "emaaccdp2x128x4wxdropbf16" == 2
 #guard accK "emaaccdp16xwxdroperfbf16" == 16
 #guard accK "emaaccdp16xwxdropbf16" == 16
+#guard accK "acc4x" == 4 && nRegions "acc4x" == 4
 #guard lambOn "emaaccdp8x128wxdowd005bf16" == false
 #guard bceOn "emaaccdp8x128wxdowd005bf16" == false
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))

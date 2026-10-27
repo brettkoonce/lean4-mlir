@@ -1551,6 +1551,19 @@ lean_exe «convnext-adam-tie» where
   root := `tests.TestConvNeXtAdamTie
   moreLinkArgs := lowererLink
 
+/-- `convnext-accum-tie` — the Orin's `acc4x` render, numerically certified: four micro-batches of 8
+    on DIFFERENT rows against ONE step of the committed batch-32 `convnext_adam_train_step.mlir` on
+    their concatenation, exact as real arithmetic because LayerNorm is per example (no Ghost-BN, so
+    stronger than `r50-accum-tie`'s duplicated batch). Gated against the batch-32 step on the same
+    rows reversed — the same class of summation-order difference — plus the wrong-k control and
+    [θ|m|v] bit-exact across the accumulate micro-batches. Needs one desktop GPU and the XLA backend:
+    the Orin Nano cannot reserve a pool for even one bare batch-32 step (tried at 0.70, 2026-10-27).
+
+        lake build convnext-accum-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/convnext-accum-tie -/
+lean_exe «convnext-accum-tie» where
+  root := `tests.TestConvNeXtAccumTie
+  moreLinkArgs := lowererLink
+
 /-- Gate on the bs256 re-render: feed it 8 identical copies of one bs32 batch. Batch-BN
     statistics and the mean-CE cotangent are then exactly the bs32 render's, so all 68M returned
     floats must AGREE — an exact known-answer check, not a tolerance argument. -/
@@ -2354,13 +2367,14 @@ script imagenette do
                 "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"] (xla := true)
 
-/-- The Orin tier's rows: (exe, pool fraction, the row's extra env), six of `imagenette`'s seven nets
-    in book order. The fraction is `LEAN_MLIR_MEM_FRACTION`, the BFC pool as a share of the board's one
+/-- The Orin tier's rows: (exe, pool fraction, the row's extra env), `imagenette`'s seven nets in
+    book order. The fraction is `LEAN_MLIR_MEM_FRACTION`, the BFC pool as a share of the board's one
     DRAM — it must hold the net's train-step activation arena and leave the process the rest — each from
     the 2026-09-13 sweep in `deploy/ORIN.md` §4. ResNet-50 is the `acc2x16` render (micro-batch 16 × 2, the
     same recipe at effective batch 32), because the batch-32 step's arena does not fit at any fraction;
     `LEAN_MLIR_G2_STEPS=590` makes its epoch the 9,440 images a batch-32 epoch takes. ConvNeXt-T is
-    absent: its renderer hard-codes batch 32 and that step does not fit the board. -/
+    the same move at 8 × 4 (`acc4x`; its batch-32 step plans one 4.24 GiB block), and
+    `LEAN_MLIR_G2_STEPS=1180` is the same 9,440 images. -/
 private def orinRows : List (String × String × List (String × String)) :=
   [ ("resnet34-verified-adam",     "0.25", []),
     ("resnet50-verified-adam",     "0.36", [("LEAN_MLIR_VARIANT", "acc2x16"), ("LEAN_MLIR_BATCH", "16"),
@@ -2368,17 +2382,19 @@ private def orinRows : List (String × String × List (String × String)) :=
     ("mobilenetv2-verified-adam",  "0.25", []),
     ("mobilenetv4-verified-adam",  "0.25", [("SLUG", "mnv4")]),   -- its checkpoint is mnv4_…, not the exe's first field
     ("efficientnet-verified-adam", "0.30", []),
+    ("convnext-verified-adam",     "0.30", [("LEAN_MLIR_VARIANT", "acc4x"), ("LEAN_MLIR_BATCH", "8"),
+                                            ("LEAN_MLIR_G2_STEPS", "1180")]),
     ("vit-verified-adam",          "0.25", []) ]
 
 /-- `lake run imagenette-orin [plan] [net-prefix …]` — the Imagenette tier on a Jetson Orin Nano:
     `orinRows` through `deploy/orin_imagenette.sh`, the board's recipe (the train split streamed from
     disk, the pool reserved once at the row's fraction, the process under a memory cap) with a relaunch
-    that resumes from the checkpoint while each attempt completes an epoch. About a day for the six
+    that resumes from the checkpoint while each attempt completes an epoch. About 1¼ days for the seven
     rows at 80 epochs (`deploy/ORIN.md` §4 has the per-net wall clocks); the board needs `~/pjrt/orin_env.sh`
     sourced and `jetson_clocks` applied, both of which the plan reports.
 
-    **Six nets, not `imagenette`'s seven**, and ResNet-50 on a different render (`acc2x16`), so this is a
-    named tier and not an environment: the drop-in platforms (a desktop CUDA or ROCm card) run
+    **ResNet-50 and ConvNeXt-T on different renders** (`acc2x16`, `acc4x`), so this is a named tier
+    and not an environment: the drop-in platforms (a desktop CUDA or ROCm card) run
     `lake run imagenette` itself. `plan` prints each row's env, command and checkpoint state and launches
     nothing; a net-prefix list (`lake run imagenette-orin vit r34`) runs a subset. A row that fails is
     named at the end and the rest run, as in `imagenette`; a second invocation resumes every row from

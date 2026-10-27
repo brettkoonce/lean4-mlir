@@ -993,6 +993,24 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "32.0"
     (ema := true))
 
+-- ⭐ The SAME recipe at micro-batch 8 × k = 4 — effective batch 32, AdamW, identical schedule — for
+-- the Orin Nano, where the bs32 step plans one 4.24 GiB block and fits at no pool fraction
+-- (deploy/ORIN.md §4). ResNet-50's `acc2x16` is the precedent; the mechanism is
+-- `convnextin_emaaccdp16x…`'s: a fourth `[θ|m|v|G]` region, `1/4` folded into `%ob1` / `%ob2`, and
+-- `bStr` the MICRO-batch's divisor, `8.0`. ConvNeXt has no BatchNorm, so four micro-batches of 8
+-- ARE one batch of 32 up to summation order — exact, not Ghost-BN.
+-- ▶ Run with `LEAN_MLIR_VARIANT=acc4x LEAN_MLIR_BATCH=8 LEAN_MLIR_G2_STEPS=1180`: 9469/8 = 1183
+-- micro-batches is not a multiple of 4, and 1180 × 8 = 9440 is exactly the images bs32 takes per
+-- epoch (295 × 32). Eval keeps `convnext_fwd.mlir` at B = 32; `trainAdamSched` reads its batch off
+-- that artifact.
+#eval IO.FS.writeFile "verified_mlir/convnext_acc4x_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepBText .tanh "0.100000" "-0.010000" "8.0"
+    (bB := 8) (acc := 4))
+#guard "convnext_acc4x_train_step" ==
+  "convnext_" ++ Proofs.StableHLO.cnxAdamVariant 1 (acc := 4) ++ "_train_step"
+-- the driver's reading of the name (`accK` = 4, four regions, no EMA, no drop) is
+-- `tests/TestVariantPredicates.lean`'s, run through the real predicates
+
 -- The **DATA-PARALLEL** render, selected at run time by `LEAN_MLIR_VARIANT=adamdp`; `replicas` is
 -- threaded through `optOne`.
 --
