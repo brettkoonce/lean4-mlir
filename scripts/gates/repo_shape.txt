@@ -115,13 +115,8 @@ grandfather runs/smooth_cifar_radii.csv
 grandfather runs/smooth_cnn.log
 grandfather runs/smooth_cnn_lipschitz.csv
 grandfather runs/smooth_cnn_radii.csv
-grandfather runs/smooth_convnext_2gpu.log
-grandfather runs/smooth_convnext_s025.log
-grandfather runs/smooth_convnext_s050.log
 grandfather runs/smooth_dump_2gpu.log
 grandfather runs/smooth_mlp.log
 grandfather runs/smooth_mlp_radii.csv
-grandfather runs/smoothing_frontier.tex
-grandfather runs/smoothing_frontier_tikz_preview.png
 grandfather runs/spectral_cnn_phase3.log
 grandfather runs/spectral_mlp_phase3.log

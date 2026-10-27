@@ -1118,13 +1118,6 @@ lean_exe «convnext-verified» where
   root := `apps.imagenette.MainConvNeXtVerified
   moreLinkArgs := lowererLink
 
--- Randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²): the deep / real-
--- resolution rung of the depth-INDEPENDENT cert (Cohen 2019). LayerNorm ⇒ per-sample fwd, so the
--- generic smoothCertify driver applies unchanged. σ via SMOOTH_SIGMA_MILLI (split across 2 GPUs).
-lean_exe «convnext-smooth» where
-  root := `apps.imagenette.MainConvNeXtSmooth
-  moreLinkArgs := lowererLink
-
 lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
   moreLinkArgs := lowererLink

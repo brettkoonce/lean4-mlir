@@ -946,9 +946,8 @@ end Proofs.StableHLO
 -- `convnext_train_step.mlir` (the SGD-inline step) stays in `ConvNeXtRender.lean`: this traversal
 -- has no fused-SGD arm, and `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at those bytes.
 
--- Regenerate `verified_mlir/convnext_fwd.mlir` — what `convnext-smooth` certifies through, and the
--- eval forward for the ConvNeXt trainers — from the SAME `convNextFwdChain` the train steps
--- differentiate. `tests/TestConvNeXtFwd.lean` is an `iree-compile` smoke over the committed bytes.
+-- Regenerate `verified_mlir/convnext_fwd.mlir` — the eval forward for the ConvNeXt trainers —
+-- from the SAME `convNextFwdChain` the train steps differentiate. `tests/TestConvNeXtFwd.lean` is an `iree-compile` smoke over the committed bytes.
 --
 -- **ConvNeXt needs no `_fwd_eval` peer and must not grow one.** LayerNorm reduces within one
 -- example, never over the batch, so this forward is already class-batch-independent — the very
