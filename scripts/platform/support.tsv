@@ -13,8 +13,8 @@
 # `runbook` the page that sets it up; `env` is scripts/platform/env.sh's profile for the row.
 #
 # scripts/platform/platforms_md.py renders PLATFORMS.md (every cell, as markdown) and
-# blueprint/src/figures/platforms.tex (per rung DATE (TAG), the link dropped; the runbooks as a
-# line under the table); `--check` fails when either committed output is stale. A new platform
+# blueprint/src/figures/platforms.tex (per rung DATE (TAG), the link dropped; the platform's
+# details after its ` — ` and its runbook as lines under the table); `--check` fails when either committed output is stale. A new platform
 # is a row here, an arm in env.sh, an expected file and a deploy/<X>.md runbook; check.sh
 # regenerates both outputs after each suite run.
 #
