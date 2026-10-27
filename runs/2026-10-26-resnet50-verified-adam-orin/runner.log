@@ -1,0 +1,5 @@
+2026-10-26 14:44:26 start resnet50-verified-adam fraction 0.36 tag orin epochs default gpu 0 clocks pinned (1020 MHz) cap 5800M
+2026-10-26 14:44:26 attempt 1 from epoch 0 → runs/2026-10-26-resnet50-verified-adam-orin/attempt1.log
+2026-10-26 15:03:47 attempt 1 ended rc 1 at epoch 3 (was 0) — relaunching from the checkpoint
+2026-10-26 15:03:47 attempt 2 from epoch 3 → runs/2026-10-26-resnet50-verified-adam-orin/attempt2.log
+2026-10-26 21:03:03 ✓ done: rc 0 at epoch 80 after 2 attempt(s); val_acc = 3515/3925 = 89.554140%  top5 = 3877/3925 = 98.777070%  [95% CI 88.56–90.47]

@@ -1,0 +1,3 @@
+2026-10-26 21:13:23 start mobilenetv2-verified-adam fraction 0.25 tag orin epochs default gpu 0 clocks pinned (1020 MHz) cap 5800M
+2026-10-26 21:13:23 attempt 1 from epoch 0 → runs/2026-10-26-mobilenetv2-verified-adam-orin/attempt1.log
+2026-10-26 23:38:55 ✓ done: rc 0 at epoch 80 after 1 attempt(s); val_acc = 3475/3925 = 88.535032%  top5 = 3865/3925 = 98.471338%  [95% CI 87.50–89.49]

@@ -199,7 +199,7 @@ The streamed loader is the one the board runs, and the tier is a command:
 ```bash
 . ~/pjrt/orin_env.sh && sudo jetson_clocks
 lake run imagenette-orin plan        # each row's env, command and checkpoint state; launches nothing
-lake run imagenette-orin             # the six rows below, in book order, ~22 h
+lake run imagenette-orin             # the six rows below, in book order, ~20 h
 lake run imagenette-orin vit r34     # a subset, by net prefix
 ```
 
@@ -240,9 +240,46 @@ sits 126 MiB under the cap, which is what the relaunch is for. ConvNeXt's render
 batch 32; a batch-8 test render trained, but at batch 32's learning rate with four times the
 updates it is a different recipe, and it is not committed.
 
-One full run on record: ViT-Tiny, 80 epochs in 1 h 48 m on one attempt, 67.97% / 90.06%
-top-1 / top-5 (best 68.48% at epoch 62), against the desktop's 68.74% / 90.42%
-(`runs/2026-08-12-vit-imagenette-xla-cuda`). The desktop run's seed spread is unmeasured.
+**The tier, 80 epochs each (2026-10-26 to 27).** Super, MAXN, `jetson_clocks` (1020 MHz). One
+net at a time through `lake run imagenette-orin <net>`, with at least 10 minutes and ≤ 50 °C
+between nets (`~/pjrt/tools/imagenette_orin_cooled.sh`; every cooldown hit 48 °C at the
+10-minute floor). The whole run took 20 h 13 m with no failed row. CUDA is the same five seeds per net that
+[ARC_B50.md § Measured](ARC_B50.md#measured) compares against:
+
+| net | top-1 (best, epoch) | top-5 | CUDA, 5 seeds | B50 | wall | attempts | peak °C | run |
+|---|---|---|---|---|---|---|---|---|
+| ViT-Tiny | 67.97 % (69.20, 41) | 90.39 % | 67.82–69.17 | 68.46 % | 1 h 35 | 1 | 65 | [`2026-10-27-vit-…`](../runs/2026-10-27-vit-verified-adam-orin/) |
+| MobileNetV2 | 88.54 % (88.66, 75) | 98.47 % | 88.74–89.32 (0.20 under) | 88.71 % | 2 h 26 | 1 | 63 | [`2026-10-26-mobilenetv2-…`](../runs/2026-10-26-mobilenetv2-verified-adam-orin/) |
+| MobileNetV4-Conv-M | 86.29 % (86.34, 77) | 96.59 % | 85.15–86.90¹ | 86.06 % | 3 h 03 | 1 | 62 | [`2026-10-26-mobilenetv4-…`](../runs/2026-10-26-mobilenetv4-verified-adam-orin/) |
+| EfficientNet-B0 | 90.09 % (= final) | 98.47 % | 89.45–90.50 | 90.55 % | 3 h 00 | 1 | 63 | [`2026-10-27-efficientnet-…`](../runs/2026-10-27-efficientnet-verified-adam-orin/) |
+| ResNet-34 | 90.32 % (= final) | 98.42 % | 89.68–90.37 | 89.68 % | 2 h 59 | 1 | 65 | [`2026-10-26-resnet34-…`](../runs/2026-10-26-resnet34-verified-adam-orin/) |
+| ResNet-50, `acc2x16` | 89.55 % (89.68, 72) | 98.78 % | 89.58–89.96 (0.03 under) | 89.61 % | 6 h 19 | 2 | 64 | [`2026-10-26-resnet50-…`](../runs/2026-10-26-resnet50-verified-adam-orin/) |
+
+¹ As on the B50, CUDA's MobileNetV4 seeds predate 90e4af7e. Four of the six finals are inside
+CUDA's range. ResNet-50's best epoch is inside it and its final is one image short. MobileNetV2's
+final is 0.20 under, eight images, the same side the B50 landed on (one image under). That is
+one seed, and a second seed has not been run. Wall clock is 2–3.5× the B50's. Every row beat
+the September sweep's 80-epoch estimate above.
+
+Memory, from a 30 s sampler on the trainer and its scope (`~/pjrt/tools/memlog.sh`,
+peak / median MiB). `process` is its anonymous RSS. On this board that includes the BFC pool,
+because CPU and GPU share one DRAM. `non-file` is what the 5,800 MiB cap counts that page cache
+cannot give back. `in cap` adds the page cache from streaming `train.bin`, which the kernel
+trims as the cap nears:
+
+| net | pool | process | non-file | in cap | least free on the board |
+|---|---|---|---|---|---|
+| ViT-Tiny | 0.25 | 3,197 / 3,099 | 3,225 / 3,158 | 3,783 | 2,831 |
+| MobileNetV2 | 0.25 | 3,693 / 3,681 | 3,208 / 3,205 | 4,907 | 2,302 |
+| ResNet-34 | 0.25 | 3,730 / 3,589 | 3,191 / 3,049 | 5,234 | 2,077 |
+| EfficientNet-B0 | 0.30 | 4,058 / 4,028 | 4,118 / 4,089 | 5,725 | 2,091 |
+| MobileNetV4-Conv-M | 0.25 | 4,064 / 3,955 | 3,308 / 3,232 | 5,063 | 1,980 |
+| ResNet-50, `acc2x16` | 0.36 | 4,928 / 4,768 | 4,648 / 4,477 | **5,799** | 1,057 |
+
+ResNet-50 is the row the relaunch exists for. Its scope sat at the cap for the whole run. In
+attempt 1, during epoch 3, one 1.25 GiB device-to-host buffer did not fit in the pool, and the
+step failed 19 minutes in. The runner resumed from the epoch-3 checkpoint, and attempt 2 ran
+the remaining 77 epochs clean.
 
 ⚠ `trainAdamSched` resumes from `.lake/build/<slug>_<variant>_ckpt_xla<TAG>.bin` and its
 `.epoch` marker without asking. The tier's tag is `orin` (`TAG=` on the script), so a

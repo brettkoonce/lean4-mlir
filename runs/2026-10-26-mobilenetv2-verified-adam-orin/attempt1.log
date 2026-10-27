@@ -1,0 +1,752 @@
+[pjrt_ffi] allocator: 2 create option(s), memory_fraction=0.250
+E1026 21:13:23.772664  123316 cuda_executor.cc:1776] Nvml call failed with 3(Not Supported). Assuming PCIe gen 3 x16 bandwidth.
+I1026 21:13:23.773009  123315 service.cc:154] XLA service 0xfffef83d1700 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1026 21:13:23.773071  123315 service.cc:170]   StreamExecutor [0]: Orin, Compute Capability 8.7 (Driver: 12.6.0[540.4.0]; Runtime: 12.6.0; Toolkit: 12.6.0; DNN: 9.12.0)
+I1026 21:13:23.776065  123315 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1026 21:13:23.776115  123315 gpu_helpers.cc:162] XLA backend allocating 1.86GiB (1998585856 bytes) on device 0 for BFCAllocator.
+E1026 21:13:23.776410  123315 cuda_executor.cc:1776] Nvml call failed with 3(Not Supported). Assuming PCIe gen 3 x16 bandwidth.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1026 21:13:24.227842  123315 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1026 21:13:27.989780  123315 cuda_dnn.cc:442] Loaded cuDNN version 91200
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU
+  xla/pjrt verified_mlir/mobilenetv2_adam_train_step.mlir
+W1026 21:13:33.170831  123327 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1026 21:13:40.986732  123324 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1026 21:13:43.240345  123324 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1026 21:13:45.479794  123324 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1026 21:13:48.145819  123328 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_adam_train_step.mlir (@mobilenetv2_adam_train_step, 581 outputs, 1 replica) in 74572 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd.mlir (@mobilenetv2_fwd, 1 outputs, 1 replica) in 2141 ms
+[pjrt_ffi] compiled verified_mlir/mobilenetv2_fwd_eval.mlir (@mobilenetv2_fwd_eval, 1 outputs, 1 replica) in 1009 ms
+  xla/pjrt verified_mlir/mobilenetv2_fwd.mlir
+  xla/pjrt verified_mlir/mobilenetv2_fwd_eval.mlir
+  imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+  train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+[pjrt_ffi] RESIDENT: @mobilenetv2_adam_train_step holds 474 parameter tensors (25.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/295: loss=2.500613
+  step 1/295: loss=2.584159
+  step 2/295: loss=2.808829
+  step 100/295: loss=2.206448
+  step 200/295: loss=2.035776
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.116395 lr=0.000333
+  epoch 1: val_acc = 995/3925 = 25.350318%  top5 = 2622/3925 = 66.802548%  [95% CI 24.01–26.73]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6539643401922783803)
+  step 0/295: loss=1.958756
+  step 1/295: loss=1.613743
+  step 2/295: loss=1.663989
+  step 100/295: loss=1.689783
+  step 200/295: loss=1.613493
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.780897 lr=0.000667
+  epoch 2: val_acc = 881/3925 = 22.445860%  top5 = 2456/3925 = 62.573248%  [95% CI 21.17–23.78]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 1346053159091505916)
+  step 0/295: loss=1.862500
+  step 1/295: loss=2.398036
+  step 2/295: loss=1.735287
+  step 100/295: loss=1.478666
+  step 200/295: loss=1.426344
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.595104 lr=0.001000
+  epoch 3: val_acc = 1528/3925 = 38.929936%  top5 = 3095/3925 = 78.853503%  [95% CI 37.42–40.47]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 16566383753739532034)
+  step 0/295: loss=1.514054
+  step 1/295: loss=1.261020
+  step 2/295: loss=1.520208
+  step 100/295: loss=1.345851
+  step 200/295: loss=1.462925
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.458305 lr=0.001000
+  epoch 4: val_acc = 1924/3925 = 49.019108%  top5 = 3532/3925 = 89.987261%  [95% CI 47.46–50.58]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 10004592115510296510)
+  step 0/295: loss=1.431305
+  step 1/295: loss=1.676602
+  step 2/295: loss=1.273293
+  step 100/295: loss=1.571200
+  step 200/295: loss=1.297880
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.336865 lr=0.000998
+  epoch 5: val_acc = 2168/3925 = 55.235669%  top5 = 3562/3925 = 90.751592%  [95% CI 53.68–56.79]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 9141688956667187747)
+  step 0/295: loss=1.366827
+  step 1/295: loss=1.230245
+  step 2/295: loss=1.092026
+  step 100/295: loss=1.379879
+  step 200/295: loss=1.532464
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.233598 lr=0.000996
+  epoch 6: val_acc = 2445/3925 = 62.292994%  top5 = 3594/3925 = 91.566879%  [95% CI 60.77–63.80]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6165768235737826629)
+  step 0/295: loss=1.230682
+  step 1/295: loss=1.167794
+  step 2/295: loss=1.201910
+  step 100/295: loss=1.387956
+  step 200/295: loss=1.189419
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.197869 lr=0.000993
+  epoch 7: val_acc = 2363/3925 = 60.203822%  top5 = 3683/3925 = 93.834395%  [95% CI 58.66–61.72]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13433658167616017178)
+  step 0/295: loss=1.114529
+  step 1/295: loss=1.231821
+  step 2/295: loss=1.420846
+  step 100/295: loss=1.301885
+  step 200/295: loss=1.254131
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.145669 lr=0.000990
+  epoch 8: val_acc = 2533/3925 = 64.535032%  top5 = 3693/3925 = 94.089172%  [95% CI 63.02–66.02]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13313100403328117731)
+  step 0/295: loss=0.935519
+  step 1/295: loss=1.025438
+  step 2/295: loss=1.100338
+  step 100/295: loss=0.990968
+  step 200/295: loss=1.158321
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.116440 lr=0.000985
+  epoch 9: val_acc = 2774/3925 = 70.675159%  top5 = 3778/3925 = 96.254777%  [95% CI 69.23–72.08]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 3590595801816813298)
+  step 0/295: loss=1.082085
+  step 1/295: loss=0.803104
+  step 2/295: loss=0.823534
+  step 100/295: loss=1.211852
+  step 200/295: loss=0.939506
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.083352 lr=0.000980
+  epoch 10: val_acc = 2832/3925 = 72.152866%  top5 = 3769/3925 = 96.025478%  [95% CI 70.73–73.53]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11416252053881654824)
+  step 0/295: loss=1.064188
+  step 1/295: loss=0.786693
+  step 2/295: loss=1.009738
+  step 100/295: loss=1.349779
+  step 200/295: loss=0.980239
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=1.063225 lr=0.000974
+  epoch 11: val_acc = 2793/3925 = 71.159236%  top5 = 3729/3925 = 95.006369%  [95% CI 69.72–72.56]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6001445401499123471)
+  step 0/295: loss=1.100300
+  step 1/295: loss=0.915611
+  step 2/295: loss=0.897963
+  step 100/295: loss=0.910705
+  step 200/295: loss=0.853103
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=1.020144 lr=0.000967
+  epoch 12: val_acc = 2747/3925 = 69.987261%  top5 = 3732/3925 = 95.082803%  [95% CI 68.53–71.40]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 15017003799206160468)
+  step 0/295: loss=1.361475
+  step 1/295: loss=1.177632
+  step 2/295: loss=1.059169
+  step 100/295: loss=1.088075
+  step 200/295: loss=0.969265
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.999297 lr=0.000959
+  epoch 13: val_acc = 2935/3925 = 74.777070%  top5 = 3756/3925 = 95.694268%  [95% CI 73.39–76.11]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 3415452875462576802)
+  step 0/295: loss=0.877577
+  step 1/295: loss=0.879863
+  step 2/295: loss=0.899735
+  step 100/295: loss=0.934274
+  step 200/295: loss=0.937261
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.977726 lr=0.000951
+  epoch 14: val_acc = 2842/3925 = 72.407643%  top5 = 3725/3925 = 94.904459%  [95% CI 70.99–73.78]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7732584375856740004)
+  step 0/295: loss=1.066429
+  step 1/295: loss=1.057544
+  step 2/295: loss=0.876564
+  step 100/295: loss=0.990279
+  step 200/295: loss=0.777914
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.955455 lr=0.000941
+  epoch 15: val_acc = 2989/3925 = 76.152866%  top5 = 3824/3925 = 97.426752%  [95% CI 74.79–77.46]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7599491084058279241)
+  step 0/295: loss=1.141136
+  step 1/295: loss=0.886696
+  step 2/295: loss=0.733274
+  step 100/295: loss=0.923408
+  step 200/295: loss=0.809257
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.936023 lr=0.000931
+  epoch 16: val_acc = 2728/3925 = 69.503185%  top5 = 3704/3925 = 94.369427%  [95% CI 68.04–70.92]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13369557511236258841)
+  step 0/295: loss=0.812613
+  step 1/295: loss=0.917550
+  step 2/295: loss=0.929101
+  step 100/295: loss=0.782108
+  step 200/295: loss=0.977443
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.925517 lr=0.000921
+  epoch 17: val_acc = 2990/3925 = 76.178344%  top5 = 3801/3925 = 96.840764%  [95% CI 74.82–77.49]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11847952574891302288)
+  step 0/295: loss=0.844115
+  step 1/295: loss=0.861264
+  step 2/295: loss=0.907149
+  step 100/295: loss=0.984024
+  step 200/295: loss=0.937113
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.897598 lr=0.000909
+  epoch 18: val_acc = 3044/3925 = 77.554140%  top5 = 3802/3925 = 96.866242%  [95% CI 76.22–78.83]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11451031705662475891)
+  step 0/295: loss=0.767825
+  step 1/295: loss=0.691216
+  step 2/295: loss=0.911754
+  step 100/295: loss=0.810329
+  step 200/295: loss=0.927090
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.882431 lr=0.000897
+  epoch 19: val_acc = 3097/3925 = 78.904459%  top5 = 3819/3925 = 97.299363%  [95% CI 77.60–80.15]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 12182983673175732708)
+  step 0/295: loss=0.924752
+  step 1/295: loss=0.924544
+  step 2/295: loss=1.047039
+  step 100/295: loss=0.996374
+  step 200/295: loss=0.780734
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.862727 lr=0.000885
+  epoch 20: val_acc = 3094/3925 = 78.828025%  top5 = 3836/3925 = 97.732484%  [95% CI 77.52–80.08]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 1258189478810882408)
+  step 0/295: loss=0.833178
+  step 1/295: loss=0.782378
+  step 2/295: loss=0.684907
+  step 100/295: loss=0.744065
+  step 200/295: loss=0.733843
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.840990 lr=0.000871
+  epoch 21: val_acc = 3029/3925 = 77.171975%  top5 = 3777/3925 = 96.229299%  [95% CI 75.83–78.46]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 10283573638461354031)
+  step 0/295: loss=0.761715
+  step 1/295: loss=0.834047
+  step 2/295: loss=0.785674
+  step 100/295: loss=0.946518
+  step 200/295: loss=0.898376
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.826234 lr=0.000857
+  epoch 22: val_acc = 2989/3925 = 76.152866%  top5 = 3807/3925 = 96.993631%  [95% CI 74.79–77.46]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 18433938139562324802)
+  step 0/295: loss=0.882126
+  step 1/295: loss=0.728646
+  step 2/295: loss=0.765737
+  step 100/295: loss=0.876423
+  step 200/295: loss=0.924793
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.805860 lr=0.000843
+  epoch 23: val_acc = 3011/3925 = 76.713376%  top5 = 3819/3925 = 97.299363%  [95% CI 75.37–78.01]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11251713347815334769)
+  step 0/295: loss=0.957194
+  step 1/295: loss=0.711476
+  step 2/295: loss=0.668264
+  step 100/295: loss=0.798901
+  step 200/295: loss=0.907808
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.796825 lr=0.000827
+  epoch 24: val_acc = 3193/3925 = 81.350318%  top5 = 3836/3925 = 97.732484%  [95% CI 80.10–82.54]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7472202930533247400)
+  step 0/295: loss=0.760680
+  step 1/295: loss=0.792470
+  step 2/295: loss=0.775221
+  step 100/295: loss=0.766510
+  step 200/295: loss=0.743365
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.780945 lr=0.000812
+  epoch 25: val_acc = 2908/3925 = 74.089172%  top5 = 3809/3925 = 97.044586%  [95% CI 72.70–75.44]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 9107677548746045305)
+  step 0/295: loss=0.744642
+  step 1/295: loss=0.699572
+  step 2/295: loss=0.800707
+  step 100/295: loss=0.705213
+  step 200/295: loss=0.817264
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.752748 lr=0.000796
+  epoch 26: val_acc = 3146/3925 = 80.152866%  top5 = 3811/3925 = 97.095541%  [95% CI 78.88–81.37]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 12455425853986021918)
+  step 0/295: loss=0.734085
+  step 1/295: loss=0.779884
+  step 2/295: loss=0.764477
+  step 100/295: loss=0.734368
+  step 200/295: loss=0.726804
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.755316 lr=0.000779
+  epoch 27: val_acc = 3004/3925 = 76.535032%  top5 = 3776/3925 = 96.203822%  [95% CI 75.18–77.83]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6891078870038148440)
+  step 0/295: loss=0.643386
+  step 1/295: loss=0.683702
+  step 2/295: loss=0.790184
+  step 100/295: loss=0.744818
+  step 200/295: loss=0.780264
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.721592 lr=0.000762
+  epoch 28: val_acc = 3201/3925 = 81.554140%  top5 = 3842/3925 = 97.885350%  [95% CI 80.31–82.74]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 14489359116354725308)
+  step 0/295: loss=0.645889
+  step 1/295: loss=0.637368
+  step 2/295: loss=0.648212
+  step 100/295: loss=0.666073
+  step 200/295: loss=0.613238
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.715113 lr=0.000744
+  epoch 29: val_acc = 3142/3925 = 80.050955%  top5 = 3810/3925 = 97.070064%  [95% CI 78.77–81.27]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 1536659251382984491)
+  step 0/295: loss=0.616417
+  step 1/295: loss=0.702965
+  step 2/295: loss=0.753298
+  step 100/295: loss=0.721948
+  step 200/295: loss=0.856137
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.715548 lr=0.000726
+  epoch 30: val_acc = 3161/3925 = 80.535032%  top5 = 3815/3925 = 97.197452%  [95% CI 79.27–81.74]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 8588306053611142090)
+  step 0/295: loss=0.686585
+  step 1/295: loss=0.863259
+  step 2/295: loss=0.847345
+  step 100/295: loss=0.861338
+  step 200/295: loss=0.668178
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.701811 lr=0.000708
+  epoch 31: val_acc = 3214/3925 = 81.885350%  top5 = 3840/3925 = 97.834395%  [95% CI 80.65–83.06]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 8361517706619411403)
+  step 0/295: loss=0.666192
+  step 1/295: loss=0.658743
+  step 2/295: loss=0.685724
+  step 100/295: loss=0.618706
+  step 200/295: loss=0.634478
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.676342 lr=0.000689
+  epoch 32: val_acc = 3253/3925 = 82.878981%  top5 = 3852/3925 = 98.140127%  [95% CI 81.67–84.03]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7352834394210281907)
+  step 0/295: loss=0.620832
+  step 1/295: loss=0.736281
+  step 2/295: loss=0.575054
+  step 100/295: loss=0.632166
+  step 200/295: loss=0.701498
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.670937 lr=0.000670
+  epoch 33: val_acc = 3172/3925 = 80.815287%  top5 = 3820/3925 = 97.324841%  [95% CI 79.55–82.02]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 2423036450956192193)
+  step 0/295: loss=0.582581
+  step 1/295: loss=0.686497
+  step 2/295: loss=0.644637
+  step 100/295: loss=0.594047
+  step 200/295: loss=0.597247
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.655667 lr=0.000651
+  epoch 34: val_acc = 3323/3925 = 84.662420%  top5 = 3847/3925 = 98.012739%  [95% CI 83.50–85.76]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17574834983952757802)
+  step 0/295: loss=0.625309
+  step 1/295: loss=0.590419
+  step 2/295: loss=0.563416
+  step 100/295: loss=0.650382
+  step 200/295: loss=0.624882
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.647319 lr=0.000631
+  epoch 35: val_acc = 3293/3925 = 83.898089%  top5 = 3822/3925 = 97.375796%  [95% CI 82.72–85.01]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17611726432327091032)
+  step 0/295: loss=0.592779
+  step 1/295: loss=0.602326
+  step 2/295: loss=0.622101
+  step 100/295: loss=0.595158
+  step 200/295: loss=0.604084
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.642563 lr=0.000611
+  epoch 36: val_acc = 3332/3925 = 84.891720%  top5 = 3862/3925 = 98.394904%  [95% CI 83.74–85.98]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 3263095849999910311)
+  step 0/295: loss=0.561051
+  step 1/295: loss=0.578024
+  step 2/295: loss=0.662389
+  step 100/295: loss=0.594671
+  step 200/295: loss=0.633968
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.630730 lr=0.000591
+  epoch 37: val_acc = 3298/3925 = 84.025478%  top5 = 3851/3925 = 98.114650%  [95% CI 82.85–85.14]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6043840723815506421)
+  step 0/295: loss=0.630207
+  step 1/295: loss=0.588309
+  step 2/295: loss=0.579122
+  step 100/295: loss=0.565447
+  step 200/295: loss=0.564795
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.623318 lr=0.000571
+  epoch 38: val_acc = 3284/3925 = 83.668790%  top5 = 3837/3925 = 97.757962%  [95% CI 82.48–84.79]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 18088037147202741156)
+  step 0/295: loss=0.625540
+  step 1/295: loss=0.623214
+  step 2/295: loss=0.570050
+  step 100/295: loss=0.606770
+  step 200/295: loss=0.709818
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.611256 lr=0.000551
+  epoch 39: val_acc = 3276/3925 = 83.464968%  top5 = 3848/3925 = 98.038217%  [95% CI 82.27–84.59]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 14846611291935999943)
+  step 0/295: loss=0.580632
+  step 1/295: loss=0.594684
+  step 2/295: loss=0.604257
+  step 100/295: loss=0.636926
+  step 200/295: loss=0.549705
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.604821 lr=0.000531
+  epoch 40: val_acc = 3277/3925 = 83.490446%  top5 = 3833/3925 = 97.656051%  [95% CI 82.30–84.62]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6780145580613326026)
+  step 0/295: loss=0.595671
+  step 1/295: loss=0.544449
+  step 2/295: loss=0.566800
+  step 100/295: loss=0.553708
+  step 200/295: loss=0.556774
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.594158 lr=0.000510
+  epoch 41: val_acc = 3375/3925 = 85.987261%  top5 = 3856/3925 = 98.242038%  [95% CI 84.87–87.04]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7153497043340628733)
+  step 0/295: loss=0.547764
+  step 1/295: loss=0.566287
+  step 2/295: loss=0.603083
+  step 100/295: loss=0.613822
+  step 200/295: loss=0.558088
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.586864 lr=0.000490
+  epoch 42: val_acc = 3401/3925 = 86.649682%  top5 = 3853/3925 = 98.165605%  [95% CI 85.55–87.68]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 12877188505866108581)
+  step 0/295: loss=0.638130
+  step 1/295: loss=0.556612
+  step 2/295: loss=0.575149
+  step 100/295: loss=0.578999
+  step 200/295: loss=0.549794
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.590864 lr=0.000469
+  epoch 43: val_acc = 3371/3925 = 85.885350%  top5 = 3854/3925 = 98.191083%  [95% CI 84.76–86.94]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11974381439333783303)
+  step 0/295: loss=0.564587
+  step 1/295: loss=0.556575
+  step 2/295: loss=0.593356
+  step 100/295: loss=0.575444
+  step 200/295: loss=0.572460
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.580999 lr=0.000449
+  epoch 44: val_acc = 3414/3925 = 86.980892%  top5 = 3864/3925 = 98.445860%  [95% CI 85.89–88.00]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 4778582244605806322)
+  step 0/295: loss=0.556472
+  step 1/295: loss=0.539268
+  step 2/295: loss=0.597353
+  step 100/295: loss=0.583428
+  step 200/295: loss=0.562064
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.574560 lr=0.000429
+  epoch 45: val_acc = 3375/3925 = 85.987261%  top5 = 3862/3925 = 98.394904%  [95% CI 84.87–87.04]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 5356455929458310347)
+  step 0/295: loss=0.572992
+  step 1/295: loss=0.553919
+  step 2/295: loss=0.584645
+  step 100/295: loss=0.563190
+  step 200/295: loss=0.598872
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.571672 lr=0.000409
+  epoch 46: val_acc = 3392/3925 = 86.420382%  top5 = 3846/3925 = 97.987261%  [95% CI 85.31–87.46]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 3105941476988125360)
+  step 0/295: loss=0.569821
+  step 1/295: loss=0.544758
+  step 2/295: loss=0.565185
+  step 100/295: loss=0.546271
+  step 200/295: loss=0.560252
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.561042 lr=0.000389
+  epoch 47: val_acc = 3407/3925 = 86.802548%  top5 = 3858/3925 = 98.292994%  [95% CI 85.71–87.83]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 5447930615128161080)
+  step 0/295: loss=0.574954
+  step 1/295: loss=0.549216
+  step 2/295: loss=0.546890
+  step 100/295: loss=0.545140
+  step 200/295: loss=0.569399
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.555176 lr=0.000369
+  epoch 48: val_acc = 3388/3925 = 86.318471%  top5 = 3856/3925 = 98.242038%  [95% CI 85.21–87.36]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17019822217932792101)
+  step 0/295: loss=0.594810
+  step 1/295: loss=0.559563
+  step 2/295: loss=0.537429
+  step 100/295: loss=0.557486
+  step 200/295: loss=0.538280
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.555214 lr=0.000349
+  epoch 49: val_acc = 3439/3925 = 87.617834%  top5 = 3863/3925 = 98.420382%  [95% CI 86.55–88.61]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 482489062633815228)
+  step 0/295: loss=0.541287
+  step 1/295: loss=0.539355
+  step 2/295: loss=0.613532
+  step 100/295: loss=0.529769
+  step 200/295: loss=0.552139
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.554556 lr=0.000330
+  epoch 50: val_acc = 3421/3925 = 87.159236%  top5 = 3855/3925 = 98.216561%  [95% CI 86.08–88.17]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 6046176449462253101)
+  step 0/295: loss=0.537620
+  step 1/295: loss=0.533364
+  step 2/295: loss=0.537433
+  step 100/295: loss=0.530585
+  step 200/295: loss=0.604394
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.550278 lr=0.000311
+  epoch 51: val_acc = 3421/3925 = 87.159236%  top5 = 3867/3925 = 98.522293%  [95% CI 86.08–88.17]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11837298553736865686)
+  step 0/295: loss=0.548089
+  step 1/295: loss=0.596484
+  step 2/295: loss=0.542298
+  step 100/295: loss=0.532709
+  step 200/295: loss=0.537169
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.545429 lr=0.000292
+  epoch 52: val_acc = 3434/3925 = 87.490446%  top5 = 3854/3925 = 98.191083%  [95% CI 86.42–88.49]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 3333647090961726341)
+  step 0/295: loss=0.552251
+  step 1/295: loss=0.572331
+  step 2/295: loss=0.529127
+  step 100/295: loss=0.580968
+  step 200/295: loss=0.538239
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.541257 lr=0.000274
+  epoch 53: val_acc = 3437/3925 = 87.566879%  top5 = 3868/3925 = 98.547771%  [95% CI 86.50–88.56]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13314321280726705501)
+  step 0/295: loss=0.548366
+  step 1/295: loss=0.567622
+  step 2/295: loss=0.544325
+  step 100/295: loss=0.542304
+  step 200/295: loss=0.539430
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.539939 lr=0.000256
+  epoch 54: val_acc = 3437/3925 = 87.566879%  top5 = 3857/3925 = 98.267516%  [95% CI 86.50–88.56]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 12938444254963334836)
+  step 0/295: loss=0.527637
+  step 1/295: loss=0.542743
+  step 2/295: loss=0.526636
+  step 100/295: loss=0.541583
+  step 200/295: loss=0.550512
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.536967 lr=0.000238
+  epoch 55: val_acc = 3444/3925 = 87.745223%  top5 = 3862/3925 = 98.394904%  [95% CI 86.68–88.73]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 16768123324469935009)
+  step 0/295: loss=0.520355
+  step 1/295: loss=0.558517
+  step 2/295: loss=0.524844
+  step 100/295: loss=0.523706
+  step 200/295: loss=0.527102
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.534048 lr=0.000221
+  epoch 56: val_acc = 3447/3925 = 87.821656%  top5 = 3864/3925 = 98.445860%  [95% CI 86.76–88.81]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 5794196356773274864)
+  step 0/295: loss=0.523207
+  step 1/295: loss=0.524194
+  step 2/295: loss=0.517245
+  step 100/295: loss=0.559637
+  step 200/295: loss=0.518671
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.532758 lr=0.000205
+  epoch 57: val_acc = 3439/3925 = 87.617834%  top5 = 3852/3925 = 98.140127%  [95% CI 86.55–88.61]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 4670287864746369903)
+  step 0/295: loss=0.550628
+  step 1/295: loss=0.525843
+  step 2/295: loss=0.531637
+  step 100/295: loss=0.542574
+  step 200/295: loss=0.514772
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.532892 lr=0.000188
+  epoch 58: val_acc = 3447/3925 = 87.821656%  top5 = 3878/3925 = 98.802548%  [95% CI 86.76–88.81]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 2932662173774596276)
+  step 0/295: loss=0.524281
+  step 1/295: loss=0.530505
+  step 2/295: loss=0.573876
+  step 100/295: loss=0.536245
+  step 200/295: loss=0.525034
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.529258 lr=0.000173
+  epoch 59: val_acc = 3446/3925 = 87.796178%  top5 = 3861/3925 = 98.369427%  [95% CI 86.74–88.78]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17322123156825688361)
+  step 0/295: loss=0.520889
+  step 1/295: loss=0.541504
+  step 2/295: loss=0.552423
+  step 100/295: loss=0.528295
+  step 200/295: loss=0.527385
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.528366 lr=0.000157
+  epoch 60: val_acc = 3449/3925 = 87.872611%  top5 = 3869/3925 = 98.573248%  [95% CI 86.81–88.86]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 9107112887362151347)
+  step 0/295: loss=0.520073
+  step 1/295: loss=0.530727
+  step 2/295: loss=0.522339
+  step 100/295: loss=0.518745
+  step 200/295: loss=0.528382
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.526509 lr=0.000143
+  epoch 61: val_acc = 3461/3925 = 88.178344%  top5 = 3865/3925 = 98.471338%  [95% CI 87.13–89.15]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13260512925073058563)
+  step 0/295: loss=0.522599
+  step 1/295: loss=0.519393
+  step 2/295: loss=0.518242
+  step 100/295: loss=0.525375
+  step 200/295: loss=0.539811
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.523935 lr=0.000129
+  epoch 62: val_acc = 3476/3925 = 88.560510%  top5 = 3864/3925 = 98.445860%  [95% CI 87.53–89.52]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 7456795610503735814)
+  step 0/295: loss=0.527228
+  step 1/295: loss=0.517423
+  step 2/295: loss=0.514359
+  step 100/295: loss=0.527398
+  step 200/295: loss=0.515691
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.525481 lr=0.000116
+  epoch 63: val_acc = 3462/3925 = 88.203822%  top5 = 3862/3925 = 98.394904%  [95% CI 87.16–89.18]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17769745374276191705)
+  step 0/295: loss=0.520666
+  step 1/295: loss=0.525851
+  step 2/295: loss=0.515449
+  step 100/295: loss=0.527031
+  step 200/295: loss=0.528827
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.523138 lr=0.000103
+  epoch 64: val_acc = 3454/3925 = 88.000000%  top5 = 3868/3925 = 98.547771%  [95% CI 86.95–88.98]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11006040572443229620)
+  step 0/295: loss=0.524201
+  step 1/295: loss=0.527745
+  step 2/295: loss=0.517920
+  step 100/295: loss=0.515839
+  step 200/295: loss=0.514171
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.522558 lr=0.000091
+  epoch 65: val_acc = 3472/3925 = 88.458599%  top5 = 3859/3925 = 98.318471%  [95% CI 87.42–89.42]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13720579417982899110)
+  step 0/295: loss=0.513429
+  step 1/295: loss=0.524594
+  step 2/295: loss=0.511954
+  step 100/295: loss=0.516138
+  step 200/295: loss=0.514969
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.522194 lr=0.000079
+  epoch 66: val_acc = 3462/3925 = 88.203822%  top5 = 3866/3925 = 98.496815%  [95% CI 87.16–89.18]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 2769619843052405210)
+  step 0/295: loss=0.515249
+  step 1/295: loss=0.517884
+  step 2/295: loss=0.515292
+  step 100/295: loss=0.517417
+  step 200/295: loss=0.522159
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.520144 lr=0.000069
+  epoch 67: val_acc = 3469/3925 = 88.382166%  top5 = 3862/3925 = 98.394904%  [95% CI 87.34–89.35]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17474816187827144836)
+  step 0/295: loss=0.517617
+  step 1/295: loss=0.514721
+  step 2/295: loss=0.522822
+  step 100/295: loss=0.533190
+  step 200/295: loss=0.522399
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.520772 lr=0.000059
+  epoch 68: val_acc = 3471/3925 = 88.433121%  top5 = 3870/3925 = 98.598726%  [95% CI 87.39–89.40]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 11003011715979794382)
+  step 0/295: loss=0.513719
+  step 1/295: loss=0.528698
+  step 2/295: loss=0.516599
+  step 100/295: loss=0.510403
+  step 200/295: loss=0.512366
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.518622 lr=0.000050
+  epoch 69: val_acc = 3476/3925 = 88.560510%  top5 = 3870/3925 = 98.598726%  [95% CI 87.53–89.52]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 10624701969259824615)
+  step 0/295: loss=0.514465
+  step 1/295: loss=0.513631
+  step 2/295: loss=0.513336
+  step 100/295: loss=0.534223
+  step 200/295: loss=0.513558
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.517829 lr=0.000041
+  epoch 70: val_acc = 3470/3925 = 88.407643%  top5 = 3866/3925 = 98.496815%  [95% CI 87.37–89.37]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 5947703104203786230)
+  step 0/295: loss=0.513372
+  step 1/295: loss=0.517972
+  step 2/295: loss=0.547084
+  step 100/295: loss=0.529205
+  step 200/295: loss=0.513168
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.518123 lr=0.000033
+  epoch 71: val_acc = 3470/3925 = 88.407643%  top5 = 3863/3925 = 98.420382%  [95% CI 87.37–89.37]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 8943168146635964744)
+  step 0/295: loss=0.512857
+  step 1/295: loss=0.518787
+  step 2/295: loss=0.528441
+  step 100/295: loss=0.532169
+  step 200/295: loss=0.548837
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.518618 lr=0.000026
+  epoch 72: val_acc = 3474/3925 = 88.509554%  top5 = 3861/3925 = 98.369427%  [95% CI 87.47–89.47]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 8099826662884837294)
+  step 0/295: loss=0.524439
+  step 1/295: loss=0.514750
+  step 2/295: loss=0.517607
+  step 100/295: loss=0.521058
+  step 200/295: loss=0.512739
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.517214 lr=0.000020
+  epoch 73: val_acc = 3467/3925 = 88.331210%  top5 = 3865/3925 = 98.471338%  [95% CI 87.29–89.30]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 17786841163049436858)
+  step 0/295: loss=0.514315
+  step 1/295: loss=0.515166
+  step 2/295: loss=0.512198
+  step 100/295: loss=0.522119
+  step 200/295: loss=0.513938
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.517734 lr=0.000015
+  epoch 74: val_acc = 3477/3925 = 88.585987%  top5 = 3862/3925 = 98.394904%  [95% CI 87.55–89.54]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 10740389798912341373)
+  step 0/295: loss=0.512958
+  step 1/295: loss=0.512100
+  step 2/295: loss=0.513521
+  step 100/295: loss=0.511261
+  step 200/295: loss=0.516401
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.517112 lr=0.000010
+  epoch 75: val_acc = 3480/3925 = 88.662420%  top5 = 3865/3925 = 98.471338%  [95% CI 87.63–89.62]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 4704618619864893063)
+  step 0/295: loss=0.511081
+  step 1/295: loss=0.555484
+  step 2/295: loss=0.511849
+  step 100/295: loss=0.547606
+  step 200/295: loss=0.510141
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.516510 lr=0.000007
+  epoch 76: val_acc = 3473/3925 = 88.484076%  top5 = 3864/3925 = 98.445860%  [95% CI 87.45–89.45]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 13202693277425126373)
+  step 0/295: loss=0.511264
+  step 1/295: loss=0.510519
+  step 2/295: loss=0.518520
+  step 100/295: loss=0.519623
+  step 200/295: loss=0.514158
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.516023 lr=0.000004
+  epoch 77: val_acc = 3478/3925 = 88.611465%  top5 = 3865/3925 = 98.471338%  [95% CI 87.58–89.57]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 9266159445743459580)
+  step 0/295: loss=0.513603
+  step 1/295: loss=0.516040
+  step 2/295: loss=0.519358
+  step 100/295: loss=0.511386
+  step 200/295: loss=0.511660
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.516516 lr=0.000002
+  epoch 78: val_acc = 3473/3925 = 88.484076%  top5 = 3864/3925 = 98.445860%  [95% CI 87.45–89.45]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 9806602603959559873)
+  step 0/295: loss=0.508867
+  step 1/295: loss=0.521948
+  step 2/295: loss=0.513133
+  step 100/295: loss=0.509382
+  step 200/295: loss=0.520312
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.516052 lr=0.000000
+  epoch 79: val_acc = 3472/3925 = 88.458599%  top5 = 3863/3925 = 98.420382%  [95% CI 87.42–89.42]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 10848912398177297812)
+  step 0/295: loss=0.510792
+  step 1/295: loss=0.508906
+  step 2/295: loss=0.516896
+  step 100/295: loss=0.519964
+  step 200/295: loss=0.527967
+[pjrt_ffi] RESIDENT: @mobilenetv2_fwd_eval holds 262 parameter tensors (8.7 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.516278 lr=0.000000
+  epoch 80: val_acc = 3475/3925 = 88.535032%  top5 = 3865/3925 = 98.471338%  [95% CI 87.50–89.49]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_xla_orin.bin.bn (34112 floats x 2, hash 14217901464396588644)
+done (trained MobileNetV2 adam + cosine/warmup via packed threading).

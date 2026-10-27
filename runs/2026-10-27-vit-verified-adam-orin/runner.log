@@ -1,0 +1,3 @@
+2026-10-27 06:12:53 start vit-verified-adam fraction 0.25 tag orin epochs default gpu 0 clocks pinned (1020 MHz) cap 5800M
+2026-10-27 06:12:53 attempt 1 from epoch 0 → runs/2026-10-27-vit-verified-adam-orin/attempt1.log
+2026-10-27 07:47:44 ✓ done: rc 0 at epoch 80 after 1 attempt(s); val_acc = 2668/3925 = 67.974522%  top5 = 3548/3925 = 90.394904%  [95% CI 66.50–69.42]
