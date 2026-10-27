@@ -111,6 +111,13 @@ jobs:
         run: |
           python3 scripts/book/book_counts.py
 
+      - name: Check the platforms table against support.tsv
+        # Appendix A's platforms table (blueprint/src/figures/platforms.tex) and PLATFORMS.md are
+        # both generated from scripts/platform/support.tsv; a hand edit to either, or a row added
+        # without regenerating, fails here.
+        run: |
+          python3 scripts/platform/platforms_md.py --check
+
       - name: Install elan (Lean toolchain manager)
         # GitHub's release server intermittently returns 504 when fetching
         # the elan tarball; retry up to 3× with a 10 s backoff before
