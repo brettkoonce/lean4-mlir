@@ -57,7 +57,7 @@ scripts/platform/goldens/*.npz
 runs/README.md
 runs/20??-??-??-*/**
 runs/platform/.gitignore
-runs/platform/20??-??-??-*/{manifest.json,results.tsv}
+runs/platform/20??-??-??-*/{manifest.json,manifest.tsv,results.tsv}
 
 # Process and site
 planning/**/*.md
