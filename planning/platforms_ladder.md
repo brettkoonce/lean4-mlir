@@ -92,3 +92,48 @@ preview diffed before commit.
 * Whether the TPU row's imagenet cell, when it exists, is per (network, recipe) like the chapters'
   tables, or one date for the whole sequence. Proposed: one date + a pointer to the runs/ README
   that lists the rows, as the ares and 3060 cells already do.
+
+## 5. IREE is a row, and the tier rule (2026-10-27, from the copy/positioning conversation)
+
+IREE gets a platform row in Table A-2 instead of its own section. Its cells are honest in the
+table's three columns: platform "IREE, over CUDA, ROCm or CPU; no PJRT plugin, it compiles every
+kernel itself"; pinned "IREE 3.11 (the release Appendix B names), `iree-compile` on `$PATH`,
+`ffi/libiree_ffi.so`"; where it stands "mnist, cifar, and five of the seven imagenette nets
+(ResNet-50 and MobileNetV4 have no driver); no collectives, so no imagenet". That makes it
+literally an mnist-to-imagenette platform, the same regime as the Orin and the Mac.
+
+The row has to carry three things or a new reader trips:
+
+* the CPU caveat: `llvm-cpu` miscompiles the pooled train steps, so the CPU gradient gate runs on
+  vmvx / JAX (Appendix B already says this; the row says it in half a line, since CPU is the
+  row's appeal for a reader without a card);
+* the admission path: `check.sh` admits a box by "plugin loads + goldens match", and IREE has no
+  plugin, so either the script grows an IREE mode or the row says it is admitted by the `-iree`
+  twins (`lake run mnist-iree`, …);
+* a `support.tsv` row (step 1), or the book and PLATFORMS.md disagree on the count. Step 5's
+  "never name a platform count" already covers the prose.
+
+**"The second lowerer" section (Appendix A) goes away.** Its mechanics are the row plus one
+sentence under the table beside the device-variable sentence (`LEAN_MLIR_LOWERER=iree`, the
+`-iree` twins). Its argument — two independent compilers with different codegen, runtime and
+kernels are what make agreement evidence of anything; the 392× runtime-size gap is not a trust
+gap; the small runtime relocates the trusted base rather than shrinking it, with the 2.3× / 4.9×
+timings — moves to Appendix B, at the top of "Against JAX", directly before the `llvm-cpu`
+miscompile. The bug is the evidence for the argument and today they sit 400 lines apart in
+different appendices. "Why now"'s one line (IREE runs where no vendor library exists) stays: it
+is a platform fact.
+
+**The tier rule, stated once.** The ladder has two regimes with a boundary at cifar. Below it,
+theorem families that need the whole training story: the SGD descent lemmas (Linear, MLP, CNN,
+CIFAR) and the randomized-smoothing scorecards (MLP, CNN, CIFAR-CNN, 2026-07-12). Above it, the
+VJP contracts, the step tie and the JAX cross-check only. IREE as a platform stops at the same
+line (no collectives). Say the rule in Appendix B once; then descent, smoothing and the IREE row
+all read as instances of it and none needs its own excuse.
+
+Smoothing, under that rule: drop the `convnext-smooth` target, its two logs and
+`runs/smoothing_frontier.tex` (20 images, n = 2016, 2 of 20 certified at r ≤ 0.5 after 2 h 10 m
+on one card: a smoke test, and the lakefile comment calls it non-vacuous); keep the three
+scorecards and their CI in `Certs` beside descent; the TRUST.md hypothesis row stays, beside the
+descent row. Nothing enters the book beyond, at most, one paragraph in Appendix B framing the
+scorecard as the one bridge from the Measured row to the Proven row (a decided binomial tail per
+image), with the sentence that this is the other meaning of "verified". Not a section.
