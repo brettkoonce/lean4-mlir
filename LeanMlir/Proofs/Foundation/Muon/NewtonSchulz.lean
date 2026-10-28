@@ -6,6 +6,7 @@ import Mathlib.Algebra.Order.Star.Real
 import Mathlib.Analysis.Normed.Field.Basic
 import Mathlib.Dynamics.FixedPoints.Topology
 import Mathlib.Topology.Metrizable.Uniformity
+import LeanMlir.Proofs.Foundation.Muon.SpectralForm
 
 @[expose] public section
 
@@ -84,21 +85,12 @@ theorem nsStep_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ) (σ : F
   -- `(U diag p Uᵀ)(U diag q Vᵀ) = U diag (p·q) Vᵀ` — the `UᵀU = 1` contraction
   have hcollapse : ∀ (p q : Fin n → ℝ),
       (U * Matrix.diagonal p * Uᵀ) * (U * Matrix.diagonal q * Vᵀ)
-        = U * Matrix.diagonal (fun i => p i * q i) * Vᵀ := by
-    intro p q
-    rw [show (U * Matrix.diagonal p * Uᵀ) * (U * Matrix.diagonal q * Vᵀ)
-          = U * (Matrix.diagonal p * (Uᵀ * U) * Matrix.diagonal q) * Vᵀ from by
-            simp only [Matrix.mul_assoc],
-        hU, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
-  -- the singular values only: `Xᵀ`, the Gram `XXᵀ`, and the cubic/quintic monomials stay `U diag(·) Vᵀ`
-  have hXt : (U * Matrix.diagonal σ * Vᵀ)ᵀ = V * Matrix.diagonal σ * Uᵀ := by
-    simp only [Matrix.transpose_mul, Matrix.diagonal_transpose, Matrix.transpose_transpose,
-      Matrix.mul_assoc]
+        = U * Matrix.diagonal (fun i => p i * q i) * Vᵀ :=
+    fun p q => MuonSpectral.svdForm_mul U U U V p q hU
+  -- the singular values only: the Gram `XXᵀ` and the cubic/quintic monomials stay `U diag(·) Vᵀ`
   have hXXt : (U * Matrix.diagonal σ * Vᵀ) * (U * Matrix.diagonal σ * Vᵀ)ᵀ
         = U * Matrix.diagonal (fun i => σ i * σ i) * Uᵀ := by
-    rw [hXt, show (U * Matrix.diagonal σ * Vᵀ) * (V * Matrix.diagonal σ * Uᵀ)
-          = U * (Matrix.diagonal σ * (Vᵀ * V) * Matrix.diagonal σ) * Uᵀ from by
-            simp only [Matrix.mul_assoc], hV, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+    rw [MuonSpectral.svdForm_transpose, MuonSpectral.svdForm_mul U V V U σ σ hV]
   have hcube : (U * Matrix.diagonal σ * Vᵀ) * (U * Matrix.diagonal σ * Vᵀ)ᵀ
                 * (U * Matrix.diagonal σ * Vᵀ)
         = U * Matrix.diagonal (fun i => σ i * σ i * σ i) * Vᵀ := by

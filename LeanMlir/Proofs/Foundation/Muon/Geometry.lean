@@ -5,6 +5,7 @@ import Mathlib.Algebra.Group.Pi.Units
 import Mathlib.Algebra.Order.Star.Real
 import Mathlib.Analysis.Matrix.PosDef
 import Mathlib.Analysis.SpecialFunctions.Bernstein
+import LeanMlir.Proofs.Foundation.Muon.SpectralForm
 
 @[expose] public section
 
@@ -361,15 +362,6 @@ theorem shampoo_eq_muon (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
         * (U * Matrix.diagonal s * Vᵀ)
         * (V * Matrix.diagonal (fun i => (Real.sqrt (s i))⁻¹) * Vᵀ) = U * Vᵀ := by
   set d : Fin n → ℝ := fun i => (Real.sqrt (s i))⁻¹ with hd
-  -- reusable contraction `W (diag a) Wᵀ · W (diag b) Wᵀ = W (diag a·b) Wᵀ` (orthonormal `W`)
-  have contract : ∀ (W : Matrix (Fin n) (Fin n) ℝ) (a b : Fin n → ℝ), Wᵀ * W = 1 →
-      (W * Matrix.diagonal a * Wᵀ) * (W * Matrix.diagonal b * Wᵀ)
-        = W * Matrix.diagonal (fun i => a i * b i) * Wᵀ := by
-    intro W a b hW
-    rw [show (W * Matrix.diagonal a * Wᵀ) * (W * Matrix.diagonal b * Wᵀ)
-          = W * (Matrix.diagonal a * (Wᵀ * W) * Matrix.diagonal b) * Wᵀ from by
-            simp only [Matrix.mul_assoc],
-       hW, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
   have hVVt : V * Vᵀ = 1 := mul_eq_one_comm.mp hV
   have hUUt : U * Uᵀ = 1 := mul_eq_one_comm.mp hU
   -- pointwise collapses: `(s^{-1/2})⁴·s² = 1` (fourth-root certs) and `s^{-1/2}·s·s^{-1/2} = 1` (jewel)
@@ -386,28 +378,19 @@ theorem shampoo_eq_muon (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
     have hne : Real.sqrt (s i) ≠ 0 := (Real.sqrt_pos.mpr hsp).ne'
     simp only [hd]; field_simp; nlinarith [hsqrt]
   -- the Gram matrices are spectral too: `GᵀG = V (diag s²) Vᵀ`, `GGᵀ = U (diag s²) Uᵀ`
-  have hGt : (U * Matrix.diagonal s * Vᵀ)ᵀ = V * Matrix.diagonal s * Uᵀ := by
-    simp only [Matrix.transpose_mul, Matrix.diagonal_transpose, Matrix.transpose_transpose,
-      Matrix.mul_assoc]
   have hGtG : (U * Matrix.diagonal s * Vᵀ)ᵀ * (U * Matrix.diagonal s * Vᵀ)
       = V * Matrix.diagonal (fun i => s i * s i) * Vᵀ := by
-    rw [hGt, show (V * Matrix.diagonal s * Uᵀ) * (U * Matrix.diagonal s * Vᵀ)
-          = V * (Matrix.diagonal s * (Uᵀ * U) * Matrix.diagonal s) * Vᵀ from by
-            simp only [Matrix.mul_assoc],
-       hU, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+    rw [MuonSpectral.svdForm_transpose, MuonSpectral.svdForm_mul V U U V s s hU]
   have hGGt : (U * Matrix.diagonal s * Vᵀ) * (U * Matrix.diagonal s * Vᵀ)ᵀ
       = U * Matrix.diagonal (fun i => s i * s i) * Uᵀ := by
-    rw [hGt, show (U * Matrix.diagonal s * Vᵀ) * (V * Matrix.diagonal s * Uᵀ)
-          = U * (Matrix.diagonal s * (Vᵀ * V) * Matrix.diagonal s) * Uᵀ from by
-            simp only [Matrix.mul_assoc],
-       hV, Matrix.mul_one, Matrix.diagonal_mul_diagonal]
+    rw [MuonSpectral.svdForm_transpose, MuonSpectral.svdForm_mul U V V U s s hV]
   refine ⟨?_, ?_, ?_⟩
   · -- `R⁴ · GᵀG = V (diag (s^{-1/2})⁴·s²) Vᵀ = V Vᵀ = 1`
-    rw [conj_diag_pow V d hV 4, hGtG, contract V _ _ hV,
+    rw [conj_diag_pow V d hV 4, hGtG, MuonSpectral.svdForm_mul V V V V _ _ hV,
         show (fun i => d i ^ 4 * (s i * s i)) = (fun _ => (1 : ℝ)) from funext hpt4,
         Matrix.diagonal_one, Matrix.mul_one, hVVt]
   · -- `L⁴ · GGᵀ = 1`, the same on the left
-    rw [conj_diag_pow U d hU 4, hGGt, contract U _ _ hU,
+    rw [conj_diag_pow U d hU 4, hGGt, MuonSpectral.svdForm_mul U U U U _ _ hU,
         show (fun i => d i ^ 4 * (s i * s i)) = (fun _ => (1 : ℝ)) from funext hpt4,
         Matrix.diagonal_one, Matrix.mul_one, hUUt]
   · -- `L · G · R = U (diag (s^{-1/2}·s·s^{-1/2})) Vᵀ = U Vᵀ`

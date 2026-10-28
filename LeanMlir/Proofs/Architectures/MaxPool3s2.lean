@@ -106,7 +106,8 @@ theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * 
 
 /-- **Smooth or dead** (`WindowSmoothOrDead`): every 3×3 window has its maximum at one position,
     or every cell `≤ 0`. The ResNet stems state their pool condition in this form
-    (`StemPoolSmoothAt`), and `maxPool3s2Flat_relu_eventuallyEq` is the lemma that uses it. -/
+    (`StemPoolSmoothAt`), and `batchMap_maxPool3s2Flat_relu_eventuallyEq` is the lemma that uses
+    it. -/
 abbrev MaxPool3s2SmoothOrDead {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
   WindowSmoothOrDead win3RowInv win3ColInv x
 

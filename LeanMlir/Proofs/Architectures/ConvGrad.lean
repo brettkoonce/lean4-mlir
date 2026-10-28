@@ -153,6 +153,13 @@ theorem convStride2_bias_sgd_certified {ic oc h w kH kW : Nat}
 -- § Conv kernel drift: the output moves by the kernel perturbation's slab
 -- ════════════════════════════════════════════════════════════════
 
+/-- The triangle inequality through a triple sum, one level at a time. -/
+private theorem abs_sum3_le {α β γ : Type*} [Fintype α] [Fintype β] [Fintype γ]
+    (f : α → β → γ → ℝ) : |∑ a, ∑ b, ∑ c, f a b c| ≤ ∑ a, ∑ b, ∑ c, |f a b c| :=
+  (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun _ _ =>
+    (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun _ _ =>
+      Finset.abs_sum_le_sum_abs _ _))
+
 theorem conv2d_kernel_sub {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) (v e : Vec (oc * ic * kH * kW))
     (o : Fin oc) (hi : Fin h) (wi : Fin w) :
@@ -175,18 +182,8 @@ theorem conv2d_kernel_drift {ic oc h w kH kW : Nat} (b : Vec oc)
       a * ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
         |e (k4Idx o c kh kw)| := by
   rw [conv2d_kernel_sub]
-  calc |∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi|
-      ≤ ∑ c : Fin ic, |∑ kh : Fin kH, ∑ kw : Fin kW,
-          e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, |∑ kw : Fin kW,
-          e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi| :=
-        Finset.sum_le_sum fun c _ => Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          |e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi| :=
-        Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
-          Finset.abs_sum_le_sum_abs _ _
+  calc _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+          |e (k4Idx o c kh kw) * convPad kH kW x c kh kw hi wi| := abs_sum3_le _
     _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           |e (k4Idx o c kh kw)| * a := by
         refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
@@ -549,22 +546,9 @@ theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
     |conv2d W b x' o ho wo - conv2d W b x o ho wo| ≤
       ((ic * kH * kW : ℕ) : ℝ) * (wK * δ) := by
   rw [conv2d_input_sub]
-  calc |∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-        W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-          convPad kH kW x c kh kw ho wo)|
-      ≤ ∑ c : Fin ic, |∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo)| :=
-        Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, |∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo)| :=
-        Finset.sum_le_sum fun c _ => Finset.abs_sum_le_sum_abs _ _
-    _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
+  calc _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
           |W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo)| :=
-        Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
-          Finset.abs_sum_le_sum_abs _ _
+            convPad kH kW x c kh kw ho wo)| := abs_sum3_le _
     _ ≤ ∑ _c : Fin ic, ∑ _kh : Fin kH, ∑ _kw : Fin kW, wK * δ := by
         refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
           Finset.sum_le_sum fun kw _ => ?_
@@ -614,29 +598,11 @@ theorem conv2d_input_l1_drift {ic oc h w kH kW : Nat}
           convPad kH kW x c kh kw ho wo| := by
     intro o ho wo
     rw [conv2d_input_sub]
-    calc |∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-            convPad kH kW x c kh kw ho wo)|
-        ≤ ∑ c : Fin ic, |∑ kh : Fin kH, ∑ kw : Fin kW,
-            W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo)| :=
-          Finset.abs_sum_le_sum_abs _ _
-      _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, |∑ kw : Fin kW,
-            W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo)| :=
-          Finset.sum_le_sum fun c _ => Finset.abs_sum_le_sum_abs _ _
-      _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-            |W o c kh kw * (convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo)| :=
-          Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
-            Finset.abs_sum_le_sum_abs _ _
-      _ ≤ ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-            wK * |convPad kH kW x' c kh kw ho wo -
-              convPad kH kW x c kh kw ho wo| := by
-          refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum
-            fun kh _ => Finset.sum_le_sum fun kw _ => ?_
-          rw [abs_mul]
-          exact mul_le_mul_of_nonneg_right (hW o c kh kw) (abs_nonneg _)
+    refine (abs_sum3_le _).trans ?_
+    refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum
+      fun kh _ => Finset.sum_le_sum fun kw _ => ?_
+    rw [abs_mul]
+    exact mul_le_mul_of_nonneg_right (hW o c kh kw) (abs_nonneg _)
   calc ∑ o : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
         |conv2d W b x' o ho wo - conv2d W b x o ho wo|
       ≤ ∑ o : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,

@@ -894,6 +894,18 @@ theorem maxPool_relu_eventuallyEq_gather {P c h w : Nat}
   filter_upwards [hev] with v' hv'
   exact maxPoolFlat_eq_poolGatherFlat σ _ hv'
 
+/-- Two cells of one 2×2 window at different window positions sit at different input cells. -/
+private theorem winInv_pair_ne {h w : Nat} (ho : Fin h) (wo : Fin w) {cd cd' : Fin 2 × Fin 2}
+    (hne : cd ≠ cd') :
+    (winRowInv ho cd.1, winColInv wo cd.2) ≠ (winRowInv ho cd'.1, winColInv wo cd'.2) :=
+  fun h => hne (by
+    obtain ⟨h1, h2⟩ := Prod.mk.inj h
+    have e1 := congrArg winRowMod h1
+    have e2 := congrArg winColMod h2
+    rw [winRowMod_winRowInv, winRowMod_winRowInv] at e1
+    rw [winColMod_winColInv, winColMod_winColInv] at e2
+    exact Prod.ext e1 e2)
+
 /-- **The margin up to twins holds along the whole step segment, in strict form**, at the
     selection `σ` = the base point's window argmax: a dead window stays strictly negative (the
     relu₂ margin), and a non-twin cell stays strictly below the selected one (the `2ρD` gap
@@ -927,16 +939,8 @@ theorem marginUpTo_seg {P c h w : Nat} (Z : Vec P → Vec (c * (2*h) * (2*w))) {
     by_cases hcd : cd = maxPool2Argmax (Tensor3.unflatten (Z v)) ci ho wo
     · exact Or.inl hcd
     refine Or.inr ?_
-    have hpos : (winRowInv ho (maxPool2Argmax (Tensor3.unflatten (Z v)) ci ho wo).1,
-        winColInv wo (maxPool2Argmax (Tensor3.unflatten (Z v)) ci ho wo).2) ≠
-        (winRowInv ho cd.1, winColInv wo cd.2) := fun h => hcd (by
-      obtain ⟨h1, h2⟩ := Prod.mk.inj h
-      have e1 := congrArg winRowMod h1
-      have e2 := congrArg winColMod h2
-      rw [winRowMod_winRowInv, winRowMod_winRowInv] at e1
-      rw [winColMod_winColInv, winColMod_winColInv] at e2
-      exact Prod.ext e1.symm e2.symm)
-    rcases hlive _ cd hpos (maxPool2Argmax_max (Tensor3.unflatten (Z v)) ci ho wo) with hgap | htw
+    rcases hlive _ cd (winInv_pair_ne ho wo (Ne.symm hcd))
+        (maxPool2Argmax_max (Tensor3.unflatten (Z v)) ci ho wo) with hgap | htw
     · exact Or.inr (lt_of_lt_gap_of_close hgap (hclose _) (hclose _))
     · exact Or.inl htw
 
@@ -1323,16 +1327,8 @@ theorem marginUpTo_strict {c h w : Nat} {δ : ℝ} (hδ : 0 ≤ δ) (x : Vec (c 
     by_cases hcd : cd = maxPool2Argmax (Tensor3.unflatten x) ci ho wo
     · exact Or.inl hcd
     refine Or.inr ?_
-    have hpos : (winRowInv ho (maxPool2Argmax (Tensor3.unflatten x) ci ho wo).1,
-        winColInv wo (maxPool2Argmax (Tensor3.unflatten x) ci ho wo).2) ≠
-        (winRowInv ho cd.1, winColInv wo cd.2) := fun h => hcd (by
-      obtain ⟨h1, h2⟩ := Prod.mk.inj h
-      have e1 := congrArg winRowMod h1
-      have e2 := congrArg winColMod h2
-      rw [winRowMod_winRowInv, winRowMod_winRowInv] at e1
-      rw [winColMod_winColInv, winColMod_winColInv] at e2
-      exact Prod.ext e1.symm e2.symm)
-    rcases hlive _ cd hpos (maxPool2Argmax_max (Tensor3.unflatten x) ci ho wo) with hgap | htw
+    rcases hlive _ cd (winInv_pair_ne ho wo (Ne.symm hcd))
+        (maxPool2Argmax_max (Tensor3.unflatten x) ci ho wo) with hgap | htw
     · exact Or.inr (by have : (0:ℝ) ≤ 2 * δ := by linarith
                        exact lt_of_sub_pos (lt_of_le_of_lt this hgap))
     · exact Or.inl htw

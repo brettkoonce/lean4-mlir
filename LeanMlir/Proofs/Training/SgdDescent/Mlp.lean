@@ -2,6 +2,7 @@ module
 
 public import LeanMlir.Proofs.Training.SgdDescent.Linear
 public import LeanMlir.Proofs.Nets.Small.MlpTrainStep -- shake: keep
+import LeanMlir.Proofs.Float.MlpFloatBridge
 
 @[expose] public section
 
@@ -290,10 +291,9 @@ theorem mlp_hidden_loss_differentiableAt {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂
 
 /-- **Closed form of the hidden-layer loss gradient at any off-kink
     parameter point**: `∂L/∂W₁_{ij} = a₀ᵢ·relu'(z₁ⱼ)·∑ₖ W₂ⱼₖ·(softmax −
-    onehot)ₖ` — the suite's conditional fold (`mlp_hidden_total_loss_grad`)
-    re-expressed through `gradAt` with both `pdiv` factors collapsed to
-    their certified closed forms. The hidden-layer peer of
-    `linear_loss_gradAt`. -/
+    onehot)ₖ` — the chain rule through the weight (`gradAt_weight_eq_pdiv`),
+    the head's partial collapsed to its closed form (`ce_head_relu_input_grad`).
+    The hidden-layer peer of `linear_loss_gradAt`. -/
 theorem mlp_hidden_loss_gradAt {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (a₀ : Vec d₁) (label : Fin d₃)
     (v : Vec (d₁ * d₂)) (hz : ∀ k, dense (Mat.unflatten v) b₁ a₀ k ≠ 0)
@@ -306,44 +306,10 @@ theorem mlp_hidden_loss_gradAt {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
             (softmax d₃
               (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k -
               oneHot d₃ label k)) := by
-  calc gradAt (fun w => crossEntropy d₃
-        (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label) v
-        (finProdFinEquiv (i, j))
-      = pdiv (fun w => fun _ : Fin 1 => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-          v (finProdFinEquiv (i, j)) 0 :=
-        gradAt_eq_pdiv _ _
-          (mlp_hidden_loss_differentiableAt b₁ W₂ b₂ a₀ label v hz) _
-    _ = pdiv (fun w => fun _ : Fin 1 => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-          (Mat.flatten (Mat.unflatten v)) (finProdFinEquiv (i, j)) 0 := by
-        rw [Mat.flatten_unflatten]
-    _ = ∑ k : Fin d₂,
-          pdiv (fun w : Vec (d₁ * d₂) => dense (Mat.unflatten w) b₁ a₀)
-              (Mat.flatten (Mat.unflatten v)) (finProdFinEquiv (i, j)) k
-            * pdiv (fun z : Vec d₂ => fun _ : Fin 1 =>
-                  crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-                (dense (Mat.unflatten v) b₁ a₀) k 0 :=
-        IR.mlp_hidden_total_loss_grad (Mat.unflatten v) b₁ W₂ b₂ a₀ label
-          hz i j
-    _ = ∑ k : Fin d₂, (if k = j then a₀ i else 0)
-            * pdiv (fun z : Vec d₂ => fun _ : Fin 1 =>
-                  crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-                (dense (Mat.unflatten v) b₁ a₀) k 0 :=
-        Finset.sum_congr rfl fun k _ => by
-          rw [pdiv_dense_W b₁ a₀ (Mat.unflatten v) i j k]
-    _ = a₀ i * pdiv (fun z : Vec d₂ => fun _ : Fin 1 =>
-            crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-          (dense (Mat.unflatten v) b₁ a₀) j 0 := by
-        simp only [ite_mul, zero_mul]
-        rw [Finset.sum_ite_eq']
-        simp
-    _ = a₀ i * ((if dense (Mat.unflatten v) b₁ a₀ j > 0 then (1:ℝ) else 0) *
-          ∑ k, W₂ j k *
-            (softmax d₃
-              (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) k -
-              oneHot d₃ label k)) := by
-        rw [ce_head_relu_input_grad W₂ b₂ label _ hz j]
+  rw [← ce_head_relu_input_grad W₂ b₂ label _ hz j]
+  exact gradAt_weight_eq_pdiv b₁ a₀
+    (fun z _ => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label) v
+    (by fun_prop (disch := assumption)) i j
 
 /-- The hidden-layer logit drift: a weight perturbation of `ℓ1` mass
     `‖e‖₁` moves every logit by at most `w₂·a·‖e‖₁` — through the frozen
@@ -543,9 +509,9 @@ theorem mlp_input_loss_differentiableAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec 
 
 /-- **Closed form of the input-layer loss gradient at any two-margin
     point**: `∂L/∂W₀_{ij} = xᵢ·relu'(z₀ⱼ)·∑ₗ W₁ⱼₗ·relu'(z₁ₗ)·∑ₖ W₂ₗₖ·
-    (softmax − onehot)ₖ` — the deepest fold (`mlp_input_total_loss_grad`)
-    with both `pdiv` factors collapsed. The input-layer peer of
-    `linear_loss_gradAt`. -/
+    (softmax − onehot)ₖ` — the chain rule through the weight (`gradAt_weight_eq_pdiv`),
+    the two-layer head's partial collapsed (`ce_head2_input_grad`). The input-layer peer
+    of `linear_loss_gradAt`. -/
 theorem mlp_input_loss_gradAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
     (x : Vec d₀) (label : Fin d₃) (v : Vec (d₀ * d₁))
@@ -563,53 +529,10 @@ theorem mlp_input_loss_gradAt {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁)
                 (softmax d₃ (dense W₂ b₂ (relu d₂
                   (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k -
                   oneHot d₃ label k))) := by
-  calc gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-        (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label) v
-        (finProdFinEquiv (i, j))
-      = pdiv (fun w => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂
-            (relu d₂ (dense W₁ b₁
-              (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-          v (finProdFinEquiv (i, j)) 0 :=
-        gradAt_eq_pdiv _ _
-          (mlp_input_loss_differentiableAt b₀ W₁ b₁ W₂ b₂ x label v
-            hz0 hz1) _
-    _ = pdiv (fun w => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂
-            (relu d₂ (dense W₁ b₁
-              (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-          (Mat.flatten (Mat.unflatten v)) (finProdFinEquiv (i, j)) 0 := by
-        rw [Mat.flatten_unflatten]
-    _ = ∑ k : Fin d₁,
-          pdiv (fun w : Vec (d₀ * d₁) => dense (Mat.unflatten w) b₀ x)
-              (Mat.flatten (Mat.unflatten v)) (finProdFinEquiv (i, j)) k
-            * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
-                  crossEntropy d₃ (dense W₂ b₂ (relu d₂
-                    (dense W₁ b₁ (relu d₁ z)))) label)
-                (dense (Mat.unflatten v) b₀ x) k 0 :=
-        IR.mlp_input_total_loss_grad (Mat.unflatten v) b₀ W₁ b₁ W₂ b₂ x
-          label hz0 hz1 i j
-    _ = ∑ k : Fin d₁, (if k = j then x i else 0)
-            * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
-                  crossEntropy d₃ (dense W₂ b₂ (relu d₂
-                    (dense W₁ b₁ (relu d₁ z)))) label)
-                (dense (Mat.unflatten v) b₀ x) k 0 :=
-        Finset.sum_congr rfl fun k _ => by
-          rw [pdiv_dense_W b₀ x (Mat.unflatten v) i j k]
-    _ = x i * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
-            crossEntropy d₃ (dense W₂ b₂ (relu d₂
-              (dense W₁ b₁ (relu d₁ z)))) label)
-          (dense (Mat.unflatten v) b₀ x) j 0 := by
-        simp only [ite_mul, zero_mul]
-        rw [Finset.sum_ite_eq']
-        simp
-    _ = x i * ((if dense (Mat.unflatten v) b₀ x j > 0 then (1:ℝ) else 0) *
-          ∑ l, W₁ j l *
-            ((if dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x)) l > 0
-                then (1:ℝ) else 0) *
-              ∑ k, W₂ l k *
-                (softmax d₃ (dense W₂ b₂ (relu d₂
-                  (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) k -
-                  oneHot d₃ label k))) := by
-        rw [ce_head2_input_grad W₁ b₁ W₂ b₂ label _ hz0 hz1 j]
+  rw [← ce_head2_input_grad W₁ b₁ W₂ b₂ label _ hz0 hz1 j]
+  exact gradAt_weight_eq_pdiv b₀ x
+    (fun z _ => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label) v
+    (by fun_prop (disch := assumption)) i j
 
 /-- The layer-1 margin keeps the *middle* pre-activation off the kink along
     the segment: the perturbation arrives through one dense + ReLU, so the
@@ -1099,19 +1022,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
     FloatModel.layerBudget_nonneg hu hw₂ le_rfl zero_le_one hcotB
   have hAct : 0 ≤ FloatModel.layerAct d₃ w₂ 0 1 :=
     FloatModel.layerAct_nonneg hw₂ le_rfl zero_le_one
-  have hη0 : 0 ≤ η := by
-    rw [hη]
-    have e1 : (0:ℝ) ≤ M.u * ((a + 0) * (FloatModel.layerAct d₃ w₂ 0 1 +
-        FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp
-          (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a)
-            (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃))) :=
-      mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
-    have e2 : (0:ℝ) ≤ a * FloatModel.layerBudget M.u d₃ w₂ 0 1
-        (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂
-          (FloatModel.layerAct d₁ w₁ β₁ a)
-          (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃) := mul_nonneg ha hcotB2
-    simp only [FloatModel.mulErr]
-    nlinarith [e1, e2]
+  have hη0 : 0 ≤ η := FloatModel.mulErr_nonneg hu ha hAct le_rfl hcotB2
   -- the layer-1 pre-activations are off the kink (from the rounding margin)
   have hz : ∀ k, dense W₁ b₁ a₀ k ≠ 0 := fun k => abs_pos.mp (hB1.trans_lt (hmargin_round k))
   -- discharge `mlp_hidden_sgd_descends`' abstract η by the proven grad-close
@@ -1265,26 +1176,15 @@ theorem mlp_w0_grad_close {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
               (layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a))
               (layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a)
                 (layerBudget M.u d₀ w₀ β₀ a 0))) d₃))) := by
-  -- layer-0 forward (x exact ⇒ inherited error 0)
+  -- layers 0 and 1 forward (x exact ⇒ inherited error 0), as in `mlp_l1_close`
+  obtain ⟨l0, r0, ha₀, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   set E₀ := layerBudget M.u d₀ w₀ β₀ a 0 with hE₀
   have hE₀0 : 0 ≤ E₀ := layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   have hA₀0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
-  have l0 : ∀ k, |M.dense W₀ b₀ x k - Proofs.dense W₀ b₀ x k| ≤ E₀ :=
-    fun k => (M.dense_close_fresh W₀ b₀ x k).trans
-      (M.denseErr_le_uniform hw₀ le_rfl hW₀ hb₀ hx k)
-  have r0 : ∀ k, |relu d₁ (M.dense W₀ b₀ x) k -
-      relu d₁ (Proofs.dense W₀ b₀ x) k| ≤ E₀ := fun k => relu_close _ _ _ l0 k
-  have ha₀ : ∀ k, |relu d₁ (Proofs.dense W₀ b₀ x) k| ≤ layerAct d₀ w₀ β₀ a :=
-    fun k => (relu_abs_le _ k).trans (dense_abs_le ha hW₀ hb₀ hx k)
-  -- layer-1 forward, inherited E₀
   set E₁ := layerBudget M.u d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) E₀ with hE₁
   have hA₁0 : 0 ≤ layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
     layerAct_nonneg hw₁ hβ₁ hA₀0
   have hE₁0 : 0 ≤ E₁ := layerBudget_nonneg M.u_nonneg hw₁ hβ₁ hA₀0 hE₀0
-  have l1 : ∀ k, |M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)) k -
-      Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x)) k| ≤ E₁ := fun k =>
-    (M.dense_close W₁ b₁ _ _ E₀ hE₀0 r0 k).trans
-      (M.denseErr_le_uniform hw₁ hE₀0 hW₁ hb₁ ha₀ k)
   have r1 : ∀ k, |relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) k -
       relu d₂ (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))) k| ≤ E₁ :=
     fun k => relu_close _ _ _ l1 k
@@ -1495,30 +1395,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
             (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
               (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)) :=
     FloatModel.layerBudget_nonneg hu hw₁ le_rfl hAct1 hec1
-  have hη0 : 0 ≤ η := by
-    rw [hη]
-    have e1 : (0:ℝ) ≤ M.u * ((a + 0) *
-        (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) +
-          FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
-            (FloatModel.layerBudget M.u d₃ w₂ 0 1
-              (FloatModel.cotErr M.u eexp
-                (FloatModel.layerBudget M.u d₂ w₂ β₂
-                  (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
-                  (FloatModel.layerBudget M.u d₁ w₁ β₁
-                    (FloatModel.layerAct d₀ w₀ β₀ a)
-                    (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))) :=
-      mul_nonneg hu (mul_nonneg (by linarith) (by linarith))
-    have e2 : (0:ℝ) ≤ a * FloatModel.layerBudget M.u d₂ w₁ 0
-        (FloatModel.layerAct d₃ w₂ 0 1)
-        (FloatModel.layerBudget M.u d₃ w₂ 0 1
-          (FloatModel.cotErr M.u eexp
-            (FloatModel.layerBudget M.u d₂ w₂ β₂
-              (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a))
-              (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)
-                (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)) :=
-      mul_nonneg ha hec0
-    simp only [FloatModel.mulErr]
-    nlinarith [e1, e2]
+  have hη0 : 0 ≤ η := FloatModel.mulErr_nonneg hu ha hAct0 le_rfl hec0
   -- the two pre-activations are off the kink (from the rounding margins)
   have hz0 : ∀ k, dense W₀ b₀ x k ≠ 0 := fun k => abs_pos.mp (hE₀0.trans_lt (hmargin0_round k))
   have hz1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0 := fun k =>

@@ -483,6 +483,52 @@ theorem cnn_conv2_cot_real_abs_le {c h w d₃ d₄ nC kH kW : Nat}
   split_ifs <;> simp [h0, hcPoolMag]
 
 open FloatModel in
+/-- **The conv-2 rounding margins put the net off its kinks**: the conv-2, dense-3 and dense-4
+    pre-activations have no zero entry and every pool window has a strict maximum, at the conv-2
+    input `X2` (magnitude `aX2`, inherited error `eX2`) — the margin hypotheses of
+    `cnn_conv2_cot_close`, read as the smoothness the `*_loss_gradAt_reluMask` bridges take. -/
+private theorem cnn_conv2_margins_ne {c h w d₃ d₄ kH kW : Nat} (M : FloatModel)
+    (X2 : Tensor3 c (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
+    (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
+    {aX2 eX2 w₂ β₂ w₃ β₃ w₄ β₄ : ℝ}
+    (haX2 : 0 ≤ aX2) (heX2 : 0 ≤ eX2) (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂)
+    (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄) (hβ₄ : 0 ≤ β₄)
+    (hmarginConv : ∀ k, FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ aX2 eX2 <
+      |Tensor3.flatten (conv2d W₂ b₂ X2) k|)
+    (hmarginPool : MaxPool2MarginQ
+      (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ aX2 eX2)
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ X2)))))
+    (hmargin3 : ∀ l, FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+        (FloatModel.layerAct (c * kH * kW) w₂ β₂ aX2)
+        (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ aX2 eX2) <
+      |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+        (Tensor3.flatten (conv2d W₂ b₂ X2)))) l|)
+    (hmargin4 : ∀ q, FloatModel.layerBudget M.u d₃ w₄ β₄
+        (FloatModel.layerAct (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ aX2))
+        (FloatModel.layerBudget M.u (c * h * w) w₃ β₃
+          (FloatModel.layerAct (c * kH * kW) w₂ β₂ aX2)
+          (FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ aX2 eX2)) <
+      |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ X2)))))) q|) :
+    (∀ k, Tensor3.flatten (conv2d W₂ b₂ X2) k ≠ 0) ∧
+    MaxPool2Smooth (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ X2)))) ∧
+    (∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ X2)))) l ≠ 0) ∧
+    (∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
+      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ X2)))))) q ≠ 0) := by
+  have A2 := layerAct_nonneg hw₂ hβ₂ haX2 (m := c * kH * kW)
+  have E2 := layerBudget_nonneg M.u_nonneg hw₂ hβ₂ haX2 heX2 (m := c * kH * kW)
+  have E3 := layerBudget_nonneg M.u_nonneg hw₃ hβ₃ A2 E2 (m := c * h * w)
+  have E4 := layerBudget_nonneg M.u_nonneg hw₄ hβ₄ (layerAct_nonneg hw₃ hβ₃ A2 (m := c * h * w))
+    E3 (m := d₃)
+  exact ⟨fun k => abs_pos.mp (E2.trans_lt (hmarginConv k)), hmarginPool.smooth E2,
+    fun l => abs_pos.mp (E3.trans_lt (hmargin3 l)),
+    fun q => abs_pos.mp (E4.trans_lt (hmargin4 q))⟩
+
+open FloatModel in
 /-- **The binary32 conv-2 weight gradient is within an explicit budget of the
     certified one** — the conv-layer peer of `mlp_w0_grad_close`. With
     the conv-2 input `x₁` exact, the FloatModel `W₂` gradient
@@ -542,8 +588,8 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
       ≤ M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp := by
   have hv2' : ∀ o' c' kh' kw', |Kernel4.unflatten v o' c' kh' kw'| ≤ w₂ :=
     fun o' c' kh' kw' => by rw [unflatten_k4Idx]; exact hv2 _
-  have Ecnn : 0 ≤ FloatModel.layerBudget M.u (c * kH * kW) w₂ β₂ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl
+  obtain ⟨hz2, hmp, hz3, hz4⟩ := cnn_conv2_margins_ne M x₁ (Kernel4.unflatten v) b₂ W₃ b₃ W₄ b₄
+    ha le_rfl hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hmarginConv hmarginPool hmargin3 hmargin4
   -- per-cell conv-2 cotangent closeness / magnitudes (exact conv-2 input x₁)
   have hc2close := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
     cnn_conv2_cot_close M x₁ x₁ (Kernel4.unflatten v) b₂ W₃ b₃ W₄ b₄ W₅ b₅ label fexp ha
@@ -555,16 +601,7 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
       hw₃ hw₄ hw₅ hW₃ hW₄ hW₅ co ho wo
   -- assemble: rewrite to the dot form (apply + bridge), then the dot composite
   rw [M.cnnConv2FloatGrad_apply b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label v o cc kh kw,
-    cnn_conv2_loss_gradAt_reluMask b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label v
-      (fun k => abs_pos.mp (lt_of_le_of_lt Ecnn (hmarginConv k)))
-      (hmarginPool.smooth Ecnn)
-      (fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-        (layerAct_nonneg hw₂ hβ₂ ha) Ecnn) (hmargin3 l)))
-      (fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
-        (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha))
-        (layerBudget_nonneg M.u_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha) Ecnn))
-        (hmargin4 q)))
-      o cc kh kw]
+    cnn_conv2_loss_gradAt_reluMask b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label v hz2 hmp hz3 hz4 o cc kh kw]
   exact M.dot_perturbed_close (convPadWin kH kW x₁ cc kh kw) _ _ ha
     (fun s => by simp only [convPadWin]; exact abs_convPad_le x₁ ha hx₁ cc kh kw _ _)
     (fun s => by simp only [cotWin]; exact abs_le_of_close (hc2close o _ _) (hc2realmag o _ _))
@@ -1095,32 +1132,11 @@ theorem cnn_conv1_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel
   have hz1 : ∀ k, Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀) k ≠ 0 :=
     fun k => abs_pos.mp (lt_of_le_of_lt
       (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl) (hmargin1 k))
-  have hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-      (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-        (conv2d (Kernel4.unflatten u) b₁ x₀))))) k ≠ 0 :=
-    fun k => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
-      (layerAct_nonneg hw₁ hβ₁ ha)
-      (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)) (hmargin2 k))
-  have hmp := hmarginPool.smooth (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
-    (layerAct_nonneg hw₁ hβ₁ ha)
-    (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))
-  have hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-        (Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀)))))))) l ≠ 0 :=
-    fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-      (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
-      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
-        (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))) (hmargin3 l))
-  have hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-          (conv2d (Kernel4.unflatten u) b₁ x₀))))))))) ) q ≠ 0 :=
-    fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
-      (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)))
-      (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-        (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
-        (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
-          (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)))) (hmargin4 q))
+  obtain ⟨hz2, hmp, hz3, hz4⟩ := cnn_conv2_margins_ne M
+    (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten u) b₁ x₀))))
+    W₂ b₂ W₃ b₃ W₄ b₄ (layerAct_nonneg hw₁ hβ₁ ha) (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)
+    hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hmargin2 hmarginPool hmargin3 hmargin4
   rw [M.cnnConv1FloatGrad_apply b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label u
       o cc kh kw,
     cnn_conv1_loss_gradAt_reluMask b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label u
@@ -1418,21 +1434,8 @@ theorem cnn_conv2_bias_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatMod
       ≤ M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
           eexp := by
   -- off-kink + smooth conditions from the quantitative margins
-  have hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ x₁) k ≠ 0 :=
-    fun k => abs_pos.mp (lt_of_le_of_lt
-      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl) (hmarginConv k))
-  have hmp := hmarginPool.smooth (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl)
-  have hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-      (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l ≠ 0 :=
-    fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-      (layerAct_nonneg hw₂ hβ₂ ha)
-      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl)) (hmargin3 l))
-  have hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q ≠ 0 :=
-    fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
-      (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha))
-      (layerBudget_nonneg M.u_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ ha)
-        (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ ha le_rfl))) (hmargin4 q))
+  obtain ⟨hz2, hmp, hz3, hz4⟩ := cnn_conv2_margins_ne M x₁ W₂ b₂ W₃ b₃ W₄ b₄
+    ha le_rfl hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hmarginConv hmarginPool hmargin3 hmargin4
   -- per-cell conv-2 cotangent closeness / magnitudes (exact conv-2 input x₁)
   have hc2close := fun (co : Fin c) (ho : Fin (2*h)) (wo : Fin (2*w)) =>
     cnn_conv2_cot_close M x₁ x₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label fexp ha (le_refl 0)
@@ -1666,30 +1669,10 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
   have hz1 : ∀ k, Tensor3.flatten (conv2d W₁ b₁ x₀) k ≠ 0 :=
     fun k => abs_pos.mp (lt_of_le_of_lt
       (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl) (hmargin1 k))
-  have hz2 : ∀ k, Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))) k ≠ 0 :=
-    fun k => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
-      (layerAct_nonneg hw₁ hβ₁ ha)
-      (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)) (hmargin2 k))
-  have hmp := hmarginPool.smooth (layerBudget_nonneg M.u_nonneg hw₂ hβ₂
-    (layerAct_nonneg hw₁ hβ₁ ha)
-    (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))
-  have hz3 : ∀ l, dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
-        (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))) l ≠ 0 :=
-    fun l => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-      (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
-      (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
-        (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl))) (hmargin3 l))
-  have hz4 : ∀ q, dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
-      (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-        (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) ) q ≠ 0 :=
-    fun q => abs_pos.mp (lt_of_le_of_lt (layerBudget_nonneg M.u_nonneg hw₄ hβ₄
-      (layerAct_nonneg hw₃ hβ₃ (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)))
-      (layerBudget_nonneg M.u_nonneg hw₃ hβ₃
-        (layerAct_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha))
-        (layerBudget_nonneg M.u_nonneg hw₂ hβ₂ (layerAct_nonneg hw₁ hβ₁ ha)
-          (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)))) (hmargin4 q))
+  obtain ⟨hz2, hmp, hz3, hz4⟩ := cnn_conv2_margins_ne M
+    (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))
+    W₂ b₂ W₃ b₃ W₄ b₄ (layerAct_nonneg hw₁ hβ₁ ha) (layerBudget_nonneg M.u_nonneg hw₁ hβ₁ ha le_rfl)
+    hw₂ hβ₂ hw₃ hβ₃ hw₄ hβ₄ hmargin2 hmarginPool hmargin3 hmargin4
   simp only [FloatModel.cnnConv1BiasFloatGrad]
   rw [cnn_conv1_bias_loss_gradAt_reluMask W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label
       b₁ hz1 hz2 hmp hz3 hz4 o]

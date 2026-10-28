@@ -20,6 +20,21 @@ The other ResNet-34 ops' float lemmas are elsewhere: the residual add is `add_cl
 
 namespace Proofs
 
+/-- **GAP as a per-channel `bnMean`.** `globalAvgPoolFlat c h w v ci` is the mean of
+    channel `ci`'s spatial slice — `bnMean (h·w)` of the `Fin (h·w)`-indexed gather.
+    `gapFlat_close` starts from it, and through it the float-bridge
+    magnitude/input-shift bounds (`bnMean_abs_le` / `bnMean_input_close`) apply. -/
+theorem globalAvgPoolFlat_eq_bnMean {c h w : Nat} (v : Vec (c * h * w)) (ci : Fin c) :
+    globalAvgPoolFlat c h w v ci
+      = bnMean (h * w) (fun s => Tensor3.unflatten v ci
+          (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2) := by
+  simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
+  congr 1
+  · rw [sum_finProdFinEquiv _]
+    refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
+    simp only [Equiv.symm_apply_apply]
+  · push_cast; ring
+
 namespace FloatModel
 
 variable (M : FloatModel)
@@ -49,31 +64,9 @@ theorem gapFlat_close {c h w : Nat} (M : FloatModel) (v : Vec (c * h * w)) {A : 
       M.u * ((1 + M.u) ^ (h * w + 1) * A) + ((1 + M.u) ^ (h * w + 1) - 1) * A := by
   set cs : Vec (h * w) := fun s =>
     Tensor3.unflatten v ci (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2 with hcs
-  have hgap : globalAvgPoolFlat c h w v ci = bnMean (h * w) cs := by
-    simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
-    congr 1
-    · rw [sum_finProdFinEquiv cs]
-      refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-      simp only [hcs, Equiv.symm_apply_apply]
-    · push_cast; ring
-  rw [FloatModel.gapFlatF, ← hcs, hgap]
+  rw [FloatModel.gapFlatF, ← hcs, globalAvgPoolFlat_eq_bnMean v ci]
   exact M.bnMean_close cs hhw (fun i => by rw [hcs]; exact hA _ _ _)
 
 end FloatModel
-
-/-- **GAP as a per-channel `bnMean`.** `globalAvgPoolFlat c h w v ci` is the mean of
-    channel `ci`'s spatial slice — `bnMean (h·w)` of the `Fin (h·w)`-indexed gather.
-    The reduction `gapFlat_close` performs inline, exposed so the float-bridge
-    magnitude/input-shift bounds (`bnMean_abs_le` / `bnMean_input_close`) apply. -/
-theorem globalAvgPoolFlat_eq_bnMean {c h w : Nat} (v : Vec (c * h * w)) (ci : Fin c) :
-    globalAvgPoolFlat c h w v ci
-      = bnMean (h * w) (fun s => Tensor3.unflatten v ci
-          (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2) := by
-  simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
-  congr 1
-  · rw [sum_finProdFinEquiv _]
-    refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
-    simp only [Equiv.symm_apply_apply]
-  · push_cast; ring
 
 end Proofs

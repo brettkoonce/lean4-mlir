@@ -87,6 +87,27 @@ theorem linear_loss_gradAt {m n : Nat} (b : Vec n) (x : Vec m)
         rw [Finset.sum_ite_eq']
         simp
 
+/-- **A weight entry's loss gradient through any differentiable head `G`**: the chain rule
+    through `pdiv_dense_W`, `∂(G ∘ dense)/∂W_{ij} = xᵢ · ∂G/∂zⱼ`. The weight peer of
+    `gradAt_bias_eq_pdiv`. -/
+theorem gradAt_weight_eq_pdiv {m n : Nat} (b : Vec n) (x : Vec m) (G : Vec n → Vec 1)
+    (v : Vec (m * n)) (hG : DifferentiableAt ℝ G (dense (Mat.unflatten v) b x))
+    (i : Fin m) (j : Fin n) :
+    gradAt (fun w => G (dense (Mat.unflatten w) b x) 0) v (finProdFinEquiv (i, j)) =
+      x i * pdiv G (dense (Mat.unflatten v) b x) j 0 := by
+  have hZ := denseWeightMap_differentiable b x v
+  have hf : DifferentiableAt ℝ (fun w : Vec (m * n) => G (dense (Mat.unflatten w) b x) 0) v :=
+    DifferentiableAt.comp (g := fun z => G z 0) v (differentiableAt_pi.1 hG 0) hZ
+  rw [gradAt_eq_pdiv _ _ hf,
+    -- `pdiv_comp` is stated on `G ∘ f`; the scalar loss is `G`'s one output read as a `Vec 1`
+    show (fun w => fun _ : Fin 1 => G (dense (Mat.unflatten w) b x) 0)
+        = G ∘ fun w => dense (Mat.unflatten w) b x by funext w i; fin_cases i; rfl,
+    pdiv_comp _ _ _ hZ hG]
+  have hW := fun k => pdiv_dense_W b x (Mat.unflatten v) i j k
+  rw [Mat.flatten_unflatten] at hW
+  simp_rw [hW, ite_mul, zero_mul]
+  rw [Finset.sum_ite_eq']; simp
+
 /-- The `ℓ1` mass of a scaled step. -/
 theorem smul_l1_mass {n : Nat} (e : Vec n) {t : ℝ} (ht0 : 0 ≤ t) :
     (∑ idx, |(t • e) idx|) = t * ∑ idx, |e idx| := by

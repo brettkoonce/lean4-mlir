@@ -12,8 +12,9 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 batch-separable nets (ViT, ConvNeXt) thread is about that shape: `batchSlice_batchMap`,
 `batchMapHasVJPAt`, `HasGradAt.param_batchMap_through`, `batchShard_batchMap`. A drop-path site
 breaks it: example `n`'s block scales its branch by example `n`'s own mask entry, so the block is a
-different map at every example. `batchMapIdx N f` takes the family `f : Fin N → Vec a → Vec b`,
-and this file restates each of those lemmas for it.
+different map at every example. `batchMapIdx N f` (`Batched.Basic`) takes the family
+`f : Fin N → Vec a → Vec b`, and this file restates each of those lemmas for it; the parameter
+gradients are stated at the family in `ParamGrad`, the uniform ones their constant-family instances.
 
 `batchMap N f` is `batchMapIdx N (fun _ => f)` and `batchMapAux N f aux` is
 `batchMapAuxIdx N (fun _ => f) aux`, both by `rfl` (`batchMap_eq_batchMapIdx`,
@@ -26,8 +27,6 @@ one with no extra step.
   block at example `n` (`pdiv_batchMapIdx_at`, from `pdivMat_rowIndep_perRow_at`, which already
   allows a different map on every row); `batchMapAuxIdx_eq_batchMapIdxHasVJPAt` ties a batched
   backward chain to it.
-* `HasGradAt.param_batchMapIdx_through` — a parameter op shared by every example, between an
-  indexed prefix and an indexed suffix: the batched node is the parameter's loss gradient.
 * `batchShard_batchMapIdx` / `_batchMapAuxIdx` — shard `r`'s family is the global one at
   `finProdFinEquiv (r, ·)`.
 
@@ -44,14 +43,6 @@ namespace Proofs
 open scoped BigOperators
 
 namespace StableHLO
-
-/-- **Per-example block-apply, a different map at every example.** Example `n` of the batch (the
-    `finProdFinEquiv` block `{(n, ·)}`) is mapped by `f n`. -/
-noncomputable def batchMapIdx (N : Nat) {a b : Nat} (f : Fin N → Vec a → Vec b) :
-    Vec (N * a) → Vec (N * b) :=
-  fun x idx =>
-    let p := finProdFinEquiv.symm idx
-    f p.1 (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
 
 /-- **`batchMapAux` with a different map at every example**: example `n` is handed its own slice of
     `aux` and mapped by `f n`. -/
@@ -187,70 +178,6 @@ theorem batchMapAuxIdx_eq_batchMapIdxHasVJPAt {N a b : Nat} (f : Fin N → Vec a
     batchMapAuxIdx N g v = (batchMapIdxHasVJPAt f v hf hf_diff).backward := by
   funext dy idx
   exact congrFun (congrFun (hg _) _) _
-
--- ════════════════════════════════════════════════════════════════
--- § The loss gradient in a parameter shared by every example
--- ════════════════════════════════════════════════════════════════
-
-/-- The batched parameterised op `θ ↦ batchMapIdx N (fun n => per n θ) r` is differentiable when
-    each example's map is differentiable in the parameter. -/
-theorem batchMapIdx_param_differentiableAt {P N a q : Nat} (per : Fin N → Vec P → Vec a → Vec q)
-    (r : Vec (N * a)) (θ : Vec P) (hper : ∀ n y, DifferentiableAt ℝ (fun θ' => per n θ' y) θ) :
-    DifferentiableAt ℝ (fun θ' => batchMapIdx N (fun n => per n θ') r) θ := by
-  refine differentiableAt_pi.2 fun J => ?_
-  exact differentiableAt_pi.1 (hper _ _) _
-
-/-- **`HasGradAt.param_batchMap` at an indexed family**: the Jacobian split by example, example `n`
-    differentiated through its own map. -/
-theorem HasGradAt.param_batchMapIdx {P N a q : Nat} {G : Vec (N * q) → Vec 1}
-    (per : Fin N → Vec P → Vec a → Vec q) (r : Vec (N * a)) {θ : Vec P} {dy : Vec (N * q)}
-    (hG : HasGradAt G (batchMapIdx N (fun n => per n θ) r) dy)
-    (hper : ∀ n y, DifferentiableAt ℝ (fun θ' => per n θ' y) θ) :
-    HasGradAt (fun θ' => G (batchMapIdx N (fun n => per n θ') r)) θ
-      (fun i => ∑ n : Fin N, ∑ j : Fin q,
-          pdiv (fun θ' => per n θ' (batchSlice N a r n)) θ i j * batchSlice N q dy n j) := by
-  have hP := hG.param (layer := fun θ' => batchMapIdx N (fun n => per n θ') r)
-    (batchMapIdx_param_differentiableAt per r θ hper)
-  refine ⟨hP.differentiableAt, fun i => ?_⟩
-  rw [hP.pdiv_eq i]
-  rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
-  refine Finset.sum_congr rfl fun n _ => Finset.sum_congr rfl fun j _ => ?_
-  congr 1
-  rw [pdiv_eq_fderiv_coord (batchMapIdx_param_differentiableAt per r θ hper),
-    pdiv_eq_fderiv_coord (hper _ _)]
-  simp only [batchMapIdx, Equiv.symm_apply_apply]
-  rfl
-
-/-- **`HasGradAt.param_batchMap_through` at an indexed family.** Example `n` runs
-    `y ↦ post n y (per θ (pre n y))`: the shared parameterised op between example `n`'s own prefix
-    and suffix (a drop scale on either side is example `n`'s mask entry). If, per example, the loss
-    `⟨post n y ·, dy⟩` has gradient `cot n y dy` at the op's output, the batched node
-    `Σ_n Σ_j ∂per/∂θ · cotₙ` — at any saved activation `A` and cotangent `COT` whose slices are
-    `pre n yₙ` and `cot n yₙ dyₙ` — is the gradient in `θ` of the whole batched loss. -/
-theorem HasGradAt.param_batchMapIdx_through {P N a b m q : Nat} {G : Vec (N * q) → Vec 1}
-    (pre : Fin N → Vec a → Vec b) (per : Vec P → Vec b → Vec m)
-    (post : Fin N → Vec a → Vec m → Vec q) (cot : Fin N → Vec a → Vec q → Vec m)
-    (X : Vec (N * a)) {θ : Vec P} {dY : Vec (N * q)}
-    (hG : HasGradAt G (batchMapIdx N (fun n y => post n y (per θ (pre n y))) X) dY)
-    (hper : ∀ y, DifferentiableAt ℝ (fun θ' => per θ' y) θ)
-    (hpost : ∀ n y, Differentiable ℝ (post n y))
-    (hcot : ∀ n y dy, HasGradAt (fun u => linLoss dy (post n y u)) (per θ (pre n y)) (cot n y dy))
-    (A : Vec (N * b)) (COT : Vec (N * m))
-    (hA : ∀ n, batchSlice N b A n = pre n (batchSlice N a X n))
-    (hC : ∀ n, batchSlice N m COT n = cot n (batchSlice N a X n) (batchSlice N q dY n)) :
-    HasGradAt (fun θ' => G (batchMapIdx N (fun n y => post n y (per θ' (pre n y))) X)) θ
-      (fun i => ∑ n : Fin N, ∑ j : Fin m,
-        pdiv (fun θ' => per θ' (batchSlice N b A n)) θ i j * batchSlice N m COT n j) := by
-  have hP := hG.param_batchMapIdx (fun n θ' y => post n y (per θ' (pre n y))) X
-    (fun n y => (hpost n y _).comp θ (hper (pre n y)))
-  refine ⟨hP.differentiableAt, fun i => ?_⟩
-  rw [hP.pdiv_eq i]
-  refine Finset.sum_congr rfl fun n _ => ?_
-  rw [hA, hC, ← ((hcot _ _ _).param
-    (layer := fun θ' => per θ' (pre n (batchSlice N a X n))) (hper _)).2 i]
-  exact (((hasGradAt_linLoss _ _).param
-    (layer := fun θ' => post n (batchSlice N a X n) (per θ' (pre n (batchSlice N a X n))))
-    ((hpost _ _ _).comp θ (hper _))).2 i).symm
 
 -- ════════════════════════════════════════════════════════════════
 -- § One example's drop site

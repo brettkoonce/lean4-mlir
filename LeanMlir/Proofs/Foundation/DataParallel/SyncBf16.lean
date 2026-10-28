@@ -181,12 +181,7 @@ theorem den_convWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat)
   rw [den_convWeightGradBBf16_eq_rnd rnd xN cotN]
   congr 1
   simp only [convWGradShardSum, denStep, denStepApp]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  -- `rw`, not `simp`: the `x` slice sits inside `conv2dWeightGradHasVJP b x`, whose TYPE
-  -- depends on it (as in `den_allReduceMeanF_convWeightGradB_shard`).
-  rw [batchSlice_batchShard, batchSlice_batchShard]
+  shard_sum
 
 /-- **The one difference, exactly.** The all-reduced bf16 weight gradient minus `1/R` of the
     batch-`R·N` bf16 node is `1/R` of (sum of the rounded partial sums − the rounded sum). -/
@@ -243,10 +238,7 @@ theorem den_convStridedWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R
   rw [den_convStridedWeightGradBBf16_eq_rnd rnd xN cotN]
   congr 1
   simp only [convStridedWGradShardSum, denStep, denStepApp]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  rw [batchSlice_batchShard, batchSlice_batchShard]
+  shard_sum
 
 /-- **Strided: the one difference, exactly.** -/
 theorem den_allReduceMeanF_convStridedWeightGradBBf16_sub_global {N ic oc h w kH kW : Nat}

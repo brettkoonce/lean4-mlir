@@ -1354,6 +1354,7 @@ open Proofs
 -- The smoothness hypothesis discharged for the Chapter-2 net
 #audit_axioms gradAt_eq_pdiv
 #audit_axioms linear_loss_gradAt
+#audit_axioms gradAt_weight_eq_pdiv
 #audit_axioms dense_unflatten_drift
 #audit_axioms linear_loss_grad_lipschitz
 #audit_axioms linear_sgd_descends
@@ -1992,6 +1993,9 @@ open Proofs
 #audit_axioms Proofs.TrainedCnn.trainedCnn_jacobian_nonzero
 #audit_axioms Proofs.TrainedCnn.trainedCnn_not_constant
 
+-- Muon spectral-form algebra (shared by the geometry and Newton–Schulz files)
+#audit_axioms Proofs.MuonSpectral.svdForm_transpose
+#audit_axioms Proofs.MuonSpectral.svdForm_mul
 -- Muon geometry
 #audit_axioms Proofs.MuonGeometry.steepest_l2_bound
 #audit_axioms Proofs.MuonGeometry.steepest_l2_attained
@@ -2099,7 +2103,7 @@ open Proofs
 #audit_axioms Proofs.r34DownBHasVJPAt
 #audit_axioms Proofs.r34StemBHasVJPAt
 #audit_axioms Proofs.stemReluPoolLayer
-#audit_axioms Proofs.maxPool3s2Flat_relu_eventuallyEq
+#audit_axioms Proofs.batchMap_maxPool3s2Flat_relu_eventuallyEq
 #audit_axioms Proofs.maxPool3s2FlatBackB_eq_reindex
 #audit_axioms Proofs.gatherReluHasVJPAt
 #audit_axioms Proofs.ResNet34TieB.r34StemPool_param_germ

@@ -28,6 +28,14 @@ noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
     let p := finProdFinEquiv.symm idx
     f (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
 
+/-- **Per-example block-apply, a different map at every example.** Example `n` of the batch (the
+    `finProdFinEquiv` block `{(n, ·)}`) is mapped by `f n`. -/
+noncomputable def batchMapIdx (N : Nat) {a b : Nat} (f : Fin N → Vec a → Vec b) :
+    Vec (N * a) → Vec (N * b) :=
+  fun x idx =>
+    let p := finProdFinEquiv.symm idx
+    f p.1 (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
+
 /-- The `n`-th example's slice of a batch laid out row-major `[N, a]`. A shared
     weight's batched gradient is the sum over `n` of the per-example gradient on
     `batchSlice n` — the form the batched param-SGD dens take (so a batched parameter fold

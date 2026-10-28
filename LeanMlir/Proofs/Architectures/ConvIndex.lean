@@ -73,15 +73,12 @@ def winRowEquiv (h : Nat) : Fin h × Fin 2 ≃ Fin (2 * h) where
     · exact congrArg Fin.val (winRowMod_winRowInv p.1 p.2)
   right_inv hi := winRowInv_winRow hi
 
-/-- Column version of `winRowEquiv`. -/
-def winColEquiv (w : Nat) : Fin w × Fin 2 ≃ Fin (2 * w) where
-  toFun p := winColInv p.1 p.2
-  invFun wi := (winCol wi, winColMod wi)
-  left_inv p := by
-    ext
-    · exact congrArg Fin.val (winCol_winColInv p.1 p.2)
-    · exact congrArg Fin.val (winColMod_winColInv p.1 p.2)
-  right_inv wi := winColInv_winCol wi
+/-- Summing over every cell of every window along one axis is summing over the axis. The column
+    inverse `winColInv` has the same body as `winRowInv`, so this serves both axes. -/
+private theorem sum_winInv {n : Nat} (g : Fin (2 * n) → ℝ) :
+    ∑ o : Fin n, ∑ a : Fin 2, g (winRowInv o a) = ∑ i, g i :=
+  (Fintype.sum_prod_type (fun q : Fin n × Fin 2 => g (winRowInv q.1 q.2))).symm.trans
+    (Equiv.sum_comp (winRowEquiv n) g)
 
 /-- Summing a function over all window cells of all windows is summing it
     over the whole spatial grid — the 2×2 stride-2 windows partition the
@@ -91,21 +88,9 @@ theorem sum_window_cells {h w : Nat} (g : Fin (2 * h) → Fin (2 * w) → ℝ) :
         g (winRowInv ho ab.1) (winColInv wo ab.2) =
       ∑ hi : Fin (2 * h), ∑ wi : Fin (2 * w), g hi wi := by
   have hcol : ∀ g' : Fin (2 * w) → ℝ,
-      ∑ wo : Fin w, ∑ b : Fin 2, g' (winColInv wo b) = ∑ wi, g' wi := by
-    intro g'
-    calc ∑ wo : Fin w, ∑ b : Fin 2, g' (winColInv wo b)
-        = ∑ q : Fin w × Fin 2, g' (winColInv q.1 q.2) :=
-          (Fintype.sum_prod_type
-            (fun q : Fin w × Fin 2 => g' (winColInv q.1 q.2))).symm
-      _ = ∑ wi, g' wi := Equiv.sum_comp (winColEquiv w) g'
+      ∑ wo : Fin w, ∑ b : Fin 2, g' (winColInv wo b) = ∑ wi, g' wi := sum_winInv
   have hrow : ∀ g' : Fin (2 * h) → ℝ,
-      ∑ ho : Fin h, ∑ a : Fin 2, g' (winRowInv ho a) = ∑ hi, g' hi := by
-    intro g'
-    calc ∑ ho : Fin h, ∑ a : Fin 2, g' (winRowInv ho a)
-        = ∑ p : Fin h × Fin 2, g' (winRowInv p.1 p.2) :=
-          (Fintype.sum_prod_type
-            (fun p : Fin h × Fin 2 => g' (winRowInv p.1 p.2))).symm
-      _ = ∑ hi, g' hi := Equiv.sum_comp (winRowEquiv h) g'
+      ∑ ho : Fin h, ∑ a : Fin 2, g' (winRowInv ho a) = ∑ hi, g' hi := sum_winInv
   calc ∑ ho : Fin h, ∑ wo : Fin w, ∑ ab : Fin 2 × Fin 2,
         g (winRowInv ho ab.1) (winColInv wo ab.2)
       = ∑ ho : Fin h, ∑ a : Fin 2, ∑ wo : Fin w, ∑ b : Fin 2,
