@@ -199,7 +199,7 @@ The streamed loader is the one the board runs, and the tier is a command:
 ```bash
 . ~/pjrt/orin_env.sh && sudo jetson_clocks
 lake run imagenette-orin plan        # each row's env, command and checkpoint state; launches nothing
-lake run imagenette-orin             # the six rows below, in book order, ~20 h
+lake run imagenette-orin             # the seven rows below, in book order, ~29 h
 lake run imagenette-orin vit r34     # a subset, by net prefix
 ```
 
@@ -228,22 +228,28 @@ fractions are the tier's rows (`orinRows` in the lakefile):
 | `mobilenetv4-verified-adam` | 0.25 | 153 | ~3.4 h | 4,194 |
 | `resnet34-verified-adam` | 0.25 | 171 | ~3.8 h | 4,575 |
 | `resnet50-verified-adam`, `acc2x16` | 0.36 | ~305 | ~6.8 h | 5,674 |
-| `convnext-verified-adam` | — | does not fit | | |
+| `convnext-verified-adam`, `acc4x` | 0.30 | 388 (the 80-epoch run) | 8.6 h | 3,948 |
 
-Six of the seven, about 22 hours for 80 epochs each. The fractions are the BFC pool, not
+All seven, about 29 hours for 80 epochs each. The fractions are the BFC pool, not
 the cgroup: EfficientNet at 0.25 fails at step 0 on one 1.89 GiB block. ResNet-50's batch-32
 step plans a 2.55 GiB arena and does not fit at any fraction, so the board runs the same
 recipe as two accumulated micro-batches of 16, `verified_mlir/resnet50_acc2x16_train_step.mlir`
 (the tier's row sets `LEAN_MLIR_VARIANT=acc2x16 LEAN_MLIR_BATCH=16 LEAN_MLIR_G2_STEPS=590`:
 590 × 16 is the 9,440 images a batch-32 epoch takes; eval stays on the batch-32 forward). It
-sits 126 MiB under the cap, which is what the relaunch is for. ConvNeXt's renderer hard-codes
-batch 32; a batch-8 test render trained, but at batch 32's learning rate with four times the
-updates it is a different recipe, and it is not committed.
+sits 126 MiB under the cap, which is what the relaunch is for. ConvNeXt-T's batch-32 step plans
+one 4.24 GiB block, so it gets the same move at 8 × 4, `verified_mlir/convnext_acc4x_train_step.mlir`
+(`LEAN_MLIR_VARIANT=acc4x LEAN_MLIR_BATCH=8 LEAN_MLIR_G2_STEPS=1180`, the same 9,440 images). With
+no BatchNorm, four micro-batches of 8 are one batch of 32 up to summation order. That is what
+`convnext-accum-tie` checks, against the committed batch-32 step on DIFFERENT rows. The tie needs a
+desktop GPU, because the board cannot reserve a pool for even one bare batch-32 step. On the board,
+epoch 1 reads 28.71 %, against 28.15 % on the B50 and 28.18 % on CUDA. A plain batch-8 test render
+at batch 32's learning rate read 38.75 % there, so it is a different recipe.
 
 **The tier, 80 epochs each (2026-10-26 to 27).** Super, MAXN, `jetson_clocks` (1020 MHz). One
 net at a time through `lake run imagenette-orin <net>`, with at least 10 minutes and ≤ 50 °C
 between nets (`~/pjrt/tools/imagenette_orin_cooled.sh`; every cooldown hit 48 °C at the
-10-minute floor). The whole run took 20 h 13 m with no failed row. CUDA is the same five seeds per net that
+10-minute floor). The first six took 20 h 13 m with no failed row. ConvNeXt-T ran on 10-27 once
+its `acc4x` render existed, and it took 8 h 38 m on one attempt. CUDA is the same five seeds per net that
 [ARC_B50.md § Measured](ARC_B50.md#measured) compares against:
 
 | net | top-1 (best, epoch) | top-5 | CUDA, 5 seeds | B50 | wall | attempts | peak °C | run |
@@ -253,13 +259,15 @@ between nets (`~/pjrt/tools/imagenette_orin_cooled.sh`; every cooldown hit 48 °
 | MobileNetV4-Conv-M | 86.29 % (86.34, 77) | 96.59 % | 85.15–86.90¹ | 86.06 % | 3 h 03 | 1 | 62 | [`2026-10-26-mobilenetv4-…`](../runs/2026-10-26-mobilenetv4-verified-adam-orin/) |
 | EfficientNet-B0 | 90.09 % (= final) | 98.47 % | 89.45–90.50 | 90.55 % | 3 h 00 | 1 | 63 | [`2026-10-27-efficientnet-…`](../runs/2026-10-27-efficientnet-verified-adam-orin/) |
 | ResNet-34 | 90.32 % (= final) | 98.42 % | 89.68–90.37 | 89.68 % | 2 h 59 | 1 | 65 | [`2026-10-26-resnet34-…`](../runs/2026-10-26-resnet34-verified-adam-orin/) |
+| ConvNeXt-T, `acc4x` | 83.03 % (83.13, 74) | 96.15 % | 82.27 (one run)² | 82.65 % | 8 h 38 | 1 | 64 | [`2026-10-27-convnext-…`](../runs/2026-10-27-convnext-verified-adam-orin/) |
 | ResNet-50, `acc2x16` | 89.55 % (89.68, 72) | 98.78 % | 89.58–89.96 (0.03 under) | 89.61 % | 6 h 19 | 2 | 64 | [`2026-10-26-resnet50-…`](../runs/2026-10-26-resnet50-verified-adam-orin/) |
 
-¹ As on the B50, CUDA's MobileNetV4 seeds predate 90e4af7e. Four of the six finals are inside
-CUDA's range. ResNet-50's best epoch is inside it and its final is one image short. MobileNetV2's
+¹ As on the B50, CUDA's MobileNetV4 seeds predate 90e4af7e. ² CUDA has one ConvNeXt run, not five
+seeds (ARC_B50.md's ³). ConvNeXt is 0.76 above it and 0.38 above the B50, at batch 8 × 4. Four of
+the six seeded finals are inside CUDA's range. ResNet-50's best epoch is inside it and its final is one image short. MobileNetV2's
 final is 0.20 under, eight images, the same side the B50 landed on (one image under). That is
-one seed, and a second seed has not been run. Wall clock is 2–3.5× the B50's. Every row beat
-the September sweep's 80-epoch estimate above.
+one seed, and a second seed has not been run. Wall clock is 2–3.5× the B50's, and 4.6× for
+ConvNeXt at micro-batch 8. Every row the September sweep estimated beat its 80-epoch estimate.
 
 Memory, from a 30 s sampler on the trainer and its scope (`~/pjrt/tools/memlog.sh`,
 peak / median MiB). `process` is its anonymous RSS. On this board that includes the BFC pool,
@@ -274,6 +282,7 @@ trims as the cap nears:
 | ResNet-34 | 0.25 | 3,730 / 3,589 | 3,191 / 3,049 | 5,234 | 2,077 |
 | EfficientNet-B0 | 0.30 | 4,058 / 4,028 | 4,118 / 4,089 | 5,725 | 2,091 |
 | MobileNetV4-Conv-M | 0.25 | 4,064 / 3,955 | 3,308 / 3,232 | 5,063 | 1,980 |
+| ConvNeXt-T, `acc4x` | 0.30 | 4,382 / 4,262 | 3,948 / 3,821 | 4,694 | 1,073 |
 | ResNet-50, `acc2x16` | 0.36 | 4,928 / 4,768 | 4,648 / 4,477 | **5,799** | 1,057 |
 
 ResNet-50 is the row the relaunch exists for. Its scope sat at the cap for the whole run. In

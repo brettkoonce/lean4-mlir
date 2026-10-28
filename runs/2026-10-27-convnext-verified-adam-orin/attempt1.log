@@ -1,0 +1,1391 @@
+[pjrt_ffi] allocator: 2 create option(s), memory_fraction=0.300
+E1027 09:15:20.569326  577621 cuda_executor.cc:1776] Nvml call failed with 3(Not Supported). Assuming PCIe gen 3 x16 bandwidth.
+I1027 09:15:20.569704  577620 service.cc:154] XLA service 0xffff103d1210 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 09:15:20.569745  577620 service.cc:170]   StreamExecutor [0]: Orin, Compute Capability 8.7 (Driver: 12.6.0[540.4.0]; Runtime: 12.6.0; Toolkit: 12.6.0; DNN: 9.12.0)
+I1027 09:15:20.582334  577620 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I1027 09:15:20.582391  577620 gpu_helpers.cc:162] XLA backend allocating 2.23GiB (2399141888 bytes) on device 0 for BFCAllocator.
+E1027 09:15:20.582688  577620 cuda_executor.cc:1776] Nvml call failed with 3(Not Supported). Assuming PCIe gen 3 x16 bandwidth.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (default)
+[pjrt_ffi] h2d: batched (default)
+[pjrt_ffi] d2h: batched (default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 09:15:20.810118  577620 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I1027 09:15:24.815803  577620 cuda_dnn.cc:442] Loaded cuDNN version 91200
+W1027 09:15:27.633427  577638 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1027 09:15:28.483227  577637 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W1027 09:15:35.231563  577638 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I1027 09:15:49.979174  577640 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_multiply_reduce_fusion_23', 4 bytes spill stores, 4 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/convnext_acc4x_train_step.mlir (@convnext_acc4x_train_step, 733 outputs, 1 replica) in 29664 ms
+W1027 09:15:53.253057  577636 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+[pjrt_ffi] compiled verified_mlir/convnext_fwd.mlir (@convnext_fwd, 1 outputs, 1 replica) in 9839 ms
+ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → XLA/PJRT → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000
+  xla/pjrt verified_mlir/convnext_acc4x_train_step.mlir
+  xla/pjrt verified_mlir/convnext_fwd.mlir
+  imagenette: train STREAMED from train.bin per batch (LEAN_MLIR_IMAGENETTE_STREAM=1); labels + raw-uint8 val resident
+  train 9469, val 3925; bs 8, ConvNeXt-T acc4x (cosine+warmup 3ep, baseLR 0.001000), He init
+  ▸ GRADIENT ACCUMULATION: k = 4, blob region 3 of 4 [θ|m|v|G]. Micro-batch 8 x 4 = EFFECTIVE BATCH 32. 1180 micro-batches/epoch = 295 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+  eval batch 32 (the batch @convnext_fwd was RENDERED at) != train batch 8 — sound because eval is class-batch-independent
+[pjrt_ffi] RESIDENT: @convnext_acc4x_train_step holds 728 parameter tensors (424.6 MB) on 1 device; they stop crossing PCIe from here
+  step 0/1180: loss=3.082844
+  step 1/1180: loss=3.006105
+  step 2/1180: loss=3.519238
+  step 100/1180: loss=1.951516
+  step 200/1180: loss=2.543485
+  step 300/1180: loss=2.060377
+  step 400/1180: loss=2.164244
+  step 500/1180: loss=2.559628
+  step 600/1180: loss=2.476303
+  step 700/1180: loss=2.054396
+  step 800/1180: loss=2.180964
+  step 900/1180: loss=2.377111
+  step 1000/1180: loss=2.137874
+  step 1100/1180: loss=2.206633
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 1/80: loss=2.308791 lr=0.000333
+  epoch 1: val_acc = 1127/3925 = 28.713376%  top5 = 2948/3925 = 75.108280%  [95% CI 27.32–30.15]
+  step 0/1180: loss=2.021351
+  step 1/1180: loss=2.558414
+  step 2/1180: loss=2.516798
+  step 100/1180: loss=2.534572
+  step 200/1180: loss=2.176057
+  step 300/1180: loss=2.181719
+  step 400/1180: loss=2.041729
+  step 500/1180: loss=1.326561
+  step 600/1180: loss=2.118827
+  step 700/1180: loss=2.079352
+  step 800/1180: loss=1.602885
+  step 900/1180: loss=2.228733
+  step 1000/1180: loss=1.759894
+  step 1100/1180: loss=1.813931
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 2/80: loss=1.997278 lr=0.000667
+  epoch 2: val_acc = 1531/3925 = 39.006369%  top5 = 3371/3925 = 85.885350%  [95% CI 37.49–40.54]
+  step 0/1180: loss=1.655597
+  step 1/1180: loss=1.856227
+  step 2/1180: loss=1.752341
+  step 100/1180: loss=2.335314
+  step 200/1180: loss=2.338526
+  step 300/1180: loss=2.027475
+  step 400/1180: loss=1.986232
+  step 500/1180: loss=1.367033
+  step 600/1180: loss=1.560051
+  step 700/1180: loss=1.703220
+  step 800/1180: loss=1.431584
+  step 900/1180: loss=1.897820
+  step 1000/1180: loss=1.767924
+  step 1100/1180: loss=1.088935
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 3/80: loss=1.694954 lr=0.001000
+  epoch 3: val_acc = 2009/3925 = 51.184713%  top5 = 3557/3925 = 90.624204%  [95% CI 49.62–52.75]
+  step 0/1180: loss=2.212900
+  step 1/1180: loss=1.596636
+  step 2/1180: loss=1.127314
+  step 100/1180: loss=1.375052
+  step 200/1180: loss=0.905753
+  step 300/1180: loss=1.252599
+  step 400/1180: loss=1.118762
+  step 500/1180: loss=1.307074
+  step 600/1180: loss=1.028535
+  step 700/1180: loss=1.148345
+  step 800/1180: loss=1.697709
+  step 900/1180: loss=1.801954
+  step 1000/1180: loss=1.271419
+  step 1100/1180: loss=1.087445
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 4/80: loss=1.510741 lr=0.001000
+  epoch 4: val_acc = 2256/3925 = 57.477707%  top5 = 3626/3925 = 92.382166%  [95% CI 55.92–59.02]
+  step 0/1180: loss=1.062912
+  step 1/1180: loss=1.677581
+  step 2/1180: loss=0.903802
+  step 100/1180: loss=0.918387
+  step 200/1180: loss=1.130678
+  step 300/1180: loss=1.406439
+  step 400/1180: loss=1.753568
+  step 500/1180: loss=1.344585
+  step 600/1180: loss=1.668331
+  step 700/1180: loss=1.815476
+  step 800/1180: loss=1.021134
+  step 900/1180: loss=0.998094
+  step 1000/1180: loss=0.823094
+  step 1100/1180: loss=1.079423
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 5/80: loss=1.372917 lr=0.000998
+  epoch 5: val_acc = 2554/3925 = 65.070064%  top5 = 3675/3925 = 93.630573%  [95% CI 63.56–66.55]
+  step 0/1180: loss=1.401880
+  step 1/1180: loss=0.963076
+  step 2/1180: loss=1.368332
+  step 100/1180: loss=1.354075
+  step 200/1180: loss=0.954391
+  step 300/1180: loss=0.978921
+  step 400/1180: loss=0.967341
+  step 500/1180: loss=1.331934
+  step 600/1180: loss=1.703933
+  step 700/1180: loss=1.584310
+  step 800/1180: loss=1.682331
+  step 900/1180: loss=1.302863
+  step 1000/1180: loss=1.067834
+  step 1100/1180: loss=0.978849
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 6/80: loss=1.263209 lr=0.000996
+  epoch 6: val_acc = 2596/3925 = 66.140127%  top5 = 3738/3925 = 95.235669%  [95% CI 64.64–67.60]
+  step 0/1180: loss=1.495629
+  step 1/1180: loss=1.066077
+  step 2/1180: loss=1.077476
+  step 100/1180: loss=1.531266
+  step 200/1180: loss=1.092179
+  step 300/1180: loss=0.904519
+  step 400/1180: loss=1.218393
+  step 500/1180: loss=0.932378
+  step 600/1180: loss=1.527649
+  step 700/1180: loss=1.239703
+  step 800/1180: loss=0.793982
+  step 900/1180: loss=0.786953
+  step 1000/1180: loss=1.526996
+  step 1100/1180: loss=0.978393
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 7/80: loss=1.190712 lr=0.000993
+  epoch 7: val_acc = 2668/3925 = 67.974522%  top5 = 3742/3925 = 95.337580%  [95% CI 66.50–69.42]
+  step 0/1180: loss=1.047337
+  step 1/1180: loss=1.498211
+  step 2/1180: loss=0.783984
+  step 100/1180: loss=0.922158
+  step 200/1180: loss=0.976706
+  step 300/1180: loss=0.928180
+  step 400/1180: loss=1.741381
+  step 500/1180: loss=1.422621
+  step 600/1180: loss=1.455613
+  step 700/1180: loss=1.274191
+  step 800/1180: loss=0.903310
+  step 900/1180: loss=1.106172
+  step 1000/1180: loss=0.854182
+  step 1100/1180: loss=1.325732
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 8/80: loss=1.123822 lr=0.000990
+  epoch 8: val_acc = 2707/3925 = 68.968153%  top5 = 3748/3925 = 95.490446%  [95% CI 67.50–70.40]
+  step 0/1180: loss=1.150045
+  step 1/1180: loss=1.296693
+  step 2/1180: loss=1.143236
+  step 100/1180: loss=0.923244
+  step 200/1180: loss=0.858510
+  step 300/1180: loss=0.846466
+  step 400/1180: loss=0.813321
+  step 500/1180: loss=0.957088
+  step 600/1180: loss=1.081498
+  step 700/1180: loss=1.108672
+  step 800/1180: loss=1.188144
+  step 900/1180: loss=0.761257
+  step 1000/1180: loss=1.362384
+  step 1100/1180: loss=1.438480
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 9/80: loss=1.080840 lr=0.000985
+  epoch 9: val_acc = 2960/3925 = 75.414013%  top5 = 3813/3925 = 97.146497%  [95% CI 74.04–76.74]
+  step 0/1180: loss=1.320413
+  step 1/1180: loss=1.500661
+  step 2/1180: loss=0.715226
+  step 100/1180: loss=0.970815
+  step 200/1180: loss=0.952370
+  step 300/1180: loss=1.357421
+  step 400/1180: loss=1.379683
+  step 500/1180: loss=1.097587
+  step 600/1180: loss=0.968043
+  step 700/1180: loss=0.652893
+  step 800/1180: loss=0.825953
+  step 900/1180: loss=1.021076
+  step 1000/1180: loss=0.967968
+  step 1100/1180: loss=0.950679
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 10/80: loss=1.017559 lr=0.000980
+  epoch 10: val_acc = 2880/3925 = 73.375796%  top5 = 3779/3925 = 96.280255%  [95% CI 71.97–74.74]
+  step 0/1180: loss=0.602575
+  step 1/1180: loss=1.194198
+  step 2/1180: loss=1.186896
+  step 100/1180: loss=0.770221
+  step 200/1180: loss=1.629834
+  step 300/1180: loss=0.801945
+  step 400/1180: loss=1.753314
+  step 500/1180: loss=0.673430
+  step 600/1180: loss=0.959105
+  step 700/1180: loss=0.797031
+  step 800/1180: loss=0.745045
+  step 900/1180: loss=0.589773
+  step 1000/1180: loss=1.280217
+  step 1100/1180: loss=0.851728
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 11/80: loss=0.993616 lr=0.000974
+  epoch 11: val_acc = 2983/3925 = 76.000000%  top5 = 3800/3925 = 96.815287%  [95% CI 74.64–77.31]
+  step 0/1180: loss=0.958976
+  step 1/1180: loss=0.990539
+  step 2/1180: loss=1.120785
+  step 100/1180: loss=1.042681
+  step 200/1180: loss=0.917256
+  step 300/1180: loss=1.501736
+  step 400/1180: loss=0.935896
+  step 500/1180: loss=1.077528
+  step 600/1180: loss=1.394276
+  step 700/1180: loss=1.044786
+  step 800/1180: loss=0.753649
+  step 900/1180: loss=0.871306
+  step 1000/1180: loss=1.253200
+  step 1100/1180: loss=0.960434
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 12/80: loss=0.940373 lr=0.000967
+  epoch 12: val_acc = 3003/3925 = 76.509554%  top5 = 3803/3925 = 96.891720%  [95% CI 75.16–77.81]
+  step 0/1180: loss=0.710480
+  step 1/1180: loss=1.315335
+  step 2/1180: loss=0.860474
+  step 100/1180: loss=1.130241
+  step 200/1180: loss=1.265467
+  step 300/1180: loss=0.579670
+  step 400/1180: loss=0.866098
+  step 500/1180: loss=0.972029
+  step 600/1180: loss=1.363518
+  step 700/1180: loss=1.135167
+  step 800/1180: loss=0.978985
+  step 900/1180: loss=0.871275
+  step 1000/1180: loss=0.651185
+  step 1100/1180: loss=0.890176
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 13/80: loss=0.910467 lr=0.000959
+  epoch 13: val_acc = 3062/3925 = 78.012739%  top5 = 3813/3925 = 97.146497%  [95% CI 76.69–79.28]
+  step 0/1180: loss=0.718851
+  step 1/1180: loss=0.893860
+  step 2/1180: loss=0.618705
+  step 100/1180: loss=1.148790
+  step 200/1180: loss=1.183270
+  step 300/1180: loss=0.718051
+  step 400/1180: loss=1.530168
+  step 500/1180: loss=0.946701
+  step 600/1180: loss=0.560055
+  step 700/1180: loss=0.642525
+  step 800/1180: loss=1.016807
+  step 900/1180: loss=1.286981
+  step 1000/1180: loss=0.891116
+  step 1100/1180: loss=0.648694
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 14/80: loss=0.870699 lr=0.000951
+  epoch 14: val_acc = 3030/3925 = 77.197452%  top5 = 3784/3925 = 96.407643%  [95% CI 75.86–78.48]
+  step 0/1180: loss=0.709236
+  step 1/1180: loss=0.997601
+  step 2/1180: loss=0.647262
+  step 100/1180: loss=1.102077
+  step 200/1180: loss=1.047751
+  step 300/1180: loss=0.656222
+  step 400/1180: loss=0.614083
+  step 500/1180: loss=0.614048
+  step 600/1180: loss=0.571957
+  step 700/1180: loss=0.647773
+  step 800/1180: loss=0.691570
+  step 900/1180: loss=0.763879
+  step 1000/1180: loss=0.680343
+  step 1100/1180: loss=1.034139
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 15/80: loss=0.838802 lr=0.000941
+  epoch 15: val_acc = 3054/3925 = 77.808917%  top5 = 3830/3925 = 97.579618%  [95% CI 76.48–79.08]
+  step 0/1180: loss=0.794785
+  step 1/1180: loss=1.167014
+  step 2/1180: loss=0.964469
+  step 100/1180: loss=0.676106
+  step 200/1180: loss=0.708964
+  step 300/1180: loss=0.684407
+  step 400/1180: loss=0.598678
+  step 500/1180: loss=1.155792
+  step 600/1180: loss=0.950631
+  step 700/1180: loss=0.738561
+  step 800/1180: loss=0.867174
+  step 900/1180: loss=1.579391
+  step 1000/1180: loss=0.699386
+  step 1100/1180: loss=0.884207
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 16/80: loss=0.799692 lr=0.000931
+  epoch 16: val_acc = 3079/3925 = 78.445860%  top5 = 3801/3925 = 96.840764%  [95% CI 77.13–79.70]
+  step 0/1180: loss=0.783444
+  step 1/1180: loss=0.675739
+  step 2/1180: loss=0.614003
+  step 100/1180: loss=0.753597
+  step 200/1180: loss=0.868689
+  step 300/1180: loss=0.788630
+  step 400/1180: loss=0.559374
+  step 500/1180: loss=0.982670
+  step 600/1180: loss=0.999586
+  step 700/1180: loss=0.631681
+  step 800/1180: loss=0.582106
+  step 900/1180: loss=0.537297
+  step 1000/1180: loss=0.898754
+  step 1100/1180: loss=1.126947
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 17/80: loss=0.770865 lr=0.000921
+  epoch 17: val_acc = 3083/3925 = 78.547771%  top5 = 3792/3925 = 96.611465%  [95% CI 77.24–79.80]
+  step 0/1180: loss=0.764640
+  step 1/1180: loss=0.828956
+  step 2/1180: loss=1.018744
+  step 100/1180: loss=0.756349
+  step 200/1180: loss=1.005470
+  step 300/1180: loss=0.827363
+  step 400/1180: loss=0.603247
+  step 500/1180: loss=0.547017
+  step 600/1180: loss=0.535447
+  step 700/1180: loss=1.022507
+  step 800/1180: loss=0.547149
+  step 900/1180: loss=0.898554
+  step 1000/1180: loss=0.516308
+  step 1100/1180: loss=1.115686
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 18/80: loss=0.736998 lr=0.000909
+  epoch 18: val_acc = 3047/3925 = 77.630573%  top5 = 3798/3925 = 96.764331%  [95% CI 76.30–78.91]
+  step 0/1180: loss=0.605231
+  step 1/1180: loss=0.974107
+  step 2/1180: loss=0.840872
+  step 100/1180: loss=0.548088
+  step 200/1180: loss=0.616329
+  step 300/1180: loss=0.747715
+  step 400/1180: loss=0.526536
+  step 500/1180: loss=0.546478
+  step 600/1180: loss=1.559382
+  step 700/1180: loss=0.651065
+  step 800/1180: loss=0.579064
+  step 900/1180: loss=1.066293
+  step 1000/1180: loss=0.612549
+  step 1100/1180: loss=0.906485
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 19/80: loss=0.710769 lr=0.000897
+  epoch 19: val_acc = 3071/3925 = 78.242038%  top5 = 3797/3925 = 96.738854%  [95% CI 76.92–79.50]
+  step 0/1180: loss=0.855623
+  step 1/1180: loss=0.624391
+  step 2/1180: loss=0.568334
+  step 100/1180: loss=0.627324
+  step 200/1180: loss=0.719438
+  step 300/1180: loss=0.524056
+  step 400/1180: loss=0.739051
+  step 500/1180: loss=0.861944
+  step 600/1180: loss=0.528697
+  step 700/1180: loss=0.528683
+  step 800/1180: loss=0.581794
+  step 900/1180: loss=0.553967
+  step 1000/1180: loss=1.011283
+  step 1100/1180: loss=0.885815
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 20/80: loss=0.696177 lr=0.000885
+  epoch 20: val_acc = 3089/3925 = 78.700637%  top5 = 3796/3925 = 96.713376%  [95% CI 77.39–79.95]
+  step 0/1180: loss=0.720166
+  step 1/1180: loss=0.532247
+  step 2/1180: loss=0.802636
+  step 100/1180: loss=0.647231
+  step 200/1180: loss=0.557836
+  step 300/1180: loss=0.681188
+  step 400/1180: loss=0.522317
+  step 500/1180: loss=0.635103
+  step 600/1180: loss=0.542270
+  step 700/1180: loss=0.669088
+  step 800/1180: loss=0.531184
+  step 900/1180: loss=0.515680
+  step 1000/1180: loss=0.685178
+  step 1100/1180: loss=0.586478
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 21/80: loss=0.673214 lr=0.000871
+  epoch 21: val_acc = 3113/3925 = 79.312102%  top5 = 3787/3925 = 96.484076%  [95% CI 78.02–80.55]
+  step 0/1180: loss=0.718727
+  step 1/1180: loss=0.605531
+  step 2/1180: loss=0.616430
+  step 100/1180: loss=0.745810
+  step 200/1180: loss=0.632163
+  step 300/1180: loss=0.521106
+  step 400/1180: loss=0.801089
+  step 500/1180: loss=0.526736
+  step 600/1180: loss=0.600376
+  step 700/1180: loss=0.664361
+  step 800/1180: loss=0.792527
+  step 900/1180: loss=0.825158
+  step 1000/1180: loss=0.563138
+  step 1100/1180: loss=0.531554
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 22/80: loss=0.651175 lr=0.000857
+  epoch 22: val_acc = 3118/3925 = 79.439490%  top5 = 3809/3925 = 97.044586%  [95% CI 78.15–80.67]
+  step 0/1180: loss=0.662865
+  step 1/1180: loss=0.681223
+  step 2/1180: loss=0.555582
+  step 100/1180: loss=0.689608
+  step 200/1180: loss=0.543815
+  step 300/1180: loss=0.631326
+  step 400/1180: loss=0.531701
+  step 500/1180: loss=0.806440
+  step 600/1180: loss=0.514497
+  step 700/1180: loss=0.561354
+  step 800/1180: loss=0.536908
+  step 900/1180: loss=0.598627
+  step 1000/1180: loss=0.530906
+  step 1100/1180: loss=0.877397
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 23/80: loss=0.639441 lr=0.000843
+  epoch 23: val_acc = 3023/3925 = 77.019108%  top5 = 3759/3925 = 95.770701%  [95% CI 75.68–78.31]
+  step 0/1180: loss=0.867212
+  step 1/1180: loss=0.536846
+  step 2/1180: loss=1.185169
+  step 100/1180: loss=0.536180
+  step 200/1180: loss=0.545354
+  step 300/1180: loss=0.517402
+  step 400/1180: loss=0.829046
+  step 500/1180: loss=0.553197
+  step 600/1180: loss=0.580392
+  step 700/1180: loss=0.874420
+  step 800/1180: loss=0.599724
+  step 900/1180: loss=0.627975
+  step 1000/1180: loss=0.548160
+  step 1100/1180: loss=0.522815
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 24/80: loss=0.613710 lr=0.000827
+  epoch 24: val_acc = 3153/3925 = 80.331210%  top5 = 3803/3925 = 96.891720%  [95% CI 79.06–81.54]
+  step 0/1180: loss=0.542725
+  step 1/1180: loss=0.752872
+  step 2/1180: loss=0.627379
+  step 100/1180: loss=0.543208
+  step 200/1180: loss=0.520520
+  step 300/1180: loss=0.796275
+  step 400/1180: loss=0.514585
+  step 500/1180: loss=0.538268
+  step 600/1180: loss=0.535010
+  step 700/1180: loss=0.557171
+  step 800/1180: loss=0.509336
+  step 900/1180: loss=0.554464
+  step 1000/1180: loss=0.673490
+  step 1100/1180: loss=0.519583
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 25/80: loss=0.597539 lr=0.000812
+  epoch 25: val_acc = 3093/3925 = 78.802548%  top5 = 3797/3925 = 96.738854%  [95% CI 77.50–80.05]
+  step 0/1180: loss=0.512771
+  step 1/1180: loss=0.537342
+  step 2/1180: loss=0.634027
+  step 100/1180: loss=0.544099
+  step 200/1180: loss=0.527061
+  step 300/1180: loss=0.512808
+  step 400/1180: loss=0.578515
+  step 500/1180: loss=0.523612
+  step 600/1180: loss=0.518196
+  step 700/1180: loss=0.634877
+  step 800/1180: loss=0.615664
+  step 900/1180: loss=0.575996
+  step 1000/1180: loss=0.589680
+  step 1100/1180: loss=0.574376
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 26/80: loss=0.595740 lr=0.000796
+  epoch 26: val_acc = 3144/3925 = 80.101911%  top5 = 3781/3925 = 96.331210%  [95% CI 78.82–81.32]
+  step 0/1180: loss=0.514579
+  step 1/1180: loss=0.531273
+  step 2/1180: loss=0.868461
+  step 100/1180: loss=0.540656
+  step 200/1180: loss=0.596201
+  step 300/1180: loss=0.545133
+  step 400/1180: loss=0.516056
+  step 500/1180: loss=0.534398
+  step 600/1180: loss=0.527238
+  step 700/1180: loss=0.565991
+  step 800/1180: loss=0.520901
+  step 900/1180: loss=0.533109
+  step 1000/1180: loss=0.589883
+  step 1100/1180: loss=0.523440
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 27/80: loss=0.587723 lr=0.000779
+  epoch 27: val_acc = 3089/3925 = 78.700637%  top5 = 3788/3925 = 96.509554%  [95% CI 77.39–79.95]
+  step 0/1180: loss=0.517432
+  step 1/1180: loss=0.531813
+  step 2/1180: loss=0.522935
+  step 100/1180: loss=0.565143
+  step 200/1180: loss=0.551708
+  step 300/1180: loss=0.526794
+  step 400/1180: loss=0.560177
+  step 500/1180: loss=0.514812
+  step 600/1180: loss=0.605433
+  step 700/1180: loss=0.527584
+  step 800/1180: loss=0.554980
+  step 900/1180: loss=0.621437
+  step 1000/1180: loss=0.510096
+  step 1100/1180: loss=0.696475
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 28/80: loss=0.562265 lr=0.000762
+  epoch 28: val_acc = 3058/3925 = 77.910828%  top5 = 3762/3925 = 95.847134%  [95% CI 76.59–79.18]
+  step 0/1180: loss=0.506953
+  step 1/1180: loss=0.620233
+  step 2/1180: loss=0.553712
+  step 100/1180: loss=0.513453
+  step 200/1180: loss=0.518914
+  step 300/1180: loss=0.539591
+  step 400/1180: loss=0.664526
+  step 500/1180: loss=0.698793
+  step 600/1180: loss=0.534982
+  step 700/1180: loss=0.552988
+  step 800/1180: loss=0.726194
+  step 900/1180: loss=0.515034
+  step 1000/1180: loss=0.602557
+  step 1100/1180: loss=0.516386
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 29/80: loss=0.577599 lr=0.000744
+  epoch 29: val_acc = 3113/3925 = 79.312102%  top5 = 3784/3925 = 96.407643%  [95% CI 78.02–80.55]
+  step 0/1180: loss=0.603135
+  step 1/1180: loss=0.517016
+  step 2/1180: loss=0.517008
+  step 100/1180: loss=0.514048
+  step 200/1180: loss=0.548895
+  step 300/1180: loss=0.541937
+  step 400/1180: loss=0.524497
+  step 500/1180: loss=0.674321
+  step 600/1180: loss=0.545852
+  step 700/1180: loss=0.700038
+  step 800/1180: loss=0.511966
+  step 900/1180: loss=0.508392
+  step 1000/1180: loss=0.509237
+  step 1100/1180: loss=0.512248
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 30/80: loss=0.576691 lr=0.000726
+  epoch 30: val_acc = 3107/3925 = 79.159236%  top5 = 3782/3925 = 96.356688%  [95% CI 77.86–80.40]
+  step 0/1180: loss=0.507958
+  step 1/1180: loss=0.528088
+  step 2/1180: loss=0.511264
+  step 100/1180: loss=0.516607
+  step 200/1180: loss=0.520445
+  step 300/1180: loss=0.523322
+  step 400/1180: loss=0.512272
+  step 500/1180: loss=0.515426
+  step 600/1180: loss=0.516740
+  step 700/1180: loss=0.704019
+  step 800/1180: loss=0.537494
+  step 900/1180: loss=0.509234
+  step 1000/1180: loss=0.507670
+  step 1100/1180: loss=0.508664
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 31/80: loss=0.549735 lr=0.000708
+  epoch 31: val_acc = 3199/3925 = 81.503185%  top5 = 3792/3925 = 96.611465%  [95% CI 80.26–82.69]
+  step 0/1180: loss=0.505836
+  step 1/1180: loss=0.520506
+  step 2/1180: loss=0.506877
+  step 100/1180: loss=0.513821
+  step 200/1180: loss=0.657469
+  step 300/1180: loss=0.506931
+  step 400/1180: loss=0.525559
+  step 500/1180: loss=0.510909
+  step 600/1180: loss=0.514889
+  step 700/1180: loss=0.519525
+  step 800/1180: loss=0.522776
+  step 900/1180: loss=0.509221
+  step 1000/1180: loss=0.510502
+  step 1100/1180: loss=0.534895
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 32/80: loss=0.563182 lr=0.000689
+  epoch 32: val_acc = 3115/3925 = 79.363057%  top5 = 3784/3925 = 96.407643%  [95% CI 78.07–80.60]
+  step 0/1180: loss=0.508631
+  step 1/1180: loss=0.512493
+  step 2/1180: loss=0.568159
+  step 100/1180: loss=0.573282
+  step 200/1180: loss=0.523516
+  step 300/1180: loss=0.564679
+  step 400/1180: loss=0.511115
+  step 500/1180: loss=0.632189
+  step 600/1180: loss=0.516028
+  step 700/1180: loss=0.582628
+  step 800/1180: loss=0.543058
+  step 900/1180: loss=0.511170
+  step 1000/1180: loss=0.703297
+  step 1100/1180: loss=0.610358
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 33/80: loss=0.552119 lr=0.000670
+  epoch 33: val_acc = 3141/3925 = 80.025478%  top5 = 3759/3925 = 95.770701%  [95% CI 78.75–81.25]
+  step 0/1180: loss=0.527864
+  step 1/1180: loss=0.570108
+  step 2/1180: loss=0.512078
+  step 100/1180: loss=0.701493
+  step 200/1180: loss=0.509694
+  step 300/1180: loss=0.546593
+  step 400/1180: loss=0.749494
+  step 500/1180: loss=0.799654
+  step 600/1180: loss=0.508128
+  step 700/1180: loss=0.543599
+  step 800/1180: loss=0.511541
+  step 900/1180: loss=0.555126
+  step 1000/1180: loss=0.508288
+  step 1100/1180: loss=0.504516
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 34/80: loss=0.547727 lr=0.000651
+  epoch 34: val_acc = 3137/3925 = 79.923567%  top5 = 3778/3925 = 96.254777%  [95% CI 78.64–81.15]
+  step 0/1180: loss=0.511845
+  step 1/1180: loss=0.771687
+  step 2/1180: loss=0.511174
+  step 100/1180: loss=0.511159
+  step 200/1180: loss=0.514099
+  step 300/1180: loss=0.509908
+  step 400/1180: loss=0.510716
+  step 500/1180: loss=0.508616
+  step 600/1180: loss=0.510207
+  step 700/1180: loss=0.510463
+  step 800/1180: loss=0.511625
+  step 900/1180: loss=0.508249
+  step 1000/1180: loss=0.519090
+  step 1100/1180: loss=0.507065
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 35/80: loss=0.549690 lr=0.000631
+  epoch 35: val_acc = 3160/3925 = 80.509554%  top5 = 3797/3925 = 96.738854%  [95% CI 79.24–81.72]
+  step 0/1180: loss=0.508224
+  step 1/1180: loss=0.562806
+  step 2/1180: loss=0.518360
+  step 100/1180: loss=0.620035
+  step 200/1180: loss=0.534267
+  step 300/1180: loss=0.518169
+  step 400/1180: loss=0.506847
+  step 500/1180: loss=0.506040
+  step 600/1180: loss=0.507593
+  step 700/1180: loss=0.511914
+  step 800/1180: loss=0.546151
+  step 900/1180: loss=0.535699
+  step 1000/1180: loss=0.948112
+  step 1100/1180: loss=0.515134
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 36/80: loss=0.541105 lr=0.000611
+  epoch 36: val_acc = 3165/3925 = 80.636943%  top5 = 3769/3925 = 96.025478%  [95% CI 79.37–81.84]
+  step 0/1180: loss=0.539073
+  step 1/1180: loss=0.509808
+  step 2/1180: loss=0.512712
+  step 100/1180: loss=0.505579
+  step 200/1180: loss=0.508802
+  step 300/1180: loss=0.518220
+  step 400/1180: loss=0.676600
+  step 500/1180: loss=0.504476
+  step 600/1180: loss=0.508988
+  step 700/1180: loss=0.621701
+  step 800/1180: loss=0.503588
+  step 900/1180: loss=0.502456
+  step 1000/1180: loss=0.520668
+  step 1100/1180: loss=0.506397
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 37/80: loss=0.528301 lr=0.000591
+  epoch 37: val_acc = 3087/3925 = 78.649682%  top5 = 3773/3925 = 96.127389%  [95% CI 77.34–79.90]
+  step 0/1180: loss=0.505206
+  step 1/1180: loss=0.521511
+  step 2/1180: loss=0.505290
+  step 100/1180: loss=0.516957
+  step 200/1180: loss=0.503228
+  step 300/1180: loss=0.515194
+  step 400/1180: loss=0.552941
+  step 500/1180: loss=0.522924
+  step 600/1180: loss=0.507567
+  step 700/1180: loss=0.544840
+  step 800/1180: loss=0.506120
+  step 900/1180: loss=0.556223
+  step 1000/1180: loss=0.508725
+  step 1100/1180: loss=0.506387
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 38/80: loss=0.530381 lr=0.000571
+  epoch 38: val_acc = 3131/3925 = 79.770701%  top5 = 3766/3925 = 95.949045%  [95% CI 78.49–81.00]
+  step 0/1180: loss=0.511495
+  step 1/1180: loss=0.504839
+  step 2/1180: loss=0.507280
+  step 100/1180: loss=0.504282
+  step 200/1180: loss=0.717927
+  step 300/1180: loss=0.508387
+  step 400/1180: loss=0.502726
+  step 500/1180: loss=0.512698
+  step 600/1180: loss=0.532903
+  step 700/1180: loss=0.504812
+  step 800/1180: loss=0.503230
+  step 900/1180: loss=0.507031
+  step 1000/1180: loss=0.505100
+  step 1100/1180: loss=0.503591
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 39/80: loss=0.527435 lr=0.000551
+  epoch 39: val_acc = 3144/3925 = 80.101911%  top5 = 3773/3925 = 96.127389%  [95% CI 78.82–81.32]
+  step 0/1180: loss=0.524757
+  step 1/1180: loss=0.508064
+  step 2/1180: loss=0.549555
+  step 100/1180: loss=0.507616
+  step 200/1180: loss=0.510478
+  step 300/1180: loss=1.047939
+  step 400/1180: loss=0.765945
+  step 500/1180: loss=0.524912
+  step 600/1180: loss=0.510735
+  step 700/1180: loss=0.518043
+  step 800/1180: loss=0.516611
+  step 900/1180: loss=0.503683
+  step 1000/1180: loss=0.503508
+  step 1100/1180: loss=0.887350
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 40/80: loss=0.533237 lr=0.000531
+  epoch 40: val_acc = 3135/3925 = 79.872611%  top5 = 3784/3925 = 96.407643%  [95% CI 78.59–81.10]
+  step 0/1180: loss=0.503144
+  step 1/1180: loss=0.508793
+  step 2/1180: loss=0.506188
+  step 100/1180: loss=0.505849
+  step 200/1180: loss=0.505724
+  step 300/1180: loss=0.505187
+  step 400/1180: loss=0.509150
+  step 500/1180: loss=0.509785
+  step 600/1180: loss=0.510986
+  step 700/1180: loss=0.506027
+  step 800/1180: loss=0.503490
+  step 900/1180: loss=0.503098
+  step 1000/1180: loss=0.505116
+  step 1100/1180: loss=0.505706
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 41/80: loss=0.519578 lr=0.000510
+  epoch 41: val_acc = 3227/3925 = 82.216561%  top5 = 3796/3925 = 96.713376%  [95% CI 80.99–83.38]
+  step 0/1180: loss=0.502330
+  step 1/1180: loss=0.505993
+  step 2/1180: loss=0.530686
+  step 100/1180: loss=0.503465
+  step 200/1180: loss=0.504261
+  step 300/1180: loss=0.503786
+  step 400/1180: loss=0.502224
+  step 500/1180: loss=0.505398
+  step 600/1180: loss=0.508910
+  step 700/1180: loss=0.502095
+  step 800/1180: loss=0.501965
+  step 900/1180: loss=0.503107
+  step 1000/1180: loss=0.502697
+  step 1100/1180: loss=0.504463
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 42/80: loss=0.514602 lr=0.000490
+  epoch 42: val_acc = 3193/3925 = 81.350318%  top5 = 3788/3925 = 96.509554%  [95% CI 80.10–82.54]
+  step 0/1180: loss=0.505179
+  step 1/1180: loss=0.505389
+  step 2/1180: loss=0.502694
+  step 100/1180: loss=0.502065
+  step 200/1180: loss=0.507661
+  step 300/1180: loss=0.504501
+  step 400/1180: loss=0.507012
+  step 500/1180: loss=0.504337
+  step 600/1180: loss=0.551177
+  step 700/1180: loss=0.504438
+  step 800/1180: loss=0.565296
+  step 900/1180: loss=0.504000
+  step 1000/1180: loss=0.504245
+  step 1100/1180: loss=0.506755
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 43/80: loss=0.523039 lr=0.000469
+  epoch 43: val_acc = 3152/3925 = 80.305732%  top5 = 3768/3925 = 96.000000%  [95% CI 79.03–81.52]
+  step 0/1180: loss=0.610690
+  step 1/1180: loss=0.505024
+  step 2/1180: loss=0.505921
+  step 100/1180: loss=0.529052
+  step 200/1180: loss=0.503988
+  step 300/1180: loss=0.507734
+  step 400/1180: loss=0.553277
+  step 500/1180: loss=0.520905
+  step 600/1180: loss=0.503108
+  step 700/1180: loss=0.681464
+  step 800/1180: loss=0.510201
+  step 900/1180: loss=0.514155
+  step 1000/1180: loss=0.504889
+  step 1100/1180: loss=0.506083
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 44/80: loss=0.524898 lr=0.000449
+  epoch 44: val_acc = 3176/3925 = 80.917197%  top5 = 3781/3925 = 96.331210%  [95% CI 79.66–82.12]
+  step 0/1180: loss=0.501680
+  step 1/1180: loss=0.504182
+  step 2/1180: loss=0.515595
+  step 100/1180: loss=0.504487
+  step 200/1180: loss=0.501618
+  step 300/1180: loss=0.501072
+  step 400/1180: loss=0.503424
+  step 500/1180: loss=0.514018
+  step 600/1180: loss=0.807248
+  step 700/1180: loss=0.504025
+  step 800/1180: loss=0.569609
+  step 900/1180: loss=0.504645
+  step 1000/1180: loss=0.511028
+  step 1100/1180: loss=0.510126
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 45/80: loss=0.518018 lr=0.000429
+  epoch 45: val_acc = 3193/3925 = 81.350318%  top5 = 3762/3925 = 95.847134%  [95% CI 80.10–82.54]
+  step 0/1180: loss=0.511170
+  step 1/1180: loss=0.504197
+  step 2/1180: loss=0.503478
+  step 100/1180: loss=0.502261
+  step 200/1180: loss=0.502756
+  step 300/1180: loss=0.502257
+  step 400/1180: loss=0.503442
+  step 500/1180: loss=0.501909
+  step 600/1180: loss=0.503125
+  step 700/1180: loss=0.670527
+  step 800/1180: loss=0.502535
+  step 900/1180: loss=0.512085
+  step 1000/1180: loss=0.502670
+  step 1100/1180: loss=0.503033
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 46/80: loss=0.512425 lr=0.000409
+  epoch 46: val_acc = 3151/3925 = 80.280255%  top5 = 3759/3925 = 95.770701%  [95% CI 79.01–81.50]
+  step 0/1180: loss=0.502001
+  step 1/1180: loss=0.503191
+  step 2/1180: loss=0.502130
+  step 100/1180: loss=0.508694
+  step 200/1180: loss=0.502600
+  step 300/1180: loss=0.503278
+  step 400/1180: loss=0.507242
+  step 500/1180: loss=0.502296
+  step 600/1180: loss=0.503112
+  step 700/1180: loss=0.502603
+  step 800/1180: loss=0.501589
+  step 900/1180: loss=0.504810
+  step 1000/1180: loss=0.502264
+  step 1100/1180: loss=0.501823
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 47/80: loss=0.517605 lr=0.000389
+  epoch 47: val_acc = 3197/3925 = 81.452229%  top5 = 3787/3925 = 96.484076%  [95% CI 80.21–82.64]
+  step 0/1180: loss=0.502368
+  step 1/1180: loss=0.502603
+  step 2/1180: loss=0.502261
+  step 100/1180: loss=0.522483
+  step 200/1180: loss=0.503003
+  step 300/1180: loss=0.519055
+  step 400/1180: loss=0.501881
+  step 500/1180: loss=0.502251
+  step 600/1180: loss=0.505160
+  step 700/1180: loss=0.633887
+  step 800/1180: loss=0.505949
+  step 900/1180: loss=0.502165
+  step 1000/1180: loss=0.503988
+  step 1100/1180: loss=0.503744
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 48/80: loss=0.513290 lr=0.000369
+  epoch 48: val_acc = 3157/3925 = 80.433121%  top5 = 3767/3925 = 95.974522%  [95% CI 79.16–81.64]
+  step 0/1180: loss=0.514219
+  step 1/1180: loss=0.506223
+  step 2/1180: loss=0.502720
+  step 100/1180: loss=0.509557
+  step 200/1180: loss=0.501559
+  step 300/1180: loss=0.504472
+  step 400/1180: loss=0.502140
+  step 500/1180: loss=0.508955
+  step 600/1180: loss=0.506104
+  step 700/1180: loss=0.574463
+  step 800/1180: loss=0.508086
+  step 900/1180: loss=0.501796
+  step 1000/1180: loss=0.502833
+  step 1100/1180: loss=0.508677
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 49/80: loss=0.508610 lr=0.000349
+  epoch 49: val_acc = 3183/3925 = 81.095541%  top5 = 3767/3925 = 95.974522%  [95% CI 79.84–82.29]
+  step 0/1180: loss=0.502189
+  step 1/1180: loss=0.501622
+  step 2/1180: loss=0.501336
+  step 100/1180: loss=0.501526
+  step 200/1180: loss=0.502436
+  step 300/1180: loss=0.501168
+  step 400/1180: loss=0.510930
+  step 500/1180: loss=0.500871
+  step 600/1180: loss=0.505558
+  step 700/1180: loss=0.501283
+  step 800/1180: loss=0.501820
+  step 900/1180: loss=0.502779
+  step 1000/1180: loss=0.504285
+  step 1100/1180: loss=0.502738
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 50/80: loss=0.509137 lr=0.000330
+  epoch 50: val_acc = 3189/3925 = 81.248408%  top5 = 3773/3925 = 96.127389%  [95% CI 80.00–82.44]
+  step 0/1180: loss=0.507759
+  step 1/1180: loss=0.502379
+  step 2/1180: loss=0.507880
+  step 100/1180: loss=0.501515
+  step 200/1180: loss=0.503452
+  step 300/1180: loss=0.502072
+  step 400/1180: loss=0.500927
+  step 500/1180: loss=0.501222
+  step 600/1180: loss=0.500978
+  step 700/1180: loss=0.502421
+  step 800/1180: loss=0.502772
+  step 900/1180: loss=0.521348
+  step 1000/1180: loss=0.502957
+  step 1100/1180: loss=0.501261
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 51/80: loss=0.507916 lr=0.000311
+  epoch 51: val_acc = 3166/3925 = 80.662420%  top5 = 3784/3925 = 96.407643%  [95% CI 79.40–81.87]
+  step 0/1180: loss=0.501955
+  step 1/1180: loss=0.501949
+  step 2/1180: loss=0.501766
+  step 100/1180: loss=0.504524
+  step 200/1180: loss=0.512442
+  step 300/1180: loss=0.501360
+  step 400/1180: loss=0.503669
+  step 500/1180: loss=0.503029
+  step 600/1180: loss=0.501861
+  step 700/1180: loss=0.502303
+  step 800/1180: loss=0.503248
+  step 900/1180: loss=0.506406
+  step 1000/1180: loss=0.503845
+  step 1100/1180: loss=0.501981
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 52/80: loss=0.505214 lr=0.000292
+  epoch 52: val_acc = 3225/3925 = 82.165605%  top5 = 3784/3925 = 96.407643%  [95% CI 80.94–83.33]
+  step 0/1180: loss=0.502118
+  step 1/1180: loss=0.500812
+  step 2/1180: loss=0.500995
+  step 100/1180: loss=0.501453
+  step 200/1180: loss=0.500988
+  step 300/1180: loss=0.502982
+  step 400/1180: loss=0.502119
+  step 500/1180: loss=0.502621
+  step 600/1180: loss=0.511621
+  step 700/1180: loss=0.503050
+  step 800/1180: loss=0.501939
+  step 900/1180: loss=0.501357
+  step 1000/1180: loss=0.504187
+  step 1100/1180: loss=0.501987
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 53/80: loss=0.505905 lr=0.000274
+  epoch 53: val_acc = 3183/3925 = 81.095541%  top5 = 3769/3925 = 96.025478%  [95% CI 79.84–82.29]
+  step 0/1180: loss=0.503770
+  step 1/1180: loss=0.501279
+  step 2/1180: loss=0.501816
+  step 100/1180: loss=0.501447
+  step 200/1180: loss=0.500933
+  step 300/1180: loss=0.501135
+  step 400/1180: loss=0.500715
+  step 500/1180: loss=0.502403
+  step 600/1180: loss=0.500953
+  step 700/1180: loss=0.501420
+  step 800/1180: loss=0.555184
+  step 900/1180: loss=0.502550
+  step 1000/1180: loss=0.504505
+  step 1100/1180: loss=0.501329
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 54/80: loss=0.507104 lr=0.000256
+  epoch 54: val_acc = 3226/3925 = 82.191083%  top5 = 3770/3925 = 96.050955%  [95% CI 80.96–83.36]
+  step 0/1180: loss=0.506842
+  step 1/1180: loss=0.500845
+  step 2/1180: loss=0.500873
+  step 100/1180: loss=0.501857
+  step 200/1180: loss=0.501398
+  step 300/1180: loss=0.501488
+  step 400/1180: loss=0.501039
+  step 500/1180: loss=0.501060
+  step 600/1180: loss=0.503705
+  step 700/1180: loss=0.502968
+  step 800/1180: loss=0.501248
+  step 900/1180: loss=0.503359
+  step 1000/1180: loss=0.501399
+  step 1100/1180: loss=0.500980
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 55/80: loss=0.507266 lr=0.000238
+  epoch 55: val_acc = 3222/3925 = 82.089172%  top5 = 3777/3925 = 96.229299%  [95% CI 80.86–83.26]
+  step 0/1180: loss=0.501524
+  step 1/1180: loss=0.503901
+  step 2/1180: loss=0.501687
+  step 100/1180: loss=0.501171
+  step 200/1180: loss=0.503625
+  step 300/1180: loss=0.502227
+  step 400/1180: loss=0.502919
+  step 500/1180: loss=0.518817
+  step 600/1180: loss=0.500925
+  step 700/1180: loss=0.502622
+  step 800/1180: loss=0.501933
+  step 900/1180: loss=0.514866
+  step 1000/1180: loss=0.501796
+  step 1100/1180: loss=0.501661
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 56/80: loss=0.506851 lr=0.000221
+  epoch 56: val_acc = 3187/3925 = 81.197452%  top5 = 3777/3925 = 96.229299%  [95% CI 79.94–82.39]
+  step 0/1180: loss=0.505800
+  step 1/1180: loss=0.502921
+  step 2/1180: loss=0.565914
+  step 100/1180: loss=0.501786
+  step 200/1180: loss=0.509391
+  step 300/1180: loss=0.502378
+  step 400/1180: loss=0.502619
+  step 500/1180: loss=0.501665
+  step 600/1180: loss=0.500779
+  step 700/1180: loss=0.501137
+  step 800/1180: loss=0.501053
+  step 900/1180: loss=0.501373
+  step 1000/1180: loss=0.502224
+  step 1100/1180: loss=0.500952
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 57/80: loss=0.506455 lr=0.000205
+  epoch 57: val_acc = 3173/3925 = 80.840764%  top5 = 3767/3925 = 95.974522%  [95% CI 79.58–82.04]
+  step 0/1180: loss=0.500816
+  step 1/1180: loss=0.505736
+  step 2/1180: loss=0.501268
+  step 100/1180: loss=0.518680
+  step 200/1180: loss=0.500921
+  step 300/1180: loss=0.501224
+  step 400/1180: loss=0.501012
+  step 500/1180: loss=0.504149
+  step 600/1180: loss=0.500721
+  step 700/1180: loss=0.506341
+  step 800/1180: loss=0.500904
+  step 900/1180: loss=0.500855
+  step 1000/1180: loss=0.501782
+  step 1100/1180: loss=0.502537
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 58/80: loss=0.502651 lr=0.000188
+  epoch 58: val_acc = 3218/3925 = 81.987261%  top5 = 3787/3925 = 96.484076%  [95% CI 80.75–83.16]
+  step 0/1180: loss=0.501068
+  step 1/1180: loss=0.501364
+  step 2/1180: loss=0.500872
+  step 100/1180: loss=0.500830
+  step 200/1180: loss=0.500892
+  step 300/1180: loss=0.501540
+  step 400/1180: loss=0.500988
+  step 500/1180: loss=0.504551
+  step 600/1180: loss=0.501200
+  step 700/1180: loss=0.500995
+  step 800/1180: loss=0.500792
+  step 900/1180: loss=0.551432
+  step 1000/1180: loss=0.500781
+  step 1100/1180: loss=0.500854
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 59/80: loss=0.501774 lr=0.000173
+  epoch 59: val_acc = 3259/3925 = 83.031847%  top5 = 3779/3925 = 96.280255%  [95% CI 81.83–84.17]
+  step 0/1180: loss=0.500548
+  step 1/1180: loss=0.501396
+  step 2/1180: loss=0.501788
+  step 100/1180: loss=0.501369
+  step 200/1180: loss=0.500613
+  step 300/1180: loss=0.501194
+  step 400/1180: loss=0.501617
+  step 500/1180: loss=0.500584
+  step 600/1180: loss=0.501116
+  step 700/1180: loss=0.503825
+  step 800/1180: loss=0.500830
+  step 900/1180: loss=0.500873
+  step 1000/1180: loss=0.500681
+  step 1100/1180: loss=0.501312
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 60/80: loss=0.502526 lr=0.000157
+  epoch 60: val_acc = 3240/3925 = 82.547771%  top5 = 3779/3925 = 96.280255%  [95% CI 81.33–83.70]
+  step 0/1180: loss=0.500607
+  step 1/1180: loss=0.501474
+  step 2/1180: loss=0.500728
+  step 100/1180: loss=0.500761
+  step 200/1180: loss=0.501017
+  step 300/1180: loss=0.501300
+  step 400/1180: loss=0.501390
+  step 500/1180: loss=0.505310
+  step 600/1180: loss=0.500897
+  step 700/1180: loss=0.500898
+  step 800/1180: loss=0.500974
+  step 900/1180: loss=0.501656
+  step 1000/1180: loss=0.508023
+  step 1100/1180: loss=0.500731
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 61/80: loss=0.501827 lr=0.000143
+  epoch 61: val_acc = 3237/3925 = 82.471338%  top5 = 3778/3925 = 96.254777%  [95% CI 81.25–83.63]
+  step 0/1180: loss=0.500634
+  step 1/1180: loss=0.500930
+  step 2/1180: loss=0.500841
+  step 100/1180: loss=0.500549
+  step 200/1180: loss=0.500815
+  step 300/1180: loss=0.500909
+  step 400/1180: loss=0.500520
+  step 500/1180: loss=0.500572
+  step 600/1180: loss=0.500742
+  step 700/1180: loss=0.500698
+  step 800/1180: loss=0.502031
+  step 900/1180: loss=0.500651
+  step 1000/1180: loss=0.500764
+  step 1100/1180: loss=0.501153
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 62/80: loss=0.501928 lr=0.000129
+  epoch 62: val_acc = 3226/3925 = 82.191083%  top5 = 3766/3925 = 95.949045%  [95% CI 80.96–83.36]
+  step 0/1180: loss=0.500615
+  step 1/1180: loss=0.500895
+  step 2/1180: loss=0.501150
+  step 100/1180: loss=0.501226
+  step 200/1180: loss=0.501052
+  step 300/1180: loss=0.501100
+  step 400/1180: loss=0.500730
+  step 500/1180: loss=0.500952
+  step 600/1180: loss=0.500761
+  step 700/1180: loss=0.500547
+  step 800/1180: loss=0.501003
+  step 900/1180: loss=0.501086
+  step 1000/1180: loss=0.500544
+  step 1100/1180: loss=0.500841
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 63/80: loss=0.501323 lr=0.000116
+  epoch 63: val_acc = 3226/3925 = 82.191083%  top5 = 3790/3925 = 96.560510%  [95% CI 80.96–83.36]
+  step 0/1180: loss=0.500648
+  step 1/1180: loss=0.500781
+  step 2/1180: loss=0.502026
+  step 100/1180: loss=0.500552
+  step 200/1180: loss=0.500722
+  step 300/1180: loss=0.500672
+  step 400/1180: loss=0.500625
+  step 500/1180: loss=0.500550
+  step 600/1180: loss=0.500800
+  step 700/1180: loss=0.500839
+  step 800/1180: loss=0.500667
+  step 900/1180: loss=0.500914
+  step 1000/1180: loss=0.500584
+  step 1100/1180: loss=0.501140
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 64/80: loss=0.501072 lr=0.000103
+  epoch 64: val_acc = 3240/3925 = 82.547771%  top5 = 3792/3925 = 96.611465%  [95% CI 81.33–83.70]
+  step 0/1180: loss=0.500945
+  step 1/1180: loss=0.500653
+  step 2/1180: loss=0.500651
+  step 100/1180: loss=0.501324
+  step 200/1180: loss=0.500777
+  step 300/1180: loss=0.501019
+  step 400/1180: loss=0.500785
+  step 500/1180: loss=0.500672
+  step 600/1180: loss=0.500599
+  step 700/1180: loss=0.501738
+  step 800/1180: loss=0.500825
+  step 900/1180: loss=0.500714
+  step 1000/1180: loss=0.500816
+  step 1100/1180: loss=0.500690
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 65/80: loss=0.500945 lr=0.000091
+  epoch 65: val_acc = 3254/3925 = 82.904459%  top5 = 3785/3925 = 96.433121%  [95% CI 81.69–84.05]
+  step 0/1180: loss=0.500670
+  step 1/1180: loss=0.500698
+  step 2/1180: loss=0.500614
+  step 100/1180: loss=0.500763
+  step 200/1180: loss=0.500718
+  step 300/1180: loss=0.500778
+  step 400/1180: loss=0.501007
+  step 500/1180: loss=0.500480
+  step 600/1180: loss=0.500713
+  step 700/1180: loss=0.500908
+  step 800/1180: loss=0.500543
+  step 900/1180: loss=0.500880
+  step 1000/1180: loss=0.500479
+  step 1100/1180: loss=0.500903
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 66/80: loss=0.501214 lr=0.000079
+  epoch 66: val_acc = 3238/3925 = 82.496815%  top5 = 3785/3925 = 96.433121%  [95% CI 81.28–83.65]
+  step 0/1180: loss=0.500667
+  step 1/1180: loss=0.509114
+  step 2/1180: loss=0.500947
+  step 100/1180: loss=0.500531
+  step 200/1180: loss=0.500970
+  step 300/1180: loss=0.500573
+  step 400/1180: loss=0.500713
+  step 500/1180: loss=0.500731
+  step 600/1180: loss=0.500551
+  step 700/1180: loss=0.500608
+  step 800/1180: loss=0.501085
+  step 900/1180: loss=0.500715
+  step 1000/1180: loss=0.500491
+  step 1100/1180: loss=0.500466
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 67/80: loss=0.501783 lr=0.000069
+  epoch 67: val_acc = 3244/3925 = 82.649682%  top5 = 3781/3925 = 96.331210%  [95% CI 81.43–83.80]
+  step 0/1180: loss=0.584426
+  step 1/1180: loss=0.500702
+  step 2/1180: loss=0.500651
+  step 100/1180: loss=0.500549
+  step 200/1180: loss=0.500485
+  step 300/1180: loss=0.501030
+  step 400/1180: loss=0.500650
+  step 500/1180: loss=0.500455
+  step 600/1180: loss=0.500497
+  step 700/1180: loss=0.500447
+  step 800/1180: loss=0.501048
+  step 900/1180: loss=0.500624
+  step 1000/1180: loss=0.500606
+  step 1100/1180: loss=0.500677
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 68/80: loss=0.501027 lr=0.000059
+  epoch 68: val_acc = 3245/3925 = 82.675159%  top5 = 3785/3925 = 96.433121%  [95% CI 81.46–83.83]
+  step 0/1180: loss=0.500542
+  step 1/1180: loss=0.500617
+  step 2/1180: loss=0.500672
+  step 100/1180: loss=0.500505
+  step 200/1180: loss=0.500529
+  step 300/1180: loss=0.500636
+  step 400/1180: loss=0.500633
+  step 500/1180: loss=0.502476
+  step 600/1180: loss=0.500588
+  step 700/1180: loss=0.500615
+  step 800/1180: loss=0.501030
+  step 900/1180: loss=0.500656
+  step 1000/1180: loss=0.500472
+  step 1100/1180: loss=0.500640
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 69/80: loss=0.501171 lr=0.000050
+  epoch 69: val_acc = 3246/3925 = 82.700637%  top5 = 3784/3925 = 96.407643%  [95% CI 81.49–83.85]
+  step 0/1180: loss=0.500953
+  step 1/1180: loss=0.502424
+  step 2/1180: loss=0.500453
+  step 100/1180: loss=0.500472
+  step 200/1180: loss=0.500623
+  step 300/1180: loss=0.500652
+  step 400/1180: loss=0.500542
+  step 500/1180: loss=0.500461
+  step 600/1180: loss=0.500811
+  step 700/1180: loss=0.500826
+  step 800/1180: loss=0.501407
+  step 900/1180: loss=0.500551
+  step 1000/1180: loss=0.500539
+  step 1100/1180: loss=0.501261
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 70/80: loss=0.500944 lr=0.000041
+  epoch 70: val_acc = 3250/3925 = 82.802548%  top5 = 3777/3925 = 96.229299%  [95% CI 81.59–83.95]
+  step 0/1180: loss=0.500710
+  step 1/1180: loss=0.500523
+  step 2/1180: loss=0.500578
+  step 100/1180: loss=0.500525
+  step 200/1180: loss=0.500542
+  step 300/1180: loss=0.500580
+  step 400/1180: loss=0.500438
+  step 500/1180: loss=0.500480
+  step 600/1180: loss=0.500537
+  step 700/1180: loss=0.500608
+  step 800/1180: loss=0.500655
+  step 900/1180: loss=0.500546
+  step 1000/1180: loss=0.500777
+  step 1100/1180: loss=0.500999
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 71/80: loss=0.500776 lr=0.000033
+  epoch 71: val_acc = 3259/3925 = 83.031847%  top5 = 3774/3925 = 96.152866%  [95% CI 81.83–84.17]
+  step 0/1180: loss=0.500527
+  step 1/1180: loss=0.502047
+  step 2/1180: loss=0.500775
+  step 100/1180: loss=0.500733
+  step 200/1180: loss=0.500521
+  step 300/1180: loss=0.501822
+  step 400/1180: loss=0.501158
+  step 500/1180: loss=0.501206
+  step 600/1180: loss=0.500567
+  step 700/1180: loss=0.500657
+  step 800/1180: loss=0.500601
+  step 900/1180: loss=0.500454
+  step 1000/1180: loss=0.500699
+  step 1100/1180: loss=0.500739
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 72/80: loss=0.500673 lr=0.000026
+  epoch 72: val_acc = 3259/3925 = 83.031847%  top5 = 3773/3925 = 96.127389%  [95% CI 81.83–84.17]
+  step 0/1180: loss=0.500421
+  step 1/1180: loss=0.500664
+  step 2/1180: loss=0.500665
+  step 100/1180: loss=0.500562
+  step 200/1180: loss=0.501809
+  step 300/1180: loss=0.500703
+  step 400/1180: loss=0.500421
+  step 500/1180: loss=0.501676
+  step 600/1180: loss=0.501172
+  step 700/1180: loss=0.500634
+  step 800/1180: loss=0.500704
+  step 900/1180: loss=0.500444
+  step 1000/1180: loss=0.500530
+  step 1100/1180: loss=0.500468
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 73/80: loss=0.500680 lr=0.000020
+  epoch 73: val_acc = 3257/3925 = 82.980892%  top5 = 3775/3925 = 96.178344%  [95% CI 81.77–84.12]
+  step 0/1180: loss=0.500510
+  step 1/1180: loss=0.500429
+  step 2/1180: loss=0.501466
+  step 100/1180: loss=0.500648
+  step 200/1180: loss=0.500758
+  step 300/1180: loss=0.500828
+  step 400/1180: loss=0.500389
+  step 500/1180: loss=0.500538
+  step 600/1180: loss=0.500577
+  step 700/1180: loss=0.500661
+  step 800/1180: loss=0.500552
+  step 900/1180: loss=0.500751
+  step 1000/1180: loss=0.500392
+  step 1100/1180: loss=0.500504
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 74/80: loss=0.500686 lr=0.000015
+  epoch 74: val_acc = 3263/3925 = 83.133758%  top5 = 3776/3925 = 96.203822%  [95% CI 81.93–84.27]
+  step 0/1180: loss=0.500614
+  step 1/1180: loss=0.500766
+  step 2/1180: loss=0.500502
+  step 100/1180: loss=0.500608
+  step 200/1180: loss=0.500723
+  step 300/1180: loss=0.500401
+  step 400/1180: loss=0.500803
+  step 500/1180: loss=0.500495
+  step 600/1180: loss=0.500584
+  step 700/1180: loss=0.500625
+  step 800/1180: loss=0.500558
+  step 900/1180: loss=0.500431
+  step 1000/1180: loss=0.500504
+  step 1100/1180: loss=0.500743
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 75/80: loss=0.500699 lr=0.000010
+  epoch 75: val_acc = 3253/3925 = 82.878981%  top5 = 3779/3925 = 96.280255%  [95% CI 81.67–84.03]
+  step 0/1180: loss=0.500642
+  step 1/1180: loss=0.500424
+  step 2/1180: loss=0.500541
+  step 100/1180: loss=0.500469
+  step 200/1180: loss=0.500511
+  step 300/1180: loss=0.500579
+  step 400/1180: loss=0.500608
+  step 500/1180: loss=0.501826
+  step 600/1180: loss=0.500492
+  step 700/1180: loss=0.500485
+  step 800/1180: loss=0.500479
+  step 900/1180: loss=0.500629
+  step 1000/1180: loss=0.500573
+  step 1100/1180: loss=0.500742
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 76/80: loss=0.500715 lr=0.000007
+  epoch 76: val_acc = 3253/3925 = 82.878981%  top5 = 3774/3925 = 96.152866%  [95% CI 81.67–84.03]
+  step 0/1180: loss=0.500692
+  step 1/1180: loss=0.500470
+  step 2/1180: loss=0.500509
+  step 100/1180: loss=0.501057
+  step 200/1180: loss=0.500501
+  step 300/1180: loss=0.500654
+  step 400/1180: loss=0.500581
+  step 500/1180: loss=0.500525
+  step 600/1180: loss=0.500507
+  step 700/1180: loss=0.500737
+  step 800/1180: loss=0.500434
+  step 900/1180: loss=0.500659
+  step 1000/1180: loss=0.500582
+  step 1100/1180: loss=0.501224
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 77/80: loss=0.500667 lr=0.000004
+  epoch 77: val_acc = 3257/3925 = 82.980892%  top5 = 3775/3925 = 96.178344%  [95% CI 81.77–84.12]
+  step 0/1180: loss=0.500483
+  step 1/1180: loss=0.500916
+  step 2/1180: loss=0.500560
+  step 100/1180: loss=0.500583
+  step 200/1180: loss=0.500457
+  step 300/1180: loss=0.500437
+  step 400/1180: loss=0.500479
+  step 500/1180: loss=0.500527
+  step 600/1180: loss=0.500446
+  step 700/1180: loss=0.500593
+  step 800/1180: loss=0.500508
+  step 900/1180: loss=0.500466
+  step 1000/1180: loss=0.500575
+  step 1100/1180: loss=0.500420
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 78/80: loss=0.500671 lr=0.000002
+  epoch 78: val_acc = 3260/3925 = 83.057325%  top5 = 3775/3925 = 96.178344%  [95% CI 81.85–84.20]
+  step 0/1180: loss=0.500533
+  step 1/1180: loss=0.500444
+  step 2/1180: loss=0.500651
+  step 100/1180: loss=0.500829
+  step 200/1180: loss=0.500460
+  step 300/1180: loss=0.500759
+  step 400/1180: loss=0.500485
+  step 500/1180: loss=0.500422
+  step 600/1180: loss=0.500529
+  step 700/1180: loss=0.500671
+  step 800/1180: loss=0.500415
+  step 900/1180: loss=0.500502
+  step 1000/1180: loss=0.500484
+  step 1100/1180: loss=0.500557
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 79/80: loss=0.500672 lr=0.000000
+  epoch 79: val_acc = 3260/3925 = 83.057325%  top5 = 3774/3925 = 96.152866%  [95% CI 81.85–84.20]
+  step 0/1180: loss=0.500540
+  step 1/1180: loss=0.500528
+  step 2/1180: loss=0.500601
+  step 100/1180: loss=0.500571
+  step 200/1180: loss=0.500564
+  step 300/1180: loss=0.500781
+  step 400/1180: loss=0.500435
+  step 500/1180: loss=0.500747
+  step 600/1180: loss=0.500411
+  step 700/1180: loss=0.500483
+  step 800/1180: loss=0.500711
+  step 900/1180: loss=0.500543
+  step 1000/1180: loss=0.500534
+  step 1100/1180: loss=0.500481
+[pjrt_ffi] RESIDENT: @convnext_fwd holds 182 parameter tensors (106.2 MB) on 1 device; they stop crossing PCIe from here
+Epoch 80/80: loss=0.500679 lr=0.000000
+  epoch 80: val_acc = 3259/3925 = 83.031847%  top5 = 3774/3925 = 96.152866%  [95% CI 81.83–84.17]
+done (trained ConvNeXt-T acc4x + cosine/warmup via packed threading).
