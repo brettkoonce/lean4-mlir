@@ -994,8 +994,8 @@ end Proofs.StableHLO
     (ema := true))
 
 -- ⭐ The SAME recipe at micro-batch 8 × k = 4 — effective batch 32, AdamW, identical schedule — for
--- the Orin Nano, where the bs32 step plans one 4.24 GiB block and fits at no pool fraction
--- (deploy/ORIN.md §4). ResNet-50's `acc2x16` is the precedent; the mechanism is
+-- the Orin Nano, where the bs32 step's activation block fits at no pool fraction (its size is in
+-- deploy/ORIN.md § Imagenette). ResNet-50's `acc2x16` is the precedent; the mechanism is
 -- `convnextin_emaaccdp16x…`'s: a fourth `[θ|m|v|G]` region, `1/4` folded into `%ob1` / `%ob2`, and
 -- `bStr` the MICRO-batch's divisor, `8.0`. ConvNeXt has no BatchNorm, so four micro-batches of 8
 -- ARE one batch of 32 up to summation order — exact, not Ghost-BN.

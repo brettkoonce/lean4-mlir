@@ -2373,7 +2373,7 @@ script imagenette do
     the 2026-09-13 sweep in `deploy/ORIN.md` §4. ResNet-50 is the `acc2x16` render (micro-batch 16 × 2, the
     same recipe at effective batch 32), because the batch-32 step's arena does not fit at any fraction;
     `LEAN_MLIR_G2_STEPS=590` makes its epoch the 9,440 images a batch-32 epoch takes. ConvNeXt-T is
-    the same move at 8 × 4 (`acc4x`; its batch-32 step plans one 4.24 GiB block), and
+    the same move at 8 × 4 (`acc4x`; its batch-32 step's block is in `deploy/ORIN.md` § Imagenette), and
     `LEAN_MLIR_G2_STEPS=1180` is the same 9,440 images. -/
 private def orinRows : List (String × String × List (String × String)) :=
   [ ("resnet34-verified-adam",     "0.25", []),

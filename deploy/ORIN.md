@@ -241,11 +241,15 @@ one 4.24 GiB block, so it gets the same move at 8 × 4, `verified_mlir/convnext_
 (`LEAN_MLIR_VARIANT=acc4x LEAN_MLIR_BATCH=8 LEAN_MLIR_G2_STEPS=1180`, the same 9,440 images). With
 no BatchNorm, four micro-batches of 8 are one batch of 32 up to summation order. That is what
 `convnext-accum-tie` checks, against the committed batch-32 step on DIFFERENT rows. The tie needs a
-desktop GPU, because the board cannot reserve a pool for even one bare batch-32 step. On the board,
+desktop GPU, because the board cannot reserve a pool for even one bare batch-32 step: tried
+2026-10-27 at `LEAN_MLIR_MEM_FRACTION=0.70`, NvMap could not reserve the 5.2 GiB pool from MemFree,
+fell back to about 3 GiB, and the peer's 3.22 GiB parameter transfer missed. On the board,
 epoch 1 reads 28.71 %, against 28.15 % on the B50 and 28.18 % on CUDA. A plain batch-8 test render
 at batch 32's learning rate read 38.75 % there, so it is a different recipe.
 
-**The tier, 80 epochs each (2026-10-26 to 27).** Super, MAXN, `jetson_clocks` (1020 MHz). One
+**The tier, 80 epochs each (2026-10-26 to 27).** Super, `jetson_clocks`, GPU pinned at 1020 MHz
+and the CPU at 1.73 GHz — MAXN_SUPER's clocks, although `nvpmodel -q` read `25W` when checked on
+2026-10-28, a mode whose caps (918 MHz / 1.34 GHz) those clocks exceed. One
 net at a time through `lake run imagenette-orin <net>`, with at least 10 minutes and ≤ 50 °C
 between nets (`~/pjrt/tools/imagenette_orin_cooled.sh`; every cooldown hit 48 °C at the
 10-minute floor). The first six took 20 h 13 m with no failed row. ConvNeXt-T ran on 10-27 once

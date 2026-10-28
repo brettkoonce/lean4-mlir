@@ -47,8 +47,8 @@ count of parameters off by more than 1e-4 norm-rel.
 
 **Not on the Orin Nano.** The peer is the batch-32 step the board cannot train at, and it cannot
 run one bare step of it either. Tried 2026-10-27 at `LEAN_MLIR_MEM_FRACTION=0.70`: NvMap could not
-reserve the 5.2 GiB pool from MemFree, fell back to about 3 GiB, and the peer's 3.22 GiB transfer
-missed. A desktop GPU runs it:
+reserve the pool from MemFree, fell back to a smaller one, and the peer's parameter transfer missed
+(deploy/ORIN.md § Imagenette). A desktop GPU runs it:
 
     lake build convnext-accum-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/convnext-accum-tie
 
