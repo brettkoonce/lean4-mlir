@@ -98,7 +98,6 @@ grandfather runs/cnn_grid_rep4.tsv
 grandfather runs/cnn_grid_rep5.tsv
 grandfather runs/efficientnet_verified_crop_gpu1.log
 grandfather runs/lipschitz_cnn.log
-grandfather runs/lipschitz_cnn.tex
 grandfather runs/lipschitz_cnn_preview.png
 grandfather runs/mlp_grid_results_xla.tsv
 grandfather runs/mobilenetv2_verified_crop_gpu0.log
