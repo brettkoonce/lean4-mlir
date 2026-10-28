@@ -1,0 +1,26 @@
+2026-10-27 19:33:03 tinydo10_s0 start (seed 0, 10000 steps, batch 32)
+2026-10-27 19:39:50 tinydo10_s0 done: final loss: 1.175588 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.552376 nats/char = 2.239605 bits/char
+2026-10-27 19:39:50 tinydo20_s0 start (seed 0, 10000 steps, batch 32)
+2026-10-27 19:46:45 tinydo20_s0 done: final loss: 1.266844 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.551817 nats/char = 2.238798 bits/char
+2026-10-27 19:46:45 tinydo10_s1 start (seed 1, 10000 steps, batch 32)
+2026-10-27 19:53:50 tinydo10_s1 done: final loss: 1.243587 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.554688 nats/char = 2.242941 bits/char
+2026-10-27 19:53:50 tinydo20_s1 start (seed 1, 10000 steps, batch 32)
+2026-10-27 20:00:48 tinydo20_s1 done: final loss: 1.312703 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.553162 nats/char = 2.240739 bits/char
+2026-10-27 20:00:48 tinydo10_s2 start (seed 2, 10000 steps, batch 32)
+2026-10-27 20:07:43 tinydo10_s2 done: final loss: 1.222242 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.555616 nats/char = 2.244279 bits/char
+2026-10-27 20:07:43 tinydo20_s2 start (seed 2, 10000 steps, batch 32)
+2026-10-27 20:14:34 tinydo20_s2 done: final loss: 1.312684 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.553205 nats/char = 2.240801 bits/char
+2026-10-27 20:14:34 ALL DONE
+2026-10-27 20:14:53 tinydo10_20k_s0 start (seed 0, 20000 steps, batch 32)
+2026-10-27 20:27:35 tinydo10_20k_s0 done: final loss: 1.109102 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.584569 nats/char = 2.286050 bits/char
+2026-10-27 20:27:35 tinydo20_20k_s0 start (seed 0, 20000 steps, batch 32)
+2026-10-27 20:38:03 tinydo20_20k_s0 done: final loss: 1.217525 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.549818 nats/char = 2.235915 bits/char
+2026-10-27 20:38:03 tinydo10_20k_s1 start (seed 1, 20000 steps, batch 32)
+2026-10-27 20:50:46 tinydo10_20k_s1 done: final loss: 1.090955 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.596005 nats/char = 2.302549 bits/char
+2026-10-27 20:50:46 tinydo20_20k_s1 start (seed 1, 20000 steps, batch 32)
+2026-10-27 21:02:01 tinydo20_20k_s1 done: final loss: 1.206626 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.544730 nats/char = 2.228575 bits/char
+2026-10-27 21:02:01 tinydo10_20k_s2 start (seed 2, 20000 steps, batch 32)
+2026-10-27 21:13:12 tinydo10_20k_s2 done: final loss: 1.086822 / score tiny-do10 trainer-logged (12 fixed random batches of 32×128): 1.585900 nats/char = 2.287970 bits/char
+2026-10-27 21:13:12 tinydo20_20k_s2 start (seed 2, 20000 steps, batch 32)
+2026-10-27 21:24:35 tinydo20_20k_s2 done: final loss: 1.189477 / score tiny-do20 trainer-logged (12 fixed random batches of 32×128): 1.536470 nats/char = 2.216658 bits/char
+2026-10-27 21:24:35 ALL DONE (20k)
