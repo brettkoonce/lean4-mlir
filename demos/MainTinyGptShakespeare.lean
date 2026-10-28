@@ -49,6 +49,11 @@ structure GptCfg where
   numHeads  : Nat
   mlpDim    : Nat
   numLayers : Nat
+  /-- GPT-2's residual dropout rate (`transformerEncoder`'s `dropout`), train step only;
+      `<key>-do<pct>` on the command line sets it and suffixes the spec name, so a
+      dropout-trained checkpoint keeps its own artifacts. The plan's fix for `tiny`
+      overfitting from step ~3500 (`planning/lm_demos_modernization.md` §1.4). -/
+  dropout   : Float := 0.0
   /-- Feed `[B, T]` f32 token ids and build the one-hot in-graph
       (tokenPositionEmbed idsInput) instead of uploading a host-built
       `[B, V·T]` one-hot. Mathematically identical. -/
@@ -110,7 +115,7 @@ def nanoRopeCfg : GptCfg :=
 def nanoRopeNoPosCfg : GptCfg :=
   { nanoCfg with key := "nano-rope-nopos", specName := "tinygpt-shakespeare-nanoropenopos", rope := true, posEmb := false }
 
-def pickCfg : String → Option GptCfg
+def pickBaseCfg : String → Option GptCfg
   | "nano" => some nanoCfg
   | "tiny" => some tinyCfg
   | "nano-ids" => some nanoIdsCfg
@@ -120,6 +125,19 @@ def pickCfg : String → Option GptCfg
   | "nano-rope-nopos" => some nanoRopeNoPosCfg
   | _ => none
 
+/-- A config key, optionally with a `-do<pct>` residual-dropout suffix (`tiny-do10` is
+    `tiny` at dropout 0.1, spec name `tinygpt-shakespeare-tiny-do10`). -/
+def pickCfg (key : String) : Option GptCfg :=
+  match pickBaseCfg key with
+  | some g => some g
+  | none =>
+    match key.splitOn "-do" with
+    | [base, pct] =>
+      match pickBaseCfg base, pct.toNat? with
+      | some g, some p => some { g with key, specName := s!"{g.specName}-do{p}", dropout := p.toFloat / 100.0 }
+      | _, _ => none
+    | _ => none
+
 def mkSpec (g : GptCfg) : NetSpec :=
   { name := g.specName
     imageH := g.seqLen     -- so y_seg shape becomes [B, T, 1]
@@ -127,7 +145,7 @@ def mkSpec (g : GptCfg) : NetSpec :=
     layers := [
       .tokenPositionEmbed vocabSize g.seqLen g.dModel (idsInput := g.ids) (gather := g.gather) (posEmb := g.posEmb),
       .transformerEncoder g.dModel g.numHeads g.mlpDim g.numLayers (causalMask := true)
-        (flashAttn := g.flashAttn) (rope := g.rope),
+        (flashAttn := g.flashAttn) (rope := g.rope) (dropout := g.dropout),
       .lmHead g.dModel vocabSize g.seqLen
     ] }
 
@@ -624,7 +642,7 @@ def main (args : List String) : IO Unit := do
       IO.eprintln s!"missing {paramsPath}; run `train {g.key}` first"; IO.Process.exit 1
     runScore g paramsPath outDir
   | _ =>
-    IO.eprintln "usage: tinygpt-shakespeare train  [nano|tiny] [steps=2000] [batch=32] [lr_x10000=30]"
+    IO.eprintln "usage: tinygpt-shakespeare train  [nano|tiny][-do<pct>] [steps=2000] [batch=32] [lr_x10000=30]"
     IO.eprintln "       tinygpt-shakespeare sample [nano|tiny] [n_chars=400] [temp_x100=80] [topk=0] [topp_x100=100] [seed=1] [prompt]"
     IO.eprintln "       tinygpt-shakespeare suite  [nano|tiny]"
     IO.eprintln "       tinygpt-shakespeare score  [nano|tiny] [params=.lake/build/<prefix>_params.bin] [outDir=.lake/build]"

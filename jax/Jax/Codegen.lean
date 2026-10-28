@@ -2154,7 +2154,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
         "    # Positional embedding (" ++ toString nTokens ++ ", " ++ toString dim ++ ")\n" ++
         "    key, k_ = random.split(key)\n" ++
         "    params.append((random.normal(k_, (" ++ toString nTokens ++ ", " ++ toString dim ++ ")) * 0.02,))\n"
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _ _ _ _ _ =>
       for i in List.range nBlocks do
         code := code ++ emitLNInit s!"Transformer block {i} LN1" dim
         code := code ++ (if cfg.vitInit then emitDenseInitTimm else emitDenseInit)
@@ -2343,7 +2343,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
         s!"    # patchEmbed positional embedding [{nP + 1}, {dim}]\n" ++
         s!"    pos = jnp.array(buf[idx:idx+{nPos}].reshape({nP + 1}, {dim})); idx += {nPos}\n" ++
         "    params.append((pos,))\n"
-    | .transformerEncoder dim _heads mlpDim nBlocks =>
+    | .transformerEncoder dim _heads mlpDim nBlocks _ _ _ _ _ =>
       -- Per block: LN1 + (Q, K, V, Output) + LN2 + (fc1, fc2) = 8 tuples.
       for bi in [:nBlocks] do
         code := code ++ emitLNFromBuf s!"trans[{bi}] LN1" dim
@@ -2493,7 +2493,7 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
       code := code ++ "    # patchEmbed positional embedding\n"
       code := code ++ "    (pos,) = params[idx]; idx += 1\n"
       code := code ++ "    f.write(np.asarray(pos).astype(np.float32).flatten().tobytes())\n"
-    | .transformerEncoder _ _ _ nBlocks =>
+    | .transformerEncoder _ _ _ nBlocks _ _ _ _ _ =>
       -- Mirror of the loader: per block LN1, Q, K, V, Output, LN2, fc1, fc2; then final LN.
       for bi in [:nBlocks] do
         code := code ++ emitLNToBuf s!"trans[{bi}] LN1"
@@ -2524,7 +2524,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
     | .convNextStage _ n _ _ => some n
     | .mbConv _ _ _ _ _ n _  => some n
     | .bottleneckBlock _ _ n _ => some n
-    | .transformerEncoder _ _ _ n => some n
+    | .transformerEncoder _ _ _ n _ _ _ _ _ => some n
     | .uib _ _ _ _ _ _ => some 1  -- each UIB is one stochastic-depth unit (drop applies only when it skips)
     | _ => none)).foldl (· + ·) 0
   let mut code := if cfg.runningBN
@@ -2837,7 +2837,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       -- Add positional embedding
       code := code ++ "    x = x + params[" ++ toString pidx ++ "][0]\n"
       pidx := pidx + 1
-    | .transformerEncoder _dim heads _mlpDim nBlocks =>
+    | .transformerEncoder _dim heads _mlpDim nBlocks _ _ _ _ _ =>
       for _ in List.range nBlocks do
         if cfg.dropPath > 0 then
           let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))

@@ -2475,7 +2475,7 @@ def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       code := code ++ snip
       curSSA := newSSA
       curShape := newShape
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence _ rope =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence _ rope _ =>
       let mut cs := curSSA
       let mut p := pidx
       for bi in [:nBlocks] do
@@ -2777,7 +2777,7 @@ def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat := Id.ru
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-    | .transformerEncoder dim _heads _ _ causalMask keepSequence _ _ =>
+    | .transformerEncoder dim _heads _ _ causalMask keepSequence _ _ _ =>
       if !causalMask && !keepSequence then
         match curShape with
         | [b, _, _] => curShape := [b, dim]
@@ -2956,7 +2956,7 @@ def _root_.NetSpec.bnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
     | .patchEmbed _ _ _ _ =>
       -- patchEmbed claims 3 pidx slots (W+b, cls, pos). No BN.
       pidx := pidx + 3
-    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ _ =>
+    | .transformerEncoder _dim _heads _mlpDim nBlocks _causal _keepSeq _ _ _ =>
       -- 8 param pairs per block + 1 for the final LN. No BN.
       pidx := pidx + 8 * nBlocks + 1
     | .tokenPositionEmbed _ _ _ _ _ posEmb =>
@@ -3202,6 +3202,8 @@ structure FwdRec where
   tbFc1OutSSA    : String := ""  -- pre-GELU (B, N, mlpDim)
   tbGeluTSSA     : String := ""  -- saved tanh value for GELU backward
   tbGeluOutSSA   : String := ""  -- post-GELU (B, N, mlpDim)
+  tbDo1SSA       : String := ""  -- residual dropout mask on the attention branch ("" = none)
+  tbDo2SSA       : String := ""  -- residual dropout mask on the MLP branch ("" = none)
   -- Final LN (after all blocks) record
   isFinalLn       : Bool := false
   finalLnPidx     : Nat := 0
@@ -5645,6 +5647,35 @@ def emitOptimizerUpdates (spec : NetSpec) (weightDecay : Float) (useAdam : Bool)
   code := code ++ s!"      : {String.intercalate ", " retTypes.toList}\n"
   code
 
+/-- A train-step dropout mask of `shape` at keep probability `keep`, drawn in the graph: a Philox
+    stream keyed on the step scalar `%t` and `site` (a fresh draw at every site of every step),
+    the top 24 bits of each word as a uniform in [0, 1), and the inverted scaling `1/keep` on the
+    kept elements. The forward and its VJP both read the one SSA value, so they agree. Returns the
+    text and the mask's SSA name; needs the Adam train step's `%t`. -/
+def emitDropoutMask (tag : String) (shape : List Nat) (keep : Float) (site : Nat) : String × String := Id.run do
+  let ty := tensorTy shape
+  let dims := String.intercalate "x" (shape.map toString)
+  let uTy := s!"tensor<{dims}xui32>"
+  let pTy := s!"tensor<{dims}xi1>"
+  let mut s := ""
+  s := s ++ s!"    // ─── residual dropout mask (keep {keep}, site {site}): Philox on (step, site) ───\n"
+  s := s ++ s!"    %do_t{tag} = stablehlo.convert %t : (tensor<f32>) -> tensor<ui64>\n"
+  s := s ++ s!"    %do_t1{tag} = stablehlo.reshape %do_t{tag} : (tensor<ui64>) -> tensor<1xui64>\n"
+  s := s ++ s!"    %do_site{tag} = stablehlo.constant dense<{site}> : tensor<1xui64>\n"
+  s := s ++ s!"    %do_st{tag} = stablehlo.concatenate %do_t1{tag}, %do_site{tag}, dim = 0 : (tensor<1xui64>, tensor<1xui64>) -> tensor<2xui64>\n"
+  s := s ++ s!"    %do_st2{tag}, %do_bits{tag} = \"stablehlo.rng_bit_generator\"(%do_st{tag}) " ++ "{rng_algorithm = #stablehlo<rng_algorithm PHILOX>}" ++ s!" : (tensor<2xui64>) -> (tensor<2xui64>, {uTy})\n"
+  s := s ++ s!"    %do_sh{tag} = stablehlo.constant dense<8> : {uTy}\n"
+  s := s ++ s!"    %do_hi{tag} = stablehlo.shift_right_logical %do_bits{tag}, %do_sh{tag} : {uTy}\n"
+  s := s ++ s!"    %do_uf{tag} = stablehlo.convert %do_hi{tag} : ({uTy}) -> {ty}\n"
+  s := s ++ s!"    %do_inv{tag} = stablehlo.constant dense<5.9604644775390625e-08> : {ty}\n"
+  s := s ++ s!"    %do_u{tag} = stablehlo.multiply %do_uf{tag}, %do_inv{tag} : {ty}\n"
+  s := s ++ s!"    %do_keep{tag} = stablehlo.constant dense<{keep}> : {ty}\n"
+  s := s ++ s!"    %do_cmp{tag} = stablehlo.compare LT, %do_u{tag}, %do_keep{tag}, FLOAT : ({ty}, {ty}) -> {pTy}\n"
+  s := s ++ s!"    %do_scale{tag} = stablehlo.constant dense<{1.0 / keep}> : {ty}\n"
+  s := s ++ s!"    %do_zero{tag} = stablehlo.constant dense<0.0> : {ty}\n"
+  s := s ++ s!"    %do_m{tag} = stablehlo.select %do_cmp{tag}, %do_scale{tag}, %do_zero{tag} : ({pTy}, {ty}, {ty}) -> {ty}\n"
+  (s, s!"%do_m{tag}")
+
 /-- The train step's forward walk: one block of StableHLO per layer, from the input reshape to the
     logits. Returns the text, the logits' SSA name and shape, and one `FwdRec` per layer — the
     names and shapes `emitTrainBackward` reads back. -/
@@ -6528,13 +6559,21 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
       curShape := newShape
       pidx := pidx + 3
 
-    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence flashAttn rope =>
+    | .transformerEncoder dim heads mlpDim nBlocks causalMask keepSequence flashAttn rope dropout =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockShape := curShape
         let basePidx := pidx
         let tag := s!"{pos}_{bi}"
         let ty := tensorTy blockShape
+        -- Residual dropout (GPT-2's): a fresh in-graph mask per branch, kept for the backward.
+        let keep := 1.0 - dropout
+        let drop (site : Nat) (branch : String) (xSSA : String) : String × String × String :=
+          if dropout > 0.0 then
+            let (mCode, mSSA) := emitDropoutMask s!"{tag}_{branch}" blockShape keep (pos * 1000 + 2 * bi + site)
+            let out := s!"%tb_{branch}{tag}"
+            (mCode ++ s!"    {out} = stablehlo.multiply {xSSA}, {mSSA} : {ty}\n", out, mSSA)
+          else ("", xSSA, "")
         -- LN1
         let g1 := s!"%W{pidx}"; let b1 := s!"%b{pidx}"
         let (ln1Code, ln1Out, ln1Norm, ln1Istd, _ln1Mean) := emitLayerNormForward s!"{tag}_ln1" blockIn blockShape g1 b1
@@ -6547,8 +6586,10 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
         let wo := s!"%W{pidx}"; let bo := s!"%b{pidx}"; pidx := pidx + 1
         let (mhCode, mhOut, mhQ, mhK, mhV, mhSmLse, mhPp, mhAvO) := emitMHSAForward s!"{tag}_mh" ln1Out blockShape heads wq bq wk bk wv bv wo bo causalMask flashAttn rope
         code := code ++ mhCode
+        let (do1Code, mhOutD, do1Mask) := drop 1 "do1" mhOut
+        code := code ++ do1Code
         -- Residual
-        code := code ++ s!"    %tb_r1{tag} = stablehlo.add {blockIn}, {mhOut} : {ty}\n"
+        code := code ++ s!"    %tb_r1{tag} = stablehlo.add {blockIn}, {mhOutD} : {ty}\n"
         let r1 := s!"%tb_r1{tag}"
         -- LN2
         let g2 := s!"%W{pidx}"; let b2 := s!"%b{pidx}"; pidx := pidx + 1
@@ -6565,8 +6606,10 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
         let wf2 := s!"%W{pidx}"; let bf2 := s!"%b{pidx}"; pidx := pidx + 1
         let (fc2Code, fc2Out, _) := emitDense3D s!"{tag}_fc2" geOut fc1Shape wf2 bf2 dim
         code := code ++ fc2Code
+        let (do2Code, fc2OutD, do2Mask) := drop 2 "do2" fc2Out
+        code := code ++ do2Code
         -- Residual
-        code := code ++ s!"    %tb_r2{tag} = stablehlo.add {r1}, {fc2Out} : {ty}\n"
+        code := code ++ s!"    %tb_r2{tag} = stablehlo.add {r1}, {fc2OutD} : {ty}\n"
         let blockOut := s!"%tb_r2{tag}"
         -- Record block
         let mut tbRec : FwdRec := default
@@ -6576,6 +6619,7 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
         tbRec := { tbRec with tbLn2OutSSA := ln2Out, tbLn2NormSSA := ln2Norm, tbLn2IstdSSA := ln2Istd }
         tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSmLse, tbMhPpSSA := mhPp, tbMhFlash := flashAttn, tbMhOSSA := mhAvO, tbMhRope := rope }
         tbRec := { tbRec with tbFc1OutSSA := fc1Out, tbGeluTSSA := geT, tbGeluOutSSA := geOut }
+        tbRec := { tbRec with tbDo1SSA := do1Mask, tbDo2SSA := do2Mask }
         records := records.push tbRec
         curSSA := blockOut
       -- Final LN
@@ -7328,7 +7372,7 @@ def emitTrainBackwardTo (B : Nat) (records : Array FwdRec) (gradSSA₀ : String)
           gradShape := r.inShape
         | _ => pure ()
       else pure ()
-    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq _ _ =>
+    | .transformerEncoder _dim _heads _mlpDim _nBlocks _causal _keepSeq _ _ _ =>
       -- For records emitted during forward of a transformerEncoder layer:
       -- CLS slice, final LN, or transformer block (each discriminated by flags).
       if r.isClsSlice then
@@ -7414,16 +7458,21 @@ def emitTrainBackwardTo (B : Nat) (records : Array FwdRec) (gradSSA₀ : String)
           let dF := d.toFloat
           let tag := s!"tb{basePidx}"
           let dy := gradSSA
+          -- Residual dropout: the MLP branch sees dy ⊙ m₂ (the mask the forward drew); the skip
+          -- passes dy through untouched. Same for the attention branch and m₁ below.
+          let dy2 := if r.tbDo2SSA.isEmpty then dy else s!"%{tag}_dy2"
+          if !r.tbDo2SSA.isEmpty then
+            code := code ++ s!"    %{tag}_dy2 = stablehlo.multiply {dy}, {r.tbDo2SSA} : {ty}\n"
           code := code ++ s!"    // ─── fc2 backward (denseHasVJP + denseWeightGrad_correct) ───\n"
           -- fc2 backward
-          code := code ++ s!"    %{tag}_dwfc2 = stablehlo.dot_general {r.tbGeluOutSSA}, {dy},\n"
+          code := code ++ s!"    %{tag}_dwfc2 = stablehlo.dot_general {r.tbGeluOutSSA}, {dy2},\n"
           code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({mlpTy}, {ty}) -> {tensorTy [mlpDim, d]}\n"
           code := code ++ s!"    %d_W{pFc2} = stablehlo.reshape %{tag}_dwfc2 : ({tensorTy [mlpDim, d]}) -> {tensorTy [mlpDim, d]}\n"
-          code := code ++ s!"    %d_b{pFc2} = stablehlo.reduce({dy} init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+          code := code ++ s!"    %d_b{pFc2} = stablehlo.reduce({dy2} init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
           code := code ++ s!"          : ({ty}, tensor<f32>) -> {dTy}\n"
-          code := code ++ s!"    %{tag}_dge = stablehlo.dot_general {dy}, %W{pFc2},\n"
+          code := code ++ s!"    %{tag}_dge = stablehlo.dot_general {dy2}, %W{pFc2},\n"
           code := code ++ s!"              contracting_dims = [2] x [1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({ty}, {tensorTy [mlpDim, d]}) -> {mlpTy}\n"
@@ -7487,17 +7536,20 @@ def emitTrainBackwardTo (B : Nat) (records : Array FwdRec) (gradSSA₀ : String)
           code := code ++ s!"    // ─── MLP-branch residual accumulate (Residual.lean: biPathHasVJP) ───\n"
           -- Residual 2 accumulate
           code := code ++ s!"    %{tag}_dr1 = stablehlo.add {dy}, %{tag}_dln2_in : {ty}\n"
+          let dr1m := if r.tbDo1SSA.isEmpty then s!"%{tag}_dr1" else s!"%{tag}_dr1m"
+          if !r.tbDo1SSA.isEmpty then
+            code := code ++ s!"    %{tag}_dr1m = stablehlo.multiply %{tag}_dr1, {r.tbDo1SSA} : {ty}\n"
           code := code ++ s!"    // ─── MHSA backward (Attention.lean: sdpaBackQ/K/V_correct + rowSoftmaxHasVJPMat) ───\n"
           code := code ++ s!"    //     output projection (Wo, bo), then per-head softmax VJP, then Q/K/V projections\n"
           -- MHSA backward
-          code := code ++ s!"    %{tag}_dwo = stablehlo.dot_general {r.tbMhPpSSA}, %{tag}_dr1,\n"
+          code := code ++ s!"    %{tag}_dwo = stablehlo.dot_general {r.tbMhPpSSA}, {dr1m},\n"
           code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({ty}, {ty}) -> {tensorTy [d, d]}\n"
           code := code ++ s!"    %d_W{pWo} = stablehlo.reshape %{tag}_dwo : ({tensorTy [d, d]}) -> {tensorTy [d, d]}\n"
-          code := code ++ s!"    %d_b{pWo} = stablehlo.reduce(%{tag}_dr1 init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
+          code := code ++ s!"    %d_b{pWo} = stablehlo.reduce({dr1m} init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
           code := code ++ s!"          : ({ty}, tensor<f32>) -> {dTy}\n"
-          code := code ++ s!"    %{tag}_dpp = stablehlo.dot_general %{tag}_dr1, %W{pWo},\n"
+          code := code ++ s!"    %{tag}_dpp = stablehlo.dot_general {dr1m}, %W{pWo},\n"
           code := code ++ s!"              contracting_dims = [2] x [1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({ty}, {tensorTy [d, d]}) -> {ty}\n"
@@ -7514,7 +7566,7 @@ def emitTrainBackwardTo (B : Nat) (records : Array FwdRec) (gradSSA₀ : String)
           let mut dvSSA := s!"%{tag}_dv"
           if r.tbMhFlash then
             let causal := match r.layer with
-              | .transformerEncoder _ _ _ _ cm _ _ _ => cm | _ => false
+              | .transformerEncoder _ _ _ _ cm _ _ _ _ => cm | _ => false
             let (fbCode, fdq, fdk, fdv) := emitFlashAttnBwd s!"{tag}fb" r.tbMhQSSA r.tbMhKSSA r.tbMhVSSA
               s!"%{tag}_dattn" r.tbMhOSSA r.tbMhSmSSA b heads n dh (flashBlock n) causal
             code := code ++ fbCode
