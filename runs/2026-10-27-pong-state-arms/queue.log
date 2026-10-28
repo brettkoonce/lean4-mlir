@@ -1,0 +1,13 @@
+2026-10-27 18:02:09 state_k4_s1 start
+2026-10-27 18:08:03 state_k4_s1 done: final (20 games, eps 0.050000): 13.45 ± 0.83 points per game; first positive eval at 225000 agent steps
+2026-10-27 18:08:03 state_k4_s2 start
+2026-10-27 18:13:00 state_k4_s2 done: final (20 games, eps 0.050000): 9.20 ± 1.04 points per game; first positive eval at 150000 agent steps
+2026-10-27 18:13:00 state_k4_s3 start
+2026-10-27 18:17:53 state_k4_s3 done: final (20 games, eps 0.050000): 10.55 ± 0.70 points per game; first positive eval at 175000 agent steps
+2026-10-27 18:17:53 state_w512_s1 start
+2026-10-27 18:24:20 state_w512_s1 done: final (20 games, eps 0.050000): 16.85 ± 0.44 points per game; first positive eval at 100000 agent steps
+2026-10-27 18:24:20 state_w512_s2 start
+2026-10-27 18:31:03 state_w512_s2 done: final (20 games, eps 0.050000): 12.75 ± 0.64 points per game; first positive eval at 100000 agent steps
+2026-10-27 18:31:03 state_w512_s3 start
+2026-10-27 18:38:34 state_w512_s3 done: final (20 games, eps 0.050000): 14.65 ± 0.75 points per game; first positive eval at 75000 agent steps
+2026-10-27 18:38:34 ALL DONE

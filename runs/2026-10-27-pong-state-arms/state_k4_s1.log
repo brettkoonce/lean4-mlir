@@ -1,0 +1,26 @@
+pong dqn state k4 w64: 5955 params, 500000 agent steps, batch 32, lr 0.000100, plain DQN, opponent speed 1.500000 delay 4, seed 1
+  sessions loaded
+  step 0  eval -18.75 ± 0.33
+  step 25000  updates 3750  games 69  eps 0.775  loss 0.03145  eval -20.30 ± 0.16  (8730 ms; act 1410 gather 152 fwd 3737 train 3211 ms)
+  step 50000  updates 10000  games 146  eps 0.550  loss 0.01842  eval -19.70 ± 0.26  (23632 ms; act 5213 gather 393 fwd 9048 train 8550 ms)
+  step 75000  updates 16250  games 210  eps 0.325  loss 0.01720  eval -12.60 ± 0.70  (42376 ms; act 11401 gather 673 fwd 14893 train 14601 ms)
+  step 100000  updates 22500  games 255  eps 0.100  loss 0.01979  eval -10.95 ± 0.78  (59189 ms; act 18145 gather 933 fwd 19726 train 19175 ms)
+  step 125000  updates 28750  games 290  eps 0.100  loss 0.01761  eval -9.05 ± 0.88  (77559 ms; act 25982 gather 1229 fwd 24758 train 23867 ms)
+  step 150000  updates 35000  games 319  eps 0.100  loss 0.01586  eval -2.05 ± 1.43  (96602 ms; act 33952 gather 1548 fwd 29931 train 28846 ms)
+  step 175000  updates 41250  games 344  eps 0.100  loss 0.01551  eval -0.55 ± 1.37  (115515 ms; act 41908 gather 1870 fwd 35062 train 33760 ms)
+  step 200000  updates 47500  games 366  eps 0.100  loss 0.01406  eval -3.25 ± 1.04  (133237 ms; act 49372 gather 2181 fwd 39862 train 38363 ms)
+  step 225000  updates 53750  games 388  eps 0.100  loss 0.01134  eval 3.50 ± 1.38  (151539 ms; act 57032 gather 2491 fwd 44831 train 43041 ms)
+  step 250000  updates 60000  games 410  eps 0.100  loss 0.00992  eval 1.65 ± 1.40  (170224 ms; act 64872 gather 2796 fwd 50006 train 47800 ms)
+  step 275000  updates 66250  games 431  eps 0.100  loss 0.00912  eval 7.25 ± 1.06  (187914 ms; act 72364 gather 3088 fwd 54887 train 52229 ms)
+  step 300000  updates 72500  games 453  eps 0.100  loss 0.00864  eval 7.85 ± 1.19  (211269 ms; act 81775 gather 3457 fwd 61177 train 58716 ms)
+  step 325000  updates 78750  games 474  eps 0.100  loss 0.00840  eval 6.35 ± 1.72  (231961 ms; act 90390 gather 3813 fwd 66682 train 64208 ms)
+  step 350000  updates 85000  games 496  eps 0.100  loss 0.00858  eval 9.75 ± 1.09  (253298 ms; act 99354 gather 4125 fwd 72491 train 69920 ms)
+  step 375000  updates 91250  games 517  eps 0.100  loss 0.00808  eval 10.50 ± 0.77  (275925 ms; act 108536 gather 4461 fwd 78503 train 76297 ms)
+  step 400000  updates 97500  games 538  eps 0.100  loss 0.00785  eval 10.10 ± 0.80  (290958 ms; act 114878 gather 4727 fwd 82529 train 80169 ms)
+  step 425000  updates 103750  games 560  eps 0.100  loss 0.00752  eval 11.65 ± 0.62  (306051 ms; act 121263 gather 4993 fwd 86673 train 83984 ms)
+  step 450000  updates 110000  games 581  eps 0.100  loss 0.00732  eval 12.45 ± 0.71  (321030 ms; act 127571 gather 5252 fwd 90699 train 87833 ms)
+  step 475000  updates 116250  games 604  eps 0.100  loss 0.00694  eval 10.90 ± 0.80  (335910 ms; act 133792 gather 5502 fwd 94721 train 91602 ms)
+  step 500000  updates 122500  games 626  eps 0.100  loss 0.00692  eval 12.45 ± 0.96  (350880 ms; act 140037 gather 5766 fwd 98779 train 95451 ms)
+trained: 500000 agent steps, 122500 updates, 626 games, 350913 ms
+wrote .lake/build/pong_dqn_state_k4_w64_state_k4_s1_curve.csv, .lake/build/pong_dqn_state_k4_w64_state_k4_s1_params.bin
+final (20 games, eps 0.050000): 13.45 ± 0.83 points per game; first positive eval at 225000 agent steps
