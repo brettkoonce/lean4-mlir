@@ -100,6 +100,14 @@ are free, the other four rows of `tab:visdrone` at two seeds each (the rows' env
 `runs/2026-09-01-visdrone-affine/README.md` and `…-decode-sweep/README.md`). Note the 09-01 README
 (:54–55) predates the seed knob; `Train.lean:653` has it now.
 
+### 2.4b VisDrone single grid, two more seeds (~1 GPU-h; future set, user's call 2026-10-28)
+
+The single-grid row of `tab:neudet_visdrone_heads` (0.0391 on VisDrone val) is still one run while
+the prose compares it with the three-seed FPN row. Two more seeds of `yolov1-visdrone448` at
+`LEAN_MLIR_SEED=1,2` (the archived 448/14 arm; `demos/README.md` "The VisDrone single-grid row")
+make it n = 3; the gap is 0.19 against a 0.004 FPN sd, so the sentence does not hinge on it.
+Queue it with the next batch of runs on the four-card box.
+
 ### 2.5 Pong (~1.5 GPU-h; needs §3 item 4 first)
 
 Three seeds of the new arm beside the existing `runs/2026-09-25-pong-dqn/` ones
@@ -297,3 +305,8 @@ If Part 2 ships first, the section stays the catalogue it is and the slate parag
   ties; buys epoch 1"; NEU-DET "grid matches" (reads within 0.02); Pong's "not dissected here";
   Boltzmann gate A holds only on the reweighted row. Landed on main the same day, rebased onto
   the TikZ fact-check commit 2111582d.
+- 2026-10-28, §7 answered: LIGO Phases 4–5 archived (`gw_detection_demo.md` §6.3–6.5 marked);
+  the NQS GPT h = 2J rerun stays out of the table (the prose names both numbers); the VisDrone
+  single-grid seeds go to a future set (§2.4b); the Leduc ES-MCCFR r = 3 cells are regenerated
+  (`leduc-env budget=4145000 esSeeds=3`); `demos/README.md`'s VisDrone and NEU-DET paragraphs
+  updated to the three-seed tables.

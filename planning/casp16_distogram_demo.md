@@ -19,8 +19,9 @@ table (one-hot, the 3B head, the 650M baseline, the book run, ESMFold, the field
 is defined in §10.1, `thm:pairTile_vjp` cites the four VJP witnesses, `Proofs.pdiv_tileWPair` is a
 formalization.yaml row and in the comparator tier, Appendix A has the CASP16 + PDB rows, README and
 demos/README their entries. The headline row is the 100-epoch run; the 30-epoch row is its schedule
-check. `casp16_esmfold.py --window` folds T1218 / T1269 per unit from an 800-residue window (written,
-not yet run — §9). The text below is the record as it was written.
+check. `casp16_esmfold.py --window` folds T1218 / T1269 per unit from an 800-residue window (ran
+2026-10-08: `runs/2026-10-02-distogram-ablations/esmfold_window.sh`, logs `esmfold_window.log` and
+`esmfold_rescore.log` beside it — §9). The text below is the record as it was written.
 
 Status 2026-10-02 18:40: the whole pipeline runs and the ablation table (§10) is filled
 (§11 is the handoff: what is running, where, and what to do when it finishes; §10a the night's

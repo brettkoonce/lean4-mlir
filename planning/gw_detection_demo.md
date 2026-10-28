@@ -253,7 +253,7 @@ matched filter without a χ² veto has no row at all. The known-time rows are
 untouched (ρ* 3.12 → 3.02), which is the point: glitches are elsewhere in
 the window, and the search pays for not knowing when.
 
-**6.3 The catalogue.** Fetch the 32 s H1+L1 snippets of every GWTC event,
+**6.3 The catalogue** _(archived 2026-10-28, user's call: not built; the section's bracket, closed form / search / CNN on Gaussian and real noise, closes without it)._ Fetch the 32 s H1+L1 snippets of every GWTC event,
 whiten with the snippet's own off-source PSD, slide the 2 s window, take the
 max CNN score. Table 3: event, published network SNR and masses, matched
 filter ρ with the catalogue masses, CNN max score against the trained
@@ -261,13 +261,13 @@ threshold, found / missed. Every event above SNR ~10 should be found; the
 marginal ones (SNR 8–10: GW151012, GW170729) are the interesting rows, and
 the model never saw a real signal.
 
-**6.4 Glitches.** Gravity Spy (Zenodo, CC) lists GPS times and classes of
+**6.4 Glitches** _(archived 2026-10-28 with 6.3)._ Gravity Spy (Zenodo, CC) lists GPS times and classes of
 labelled glitches; a "blip" is a sub-second broadband burst that mimics a
 heavy-mass chirp. Cut windows at those times, score them: the CNN's and the
 matched filter's false-alarm rate on blips against Gaussian noise is one
 row each, and the reason the real search has a χ² veto.
 
-**6.5 The 1-D arm** (§4), if built: same table, one more row.
+**6.5 The 1-D arm** (§4) _(archived 2026-10-28 with 6.3; needs a strided k×1 convBn or a 1-D primitive first)._ If built: same table, one more row.
 
 ## 7. Figure and section
 
@@ -355,8 +355,12 @@ Phase 3 (½ session):         `real` arm, the 2 × 2, 6.2
                              figures: runs/2026-09-11-gw-*/, runs/2026-09-11-gw-gate1/
                              (compare_nets.log, gw_detect_{cifarbn3,cnn,e3}.png).
 Phase 4 (½ session):         6.3 the catalogue table
+                             ✗ archived 2026-10-28 (user's call; planning/part2_ship_audit.md §7)
 Phase 5 (½ session):         6.4 glitches; the 1-D arm if cheap
+                             ✗ archived 2026-10-28 with Phase 4
 Phase 6 (½ session):         §7 figure + section + two bestiary entries
+                             section and figure in the book (sec:bestiary_signal); the two
+                             bestiary entries are not in the tree (audit §3.9)
 ```
 
 Training is minutes on one card at B0 on 64 × 128; the download is a few
