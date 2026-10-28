@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every code listing in the book, checked against the file it quotes.
+r"""Every code listing in the book, checked against the file it quotes.
 
     python3 scripts/book/book_listings.py            # one block per listing: its file, and every quoted unit the file no longer has
     python3 scripts/book/book_listings.py --summary  # one line per listing
@@ -114,7 +114,7 @@ def load_mlir():
 
 NAMED = re.compile(r'verified\\_mlir/([A-Za-z0-9_\\]+)\.mlir')
 def named_artifact(tex_lines, start):
-    """the `verified\_mlir/<name>.mlir` the prose names between the previous heading and the block, if one"""
+    r"""the `verified\_mlir/<name>.mlir` the prose names between the previous heading and the block, if one"""
     for i in range(start - 1, max(-1, start - 40), -1):
         if HEAD.match(tex_lines[i]): break
         m = NAMED.findall(tex_lines[i])

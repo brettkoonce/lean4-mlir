@@ -3290,7 +3290,9 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
+  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA          -- packed [W0|b0] layout for the verified forward
+  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
@@ -3344,8 +3346,18 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     W0 := packed.extract 0 (d0 * d1 * 4)
     b0 := packed.extract (d0 * d1 * 4) pBytes
     let params := packed
-    let (correct, _, _, _) ← evalScore fwdSess fwdFn params shapes (.held evalImg evalLbl)
-                               nEval bs d0 d1 1 nResident (ep + 1).toUSize false
+    -- Written out rather than through `evalScore`: this is the loop the book's "What's inside
+    -- `.train`?" listing quotes (scripts/book/book_listings.py checks it against this file).
+    let mut correct := 0
+    for bi in [0:nbt] do
+      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
+      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
+                      xb xShape bs.toUSize d1.toUSize
+                      nResident (ep + 1).toUSize
+      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
+        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
+        let lbl  := F32.readLabel evalLbl (bi * bs + j)
+        if pred == lbl then correct := correct + 1
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
     -- `wilson95` here too. Chapter 1's linear model is the ONE book trainer that does not route
