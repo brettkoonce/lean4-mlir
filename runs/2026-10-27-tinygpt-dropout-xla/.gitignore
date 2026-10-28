@@ -1,0 +1,10 @@
+# regenerable: `fit` (5 s) and `score` (seconds) rebuild the KN model and its per-position arrays;
+# kn_table.sh re-makes the per-job symlinks to them
+*.npz
+*.npy
+kn_T64/
+kn_T128/
+# the Lean `score` mode's per-position bins (regenerate with `score <key> <job>/<key>_params.bin <job>`)
+*_score_*.bin
+# the 12 checkpoints (59 MB, 4.9 MB each) stay on ares — see the README
+*_params.bin
