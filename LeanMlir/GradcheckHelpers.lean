@@ -12,8 +12,9 @@ then runs the **adjoint / finite-difference dot-product test**: for a forward
 perturbation directions `v_i`,
   Σ_i ⟨g_i, v_i⟩  =  ⟨Jᵀ dOut, v⟩  =  ⟨dOut, J v⟩  =  (Φ(+ε) − Φ(−ε)) / 2ε,
 where `Φ(s) := ⟨f(inputs + s·v), dOut⟩`. One backward run + two forward runs
-validate ALL input gradients at once — catching transpose/axis bugs that
-`iree-compile` (type-checking only) cannot.
+test all input gradients together, along one random direction — catching transpose/axis bugs that
+`iree-compile` (type-checking only) cannot. The test sums over inputs, so a wrong gradient for one
+input is caught only when its share of the sum is above the tolerance.
 
 Used by the ViT gradcheck tests (tests/TestSDPA.lean, TestMHSA, TestViTBlock, TestViTTiny).
 All Lean4. -/
@@ -100,14 +101,20 @@ def adjointGradcheckFixed (label fwdVmfb fwdFn backVmfb backFn : String)
   let back ← runFn backVmfb backFn (fixed ++ ins ++ [(outShape, dO)]) inShapes.length
   if back.size != inShapes.length then
     IO.eprintln s!"[{label}] expected {inShapes.length} back results, got {back.size}"; return false
+  -- `dot` and `axpy` zip, which truncates silently, so every length is checked first.
+  let gotLens := back.toList.map (·.size)
+  if gotLens != inLens then
+    IO.eprintln s!"[{label}] back result lengths {gotLens}, expected {inLens}"; return false
   let lhs := ((back.toList.zip dirs).map (fun (g, v) => dot g v)).foldl (· + ·) 0.0
-  let phi (s : Float) : IO Float := do
+  let phi (s : Float) : IO (Option Float) := do
     let pert := (params.zip dirs).map (fun (pv, vv) => axpy s vv pv)
     let f ← runFn fwdVmfb fwdFn (fixed ++ inShapes.zip pert) 1
-    if f.size != 1 then IO.eprintln s!"[{label}] fwd result missing"; return 0.0
-    return dot f[0]! dO
-  let phiP ← phi eps
-  let phiM ← phi (-eps)
+    if f.size != 1 then IO.eprintln s!"[{label}] fwd run failed"; return none
+    if f[0]!.size != outLen then
+      IO.eprintln s!"[{label}] fwd result length {f[0]!.size}, expected {outLen}"; return none
+    return some (dot f[0]! dO)
+  let some phiP ← phi eps | return false
+  let some phiM ← phi (-eps) | return false
   let rhs := (phiP - phiM) / (2.0 * eps)
   let absErr := Float.abs (lhs - rhs)
   let relErr := absErr / (Float.abs rhs + 1.0e-9)

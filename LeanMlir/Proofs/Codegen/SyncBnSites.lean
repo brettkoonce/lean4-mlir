@@ -10,22 +10,25 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 Used by `ResNet34RenderB`, `ResNet50RenderB` (through `ResNet34RenderB`), `MobileNetV2RenderB`,
 `MobileNetV4RenderB` and `EfficientNetRender.Basic`, so every batch-BN renderer emits the same sync-BN
 composition. Each
-site is one BatchNorm node at `replicas ≤ 1` and at `replicas > 1` the sync-BN subgraph whose `den`
+site is one BatchNorm node at `sync = false` and at `sync = true` the sync-BN subgraph whose `den`
 [`Foundation/DataParallel/Sync.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel/Sync.lean) states
 (the forward's two collectives, the backward's one, the γ gradient reading the forward's
-statistics).
+statistics). `sync` alone picks the branch; `replicas` only sizes the collectives. Callers pass
+`sync := replicas > 1` (`ResNet34RenderB` adds `forceSync`, sync-BN on one device), so
+`sync = false` at several replicas would be per-replica batch BN.
 
-**Tags.** A site's `tag` is its γ parameter's name without `%`; the collectives it emits are
-named from it (`{tag}mu`, `{tag}var`, and the backward's `{tag}dst`), so tags must be unique per
-site and must not collide with any parameter's name.
+**Tags.** The forward site's `tag` is its γ parameter's name without `%`, and its collectives are
+named from it (`{tag}mu`, `{tag}var`). The backward site's `tag` is the collective's full name,
+which callers build as `{γ name}dst`. Tags must be unique per site and must not collide with any
+parameter's name.
 -/
 
 open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/-- **One BatchNorm FORWARD site.** At `replicas ≤ 1` the batch-BN node `bnBatchF`. At
-    `replicas > 1` the sync-BN composition, in TWO rounds
+/-- **One BatchNorm FORWARD site.** At `sync = false` the batch-BN node `bnBatchF`. At
+    `sync = true` the sync-BN composition, in TWO rounds
     (Chan's parallel variance): this replica's μ_r (`bnBatchMeanB`) all-reduced to the global μ;
     then `σ²_r + (μ_r − μ)²` (`bnBatchVarAtB`) all-reduced to the global σ² — each by
     `prettyAllReduceMean`, the SAME collective node the parameter gradients ride; packed
@@ -56,8 +59,8 @@ def bnFwdSite (B oc hh ww : Nat) (sync : Bool) (replicas : Nat)
     let (cY, nY)   ← pretty B (.bnSyncF (N := B) (oc := oc) (h := hh) (w := ww) gN btN epsStr 0 zoc zoc (.operand xIn zbn) (.operand nP zst))
     pure (cM ++ cAM ++ cV ++ cAV ++ cP ++ cY, nY, nP)
 
-/-- **One BatchNorm BACKWARD site** — the input cotangent. At `replicas ≤ 1` `bnBatchBack`; at
-    `replicas > 1` this replica's `[μ ‖ σ² ‖ mean(γ·dy) ‖ mean(x̂·γ·dy)]` (`bnSyncDyStatsB`, reading
+/-- **One BatchNorm BACKWARD site** — the input cotangent. At `sync = false` `bnBatchBack`; at
+    `sync = true` this replica's `[μ ‖ σ² ‖ mean(γ·dy) ‖ mean(x̂·γ·dy)]` (`bnSyncDyStatsB`, reading
     the forward's packed `st`, so its `x̂` is the forward's), all-reduced, then `bnSyncBack`. One
     collective per BN layer in the backward (three per layer per step with the forward's two). -/
 def bnBackSite (B oc hh ww : Nat) (sync : Bool) (replicas : Nat)
@@ -76,9 +79,9 @@ def bnBackSite (B oc hh ww : Nat) (sync : Bool) (replicas : Nat)
     pure (cD ++ cA ++ cX, nX)
 
 /-- **One BatchNorm γ-GRADIENT site.** `bnGammaGradB` rebuilds `x̂` from ITS OWN batch, which under
-    sync-BN is not the `x̂` the forward used — so at `replicas > 1` it is `bnSyncGammaGradB`,
+    sync-BN is not the `x̂` the forward used — so at `sync = true` it is `bnSyncGammaGradB`,
     reading the forward's packed global statistics. β's gradient is `Σ dy`, reads
-    no statistic, and stays `bnBetaGradB` at every replica count. -/
+    no statistic, and stays `bnBetaGradB` either way. -/
 def bnGammaSite (B oc hh ww : Nat) (sync : Bool) (epsStr xN dyIn st : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
   let zbn : Vec (B*(oc*(hh*ww))) := fun _ => 0

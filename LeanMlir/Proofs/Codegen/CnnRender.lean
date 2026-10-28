@@ -596,8 +596,9 @@ def cifar8AdamTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' (0, [])
-  -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
-  -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
+  -- The emitted entry is this AdamW name for every `opt`; each caller renames it (`.replace`) to
+  -- its driver's `{slug}_{variant}_train_step`, and a mismatch is refused by the shim as "entry
+  -- mismatch", not silently mis-run.
   let fname := if replicas ≤ 1 then "cifar8_adam_train_step" else "cifar8_adamdp_train_step"
   let msfx := sfx "m"
   let vsfx := sfx "v"
@@ -640,7 +641,11 @@ set_option maxRecDepth 8000 in
     the `…V` peer.
 
     Parameters are NOT batched — only activations are. The optimizer tail (`optTail`) is
-    therefore untouched and shared verbatim with `…V`. -/
+    therefore untouched and shared verbatim with `…V`.
+
+    `fp8` switches the forward convs (`convF8`) and the conv input-VJPs (`convBackBatchedF8`) to
+    E4M3. The conv weight gradients and the dense ops have no f8 twin and stay at `bf16` (f32 when
+    `bf16 := false`). -/
 def cifar8AdamTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (invBStr b1Str ob1Str b2Str ob2Str epsStr wdStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
@@ -846,8 +851,9 @@ def cifar8AdamTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' (0, [])
-  -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (see ResNet34RenderB:
-  -- a mismatch here is refused by the shim as "entry mismatch", not silently mis-run).
+  -- The emitted entry is this AdamW name for every `opt`; each caller renames it (`.replace`) to
+  -- its driver's `{slug}_{variant}_train_step`, and a mismatch is refused by the shim as "entry
+  -- mismatch", not silently mis-run.
   let fname := if replicas ≤ 1 then "cifar8b_adam_train_step" else "cifar8b_adamdp_train_step"
   let msfx := sfx "m"
   let vsfx := sfx "v"
@@ -1541,8 +1547,9 @@ def cifar8BnTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
   let retTy := String.intercalate ", " (pTys ++ pTys ++ pTys) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' (0, [])
-  -- Entry name tracks the driver's `{slug}_{variant}_train_step` convention (a mismatch here is
-  -- refused by the shim as "entry mismatch", not silently mis-run).
+  -- The emitted entry is this AdamW name for every `opt`; each caller renames it (`.replace`) to
+  -- its driver's `{slug}_{variant}_train_step`, and a mismatch is refused by the shim as "entry
+  -- mismatch", not silently mis-run.
   let fname := if replicas ≤ 1 then "cifar8b_bn_adam_train_step" else "cifar8b_bn_adamdp_train_step"
   let argSig := argBlk "" ++ ", " ++ argBlk "m" ++ ", " ++ argBlk "v" ++
                 s!", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}"

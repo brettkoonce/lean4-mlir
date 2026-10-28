@@ -409,10 +409,19 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
+/-- Refuse a net `certProduct` cannot bound: one with a normalization scale (a BN or LayerNorm γ,
+    init kind `1`) or a parameter that is not a kernel, a dense weight or a bias. The product
+    skips every rank-1 parameter, so on such a net it would return a number that is no bound. -/
+def requireCertModelled (name : String) (specs : Array (Array Nat × Nat)) : IO Unit := do
+  for (dims, kind) in specs do
+    unless dims.size ∈ [1, 2, 4] && kind != 1 do
+      throw <| IO.userError s!"{name}: the Lipschitz product models conv, dense and bias \
+        parameters only; {dims} (init kind {kind}) is not one"
+
 /-- The conv-aware certificate product over a packed parameter list: `convLip` for each
     `[o,i,kh,kw]` kernel, `denseLip` for each `[d0,d1]` weight, biases skipped. Returns the
     product of the bounds (the certificate's `L`), the product of the estimates, and a per-layer
-    `bound (estimate)` line. -/
+    `bound (estimate)` line. Sound only for nets `requireCertModelled` accepts. -/
 def certProduct (theta : ByteArray) (specs : Array (Array Nat × Nat)) :
     Float × Float × String := Id.run do
   let mut L := 1.0
@@ -444,6 +453,7 @@ def certProduct (theta : ByteArray) (specs : Array (Array Nat × Nat)) :
     (`genCnnPgdStep`/MNIST-CNN, `genCifarPgdStep`/CIFAR-CNN). -/
 def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (genKernel : Nat → Float → Float → Bool → String) : IO Unit := do
+  requireCertModelled net.name net.specs
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses
@@ -562,6 +572,7 @@ def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     certifying the conv net is harder." Generic over `genKernel`/`net.slug` (MNIST-CNN, CIFAR-CNN). -/
 def VerifiedNet.attackPgdSpectralConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (caps : List Float) (genKernel : Nat → Float → Float → Bool → String) : IO Unit := do
+  requireCertModelled net.name net.specs
   let bs := cfg.batchSize
   let d0 := net.d0
   let d1 := net.nClasses

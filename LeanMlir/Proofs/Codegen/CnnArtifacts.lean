@@ -144,8 +144,8 @@ it. -/
 -- the `…V` artifacts above (bf16 forward convs only), these carry bf16 through the BACKWARD as
 -- well — `convBackBatchedBf16` + `convWeightGradBBf16` — because those twins exist for the
 -- batched family and not for the per-example one. Zero new verified ops.
--- THE FIRST ARTIFACT IN THIS REPO CONTAINING AN f8 TYPE. Forward convs only
--- (`convBackBatchedF8` / `convWeightGradBF8` do not exist), and UNSCALED, so this is a lowering
+-- THE FIRST ARTIFACT IN THIS REPO CONTAINING AN f8 TYPE. Forward convs and conv input-VJPs only
+-- (`convWeightGradBF8` and dense f8 twins do not exist), and UNSCALED, so this is a lowering
 -- probe rather than a trainable arm: E4M3 maxes at 448 and XLA synthesises scale = 1.0 when given
 -- no scale operand.
 #eval IO.FS.writeFile "verified_mlir/cifar8b_fp8_adam_train_step.mlir"
