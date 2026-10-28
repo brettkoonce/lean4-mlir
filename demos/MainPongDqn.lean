@@ -18,7 +18,9 @@ public import LeanMlir.CliArgs
     first step), so `state` and `pixels` share every line of the loop but the
     observation and the net:
 
-    - `state`: the six-number state, a 6→64→64→3 MLP; the ceiling row.
+    - `state`: the six-number state, a 6→64→64→3 MLP; the ceiling row. `k=4` stacks
+      four states (the pixel net's history) and `width=` widens the MLP — the two
+      knobs of the state-vs-pixels dissection.
     - `pixels`: 84 × 84 u8 frames, `k` stacked (4, or 1 for the ablation),
       Chapter 3's CNN with pooling standing in for stride.
 
@@ -27,7 +29,7 @@ public import LeanMlir.CliArgs
     (own minus opponent's). XLA only.
 
     `lake exe pong-dqn [mode=state] [steps=500000] [seed=1] [lr=1e-4] [double]
-     [k=4] [opp=1.5] [tag=<name>]`; writes `<prefix>_curve.csv` and
+     [k=4] [width=64] [opp=1.5] [tag=<name>]`; writes `<prefix>_curve.csv` and
      `<prefix>_params.bin` under `.lake/build/`.
 
     Residency is the shim's default: [θ|m|v] stays on the card across train
@@ -46,14 +48,18 @@ open PongEnv
 
 namespace PongDqn
 
-def stateNet : NetSpec where
-  name := "pong dqn state"
+/-- The six-number state's MLP. `k` stacks the last `k` states the way the pixel net stacks
+    frames (`k = 1` is the 09-25 arm, name kept so its artifacts keep their prefix); `width`
+    is the hidden width. Both are the state-vs-pixels dissection's knobs: the six numbers
+    carry the ball's velocity but not the paddles', which four stacked frames do. -/
+def stateNet (k : Nat := 1) (width : Nat := 64) : NetSpec where
+  name := if k == 1 && width == 64 then "pong dqn state" else s!"pong dqn state k{k} w{width}"
   imageH := 1
   imageW := 1
   layers := [
-    .dense 6 64 .relu,
-    .dense 64 64 .relu,
-    .dense 64 3 .identity     -- stay, up, down
+    .dense (6 * k) width .relu,
+    .dense width width .relu,
+    .dense width 3 .identity     -- stay, up, down
   ]
 
 /-- Chapter 3's kit at 84 × 84 on a stack of `k` frames. The Nature net's strides
@@ -143,8 +149,9 @@ def main (args : List String) : IO Unit := do
     | "state" => pure false
     | "pixels" => pure true
     | _ => throw <| IO.userError s!"mode={mode}: expected state or pixels"
-  let k : Nat := if pixels then natArg "k" 4 else 1
-  let spec := if pixels then pixelNet k else stateNet
+  let k : Nat := natArg "k" (if pixels then 4 else 1)
+  let width : Nat := natArg "width" 64
+  let spec := if pixels then pixelNet k else stateNet k width
   -- the replay's per-step record: 24 bytes of f32 state, or one 7056-byte u8 frame
   let obsOf : Pong → ByteArray := if pixels then Pong.render else stateObs
   -- the network's input from concatenated records
