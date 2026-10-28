@@ -166,16 +166,18 @@ noncomputable def lambStep (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v 
 
 /-- **LAMB is NOT AdamW: the trust ratio is per-tensor, so it does not factor out.**
 
-    `GradClip`'s `clipFactor_shared` says the clip's factor is one scalar for every parameter; this
-    is the statement that LAMB's is not, made structural — `lambScale` sees only `r` and one norm,
-    so its factor is determined by THAT tensor and two tensors with different norms get different
-    scales. Stated as the explicit witness rather than as prose, because "compute a norm and scale
-    by a ratio" describes both features and the quantifier is the whole difference. -/
+    `GradClip`'s `clipFactor_shared` says the clip's factor is one scalar for every parameter:
+    `(clipScale fac g₁) i * g₂ j = (clipScale fac g₂) j * g₁ i`. This is the negation of that
+    identity for `lambScale` — `lambScale` sees only `r` and one norm, so its factor is determined
+    by THAT tensor, and two tensors with different norms get different scales. Stated as the
+    negated identity rather than as prose, because "compute a norm and scale by a ratio" describes
+    both features and the quantifier is the whole difference. -/
 theorem lambScale_not_shared :
-    ∃ (wn2 : ℝ) (r₁ r₂ : Vec 1),
-      lambTrust wn2 (gradSumSq r₁) ≠ lambTrust wn2 (gradSumSq r₂) := by
-  refine ⟨1, (fun _ => 1), (fun _ => 2), ?_⟩
-  norm_num [lambTrust, gradSumSq]
+    ¬ ∀ (wn2 : ℝ) (r₁ r₂ : Vec 1),
+      lambScale wn2 r₁ 0 * r₂ 0 = lambScale wn2 r₂ 0 * r₁ 0 := by
+  intro h
+  have h' := h 1 (fun _ => 1) (fun _ => 2)
+  norm_num [lambScale, lambTrust, gradSumSq] at h'
 
 /-- **The decay is inside the ratio, and that is observable.** At `wd = 0` the direction is pure
     bias-corrected Adam; any other `wd` moves it by exactly `wd·θ`, BEFORE `lambScale` takes its

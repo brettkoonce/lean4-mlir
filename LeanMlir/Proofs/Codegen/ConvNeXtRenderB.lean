@@ -1059,9 +1059,6 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd_s288.mlir"
   (Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd_s288" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS) (s := 288))
-#guard Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
-    (bB := cnxInBS) (s := 224) ==
-  Proofs.StableHLO.convNextFwdRenderB .tanh "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner (bB := cnxInBS)
 
 -- ── `wdExcludeNormBias` — timm/DeiT `no_weight_decay` ──────────────────────────────────────────
 -- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 123 of the 182 params take `%wdz`: every

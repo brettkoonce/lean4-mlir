@@ -248,12 +248,19 @@ theorem FloatModel.flatConvMixed_close (M L : FloatModel) {ic oc h w kH kW : Nat
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The per-layer error GAIN** — the coefficient of the inherited error `E` in
-    `convMixedBudget`. This is the number that compounds: a `d`-layer stack multiplies its
+    `convMixedBudget` (`convMixedBudget_eq_gain`). This is the number that compounds: a `d`-layer stack multiplies its
     input error by `gain^d`, so the gain, not the additive constant, is what decides whether a
     composed bound says anything. -/
 noncomputable def convMixedGain (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) : ℝ :=
   (n : ℝ) * w * (1 + convBrR uacc uleaf n + uleaf * (1 + convBrR uacc uleaf n)
     + uacc * ((1 + uleaf) * (1 + convBrR uacc uleaf n)))
+
+/-- **`convMixedGain` is the budget's slope in `E`**: the budget at inherited error `E` is the
+    budget at `E = 0` plus `convMixedGain · E`. -/
+theorem convMixedBudget_eq_gain (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) :
+    convMixedBudget uacc uleaf n w β A E
+      = convMixedBudget uacc uleaf n w β A 0 + convMixedGain uacc uleaf n w * E := by
+  simp only [convMixedBudget, convMixedGain]; ring
 
 -- Illustration (arithmetic outside Lean): the f32 gain's `ε = (1+u_acc)^(n+2) − 1` is 2.7e-4 at
 -- `u_acc = 2⁻²⁴`, `n = 4608`; the bf16-mixed `ε` is 1.20e-2 at `u_leaf = 2⁻⁸`, dominated by

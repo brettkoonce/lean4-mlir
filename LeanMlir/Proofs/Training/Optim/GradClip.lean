@@ -22,8 +22,10 @@ grads = jax.tree.map(lambda g: g * jnp.minimum(1.0, CLIP / (gn + 1e-6)), grads)
 **THE NORM IS GLOBAL — ONE SCALAR ACROSS EVERY PARAMETER, NOT ONE PER PARAMETER.** That is the
 entire semantic content of the feature, and it is the thing a per-parameter check cannot see: a
 per-parameter clip compiles, renders, trains and descends, and differs only in that the factor stops
-being shared. `clipFactor_shared` below is the statement the numeric gate drives, and it is why that
-gate measures the ratio's CONSTANCY across parameters rather than the presence of scaling.
+being shared. `clipFactor_shared` below is the cross-multiplied form the numeric gate checks, and it
+is why that gate measures the ratio's CONSTANCY across parameters rather than the presence of
+scaling. On its own it is `fac·a·b = fac·b·a` for one given `fac`; that the render really feeds every
+parameter the one factor is `StableHLO.clipShared_faithful`, the shared node.
 
 **Who uses it**: ViT 1.0 ([`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean), *"DeiT default; the unlock for the 5e-4
 LR"*) and ConvNeXt 1.0 ([`jax/MainConvNeXtImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtImagenet.lean)). **EfficientNet sets it to 0.0
@@ -152,7 +154,9 @@ theorem clipFactor_pos (c ε s : ℝ) (hc : 0 < c) (hε : 0 < ε) : 0 < clipFact
 
     Two parameters clipped by the same global factor have `g'ᵢ/gᵢ` equal, coordinate for coordinate,
     across BOTH of them. Stated as the cross-multiplied form so it needs no nonzero hypothesis and
-    no division: `g'₁ᵢ · g₂ⱼ = g'₂ⱼ · g₁ᵢ`.
+    no division: `g'₁ᵢ · g₂ⱼ = g'₂ⱼ · g₁ᵢ`. With one `fac` supplied this is just commutativity; what
+    makes the emitted step share it is `StableHLO.clipShared_faithful`, and this is the spec the
+    numeric gate checks the render against.
 
     **A per-parameter clip satisfies every other theorem in this file.** It scales, it never
     amplifies, it is the identity below the threshold — it differs from the reference only here. So

@@ -32,7 +32,7 @@ is the cotangent lemma those ties need: at a general target and at the smoothed 
   with no hypothesis on `t` at all: it is `softmaxCE_grad` under `pdiv_finset_sum`, and the
   familiar `softmax − t` is the `Σ t = 1` case.
 * `smoothTarget K α t = (1−α)·t + α/K` is label smoothing as a map on targets, and it preserves
-  `Σ = 1` (`smoothTarget_sum`, the one place `0 < K` is needed).
+  `Σ = 1` (`smoothTarget_sum`; `Σ t = 1` already rules out `K = 0`).
 * `smoothedCE_grad`: the gradient of `softCE` at the SMOOTHED target is exactly the expression
   the render emits — `softmax(z)_j − t_j + α·t_j − α/K`. So the six-op chain is not an
   approximation of the smoothed loss's gradient; it is that gradient, rearranged so that the
@@ -110,11 +110,11 @@ theorem softCE_grad (K : Nat) (t z : Vec K) (j : Fin K) :
 noncomputable def smoothTarget (K : Nat) (α : ℝ) (t : Vec K) : Vec K :=
   fun k => (1 - α) * t k + α / K
 
-/-- Smoothing preserves total mass. The one place `0 < K` is needed — with `K = 0` the `α/K`
-    term is `α/0 = 0` and the identity fails for `α ≠ 0`. -/
-theorem smoothTarget_sum (K : Nat) (hK : 0 < K) (α : ℝ) (t : Vec K) (ht : ∑ k : Fin K, t k = 1) :
+/-- Smoothing preserves total mass. No `0 < K` is needed: at `K = 0` the sum over `Fin 0` is
+    empty, so `ht` is already false. -/
+theorem smoothTarget_sum (K : Nat) (α : ℝ) (t : Vec K) (ht : ∑ k : Fin K, t k = 1) :
     ∑ k : Fin K, smoothTarget K α t k = 1 := by
-  have hKR : (K : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hK.ne'
+  have hKR : (K : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (by rintro rfl; simp at ht)
   simp only [smoothTarget]
   rw [Finset.sum_add_distrib, ← Finset.mul_sum, ht, mul_one, Fin.sum_const, nsmul_eq_mul]
   field_simp
@@ -128,7 +128,7 @@ theorem smoothedCE_grad (K : Nat) (α : ℝ) (t z : Vec K)
     (ht : ∑ k : Fin K, t k = 1) (j : Fin K) :
     pdiv (fun z' : Vec K => fun _ : Fin 1 => softCE K (smoothTarget K α t) z') z j 0
       = softmax K z j - t j + α * t j - α / K := by
-  rw [softCE_grad K (smoothTarget K α t) z j, smoothTarget_sum K j.pos α t ht, one_mul]
+  rw [softCE_grad K (smoothTarget K α t) z j, smoothTarget_sum K α t ht, one_mul]
   simp only [smoothTarget]
   ring
 

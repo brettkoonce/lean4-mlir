@@ -2070,6 +2070,7 @@ open Proofs
 #audit_axioms Proofs.conv2d_sub_abs_le
 #audit_axioms Proofs.FloatModel.convMixed_close_prop
 #audit_axioms Proofs.FloatModel.flatConvMixed_close
+#audit_axioms Proofs.convMixedBudget_eq_gain
 
 -- The bf16-mixed DEPTHWISE (DepthwiseMixedFloatBridge.lean)
 #audit_axioms Proofs.depthwiseConv2d_eq_dw_dot
