@@ -56,7 +56,11 @@ arithmetic noise).
     C8BBN_GC_TENSORS=1 .lake/build/bin/cifar8-bbn-gradcheck          # the probe per tensor
     C8BBN_GC_DUMP=/tmp/d/bbn .lake/build/bin/cifar8-bbn-gradcheck    # + tests/cifar8_bbn_jax_ref.py
 
-## ⚠ Run it on `IREE_BACKEND=vmvx` (or XLA), NOT llvm-cpu — the lowerer, not the render
+## ⚠ Under IREE 3.11 run it on `IREE_BACKEND=vmvx` (or XLA), NOT llvm-cpu — the lowerer, not the render
+
+(On IREE 3.13.0's llvm-cpu — `deploy/iree_cpu_setup.sh`'s stack — both this artifact and the
+per-image control PASS, 2026-10-28, worst rel 0.0051 / 0.0067, tier-1 |cos∠| ≤ 1e-6, 17 s each on
+88 cores. What follows is the 3.11 finding, which is why the vmvx route exists.)
 
 Found 2026-10-19, the first time this gate ran. On IREE 3.11's **llvm-cpu** target this artifact's
 gradient is wrong below the stage-3 pool — layers 1-6 at cosine 0.4-0.8 against JAX, layers 7-8

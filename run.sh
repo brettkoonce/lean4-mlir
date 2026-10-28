@@ -10,7 +10,8 @@
 #   gpu      - GPU index to expose (default: 0)
 #   backend  - "cuda", "rocm", "xpu", "neuron" or "metal" (default: what scripts/platform/env.sh
 #              detects on this box; metal has one GPU, so the index is ignored there; on neuron
-#              the index is a NeuronCore)
+#              the index is a NeuronCore); "llvm-cpu" or "vmvx" is the IREE lowerer on the CPU
+#              (LEAN_MLIR_LOWERER=iree on a box without a GPU), with no device to select
 #
 # Examples:
 #   ./run.sh mnist-cnn-verified
@@ -63,7 +64,8 @@ case "$backend" in
   xpu)  export ZE_AFFINITY_MASK="$gpu" ;;
   neuron) export NEURON_RT_VISIBLE_CORES="$gpu" ;;   # a NeuronCore; a trn1 chip has two
   metal) ;;
-  *)    echo "Unknown backend: $backend (expected cuda, rocm, xpu, neuron or metal)" >&2; exit 1 ;;
+  llvm-cpu|vmvx) ;;   # the IREE lowerer on the CPU: no device variable, the index is moot
+  *)    echo "Unknown backend: $backend (expected cuda, rocm, xpu, neuron, metal, llvm-cpu or vmvx)" >&2; exit 1 ;;
 esac
 
 export IREE_BACKEND="$backend"

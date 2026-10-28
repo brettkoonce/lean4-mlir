@@ -5,10 +5,9 @@ public import LeanMlir.Verified.Train
 
 @[expose] public section
 
-/-! # `resnet50-verified-adam` — ResNet-50 on Imagenette, via XLA/PJRT
+/-! # `resnet50-verified-adam` — ResNet-50 on Imagenette, either lowerer
 
-
-The bottleneck peer of `resnet34-verified-adam` (on XLA): same harness, same 80-epoch
+The bottleneck peer of `resnet34-verified-adam`: same harness, same 80-epoch
 bs32 AdamW schedule, one net swapped. Its `resnet50_*` renders come from
 `Proofs/Codegen/ResNet50RenderB.lean`.
 
@@ -21,7 +20,8 @@ lake build resnet50-verified-adam
 HIP_VISIBLE_DEVICES=0 .lake/build/bin/resnet50-verified-adam data
 ```
 
-`IREE_BACKEND` is inert here — PJRT does not read it.
+`IREE_BACKEND` is read only under `LEAN_MLIR_LOWERER=iree`, where it picks the target; PJRT does
+not read it.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with

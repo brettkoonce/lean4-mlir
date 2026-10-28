@@ -83,6 +83,12 @@ by allocation luck — worth moving to vmvx). IREE's CUDA target also fails to c
 `IREE_EXTRA_FLAGS=--iree-codegen-llvmgpu-use-reduction-vector-distribution=false`, the flag
 `ireeCompileArgs` already applies for rocm.
 
+**2026-10-28, IREE 3.13.0 llvm-cpu (atlas, `deploy/iree_cpu_setup.sh`):** the gate PASSES on
+llvm-cpu for both artifacts — `cifar8wb_bbn` worst rel 0.0051, `cifar8wb_bn` 0.0067, tier-1
+|cos∠| ≤ 1e-6, 17–18 s each on local-task. So the miscompile is 3.11's; the vmvx route stays for
+CI's pin. (3.11.0's local-task device also segfaults on every 224² artifact, which is why the
+CPU stack moved — historical/IREE_BUILD.md.)
+
 ### Gradcheck on vmvx (2026-10-19)
 
 `cifar8-bbn-gradcheck` on `cifar8wb_bbn_adam_train_step.mlir`, bs 128, h = 6e-5, 25 invokes,

@@ -13,7 +13,8 @@
 # exporting it first; $PJRT_PLUGIN and $IREE_BACKEND are
 # honoured as the older spellings of the plugin and the backend):
 #   PLATFORM_BACKEND  cuda | rocm | xpu | neuron | metal — metal on macOS, else the vendor SMI on
-#                     PATH decides, nvidia first (neuron: a /dev/neuron0 device)
+#                     PATH decides, nvidia first (neuron: a /dev/neuron0 device); llvm-cpu | vmvx
+#                     only when asked for (IREE_BACKEND), the IREE lowerer on a box without a GPU
 #   PLATFORM_KIND     desktop | tegra — a Jetson shares one DRAM between host and device
 #   PLATFORM_HOST     ares | 3060 | orin | <hostname> — the box profile the job confs key on
 #   PLATFORM_GPU      the slug the suite's baselines and PLATFORMS.md are keyed by (rtx-4060-ti,
@@ -173,8 +174,22 @@ case "$PLATFORM_BACKEND:$PLATFORM_KIND" in
            LEAN_MLIR_MEM_FRACTION=${LEAN_MLIR_MEM_FRACTION:-1.0} \
            LEAN_MLIR_STAGE_H2D=${LEAN_MLIR_STAGE_H2D:-0}
     ;;
+  llvm-cpu:*|vmvx:*)
+    # No GPU: the IREE lowerer's CPU targets (LEAN_MLIR_LOWERER=iree with IREE_BACKEND=llvm-cpu, or
+    # vmvx for the slow reference lowering), the `-iree` twins' only backend on a box without a
+    # card. Never detected — only an explicit IREE_BACKEND lands here. Nothing to dlopen and no
+    # device to select; deploy/iree_cpu_setup.sh builds the shim, historical/IREE_BUILD.md is the
+    # runbook. The slug is the CPU model, in case a suite baseline is ever keyed by it.
+    PLATFORM_HOST=$(hostname -s 2>/dev/null || echo cpu)
+    PLATFORM_DEVVAR=""
+    PLATFORM_PLUGIN=""
+    PLATFORM_RUNBOOK=historical/IREE_BUILD.md
+    [ -x .venv/bin/python3 ] && PLATFORM_PY=.venv/bin/python3
+    [ -z "$PLATFORM_GPU" ] && command -v lscpu > /dev/null 2>&1 && \
+      PLATFORM_GPU=$(lscpu 2>/dev/null | sed -n 's/^Model name:[[:space:]]*//p' | head -1 | _platform_slug) || true
+    ;;
   *)
-    echo "scripts/platform/env.sh: unknown backend '$PLATFORM_BACKEND' (cuda | rocm | xpu | neuron | metal)" >&2
+    echo "scripts/platform/env.sh: unknown backend '$PLATFORM_BACKEND' (cuda | rocm | xpu | neuron | metal | llvm-cpu | vmvx)" >&2
     return 2 2>/dev/null || exit 2
     ;;
 esac

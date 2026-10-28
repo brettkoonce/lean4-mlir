@@ -1,0 +1,8 @@
+host	atlas
+cpu	Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz
+threads	88
+iree	3.13.0rc20261016 @ 89ece87b89852100c0a4ac3d515e14842d090967
+runtime_commit	89ece87b89852100c0a4ac3d515e14842d090967
+gcc	gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+shim	1431040 bytes, -DUSE_CPU, local-task + local-sync
+repo	5fb4dd55+dirty

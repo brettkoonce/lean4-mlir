@@ -5,9 +5,9 @@ public import LeanMlir.Verified.Train
 
 @[expose] public section
 
-/-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-M AdamW trainer on XLA/PJRT
+/-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-M AdamW trainer, either lowerer
 
-The body is `runMobilenetV4Adam` below, linked against `ffi/libpjrt_ffi.so`.
+The body is `runMobilenetV4Adam` below; the lowerer is dlopened at run time.
 
 80 epochs, bs32, AdamW; the target is the JAX-baseline path's number for this block table. The
 forward and the gradient are both tied against that reference, so the two paths are the same net and

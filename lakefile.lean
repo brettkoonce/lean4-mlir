@@ -547,8 +547,8 @@ lean_exe «mobilenetv2-verified-adam» where
   root := `apps.imagenette.MainMobilenetV2VerifiedAdam
   moreLinkArgs := lowererLink
 
-/-- 80ep, bs32, AdamW; the target is `historical/RESULTS.md`'s MobileNetV4 row. XLA/PJRT only — no
-    IREE peer exists yet, and the body is backend-agnostic if one is wanted. -/
+/-- 80ep, bs32, AdamW; the target is `historical/RESULTS.md`'s MobileNetV4 row. One binary, either
+    lowerer — in `lake run imagenette` on XLA and in `lake run imagenette-iree` on IREE. -/
 lean_exe «mobilenetv4-verified-adam» where
   root := `apps.imagenette.MainMobilenetV4VerifiedAdam
   moreLinkArgs := lowererLink
@@ -1770,8 +1770,9 @@ lean_exe «r50-gradcheck» where
     (`tests/TestCifar8BbnGradCheck.lean`): `r50-gradcheck`'s two tiers on the committed
     `cifar8wb_bbn_adam_train_step.mlir` — the `(W, b)` homogeneity identity at the 8 BN-followed
     convs and the adjoint finite-difference probe per layer. Seconds on XLA; on a CPU-only box
-    run it at `LEAN_MLIR_LOWERER=iree IREE_BACKEND=vmvx` (slow but sound) — NOT llvm-cpu, which
-    miscompiles this step's max-pool backward (the test's header has the evidence).
+    run it at `LEAN_MLIR_LOWERER=iree IREE_BACKEND=vmvx` (slow but sound) — NOT llvm-cpu under
+    IREE 3.11, which miscompiles this step's max-pool backward (the test's header has the
+    evidence); on IREE 3.13 (`deploy/iree_cpu_setup.sh`) llvm-cpu passes it in 17 s.
     `C8BBN_GC_SLUG=cifar8wb_bn` runs it on the per-image sibling as a control. -/
 lean_exe «cifar8-bbn-gradcheck» where
   root := `tests.TestCifar8BbnGradCheck
@@ -2306,7 +2307,8 @@ script mnist do
     SAME binaries differing only in the lowerer `runDemoGroup` selects. `cifar8wb-bbn-ablation` is
     the chapter's headline net — BatchNorm at batch statistics with running-stat eval, the layer
     Chapter 5 onward trains — and is XLA-only here: IREE 3.11's llvm-cpu miscompiles the pooled
-    batched steps (planning/cifar-batch-bn-rerender.md), so it has no `-iree` twin. All three run
+    batched steps (planning/cifar-batch-bn-rerender.md; 3.13's does not, per the gate), so it has
+    no `-iree` twin. All three run
     the WIDE head so the demo trains the nets Chapter 4 reports on; wide costs more wall-clock per
     epoch than narrow and buys no accuracy — §4.3's head-width sweep is exactly that finding —
     but matching the chapter is worth the minutes. -/

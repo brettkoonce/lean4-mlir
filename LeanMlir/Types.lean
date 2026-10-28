@@ -1344,7 +1344,9 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
   -- uninitialised running-max accumulator — the compile warns "reads uninitialized values from an
   -- operand produced by a tensor.empty op" — and the gradient below the stage-3 pool comes out
   -- wrong in cosine, differently per compile; tests/TestCifar8BbnGradCheck.lean has the
-  -- evidence and the JAX reference). Neither target takes a chip flag.
+  -- evidence and the JAX reference). On IREE 3.13.0 the same gate PASSES on llvm-cpu (both
+  -- artifacts, 2026-10-28, deploy/iree_cpu_setup.sh's stack), so vmvx is for 3.11 — CI's pin.
+  -- Neither target takes a chip flag.
   let chipArgs ← if backend == "llvm-cpu" || backend == "vmvx" then
     pure #[]
   else

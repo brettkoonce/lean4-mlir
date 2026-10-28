@@ -33,6 +33,18 @@ were hit) lives in [`IREE.md`](IREE.md). The ROCm-specific variant is in
 > just caught at module-load instead of at runtime. `git checkout <wheel-commit>`
 > in `$IREE_SRC` before building the archives.
 
+## No GPU? One script
+
+On a box without a card the whole recipe below collapses to
+`bash deploy/iree_cpu_setup.sh` (stages `check venv runtime shim smoke`): `iree-compile` into
+`.venv`, the runtime at the wheel's commit, the archives with the `local-task` and `local-sync`
+drivers, `ffi/libiree_ffi.so` compiled `-DUSE_CPU`, and a smoke that runs a 224² render on
+`local-task`. It pins **IREE 3.13.0**, not CI's 3.11.0: 3.11.0's CPU task device segfaults
+inside the first invoke of every 224² artifact (reproduced with `iree-run-module`, one worker,
+8 MB stacks; the same `.vmfb` runs on `local-sync`), and the MNIST-sized artifacts CI runs
+never hit it. Then `LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu lake run mnist-iree`, and
+the other `-iree` twins. Slow: seconds per batch-32 step of a 224² net on 88 cores.
+
 ## What you need
 
 | Thing | Why | How |
@@ -288,6 +300,8 @@ uses the same unified `spec.train` loop as every other architecture.
 | `iree-compile` not found | venv not active in the shell that runs `lake build` | `source .venv/bin/activate` first |
 | `undefined symbol: flatcc_verify_table_as_root` *at runtime, not link time* | flatcc symbols built with `-fvisibility=hidden`, stripped from `.dynsym` | use the §4c fallback (rebuild `verifier.c` with `-fvisibility=default`) |
 | Trainer crashes with `device target "cuda"` error on a HIP machine (or vice versa) | `IREE_BACKEND` env var not propagated through tmux into the binary | set it via a shell wrapper script (see `run_*.sh` in the repo root for examples) — `IREE_BACKEND=cuda` is the default |
+| `Segmentation fault` inside the first invoke on `local-task` (CPU), the same `.vmfb` fine on `local-sync` or under `iree-run-module --device=local-sync` | IREE 3.11.0's CPU task device on the 224² artifacts (MobileNetV2's forward and train step; not the MNIST ones) — not the shim, not the stack size, not the core count | move compiler wheel, runtime wheel and runtime commit together to 3.13.0: `deploy/iree_cpu_setup.sh`; delete `.lake/build/*_llvm-cpu.vmfb` (a cache from another release does not load: `required module 'hal' version mismatch`) |
+| `ninja: unknown target 'build_tools/third_party/printf/libprintf_printf.a'` | IREE ≥ 3.13 folds printf into `libiree_runtime_unified.a`; 3.11 had it as its own archive | link whatever `libprintf*.a` exists, none if none — `deploy/iree_cpu_setup.sh` does |
 | Eval call fails with `module 'foo_eval' not registered` after epoch 10 | the trainer's eval string is misspelled vs the sanitized spec name | sanitize lowercases and replaces non-alphanum with `_` — "EfficientNet V2-S" → `efficientnet_v2_s_eval`, NOT `efficient_net_v2_s_eval` |
 
 ## What this gets you

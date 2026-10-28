@@ -1,0 +1,37 @@
+════ iree_cpu_setup 2026-10-28 03:48:21 — stages: check venv runtime shim smoke — IREE 3.13.0
+
+━━━ check: the box
+  ✓ C compiler: gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0
+  ✓ no python 3.12/3.13 on PATH; uv is, and the venv stage will use it
+  ✓ disk: 1372 GB free
+  ✓ cpu: Intel(R) Xeon(R) CPU E5-2699 v4 @ 2.20GHz, 88 threads
+
+━━━ venv: .venv with iree-base-compiler + iree-base-runtime 3.13.0, cmake, ninja
+  ✓ .venv already has iree-compile 3.13.0
+  ✓ IREE compiler version 3.13.0rc20261016 @ 89ece87b89852100c0a4ac3d515e14842d090967
+
+━━━ runtime: /home/skoonce/src/iree at the wheel's commit, static archives in /home/skoonce/src/iree-build
+  ✓ wheel commit 89ece87b89852100c0a4ac3d515e14842d090967
+  ✓ source at 89ece87 2026-10-16
+  ✓ archives: 3 (25M build)
+
+━━━ shim: ffi/libiree_ffi.so, CPU only
+
+  ✗ local-task driver symbol missing — --whole-archive dropped?
+
+  The log is runs/2026-10-28-iree-cpu-setup/setup.log. Fix the above, then resume with:
+    bash deploy/iree_cpu_setup.sh shim
+════ iree_cpu_setup 2026-10-28 03:49:08 — stages: shim smoke — IREE 3.13.0
+
+━━━ shim: ffi/libiree_ffi.so, CPU only
+  ✓ ffi/libiree_ffi.so (1.4M), local-task + local-sync drivers, 8 entry points
+  ✓ removed 16 cached CPU .vmfb (compiled by another release, they would not load)
+
+━━━ smoke: the MobileNetV2 eval forward on llvm-cpu, local-task (what 3.11.0 segfaults on)
+  ✓ mobilenetv2_fwd_eval ran on local-task: 32x10xf32=[0 0 0 0 0 0 0 0 0 0]...
+  ✓ manifest: runs/2026-10-28-iree-cpu-setup/manifest.txt
+
+  Next, from this shell:
+    LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu lake run mnist-iree          # a few minutes
+    LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu lake run imagenette-iree     # the seven, days on a CPU
+  The lakefile puts .venv/bin on PATH for the -iree groups itself; a bare binary wants it on PATH.
