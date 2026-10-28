@@ -1,0 +1,15 @@
+I1028 05:12:03.507261 1205388 service.cc:154] XLA service 0x7b5f8c02ed40 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1028 05:12:03.507389 1205388 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1028 05:12:03.509844 1205388 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1028 05:12:03.509889 1205388 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1028 05:12:03.517505 1205388 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__long50_s0e10_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2338 ms
+FPN VisDrone inference dump (tower=0) — data/visdrone_fpn → runs/2026-10-27-visdrone-rows-seeds/infer_long50_s0e10
+  spec   : ResNet-34 + FPN detector 448 wcls pb (VisDrone) long50_s0e10
+  prefix : .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__long50_s0e10
+  params : .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__long50_s0e10_params.bin (21548743 floats expected)
+  loaded 548 val records (185220-wide output); dumping logits
+  wrote runs/2026-10-27-visdrone-rows-seeds/infer_long50_s0e10/logits.bin (406002240 bytes — 548×185220 f32)

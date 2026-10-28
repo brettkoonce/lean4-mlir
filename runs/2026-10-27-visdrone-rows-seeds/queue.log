@@ -1,0 +1,83 @@
+2026-10-27 21:24:35 aug50_s1 start (FPN_AUG=1 FPN_EPOCHS=50)
+2026-10-27 23:18:00 long50_s2 start (FPN_EPOCHS=50)
+2026-10-27 23:19:00 long50_s1 start (FPN_EPOCHS=50)
+2026-10-28 02:04:10 aug50_s1 exit 0
+2026-10-28 02:08:40 aug50_s1: multilabel mAP@0.50 = 0.1668 / argmax mAP@0.50 = 0.1624
+2026-10-28 02:13:10 aug50_s1e10: multilabel mAP@0.50 = 0.1788 / argmax mAP@0.50 = 0.1690
+2026-10-28 02:17:52 aug50_s1e20: multilabel mAP@0.50 = 0.1628 / argmax mAP@0.50 = 0.1563
+2026-10-28 02:22:12 aug50_s1e30: multilabel mAP@0.50 = 0.1707 / argmax mAP@0.50 = 0.1655
+2026-10-28 02:26:38 aug50_s1e40: multilabel mAP@0.50 = 0.1681 / argmax mAP@0.50 = 0.1637
+2026-10-28 02:26:38 aug50_s1 DONE
+2026-10-28 02:26:38 ctrl12_s1 start (FPN_EPOCHS=12)
+2026-10-28 02:41:48 long50_s2 exit 0
+2026-10-28 02:45:51 long50_s2: multilabel mAP@0.50 = 0.1276 / argmax mAP@0.50 = 0.1232
+2026-10-28 02:50:37 long50_s2e10: multilabel mAP@0.50 = 0.1385 / argmax mAP@0.50 = 0.1319
+2026-10-28 02:55:08 long50_s2e20: multilabel mAP@0.50 = 0.1354 / argmax mAP@0.50 = 0.1311
+2026-10-28 02:55:25 long50_s1 exit 0
+2026-10-28 02:59:13 long50_s2e30: multilabel mAP@0.50 = 0.1346 / argmax mAP@0.50 = 0.1304
+2026-10-28 02:59:28 long50_s1: multilabel mAP@0.50 = 0.1297 / argmax mAP@0.50 = 0.1254
+2026-10-28 03:03:06 long50_s2e40: multilabel mAP@0.50 = 0.1289 / argmax mAP@0.50 = 0.1247
+2026-10-28 03:03:06 long50_s2 DONE
+2026-10-28 03:03:06 cfoc2_s2 start (FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12)
+2026-10-28 03:04:01 long50_s1e10: multilabel mAP@0.50 = 0.1450 / argmax mAP@0.50 = 0.1383
+2026-10-28 03:08:40 long50_s1e20: multilabel mAP@0.50 = 0.1362 / argmax mAP@0.50 = 0.1319
+2026-10-28 03:12:12 ctrl12_s1 exit 0
+2026-10-28 03:12:59 long50_s1e30: multilabel mAP@0.50 = 0.1358 / argmax mAP@0.50 = 0.1315
+2026-10-28 03:16:30 ctrl12_s1: multilabel mAP@0.50 = 0.1527 / argmax mAP@0.50 = 0.1460
+2026-10-28 03:16:30 ctrl12_s1 DONE
+2026-10-28 03:16:30 ALL DONE (aug50:1 ctrl12:1)
+2026-10-28 03:17:00 long50_s1e40: multilabel mAP@0.50 = 0.1307 / argmax mAP@0.50 = 0.1265
+2026-10-28 03:17:00 long50_s1 DONE
+2026-10-28 03:17:00 cfoc2_s1 start (FPN_AUG=1 FPN_CLSW=none FPN_CLSFOCAL=2 FPN_EPOCHS=12)
+2026-10-28 03:47:11 aug50_s2 start (FPN_AUG=1 FPN_EPOCHS=50)
+2026-10-28 03:53:07 cfoc2_s2 exit 0
+2026-10-28 03:53:48 ctrl12_s0 rescore start (seed-0 checkpoint of 2026-08-28)
+2026-10-28 03:57:20 cfoc2_s2: multilabel mAP@0.50 = 0.1516 / argmax mAP@0.50 = 0.1326
+2026-10-28 03:57:20 cfoc2_s2 DONE
+2026-10-28 03:57:20 ALL DONE (long50:2 cfoc2:2)
+2026-10-28 03:58:13 ctrl12_s0: multilabel mAP@0.50 = 0.1588 / argmax mAP@0.50 = 0.1526
+2026-10-28 03:58:13 long50_s0 rescore start (seed-0 checkpoint of 2026-08-28)
+2026-10-28 04:02:14 long50_s0: multilabel mAP@0.50 = 0.1287 / argmax mAP@0.50 = 0.1243
+2026-10-28 04:02:14 aug50_s0 rescore start (seed-0 checkpoint of 2026-08-28)
+2026-10-28 04:06:30 aug50_s0: multilabel mAP@0.50 = 0.1718 / argmax mAP@0.50 = 0.1674
+2026-10-28 04:06:30 cfoc2_s0 rescore start (seed-0 checkpoint of 2026-08-29)
+2026-10-28 04:08:07 cfoc2_s1 exit 0
+2026-10-28 04:10:30 cfoc2_s0: multilabel mAP@0.50 = 0.1961 / argmax mAP@0.50 = 0.1762
+2026-10-28 04:10:30 RESCORE DONE (ctrl12 long50 aug50 cfoc2)
+2026-10-28 04:12:03 cfoc2_s1: multilabel mAP@0.50 = 0.1350 / argmax mAP@0.50 = 0.1182
+2026-10-28 04:12:03 cfoc2_s1 DONE
+2026-10-28 04:12:03 ALL DONE (long50:1 cfoc2:1)
+2026-10-28 04:18:09 cfoc2_s1e6: multilabel mAP@0.50 = 0.1344 / argmax mAP@0.50 = 0.1157
+2026-10-28 04:22:26 cfoc2_s1e8: multilabel mAP@0.50 = 0.1399 / argmax mAP@0.50 = 0.1235
+2026-10-28 04:26:27 cfoc2_s1e10: multilabel mAP@0.50 = 0.1298 / argmax mAP@0.50 = 0.1144
+2026-10-28 04:26:27 CKPT DONE cfoc2_s1 (6 8 10)
+2026-10-28 04:30:50 cfoc2_s0e6: multilabel mAP@0.50 = 0.1366 / argmax mAP@0.50 = 0.1165
+2026-10-28 04:34:48 cfoc2_s0e8: multilabel mAP@0.50 = 0.1386 / argmax mAP@0.50 = 0.1203
+2026-10-28 04:38:49 cfoc2_s0e10: multilabel mAP@0.50 = 0.1944 / argmax mAP@0.50 = 0.1741
+2026-10-28 04:38:49 CKPT DONE cfoc2_s0 (6 8 10)
+2026-10-28 04:43:45 cfoc2_s2e6: multilabel mAP@0.50 = 0.1264 / argmax mAP@0.50 = 0.1077
+2026-10-28 04:48:18 cfoc2_s2e8: multilabel mAP@0.50 = 0.1438 / argmax mAP@0.50 = 0.1254
+2026-10-28 04:52:33 cfoc2_s2e10: multilabel mAP@0.50 = 0.1687 / argmax mAP@0.50 = 0.1493
+2026-10-28 04:52:33 CKPT DONE cfoc2_s2 (6 8 10)
+2026-10-28 04:59:38 aug50_s0e10: multilabel mAP@0.50 = 0.1684 / argmax mAP@0.50 = 0.1592
+2026-10-28 05:03:49 aug50_s0e20: multilabel mAP@0.50 = 0.1766 / argmax mAP@0.50 = 0.1703
+2026-10-28 05:08:01 aug50_s0e30: multilabel mAP@0.50 = 0.1777 / argmax mAP@0.50 = 0.1731
+2026-10-28 05:12:03 aug50_s0e40: multilabel mAP@0.50 = 0.1738 / argmax mAP@0.50 = 0.1694
+2026-10-28 05:12:03 CKPT DONE aug50_s0 (10 20 30 40)
+2026-10-28 05:16:12 long50_s0e10: multilabel mAP@0.50 = 0.1277 / argmax mAP@0.50 = 0.1223
+2026-10-28 05:20:36 long50_s0e20: multilabel mAP@0.50 = 0.1355 / argmax mAP@0.50 = 0.1313
+2026-10-28 05:24:39 long50_s0e30: multilabel mAP@0.50 = 0.1327 / argmax mAP@0.50 = 0.1283
+2026-10-28 05:28:41 long50_s0e40: multilabel mAP@0.50 = 0.1312 / argmax mAP@0.50 = 0.1268
+2026-10-28 05:28:41 CKPT DONE long50_s0 (10 20 30 40)
+2026-10-28 06:57:57 aug50_s2 exit 0
+2026-10-28 07:01:43 aug50_s2: multilabel mAP@0.50 = 0.1708 / argmax mAP@0.50 = 0.1666
+2026-10-28 07:05:24 aug50_s2e10: multilabel mAP@0.50 = 0.1703 / argmax mAP@0.50 = 0.1614
+2026-10-28 07:09:02 aug50_s2e20: multilabel mAP@0.50 = 0.1806 / argmax mAP@0.50 = 0.1738
+2026-10-28 07:12:45 aug50_s2e30: multilabel mAP@0.50 = 0.1797 / argmax mAP@0.50 = 0.1748
+2026-10-28 07:16:30 aug50_s2e40: multilabel mAP@0.50 = 0.1743 / argmax mAP@0.50 = 0.1700
+2026-10-28 07:16:30 aug50_s2 DONE
+2026-10-28 07:16:30 ctrl12_s2 start (FPN_EPOCHS=12)
+2026-10-28 07:53:44 ctrl12_s2 exit 0
+2026-10-28 07:57:37 ctrl12_s2: multilabel mAP@0.50 = 0.1606 / argmax mAP@0.50 = 0.1538
+2026-10-28 07:57:37 ctrl12_s2 DONE
+2026-10-28 07:57:37 ALL DONE (aug50:2 ctrl12:2)

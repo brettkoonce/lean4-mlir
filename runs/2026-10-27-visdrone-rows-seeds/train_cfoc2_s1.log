@@ -1,0 +1,205 @@
+ResNet-34 + FPN detector 448 wcls pb (VisDrone) cfoc2_s1: 21548743 params
+Generating train step MLIR...
+  950250 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1028 03:17:00.460828 1136336 service.cc:154] XLA service 0x72b1680093f0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1028 03:17:00.460874 1136336 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1028 03:17:00.462368 1136336 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1028 03:17:00.462413 1136336 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1028 03:17:00.469270 1136336 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1028 03:17:04.952393 1136371 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_18', 40 bytes spill stores, 40 bytes spill loads
+
+I1028 03:17:05.333068 1136367 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_61', 76 bytes spill stores, 60 bytes spill loads
+
+I1028 03:17:05.630560 1136372 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_18', 8468 bytes spill stores, 8440 bytes spill loads
+
+I1028 03:17:05.685978 1136351 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_19', 48 bytes spill stores, 48 bytes spill loads
+
+I1028 03:17:05.948679 1136364 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_19', 8944 bytes spill stores, 8968 bytes spill loads
+
+I1028 03:17:06.060313 1136354 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 56 bytes spill stores, 56 bytes spill loads
+
+I1028 03:17:06.421274 1136374 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 8860 bytes spill stores, 8892 bytes spill loads
+
+I1028 03:17:06.800257 1136366 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_60', 272 bytes spill stores, 160 bytes spill loads
+
+I1028 03:17:08.368695 1136363 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_59', 100 bytes spill stores, 84 bytes spill loads
+
+I1028 03:17:11.739417 1136380 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_add_reduce_subtract_fusion', 28 bytes spill stores, 28 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_train_step.mlir (@main, 424 outputs, 1 replica) in 29359 ms
+  session loaded
+  train: 6471 images (602112 floats/image)
+  seed offset: 1 (LEAN_MLIR_SEED)
+  bootstrap: loading first 21284672 floats from .lake/build/jax_r34_imagenet.bin
+  detector prior-bias init: π = 0.010000 → obj bias = -4.595120
+  21548743 params + m + v (246 MB)
+training: 808 batches/epoch, batch=8, Adam, lr=0.000400, cosine warmup=3, label_smooth=0.000000, wd=0.000500
+  BN layers: 36, BN stat floats: 17024
+  WARN: bootstrap BN stats size 85138688 ≠ expected 68096; using zeros
+  step 0/808: loss=825.720886 (485ms)
+  step 1/808: loss=815.559692 (178ms)
+  step 2/808: loss=743.935303 (184ms)
+  step 100/808: loss=508.627350 (206ms)
+  step 200/808: loss=250.286774 (200ms)
+  step 300/808: loss=342.835907 (198ms)
+  step 400/808: loss=174.248886 (215ms)
+  step 500/808: loss=154.038727 (199ms)
+  step 600/808: loss=162.184479 (199ms)
+  step 700/808: loss=299.971710 (213ms)
+  step 800/808: loss=164.562408 (194ms)
+Epoch 1/12: loss=320.900562 lr=0.000133 (239244ms)
+  step 0/808: loss=190.733902 (200ms)
+  step 1/808: loss=223.467590 (180ms)
+  step 2/808: loss=224.744095 (185ms)
+  step 100/808: loss=181.793030 (194ms)
+  step 200/808: loss=254.149689 (195ms)
+  step 300/808: loss=229.695557 (195ms)
+  step 400/808: loss=248.478348 (183ms)
+  step 500/808: loss=201.120758 (191ms)
+  step 600/808: loss=87.186241 (193ms)
+  step 700/808: loss=174.977158 (200ms)
+  step 800/808: loss=167.709335 (207ms)
+Epoch 2/12: loss=193.283232 lr=0.000267 (239947ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e2.bin + bn_stats_e2.bin
+  step 0/808: loss=267.616730 (205ms)
+  step 1/808: loss=227.725479 (181ms)
+  step 2/808: loss=172.876404 (186ms)
+  step 100/808: loss=138.051605 (230ms)
+  step 200/808: loss=175.381714 (192ms)
+  step 300/808: loss=235.970825 (183ms)
+  step 400/808: loss=230.673203 (195ms)
+  step 500/808: loss=204.736053 (219ms)
+  step 600/808: loss=160.684174 (199ms)
+  step 700/808: loss=293.243958 (202ms)
+  step 800/808: loss=205.847595 (195ms)
+Epoch 3/12: loss=178.478856 lr=0.000400 (240016ms)
+  step 0/808: loss=141.925720 (219ms)
+  step 1/808: loss=184.755356 (211ms)
+  step 2/808: loss=193.611176 (193ms)
+  step 100/808: loss=154.618301 (225ms)
+  step 200/808: loss=162.693451 (202ms)
+  step 300/808: loss=212.281357 (199ms)
+  step 400/808: loss=194.455063 (194ms)
+  step 500/808: loss=196.995758 (187ms)
+  step 600/808: loss=139.476074 (203ms)
+  step 700/808: loss=229.713577 (198ms)
+  step 800/808: loss=183.605881 (202ms)
+Epoch 4/12: loss=171.365936 lr=0.000388 (240161ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e4.bin + bn_stats_e4.bin
+  step 0/808: loss=214.715149 (198ms)
+  step 1/808: loss=166.792419 (184ms)
+  step 2/808: loss=77.970665 (181ms)
+  step 100/808: loss=109.256584 (204ms)
+  step 200/808: loss=146.845596 (209ms)
+  step 300/808: loss=102.764244 (215ms)
+  step 400/808: loss=244.694931 (199ms)
+  step 500/808: loss=110.856667 (183ms)
+  step 600/808: loss=245.696838 (205ms)
+  step 700/808: loss=178.594788 (202ms)
+  step 800/808: loss=115.183388 (202ms)
+Epoch 5/12: loss=162.769824 lr=0.000353 (240010ms)
+  step 0/808: loss=191.078979 (233ms)
+  step 1/808: loss=133.259247 (211ms)
+  step 2/808: loss=164.661011 (191ms)
+  step 100/808: loss=136.399612 (189ms)
+  step 200/808: loss=98.314072 (207ms)
+  step 300/808: loss=122.985924 (199ms)
+  step 400/808: loss=143.748413 (198ms)
+  step 500/808: loss=110.838547 (202ms)
+  step 600/808: loss=239.472107 (203ms)
+  step 700/808: loss=199.987000 (195ms)
+  step 800/808: loss=173.721603 (193ms)
+Epoch 6/12: loss=156.659184 lr=0.000300 (240243ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e6.bin + bn_stats_e6.bin
+  step 0/808: loss=136.496674 (187ms)
+  step 1/808: loss=99.852898 (181ms)
+  step 2/808: loss=196.284500 (198ms)
+  step 100/808: loss=150.305099 (184ms)
+  step 200/808: loss=142.760666 (195ms)
+  step 300/808: loss=173.463226 (208ms)
+  step 400/808: loss=118.637619 (212ms)
+  step 500/808: loss=133.070648 (198ms)
+  step 600/808: loss=187.059235 (212ms)
+  step 700/808: loss=148.288681 (201ms)
+  step 800/808: loss=152.468048 (202ms)
+Epoch 7/12: loss=150.618970 lr=0.000235 (247126ms)
+  step 0/808: loss=175.695587 (228ms)
+  step 1/808: loss=128.179520 (240ms)
+  step 2/808: loss=167.878952 (203ms)
+  step 100/808: loss=136.947342 (195ms)
+  step 200/808: loss=156.668365 (199ms)
+  step 300/808: loss=144.438477 (190ms)
+  step 400/808: loss=106.726692 (185ms)
+  step 500/808: loss=160.989914 (330ms)
+  step 600/808: loss=167.088776 (184ms)
+  step 700/808: loss=176.443314 (189ms)
+  step 800/808: loss=237.128448 (193ms)
+Epoch 8/12: loss=144.469697 lr=0.000165 (289952ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e8.bin + bn_stats_e8.bin
+  step 0/808: loss=126.280495 (289ms)
+  step 1/808: loss=64.152756 (184ms)
+  step 2/808: loss=174.599274 (190ms)
+  step 100/808: loss=166.140915 (192ms)
+  step 200/808: loss=145.885590 (205ms)
+  step 300/808: loss=94.151520 (182ms)
+  step 400/808: loss=149.556030 (280ms)
+  step 500/808: loss=96.661713 (195ms)
+  step 600/808: loss=128.890625 (294ms)
+  step 700/808: loss=133.443054 (181ms)
+  step 800/808: loss=81.937218 (287ms)
+Epoch 9/12: loss=139.503677 lr=0.000100 (291442ms)
+  step 0/808: loss=181.312775 (289ms)
+  step 1/808: loss=152.627640 (200ms)
+  step 2/808: loss=114.901924 (197ms)
+  step 100/808: loss=202.343277 (177ms)
+  step 200/808: loss=148.186890 (175ms)
+  step 300/808: loss=226.454254 (180ms)
+  step 400/808: loss=165.912354 (196ms)
+  step 500/808: loss=158.384476 (179ms)
+  step 600/808: loss=116.288582 (178ms)
+  step 700/808: loss=164.517868 (179ms)
+  step 800/808: loss=109.802559 (174ms)
+Epoch 10/12: loss=135.345130 lr=0.000047 (254713ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e10.bin + bn_stats_e10.bin
+  (fpn eval skipped — offline mAP pass; train loss above is the signal)
+  step 0/808: loss=100.313164 (195ms)
+  step 1/808: loss=121.411285 (178ms)
+  step 2/808: loss=156.509705 (185ms)
+  step 100/808: loss=92.903313 (197ms)
+  step 200/808: loss=115.587906 (194ms)
+  step 300/808: loss=68.947510 (177ms)
+  step 400/808: loss=77.080231 (199ms)
+  step 500/808: loss=153.446915 (184ms)
+  step 600/808: loss=115.239532 (186ms)
+  step 700/808: loss=135.294769 (183ms)
+  step 800/808: loss=177.302979 (203ms)
+Epoch 11/12: loss=132.286297 lr=0.000012 (235394ms)
+  step 0/808: loss=128.082809 (201ms)
+  step 1/808: loss=137.289673 (177ms)
+  step 2/808: loss=128.253967 (178ms)
+  step 100/808: loss=80.375931 (178ms)
+  step 200/808: loss=188.246414 (186ms)
+  step 300/808: loss=122.269653 (186ms)
+  step 400/808: loss=102.845528 (181ms)
+  step 500/808: loss=145.725616 (193ms)
+  step 600/808: loss=97.444252 (175ms)
+  step 700/808: loss=128.780624 (173ms)
+  step 800/808: loss=159.095886 (188ms)
+Epoch 12/12: loss=130.982065 lr=0.000000 (230801ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448_wcls_pb__visdrone__cfoc2_s1_params_e12.bin + bn_stats_e12.bin
+  (fpn eval skipped — offline mAP pass; train loss above is the signal)
+Saved params + BN stats.
+FPN multi-scale VisDrone (56/28/14, 3 anchors/scale, Ntot=185220, head tower=0) — data dir: data/visdrone_fpn
+  spec   : ResNet-34 + FPN detector 448 wcls pb (VisDrone) cfoc2_s1
+  epochs : 12
+  lr     : 0.000400  clip: 4.000000
+  augment: true (HSV jitter + hflip on the FPN path)
+  clsw   : none weights (FPN_CLSW=none|sqrt|inv), class focal γ=2.000000
+  affine : off (FPN_AFFINE=<percent> to enable)
