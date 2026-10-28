@@ -175,6 +175,13 @@ def main (args : List String) : IO Unit := do
       esCsv := esCsv ++ s!"{esSeed},{readU64 st 0},{readU64 st 1},{e},{fmt cov 4}\n"
       last := readU64 st 0
       b := b * 10
+    -- the table at `budget`: the matched-budget row's other two columns (head-to-head against
+    -- CFR+ seat-averaged, the worst-hand raises) and the table itself, for the run directory
+    let esTbl ← esAverage es
+    say s!"    at {last} nodes: vs CFR+ seat-averaged {fmt (seatAveraged r esTbl eq) 5}"
+    for (name, f) in worstHandRaises r ks worst esTbl do
+      say s!"      {name.pushn ' ' (28 - name.length)} {fmt (100.0 * f) 1}%"
+    dumpTable s!"esmccfr_s{esSeed}" esTbl
   IO.FS.writeFile s!".lake/build/leduc_r{r}_esmccfr.csv" esCsv
   if !ok then throw <| IO.userError "leduc gates failed"
   say s!"gates: the Lean game is the C tree, the information-set count is {nInfo r}\

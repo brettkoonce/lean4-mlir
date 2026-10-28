@@ -33,7 +33,7 @@ net. 4.12–4.17M nodes touched, 204,000 steps, 5.7 min a seed. The strategy res
 |---|---|---|
 | strategy net | 0.229 / 0.185 / 0.152 (mean 0.189) | −0.055 / −0.039 / −0.050 |
 | SD-CFR (the T stored advantage nets, own-reach weighted) | 0.127 / 0.150 / 0.109 (mean 0.129) | −0.022 / −0.031 / −0.020 |
-| tabular ES-MCCFR at 4.145M nodes (seeds 1 / 2 / 3) | 0.038 / 0.043 / 0.041 (mean 0.041) | |
+| tabular ES-MCCFR at 4.145M nodes (seeds 1 / 2 / 3) | 0.038 / 0.043 / 0.041 (mean 0.041) | −0.007 / −0.010 / −0.009 |
 | CFR+ 1,000 iterations (exact) | 0.000238 | 0 |
 
 Fixed arms (`lake exe leduc-env`): uniform 2.3736, scripted honest 1.050 (−0.123/hand), CFR+ with the
@@ -90,3 +90,13 @@ parameter binding at creation; the forward never saw a trained net. Found by dum
 outputs at t = 1 and t = 2 (identical) and the parameters (different); fixed by passing the
 parameters in. The r = 3 runs predate that refactor. The trainer now throws on a non-finite
 advantage instead of folding silently.
+
+## 2026-10-28 — the ES-MCCFR r = 3 cells
+
+The r = 3 trainer runs predate the matched-budget bracket, so the ES-MCCFR row had no table and
+no head-to-head. `leduc-env` now dumps the ES-MCCFR table at `budget` and prints its head-to-head
+and worst-hand raises; `.lake/build/bin/leduc-env budget=4145000 esSeeds=3 seeds=0` (CPU, 0.3 s)
+reproduces the row's exploitability to three digits (0.037889 / 0.042811 / 0.041128 at 4,145,015 /
+4,145,026 / 4,145,024 nodes) and gives vs CFR+ seat-averaged −0.00677 / −0.01036 / −0.00854 and the
+bluff (raise opening round 2 with a jack under a queen, information set 19) 9.5% / 11.7% / 2.2%.
+Tables: `r3_s<seed>_esmccfr.txt`, `idx σ_fold σ_call σ_raise` as the others.
