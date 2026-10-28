@@ -1361,7 +1361,7 @@ theorem mnv4_net_lossGrad (N f : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
 
 /-- **The loss the artifacts ship**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits. -/
-theorem mnv4_net_lossGrad_smoothedCE (N f : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem mnv4_net_lossGrad_smoothedCE (N f : Nat) {nCls : Nat}
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Mnv4BWeights nCls)
     (bf16 : Bool) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) (hx : Mnv4SmoothAt N f w x)
     (t : Vec (N * (1 * nCls))) (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
@@ -1370,7 +1370,7 @@ theorem mnv4_net_lossGrad_smoothedCE (N f : Nat) {nCls : Nat} (hK : 0 < nCls)
         (rowB N nCls (mobilenetv4ForwardBFull N f w x)) t))) :=
   mnv4_net_lossGrad N f xN cotN vN epsStr w bf16 x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
-      fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLoss_grad N nCls α B aStr negAK bStr logN ohN t _ ht J⟩
 
 
 /-- **The emitted MobileNetV4 step's gradient nodes ARE the loss's gradient, at one chain.** For

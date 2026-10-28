@@ -82,9 +82,10 @@ theorem denseWB_den {N a c : Nat}
   simp only [Mat.flatten, Equiv.symm_apply_apply]
 
 /-- **Batched dense bias op denotes the certified Σ_n batched bias gradient** (`Σ_{n} cotₙ` per
-    output) — `Σ_n` of `denseBiasGrad_correct`. Covers the SE `b₁`/`b₂` and the head bias. -/
-theorem denseBB_den {N c : Nat}
-    (bN lrStr cotN : String) (W : Mat c c) (x : Vec c) (b : Vec c) (cot : Vec (N * c))
+    output) — `Σ_n` of `denseBiasGrad_correct`. Covers the SE `b₁`/`b₂` and the head bias, at any
+    `W : Mat a c`; the gradient reads neither `W` nor `x`. -/
+theorem denseBB_den {N a c : Nat}
+    (bN lrStr cotN : String) (W : Mat a c) (x : Vec a) (b : Vec c) (cot : Vec (N * c))
     (lr : ℝ) (j : Fin c) :
     den (SHlo.denseBiasSgdB bN lrStr b lr (.operand cotN cot)) j
       = b j - lr * ∑ n : Fin N, ∑ k : Fin c,
@@ -242,7 +243,7 @@ theorem denseWSgdTiedB_holds {N a c : Nat} {xN wN lrStr cotN : String} {x : Vec 
   denseWB_den xN wN lrStr cotN x W b cot lr i j
 
 /-- At a square witness, as every use is (the gradient ignores `W` and `x`). -/
-theorem denseBSgdTiedB_holds {N c : Nat} {bN lrStr cotN : String} {W : Mat c c} {x : Vec c}
+theorem denseBSgdTiedB_holds {N a c : Nat} {bN lrStr cotN : String} {W : Mat a c} {x : Vec a}
     {b : Vec c} {cot : Vec (N * c)} {lr : ℝ} : DenseBSgdTiedB N bN lrStr cotN W x b cot lr :=
   fun j => denseBB_den bN lrStr cotN W x b cot lr j
 

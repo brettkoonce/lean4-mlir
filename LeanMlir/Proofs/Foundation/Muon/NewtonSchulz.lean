@@ -29,9 +29,10 @@ asks when the matmul iteration `X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` (`nsStep`) c
 * **The lift to matrices** (`nsStep_iterate_tendsto_polar`, and its cubic and quintic instances):
   for pre-normalized full-rank `G` with every `σᵢ ∈ (0,1]`, the iterate converges to `UVᵀ`
   whenever the scalar map drives `(0,1]` to `1`.
-* **Muon's tuned quintic** `(3.4445, −4.7750, 2.0315)` does not satisfy that hypothesis
-  (`qScalar_not_le_one`, `qScalar_one_lt_one`); what is proved for it is a five-step band bound
-  at `σ = 1/2` (`qScalar_iterate_band_half`).
+* **Muon's tuned quintic** `(3.4445, −4.7750, 2.0315)` does not satisfy that hypothesis: `1` is
+  not a fixed point (`qScalar_one_lt_one`), so no orbit converges to `1`
+  (`qScalar_iterate_not_tendsto_one`, `qScalar_not_hconv`). What is proved for it is a five-step
+  band bound at `σ = 1/2` (`qScalar_iterate_band_half`).
 
 All `propext / Classical.choice / Quot.sound`-clean.
 
@@ -152,8 +153,9 @@ theorem nsStep_iterate_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ)
     continuity makes `L` a fixed point (`isFixedPt_of_tendsto_iterate`), and `hfix` pins `L = 1`.
 
     Both the cubic (`gCubic_iterate_tendsto_one`) and the *principled* convergent quintic
-    (`q5Scalar_iterate_tendsto_one`) instantiate this. Muon's *tuned* quintic (`qScalar`) fails `g t ≤ 1` —
-    that single broken hypothesis is exactly why it bands instead of converging. -/
+    (`q5Scalar_iterate_tendsto_one`) instantiate this. Muon's *tuned* quintic (`qScalar`) fails both
+    `g t ≤ 1` (`qScalar_not_le_one`) and `t ≤ g t` at `t = 1` (`qScalar_one_lt_one`); since `1` is not
+    a fixed point, no orbit of it converges to `1` (`qScalar_iterate_not_tendsto_one`). -/
 theorem scalar_iterate_tendsto_one (g : ℝ → ℝ) (hcont : Continuous g)
     (hge : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → t ≤ g t) (hle : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → g t ≤ 1)
     (hfix : ∀ L : ℝ, 0 < L → L ≤ 1 → g L = L → L = 1)
@@ -262,7 +264,7 @@ theorem q5Scalar_iterate_tendsto_one {t₀ : ℝ} (h0 : 0 < t₀) (h1 : t₀ ≤
     the object `MuonGeometry.muon_polar_steepest` proves is the operator-norm steepest-ascent
     direction. `hconv` is proved here for the classic cubic and Higham's quintic
     (`nsStep_cubic_iterate_tendsto_polar`, `nsStep_q5_iterate_tendsto_polar`), not for Muon's
-    tuned quintic, which violates it (`qScalar_not_le_one`) and only bands
+    tuned quintic, which violates it (`qScalar_not_hconv`) and only bands
     (`qScalar_iterate_band_half`). The rank hypothesis `σᵢ > 0` is what makes the per-value limit
     `1`; `σᵢ = 0` would stay `0`. -/
 -- Proof: `nsStep_iterate_spectral` makes the matrix iterate `U (diagonal (g^[k] ∘ σ)) Vᵀ`; each
@@ -326,7 +328,8 @@ theorem nsStep_q5_iterate_tendsto_polar
     coefficients for *speed to a band near 1 in ~5 steps*, deliberately giving up asymptotic
     convergence. The map straddles `1` (`qScalar_one_lt_one` ∧ `qScalar_half_gt_one`) and so
     oscillates; the theorems below prove the cubic's monotone-convergence hypotheses (`scalar_iterate_
-    tendsto_one`) structurally *fail* here, so one must **not** state `qScalar^[k] → 1`. -/
+    tendsto_one`) fail here, and that `qScalar^[k] t₀ → 1` is false for every `t₀`
+    (`qScalar_iterate_not_tendsto_one`). -/
 noncomputable def qScalar (t : ℝ) : ℝ := nsScalar 3.4445 (-4.7750) 2.0315 t
 
 /-- At the top of the normalized range, the tuned quintic pulls **below** `1`: `φ(1) = 0.701 < 1`. So
@@ -343,11 +346,25 @@ theorem qScalar_half_gt_one : 1 < qScalar (1 / 2) := by
 
 /-- **The cubic's key bound fails for the tuned quintic** — `qScalar` is *not* `≤ 1` on `[0,1]` (it
     overshoots at `1/2`). This is exactly the hypothesis `g(t) ≤ 1` that powered the monotone-bounded
-    convergence of `gCubic_iterate_tendsto_one`; its failure is *why* the clean `→ 1` proof does
-    not transfer to Muon's quintic, and why claiming `qScalar^[k] → 1` would be an overclaim. -/
+    convergence of `gCubic_iterate_tendsto_one`, so the monotone proof does not transfer. That the
+    orbits really do not converge to `1` is `qScalar_iterate_not_tendsto_one`. -/
 theorem qScalar_not_le_one : ¬ ∀ t : ℝ, 0 ≤ t → t ≤ 1 → qScalar t ≤ 1 := by
   intro h
   linarith [h (1 / 2) (by norm_num) (by norm_num), qScalar_half_gt_one]
+
+/-- **No orbit of the tuned quintic converges to `1`.** A limit of `qScalar^[k] t₀` is a fixed point
+    of the continuous `qScalar`, and `1` is not one (`qScalar_one_lt_one`). -/
+theorem qScalar_iterate_not_tendsto_one (t₀ : ℝ) :
+    ¬ Filter.Tendsto (fun k => qScalar^[k] t₀) Filter.atTop (nhds 1) := by
+  intro h
+  have hcont : Continuous qScalar := by unfold qScalar nsScalar; fun_prop
+  have hfix : qScalar 1 = 1 := isFixedPt_of_tendsto_iterate h hcont.continuousAt
+  linarith [qScalar_one_lt_one]
+
+/-- **The tuned quintic fails `nsStep_iterate_tendsto_polar`'s `hconv`**, at every `t₀ ∈ (0,1]`. -/
+theorem qScalar_not_hconv :
+    ¬ ∀ t₀ : ℝ, 0 < t₀ → t₀ ≤ 1 → Filter.Tendsto (fun k => qScalar^[k] t₀) Filter.atTop (nhds 1) :=
+  fun h => qScalar_iterate_not_tendsto_one 1 (h 1 one_pos le_rfl)
 
 /-- **A finite-5-step band bound for the tuned quintic.**
     Five steps of Muon's tuned quintic from `σ = 1/2` land within `0.3` of `1`:

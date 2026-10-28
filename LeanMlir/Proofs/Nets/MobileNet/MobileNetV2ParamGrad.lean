@@ -670,7 +670,9 @@ theorem mnv2_factor_head (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) (x : Vec
 /-- **Every MobileNetV2 parameter gradient node is the derivative of `L` in that parameter**, for a
     loss `L` of the logits and `g` the cotangent the chain starts from: the 210 slots
     `mnv2_net_tiedB` ties, each at the cotangent the emitted chain threads to it, stated against `L`
-    of `mobilenetv2ForwardBFull` with that one parameter varied. -/
+    of `mobilenetv2ForwardBFullDoOpt … cd` with that one parameter varied: the net with the
+    classifier-dropout mask `cd`, which is `mobilenetv2ForwardBFull` at `cd = none`
+    (`mobilenetv2ForwardBFullDoOpt_none`). -/
 def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MNV2BWeights nCls)
     (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (L : Vec (N * nCls) → Vec 1) (g : Vec (N * nCls)) : Prop :=
@@ -737,8 +739,9 @@ def MNV2NetLossTiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String) (w : MN
 /-- **Every MobileNetV2 parameter gradient node is the derivative of the loss in that
     parameter.** For any loss `L` of the logits with gradient `g` at the net's output, each of the
     210 slots `mnv2_net_tiedB` ties — at the same cotangent — is `∂L/∂θ` of the WHOLE net,
-    `mobilenetv2ForwardBFull` with that one parameter varied (a stem field, a block's weight record
-    `w.bk := p` with one slot changed, or a head field).
+    `mobilenetv2ForwardBFullDoOpt … cd` with that one parameter varied (a stem field, a block's weight
+    record `w.bk := p` with one slot changed, or a head field). At `cd = none` that is
+    `mobilenetv2ForwardBFull`; at `cd = some m` it is the net with the classifier-dropout mask `m`.
 
     Hypotheses: every BN `ε` positive (`MNV2PosB`) and all 35 relu6 sites off both kinks at the real
     activations (`MNV2SmoothAtB`). The loss enters only through `hL`;
@@ -839,7 +842,7 @@ theorem mnv2_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
 
 /-- **The loss the artifacts ship**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits. -/
-theorem mnv2_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem mnv2_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat}
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
     (hq : MNV2PosB w) (bf16 : Bool) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) (t : Vec (N * (1 * nCls)))
@@ -849,14 +852,14 @@ theorem mnv2_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
         (rowB N nCls (mobilenetv2ForwardBFullDoOpt N w cd x)) t))) :=
   mnv2_net_lossGrad N xN cotN vN epsStr w hq bf16 cd x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
-      fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLoss_grad N nCls α B aStr negAK bStr logN ohN t _ ht J⟩
 
 
 /-- **The emitted MobileNetV2 step's gradient nodes ARE the loss's gradient, at one chain.** For
     each of the 210 parameter slots, at ONE cotangent chain (the tie's own, from `g`): the node
     denotes its layer's Jacobian against the chain cotangent (`mnv2_net_tiedB`), and any loss `L` of
-    the logits with gradient `g` at the network's output of `mobilenetv2ForwardBFull` with that one
-    slot varied is differentiable there with the node as its gradient (`mnv2_net_lossGrad`). The two
+    the logits with gradient `g` at the network's output of `mobilenetv2ForwardBFullDoOpt … cd` with
+    that one slot varied is differentiable there with the node as its gradient (`mnv2_net_lossGrad`). The two
     theorems each state the chain; this one states it once, so an edit to either chain breaks its
     proof. -/
 theorem mnv2_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)

@@ -897,7 +897,7 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     Together with the capstone: every parameter node denotes the certified batched gradient at the
     chain cotangent that starts from the gradient of the loss the trainer minimises. Shared with
     ResNet-34 through [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean), at a general target. -/
-theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat}
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
     (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls)))
@@ -911,6 +911,6 @@ theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
             (rowB N nCls (mobilenetv2ForwardBFullDoOpt N w cd x)) n) (0 : Fin 1)) j 0) / B :=
-  smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
+  smoothedLossCotGraph_row N nCls α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.MobileNetV2TieB

@@ -44,9 +44,10 @@ theorem momVNext_mu_one (G g : Vec n) (i : Fin n) : momVNext 1 G g i = G i + g i
 theorem momVNext_mu_zero (G g : Vec n) (i : Fin n) : momVNext 0 G g i = g i := by
   simp [momVNext]
 
-/-- A cycle's accumulator: the reset on the first micro-batch, then `k − 1` additions. -/
-def accumCycle (gs : List (Vec n)) : Vec n :=
-  gs.foldl (fun G g => momVNext 1 G g) (fun _ => 0)
+/-- A cycle's accumulator, from whatever total `G₀` the previous cycle left: the first micro-batch
+    `g` at `akeep = 0` (the reset), then the rest at `akeep = 1`. -/
+def accumCycle (G₀ g : Vec n) (gs : List (Vec n)) : Vec n :=
+  gs.foldl (fun G g => momVNext 1 G g) (momVNext 0 G₀ g)
 
 theorem foldl_momVNext_one (gs : List (Vec n)) (G : Vec n) (i : Fin n) :
     (gs.foldl (fun G g => momVNext 1 G g) G) i = G i + (gs.map (fun g => g i)).sum := by
@@ -55,9 +56,9 @@ theorem foldl_momVNext_one (gs : List (Vec n)) (G : Vec n) (i : Fin n) :
   | cons g gs ih =>
     simp only [List.foldl_cons, List.map_cons, List.sum_cons, ih, momVNext_mu_one]; ring
 
-/-- After the cycle, `Gt` is the SUM of its micro-batch gradients. -/
-theorem accumCycle_sum (gs : List (Vec n)) (i : Fin n) :
-    accumCycle gs i = (gs.map (fun g => g i)).sum := by
+/-- After the cycle, `Gt` is the SUM of its micro-batch gradients, whatever the previous total. -/
+theorem accumCycle_sum (G₀ g : Vec n) (gs : List (Vec n)) (i : Fin n) :
+    accumCycle G₀ g gs i = ((g :: gs).map (fun g => g i)).sum := by
   simp [accumCycle, foldl_momVNext_one]
 
 -- ════════════════════════════════════════════════════════════════

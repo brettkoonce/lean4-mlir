@@ -591,7 +591,7 @@ theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     chain `ResNet50RenderB` emits is `(1/B)·∂/∂logits` of soft-target cross-entropy against the
     SMOOTHED target, at that example's real logits. The only hypothesis is that the example's
     target sums to 1 — a one-hot, or mixup's convex combination. -/
-theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat}
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls)
@@ -604,7 +604,7 @@ theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
             (rowB N nCls (resnet50ForwardBFull N q w x)) n) (0 : Fin 1)) j 0) / B :=
-  smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
+  smoothedLossCotGraph_row N nCls α B aStr negAK bStr logN ohN _ t n j ht
 
 /-- **The BCE-with-logits cotangent, for every `bce := true` artifact — including
     `resnet50in160_lambaccdp8x64wxclipbce`.** Row by row, the three-op chain `sigmoidB → subB → divConstB` is

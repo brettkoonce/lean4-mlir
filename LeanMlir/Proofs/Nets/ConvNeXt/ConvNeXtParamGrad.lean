@@ -1417,14 +1417,14 @@ theorem cnx_net_lossGrad {gf : GeluForm} (xN epsStr cotN dN : String) (N : Nat) 
     cross-entropy `smoothedBatchLossDiv`, `g` the `softmaxDiv` cotangent the render emits — the
     tie's own `g`, whose logits are `cnxNetB N ε w x` (`cnx_logitsB_eq`). -/
 theorem cnx_net_lossGrad_smoothedCE {gf : GeluForm} (xN epsStr cotN dN aStr negAK bStr logN ohN : String)
-    (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : CnxTieWeights nC) (bf16 : Bool)
+    (N : Nat) {nC : Nat} (ε α B : ℝ) (hε : 0 < ε) (w : CnxTieWeights nC) (bf16 : Bool)
     (sd : Option (Fin 18 → Vec N)) (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
     (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     CnxNetLossTiedGB gf xN epsStr cotN dN N ε w bf16 sd x (smoothedBatchLossDiv N nC α B t)
       (den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN (cnxNetB gf N ε w sd x) t)) :=
   cnx_net_lossGrad xN epsStr cotN dN N ε hε w bf16 sd x
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
-      fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLossDiv_grad N nC α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The emitted ConvNeXt-T step's gradient nodes ARE the loss's gradient, at one chain.** For
     each of the 182 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
@@ -1437,7 +1437,7 @@ theorem cnx_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : CnxTieWeights nC) (bf16 : Bool) (sd : Option (Fin 18 → Vec N))
     (x : Vec (N * (3*224*224))) (t : Vec (N * nC))
-    (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
+    (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     -- forward block inputs (the prefixes of the committed render's forward)
     let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) x
     let ib2 : Vec (N * (96*56*56)) := batchMapIdx N (fun n => w.b1.fwdOD gf ε (exampleSite (cnxSd sd 0) n)) ib1
@@ -1569,7 +1569,7 @@ theorem cnx_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     t20, t21, t22⟩ :=
     cnx_net_tiedGB N xN epsStr cotN dN aStr negAK bStr logN ohN ε α B w bf16 sd x t
   have hl :=
-    cnx_net_lossGrad_smoothedCE (gf := gf) xN epsStr cotN dN aStr negAK bStr logN ohN N hK ε α B hε w
+    cnx_net_lossGrad_smoothedCE (gf := gf) xN epsStr cotN dN aStr negAK bStr logN ohN N ε α B hε w
       bf16 sd x t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : cnxPreS N ε w x = ib1 := by rw [cnxPreS_apply N ε w x]

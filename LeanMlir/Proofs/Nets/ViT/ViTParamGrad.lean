@@ -1678,13 +1678,13 @@ theorem vit_net_lossGrad {gf : GeluForm} (xN aN epsStr cotN : String) (N : Nat) 
     cross-entropy `smoothedBatchLossDiv`, `g` the `softmaxDiv` cotangent the render emits — the
     tie's own `g`, whose logits are `vitNetB N ε w img` (`vit_logitsB_eq`). -/
 theorem vit_net_lossGrad_smoothedCE {gf : GeluForm} (xN aN epsStr cotN aStr negAK bStr logN ohN : String)
-    (N : Nat) {nC : Nat} (hK : 0 < nC) (ε α B : ℝ) (hε : 0 < ε) (w : ViTTieWeights nC)
+    (N : Nat) {nC : Nat} (ε α B : ℝ) (hε : 0 < ε) (w : ViTTieWeights nC)
     (bf16 bf16ConvW : Bool) (sd : Option (Fin 12 → Vec N × Vec N)) (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     ViTNetLossTiedGB gf xN aN epsStr cotN N ε w bf16 bf16ConvW sd img (smoothedBatchLossDiv N nC α B t)
       (den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN (vitNetB gf N ε w sd img) t)) :=
   vit_net_lossGrad xN aN epsStr cotN N ε hε w bf16 bf16ConvW sd img
     ⟨(smoothedBatchLossDiv_differentiable N nC α B t) _,
-      fun J => smoothedBatchLossDiv_grad N nC hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLossDiv_grad N nC α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The emitted ViT-Tiny step's gradient nodes ARE the loss's gradient, at one chain.** For each
     of the 200 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
@@ -1698,7 +1698,7 @@ theorem vit_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : ViTTieWeights nC) (bf16 bf16ConvW : Bool) (sd : Option (Fin 12 → Vec N × Vec N))
     (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC))
-    (hK : 0 < nC) (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
+    (hε : 0 < ε) (ht : ∀ n, ∑ k : Fin nC, batchSlice N nC t n k = 1) :
     let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
     let ib2    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b1.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 0) n) (exampleSite (vitSdM sd 0) n)) ib1
     let ib3    : Vec (N * (197 * 192)) := batchMapIdx N (fun n => w.b2.fwdOD gf (Np1 := 197) (heads := 3) (d := 64) ε (exampleSite (vitSdA sd 1) n) (exampleSite (vitSdM sd 1) n)) ib2
@@ -1781,7 +1781,7 @@ theorem vit_net_tied_lossGrad {gf : GeluForm} (N : Nat) {nC : Nat}
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14⟩ :=
     vit_net_tiedGB (gf := gf) N xN aN epsStr cotN aStr negAK bStr logN ohN ε α B w bf16 bf16ConvW sd img t
   have hl :=
-    vit_net_lossGrad_smoothedCE (gf := gf) xN aN epsStr cotN aStr negAK bStr logN ohN N hK ε α B hε w bf16 bf16ConvW sd img t ht
+    vit_net_lossGrad_smoothedCE (gf := gf) xN aN epsStr cotN aStr negAK bStr logN ohN N ε α B hε w bf16 bf16ConvW sd img t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : vitPreE N w img = ib1 := by rw [vitPreE_apply N w img]
   have e1 : vitPreB1 gf N ε w sd img = ib2 := by rw [vitPreB1_apply N ε w sd img, e0]

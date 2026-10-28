@@ -134,9 +134,9 @@ def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
         (reassocB N mid h w cotDn) lr
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz1 0 bz1 cotE1 lr
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz2 0 bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
   ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr
@@ -218,9 +218,9 @@ def enetStridedTied {N ic mid oc h w r kHd kWd : Nat}
         (reassocB N mid h w cotDn) lr
   -- SE reduce/excite dense (mid → r → mid)
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz1 0 bz1 cotE1 lr
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz2 0 bz2 cotE2 lr
   -- project 1×1 conv (mid → oc), cot = cotPbn
   ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr
@@ -295,9 +295,9 @@ def enetNoExpTied {N ic oc h w r kHd kWd : Nat}
         (reassocB N ic h w cotDn) lr
   -- SE reduce/excite dense (ic → r → ic)
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN s Wz1 bz1 cotE1 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz1 0 bz1 cotE1 lr
   ∧ EnetFold.DenseWSgdTiedB N xN wN lrStr cotN z Wz2 bz2 cotE2 lr
-  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 lr
+  ∧ EnetFold.DenseBSgdTiedB N bN lrStr cotN Wz2 0 bz2 cotE2 lr
   -- project 1×1 conv (ic → oc), cot = cotPbn
   ∧ EnetFold.ConvWSgdTiedB N h w xN wN lrStr cotN bp se Wp cotPbn lr
   ∧ ConvBBetaSgdTied N h w bN lrStr cotN εp bp cotPbn lr

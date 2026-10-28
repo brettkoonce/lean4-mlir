@@ -819,7 +819,7 @@ theorem r50_net_lossGrad_stemSelect (N q : Nat) {nCls : Nat} (xN cotN vN epsStr 
 
 /-- **The `bce := false` artifacts**: every node is the derivative of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits. -/
-theorem r50_net_lossGrad_smoothedCE (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem r50_net_lossGrad_smoothedCE (N q : Nat) {nCls : Nat}
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R50BWeights nCls)
     (hp : R50PosB w) (bf16 : Bool) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50LossSmoothAtB N q w x) (t : Vec (N * (1 * nCls)))
@@ -829,7 +829,7 @@ theorem r50_net_lossGrad_smoothedCE (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
         (rowB N nCls (resnet50ForwardBFull N q w x)) t))) :=
   r50_net_lossGrad N q xN cotN vN epsStr w hp bf16 x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
-      fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLoss_grad N nCls α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The `bce := true` artifacts** (`resnet50in160_lambaccdp8x64wxclipbce` among them): every node is
     the derivative of the batched BCE-with-logits `bceBatchLoss`, the mean over `B×K`, `g` the

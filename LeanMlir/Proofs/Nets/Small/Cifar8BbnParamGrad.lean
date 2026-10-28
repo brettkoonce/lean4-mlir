@@ -1142,21 +1142,21 @@ theorem cifar8BbnLossCot_eq (N K : Nat) (sStr vN cotN aStr negAK bStr logN ohN :
 
 /-- **The artifact's loss has the emitted cotangent as its gradient**, at any target whose rows
     each sum to one and any positive class count. -/
-theorem cifar8BbnLoss_hasGradAt (N K : Nat) (hK : 0 < K) (sStr vN cotN : String) (invB : ℝ)
+theorem cifar8BbnLoss_hasGradAt (N K : Nat) (sStr vN cotN : String) (invB : ℝ)
     (z t : Vec (N * K)) (ht : ∀ n, ∑ k : Fin K, targetRow N K (rowB N K t) n k = 1) :
     HasGradAt (smoothedBatchLoss N K 0 invB⁻¹ (rowB N K t)) z
       (den (SHlo.scaleB sStr invB (.subB (.operand vN (unrowB N K
         (den (.batchOp (N := N) (.softmaxRow (m := 1) (n := K)) (.operand vN (rowB N K z))))))
       (.operand cotN t)))) := by
   refine ⟨smoothedBatchLoss_differentiable N K 0 invB⁻¹ (rowB N K t) z, fun J => ?_⟩
-  rw [smoothedBatchLoss_grad N K hK 0 invB⁻¹ "" "" "" "" "" (rowB N K t) z ht J,
+  rw [smoothedBatchLoss_grad N K 0 invB⁻¹ "" "" "" "" "" (rowB N K t) z ht J,
     cifar8BbnLossCot_eq N K sStr vN cotN "" "" "" "" "" invB z t]
 
 /-- **At the artifact's loss**: every node is the gradient of the batch-mean softmax
     cross-entropy at the soft target `t` (the graph input `%onehot`), with `g` the cotangent the
     render composes from `softmaxRow`, `subB` and `scaleB` — the chain `cifar8Bbn_train_step_tiedB`
     reads, at `castB1 = rowB` and `unB1 = unrowB`. -/
-theorem cifar8Bbn_net_lossGrad_CE (N : Nat) (xN cotN vN epsStr sStr : String) (hK : 0 < nC)
+theorem cifar8Bbn_net_lossGrad_CE (N : Nat) (xN cotN vN epsStr sStr : String)
     (p : C8BbnW ic c1 c2 c3 c4 h w d1 nC kH kW) (ε : ℝ) (hε : 0 < ε) (bf16 : Bool) (invB : ℝ)
     (x : Vec (N * (ic * (2 * (2 * (2 * (2 * h)))) * (2 * (2 * (2 * (2 * w)))))))
     (t : Vec (N * nC)) (ht : ∀ n, ∑ k : Fin nC, targetRow N nC (rowB N nC t) n k = 1)
@@ -1172,6 +1172,6 @@ theorem cifar8Bbn_net_lossGrad_CE (N : Nat) (xN cotN vN epsStr sStr : String) (h
           (.operand vN (rowB N nC (cifar8BbnForwardB N p ε x)))))))
         (.operand cotN t)))) :=
   cifar8Bbn_net_lossGrad N xN cotN vN epsStr p ε hε bf16 x σ₁ σ₂ σ₃ σ₄ hx
-    (cifar8BbnLoss_hasGradAt N nC hK sStr vN cotN invB _ t ht)
+    (cifar8BbnLoss_hasGradAt N nC sStr vN cotN invB _ t ht)
 
 end Proofs

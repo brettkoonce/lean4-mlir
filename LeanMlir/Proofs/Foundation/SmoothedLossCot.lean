@@ -124,11 +124,11 @@ theorem smoothTarget_sum (K : Nat) (hK : 0 < K) (α : ℝ) (t : Vec K) (ht : ∑
     the SMOOTHED target `(1−α)t + α/K` equals `softmax(z)_j − t_j + α·t_j − α/K`, which is exactly
     what the render's `softmaxRow → subB → scaleB → addVB → shiftB` chain computes, before the
     batch divide. -/
-theorem smoothedCE_grad (K : Nat) (hK : 0 < K) (α : ℝ) (t z : Vec K)
+theorem smoothedCE_grad (K : Nat) (α : ℝ) (t z : Vec K)
     (ht : ∑ k : Fin K, t k = 1) (j : Fin K) :
     pdiv (fun z' : Vec K => fun _ : Fin 1 => softCE K (smoothTarget K α t) z') z j 0
       = softmax K z j - t j + α * t j - α / K := by
-  rw [softCE_grad K (smoothTarget K α t) z j, smoothTarget_sum K hK α t ht, one_mul]
+  rw [softCE_grad K (smoothTarget K α t) z j, smoothTarget_sum K j.pos α t ht, one_mul]
   simp only [smoothTarget]
   ring
 
@@ -164,7 +164,7 @@ theorem smoothedLossCotGraph_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN 
     logits, divided by the batch.** `Mat.unflatten` splits the flat `N·(1·K)` activation into its
     `N` per-example rows; `smoothedCE_grad` supplies the gradient. The hypothesis is only that the
     example's target sums to 1 — a one-hot, a mixup convex combination, or any distribution. -/
-theorem smoothedLossCotGraph_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
+theorem smoothedLossCotGraph_row (N K : Nat) (α B : ℝ)
     (aStr negAK bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) (n : Fin N) (j : Fin K)
     (ht : ∑ k : Fin K, Mat.unflatten (StableHLO.batchSlice N (1 * K) t n) (0 : Fin 1) k = 1) :
@@ -184,7 +184,7 @@ theorem smoothedLossCotGraph_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
   have hti : t (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = Mat.unflatten (StableHLO.batchSlice N (1 * K) t n) (0 : Fin 1) j := by
     simp only [StableHLO.batchSlice, Mat.unflatten]
-  rw [smoothedLossCotGraph_den, smoothedCE_grad K hK α _ _ ht j, hsm, hti]
+  rw [smoothedLossCotGraph_den, smoothedCE_grad K α _ _ ht j, hsm, hti]
   ring
 
 -- ════════════════════════════════════════════════════════════════
@@ -219,7 +219,7 @@ theorem smoothedLossCotGraphDiv_den (N K : Nat) (α B : ℝ) (aStr negAK bStr lo
     example's logits, divided by the batch** — `smoothedLossCotGraph_row` at the `softmaxDiv`
     spelling and the plain `N·K` index, where the example is `batchSlice N K · n` with no
     `Mat.unflatten`. The hypothesis is only that the example's target sums to 1. -/
-theorem smoothedLossCotGraphDiv_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
+theorem smoothedLossCotGraphDiv_row (N K : Nat) (α B : ℝ)
     (aStr negAK bStr logN ohN : String) (logits t : Vec (N * K)) (n : Fin N) (j : Fin K)
     (ht : ∑ k : Fin K, StableHLO.batchSlice N K t n k = 1) :
     den (smoothedLossCotGraphDiv N K α B aStr negAK bStr logN ohN logits t)
@@ -232,7 +232,7 @@ theorem smoothedLossCotGraphDiv_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
     simp only [StableHLO.batchMap, Equiv.symm_apply_apply]
     rfl
   have hti : t (finProdFinEquiv (n, j)) = StableHLO.batchSlice N K t n j := rfl
-  rw [smoothedLossCotGraphDiv_den, smoothedCE_grad K hK α _ _ ht j, hsm, hti]
+  rw [smoothedLossCotGraphDiv_den, smoothedCE_grad K α _ _ ht j, hsm, hti]
   ring
 
 end Proofs

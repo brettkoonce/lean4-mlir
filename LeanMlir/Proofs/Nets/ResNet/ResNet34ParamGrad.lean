@@ -1027,8 +1027,8 @@ theorem r34_net_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
 
 /-- **The artifacts' loss**: every node is the gradient of the batched label-smoothed
     cross-entropy `smoothedBatchLoss`, `g` the emitted loss cotangent, given every example's target
-    summing to one and at least one class. -/
-theorem r34_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
+    summing to one. -/
+theorem r34_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat}
     (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (hq : R34PosB w) (bf16 : Bool) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (hx : R34LossSmoothAtB N w x) (t : Vec (N * (1 * nCls)))
@@ -1038,7 +1038,7 @@ theorem r34_net_lossGrad_smoothedCE (N : Nat) {nCls : Nat} (hK : 0 < nCls)
         (rowB N nCls (resnet34ForwardBFull N w x)) t))) :=
   r34_net_lossGrad N xN cotN vN epsStr w hq bf16 x hx
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
-      fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLoss_grad N nCls α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The stem's gradient nodes at the render's own pool routing.** The stem bundle of
     `r34_net_lossGrad` reads the four stem nodes at the cotangent the pool backward
@@ -1090,7 +1090,7 @@ theorem r34_net_lossGrad_stemSelect (N : Nat) {nCls : Nat} (xN cotN vN epsStr : 
 theorem r34_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls) (bf16 : Bool)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls)))
-    (hK : 0 < nCls) (hq : R34PosB w) (hx : R34LossSmoothAtB N w x)
+    (hq : R34PosB w) (hx : R34LossSmoothAtB N w x)
     (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
     -- the label-smoothed loss cotangent at the real logits and a general target
     let g : Vec (N * nCls) :=
@@ -1174,7 +1174,7 @@ theorem r34_net_tied_lossGrad (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17⟩ :=
     r34_net_tiedB N xN cotN vN epsStr aStr negAK bStr logN ohN α B w bf16 x t
   have hl :=
-    r34_net_lossGrad_smoothedCE N hK xN cotN vN epsStr aStr negAK bStr logN ohN α B w hq bf16 x hx t ht
+    r34_net_lossGrad_smoothedCE N xN cotN vN epsStr aStr negAK bStr logN ohN α B w hq bf16 x hx t ht
   obtain ⟨l0, l1, l2, l3, l4, l5, l6, l7, l8, l9, l10, l11, l12, l13, l14, l15, l16, l17⟩ := hl
   exact ⟨⟨t0, l0⟩, ⟨t1, l1⟩, ⟨t2, l2⟩, ⟨t3, l3⟩, ⟨t4, l4⟩, ⟨t5, l5⟩, ⟨t6, l6⟩, ⟨t7, l7⟩, ⟨t8, l8⟩,
     ⟨t9, l9⟩, ⟨t10, l10⟩, ⟨t11, l11⟩, ⟨t12, l12⟩, ⟨t13, l13⟩, ⟨t14, l14⟩, ⟨t15, l15⟩, ⟨t16, l16⟩,

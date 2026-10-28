@@ -177,14 +177,12 @@ theorem chk_convStridedWGradB_den :
 
 /-- `Proofs.smoothedCE_grad` -/
 theorem chk_smoothedCE_grad :
-    ∀ (K : ℕ),
-      (0 : ℕ) < K →
-        ∀ (α : ℝ) (t z : Proofs.Vec K),
-          ∑ k : Fin K, t k = (1 : ℝ) →
-            ∀ (j : Fin K),
-              Proofs.pdiv (fun (z' : Proofs.Vec K) (_ : Fin (1 : ℕ)) => Proofs.softCE K (Proofs.smoothTarget K α t) z') z j
-                  (0 : Fin (1 : ℕ)) =
-                Proofs.softmax K z j - t j + α * t j - α / ↑K := by sorry
+    ∀ (K : ℕ) (α : ℝ) (t z : Proofs.Vec K),
+      ∑ k : Fin K, t k = (1 : ℝ) →
+        ∀ (j : Fin K),
+          Proofs.pdiv (fun (z' : Proofs.Vec K) (_ : Fin (1 : ℕ)) => Proofs.softCE K (Proofs.smoothTarget K α t) z') z j
+              (0 : Fin (1 : ℕ)) =
+            Proofs.softmax K z j - t j + α * t j - α / ↑K := by sorry
 
 /-- `Proofs.ResNet50TieB.r50_net_tiedB` -/
 theorem chk_r50_net_tiedB :

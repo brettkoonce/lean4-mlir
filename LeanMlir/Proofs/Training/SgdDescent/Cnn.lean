@@ -1688,8 +1688,8 @@ namespace Conv1Slot
     factor `c·kH·kW·w₂`. -/
 private theorem z2_entry_drift {P c h w kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
-    {ρ w₂ : ℝ} (hρ : 0 ≤ ρ) (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|)
-    (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
+    {ρ w₂ : ℝ} (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|)
+    (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
     (v e : Vec P) (k : Fin (c * (2*h) * (2*w))) :
     |Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
         (relu (c * (2*h) * (2*w)) (Z (v + e))))) k -
@@ -1698,8 +1698,7 @@ private theorem z2_entry_drift {P c h w kH kW : Nat}
       ((c * kH * kW : ℕ) : ℝ) * (w₂ * (ρ * ∑ idx, |e idx|)) := by
   obtain ⟨o, ho, wo, rfl⟩ := t3Idx_surj k
   rw [flatten_t3Idx, flatten_t3Idx]
-  exact conv2d_input_entry_drift W₂ b₂ _ _ hw₂ hW₂
-    (mul_nonneg hρ (Finset.sum_nonneg fun _ _ => abs_nonneg _))
+  exact conv2d_input_entry_drift W₂ b₂ _ _ hW₂
     (fun cc i j => Conv2Slot.postrelu_close Z hZ v e cc i j) o ho wo
 
 /-- `ℓ1` conv2-preactivation drift: conv1 (`ℓ1`, `hZ1`) → relu → conv2-as-input (`ℓ1`,
@@ -1899,7 +1898,7 @@ theorem sgd_descends {P c h w d₃ d₄ nC kH kW : Nat}
     (fun v' => Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
       (relu (c * (2*h) * (2*w)) (Z v'))))) W₃ b₃ W₄ b₄ W₅ b₅ label v gh
     (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₂ hρ))
-    (fun v e k => (z2_entry_drift Z W₂ b₂ hρ hZ hw₂ hW₂ v e k).trans_eq (by ring))
+    (fun v e k => (z2_entry_drift Z W₂ b₂ hZ hW₂ v e k).trans_eq (by ring))
     (fun v e => (z2_l1_drift Z W₂ b₂ hZ1 hw₂ hW₂ v e).trans_eq (by ring))
     hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ _ hJ₂ (fun v' => ∀ k, Z v' k ≠ 0 ∧ (0 < Z v' k ↔ 0 < Z v k))
     hpd₂ T hT hlr hη hgh

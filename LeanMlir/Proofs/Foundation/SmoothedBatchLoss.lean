@@ -135,7 +135,7 @@ theorem smoothedBatchLoss_pdiv (N K : Nat) (α B : ℝ) (t : Vec (N * (1 * K))) 
 /-- **The emitted cotangent is the batched loss's gradient.** Read at the head's `N·K` index
     (`unrowB`), the six-op chain at the logits `rowB z` is `∇ smoothedBatchLoss` at `z`, whenever
     every example's target sums to 1. -/
-theorem smoothedBatchLoss_grad (N K : Nat) (hK : 0 < K) (α B : ℝ)
+theorem smoothedBatchLoss_grad (N K : Nat) (α B : ℝ)
     (aStr negAK bStr logN ohN : String) (t : Vec (N * (1 * K))) (z : Vec (N * K))
     (ht : ∀ n, ∑ k : Fin K, targetRow N K t n k = 1) (J : Fin (N * K)) :
     pdiv (smoothedBatchLoss N K α B t) z J 0
@@ -143,7 +143,7 @@ theorem smoothedBatchLoss_grad (N K : Nat) (hK : 0 < K) (α B : ℝ)
           J := by
   obtain ⟨⟨n, j⟩, rfl⟩ := finProdFinEquiv.surjective J
   rw [smoothedBatchLoss_pdiv, unrowB, rowIdx_cast,
-    smoothedLossCotGraph_row N K hK α B aStr negAK bStr logN ohN _ t n j (ht n),
+    smoothedLossCotGraph_row N K α B aStr negAK bStr logN ohN _ t n j (ht n),
     rowB_row_eq_logitRow]
   rfl
 
@@ -160,7 +160,7 @@ theorem smoothedBatchLossDiv_differentiable (N K : Nat) (α B : ℝ) (t : Vec (N
 
 /-- **The emitted `softmaxDiv` cotangent is the batched loss's gradient**, entry by entry, whenever
     every example's target sums to 1 — `smoothedBatchLoss_grad` at the plain `N·K` index. -/
-theorem smoothedBatchLossDiv_grad (N K : Nat) (hK : 0 < K) (α B : ℝ)
+theorem smoothedBatchLossDiv_grad (N K : Nat) (α B : ℝ)
     (aStr negAK bStr logN ohN : String) (t : Vec (N * K)) (z : Vec (N * K))
     (ht : ∀ n, ∑ k : Fin K, batchSlice N K t n k = 1) (J : Fin (N * K)) :
     pdiv (smoothedBatchLossDiv N K α B t) z J 0
@@ -170,7 +170,7 @@ theorem smoothedBatchLossDiv_grad (N K : Nat) (hK : 0 < K) (α B : ℝ)
       B⁻¹ * softCE K (smoothTarget K α (batchSlice N K t m)) (logitRow N K z' m) from by
     funext z' _; simp only [smoothedBatchLossDiv, div_eq_inv_mul],
     rowSumLoss_pdiv_smul N K B⁻¹ _ (fun m => softCE_differentiable K _),
-    smoothedLossCotGraphDiv_row N K hK α B aStr negAK bStr logN ohN z t n j (ht n), div_eq_inv_mul]
+    smoothedLossCotGraphDiv_row N K α B aStr negAK bStr logN ohN z t n j (ht n), div_eq_inv_mul]
   rfl
 
 end Proofs

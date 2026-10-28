@@ -1064,7 +1064,7 @@ theorem mnv4_net_tiedB (N f : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
 
     MNv4 ships one loss — there is no BCE twin to state, where ResNet-50 needed both. The only
     hypothesis is that the example's target sums to 1: a one-hot, or mixup's convex combination. -/
-theorem mnv4_lossCot_is_smoothedCE_grad (N f : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem mnv4_lossCot_is_smoothedCE_grad (N f : Nat) {nCls : Nat}
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls)
@@ -1077,6 +1077,6 @@ theorem mnv4_lossCot_is_smoothedCE_grad (N f : Nat) {nCls : Nat} (hK : 0 < nCls)
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
             (rowB N nCls (mobilenetv4ForwardBFull N f w x)) n) (0 : Fin 1)) j 0) / B :=
-  smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
+  smoothedLossCotGraph_row N nCls α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.Mnv4TieB

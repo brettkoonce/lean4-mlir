@@ -2025,6 +2025,8 @@ open Proofs
 #audit_axioms Proofs.MuonNewtonSchulz.qScalar_one_lt_one
 #audit_axioms Proofs.MuonNewtonSchulz.qScalar_half_gt_one
 #audit_axioms Proofs.MuonNewtonSchulz.qScalar_not_le_one
+#audit_axioms Proofs.MuonNewtonSchulz.qScalar_iterate_not_tendsto_one
+#audit_axioms Proofs.MuonNewtonSchulz.qScalar_not_hconv
 #audit_axioms Proofs.MuonNewtonSchulz.qScalar_iterate_band_half
 
 -- Spec→math ties (SpecVJP.lean)

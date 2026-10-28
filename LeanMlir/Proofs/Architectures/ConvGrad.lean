@@ -543,8 +543,8 @@ private theorem conv2d_input_sub {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH k
     inputs through taps bounded by `wK`. -/
 theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x x' : Tensor3 ic h w)
-    {wK δ : ℝ} (hwK : 0 ≤ wK) (hW : ∀ o c kh kw, |W o c kh kw| ≤ wK)
-    (hδ : 0 ≤ δ) (hclose : ∀ c i j, |x' c i j - x c i j| ≤ δ)
+    {wK δ : ℝ} (hW : ∀ o c kh kw, |W o c kh kw| ≤ wK)
+    (hclose : ∀ c i j, |x' c i j - x c i j| ≤ δ)
     (o : Fin oc) (ho : Fin h) (wo : Fin w) :
     |conv2d W b x' o ho wo - conv2d W b x o ho wo| ≤
       ((ic * kH * kW : ℕ) : ℝ) * (wK * δ) := by
@@ -568,10 +568,11 @@ theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
     _ ≤ ∑ _c : Fin ic, ∑ _kh : Fin kH, ∑ _kw : Fin kW, wK * δ := by
         refine Finset.sum_le_sum fun c _ => Finset.sum_le_sum fun kh _ =>
           Finset.sum_le_sum fun kw _ => ?_
+        -- Both bounds are nonnegative because each bounds an absolute value at an index in scope.
         rw [abs_mul]
         exact mul_le_mul (hW o c kh kw)
-          (abs_convPad_sub_le x x' hδ hclose c kh kw ho wo)
-          (abs_nonneg _) hwK
+          (abs_convPad_sub_le x x' ((abs_nonneg _).trans (hclose c ho wo)) hclose c kh kw ho wo)
+          (abs_nonneg _) ((abs_nonneg _).trans (hW o c kh kw))
     _ = ((ic * kH * kW : ℕ) : ℝ) * (wK * δ) := by simp [mul_assoc]
 
 /-- The padded-read drift as a position-pinned indicator sum — the

@@ -1406,7 +1406,7 @@ theorem enet_net_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat}
     cross-entropy `smoothedBatchLoss`, `g` the six-op cotangent the render emits — the tie's own
     `g`, whose logits `headFwdB … a16` are `efficientnetForwardBFullDrop N w sd cd x`. -/
 theorem enet_net_lossGrad_smoothedCE (xN vN epsStr cotN dN aStr negAK bStr logN ohN : String)
-    (N : Nat) {nCls : Nat} (hK : 0 < nCls) (α B : ℝ) (w : B0Weights nCls) (hεw : w.EpsPos)
+    (N : Nat) {nCls : Nat} (α B : ℝ) (w : B0Weights nCls) (hεw : w.EpsPos)
     (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
     (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
@@ -1415,7 +1415,7 @@ theorem enet_net_lossGrad_smoothedCE (xN vN epsStr cotN dN aStr negAK bStr logN 
         (rowB N nCls (efficientnetForwardBFullDrop N w sd cd x)) t))) :=
   enet_net_lossGrad xN vN epsStr cotN dN N w hεw bf16 sd cd x
     ⟨(smoothedBatchLoss_differentiable N nCls α B t) _,
-      fun J => smoothedBatchLoss_grad N nCls hK α B aStr negAK bStr logN ohN t _ ht J⟩
+      fun J => smoothedBatchLoss_grad N nCls α B aStr negAK bStr logN ohN t _ ht J⟩
 
 /-- **The emitted EfficientNet-B0 step's gradient nodes ARE the loss's gradient, at one chain.**
     For each of the 262 parameter slots, at ONE cotangent chain (the tie's own, from the emitted
@@ -1429,7 +1429,7 @@ theorem enet_net_tied_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls :
     (hεw : w.EpsPos) (bf16 : Bool) (sd : Option (Fin 9 → Vec N)) (cd : Option (Vec (N * 1280)))
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls)))
-    (hK : 0 < nCls) (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
+    (ht : ∀ n, ∑ k : Fin nCls, targetRow N nCls t n k = 1) :
     -- forward block inputs (the prefixes of efficientnetForwardBFull)
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
@@ -1536,7 +1536,7 @@ theorem enet_net_tied_lossGrad (xN vN epsStr cotN dN : String) (N : Nat) {nCls :
   extract_lets at htie
   obtain ⟨t0, t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15, t16, t17⟩ := htie
   have hl :=
-    enet_net_lossGrad_smoothedCE xN vN epsStr cotN dN aStr negAK bStr logN ohN N hK α B w hεw bf16 sd cd x t ht
+    enet_net_lossGrad_smoothedCE xN vN epsStr cotN dN aStr negAK bStr logN ohN N α B w hεw bf16 sd cd x t ht
   -- the loss side's activations and logits, in the tie's spelling
   have e0 : enetPreB0 N w x = a0 := by rw [enetPreB0_apply N w x]
   have e1 : enetPreB1 N w x = a1 := by rw [enetPreB1_apply N w x, e0]

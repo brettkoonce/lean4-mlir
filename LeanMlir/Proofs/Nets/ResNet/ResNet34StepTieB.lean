@@ -508,7 +508,7 @@ theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     point with positive epsilons (`R34IdSmoothAt` / `R34DownSmoothAt`, `R34IdPos` / `R34DownPos`,
     via `r34IdCotIn_eq_vjp` / `r34DownCotIn_eq_vjp`) the block-input cotangents are the certified
     block backwards. -/
-theorem r34_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
+theorem r34_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat}
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls)
@@ -521,6 +521,6 @@ theorem r34_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
             (rowB N nCls (resnet34ForwardBFull N w x)) n) (0 : Fin 1)) j 0) / B :=
-  smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
+  smoothedLossCotGraph_row N nCls α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.ResNet34TieB
