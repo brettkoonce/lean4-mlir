@@ -1,0 +1,165 @@
+ResNet-34 + YOLOv1 448 (NEU-DET) run1_s2: 22472286 params
+Generating train step MLIR...
+  612234 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 20:32:27.968766  856204 service.cc:154] XLA service 0x789b200093f0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 20:32:27.968824  856204 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 20:32:27.970707  856204 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 20:32:27.970763  856204 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 20:32:27.979093  856204 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+[pjrt_ffi] compiled .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_train_step.mlir (@main, 409 outputs, 1 replica) in 6532 ms
+  session loaded
+  train: 1080 images (602112 floats/image)
+  seed offset: 2 (LEAN_MLIR_SEED)
+  bootstrap: loading first 21284672 floats from .lake/build/jax_r34_imagenet.bin
+  22472286 params + m + v (257 MB)
+training: 67 batches/epoch, batch=16, Adam, lr=0.000700, cosine warmup=3, label_smooth=0.000000, wd=0.000000
+  BN layers: 36, BN stat floats: 17024
+  WARN: bootstrap BN stats size 85138688 ≠ expected 68096; using zeros
+  step 0/67: loss=175.934677 (567ms)
+  step 1/67: loss=170.160843 (285ms)
+  step 2/67: loss=183.194778 (291ms)
+Epoch 1/30: loss=45.924374 lr=0.000233 (23003ms)
+  step 0/67: loss=10.782750 (287ms)
+  step 1/67: loss=12.178757 (290ms)
+  step 2/67: loss=14.016672 (281ms)
+Epoch 2/30: loss=10.576738 lr=0.000467 (22777ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e2.bin + bn_stats_e2.bin
+  step 0/67: loss=10.631800 (284ms)
+  step 1/67: loss=9.731726 (283ms)
+  step 2/67: loss=9.586781 (291ms)
+Epoch 3/30: loss=14.083209 lr=0.000700 (24463ms)
+  step 0/67: loss=7.753475 (325ms)
+  step 1/67: loss=8.012946 (307ms)
+  step 2/67: loss=8.025952 (319ms)
+Epoch 4/30: loss=18.029327 lr=0.000698 (27706ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e4.bin + bn_stats_e4.bin
+  step 0/67: loss=7.175168 (356ms)
+  step 1/67: loss=9.003845 (336ms)
+  step 2/67: loss=10.064428 (336ms)
+Epoch 5/30: loss=9.168286 lr=0.000691 (28383ms)
+  step 0/67: loss=5.256152 (310ms)
+  step 1/67: loss=7.139859 (329ms)
+  step 2/67: loss=6.667707 (291ms)
+Epoch 6/30: loss=6.412122 lr=0.000679 (28472ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e6.bin + bn_stats_e6.bin
+  step 0/67: loss=5.766167 (344ms)
+  step 1/67: loss=4.946246 (351ms)
+  step 2/67: loss=5.732100 (306ms)
+Epoch 7/30: loss=6.077253 lr=0.000663 (28293ms)
+  step 0/67: loss=5.175152 (357ms)
+  step 1/67: loss=4.535973 (335ms)
+  step 2/67: loss=5.581753 (337ms)
+Epoch 8/30: loss=5.377038 lr=0.000642 (28023ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e8.bin + bn_stats_e8.bin
+  step 0/67: loss=4.875732 (318ms)
+  step 1/67: loss=4.451203 (329ms)
+  step 2/67: loss=5.705801 (296ms)
+Epoch 9/30: loss=5.555188 lr=0.000618 (27911ms)
+  step 0/67: loss=4.392260 (373ms)
+  step 1/67: loss=5.497421 (326ms)
+  step 2/67: loss=7.594253 (330ms)
+Epoch 10/30: loss=5.940738 lr=0.000590 (28266ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e10.bin + bn_stats_e10.bin
+  (yolov1 eval skipped — offline mAP pass; train loss above is the signal)
+  step 0/67: loss=4.562878 (333ms)
+  step 1/67: loss=4.523664 (330ms)
+  step 2/67: loss=5.127679 (305ms)
+Epoch 11/30: loss=5.131692 lr=0.000559 (28494ms)
+  step 0/67: loss=3.685175 (322ms)
+  step 1/67: loss=3.937851 (337ms)
+  step 2/67: loss=4.763149 (333ms)
+Epoch 12/30: loss=4.558462 lr=0.000525 (28690ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e12.bin + bn_stats_e12.bin
+  step 0/67: loss=4.827904 (418ms)
+  step 1/67: loss=3.931129 (403ms)
+  step 2/67: loss=4.097575 (421ms)
+Epoch 13/30: loss=4.331951 lr=0.000489 (29217ms)
+  step 0/67: loss=4.957132 (395ms)
+  step 1/67: loss=4.510748 (332ms)
+  step 2/67: loss=3.119452 (307ms)
+Epoch 14/30: loss=4.345503 lr=0.000450 (28244ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e14.bin + bn_stats_e14.bin
+  step 0/67: loss=4.136743 (329ms)
+  step 1/67: loss=4.077305 (334ms)
+  step 2/67: loss=4.128611 (339ms)
+Epoch 15/30: loss=4.094115 lr=0.000411 (28097ms)
+  step 0/67: loss=4.424722 (333ms)
+  step 1/67: loss=3.512460 (337ms)
+  step 2/67: loss=4.184221 (308ms)
+Epoch 16/30: loss=3.862960 lr=0.000370 (28421ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e16.bin + bn_stats_e16.bin
+  step 0/67: loss=3.835137 (344ms)
+  step 1/67: loss=2.890512 (330ms)
+  step 2/67: loss=3.164847 (320ms)
+Epoch 17/30: loss=3.738273 lr=0.000330 (27778ms)
+  step 0/67: loss=3.355674 (328ms)
+  step 1/67: loss=2.709206 (300ms)
+  step 2/67: loss=5.000396 (317ms)
+Epoch 18/30: loss=3.566948 lr=0.000289 (27626ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e18.bin + bn_stats_e18.bin
+  step 0/67: loss=4.044526 (380ms)
+  step 1/67: loss=3.861937 (334ms)
+  step 2/67: loss=3.042949 (319ms)
+Epoch 19/30: loss=3.584974 lr=0.000250 (28213ms)
+  step 0/67: loss=4.400775 (361ms)
+  step 1/67: loss=3.534731 (296ms)
+  step 2/67: loss=3.343988 (317ms)
+Epoch 20/30: loss=3.487639 lr=0.000211 (28048ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e20.bin + bn_stats_e20.bin
+  (yolov1 eval skipped — offline mAP pass; train loss above is the signal)
+  step 0/67: loss=3.485348 (328ms)
+  step 1/67: loss=2.590364 (360ms)
+  step 2/67: loss=3.631584 (329ms)
+Epoch 21/30: loss=3.332608 lr=0.000175 (28347ms)
+  step 0/67: loss=3.622249 (336ms)
+  step 1/67: loss=3.773087 (345ms)
+  step 2/67: loss=2.754467 (315ms)
+Epoch 22/30: loss=3.235225 lr=0.000141 (27922ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e22.bin + bn_stats_e22.bin
+  step 0/67: loss=3.071811 (361ms)
+  step 1/67: loss=3.374086 (341ms)
+  step 2/67: loss=3.035516 (318ms)
+Epoch 23/30: loss=3.060739 lr=0.000110 (27957ms)
+  step 0/67: loss=2.763430 (337ms)
+  step 1/67: loss=3.407020 (339ms)
+  step 2/67: loss=2.698457 (318ms)
+Epoch 24/30: loss=3.006801 lr=0.000082 (28003ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e24.bin + bn_stats_e24.bin
+  step 0/67: loss=3.589301 (304ms)
+  step 1/67: loss=3.478781 (355ms)
+  step 2/67: loss=2.770580 (307ms)
+Epoch 25/30: loss=2.927861 lr=0.000058 (28057ms)
+  step 0/67: loss=2.556276 (344ms)
+  step 1/67: loss=3.200567 (319ms)
+  step 2/67: loss=2.328177 (295ms)
+Epoch 26/30: loss=2.854880 lr=0.000037 (27933ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e26.bin + bn_stats_e26.bin
+  step 0/67: loss=3.877166 (340ms)
+  step 1/67: loss=2.477823 (343ms)
+  step 2/67: loss=2.343028 (329ms)
+Epoch 27/30: loss=2.780792 lr=0.000021 (28244ms)
+  step 0/67: loss=3.099898 (334ms)
+  step 1/67: loss=3.278780 (323ms)
+  step 2/67: loss=3.112165 (343ms)
+Epoch 28/30: loss=2.770018 lr=0.000009 (28300ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e28.bin + bn_stats_e28.bin
+  step 0/67: loss=2.923285 (337ms)
+  step 1/67: loss=2.356810 (314ms)
+  step 2/67: loss=2.562799 (308ms)
+Epoch 29/30: loss=2.758565 lr=0.000002 (28074ms)
+  step 0/67: loss=2.678033 (318ms)
+  step 1/67: loss=3.073817 (314ms)
+  step 2/67: loss=2.856340 (306ms)
+Epoch 30/30: loss=2.716146 lr=0.000000 (28284ms)
+  checkpoint: wrote .lake/build/resnet_34___yolov1_448__neu_det__run1_s2_params_e30.bin + bn_stats_e30.bin
+  (yolov1 eval skipped — offline mAP pass; train loss above is the signal)
+Saved params + BN stats.
+YOLOv1 NEU-DET-448 (single 14×14 grid) — data data/neu_det448 — epochs 30 — box loss: sqrt-MSE
+  spec   : ResNet-34 + YOLOv1 448 (NEU-DET) run1_s2

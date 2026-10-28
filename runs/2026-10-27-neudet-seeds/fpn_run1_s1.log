@@ -1,0 +1,222 @@
+ResNet-34 + FPN detector 448 (NEU-DET) run1_s1: 21548743 params
+Generating train step MLIR...
+  950230 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 17:42:44.478330  730189 service.cc:154] XLA service 0x7a730c009500 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 17:42:44.478374  730189 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 17:42:44.479923  730189 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 17:42:44.479969  730189 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 17:42:44.487973  730189 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 17:42:52.108076  730353 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_61', 76 bytes spill stores, 60 bytes spill loads
+
+I1027 17:42:53.942950  730342 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_18', 40 bytes spill stores, 40 bytes spill loads
+
+I1027 17:42:55.109865  730334 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_19', 8944 bytes spill stores, 8968 bytes spill loads
+
+I1027 17:42:55.381840  730343 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_18', 8468 bytes spill stores, 8440 bytes spill loads
+
+I1027 17:42:55.984043  730342 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_60', 272 bytes spill stores, 160 bytes spill loads
+
+I1027 17:42:56.116327  730329 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_19', 48 bytes spill stores, 48 bytes spill loads
+
+I1027 17:42:56.459355  730332 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 56 bytes spill stores, 56 bytes spill loads
+
+I1027 17:42:56.926907  730349 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_59', 100 bytes spill stores, 84 bytes spill loads
+
+I1027 17:43:00.318032  730357 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_17', 8860 bytes spill stores, 8892 bytes spill loads
+
+I1027 17:43:05.164230  730354 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'input_add_reduce_subtract_fusion', 28 bytes spill stores, 28 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_train_step.mlir (@main, 424 outputs, 1 replica) in 38548 ms
+  session loaded
+  train: 1080 images (602112 floats/image)
+  seed offset: 1 (LEAN_MLIR_SEED)
+  bootstrap: loading first 21284672 floats from .lake/build/jax_r34_imagenet.bin
+  detector prior-bias init: π = 0.010000 → obj bias = -4.595120
+  21548743 params + m + v (246 MB)
+training: 135 batches/epoch, batch=8, Adam, lr=0.000400, cosine warmup=3, label_smooth=0.000000, wd=0.000500
+  BN layers: 36, BN stat floats: 17024
+  WARN: bootstrap BN stats size 85138688 ≠ expected 68096; using zeros
+  step 0/135: loss=274.479614 (494ms)
+  step 1/135: loss=229.187790 (184ms)
+  step 2/135: loss=197.976288 (184ms)
+  step 100/135: loss=12.300609 (205ms)
+Epoch 1/30: loss=42.426707 lr=0.000133 (50775ms)
+  step 0/135: loss=18.159868 (213ms)
+  step 1/135: loss=12.694135 (208ms)
+  step 2/135: loss=13.017822 (225ms)
+  step 100/135: loss=9.344813 (201ms)
+Epoch 2/30: loss=11.707220 lr=0.000267 (52062ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e2.bin + bn_stats_e2.bin
+  step 0/135: loss=9.311745 (224ms)
+  step 1/135: loss=10.548554 (199ms)
+  step 2/135: loss=41.292145 (247ms)
+  step 100/135: loss=10.673898 (193ms)
+Epoch 3/30: loss=11.326813 lr=0.000400 (52573ms)
+  step 0/135: loss=10.995375 (218ms)
+  step 1/135: loss=12.818733 (202ms)
+  step 2/135: loss=9.888385 (208ms)
+  step 100/135: loss=9.408465 (216ms)
+Epoch 4/30: loss=9.870094 lr=0.000399 (52571ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e4.bin + bn_stats_e4.bin
+  step 0/135: loss=8.008898 (199ms)
+  step 1/135: loss=19.987904 (212ms)
+  step 2/135: loss=8.010895 (224ms)
+  step 100/135: loss=8.539480 (191ms)
+Epoch 5/30: loss=10.307494 lr=0.000395 (52407ms)
+  step 0/135: loss=7.129260 (225ms)
+  step 1/135: loss=8.987972 (206ms)
+  step 2/135: loss=7.071115 (223ms)
+  step 100/135: loss=8.813345 (197ms)
+Epoch 6/30: loss=8.994561 lr=0.000388 (52643ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e6.bin + bn_stats_e6.bin
+  step 0/135: loss=9.200331 (213ms)
+  step 1/135: loss=7.048461 (221ms)
+  step 2/135: loss=6.250772 (188ms)
+  step 100/135: loss=5.271010 (204ms)
+Epoch 7/30: loss=8.401322 lr=0.000379 (55491ms)
+  step 0/135: loss=6.189203 (196ms)
+  step 1/135: loss=7.923726 (190ms)
+  step 2/135: loss=10.293148 (194ms)
+  step 100/135: loss=5.089958 (201ms)
+Epoch 8/30: loss=7.795569 lr=0.000367 (53252ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e8.bin + bn_stats_e8.bin
+  step 0/135: loss=7.805387 (216ms)
+  step 1/135: loss=4.500489 (206ms)
+  step 2/135: loss=4.906219 (195ms)
+  step 100/135: loss=6.868831 (188ms)
+Epoch 9/30: loss=7.490954 lr=0.000353 (52033ms)
+  step 0/135: loss=4.806512 (228ms)
+  step 1/135: loss=7.627144 (197ms)
+  step 2/135: loss=5.541680 (206ms)
+  step 100/135: loss=4.570916 (211ms)
+Epoch 10/30: loss=7.723559 lr=0.000337 (52874ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e10.bin + bn_stats_e10.bin
+  (fpn eval skipped — offline mAP pass; train loss above is the signal)
+  step 0/135: loss=4.811172 (221ms)
+  step 1/135: loss=7.238671 (206ms)
+  step 2/135: loss=6.572985 (216ms)
+  step 100/135: loss=7.467674 (208ms)
+Epoch 11/30: loss=6.821726 lr=0.000319 (53290ms)
+  step 0/135: loss=11.671019 (192ms)
+  step 1/135: loss=4.958499 (178ms)
+  step 2/135: loss=5.526657 (193ms)
+  step 100/135: loss=6.761003 (197ms)
+Epoch 12/30: loss=7.004833 lr=0.000300 (52849ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e12.bin + bn_stats_e12.bin
+  step 0/135: loss=6.372890 (232ms)
+  step 1/135: loss=6.408473 (191ms)
+  step 2/135: loss=7.526268 (199ms)
+  step 100/135: loss=6.183134 (205ms)
+Epoch 13/30: loss=6.878742 lr=0.000279 (54303ms)
+  step 0/135: loss=3.893779 (221ms)
+  step 1/135: loss=6.585516 (213ms)
+  step 2/135: loss=4.253746 (208ms)
+  step 100/135: loss=5.356785 (311ms)
+Epoch 14/30: loss=6.286377 lr=0.000257 (54524ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e14.bin + bn_stats_e14.bin
+  step 0/135: loss=5.858402 (203ms)
+  step 1/135: loss=6.669889 (212ms)
+  step 2/135: loss=4.976799 (215ms)
+  step 100/135: loss=5.411108 (254ms)
+Epoch 15/30: loss=5.813026 lr=0.000235 (52748ms)
+  step 0/135: loss=7.304925 (241ms)
+  step 1/135: loss=5.360507 (184ms)
+  step 2/135: loss=5.294378 (223ms)
+  step 100/135: loss=7.749355 (236ms)
+Epoch 16/30: loss=5.645649 lr=0.000212 (53031ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e16.bin + bn_stats_e16.bin
+  step 0/135: loss=6.131885 (232ms)
+  step 1/135: loss=7.060520 (201ms)
+  step 2/135: loss=4.411731 (237ms)
+  step 100/135: loss=5.837153 (187ms)
+Epoch 17/30: loss=5.424886 lr=0.000188 (52581ms)
+  step 0/135: loss=5.854566 (247ms)
+  step 1/135: loss=4.457168 (189ms)
+  step 2/135: loss=6.161482 (190ms)
+  step 100/135: loss=4.457946 (190ms)
+Epoch 18/30: loss=5.411636 lr=0.000165 (52349ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e18.bin + bn_stats_e18.bin
+  step 0/135: loss=5.230244 (194ms)
+  step 1/135: loss=5.251446 (200ms)
+  step 2/135: loss=7.520852 (222ms)
+  step 100/135: loss=5.792692 (199ms)
+Epoch 19/30: loss=5.261309 lr=0.000143 (53721ms)
+  step 0/135: loss=5.154642 (236ms)
+  step 1/135: loss=5.179804 (206ms)
+  step 2/135: loss=4.968088 (216ms)
+  step 100/135: loss=4.992546 (197ms)
+Epoch 20/30: loss=5.061192 lr=0.000121 (52805ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e20.bin + bn_stats_e20.bin
+  (fpn eval skipped — offline mAP pass; train loss above is the signal)
+  step 0/135: loss=6.619138 (249ms)
+  step 1/135: loss=7.026682 (218ms)
+  step 2/135: loss=3.996042 (229ms)
+  step 100/135: loss=4.588554 (233ms)
+Epoch 21/30: loss=5.056460 lr=0.000100 (53777ms)
+  step 0/135: loss=4.474814 (214ms)
+  step 1/135: loss=4.120360 (194ms)
+  step 2/135: loss=4.050448 (225ms)
+  step 100/135: loss=4.147964 (209ms)
+Epoch 22/30: loss=4.750171 lr=0.000081 (55138ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e22.bin + bn_stats_e22.bin
+  step 0/135: loss=3.758285 (266ms)
+  step 1/135: loss=4.647508 (225ms)
+  step 2/135: loss=3.827281 (198ms)
+  step 100/135: loss=3.250371 (232ms)
+Epoch 23/30: loss=4.717812 lr=0.000063 (54169ms)
+  step 0/135: loss=4.956983 (235ms)
+  step 1/135: loss=4.825448 (221ms)
+  step 2/135: loss=4.299918 (227ms)
+  step 100/135: loss=4.842982 (202ms)
+Epoch 24/30: loss=4.608021 lr=0.000047 (53598ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e24.bin + bn_stats_e24.bin
+  step 0/135: loss=4.682484 (215ms)
+  step 1/135: loss=3.984354 (198ms)
+  step 2/135: loss=6.204037 (250ms)
+  step 100/135: loss=4.718205 (260ms)
+Epoch 25/30: loss=4.487299 lr=0.000033 (59871ms)
+  step 0/135: loss=4.625930 (200ms)
+  step 1/135: loss=3.973025 (232ms)
+  step 2/135: loss=4.508044 (202ms)
+  step 100/135: loss=4.364911 (191ms)
+Epoch 26/30: loss=4.395691 lr=0.000021 (56540ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e26.bin + bn_stats_e26.bin
+  step 0/135: loss=4.232820 (227ms)
+  step 1/135: loss=4.598805 (208ms)
+  step 2/135: loss=3.082567 (224ms)
+  step 100/135: loss=3.870560 (190ms)
+Epoch 27/30: loss=4.351415 lr=0.000012 (51424ms)
+  step 0/135: loss=3.619560 (201ms)
+  step 1/135: loss=4.486808 (188ms)
+  step 2/135: loss=5.343931 (192ms)
+  step 100/135: loss=3.091503 (192ms)
+Epoch 28/30: loss=4.354402 lr=0.000005 (52318ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e28.bin + bn_stats_e28.bin
+  step 0/135: loss=3.043723 (220ms)
+  step 1/135: loss=3.751641 (203ms)
+  step 2/135: loss=3.384871 (227ms)
+  step 100/135: loss=3.703302 (195ms)
+Epoch 29/30: loss=4.322093 lr=0.000001 (51438ms)
+  step 0/135: loss=7.463719 (216ms)
+  step 1/135: loss=4.069117 (220ms)
+  step 2/135: loss=5.359216 (181ms)
+  step 100/135: loss=3.469836 (226ms)
+Epoch 30/30: loss=4.306875 lr=0.000000 (51410ms)
+  checkpoint: wrote .lake/build/resnet_34___fpn_detector_448__neu_det__run1_s1_params_e30.bin + bn_stats_e30.bin
+  (fpn eval skipped — offline mAP pass; train loss above is the signal)
+Saved params + BN stats.
+FPN multi-scale NEU-DET (56/28/14, 3 anchors/scale, Ntot=185220, head tower=0) — data dir: data/neu_det_fpn
+  spec   : ResNet-34 + FPN detector 448 (NEU-DET) run1_s1
+  epochs : 30
+  lr     : 0.000400  clip: 4.000000
+  augment: true (HSV jitter + hflip on the FPN path)
+  clsw   : none weights, class focal γ=2.000000
+  affine : p=0.500000 scale=±0.250000 translate=±0.100000 (box-aware, target re-encoded)
+  bootstrap: ImageNet R34 prefix
