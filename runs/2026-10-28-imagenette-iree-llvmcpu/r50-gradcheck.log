@@ -1,0 +1,46 @@
+§3.2's owed gate — ResNet-50's GRADIENT on the committed train step
+  artifact verified_mlir/resnet50in_adam64_train_step.mlir
+  161 params (25557032 floats), bs 64, 53 BN layers, backend iree
+  tier 1 |cos∠| ≤ 0.000300   ·   tier 2 h = 0.000060, rel ≤ 0.300000
+  iree-compile verified_mlir/resnet50in_adam64_train_step.mlir
+  base loss 7.821349   ‖g‖ 197.534465   (ln 1000 = 6.907755)
+
+  TIER 1  A  ⟨g_W,W⟩ = 0        53 conv kernels    worst |cos∠| 0.000002 at s4b2.W3
+          B  ⟨g_γ,γ⟩+⟨g_β,β⟩=0  33 BN affines      worst |cos∠| 0.000058 at s4b2.bn2
+             ⭐ the stem's B, which is the only path through maxPool3s2: 0.000001
+          ⟂  control: 21 sites where the invariance is FALSE (residual-add BNs + the head)
+             weakest violation 0.003429 at s2b3.bn3 (residual add);  10th pct 0.007106;  median 0.019006;  strongest 0.118678
+             populations strictly separate (min ⟂ > worst passing)? yes
+
+  TIER 2  group        form                          <g,δ>        (L₊−L₋)/2       rel
+          stem	conv7x7-s2 + BN + maxPool3s2	0.094083	0.085604	0.090125
+          s1b0	PROJ stride-1 ⭐	0.067200	0.064165	0.045163
+          s1b0.proj	shortcut branch	0.021254	0.020745	0.023936
+          s1b1	identity	0.054983	0.053058	0.035004
+          s1b2	identity	0.037347	0.036556	0.021159
+          s2b0	PROJ strided	0.051582	0.050559	0.019843
+          s2b0.proj	shortcut branch	0.017744	0.017566	0.010052
+          s2b1	identity	0.039120	0.038579	0.013829
+          s2b2	identity	0.026783	0.026548	0.008800
+          s2b3	identity	0.019402	0.019278	0.006376
+          s3b0	PROJ strided	0.029219	0.029005	0.007326
+          s3b0.proj	shortcut branch	0.010056	0.010027	0.002811
+          s3b1	identity	0.022568	0.022453	0.005096
+          s3b2	identity	0.015400	0.015350	0.003213
+          s3b3	identity	0.011119	0.011096	0.002048
+          s3b4	identity	0.008358	0.008345	0.001641
+          s3b5	identity	0.006544	0.006536	0.001151
+          s4b0	PROJ strided	0.011554	0.011538	0.001354
+          s4b0.proj	shortcut branch	0.003958	0.003956	0.000380
+          s4b1	identity	0.008974	0.008967	0.000790
+          s4b2	identity	0.006213	0.006211	0.000267
+          head	dense 2048→1000	0.012934	0.012934	0.000041
+  worst rel 0.090125 at stem;  stem's fp32 NOISE FLOOR at the same ‖δ‖ is 0.000094 — the residual is truncation, not arithmetic
+  ⟂ scale control (fd vs 2·⟨g,δ⟩)  weakest 1.000041 at head
+  49 invokes of @m.resnet50in_adam64_train_step
+
+  ✅ GRADCHECK PASSES.
+     TIER 1: 53 conv kernels and 33 BN affines satisfy their homogeneity identities to |cos∠| ≤ 0.000058 — including the stem's, the only gradient path through maxPool3s2 — against 21 non-homogeneous control sites that do not overlap them at all: weakest at the 10th percentile 0.007106 (123.550809× the worst passing site), median 0.019006 (330.438833×), with the tolerance 0.000300 sitting between the two populations. ⚠ The single weakest violation is 0.003429, reported but NOT the verdict's statistic — it is an unstable extremum (§3.1b).
+     TIER 2: all 22 groups agree in magnitude to rel ≤ 0.090125, against a doubled-gradient control that misses by 1.000041 (11.096143× the tie).
+     All three bottleneck forms are covered — the stride-1 projection (s1b0), the three strided projections, and the 12 identity blocks — plus each shortcut branch on its own.
+     §3.2's "the gradient is ungated" is discharged for verified_mlir/resnet50in_adam64_train_step.mlir.

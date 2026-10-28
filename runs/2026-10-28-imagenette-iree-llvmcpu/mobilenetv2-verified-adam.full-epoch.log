@@ -1,0 +1,11 @@
+# mobilenetv2-verified-adam — IREE 3.13.0 llvm-cpu, local-task, atlas (88 threads), 2026-10-28
+# The first run of the day, a FULL first epoch (295 steps of batch 32) with no step cap; only the tail of its
+# stdout was kept (the shell piped it through tail -8). 1052 s wall end to end, including the three
+# iree-compiles and the 3925-image eval. The 10-step record in the same shape as the other nets is below it.
+  step 2/295: loss=2.808410
+  step 100/295: loss=2.211002
+  step 200/295: loss=2.066377
+Epoch 1/80: loss=2.115044 lr=0.000333
+  epoch 1: val_acc = 682/3925 = 17.375796%  top5 = 2601/3925 = 66.267516%  [95% CI 16.22–18.59]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_smoke.bin.bn (34112 floats x 2, hash 16686897211725037215)
+done (trained MobileNetV2 adam + cosine/warmup via packed threading).

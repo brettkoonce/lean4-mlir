@@ -728,7 +728,8 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
   let mp3b := (cases.filter (fun c => c.1 == "maxPool3s2Back")).head!.2.1
   let mp2 := (cases.filter (fun c => c.1 == "maxPool")).head!.2.1
   let mp2b := (cases.filter (fun c => c.1 == "maxPoolBack")).head!.2.1
-  for (nm, txt) in [("maxPool3s2", mp3), ("maxPool3s2Back", mp3b)] do
+  -- The FORWARD carries the window as attributes on one `reduce_window`.
+  for (nm, txt) in [("maxPool3s2", mp3)] do
     if txt.isEmpty || (txt.splitOn "MALFORMED").length != 1 then
       die s!"DEGENERATE: {nm} render is empty or fell through to // MALFORMED"
     -- the window itself. `1, 1, 3, 3` over the two spatial axes, stride `1, 1, 2, 2`.
@@ -745,6 +746,35 @@ transpose, so these must be one emitter:\n forward:\n{d} backward:\n{dropoutBack
     if (txt.splitOn "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>").length != 2 then
       die s!"{nm}'s padding is not SYMMETRIC 1 — XLA 'SAME' would offset the pooling grid by one \
 input position, which is a different function at the same output shape:\n{txt}"
+  -- The BACKWARD carries the same window as GEOMETRY, not attributes: since 2026-10-28 it is
+  --    `maxPool3s2BackFlat` spelled as nine stride-2 slices of the `-inf`-padded input, because no
+  --    IREE release lowers `select_and_scatter` over OVERLAPPING windows (`maxPool3s2BackText`'s
+  --    docstring). What pins the window here is therefore: the symmetric `-inf` pad by one, nine
+  --    stride-2 slices (one per window offset), nine interior-1 pads routing each offset's
+  --    cotangent back, and NO `select_and_scatter` — a backward that reached for the op again
+  --    would compile on XLA, tie on every structural audit, and fail on IREE at the first
+  --    ResNet.
+  if mp3b.isEmpty || (mp3b.splitOn "MALFORMED").length != 1 then
+    die s!"DEGENERATE: maxPool3s2Back render is empty or fell through to // MALFORMED"
+  if (mp3b.splitOn "select_and_scatter").length != 1 then
+    die s!"maxPool3s2Back emits `select_and_scatter` — IREE cannot lower it over overlapping \
+windows, so this backward would compile on XLA only:\n{mp3b}"
+  if (mp3b.splitOn "stablehlo.constant dense<0xFF800000> : tensor<f32>").length != 2 then
+    die s!"maxPool3s2Back has no `-inf` pad value — a pad cell could then win a window:\n{mp3b}"
+  if (mp3b.splitOn "low = [0, 0, 1, 1], high = [0, 0, 1, 1], interior = [0, 0, 0, 0]").length != 2 then
+    die s!"maxPool3s2Back's input pad is not SYMMETRIC 1 — the window grid would be XLA 'SAME''s, \
+offset by one input position from He et al.'s:\n{mp3b}"
+  let slices := (mp3b.splitOn "stablehlo.slice").length - 1
+  if slices != 10 then   -- nine window offsets + the final border slice
+    die s!"maxPool3s2Back emits {slices} slices, not 10 (nine 3×3 window offsets + the border):\n{mp3b}"
+  let strided := (mp3b.splitOn ":2]").length - 1
+  if strided != 9 then
+    die s!"maxPool3s2Back has {strided} stride-2 slices, not 9 — that is not a 3×3 window at stride 2:\n{mp3b}"
+  if ((mp3b.splitOn "interior = [0, 0, 1, 1]").length - 1) != 9 then
+    die s!"maxPool3s2Back does not route all nine window offsets back (interior-1 pads):\n{mp3b}"
+  if ((mp3b.splitOn "stablehlo.not ").length - 1) != 8 || ((mp3b.splitOn "stablehlo.or ").length - 1) != 8 then
+    die s!"maxPool3s2Back's first-max mask is not the eight-step running claim — a tie could route \
+to two cells, which is not the `GE` select's function:\n{mp3b}"
   -- The 2×2 ops must NOT move. They back every mnist/cifar net in the repo, and the whole
   -- claim that the 3×3 pool is confined to the ResNets rests on their emit being untouched.
   if (mp2.splitOn "window_dimensions = array<i64: 1, 1, 2, 2>").length != 2 then
@@ -759,7 +789,7 @@ input position, which is a different function at the same output shape:\n{txt}"
   if mp3b == mp2b then
     die s!"maxPool3s2Back and maxPoolBack emit IDENTICAL text — one of them is the wrong pool:\n{mp3b}"
   IO.println "  ✓ maxPool3s2: 3×3 window, stride 2, SYMMETRIC padding 1 (He et al., not XLA 'SAME')"
-  IO.println "  ✓ maxPool3s2Back: same window on the select_and_scatter (add-reduce accumulates)"
+  IO.println "  ✓ maxPool3s2Back: the same window as nine stride-2 slices of the -inf pad, first-max\n      claim in row-major order, nine interior-1 pads summed — no select_and_scatter, so IREE lowers it"
   IO.println "  ✓ maxPool (2×2) untouched: 2×2 window, no padding attribute"
   IO.println "  ✓ maxPool3s2 ≠ maxPool: the two pools render distinguishable text"
   -- ── the exact GELU beside the tanh approximation. Same arity, same descriptor shape, same

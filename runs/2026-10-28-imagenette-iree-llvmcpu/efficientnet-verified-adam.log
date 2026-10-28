@@ -1,0 +1,14 @@
+EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/efficientnet_adam_train_step.mlir
+  iree-compile verified_mlir/efficientnet_fwd.mlir
+  iree-compile verified_mlir/efficientnet_fwd_eval.mlir
+  train 9469, val 3925; bs 32, EfficientNet-B0 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 49 layers, 42016 stat floats → eval via @efficientnet_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.444753
+  step 1/10: loss=2.247611
+  step 2/10: loss=2.447101
+Epoch 1/80: loss=2.325499 lr=0.000333
+  epoch 1: val_acc = 609/3925 = 15.515924%  top5 = 2647/3925 = 67.439490%  [95% CI 14.42–16.68]
+    BN companion -> .lake/build/efficientnet_adam_ckpt_smoke.bin.bn (42016 floats x 2, hash 11326137710973065965)
+done (trained EfficientNet-B0 adam + cosine/warmup via packed threading).

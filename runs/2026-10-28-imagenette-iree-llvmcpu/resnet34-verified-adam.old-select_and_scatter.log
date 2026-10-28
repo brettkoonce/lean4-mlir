@@ -1,0 +1,17 @@
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/resnet34_adam_train_step.mlir
+uncaught exception: iree-compile failed:
+verified_mlir/resnet34_adam_train_step.mlir:3919:14: error: failed to legalize operation 'stablehlo.select_and_scatter' that was explicitly marked illegal: %7137 = "stablehlo.select_and_scatter"(%343, %7056, %263) <{padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>, window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>}> ({...}, {...}) : (tensor<32x64x112x112xf32>, tensor<32x64x56x56xf32>, tensor<f32>) -> tensor<32x64x112x112xf32>
+    %v3586 = "stablehlo.select_and_scatter"(%v3583, %v3584, %v3585) ({
+             ^
+verified_mlir/resnet34_adam_train_step.mlir:3919:14: note: see current operation: 
+%7137 = "stablehlo.select_and_scatter"(%343, %7056, %263) <{padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>, window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>}> ({
+^bb0(%arg423: tensor<f32>, %arg424: tensor<f32>):
+  %9072 = "stablehlo.compare"(%arg423, %arg424) <{comparison_direction = #stablehlo<comparison_direction GE>}> : (tensor<f32>, tensor<f32>) -> tensor<i1>
+  "stablehlo.return"(%9072) : (tensor<i1>) -> ()
+}, {
+^bb0(%arg421: tensor<f32>, %arg422: tensor<f32>):
+  %9071 = "stablehlo.add"(%arg421, %arg422) : (tensor<f32>, tensor<f32>) -> tensor<f32>
+  "stablehlo.return"(%9071) : (tensor<f32>) -> ()
+}) : (tensor<32x64x112x112xf32>, tensor<32x64x56x56xf32>, tensor<f32>) -> tensor<32x64x112x112xf32>
+

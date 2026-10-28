@@ -1,0 +1,14 @@
+Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/resnet34_adam_train_step.mlir
+  iree-compile verified_mlir/resnet34_fwd.mlir
+  iree-compile verified_mlir/resnet34_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-34 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 36 layers, 17024 stat floats → eval via @resnet34_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=3.614362
+  step 1/10: loss=3.587044
+  step 2/10: loss=3.184935
+Epoch 1/80: loss=2.948847 lr=0.000333
+  epoch 1: val_acc = 432/3925 = 11.006369%  top5 = 2171/3925 = 55.312102%  [95% CI 10.07–12.02]
+    BN companion -> .lake/build/resnet34_adam_ckpt_smoke.bin.bn (17024 floats x 2, hash 2409124935929695428)
+done (trained ResNet-34 adam + cosine/warmup via packed threading).

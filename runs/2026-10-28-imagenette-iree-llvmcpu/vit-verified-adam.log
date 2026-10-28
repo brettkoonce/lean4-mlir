@@ -1,0 +1,10 @@
+ViT-Tiny on Imagenette 224² (patch-16 → CLS+pos → 12 transformer blocks @ dim192/3heads/MLP768 → final LN → CLS-head 10) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/vit_adam_train_step.mlir
+  iree-compile verified_mlir/vit_fwd.mlir
+  train 9469, val 3925; bs 32, ViT-Tiny adam (cosine+warmup 5ep, baseLR 0.000300), He init
+  step 0/10: loss=3.351305
+  step 1/10: loss=2.838582
+  step 2/10: loss=2.354718
+Epoch 1/80: loss=2.598988 lr=0.000060
+  epoch 1: val_acc = 776/3925 = 19.770701%  top5 = 2475/3925 = 63.057325%  [95% CI 18.55–21.05]
+done (trained ViT-Tiny adam + cosine/warmup via packed threading).

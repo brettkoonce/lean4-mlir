@@ -125,32 +125,84 @@ def maxPool3s2FwdText (B c h w : Nat) (r xn ninf p o : String) : String :=
   s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
   s!"    {o} = stablehlo.reshape {p} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n"
 
-/-- **The 3×3/s2 pool's emitted backward text**, given already-freshened names. Shared by the
-    per-example and batched arms, for `maxPool3s2FwdText`'s reason.
+/-- **The 3×3/s2 pool's emitted backward text**, from the saved input `xN` and the cotangent `r`;
+    returns the text and the output's name. Shared by the per-example and batched arms, for
+    `maxPool3s2FwdText`'s reason. It draws its own fresh names because it emits some fifty values.
 
-    Only the window attributes differ from `maxPoolBack`'s emit — **nothing else** — because
-    `select_and_scatter`'s scatter region already reduces with `add`, which is exactly the
-    accumulation overlapping windows need.
+    **This is `maxPool3s2BackFlat` written without `stablehlo.select_and_scatter`.** No IREE
+    release lowers that op when the windows OVERLAP — upstream StableHLO's linalg legalization
+    handles only window = stride — so until 2026-10-28 neither ResNet compiled through the second
+    lowerer at all (`maxPoolBack`'s 2×2 windows tile, so it keeps the op). XLA lowers both
+    spellings. The same function, as nine strided slices:
 
-    `%sa`/`%sb`/`%sc`/`%sd` are hardcoded region block arguments and are therefore RESERVED SSA
-    names: a top-level value of the same name is a redefinition error that surfaces only at
-    XLA compile time. -/
-def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
-  s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
-  s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
-  s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-  s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
-  "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
-  "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
-  "        stablehlo.return %sge : tensor<i1>\n" ++
-  "    }, " ++ "{\n" ++
-  "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
-  "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
-  "        stablehlo.return %ss : tensor<f32>\n" ++
-  "    }) {window_dimensions = array<i64: 1, 1, 3, 3>, window_strides = array<i64: 1, 1, 2, 2>, " ++
-  "padding = dense<[[0, 0], [0, 0], [1, 1], [1, 1]]> : tensor<4x2xi64>}" ++
-  s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
-  s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n"
+    1. pad the input with `-inf` by one on each spatial side: window `(oh, ow)` is then the 3×3
+       block at `[2oh, 2oh+2] × [2ow, 2ow+2]` of the padded map, and a pad cell never wins a max
+       because every window holds a real cell;
+    2. slice the padded map at each window offset `(i, j)` with stride 2 — `s_ij[oh, ow]` is the
+       cell at offset `(i, j)` of window `(oh, ow)` — so one `maximum` over the nine is the
+       forward's max `m`;
+    3. the first-max mask, in ROW-MAJOR window order: `mask_ij = (s_ij = m) ∧ ¬claimed`, with
+       `claimed` the OR of the earlier equalities. That is the `GE` select's choice, a later equal
+       never displacing an earlier one, and the `windowArgmax` the denotation names;
+    4. route: `c_ij = select mask_ij dy 0`;
+    5. scatter: pad `c_ij` with interior 1 and edges `(i, 3−i)` / `(j, 3−j)`, which puts
+       `c_ij[oh, ow]` at padded cell `(2oh+i, 2ow+j)`, the cell it was read from;
+    6. SUM the nine — an input is the argmax of up to four windows and the cotangent accumulates,
+       which is what the scatter region's `add` did — and slice the pad border off.
+
+    Checked at the stem shape (32×64×112×112) with ties forced: against XLA's own
+    `select_and_scatter` (JAX CPU) and against an independent argmax/bincount reference, identical
+    to 5e-7 — fp32 summation order, nothing else (atlas, 2026-10-28). -/
+def maxPool3s2BackText (B c h w : Nat) (xN r : String) : StateM EmitS (String × String) := do
+  let H := 2*h; let W := 2*w
+  let xr ← fresh; let dr ← fresh; let ninf ← fresh; let z ← fresh; let zs ← fresh; let xp ← fresh
+  let mut txt :=
+    s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*H*W]}) -> {ty [B,c,H,W]}\n" ++
+    s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+    s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    {zs} = stablehlo.constant dense<0.0> : {ty [B,c,h,w]}\n" ++
+    s!"    {xp} = stablehlo.pad {xr}, {ninf}, low = [0, 0, 1, 1], high = [0, 0, 1, 1], interior = [0, 0, 0, 0] : ({ty [B,c,H,W]}, tensor<f32>) -> {ty [B,c,H+2,W+2]}\n"
+  -- the nine window offsets, row-major: the order the `GE` select visits them in
+  let offs : List (Nat × Nat) := [(0,0),(0,1),(0,2),(1,0),(1,1),(1,2),(2,0),(2,1),(2,2)]
+  let mut ss : Array String := #[]
+  for (i, j) in offs do
+    let s ← fresh
+    txt := txt ++ s!"    {s} = stablehlo.slice {xp} [0:{B}, 0:{c}, {i}:{i+H}:2, {j}:{j+W}:2] : ({ty [B,c,H+2,W+2]}) -> {ty [B,c,h,w]}\n"
+    ss := ss.push s
+  let mut m := ss[0]!
+  for s in ss[1:] do
+    let m' ← fresh
+    txt := txt ++ s!"    {m'} = stablehlo.maximum {m}, {s} : {ty [B,c,h,w]}\n"
+    m := m'
+  let mut claimed : Option String := none
+  let mut acc : Option String := none
+  for (s, (i, j)) in ss.toList.zip offs do
+    let eq ← fresh
+    txt := txt ++ s!"    {eq} = stablehlo.compare EQ, {s}, {m} : ({ty [B,c,h,w]}, {ty [B,c,h,w]}) -> {tyI1 [B,c,h,w]}\n"
+    let mut mask := eq
+    if let some cl := claimed then
+      let nc ← fresh; let mk ← fresh; let cl' ← fresh
+      txt := txt ++ s!"    {nc} = stablehlo.not {cl} : {tyI1 [B,c,h,w]}\n" ++
+                    s!"    {mk} = stablehlo.and {eq}, {nc} : {tyI1 [B,c,h,w]}\n" ++
+                    s!"    {cl'} = stablehlo.or {cl}, {eq} : {tyI1 [B,c,h,w]}\n"
+      mask := mk
+      claimed := some cl'
+    else
+      claimed := some eq
+    let cc ← fresh; let p ← fresh
+    txt := txt ++ s!"    {cc} = stablehlo.select {mask}, {dr}, {zs} : {tyI1 [B,c,h,w]}, {ty [B,c,h,w]}\n" ++
+                  s!"    {p} = stablehlo.pad {cc}, {z}, low = [0, 0, {i}, {j}], high = [0, 0, {3-i}, {3-j}], interior = [0, 0, 1, 1] : ({ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,H+2,W+2]}\n"
+    if let some a := acc then
+      let a' ← fresh
+      txt := txt ++ s!"    {a'} = stablehlo.add {a}, {p} : {ty [B,c,H+2,W+2]}\n"
+      acc := some a'
+    else
+      acc := some p
+  let dx ← fresh; let o ← fresh
+  txt := txt ++ s!"    {dx} = stablehlo.slice {acc.getD xp} [0:{B}, 0:{c}, 1:{H+1}, 1:{W+1}] : ({ty [B,c,H+2,W+2]}) -> {ty [B,c,H,W]}\n" ++
+                s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,H,W]}) -> {ty [B, c*H*W]}\n"
+  pure (txt, o)
 
 /-- **The stochastic-depth mask input name for ramp index `i`** — the `mName` a `dropPathB` carries,
     and the `tensor<Bxf32>` the signature declares for it.
@@ -3171,11 +3223,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
           pure (maxPool3s2FwdText B c h w r xn ninf pp o, o :: st)
       | "maxPool3s2BackP", [xN], [c, h, w] => do
-          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
-          pure (maxPool3s2BackText B c h w xN r xr dr z scn o, o :: st)
+          let (txt, o) ← maxPool3s2BackText B c h w xN r
+          pure (txt, o :: st)
       | "maxPool3s2BackP", [xN], [_N, c, h, w] => do
-          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
-          pure (maxPool3s2BackText B c h w xN r xr dr z scn o, o :: st)
+          let (txt, o) ← maxPool3s2BackText B c h w xN r
+          pure (txt, o :: st)
       | "maxPoolBackP", [xN], [_N, c, h, w] => do
           -- byte-for-byte `.maxPoolBack`'s emit. NOTE the region block arguments %sa/%sb/%sc/%sd
           -- are HARDCODED here, so they are reserved SSA names: a top-level value of the same

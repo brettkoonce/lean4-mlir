@@ -1,0 +1,10 @@
+ConvNeXt-T on Imagenette 224² (patchify /4 → stem channel-LN → [3,3,9,3] blocks @ [96,192,384,768] depthwise-7×7 + channel-LN + GELU + layerScale + 3 downsamples 56→7 → GAP → LN → dense) via the VERIFIED renderer → IREE FFI → GPU. LayerNorm is ConvNeXt's REAL channel LN — statistics over the c channels at each spatial position, per-channel [c] affine — on all 22 of those sites (§2m), plus a 23rd over the [768] GAP output — the paper's head LN, restored 2026-08-30; the count matches timm at 28,589,128 for K=1000
+  iree-compile verified_mlir/convnext_adam_train_step.mlir
+  iree-compile verified_mlir/convnext_fwd.mlir
+  train 9469, val 3925; bs 32, ConvNeXt-T adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  step 0/10: loss=3.556979
+  step 1/10: loss=3.329984
+  step 2/10: loss=2.691321
+Epoch 1/80: loss=3.168737 lr=0.000333
+  epoch 1: val_acc = 645/3925 = 16.433121%  top5 = 2546/3925 = 64.866242%  [95% CI 15.31–17.63]
+done (trained ConvNeXt-T adam + cosine/warmup via packed threading).

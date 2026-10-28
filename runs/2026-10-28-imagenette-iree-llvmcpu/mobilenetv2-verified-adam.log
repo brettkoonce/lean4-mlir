@@ -1,0 +1,14 @@
+MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → IREE FFI → GPU
+  (cached vmfb) .lake/build/mobilenetv2_adam_train_step_llvm-cpu.vmfb
+  (cached vmfb) .lake/build/mobilenetv2_fwd_llvm-cpu.vmfb
+  (cached vmfb) .lake/build/mobilenetv2_fwd_eval_llvm-cpu.vmfb
+  train 9469, val 3925; bs 32, MobileNetV2 adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 52 layers, 34112 stat floats → eval via @mobilenetv2_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.500502
+  step 1/10: loss=2.578393
+  step 2/10: loss=2.759693
+Epoch 1/80: loss=2.503961 lr=0.000333
+  epoch 1: val_acc = 445/3925 = 11.337580%  top5 = 2243/3925 = 57.146497%  [95% CI 10.38–12.37]
+    BN companion -> .lake/build/mobilenetv2_adam_ckpt_smoke10.bin.bn (34112 floats x 2, hash 10571682350503533483)
+done (trained MobileNetV2 adam + cosine/warmup via packed threading).

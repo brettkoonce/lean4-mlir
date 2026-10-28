@@ -1,0 +1,14 @@
+MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/mnv4_adam_train_step.mlir
+  iree-compile verified_mlir/mnv4_fwd.mlir
+  iree-compile verified_mlir/mnv4_fwd_eval.mlir
+  train 9469, val 3925; bs 32, MobileNetV4-Conv-M adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=2.709641
+  step 1/10: loss=2.624977
+  step 2/10: loss=2.534651
+Epoch 1/80: loss=2.481197 lr=0.000333
+  epoch 1: val_acc = 517/3925 = 13.171975%  top5 = 2037/3925 = 51.898089%  [95% CI 12.15–14.27]
+    BN companion -> .lake/build/mnv4_adam_ckpt_smoke.bin.bn (67904 floats x 2, hash 15848099164054805521)
+done (trained MobileNetV4-Conv-M adam + cosine/warmup via packed threading).

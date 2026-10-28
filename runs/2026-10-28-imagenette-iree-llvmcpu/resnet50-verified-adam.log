@@ -1,0 +1,14 @@
+ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224² via the VERIFIED renderer → IREE FFI → GPU
+  iree-compile verified_mlir/resnet50_adam_train_step.mlir
+  iree-compile verified_mlir/resnet50_fwd.mlir
+  iree-compile verified_mlir/resnet50_fwd_eval.mlir
+  train 9469, val 3925; bs 32, ResNet-50 (Imagenette) adam (cosine+warmup 3ep, baseLR 0.001000), He init
+  running-stats BN: 53 layers, 53120 stat floats → eval via @resnet50_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.010000
+  step 0/10: loss=3.358071
+  step 1/10: loss=2.823497
+  step 2/10: loss=3.171751
+Epoch 1/80: loss=2.777641 lr=0.000333
+  epoch 1: val_acc = 412/3925 = 10.496815%  top5 = 2031/3925 = 51.745223%  [95% CI 9.58–11.49]
+    BN companion -> .lake/build/resnet50_adam_ckpt_smoke.bin.bn (53120 floats x 2, hash 10687573720463486548)
+done (trained ResNet-50 (Imagenette) adam + cosine/warmup via packed threading).

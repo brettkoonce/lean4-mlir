@@ -435,10 +435,11 @@ inductive SHlo : Nat → Type where
   -- VJP reading is conditional (each window's max attained once, `MaxPool2Smooth`), like
   -- the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
-  -- The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
-  -- padding — and **nothing else changes**, because `select_and_scatter` scatters with an
-  -- **add** reduction, which is exactly the accumulation overlapping windows need. Only the window
-  -- attributes move.
+  -- The **3×3/s2** peer of `maxPoolBack`: wider window, symmetric padding, and the windows
+  -- OVERLAP, so the backward accumulates (`maxPool3s2BackFlat` is a sum where the 2×2 peer is a
+  -- lookup). The emit is NOT `select_and_scatter` since 2026-10-28 — no IREE lowers that op over
+  -- overlapping windows — but nine strided slices, a first-max mask and nine interior pads summed
+  -- (`maxPool3s2BackText`); the same function, and this `den` is what both spellings denote.
   | maxPool3s2Back {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 3 (CNN) param-SGD tail (the conv train step, folded into the AST):
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
@@ -683,7 +684,7 @@ inductive SHlo : Nat → Type where
   -- Same `batchMapAux` story (example `n` gets its OWN slice of `x`), same reason it is not a
   -- descriptor. What differs from the 2×2 peer is only inside `maxPool3s2BackFlat`: the windows
   -- overlap, so the backward SUMS over every output that selected this input rather than looking
-  -- one up. The emitted `select_and_scatter` handles that as is — it reduces with `add`.
+  -- one up. The emit sums its nine routed slices (`maxPool3s2BackText`), which is that sum.
   | maxPool3s2BackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched conv BIAS param-SGD, the peers of `conv{,Strided}WeightSgdB`: `b − lr·Σ_n dβ_n`,

@@ -1,0 +1,169 @@
+── Proofs/Codegen (pretty(provenGraph)) ──
+  lake build LeanMlir.Proofs.Codegen.ChapterArtifacts
+✔ [2831/2832] Built LeanMlir.Proofs.Codegen.ChapterGraphs (2.9s)
+✔ [2832/2832] Built LeanMlir.Proofs.Codegen.ChapterArtifacts (2.2s)
+Build completed successfully (2832 jobs).
+  lake build LeanMlir.Proofs.Codegen.MlpArtifacts
+✔ [2834/2836] Built LeanMlir.Proofs.Codegen.RenderKit (3.6s)
+✔ [2835/2836] Built LeanMlir.Proofs.Codegen.MlpRender (2.3s)
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.MlpArtifacts (1.0s)
+Build completed successfully (2836 jobs).
+  lake build LeanMlir.Proofs.Codegen.CnnArtifacts
+✔ [2835/2838] Built LeanMlir.Proofs.Codegen.SyncBnSites (2.2s)
+✔ [2836/2838] Built LeanMlir.Proofs.Codegen.CnnRender (14s)
+✔ [2837/2838] Built LeanMlir.Proofs.Codegen.CnnBbnRender (4.2s)
+✔ [2838/2838] Built LeanMlir.Proofs.Codegen.CnnArtifacts (8.6s)
+Build completed successfully (2838 jobs).
+  lake build LeanMlir.Proofs.Codegen.ResNet34RenderB
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.ResNet34RenderB (7.0s)
+Build completed successfully (2836 jobs).
+  lake build LeanMlir.Proofs.Codegen.ResNet50RenderB
+✔ [2837/2837] Built LeanMlir.Proofs.Codegen.ResNet50RenderB (12s)
+Build completed successfully (2837 jobs).
+  lake build LeanMlir.Proofs.Codegen.MobileNetV2RenderB
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.MobileNetV2RenderB (8.9s)
+Build completed successfully (2836 jobs).
+  lake build LeanMlir.Proofs.Codegen.MobileNetV4RenderB
+✔ [2837/2837] Built LeanMlir.Proofs.Codegen.MobileNetV4RenderB (7.7s)
+Build completed successfully (2837 jobs).
+  lake build LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.EfficientNetRender.Basic (9.3s)
+Build completed successfully (2836 jobs).
+  lake build LeanMlir.Proofs.Codegen.ConvNeXtRender
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.ConvNeXtRender (5.4s)
+Build completed successfully (2836 jobs).
+  lake build LeanMlir.Proofs.Codegen.ConvNeXtRenderB
+✔ [2837/2837] Built LeanMlir.Proofs.Codegen.ConvNeXtRenderB (16s)
+Build completed successfully (2837 jobs).
+  lake build LeanMlir.Proofs.Codegen.ViTRender
+✔ [2835/2835] Built LeanMlir.Proofs.Codegen.ViTRender (4.9s)
+Build completed successfully (2835 jobs).
+  lake build LeanMlir.Proofs.Codegen.ViTRenderB
+✔ [2836/2836] Built LeanMlir.Proofs.Codegen.ViTRenderB (21s)
+Build completed successfully (2836 jobs).
+
+── verified_mlir/ writer audit ──
+  OK — 398 artifacts, one writer each
+
+── forward ⊂ train-step prefix check ──
+  OK — resnet34_fwd.mlir is a byte-identical 1220-line prefix of resnet34_sgd_train_step.mlir
+  OK — cifar8wb_bbn_fwd.mlir is a byte-identical 301-line prefix of cifar8wb_bbn_sgd_train_step.mlir
+  OK — convnext_fwd.mlir is a byte-identical 1662-line prefix of convnext_train_step.mlir
+  OK — efficientnet_fwd.mlir is a byte-identical 1820-line prefix of efficientnet_train_step.mlir
+  OK — efficientnet_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnet_adamdrop_train_step.mlir
+  OK — efficientnetin_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnetin_emarms64drop_train_step.mlir
+  OK — efficientnet_do_fwd.mlir is a byte-identical 1821-line prefix of efficientnet_adamdo_train_step.mlir
+  OK — efficientnetin_dropdo_fwd.mlir is a byte-identical 1857-line prefix of efficientnetin_emarms64dropdo_train_step.mlir
+  OK — convnext_drop_fwd.mlir is a byte-identical 1734-line prefix of convnext_adamdrop_train_step.mlir
+  OK — convnextin_drop_fwd.mlir is a byte-identical 1734-line prefix of convnextin_adamwxclipdrop_train_step.mlir
+  OK — convnextsin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextsin_adamwxclipdrop_train_step.mlir
+  OK — convnextbin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextbin_adamwxclipdrop_train_step.mlir
+  OK — vit_drop_fwd.mlir is a byte-identical 2520-line prefix of vit_adamdrop_train_step.mlir
+  OK — vitin_drop_fwd.mlir is a byte-identical 2520-line prefix of vitin_adamwxclipdrop_train_step.mlir
+  OK — convnextin_droperf_fwd.mlir is a byte-identical 1626-line prefix of convnextin_adamwxclipdroperf_train_step.mlir
+  OK — convnextsin_droperf_fwd.mlir is a byte-identical 3048-line prefix of convnextsin_adamwxclipdroperf_train_step.mlir
+  OK — convnextbin_droperf_fwd.mlir is a byte-identical 3048-line prefix of convnextbin_adamwxclipdroperf_train_step.mlir
+  OK — vitin_droperf_fwd.mlir is a byte-identical 2448-line prefix of vitin_adamwxclipdroperf_train_step.mlir
+
+── forward ⊂ ADAM train-step prefix check (§3d(b)) ──
+  OK — resnet34_fwd.mlir is a byte-identical 1220-line prefix of resnet34_adam_train_step.mlir
+  OK — cifar8wb_bbn_fwd.mlir is a byte-identical 301-line prefix of cifar8wb_bbn_adam_train_step.mlir
+  OK — resnet50_fwd.mlir is a byte-identical 1760-line prefix of resnet50_adam_train_step.mlir
+  OK — mobilenetv2_fwd.mlir is a byte-identical 1714-line prefix of mobilenetv2_adam_train_step.mlir
+  OK — efficientnet_fwd.mlir is a byte-identical 1820-line prefix of efficientnet_adam_train_step.mlir
+  OK — convnext_fwd.mlir is a byte-identical 1662-line prefix of convnext_adam_train_step.mlir
+  OK — vit_fwd.mlir is a byte-identical 2472-line prefix of vit_adam_train_step.mlir
+  OK — mnv4_fwd.mlir is a byte-identical 2388-line prefix of mnv4_adam_train_step.mlir
+  OK — resnet34in_fwd.mlir is a byte-identical 1220-line prefix of resnet34in_mom256_train_step.mlir
+  OK — resnet50in_fwd.mlir is a byte-identical 1760-line prefix of resnet50in_mom256_train_step.mlir
+  OK — resnet50in160_fwd.mlir is a byte-identical 1760-line prefix of resnet50in160_lambacc8x64bce_train_step.mlir
+  OK — mobilenetv2in_fwd.mlir is a byte-identical 1714-line prefix of mobilenetv2in_rms64_train_step.mlir
+  OK — efficientnetin_fwd.mlir is a byte-identical 1820-line prefix of efficientnetin_emarms64_train_step.mlir
+  OK — efficientnetin_drop_fwd.mlir is a byte-identical 1856-line prefix of efficientnetin_emarms64drop_train_step.mlir
+  OK — efficientnetin_dropdo_fwd.mlir is a byte-identical 1857-line prefix of efficientnetin_emarms64dropdo_train_step.mlir
+  OK — convnextin_fwd.mlir is a byte-identical 1662-line prefix of convnextin_adamdp_train_step.mlir
+  OK — convnextin_drop_fwd.mlir is a byte-identical 1734-line prefix of convnextin_adamdpwxclipdrop_train_step.mlir
+  OK — convnextsin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextsin_adamdpwxclipdrop_train_step.mlir
+  OK — convnextbin_drop_fwd.mlir is a byte-identical 3264-line prefix of convnextbin_adamdpwxclipdrop_train_step.mlir
+  OK — vitin_drop_fwd.mlir is a byte-identical 2520-line prefix of vitin_adamwxclipdrop_train_step.mlir
+  OK — mnv4in_fwd.mlir is a byte-identical 2388-line prefix of mnv4in_adam64_train_step.mlir
+  OK — convnextin_erf_fwd.mlir is a byte-identical 1554-line prefix of convnextin_adamdperf_train_step.mlir
+  OK — convnextin_droperf_fwd.mlir is a byte-identical 1626-line prefix of convnextin_adamdpwxclipdroperf_train_step.mlir
+  OK — convnextsin_droperf_fwd.mlir is a byte-identical 3048-line prefix of convnextsin_adamdpwxclipdroperf_train_step.mlir
+  OK — convnextbin_droperf_fwd.mlir is a byte-identical 3048-line prefix of convnextbin_adamdpwxclipdroperf_train_step.mlir
+  OK — vitin_droperf_fwd.mlir is a byte-identical 2448-line prefix of vitin_adamwxclipdroperf_train_step.mlir
+  26 paired, 0 known-split, 0 unaccounted
+  ⚠ 6 classified ImageNet forward(s) no longer on disk: vitbin_emaaccdp2x128x4wxdropeps0000001erferfbf16_fwd.mlir, vitbin_emaaccdp2x128x4wxdropeps0000001smxerferfbf16_fwd.mlir, vitin_emadp256x4wxdropeps0000001erferfbf16_fwd.mlir, vitin_emadp256x4wxdropeps0000001smxerferfbf16_fwd.mlir, vitsin_emadp256x4wxdropeps0000001erferfbf16_fwd.mlir, vitsin_emadp256x4wxdropeps0000001smxerferfbf16_fwd.mlir
+  OK — all 49 ImageNet forwards classified (18 paired, 31 no-partner: no train step exists at their batch/drop configuration)
+
+── silent-emit audit (MALFORMED / render TODO) ──
+  OK — no artifact contains a catch-all emit marker
+
+── git diff verified_mlir/ (should be empty) ──
+ verified_mlir/resnet34_adam128_train_step.mlir     |  9517 +++----
+ verified_mlir/resnet34_adam256_train_step.mlir     |  9517 +++----
+ verified_mlir/resnet34_adam64_train_step.mlir      |  9517 +++----
+ verified_mlir/resnet34_adam_train_step.mlir        |  9517 +++----
+ verified_mlir/resnet34_adambf16_train_step.mlir    |  9523 +++----
+ verified_mlir/resnet34_adamdp128_train_step.mlir   |  8537 +++----
+ verified_mlir/resnet34_adamdp_train_step.mlir      |  8537 +++----
+ verified_mlir/resnet34_adamls0_train_step.mlir     |  9517 +++----
+ verified_mlir/resnet34_adamls0bf16_train_step.mlir |  9523 +++----
+ verified_mlir/resnet34_adamwd00_train_step.mlir    |  9517 +++----
+ .../resnet34_adamwd00bf16_train_step.mlir          |  9523 +++----
+ verified_mlir/resnet34_mom_train_step.mlir         |  3357 +--
+ verified_mlir/resnet34_mombf16_train_step.mlir     |  3363 +--
+ verified_mlir/resnet34_momls0_train_step.mlir      |  3357 +--
+ verified_mlir/resnet34_momwd00_train_step.mlir     |  3357 +--
+ verified_mlir/resnet34_sgd_train_step.mlir         |  2697 +-
+ verified_mlir/resnet34_sgdbf16_train_step.mlir     |  2703 +-
+ verified_mlir/resnet34in_mom256_train_step.mlir    |  3357 +--
+ verified_mlir/resnet34in_momdp128_train_step.mlir  |  2377 +-
+ verified_mlir/resnet34in_momdp64_train_step.mlir   |  2377 +-
+ .../resnet34in_momdp64bf16_train_step.mlir         |  2383 +-
+ .../resnet34in_momdp64wxbf16_train_step.mlir       |  2383 +-
+ verified_mlir/resnet50_acc2x16_train_step.mlir     | 14801 +++++------
+ verified_mlir/resnet50_adam_train_step.mlir        | 13835 ++++++-----
+ .../resnet50in160_lamb64bce_train_step.mlir        | 18987 +++++++-------
+ .../resnet50in160_lambacc4x64bce_train_step.mlir   | 19953 +++++++--------
+ .../resnet50in160_lambacc8x64bce_train_step.mlir   | 19953 +++++++--------
+ .../resnet50in160_lambacc8x64wxbce_train_step.mlir | 18991 +++++++-------
+ ...net50in160_lambacc8x64wxclipbce_train_step.mlir | 23283 ++++++++---------
+ ...0in160_lambacc8x64wxclipbcebf16_train_step.mlir | 23289 ++++++++---------
+ ...160_lambaccdp4x128wxclipbcebf16_train_step.mlir | 21833 ++++++++--------
+ ...resnet50in160_lambaccdp8x128bce_train_step.mlir | 18497 +++++++-------
+ .../resnet50in160_lambaccdp8x64bce_train_step.mlir | 18497 +++++++-------
+ ...esnet50in160_lambaccdp8x64wxbce_train_step.mlir | 17641 ++++++-------
+ ...t50in160_lambaccdp8x64wxclipbce_train_step.mlir | 21827 ++++++++--------
+ ...n160_lambaccdp8x64wxclipbcebf16_train_step.mlir | 21833 ++++++++--------
+ .../resnet50in160_lambdp64bce_train_step.mlir      | 17531 ++++++-------
+ verified_mlir/resnet50in_acc4x64_train_step.mlir   | 14801 +++++------
+ verified_mlir/resnet50in_accdp4x64_train_step.mlir | 13345 +++++-----
+ verified_mlir/resnet50in_accdp8x64_train_step.mlir | 13345 +++++-----
+ verified_mlir/resnet50in_adam64_train_step.mlir    | 13835 ++++++-----
+ verified_mlir/resnet50in_adam64bce_train_step.mlir | 13835 ++++++-----
+ verified_mlir/resnet50in_adamdp64_train_step.mlir  | 12379 ++++-----
+ ...in_emalambacc4x128wxclipdropbce_train_step.mlir | 24893 +++++++++---------
+ ...malambacc4x128wxclipdropbcebf16_train_step.mlir | 24899 ++++++++++---------
+ ...alambacc4x128wxclipdropbcewd001_train_step.mlir | 24893 +++++++++---------
+ ...bacc4x128wxclipdropbcewd001bf16_train_step.mlir | 24899 ++++++++++---------
+ ..._emalambaccdp4x128wxclipdropbce_train_step.mlir | 23437 ++++++++---------
+ ...lambaccdp4x128wxclipdropbcebf16_train_step.mlir | 23443 ++++++++---------
+ ...ambaccdp4x128wxclipdropbcewd001_train_step.mlir | 23437 ++++++++---------
+ ...ccdp4x128wxclipdropbcewd001bf16_train_step.mlir | 23443 ++++++++---------
+ verified_mlir/resnet50in_lamb64_train_step.mlir    | 18987 +++++++-------
+ verified_mlir/resnet50in_lamb64bce_train_step.mlir | 18987 +++++++-------
+ ...0in_lambaccdp4x128wxclipdropbce_train_step.mlir | 21827 ++++++++--------
+ ...lambaccdp4x128wxclipdropbcebf16_train_step.mlir | 21833 ++++++++--------
+ ...ambaccdp4x128wxclipdropbcewd001_train_step.mlir | 21827 ++++++++--------
+ ...ccdp4x128wxclipdropbcewd001bf16_train_step.mlir | 21833 ++++++++--------
+ verified_mlir/resnet50in_mom256_train_step.mlir    |  4819 ++--
+ verified_mlir/resnet50in_momdp64_train_step.mlir   |  3363 +--
+ .../resnet50in_momdp64bf16_train_step.mlir         |  3369 +--
+ .../resnet50in_momdp64wxbf16_train_step.mlir       |  3369 +--
+ 61 files changed, 422318 insertions(+), 417987 deletions(-)
+
+real	3m18.884s
+user	3m41.724s
+sys	0m34.646s
+exit 0

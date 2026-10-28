@@ -1,0 +1,10 @@
+# The seven `lake run imagenette` binaries under LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu (local-task), IREE 3.13.0, atlas (2× Xeon E5-2699 v4, 88 threads, no GPU), 2026-10-28.
+# Each run: iree-compile of the train step and the two forwards, LEAN_MLIR_G2_STEPS=10 steps of batch 32, then the full 3925-image eval. wall is end to end; the step-0 loss is ln 10 ≈ 2.30 plus the head's init; the eval is after ten steps and means nothing beyond "the eval forward runs".
+net	status	wall_s	maxrss_gb	loss_step0	loss_epoch_mean	val_top1_after_10_steps	note
+mobilenetv2-verified-adam	PASS	153.82	13.1	2.500502	2.503961	445/3925 = 11.34%	the full-epoch run (295 steps) is mobilenetv2-verified-adam.full-epoch.log: 1052 s, 17.38 % after one epoch
+mobilenetv4-verified-adam	PASS	352.91	12.9	2.709641	2.481197	517/3925 = 13.17%	
+efficientnet-verified-adam	PASS	356.52	14.3	2.444753	2.325499	609/3925 = 15.52%	
+convnext-verified-adam	PASS	919.98	18.3	3.556979	3.168737	645/3925 = 16.43%	
+vit-verified-adam	PASS	237.60	11.9	3.351305	2.598988	776/3925 = 19.77%	
+resnet34-verified-adam	PASS	1697.91	12.8	3.614362	2.948847	432/3925 = 11.01%	since the 2026-10-28 rerender (maxPool3s2Back as nine slices, no select_and_scatter); the old render's compile error is resnet34-verified-adam.old-select_and_scatter.log
+resnet50-verified-adam	PASS	1361.06	16.3	3.358071	2.777641	412/3925 = 10.50%	same rerender; r50-gradcheck.log is the gradient gate on resnet50in_adam64_train_step through IREE llvm-cpu (PASS, 49 invokes, 3050 s)

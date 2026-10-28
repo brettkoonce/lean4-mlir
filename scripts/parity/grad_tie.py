@@ -96,10 +96,10 @@ NETS = {
         mlir=".lake/build/resnet34_adam_train_step_b2.mlir",
         fn="resnet34_adam2_train_step",
         ref_py="jax/.lake/build/generated_resnet34.py",
-        # ⚠ XLA, not IREE, and not by preference: **IREE cannot compile this net.** The maxpool
-        # backward emits `stablehlo.select_and_scatter`, which iree-compile 3.12 marks explicitly
-        # illegal — on llvm-cpu AND rocm, and on the committed B=32 artifact as well as this one.
-        # R34 trains on XLA/PJRT, so the tie runs the same lowerer the trainer does.
+        # XLA, the lowerer R34's quoted numbers were trained under, so the tie runs what the
+        # trainer runs. (Until 2026-10-28 it was also the only choice: the maxpool backward emitted
+        # `stablehlo.select_and_scatter`, which no iree-compile lowers over overlapping windows.
+        # `maxPool3s2BackText` now spells that backward without the op, and IREE compiles the net.)
         nparams=110, nstats=72, nclasses=10, runner="xla",
         emit="lake build r34-train-b2 && .lake/build/bin/r34-train-b2",
         # ✅ NO PATCHES — and that is the point. This entry used to monkey-patch the reference
@@ -191,10 +191,10 @@ def load_reference_forward(ref_py, patches=()):
 def run_xla(mlir_path, fn, arrays):
     """Execute the render through **XLA** — the same lowerer the PJRT trainers use.
 
-    Needed because IREE cannot compile every net: R34's maxpool backward is
-    `stablehlo.select_and_scatter`, which iree-compile 3.12 marks explicitly illegal. Running
-    through XLA is also the more faithful choice where both work, since it is the lowerer the
-    quoted numbers were actually trained under.
+    The more faithful choice, since XLA is the lowerer the quoted numbers were actually trained
+    under. (It was also the only one that compiled R34 until 2026-10-28, when the maxpool backward
+    stopped being emitted as `stablehlo.select_and_scatter`, which no iree-compile lowers over
+    overlapping windows.)
 
     ⚠ XLA requires the entry point to be called `main`, so the function is renamed on the way in.
     That is a pure rename of the symbol — no other text changes — and the caller still refers to it

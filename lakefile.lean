@@ -2255,27 +2255,41 @@ script «mnist-iree» do
 script «cifar-iree» do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"]
 
-/-- `lake run imagenette-iree` — the Part-I verified Imagenette trainers (the rest of
-    the chapters: ResNet-34, MobileNetV2, EfficientNet-B0, ConvNeXt-T, ViT-Tiny),
-    80-epoch AdamW at 224². Many hours end-to-end on one card (the ViT chapter's results table
-    has the per-net wall clocks) — a real time investment, not a quick demo.
+/-- `lake run imagenette-iree` — the Imagenette nets IREE lowers, the SAME binaries as
+    `lake run imagenette` in the same book order, with the IREE lowerer selected instead of XLA:
+    80-epoch AdamW at 224². Many hours end-to-end on one card (the ViT chapter's results table has
+    the per-net wall clocks) — a real time investment, not a quick demo. **`imagenette` is the
+    official set**; this group is the IREE half of the cross-backend comparison.
 
-    **This is FIVE nets, not the seven of `imagenette`.** MobileNetV4 and ResNet-50 are
-    XLA-only: `apps/imagenette/` has `MainMobilenetV4VerifiedAdamXla` and
-    `MainResnet50VerifiedAdamXla` and **no IREE peers**, so there is nothing to put here. That is
-    an omission of drivers, not of nets — both have 80-epoch numbers on their certified bytes,
-    both off the XLA path. **`imagenette` is the official set**; this
-    group is the IREE half of the cross-backend comparison. -/
+    **All seven, since 2026-10-28.** Until then the two ResNets could not go: not for want of a
+    driver — every `apps/imagenette/` trainer has long been one binary, either lowerer (this
+    note used to blame `-Xla` files that no longer exist, and listed ResNet-34 while leaving out
+    MobileNetV4) — but because their stem's 3×3 stride-2 max pool has
+    OVERLAPPING windows, and its backward was emitted as `stablehlo.select_and_scatter`, which no
+    IREE release from 3.11.0 to the 3.14 nightlies lowers over overlapping windows ("failed to
+    legalize operation 'stablehlo.select_and_scatter' that was explicitly marked illegal"). The
+    render now says that backward another way — `maxPool3s2BackText` (Pretty.lean) writes the
+    SAME function as nine stride-2 slices, a first-max mask and nine interior pads summed, with no
+    `select_and_scatter` — so every ResNet train step compiles on IREE, and XLA takes the new text
+    too. The denotation did not move; the emitter did, and `r50-gradcheck` gates its gradient.
+    `runs/2026-10-28-imagenette-iree-llvmcpu/` has all seven stepping through IREE 3.13 on a CPU,
+    and the two compile errors the old text produced, verbatim.
+
+    On a box without a GPU this is the only way to run the tier at all:
+    `IREE_BACKEND=llvm-cpu lake run imagenette-iree`, with `ffi/libiree_ffi.so` from
+    `deploy/iree_cpu_setup.sh` (IREE 3.13: 3.11's CPU task device crashes on the 224² nets). Slow —
+    seconds per step at batch 32 on 88 cores, an 18-minute MobileNetV2 epoch — so a training run
+    here is days, not hours. -/
 script «imagenette-iree» do
-  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam",
-                "efficientnet-verified-adam", "convnext-verified-adam",
+  runDemoGroup ["resnet34-verified-adam", "mobilenetv2-verified-adam", "resnet50-verified-adam",
+                "mobilenetv4-verified-adam", "efficientnet-verified-adam", "convnext-verified-adam",
                 "vit-verified-adam"]
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- THE DEFAULT DEMO GROUPS — `lake run {mnist,cifar,imagenette}`.
 --
 -- XLA is the default because it is where every quoted number comes from, it is much faster than
--- IREE on EfficientNet, and it is the only path with MobileNetV4 and ResNet-50 at all.
+-- IREE on EfficientNet, and it is the only path with collectives.
 --
 -- Same nets, same certified artifacts, same schedules and seeds as the `-iree` group — the
 -- ONLY difference is which trusted lowerer consumes the emitted StableHLO, which is the whole
@@ -2287,7 +2301,7 @@ script «imagenette-iree» do
 -- entry point outright. Re-measure per net rather than assuming that ratio; it is one
 -- net's number, on a depthwise-convolution-heavy net.
 --
--- Two coverage gaps, both named rather than papered over — see each docstring.
+-- One coverage gap, named rather than papered over — see `cifar`'s docstring.
 -- ═══════════════════════════════════════════════════════════════════════
 
 /-- `lake run mnist` — the three verified MNIST demos (linear/MLP/CNN) on XLA.
@@ -2319,9 +2333,8 @@ script cifar do
     at 224², in book order (ch.5 → ch.9, each chapter's side quest right after it).
 
     **SEVEN NETS, and this is THE OFFICIAL SET** — `lake run mnist` (3) + `lake run cifar` (6) +
-    this (7) is the whole demo surface; nothing else is a headline runner. MobileNetV4 and
-    ResNet-50 are here and **only** here, because neither has an IREE driver (see
-    `lake run imagenette-iree`'s note).
+    this (7) is the whole demo surface; nothing else is a headline runner. `lake run
+    imagenette-iree` is the same seven binaries on the other lowerer.
 
     The latest 80-epoch top-1 and wall clock on the certified bytes live in each net's chapter
     and run directory: ResNet-34 in `runs/2026-09-12-r34-ablation-fp32-seeds/`, ResNet-50 and
