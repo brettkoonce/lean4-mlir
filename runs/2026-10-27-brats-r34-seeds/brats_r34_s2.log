@@ -1,0 +1,216 @@
+  arm: r34_s2  (R34 ImageNet bootstrap)
+  artifacts: .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_*
+ResNet-34 UNet skip (BraTS, 224×224 4-modality MRI → 4-class tumour): 24515652 params
+Generating train step MLIR...
+  1900625 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 20:33:30.057254  858343 service.cc:154] XLA service 0x7283d401e150 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 20:33:30.057300  858343 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 20:33:30.058822  858343 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 20:33:30.058866  858343 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 20:33:30.066061  858343 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 20:33:32.888629  858358 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 8 bytes spill stores, 8 bytes spill loads
+
+I1027 20:33:33.156764  858367 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 96 bytes spill stores, 48 bytes spill loads
+
+I1027 20:33:34.666034  858372 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_11', 64 bytes spill stores, 32 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_train_step.mlir (@main, 502 outputs, 1 replica) in 10441 ms
+  session loaded
+  train: 14415 images (200704 floats/image)
+  seed offset: 2 (LEAN_MLIR_SEED)
+  bootstrap(range): 21275136 floats from .lake/build/jax_r34_imagenet.bin[9536..] → init[12672..]
+  bootstrap(range): init[0..12672) stays He-init (fresh stem)
+  bootstrap(range): GUARD OK — 21275136 floats byte-equal checkpoint, stem untouched
+  24515652 params + m + v (280 MB)
+training: 900 batches/epoch, batch=16, Adam, lr=0.001000, cosine warmup=1, label_smooth=0.000000, wd=0.000100
+  BN layers: 45, BN stat floats: 19136
+  WARN: bootstrap BN stats size 85138688 ≠ expected 76544; using zeros
+  step 0/900: loss=2.211796 (525ms)
+  step 1/900: loss=2.245540 (227ms)
+  step 2/900: loss=2.224938 (270ms)
+  step 100/900: loss=0.786701 (227ms)
+  step 200/900: loss=0.495192 (234ms)
+  step 300/900: loss=0.296667 (238ms)
+  step 400/900: loss=0.186389 (250ms)
+  step 500/900: loss=0.108901 (268ms)
+  step 600/900: loss=0.080949 (231ms)
+  step 700/900: loss=0.054965 (275ms)
+  step 800/900: loss=0.042570 (255ms)
+Epoch 1/10: loss=0.334066 lr=0.001000 (331689ms)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 569 ms
+  val mIoU: 0.689808  (per-class: c0=0.993205 c1=0.636352 c2=0.440570 c3=0.689102)
+  val Dice WT: 0.883711  (inter=3232842 gt=3891438 pred=3425077)
+  val Dice TC: 0.821410  (inter=1104367 gt=1455542 pred=1233411)
+  val Dice ET: 0.815939  (inter=642129 gt=768149 pred=805814)
+  ✓ new best (score 0.840353) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.036063 (273ms)
+  step 1/900: loss=0.032103 (286ms)
+  step 2/900: loss=0.037627 (262ms)
+  step 100/900: loss=0.032338 (240ms)
+  step 200/900: loss=0.034149 (267ms)
+  step 300/900: loss=0.024720 (293ms)
+  step 400/900: loss=0.027435 (256ms)
+  step 500/900: loss=0.028917 (282ms)
+  step 600/900: loss=0.025541 (225ms)
+  step 700/900: loss=0.024284 (263ms)
+  step 800/900: loss=0.023302 (258ms)
+Epoch 2/10: loss=0.029663 lr=0.000970 (335445ms)
+  checkpoint: wrote .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_params_e2.bin + bn_stats_e2.bin
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 591 ms
+  val mIoU: 0.648476  (per-class: c0=0.992824 c1=0.616005 c2=0.282736 c3=0.702339)
+  val Dice WT: 0.875718  (inter=3167600 gt=3891438 pred=3342852)
+  val Dice TC: 0.748798  (inter=902078 gt=1455542 pred=953862)
+  val Dice ET: 0.825146  (inter=615920 gt=768149 pred=724727)
+  step 0/900: loss=0.031931 (240ms)
+  step 1/900: loss=0.030679 (254ms)
+  step 2/900: loss=0.028885 (282ms)
+  step 100/900: loss=0.024133 (267ms)
+  step 200/900: loss=0.016712 (293ms)
+  step 300/900: loss=0.021962 (224ms)
+  step 400/900: loss=0.016073 (217ms)
+  step 500/900: loss=0.020584 (223ms)
+  step 600/900: loss=0.019786 (259ms)
+  step 700/900: loss=0.020878 (247ms)
+  step 800/900: loss=0.021147 (233ms)
+Epoch 3/10: loss=0.023948 lr=0.000883 (297436ms)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 475 ms
+  val mIoU: 0.716742  (per-class: c0=0.994178 c1=0.675805 c2=0.471661 c3=0.725323)
+  val Dice WT: 0.904167  (inter=3433656 gt=3891438 pred=3703741)
+  val Dice TC: 0.826643  (inter=1089226 gt=1455542 pred=1179758)
+  val Dice ET: 0.840797  (inter=635726 gt=768149 pred=744050)
+  ✓ new best (score 0.857202) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.014289 (243ms)
+  step 1/900: loss=0.023497 (228ms)
+  step 2/900: loss=0.023782 (229ms)
+  step 100/900: loss=0.021158 (233ms)
+  step 200/900: loss=0.018805 (229ms)
+  step 300/900: loss=0.017781 (241ms)
+  step 400/900: loss=0.021614 (243ms)
+  step 500/900: loss=0.018825 (235ms)
+  step 600/900: loss=0.021637 (239ms)
+  step 700/900: loss=0.020921 (246ms)
+  step 800/900: loss=0.020759 (236ms)
+Epoch 4/10: loss=0.019906 lr=0.000750 (283809ms)
+  checkpoint: wrote .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_params_e4.bin + bn_stats_e4.bin
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 487 ms
+  val mIoU: 0.720795  (per-class: c0=0.994161 c1=0.684466 c2=0.474581 c3=0.729972)
+  val Dice WT: 0.904297  (inter=3448408 gt=3891438 pred=3735279)
+  val Dice TC: 0.843892  (inter=1154270 gt=1455542 pred=1280046)
+  val Dice ET: 0.843912  (inter=645902 gt=768149 pred=762584)
+  ✓ new best (score 0.864034) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.018075 (251ms)
+  step 1/900: loss=0.020377 (229ms)
+  step 2/900: loss=0.013612 (231ms)
+  step 100/900: loss=0.018172 (245ms)
+  step 200/900: loss=0.017805 (215ms)
+  step 300/900: loss=0.018247 (237ms)
+  step 400/900: loss=0.017595 (230ms)
+  step 500/900: loss=0.017333 (223ms)
+  step 600/900: loss=0.021780 (236ms)
+  step 700/900: loss=0.015722 (237ms)
+  step 800/900: loss=0.017465 (234ms)
+Epoch 5/10: loss=0.018008 lr=0.000587 (282298ms)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 479 ms
+  val mIoU: 0.711083  (per-class: c0=0.994305 c1=0.682845 c2=0.483717 c3=0.683466)
+  val Dice WT: 0.906053  (inter=3433534 gt=3891438 pred=3687661)
+  val Dice TC: 0.836518  (inter=1114220 gt=1455542 pred=1208407)
+  val Dice ET: 0.811975  (inter=567868 gt=768149 pred=630584)
+  step 0/900: loss=0.015673 (238ms)
+  step 1/900: loss=0.015586 (228ms)
+  step 2/900: loss=0.015446 (239ms)
+  step 100/900: loss=0.019183 (236ms)
+  step 200/900: loss=0.016960 (219ms)
+  step 300/900: loss=0.017584 (238ms)
+  step 400/900: loss=0.021623 (239ms)
+  step 500/900: loss=0.019198 (242ms)
+  step 600/900: loss=0.017841 (239ms)
+  step 700/900: loss=0.016881 (246ms)
+  step 800/900: loss=0.016658 (233ms)
+Epoch 6/10: loss=0.016639 lr=0.000413 (285463ms)
+  checkpoint: wrote .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_params_e6.bin + bn_stats_e6.bin
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 508 ms
+  val mIoU: 0.718347  (per-class: c0=0.994521 c1=0.688270 c2=0.447643 c3=0.742954)
+  val Dice WT: 0.909034  (inter=3422605 gt=3891438 pred=3638764)
+  val Dice TC: 0.833663  (inter=1108475 gt=1455542 pred=1203746)
+  val Dice ET: 0.852523  (inter=647778 gt=768149 pred=751524)
+  ✓ new best (score 0.865073) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.015029 (257ms)
+  step 1/900: loss=0.018862 (230ms)
+  step 2/900: loss=0.013600 (217ms)
+  step 100/900: loss=0.015526 (245ms)
+  step 200/900: loss=0.014906 (230ms)
+  step 300/900: loss=0.016199 (242ms)
+  step 400/900: loss=0.022478 (236ms)
+  step 500/900: loss=0.013264 (233ms)
+  step 600/900: loss=0.012557 (243ms)
+  step 700/900: loss=0.021477 (232ms)
+  step 800/900: loss=0.011380 (242ms)
+Epoch 7/10: loss=0.015491 lr=0.000250 (285321ms)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 514 ms
+  val mIoU: 0.725747  (per-class: c0=0.994562 c1=0.698543 c2=0.475955 c3=0.733927)
+  val Dice WT: 0.910588  (inter=3460774 gt=3891438 pred=3709749)
+  val Dice TC: 0.860883  (inter=1210220 gt=1455542 pred=1356036)
+  val Dice ET: 0.846549  (inter=701322 gt=768149 pred=888748)
+  ✓ new best (score 0.872673) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.013443 (238ms)
+  step 1/900: loss=0.014577 (234ms)
+  step 2/900: loss=0.014796 (232ms)
+  step 100/900: loss=0.013494 (223ms)
+  step 200/900: loss=0.013125 (247ms)
+  step 300/900: loss=0.020388 (237ms)
+  step 400/900: loss=0.018902 (241ms)
+  step 500/900: loss=0.012962 (232ms)
+  step 600/900: loss=0.016278 (240ms)
+  step 700/900: loss=0.017604 (231ms)
+  step 800/900: loss=0.014271 (229ms)
+Epoch 8/10: loss=0.014393 lr=0.000117 (285677ms)
+  checkpoint: wrote .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_params_e8.bin + bn_stats_e8.bin
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 501 ms
+  val mIoU: 0.738947  (per-class: c0=0.994547 c1=0.701471 c2=0.508315 c3=0.751457)
+  val Dice WT: 0.911386  (inter=3503673 gt=3891438 pred=3797230)
+  val Dice TC: 0.862464  (inter=1208017 gt=1455542 pred=1345775)
+  val Dice ET: 0.858093  (inter=677082 gt=768149 pred=809959)
+  ✓ new best (score 0.877314) — saved .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_best_*
+  step 0/900: loss=0.014026 (247ms)
+  step 1/900: loss=0.016248 (228ms)
+  step 2/900: loss=0.012745 (227ms)
+  step 100/900: loss=0.013346 (237ms)
+  step 200/900: loss=0.014013 (223ms)
+  step 300/900: loss=0.013653 (227ms)
+  step 400/900: loss=0.009390 (222ms)
+  step 500/900: loss=0.014571 (232ms)
+  step 600/900: loss=0.014288 (234ms)
+  step 700/900: loss=0.011851 (238ms)
+  step 800/900: loss=0.010674 (238ms)
+Epoch 9/10: loss=0.013399 lr=0.000030 (283028ms)
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 464 ms
+  val mIoU: 0.738910  (per-class: c0=0.994503 c1=0.698547 c2=0.512026 c3=0.750566)
+  val Dice WT: 0.909796  (inter=3464741 gt=3891438 pred=3725087)
+  val Dice TC: 0.862204  (inter=1201082 gt=1455542 pred=1330532)
+  val Dice ET: 0.857512  (inter=665192 gt=768149 pred=783297)
+  step 0/900: loss=0.014985 (234ms)
+  step 1/900: loss=0.021943 (219ms)
+  step 2/900: loss=0.011343 (229ms)
+  step 100/900: loss=0.011652 (220ms)
+  step 200/900: loss=0.014997 (221ms)
+  step 300/900: loss=0.012816 (240ms)
+  step 400/900: loss=0.012204 (230ms)
+  step 500/900: loss=0.017702 (234ms)
+  step 600/900: loss=0.015851 (229ms)
+  step 700/900: loss=0.011639 (244ms)
+  step 800/900: loss=0.012256 (210ms)
+Epoch 10/10: loss=0.012823 lr=0.000000 (283624ms)
+  checkpoint: wrote .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_params_e10.bin + bn_stats_e10.bin
+[pjrt_ffi] compiled .lake/build/resnet_34_unet_skip__brats__224_224_4_modality_mri___4_class_tumour__r34_s2_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 435 ms
+  val mIoU: 0.739293  (per-class: c0=0.994491 c1=0.697255 c2=0.514984 c3=0.750440)
+  val Dice WT: 0.909667  (inter=3466767 gt=3891438 pred=3730616)
+  val Dice TC: 0.863369  (inter=1211458 gt=1455542 pred=1350810)
+  val Dice ET: 0.857430  (inter=670257 gt=768149 pred=795260)
+Saved params + BN stats.
