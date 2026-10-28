@@ -33,7 +33,7 @@ namespace Proofs.StableHLO
     then `σ²_r + (μ_r − μ)²` (`bnBatchVarAtB`) all-reduced to the global σ² — each by
     `prettyAllReduceMean`, the SAME collective node the parameter gradients ride; packed
     (`bnPackB`); then `bnSyncF`, normalising with the global statistics. Returns `(code, y, st)`,
-    `st` the packed `[μ ‖ σ²]` SSA name (`""` when there is no collective): the backward, the γ
+    `st` the packed `[μ ‖ σ²]` SSA name (`""` exactly when `sync = false`): the backward, the γ
     gradient and the handed-back running stats all read it, which is what makes the four agree
     on ONE `x̂`.
 

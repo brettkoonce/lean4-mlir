@@ -409,9 +409,11 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
-/-- Refuse a net `certProduct` cannot bound: one with a normalization scale (a BN or LayerNorm γ,
-    init kind `1`) or a parameter that is not a kernel, a dense weight or a bias. The product
-    skips every rank-1 parameter, so on such a net it would return a number that is no bound. -/
+/-- Refuse a net `certProduct` cannot bound. The check is by shape and init kind only: it refuses
+    any parameter of rank other than 1, 2 or 4, and any of init kind `1` (`mkParam`'s constant-one
+    init, which is how a BN or LayerNorm γ starts). The product skips every rank-1 parameter, so a
+    scale it does not catch this way (another init kind) would still make it return a number that
+    is no bound; today's callers, the BN-free MNIST and CIFAR CNNs, have none. -/
 def requireCertModelled (name : String) (specs : Array (Array Nat × Nat)) : IO Unit := do
   for (dims, kind) in specs do
     unless dims.size ∈ [1, 2, 4] && kind != 1 do

@@ -361,7 +361,8 @@ theorem qScalar_iterate_not_tendsto_one (t₀ : ℝ) :
   have hfix : qScalar 1 = 1 := isFixedPt_of_tendsto_iterate h hcont.continuousAt
   linarith [qScalar_one_lt_one]
 
-/-- **The tuned quintic fails `nsStep_iterate_tendsto_polar`'s `hconv`**, at every `t₀ ∈ (0,1]`. -/
+/-- **The tuned quintic fails `nsStep_iterate_tendsto_polar`'s `hconv`.** The witness is `t₀ = 1`;
+    that every `t₀` fails is `qScalar_iterate_not_tendsto_one`. -/
 theorem qScalar_not_hconv :
     ¬ ∀ t₀ : ℝ, 0 < t₀ → t₀ ≤ 1 → Filter.Tendsto (fun k => qScalar^[k] t₀) Filter.atTop (nhds 1) :=
   fun h => qScalar_iterate_not_tendsto_one 1 (h 1 one_pos le_rfl)

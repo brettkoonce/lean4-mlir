@@ -242,7 +242,7 @@ theorem denseWSgdTiedB_holds {N a c : Nat} {xN wN lrStr cotN : String} {x : Vec 
     DenseWSgdTiedB N xN wN lrStr cotN x W b cot lr := fun i j =>
   denseWB_den xN wN lrStr cotN x W b cot lr i j
 
-/-- At a square witness, as every use is (the gradient ignores `W` and `x`). -/
+/-- At any layer `W : Mat a c` and activation `x` (the gradient reads neither). -/
 theorem denseBSgdTiedB_holds {N a c : Nat} {bN lrStr cotN : String} {W : Mat a c} {x : Vec a}
     {b : Vec c} {cot : Vec (N * c)} {lr : ℝ} : DenseBSgdTiedB N bN lrStr cotN W x b cot lr :=
   fun j => denseBB_den bN lrStr cotN W x b cot lr j
