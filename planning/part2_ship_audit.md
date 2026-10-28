@@ -123,7 +123,7 @@ item 7) and §5 proposes dropping them. MuZero's B50 runs already exist on the r
 
 Blocking a run above:
 
-1. **TinyGPT dropout.** `TrainConfig.dropout` is the classifier-head dropout only
+1. **TinyGPT dropout.** _Landed 00c5dc86: `transformerEncoder (dropout := r)`, `tinygpt-shakespeare` takes `<key>-do<pct>`._ `TrainConfig.dropout` is the classifier-head dropout only
    (`LeanMlir/Types.lean:1235–1240`); `.transformerEncoder` has no dropout argument (:153–157) and
    `MlirCodegen.lean` emits none. The plan calls dropout the fix for "undertrained"; T6 waits on it.
 2. **TinyGPT checkpoint path.** Every run writes the same file (`MainTinyGptShakespeare.lean:584–586`,
@@ -132,9 +132,9 @@ Blocking a run above:
 3. **TinyGPT `score` eval length.** `score` scores at the trained `seqLen` only (:487); the plan's
    RoPE gate wants P2 at T = 64/128/256 (`tinygpt_ngram_ladder.md:231–232`). `xeval` (:258–277) is the
    weak form: 20 random batches, and it exits on a size mismatch (:267–269).
-4. **Pong ablation knob.** `mode=state|pixels` only (`demos/MainPongDqn.lean:145`); the owed arm is a
+4. **Pong ablation knob.** _Landed f6327752: `k=` and `width=` for the state net._ `mode=state|pixels` only (`demos/MainPongDqn.lean:145`); the owed arm is a
    normalised state input or the CNN on a rendered state (`demo_slate.md:67–68`).
-5. **Boltzmann training seed** if absent (§2.6).
+5. **Boltzmann training seed** if absent (§2.6). _Landed f902bff1: `LEAN_MLIR_SEED=<k>` moves the He-init and every step's (t, ε) draw._
 
 Not blocking a run:
 
@@ -283,3 +283,17 @@ If Part 2 ships first, the section stays the catalogue it is and the slate parag
 
 - 2026-10-27: opened on branch `part2-ship` from the audit (four read-only passes over the demos,
   the runs and the 10-26 review backlog). Nothing in the book or the code changed.
+- 2026-10-28: §2 ran in full on ares, four cards, 10-27 17:42 → 10-28 07:58 UTC, plus §7.4's
+  other four VisDrone rows; the record is `runs/2026-10-27-part2-grind/README.md` (the queue per
+  card, then "what the grind settled, one line a run"). §3 items 1, 4 and 5 landed first
+  (00c5dc86, f6327752, f902bff1). The run directories, by §2 item: 2.1
+  `runs/2026-10-27-tinygpt-ladder-xla/` (T1–T5 × 3 seeds) and `…-tinygpt-dropout-xla/` (T6, 10k and
+  20k); 2.2 `runs/2026-10-27-neudet-seeds/` with sixteen `…-neudet-{fpn,grid}-*_s{1,2}-sweep/`;
+  2.3 `runs/2026-10-27-brats-r34-seeds/`; 2.4 `runs/2026-10-27-visdrone-aff30-seeds/` and
+  `…-visdrone-rows-seeds/` (every row of `tab:visdrone` at three seeds, both decodes, plus the
+  `cfoc2` / `aug50` / `long50` epoch ladders); 2.5 `runs/2026-10-27-pong-state-arms/`; 2.6
+  `runs/2026-10-27-boltzmann-seeds/`. Not run: §4 MuZero, §6 denoising. Book claims that fell,
+  for §5: "RoPE stays coherent at T=128/256"; "12 epochs still beats 50"; BraTS "bootstrap
+  ties; buys epoch 1"; NEU-DET "grid matches" (reads within 0.02); Pong's "not dissected here";
+  Boltzmann gate A holds only on the reweighted row. Landed on main the same day, rebased onto
+  the TikZ fact-check commit 2111582d.
