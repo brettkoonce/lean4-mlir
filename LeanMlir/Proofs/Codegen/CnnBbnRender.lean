@@ -100,6 +100,22 @@ def c8bbnConvBnRelu (B ic oc hh ww kH kW : Nat) (bf16 sync : Bool) (replicas : N
   let (cA, nA) ← pretty B (.batchOp (N := B) .relu (.operand nBn zy))
   pure ⟨cH ++ cBn ++ cA, nH, nBn, st, nA⟩
 
+/-- **One conv→BN→relu layer at FROZEN running statistics** — `c8bbnConvBnRelu`'s eval twin, the
+    per-example op family: `flatConvF`, then `bnEvalSite` (`bnPerChannelEvalF` at the `%n{i}mu` /
+    `%n{i}var` graph inputs), then `reluF`. Same parameter names `%W{i}`/`%cb{i}`/`%g{i}`/`%bt{i}`,
+    so the naming scheme and the shape-to-zero-operand pairing are written once per op family.
+    Returns `(code, relu output)`. -/
+def c8bbnEvalConvBnRelu (B ic oc hh ww kH kW : Nat) (epsStr : String) (i : Nat) (xIn : String) :
+    StateM EmitS (String × String) := do
+  let zx : Vec (ic*hh*ww) := fun _ => 0
+  let zW : Kernel4 oc ic kH kW := fun _ _ _ _ => 0
+  let zb : Vec oc := fun _ => 0
+  let zy : Vec (oc*hh*ww) := fun _ => 0
+  let (cH, nH) ← pretty B (.flatConvF (h := hh) (w := ww) s!"%W{i}" s!"%cb{i}" zW zb (.operand xIn zx))
+  let (cBn, nBn) ← bnEvalSite B oc hh ww epsStr s!"%g{i}" s!"%bt{i}" s!"n{i}" nH
+  let (cA, nA) ← pretty B (.reluF (.operand nBn zy))
+  pure (cH ++ cBn ++ cA, nA)
+
 /-- Saved forward SSA names the train step's backward and statistics read. -/
 structure C8BbnFwdB where
   code : String
@@ -206,71 +222,36 @@ def cifar8BbnFwdEvalText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr 
   let flat := c4*h*w
   let sig := cifar8BnSigList ic c1 c2 c3 c4 flat d1 nClasses kH kW
   let statSig := cifar8BbnStatSigList c1 c2 c3 c4
-  let zx : Vec (ic*s1h*s1w) := fun _ => 0
   let zS1c1 : Vec (c1*s1h*s1w) := fun _ => 0
-  let zS2c1 : Vec (c1*s2h*s2w) := fun _ => 0
   let zS2c2 : Vec (c2*s2h*s2w) := fun _ => 0
-  let zS3c2 : Vec (c2*s3h*s3w) := fun _ => 0
   let zS3c3 : Vec (c3*s3h*s3w) := fun _ => 0
-  let zS4c3 : Vec (c3*s4h*s4w) := fun _ => 0
   let zS4c4 : Vec (c4*s4h*s4w) := fun _ => 0
   let zPc4 : Vec (c4*h*w) := fun _ => 0
   let zD1 : Vec d1 := fun _ => 0
   let zNC : Vec nClasses := fun _ => 0
-  let zW1 : Kernel4 c1 ic kH kW := fun _ _ _ _ => 0
-  let zW2 : Kernel4 c1 c1 kH kW := fun _ _ _ _ => 0
-  let zW3 : Kernel4 c2 c1 kH kW := fun _ _ _ _ => 0
-  let zW4 : Kernel4 c2 c2 kH kW := fun _ _ _ _ => 0
-  let zW5 : Kernel4 c3 c2 kH kW := fun _ _ _ _ => 0
-  let zW6 : Kernel4 c3 c3 kH kW := fun _ _ _ _ => 0
-  let zW7 : Kernel4 c4 c3 kH kW := fun _ _ _ _ => 0
-  let zW8 : Kernel4 c4 c4 kH kW := fun _ _ _ _ => 0
-  let zc1 : Vec c1 := fun _ => 0
-  let zc2 : Vec c2 := fun _ => 0
-  let zc3 : Vec c3 := fun _ => 0
-  let zc4 : Vec c4 := fun _ => 0
   let zW9 : Mat (c4*h*w) d1 := fun _ _ => 0
   let zWa : Mat d1 d1 := fun _ _ => 0
   let zWb : Mat d1 nClasses := fun _ _ => 0
   let go : StateM EmitS String := do
-    let (cHc1, nHc1) ← pretty B (.flatConvF (h := s1h) (w := s1w) "%W1" "%cb1" zW1 zc1 (.operand "%x" zx))
-    let (cBn1, nBn1) ← bnEvalSite B c1 s1h s1w epsStr "%g1" "%bt1" "n1" nHc1
-    let (cAc1, nAc1) ← pretty B (.reluF (.operand nBn1 zS1c1))
-    let (cHc2, nHc2) ← pretty B (.flatConvF (h := s1h) (w := s1w) "%W2" "%cb2" zW2 zc1 (.operand nAc1 zS1c1))
-    let (cBn2, nBn2) ← bnEvalSite B c1 s1h s1w epsStr "%g2" "%bt2" "n2" nHc2
-    let (cAc2, nAc2) ← pretty B (.reluF (.operand nBn2 zS1c1))
-    let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := s2h) (w := s2w) (.operand nAc2 zS1c1))
-    let (cHc3, nHc3) ← pretty B (.flatConvF (h := s2h) (w := s2w) "%W3" "%cb3" zW3 zc2 (.operand nPool1 zS2c1))
-    let (cBn3, nBn3) ← bnEvalSite B c2 s2h s2w epsStr "%g3" "%bt3" "n3" nHc3
-    let (cAc3, nAc3) ← pretty B (.reluF (.operand nBn3 zS2c2))
-    let (cHc4, nHc4) ← pretty B (.flatConvF (h := s2h) (w := s2w) "%W4" "%cb4" zW4 zc2 (.operand nAc3 zS2c2))
-    let (cBn4, nBn4) ← bnEvalSite B c2 s2h s2w epsStr "%g4" "%bt4" "n4" nHc4
-    let (cAc4, nAc4) ← pretty B (.reluF (.operand nBn4 zS2c2))
-    let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := s3h) (w := s3w) (.operand nAc4 zS2c2))
-    let (cHc5, nHc5) ← pretty B (.flatConvF (h := s3h) (w := s3w) "%W5" "%cb5" zW5 zc3 (.operand nPool2 zS3c2))
-    let (cBn5, nBn5) ← bnEvalSite B c3 s3h s3w epsStr "%g5" "%bt5" "n5" nHc5
-    let (cAc5, nAc5) ← pretty B (.reluF (.operand nBn5 zS3c3))
-    let (cHc6, nHc6) ← pretty B (.flatConvF (h := s3h) (w := s3w) "%W6" "%cb6" zW6 zc3 (.operand nAc5 zS3c3))
-    let (cBn6, nBn6) ← bnEvalSite B c3 s3h s3w epsStr "%g6" "%bt6" "n6" nHc6
-    let (cAc6, nAc6) ← pretty B (.reluF (.operand nBn6 zS3c3))
-    let (cP3, nPool3) ← pretty B (.maxPoolF (c := c3) (h := s4h) (w := s4w) (.operand nAc6 zS3c3))
-    let (cHc7, nHc7) ← pretty B (.flatConvF (h := s4h) (w := s4w) "%W7" "%cb7" zW7 zc4 (.operand nPool3 zS4c3))
-    let (cBn7, nBn7) ← bnEvalSite B c4 s4h s4w epsStr "%g7" "%bt7" "n7" nHc7
-    let (cAc7, nAc7) ← pretty B (.reluF (.operand nBn7 zS4c4))
-    let (cHc8, nHc8) ← pretty B (.flatConvF (h := s4h) (w := s4w) "%W8" "%cb8" zW8 zc4 (.operand nAc7 zS4c4))
-    let (cBn8, nBn8) ← bnEvalSite B c4 s4h s4w epsStr "%g8" "%bt8" "n8" nHc8
-    let (cAc8, nAc8) ← pretty B (.reluF (.operand nBn8 zS4c4))
-    let (cP4, nPool4) ← pretty B (.maxPoolF (c := c4) (h := h) (w := w) (.operand nAc8 zS4c4))
+    let (l1, a1) ← c8bbnEvalConvBnRelu B ic c1 s1h s1w kH kW epsStr 1 "%x"
+    let (l2, a2) ← c8bbnEvalConvBnRelu B c1 c1 s1h s1w kH kW epsStr 2 a1
+    let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := s2h) (w := s2w) (.operand a2 zS1c1))
+    let (l3, a3) ← c8bbnEvalConvBnRelu B c1 c2 s2h s2w kH kW epsStr 3 nPool1
+    let (l4, a4) ← c8bbnEvalConvBnRelu B c2 c2 s2h s2w kH kW epsStr 4 a3
+    let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := s3h) (w := s3w) (.operand a4 zS2c2))
+    let (l5, a5) ← c8bbnEvalConvBnRelu B c2 c3 s3h s3w kH kW epsStr 5 nPool2
+    let (l6, a6) ← c8bbnEvalConvBnRelu B c3 c3 s3h s3w kH kW epsStr 6 a5
+    let (cP3, nPool3) ← pretty B (.maxPoolF (c := c3) (h := s4h) (w := s4w) (.operand a6 zS3c3))
+    let (l7, a7) ← c8bbnEvalConvBnRelu B c3 c4 s4h s4w kH kW epsStr 7 nPool3
+    let (l8, a8) ← c8bbnEvalConvBnRelu B c4 c4 s4h s4w kH kW epsStr 8 a7
+    let (cP4, nPool4) ← pretty B (.maxPoolF (c := c4) (h := h) (w := w) (.operand a8 zS4c4))
     let (cH9, nH9) ← pretty B (denseF "%W9" "%b9" zW9 zD1 (.operand nPool4 zPc4))
     let (cA9, nA9) ← pretty B (.reluF (.operand nH9 zD1))
     let (cHa, nHa) ← pretty B (denseF "%Wa" "%ba" zWa zD1 (.operand nA9 zD1))
     let (cAa, nAa) ← pretty B (.reluF (.operand nHa zD1))
     let (cLog, nLog) ← pretty B (denseF "%Wb" "%bb" zWb zNC (.operand nAa zD1))
     pure <|
-      cHc1 ++ cBn1 ++ cAc1 ++ cHc2 ++ cBn2 ++ cAc2 ++ cP1 ++
-      cHc3 ++ cBn3 ++ cAc3 ++ cHc4 ++ cBn4 ++ cAc4 ++ cP2 ++
-      cHc5 ++ cBn5 ++ cAc5 ++ cHc6 ++ cBn6 ++ cAc6 ++ cP3 ++
-      cHc7 ++ cBn7 ++ cAc7 ++ cHc8 ++ cBn8 ++ cAc8 ++ cP4 ++
+      l1 ++ l2 ++ cP1 ++ l3 ++ l4 ++ cP2 ++ l5 ++ l6 ++ cP3 ++ l7 ++ l8 ++ cP4 ++
       cH9 ++ cA9 ++ cHa ++ cAa ++ cLog ++
       s!"    return {nLog} : {ty [B, nClasses]}\n"
   let inner : String := go.run' (0, [])

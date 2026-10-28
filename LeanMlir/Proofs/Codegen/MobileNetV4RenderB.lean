@@ -636,6 +636,32 @@ def zipPs (sig : List (String × List Nat)) (grads : List String) : List PGrad :
   -- `%{nm}v` off it. (`String.drop` returns a `String.Slice` on this toolchain.)
   (sig.zip grads).map (fun ((n, ds), g) => ⟨String.ofList n.toList.tail, g, ds⟩)
 
+/-- **A bias-free 1×1 conv + BN, reversed** — the pass every UIB/fused backward runs for
+    its project and expand stages: the BN input-VJP (`bnBackSite`), the conv weight gradient on the
+    BN-back output, γ (`bnGammaSite`) and β (`bnBetaGradB`) on the incoming cotangent `dyIn`, and the
+    conv input-VJP. `ic → oc` at `h×h`; `wName`/`gName`/`tag` are the stage's weight, γ and sync-BN
+    tag, `xc` and `st` the forward's saved conv output and statistics, `actIn` the conv's forward
+    input. The caller passes `dyIn` already masked (`selectPosB`) where an activation sits between
+    stages. Returns `(code, dW, dγ, dβ, dx)`, the code in `pretty`-call order, so the SSA numbering is
+    the inlined spelling's. -/
+def conv1x1BnBack (B ic oc h : Nat) (bf16 sync : Bool) (replicas : Nat)
+    (epsStr wName gName tag xc st actIn dyIn : String) :
+    StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
+  let zoc : Vec oc := fun _ => 0
+  let zk  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
+  let zib : Vec (B*(ic*h*h)) := fun _ => 0
+  let zob : Vec (B*(oc*h*h)) := fun _ => 0
+  let zop : Vec (B*(oc*(h*h))) := fun _ => 0
+  let (cN, nN) ← bnBackSite B oc h h sync replicas epsStr gName xc tag dyIn st
+  let (cW, nW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := ic) (oc := oc) (h := h) (w := h) zrnd
+    actIn zoc zib zk (.operand nN zob))
+  let (cG, nG) ← bnGammaSite B oc h h sync epsStr xc dyIn st
+  let (cT, nT) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
+    (.operand dyIn zop))
+  let (cX, nX) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := ic) (oc := oc) (h := h) (w := h) zrnd
+    wName zk zoc (.operand nN zob))
+  pure (cN ++ cW ++ cG ++ cT ++ cX, nW, nG, nT, nX)
+
 /-- **STRIDE-1 UIB backward + its 6/9/12 un-fused gradients** — all four families, `ic = oc = c`.
     The skip is linear, so `dy` reaches the project BN unchanged AND fans back in at the block dx.
 
@@ -654,8 +680,6 @@ def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   let zm   : Vec mid := fun _ => 0
   let zqk  : DepthwiseKernel c preDWk preDWk := fun _ _ _ => 0
   let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
-  let zke  : Kernel4 mid c 1 1 := fun _ _ _ _ => 0
-  let zkp  : Kernel4 c mid 1 1 := fun _ _ _ _ => 0
   let zcb  : Vec (B*(c*h*h)) := fun _ => 0
   let zcp  : Vec (B*(c*(h*h))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
@@ -668,15 +692,9 @@ def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     | none   => pure ("", dyName0)
   -- ── project 1×1 + BN ──
   let pIn := if postDWk > 0 then f.dr else f.er
-  let (cPn, nPn) ← bnBackSite B c h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
-  let (cPW, nPW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := mid) (oc := c) (h := h) (w := h) zrnd
-    pIn zc zmb zkp (.operand nPn zcb))
-  let (cPg, nPg) ← bnGammaSite B c h h sync epsStr f.pc dyName f.pst
-  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := c) (h := h) (w := h)
-    (.operand dyName zcp))
-  let (cPx, nPx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := c) (h := h) (w := h) zrnd
-    s!"%u{p}pW" zkp zc (.operand nPn zcb))
-  let mut code := cDd ++ cPn ++ cPW ++ cPg ++ cPt ++ cPx
+  let (cP, nPW, nPg, nPt, nPx) ← conv1x1BnBack B mid c h bf16 sync replicas epsStr
+    s!"%u{p}pW" s!"%u{p}pg" s!"u{p}pgdst" f.pc f.pst pIn dyName
+  let mut code := cDd ++ cP
   let mut cur := nPx
   -- ── post-DW (present iff postDWk > 0), stride 1 on `mid` channels ──
   let mut dGrads : List String := []
@@ -696,15 +714,9 @@ def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
   -- ── expand 1×1 (c → mid) + BN ──
   let eIn := if preDWk > 0 then f.qr else xName
   let (cEm, nEm) ← pretty B (.selectPosB f.en zmb (.operand cur zmb))
-  let (cEn, nEn) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}eg" f.ec s!"u{p}egdst" nEm f.est
-  let (cEW, nEW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := c) (oc := mid) (h := h) (w := h) zrnd
-    eIn zm zcb zke (.operand nEn zmb))
-  let (cEg, nEg) ← bnGammaSite B mid h h sync epsStr f.ec nEm f.est
-  let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := h) (w := h)
-    (.operand nEm zmp))
-  let (cEx, nEx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := c) (oc := mid) (h := h) (w := h) zrnd
-    s!"%u{p}eW" zke zm (.operand nEn zmb))
-  code := code ++ cEm ++ cEn ++ cEW ++ cEg ++ cEt ++ cEx
+  let (cE, nEW, nEg, nEt, nEx) ← conv1x1BnBack B c mid h bf16 sync replicas epsStr
+    s!"%u{p}eW" s!"%u{p}eg" s!"u{p}egdst" f.ec f.est eIn nEm
+  code := code ++ cEm ++ cE
   cur := nEx
   -- ── pre-DW (present iff preDWk > 0), stride 1 on `c` channels, reading the BLOCK INPUT.
   --    BN only (timm's `dw_start`), so the cotangent reaches its BN backward unmasked ──
@@ -739,26 +751,14 @@ def uibBackStridedGradB (B ic oc expand preDWk postDWk h : Nat)
   let zic  : Vec ic := fun _ => 0
   let zqk  : DepthwiseKernel ic preDWk preDWk := fun _ _ _ => 0
   let zinp : Vec (B*(ic*((2*h)*(2*h)))) := fun _ => 0
-  let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zdk  : DepthwiseKernel mid postDWk postDWk := fun _ _ _ => 0
-  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
-  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
   let zeb  : Vec (B*(mid*(2*h)*(2*h))) := fun _ => 0
-  let zep  : Vec (B*(mid*((2*h)*(2*h)))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
-  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
-  let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
-  let (cPn, nPn) ← bnBackSite B oc h h sync replicas epsStr s!"%u{p}pg" f.pc s!"u{p}pgdst" dyName f.pst
-  let (cPW, nPW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
-    f.dr zoc zmb zkp (.operand nPn zob))
-  let (cPg, nPg) ← bnGammaSite B oc h h sync epsStr f.pc dyName f.pst
-  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
-    (.operand dyName zop))
-  let (cPx, nPx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
-    s!"%u{p}pW" zkp zoc (.operand nPn zob))
+  let (cP, nPW, nPg, nPt, nPx) ← conv1x1BnBack B mid oc h bf16 sync replicas epsStr
+    s!"%u{p}pW" s!"%u{p}pg" s!"u{p}pgdst" f.pc f.pst f.dr dyName
   -- post-DW: STRIDED, so its input-VJP is the one that upsamples h → 2h
   let (cDm, nDm) ← pretty B (.selectPosB f.dn zmb (.operand nPx zmb))
   let (cDn, nDn) ← bnBackSite B mid h h sync replicas epsStr s!"%u{p}dg" f.dc s!"u{p}dgdst" nDm f.dst
@@ -771,17 +771,10 @@ def uibBackStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     s!"%u{p}dW" zdk zm (.operand nDn zmb))
   -- expand 1×1 (ic → mid) at the INPUT resolution 2h
   let (cEm, nEm) ← pretty B (.selectPosB f.en zeb (.operand nDx zeb))
-  let (cEn, nEn) ← bnBackSite B mid (2*h) (2*h) sync replicas epsStr s!"%u{p}eg" f.ec s!"u{p}egdst" nEm f.est
   let eIn := if preDWk > 0 then f.qr else xName
-  let (cEW, nEW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) zrnd
-    eIn zm zin zke (.operand nEn zeb))
-  let (cEg, nEg) ← bnGammaSite B mid (2*h) (2*h) sync epsStr f.ec nEm f.est
-  let (cEt, nEt) ← pretty B (.bnBetaGradB (N := B) (oc := mid) (h := 2*h) (w := 2*h)
-    (.operand nEm zep))
-  let (cEx, nEx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := ic) (oc := mid) (h := 2*h) (w := 2*h) zrnd
-    s!"%u{p}eW" zke zm (.operand nEn zeb))
-  let mut code := cPn ++ cPW ++ cPg ++ cPt ++ cPx ++ cDm ++ cDn ++ cDW ++ cDg ++ cDt ++ cDx ++
-                 cEm ++ cEn ++ cEW ++ cEg ++ cEt ++ cEx
+  let (cE, nEW, nEg, nEt, nEx) ← conv1x1BnBack B ic mid (2*h) bf16 sync replicas epsStr
+    s!"%u{p}eW" s!"%u{p}eg" s!"u{p}egdst" f.ec f.est eIn nEm
+  let mut code := cP ++ cDm ++ cDn ++ cDW ++ cDg ++ cDt ++ cDx ++ cEm ++ cE
   let mut dx := nEx
   let mut qGrads : List String := []
   -- pre-DW (present iff preDWk > 0): stride 1 at `2h` on `ic` channels, reading the BLOCK INPUT
@@ -809,23 +802,13 @@ def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS BlockBack := do
   let mid := if expand == 1 then oc else ic * expand
-  let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
   let zkf  : Kernel4 mid ic k k := fun _ _ _ _ => 0
-  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zin  : Vec (B*(ic*(2*h)*(2*h))) := fun _ => 0
   let zmb  : Vec (B*(mid*h*h)) := fun _ => 0
   let zmp  : Vec (B*(mid*(h*h))) := fun _ => 0
-  let zob  : Vec (B*(oc*h*h)) := fun _ => 0
-  let zop  : Vec (B*(oc*(h*h))) := fun _ => 0
-  let (cPn, nPn) ← bnBackSite B oc h h sync replicas epsStr s!"%f{p}pg" f.pc s!"f{p}pgdst" dyName f.pst
-  let (cPW, nPW) ← pretty B (.convWeightGradBAt bf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
-    f.er zoc zmb zkp (.operand nPn zob))
-  let (cPg, nPg) ← bnGammaSite B oc h h sync epsStr f.pc dyName f.pst
-  let (cPt, nPt) ← pretty B (.bnBetaGradB (N := B) (oc := oc) (h := h) (w := h)
-    (.operand dyName zop))
-  let (cPx, nPx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := oc) (h := h) (w := h) zrnd
-    s!"%f{p}pW" zkp zoc (.operand nPn zob))
+  let (cP, nPW, nPg, nPt, nPx) ← conv1x1BnBack B mid oc h bf16 sync replicas epsStr
+    s!"%f{p}pW" s!"%f{p}pg" s!"f{p}pgdst" f.pc f.pst f.er dyName
   let (cSw, nSw) ← pretty B (.selectPosB f.en zmb (.operand nPx zmb))
   let (cCn, nCn) ← bnBackSite B mid h h sync replicas epsStr s!"%f{p}cg" f.ec s!"f{p}cgdst" nSw f.est
   let (cCW, nCW) ← pretty B (.convStridedWeightGradBAt bf16 (N := B) (ic := ic) (oc := mid)
@@ -835,7 +818,7 @@ def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (.operand nSw zmp))
   let (cCx, nCx) ← pretty B (.convStridedBackBatchedAt bf16 (N := B) (ic := ic) (oc := mid)
     (h := h) (w := h) zrnd s!"%f{p}cW" zkf zm (.operand nCn zmb))
-  pure { code := cPn ++ cPW ++ cPg ++ cPt ++ cPx ++ cSw ++ cCn ++ cCW ++ cCg ++ cCt ++ cCx,
+  pure { code := cP ++ cSw ++ cCn ++ cCW ++ cCg ++ cCt ++ cCx,
          dx := nCx,
          ps := zipPs (fusedSig p ic oc expand k) [nCW, nCg, nCt, nPW, nPg, nPt] }
 

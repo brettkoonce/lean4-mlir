@@ -486,6 +486,32 @@ def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) 
 -- § MBConv backward emitters (project → SE → depthwise → expand; param-SGD in func-arg order)
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The project + SE stage backward**, the part every MBConv backward runs first and runs the
+    same way: project BN back (cot at the project conv out) → 1×1 conv back (cot at the SE out), the
+    project γ/β/W (and conv-bias) grads, then the SE backward on `cm` channels. The project stage
+    always runs at `hh×hh`, strided block or not. The wiring it fixes in one place: the weight tail
+    (`W`, bias) reads the BN-back cotangent, the γ and β tails read the incoming `dyName`.
+    Returns `(code, dx at the depthwise-swish out, names)`, `names` in func-arg order
+    (`seNames ++ [W] ++ bias ++ [γ, β]`), and the code in `pretty`-call order. -/
+def eBackProjSe (adam : Bool) (B cm oc hh r : Nat) (epsStr lrStr p : String)
+    (f : EFwd) (dyName : String) (convBias : Bool)
+    (bf16 : Bool) (replicas : Nat) (sync : Bool) :
+    StateM Proofs.StableHLO.EmitS (String × String × List String) := do
+  let ww := hh
+  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
+  let zKp  : Kernel4 oc cm 1 1 := fun _ _ _ _ => 0
+  let zVo  : Vec oc := fun _ => 0
+  let (cPbn, nPbn) ← bnBackSite B oc (hh) (ww) sync replicas epsStr s!"%{p}pg" f.pc s!"{p}pgdst" dyName f.stP
+  let (cPdr, nPdr) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := cm) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
+  let (cgp, ngp) ← bnG adam B oc hh ww s!"%{p}pg" f.pc epsStr lrStr dyName (sync := sync) (st := f.stP)
+  let (ctp, ntp) ← bnBt adam B oc hh ww s!"%{p}pbt" lrStr dyName
+  let (cWp, nWp) ← convW1 adam B cm oc hh ww f.se s!"%{p}pW" lrStr nPbn (bf16 := bf16)
+  let (cbp, nbp) ← if convBias then bnBt adam B oc hh ww s!"%{p}pb" lrStr nPbn else pure ("", "")
+  -- SE back (dx at depthwise-swish out) + its param grads
+  let (cSe, nDxSe, seNames) ← seBack adam B cm hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
+  pure (cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe, nDxSe,
+        seNames ++ [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp])
+
 /-- Stride-1 expand MBConv backward body (shared by residual + no-skip): returns the EBack with `dx`
     = the expand-conv-back cotangent (caller adds the residual `+ dyOut` for residual blocks). -/
 def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : String)
@@ -493,21 +519,11 @@ def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : 
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
   let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
-  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
-  let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
-  let zVo  : Vec oc := fun _ => 0
-  -- project: BN back (cot at project conv out) → 1×1 conv back (cot at SE out)
-  let (cPbn, nPbn) ← bnBackSite B oc (hh) (ww) sync replicas epsStr s!"%{p}pg" f.pc s!"{p}pgdst" dyName f.stP
-  let (cPdr, nPdr) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← bnG adam B oc hh ww s!"%{p}pg" f.pc epsStr lrStr dyName (sync := sync) (st := f.stP)
-  let (ctp, ntp) ← bnBt adam B oc hh ww s!"%{p}pbt" lrStr dyName
-  let (cWp, nWp) ← convW1 adam B mid oc hh ww f.se s!"%{p}pW" lrStr nPbn (bf16 := bf16)
-  let (cbp, nbp) ← if convBias then bnBt adam B oc hh ww s!"%{p}pb" lrStr nPbn else pure ("", "")
-  -- SE back (dx at depthwise-swish out) + 4 SE param grads
-  let (cSe, nDxSe, seNames) ← seBack adam B mid hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
+  -- project + SE back (dx at depthwise-swish out)
+  let (cPS, nDxSe, tailNames) ← eBackProjSe adam B mid oc hh r epsStr lrStr p f dyName convBias bf16 replicas sync
   -- depthwise: swish mask (cot at dw-BN out) → BN back (cot at dw conv out) → conv back (cot at expand-swish out)
   let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zMidF))
   let (cDbn, nDbn) ← bnBackSite B mid (hh) (ww) sync replicas epsStr s!"%{p}dg" f.dc s!"{p}dgdst" nDsw f.stD
@@ -525,8 +541,8 @@ def eBackBody (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName : 
   let (cWe, nWe) ← convW1 adam B ic mid hh ww xName s!"%{p}eW" lrStr nEbn (bf16 := bf16)
   let (cbe, nbe) ← if convBias then bnBt adam B mid hh ww s!"%{p}eb" lrStr nEbn else pure ("", "")
   let names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++ biasSlot convBias nbd ++
-               [ngd, ntd] ++ seNames ++ [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
-  pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
+               [ngd, ntd] ++ tailNames
+  pure { code := cPS ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
                  cEsw ++ cEbn ++ cExb ++ cge ++ cte ++ cWe ++ cbe,
          dx := nExb, names := names }
@@ -565,21 +581,11 @@ def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName
   let ww := hh
   let zMidHF : Vec (B * (mid * (2*hh) * (2*ww))) := fun _ => 0
   let zMidF : Vec (B * (mid * hh * ww)) := fun _ => 0
-  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
   let zKe  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
-  let zKp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel mid kd kd := fun _ _ _ => 0
   let zVm  : Vec mid := fun _ => 0
-  let zVo  : Vec oc := fun _ => 0
-  -- project (at hh)
-  let (cPbn, nPbn) ← bnBackSite B oc (hh) (ww) sync replicas epsStr s!"%{p}pg" f.pc s!"{p}pgdst" dyName f.stP
-  let (cPdr, nPdr) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← bnG adam B oc hh ww s!"%{p}pg" f.pc epsStr lrStr dyName (sync := sync) (st := f.stP)
-  let (ctp, ntp) ← bnBt adam B oc hh ww s!"%{p}pbt" lrStr dyName
-  let (cWp, nWp) ← convW1 adam B mid oc hh ww f.se s!"%{p}pW" lrStr nPbn (bf16 := bf16)
-  let (cbp, nbp) ← if convBias then bnBt adam B oc hh ww s!"%{p}pb" lrStr nPbn else pure ("", "")
-  -- SE back (at hh)
-  let (cSe, nDxSe, seNames) ← seBack adam B mid hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
+  -- project + SE back (at hh)
+  let (cPS, nDxSe, tailNames) ← eBackProjSe adam B mid oc hh r epsStr lrStr p f dyName convBias bf16 replicas sync
   -- depthwise (swish + BN at hh, strided conv-back upsamples to 2hh)
   let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zMidF))
   let (cDbn, nDbn) ← bnBackSite B mid (hh) (ww) sync replicas epsStr s!"%{p}dg" f.dc s!"{p}dgdst" nDsw f.stD
@@ -597,8 +603,8 @@ def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr p xName
   let (cWe, nWe) ← convW1 adam B ic mid (2*hh) (2*ww) xName s!"%{p}eW" lrStr nEbn (bf16 := bf16)
   let (cbe, nbe) ← if convBias then bnBt adam B mid (2*hh) (2*ww) s!"%{p}eb" lrStr nEbn else pure ("", "")
   let names := [nWe] ++ biasSlot convBias nbe ++ [nge, nte, nWd] ++ biasSlot convBias nbd ++
-               [ngd, ntd] ++ seNames ++ [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
-  pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
+               [ngd, ntd] ++ tailNames
+  pure { code := cPS ++
                  cDsw ++ cDbn ++ cDer ++ cgd ++ ctd ++ cWd ++ cbd ++
                  cEsw ++ cEbn ++ cExb ++ cge ++ cte ++ cWe ++ cbe,
          dx := nExb, names := names }
@@ -611,20 +617,10 @@ def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xName : Str
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
   let ww := hh
   let zInF  : Vec (B * (ic * hh * ww)) := fun _ => 0
-  let zOutF : Vec (B * (oc * hh * ww)) := fun _ => 0
-  let zKp  : Kernel4 oc ic 1 1 := fun _ _ _ _ => 0
   let zDk  : DepthwiseKernel ic kd kd := fun _ _ _ => 0
   let zVi  : Vec ic := fun _ => 0
-  let zVo  : Vec oc := fun _ => 0
-  -- project
-  let (cPbn, nPbn) ← bnBackSite B oc (hh) (ww) sync replicas epsStr s!"%{p}pg" f.pc s!"{p}pgdst" dyName f.stP
-  let (cPdr, nPdr) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := ic) (oc := oc) (h := hh) (w := ww) zrnd s!"%{p}pW" zKp zVo (.operand nPbn zOutF))
-  let (cgp, ngp) ← bnG adam B oc hh ww s!"%{p}pg" f.pc epsStr lrStr dyName (sync := sync) (st := f.stP)
-  let (ctp, ntp) ← bnBt adam B oc hh ww s!"%{p}pbt" lrStr dyName
-  let (cWp, nWp) ← convW1 adam B ic oc hh ww f.se s!"%{p}pW" lrStr nPbn (bf16 := bf16)
-  let (cbp, nbp) ← if convBias then bnBt adam B oc hh ww s!"%{p}pb" lrStr nPbn else pure ("", "")
-  -- SE back (on ic channels)
-  let (cSe, nDxSe, seNames) ← seBack adam B ic hh r lrStr p f.dr f.s f.e1 f.z f.e2 nPdr
+  -- project + SE back (on ic channels)
+  let (cPS, nDxSe, tailNames) ← eBackProjSe adam B ic oc hh r epsStr lrStr p f dyName convBias bf16 replicas sync
   -- depthwise (on ic channels)
   let (cDsw, nDsw) ← pretty B (.swishBackB f.dn (fun _ => 0) (.operand nDxSe zInF))
   let (cDbn, nDbn) ← bnBackSite B ic (hh) (ww) sync replicas epsStr s!"%{p}dg" f.dc s!"{p}dgdst" nDsw f.stD
@@ -633,9 +629,8 @@ def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xName : Str
   let (ctd, ntd) ← bnBt adam B ic hh ww s!"%{p}dbt" lrStr nDsw
   let (cWd, nWd) ← dwW adam B ic hh ww kd xName s!"%{p}dW" lrStr nDbn (bf16 := bf16)
   let (cbd, nbd) ← if convBias then bnBt adam B ic hh ww s!"%{p}db" lrStr nDbn else pure ("", "")
-  let names := [nWd] ++ biasSlot convBias nbd ++ [ngd, ntd] ++ seNames ++
-               [nWp] ++ biasSlot convBias nbp ++ [ngp, ntp]
-  pure { code := cPbn ++ cPdr ++ cgp ++ ctp ++ cWp ++ cbp ++ cSe ++
+  let names := [nWd] ++ biasSlot convBias nbd ++ [ngd, ntd] ++ tailNames
+  pure { code := cPS ++
                  cDsw ++ cDbn ++ cDxb ++ cgd ++ ctd ++ cWd ++ cbd,
          dx := nDxb, names := names }
 

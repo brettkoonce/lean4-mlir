@@ -770,6 +770,22 @@ def sdpaFwdModule (n d : Nat) (scale : String) : String :=
   matdg "%out" "%weights" "%V" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
   s!"    return %out : {tt [n,d]}\n" ++ "  }\n}\n"
 
+/-- The SDPA input-gradient chain, written once for `sdpaBackModule` and both transformer
+    backwards: from the softmax weights `w` and the cotangent `dout` of `w·V`, emits
+    `%dWeights = dout·Vᵀ`, `%dV = wᵀ·dout`, the row-softmax VJP `%dScaled = w⊙(dW − ⟨w,dW⟩)`,
+    `%dScores = %dScaled·%scl`, then `%dQ = %dScores·K` and `%dK = %dScoresᵀ·Q` — the proven
+    `sdpaBackQ/K/V_correct` steps. `%Q`, `%K`, `%V`, `%scl` and `%sc` must be in scope. -/
+def renderSdpaBack (w dout : String) (n d : Nat) : String :=
+  matdg "%dWeights" dout "%V" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
+  matdg "%dV" w dout "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  s!"    %pdw = stablehlo.multiply {w}, %dWeights : {tt [n,n]}\n" ++
+  reduceSumBcast "%srow" "%pdw" n n ++
+  s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [n,n]}\n" ++
+  s!"    %dScaled = stablehlo.multiply {w}, %diff : {tt [n,n]}\n" ++
+  s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [n,n]}\n" ++
+  matdg "%dQ" "%dScores" "%K" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  matdg "%dK" "%dScores" "%Q" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d])
+
 /-- SDPA backward (the three proven input grads `sdpaBackQ/K/V`) as
     `@sdpa_back`: recompute the softmax weights, then the matmul/softmax-VJP
     chain. Returns `(dQ, dK, dV)`. -/
@@ -782,15 +798,7 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
   matdg "%scores" "%Q" "%K" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
   s!"    %scaled = stablehlo.multiply %scores, %scl : {tt [n,n]}\n" ++
   renderSoftmax "%weights" "%scaled" n n ++
-  matdg "%dWeights" "%dOut" "%V" "1" "1" (tt [n,d]) (tt [n,d]) (tt [n,n]) ++
-  matdg "%dV" "%weights" "%dOut" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
-  s!"    %pdw = stablehlo.multiply %weights, %dWeights : {tt [n,n]}\n" ++
-  reduceSumBcast "%srow" "%pdw" n n ++
-  s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [n,n]}\n" ++
-  s!"    %dScaled = stablehlo.multiply %weights, %diff : {tt [n,n]}\n" ++
-  s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [n,n]}\n" ++
-  matdg "%dQ" "%dScores" "%K" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
-  matdg "%dK" "%dScores" "%Q" "0" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
+  renderSdpaBack "%weights" "%dOut" n d ++
   s!"    return %dQ, %dK, %dV : {tt [n,d]}, {tt [n,d]}, {tt [n,d]}\n" ++ "  }\n}\n"
 
 -- ════════════════════════════════════════════════════════════════
@@ -978,17 +986,18 @@ def seBackM (m : Nat) : String :=
 -- d_head=D); `N` tokens, model dim `D`, MLP hidden `F`, scale `1/√D`.
 -- ════════════════════════════════════════════════════════════════
 
-/-- Per-token LayerNorm forward into `out` (γ,β scalar SSA names); leaves
-    `{out}_xhat` and `{out}_istd` in scope for the backward. `%sc` (f32 0),
-    `%nf` (= n splat) and `%eps` must be in scope. -/
-def renderLN (out x g b : String) (B n : Nat) : String :=
+/-- Flat-BN / LayerNorm forward (`bnForward`) into `out`, with explicit `nf`,`eps` SSA names so
+    one block can carry several BN widths (cmid·h·w vs cout·h·w); leaves `{out}_xhat` and
+    `{out}_istd` in scope for the backward. `%sc` (f32 0) must be in scope. The ONE copy of the
+    normalization: `renderLN` is this at `%nf`/`%eps`. -/
+def mbLNF (out x g b nf eps : String) (B n : Nat) : String :=
   reduceSumBcast s!"{out}_sm" x B n ++
-  s!"    {out}_mu = stablehlo.divide {out}_sm, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_mu = stablehlo.divide {out}_sm, {nf} : {tt [B,n]}\n" ++
   s!"    {out}_xc = stablehlo.subtract {x}, {out}_mu : {tt [B,n]}\n" ++
   s!"    {out}_sq = stablehlo.multiply {out}_xc, {out}_xc : {tt [B,n]}\n" ++
   reduceSumBcast s!"{out}_vs" s!"{out}_sq" B n ++
-  s!"    {out}_var = stablehlo.divide {out}_vs, %nf : {tt [B,n]}\n" ++
-  s!"    {out}_ve = stablehlo.add {out}_var, %eps : {tt [B,n]}\n" ++
+  s!"    {out}_var = stablehlo.divide {out}_vs, {nf} : {tt [B,n]}\n" ++
+  s!"    {out}_ve = stablehlo.add {out}_var, {eps} : {tt [B,n]}\n" ++
   s!"    {out}_istd = stablehlo.rsqrt {out}_ve : {tt [B,n]}\n" ++
   s!"    {out}_xhat = stablehlo.multiply {out}_xc, {out}_istd : {tt [B,n]}\n" ++
   s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
@@ -996,20 +1005,32 @@ def renderLN (out x g b : String) (B n : Nat) : String :=
   s!"    {out}_gx = stablehlo.multiply {out}_xhat, {out}_gb : {tt [B,n]}\n" ++
   s!"    {out} = stablehlo.add {out}_gx, {out}_bb : {tt [B,n]}\n"
 
-/-- LayerNorm backward `dx` from cotangent `dy`, reusing `{ln}_xhat`/`{ln}_istd`
-    + scalar γ `g`. (The proven 3-term form.) `%nf` in scope. -/
-def renderLNBack (out ln g dy : String) (B n : Nat) : String :=
+/-- Flat-BN / LayerNorm backward `dx` from cotangent `dy`, with explicit `nf` name; reuses
+    `{ln}_xhat`/`{ln}_istd` + scalar γ `g`. The proven 3-term form, written once:
+    `renderLNBack` is this at `%nf`. -/
+def mbLNB (out ln g dy nf : String) (B n : Nat) : String :=
   s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
   s!"    {out}_dxh = stablehlo.multiply {out}_gb, {dy} : {tt [B,n]}\n" ++
   reduceSumBcast s!"{out}_sdx" s!"{out}_dxh" B n ++
   s!"    {out}_xd = stablehlo.multiply {ln}_xhat, {out}_dxh : {tt [B,n]}\n" ++
   reduceSumBcast s!"{out}_sxd" s!"{out}_xd" B n ++
-  s!"    {out}_t1 = stablehlo.multiply {out}_dxh, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_t1 = stablehlo.multiply {out}_dxh, {nf} : {tt [B,n]}\n" ++
   s!"    {out}_i1 = stablehlo.subtract {out}_t1, {out}_sdx : {tt [B,n]}\n" ++
   s!"    {out}_xs = stablehlo.multiply {ln}_xhat, {out}_sxd : {tt [B,n]}\n" ++
   s!"    {out}_i2 = stablehlo.subtract {out}_i1, {out}_xs : {tt [B,n]}\n" ++
-  s!"    {out}_s = stablehlo.divide {ln}_istd, %nf : {tt [B,n]}\n" ++
+  s!"    {out}_s = stablehlo.divide {ln}_istd, {nf} : {tt [B,n]}\n" ++
   s!"    {out} = stablehlo.multiply {out}_s, {out}_i2 : {tt [B,n]}\n"
+
+/-- Per-token LayerNorm forward into `out` (γ,β scalar SSA names): `mbLNF` at `%nf` (= n
+    splat) and `%eps`, which must be in scope with `%sc` (f32 0). Leaves `{out}_xhat` and
+    `{out}_istd` in scope for the backward. -/
+def renderLN (out x g b : String) (B n : Nat) : String :=
+  mbLNF out x g b "%nf" "%eps" B n
+
+/-- LayerNorm backward `dx` from cotangent `dy`, reusing `{ln}_xhat`/`{ln}_istd`
+    + scalar γ `g`: `mbLNB` at `%nf`, which must be in scope. -/
+def renderLNBack (out ln g dy : String) (B n : Nat) : String :=
+  mbLNB out ln g dy "%nf" B n
 
 /-- Dense `out = in·W + b` ([B,m]·[m,n]+[n]) into `{out}`. -/
 def renderDense (out inp W b : String) (B m n : Nat) : String :=
@@ -1073,6 +1094,15 @@ def attnSublayerFwdModule (N D : Nat) (eps scale : String) : String :=
      renderDense "%o" "%attn" "%Wo" "%bo" N D D ++
      s!"    %out = stablehlo.add %x, %o : {tt [N,D]}\n    return %out : {tt [N,D]}\n")
 
+/-- The transformer's three-way Q/K/V fan-in back to the LN output:
+    `%da = %dQ·Wqᵀ + %dK·Wkᵀ + %dV·Wvᵀ` (via `%daQ`/`%daK`/`%daV`/`%daQK`). -/
+def renderQkvFanIn (N D : Nat) : String :=
+  matdg "%daQ" "%dQ" "%Wq" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+  matdg "%daK" "%dK" "%Wk" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+  matdg "%daV" "%dV" "%Wv" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
+  s!"    %daQK = stablehlo.add %daQ, %daK : {tt [N,D]}\n" ++
+  s!"    %da = stablehlo.add %daQK, %daV : {tt [N,D]}\n"
+
 /-- ViT attention sublayer **input-gradient backward** `dx` (chains LN-back,
     the three-way Q/K/V fan-in, SDPA dQ/dK/dV, residual). `@attn_back`. -/
 def attnSublayerBackModule (N D : Nat) (eps scale : String) : String :=
@@ -1095,21 +1125,9 @@ def attnSublayerBackModule (N D : Nat) (eps scale : String) : String :=
      -- backward: o = attn·Wo ⇒ dattn = dOut·Woᵀ
      matdg "%dattn" "%dOut" "%Wo" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
      -- SDPA backward (dQ,dK,dV)
-     matdg "%dWeights" "%dattn" "%V" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
-     matdg "%dV" "%w" "%dattn" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
-     s!"    %pdw = stablehlo.multiply %w, %dWeights : {tt [N,N]}\n" ++
-     reduceSumBcast "%srow" "%pdw" N N ++
-     s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [N,N]}\n" ++
-     s!"    %dScaled = stablehlo.multiply %w, %diff : {tt [N,N]}\n" ++
-     s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [N,N]}\n" ++
-     matdg "%dQ" "%dScores" "%K" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
-     matdg "%dK" "%dScores" "%Q" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
+     renderSdpaBack "%w" "%dattn" N D ++
      -- projections back ⇒ three-way fan-in da = dQ·Wqᵀ + dK·Wkᵀ + dV·Wvᵀ
-     matdg "%daQ" "%dQ" "%Wq" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     matdg "%daK" "%dK" "%Wk" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     matdg "%daV" "%dV" "%Wv" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     s!"    %daQK = stablehlo.add %daQ, %daK : {tt [N,D]}\n" ++
-     s!"    %da = stablehlo.add %daQK, %daV : {tt [N,D]}\n" ++
+     renderQkvFanIn N D ++
      -- LN backward + residual fan-in
      renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
      s!"    %dx = stablehlo.add %dOut, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
@@ -1163,20 +1181,8 @@ def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
      s!"    %dx1 = stablehlo.add %dOut, %dx1m : {tt [N,D]}\n" ++
      -- attention sublayer backward (cotangent %dx1)
      matdg "%dattn" "%dx1" "%Wo" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     matdg "%dWeights" "%dattn" "%V" "1" "1" (tt [N,D]) (tt [N,D]) (tt [N,N]) ++
-     matdg "%dV" "%w" "%dattn" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
-     s!"    %pdw = stablehlo.multiply %w, %dWeights : {tt [N,N]}\n" ++
-     reduceSumBcast "%srow" "%pdw" N N ++
-     s!"    %diff = stablehlo.subtract %dWeights, %srow : {tt [N,N]}\n" ++
-     s!"    %dScaled = stablehlo.multiply %w, %diff : {tt [N,N]}\n" ++
-     s!"    %dScores = stablehlo.multiply %dScaled, %scl : {tt [N,N]}\n" ++
-     matdg "%dQ" "%dScores" "%K" "1" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
-     matdg "%dK" "%dScores" "%Q" "0" "0" (tt [N,N]) (tt [N,D]) (tt [N,D]) ++
-     matdg "%daQ" "%dQ" "%Wq" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     matdg "%daK" "%dK" "%Wk" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     matdg "%daV" "%dV" "%Wv" "1" "1" (tt [N,D]) (tt [D,D]) (tt [N,D]) ++
-     s!"    %daQK = stablehlo.add %daQ, %daK : {tt [N,D]}\n" ++
-     s!"    %da = stablehlo.add %daQK, %daV : {tt [N,D]}\n" ++
+     renderSdpaBack "%w" "%dattn" N D ++
+     renderQkvFanIn N D ++
      renderLNBack "%dxa" "%a" "%g1" "%da" N D ++
      s!"    %dx = stablehlo.add %dx1, %dxa : {tt [N,D]}\n    return %dx : {tt [N,D]}\n")
 
@@ -1473,38 +1479,6 @@ def resnetTrainStepModule (C H W kH kW nCls : Nat) (eps lr : String) : String :=
 -- Expand widens channels (cin→cmid) so the expand/dw BN run over cmid·h·w while
 -- the project BN runs over cout·h·w — hence the nf/eps-parameterized flat BN.
 -- ════════════════════════════════════════════════════════════════
-
-/-- Flat-BN forward (= `renderLN`/`bnForward`) but with explicit `nf`,`eps` SSA
-    names so one block can carry several BN widths (cmid·h·w vs cout·h·w). -/
-def mbLNF (out x g b nf eps : String) (B n : Nat) : String :=
-  reduceSumBcast s!"{out}_sm" x B n ++
-  s!"    {out}_mu = stablehlo.divide {out}_sm, {nf} : {tt [B,n]}\n" ++
-  s!"    {out}_xc = stablehlo.subtract {x}, {out}_mu : {tt [B,n]}\n" ++
-  s!"    {out}_sq = stablehlo.multiply {out}_xc, {out}_xc : {tt [B,n]}\n" ++
-  reduceSumBcast s!"{out}_vs" s!"{out}_sq" B n ++
-  s!"    {out}_var = stablehlo.divide {out}_vs, {nf} : {tt [B,n]}\n" ++
-  s!"    {out}_ve = stablehlo.add {out}_var, {eps} : {tt [B,n]}\n" ++
-  s!"    {out}_istd = stablehlo.rsqrt {out}_ve : {tt [B,n]}\n" ++
-  s!"    {out}_xhat = stablehlo.multiply {out}_xc, {out}_istd : {tt [B,n]}\n" ++
-  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
-  s!"    {out}_bb = stablehlo.broadcast_in_dim {b}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
-  s!"    {out}_gx = stablehlo.multiply {out}_xhat, {out}_gb : {tt [B,n]}\n" ++
-  s!"    {out} = stablehlo.add {out}_gx, {out}_bb : {tt [B,n]}\n"
-
-/-- Flat-BN backward (= `renderLNBack`) with explicit `nf` name; reuses
-    `{ln}_xhat`/`{ln}_istd` + scalar γ `g`. -/
-def mbLNB (out ln g dy nf : String) (B n : Nat) : String :=
-  s!"    {out}_gb = stablehlo.broadcast_in_dim {g}, dims = [] : (tensor<f32>) -> {tt [B,n]}\n" ++
-  s!"    {out}_dxh = stablehlo.multiply {out}_gb, {dy} : {tt [B,n]}\n" ++
-  reduceSumBcast s!"{out}_sdx" s!"{out}_dxh" B n ++
-  s!"    {out}_xd = stablehlo.multiply {ln}_xhat, {out}_dxh : {tt [B,n]}\n" ++
-  reduceSumBcast s!"{out}_sxd" s!"{out}_xd" B n ++
-  s!"    {out}_t1 = stablehlo.multiply {out}_dxh, {nf} : {tt [B,n]}\n" ++
-  s!"    {out}_i1 = stablehlo.subtract {out}_t1, {out}_sdx : {tt [B,n]}\n" ++
-  s!"    {out}_xs = stablehlo.multiply {ln}_xhat, {out}_sxd : {tt [B,n]}\n" ++
-  s!"    {out}_i2 = stablehlo.subtract {out}_i1, {out}_xs : {tt [B,n]}\n" ++
-  s!"    {out}_s = stablehlo.divide {ln}_istd, {nf} : {tt [B,n]}\n" ++
-  s!"    {out} = stablehlo.multiply {out}_s, {out}_i2 : {tt [B,n]}\n"
 
 /-- Elementwise swish forward `y = x·σ(x)` into `{out}` (StableHLO type `ty`). -/
 def swishF (out x ty : String) : String :=

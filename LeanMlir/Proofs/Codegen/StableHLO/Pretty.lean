@@ -204,6 +204,50 @@ def maxPool3s2BackText (B c h w : Nat) (xN r : String) : StateM EmitS (String ×
                 s!"    {o} = stablehlo.reshape {dx} : ({ty [B,c,H,W]}) -> {ty [B, c*H*W]}\n"
   pure (txt, o)
 
+/-- **The 2×2/s2 pool's emitted forward text** on the flat input `r`; returns the text and the
+    output's name. One writer for the per-example `.maxPoolF` token and the batched `"maxPool"`
+    descriptor, for `maxPool3s2FwdText`'s reason. The windows tile, so there is no padding.
+
+    The region block arguments `%pa`/`%pb`/`%pm` are spelled out, so they are reserved SSA names. -/
+def maxPool2FwdText (B c h w : Nat) (r : String) : StateM EmitS (String × String) := do
+  let xn ← fresh; let ninf ← fresh; let p ← fresh; let o ← fresh
+  pure (
+    s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+    s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
+    s!"    {p} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
+    "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
+    "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
+    "        stablehlo.return %pm : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
+    s!"    {o} = stablehlo.reshape {p} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o)
+
+/-- **The 2×2/s2 pool's emitted backward text**, from the saved input `xN` and the cotangent `r`;
+    returns the text and the output's name. One writer for the `.maxPoolBack` token and the batched
+    `"maxPoolBackP"` tag. The windows tile, so `stablehlo.select_and_scatter` lowers in both
+    compilers and stays (contrast `maxPool3s2BackText`).
+
+    NOTE the region block arguments `%sa`/`%sb`/`%sc`/`%sd` (and `%sge`/`%ss`) are HARDCODED, so
+    they are reserved SSA names: a top-level value of the same name is a redefinition error, and it
+    only surfaces at XLA compile time. -/
+def maxPool2BackText (B c h w : Nat) (xN r : String) : StateM EmitS (String × String) := do
+  let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
+  pure (
+    s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
+    s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
+    s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
+    "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
+    "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
+    "        stablehlo.return %sge : tensor<i1>\n" ++
+    "    }, " ++ "{\n" ++
+    "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
+    "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
+    "        stablehlo.return %ss : tensor<f32>\n" ++
+    "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
+    s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
+    s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o)
+
 /-- **The stochastic-depth mask input name for ramp index `i`** — the `mName` a `dropPathB` carries,
     and the `tensor<Bxf32>` the signature declares for it.
 
@@ -1398,6 +1442,146 @@ def geluErfBackText (r x : String) (d : List Nat) : StateM EmitS (String × Stri
         s!"    {h} = stablehlo.multiply {chalf}, {dyec} : {ty d}\n" ++
         s!"    {o} = stablehlo.add {nd}, {h} : {ty d}\n", o)
 
+/-- **The tanh-GELU forward's ops** on `r` at type `d`:
+    `y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`. Smooth everywhere (no kink, no mask);
+    `stablehlo.tanh` is the only non-arithmetic op.
+
+    One body for the `.geluF .tanh` token and the batched `"gelu"` descriptor, so the two renders
+    cannot differ — `geluErfFwdText`'s reason. -/
+def geluTanhFwdText (r : String) (d : List Nat) : StateM EmitS (String × String) := do
+  let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+  let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+  let chalf ← fresh; let hx ← fresh; let o ← fresh
+  pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty d}\n" ++
+        s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty d}\n" ++
+        s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+        s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+        s!"    {inn} = stablehlo.add {r}, {kx3} : {ty d}\n" ++
+        s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+        s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+        s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+        s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+        s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+        s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+        s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
+        s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
+
+/-- **The tanh-GELU input-VJP's ops**, cotangent `r` and saved pre-activation `x` at type `d`:
+    `dy ⊙ gelu'(x)`, recomputing `t = tanh(√(2/π)·(x + 0.044715·x³))` from `x`, with
+    `gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1 + 3·0.044715·x²)`. (Matches IRPrint
+    `renderGeluB`.)
+
+    One body for the `.geluBack .tanh` token and the batched `"geluBackP"` tag. -/
+def geluTanhBackText (r x : String) (d : List Nat) : StateM EmitS (String × String) := do
+  let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
+  let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
+  let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
+  let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
+  let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
+  pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty d}\n" ++
+        s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty d}\n" ++
+        s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
+        s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
+        s!"    {inn} = stablehlo.add {x}, {kx3} : {ty d}\n" ++
+        s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
+        s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
+        s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
+        s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
+        s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
+        s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
+        s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty d}\n" ++
+        s!"    {t2} = stablehlo.multiply {t}, {t} : {ty d}\n" ++
+        s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty d}\n" ++
+        s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
+        s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty d}\n" ++
+        s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty d}\n" ++
+        s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty d}\n" ++
+        s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty d}\n" ++
+        s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty d}\n" ++
+        s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
+        s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
+        s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+
+/-- **The row-wise LayerNorm forward's text** on the flat `r : [B, m*n]`; returns the text and
+    the output's name. Reshape to `[B,m,n]`, then `bnF`'s normalize/affine graph at rank 3 — μ/var
+    reduced over the LAST axis `[2]` (per token row), broadcast back over dims `[0,1]`, scalar γ/β
+    (dims = `[]`) — and reshape to flat. LayerNorm IS per-example BN per row; `m` is rows PER
+    EXAMPLE.
+
+    One body for the `.lnRowF` token and the batched `"lnRowP"` descriptor, so the two renders
+    cannot differ. -/
+def lnRowFwdText (B m n : Nat) (gN bN epsStr r : String) : StateM EmitS (String × String) := do
+  let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+  let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+  let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+  let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh; let o ← fresh
+  pure (
+    s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+    s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+    s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+    s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+    s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+    s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+    s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+    s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+    s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+    s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+    s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,m,n]}\n" ++
+    s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,m,n]}\n" ++
+    s!"    {o} = stablehlo.reshape {ob} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o)
+
+/-- **The row-wise LayerNorm input-VJP's text**, cotangent `r` and saved flat pre-LN input `xN`;
+    returns the text and the output's name. It recomputes x̂/istd per row from `xN`, then
+    `bnBack`'s consolidated three-term `(istd/n)·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))` (dx̂ = γ·dy) at
+    rank 3, every Σ over the row axis `[2]`, and reshapes to flat.
+
+    One body for the `.lnRowBack` token and the batched `"lnRowBackP"` tag. -/
+def lnRowBackText (B m n : Nat) (gN xN epsStr r : String) : StateM EmitS (String × String) := do
+  let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
+  let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
+  let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
+  let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
+  let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
+  let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
+  pure (
+    s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+    s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
+    s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+    s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
+    s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
+    s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
+    s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
+    s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
+    s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
+    s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
+    s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
+    s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,m,n]}\n" ++
+    s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,m,n]}\n" ++
+    s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
+    s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
+    s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,m,n]}\n" ++
+    s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,m,n]}\n" ++
+    s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,m,n]}\n" ++
+    s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
+    s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
+    s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o)
+
 /-- **The text of the cross-replica mean** — `ViTRender.emitGradAllReduce`'s body, verbatim, so
     that the `allReduceMean` token re-renders every committed `*dp*` artifact byte-identically.
     `all_reduce(add)` over `replica_groups = [[0..R-1]]`, then a divide by `R`; the names are
@@ -1792,17 +1976,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       let (s, o) ← emitFlatConv B (some tyBf16) w b ic oc h w' kH kW r
       pure (s, o :: st)
   | .maxPoolF c h w, r :: st => do
-      let xn ← fresh; let ninf ← fresh; let p ← fresh; let o ← fresh
-      pure (
-        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
-        s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
-        s!"    {p} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
-        "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
-        "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
-        "        stablehlo.return %pm : tensor<f32>\n" ++
-        "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
-        s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
-        s!"    {o} = stablehlo.reshape {p} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+      let (s, o) ← maxPool2FwdText B c h w r
+      pure (s, o :: st)
   | .convBack w ic oc h w' kH kW, r :: st => do
       let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
       let dn ← fresh; let wt ← fresh; let wr ← fresh; let dx ← fresh; let o ← fresh
@@ -1817,22 +1992,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
         s!" : ({ty [B,oc,h,w']}, {ty [ic,oc,kH,kW]}) -> {ty [B,ic,h,w']}\n" ++
         s!"    {o} = stablehlo.reshape {dx} : ({ty [B,ic,h,w']}) -> {ty [B, ic*h*w']}\n", o :: st)
   | .maxPoolBack xN c h w, r :: st => do
-      let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
-      pure (
-        s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
-        s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
-        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
-        "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
-        "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
-        "        stablehlo.return %sge : tensor<i1>\n" ++
-        "    }, " ++ "{\n" ++
-        "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
-        "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
-        "        stablehlo.return %ss : tensor<f32>\n" ++
-        "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
-        s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
-        s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
+      let (s, o) ← maxPool2BackText B c h w xN r
+      pure (s, o :: st)
   | .bnF gN bN epsStr n, r :: st => do
       -- per-example BatchNorm forward `γ·(x−μ)·istd + β` (reduce μ/var over [1])
       let z ← fresh; let nf ← fresh; let ep ← fresh
@@ -2692,59 +2853,10 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {m} = stablehlo.multiply {xn}, {gb} : {ty [B,c,h,w']}\n" ++
             s!"    {o} = stablehlo.reshape {m} : ({ty [B,c,h,w']}) -> {ty [B, c*h*w']}\n", o :: st)
   | .geluF .tanh n, r :: st => do
-      let (txt4, res4) ← liftPointwise B n r fun r d => do
-          -- gelu forward (tanh approximation): y = 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))).
-          -- Smooth everywhere (no kink/mask); `stablehlo.tanh` is the only non-arith op.
-          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-          let chalf ← fresh; let hx ← fresh; let o ← fresh
-          pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty d}\n" ++
-                s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty d}\n" ++
-                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
-                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
-                s!"    {inn} = stablehlo.add {r}, {kx3} : {ty d}\n" ++
-                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
-                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
-                s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
-                s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
-                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
-                s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
-                s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
+      let (txt4, res4) ← liftPointwise B n r geluTanhFwdText
       pure (txt4, res4 :: st)
   | .geluBack .tanh x n, r :: st => do
-      let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
-          -- gelu input-VJP: dy ⊙ gelu'(x), recomputing tanh(u(x)) from the saved
-          -- pre-activation {x}. gelu'(x) = 0.5·(1+t) + 0.5·x·(1−t²)·√(2/π)·(1+3·0.044715·x²),
-          -- t = tanh(√(2/π)·(x+0.044715·x³)). (Matches IRPrint `renderGeluB`.)
-          let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-          let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-          let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
-          let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
-          let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
-          pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty d}\n" ++
-                s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty d}\n" ++
-                s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
-                s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
-                s!"    {inn} = stablehlo.add {x}, {kx3} : {ty d}\n" ++
-                s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
-                s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
-                s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
-                s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
-                s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
-                s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
-                s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty d}\n" ++
-                s!"    {t2} = stablehlo.multiply {t}, {t} : {ty d}\n" ++
-                s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty d}\n" ++
-                s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
-                s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty d}\n" ++
-                s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty d}\n" ++
-                s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty d}\n" ++
-                s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty d}\n" ++
-                s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty d}\n" ++
-                s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
-                s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
-                s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+      let (txt4, res4) ← liftPointwise2 B n r x geluTanhBackText
       pure (txt4, res4 :: st)
   | .geluF .erf n, r :: st => do
       let (txt4, res4) ← liftPointwise B n r geluErfFwdText
@@ -2828,77 +2940,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                 s!"    {o} = stablehlo.multiply {r}, {c} : {ty d}\n", o)
       pure (txt4, res4 :: st)
   | .lnRowF gN bN epsStr m n, r :: st => do
-      -- ROW-wise LayerNorm forward: reshape flat [B,m*n] → [B,m,n], then `bnF`'s
-      -- normalize/affine graph at rank 3 — μ/var reduced over the LAST axis [2]
-      -- (per token row), broadcast back over dims [0,1], scalar γ/β (dims = []),
-      -- reshape to flat. LayerNorm IS per-example BN per row.
-      let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
-      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
-      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
-      let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh; let o ← fresh
-      pure (
-        s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
-        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
-        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
-        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
-        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
-        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
-        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
-        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-        s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-        s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,m,n]}\n" ++
-        s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,m,n]}\n" ++
-        s!"    {o} = stablehlo.reshape {ob} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      let (s, o) ← lnRowFwdText B m n gN bN epsStr r
+      pure (s, o :: st)
   | .lnRowBack gN xN epsStr m n, r :: st => do
-      -- ROW-wise LN input-VJP: recompute x̂/istd per row from the saved flat
-      -- pre-LN input {xN}, then `bnBack`'s consolidated three-term
-      -- `(istd/n)·(n·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))` (dx̂ = γ·dy) at rank 3, all Σ
-      -- reductions over the row axis [2], reshape to flat. {r} is dy.
-      let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
-      let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
-      let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
-      let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
-      let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
-      let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
-      pure (
-        s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-        s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-        s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
-        s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
-        s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
-        s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
-        s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
-        s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
-        s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
-        s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-        s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,m,n]}\n" ++
-        s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,m,n]}\n" ++
-        s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-        s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-        s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,m,n]}\n" ++
-        s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,m,n]}\n" ++
-        s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,m,n]}\n" ++
-        s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
-        s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
-        s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+      let (s, o) ← lnRowBackText B m n gN xN epsStr r
+      pure (s, o :: st)
   | .denseRowF wN bN N a c, r :: st => do
       -- per-token dense: reshape [B,N*a] → [B,N,a], dot_general contracting the
       -- feature axis with W:[a,c] ([2] x [0] — every token row through the same W),
@@ -3204,18 +3250,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
                   s!"    {o} = stablehlo.minimum {mx}, {six} : {ty d}\n", o)
           pure (txt4, res4 :: st)
       | "maxPool", [], [_N, c, h, w] => do
-          -- byte-for-byte `.maxPoolF`'s emit; dims from the descriptor, batch from `B`.
-          let xn ← fresh; let ninf ← fresh; let pp ← fresh; let o ← fresh
-          pure (
-            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
-            s!"    {ninf} = stablehlo.constant dense<0xFF800000> : tensor<f32>\n" ++
-            s!"    {pp} = \"stablehlo.reduce_window\"({xn}, {ninf}) (" ++ "{\n" ++
-            "      ^bb0(%pa: tensor<f32>, %pb: tensor<f32>):\n" ++
-            "        %pm = stablehlo.maximum %pa, %pb : tensor<f32>\n" ++
-            "        stablehlo.return %pm : tensor<f32>\n" ++
-            "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
-            s!" : ({ty [B,c,2*h,2*w]}, tensor<f32>) -> {ty [B,c,h,w]}\n" ++
-            s!"    {o} = stablehlo.reshape {pp} : ({ty [B,c,h,w]}) -> {ty [B, c*h*w]}\n", o :: st)
+          let (txt, o) ← maxPool2FwdText B c h w r
+          pure (txt, o :: st)
       -- The 3×3/s2 stem pool, forward — both index conventions, ONE text writer
       -- (`maxPool3s2FwdText`), so the per-example and batched forms cannot drift.
       | "maxPool3s2", [], [c, h, w] => do
@@ -3231,25 +3267,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           let (txt, o) ← maxPool3s2BackText B c h w xN r
           pure (txt, o :: st)
       | "maxPoolBackP", [xN], [_N, c, h, w] => do
-          -- byte-for-byte `.maxPoolBack`'s emit. NOTE the region block arguments %sa/%sb/%sc/%sd
-          -- are HARDCODED here, so they are reserved SSA names: a top-level value of the same
-          -- name is a redefinition error, and it only surfaces at XLA compile time.
-          let xr ← fresh; let dr ← fresh; let z ← fresh; let scn ← fresh; let o ← fresh
-          pure (
-            s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
-            s!"    {dr} = stablehlo.reshape {r} : ({ty [B, c*h*w]}) -> {ty [B,c,h,w]}\n" ++
-            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {scn} = \"stablehlo.select_and_scatter\"({xr}, {dr}, {z}) (" ++ "{\n" ++
-            "      ^bb0(%sa: tensor<f32>, %sb: tensor<f32>):\n" ++
-            "        %sge = stablehlo.compare GE, %sa, %sb : (tensor<f32>, tensor<f32>) -> tensor<i1>\n" ++
-            "        stablehlo.return %sge : tensor<i1>\n" ++
-            "    }, " ++ "{\n" ++
-            "      ^bb0(%sc: tensor<f32>, %sd: tensor<f32>):\n" ++
-            "        %ss = stablehlo.add %sc, %sd : tensor<f32>\n" ++
-            "        stablehlo.return %ss : tensor<f32>\n" ++
-            "    }) {window_dimensions = array<i64: 1, 1, 2, 2>, window_strides = array<i64: 1, 1, 2, 2>}" ++
-            s!" : ({ty [B,c,2*h,2*w]}, {ty [B,c,h,w]}, tensor<f32>) -> {ty [B,c,2*h,2*w]}\n" ++
-            s!"    {o} = stablehlo.reshape {scn} : ({ty [B,c,2*h,2*w]}) -> {ty [B, c*(2*h)*(2*w)]}\n", o :: st)
+          let (txt, o) ← maxPool2BackText B c h w xN r
+          pure (txt, o :: st)
       | "convBiasSgd", [bN, lrS], [_N, oc, h, w] => do
           -- byte-for-byte `.convBiasSgd`'s emit. Stride-independent, so the strided peer
           -- shares this case (both `skel` to the same Raw).
@@ -3388,76 +3407,11 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           let (txt4, res4) ← liftPointwise2 B n r x geluErfBackText
           pure (txt4, res4 :: st)
       | "geluBackP", [x], [_N, n] => do
-          let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do
-            -- byte-for-byte `.geluBack`'s emit, width from the descriptor's `n`.
-            let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-            let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-            let chalf ← fresh; let term1 ← fresh; let t2 ← fresh; let omt2 ← fresh
-            let hx ← fresh; let hxo ← fresh; let c3b ← fresh; let a3x2 ← fresh
-            let in2 ← fresh; let up ← fresh; let term2 ← fresh; let gp ← fresh; let o ← fresh
-            pure (s!"    {x2} = stablehlo.multiply {x}, {x} : {ty d}\n" ++
-                  s!"    {x3} = stablehlo.multiply {x2}, {x} : {ty d}\n" ++
-                  s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
-                  s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
-                  s!"    {inn} = stablehlo.add {x}, {kx3} : {ty d}\n" ++
-                  s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
-                  s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
-                  s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
-                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
-                  s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
-                  s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
-                  s!"    {term1} = stablehlo.multiply {chalf}, {opt} : {ty d}\n" ++
-                  s!"    {t2} = stablehlo.multiply {t}, {t} : {ty d}\n" ++
-                  s!"    {omt2} = stablehlo.subtract {one}, {t2} : {ty d}\n" ++
-                  s!"    {hx} = stablehlo.multiply {chalf}, {x} : {ty d}\n" ++
-                  s!"    {hxo} = stablehlo.multiply {hx}, {omt2} : {ty d}\n" ++
-                  s!"    {c3b} = stablehlo.constant dense<0.134145> : {ty d}\n" ++
-                  s!"    {a3x2} = stablehlo.multiply {c3b}, {x2} : {ty d}\n" ++
-                  s!"    {in2} = stablehlo.add {one}, {a3x2} : {ty d}\n" ++
-                  s!"    {up} = stablehlo.multiply {csqrt}, {in2} : {ty d}\n" ++
-                  s!"    {term2} = stablehlo.multiply {hxo}, {up} : {ty d}\n" ++
-                  s!"    {gp} = stablehlo.add {term1}, {term2} : {ty d}\n" ++
-                  s!"    {o} = stablehlo.multiply {r}, {gp} : {ty d}\n", o)
+          let (txt4, res4) ← liftPointwise2 B n r x geluTanhBackText
           pure (txt4, res4 :: st)
       | "lnRowBackP", [gN, xN, epsStr], [_N, m, n] => do
-          -- byte-for-byte `.lnRowBack`'s emit; `m` is rows PER EXAMPLE.
-          let dn ← fresh; let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
-          let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
-          let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
-          let xhat ← fresh; let gb ← fresh; let dxh ← fresh; let sdxr ← fresh; let sdx ← fresh
-          let xd ← fresh; let sxdr ← fresh; let sxd ← fresh; let t1 ← fresh; let i1 ← fresh
-          let xs ← fresh; let i2 ← fresh; let sN ← fresh; let o0 ← fresh; let o ← fresh
-          pure (
-            s!"    {dn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-            s!"    {xn} = stablehlo.reshape {xN} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
-            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
-            s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
-            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
-            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
-            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
-            s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
-            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-            s!"    {dxh} = stablehlo.multiply {gb}, {dn} : {ty [B,m,n]}\n" ++
-            s!"    {sdxr} = stablehlo.reduce({dxh} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {sdx} = stablehlo.broadcast_in_dim {sdxr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {xd} = stablehlo.multiply {xhat}, {dxh} : {ty [B,m,n]}\n" ++
-            s!"    {sxdr} = stablehlo.reduce({xd} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {sxd} = stablehlo.broadcast_in_dim {sxdr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {t1} = stablehlo.multiply {dxh}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {i1} = stablehlo.subtract {t1}, {sdx} : {ty [B,m,n]}\n" ++
-            s!"    {xs} = stablehlo.multiply {xhat}, {sxd} : {ty [B,m,n]}\n" ++
-            s!"    {i2} = stablehlo.subtract {i1}, {xs} : {ty [B,m,n]}\n" ++
-            s!"    {sN} = stablehlo.divide {istd}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {o0} = stablehlo.multiply {sN}, {i2} : {ty [B,m,n]}\n" ++
-            s!"    {o} = stablehlo.reshape {o0} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+          let (s, o) ← lnRowBackText B m n gN xN epsStr r
+          pure (s, o :: st)
       | "dotOutP", [w], [_N, m, n] => do
           let o ← fresh
           pure (s!"    {o} = stablehlo.dot_general {r}, {w}, contracting_dims = [1] x [1], " ++
@@ -3509,23 +3463,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
           let (txt4, res4) ← liftPointwise B n r geluErfFwdText
           pure (txt4, res4 :: st)
       | "gelu", [], [_N, n] => do
-          let (txt4, res4) ← liftPointwise B n r fun r d => do
-            let x2 ← fresh; let x3 ← fresh; let ck ← fresh; let kx3 ← fresh; let inn ← fresh
-            let csqrt ← fresh; let u ← fresh; let t ← fresh; let one ← fresh; let opt ← fresh
-            let chalf ← fresh; let hx ← fresh; let o ← fresh
-            pure (s!"    {x2} = stablehlo.multiply {r}, {r} : {ty d}\n" ++
-                  s!"    {x3} = stablehlo.multiply {x2}, {r} : {ty d}\n" ++
-                  s!"    {ck} = stablehlo.constant dense<0.044715> : {ty d}\n" ++
-                  s!"    {kx3} = stablehlo.multiply {ck}, {x3} : {ty d}\n" ++
-                  s!"    {inn} = stablehlo.add {r}, {kx3} : {ty d}\n" ++
-                  s!"    {csqrt} = stablehlo.constant dense<0.7978845608028654> : {ty d}\n" ++
-                  s!"    {u} = stablehlo.multiply {csqrt}, {inn} : {ty d}\n" ++
-                  s!"    {t} = stablehlo.tanh {u} : {ty d}\n" ++
-                  s!"    {one} = stablehlo.constant dense<1.0> : {ty d}\n" ++
-                  s!"    {opt} = stablehlo.add {one}, {t} : {ty d}\n" ++
-                  s!"    {chalf} = stablehlo.constant dense<0.5> : {ty d}\n" ++
-                  s!"    {hx} = stablehlo.multiply {chalf}, {r} : {ty d}\n" ++
-                  s!"    {o} = stablehlo.multiply {hx}, {opt} : {ty d}\n", o)
+          let (txt4, res4) ← liftPointwise B n r geluTanhFwdText
           pure (txt4, res4 :: st)
       | "transposeP", [], [_N, m, n] => do
           let xn ← fresh; let t ← fresh; let o ← fresh
@@ -3533,32 +3471,8 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             s!"    {t} = stablehlo.transpose {xn}, dims = [0, 2, 1] : ({ty [B,m,n]}) -> {ty [B,n,m]}\n" ++
             s!"    {o} = stablehlo.reshape {t} : ({ty [B,n,m]}) -> {ty [B, n*m]}\n", o :: st)
       | "lnRowP", [gN, bN, epsStr], [_N, m, n] => do
-          let xn ← fresh; let z ← fresh; let nf ← fresh; let ep ← fresh
-          let smr ← fresh; let sm ← fresh; let mu ← fresh; let xc ← fresh; let sq ← fresh
-          let vsr ← fresh; let vs ← fresh; let vr ← fresh; let ve ← fresh; let istd ← fresh
-          let xhat ← fresh; let gb ← fresh; let bb ← fresh; let gx ← fresh; let ob ← fresh
-          let o ← fresh
-          pure (
-            s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++
-            s!"    {z} = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-            s!"    {nf} = stablehlo.constant dense<{n}.0> : {ty [B,m,n]}\n" ++
-            s!"    {ep} = stablehlo.constant dense<{epsStr}> : {ty [B,m,n]}\n" ++
-            s!"    {smr} = stablehlo.reduce({xn} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {sm} = stablehlo.broadcast_in_dim {smr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {mu} = stablehlo.divide {sm}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {xc} = stablehlo.subtract {xn}, {mu} : {ty [B,m,n]}\n" ++
-            s!"    {sq} = stablehlo.multiply {xc}, {xc} : {ty [B,m,n]}\n" ++
-            s!"    {vsr} = stablehlo.reduce({sq} init: {z}) applies stablehlo.add across dimensions = [2] : ({ty [B,m,n]}, tensor<f32>) -> {ty [B,m]}\n" ++
-            s!"    {vs} = stablehlo.broadcast_in_dim {vsr}, dims = [0, 1] : ({ty [B,m]}) -> {ty [B,m,n]}\n" ++
-            s!"    {vr} = stablehlo.divide {vs}, {nf} : {ty [B,m,n]}\n" ++
-            s!"    {ve} = stablehlo.add {vr}, {ep} : {ty [B,m,n]}\n" ++
-            s!"    {istd} = stablehlo.rsqrt {ve} : {ty [B,m,n]}\n" ++
-            s!"    {xhat} = stablehlo.multiply {xc}, {istd} : {ty [B,m,n]}\n" ++
-            s!"    {gb} = stablehlo.broadcast_in_dim {gN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-            s!"    {bb} = stablehlo.broadcast_in_dim {bN}, dims = [] : (tensor<f32>) -> {ty [B,m,n]}\n" ++
-            s!"    {gx} = stablehlo.multiply {xhat}, {gb} : {ty [B,m,n]}\n" ++
-            s!"    {ob} = stablehlo.add {gx}, {bb} : {ty [B,m,n]}\n" ++
-            s!"    {o} = stablehlo.reshape {ob} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o :: st)
+          let (s, o) ← lnRowFwdText B m n gN bN epsStr r
+          pure (s, o :: st)
       | "rowScaleP", [gN], [_N, m, n] => do
           let xn ← fresh; let gb ← fresh; let mu ← fresh; let o ← fresh
           pure (s!"    {xn} = stablehlo.reshape {r} : ({ty [B, m*n]}) -> {ty [B,m,n]}\n" ++

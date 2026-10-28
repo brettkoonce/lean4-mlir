@@ -98,10 +98,13 @@ def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : B
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          stE := stE, stD := stD, stP := stP }
 
-/-- **STRIDE-1 inverted-residual forward with the identity skip** (`ic = oc`): everything at
-    `hh×ww`, block output = `addVB (project-BN out) (block input)`. The bottleneck is LINEAR — no
-    relu6 after the add. -/
-def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+/-- **STRIDE-1 inverted-residual forward**, shared by the identity-skip (`skip := true`) and
+    expand-no-skip block kinds: everything at `hh×ww`; with the skip the block output is
+    `addVB (project-BN out) (block input)`, without it the project-BN output directly. The
+    bottleneck is LINEAR — no relu6 after the add. One function with a flag, as
+    `irBackStride1GradB` is on the backward side, so the two kinds cannot drift. `ic = oc` whenever
+    `skip` is true. -/
+def irFwdStride1B (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
@@ -126,40 +129,27 @@ def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool
     (.convAt bf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
     (.operand nDr zeb))
   let (cPn, nPn, stP) ← bnFwdSite B oc (hh) (ww) sync replicas epsStr s!"%b{p}pg" s!"%b{p}pbt" s!"b{p}pg" nPc
-  let (cA, nA) ← pretty B (.addVB (.operand nPn zob) (.operand xName zob))
+  -- the skip's `addVB` is the LAST `pretty` call, and the no-skip block makes none, so the
+  -- fresh-name counter agrees with the two-function spelling this replaced.
+  let (cA, nA) ← if skip then pretty B (.addVB (.operand nPn zob) (.operand xName zob))
+                 else pure ("", nPn)
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
          o := nA, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          stE := stE, stD := stD, stP := stP }
 
-/-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): as `irFwdSkipB` but `ic ≠ oc`, so the block
-    output is the project-BN output directly. -/
+/-- **STRIDE-1 inverted-residual forward with the identity skip** (`ic = oc`):
+    `irFwdStride1B` at `skip := true`. -/
+def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS MBFwdB :=
+  irFwdStride1B B ic mid oc hh true epsStr p xName convBias bf16 replicas sync
+
+/-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): `irFwdStride1B` at `skip := false`, for
+    `ic ≠ oc`, so the block output is the project-BN output directly. -/
 def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS MBFwdB := do
-  let ww := hh
-  let zmid : Vec mid := fun _ => 0
-  let zoc  : Vec oc := fun _ => 0
-  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
-  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
-  let zdk  : DepthwiseKernel mid 3 3 := fun _ _ _ => 0
-  let zxin : Vec (B*(ic*hh*ww)) := fun _ => 0
-  let zeb  : Vec (B*(mid*hh*ww)) := fun _ => 0
-  let (cEc, nEc) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := ic) (oc := mid) (h := hh) (w := ww) zrnd s!"%b{p}eW" (biasName convBias s!"%b{p}eb" mid) zke zmid)
-    (.operand xName zxin))
-  let (cEn, nEn, stE) ← bnFwdSite B mid (hh) (ww) sync replicas epsStr s!"%b{p}eg" s!"%b{p}ebt" s!"b{p}eg" nEc
-  let (cEr, nEr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nEn zeb))
-  let (cDc, nDc) ← pretty B (.batchOp (N := B)
-    (.depthwiseAt bf16 (c := mid) (h := hh) (w := ww) zrnd s!"%b{p}dW" (biasName convBias s!"%b{p}db" mid) zdk zmid) (.operand nEr zeb))
-  let (cDn, nDn, stD) ← bnFwdSite B mid (hh) (ww) sync replicas epsStr s!"%b{p}dg" s!"%b{p}dbt" s!"b{p}dg" nDc
-  let (cDr, nDr) ← pretty B (.batchOp (N := B) (.relu6 (n := mid*hh*ww)) (.operand nDn zeb))
-  let (cPc, nPc) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := mid) (oc := oc) (h := hh) (w := ww) zrnd s!"%b{p}pW" (biasName convBias s!"%b{p}pb" oc) zkp zoc)
-    (.operand nDr zeb))
-  let (cPn, nPn, stP) ← bnFwdSite B oc (hh) (ww) sync replicas epsStr s!"%b{p}pg" s!"%b{p}pbt" s!"b{p}pg" nPc
-  pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
-         stE := stE, stD := stD, stP := stP }
+    StateM Proofs.StableHLO.EmitS MBFwdB :=
+  irFwdStride1B B ic mid oc hh false epsStr p xName convBias bf16 replicas sync
 
 /-- **NO-EXPAND forward** (b1, the canonical `t = 1` block): depthwise(stride-1, on `ic` channels)
     → BN → relu6 → project(1×1 `ic→oc`) → BN. No expand conv, no skip. `er` is the depthwise INPUT
@@ -990,33 +980,6 @@ def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bo
          o := nPn,
          bns := [(s!"b{p}en", mid, 2*hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
-/-- **STRIDE-1 inverted-residual forward** (b3, b5, b6, b8–b10, b12, b13, b15, b16 in
-    `mnv2FwdChain`): everything at `hh×ww`, with an `addV` skip on the
-    block input (ic = oc). -/
-def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
-  let ww := hh
-  let zmid : Vec mid := fun _ => 0
-  let zoc  : Vec oc := fun _ => 0
-  let zke  : Kernel4 mid ic 1 1 := fun _ _ _ _ => 0
-  let zkp  : Kernel4 oc mid 1 1 := fun _ _ _ _ => 0
-  let zdk  : DepthwiseKernel mid 3 3 := fun _ _ _ => 0
-  let zxin : Vec (ic*hh*ww) := fun _ => 0
-  let zeb  : Vec (mid*hh*ww) := fun _ => 0
-  let zob  : Vec (oc*hh*ww) := fun _ => 0
-  let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← bnEvalSite B mid hh ww epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
-  let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
-  let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← bnEvalSite B mid hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
-  let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
-  let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zeb))
-  let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
-  let (cA, nA) ← pretty B (.addV (.operand nPn zob) (.operand xName zob))
-  pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
-         o := nA,
-         bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
-
-
 -- ════════════════════════════════════════════════════════════════
 -- § NO-EXPAND block (b1): depthwise(stride-1, on `ic` ch)→BN→relu6 → project(1×1 ic→oc)→BN.
 --   NO expand conv, NO skip. 8 params (Wd bd gd btd Wp bp gp btp).
@@ -1048,9 +1011,11 @@ def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : 
 --   block output = project-BN out directly; backward dx = expand-conv-back (no fan-in).
 -- ════════════════════════════════════════════════════════════════
 
-/-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6
-    → project(1×1)→BN. Everything at `hh×ww`; `ic ≠ oc` so NO skip (block output = project-BN out). -/
-def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+/-- **STRIDE-1 inverted-residual forward** (eval), shared by the skip and expand-no-skip block
+    kinds — `irFwdStride1B`'s eval twin: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 →
+    project(1×1)→BN, everything at `hh×ww`, then an `addV` skip on the block input when `skip`
+    (`ic = oc`). The `bns` layout is written here once for both kinds. -/
+def irFwdStride1 (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1059,7 +1024,7 @@ def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Boo
   let zdk  : DepthwiseKernel mid 3 3 := fun _ _ _ => 0
   let zxin : Vec (ic*hh*ww) := fun _ => 0
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
-  let _zob  : Vec (oc*hh*ww) := fun _ => 0
+  let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
   let (cEn, nEn) ← bnEvalSite B mid hh ww epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
@@ -1068,9 +1033,23 @@ def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Boo
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zeb))
   let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
-  pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn,
+  -- `addV` last, or no call at all: the counter order is the two-function spelling's.
+  let (cA, nA) ← if skip then pretty B (.addV (.operand nPn zob) (.operand xName zob))
+                 else pure ("", nPn)
+  pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
+         o := nA,
          bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
+
+/-- **STRIDE-1 inverted-residual forward** (b3, b5, b6, b8–b10, b12, b13, b15, b16 in
+    `mnv2FwdChain`): `irFwdStride1` at `skip := true`, the `addV` skip on the block input
+    (ic = oc). -/
+def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd :=
+  irFwdStride1 B ic mid oc hh true epsStr p xName convBias
+
+/-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): `irFwdStride1` at `skip := false`;
+    `ic ≠ oc` so NO skip (block output = project-BN out). -/
+def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd :=
+  irFwdStride1 B ic mid oc hh false epsStr p xName convBias
 
 -- ════════════════════════════════════════════════════════════════
 -- § Param signature lists (func-arg order — names + types, shared by sig + return types)

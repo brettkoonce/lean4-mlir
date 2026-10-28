@@ -360,6 +360,59 @@ def accumScalarConsts (k : Nat) : String :=
     One name, one predicate, both consumers downstream of it. -/
 def wdNameExcludes (wdName : String) : Bool := wdName != "%wd"
 
+/-- **One parameter's LAMB tail, as `pretty` of the proven ops** — `prettyAdamW`'s LAMB twin,
+    reading the gradient `grad` (the averaged `g` for `.lamb`, the accumulated `Gt` for
+    `.lambAccum`: that substitution is the only difference between the two arms, so the tail is
+    written once and they cannot drift). Returns `(code, θ', m', v')`. `Optim.Lamb` carries the ℝ
+    reference and the clauses.
+
+    ① the DIRECTION `lambDirF`, `r = m̂/(√v̂+ε) + wd·θ`, from the incoming moments and `grad`.
+    ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both have a
+    plausible wrong neighbour (RMSProp-TF's `√(v̂+ε)`, AdamW's decay after the ratio).
+
+    ② `‖θ‖²`, THIS parameter's own — `gradSumSqAccF` seeded at `%lzero` and never folded across
+    parameters. That single-leaf fold is the entire difference from the global-norm clip, whose
+    whole semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
+    `Proofs.lambScale_not_shared`). It reads θ alone, so accumulation cannot reach it.
+    **The no_weight_decay group is NOT layer-adapted, so this op is SKIPPED for it.** timm reads
+    `if weight_decay != 0 or group['always_adapt']:` before computing the ratio, so an excluded
+    parameter takes a plain Adam step at `trust = 1`. Feeding `%lzero` here — the same zero this
+    op would otherwise seed from — makes `wn2 = 0`, and `Proofs.lambTrust_zero_weight`
+    (`lambTrust 0 rn2 = 1`, already `@[simp]`) says that IS 1. No new op, no new constructor, no
+    new theorem; the excluded params emit one op FEWER. The existing zero-norm guard does not
+    already cover this: it fires at `‖θ‖ = 0` exactly, i.e. step one, where every BN β and bias
+    starts; from step two the parameter is small-but-nonzero and `‖θ‖/‖r‖` collapses well below
+    timm's 1.0, so `lambTrust_zero_weight` can hold on both sides while both are wrong. INERT
+    unless the skip-list is on: with `wdExclude := false` every `wdName` is `"%wd"`.
+
+    ③ `trust · r` (`lambScaleF`), with `‖r‖²` reduced inside the op from its own tensor child.
+
+    ④ `θ' = θ − lr·(trust·r)` — `sgdParamF`, applied to the scaled direction exactly as
+    `.heavyBall` applies it to the velocity. Under accumulation this is where the accumulate phase
+    is frozen: `%lr = 0` makes it `θ` exactly, and LAMB's decay is inside `r`, which the zero
+    multiplies away.
+
+    Then the moments, unchanged from `.adamw` — LAMB's m and v ARE Adam's.
+
+    The `pretty` calls run in the order above and the code is concatenated moments-first; both
+    orders are the committed artifacts' and the fresh-name counter depends on the first. -/
+def prettyLamb (B : Nat) (nm : String) (ds : List Nat) (grad wdName : String) :
+    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
+  let n := ds.foldl (· * ·) 1
+  let z : Vec n := fun _ => 0
+  let z1 : Vec 1 := fun _ => 0
+  let gr : SHlo n := .operand grad z
+  let (cR, nR) ← pretty B (.lambDirF s!"%{nm}" s!"%{nm}m" s!"%{nm}v" "%b1" "%ob1"
+                    "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName ds 0 0 0 0 0 0 z z z gr)
+  let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
+                 else pretty B (.gradSumSqAccF (n := n) ds (.operand "%lzero" z1)
+                                 (.operand s!"%{nm}" z))
+  let (cS, nS) ← pretty B (.lambScaleF (n := n) ds (.operand nN z1) (.operand nR z))
+  let (cT, nT) ← pretty B (.sgdParamF s!"%{nm}" "%lr" ds 0 z (.operand nS z))
+  let (cM, nM) ← pretty B (.adamMNextF s!"%{nm}m" "%b1" "%ob1" ds 0 z gr)
+  let (cV, nV) ← pretty B (.adamVNextF s!"%{nm}v" "%b2" "%ob2" ds 0 z gr)
+  pure (cM ++ cV ++ cR ++ cN ++ cS ++ cT, nT, nM, nV)
+
 /-- `(θ', m', v')` for one parameter, from its un-fused gradient.
 
     For `.adamw` the three ops are the proven `adamMNextF`/`adamVNextF`/`adamWParamF`
@@ -515,42 +568,10 @@ def optOne (opt : OptRecipe) (B : Nat) (replicas : Nat) (g : PGrad)
     pure (arS ++ cW ++ cS ++ cB ++ cT ++ cE, nT, nB, nS, none, nE)
   | .lamb =>
     -- LAMB, in four ops per parameter, TWO of which are LAMB's own (`gradSumSqAccF` serves the
-    -- clip too, and `sgdParamF` heavy-ball). `Optim.Lamb` carries the ℝ reference and the clauses.
-    let z1 : Vec 1 := fun _ => 0
-    -- ① the DIRECTION, `r = m̂/(√v̂+ε) + wd·θ`, from the incoming moments and this step's gradient.
-    -- ε OUTSIDE the root and the decay INSIDE `r` — both placements are load-bearing and both
-    -- have a plausible wrong neighbour (RMSProp-TF's `√(v̂+ε)`, AdamW's decay after the ratio).
-    let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gr)
-    -- ② `‖θ‖²`, THIS parameter's own. Seeded at `%lzero` and never folded across parameters —
-    -- that single-leaf fold is the entire difference from the global-norm clip, whose whole
-    -- semantic content is that ONE scalar is shared (`Proofs.clipFactor_shared` against
-    -- `Proofs.lambScale_not_shared`). The two features emit nearly the same lines.
-    -- **The no_weight_decay group is NOT layer-adapted, so this op is SKIPPED for it.**
-    -- timm reads `if weight_decay != 0 or group['always_adapt']:` before computing the ratio, so an
-    -- excluded parameter takes a plain Adam step at `trust = 1`. Feeding `%lzero` here — the same
-    -- zero this op would otherwise seed from — makes `wn2 = 0`, and `Proofs.lambTrust_zero_weight`
-    -- (`lambTrust 0 rn2 = 1`, already `@[simp]`) says that IS 1. No new op, no new constructor,
-    -- no new theorem; the excluded params emit one op FEWER.
-    -- The existing zero-norm guard does not already cover this. It fires at `‖θ‖ = 0` exactly,
-    -- i.e. step one, where every BN β and bias starts; from step two the parameter is
-    -- small-but-nonzero and `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0. So
-    -- `lambTrust_zero_weight` can hold on both sides while both are wrong.
-    -- INERT unless the skip-list is on: with `wdExclude := false` every `wdName` is `"%wd"`, so
-    -- this takes the `else` and every committed non-`wx` artifact re-renders byte-identically.
-    let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
-                   else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
-                                   (.operand s!"%{g.nm}" z))
-    -- ③ `trust · r`, with `‖r‖²` reduced inside the op from its own tensor child.
-    let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
-    -- ④ `θ' = θ − lr·(trust·r)` — `sgdParamF`, an op that already exists, applied to the scaled
-    -- direction exactly as `.heavyBall` applies it to the velocity.
-    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nS z))
-    -- the moments themselves, unchanged from `.adamw` — LAMB's m and v ARE Adam's.
-    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gr)
-    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gr)
+    -- clip too, and `sgdParamF` heavy-ball). The ops and their placements are `prettyLamb`'s.
+    let (cL, nT, nM, nV) ← prettyLamb B g.nm g.ds gAvg wdName
     let (cE, nE) ← emaTail nT
-    pure (arS ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, none, nE)
+    pure (arS ++ cL ++ cE, nT, nM, nV, none, nE)
   | .adamwAccum _ =>
     -- **The whole feature, and it adds exactly ONE op per parameter.**
     --
@@ -586,7 +607,6 @@ def optOne (opt : OptRecipe) (B : Nat) (replicas : Nat) (g : PGrad)
     -- **RSB-A3's optimizer.** Structurally: `.adamwAccum`'s ① accumulator, then `.lamb`'s tail
     -- reading `Gt` where it read `g`. Nothing else changes, and nothing new is introduced — no new
     -- `SHlo` constructor, so no ten-site surgery and every faithfulness theorem carries over.
-    let z1 : Vec 1 := fun _ => 0
     -- ① the accumulator, `Gt = akeep·G + g` — the SAME `momVNextF` instantiation `.adamwAccum`
     -- uses, for the same reason (`Proofs.momVNext μ v g = μ·v + g` at `(μ := %akeep, v := G)`).
     -- It is upstream of the optimizer and does not know which one follows: that independence is
@@ -595,30 +615,16 @@ def optOne (opt : OptRecipe) (B : Nat) (replicas : Nat) (g : PGrad)
     -- timm's `Lamb` is the optimizer whose `max_grad_norm = 1.0` default makes the clip
     -- mandatory, so `.lambAccum` + clip is the composition that has to be right.
     let (cG, nG, gt) ← match accIn with
-      | some a => pure ("", a, gr)
+      | some a => pure ("", a, gAvg)
       | none   => do
           let (c, nm') ← pretty B (.momVNextF s!"%{g.nm}a" "%akeep" g.ds 0 z gr)
-          pure (c, nm', (.operand nm' z : SHlo n))
-    -- ② LAMB's four ops, **byte-identical to `.lamb`'s except that they consume `Gt` rather than
-    -- `g`** — the same substitution `.adamwAccum` makes to AdamW's three.
-    let (cR, nR) ← pretty B (.lambDirF s!"%{g.nm}" s!"%{g.nm}m" s!"%{g.nm}v" "%b1" "%ob1"
-                      "%b2" "%ob2" "%bc1" "%bc2" "%eps" wdName g.ds 0 0 0 0 0 0 z z z gt)
-    -- `‖θ‖²` reads θ ALONE — no gradient, so accumulation cannot reach it and this line is
-    -- character-for-character `.lamb`'s, INCLUDING its no_weight_decay skip: an excluded parameter feeds
-    -- `%lzero` so `lambTrust 0 _ = 1`. See the `.lamb` branch above for why.
-    let (cN, nN) ← if wdNameExcludes wdName then pure ("", "%lzero")
-                   else pretty B (.gradSumSqAccF (n := n) g.ds (.operand "%lzero" z1)
-                                   (.operand s!"%{g.nm}" z))
-    let (cS, nS) ← pretty B (.lambScaleF (n := n) g.ds (.operand nN z1) (.operand nR z))
-    -- ④ `θ' = θ − lr·(trust·r)`. THIS is where the accumulate phase is frozen: `%lr = 0` makes it
-    -- `θ − 0·(…) = θ` exactly. LAMB's decay is inside `r`, which the zero multiplies away, so there
-    -- is no decay term left running k times per optimizer step.
-    let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nS z))
-    -- the moments, from `Gt`, with `%b1`/`%ob1` computed from `%aup` — passthroughs while accumulating.
-    let (cM, nM) ← pretty B (.adamMNextF s!"%{g.nm}m" "%b1" "%ob1" g.ds 0 z gt)
-    let (cV, nV) ← pretty B (.adamVNextF s!"%{g.nm}v" "%b2" "%ob2" g.ds 0 z gt)
+          pure (c, nm', nm')
+    -- ② LAMB's four ops and the moments, `prettyLamb` reading `Gt` where `.lamb` reads `g` — the
+    -- same substitution `.adamwAccum` makes to AdamW's three. Under accumulation `%lr = 0` freezes
+    -- θ and `%b1`/`%ob1`, computed from `%aup`, make the moments passthroughs.
+    let (cL, nT, nM, nV) ← prettyLamb B g.nm g.ds gt wdName
     let (cE, nE) ← emaTail nT
-    pure (arS ++ cG ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, some nG, nE)
+    pure (arS ++ cG ++ cL ++ cE, nT, nM, nV, some nG, nE)
   | .heavyBall =>
     -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
     -- ten-site surgery (and none of the `StableHLO.Parse` roundtrip risk) an added op costs.
