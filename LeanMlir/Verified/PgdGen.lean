@@ -10,6 +10,67 @@ StableHLO text, for `Verified.Attack`'s attacks. These are not rendered from a p
 no tie pins them: each follows the proven input-VJP's formula by hand (the formula is cited in its
 docstring), so they are unverified program code, like the reference `MlirCodegen`. -/
 
+/-- The stable softmax-CE seed `%g = softmax(%logits) − %onehot`, row-wise over `[bs, nClasses]`
+    logits of type `lty` (`rty` the per-row `[bs]` type). Reads `%logits`, `%onehot`, `%ninf` and
+    `%zero`; `expv` names the exponential (the linear kernel's spelling is `%exp`). -/
+def softmaxCeSeed (lty rty : String) (expv : String := "%expv") : String :=
+  s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({lty}, tensor<f32>) -> {rty}\n" ++
+  s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {lty}\n" ++
+  s!"    %shift = stablehlo.subtract %logits, %rmaxb : {lty}\n" ++
+  s!"    {expv} = stablehlo.exponential %shift : {lty}\n" ++
+  s!"    %ssum = stablehlo.reduce({expv} init: %zero) applies stablehlo.add across dimensions = [1] : ({lty}, tensor<f32>) -> {rty}\n" ++
+  s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {lty}\n" ++
+  s!"    %softmax = stablehlo.divide {expv}, %ssumb : {lty}\n" ++
+  s!"    %g = stablehlo.subtract %softmax, %onehot : {lty}\n"
+
+/-- Every PGD kernel's tail, from the input gradient `%dx` on: the `α`/`0`/`1` broadcasts, the
+    step and projection — L∞ (sign step, box-clip to `x0 ± ε`) or L2 (normalised step, rescale
+    into the ε-ball) — then the clip to `[0,1]`, the return and the closing braces. Reads `%x`,
+    `%x0`, `%dx`, `%alpha`, `%eps`, `%zero` and `%one`. `stp`, `pj1`, `clA` and `clB` name the step,
+    the L∞ lower clip and the two `[0,1]` clips (the linear kernel spells them `%step`, `%c1`,
+    `%c3`, `%c4`). -/
+def pgdStepTail (bxd0 rty : String) (linf : Bool) (stp : String := "%stp") (pj1 : String := "%pj1")
+    (clA : String := "%clA") (clB : String := "%clB") : String :=
+  s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+  (if linf then
+    s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
+    s!"    {stp} = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
+    s!"    %xn = stablehlo.add %x, {stp} : {bxd0}\n" ++
+    s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
+    s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
+    s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
+    s!"    {pj1} = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
+    s!"    %xp = stablehlo.minimum {pj1}, %hi : {bxd0}\n"
+  else
+    s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
+    s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
+    s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
+    s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+    s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
+    s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
+    s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
+    s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
+    s!"    {stp} = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
+    s!"    %xn = stablehlo.add %x, {stp} : {bxd0}\n" ++
+    s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
+    s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
+    s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
+    s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
+    s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
+    s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
+    s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
+    s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
+    s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
+    s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
+    s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
+    s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n") ++
+  s!"    {clA} = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
+  s!"    {clB} = stablehlo.minimum {clA}, %oneb : {bxd0}\n" ++
+  s!"    return {clB} : {bxd0}\n" ++
+  "  }\n}\n"
+
 /-- PGD-step kernel for the linear classifier.
     `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the formula of the
     linear input-VJP, written by hand) → step → project to the `eps`-ball around `x0` → clip
@@ -25,7 +86,7 @@ def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) (linf : Bool) : String
   let wty  := s!"tensor<{d0}x{d1}xf32>"
   let bty  := s!"tensor<{d1}xf32>"
   let rty  := s!"tensor<{bs}xf32>"
-  -- shared: forward → softmax-CE input gradient %dx, then the broadcast constants
+  -- forward → softmax-CE input gradient %dx; `pgdStepTail` writes the rest
   let header :=
     "module @m {\n" ++
     s!"  func.func @linear_pgd_step(%x: {bxd0}, %W0: {wty}, %b0: {bty}, %onehot: {bxd1}, %x0: {bxd0}) -> {bxd0} " ++ "{\n" ++
@@ -37,57 +98,9 @@ def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) (linf : Bool) : String
     s!"    %mm = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : ({bxd0}, {wty}) -> {bxd1}\n" ++
     s!"    %bb = stablehlo.broadcast_in_dim %b0, dims = [1] : ({bty}) -> {bxd1}\n" ++
     s!"    %logits = stablehlo.add %mm, %bb : {bxd1}\n" ++
-    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
-    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
-    s!"    %exp = stablehlo.exponential %shift : {bxd1}\n" ++
-    s!"    %ssum = stablehlo.reduce(%exp init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
-    s!"    %softmax = stablehlo.divide %exp, %ssumb : {bxd1}\n" ++
-    s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
-    s!"    %dx = stablehlo.dot_general %g, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {wty}) -> {bxd0}\n" ++
-    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
-  -- step + projection: L∞ (sign, box-clip to x0±eps) or L2 (normalized grad, eps-ball)
-  let step :=
-    if linf then
-      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
-      s!"    %step = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
-      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
-      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
-      s!"    %c1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
-      s!"    %xp = stablehlo.minimum %c1, %hi : {bxd0}\n"
-    else
-      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
-      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
-      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
-      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
-      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
-      s!"    %step = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %step : {bxd0}\n" ++
-      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
-      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
-      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
-      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
-      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
-      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
-      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
-      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
-  header ++ step ++
-  s!"    %c3 = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
-  s!"    %c4 = stablehlo.minimum %c3, %oneb : {bxd0}\n" ++
-  s!"    return %c4 : {bxd0}\n" ++
-  "  }\n}\n"
+    softmaxCeSeed bxd1 rty (expv := "%exp") ++
+    s!"    %dx = stablehlo.dot_general %g, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {wty}) -> {bxd0}\n"
+  header ++ pgdStepTail bxd0 rty linf (stp := "%step") (pj1 := "%c1") (clA := "%c3") (clB := "%c4")
 
 /-- PGD-step kernel for the 2-hidden-layer MLP (`d0→h→h→d1`, ReLU). Forward
     (saving the pre-activations `z0,z1`) → the input gradient
@@ -127,14 +140,7 @@ def genMlpPgdStep (bs d0 h d1 : Nat) (eps alpha : Float) (linf : Bool) : String 
     s!"    %b2b = stablehlo.broadcast_in_dim %b2, dims = [1] : ({d1bt}) -> {bxd1}\n" ++
     s!"    %logits = stablehlo.add %lgmm, %b2b : {bxd1}\n" ++
     -- softmax-CE gradient g
-    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {bxd1}\n" ++
-    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {bxd1}\n" ++
-    s!"    %expv = stablehlo.exponential %shift : {bxd1}\n" ++
-    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd1}, tensor<f32>) -> {rty}\n" ++
-    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {bxd1}\n" ++
-    s!"    %softmax = stablehlo.divide %expv, %ssumb : {bxd1}\n" ++
-    s!"    %g = stablehlo.subtract %softmax, %onehot : {bxd1}\n" ++
+    softmaxCeSeed bxd1 rty ++
     -- backward: dx = ((g·W2ᵀ ⊙ relu'(z1))·W1ᵀ ⊙ relu'(z0))·W0ᵀ
     s!"    %dh1 = stablehlo.dot_general %g, %W2, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxd1}, {w2ty}) -> {bxh}\n" ++
     s!"    %rm1 = stablehlo.compare GT, %z1, %zh : ({bxh}, {bxh}) -> {bxhi}\n" ++
@@ -142,48 +148,8 @@ def genMlpPgdStep (bs d0 h d1 : Nat) (eps alpha : Float) (linf : Bool) : String 
     s!"    %dh0 = stablehlo.dot_general %dz1, %W1, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxh}, {w1ty}) -> {bxh}\n" ++
     s!"    %rm0 = stablehlo.compare GT, %z0, %zh : ({bxh}, {bxh}) -> {bxhi}\n" ++
     s!"    %dz0 = stablehlo.select %rm0, %dh0, %zh : {bxhi}, {bxh}\n" ++
-    s!"    %dx = stablehlo.dot_general %dz0, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxh}, {w0ty}) -> {bxd0}\n" ++
-    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
-  let step :=
-    if linf then
-      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
-      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
-      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
-      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
-    else
-      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
-      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
-      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
-      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
-      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
-      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
-      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
-      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
-      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
-      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
-      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
-      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
-  header ++ step ++
-  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
-  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
-  s!"    return %clB : {bxd0}\n" ++
-  "  }\n}\n"
+    s!"    %dx = stablehlo.dot_general %dz0, %W0, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({bxh}, {w0ty}) -> {bxd0}\n"
+  header ++ pgdStepTail bxd0 rty linf
 
 /-- **PGD-step kernel for the verified MNIST CNN** (`conv 1→32 → relu → conv 32→32 →
     relu → maxpool 28→14 → flatten → dense 6272→512 → relu → 512→512 → relu → 512→10`).
@@ -248,14 +214,7 @@ def genCnnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
     s!"    %b5b = stablehlo.broadcast_in_dim %b5, dims = [1] : (tensor<10xf32>) -> {o2}\n" ++
     s!"    %logits = stablehlo.add %d5, %b5b : {o2}\n" ++
     -- ── softmax-CE seed g = softmax(logits) − onehot ──
-    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
-    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {o2}\n" ++
-    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {o2}\n" ++
-    s!"    %expv = stablehlo.exponential %shift : {o2}\n" ++
-    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
-    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {o2}\n" ++
-    s!"    %softmax = stablehlo.divide %expv, %ssumb : {o2}\n" ++
-    s!"    %g = stablehlo.subtract %softmax, %onehot : {o2}\n" ++
+    softmaxCeSeed o2 rty ++
     -- ── backward to dx ──
     s!"    %dh4 = stablehlo.dot_general %g, %W5, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({o2}, tensor<512x10xf32>) -> {h2}\n" ++
     s!"    %rm4 = stablehlo.compare GT, %z4, %zh : ({h2}, {h2}) -> {h2i}\n" ++
@@ -287,48 +246,8 @@ def genCnnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
     s!"    %w1t = stablehlo.transpose %W1, dims = [1, 0, 2, 3] : (tensor<32x1x3x3xf32>) -> tensor<1x32x3x3xf32>\n" ++
     s!"    %w1r = stablehlo.reverse %w1t, dims = [2, 3] : tensor<1x32x3x3xf32>\n" ++
     s!"    %dxi = stablehlo.convolution(%dz1, %w1r)\n      {convCfg} : ({c4}, tensor<1x32x3x3xf32>) -> {i4}\n" ++
-    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n" ++
-    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
-  let step :=
-    if linf then
-      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
-      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
-      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
-      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
-    else
-      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
-      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
-      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
-      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
-      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
-      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
-      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
-      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
-      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
-      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
-      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
-      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
-  header ++ step ++
-  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
-  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
-  s!"    return %clB : {bxd0}\n" ++
-  "  }\n}\n"
+    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n"
+  header ++ pgdStepTail bxd0 rty linf
 
 /-- **PGD-step kernel for the verified CIFAR-10 CNN** — the deeper sibling of
     `genCnnPgdStep` (`conv 3→32 → relu → conv 32→32 → relu → maxpool → conv 32→64 → relu →
@@ -409,14 +328,7 @@ def genCifarPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
     s!"    %b7b = stablehlo.broadcast_in_dim %b7, dims = [1] : (tensor<10xf32>) -> {o2}\n" ++
     s!"    %logits = stablehlo.add %d7, %b7b : {o2}\n" ++
     -- ── softmax-CE seed ──
-    s!"    %rmax = stablehlo.reduce(%logits init: %ninf) applies stablehlo.maximum across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
-    s!"    %rmaxb = stablehlo.broadcast_in_dim %rmax, dims = [0] : ({rty}) -> {o2}\n" ++
-    s!"    %shift = stablehlo.subtract %logits, %rmaxb : {o2}\n" ++
-    s!"    %expv = stablehlo.exponential %shift : {o2}\n" ++
-    s!"    %ssum = stablehlo.reduce(%expv init: %zero) applies stablehlo.add across dimensions = [1] : ({o2}, tensor<f32>) -> {rty}\n" ++
-    s!"    %ssumb = stablehlo.broadcast_in_dim %ssum, dims = [0] : ({rty}) -> {o2}\n" ++
-    s!"    %softmax = stablehlo.divide %expv, %ssumb : {o2}\n" ++
-    s!"    %g = stablehlo.subtract %softmax, %onehot : {o2}\n" ++
+    softmaxCeSeed o2 rty ++
     -- ── backward to dx ──
     s!"    %dh6 = stablehlo.dot_general %g, %W7, contracting_dims = [1] x [1], precision = [DEFAULT, DEFAULT] : ({o2}, tensor<512x10xf32>) -> {h2}\n" ++
     s!"    %rm6 = stablehlo.compare GT, %z6, %zh : ({h2}, {h2}) -> {h2i}\n" ++
@@ -470,46 +382,6 @@ def genCifarPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
     s!"    %w1t = stablehlo.transpose %W1, dims = [1, 0, 2, 3] : (tensor<32x3x3x3xf32>) -> tensor<3x32x3x3xf32>\n" ++
     s!"    %w1r = stablehlo.reverse %w1t, dims = [2, 3] : tensor<3x32x3x3xf32>\n" ++
     s!"    %dxi = stablehlo.convolution(%dz1, %w1r)\n      {convCfg} : ({m32}, tensor<3x32x3x3xf32>) -> {i4}\n" ++
-    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n" ++
-    s!"    %alphab = stablehlo.broadcast_in_dim %alpha, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %zerob = stablehlo.broadcast_in_dim %zero, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-    s!"    %oneb = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {bxd0}\n"
-  let step :=
-    if linf then
-      s!"    %sgn = stablehlo.sign %dx : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %sgn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %epsb = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {bxd0}\n" ++
-      s!"    %lo = stablehlo.subtract %x0, %epsb : {bxd0}\n" ++
-      s!"    %hi = stablehlo.add %x0, %epsb : {bxd0}\n" ++
-      s!"    %pj1 = stablehlo.maximum %xn, %lo : {bxd0}\n" ++
-      s!"    %xp = stablehlo.minimum %pj1, %hi : {bxd0}\n"
-    else
-      s!"    %e12 = stablehlo.constant dense<1.0e-12> : tensor<f32>\n" ++
-      s!"    %e12r = stablehlo.broadcast_in_dim %e12, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %dx2 = stablehlo.multiply %dx, %dx : {bxd0}\n" ++
-      s!"    %dxs = stablehlo.reduce(%dx2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dxn = stablehlo.sqrt %dxs : {rty}\n" ++
-      s!"    %dxnp = stablehlo.add %dxn, %e12r : {rty}\n" ++
-      s!"    %dxnb = stablehlo.broadcast_in_dim %dxnp, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %gn = stablehlo.divide %dx, %dxnb : {bxd0}\n" ++
-      s!"    %stp = stablehlo.multiply %alphab, %gn : {bxd0}\n" ++
-      s!"    %xn = stablehlo.add %x, %stp : {bxd0}\n" ++
-      s!"    %delta = stablehlo.subtract %xn, %x0 : {bxd0}\n" ++
-      s!"    %dl2 = stablehlo.multiply %delta, %delta : {bxd0}\n" ++
-      s!"    %dls = stablehlo.reduce(%dl2 init: %zero) applies stablehlo.add across dimensions = [1] : ({bxd0}, tensor<f32>) -> {rty}\n" ++
-      s!"    %dln = stablehlo.sqrt %dls : {rty}\n" ++
-      s!"    %dlnp = stablehlo.add %dln, %e12r : {rty}\n" ++
-      s!"    %epsr = stablehlo.broadcast_in_dim %eps, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %oner = stablehlo.broadcast_in_dim %one, dims = [] : (tensor<f32>) -> {rty}\n" ++
-      s!"    %ratio = stablehlo.divide %epsr, %dlnp : {rty}\n" ++
-      s!"    %fac = stablehlo.minimum %oner, %ratio : {rty}\n" ++
-      s!"    %facb = stablehlo.broadcast_in_dim %fac, dims = [0] : ({rty}) -> {bxd0}\n" ++
-      s!"    %dproj = stablehlo.multiply %delta, %facb : {bxd0}\n" ++
-      s!"    %xp = stablehlo.add %x0, %dproj : {bxd0}\n"
-  header ++ step ++
-  s!"    %clA = stablehlo.maximum %xp, %zerob : {bxd0}\n" ++
-  s!"    %clB = stablehlo.minimum %clA, %oneb : {bxd0}\n" ++
-  s!"    return %clB : {bxd0}\n" ++
-  "  }\n}\n"
+    s!"    %dx = stablehlo.reshape %dxi : ({i4}) -> {bxd0}\n"
+  header ++ pgdStepTail bxd0 rty linf
 

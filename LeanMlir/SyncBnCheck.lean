@@ -90,6 +90,16 @@ def regionErr (lo hi : Nat) (d : ByteArray) (ref : Nat → Float) : Float × Flo
     if r.abs > mag then mag := r.abs
   (err, mag)
 
+/-- `e / m`, the error relative to the magnitude, and `0` when the magnitude is (numerically) zero. -/
+def relErr (e m : Float) : Float := if m > 1e-30 then e / m else 0.0
+
+/-- One BN layer's statistics in the test output `d` against the reference `ref`: the mean slice
+    `[so, so+c)` and the variance slice `[so+c, so+2c)`, each as `relErr` of `regionErr`. -/
+def bnLayerRelErr (d ref : ByteArray) (so c : Nat) : Float × Float :=
+  let (eM, mM) := regionErr so (so + c) d (fun i => F32.read ref i.toUSize)
+  let (eV, mV) := regionErr (so + c) (so + 2*c) d (fun i => F32.read ref i.toUSize)
+  (relErr eM mM, relErr eV mV)
+
 def run (cfg : Cfg) : IO Unit := do
   let net := cfg.net
   let bs := cfg.bs
@@ -230,13 +240,13 @@ backend {← LowererSession.backendName}"
     let (eSn, _) := regionErr lo hi o2p (fun i => F32.read o2 i.toUSize)
     let (eDup, mDup) := regionErr lo hi oDD (fun i => F32.read oS1 i.toUSize)
     let (eRp, _) := regionErr lo hi o2r (fun i => F32.read o2 i.toUSize)
-    let nrRp := if mT > 1e-30 then eRp / mT else 0.0
-    let nrSn := if mT > 1e-30 then eSn / mT else 0.0
-    let nrDup := if mDup > 1e-30 then eDup / mDup else 0.0
-    let nrT := if mT > 1e-30 then eT / mT else 0.0
-    let nrC := if mC > 1e-30 then eC / mC else 0.0
-    let nrP := if mT > 1e-30 then eP / mT else 0.0
-    let nrF := if mT > 1e-30 then eF / mT else 0.0
+    let nrRp := relErr eRp mT
+    let nrSn := relErr eSn mT
+    let nrDup := relErr eDup mDup
+    let nrT := relErr eT mT
+    let nrC := relErr eC mC
+    let nrP := relErr eP mT
+    let nrF := relErr eF mT
     IO.println s!"  ── {what} [{lo}, {hi}) ──"
     IO.println s!"    TEST        |DP − single_Rb|      / max|single_Rb| = {nrT}"
     IO.println s!"    COLLECTIVE  |DP − sync_Rb|        / max|single_Rb| = {nrP}"
@@ -272,9 +282,8 @@ backend {← LowererSession.backendName}"
     let mut so := 3*nP + 3
     let mut j := 0
     for c in net.bnChannels do
-      let (eM, mM) := regionErr so (so + c) oD (fun i => F32.read o2 i.toUSize)
-      let (eV, mV) := regionErr (so + c) (so + 2*c) oD (fun i => F32.read o2 i.toUSize)
-      IO.println s!"    bn{j} [{c}] : {if mM > 1e-30 then eM / mM else 0.0} | {if mV > 1e-30 then eV / mV else 0.0}"
+      let (rm, rv) := bnLayerRelErr oD o2 so c
+      IO.println s!"    bn{j} [{c}] : {rm} | {rv}"
       so := so + 2*c
       j := j + 1
   if nonFinite > 0 then
@@ -301,10 +310,8 @@ single_Rb([x₀|…]) by {statsTest} > {cfg.statsTol} — beyond what kernel rou
   --     statistics depend only on the input and the stem conv, so a b-row and an Rb-row
   --     reduction may differ only in their last bits. A wrong exchange (Chan's correction, the
   --     packing, a collective's divisor) is visible here at full size.
-  let c0 := net.bnChannels[0]!
-  let (e0m, m0m) := regionErr (3*nP + 3) (3*nP + 3 + c0) oD (fun i => F32.read o2 i.toUSize)
-  let (e0v, m0v) := regionErr (3*nP + 3 + c0) (3*nP + 3 + 2*c0) oD (fun i => F32.read o2 i.toUSize)
-  let first := max (if m0m > 1e-30 then e0m / m0m else 0.0) (if m0v > 1e-30 then e0v / m0v else 0.0)
+  let (r0m, r0v) := bnLayerRelErr oD o2 (3*nP + 3) net.bnChannels[0]!
+  let first := max r0m r0v
   if first > 1e-5 then
     IO.eprintln s!"SYNC-BN CHECK FAILED (first layer): DP_sync([x₀|…])'s first BN layer's statistics \
 differ from single_Rb's by {first} > 1e-5 — before any depth has compounded, so the exchange itself."

@@ -71,31 +71,23 @@ def roundE4M3 (x : Float) : Float :=
 #guard roundE4M3 500.0 == 448.0
 #guard roundE4M3 0.00001 == 0.0
 
-/-- **Per-tensor E4M3 quant** (one scale `s = max|·|/448`). Round-trips through
-    the grid: returns `s · q(vᵢ/s)` as f32 bytes (the dequantized operand). -/
-def quantPerTensor (ba : ByteArray) : ByteArray := Id.run do
-  let n := F32.size ba
+/-- `max |·|` over the `count` f32 elements of `ba` at `start`, `start + stride`, … -/
+def absMaxStrided (ba : ByteArray) (start stride count : Nat) : Float := Id.run do
   let mut m : Float := 0.0
-  for i in [0:n] do
-    let v := (F32.read ba i.toUSize).abs
+  for t in [0:count] do
+    let v := (F32.read ba (start + t * stride).toUSize).abs
     if v > m then m := v
-  let s := if m > 0.0 then m / e4m3Max else 1.0
-  let mut out := ByteArray.emptyWithCapacity (n * 4)
-  for i in [0:n] do
-    let v := F32.read ba i.toUSize
-    out := pushF32LE out (roundE4M3 (v / s) * s)
-  return out
+  return m
+
+/-- A group's E4M3 scale from its `max |·|`: `m / e4m3Max`, and `1` for an all-zero group. -/
+def e4m3Scale (m : Float) : Float := if m > 0.0 then m / e4m3Max else 1.0
 
 /-- **Per-output-column E4M3 quant** for a row-major `[d0 × d1]` matrix (the
     "block scale" `sWⱼ` of the fp8 render tie: each output column scaled independently). -/
 def quantPerColumn (ba : ByteArray) (d0 d1 : Nat) : ByteArray := Id.run do
   let mut scales : Array Float := #[]
   for j in [0:d1] do
-    let mut m : Float := 0.0
-    for i in [0:d0] do
-      let v := (F32.read ba (i * d1 + j).toUSize).abs
-      if v > m then m := v
-    scales := scales.push (if m > 0.0 then m / e4m3Max else 1.0)
+    scales := scales.push (e4m3Scale (absMaxStrided ba j d1 d0))
   let mut out := ByteArray.emptyWithCapacity (d0 * d1 * 4)
   for i in [0:d0] do
     for j in [0:d1] do
@@ -124,15 +116,17 @@ def quantPerLeadingBlock (ba : ByteArray) (nBlocks blockSize : Nat) : ByteArray 
   let mut out := ByteArray.emptyWithCapacity (nBlocks * blockSize * 4)
   for o in [0:nBlocks] do
     let base := o * blockSize
-    let mut m : Float := 0.0
-    for t in [0:blockSize] do
-      let v := (F32.read ba (base + t).toUSize).abs
-      if v > m then m := v
-    let s := if m > 0.0 then m / e4m3Max else 1.0
+    let s := e4m3Scale (absMaxStrided ba base 1 blockSize)
     for t in [0:blockSize] do
       let v := F32.read ba (base + t).toUSize
       out := pushF32LE out (roundE4M3 (v / s) * s)
   return out
+
+/-- **Per-tensor E4M3 quant** (one scale `s = max|·|/448`): `quantPerLeadingBlock` with the whole
+    tensor as its one block. Round-trips through the grid: returns `s · q(vᵢ/s)` as f32 bytes (the
+    dequantized operand). -/
+def quantPerTensor (ba : ByteArray) : ByteArray :=
+  quantPerLeadingBlock ba 1 (F32.size ba)
 
 /-- **Quantize a packed param buffer slot-by-slot**, per the `(dims, initKind)`
     layout (`VerifiedNetSpec.toSpecs`, func-arg order). `initKind == 0` weights:

@@ -109,6 +109,15 @@ def graphArtifact (pfx suffix : String) : IO String := do
   then return s!"{pfx}_{suffix}.mlir"
   else return s!"{pfx}_{suffix}.vmfb"
 
+/-- Rows of a `[batch, numClasses]` logits buffer whose argmax equals the label, the label of row
+    `i` being the first byte of record `i` in `lblSlice` (four bytes per record). -/
+def batchTop1 (spec : NetSpec) (logits lblSlice : ByteArray) (batch : Nat) : Nat := Id.run do
+  let mut c := 0
+  for i in [:batch] do
+    let pred := F32.argmaxN logits (i * spec.numClasses).toUSize spec.numClasses.toUSize
+    if pred.toNat == lblSlice.data[i * 4]!.toNat then c := c + 1
+  return c
+
 /-- The eval forward of `spec` over the `n` images of a flat f32 set (`imgFloats` floats each) at
     batch `batch`, the tail batch padded with the last real image: the `[n, nOut]` f32 logits of
     the real rows. The detector demos' `infer` dumps. -/
@@ -1220,11 +1229,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
             let mom : Float := 1.0 / (k.toFloat + 1.0)
             logitsAcc ← F32.ema logitsAcc logits mom
           let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
-          for i in [:evalBatch] do
-            let pred := F32.argmaxN logitsAcc (i * spec.numClasses).toUSize spec.numClasses.toUSize
-            let label := lblSlice.data[i * 4]!.toNat
-            if pred.toNat == label then correct := correct + 1
-            total := total + 1
+          correct := correct + spec.batchTop1 logitsAcc lblSlice evalBatch
+          total := total + evalBatch
         let acc := correct.toFloat / total.toFloat * 100.0
         IO.eprintln s!"  val accuracy ({evalLabel2}): {correct}/{total} = {acc}%"
 
@@ -1266,11 +1272,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
       let mut total : Nat := 0
       for bi in [:evalSteps] do
         let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
-        for i in [:evalBatch] do
-          let pred := F32.argmaxN logitsAccs[bi]! (i * spec.numClasses).toUSize spec.numClasses.toUSize
-          let label := lblSlice.data[i * 4]!.toNat
-          if pred.toNat == label then correct := correct + 1
-          total := total + 1
+        correct := correct + spec.batchTop1 logitsAccs[bi]! lblSlice evalBatch
+        total := total + evalBatch
       let acc := correct.toFloat / total.toFloat * 100.0
       IO.eprintln s!"  val accuracy (SWAG×{cfg.swagSamples}): {correct}/{total} = {acc}%"
 
@@ -1333,11 +1336,8 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     let logits ← LowererSession.forwardF32 evalSess spec.evalFnName
                     evalParams evalShapesBA xba evalXSh evalBatch.toUSize nClasses
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch dio.labelBytesPerRecord
-    for i in [:evalBatch] do
-      let pred := F32.argmaxN logits (i * spec.numClasses).toUSize spec.numClasses.toUSize
-      let label := lblSlice.data[i * 4]!.toNat
-      if pred.toNat == label then correct := correct + 1
-      total := total + 1
+    correct := correct + spec.batchTop1 logits lblSlice evalBatch
+    total := total + evalBatch
   let acc := correct.toFloat / total.toFloat * 100.0
   IO.eprintln s!"EVAL ONLY  {spec.name}: {correct}/{total} = {acc}%"
 

@@ -1386,9 +1386,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
-  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA
-  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   -- Device-resident parameters. **Every** param is resident here, not a prefix: this loop's step is
@@ -1476,18 +1474,12 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     params := F32.concat #[params, ← F32.const 1 0.0]
     let mut correct := 0
     if !synth then          -- synth probe: skip eval (no eval split on disk)
-      for bi in [0:nbt] do
-        let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-        -- Hold the parameters on device across the eval batches. `ep+1` is
-        -- the generation token: `params` changes exactly once per epoch and this
-        -- says so, so the held set cannot go stale.
-        let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
-                        xb xShape bs.toUSize nc.toUSize
-                        nResident (ep + 1).toUSize
-        for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-          let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-          let lbl  := F32.readLabel evalLbl (bi * bs + j)
-          if pred == lbl then correct := correct + 1
+      -- Hold the parameters on device across the eval batches. `ep+1` is
+      -- the generation token: `params` changes exactly once per epoch and this
+      -- says so, so the held set cannot go stale.
+      let (c, _, _, _) ← evalScore fwdSess fwdFn params shapes (.held evalImg evalLbl)
+                           nEval bs d0 nc 1 nResident (ep + 1).toUSize false
+      correct := c
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
     -- Only nets whose render carries the `%loss` scalar have a loss to report. Printing
@@ -3298,9 +3290,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let nb := match (← IO.getEnv "LEAN_MLIR_MAX_STEPS").bind (·.toNat?) with
     | some n => min n nbFull
     | none   => nbFull
-  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
   let shapes := net.shapesBA          -- packed [W0|b0] layout for the verified forward
-  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
@@ -3354,16 +3344,8 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     W0 := packed.extract 0 (d0 * d1 * 4)
     b0 := packed.extract (d0 * d1 * 4) pBytes
     let params := packed
-    let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
-                      xb xShape bs.toUSize d1.toUSize
-                      nResident (ep + 1).toUSize
-      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * bs + j)
-        if pred == lbl then correct := correct + 1
+    let (correct, _, _, _) ← evalScore fwdSess fwdFn params shapes (.held evalImg evalLbl)
+                               nEval bs d0 d1 1 nResident (ep + 1).toUSize false
     let acc := correct.toFloat / nEval.toFloat * 100.0
     let epMs := (← IO.monoMsNow) - tEp0
     -- `wilson95` here too. Chapter 1's linear model is the ONE book trainer that does not route
@@ -3415,9 +3397,7 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
   IO.println s!"  train {nTrain}, {evalName} {nEval}; dense {d0}->{d1}, bs {bs}, fp8-SGD (E4M3 leaf / fp32 acc)"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
-  let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
-  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   -- Static per-tensor activation scale ⇒ quantize the whole train set ONCE.
@@ -3436,15 +3416,8 @@ def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (data
       mW := F32E4M3.addDelta mW Wout Wq                       -- master += (Wout − Wq)
       mb := bout                                              -- bias update is exact (unquantized)
     let params := mW ++ mb
-    let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
-                      xb xShape bs.toUSize d1.toUSize
-      for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmaxN logits (j * d1).toUSize d1.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * bs + j)
-        if pred == lbl then correct := correct + 1
+    let (correct, _, _, _) ← evalScore fwdSess fwdFn params shapes (.held evalImg evalLbl)
+                               nEval bs d0 d1 1 0 0 false
     let acc := correct.toFloat / nEval.toFloat * 100.0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% (fp8 E4M3)"
     (← IO.getStdout).flush
@@ -3486,7 +3459,6 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), fp8-SGD (E4M3 leaf / fp32 acc), He init"
   (← IO.getStdout).flush
   let nb  := nTrain / bs
-  let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let shapes := net.shapesBA
   -- The TRAIN STEP declares one more tensor than the forward when the graph emits a loss:
   -- a rank-0 scalar after the params. Same construction as the fp32 `train` (see the `tsShapes`
@@ -3499,7 +3471,6 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
   -- logits only. The two must NOT be unified.
   -- The extra trailing float is never read back: `F32E4M3.addDelta` iterates `F32.size master`.
   let tsShapes := packShapes (if net.lossSlot then net.paramShapes ++ #[#[]] else net.paramShapes)
-  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
@@ -3520,15 +3491,8 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
       let out ← LowererSession.mlpTrainStepV tsSess tsFn
                   xb paramsQ tsShapes yb bs.toUSize d0.toUSize nc.toUSize
       params := F32E4M3.addDelta params out paramsQ              -- master += (out − paramsQ)
-    let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← LowererSession.forwardF32 fwdSess fwdFn params shapes
-                      xb xShape bs.toUSize nc.toUSize
-      for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * bs + j)
-        if pred == lbl then correct := correct + 1
+    let (correct, _, _, _) ← evalScore fwdSess fwdFn params shapes (.held evalImg evalLbl)
+                               nEval bs d0 nc 1 0 0 false
     let acc := correct.toFloat / nEval.toFloat * 100.0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% (fp8 E4M3)"
     (← IO.getStdout).flush
@@ -3573,7 +3537,6 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
     loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
   let nb  := nTrain / bs
-  let nbt := (nEval + bs - 1) / bs   -- ceil: last partial batch zero-padded, not dropped
   let nEpochs := match (← IO.getEnv "LEAN_MLIR_MAX_EPOCHS").bind (·.toNat?) with
     | some n => min n cfg.epochs
     | none   => cfg.epochs
@@ -3585,7 +3548,6 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
                                 ++ (if hasBn then bnStatShapes else #[]))
   let fwdShapes := net.shapesBA
   let fwdEvalShapes := packShapes (net.paramShapes ++ bnStatShapes)
-  let xShape := net.xShape bs
   let tsFn  := s!"m.{net.slug}_{variant}_train_step"
   let fwdFn := s!"m.{net.slug}_fwd"
   let mut parts : Array ByteArray := #[]
@@ -3688,15 +3650,8 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
     let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}" else fwdFn
     let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
-    let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← LowererSession.forwardF32 evalSess evalFn evalParams evalShapes
-                      xb xShape bs.toUSize nc.toUSize
-      for j in [0:min bs (nEval - bi * bs)] do
-        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * bs + j)
-        if pred == lbl then correct := correct + 1
+    let (correct, _, _, _) ← evalScore evalSess evalFn evalParams evalShapes (.held evalImg evalLbl)
+                               nEval bs d0 nc 1 0 0 false
     let acc := correct.toFloat / nEval.toFloat * 100.0
     IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}% (fp8 E4M3, {variant})"
     (← IO.getStdout).flush
