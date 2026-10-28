@@ -70,21 +70,6 @@ noncomputable def transformerBlockV (gf : GeluForm) (N heads d_head mlpDim : Nat
   (transformerMlpSublayerV gf N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
   (transformerAttnSublayerV N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
 
-/-- Flat Diff of the attentionᵥ sublayer's non-trivial arm (`mhsa ∘ LNᵥ`). -/
-private lemma transformerAttnSublayerV_inner_flat_differentiable
-    (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
-    (bq bk bv bo : Vec (heads * d_head)) :
-    Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten
-        (((mhsaLayer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
-          (fun X : Mat N (heads * d_head) => fun n =>
-            layerNormVec (heads * d_head) ε γ1 β1 (X n)))
-         (Mat.unflatten v))) := by
-  simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
-      (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
-
 /-- Flat Diff of the attentionᵥ sublayer. -/
 lemma transformerAttnSublayerV_flat_differentiable
     (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
@@ -92,9 +77,10 @@ lemma transformerAttnSublayerV_flat_differentiable
     (bq bk bv bo : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerAttnSublayerV N heads d_head ε γ1 β1
-                     Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) := by
-  exact (identity_mat_flat_differentiable N (heads * d_head)).add
-    (transformerAttnSublayerV_inner_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+                     Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) :=
+  preLNRes_flat_differentiable _ _
+    (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
+    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Attentionᵥ sublayer VJP. -/
 noncomputable def transformerAttnSublayerVHasVJPMat (N heads d_head : Nat)
@@ -108,21 +94,6 @@ noncomputable def transformerAttnSublayerVHasVJPMat (N heads d_head : Nat)
     (layerNormVecPerTokenHasVJPMat N (heads * d_head) ε γ1 β1 hε)
     (mhsaHasVJPMat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
-/-- Flat Diff of the MLPᵥ sublayer's non-trivial arm. -/
-private lemma transformerMlpSublayerV_inner_flat_differentiable {gf : GeluForm}
-    (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
-    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
-    Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten
-        (((transformerMlp gf N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
-          (fun X : Mat N (heads * d_head) => fun n =>
-            layerNormVec (heads * d_head) ε γ2 β2 (X n)))
-         (Mat.unflatten v))) := by
-  simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
-      (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
-
 /-- Flat Diff of the MLPᵥ sublayer. -/
 lemma transformerMlpSublayerV_flat_differentiable {gf : GeluForm}
     (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
@@ -130,9 +101,10 @@ lemma transformerMlpSublayerV_flat_differentiable {gf : GeluForm}
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerMlpSublayerV gf N heads d_head mlpDim ε γ2 β2
-                     Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-  exact (identity_mat_flat_differentiable N (heads * d_head)).add
-    (transformerMlpSublayerV_inner_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
+                     Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) :=
+  preLNRes_flat_differentiable _ _
+    (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- MLPᵥ sublayer VJP. -/
 noncomputable def transformerMlpSublayerVHasVJPMat (gf : GeluForm) (N heads d_head mlpDim : Nat)
@@ -157,10 +129,10 @@ lemma transformerBlockV_flat_differentiable {gf : GeluForm} (N heads d_head mlpD
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerBlockV gf N heads d_head mlpDim ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
-                   (Mat.unflatten v))) := by
-  simpa [transformerBlockV, Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlpSublayerV_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).comp
-      (transformerAttnSublayerV_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+                   (Mat.unflatten v))) :=
+  flat_differentiable_comp
+    (transformerAttnSublayerV_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+    (transformerMlpSublayerV_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
 /-- **Vector-LN block VJP** — one `vjpMatComp` of the two sublayer witnesses. -/
 noncomputable def transformerBlockVHasVJPMat (gf : GeluForm) (N heads d_head mlpDim : Nat)

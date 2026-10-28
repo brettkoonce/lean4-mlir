@@ -277,6 +277,43 @@ noncomputable def convNextForwardTCh (gf : GeluForm) {nC : Nat} (w : CnxTWeights
                     (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ
                       (flatConvStride4 (h := 56) (w := 56) w.sW w.sb x)))))))))))
 
+/-- The twelve-factor chain with each stage's VJP bundled with its differentiability
+    (`vjpCompDiff`): `convNextForwardTChHasVJP` is its `.fst`, `convNextForwardTCh_differentiable`
+    its `.snd`, so the stage list is written once. -/
+noncomputable def convNextForwardTChVjpDiff (gf : GeluForm) {nC : Nat} (w : CnxTWeightsCh nC)
+    (hsε : 0 < w.sε)
+    (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
+    (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
+    (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
+    (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) :=
+  let c1 := vjpCompDiff _ _
+    ⟨flatConvStride4HasVJP (h := 56) (w := 56) w.sW w.sb,
+     flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb⟩
+    ⟨chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε,
+     chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε⟩
+  let c2 := vjpCompDiff _ _ c1
+    ⟨convNextStageChKHasVJP gf 3 w.s1 h1, convNextStageChK_differentiable 3 w.s1 h1⟩
+  let c3 := vjpCompDiff _ _ c2
+    ⟨cnxDownChWHasVJP 28 28 w.d1 hd1, cnxDownChW_differentiable 28 28 w.d1 hd1⟩
+  let c4 := vjpCompDiff _ _ c3
+    ⟨convNextStageChKHasVJP gf 3 w.s2 h2, convNextStageChK_differentiable 3 w.s2 h2⟩
+  let c5 := vjpCompDiff _ _ c4
+    ⟨cnxDownChWHasVJP 14 14 w.d2 hd2, cnxDownChW_differentiable 14 14 w.d2 hd2⟩
+  let c6 := vjpCompDiff _ _ c5
+    ⟨convNextStageChKHasVJP gf 9 w.s3 h3, convNextStageChK_differentiable 9 w.s3 h3⟩
+  let c7 := vjpCompDiff _ _ c6
+    ⟨cnxDownChWHasVJP 7 7 w.d3 hd3, cnxDownChW_differentiable 7 7 w.d3 hd3⟩
+  let c8 := vjpCompDiff _ _ c7
+    ⟨convNextStageChKHasVJP gf 3 w.s4 h4, convNextStageChK_differentiable 3 w.s4 h4⟩
+  let c9 := vjpCompDiff _ _ c8
+    ⟨globalAvgPoolFlatHasVJP 768 7 7, globalAvgPoolFlat_differentiable 768 7 7⟩
+  -- the HEAD LN (the paper's `norm(x.mean([-2,-1]))`): `layerNormVec` is ViT's final-LN
+  -- primitive and carries its own `_diff`/`HasVJP`, so nothing new is proven here.
+  let c10 := vjpCompDiff _ _ c9
+    ⟨rowLNVecFlatHasVJP 1 768 w.hε w.hγ w.hβ hhε,
+     rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε⟩
+  vjpCompDiff _ _ c10 ⟨denseHasVJP w.Wd w.bd, dense_differentiable w.Wd w.bd⟩
+
 /-- **The channel-LN ConvNeXt-T has a (correct) VJP — at every input.** 23 LayerNorm
     positivities: stem + 18 blocks (via the per-stage `∀ i`) + 3 downsamples + **the head LN**,
     which this statement composes as `rowLNVecFlat 1 768 w.hε w.hγ w.hβ` and takes `hhε` for.
@@ -299,44 +336,8 @@ noncomputable def convNextForwardTChHasVJP (gf : GeluForm) {nC : Nat} (w : CnxTW
         cnxDownChW 28 28 w.d1 ∘
         convNextStageChK gf 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
-        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) := by
-  have st_diff := flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb
-  have st_vjp := flatConvStride4HasVJP (h := 56) (w := 56) w.sW w.sb
-  have lns_diff := chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε
-  have lns_vjp := chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε
-  have e1 := vjpComp _ _ st_diff lns_diff st_vjp lns_vjp
-  have f1 := lns_diff.comp st_diff
-  have s1d := convNextStageChK_differentiable (gf := gf) 3 w.s1 h1
-  have e2 := vjpComp _ _ f1 s1d e1 (convNextStageChKHasVJP gf 3 w.s1 h1)
-  have f2 := s1d.comp f1
-  have d1d := cnxDownChW_differentiable 28 28 w.d1 hd1
-  have e3 := vjpComp _ _ f2 d1d e2 (cnxDownChWHasVJP 28 28 w.d1 hd1)
-  have f3 := d1d.comp f2
-  have s2d := convNextStageChK_differentiable (gf := gf) 3 w.s2 h2
-  have e4 := vjpComp _ _ f3 s2d e3 (convNextStageChKHasVJP gf 3 w.s2 h2)
-  have f4 := s2d.comp f3
-  have d2d := cnxDownChW_differentiable 14 14 w.d2 hd2
-  have e5 := vjpComp _ _ f4 d2d e4 (cnxDownChWHasVJP 14 14 w.d2 hd2)
-  have f5 := d2d.comp f4
-  have s3d := convNextStageChK_differentiable (gf := gf) 9 w.s3 h3
-  have e6 := vjpComp _ _ f5 s3d e5 (convNextStageChKHasVJP gf 9 w.s3 h3)
-  have f6 := s3d.comp f5
-  have d3d := cnxDownChW_differentiable 7 7 w.d3 hd3
-  have e7 := vjpComp _ _ f6 d3d e6 (cnxDownChWHasVJP 7 7 w.d3 hd3)
-  have f7 := d3d.comp f6
-  have s4d := convNextStageChK_differentiable (gf := gf) 3 w.s4 h4
-  have e8 := vjpComp _ _ f7 s4d e7 (convNextStageChKHasVJP gf 3 w.s4 h4)
-  have f8 := s4d.comp f7
-  have gap_diff := globalAvgPoolFlat_differentiable 768 7 7
-  have e9 := vjpComp _ _ f8 gap_diff e8 (globalAvgPoolFlatHasVJP 768 7 7)
-  have f9 := gap_diff.comp f8
-  -- the HEAD LN (the paper's `norm(x.mean([-2,-1]))`). One more
-  -- `vjpComp` link and one more positivity — `layerNormVec` is ViT's final-LN primitive and
-  -- carries its own `_diff`/`HasVJP`, so nothing new is proven here.
-  have hln_diff := rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε
-  have e10 := vjpComp _ _ f9 hln_diff e9 (rowLNVecFlatHasVJP 1 768 w.hε w.hγ w.hβ hhε)
-  have f10 := hln_diff.comp f9
-  exact vjpComp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (denseHasVJP w.Wd w.bd)
+        flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
+  (convNextForwardTChVjpDiff gf w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).fst
 
 /-- **The chain is differentiable everywhere** (the 23 LayerNorm positivities only) — the
     `Differentiable` peer of `convNextForwardTChHasVJP`, on the same twelve-factor chain, which
@@ -361,18 +362,7 @@ theorem convNextForwardTCh_differentiable {gf : GeluForm} {nC : Nat} (w : CnxTWe
         convNextStageChK gf 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
-  (dense_differentiable w.Wd w.bd).comp
-    ((rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε).comp
-      ((globalAvgPoolFlat_differentiable 768 7 7).comp
-        ((convNextStageChK_differentiable 3 w.s4 h4).comp
-          ((cnxDownChW_differentiable 7 7 w.d3 hd3).comp
-            ((convNextStageChK_differentiable 9 w.s3 h3).comp
-              ((cnxDownChW_differentiable 14 14 w.d2 hd2).comp
-                ((convNextStageChK_differentiable 3 w.s2 h2).comp
-                  ((cnxDownChW_differentiable 28 28 w.d1 hd1).comp
-                    ((convNextStageChK_differentiable 3 w.s1 h1).comp
-                      ((chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε).comp
-                        (flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb)))))))))))
+  (convNextForwardTChVjpDiff gf w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).snd
 
 /-- The nested↔chain bridge: `convNextForwardTCh w x` equals the twelve-factor `∘` chain
     `convNextForwardTChHasVJP` is stated on. -/

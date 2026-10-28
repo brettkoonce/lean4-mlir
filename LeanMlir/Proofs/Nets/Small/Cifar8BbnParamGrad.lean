@@ -534,18 +534,12 @@ theorem c8_contb (hε : 0 < ε) (Wc : Kernel4 oc a kH' kW') (bc : Vec oc) (γ β
 theorem c8_contγ (hε : 0 < ε) (γ β : Vec oc) (v : Vec (N * (oc * H * W))) :
     ContinuousAt (fun θ => bnBatchLA N oc H W ε θ β v) γ := by
   have _ := hε
-  show ContinuousAt (fun θ => fun J => bnPerChannelFlat oc (N * (H * W)) ε θ β
-    (bnchwFwd N oc H W (reassocB N oc H W v)) (bnLAPerm N oc H W J)) γ
-  exact ((reindexCLM (bnLAPerm N oc H W)).continuous.comp
-    (bnPerChannelFlat_gamma_differentiable oc (N * (H * W)) ε β _).continuous).continuousAt
+  exact (bnBatchLA_gamma_continuous N oc H W ε β v).continuousAt
 
 theorem c8_contβ (hε : 0 < ε) (γ β : Vec oc) (v : Vec (N * (oc * H * W))) :
     ContinuousAt (fun θ => bnBatchLA N oc H W ε γ θ v) β := by
   have _ := hε
-  show ContinuousAt (fun θ => fun J => bnPerChannelFlat oc (N * (H * W)) ε γ θ
-    (bnchwFwd N oc H W (reassocB N oc H W v)) (bnLAPerm N oc H W J)) β
-  exact ((reindexCLM (bnLAPerm N oc H W)).continuous.comp
-    (bnPerChannelFlat_beta_differentiable oc (N * (H * W)) ε γ _).continuous).continuousAt
+  exact (bnBatchLA_beta_continuous N oc H W ε γ v).continuousAt
 
 end ParamCont
 

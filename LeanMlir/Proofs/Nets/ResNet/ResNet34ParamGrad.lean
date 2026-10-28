@@ -461,20 +461,10 @@ theorem r34_stem_lossTiedB_select (xN cotN vN epsStr : String)
     ((hbn γs βs).continuousAt.comp (batchMap_param_differentiableAt
       (fun θ y => flatConvStride2 Ws θ y) x _
       (fun y => (GradNodeB.flatConvStride2_bias_differentiable Ws y) _)).continuousAt)
-  have hγc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs θ βs
-      (batchMap N (flatConvStride2 Ws bs) x)) := by
-    -- `bnBatchLA` is the per-channel core read at the `bnLAPerm` cell, by `rfl`
-    exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
-      (GradNodeB.bnPerChannelFlat_gamma_differentiable oc (N * (2 * h * (2 * w))) εs βs
-        (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
-          (batchMap N (flatConvStride2 Ws bs) x)))).continuous
-  have hβc : Continuous (fun θ : Vec oc => bnBatchLA N oc (2 * h) (2 * w) εs γs θ
-      (batchMap N (flatConvStride2 Ws bs) x)) := by
-    -- `bnBatchLA` is the per-channel core read at the `bnLAPerm` cell, by `rfl`
-    exact continuous_pi fun J => (continuous_apply (GradNodeB.bnLAPerm N oc (2 * h) (2 * w) J)).comp
-      (GradNodeB.bnPerChannelFlat_beta_differentiable oc (N * (2 * h * (2 * w))) εs γs
-        (bnchwFwd N oc (2 * h) (2 * w) (reassocB N oc (2 * h) (2 * w)
-          (batchMap N (flatConvStride2 Ws bs) x)))).continuous
+  have hγc := GradNodeB.bnBatchLA_gamma_continuous N oc (2 * h) (2 * w) εs βs
+    (batchMap N (flatConvStride2 Ws bs) x)
+  have hβc := GradNodeB.bnBatchLA_beta_continuous N oc (2 * h) (2 * w) εs γs
+    (batchMap N (flatConvStride2 Ws bs) x)
   have gγ := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ
     (fun _ => Ws) (fun _ => bs) id (fun _ => βs) γs rfl hγc.continuousAt
   have gβ := r34StemPool_param_germ_select Ws bs εs γs βs x hstem hpool σ hσ

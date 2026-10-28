@@ -61,9 +61,8 @@ def MaxPool2SmoothB (N c h w : Nat) (x : Vec (N * (c * (2 * h) * (2 * w)))) : Pr
 
 theorem maxPoolFlat_differentiableAt_row (N c h w : Nat) (x : Vec (N * (c * (2 * h) * (2 * w))))
     (hx : MaxPool2SmoothB N c h w x) (r : Fin N) :
-    DifferentiableAt ℝ (maxPoolFlat c h w) (Mat.unflatten x r) := by
-  have h := maxPoolFlat_differentiableAt (Tensor3.unflatten (Mat.unflatten x r)) (hx r)
-  rwa [Tensor3.flatten_unflatten] at h
+    DifferentiableAt ℝ (maxPoolFlat c h w) (Mat.unflatten x r) :=
+  maxPoolFlat_differentiableAt_flat _ (hx r)
 
 /-- **The batched 2×2 pool's VJP at a smooth point** — `batchMapHasVJPAt` over each example's own
     `maxPoolFlatHasVJPAt'`. Built field by field (no transport), so its `.backward` reduces. -/

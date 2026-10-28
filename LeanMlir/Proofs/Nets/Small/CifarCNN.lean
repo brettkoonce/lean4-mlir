@@ -146,17 +146,14 @@ noncomputable def cifarCnnHasVJPAt
   have s2d2 := convRelu_differentiableAt W₂ b₂ _ h2
   have s2 := vjpCompAt _ _ x s1d s2d2 s1 s2v
   have s2d := s2d2.comp x s1d
-  -- maxpool 1 at (block-2 output); align the point via flatten ∘ unflatten = id
+  -- maxpool 1 at (block-2 output)
   set zmp1 := (((relu (c1 * (2*(2*h)) * (2*(2*w)))
                 ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₂ b₂)
               ∘ (relu (c1 * (2*(2*h)) * (2*(2*w)))
                 ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₁ b₁)) x) with hzmp1
-  have hpt1 : Tensor3.flatten (Tensor3.unflatten zmp1 : Tensor3 c1 (2*(2*h)) (2*(2*w))) = zmp1 :=
-    Tensor3.flatten_unflatten zmp1
-  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*h) (2*w)) zmp1 := by
-    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ h_mp1
-  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*h) (2*w)) zmp1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1
+  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*h) (2*w)) zmp1 := maxPoolFlatHasVJPAtFlat _ h_mp1
+  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*h) (2*w)) zmp1 :=
+    maxPoolFlat_differentiableAt_flat _ h_mp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- conv→relu block 3 at (pool-1 output)
@@ -173,12 +170,9 @@ noncomputable def cifarCnnHasVJPAt
   have s5d := s5d4.comp x s4d
   -- maxpool 2 at (block-4 output)
   set zmp2 := (relu (c2 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₄ b₄) z3 with hzmp2
-  have hpt2 : Tensor3.flatten (Tensor3.unflatten zmp2 : Tensor3 c2 (2*h) (2*w)) = zmp2 :=
-    Tensor3.flatten_unflatten zmp2
-  have mp2_v : HasVJPAt (maxPoolFlat c2 h w) zmp2 := by
-    rw [← hpt2]; exact maxPoolFlatHasVJPAt _ h_mp2
-  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 h w) zmp2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2
+  have mp2_v : HasVJPAt (maxPoolFlat c2 h w) zmp2 := maxPoolFlatHasVJPAtFlat _ h_mp2
+  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 h w) zmp2 :=
+    maxPoolFlat_differentiableAt_flat _ h_mp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- dense→relu block 5 at (pool-2 output)
@@ -579,12 +573,10 @@ noncomputable def cifarCnn8HasVJPAt
                 ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂)
               ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
                 ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x) with hz1
-  have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) = z1 :=
-    Tensor3.flatten_unflatten z1
-  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ hp1
-  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1
+  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 :=
+    maxPoolFlatHasVJPAtFlat _ hp1
+  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 :=
+    maxPoolFlat_differentiableAt_flat _ hp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- stage 2: conv→relu ×2
@@ -600,12 +592,9 @@ noncomputable def cifarCnn8HasVJPAt
   have s5d := s5d4.comp x s4d
   -- pool 2
   set z2 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w)))) ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) z3 with hz2
-  have hpt2 : Tensor3.flatten (Tensor3.unflatten z2 : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))) = z2 :=
-    Tensor3.flatten_unflatten z2
-  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlatHasVJPAt _ hp2
-  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ hp2
+  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := maxPoolFlatHasVJPAtFlat _ hp2
+  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 :=
+    maxPoolFlat_differentiableAt_flat _ hp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- stage 3: conv→relu ×2
@@ -621,12 +610,9 @@ noncomputable def cifarCnn8HasVJPAt
   have s8d := s8d6.comp x s7d
   -- pool 3
   set z3p := (relu (c3 * (2*(2*h)) * (2*(2*w))) ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) z5 with hz3p
-  have hpt3 : Tensor3.flatten (Tensor3.unflatten z3p : Tensor3 c3 (2*(2*h)) (2*(2*w))) = z3p :=
-    Tensor3.flatten_unflatten z3p
-  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlatHasVJPAt _ hp3
-  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ hp3
+  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := maxPoolFlatHasVJPAtFlat _ hp3
+  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p :=
+    maxPoolFlat_differentiableAt_flat _ hp3
   have s9 := vjpCompAt _ _ x s8d mp3_d s8 mp3_v
   have s9d := mp3_d.comp x s8d
   -- stage 4: conv→relu ×2
@@ -642,12 +628,9 @@ noncomputable def cifarCnn8HasVJPAt
   have s11d := s11d8.comp x s10d
   -- pool 4
   set z4p := (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) z7 with hz4p
-  have hpt4 : Tensor3.flatten (Tensor3.unflatten z4p : Tensor3 c4 (2*h) (2*w)) = z4p :=
-    Tensor3.flatten_unflatten z4p
-  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlatHasVJPAt _ hp4
-  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ hp4
+  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := maxPoolFlatHasVJPAtFlat _ hp4
+  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p :=
+    maxPoolFlat_differentiableAt_flat _ hp4
   have s12 := vjpCompAt _ _ x s11d mp4_d s11 mp4_v
   have s12d := mp4_d.comp x s11d
   -- dense→relu ×2
@@ -889,12 +872,10 @@ noncomputable def cifarCnnBn8HasVJPAt
   set z1 := (((relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
       ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ β₂ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₂ b₂) ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
       ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)) x) with hz1
-  have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w))))) = z1 :=
-    Tensor3.flatten_unflatten z1
-  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ h_mp1
-  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1
+  have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 :=
+    maxPoolFlatHasVJPAtFlat _ h_mp1
+  have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 :=
+    maxPoolFlat_differentiableAt_flat _ h_mp1
   have s3 := vjpCompAt _ _ x s2d mp1_d s2 mp1_v
   have s3d := mp1_d.comp x s2d
   -- stage 2
@@ -912,12 +893,9 @@ noncomputable def cifarCnnBn8HasVJPAt
   -- pool 2
   set z2 := (relu (c2 * (2*(2*(2*h))) * (2*(2*(2*w))))
       ∘ bnPerChannelTensor3 c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ β₄ ∘ flatConv (h := 2*(2*(2*h))) (w := 2*(2*(2*w))) W₄ b₄) z3 with hz2
-  have hpt2 : Tensor3.flatten (Tensor3.unflatten z2 : Tensor3 c2 (2*(2*(2*h))) (2*(2*(2*w)))) = z2 :=
-    Tensor3.flatten_unflatten z2
-  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlatHasVJPAt _ h_mp2
-  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := by
-    rw [← hpt2]; exact maxPoolFlat_differentiableAt _ h_mp2
+  have mp2_v : HasVJPAt (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 := maxPoolFlatHasVJPAtFlat _ h_mp2
+  have mp2_d : DifferentiableAt ℝ (maxPoolFlat c2 (2*(2*h)) (2*(2*w))) z2 :=
+    maxPoolFlat_differentiableAt_flat _ h_mp2
   have s6 := vjpCompAt _ _ x s5d mp2_d s5 mp2_v
   have s6d := mp2_d.comp x s5d
   -- stage 3
@@ -935,12 +913,9 @@ noncomputable def cifarCnnBn8HasVJPAt
   -- pool 3
   set z3p := (relu (c3 * (2*(2*h)) * (2*(2*w)))
       ∘ bnPerChannelTensor3 c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ β₆ ∘ flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₆ b₆) z5 with hz3p
-  have hpt3 : Tensor3.flatten (Tensor3.unflatten z3p : Tensor3 c3 (2*(2*h)) (2*(2*w))) = z3p :=
-    Tensor3.flatten_unflatten z3p
-  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlatHasVJPAt _ h_mp3
-  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p := by
-    rw [← hpt3]; exact maxPoolFlat_differentiableAt _ h_mp3
+  have mp3_v : HasVJPAt (maxPoolFlat c3 (2*h) (2*w)) z3p := maxPoolFlatHasVJPAtFlat _ h_mp3
+  have mp3_d : DifferentiableAt ℝ (maxPoolFlat c3 (2*h) (2*w)) z3p :=
+    maxPoolFlat_differentiableAt_flat _ h_mp3
   have s9 := vjpCompAt _ _ x s8d mp3_d s8 mp3_v
   have s9d := mp3_d.comp x s8d
   -- stage 4
@@ -958,12 +933,9 @@ noncomputable def cifarCnnBn8HasVJPAt
   -- pool 4
   set z4p := (relu (c4 * (2*h) * (2*w))
       ∘ bnPerChannelTensor3 c4 (2*h) (2*w) ε₈ γ₈ β₈ ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈) z7 with hz4p
-  have hpt4 : Tensor3.flatten (Tensor3.unflatten z4p : Tensor3 c4 (2*h) (2*w)) = z4p :=
-    Tensor3.flatten_unflatten z4p
-  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlatHasVJPAt _ h_mp4
-  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p := by
-    rw [← hpt4]; exact maxPoolFlat_differentiableAt _ h_mp4
+  have mp4_v : HasVJPAt (maxPoolFlat c4 h w) z4p := maxPoolFlatHasVJPAtFlat _ h_mp4
+  have mp4_d : DifferentiableAt ℝ (maxPoolFlat c4 h w) z4p :=
+    maxPoolFlat_differentiableAt_flat _ h_mp4
   have s12 := vjpCompAt _ _ x s11d mp4_d s11 mp4_v
   have s12d := mp4_d.comp x s11d
   -- dense head

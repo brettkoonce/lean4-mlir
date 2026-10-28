@@ -176,6 +176,18 @@ noncomputable def reindexHasVJP {a b : Nat} (σ : Fin b → Fin a) :
   correct v dy i :=
     (congrFun (reindexVJP_backward σ v dy) i).symm.trans ((reindexVJP σ).correct v dy i)
 
+/-- A `Fin.cast` reindex's backward is the reverse relabel: along a bijection exactly one term of
+    `reindexHasVJP`'s masked sum survives. -/
+theorem reindexHasVJP_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
+    (reindexHasVJP (Fin.cast h.symm)).backward x dy = fun i => dy (Fin.cast h i) := by
+  funext i
+  show ∑ k : Fin m, (if i = Fin.cast h.symm k then dy k else 0) = dy (Fin.cast h i)
+  have hk : ∀ k : Fin m, i = Fin.cast h.symm k ↔ Fin.cast h i = k := fun k => by
+    constructor
+    · rintro rfl; exact Fin.ext rfl
+    · rintro rfl; exact Fin.ext rfl
+  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+
 /-- **`bnBatchLA` is the proven `bnBatchTensor4`, conjugated by the `mul_assoc` reindex.** Both reindex
     maps are `reindexCLM (Fin.cast …)`; the middle is the genuinely batch-coupled true batch-norm. -/
 theorem bnBatchLA_eq_comp (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :

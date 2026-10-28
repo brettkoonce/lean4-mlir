@@ -302,6 +302,7 @@ open Proofs
 #audit_axioms sdpaBackV_correct
 #audit_axioms mhsaHasVJPMat_correct
 #audit_axioms transformerBlockHasVJPMat_correct
+#audit_axioms preLNRes_flat_differentiable
 #audit_axioms transformerTowerHasVJPMat
 #audit_axioms vitBodyHasVJPMat
 #audit_axioms vitFullHasVJP
@@ -319,6 +320,8 @@ open Proofs
 #audit_axioms mlpHasVJPAt
 #audit_axioms mnistLinearHasVJP_correct
 #audit_axioms maxPool2HasVJPAt3
+#audit_axioms maxPoolFlatHasVJPAtFlat
+#audit_axioms maxPoolFlat_differentiableAt_flat
 
 -- Capstone: end-to-end ResNet-style CNN whole-network VJP + the global-average-pool VJP it depends on
 #audit_axioms globalAvgPoolFlatHasVJP
@@ -416,6 +419,7 @@ open Proofs
 -- Chain-rule fold: the SGD step is literally θ − lr·∂Loss/∂θ.
 #audit_axioms Proofs.crossEntropy_differentiable
 #audit_axioms StableHLO.denseWeightMap_differentiable
+#audit_axioms StableHLO.pdiv_denseWeight_comp
 #audit_axioms StableHLO.lossWeightGrad_eq_sum
 #audit_axioms StableHLO.sgdW_descends_loss_gradient
 -- Rendering half
@@ -429,6 +433,7 @@ open Proofs
 #audit_axioms LinFold.poc_train_step_tail_certified
 -- MNIST-linear at batch N (LinearFoldB.lean)
 #audit_axioms LinFoldB.lossCotB_slice
+#audit_axioms LinFoldB.den_softmaxCotB_slice
 #audit_axioms LinFoldB.lin_train_step_tiedB
 #audit_axioms LinFoldB.lin_weight_meanlossB
 -- mnist-MLP fully folded
@@ -718,6 +723,7 @@ open Proofs
 #audit_axioms batchMapHasVJP
 #audit_axioms batchMap_differentiable
 #audit_axioms reindexHasVJP
+#audit_axioms reindexHasVJP_cast_backward
 #audit_axioms bnBatchLAHasVJP
 #audit_axioms bnBatchLA_differentiable
 -- Per-block batched gradients (the per-block VJP, the user-requested deliverable)
@@ -806,6 +812,7 @@ open Proofs
 #audit_axioms convNextStageChKHasVJP
 #audit_axioms cnxDownChWHasVJP
 #audit_axioms convNextForwardTChHasVJP
+#audit_axioms convNextForwardTChVjpDiff
 -- The nested↔∘-chain bridge
 #audit_axioms convNextForwardTCh_eq_chain
 #audit_axioms convNextForwardTCh_differentiable
@@ -1088,6 +1095,7 @@ open Proofs
 #audit_axioms Proofs.cnxLNhBackB_eq_vjp
 #audit_axioms Proofs.cnxDenseBackB_eq_vjp
 #audit_axioms Proofs.vjpCompDiffAt_fst_backward
+#audit_axioms Proofs.vjpCompDiff
 #audit_axioms Proofs.convNextForwardTChBHasVJPAt
 #audit_axioms Proofs.convnextInputGradB_eq_convNextForwardTChB_vjp
 #audit_axioms Proofs.convNextForwardTChB_eq_chain
@@ -1198,6 +1206,8 @@ open Proofs
 #audit_axioms Proofs.GradNodeB.denseB_hasGradAt
 #audit_axioms Proofs.GradNodeB.bnGamma_hasGradAt
 #audit_axioms Proofs.GradNodeB.bnBeta_hasGradAt
+#audit_axioms Proofs.GradNodeB.bnBatchLA_gamma_continuous
+#audit_axioms Proofs.GradNodeB.bnBatchLA_beta_continuous
 #audit_axioms Proofs.GradNodeB.cStridedInB_eq_batchMapBackward
 #audit_axioms Proofs.GradNodeB.dInB_eq_batchMapBackward
 #audit_axioms Proofs.GradNodeB.convStridedXlaW_hasGradAt
@@ -1622,6 +1632,7 @@ open Proofs
 #audit_axioms StableHLO.CertLayer.id'
 #audit_axioms StableHLO.CertLayer.comp
 #audit_axioms StableHLO.CertLayer.residual
+#audit_axioms StableHLO.CertLayer.backward_eq_den_graph
 #audit_axioms StableHLO.CertLayer.chain
 #audit_axioms StableHLO.CertLayer.chain_fwd
 #audit_axioms StableHLO.CertLayer.chain_faithful

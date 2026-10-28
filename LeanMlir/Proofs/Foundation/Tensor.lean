@@ -571,6 +571,18 @@ theorem vjpCompDiffAt_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec 
     (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) (dy : Vec p) :
     (vjpCompDiffAt f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
 
+/-- A global VJP witness together with global differentiability — `HasVJPDiffAt` without the
+    point. A `PProd`, so the `Differentiable` `Prop` can ride along with the data. -/
+abbrev HasVJPDiff {m n : Nat} (f : Vec m → Vec n) :=
+  PProd (HasVJP f) (Differentiable ℝ f)
+
+/-- Compose two `HasVJPDiff` stages: `vjpComp` on the witnesses, `Differentiable.comp` on the
+    rest. One chain then yields both a whole net's `HasVJP` (`.fst`) and its `Differentiable`
+    (`.snd`). -/
+noncomputable def vjpCompDiff {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (hf : HasVJPDiff f) (hg : HasVJPDiff g) : HasVJPDiff (g ∘ f) :=
+  ⟨vjpComp f g hf.snd hg.snd hf.fst hg.fst, hg.snd.comp hf.snd⟩
+
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix ↔ Vector flattening (row-major)
 -- ════════════════════════════════════════════════════════════════

@@ -731,8 +731,8 @@ theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
 /-! The capstone below threads `dy21 … dyStem` through `mnv4HeadCotIn`, `mnv4BodyCotIn` +
 `mnv4SkipCotIn`, `mnv4SBodyCotIn` and `mnv4FusedCotIn`. Each is stated here to be the backward
 of the certified `CertLayer` VJP it stands for, at a block input where that layer is certified
-(its `.ok`). Every proof is the layer's `.faithful` at `e := .operand "" dyOut`, then a
-definitional match with the constructed chain. -/
+(its `.ok`). Every proof is the layer's `.faithful` at `e := .operand "" dyOut`
+(`CertLayer.backward_eq_den_graph`), then a definitional match with the constructed chain. -/
 
 /-- **A stride-1 UIB body's input cotangent is its certified VJP's backward.** The chain the
     render emits (`mnv4BodyCotIn`, through `mnv4CotQc … mnv4CotPc`) is
@@ -743,10 +743,7 @@ theorem mnv4BodyCotIn_eq_vjp (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h)))
     (hok : (mnv4BodyOfRow N s p).ok xin) :
     mnv4BodyCotIn N s p xin dyOut = ((mnv4BodyOfRow N s p).vjp xin hok).backward dyOut := by
-  have h := (mnv4BodyOfRow N s p).faithful xin hok (.operand "" dyOut)
-  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
-  rw [he] at h
-  rw [← h]
+  rw [CertLayer.backward_eq_den_graph]
   by_cases hq : s.preDWk = 0 <;> by_cases hd : s.postDWk = 0 <;>
     simp only [mnv4BodyCotIn, mnv4CotQc, mnv4CotQn, mnv4CotEc, mnv4CotEn, mnv4CotDc, mnv4CotDn,
       mnv4CotPc, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, hq, hd, ↓reduceIte,
@@ -759,10 +756,7 @@ theorem mnv4SBodyCotIn_eq_vjp (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h)))
     (hok : (mnv4StridedBodyOfRow N s p).ok xin) :
     mnv4SBodyCotIn N s p xin dyOut = ((mnv4StridedBodyOfRow N s p).vjp xin hok).backward dyOut := by
-  have h := (mnv4StridedBodyOfRow N s p).faithful xin hok (.operand "" dyOut)
-  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
-  rw [he] at h
-  rw [← h]
+  rw [CertLayer.backward_eq_den_graph]
   by_cases hq : s.preDWk = 0 <;>
     simp only [mnv4SBodyCotIn, mnv4SCotQc, mnv4SCotQn, mnv4SCotEc, mnv4SCotEn, mnv4SCotDc,
       mnv4SCotDn, mnv4SCotPc, mnv4StridedBodyOfRow, mnv4UibStridedBody, mnv4PreDWSlot, hq,
@@ -779,11 +773,8 @@ theorem mnv4SkipCotIn_eq_vjp {N n : Nat} (L : CertLayer (N * n) (N * n)) (x : Ve
     (hok : L.ok x) (dyOut : Vec (N * n)) :
     mnv4SkipCotIn ((L.vjp x hok).backward dyOut) dyOut
       = ((CertLayer.residual L).vjp x hok).backward dyOut := by
-  have h := (CertLayer.residual L).faithful x hok (.operand "" dyOut)
-  have hL := L.faithful x hok (.operand "" dyOut)
-  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
-  rw [he] at h hL
-  rw [← h, CertLayer.residual_graph, den_addV, hL, he]
+  rw [CertLayer.backward_eq_den_graph (CertLayer.residual L) x hok, CertLayer.residual_graph,
+    den_addV, ← CertLayer.backward_eq_den_graph L x hok, den_operand]
   rfl
 
 /-- **The fused stage's input cotangent is its certified VJP's backward.** -/
@@ -796,11 +787,7 @@ theorem mnv4FusedCotIn_eq_vjp (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel
     mnv4FusedCotIn N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
       = ((mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
           (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).vjp xin hok).backward dyF := by
-  have h := (mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
-      (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).faithful xin hok (.operand "" dyF)
-  have he : den (SHlo.operand "" dyF) = dyF := rfl
-  rw [he] at h
-  rw [← h]
+  rw [CertLayer.backward_eq_den_graph]
   rfl
 
 
@@ -836,15 +823,9 @@ theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
           (gapLayer N (c := mid) (h := h) (w := w))
           (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).vjp
             xin hok).backward g := by
-  have h := (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
-      (gapLayer N (c := mid) (h := h) (w := w))
-      (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).faithful
-        xin hok (.operand "" g)
-  have he : den (SHlo.operand "" g) = g := rfl
-  rw [he] at h
-  rw [← h]
+  rw [CertLayer.backward_eq_den_graph]
   simp only [mnv4Head, CertLayer.comp, castLayer, gapLayer, denseLayer, cbReluLayer,
-    den_cbReluBack, den_gapBack, den_castIdx, den_denseRowBack, he, reindexCLM_apply]
+    den_cbReluBack, den_gapBack, den_castIdx, den_denseRowBack, den_operand, reindexCLM_apply]
   rfl
 
 -- ════════════════════════════════════════════════════════════════

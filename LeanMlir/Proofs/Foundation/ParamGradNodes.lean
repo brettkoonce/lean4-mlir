@@ -130,14 +130,7 @@ theorem hasGradAt_cast {n m : Nat} (e : n = m) (x : Vec n) {G : Vec m → Vec 1}
     HasGradAt (fun u => G (fun j => u (Fin.cast e.symm j))) x (fun i => dy (Fin.cast e i)) := by
   refine (HasGradAt.comp (f := reindexCLM (Fin.cast e.symm)) (x := x) hG
     (reindexCLM _).differentiableAt ((reindexHasVJP (Fin.cast e.symm)).toHasVJPAt x)).of_eq ?_
-  funext i
-  -- `reindexHasVJP`'s backward is this indicator sum by definition
-  show ∑ k : Fin m, (if i = Fin.cast e.symm k then dy k else 0) = dy (Fin.cast e i)
-  have hk : ∀ k : Fin m, i = Fin.cast e.symm k ↔ Fin.cast e i = k := fun k => by
-    constructor
-    · rintro rfl; exact Fin.ext rfl
-    · rintro rfl; exact Fin.ext rfl
-  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+  exact reindexHasVJP_cast_backward e x dy
 
 /-- Back through a certified layer, at a point it certifies: the layer's own backward. -/
 theorem _root_.Proofs.StableHLO.CertLayer.hasGradAt_comp {m n : Nat} (L : CertLayer m n)
@@ -455,6 +448,21 @@ theorem bnPerChannelFlat_beta_differentiable (oc m : Nat) (ε : ℝ) (γ : Vec o
     (v : Vec (oc * m)) : Differentiable ℝ (fun β' : Vec oc => bnPerChannelFlat oc m ε γ β' v) := by
   unfold bnPerChannelFlat bnPerChannelMat Mat.flatten bnForward
   fun_prop
+
+/-- `bnBatchLA` is continuous in `γ`: its per-channel core, read at the `bnLAPerm` cell by `rfl`.
+    No `0 < ε` needed. -/
+theorem bnBatchLA_gamma_continuous (N oc h w : Nat) (ε : ℝ) (β : Vec oc)
+    (v : Vec (N * (oc * h * w))) : Continuous (fun γ' : Vec oc => bnBatchLA N oc h w ε γ' β v) :=
+  continuous_pi fun J => (continuous_apply (bnLAPerm N oc h w J)).comp
+    (bnPerChannelFlat_gamma_differentiable oc (N * (h * w)) ε β
+      (bnchwFwd N oc h w (reassocB N oc h w v))).continuous
+
+/-- `bnBatchLA` is continuous in `β`; the `bnBatchLA_gamma_continuous` peer. -/
+theorem bnBatchLA_beta_continuous (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+    (v : Vec (N * (oc * h * w))) : Continuous (fun β' : Vec oc => bnBatchLA N oc h w ε γ β' v) :=
+  continuous_pi fun J => (continuous_apply (bnLAPerm N oc h w J)).comp
+    (bnPerChannelFlat_beta_differentiable oc (N * (h * w)) ε γ
+      (bnchwFwd N oc h w (reassocB N oc h w v))).continuous
 
 /-- A parameter entering `bnBatchLA` through its per-channel core: the loss gradient re-sums
     over the permutation into the core's layout. -/

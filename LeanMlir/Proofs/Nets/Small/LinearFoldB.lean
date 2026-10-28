@@ -94,6 +94,27 @@ theorem batchSlice_oneHotB (k : Fin N) :
     batchSlice N n (oneHotB N label) k = oneHot n (label k) := by
   funext j; simp [batchSlice, oneHotB]
 
+/-- Example `k`'s slice of a batched softmax-CE cotangent `softmax(e) − onehot`, whatever graph `e`
+    computes the logits: the per-example `softmax − oneHot` at `e`'s slice. Each batched fold's
+    `cotB_slice` is this plus its own logits slice. -/
+theorem den_softmaxCotB_slice (e : SHlo (N * n)) (k : Fin N) (j : Fin n) :
+    den (.subB (.batchOp (N := N) (.softmaxDiv (n := n)) (.batchOp (N := N) (.expe (n := n)) e))
+          (.operand "%onehot" (oneHotB N label))) (finProdFinEquiv (k, j))
+      = softmax n (batchSlice N n (den e) k) j - oneHot n (label k) j := by
+  have h1 : den (.subB (.batchOp (N := N) (.softmaxDiv (n := n))
+                (.batchOp (N := N) (.expe (n := n)) e))
+              (.operand "%onehot" (oneHotB N label))) (finProdFinEquiv (k, j))
+      = den (.batchOp (N := N) (.softmaxDiv (n := n)) (.batchOp (N := N) (.expe (n := n)) e))
+          (finProdFinEquiv (k, j))
+        - oneHotB N label (finProdFinEquiv (k, j)) := rfl
+  have h2 : ∀ i : Fin n,
+      batchSlice N n (den (.batchOp (N := N) (.expe (n := n)) e)) k i
+        = Real.exp (batchSlice N n (den e) k i) := by
+    intro i
+    simp only [den_batchOp, batchSlice_batchMap, denOp]
+  rw [h1, den_batchOp_softmaxDiv_per_example]
+  simp only [h2, oneHotB, Equiv.symm_apply_apply, softmax_apply]
+
 /-- The batched forward: `dense W b` lifted across the batch (`%x : [N, m]`). -/
 def fwdGraphB : SHlo (N * n) :=
   .batchOp (N := N) (.dense "%W0" "%b0" W b) (.operand "%x" xB)
@@ -108,18 +129,10 @@ noncomputable def lossCotGraphB : SHlo (N * n) :=
 theorem lossCotB_slice (k : Fin N) (j : Fin n) :
     den (lossCotGraphB N W b xB label) (finProdFinEquiv (k, j))
       = softmax n (mnistLinear W b (batchSlice N m xB k)) j - oneHot n (label k) j := by
-  have h1 : den (lossCotGraphB N W b xB label) (finProdFinEquiv (k, j))
-      = den (.batchOp (N := N) (.softmaxDiv (n := n))
-              (.batchOp (N := N) (.expe (n := n)) (fwdGraphB N W b xB))) (finProdFinEquiv (k, j))
-        - oneHotB N label (finProdFinEquiv (k, j)) := rfl
-  have h2 : ∀ i : Fin n,
-      batchSlice N n (den (.batchOp (N := N) (.expe (n := n)) (fwdGraphB N W b xB))) k i
-        = Real.exp (dense W b (batchSlice N m xB k) i) := by
-    intro i
+  have hz : batchSlice N n (den (fwdGraphB N W b xB)) k = mnistLinear W b (batchSlice N m xB k) := by
     simp only [fwdGraphB, den_batchOp, batchSlice_batchMap, denOp]
     rfl
-  rw [h1, den_batchOp_softmaxDiv_per_example]
-  simp only [h2, oneHotB, Equiv.symm_apply_apply, softmax_apply, mnistLinear]
+  rw [lossCotGraphB, den_softmaxCotB_slice, hz]
 
 /-- The slice form of `lossCotB_slice`. -/
 theorem batchSlice_lossCotB (k : Fin N) :

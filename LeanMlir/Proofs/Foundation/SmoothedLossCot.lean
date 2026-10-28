@@ -262,6 +262,19 @@ theorem denseWeightMap_differentiable {m n : Nat} (b : Vec n) (x : Vec m) :
   unfold dense Mat.unflatten
   fun_prop
 
+/-- The chain rule through the dense weight map: for `G` differentiable at the layer output
+    `dense W b x`, the weight gradient of `G ∘ dense` is the certified `∂(dense)/∂W` contracted
+    with `G`'s gradient there. -/
+theorem pdiv_denseWeight_comp {m n p : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
+    (G : Vec n → Vec p) (hG : DifferentiableAt ℝ G (dense W b x)) (i : Fin (m * n)) (o : Fin p) :
+    pdiv (fun v : Vec (m * n) => G (dense (Mat.unflatten v) b x)) (Mat.flatten W) i o
+      = ∑ k : Fin n, pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) (Mat.flatten W) i k
+          * pdiv G (dense W b x) k o := by
+  have h := pdiv_comp (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) G (Mat.flatten W)
+    (denseWeightMap_differentiable b x _) (by rw [Mat.unflatten_flatten]; exact hG) i o
+  simp only [Mat.unflatten_flatten] at h
+  exact h
+
 /-- The total-loss gradient wrt a weight entry equals the certified
     `(∂logits/∂W) · (softmax − onehot)` contraction (the chain rule, `pdiv_comp`). -/
 theorem lossWeightGrad_eq_sum {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
@@ -272,14 +285,10 @@ theorem lossWeightGrad_eq_sum {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
           pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
                (Mat.flatten W) (finProdFinEquiv (i, j)) k
             * (softmax n (mnistLinear W b x) k - oneHot n label k) := by
-  rw [show (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label)
-        = (fun z : Vec n => fun _ : Fin 1 => crossEntropy n z label)
-            ∘ (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) from rfl,
-      pdiv_comp _ _ _ (denseWeightMap_differentiable b x _)
-        (differentiable_pi.mpr (fun _ => crossEntropy_differentiable n label) _)]
+  rw [pdiv_denseWeight_comp W b x (fun z : Vec n => fun _ : Fin 1 => crossEntropy n z label)
+    (differentiable_pi.mpr (fun _ => crossEntropy_differentiable n label) _)]
   refine Finset.sum_congr rfl (fun k _ => ?_)
   congr 1
-  rw [Mat.unflatten_flatten]
   exact softmaxCE_grad n (mnistLinear W b x) label k
 
 end Proofs.StableHLO

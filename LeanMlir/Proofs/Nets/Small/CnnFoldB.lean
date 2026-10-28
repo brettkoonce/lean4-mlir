@@ -133,18 +133,7 @@ theorem logitsB_slice (k : Fin N) :
 theorem cotB_slice (k : Fin N) (j : Fin nClasses) :
     den (cotB N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB label) (finProdFinEquiv (k, j))
       = gk N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB label k j := by
-  have h1 : den (cotB N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB label) (finProdFinEquiv (k, j))
-      = den (.batchOp (N := N) (.softmaxDiv (n := nClasses))
-              (.batchOp (N := N) (.expe (n := nClasses)) (logitsB N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB)))
-            (finProdFinEquiv (k, j))
-        - LinFoldB.oneHotB N label (finProdFinEquiv (k, j)) := rfl
-  have h2 : ∀ i : Fin nClasses,
-      batchSlice N nClasses (den (.batchOp (N := N) (.expe (n := nClasses))
-        (logitsB N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB))) k i
-        = Real.exp (mnistLinear W₅ b₅ (a4 N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ xB k) i) := by
-    intro i; simp only [den_batchOp, batchSlice_batchMap, denOp, logitsB_slice]
-  rw [h1, den_batchOp_softmaxDiv_per_example]
-  simp only [h2, LinFoldB.oneHotB, Equiv.symm_apply_apply, gk, softmax_apply]
+  rw [cotB, LinFoldB.den_softmaxCotB_slice, logitsB_slice]
 
 theorem batchSlice_cotB (k : Fin N) :
     batchSlice N nClasses (den (cotB N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ xB label)) k

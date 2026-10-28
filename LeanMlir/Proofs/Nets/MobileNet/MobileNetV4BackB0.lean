@@ -332,12 +332,7 @@ noncomputable def castLayer {n m : Nat} (h : n = m) : CertLayer n m where
   faithful := fun x _ e => by
     funext i
     rw [den_castIdx]
-    show den e (Fin.cast h.symm.symm i) = ∑ k : Fin m, (if i = Fin.cast h.symm k then den e k else 0)
-    have hk : ∀ k : Fin m, i = Fin.cast h.symm k ↔ Fin.cast h i = k := fun k => by
-      constructor
-      · rintro rfl; exact Fin.ext rfl
-      · rintro rfl; exact Fin.ext rfl
-    simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+    exact (congrFun (reindexHasVJP_cast_backward h x (den e)) i).symm
 
 theorem castLayer_fwd_apply {n m : Nat} (h : n = m) (v : Vec n) :
     (castLayer h).fwd v = fun j => v (Fin.cast h.symm j) := rfl

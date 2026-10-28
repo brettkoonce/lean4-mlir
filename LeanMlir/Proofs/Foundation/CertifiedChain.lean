@@ -204,6 +204,12 @@ peel itself is a kernel deterministic timeout by `rfl` / `Function.comp_apply` /
 theorem residual_graph {n : Nat} (L : CertLayer n n) (x : Vec n) (e : SHlo n) :
     (residual L).graph x e = .addV (L.graph x e) e := rfl
 
+/-- A certified layer's backward at `dy` is the `den` of its graph fed `dy` as an operand leaf:
+    `faithful` at `.operand "" dy`, read right to left. -/
+theorem backward_eq_den_graph {m n : Nat} (L : CertLayer m n) (x : Vec m) (hx : L.ok x)
+    (dy : Vec n) : (L.vjp x hx).backward dy = den (L.graph x (.operand "" dy)) :=
+  (L.faithful x hx (.operand "" dy)).symm
+
 @[simp] theorem id'_fwd (n : Nat) : (id' n).fwd = fun y => y := rfl
 
 /-- `comp`'s forward, APPLIED — the one lemma a whole-net shape check at literal widths rests on. -/

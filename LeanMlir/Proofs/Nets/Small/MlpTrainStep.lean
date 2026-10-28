@@ -150,22 +150,9 @@ theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
                      crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
                    (dense W₁ b₁ a₀) k 0 := by
   -- `G = loss ∘ dense W₂ ∘ relu` is differentiable at `p₁` (ReLU smooth there).
-  have hG_diff : DifferentiableAt ℝ
-      (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-      (dense W₁ b₁ a₀) := by
-    fun_prop (disch := assumption)
-  -- The loss-of-W₁ map is `G ∘ (W₁-weight-map)`; apply the chain rule.
-  rw [show (fun v : Vec (d₁ * d₂) => fun _ : Fin 1 =>
-              crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten v) b₁ a₀))) label)
-        = (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-            ∘ (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ a₀) from rfl,
-      pdiv_comp _ _ _ ((StableHLO.denseWeightMap_differentiable b₁ a₀) _)
-        (show DifferentiableAt ℝ
-                (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
-                (dense (Mat.unflatten (Mat.flatten W₁)) b₁ a₀)
-           from by rw [Mat.unflatten_flatten]; exact hG_diff)]
-  -- The inner point `F(flatten W₁) = dense (unflatten (flatten W₁)) b₁ a₀ = dense W₁ b₁ a₀`.
-  simp only [Mat.unflatten_flatten]
+  exact StableHLO.pdiv_denseWeight_comp W₁ b₁ a₀
+    (fun z : Vec d₂ => fun _ : Fin 1 => crossEntropy d₃ (dense W₂ b₂ (relu d₂ z)) label)
+    (by fun_prop (disch := assumption)) _ 0
 
 /-- **Input-layer total-loss fold (conditional, deepest).** The same fold for the
     first layer `W₀`, whose chain runs back through *both* ReLUs — so it carries both
@@ -189,24 +176,10 @@ theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
             * pdiv (fun z : Vec d₁ => fun _ : Fin 1 =>
                      crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
                    (dense W₀ b₀ x) k 0 := by
-  have hG_diff : DifferentiableAt ℝ
-      (fun z : Vec d₁ => fun _ : Fin 1 =>
-        crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
-      (dense W₀ b₀ x) := by
-    fun_prop (disch := assumption)
-  rw [show (fun v : Vec (d₀ * d₁) => fun _ : Fin 1 =>
-              crossEntropy d₃
-                (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten v) b₀ x))))) label)
-        = (fun z : Vec d₁ => fun _ : Fin 1 =>
-              crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
-            ∘ (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x) from rfl,
-      pdiv_comp _ _ _ ((StableHLO.denseWeightMap_differentiable b₀ x) _)
-        (show DifferentiableAt ℝ
-                (fun z : Vec d₁ => fun _ : Fin 1 =>
-                  crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
-                (dense (Mat.unflatten (Mat.flatten W₀)) b₀ x)
-           from by rw [Mat.unflatten_flatten]; exact hG_diff)]
-  simp only [Mat.unflatten_flatten]
+  exact StableHLO.pdiv_denseWeight_comp W₀ b₀ x
+    (fun z : Vec d₁ => fun _ : Fin 1 =>
+      crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ z)))) label)
+    (by fun_prop (disch := assumption)) _ 0
 
 -- ════════════════════════════════════════════════════════════════
 -- § Whole-net capstone — every weight layer's total-loss gradient at once

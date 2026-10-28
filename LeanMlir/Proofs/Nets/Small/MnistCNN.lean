@@ -134,15 +134,12 @@ noncomputable def mnistCnnNoBnHasVJPAt
   have s2d2 := convRelu_differentiableAt W₂ b₂ _ h2
   have s2 := vjpCompAt _ _ x s1d s2d2 s1 s2v
   have s2d := s2d2.comp x s1d
-  -- maxpool at (block-2 output); align the point via flatten ∘ unflatten = id
+  -- maxpool at (block-2 output)
   set zmp := (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
               ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x) with hzmp
-  have hpt : Tensor3.flatten (Tensor3.unflatten zmp : Tensor3 c (2*h) (2*w)) = zmp :=
-    Tensor3.flatten_unflatten zmp
-  have mp_v : HasVJPAt (maxPoolFlat c h w) zmp := by
-    rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
-  have mp_d : DifferentiableAt ℝ (maxPoolFlat c h w) zmp := by
-    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp
+  have mp_v : HasVJPAt (maxPoolFlat c h w) zmp := maxPoolFlatHasVJPAtFlat _ h_mp
+  have mp_d : DifferentiableAt ℝ (maxPoolFlat c h w) zmp :=
+    maxPoolFlat_differentiableAt_flat _ h_mp
   have s3 := vjpCompAt _ _ x s2d mp_d s2 mp_v
   have s3d := mp_d.comp x s2d
   -- dense→relu block 3

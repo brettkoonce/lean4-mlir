@@ -1427,6 +1427,20 @@ noncomputable def maxPoolFlatHasVJPAt {c h w : Nat}
     HasVJPAt (maxPoolFlat c h w) (Tensor3.flatten x) :=
   HasVJPAt3.toHasVJPAt (maxPool2HasVJPAt3 x h_smooth)
 
+/-- `maxPoolFlat_differentiableAt` at a raw flat point `v`, smoothness read on `unflatten v`. -/
+theorem maxPoolFlat_differentiableAt_flat {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+    (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
+    DifferentiableAt ℝ (maxPoolFlat c h w) v := by
+  have h := maxPoolFlat_differentiableAt _ hs
+  rwa [Tensor3.flatten_unflatten] at h
+
+/-- `maxPoolFlatHasVJPAt` at a raw flat point `v`, smoothness read on `unflatten v`
+    (transported along `Tensor3.flatten_unflatten`). -/
+noncomputable def maxPoolFlatHasVJPAtFlat {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+    (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
+    HasVJPAt (maxPoolFlat c h w) v :=
+  Tensor3.flatten_unflatten v ▸ maxPoolFlatHasVJPAt _ hs
+
 -- ════════════════════════════════════════════════════════════════
 -- § MaxPool is exact in floating point (the float-bridge pass-through)
 -- ════════════════════════════════════════════════════════════════
@@ -1590,13 +1604,9 @@ noncomputable def cnnHasVJPAt
     convBnReluHasVJPAt Ws bs εs γs βs hεs x h_stem
   have s0_diff : DifferentiableAt ℝ S0 x :=
     convBnRelu_differentiableAt Ws bs εs γs βs hεs x h_stem
-  -- s1: maxPoolFlat ∘ S0 at x; align maxpool point
-  have hpt : Tensor3.flatten (Tensor3.unflatten (S0 x) : Tensor3 c (2*h) (2*w)) = S0 x :=
-    Tensor3.flatten_unflatten (S0 x)
-  have mp_vjp : HasVJPAt (maxPoolFlat c h w) (S0 x) := by
-    rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
-  have mp_diff : DifferentiableAt ℝ (maxPoolFlat c h w) (S0 x) := by
-    rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp
+  -- s1: maxPoolFlat ∘ S0 at x
+  have mp_vjp := maxPoolFlatHasVJPAtFlat (S0 x) h_mp
+  have mp_diff := maxPoolFlat_differentiableAt_flat (S0 x) h_mp
   have s1_vjp : HasVJPAt (maxPoolFlat c h w ∘ S0) x :=
     vjpCompAt S0 (maxPoolFlat c h w) x s0_diff mp_diff s0_vjp mp_vjp
   have s1_diff : DifferentiableAt ℝ (maxPoolFlat c h w ∘ S0) x :=

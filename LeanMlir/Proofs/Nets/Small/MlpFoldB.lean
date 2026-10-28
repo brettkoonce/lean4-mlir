@@ -85,18 +85,7 @@ theorem logitsB_slice (k : Fin N) :
 /-- Example `k`'s slice of the batched loss cotangent is `softmax(logitsₖ) − onehotₖ`. -/
 theorem cotB_slice (k : Fin N) (j : Fin d₃) :
     den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label) (finProdFinEquiv (k, j)) = gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k j := by
-  have h1 : den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label) (finProdFinEquiv (k, j))
-      = den (.batchOp (N := N) (.softmaxDiv (n := d₃))
-              (.batchOp (N := N) (.expe (n := d₃)) (logitsB N W₀ b₀ W₁ b₁ W₂ b₂ xB)))
-            (finProdFinEquiv (k, j))
-        - LinFoldB.oneHotB N label (finProdFinEquiv (k, j)) := rfl
-  have h2 : ∀ i : Fin d₃,
-      batchSlice N d₃ (den (.batchOp (N := N) (.expe (n := d₃)) (logitsB N W₀ b₀ W₁ b₁ W₂ b₂ xB))) k i
-        = Real.exp (mnistLinear W₂ b₂ (relu d₂ (p1 N W₀ b₀ W₁ b₁ xB k)) i) := by
-    intro i
-    simp only [den_batchOp, batchSlice_batchMap, denOp, logitsB_slice]
-  rw [h1, den_batchOp_softmaxDiv_per_example]
-  simp only [h2, LinFoldB.oneHotB, Equiv.symm_apply_apply, gk, softmax_apply]
+  rw [cotB, LinFoldB.den_softmaxCotB_slice, logitsB_slice]
 
 theorem batchSlice_cotB (k : Fin N) :
     batchSlice N d₃ (den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label)) k = gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k := by
@@ -114,24 +103,8 @@ noncomputable def cot1B (p₁N dyN : String) : SHlo (N * d₂) :=
 theorem cot1B_slice (p₁N dyN : String) (k : Fin N) :
     batchSlice N d₂ (den (cot1B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₁N dyN)) k
       = (mlpCotOut1 W₂ (p1 N W₀ b₀ W₁ b₁ xB k)).denote (gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k) := by
-  rw [mlpCotOut1_denote]
-  funext i
-  show (if den (preB1 N W₀ b₀ W₁ b₁ xB) (finProdFinEquiv (k, i)) > 0
-          then den (.batchOp (N := N) (.dotOut "%W2" W₂)
-                 (.operand dyN (den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label)))) (finProdFinEquiv (k, i))
-          else 0) = _
-  have hp : den (preB1 N W₀ b₀ W₁ b₁ xB) (finProdFinEquiv (k, i)) = p1 N W₀ b₀ W₁ b₁ xB k i :=
-    congrFun (preB1_slice N W₀ b₀ W₁ b₁ xB k) i
-  have hd : den (.batchOp (N := N) (.dotOut "%W2" W₂)
-                 (.operand dyN (den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label)))) (finProdFinEquiv (k, i))
-      = Mat.mulVec W₂ (gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k) i := by
-    have := congrFun (batchSlice_batchMap (denOp (.dotOut (n := d₃) "%W2" W₂))
-      (den (.operand dyN (den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label)))) k) i
-    simp only [batchSlice] at this
-    rw [den_batchOp, this]
-    show denOp (.dotOut "%W2" W₂) (batchSlice N d₃ (den (cotB N W₀ b₀ W₁ b₁ W₂ b₂ xB label)) k) i = _
-    rw [batchSlice_cotB]; rfl
-  rw [hp, hd]
+  rw [mlpCotOut1_denote, cot1B, LinFoldB.batchSlice_selectPosB, LinFoldB.batchSlice_dotOutB,
+    LinFoldB.batchSlice_operand, preB1_slice, batchSlice_cotB]
 
 /-- Layer-0 batched chain cotangent `selectPosB p₀ (dotOut W₁ c₁)`, `c₁` the layer-1 chain
     cotangent as an operand leaf. -/
@@ -144,26 +117,8 @@ theorem cot0B_slice (p₀N p₁N dyN c₁N : String) (k : Fin N) :
     batchSlice N d₁ (den (cot0B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₀N p₁N dyN c₁N)) k
       = (mlpCotOut0 W₁ W₂ (p0 N W₀ b₀ xB k) (p1 N W₀ b₀ W₁ b₁ xB k)).denote
           (gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k) := by
-  rw [mlpCotOut0_denote]
-  funext i
-  show (if den (preB0 N W₀ b₀ xB) (finProdFinEquiv (k, i)) > 0
-          then den (.batchOp (N := N) (.dotOut "%W1" W₁)
-                 (.operand c₁N (den (cot1B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₁N dyN)))) (finProdFinEquiv (k, i))
-          else 0) = _
-  have hp : den (preB0 N W₀ b₀ xB) (finProdFinEquiv (k, i)) = p0 N W₀ b₀ xB k i :=
-    congrFun (preB0_slice N W₀ b₀ xB k) i
-  have hd : den (.batchOp (N := N) (.dotOut "%W1" W₁)
-                 (.operand c₁N (den (cot1B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₁N dyN)))) (finProdFinEquiv (k, i))
-      = Mat.mulVec W₁ (fun k' => if p1 N W₀ b₀ W₁ b₁ xB k k' > 0
-          then Mat.mulVec W₂ (gk N W₀ b₀ W₁ b₁ W₂ b₂ xB label k) k' else 0) i := by
-    have := congrFun (batchSlice_batchMap (denOp (.dotOut (n := d₂) "%W1" W₁))
-      (den (.operand c₁N (den (cot1B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₁N dyN)))) k) i
-    simp only [batchSlice] at this
-    rw [den_batchOp, this]
-    show denOp (.dotOut "%W1" W₁)
-      (batchSlice N d₂ (den (cot1B N W₀ b₀ W₁ b₁ W₂ b₂ xB label p₁N dyN)) k) i = _
-    rw [cot1B_slice, mlpCotOut1_denote]; rfl
-  rw [hp, hd]
+  rw [mlpCotOut0_denote, cot0B, LinFoldB.batchSlice_selectPosB, LinFoldB.batchSlice_dotOutB,
+    LinFoldB.batchSlice_operand, preB0_slice, cot1B_slice, mlpCotOut1_denote]
 
 /-! ## The six parameter nodes at batch `N` -/
 

@@ -39,7 +39,7 @@ No accuracy is quoted for this net. The statements are about timm's `mobilenetv4
 The stem is ResNet's symmetric strided conv-bn-relu, so its tie is ResNet's; the first head conv is
 `cbReluB`. What is MobileNetV4's own is the pool stage in front of `conv_head` (GAP then a
 `Fin.cast` relabel, whose certified backward along a bijection is the plain relabel,
-`reindex_cast_backward`) and the relabel in front of the classifier.
+`reindexHasVJP_cast_backward`) and the relabel in front of the classifier.
 
 ## The apex is composed at block granularity, not at `MobileNetV4FullB.lean`'s groups
 
@@ -114,18 +114,6 @@ theorem mnv4StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 -- § The head's pool and classifier stages, and their ties
 -- ════════════════════════════════════════════════════════════════
 
-/-- A `Fin.cast` reindex's certified backward is the reverse relabel: along a bijection exactly
-    one term of `reindexHasVJP`'s masked sum survives. -/
-private theorem reindex_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
-    (reindexHasVJP (Fin.cast h.symm)).backward x dy = fun i => dy (Fin.cast h i) := by
-  funext i
-  show ∑ k : Fin m, (if i = Fin.cast h.symm k then dy k else 0) = dy (Fin.cast h i)
-  have hk : ∀ k : Fin m, i = Fin.cast h.symm k ↔ Fin.cast h i = k := fun k => by
-    constructor
-    · rintro rfl; exact Fin.ext rfl
-    · rintro rfl; exact Fin.ext rfl
-  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
-
 /-- **The pool stage** in front of `conv_head`: GAP, then the relabel to `[N, c, 1, 1]`. -/
 @[reducible] noncomputable def mnv4PoolB (N h w : Nat) {c : Nat} :
     Vec (N * (c * h * w)) → Vec (N * (c * 1 * 1)) :=
@@ -148,7 +136,7 @@ private theorem mnv4PoolB_backward (N h w : Nat) {c : Nat} (v : Vec (N * (c * h 
     (mnv4PoolBHasVJP N h w (c := c)).backward v d
       = StableHLO.batchMap N (gapBack c h w) (fun i => d (Fin.cast (mnv4_pool11 N c) i)) := by
   unfold mnv4PoolBHasVJP
-  rw [vjpComp_backward, reindex_cast_backward]
+  rw [vjpComp_backward, reindexHasVJP_cast_backward]
   rfl
 
 /-- **`conv_head`'s stage**: the pool, then conv-bn-relu at `1×1`, with its VJP at a point where
@@ -206,7 +194,7 @@ private theorem mnv4ClsB_backward (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (
       = fun i => StableHLO.batchMap N ((denseHasVJP Wd bd).backward (fun _ => 0)) d
           (Fin.cast (mnv4_pool11 N oc).symm i) := by
   unfold mnv4ClsBHasVJP
-  rw [vjpComp_backward, reindex_cast_backward]
+  rw [vjpComp_backward, reindexHasVJP_cast_backward]
   rfl
 
 /-- **The classifier stage tie**: dense-back (`Wᵀ`), then the relabel, IS its certified backward. -/

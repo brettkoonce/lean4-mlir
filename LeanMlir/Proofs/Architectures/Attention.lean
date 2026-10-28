@@ -1466,6 +1466,16 @@ noncomputable def preLNResHasVJPMat {N D : Nat} (L F : Mat N D → Mat N D)
     (flat_differentiable_comp hL hF)
     (identityMatHasVJP N D) (vjpMatComp L F hL hF vL vF)
 
+/-- Flat differentiability of a pre-norm residual sublayer `X ↦ X + F (L X)`: the identity
+    skip plus the flattened composite `F ∘ L`, the differentiability half of
+    `preLNResHasVJPMat`. -/
+lemma preLNRes_flat_differentiable {N D : Nat} (L F : Mat N D → Mat N D)
+    (hL : Differentiable ℝ (fun v : Vec (N * D) => Mat.flatten (L (Mat.unflatten v))))
+    (hF : Differentiable ℝ (fun v : Vec (N * D) => Mat.flatten (F (Mat.unflatten v)))) :
+    Differentiable ℝ (fun v : Vec (N * D) =>
+      Mat.flatten (biPathMat (fun X => X) (F ∘ L) (Mat.unflatten v))) :=
+  (identity_mat_flat_differentiable N D).add (flat_differentiable_comp hL hF)
+
 /-- Attention sublayer: `X ↦ X + MHSA(LN1(X))`. Top-level composition;
     the `biPathMat` skip-adds identity to the MHSA∘LN1 branch. -/
 noncomputable def transformerAttnSublayer (N heads d_head : Nat) (ε γ1 β1 : ℝ)
@@ -1501,22 +1511,6 @@ noncomputable def transformerBlock (gf : GeluForm) (N heads d_head mlpDim : Nat)
   (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2) ∘
   (transformerAttnSublayer N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
 
-/-- Differentiability of the flattened attention sublayer's non-trivial arm
-    (`mhsa ∘ LN1`). Used by both the sublayer VJP proof and any downstream
-    composition that needs Diff for the sublayer's arm. -/
-private lemma transformerAttnSublayer_inner_flat_differentiable
-    (N heads d_head : Nat) (ε γ1 β1 : ℝ) (hε : 0 < ε)
-    (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
-    (bq bk bv bo : Vec (heads * d_head)) :
-    Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten
-        (((mhsaLayer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
-          (fun X : Mat N (heads * d_head) => fun n =>
-            layerNormForward (heads * d_head) ε γ1 β1 (X n)))
-         (Mat.unflatten v))) :=
-  flat_differentiable_comp (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
-    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo)
-
 /-- Differentiability of the flattened attention sublayer.
     `biPathMat (id) (mhsa ∘ LN1)` flattens to a sum, both arms Differentiable. -/
 lemma transformerAttnSublayer_flat_differentiable
@@ -1525,9 +1519,10 @@ lemma transformerAttnSublayer_flat_differentiable
     (bq bk bv bo : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerAttnSublayer N heads d_head ε γ1 β1
-                     Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) := by
-  exact (identity_mat_flat_differentiable N (heads * d_head)).add
-    (transformerAttnSublayer_inner_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+                     Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) :=
+  preLNRes_flat_differentiable _ _
+    (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
+    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Attention sublayer VJP: `preLNResHasVJPMat` at `L = LN1`, `F = mhsa`. -/
 noncomputable def transformerAttnSublayerHasVJPMat (N heads d_head : Nat)
@@ -1541,22 +1536,6 @@ noncomputable def transformerAttnSublayerHasVJPMat (N heads d_head : Nat)
     (layerNormPerTokenHasVJPMat N (heads * d_head) ε γ1 β1 hε)
     (mhsaHasVJPMat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
-/-- Differentiability of the MLP sublayer's non-trivial arm
-    (`transformerMlp ∘ LN2`). Composition of `transformerMlp_flat_differentiable`
-    and `layerNorm_per_token_flat_differentiable`. -/
-private lemma transformerMlpSublayer_inner_flat_differentiable {gf : GeluForm}
-    (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
-    (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
-    (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
-    Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
-      Mat.flatten
-        (((transformerMlp gf N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2) ∘
-          (fun X : Mat N (heads * d_head) => fun n =>
-            layerNormForward (heads * d_head) ε γ2 β2 (X n)))
-         (Mat.unflatten v))) :=
-  flat_differentiable_comp (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
-    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-
 /-- Differentiability of the flattened MLP sublayer.
     `biPathMat (id) (transformerMlp ∘ LN2)` flattens to a sum, both arms Differentiable. -/
 lemma transformerMlpSublayer_flat_differentiable {gf : GeluForm}
@@ -1565,9 +1544,10 @@ lemma transformerMlpSublayer_flat_differentiable {gf : GeluForm}
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerMlpSublayer gf N heads d_head mlpDim ε γ2 β2
-                     Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-  exact (identity_mat_flat_differentiable N (heads * d_head)).add
-    (transformerMlpSublayer_inner_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
+                     Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) :=
+  preLNRes_flat_differentiable _ _
+    (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- MLP sublayer VJP: `preLNResHasVJPMat` at `L = LN2`, `F = transformerMlp`. -/
 noncomputable def transformerMlpSublayerHasVJPMat (gf : GeluForm) (N heads d_head mlpDim : Nat)
