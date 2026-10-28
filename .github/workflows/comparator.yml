@@ -75,18 +75,84 @@ jobs:
   # ⭐ 2026-10-28: split four ways. Run 40732487806's timestamps put the tier config at 1123 s, of
   # which 995 s were the six checkers one after another (Lean paranoid 266, lean4lean 311, nanoda
   # 64, con-leche 100, con-ron 49, Lean default 205) and 127 s the sandboxed build+export. Each leg
-  # below builds and exports for itself and runs Lean's default kernel (comparator always does),
+  # below exports for itself (in its own sandbox, from the build job's oleans) and runs Lean's default kernel (comparator always does),
   # plus its share of the five external checkers, so every checker still sees an export made in its
   # own sandbox. The tier legs are balanced including that default pass: ~516 / ~471 / ~418 s.
   # The two small configs keep one `--paranoid` leg. `comparator` below is the one check branch
   # protection requires; it fails unless every leg passed.
+  # ⭐ 2026-10-28, `needs: build`: the first four-leg run (40742455674) followed edits to widely
+  # imported Foundation files, and each leg rebuilt most of Certs for itself, ~25 min four times
+  # over. This job builds once and is the ONLY one that saves `lake-certs-`; the legs restore this
+  # run's exact entry read-only and replay. A warm run pays one restore + replay here before the
+  # legs start; a run after a proof edit or a toolchain bump pays the rebuild once instead of 4×.
+  build:
+    runs-on: ubuntu-24.04
+    # A COLD Certs build is ~42 min. 150 leaves room for a slower runner. The old 45-min cap
+    # killed the one-time cold bootstrap before it could save the `lake-certs-` cache (run #219).
+    # certs.yml uses 180.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free up disk space
+        # Mathlib is now materialized once (the nested package and its second ~2.3 GB tree
+        # are gone), but the Certs oleans plus three NDJSON exports in /tmp still crowd the
+        # runner's ~14 GB free; reclaiming the unused preinstalled SDKs is cheap headroom.
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake (parent — Mathlib + proof oleans)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          # ⚠ This path block must stay BYTE-IDENTICAL across certs.yml, comparator.yml,
+          # certs-heavy.yml and blueprint.yml's rolling step: actions/cache hashes the path list
+          # into a cache "version", and restore only ever matches entries of the same version.
+          # blueprint.yml needs the two exclusions (its doc-gen4 output lives in those dirs);
+          # they are no-ops here, and carrying them is what lets blueprint restore `lake-certs-`.
+          # Learned 2026-09-09: blueprint run 34384974391 missed BOTH its restores for this
+          # reason and built 242 modules cold.
+          # Cache ONLY the parent project build (Certs oleans), NOT .lake/packages
+          # — Mathlib comes from `lake exe cache get` below. Rolling key kept for
+          # freshness, but the entry is now a few hundred MB instead of ~3 GB, so
+          # it no longer blows GitHub's ~10 GB budget → no eviction. Shares the
+          # `lake-certs-` namespace with certs.yml (both run `lake build Certs`),
+          # so the two warm each other and never restore proofs.yml's Proofs-only
+          # build (which would rebuild the Certs corpus cold). See proofs.yml.
+          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
+
+      - name: Build proof suite (the oleans every leg restores)
+        run: |
+          # `Certs` since the 2026-07-06 Proofs/Certs split: the comparator
+          # re-checks corpus theorems (whole-net VJPs, seals), and `Proofs` is
+          # now only the slim demo-cone slice. Certs' roots subsume it.
+          lake exe cache get || true   # like the other five workflows: a cache blip is not a proof failure
+          # `ComparatorTests` too: the sandboxed `lake comparator` build then only replays.
+          lake build Certs ComparatorTests
+
   comparator-leg:
     name: comparator (${{ matrix.leg }})
+    needs: build
     runs-on: ubuntu-24.04
-    # A COLD Certs build is ~42 min (`Build proof suite`), plus the ~2-min generator drift check,
-    # plus the leg's comparator pass (≤ ~10 min for the tier legs). 150 leaves room for a slower
-    # runner. The old 45-min cap killed the one-time cold bootstrap before it could save the
-    # `lake-certs-` cache (run #219). certs.yml uses 180.
+    # The build job's oleans replay in a few minutes; then the ~2-min generator drift check (small
+    # leg) and the leg's comparator pass (≤ ~11 min). 150 only matters if the restore misses and
+    # the leg has to build Certs itself (~42 min cold).
     timeout-minutes: 150
     strategy:
       fail-fast: false
@@ -133,8 +199,10 @@ jobs:
           echo "$HOME/.elan/bin" >> $GITHUB_PATH
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Cache .lake (parent — Mathlib + proof oleans)
-        uses: actions/cache@v4
+      - name: Restore .lake (the build job's oleans, read-only)
+        # `restore`, not `cache`: only the build job saves, so four legs never race to write the
+        # same key. The exact key is this run's build-job entry; the prefixes are the fallback.
+        uses: actions/cache/restore@v4
         with:
           path: |
             .lake/build
@@ -159,8 +227,9 @@ jobs:
             lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
             lake-certs-
 
-      - name: Build proof suite (warms Mathlib + corpus oleans for comparator)
+      - name: Replay the build job's oleans
         run: |
+          # A replay when the restore hit the build job's entry; a real build only if it missed.
           # `Certs` since the 2026-07-06 Proofs/Certs split: the comparator
           # re-checks corpus theorems (whole-net VJPs, seals), and `Proofs` is
           # now only the slim demo-cone slice. Certs' roots subsume it.
