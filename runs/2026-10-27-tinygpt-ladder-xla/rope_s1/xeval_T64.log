@@ -1,0 +1,29 @@
+compiling eval @ T=64 (model=nano-rope-nopos, params=208449) ...
+Generating train step MLIR...
+  281851 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 19:00:16.370695  789302 service.cc:154] XLA service 0x73b1ec0083b0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 19:00:16.371175  789302 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 19:00:16.380410  789302 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:00:16.380638  789302 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 19:00:16.397036  789302 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:00:19.215383  789315 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_246', 8 bytes spill stores, 8 bytes spill loads
+
+I1027 19:00:19.984967  789340 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 4 bytes spill stores, 4 bytes spill loads
+
+I1027 19:00:20.598117  789340 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 84 bytes spill stores, 84 bytes spill loads
+
+I1027 19:00:20.941263  789317 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 692 bytes spill stores, 692 bytes spill loads
+
+I1027 19:00:21.047246  789328 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 112 bytes spill stores, 112 bytes spill loads
+
+I1027 19:00:21.853195  789316 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 856 bytes spill stores, 856 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_nanoropenopos_train_step.mlir (@main, 208 outputs, 1 replica) in 6635 ms
+xeval nano-rope-nopos @ T=64: 1.580264 nats/char = 2.279839 bits/char

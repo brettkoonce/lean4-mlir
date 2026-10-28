@@ -1,0 +1,27 @@
+compiling eval @ T=128 (model=nano-rope-nopos, params=208449) ...
+Generating train step MLIR...
+  283557 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 19:00:24.092598  790194 service.cc:154] XLA service 0x75603801e150 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 19:00:24.092663  790194 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 19:00:24.094617  790194 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:00:24.094674  790194 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 19:00:24.101703  790194 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:00:28.528774  790237 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 4 bytes spill stores, 4 bytes spill loads
+
+I1027 19:00:28.830174  790211 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 112 bytes spill stores, 112 bytes spill loads
+
+I1027 19:00:29.947506  790236 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 852 bytes spill stores, 852 bytes spill loads
+
+I1027 19:00:30.077413  790225 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 100 bytes spill stores, 100 bytes spill loads
+
+I1027 19:00:30.260058  790221 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 856 bytes spill stores, 856 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_nanoropenopos_train_step.mlir (@main, 208 outputs, 1 replica) in 7562 ms
+xeval nano-rope-nopos @ T=128: 2.139970 nats/char = 3.087324 bits/char

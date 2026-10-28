@@ -1,0 +1,47 @@
+2026-10-27 17:42:43 tiny_s0 start (seed 0, 10000 steps, batch 32)
+2026-10-27 17:49:11 tiny_s0 done: final loss: 0.894318 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.910529 nats/char = 2.756311 bits/char
+2026-10-27 17:49:11 tiny_s1 start (seed 1, 10000 steps, batch 32)
+2026-10-27 17:55:49 tiny_s1 done: final loss: 0.872654 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.925939 nats/char = 2.778542 bits/char
+2026-10-27 17:55:49 tiny_s2 start (seed 2, 10000 steps, batch 32)
+2026-10-27 18:02:33 tiny_s2 done: final loss: 0.876267 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.927925 nats/char = 2.781408 bits/char
+2026-10-27 18:02:33 tiny5k_s0 start (seed 0, 5000 steps, batch 32)
+2026-10-27 18:06:26 tiny5k_s0 done: final loss: 1.061520 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.588752 nats/char = 2.292085 bits/char
+2026-10-27 18:06:26 nano20k_s0 start (seed 0, 20000 steps, batch 32)
+2026-10-27 18:12:09 nano20k_s0 done: final loss: 1.274970 / score nano trainer-logged (12 fixed random batches of 32×64): 1.569970 nats/char = 2.264989 bits/char
+2026-10-27 18:12:17 xeval nano 128 (contrast, exit 1):   checkpoint 850180B ≠ expected 866564B — the [seqLen,D] position table makes this model length-specific (posEmb-off is required to extrapolate)
+2026-10-27 18:12:17 nano40k_s0 start (seed 0, 40000 steps, batch 32)
+2026-10-27 18:23:54 nano40k_s0 done: final loss: 1.166662 / score nano trainer-logged (12 fixed random batches of 32×64): 1.599091 nats/char = 2.307001 bits/char
+2026-10-27 18:23:54 nanob64_s0 start (seed 0, 10000 steps, batch 64)
+2026-10-27 18:27:26 nanob64_s0 done: final loss: 1.355939 / score nano trainer-logged (12 fixed random batches of 32×64): 1.579181 nats/char = 2.278277 bits/char
+2026-10-27 18:27:26 rope_s0 start (seed 0, 10000 steps, batch 32)
+2026-10-27 18:30:47 rope_s0 done: final loss: 1.370785 / score nano-rope-nopos trainer-logged (12 fixed random batches of 32×64): 1.573720 nats/char = 2.270399 bits/char
+2026-10-27 18:30:54 rope_s0 xeval T=64 (exit 0): xeval nano-rope-nopos @ T=64: 1.581841 nats/char = 2.282115 bits/char
+2026-10-27 18:31:03 rope_s0 xeval T=128 (exit 0): xeval nano-rope-nopos @ T=128: 2.326950 nats/char = 3.357079 bits/char
+2026-10-27 18:31:14 rope_s0 xeval T=256 (exit 0): xeval nano-rope-nopos @ T=256: 3.747877 nats/char = 5.407043 bits/char
+2026-10-27 18:31:14 tiny5k_s1 start (seed 1, 5000 steps, batch 32)
+2026-10-27 18:35:08 tiny5k_s1 done: final loss: 1.125079 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.601794 nats/char = 2.310900 bits/char
+2026-10-27 18:35:08 nano20k_s1 start (seed 1, 20000 steps, batch 32)
+2026-10-27 18:41:22 nano20k_s1 done: final loss: 1.269410 / score nano trainer-logged (12 fixed random batches of 32×64): 1.563314 nats/char = 2.255386 bits/char
+2026-10-27 18:41:22 nano40k_s1 start (seed 1, 40000 steps, batch 32)
+2026-10-27 18:53:27 nano40k_s1 done: final loss: 1.180138 / score nano trainer-logged (12 fixed random batches of 32×64): 1.591643 nats/char = 2.296255 bits/char
+2026-10-27 18:53:27 nanob64_s1 start (seed 1, 10000 steps, batch 64)
+2026-10-27 18:56:58 nanob64_s1 done: final loss: 1.262922 / score nano trainer-logged (12 fixed random batches of 32×64): 1.580298 nats/char = 2.279889 bits/char
+2026-10-27 18:56:58 rope_s1 start (seed 1, 10000 steps, batch 32)
+2026-10-27 19:00:16 rope_s1 done: final loss: 1.299009 / score nano-rope-nopos trainer-logged (12 fixed random batches of 32×64): 1.575899 nats/char = 2.273542 bits/char
+2026-10-27 19:00:23 rope_s1 xeval T=64 (exit 0): xeval nano-rope-nopos @ T=64: 1.580264 nats/char = 2.279839 bits/char
+2026-10-27 19:00:32 rope_s1 xeval T=128 (exit 0): xeval nano-rope-nopos @ T=128: 2.139970 nats/char = 3.087324 bits/char
+2026-10-27 19:00:42 rope_s1 xeval T=256 (exit 0): xeval nano-rope-nopos @ T=256: 3.480320 nats/char = 5.021040 bits/char
+2026-10-27 19:00:42 tiny5k_s2 start (seed 2, 5000 steps, batch 32)
+2026-10-27 19:04:26 tiny5k_s2 done: final loss: 1.143790 / score tiny trainer-logged (12 fixed random batches of 32×128): 1.595146 nats/char = 2.301309 bits/char
+2026-10-27 19:04:26 nano20k_s2 start (seed 2, 20000 steps, batch 32)
+2026-10-27 19:10:43 nano20k_s2 done: final loss: 1.314759 / score nano trainer-logged (12 fixed random batches of 32×64): 1.555143 nats/char = 2.243597 bits/char
+2026-10-27 19:10:43 nano40k_s2 start (seed 2, 40000 steps, batch 32)
+2026-10-27 19:22:58 nano40k_s2 done: final loss: 1.236634 / score nano trainer-logged (12 fixed random batches of 32×64): 1.585343 nats/char = 2.287166 bits/char
+2026-10-27 19:22:58 nanob64_s2 start (seed 2, 10000 steps, batch 64)
+2026-10-27 19:26:31 nanob64_s2 done: final loss: 1.265483 / score nano trainer-logged (12 fixed random batches of 32×64): 1.562597 nats/char = 2.254351 bits/char
+2026-10-27 19:26:31 rope_s2 start (seed 2, 10000 steps, batch 32)
+2026-10-27 19:29:52 rope_s2 done: final loss: 1.273969 / score nano-rope-nopos trainer-logged (12 fixed random batches of 32×64): 1.575697 nats/char = 2.273250 bits/char
+2026-10-27 19:30:00 rope_s2 xeval T=64 (exit 0): xeval nano-rope-nopos @ T=64: 1.576972 nats/char = 2.275089 bits/char
+2026-10-27 19:30:08 rope_s2 xeval T=128 (exit 0): xeval nano-rope-nopos @ T=128: 1.973000 nats/char = 2.846437 bits/char
+2026-10-27 19:30:18 rope_s2 xeval T=256 (exit 0): xeval nano-rope-nopos @ T=256: 3.038690 nats/char = 4.383903 bits/char
+2026-10-27 19:30:18 ALL DONE

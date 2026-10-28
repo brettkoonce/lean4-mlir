@@ -1,0 +1,278 @@
+compiling train step (model=nano, B=32, T=64, V=65, params=212545) ...
+Generating train step MLIR...
+  254497 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 19:04:26.631785  796811 service.cc:154] XLA service 0x79ec080084c0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 19:04:26.631871  796811 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 19:04:26.634659  796811 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:04:26.634737  796811 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 19:04:26.653602  796811 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:04:28.483558  796836 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_246', 8 bytes spill stores, 8 bytes spill loads
+
+I1027 19:04:29.091972  796855 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 68 bytes spill stores, 68 bytes spill loads
+
+I1027 19:04:29.659464  796835 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 88 bytes spill stores, 88 bytes spill loads
+
+I1027 19:04:30.432897  796836 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 4 bytes spill stores, 4 bytes spill loads
+
+I1027 19:04:30.564595  796843 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 112 bytes spill stores, 112 bytes spill loads
+
+I1027 19:04:31.460723  796842 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 856 bytes spill stores, 856 bytes spill loads
+
+I1027 19:04:31.500627  796838 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 84 bytes spill stores, 84 bytes spill loads
+
+I1027 19:04:32.158825  796839 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 692 bytes spill stores, 692 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_train_step.mlir (@main, 211 outputs, 1 replica) in 6627 ms
+loading data/shakespeare/{train,val}.bin ...
+  1003854 train tokens, 111540 val tokens
+  seed offset: 2 (LEAN_MLIR_SEED)
+training: 20000 steps × batch 32 × T 64, lr peak 0.003000 (cosine + 100-step warmup), Adam
+  step 1/20000: loss=4.914608 lr=0.000030
+  step 101/20000: loss=2.628499 lr=0.003000
+  step 201/20000: loss=2.398298 lr=0.003000
+  step 301/20000: loss=2.187167 lr=0.002999
+  step 401/20000: loss=2.048171 lr=0.002998
+  ── val @ step 500: 2.053541 nats/char = 2.962634 bits/char
+  step 501/20000: loss=2.007583 lr=0.002997
+  step 601/20000: loss=1.891303 lr=0.002996
+  step 701/20000: loss=1.769814 lr=0.002994
+  step 801/20000: loss=1.807322 lr=0.002992
+  step 901/20000: loss=1.774613 lr=0.002989
+  ── val @ step 1000: 1.844741 nats/char = 2.661399 bits/char
+  step 1001/20000: loss=1.676615 lr=0.002986
+  step 1101/20000: loss=1.651552 lr=0.002983
+  step 1201/20000: loss=1.663249 lr=0.002980
+  step 1301/20000: loss=1.662541 lr=0.002976
+  step 1401/20000: loss=1.677420 lr=0.002972
+  ── val @ step 1500: 1.794167 nats/char = 2.588436 bits/char
+  step 1501/20000: loss=1.598758 lr=0.002967
+  step 1601/20000: loss=1.652118 lr=0.002962
+  step 1701/20000: loss=1.599124 lr=0.002957
+  step 1801/20000: loss=1.563365 lr=0.002952
+  step 1901/20000: loss=1.586929 lr=0.002946
+  ── val @ step 2000: 1.724277 nats/char = 2.487606 bits/char
+  step 2001/20000: loss=1.543441 lr=0.002940
+  step 2101/20000: loss=1.538896 lr=0.002933
+  step 2201/20000: loss=1.617981 lr=0.002926
+  step 2301/20000: loss=1.537014 lr=0.002919
+  step 2401/20000: loss=1.489665 lr=0.002912
+  ── val @ step 2500: 1.716428 nats/char = 2.476282 bits/char
+  step 2501/20000: loss=1.537080 lr=0.002904
+  step 2601/20000: loss=1.616392 lr=0.002896
+  step 2701/20000: loss=1.488965 lr=0.002888
+  step 2801/20000: loss=1.537636 lr=0.002879
+  step 2901/20000: loss=1.485684 lr=0.002870
+  ── val @ step 3000: 1.681688 nats/char = 2.426162 bits/char
+  step 3001/20000: loss=1.559392 lr=0.002861
+  step 3101/20000: loss=1.529924 lr=0.002851
+  step 3201/20000: loss=1.475998 lr=0.002842
+  step 3301/20000: loss=1.502781 lr=0.002831
+  step 3401/20000: loss=1.549293 lr=0.002821
+  ── val @ step 3500: 1.667277 nats/char = 2.405372 bits/char
+  step 3501/20000: loss=1.539420 lr=0.002810
+  step 3601/20000: loss=1.479717 lr=0.002799
+  step 3701/20000: loss=1.484818 lr=0.002788
+  step 3801/20000: loss=1.411529 lr=0.002776
+  step 3901/20000: loss=1.442011 lr=0.002764
+  ── val @ step 4000: 1.652693 nats/char = 2.384332 bits/char
+  step 4001/20000: loss=1.435546 lr=0.002752
+  step 4101/20000: loss=1.475225 lr=0.002740
+  step 4201/20000: loss=1.388778 lr=0.002727
+  step 4301/20000: loss=1.399142 lr=0.002714
+  step 4401/20000: loss=1.417575 lr=0.002701
+  ── val @ step 4500: 1.647169 nats/char = 2.376363 bits/char
+  step 4501/20000: loss=1.488762 lr=0.002687
+  step 4601/20000: loss=1.486892 lr=0.002673
+  step 4701/20000: loss=1.459753 lr=0.002659
+  step 4801/20000: loss=1.425487 lr=0.002645
+  step 4901/20000: loss=1.456265 lr=0.002631
+  ── val @ step 5000: 1.625084 nats/char = 2.344501 bits/char
+  step 5001/20000: loss=1.456645 lr=0.002616
+  step 5101/20000: loss=1.446229 lr=0.002601
+  step 5201/20000: loss=1.374720 lr=0.002586
+  step 5301/20000: loss=1.468102 lr=0.002570
+  step 5401/20000: loss=1.445040 lr=0.002554
+  ── val @ step 5500: 1.625196 nats/char = 2.344662 bits/char
+  step 5501/20000: loss=1.407682 lr=0.002538
+  step 5601/20000: loss=1.412693 lr=0.002522
+  step 5701/20000: loss=1.377023 lr=0.002506
+  step 5801/20000: loss=1.399055 lr=0.002489
+  step 5901/20000: loss=1.437434 lr=0.002473
+  ── val @ step 6000: 1.616514 nats/char = 2.332137 bits/char
+  step 6001/20000: loss=1.392453 lr=0.002456
+  step 6101/20000: loss=1.432244 lr=0.002438
+  step 6201/20000: loss=1.392969 lr=0.002421
+  step 6301/20000: loss=1.453131 lr=0.002403
+  step 6401/20000: loss=1.387209 lr=0.002386
+  ── val @ step 6500: 1.614132 nats/char = 2.328700 bits/char
+  step 6501/20000: loss=1.409078 lr=0.002368
+  step 6601/20000: loss=1.398342 lr=0.002349
+  step 6701/20000: loss=1.404018 lr=0.002331
+  step 6801/20000: loss=1.466434 lr=0.002313
+  step 6901/20000: loss=1.336152 lr=0.002294
+  ── val @ step 7000: 1.601273 nats/char = 2.310149 bits/char
+  step 7001/20000: loss=1.313559 lr=0.002275
+  step 7101/20000: loss=1.374910 lr=0.002256
+  step 7201/20000: loss=1.419415 lr=0.002237
+  step 7301/20000: loss=1.458374 lr=0.002218
+  step 7401/20000: loss=1.370218 lr=0.002198
+  ── val @ step 7500: 1.601859 nats/char = 2.310995 bits/char
+  step 7501/20000: loss=1.361520 lr=0.002179
+  step 7601/20000: loss=1.413160 lr=0.002159
+  step 7701/20000: loss=1.286509 lr=0.002139
+  step 7801/20000: loss=1.457131 lr=0.002120
+  step 7901/20000: loss=1.409567 lr=0.002099
+  ── val @ step 8000: 1.582241 nats/char = 2.282692 bits/char
+  step 8001/20000: loss=1.334671 lr=0.002079
+  step 8101/20000: loss=1.322363 lr=0.002059
+  step 8201/20000: loss=1.426629 lr=0.002039
+  step 8301/20000: loss=1.384386 lr=0.002018
+  step 8401/20000: loss=1.370238 lr=0.001998
+  ── val @ step 8500: 1.593193 nats/char = 2.298492 bits/char
+  step 8501/20000: loss=1.374739 lr=0.001977
+  step 8601/20000: loss=1.355345 lr=0.001956
+  step 8701/20000: loss=1.376004 lr=0.001936
+  step 8801/20000: loss=1.339021 lr=0.001915
+  step 8901/20000: loss=1.301073 lr=0.001894
+  ── val @ step 9000: 1.591845 nats/char = 2.296546 bits/char
+  step 9001/20000: loss=1.321217 lr=0.001873
+  step 9101/20000: loss=1.344041 lr=0.001852
+  step 9201/20000: loss=1.389396 lr=0.001831
+  step 9301/20000: loss=1.375631 lr=0.001809
+  step 9401/20000: loss=1.287456 lr=0.001788
+  ── val @ step 9500: 1.580293 nats/char = 2.279881 bits/char
+  step 9501/20000: loss=1.317140 lr=0.001767
+  step 9601/20000: loss=1.284904 lr=0.001746
+  step 9701/20000: loss=1.349807 lr=0.001725
+  step 9801/20000: loss=1.384671 lr=0.001703
+  step 9901/20000: loss=1.350023 lr=0.001682
+  ── val @ step 10000: 1.576375 nats/char = 2.274228 bits/char
+  step 10001/20000: loss=1.368744 lr=0.001661
+  step 10101/20000: loss=1.358240 lr=0.001639
+  step 10201/20000: loss=1.341660 lr=0.001618
+  step 10301/20000: loss=1.323662 lr=0.001597
+  step 10401/20000: loss=1.354388 lr=0.001575
+  ── val @ step 10500: 1.587798 nats/char = 2.290708 bits/char
+  step 10501/20000: loss=1.395118 lr=0.001554
+  step 10601/20000: loss=1.408162 lr=0.001533
+  step 10701/20000: loss=1.337647 lr=0.001512
+  step 10801/20000: loss=1.393797 lr=0.001491
+  step 10901/20000: loss=1.305789 lr=0.001469
+  ── val @ step 11000: 1.580915 nats/char = 2.280779 bits/char
+  step 11001/20000: loss=1.317041 lr=0.001448
+  step 11101/20000: loss=1.317832 lr=0.001427
+  step 11201/20000: loss=1.381659 lr=0.001406
+  step 11301/20000: loss=1.297550 lr=0.001385
+  step 11401/20000: loss=1.360490 lr=0.001364
+  ── val @ step 11500: 1.575308 nats/char = 2.272688 bits/char
+  step 11501/20000: loss=1.342423 lr=0.001344
+  step 11601/20000: loss=1.294815 lr=0.001323
+  step 11701/20000: loss=1.301888 lr=0.001302
+  step 11801/20000: loss=1.357594 lr=0.001282
+  step 11901/20000: loss=1.336390 lr=0.001261
+  ── val @ step 12000: 1.567503 nats/char = 2.261428 bits/char
+  step 12001/20000: loss=1.327405 lr=0.001241
+  step 12101/20000: loss=1.294489 lr=0.001221
+  step 12201/20000: loss=1.321465 lr=0.001201
+  step 12301/20000: loss=1.303161 lr=0.001180
+  step 12401/20000: loss=1.348365 lr=0.001161
+  ── val @ step 12500: 1.569711 nats/char = 2.264614 bits/char
+  step 12501/20000: loss=1.341822 lr=0.001141
+  step 12601/20000: loss=1.260541 lr=0.001121
+  step 12701/20000: loss=1.347737 lr=0.001102
+  step 12801/20000: loss=1.358150 lr=0.001082
+  step 12901/20000: loss=1.277721 lr=0.001063
+  ── val @ step 13000: 1.557018 nats/char = 2.246302 bits/char
+  step 13001/20000: loss=1.299520 lr=0.001044
+  step 13101/20000: loss=1.245432 lr=0.001025
+  step 13201/20000: loss=1.272813 lr=0.001006
+  step 13301/20000: loss=1.305868 lr=0.000987
+  step 13401/20000: loss=1.331273 lr=0.000969
+  ── val @ step 13500: 1.564876 nats/char = 2.257638 bits/char
+  step 13501/20000: loss=1.311008 lr=0.000951
+  step 13601/20000: loss=1.311214 lr=0.000932
+  step 13701/20000: loss=1.290257 lr=0.000914
+  step 13801/20000: loss=1.306730 lr=0.000897
+  step 13901/20000: loss=1.293796 lr=0.000879
+  ── val @ step 14000: 1.562453 nats/char = 2.254144 bits/char
+  step 14001/20000: loss=1.290436 lr=0.000862
+  step 14101/20000: loss=1.242463 lr=0.000844
+  step 14201/20000: loss=1.246005 lr=0.000827
+  step 14301/20000: loss=1.309985 lr=0.000811
+  step 14401/20000: loss=1.158743 lr=0.000794
+  ── val @ step 14500: 1.557816 nats/char = 2.247453 bits/char
+  step 14501/20000: loss=1.303837 lr=0.000778
+  step 14601/20000: loss=1.325881 lr=0.000762
+  step 14701/20000: loss=1.269985 lr=0.000746
+  step 14801/20000: loss=1.192148 lr=0.000730
+  step 14901/20000: loss=1.317605 lr=0.000714
+  ── val @ step 15000: 1.559290 nats/char = 2.249580 bits/char
+  step 15001/20000: loss=1.257190 lr=0.000699
+  step 15101/20000: loss=1.328671 lr=0.000684
+  step 15201/20000: loss=1.246500 lr=0.000669
+  step 15301/20000: loss=1.242030 lr=0.000655
+  step 15401/20000: loss=1.257829 lr=0.000641
+  ── val @ step 15500: 1.554478 nats/char = 2.242638 bits/char
+  step 15501/20000: loss=1.288632 lr=0.000627
+  step 15601/20000: loss=1.324696 lr=0.000613
+  step 15701/20000: loss=1.305163 lr=0.000599
+  step 15801/20000: loss=1.281609 lr=0.000586
+  step 15901/20000: loss=1.323397 lr=0.000573
+  ── val @ step 16000: 1.560503 nats/char = 2.251330 bits/char
+  step 16001/20000: loss=1.245593 lr=0.000560
+  step 16101/20000: loss=1.236166 lr=0.000548
+  step 16201/20000: loss=1.292687 lr=0.000536
+  step 16301/20000: loss=1.330281 lr=0.000524
+  step 16401/20000: loss=1.297829 lr=0.000512
+  ── val @ step 16500: 1.556938 nats/char = 2.246187 bits/char
+  step 16501/20000: loss=1.255277 lr=0.000501
+  step 16601/20000: loss=1.229030 lr=0.000490
+  step 16701/20000: loss=1.245120 lr=0.000479
+  step 16801/20000: loss=1.219821 lr=0.000469
+  step 16901/20000: loss=1.357657 lr=0.000458
+  ── val @ step 17000: 1.549346 nats/char = 2.235234 bits/char
+  step 17001/20000: loss=1.299508 lr=0.000449
+  step 17101/20000: loss=1.263549 lr=0.000439
+  step 17201/20000: loss=1.233069 lr=0.000430
+  step 17301/20000: loss=1.234158 lr=0.000421
+  step 17401/20000: loss=1.203553 lr=0.000412
+  ── val @ step 17500: 1.552447 nats/char = 2.239708 bits/char
+  step 17501/20000: loss=1.303212 lr=0.000404
+  step 17601/20000: loss=1.318683 lr=0.000396
+  step 17701/20000: loss=1.281498 lr=0.000388
+  step 17801/20000: loss=1.269515 lr=0.000381
+  step 17901/20000: loss=1.249528 lr=0.000374
+  ── val @ step 18000: 1.549455 nats/char = 2.235390 bits/char
+  step 18001/20000: loss=1.231577 lr=0.000367
+  step 18101/20000: loss=1.255086 lr=0.000360
+  step 18201/20000: loss=1.234939 lr=0.000354
+  step 18301/20000: loss=1.192849 lr=0.000348
+  step 18401/20000: loss=1.260511 lr=0.000343
+  ── val @ step 18500: 1.551828 nats/char = 2.238814 bits/char
+  step 18501/20000: loss=1.272476 lr=0.000338
+  step 18601/20000: loss=1.227845 lr=0.000333
+  step 18701/20000: loss=1.300883 lr=0.000328
+  step 18801/20000: loss=1.280735 lr=0.000324
+  step 18901/20000: loss=1.341362 lr=0.000320
+  ── val @ step 19000: 1.555800 nats/char = 2.244545 bits/char
+  step 19001/20000: loss=1.303763 lr=0.000317
+  step 19101/20000: loss=1.226537 lr=0.000314
+  step 19201/20000: loss=1.249018 lr=0.000311
+  step 19301/20000: loss=1.253539 lr=0.000308
+  step 19401/20000: loss=1.237317 lr=0.000306
+  ── val @ step 19500: 1.556375 nats/char = 2.245375 bits/char
+  step 19501/20000: loss=1.280662 lr=0.000304
+  step 19601/20000: loss=1.286432 lr=0.000303
+  step 19701/20000: loss=1.297869 lr=0.000302
+  step 19801/20000: loss=1.284584 lr=0.000301
+  step 19901/20000: loss=1.229149 lr=0.000300
+  step 20000/20000: loss=1.314759 lr=0.000300
+  ── val @ step 20000: 1.555145 nats/char = 2.243600 bits/char
+saved params to .lake/build/tinygpt_shakespeare_params.bin  (final loss: 1.314759)

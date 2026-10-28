@@ -1,0 +1,58 @@
+compiling eval forward + train step at B=32 (model=nano, T=64) ...
+Generating train step MLIR...
+  254497 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 18:23:36.635072  763447 service.cc:154] XLA service 0x7d85c0008510 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 18:23:36.635190  763447 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 18:23:36.637626  763447 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 18:23:36.637725  763447 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 18:23:36.648007  763447 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 18:23:38.279682  763487 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 68 bytes spill stores, 68 bytes spill loads
+
+I1027 18:23:38.482602  763469 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 88 bytes spill stores, 88 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 2921 ms
+  streaming 6400/111476
+  streaming 12800/111476
+  streaming 19200/111476
+  streaming 25600/111476
+  streaming 32000/111476
+  streaming 38400/111476
+  streaming 44800/111476
+  streaming 51200/111476
+  streaming 57600/111476
+  streaming 64000/111476
+  streaming 70400/111476
+  streaming 76800/111476
+  streaming 83200/111476
+  streaming 89600/111476
+  streaming 96000/111476
+  streaming 102400/111476
+  streaming 108800/111476
+I1027 18:23:49.038122  763447 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 18:23:49.039475  763447 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 18:23:50.769324  763757 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_246', 8 bytes spill stores, 8 bytes spill loads
+
+I1027 18:23:51.387497  763759 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 4 bytes spill stores, 4 bytes spill loads
+
+I1027 18:23:52.360375  763748 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 692 bytes spill stores, 692 bytes spill loads
+
+I1027 18:23:52.595921  763775 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 856 bytes spill stores, 856 bytes spill loads
+
+I1027 18:23:52.757720  763749 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_247', 112 bytes spill stores, 112 bytes spill loads
+
+I1027 18:23:52.982569  763752 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_261', 84 bytes spill stores, 84 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_train_step.mlir (@main, 211 outputs, 1 replica) in 5189 ms
+score nano chunked64: 111488 positions, 1.622779 nats/char = 2.341176 bits/char
+score nano streaming: 111476 positions, 1.595415 nats/char = 2.301698 bits/char
+score nano trainer-logged (12 fixed random batches of 32×64): 1.599091 nats/char = 2.307001 bits/char
