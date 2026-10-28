@@ -940,7 +940,8 @@ regularizer on separable_conv2d)" else "1-D params") ++ adamCode ++ lossCode ++
 --   nothing needs it to move.
 --   `paperSig` and `mnv2SigList` are the SAME 210/158 parameters in the SAME order under two
 --   naming conventions — `%Ws`/`%We2`/`%Wfc` here, `%sW`/`%b2eW`/`%Wd` there. The `#guard`s at
---   the bottom of this file pin both arities, which is what keeps the two lists one contract.
+--   the bottom of this file pin both arities. Only the lengths: the shapes are not compared, so
+--   a shape swap or block-index typo in one list would pass them.
 -- ════════════════════════════════════════════════════════════════
 
 structure MBFwd where
@@ -961,8 +962,8 @@ structure MBFwd where
 --   inverted residual: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN
 -- ════════════════════════════════════════════════════════════════
 
-/-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
-    downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
+/-- **STRIDED inverted-residual forward** (b2/b4/b7/b14 in `mnv2FwdChain`): expand at the input
+    `2hh×2ww`, depthwise downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
 def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
@@ -989,7 +990,8 @@ def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bo
          o := nPn,
          bns := [(s!"b{p}en", mid, 2*hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
-/-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
+/-- **STRIDE-1 inverted-residual forward** (b3, b5, b6, b8–b10, b12, b13, b15, b16 in
+    `mnv2FwdChain`): everything at `hh×ww`, with an `addV` skip on the
     block input (ic = oc). -/
 def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
@@ -1042,7 +1044,7 @@ def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : 
          bns := [(s!"b{p}dn", ic, hh), (s!"b{p}pn", oc, hh)] }
 
 -- ════════════════════════════════════════════════════════════════
--- § EXPAND-NO-SKIP stride-1 block (b11, b17): == irFwd/irBack but NO addV skip.
+-- § EXPAND-NO-SKIP stride-1 block (b11, b17): == irFwd but NO addV skip.
 --   block output = project-BN out directly; backward dx = expand-conv-back (no fan-in).
 -- ════════════════════════════════════════════════════════════════
 
@@ -1091,11 +1093,10 @@ def irSigNoExp (p : String) (ic oc : Nat) (convBias : Bool) : List (String × St
    (s!"%Wp{p}", ty [oc,ic,1,1])] ++ b s!"%bp{p}" oc ++
   [(s!"%gp{p}", ty [oc]), (s!"%btp{p}", ty [oc])]
 
-/-- **Reduced 6-block param signature** (the demo net), func-arg order: stem (4) + 6×12 + head (4)
-    + dense (2) = 82 tensors, or 64 at `convBias := false`. One source for the func signature, the
-    return types and the demo's own arity — it was written out twice, which is the same
-    two-lists-one-net shape that let the stem/head gate go missing in `paperSig`. -/
-
+/-- **The 17-block paper-spec param signature**, func-arg order: stem (4) + b1 no-expand (8) +
+    16×12 + head (4) + dense (2) = 210 tensors, or 158 at `convBias := false` (the `#guard`s
+    below). The signature of the eval forward `@mobilenetv2_fwd_eval`, in the same order as
+    `mnv2SigList` under this file's eval-chain names. -/
 def paperSig (nClasses : Nat) (convBias : Bool) : List (String × String) :=
   [("%Ws", ty [32,3,3,3])] ++ (if convBias then [("%bs", ty [32])] else []) ++
   [("%gs", ty [32]), ("%bts", ty [32])] ++
@@ -1475,6 +1476,3 @@ end Proofs.StableHLO
 -- ε-1e-5 file above stays, because the checkpoints trained at 1e-5 score through it.
 #eval IO.FS.writeFile "verified_mlir/mobilenetv2in_fwd_eval_eps0001.mlir"
   (Proofs.StableHLO.mnv2FwdEvalText 64 1000 "1.0e-3" false "mobilenetv2in")
-
--- The reduced 6-block render kept as a demo / stepping-stone (the worked foundation that built the
--- depthwise SGD core ops); NOT what the trainer reads.

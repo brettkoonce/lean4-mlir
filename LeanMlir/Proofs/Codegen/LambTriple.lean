@@ -41,6 +41,8 @@ and `lambScaleF_faithful` (both `rfl`, at `adamWParamF_faithful`'s bar). This fi
   is 1, not 0 and not `0/0`. timm reads `if weight_decay != 0 or group['always_adapt']:` before
   computing the ratio, so an excluded parameter takes a plain Adam step; this says the render's
   "skip the op and pass the zero" implements that, rather than only that the guard does not crash.
+  The theorem leaves `wd` free (`r = lambDir … wd …`): the step is plain Adam because the
+  excluded group's `wd` is 0, which the render supplies and the statement does not fix.
 
 ## What is NOT claimed
 
@@ -102,7 +104,8 @@ theorem lamb_triple_faithful_committed {n : Nat}
   show scalarOf (fun _ => (0 : ℝ) + gradSumSq θ) = gradSumSq θ
   simp only [scalarOf, zero_add]
 
-/-- **The `no_weight_decay` group: the emitted step IS a plain Adam step at trust 1.**
+/-- **The `no_weight_decay` group: the emitted step is `θ − lr·lambDir` at trust 1** — a plain
+    Adam step when the group's `wd` is 0, as for `no_weight_decay` (`wd` is free here).
     timm reads `if weight_decay != 0 or group['always_adapt']:` before computing the ratio, so an
     excluded parameter is NOT layer-adapted. The render implements that by skipping the norm op
     and passing `%lzero` — the same zero the fold would have been seeded from — and this says the
@@ -111,7 +114,7 @@ theorem lamb_triple_faithful_committed {n : Nat}
     The pre-existing zero-norm guard does not already give this at the artifact. It fires at
     `‖θ‖ = 0` exactly, i.e. step one, where every BatchNorm β and dense bias starts; from step two
     the parameter is small-but-nonzero and `‖θ‖/‖r‖` collapses to ~0.01–0.1 against timm's 1.0.
-    So `lambTrust_zero_weight` alone does not give the excluded group's plain-Adam step; this
+    So `lambTrust_zero_weight` alone does not give the excluded group's trust-1 step; this
     theorem does. -/
 theorem lamb_triple_faithful_excluded {n : Nat}
     (θN lrN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN lzN : String) (ds : List Nat)

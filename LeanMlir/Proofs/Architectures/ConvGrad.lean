@@ -692,11 +692,11 @@ theorem conv2d_input_l1_drift {ic oc h w kH kW : Nat}
 -- The bias rungs. `conv2d` is affine in its bias with the SIMPLEST
 -- possible Jacobian: output `(co,hi,wi)` reads bias entry `co` with
 -- coefficient 1 — a Kronecker channel indicator, point-free. The
--- per-entry drift is exactly `|e o|` (no input bound `a`, no kernel
--- mass); only the `ℓ1` drift picks up the spatial multiplicity `h·w`
--- (one bias entry feeds a whole channel — sharing, exactly as for the
--- kernel). Everything downstream of the conv is the kernel-rung
--- argument verbatim.
+-- per-entry drift is exactly `|e o|` (`conv2d_bias_sub`; no input bound `a`, no kernel
+-- mass), stated for the rungs as at most `‖e‖₁`; only the `ℓ1` drift
+-- picks up the spatial multiplicity `h·w` (one bias entry feeds a whole
+-- channel — sharing, exactly as for the kernel). Everything downstream
+-- of the conv is the kernel-rung argument verbatim.
 -- ════════════════════════════════════════════════════════════════
 
 /-- The conv output difference under a bias perturbation, exactly:
@@ -708,8 +708,9 @@ theorem conv2d_bias_sub {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
   rw [conv2d_eq_convPad, conv2d_eq_convPad, Pi.add_apply]
   ring
 
-/-- Per-entry conv drift under a bias perturbation: the perturbation's
-    own entry — no `a` factor, no kernel mass. Flat-index form. -/
+/-- Per-entry conv drift under a bias perturbation, bounded by the perturbation's total
+    `ℓ1` mass `‖e‖₁` — no `a` factor, no kernel mass. Flat-index form, the form the relu
+    margins consume; the exact drift `e o` is `conv2d_bias_sub`. -/
 theorem conv2d_flat_bias_drift_total {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b e : Vec oc)
     (k : Fin (oc * h * w)) :

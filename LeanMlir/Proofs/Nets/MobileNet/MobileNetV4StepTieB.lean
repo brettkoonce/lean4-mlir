@@ -961,7 +961,10 @@ noncomputable def mnv4Blk21 (N f : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     are `∀ cot` statements at explicitly constructed cotangents; the kink and positivity conditions
     live in the `CertLayer`s whose `.ok` `MobileNetV4FullBVJP.lean` binds. The final side `f`
     is a binder, as ResNet-50's `q`: `f = 7` is the artifacts at 224×224 (`mnv4in_adamdp64`, …), `f = 8`
-    the paper tier's `mnv4in256_acc{,dp}8x128wxdropdowd01bf16`. One device, at either precision:
+    the paper tier's `mnv4in256_acc{,dp}8x128wxdropdowd01bf16`, a drop artifact: the statement has
+    no mask binder, so it covers that step only at the all-ones masks
+    (`mobilenetv4ForwardBFullDrop_ones`), and the backward through its drop sites is outside it.
+    One device, at either precision:
     `bf16` selects the conv and depthwise weight nodes' kind — `false` the f32 artifacts', `true`
     the bf16 ones', read over ℝ (`Bf16Erasure`); the right-hand side is the same certified
     gradient at either value.

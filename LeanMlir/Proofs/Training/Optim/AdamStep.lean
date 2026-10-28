@@ -77,10 +77,11 @@ theorem adamVNext_nonneg {β₂ : ℝ} (hβ₂0 : 0 ≤ β₂) (hβ₂1 : β₂ 
     {v g : Vec n} (hv : ∀ i, 0 ≤ v i) (i : Fin n) : 0 ≤ adamVNext β₂ v g i :=
   add_nonneg (mul_nonneg hβ₂0 (hv i)) (mul_nonneg (sub_nonneg.2 hβ₂1) (sq_nonneg _))
 
-/-- **Well-definedness of the AdamW update.** The denominator `√(v'/bc₂) + ε` is
-    strictly positive whenever `ε > 0` — `Real.sqrt` is unconditionally nonnegative,
-    so there is no division by zero in `adamWParam` (the analogue of the BatchNorm
-    `0 < ε` positivity side condition, but unconditional in `v`). -/
+/-- **The AdamW update's outer denominator is positive.** `√(v'/bc₂) + ε` is
+    strictly positive whenever `ε > 0` — `Real.sqrt` is unconditionally nonnegative
+    (the analogue of the BatchNorm `0 < ε` positivity side condition, but unconditional
+    in `v`). `adamWParam` also divides by `bc₁` and `bc₂`, which this does not touch:
+    `bc₁, bc₂ > 0` is the driver's `t ≥ 1`. -/
 theorem adam_denom_pos {β₂ ε bc₂ : ℝ} (hε : 0 < ε) {v g : Vec n} (i : Fin n) :
     0 < Real.sqrt (adamVNext β₂ v g i / bc₂) + ε :=
   add_pos_of_nonneg_of_pos (Real.sqrt_nonneg _) hε
@@ -102,7 +103,8 @@ def emaNext (d : ℝ) (e θ' : Vec n) : Vec n := adamMNext d e θ'
 theorem emaNext_apply (d : ℝ) (e θ' : Vec n) (i : Fin n) :
     emaNext d e θ' i = d * e i + (1 - d) * θ' i := rfl
 
-/-- The shadow's distance to the live weight shrinks by the factor `d` per step. -/
+/-- Against the fixed updated weight `θ'`, one EMA update scales the shadow's gap by `d`. A
+    one-update identity, not a bound on the lag along a trajectory (the weight moves too). -/
 theorem emaNext_lag (d : ℝ) (e θ' : Vec n) (i : Fin n) :
     emaNext d e θ' i - θ' i = d * (e i - θ' i) := by
   simp only [emaNext_apply]; ring

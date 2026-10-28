@@ -89,7 +89,7 @@ theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
     `Mat.outer x dy` is the cotangent-contracted Jacobian of `dense(W, b, x)`
     with respect to `W`, at every index.
 
-    `(Mat.outer x dy) i j = ∑ k, pdiv (…) (Mat.flatten W) (fPF (i, j)) k · dy k` -/
+    `(Mat.outer x dy) i j = ∑ k, pdiv (…) (Mat.flatten W) (finProdFinEquiv (i, j)) k · dy k` -/
 theorem denseWeightGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin m) (j : Fin n) :
     Mat.outer x dy i j =
@@ -117,12 +117,14 @@ theorem denseBiasGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
   simp [pdiv_dense_b]
 
 /-- **Dense weight backward** — named accessor.
-    `dW = x ⊗ dy` (outer product). -/
+    `dW = x ⊗ dy` (outer product). Definitionally the `Mat.outer x dy` that
+    `denseWeightGrad_correct` states; the theorem does not mention this name. -/
 noncomputable def denseWeightGrad {m n : Nat}
     (x : Vec m) (dy : Vec n) : Mat m n :=
   Mat.outer x dy
 
-/-- **Dense bias backward** — named accessor. `db = dy`. -/
+/-- **Dense bias backward** — named accessor. `db = dy`. Definitionally the `dy` that
+    `denseBiasGrad_correct` states; the theorem does not mention this name. -/
 def denseBiasGrad {n : Nat} (dy : Vec n) : Vec n := dy
 
 -- ════════════════════════════════════════════════════════════════

@@ -402,8 +402,9 @@ noncomputable def mobilenetv4ForwardBFull (N f : Nat) {nCls : Nat} (w : Mnv4BWei
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * f))))) * (2 * (2 * (2 * (2 * (2 * f)))))))) : Vec (N * nCls) :=
   (mnv4HeadStack N f w).fwd (mnv4Pre6 N f w x)
 
--- The stem's own arithmetic, checked rather than asserted: its input is the 224-px image and
--- its output is what the fused stage reads. A wrong nest depth is well-typed at a variable.
+-- The halving chain the stem nest spells, from the 224-px image down: closed literal arithmetic
+-- that does not mention the nest. A wrong nest depth is well-typed at a variable; the examples
+-- below are what pin the nest itself to the image types.
 #guard 2 * 112 == 224
 #guard 2 * 56 == 112
 #guard 2 * 28 == 56
@@ -514,7 +515,8 @@ def mnv4ExtraDWBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibPara
                       e)))))))))
 
 /-- The ExtraDW body graph denotes the row-typed body's forward — **generic in the row**, so one
-    theorem serves all thirteen. The two hypotheses are exactly the dispatch conditions
+    theorem serves the ten stride-1 ExtraDW rows (the three strided ones go through the strided
+    builder below). The two hypotheses are exactly the dispatch conditions
     `mnv4PreDWSlot`/`mnv4PostDWSlot` branch on, discharged by `decide` at each concrete row. -/
 theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     (p : UibParams s) (bf16 : Bool) (hq : s.preDWk ≠ 0) (hd : s.postDWk ≠ 0)

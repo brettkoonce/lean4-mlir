@@ -34,9 +34,13 @@ outside Lean, quoted as illustration, not proved here:
     stage-4 3×3, ic=512        4608     2.8e-04     7.83e-03    0.0081
     1×1 projection, ic=512      512     3.1e-05     7.83e-03    0.0079
 
-Under 1% everywhere, and the LEAF term dominates the fan-in term by ~28× even at the widest
-layer. Set the accumulate to bf16 as well and `((1+u)^(n+1) − 1)` at n=4608 is **6.4e7** — a
-bound that says nothing at all. That contrast is the whole argument for bf16-mixed over bf16:
+`convBr` is under 1% everywhere, and the LEAF term dominates the fan-in term by ~28× even at the
+widest layer. That is the dot bracket only: `conv_close_mixed` adds the store term
+`L.u·(1 + convBr)` (half the leaf term again at `L.u = 2⁻⁸`) and a negligible bias-add term, so
+the theorem's full coefficient on `convFanS` is larger than `convBr`. The bound is relative to
+`convFanS = Σ|w·x|`, not to the output, which can be much smaller when terms cancel. Set the
+accumulate to bf16 as well and `((1+u)^(n+1) − 1)` at n=4608 is **6.4e7** — a bound that says
+nothing at all. That contrast is the whole argument for bf16-mixed over bf16:
 the `1/u` fan-in wall sits at the ACCUMULATE precision, which stays fp32.
 -/
 

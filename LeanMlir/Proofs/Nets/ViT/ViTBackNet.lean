@@ -325,14 +325,14 @@ theorem vitNetBackGraph_faithful {gf : GeluForm}
       Wc bc cls pos ε hε ps γF βF Wcls bcls).toHasVJPAt x) (den e)
 
 -- ════════════════════════════════════════════════════════════════
--- § ViT-Tiny's depth, as a check rather than prose
+-- § ViT-Tiny's depth (prose, not a check)
 -- ════════════════════════════════════════════════════════════════
 
-/-! The peer of `R34BWeights` / `R50BWeights` / `mnv4Blocks`: the shipped config's shape
-pinned in the types instead of stated in a docstring. ViT-Tiny is 12 identical-shaped blocks at
-`heads = 3`, `d_head = 64` (`D = 192`), `mlpDim = 768`, `N + 1 = 197` tokens — so unlike the conv
-nets there is no ladder to pin, only the depth and the widths, and every block has the same type
-(which is why `chain` over a `List.replicate`-shaped index is the right form here and a
-per-row-typed parameter record buys nothing). -/
+/-! Unlike `R34BWeights` / `R50BWeights` / `mnv4Blocks`, nothing here pins the shipped config in a
+type: the theorems above stay generic in `k`, `hm1`, `d`, `mlpDim` and `N`. ViT-Tiny is 12
+identical-shaped blocks at `heads = 3`, `d_head = 64` (`D = 192`), `mlpDim = 768`, `N + 1 = 197`
+tokens — so unlike the conv nets there is no ladder to pin, only the depth and the widths, and
+every block has the same type (which is why `chain` over a `List.replicate`-shaped index is the
+right form here and a per-row-typed parameter record buys nothing). -/
 
 end Proofs.StableHLO

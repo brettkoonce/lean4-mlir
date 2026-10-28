@@ -50,7 +50,9 @@ def Pos.index (p : Pos) : Nat := Id.run do
     w := w * 3
   return idx
 
-/-- Did `who` complete `k` in a row through cell `c`? -/
+/-- Did `who` complete `k` in a row through cell `c`? Assumes `p.cells[c]! = who` (every caller
+    passes the cell just played by `who`): the run counts `c` itself without reading it, so on
+    any other cell the answer is about `c`'s neighbours only. -/
 def Pos.winsThrough (p : Pos) (c : Nat) (who : UInt8) : Bool := Id.run do
   let n := p.n
   let r0 : Int := c / n

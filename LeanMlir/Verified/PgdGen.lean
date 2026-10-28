@@ -12,8 +12,10 @@ docstring), so they are unverified program code, like the reference `MlirCodegen
 
 /-- PGD-step kernel for the linear classifier.
     `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the formula of the
-    linear input-VJP, written by hand) → L∞ sign-step → project to the
-    `eps`-ball around `x0` → clip to [0,1]. Returns the advanced adversarial input `x_adv`.
+    linear input-VJP, written by hand) → step → project to the `eps`-ball around `x0` → clip
+    to [0,1]. `linf := true`: L∞ sign-step, box-clip to `x0 ± eps`. `linf := false`: L2 step on
+    the per-sample normalised gradient, projection onto the L2 ball of radius `eps` around `x0`.
+    Returns the advanced adversarial input `x_adv`.
     `eps`/`alpha` baked as constants (recompiled per sweep point). Invoked via the generic
     `forwardF32` FFI with `onehot`+`x0` in the params blob and `nClasses := d0` (output size) —
     no new FFI/C shim. The whole PGD step runs on the GPU; the host just iterates. -/

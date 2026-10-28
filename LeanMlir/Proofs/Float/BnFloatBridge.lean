@@ -21,9 +21,12 @@ The keystone is that `t ↦ 1/√t` is Lipschitz on `[ε, ∞)` with constant `1
 accuracy with this Lipschitz bound gives `bnIstd_close`: the float `istd` is within
 `ers/√ε + e_var/(2ε√ε)` of the certified `bnIstd`, where `e_var` is whatever budget
 the (standard, Higham) variance rounding supplies. This is the BN analog of the
-`exp` accuracy handoff. The per-example `bnForward` rounding budget composes it with
-the Higham mean/variance budgets (`FloatModel.bnMean_close`, `FloatModel.bnVar_close`)
-and the normalize chain (`FloatModel.bnForward_close_of`), all in this file.
+`exp` accuracy handoff. The per-example `bnForward` rounding budget
+(`FloatModel.bnForward_close`) composes it with the Higham mean budget
+(`FloatModel.bnMean_close`) and the normalize chain (`FloatModel.bnForward_close_of`), all in
+this file. The variance is not composed: `bnForward_close` takes the float variance's
+closeness (`hvar`, budget `evar`) and its `ε` floor (`hfv`) as hypotheses, and
+`FloatModel.bnVar_close` is a standalone variance budget nothing here connects to them.
 -/
 
 namespace Proofs

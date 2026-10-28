@@ -28,6 +28,12 @@ zero-bias constant, `%stnmu`/`%b{k}{e,d,p}nmu`/`%hnmu` statistics, `zW1`…`zb2`
 `%Wd`/`%bd`), and `FwdGraphTextTies` checks the render's stem, block and head text against it
 per kind.
 
+**The artifacts are the zero-bias instance.** `MBWEval` / `MBWNoExpEval` / `B0WeightsEval`
+carry a conv-bias field per conv site, which `den` reads, while the graph spells each one as the
+zero-bias constant. So the two artifacts are the instance with every conv bias `0`. At inference
+BatchNorm a conv bias does not cancel as it does under batch BN, so this is a restriction, not a
+reparametrisation.
+
 B0 stage spec `[t,c,n,s,k]`: s1 (1,16,1,1,3) s2 (6,24,2,2,3) s3 (6,40,2,2,5) s4 (6,80,3,2,3)
 s5 (6,112,3,1,5) s6 (6,192,4,2,5) s7 (6,320,1,1,3); stem 3×3/s2 (3→32) at the XLA-`SAME` phase,
 head 1×1 (320→1280) → GAP → dense.

@@ -672,7 +672,9 @@ theorem mlpSublayerVBackGraph_faithfulMH {gf : GeluForm} {Np1 hm1 d mlpDim : Nat
 -- ── Stage 3: Vec-LN attention sublayer backward graph (multi-head) ──
 
 /-- The vec-LN attn-sublayer non-trivial arm (`mhsa ∘ LNᵥ₁`), multi-head. REUSES
-    `mhsaBackGraphMH` verbatim, after the vector-LN back fragment `lnRowBack(γ=1) ∘ rowScaleF γ1v`. -/
+    `mhsaBackGraphMH` verbatim, after the vector-LN back fragment `lnRowBack(γ=1) ∘ rowScaleF γ1v`.
+    `mhsaBackGraphMH` takes a `Vec` cotangent, so this arm reads `den e`, re-wrapped there as the
+    operand `%dh`; only the skip arm of `attnSublayerVBackGraphMH` keeps `e` as a subgraph. -/
 noncomputable def attnSublayerVInnerBackGraphMH {Np1 hm1 d : Nat} (ε : ℝ)
     (γ1v : Vec ((hm1+1) * d))
     (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv _bo : Vec ((hm1+1) * d))
@@ -758,10 +760,10 @@ theorem attnSublayerVBackGraphMH_faithful {Np1 hm1 d : Nat} (ε : ℝ)
     mlpSublayerV ∘ attnSublayerV`, so `block.backward A dY = attn.backward A
     (mlp.backward (attn A) dY)`. Saved: `A` (block input), `h = attnSublayerV A`.
 
-    The MLP sublayer's graph is fed to the attention sublayer as a subgraph,
-    not as `den (…)` re-wrapped as an operand: the two sublayers compose symbolically,
-    and the block itself takes a cotangent subgraph so it can sit downstream of the
-    next block. This is what makes the depth-`k` tower a real composite term. -/
+    The MLP sublayer's graph is fed to the attention sublayer as a subgraph, and the block
+    itself takes a cotangent subgraph so it can sit downstream of the next block. The skip arm
+    carries that subgraph through; the MHSA arm reads its `den`, re-wrapped as the operand `%dh`
+    inside `mhsaBackGraphMH`, so the composite term is symbolic along the skip path only. -/
 noncomputable def transformerBlockVBackGraphMH (gf : GeluForm) {Np1 hm1 d mlpDim : Nat}
     (ε : ℝ) (γ1v β1v γ2v β2v : Vec ((hm1+1) * d))
     (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
@@ -928,17 +930,18 @@ noncomputable def transformerBlockVBackGraphMHP (gf : GeluForm) {Np1 hm1 d mlpDi
     (transformerAttnSublayerV Np1 (hm1+1) d ε p.γ1 p.β1 p.Wq p.Wk p.Wv p.Wo
       p.bq p.bk p.bv p.bo A) ecot
 
-/-- **Bundled per-block backward faithfulness.** The block back graph at a bundled
-    `BlockParamsV` block (saved input `A`, cotangent `dY`) denotes the flatten of
-    the proven `blockV`'s VJP backward — `transformerBlockVHasVJPMat.backward`,
-    spelled ONCE here over a generic `p` (so the depth-`k` induction never re-spells
-    the 16-field tuple). The block VJP is bundled as `transformerBlockVHasVJPMatP`. -/
+/-- `transformerBlockVHasVJPMat` at a bundled `BlockParamsV` block. -/
 noncomputable def transformerBlockVHasVJPMatP (gf : GeluForm) {N hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV ((hm1+1) * d) mlpDim) :
     HasVJPMat (blockV gf N (hm1+1) d mlpDim ε p) :=
   transformerBlockVHasVJPMat gf N (hm1+1) d mlpDim ε p.γ1 p.β1 hε p.Wq p.Wk p.Wv p.Wo
     p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2
 
+/-- **Bundled per-block backward faithfulness.** The block back graph at a bundled
+    `BlockParamsV` block (saved input `A`, cotangent `dY`) denotes the flatten of
+    the proven `blockV`'s VJP backward — `transformerBlockVHasVJPMat.backward`,
+    spelled ONCE here over a generic `p` (so the depth-`k` induction never re-spells
+    the 16-field tuple). The block VJP is bundled as `transformerBlockVHasVJPMatP`. -/
 theorem transformerBlockVBackGraphMHP_faithful {gf : GeluForm} {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV ((hm1+1) * d) mlpDim) (A dY : Mat Np1 ((hm1+1) * d))
     (ecot : SHlo (Np1 * ((hm1+1) * d))) (hecot : den ecot = Mat.flatten dY) :

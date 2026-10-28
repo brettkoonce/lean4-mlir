@@ -1945,9 +1945,11 @@ The forward `patchEmbedFlat` is a concrete `def`; its VJP
 `patchEmbedFlatHasVJP` and `patchEmbedFlat_differentiable` are proved
 from foundation rules.
 
-The `N` parameter is independent of `(H, W, patchSize)` — out-of-range
-patches contribute zero (via a `hpad` guard on the image read), so the
-API does not require `N = (H/patchSize) * (W/patchSize)`. -/
+The `N` parameter is independent of `(H, W, patchSize)`, so the API does not require
+`N = (H/patchSize) * (W/patchSize)`. The `hpad` guard is per pixel: out-of-range pixels read
+zero. A row past the patch grid reads only `b_conv` (plus its `pos_embed`) only when
+`patchSize` divides `H` and `W` and `W/patchSize > 0`; otherwise it can read partial edge
+pixels. -/
 
 /-- **Patch embedding forward** on flattened endpoints.
 
@@ -1960,9 +1962,10 @@ API does not require `N = (H/patchSize) * (W/patchSize)`. -/
       where the image read is guarded by `h'*P+kh < H ∧ w'*P+kw < W`
       (returns 0 if out of range).
 
-    This handles arbitrary `N` cleanly: for `n` whose decoded patch
-    `(h', w')` falls outside the image grid, the inner sum is identically
-    zero. -/
+    For arbitrary `N`: when `patchSize` divides `H` and `W` (and `W/patchSize > 0`), a row `n`
+    whose decoded patch `(h', w')` falls outside the grid has an identically zero inner sum, so
+    it reads `b_conv d + pos_embed n d`. Otherwise the guard is per pixel and such a row can
+    read partial edge pixels. -/
 noncomputable def patchEmbedFlat
     (ic H W patchSize N D : Nat)
     (W_conv : Kernel4 D ic patchSize patchSize) (b_conv : Vec D)

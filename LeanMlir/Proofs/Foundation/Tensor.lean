@@ -373,11 +373,12 @@ theorem reindexVJP_backward {a b : Nat} (σ : Fin b → Fin a) (v : Vec a) (dy :
   show ∑ k, (if i = σ k then (1 : ℝ) else 0) * dy k = _
   simp only [ite_mul, one_mul, zero_mul]
 
-/-- **Additive fan-in** — proved, no sorry. Requires `f` and `g` to be
-    differentiable everywhere. -/
+/-- **Additive fan-in** `x ↦ f x + g x`. Its VJP is `biPathHasVJP`. -/
 @[reducible] noncomputable def biPath {m n : Nat} (f g : Vec m → Vec n) : Vec m → Vec n :=
   fun x i => f x i + g x i
 
+/-- **Additive fan-in VJP**: the backward is the sum of the two branch backwards. Requires `f`
+    and `g` to be differentiable everywhere. -/
 noncomputable def biPathHasVJP {m n : Nat}
     (f g : Vec m → Vec n)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
@@ -389,12 +390,15 @@ noncomputable def biPathHasVJP {m n : Nat}
     rw [hf.correct, hg.correct, ← Finset.sum_add_distrib]
     congr 1; ext j; rw [pdiv_add _ _ _ (hf_diff x) (hg_diff x)]; ring
 
-/-- **Multiplicative fan-in** — proved, no sorry. Requires `f` and `g`
-    to be differentiable everywhere. -/
+/-- **Multiplicative fan-in** `x ↦ f x * g x` (pointwise). Its VJP is
+    `elemwiseProductHasVJP`. -/
 @[reducible] noncomputable def elemwiseProduct {n : Nat}
     (f g : Vec n → Vec n) : Vec n → Vec n :=
   fun x i => f x i * g x i
 
+/-- **Multiplicative fan-in VJP** (the product rule): each branch backward is fed the
+    cotangent scaled by the other branch. Requires `f` and `g` to be differentiable
+    everywhere. -/
 noncomputable def elemwiseProductHasVJP {n : Nat}
     (f g : Vec n → Vec n)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)

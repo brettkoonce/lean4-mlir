@@ -83,8 +83,9 @@ theorem momParam_mu_zero (lr : ℝ) (θ v g : Vec n) :
     momParam 0 lr θ v g = sgdParam lr θ g := by
   funext i; simp [momParam, sgdParam, momVNext]
 
-/-- **`lr = 0` freezes the parameter** — the determinism probe's precondition, stated so a render
-    can be checked to move nothing at zero learning rate while still updating the velocity. -/
+/-- **`lr = 0` freezes the parameter** of plain SGD — the determinism probe's precondition, stated
+    so a render can be checked to move nothing at zero learning rate. The momentum peer (`momParam`
+    frozen, velocity still updated) is not stated here. -/
 theorem sgdParam_lr_zero (θ g : Vec n) : sgdParam 0 θ g = θ := by
   funext i; simp [sgdParam]
 

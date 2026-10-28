@@ -38,7 +38,8 @@ open Proofs
     Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
     shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
     placeholders print identically to the live graphs the `den` theorems use. Dims: `h,w`
-    are the post-pool spatial sizes, the image is `2h × 2w`. -/
+    are the post-pool spatial sizes, the image is `2h × 2w`. `lrStr` is `lr/B`: the rendered
+    cotangent `softmax − onehot` is the batch sum, not the mean the `%loss` block reports. -/
 def cnnTrainStepText (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)
@@ -112,7 +113,8 @@ def cnnTrainStepText (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     ops (reused from cnn, NO new ops). Every line that feeds a returned parameter is
     `pretty(provenNode)`, and `CifarFold.cifar_train_step_tied` states each output's
     `den` as the certified SGD step at the rendered chain cotangent.
-    Dims: `h,w` are the final pooled spatial sizes; image `4h×4w`, stage-2 spatial `2h×2w`. -/
+    Dims: `h,w` are the final pooled spatial sizes; image `4h×4w`, stage-2 spatial `2h×2w`.
+    `lrStr` is `lr/B`: the rendered cotangent `softmax − onehot` is the batch sum. -/
 def cifarTrainStepText (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -199,7 +201,8 @@ set_option maxRecDepth 4000 in
     `convBiasSgd`, dense via `weightSgd`/`biasSgd` (NO new ops).
     `Cifar8Tie.cifar8_train_step_tied` states each output's `den` as the certified SGD
     step at the rendered chain cotangent. `h,w` are the final pooled sizes; stage spatials build
-    up ×2 per pool (`s4=2h, s3=4h, s2=8h, s1=16h`; image `16h×16w`). -/
+    up ×2 per pool (`s4=2h, s3=4h, s2=8h, s1=16h`; image `16h×16w`). `lrStr` is `lr/B`: the
+    rendered cotangent `softmax − onehot` is the batch sum. -/
 def cifar8TrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)

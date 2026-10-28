@@ -31,7 +31,8 @@ namespace Proofs
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § Per-block weight bundles (the 17-block net has 158 block params + stem/head/fc)
+-- § Per-block weight bundles (158 is the whole net's tensor count, stem/head/fc included;
+--   the records also keep the bias slots `eb`/`db`/`pb`, folded into BN at `convBias := false`)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Weights of one MobileNetV2 bottleneck (expand `ic→mid` 1×1, depthwise 3×3,

@@ -1114,8 +1114,10 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/resnet34in_fwd_eval.mlir"
   (Proofs.StableHLO.resnet34FwdEvalText 256 1000 "1.0e-05" "resnet34in")
 
--- Pin the seven literal artifact paths above against the name the renderer actually emits. If a
--- variant is renamed, this fails at `lake build` instead of at run time as an "entry mismatch".
+-- Pin the variant spelling the literal artifact paths above use. If a variant is renamed, this
+-- fails at `lake build` instead of at run time as an "entry mismatch". These evaluate
+-- `r34AdamVariant` on their own arguments and never read the `#eval` paths, so a typo in a path,
+-- or an `#eval` whose arguments no longer match its path, still passes.
 #guard Proofs.StableHLO.r34AdamVariant 32 1 == "adam"
 #guard Proofs.StableHLO.r34AdamVariant 32 2 == "adamdp"
 #guard Proofs.StableHLO.r34AdamVariant 256 1 == "adam256"

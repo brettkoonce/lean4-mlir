@@ -321,7 +321,10 @@ abbrev MaxPool2MarginQUpTo {c h w : Nat} (δ : ℝ)
 
 /-- The post-ReLU `MaxPool2MarginQ` gives the pre-activation `MaxPool2MarginQUpTo`, with any
     twins: the dominating pre-activation cell is positive unless the window is dead, and below a
-    positive cell the pre-activation gaps are at least the post-ReLU ones. -/
+    positive cell the pre-activation gaps are at least the post-ReLU ones. For `0 ≤ δ` the
+    hypothesis already excludes dead and tied windows (their post-ReLU cells are equal), so the
+    dead branch and the generality in `T` are unreachable: this lifts untied windows only, and
+    the MNIST twin case `MaxPool2MarginQUpTo` is built for is not reached through it. -/
 theorem MaxPool2MarginQ.to_marginQUpTo {c h w : Nat} {δ : ℝ} {x : Tensor3 c (2*h) (2*w)}
     (T : Fin (2*h) × Fin (2*w) → Fin (2*h) × Fin (2*w) → Prop)
     (hm : MaxPool2MarginQ δ (fun ci hi wi => max (x ci hi wi) 0)) :

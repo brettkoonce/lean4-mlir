@@ -38,7 +38,9 @@ is the gradient of a loss, which ResNet-50's BCE step tie needs.
 ## What is NOT claimed
 
 Note: **The divisor is `B·K`, not `B`, and the theorem carries it as a binder rather than asserting
-it.** `bceLossCotGraph_row_committed` pins it to `N·K`, which is what `ResNet50RenderB` bakes.
+it.** `bceLossCotGraph_row_committed` pins the denoted divisor to `N·K`, the value
+`ResNet50RenderB` bakes. The printed literal is the string `bStr`, which `den` ignores, so nothing
+here ties the printed constant to `N·K`: that literal is trusted.
 timm's `BinaryCrossEntropy` is `reduction='mean'` over `B×C`, not the mean of the per-example sum
 over classes; at `K = 1000` the two differ by 1000× on the effective step, and RSB-A2's `lr 5e-3`
 is tuned to this form. `bceLogits` is the per-example SUM over classes, so the `/K` half of the
@@ -218,8 +220,9 @@ theorem bceLossCotGraph_row (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
     `{B * nClasses}.0`; softmax-CE's peer bakes `{B}.0`. timm's `BinaryCrossEntropy` is
     `reduction='mean'` over `B×C`, not the mean of the per-example sum over classes, and at
     `K = 1000` the two differ by 1000× on the effective step — RSB-A2's `lr 5e-3` is tuned to
-    this form. Stated separately from `bceLossCotGraph_row` so that the divisor is a checked
-    fact about the artifact rather than a binder nobody instantiated. -/
+    this form. This only instantiates `bceLossCotGraph_row`'s real divisor at `N·K`; the
+    printed literal is the free string `bStr`, which `den` ignores, so the artifact's printed
+    divisor is trusted, not checked. -/
 theorem bceLossCotGraph_row_committed (N K : Nat) (bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) (n : Fin N) (j : Fin K) :
     den (bceLossCotGraph N K ((N : ℝ) * (K : ℝ)) bStr logN ohN logits t)

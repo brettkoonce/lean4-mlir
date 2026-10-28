@@ -339,7 +339,12 @@ theorem w5B_tied (aN : String) (lr : ℝ) (i : Fin d1) (j : Fin nClasses) :
     `g`/`mlpCotOut1`/`mlpCotOut0` per example (`dy4B_slice`, `dy3B_slice`), conv₂ against the
     emitted pool-back chain (`dhc2B_slice` = `cnnChainCotW2`), conv₁ against the emitted conv-back
     chain (`dhc1B_slice` = `cnnChainCotW1` for odd kernels). The output weight folds to the whole
-    loss in `w5B_tied`. -/
+    loss in `w5B_tied`.
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which node each op reads;
+    that those nodes are the per-example chain cotangents above is the separate `*_slice` lemmas,
+    and that those are the loss's gradient is `cnn_net_lossGrad`. -/
 theorem cnn_train_step_tiedB (a4N a3N poolN ac1N : String) (lr : ℝ) :
     let a4v := den (a4B N W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ xB)
     let a3v := den (a3B N W₁ b₁ W₂ b₂ W₃ b₃ xB)

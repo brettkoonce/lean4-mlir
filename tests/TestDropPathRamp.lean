@@ -115,10 +115,10 @@ private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard convnextSImagenetVerified.dropKeeps.size == cnxDropSites cnxSmall
 #guard convnextSImagenetVerified.dropKeeps.size == 36
 
--- The renderer's parameter list and the spec's layer list must be the same 342 tensors — the
+-- The renderer's parameter list and the spec's layer list must be the same 344 tensors — the
 -- `toSpecs == Layout.specs` move carried across the depth parameter. This is what fires if
 -- `cnxSmall` and the spec's layer list ever disagree about WHICH stage deepens: both would still
--- have 36 blocks and 342 tensors, but the shapes would differ.
+-- have 36 blocks and 344 tensors, but the shapes would differ.
 #guard (cnxAllParams 1000 cnxSmall).map (fun (_, ds) => ds.toArray) ==
          (convnextSImagenetVerified.toSpecs.map (fun (d, _) => d)).toList
 

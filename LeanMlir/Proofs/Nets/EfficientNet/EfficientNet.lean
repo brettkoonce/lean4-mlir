@@ -34,6 +34,9 @@ own composed VJP — plus its differentiability.
   separable striding/pooling plumbing is already in `CNN.lean`).  Only the
   `0 < ε` batch-norm hypotheses are required — swish and sigmoid are
   smooth, so there are no relu-style kink hypotheses anywhere in the block.
+  Every "bn" in this file is `bnForward`: one normalisation over the whole flattened tensor with
+  scalar `γ β : ℝ`, not per-channel BatchNorm; the per-channel, batch-BatchNorm net is
+  `efficientnetForwardBFull`.
 
 ## References
 

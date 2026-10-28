@@ -86,8 +86,8 @@ theorem convBBetaSgdTied_holds {N h w oc : Nat} {bN lrStr cotN : String} {ε : �
     EnetFold.bnBetaB_den bN lrStr cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) lr o
 
 /-- **Residual stride-1 MBConv block, tied.** All 16 params (expand/project 1×1 conv W+b, depthwise
-    W+b, SE reduce/excite dense W₁/b₁/W₂/b₂, three true-BN γ/β) denote the certified batched Σ_n
-    loss-descent step at the real block forward activations + the chain cotangents driven by `dyOut`. -/
+    W+b, SE reduce/excite dense W₁/b₁/W₂/b₂, three true-BN γ/β) denote their batched Σ_n SGD update
+    at the real block forward activations + the chain cotangents driven by `dyOut`. -/
 def enetExpTied {N ic mid oc h w r kHd kWd : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (εe : ℝ) (hεe : 0 < εe) (εd : ℝ) (hεd : 0 < εd) (εp : ℝ) (hεp : 0 < εp)
@@ -364,7 +364,7 @@ per-row softmax-CE gradient `g = rowSoftmax(logits) − onehot`. The head conv p
 cotangent (loss → dense-back → GAP-back → swish/BN-back); the dense Wfc/bfc tie at the loss cotangent
 `g` directly. -/
 
-/-- **Head, tied.** The 4 head conv-bn params + the 2 dense params (Wfc/bfc) denote the certified step
+/-- **Head, tied.** The 4 head conv-bn params + the 2 dense params (Wfc/bfc) denote their SGD step
     at the real head forward + the loss-driven cotangent `g = rowSoftmax(logits) − onehot`. -/
 def enetHeadTied {N c oc h w nC : Nat}
     (xN wN bN gN vN epsStr lrStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
@@ -458,8 +458,13 @@ identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so i
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied.** Threading the real batched (true-BN + SE)
     forward `efficientnetForwardBFull` and the loss-driven backward cotangent chain (swish masks, SE
     gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16
-    MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
-    loss-descent step. -/
+    MBConv blocks, the conv-bn-swish head, and the dense head all denote their batched Σ_n SGD
+    update at the chain's cotangents.
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which cotangent each op
+    reads; that those cotangents are the loss's gradient is `enet_net_lossGrad`, stated at the
+    `*GradB` nodes of `EnetTieG.efficientnet_net_tiedG`. -/
 theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
     (x : Vec (N * (3 * 224 * 224))) (onehot : Vec (N * nCls)) (lr : ℝ) :

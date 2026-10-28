@@ -1160,7 +1160,7 @@ def convnextSImagenetVerified : VerifiedNetSpec where
 #guard (convnextSImagenetVerified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 50223688
 -- The guards that tie this spec to the RENDERER's own depth table — that `cnxAllParams` at
--- `cnxSmall` is these same 342 tensors, and that `dropKeeps` has one entry per rendered site —
+-- `cnxSmall` is these same 344 tensors, and that `dropKeeps` has one entry per rendered site —
 -- live in `tests/TestDropPathRamp.lean`, beside ConvNeXt-T's. They cannot live here: this module
 -- is BELOW `Proofs/Codegen` in the import graph, which is the same reason `convnextVerified`'s ramp
 -- is checked against `cnxBlockIdx` over there rather than next to its own definition.
@@ -1698,10 +1698,13 @@ def mnv4Imagenet256FullVerified : VerifiedNetSpec :=
 
 -- ═══════════════════════════════════════════════════════════════════════════════════════════════
 -- THE INVARIANT THAT LICENSES `loadData`'s `trainPix := net.d0` (`Verified.Train`,
--- the `.imagenet` branch). Placed here because it needs EVERY `.imagenet` spec in scope.
+-- the `.imagenet` branch). Placed here because it needs the `.imagenet` specs in scope.
 --
 -- `trainPix := net.d0` differs from the 224² val width ONLY for a net whose `d0` is not 224², i.e.
--- only the 160 net. These guards pin every other `.imagenet` net at 224².
+-- only the 160 net. These guards pin the listed `.imagenet` nets at 224². Not every one is listed:
+-- `convnextSImagenetVerified`, `convnextBImagenetVerified`, `vitSImagenetVerified` and
+-- `vitBImagenetVerified` set their own `imageH`/`imageW` and carry no row here, nor do the
+-- `with`-derived R50 2018/A1/A2 specs and `mnv4ImagenetFullVerified`.
 --
 -- The eval path reads its own width off the eval artifact (`evalD0`, passed to `loadData` and
 -- `spawnValStream`), so a net may train at one resolution and evaluate at another. A new

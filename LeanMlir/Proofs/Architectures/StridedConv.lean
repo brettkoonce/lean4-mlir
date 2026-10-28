@@ -79,7 +79,8 @@ noncomputable def HasVJP.decimate {n oc h w : Nat} {f : Vec n → Vec (oc * (2 *
 
 /-- **Stride-2 SAME convolution**, flattened: `Vec (ic·2h·2w) → Vec (oc·h·w)`.
     Defined as `decimateFlat ∘ flatConv` (the stride-1 SAME conv on the `2h×2w`
-    grid, then keep even positions) — provably the genuine stride-2 conv. -/
+    grid, then keep even positions). No lemma here states the explicit stride-2 index formula;
+    its agreement with `jax.lax`'s stride-2 SAME conv is checked outside Lean. -/
 noncomputable def flatConvStride2 {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w) :=

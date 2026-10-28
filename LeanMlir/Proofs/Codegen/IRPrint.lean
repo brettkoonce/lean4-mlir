@@ -26,6 +26,10 @@ So `mlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven equal to
 `mlpHasVJPAt.backward` at a point where both hidden pre-activations are nonzero everywhere
 (`IR.mlp_whole_bridge`). The printed text is the rendering of that computation up to this
 printer (trusted), the compiler, and float.
+
+The `PROOF-BACKED` labels these printers write into the emitted text mean "mirrors a proven
+formula by hand": no theorem relates the printed text to `IR`. The CNN conv weight gradient is
+only numerically validated (see the CNN train-step section).
 -/
 
 namespace Proofs.IRPrint
@@ -537,7 +541,7 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
 -- ════════════════════════════════════════════════════════════════
 -- § CNN train step — the CNN peer of mlpTrainStepModule
 --
--- A full SGD step for the conv-net, every mathematical op proof-backed:
+-- A full SGD step for the conv-net, every mathematical op mirroring a proven formula by hand:
 --   forward  conv → relu → maxpool → flatten → dense (logits)
 --   loss     dy = softmax(logits) − onehot                 (lossCot_bridge)
 --   backward dense_back → reshape → maxpool_back → relu_back → (dhconv)
@@ -556,8 +560,9 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
 
 /-- A full CNN SGD train step `@cnn_train_step`. Inputs: `x`, conv `%Wc,%bc`,
     dense `%Wd,%bd`, target `%onehot`. Returns the four updated parameters.
-    Forward/loss/backward/param-grads are renderings of proof-backed IR (conv
-    weight-grad numerically validated); only SGD is the trusted frame. -/
+    Forward/loss/backward/param-grads are hand-written text mirroring proven formulas (conv
+    weight-grad only numerically validated); the text is trusted. The emitted `PROOF-BACKED`
+    label on the backward section covers the conv `dW` too, which no bridge reaches. -/
 def cnnTrainStepModule (ic oc H W kH kW nClass : Nat) (lr : String) : String :=
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
   let H2 := H / 2; let W2 := W / 2; let flat := oc * H2 * W2

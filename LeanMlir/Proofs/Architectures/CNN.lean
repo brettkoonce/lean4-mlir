@@ -163,7 +163,9 @@ lemma differentiableAt_pad_eval {n : Nat} (P : Prop) [Decidable P]
     actually reachable from output `(ho, wo)` via some valid kernel offset.
     Equivalent (under the `(ho, wo) ↔ (kh, kw)` partial bijection
     `ho = hi+pH-kh`) to the MLIR-aligned "reversed-kernel" formula
-    `dx[c, h, w] = Σ_{o, kh, kw} W[o, c, kH−1−kh, kW−1−kw] · dy[o, h+kh−p, w+kw−p]`. -/
+    `dx[c, h, w] = Σ_{o, kh, kw} W[o, c, kH−1−kh, kW−1−kw] · dy[o, h+kh−p, w+kw−p]`
+    with `p = pH` (rows) and `pW` (columns), for odd `kH`, `kW` only: an even kernel's
+    reversed read is at `h+kh−(kH−1−pH)`, not `h+kh−pH`. -/
 noncomputable def conv2dInputGradFormula {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   fun ci hi wi =>
@@ -219,7 +221,9 @@ theorem padTap_indicator {C h w kH kW : Nat} (c ci : Fin C) (hi ho : Fin h) (wi 
     `(co, kh, kw)` of `W co ci kh kw * dy co ho_nat wo_nat` for valid
     `(ho_nat, wo_nat)`. Equivalent (under `kh ↔ kH−1−kh`) to the
     MLIR-aligned reversed-kernel formula
-    `dx[c, h, w] = Σ_{o, kh, kw} W[o, c, kH−1−kh, kW−1−kw] · dy[o, h+kh−p, w+kw−p]`.
+    `dx[c, h, w] = Σ_{o, kh, kw} W[o, c, kH−1−kh, kW−1−kw] · dy[o, h+kh−p, w+kw−p]`
+    for odd `kH`, `kW` with `p = (kH−1)/2`; an even kernel needs the asymmetric pad
+    `kH−1−(kH−1)/2`.
 
     MLIR emits the reversed-kernel form directly:
       %W1_t   = stablehlo.transpose %W1, dims = [1, 0, 2, 3]   -- swap oc↔ic

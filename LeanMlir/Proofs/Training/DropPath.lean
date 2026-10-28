@@ -158,9 +158,10 @@ theorem dropPath_vjp_is_self (N n : Nat) (s : Vec N) (x dy : Vec (N * n)) :
     descends, and trains a different objective. The gate for it is a known answer, not a tie (every tie compares the render
     against a peer built from the same constant, so none of them can see it).
 
-    Kept in ℝ here so the denotation side has one definition of the ramp; the renderer's Float peer
-    must agree with it, and does, because both read the same `(i, totalDrop)` out of the same block
-    traversal. -/
+    Kept in ℝ here so the denotation side has one definition of the DEFAULT ramp, the one the
+    renderer's Float peer uses when neither `TrainConfig.dropPathOverN` nor
+    `TrainConfig.dropPathAllBlocks` is set; those configs follow other ramps. No theorem ties
+    `keepProb` to the Float peer. -/
 noncomputable def keepProb (dropRate : ℝ) (i totalDrop : Nat) : ℝ :=
   1 - dropRate * (i : ℝ) / ((totalDrop : ℝ) - 1)
 
@@ -171,7 +172,9 @@ noncomputable def keepProb (dropRate : ℝ) (i totalDrop : Nat) : ℝ :=
 
 /-- **The last block drops the most**: at `i = totalDrop − 1` the ramp reaches `1 − dropRate`
     exactly. Requires `totalDrop ≥ 2`, which every net that sets `dropPath` satisfies (ConvNeXt-T
-    has 18 blocks, ViT-Tiny 12, EfficientNet-B0 16). -/
+    has 18 blocks, ViT-Tiny 12, EfficientNet-B0 16). Default ramp only: under
+    `TrainConfig.dropPathOverN` (EfficientNet-B0's ImageNet config) the last keep is not
+    `1 − dropRate`. -/
 theorem keepProb_last (dropRate : ℝ) (totalDrop : Nat) (h : 2 ≤ totalDrop) :
     keepProb dropRate (totalDrop - 1) totalDrop = 1 - dropRate := by
   have hd : ((totalDrop : ℝ) - 1) ≠ 0 := by
@@ -221,10 +224,10 @@ the value's type, so the denotation is `layerScale` applied directly. -/
 /-- **Classifier dropout at the batched index** — the per-ELEMENT inverted mask, `layerScale`
     applied with no lift at all.
 
-    `N` and `n` are carried as explicit arguments even though the body ignores them, so that a
-    `dropout` node and the `dropPath` node it could be confused with have the same shape of
-    signature and the batched index is visible at every use site. The op that renders this
-    (`SHlo.dropoutB`) needs `N` and `n` for its emitted type anyway. -/
+    Indexed only by the value's own width `{m}`: there are no explicit `N`/`n` arguments. The
+    batched shape `N * n` appears only through the instantiation `m = N * n`, as in
+    `dropout_of_dropScale`. The op that renders this (`SHlo.dropoutB`) carries `N` and `n` for
+    its emitted type. -/
 noncomputable def dropout {m : Nat} (mask : Vec m) : Vec m → Vec m :=
   layerScale mask
 

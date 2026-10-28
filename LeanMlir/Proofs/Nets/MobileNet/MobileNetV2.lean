@@ -61,7 +61,7 @@ open Finset BigOperators
 -- § Conv/Depthwise + BN + ReLU6 blocks (flat Vec space)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **1×1 conv → bn → relu6** (expand stage / stem). Mirror of
+/-- **kH×kW conv → bn → relu6** (1×1 in the expand stage; the stem). Mirror of
     `convBnReluHasVJPAt` with relu6 in place of relu. -/
 noncomputable def convBnRelu6HasVJPAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)

@@ -172,7 +172,8 @@ theorem mlp_W2_tied_totalloss (aN lrStr dyN : String) (label : Fin d₃) (i : Fi
     denote `θ − lr·(certified ∂layer/∂θ · the backward-chain cotangent the real loss drives)` (the
     `*_den_certified` at the composed `g`); `mlp_net_lossGrad` states the nodes at these chain
     cotangents as the loss gradients.
-    No symbolic cotangent remains; the forward is shared (single render, correctly-threaded SSAs). -/
+    No symbolic cotangent remains; every op reads the same forward activations. Operand names are
+    free strings that `den` ignores, so SSA threading is not stated here. -/
 theorem mlp_train_step_tied (lrStr aN dyN cN : String) (label : Fin d₃) :
     -- `g` = the softmax-CE gradient of the REAL forward logits (= `den` of the emitted loss graph)
     (∀ i j, den (SHlo.weightSgd aN "%W2" lrStr (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) W₂ lr

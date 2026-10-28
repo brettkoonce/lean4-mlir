@@ -564,10 +564,9 @@ def cnxWdCounts (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : Nat × Nat :=
 #guard rankWdDecays "psng" [96] == false           -- stem LN γ
 #guard rankWdDecays "d0W" [192,96,2,2] == true     -- downsample conv
 
-/-- `allParams` is `private` (it is this file's internal signature source); this is the one thing
-    outside it that legitimately needs the list — [`tests/TestWdExcludeTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestWdExcludeTie.lean), which must read
-    the SAME names and shapes the renderer chose `%wd`/`%wdz` from. Exposing an alias rather than
-    dropping `private` keeps the surface one definition wide. -/
+/-- A namespaced public alias of `allParams` (this file's signature source, itself public) for
+    the one thing outside it that needs the list — [`tests/TestWdExcludeTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestWdExcludeTie.lean), which must read
+    the SAME names and shapes the renderer chose `%wd`/`%wdz` from. -/
 def cnxAllParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny) : List (String × List Nat) :=
   allParams nClasses V
 
@@ -930,9 +929,11 @@ def convNextAdamTrainStepText (gf : GeluForm) (alphaStr negAlphaKStr bStr : Stri
     -- STOCHASTIC DEPTH is a signature/variant flag HERE and a site-placement flag in the
     -- TRAVERSAL, and the two must agree. They are not independently settable in practice —
     -- `convNextAdamTrainStepBText` is the only caller that sets either, and it spells `sd` once
-    -- and passes it to both. If they ever did disagree the failure is LOUD in both directions: sites
-    -- without inputs emit an undeclared `%dp<i>` (the lowerer rejects it), inputs without sites
-    -- leave an unused argument (an arity mismatch at the driver). Neither is silent.
+    -- and passes it to both. If they ever did disagree, only one direction is loud: sites without
+    -- inputs emit an undeclared `%dp<i>` (the lowerer rejects it). Inputs without sites are SILENT:
+    -- the `%dp<i>` inputs are declared and returned as pass-throughs, so the arity matches and the
+    -- result is a drop-free module under a drop variant name. Nothing here rejects `sd` with
+    -- `traversal := none`.
     (sd : Bool := false)
     -- THE STAGE TABLE, and it is TRAILING and DEFAULTED for the same reason every flag above is.
     -- `[3,3,9,3]` is ConvNeXt-T; `cnxSmall` = `[3,3,27,3]` is ConvNeXt-S. It must reach the

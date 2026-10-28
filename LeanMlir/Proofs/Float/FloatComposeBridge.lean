@@ -125,9 +125,10 @@ theorem floatClose_addResidual {m : Nat} (M : FloatModel) {A B : ℝ}
 
 /-- **Residual block `relu(F(x) + x)` is `FloatClose`** — the branching combinator
     (the skip reuses the input, so it's not a plain `.comp`). Given the body `F`
-    `FloatClose A B`, the block's float (rounded skip-add) is within
-    `B + A + u·(B + A)` of the real `relu(F(x)+x)`; output magnitude
-    `(1+u)(B+A)`. The defining ResNet op: `floatClose_addResidual` then `floatClose_relu`. -/
+    `FloatClose A B`, the block maps magnitude `A` to magnitude `B + A + u·(B + A)` (real and
+    float), with error modulus `e ↦ u·(B + LF e + A + e) + (LF e + e)`: the skip-add's
+    `add_close` budget (relu is exact, modulus `id`). The defining ResNet op:
+    `floatClose_addResidual` then `floatClose_relu`. -/
 theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
     {F FF : Vec m → Vec m} {LF : ℝ → ℝ} (hF : FloatClose A B F FF LF) :
     FloatClose A (B + A + M.u * (B + A))

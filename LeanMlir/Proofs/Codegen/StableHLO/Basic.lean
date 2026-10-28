@@ -2312,7 +2312,8 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (Mat.flatten (fun i j => batchSlice N m x k i * batchSlice N n (den e) k j)) idx
   -- `biasGrad` is the IDENTITY on its operand (the per-example peer returns `SHlo n`, not
   -- `SHlo` of the bias width) — the channel sum happens in the emitted reduce, outside the AST.
-  -- Carried over verbatim so the batched form is the same carve-out, not a new one.
+  -- `biasGradB` keeps that carve-out for the channel sum but adds the `Σ_k` over the batch (the
+  -- `*GradB` shape, the bias peer of `weightGradB`), so it equals `biasGrad` only at `N = 1`.
   | _, .biasGradB (N := N) (n := n) e => fun j => ∑ k : Fin N, batchSlice N n (den e) k j
   -- LayerNorm's backward is NOT pointwise (it reduces within a row), so this one genuinely needs
   -- the auxiliary lift: example `k` is handed `batchSlice k x`, never the whole `x`.
@@ -2799,9 +2800,9 @@ theorem den_matmulFB_per_example {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo 
     den (.softmaxRowBackB xN preAct e) = batchMapAux N (rowSoftmaxBackFlat m n) preAct (den e) :=
   rfl
 
-/-- **Each example's softmax backward recomputes from ITS OWN saved scores.** The descriptor
-    version would hand all `N` example 0's — same types, same bytes, different function.
-    `lnRowBackB`'s statement, on attention. -/
+/-- The max-shifted batched softmax backward denotes `batchMapAux` of
+    `rowSoftmaxBackShiftFlat` (`rfl`); `den_softmaxRowBackShiftB_eq` transfers the per-example
+    reading of `den_softmaxRowBackB_per_example` to it. -/
 @[simp] theorem den_softmaxRowBackShiftB {N m n : Nat} (xN : String) (preAct : Vec (N*(m*n)))
     (e : SHlo (N*(m*n))) :
     den (.softmaxRowBackShiftB xN preAct e)
@@ -2815,6 +2816,9 @@ theorem den_softmaxRowBackShiftB_eq {N m n : Nat} (xN : String) (preAct : Vec (N
     den (.softmaxRowBackShiftB xN preAct e) = den (.softmaxRowBackB xN preAct e) := by
   simp only [den_softmaxRowBackShiftB, den_softmaxRowBackB, rowSoftmaxBackShiftFlat_eq]
 
+/-- **Each example's softmax backward recomputes from ITS OWN saved scores.** The descriptor
+    version would hand all `N` example 0's — same types, same bytes, different function.
+    `lnRowBackB`'s statement, on attention. -/
 theorem den_softmaxRowBackB_per_example {N m n : Nat} (xN : String) (preAct : Vec (N*(m*n)))
     (e : SHlo (N*(m*n))) (k : Fin N) (i : Fin (m*n)) :
     den (.softmaxRowBackB xN preAct e) (finProdFinEquiv (k, i))

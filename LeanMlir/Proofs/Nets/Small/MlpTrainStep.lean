@@ -214,9 +214,11 @@ theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
 -- One statement for the whole MLP's training: at a smooth point (both hidden
 -- pre-activations off the ReLU kinks — the same pair `mlpHasVJPAt` uses), the
 -- gradient of the WHOLE softmax-CE loss `crossEntropy ∘ mlpForward` with respect to
--- every weight layer is the certified assembled gradient. Output layer unconditionally,
--- the two hidden layers conditionally — folded from the per-layer results, with the
--- forward activations threaded through (`a₀ = relu(dense W₀ b₀ x)`, etc.).
+-- every weight layer is given: the output layer as the certified assembled gradient
+-- (unconditionally), the two hidden layers conditionally as a chain-rule factorisation whose
+-- downstream `pdiv` is left unevaluated — folded from the per-layer results, with the
+-- forward activations threaded through (`a₀ = relu(dense W₀ b₀ x)`, etc.). The statement at
+-- the chain cotangents (`mlpCotOut1`, `mlpCotOut0`) is `mlp_net_lossGrad`.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Whole-network MLP weight-gradient capstone.** The three weight layers' total-loss

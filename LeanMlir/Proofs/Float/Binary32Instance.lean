@@ -139,7 +139,11 @@ def lbl : Fin 2 := 0
     float-computed gradient `binary32.linearFloatGrad`; the conclusion bounds the *real*
     cross-entropy after the step by the real cross-entropy before minus `lr·‖∇‖²/2`. All
     of `hsmall`/`h1`/`h2` are proved for the concrete `(W0, x0, lr = 1/100)`. Axiom-free:
-    `binary32` is the constructed `rndP 23` grid (bare triple surfaced below). -/
+    `binary32` is the constructed `rndP 23` grid (bare triple surfaced below). At this instance
+    the float `exp` is `Real.exp` itself (exact, so `eexp = 0`), every rounding acts on dyadic
+    values and is the identity, and the update is taken in ℝ: a satisfiability check of
+    `linear_float_sgd_descends`'s hypotheses. The non-trivial instance is
+    `TrainedLinearDescent.trained_linear_sgd_descends_concrete`. -/
 theorem binary32_linear_sgd_descends_concrete :
     crossEntropy 2 (dense (Mat.unflatten (Mat.flatten W0 -
         (1 / 100 : ℝ) • binary32.linearFloatGrad W0 b0 x0 Real.exp lbl)) b0 x0) lbl ≤

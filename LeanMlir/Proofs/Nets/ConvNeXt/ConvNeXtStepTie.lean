@@ -87,8 +87,9 @@ LN-form-agnostic and are reused verbatim from `ConvNeXtChainClose`. -/
 
 /-- **ConvNeXt block, tied.** All 9 params (depthwise 7×7 `W`+`b`, channel-LN γ/β at `Vec c`,
     expand/project 1×1 conv `W`+`b`, per-channel layer-scale γ) denote
-    `θ − lr·(certified per-layer Jacobian · cot)` at the real block forward activations and the
-    chain cotangents driven by `dyOut`. -/
+    `θ − lr·(certified per-layer Jacobian · cot)` at the supplied block activations
+    (`d nl p e g`, free here) and the chain cotangents driven by `dyOut`; `cnxBlockChTiedAt` pins
+    the activations to the forward from `xin`. -/
 def cnxBlockChTied (gf : GeluForm) {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)

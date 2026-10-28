@@ -32,7 +32,9 @@ def Act.dir : Act → Float
 def Act.ofNat : Nat → Act
   | 0 => .stay | 1 => .up | _ => .down
 
-/-- Opponent knobs: tracking speed in px per frame and reaction delay in frames. -/
+/-- Opponent knobs: tracking speed in px per frame, and `delay`, the target refresh period in
+    frames (sample-and-hold: the target is re-read when `frame % delay == 0`, so `1` tracks the
+    ball every frame). `delay = 0` is not guarded: the target is read at frame 0 and never again. -/
 structure Opp where
   speed : Float := 1.5
   delay : Nat := 4

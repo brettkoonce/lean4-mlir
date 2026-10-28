@@ -19,15 +19,15 @@ ConvNeXt is the "ResNet, modernized" architecture: it keeps the residual
 skeleton but swaps in the ViT-era ingredients — a large-kernel (7×7)
 *depthwise* conv for spatial mixing, *LayerNorm* instead of BatchNorm,
 GELU instead of ReLU, an inverted-bottleneck MLP (1×1 expand → GELU →
-1×1 project), and a learnable per-channel *layer scale*. Crucially, the
+1×1 project), and a learnable *layer scale* (per-channel in the paper). Crucially, the
 block has **no non-smooth activation** (GELU is smooth everywhere) and
 **no max-pool**, so — unlike `cnnHasVJPAt` — the entire VJP composes
 with *no kink hypotheses*: the only side conditions are the LayerNorm
 positivity arguments `0 < ε`.
 
-This file contributes three genuinely new pieces:
+This file contributes two new pieces, on top of one reused from `LayerNorm.lean`:
 
-  * `layerScale` — per-channel learnable elementwise scale, a diagonal
+  * `layerScale` (reused, with `layerScaleHasVJP`) — a learnable elementwise scale, a diagonal
     linear map; `Differentiable` + a `HasVJP` (`back i = γ i · dy i`),
     its Jacobian read off the basis vector by `pdiv_of_linear`.
   * the **ConvNeXt block body** `layerScale ∘ project ∘ gelu ∘ expand ∘
@@ -70,9 +70,10 @@ open Finset BigOperators
     `c × kH × kW` (the 7×7 in ConvNeXt), the expand conv lifts `c → cExp`
     channels (the usual 4× inverted-bottleneck), gelu is applied on the
     expanded activation, the project conv brings `cExp → c` back, and the
-    per-channel layer scale closes the block. `gf` is the form of the GELU, the tanh
-    approximation or the exact `x · Φ(x)` (`GeluForm`); the block, the net and every theorem
-    about them carry it and hold for both.
+    layer scale `γls : Vec (c * h * w)` closes the block — a per-element diagonal scale, with
+    ConvNeXt's per-channel one `fun k => γ (chanIdx c h w k)` as a special case (`cnxGlsCh`).
+    `gf` is the form of the GELU, the tanh approximation or the exact `x · Φ(x)` (`GeluForm`);
+    the block, the net and every theorem about them carry it and hold for both.
 
     The `layerNormForward` used here normalizes over the whole flattened
     `c·h·w` vector with scalar `γ_n, β_n`. The per-position channel

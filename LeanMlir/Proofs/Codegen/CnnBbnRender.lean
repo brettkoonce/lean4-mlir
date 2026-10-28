@@ -27,17 +27,19 @@ everything a batch-statistics layer needs that a per-image one does not:
 
 Three BN emit sites — forward, input-cotangent, γ-gradient — are the shared
 [`SyncBnSites`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/SyncBnSites.lean)
-ones every batch-BN renderer uses, so at `replicas > 1` this render is sync-BN for free; no
-data-parallel artifact is written.
+ones every batch-BN renderer uses, so at `replicas > 1` this render uses the shared sync sites; no
+sync tie is stated for this net, and no data-parallel artifact is written.
 
 Faithful by construction like every render here: the AST is built only from verified constructors,
 so `pretty(provenGraph)` needs no new proof. Hand-written text: the signatures, the constants, the
 report-only `%loss` and the `%bc1`/`%bc2` passthroughs — none of it feeds a parameter or a statistic.
 The per-example ties (`Cifar8BnStepTie`, `Cifar8BnStepTieG`) are stated at `bnPerChannel*`; the
-batch-statistics step tie at these nodes is `Cifar8BbnStepTieB` (planned in
-`planning/cifar-batch-bn-rerender.md`). The convolutions, pools, dense head and optimizer tails
-are byte-for-byte the nodes `cifar8BnTrainStepBText` emits — only the BN sites and the stat
-plumbing differ — so bf16 reaches the same 23 convolutions it reaches there, and BN stays f32.
+single-replica batch-statistics step tie at these nodes is
+`Proofs.Cifar8BbnTieB.cifar8Bbn_train_step_tiedB` (proved, with `Cifar8BbnWholeBackB`). Not
+stated: the `replicas > 1` sync-BN tie and the whole-net forward graph tie. The convolutions,
+pools, dense head and optimizer tails are byte-for-byte the nodes `cifar8BnTrainStepBText`
+emits — only the BN sites and the stat plumbing differ — so bf16 reaches the same 23
+convolutions it reaches there, and BN stays f32.
 
 The `#eval` writers are in `CnnArtifacts.lean`.
 -/
@@ -471,6 +473,8 @@ def cifar8BbnTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       "    //    family: every op is pretty(verified AST node) except the constants below, the marked\n" ++
       "    //    report-only loss and the %bc passthroughs; the 16 trailing outputs are each BN's\n" ++
       "    //    batch mean and variance, for the host's running-statistics EMA ──\n" ++
+      -- NB the banner below says "proved as …", but neither name it is given exists: for this net
+      -- the global-batch equivalence is not stated. No committed artifact carries it.
       (if sync then
         syncBnBanner "Cifar8BbnSyncTieB (not yet stated)" "cifar8BbnFwdGraphSync_shard (not yet stated)" "Small"
        else "") ++

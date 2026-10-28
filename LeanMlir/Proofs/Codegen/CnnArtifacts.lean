@@ -34,9 +34,6 @@ it. -/
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0))
 
--- Regenerate `verified_mlir/cifar8_train_step.mlir` (what MainCifar8Verified trains on)
--- from the faithful renderer; the den-certified proofs live in Cifar8StepTie.lean.
--- Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
 -- Regenerate `verified_mlir/cifar8_adam_train_step.mlir` — the AdamW peer, same forward/backward
 -- with the fused SGD tail replaced by un-fused gradients + the proven AdamW ops. Hyperparameters:
 -- β₁ 0.9, β₂ 0.999, ε 1e-8, wd 1e-4; 1/B = 1/128 = 0.0078125 (exact in binary32).
@@ -96,6 +93,9 @@ it. -/
     (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
     (fun _ => 0) (replicas := 2))
 
+-- Regenerate `verified_mlir/cifar8_train_step.mlir` (what MainCifar8Verified trains on)
+-- from the faithful renderer; the den-certified proofs live in Cifar8StepTie.lean.
+-- Dims `128 3 16 16 32 32 2 2 64 10 3 3`: h=w=2 (final pooled, image 32×32).
 #eval IO.FS.writeFile "verified_mlir/cifar8_train_step.mlir"
   (Proofs.StableHLO.cifar8TrainStepText 128 3 16 16 32 32 2 2 64 10 3 3 "0.00078125"
     (fun _ _ _ _ => 0) (fun _ => 0) (fun _ _ _ _ => 0) (fun _ => 0)

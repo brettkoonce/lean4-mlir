@@ -87,8 +87,9 @@ opaque prependSinCosTScalar (xt : @& ByteArray)
       - `x_t` is `[B, npixels]` f32
       - `ε`   is `[B, npixels]` f32 (the loss target — what the model
               should learn to predict)
-      - `t`   is `[B]` int32 LE (the per-image timesteps; useful for
-              future time-conditioning, currently unused by codegen). -/
+      - `t`   is `[B]` int32 LE (the per-image timestep indices, which
+              callers feed to `prependSinCosT` / `prependTChannel` to
+              condition the network on the timestep). -/
 @[extern "lean_ddpm_step_inputs"]
 opaque stepInputs (x0 : @& ByteArray) (alphaBar : @& ByteArray)
     (B : USize) (npixels : USize) (seed : USize)
@@ -135,7 +136,11 @@ def sBias : Float := 0.008
 def theta (t : Float) : Float :=
   (t + sBias) / (1.0 + sBias) * (piF / 2.0)
 
-/-- ᾱ(t) = cos²θ(t) / cos²θ(0) — the closed form of the tabulated schedule. -/
+/-- ᾱ(t) = cos²θ(t) / cos²θ(0) — the UNCLAMPED closed form of the tabulated schedule. The
+    `cosineSchedule` table additionally clamps ᾱ away from 0 and 1 (in its C implementation), so
+    the two differ at the ends: `abarC 0 = 1` and `sigC 0 = 0` exactly, while the table's first
+    entry is below 1 and its last above 0. Solvers that should match training stay inside
+    `[1/T, (T-1)/T]`. -/
 def abarC (t : Float) : Float :=
   let c := Float.cos (theta t)
   let c0 := Float.cos (theta 0.0)

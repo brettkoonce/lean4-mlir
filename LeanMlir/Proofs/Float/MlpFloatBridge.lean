@@ -689,7 +689,9 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
     The 122 is the worst-case threshold; with the demo's measured `B = 0.38`
     the same `argmax_preserved` covers the `>0.76`-margin inputs, which the demo
     counts over the MNIST test set (`scripts/demos/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
-    (within `u_acc`), so the demo's fp32 margins are the relevant quantity. -/
+    (within `u_acc`), so the demo's fp32 margins are the relevant quantity. The guarantee is
+    for the normal-range relative-error `FloatModel` (no subnormal floor, no overflow); real
+    E4M3 is covered only when every rounded weight and pixel is in the normal range (or zero). -/
 theorem linear_e4m3_argmax_preserved (L : FloatModel) (hMu : M.u ≤ u32)
     (hLu : L.u ≤ uE4M3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}
     (hW : ∀ i j, |W i j| ≤ 3 / 5) (hb : ∀ j, |b j| ≤ 1) (hx : ∀ i, |x i| ≤ 1)

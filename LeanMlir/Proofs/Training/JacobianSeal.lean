@@ -18,7 +18,8 @@ says nothing about a real gradient. A non-vacuity fact of the weaker kind
 weaker than a non-trivial backward at the witness.
 
 This file supplies the **level-3 seal**: the reusable bridge from a single nonzero Jacobian entry to a provably non-trivial
-backward, and the equivalence with `fderiv ℝ f x ≠ 0`. A witness then upgrades from
+backward, and the one-way link from `fderiv ℝ f x ≠ 0` (a nonzero `fderiv` yields a nonzero
+entry, `exists_pdiv_ne_of_fderiv_ne`; the converse is not stated). A witness then upgrades from
 "forward ≠ const" to "the proven backward at this point is not the zero map" by exhibiting
 **one** `pdiv f x i j ≠ 0` — which is what a genuine (non-degenerate) gradient requires.
 

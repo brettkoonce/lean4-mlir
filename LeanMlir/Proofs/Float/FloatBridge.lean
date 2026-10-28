@@ -25,7 +25,8 @@ hypotheses: a `FloatModel` is any rounding operator `rnd` with relative error
 round-to-nearest satisfies the interface with `u = 2⁻²⁴` **in the normal
 range** (Higham, *Accuracy and Stability*, §2.2; the standard model without
 underflow — the subnormal floor is outside the model; no subnormal-aware model is stated). `exactModel` (`rnd = id`, `u = 0`) shows the interface is
-inhabited and collapses every bound to `0`.
+inhabited and collapses the rounding part of each budget (fresh inputs) to `0`; terms carrying
+inherited error remain.
 
 Design notes, in suite style:
 * **Summation order.** `FloatModel.dot` and `FloatModel.sum` fix one
@@ -1187,7 +1188,9 @@ theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : �
 -- ════════════════════════════════════════════════════════════════
 
 /-- The exact-arithmetic model: `rnd = id`, `u = 0`. Inhabits the interface
-    (the standard model isn't vacuous) and collapses every budget to `0`. -/
+    (the standard model isn't vacuous) and collapses the rounding part of each budget to `0`
+    at fresh inputs (`exactModel_dot`, `exactModel_denseErr` at `e = 0`); inherited-error terms
+    (e.g. `layerBudget`'s `m·w·E`) remain. -/
 def exactModel : FloatModel where
   rnd := id
   u := 0

@@ -410,7 +410,9 @@ theorem cbr_x : cbr (h := 2*1) (w := 2*1) Ws bs (11/4) 1 10 X
 /-- **Whole-network VJP for a concrete ResNet-style CNN with BatchNorm** —
     every smoothness hypothesis discharged: the stem produces distinct
     positive BN outputs (so maxpool has no ties and `bn ≠ 0`), and the
-    resblock BNs use γ=0 (constant). -/
+    resblock BNs use γ=0 (constant). The dense head `Wd` is zero too, so the whole
+    forward is constant and its Jacobian is zero: the witness shows the smoothness
+    hypotheses are dischargeable, not a non-trivial backward. -/
 noncomputable def cnnConcreteHasVJPAt :
     HasVJPAt (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
       W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X :=

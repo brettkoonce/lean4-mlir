@@ -1117,8 +1117,8 @@ def r50FwdChain (B nClasses : Nat) (epsStr : String)
     BN: rendered from `r50FwdChainB`, the traversal the train step differentiates, so
     `check_adam_prefix` holds it as a byte prefix of the train step.
 
-    `r50FwdChain`'s `.train` branch is UNUSED by R50 and must stay that way; it survives only
-    because `.eval` shares the function. Rendering a forward from it reopens the split. -/
+    `r50FwdChain` is the eval-only chain (every BN a `bnEvalSite`), so the batch-statistic
+    forward must be rendered from `r50FwdChainB`, as this function does. -/
 def resnet50FwdText (B nClasses : Nat) (epsStr : String)
     (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=
   let sigList := r50SigList nClasses
@@ -1193,8 +1193,9 @@ end Proofs.StableHLO
 -- `scripts/probes/bf16_gate2.py` on the OPTIMIZED HLO's operand SSA names, never by grepping the op line,
 -- which shows only the result type.
 --
--- R50 exercises a shape R34 never did: the **stride-1 1×1** convolution, which is 34 of these 53
--- sites (`convBf16` at `kH = kW = 1`, so `pad = 0`). R34's only 1×1s are its strided projections.
+-- R50 exercises a shape R34 never did: the **stride-1 1×1** convolution, which is most of these 53
+-- sites — every bottleneck's conv1 and conv3, plus the stride-1 `s1b0` projection (`convBf16` at
+-- `kH = kW = 1`, so `pad = 0`). R34's only 1×1s are its strided projections.
 -- That is the one genuinely new thing about this render and it is what gate 2 has to confirm.
 #eval IO.FS.writeFile "verified_mlir/resnet50in_momdp64bf16_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 4
@@ -1380,8 +1381,8 @@ end Proofs.StableHLO
     (wdExclude := true))
 -- Its single-device peer, for the same reason the non-`wx` pair has one: `r50-accum-tie` and
 -- `r50-accum-shard-tie` both compare against a 1-replica render, so a DP-only `wx` would be
--- ungateable — and `wx` is exactly the axis worth gating, since it changes 105 of 161 decay
--- operands and nothing about the arity.
+-- ungateable — and `wx` is exactly the axis worth gating, since it changes every 1-D decay
+-- operand of the 161 (each BN γ/β and the head bias `bd`) and nothing about the arity.
 #eval IO.FS.writeFile "verified_mlir/resnet50in160_lambacc8x64wxbce_train_step.mlir"
   (Proofs.StableHLO.resnet50TrainStepText 64 1000 "1.0e-05" 1
     (Proofs.StableHLO.OptRecipe.lambAccum 8) "resnet50in160" (bce := true) (q := 5)

@@ -693,30 +693,30 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
 -- (`dx`). A train step also needs the *parameter* gradients at each dense
 -- layer: given the cotangent `dyℓ` arriving at that layer's output (computed
 -- by a backward subgraph `e`) and the layer's saved forward input `x`,
---   dW = outer(x, dyℓ)   — a `dot_general` contracting the batch axis,
---   db = dyℓ             — a `reduce`-add over the batch axis.
--- These are the proven `denseWeightGrad`/`denseBiasGrad`, which
--- `denseWeightGrad_correct`/`denseBiasGrad_correct` certify *are* the
--- cotangent-contracted Jacobians of the dense layer wrt `W` and `b`.
--- Emitting them off the (already-bridged) backward chain promotes the
--- input-gradient bridge to a full **train-step** bridge: every gradient the
--- optimizer consumes is the rendering of a proof-backed quantity.
+--   dW = outer(x, dyℓ),
+--   db = dyℓ.
+-- These are the single-example (no batch axis) formulas `denseWeightGrad`/`denseBiasGrad`,
+-- which `denseWeightGrad_correct`/`denseBiasGrad_correct` certify *are* the
+-- cotangent-contracted Jacobians of the dense layer wrt `W` and `b`. They are plain `Vec`/`Mat`
+-- functions, not IR nodes: the bridges below restate those lemmas at the chain cotangent
+-- `e.denote dy`. The batch contraction (`dot_general`) and batch `reduce`-add the printer
+-- emits for them are outside this proof, at the trusted printer.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Weight-gradient emitter: the outer product of the dense layer's saved
     forward input `x` with the cotangent at the layer's output (the
-    denotation of the backward subgraph `e`). Mirrors the `dot_general`
-    that contracts the batch axis (`dW = xᵀ · dy`). -/
+    denotation of the backward subgraph `e`). The single-example formula; the batched
+    `dot_general` (`dW = xᵀ · dy`) the printer emits is not modelled here. -/
 noncomputable def emitWeightGrad {inp m n : Nat} (x : Vec m) (e : Back inp n)
     (dy : Vec inp) : Mat m n :=
   Mat.outer x (e.denote dy)
 
-/-- Bias-gradient emitter: the cotangent at the layer's output. Mirrors the
-    `reduce`-add over the batch axis (`db = Σ_batch dy`). -/
+/-- Bias-gradient emitter: the cotangent at the layer's output. The single-example
+    formula; the batch `reduce`-add (`db = Σ_batch dy`) the printer emits is not modelled here. -/
 noncomputable def emitBiasGrad {inp n : Nat} (e : Back inp n) (dy : Vec inp) : Vec n :=
   e.denote dy
 
-/-- **Weight-gradient bridge.** The emitted outer-product graph, fed the
+/-- **Weight-gradient bridge.** The outer-product formula `emitWeightGrad`, fed the
     cotangent the backward subgraph `e` delivers, computes coordinate-wise
     the cotangent-contracted Jacobian of the dense layer wrt `W` — the
     proven `denseWeightGrad`. Certified by `denseWeightGrad_correct` at
@@ -730,8 +730,8 @@ theorem weight_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
                (Mat.flatten W) (finProdFinEquiv (i, j)) k * (e.denote dy) k :=
   denseWeightGrad_correct W b x (e.denote dy) i j
 
-/-- **Bias-gradient bridge.** The emitted graph (the cotangent itself,
-    reduce-summed over the batch) computes the cotangent-contracted Jacobian
+/-- **Bias-gradient bridge.** `emitBiasGrad` (the cotangent itself, single example; no
+    batch reduce is modelled) computes the cotangent-contracted Jacobian
     of the dense layer wrt `b` — the proven `denseBiasGrad`. Certified by
     `denseBiasGrad_correct`. -/
 theorem bias_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
@@ -832,21 +832,21 @@ theorem mlp_fwd_preact1 {d₀ d₁ d₂ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Ve
 --
 -- Without it the train step feeds the backward a *supplied* cotangent dy = ∂L/∂logits.
 -- For softmax-cross-entropy the repo PROVES that gradient is
--- `softmax(logits) − onehot(label)` (`softmaxCE_grad`). Emitting that as a
--- loss-head graph (`exp`+`reduce`+`broadcast`+`divide`, then `subtract` the
--- target) makes dy itself proof-backed: the train step then takes the target
--- distribution as input and the only trusted numerics left is SGD.
+-- `softmax(logits) − onehot(label)` (`softmaxCE_grad`). `emitLossCot` below records that
+-- closed form as a plain `Vec` function, not a `Fwd`/`Back` graph, and `lossCot_bridge` says it
+-- is ∂CE/∂logits. No loss-head IR is denoted here and nothing feeds it to `Back.cotangent`; the
+-- loss-head graph ties live in the StableHLO `SHlo` layer.
 -- ════════════════════════════════════════════════════════════════
 
-/-- The emitted loss-cotangent (softmax-CE head): `softmax(logits) −
-    onehot(label)`. Rendered as `exp` + `reduce`(add) + `broadcast` + `divide`
-    (softmax) then `subtract` the target. Feeds the backward's cotangent leaf. -/
+/-- The loss-cotangent closed form (softmax-CE head): `softmax(logits) −
+    onehot(label)`, as a plain `Vec` function. The printer's `exp` + `reduce`(add) +
+    `broadcast` + `divide` + `subtract` rendering is not modelled in this IR. -/
 noncomputable def emitLossCot (c : Nat) (logits : Vec c) (label : Fin c) : Vec c :=
   fun j => softmax c logits j - oneHot c label j
 
-/-- **Loss-cotangent bridge.** The emitted softmax−onehot vector `emitLossCot`
-    equals `∂(crossEntropy)/∂logits` (`softmaxCE_grad`), so the backward's
-    cotangent leaf is proof-backed rather than supplied. -/
+/-- **Loss-cotangent bridge.** The softmax−onehot vector `emitLossCot`
+    equals `∂(crossEntropy)/∂logits` (`softmaxCE_grad`, read backwards): the closed form
+    the loss head computes is the CE gradient. It does not connect to `Back.cotangent`. -/
 theorem lossCot_bridge (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
     emitLossCot c logits label j
       = pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0 :=

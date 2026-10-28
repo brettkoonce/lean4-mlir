@@ -105,8 +105,8 @@ The CNN's denotation is `mnistCnnNoBnForward` — a flat `Vec 784 → Vec 10` ch
 `flatConv → relu → flatConv → relu → maxPoolFlat → dense → relu → dense → relu → dense`.
 The honest chain-rule fold (via `vjpCompAt` through conv/maxpool/dense) is the audited
 `mnistCnnNoBnHasVJPAt`, conditional on its ReLU and max-pool smoothness hypotheses at the
-input. The witness below is the canonical one; the spec is the subject of that conditional
-fold via `cnnVerified_denote_eq`. -/
+input. No VJP is stated at the spec's denotation here: the spec reaches that conditional fold
+through `cnnVerified_denote_eq`. -/
 
 /-- Math denotation of the CNN spec: the 11-layer list denotes to `mnistCnnNoBnForward`
     (`c=32`, `h=w=14`, the Chapter-3 MNIST CNN). -/
@@ -212,9 +212,10 @@ theorem cnnVerified_fwd_faithful (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
 /-! ## The CIFAR CNN (no BN)
 
 The CIFAR-10 net (ic=3, c1=32, c2=64, h=w=8 — spatial 32→16→8) gets the spec→math
-denotation (= `cifarCnnForward` by `rfl`), the canonical witness, and the forward
-spec→generated-MLIR tie (`cifarFwdGraph_faithful`). The conditional fold is
-`cifarCnnHasVJPAt` (ReLU and max-pool smoothness hypotheses at the input). -/
+denotation (= `cifarCnnForward` by `rfl`) and the forward spec→generated-MLIR tie
+(`cifarFwdGraph_faithful`). No VJP is stated at the spec's denotation here; the conditional fold
+is `cifarCnnHasVJPAt` (ReLU and max-pool smoothness hypotheses at the input), reached through
+`cifarVerified_denote_eq`. -/
 
 noncomputable def denoteCifar (layers : List VLayer)
     (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
@@ -376,7 +377,7 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
   (efficientnetFwdGraphBFull_faithful N epsStr w false x).trans
     (congrFun (efficientnetVerified_denote_eq N w).symm x)
 
--- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTCh ──
+-- ── ConvNeXt-T (FULL): the committed 29-entry spec ↔ convNextForwardTCh ──
 
 /-- Math denotation of the committed ConvNeXt-T spec: the 29-entry `[3,3,9,3]` layer list
     denotes to `convNextForwardTCh` — the channel-LayerNorm net, whose 23 LN sites
@@ -466,7 +467,7 @@ theorem vitVerified_denote_eq {gf : GeluForm} (w : ViTTinyWeights) :
 
 /-- **The whole-net VJP at the committed ViT-Tiny spec.** ViT is all-smooth
     (GELU/softmax/LN), so the chain-rule fold applies globally: `vitForwardKVHasVJP` at the
-    committed config, hypothesis `0 < ε` only. Not the canonical witness. -/
+    committed config, hypothesis `0 < ε` only. -/
 noncomputable def vitVerifiedHasVJP (gf : GeluForm) (w : ViTTinyWeights) (hε : 0 < w.ε) :
     HasVJP (denoteVitTiny gf vitVerified.layers w) :=
   vitForwardKVHasVJP gf 3 224 224 16 196 768 3 64 10 12

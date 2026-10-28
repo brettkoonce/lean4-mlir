@@ -145,10 +145,12 @@ inductive VLayer where
       count. -/
   | uib (ic oc expand stride preDWk postDWk : Nat)
   /-- **Fused inverted bottleneck**, single block, no squeeze-excite — EfficientNetV2's early-stage
-      block, and MobileNetV4's stage 0. `k×k regular conv ic→mid (stride) → BN → swish →
+      block, and MobileNetV4's stage 0. `k×k regular conv ic→mid (stride) → BN → ReLU →
       1×1 project mid→oc → BN`, no activation after the project; skip iff `stride = 1 ∧ ic = oc`.
       "Fused" = the MBConv expand-1×1 and depthwise collapse into ONE regular `k×k` conv, which is
       why nothing here is depthwise. `mid = ic * expand`. Bias-free — both convs are BN-followed.
+      Except at `expand = 1`: there the layout (`toSpecs`) is a single `k×k` conv `ic→oc` + BN,
+      with no project.
 
       ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium`.
 
@@ -329,7 +331,8 @@ structure VerifiedNetSpec where
   dropSites : Array Nat := #[]
   /-- The ramp denominator: the reference's block count minus one (timm's `linspace`), or its
       block count (TF's `rate · idx / len(blocks)`), or every entry of its block list
-      (tf-models' `get_stochastic_depth_rate(rate, block_idx + 1, len(decoded_specs))`). -/
+      (tf-models' `get_stochastic_depth_rate(rate, block_idx + 1, len(decoded_specs))`). Must be
+      `≥ 1`: nothing guards the division, so `0` (a single-site `linspace`) gives NaN/∞ keeps. -/
   dropDenom : Nat := 1
   /-- Added to each site's index in the numerator: site `i` keeps with
       `1 − dropRate · (i + dropIdxOffset) / dropDenom`. `0` for every ramp that counts the sites'
@@ -371,8 +374,8 @@ def nClasses (s : VerifiedNetSpec) : Nat :=
   | _ => 0
 
 /-- The stochastic-depth keeps at drop-path rate `rate`, one per site:
-    `1 − rate · (i + dropIdxOffset) / dropDenom`. Rate `0` gives exactly `1.0` everywhere (the
-    identity endpoint). -/
+    `1 − rate · (i + dropIdxOffset) / dropDenom`. For `dropDenom ≥ 1`, rate `0` gives exactly
+    `1.0` everywhere (the identity endpoint). -/
 def dropKeepsAt (s : VerifiedNetSpec) (rate : Float) : Array Float :=
   s.dropSites.map (fun i => 1.0 - rate * (i + s.dropIdxOffset).toFloat / s.dropDenom.toFloat)
 

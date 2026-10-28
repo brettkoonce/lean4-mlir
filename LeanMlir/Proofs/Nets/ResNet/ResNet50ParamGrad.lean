@@ -689,7 +689,8 @@ theorem r50LossSmoothAtB_of_smoothAtB {N q nCls : Nat} {w : R50BWeights nCls}
     activations (`R50LossSmoothAtB`). The loss enters only through `hL`;
     `r50_net_lossGrad_smoothedCE` and `r50_net_lossGrad_bce` discharge it for the two losses the
     artifacts ship.
-    The nodes are the f32 ones on one replica (the module's Scope). -/
+    The conv-weight nodes are at the precision switch `bf16`, read at the identity rounding, on
+    one replica (the module's Scope). -/
 theorem r50_net_lossGrad (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (hp : R50PosB w) (bf16 : Bool) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (hx : R50LossSmoothAtB N q w x)
     {L : Vec (N * nCls) → Vec 1} {g : Vec (N * nCls)}

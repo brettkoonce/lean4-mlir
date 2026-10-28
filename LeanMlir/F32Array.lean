@@ -134,9 +134,9 @@ opaque dotSlice (a : @& ByteArray) (aOff : USize) (b : @& ByteArray)
 def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray := do
   let n := keeps.size * bs
   let mut out ← const n.toUSize 1.0
-  -- xorshift64*, the same family `heInit` uses. Seeded per call from the global step, and
-  -- advanced once per (site, example) so the draw order is fixed by the layout rather than by
-  -- evaluation order.
+  -- Plain xorshift64 (no output multiply), the xorshift family `heInit` uses. Seeded per call
+  -- from the global step, and advanced once per (site, example) so the draw order is fixed by
+  -- the layout rather than by evaluation order.
   let mut st : UInt64 := (seed.toUInt64 * 2654435761) ||| 1
   let mut buf : Array Float := #[]
   for si in [0:keeps.size] do
@@ -149,7 +149,10 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
       -- (all-ones, k = 1) is the identity. `k ≥ 1` ⇒ always keep, scale 1.0.
       buf := buf.push (if k ≥ 1.0 then 1.0 else if u < k then 1.0 / k else 0.0)
   -- `write3` is the only in-place float writer; `keeps.size * bs` is divisible by 3 whenever the
-  -- site count is (9 on EfficientNet-B0), so this tiles exactly with no tail.
+  -- site count is (9 on EfficientNet-B0), so this tiles exactly. Otherwise the tail loop rewrites
+  -- the last three floats, which needs `keeps.size * bs ≥ 3`: below that (but above 0) the `Nat`
+  -- subtraction truncates and `write3` fails with its out-of-range error (no `dropoutMask`-style
+  -- guard here).
   let mut i := 0
   while i + 3 ≤ buf.size do
     out ← write3 out i.toUSize buf[i]! buf[i+1]! buf[i+2]!

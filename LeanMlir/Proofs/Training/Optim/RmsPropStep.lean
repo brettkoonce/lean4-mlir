@@ -138,8 +138,10 @@ theorem rmsBufNext_eps_placement_at_zero {ρ μ ε : ℝ}
   · show μ * buf i + g i / (Real.sqrt (adamVNext ρ sq g i) + ε) = _
     rw [h, Real.sqrt_zero, zero_add]
 
-/-- **The buffer is NOT affine in the gradient, even from a zero buffer** — recorded because the
-    shard/DP gates lean on the opposite property for every other optimizer here.
+/-- **The buffer from a zero buffer, in closed form: `g/√(s' + ε)`** — recorded because the
+    shard/DP gates lean on affinity in `g` for every other optimizer here, and this form is not
+    affine in `g` (for `ε > 0`, `ρ < 1`). The theorem states only the closed form; the
+    non-affinity below is read off it, not proved.
 
     `momVNext_v_zero` gives `v' = g` and `adamMNextF` gives `m' = (1−β₁)·g`, both exactly linear, so
     those renders can use a moment slot as a gradient proxy and average it across replicas
@@ -215,7 +217,8 @@ theorem rmsPropTfStep_theta_lr_change (ρ μ ε lr₀ lr₁ : ℝ) (θ sq buf g 
 
 /-- From a zero buffer the TF buffer is `lr·g/√(s' + ε)` — the reference's `rmsBufNext_buf_zero`
     scaled by the rate, which is what `rms-tie`'s claim ② reads on a TF render. Like the reference
-    form it is not affine in `g`, so the shard-check construction does not transfer either. -/
+    form it is not affine in `g` (for `ε > 0`, `ρ < 1`; read off the closed form, not proved), so
+    the shard-check construction does not transfer either. -/
 theorem rmsBufNextTf_buf_zero (ρ μ ε lr : ℝ) (sq g : Vec n) :
     rmsBufNextTf ρ μ ε lr sq (fun _ => 0) g
       = fun i => lr * (g i / Real.sqrt (adamVNext ρ sq g i + ε)) := by

@@ -17,12 +17,14 @@ couples the batch — so the whole net lives at the **batched index** `N·(c·h�
 **The SE wrinkle (vs MobileNetV2's relu6 blocks).** Each MBConv has a squeeze-excite gate
 `x ⊙ sigmoid(dense W₂ (swish (dense W₁ (GAP x))))`, and the committed trainer **trains all 4 SE dense
 params**. The fused `batchOp seBlock` / `seBackBatched` give the forward value + the SE *input*
-cotangent but NOT the SE param grads, so the renderer **un-fuses** SE: it keeps the fused `seBlock`
-for the forward `out` and ADDITIONALLY emits the un-fused gate subnet `s = batchOp gap → e1 = batchOp
-dense W₁ → z = batchOp swish → e2 = batchOp dense W₂` (only to expose `s/e1/z/e2`); the SE param grads chain
-`seReduceB → sigmoidBack(e2) → denseWeightSgdB/denseBiasSgdB (W₂) → denseRowBack(W₂) → swishBack(e1)
-→ denseWeightSgdB/denseBiasSgdB (W₁)`, and `dx` reuses the fused `seBackBatched`. Activations
-are **swish** (smooth, no relu6 kink), the head GAP-back uses the batched `gapBackBatched`.
+cotangent but NOT the SE param grads. The forward emits only the fused `seBlock` (`seFwd`); the
+gate activations `s = gap → e1 = dense W₁ → z = swish → e2 = dense W₂` are intermediate SSA names
+inside that node's text, recovered by `seBlockSavedNames`. So the backward depends on `seBlock`'s
+emit numbering: `seBlockSavedNames` and `seBlock`'s printer change together. The SE param grads
+chain `seReduceB → sigmoidBack(e2) → denseWeightSgdB/denseBiasSgdB (W₂) → denseRowBack(W₂)
+→ swishBack(e1) → denseWeightSgdB/denseBiasSgdB (W₁)`, and `dx` reuses the fused
+`seBackBatched`. Activations are **swish** (smooth, no relu6 kink), the head GAP-back uses the
+batched `gapBackBatched`.
 
 Render is value-independent (`skel` erases values), so placeholder zeros + `lr := 0`/`ε := 0` are
 passed; the emitted `lrStr`/`epsStr` literals carry the real values.
@@ -223,7 +225,7 @@ def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Proofs.Stab
     pretty B (.denseBiasSgdB (N := B) (c := c) bName lrStr zb 0 (.operand dy zd))
 
 -- ════════════════════════════════════════════════════════════════
--- § Squeeze-excite forward (un-fused, for activation-saving) + backward (param grads)
+-- § Squeeze-excite forward (fused; activations read off its text) + backward (param grads)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **SE forward** on `c` channels at `hh×ww`, reduce dim `r`: one fused `seBlock`, whose text
