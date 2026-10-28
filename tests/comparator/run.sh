@@ -26,19 +26,40 @@
 #
 # Usage: tests/comparator/run.sh [--no-paranoid]
 
-set -e
+set -e -o pipefail
 
 PARANOID=--paranoid
 [ "$1" = "--no-paranoid" ] && PARANOID=
 
 cd "$(dirname "$0")/../.."
 
+# Pass `lake comparator`'s output through, adding one `[comparator-time] <config> <phase>: <s> s`
+# line per phase: `build+export` (both modules built and exported, up to the first checker), then
+# each checker from its `Running <k> kernel on solution` to its `<k> kernel accepts the solution`.
+# A checker that rejects gets no line.
+now_us() { echo "${EPOCHREALTIME//[.,]/}"; }
+phase_times() {
+  local cfg=$1 t0 tk="" k="" line
+  t0=$(now_us)
+  while IFS= read -r line; do
+    printf '%s\n' "$line"
+    case "$line" in
+      "Running "*" kernel on solution")
+        [ -z "$tk" ] && echo "[comparator-time] $cfg build+export: $(( ($(now_us) - t0) / 1000000 )) s"
+        k=${line#Running }; k=${k% kernel on solution}; tk=$(now_us) ;;
+      "$k kernel accepts the solution")
+        echo "[comparator-time] $cfg $k: $(( ($(now_us) - tk) / 1000000 )) s" ;;
+    esac
+  done
+}
+
 # One `[comparator] <config>: <n> theorems OK in <s> s` line per config, printed only after
-# `lake comparator` exits 0 (set -e). comparator.yml's job summary is built from these lines.
+# `lake comparator` exits 0 (set -e, pipefail). comparator.yml's job summary is built from these
+# lines and the `[comparator-time]` ones.
 for cfg in config.json config-arch.json config-tier.json; do
   path="tests/comparator/$cfg"
   n="$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["theorem_names"]))' "$path")"
   t0=$SECONDS
-  lake comparator $PARANOID --config "$path"
+  lake comparator $PARANOID --config "$path" 2>&1 | phase_times "$cfg"
   echo "[comparator] $cfg: $n theorems OK in $((SECONDS - t0)) s"
 done

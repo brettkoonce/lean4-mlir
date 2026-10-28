@@ -203,6 +203,21 @@ jobs:
             echo "|---|---|---|---|---|"
             printf '%s' "$rows"
             echo ""
+            # Seconds per phase, from run.sh's `[comparator-time] <config> <phase>: <s> s` lines:
+            # the sandboxed build+export, then each checker. `—` is a phase that did not finish.
+            phases="build+export|Lean paranoid|lean4lean|nanoda|con-leche|con-ron|Lean default"
+            echo "| config (seconds) | ${phases//|/ | } |"
+            echo "|---$(printf '|---:%.0s' {1..7})|"
+            for cfg in config.json config-arch.json config-tier.json; do
+              row="| \`$cfg\`"
+              IFS='|' read -ra ph <<< "$phases"
+              for p in "${ph[@]}"; do
+                s="$(grep -F "[comparator-time] $cfg $p: " "$log" 2>/dev/null | tail -1 | sed -E 's/.*: ([0-9]+) s$/\1/')"
+                row+=" | ${s:-—}"
+              done
+              echo "$row |"
+            done
+            echo ""
             echo "$tier"
             echo ""
             echo "**Sandbox:** \`$(bwrap --version)\` on Linux \`$(uname -r)\` · **Lean:** \`$(cat lean-toolchain)\` (\`lake comparator --paranoid\`; exporter and checkers bundled with the toolchain)"
