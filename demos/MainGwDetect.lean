@@ -9,8 +9,9 @@ public import LeanMlir.SmallClassifier
 
 /-! A CNN against the matched filter on LIGO strain.
 
-    Two-channel (H1, L1) 64 × 128 constant-Q spectrograms of 2-s windows, half of
-    them carrying an injected binary-black-hole chirp, from `scripts/datasets/preprocess_gw.py`. The
+    Two-channel (H1, L1) 64 × 128 constant-Q spectrograms of 2-s windows, half of the
+    training windows and a third of the validation windows carrying an injected
+    binary-black-hole chirp, from `scripts/datasets/preprocess_gw.py`. The
     net is chapter 4's CIFAR-CNN8-wide-BN (`cifar8w`) with a 2-channel stem and a two-class head,
     and the ordinary cross-entropy train step with int32 labels — the 2-D demo's pattern of a
     host loop around the standard step, no `DatasetKind`, no new codegen. The score is not the accuracy printed here but the

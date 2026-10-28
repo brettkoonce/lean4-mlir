@@ -84,11 +84,14 @@ augmentation). Box colour is the class, keyed along the bottom edge, and each fr
 follows its label. The night market and the street market are where the misses live — the small
 and the rare, exactly what the per-class spread predicts.
 
-**mAP@0.5 = 0.2363** (recall 0.769, class-agnostic AP 0.487) at 30 epochs, and 65 fps on one RTX
-4060 Ti — or **55.9 fps on a 25 W Jetson Orin Nano** under TensorRT, with a uint8 input path and
-the clocks pinned (`runs/2026-09-09-orin-remeasure/`, `deploy/ORIN.md`), which is the deployment
-this dataset implies. That beats a hand-written PyTorch replica of this same architecture (0.1532)
-by **54%**.
+**mAP@0.5 = 0.232 ± 0.004** over three seeds (0.2363 / 0.2313 / 0.2289; recall 0.769, class-agnostic
+AP 0.482) at 30 epochs under the multilabel decode, and 65 fps on one RTX 4060 Ti — or **55.9 fps on
+a 25 W Jetson Orin Nano** under TensorRT, with a uint8 input path and the clocks pinned
+(`runs/2026-09-09-orin-remeasure/`, `deploy/ORIN.md`), which is the deployment this dataset implies.
+The PyTorch replica of this same architecture scores 0.1532 under its own recipe (12 epochs, no
+augmentation, argmax decode); the Lean trainer on that recipe and decode is 0.151 ± 0.004, level with
+it. The gap from 0.15 to 0.23 is the recipe — scale augmentation and the 30-epoch schedule — not the
+implementation (`runs/2026-10-27-visdrone-aff30-seeds/`, `runs/2026-10-27-visdrone-rows-seeds/`).
 
 ⚠ Frames are picked with `--diverse`. Picking the *densest* frames selects
 consecutive frames of one VisDrone sequence — val records are video — so the
@@ -173,33 +176,35 @@ Defaults are the measured recipe, so `FPN_BACKBONE` is `r34` and `FPN_CLSW` is
 ![NEU-DET: truth, R34+FPN, single grid](figures/neudet_fpn.png)
 
 Truth / R34+FPN / single 14×14 grid on a crazing, inclusion, rolled-in-scale and
-scratches crop. **NEU-DET test (360 images), at each arm's val-peak epoch:**
+scratches crop. **NEU-DET test (360 images), at each arm's val-peak epoch, three seeds an arm
+(`runs/2026-09-17-neudet-fpn-run1/` seed 0, `runs/2026-10-27-neudet-seeds/` seeds 1 and 2):**
 
-| arm | mAP@0.5 | recall | class-agnostic AP |
+| arm (mean ± sd, seeds 0 / 1 / 2) | mAP@0.5 | recall | class-agnostic AP |
 |---|---|---|---|
-| **R34+FPN**, VisDrone recipe (e28) | **0.623** | 0.992 | 0.625 |
-| R34+FPN, HSV+hflip off (e30) | 0.630 | 0.987 | 0.640 |
-| R34+FPN, no ImageNet bootstrap (e26) | 0.555 | 0.986 | 0.555 |
-| **R34 single grid 14×14** (e28) | **0.607** | 0.917 | 0.609 |
+| **R34+FPN**, VisDrone recipe | **0.632 ± 0.008** | 0.992 ± 0.001 | 0.640 ± 0.013 |
+| R34+FPN, HSV+hflip off (affine kept) | 0.646 ± 0.015 | 0.991 ± 0.004 | 0.659 ± 0.017 |
+| R34+FPN, no ImageNet bootstrap | 0.562 ± 0.012 | 0.986 ± 0.001 | 0.567 ± 0.014 |
+| **R34 single grid 14×14** | **0.609 ± 0.018** | 0.923 ± 0.008 | 0.606 ± 0.027 |
 | published stock detectors, 640 px, 300 ep | 0.73–0.78 | | |
 | published improved variants | ~0.83 | | |
 
 **The same two heads on VisDrone val** (548 images, uncapped GT): R34+FPN
-**0.2363** / 0.769 / 0.487; single grid 14×14 **0.0391** / 0.184 / 0.107.
+**0.232 ± 0.004** / 0.769 / 0.482 over three seeds; single grid 14×14 **0.0391** / 0.184 / 0.107
+(one run).
 
-⭐ **On steel the grid head matches the FPN (0.61 vs 0.62); on drones it is six
-times behind (0.04 vs 0.24, recall 0.18 vs 0.77).** Same backbone, bootstrap,
+⭐ **On steel the grid head is within 0.02 of the FPN (0.609 ± 0.018 vs 0.632 ± 0.008, behind on
+every seed); on drones it is six times behind (0.04 vs 0.23, recall 0.18 vs 0.77).** Same backbone, bootstrap,
 scorer and lowerer in all four cells. Multi-scale detection pays only where
 objects are small; on NEU the neck runs three heads for one level's work.
 
 ⭐ Recall is 0.99 on NEU — the number is ranking, and it is two classes: crazing
-(0.29) and rolled-in scale (0.41), the diffuse textures whose "box" is most of
-the crop, worst for both heads and in every NEU paper. The ImageNet prefix is
-worth +0.07 at 1,080 images. Photometric augmentation's +0.007 is one run against
-one run; no seed spread has been measured on this detector, so it is not a result in
-either direction. Both arms are still rising at e30 — 30 epochs here is 4,050
-steps against VisDrone's 24,000 — and the gap to the published rows is
-schedule, resolution and split before it is architecture.
+(0.34) and rolled-in scale (0.43), the diffuse textures whose "box" is most of
+the crop, worst for both heads on every seed and in every NEU paper. Three seeds an
+arm (`runs/2026-10-27-neudet-seeds/`): the recipe is 0.632 ± 0.008, the ImageNet prefix is
+worth +0.071 ± 0.011 at 1,080 images, same sign on all three seeds, and switching the HSV
+jitter and flip off is +0.014, same sign on all three — the crops are grey, the affine does
+the work. The cosine has levelled by e26–30 on every arm and seed, and the gap to the published
+rows is schedule, resolution and split before it is architecture.
 
 The VisDrone single-grid row is `yolov1-visdrone448` (the archived 448/14 arm,
 12 epochs) measured on the current data and lowerer — Table 2 of
@@ -514,7 +519,8 @@ codegen primitives shipped to support it:
 
 212K params (T=64, D=64, 4 layers, 2 heads). 10K Adam steps take ~3 min on
 one RTX 4060 Ti through XLA, compile included, and reach 2.28 bits/char on
-the held-out split (bigram baseline 3.56, uniform 6.02). Workings in
+the held-out split (Kneser-Ney bigram on the same split 3.583, 7-gram 2.188, uniform 6.02;
+`bigram-shakespeare`'s 3.56 is a training loss). Workings in
 `runs/2026-09-09-tinygpt-nano-xla/`; plan in `planning/archive/tinygpt_demo_v2.md`.
 
 ```bash
@@ -714,7 +720,7 @@ minutes on one card. Zero new codegen: the ordinary train step with integer labe
 host loop, as the 2-D diffusion demo. See `planning/gw_detection_demo.md`.
 
 ```bash
-python3 scripts/datasets/preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw    # O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
+.venv-gw/bin/python scripts/datasets/preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw   # in .venv-gw (gwosc, gwpy, pycbc): O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
 lake exe gw-detect arm=real  net=cifar8w epochs=6 tag=real          # trained on the real strain
 lake exe gw-detect arm=gauss net=cifar8w epochs=6 tag=gauss         # trained on Gaussian noise coloured by the same PSD
 python3 scripts/demos/gw_metrics.py table --gate                          # the matched filter against its closed form (Gate 1)
@@ -727,12 +733,14 @@ python3 scripts/demos/gw_figure.py <table_val.json> gw_detect.png --cnn-real=<ta
 (a) A whitened 2 s H1 window from the validation set with its injected chirp overlaid; (b) the
 spectrograms the CNN sees, a noise-only window and the injected one; (c) detection probability
 against injected network SNR in Gaussian noise — the closed form at the search's own threshold,
-PyCBC's coherent matched-filter search on the same windows, and the CNN; (d) the same in real O3a
+PyCBC's matched filter on the same windows, the two detectors summed in quadrature, and the CNN;
+(d) the same in real O3a
 noise.
 
 **The data is real detector noise with the signal we chose.** Twenty-six file pairs of O3a strain
 from H1 and L1, science-mode and free of hardware injections, cut into 2 s windows and whitened by
-each file's own median-Welch PSD over 20–500 Hz. Half the windows carry an IMRPhenomD chirp from
+each file's own median-Welch PSD over 20–500 Hz. Half the training windows and a third of the
+validation windows carry an IMRPhenomD chirp from
 PyCBC, masses uniform in [10, 50] M☉, random sky position, projected onto both detectors and
 scaled to a network SNR uniform in [4, 20]. Two noise sets share every window and every injection:
 Gaussian noise coloured by the same PSD, the theorem's regime, and the strain itself. 40,760
@@ -751,11 +759,12 @@ the stated fraction of them exceeds it.
 |---|---|---|---|
 | CNN, Gaussian noise | 6.80 | 7.17 | 18.7 |
 | CNN, real O3a strain | 6.65 | **6.91** | **7.52** |
-| PyCBC coherent search | **5.27** | 10.32 | — |
+| matched filter, quadrature sum | **5.27** | 10.32 | — |
 
-ρ½ is the injected network SNR at which half the injections are detected. Each network is best on
-the noise it trained on, by a few tenths, and in Gaussian noise the filter is the optimum it is
-supposed to be. **Real noise costs the filter, not the network:** the filter loses five units of
+ρ½ is the injected network SNR at which half the injections are detected. The network trained on
+real strain is the better one on both noise sets, by 0.15 in Gaussian noise and 0.26 in real; in
+Gaussian noise the known-time filter sits on its closed form and the search, which maximises over
+time, reaches half detection at 5.27 against Q₂'s 5.63 at the same threshold. **Real noise costs the filter, not the network:** the filter loses five units of
 SNR to glitches at 10⁻², and at 10⁻³ its threshold is 417 — eight validation windows hold a glitch
 that loud, and without a veto the filter has no row — while the network trained on real strain
 still reaches half detection at 7.5. Training on the real detector is what teaches the glitch
@@ -1297,9 +1306,9 @@ see, exploitability the worst case):
 | uniform random | 2.3736 | −0.707 | 50% |
 | scripted honest (raise a pair or a K, fold J to a bet, else call) | 1.050 | −0.123 | 0% |
 | CFR+ with its bluffs removed — **the price of honesty** | 0.1856 | −0.0115 | 0% |
-| Deep CFR, strategy net (4.1M nodes) | 0.229 / 0.185 / 0.152 | −0.055 / −0.039 / −0.050 | |
-| Deep CFR, SD-CFR average (4.1M nodes) | 0.127 / 0.150 / 0.109 | −0.022 / −0.031 / −0.020 | 0% (seed 1) |
-| tabular ES-MCCFR at the same 4.1M nodes | 0.038 / 0.043 / 0.041 | | |
+| Deep CFR, strategy net (4.1M nodes) | 0.229 / 0.185 / 0.152 | −0.055 / −0.039 / −0.050 | 1.6% / 0.8% / 6.4% |
+| Deep CFR, SD-CFR average (4.1M nodes) | 0.127 / 0.150 / 0.109 | −0.022 / −0.031 / −0.020 | 0.0% / 5.5% / 6.3% |
+| tabular ES-MCCFR at the same 4.1M nodes | 0.038 / 0.043 / 0.041 | −0.007 / −0.010 / −0.009 | 9.5% / 11.7% / 2.2% |
 | CFR+, 1,000 iterations | 0.00024 | 0 | 19.5% (18.6–19.5% over solvers × inits) |
 
 Deep CFR's exploitability falls from 1.4 at iteration 5 to 0.11–0.15 at 100 and ends

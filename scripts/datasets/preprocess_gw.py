@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Build the gravitational-wave detection sets — planning/gw_detection_demo.md §3.
 
-Real O3a strain from GWOSC, cut into 2-s H1+L1 windows, half of them carrying a
-binary-black-hole chirp injected at a chosen network SNR. Two noise sets share every
+Real O3a strain from GWOSC, cut into 2-s H1+L1 windows, half of the training windows and
+a third of the validation windows carrying a binary-black-hole chirp injected at a chosen
+network SNR. Two noise sets share every
 window position and every injection: `gauss` is Gaussian noise coloured by the file's
 own PSD (the theorem's regime), `real` is the strain itself. Written per split:
 

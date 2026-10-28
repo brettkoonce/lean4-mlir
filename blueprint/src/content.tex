@@ -16600,37 +16600,50 @@ graph, not a list. The catalogue entries keep the single-scale view; the
 demo trains the multi-scale head, \texttt{.fpnDetect}
 (Definition~\ref{layer:fpnDetect}).
 
+\textbf{The data.} VisDrone-DET (Zhu et al.\ 2021; Appendix~\ref{app:data},
+Table~\ref{tab:datasets_demo}) is drone-altitude imagery in ten classes, from
+car ($14{,}064$ validation boxes) to bus ($251$): $6{,}471$ training images,
+and a validation split of $548$ images with $38{,}759$ ground-truth boxes ---
+seventy an image, many of them $2$--$5$\,px after the resize to $448$. It is
+the harder half of detection, the regime where a single coarse grid
+structurally cannot emit the objects, and what makes the multi-scale head of
+Definition~\ref{layer:fpnModule} necessary rather than decorative. Every
+number here is scored against that uncapped validation ground truth --- all
+$38{,}759$ boxes, not the 56-box-truncated training record, which drops
+$34.9\%$ of them and is not the benchmark's protocol --- and every row of this
+stack under one decode, the multilabel one: up to three classes per anchor
+cell, $3{,}000$ boxes an image.
+
 \paragraph{The working detector.}
 A ResNet-34 backbone, trained by this stack on ImageNet, feeding an FPN
 top-down neck into three anchor heads at strides $8/16/32$; DIoU box loss,
-focal objectness, focal class CE; $448$\,px input, 30 epochs, photometric
-and box-aware scale augmentation. VisDrone is the harder half of detection:
-drone-altitude imagery where an image holds seventy objects on average and
-many are $2$--$5$\,px after the resize --- the regime where a single coarse
-grid structurally cannot emit the objects, and what makes the multi-scale head
-of Definition~\ref{layer:fpnModule} necessary rather than decorative. Scored
-against VisDrone's uncapped validation ground truth --- all $38{,}759$
-boxes, not the 56-box-truncated training record, which drops $34.9\%$ of them
-and is not the benchmark's protocol. The YOLO catalogue entry keeps the
-paper-exact YOLOv1 shape for the historical record; Table~\ref{tab:visdrone_results}
-is the trained detector beside it, and Figure~\ref{fig:visdrone_fpn} is its top row on
-four validation frames.
+focal objectness, focal class CE; $448$\,px input, 30 epochs, HSV jitter,
+horizontal flip and box-aware scale augmentation. The trainer is
+\texttt{demos/MainYolov1VisdroneFpn.lean}, built as the
+\texttt{yolov1-visdrone-fpn} executable. The question is what the multi-scale head and the augmentation
+pack buy at this object scale, and what the schedule does to the number.
+Table~\ref{tab:visdrone_results} is the detector at three seeds a row beside
+its ablations, a PyTorch replica and YOLOv8s
+(\texttt{runs/2026-10-27-visdrone-aff30-seeds/},
+\texttt{runs/2026-10-27-visdrone-rows-seeds/}); the YOLO catalogue entry keeps
+the paper-exact YOLOv1 shape for the historical record; and
+Figure~\ref{fig:visdrone_fpn} is the bold row on four validation frames.
 
 \begin{table}[H]
 \centering
-\caption{Detection on VisDrone validation: mAP@0.5, recall and class-agnostic AP for each arm.}
+\caption{Detection on VisDrone validation: mAP@0.5, recall and class-agnostic AP. The R34+FPN rows are the mean $\pm$ sd over three seeds at the final epoch, all under the multilabel decode (\texttt{runs/2026-10-27-visdrone-aff30-seeds/}, \texttt{runs/2026-10-27-visdrone-rows-seeds/}); the replica is one run under the argmax decode.}
 \label{tab:visdrone_results}
 \small
 \begin{tabular}{l c c c}
 \hline
- & mAP@0.5 & recall & class-agnostic AP \\
+VisDrone val, multilabel decode & mAP@0.5 & recall & class-agnostic AP \\
 \hline
-\textbf{R34+FPN, 30\,ep, +scale aug} & \textbf{0.2363} & \textbf{0.769} & \textbf{0.487} \\
-R34+FPN, 12\,ep, +photometric aug & 0.1961 & 0.749 & 0.441 \\
-R34+FPN, 50\,ep, +photometric aug & 0.1674 & 0.703 & 0.429 \\
-R34+FPN, 12\,ep, no aug & 0.1526 & 0.682 & 0.393 \\
-R34+FPN, 50\,ep, no aug & 0.1243 & 0.669 & 0.369 \\
-PyTorch replica, same architecture & 0.1532 & 0.677 & 0.400 \\
+\textbf{R34+FPN, 30\,ep, HSV+flip+scale aug}, 3 seeds & \textbf{0.232 $\pm$ 0.004} & \textbf{0.769 $\pm$ 0.000} & \textbf{0.482 $\pm$ 0.011} \\
+R34+FPN, 50\,ep, HSV+flip aug, 3 seeds & 0.170 $\pm$ 0.003 & 0.739 $\pm$ 0.001 & 0.435 $\pm$ 0.004 \\
+R34+FPN, 12\,ep, HSV+flip aug, 3 seeds & 0.161 $\pm$ 0.032 & 0.749 $\pm$ 0.001 & 0.373 $\pm$ 0.061 \\
+R34+FPN, 12\,ep, no aug, 3 seeds & 0.157 $\pm$ 0.004 & 0.726 $\pm$ 0.001 & 0.396 $\pm$ 0.003 \\
+R34+FPN, 50\,ep, no aug, 3 seeds & 0.1287 $\pm$ 0.0011 & 0.709 $\pm$ 0.002 & 0.372 $\pm$ 0.002 \\
+PyTorch replica, 12\,ep, no aug, argmax decode, 1 run & 0.1532 & 0.677 & 0.400 \\
 YOLOv8s, matched budget & 0.140 & --- & --- \\
 YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
 \hline
@@ -16641,29 +16654,51 @@ YOLOv8s, 100\,ep, 640\,px, full aug & 0.391 & 0.400 & --- \\
 \centering
 \includegraphics[width=\textwidth]{demos/visdrone_fpn.jpg}
 \caption{The detector on four VisDrone validation frames at $448$: ground truth
-above, the R34+FPN's boxes below, at the top row of the table (30 epochs, scale
-augmentation, mAP@0.5 $0.2363$). Box colour is the class, keyed along the bottom
+above, the R34+FPN's boxes below --- the bold row of
+Table~\ref{tab:visdrone_results} at its first seed, mAP@0.5 $0.2363$. Box
+colour is the class, keyed along the bottom
 edge, and each frame's box count sits in its corner. The night market and the
 street market are where the misses live --- the small and the rare.}
 \label{fig:visdrone_fpn}
 \end{figure}
 
 \noindent \textbf{Augmentation and schedule length are one decision, not two,
-and the top five rows only mean something together.} Quadrupling the schedule
-with augmentation off costs $19\%$ --- ordinary overfitting on $6{,}471$
-images. Photometric augmentation recovers it, but at that strength 12 epochs
-still beats 50. Augmentation that changes object scale inverts the
-ordering again: the 30-epoch scale-augmented run scores a fifth above the
-best 12-epoch row, $0.2363$ against $0.1961$. A stronger
-augmentation needs a longer schedule to absorb, so \textbf{the optimum epoch
-count is a property of the augmentation pack} --- there is no schedule that can
-be tuned once and carried across packs.
+and the five R34+FPN rows only mean something together.} Quadrupling the
+schedule with augmentation off costs $18\%$, $0.157$ to $0.129$ --- ordinary
+overfitting on $6{,}471$ images --- and no checkpoint of the 50-epoch run
+reaches the 12-epoch run's number: its best is $0.136$--$0.145$ at epoch 10 or
+20, under the 12-epoch row's lowest seed, $0.153$, and every seed falls
+$0.007$--$0.015$ from there to epoch 50. Photometric augmentation recovers it.
+With HSV jitter and flip on, the 50-epoch run scores $0.170$ and is flat from
+epoch 10 to 50 --- $0.163$--$0.181$ across checkpoints and seeds, the peak at a
+different epoch on each seed, so the checkpoint noise is the size of any
+trend --- and the 12-epoch run under the same pack is $0.161 \pm 0.032$, not
+above it. That row's three seeds end at $0.196$, $0.135$ and $0.152$ from
+$0.139$--$0.144$ at epoch 8; the last four epochs of the cosine tail decide
+it, and what moves there is the ranking, not the recall --- recall is
+$0.744$--$0.749$ on every seed from epoch 10 while class-agnostic AP goes to
+$0.441$ on one seed and stays at $0.31$--$0.32$ on another, which nothing the
+trainer prints can see. Augmentation that changes object scale is a different
+tier: the 30-epoch scale-augmented row is $0.232 \pm 0.004$, and its curve
+climbs to epoch 28--30. Without augmentation the long schedule is worse than
+the short one at every checkpoint; with photometric augmentation it is flat;
+with scale augmentation it pays. \textbf{The pack sets whether the long
+schedule pays}, so there is no epoch count that can be tuned once and carried
+across packs.\footnote{The bold row and the 12-epoch HSV+flip row train the
+class term under focal loss with the class weights off; the other three
+R34+FPN rows use the trainer's default square-root class weights without the
+focal term. The 12-epoch HSV+flip row is the bold row's recipe without the
+scale augmentation, at 12 epochs.}
 
 \medskip\noindent \textbf{The mean hides where detection fails.} Per-class
-AP runs from car down to bicycle, a spread of $19\times$, and scale augmentation
-narrowed it from $25\times$ by lifting exactly the classes that were worst:
-awning-tricycle by $59\%$, bicycle by $41\%$, tricycle by $40\%$, against car's
-$7\%$. That the fix was data rather than objective is the substantive point.
+AP on the bold row runs from car, $0.66$, down to bicycle, $0.036$, a spread
+of $18\times$, and scale augmentation narrowed it from $24\times$ by lifting
+exactly the classes that were worst. Against the 12-epoch HSV+flip row, three
+seeds on each side, awning-tricycle gains $1.9\times$, tricycle $1.6\times$
+and bicycle $1.5\times$, car $1.1\times$; the direction holds on every seed,
+and the seed spread of the bold row lives in the big classes --- car moves
+$0.066$ across seeds --- while the four rarest agree to $0.002$. That the fix
+was data rather than objective is the substantive point.
 Reweighting a loss toward rare classes buys their recall at the expense of
 precision, and average precision charges for the trade; supplying the scales the
 rare classes are missing raises both at once, which is what the recall and
@@ -16672,8 +16707,11 @@ not degrade uniformly --- it collapses on whatever is simultaneously small
 and rare, and an averaged mAP is precisely the statistic that hides it.
 
 \medskip\noindent The stack matches the hand-written PyTorch replica of
-this same architecture on the matched recipe, $0.1526$ against $0.1532$ at
-12 epochs without augmentation, and runs at 65\,fps on one RTX 4060 Ti
+this same architecture on the matched recipe and decode, $0.151 \pm 0.004$
+against $0.1532$ at 12 epochs without augmentation under the argmax decode
+(the multilabel decode the table prints adds $0.004$--$0.007$ to every row
+without the focal term and $0.02$ to the row with it, on every seed, and
+changes no ordering), and runs at 65\,fps on one RTX 4060 Ti
 --- or $55.9$\,fps on a 25\,W Jetson Orin Nano under TensorRT, with a
 uint8 input path and the clocks pinned. The replica, not YOLOv8, is the
 yardstick: it
@@ -16684,7 +16722,14 @@ this detector, though from random weights rather than an ImageNet-pretrained
 backbone --- while its ordinary-practice $0.391$ comes from $8\times$ the epochs,
 higher resolution, full augmentation and COCO pretraining. \textbf{The distance
 to the field is recipe, not architecture}, and one item of that recipe, scale
-augmentation with the schedule it needs, closes a fifth of it.
+augmentation with the schedule it needs, closes $0.07$ of the $0.23$
+between the matched 12-epoch row and the field.
+
+\medskip\noindent What this detector is not: a tracker, or the field's
+number. It reads one $448$-px frame --- no identity from frame to frame, no
+count over a sequence, though the validation records are video --- and on the
+classes that are small and rare at once the honest number is the per-class
+one, bicycle at $0.036$, not the mean.
 
 \subsection*{YOLO v1/v3/v5/v8/v11 (\texttt{Bestiary/YOLO.lean})}
 v1 (Redmon et al.\ 2016,
@@ -16807,9 +16852,12 @@ def detrR50 : NetSpec where
 \section{Industrial inspection --- demo: the same detector on NEU-DET steel defects}
 \label{sec:bestiary_inspection}
 
-The detector of the previous section, unchanged --- backbone, neck, heads,
-loss, ImageNet bootstrap, scorer --- on the dataset the industrial-inspection
-literature reports on. NEU-DET (Song \& Yan 2013; boxes He et al.\ 2020) is
+The detector of \S\ref{sec:bestiary_detection}, unchanged --- backbone,
+neck, heads, loss, ImageNet bootstrap, scorer --- on the dataset the
+industrial-inspection literature reports on.
+
+\textbf{The data.} NEU-DET (Song \& Yan 2013; boxes He et al.\ 2020;
+Appendix~\ref{app:data}) is
 $1{,}800$ grayscale $200\times200$ crops of hot-rolled steel strip, $300$ per
 class over six defect types --- crazing, inclusion, patches, pitted surface,
 rolled-in scale, scratches --- with Pascal-VOC boxes. It is VisDrone's opposite
@@ -16828,7 +16876,13 @@ emitter and the scorer averages over the classes present. NEU-DET ships no
 split; the one here is $1{,}080/360/360$, stratified $180/60/60$ per class from
 a fixed seed. Epochs are chosen on the validation $360$ and the numbers in
 Table~\ref{tab:neudet_results} are the test $360$ at that epoch, scored by the VisDrone protocol against
-uncapped ground truth. The single-grid arm is the same ResNet-34 and the same
+uncapped ground truth, three seeds an arm --- the seed sets the He
+initialisation of whatever is not bootstrapped, the shuffle and the
+augmentation draws --- printed as mean $\pm$ sd
+(\texttt{demos/MainYolov1NeuDetFpn.lean},
+\texttt{demos/MainYolov1NeuDet448.lean};
+\texttt{runs/2026-09-17-neudet-fpn-run1/},
+\texttt{runs/2026-10-27-neudet-seeds/}). The single-grid arm is the same ResNet-34 and the same
 bootstrap under a one-grid YOLOv1 head at $448/14$, run for the same 30
 epochs here (its VisDrone run was 12 epochs without the scale
 augmentation). Table~\ref{tab:neudet_visdrone_heads} is the same two heads on
@@ -16836,17 +16890,17 @@ VisDrone, and Figure~\ref{fig:neudet_fpn} is both on one crop of each defect.
 
 \begin{table}[H]
 \centering
-\caption{Detection on the NEU-DET test split: the R34+FPN arms, the single-grid head, and published detectors.}
+\caption{Detection on the NEU-DET test split: the R34+FPN arms and the single-grid head, mean $\pm$ sd over three seeds of the test score at each run's validation-peak epoch (\texttt{runs/2026-10-27-neudet-seeds/}), and published detectors.}
 \label{tab:neudet_results}
 \small
 \begin{tabular}{l c c c}
 \hline
-NEU-DET test & mAP@0.5 & recall & class-agnostic AP \\
+NEU-DET test, 3 seeds & mAP@0.5 & recall & class-agnostic AP \\
 \hline
-\textbf{R34+FPN, the VisDrone recipe} (e28) & \textbf{0.623} & 0.992 & 0.625 \\
-R34+FPN, photometric augmentation off (e30) & 0.630 & 0.987 & 0.640 \\
-R34+FPN, no ImageNet bootstrap (e26) & 0.555 & 0.986 & 0.555 \\
-\textbf{R34, single $14\times14$ grid} (e28) & \textbf{0.607} & 0.917 & 0.609 \\
+\textbf{R34+FPN, the VisDrone recipe} & \textbf{0.632 $\pm$ 0.008} & 0.992 $\pm$ 0.001 & 0.640 $\pm$ 0.013 \\
+R34+FPN, HSV jitter and flip off, affine kept & 0.646 $\pm$ 0.015 & 0.991 $\pm$ 0.004 & 0.659 $\pm$ 0.017 \\
+R34+FPN, no ImageNet bootstrap & 0.562 $\pm$ 0.012 & 0.986 $\pm$ 0.001 & 0.567 $\pm$ 0.014 \\
+\textbf{R34, single $14\times14$ grid} & \textbf{0.609 $\pm$ 0.018} & 0.923 $\pm$ 0.008 & 0.606 $\pm$ 0.027 \\
 published stock detectors, $640$\,px, 300\,ep & 0.73--0.78 & --- & --- \\
 published improved variants & $\approx 0.83$ & --- & --- \\
 \hline
@@ -16855,15 +16909,15 @@ published improved variants & $\approx 0.83$ & --- & --- \\
 
 \begin{table}[H]
 \centering
-\caption{The same two detection heads on VisDrone validation.}
+\caption{The same two detection heads on VisDrone validation: the R34+FPN row of Table~\ref{tab:visdrone_results}, three seeds; the single grid, one run (\texttt{runs/2026-09-17-neudet-fpn-run1/}).}
 \label{tab:neudet_visdrone_heads}
 \small
 \begin{tabular}{l c c c}
 \hline
 VisDrone val, the same two heads & mAP@0.5 & recall & class-agnostic AP \\
 \hline
-\textbf{R34+FPN}, 30\,ep, +scale aug & \textbf{0.2363} & 0.769 & 0.487 \\
-\textbf{R34, single $14\times14$ grid}, 12\,ep & \textbf{0.0391} & 0.184 & 0.107 \\
+\textbf{R34+FPN}, 30\,ep, HSV+flip+scale aug, 3 seeds & \textbf{0.232 $\pm$ 0.004} & 0.769 $\pm$ 0.000 & 0.482 $\pm$ 0.011 \\
+\textbf{R34, single $14\times14$ grid}, 12\,ep, 1 run & \textbf{0.0391} & 0.184 & 0.107 \\
 \hline
 \end{tabular}
 \end{table}
@@ -16880,33 +16934,51 @@ with the truth and with each other.}
 \label{fig:neudet_fpn}
 \end{figure}
 
-\noindent \textbf{Table~\ref{tab:neudet_visdrone_heads} is the result.} On steel the single grid
-matches the multi-scale head, $0.607$ against $0.623$; on drones it is six
-times behind, $0.039$ against $0.236$, with recall $0.18$ against $0.77$ ---
-same backbone, same bootstrap, same scorer, same lowerer in all four cells
-(against the FPN's own 12-epoch unaugmented row, $0.1526$, the grid is four
-times behind).
-The FPN pays for itself only where objects are small; on NEU-DET it runs three
-heads for one level's worth of work, and the head that collapses on VisDrone
-is not wrong, it is wrong for drones. Recall is not the limit on steel:
-the FPN finds $99\%$ of defects and the mean is held down by two classes,
-crazing at $0.29$ and rolled-in scale at $0.41$ against $0.66$--$0.84$ for the
-other four --- the diffuse textures whose ``box'' is most of the crop, the
-worst two in every published NEU-DET table and the worst two for both heads
-here. The ImageNet prefix is worth $+0.07$ at $1{,}080$ training images, a gap
-that has not closed by epoch 30. Photometric augmentation's $-0.007$ is one
-run against one run; no seed spread has been measured on this detector, so
-it is not a result in either direction.
+\noindent \textbf{Table~\ref{tab:neudet_results} beside
+Table~\ref{tab:neudet_visdrone_heads} is the result.} On steel the single
+grid is within $0.02$ of the multi-scale head, $0.609$ against $0.632$ ---
+behind on every seed, by $0.008$ to $0.044$; on drones it is six times
+behind, $0.039$ against $0.232$, with recall $0.18$ against $0.77$ --- same
+backbone, same bootstrap, same scorer, same lowerer in all four cells
+(against the FPN's own 12-epoch unaugmented row, $0.157$, the grid is four
+times behind). The FPN pays for itself only where objects are small; on
+NEU-DET it runs three heads for one level's worth of work, and the head that
+collapses on VisDrone is not wrong, it is wrong for drones. Recall is not the
+limit on steel: the FPN finds $99\%$ of defects on every seed and the mean is
+held down by two classes, crazing at $0.34$ and rolled-in scale at $0.43$
+against $0.67$--$0.84$ for the other four --- the diffuse textures whose
+``box'' is most of the crop, the worst two in every published NEU-DET table
+and the worst two for every arm and seed here. The ImageNet prefix is worth
+$0.071 \pm 0.011$ at $1{,}080$ training images, the same sign on all three
+seeds and five times either arm's spread; without it the validation curve
+sits $0.04$--$0.09$ lower at every epoch from 26. Switching the HSV jitter and
+the flip off is $+0.014$, the same sign on all three seeds on test and on
+validation, about one seed sd of the recipe arm: the crops are grey, hue
+jitter on grey content is input noise, and the box-aware affine, kept in both
+arms, is the augmentation doing the work. It is small, consistent, and not
+the table's point; the bold row is the VisDrone recipe unchanged, and a
+NEU-tuned recipe would start by switching the jitter off.
 
 \medskip\noindent The distance to the published rows is recipe. Those
 detectors run at $640$\,px for 300 epochs on a $1{,}440/180/180$ split; this
 one runs at $448$\,px for 30 epochs, which on $1{,}080$ images is $4{,}050$
-steps against VisDrone's $24{,}000$, and both arms are still rising at epoch
-30. The anchor priors are a second, smaller part of it: three per level fit
+steps against VisDrone's $24{,}000$, under a cosine that has levelled by
+epoch 26--30 on every arm and seed: the validation peak is epoch 28 or 30 on
+eleven of the twelve runs, and the test score at epoch 30 is within $0.011$
+of the score at the peak on all of them. The anchor priors are a second,
+smaller part of it: three per level fit
 a level that carries $98\%$ of the boxes at every aspect from $64$\,px to the
 full frame at a mean IoU of $0.52$, and the head has to regress the rest.
 Both are levers the detector already has; neither was pulled, because the
 comparison the section makes needs the detector to be the detector.
+
+\medskip\noindent What this detector is not: an inspection line. It draws a
+box on a $200$-px crop already cut from the strip --- no line speed, no
+severity, no miss rate against a plant's tolerance --- and on the two diffuse
+classes, crazing at $0.33$--$0.35$ and rolled-in scale at $0.40$--$0.48$
+across the four arms, the box is a region of texture that the labels, the
+published detectors and both heads here place differently. The honest number
+on steel is the per-class one.
 
 \section{People watching --- demo: Arabic sign-language letters on ArASL}
 \label{sec:bestiary_people}
@@ -16949,7 +17021,8 @@ one the gravitational-wave demo (\S\ref{sec:bestiary_signal}) also uses: the
 ordinary train step with integer
 labels, Adam at $10^{-3}$ with one warm-up epoch and cosine decay, batch 64,
 30 epochs, no flip (a mirrored hand is a different sign for some letters),
-five minutes on one card. The chapter's linear and MLP rungs run through
+five minutes on one card (\texttt{runs/2026-09-17-arasl/}, one directory per arm
+beside it). The chapter's linear and MLP rungs run through
 the same loop as the bracket, and the chapter net at its own $32\times32$
 input checks that the resolution is not the story. Epochs are chosen on
 the validation tenth and the numbers in Table~\ref{tab:arasl_results} are the
@@ -17049,7 +17122,9 @@ healthy leaf of each crop. Published classifiers score $99$--$99.7\%$ on a
 random split of it. PlantDoc (Singh et al.\ 2020; CC~BY~4.0) is $2{,}578$
 photographs of the same crops and diseases taken where they grow --- leaves
 on the plant, several per frame, soil and sky behind them, phone lighting
---- in 28 classes that all map onto PlantVillage's. The net here is
+--- in 28 classes that all map onto PlantVillage's; those are the counts of the
+GitHub release \texttt{download\_plant.sh} fetches and checks, where the paper
+reports $2{,}598$ in 27. The net here is
 Chapter~\ref{chap:residual}'s ResNet-34 from its ImageNet weights with a
 38-way head, ten epochs on PlantVillage, forty minutes on one card; PlantDoc
 is never seen in training except by the three field-label rows of
@@ -17092,7 +17167,7 @@ what they find.
 
 \begin{table}[H]
 \centering
-\caption{What the PlantVillage net responds to: edited test leaves and two explainers, for the base net and the net trained with backgrounds.}
+\caption{What the PlantVillage net responds to: edited test leaves and two explainers, for the base net and the net trained with backgrounds. The black-background cell is the one that moves with the seed; it lists the three seeds behind its mean.}
 \label{tab:plantvillage_probes}
 \small
 \begin{tabular}{l c c}
@@ -17100,7 +17175,7 @@ what they find.
 What the trained net is asked, PlantVillage test ($10{,}709$) & base & + backgrounds \\
 \hline
 the test leaves as photographed & 99.6 & 99.4 \\
-the same leaves on a black background & \textbf{60} & \textbf{96} \\
+the same leaves on a black background & \textbf{60} (49, 59, 72) & \textbf{96} \\
 the leaf on its own median background colour & 94 & 99 \\
 the background only, leaf filled with that colour (chance 2.6) & \textbf{25} & 14 \\
 a flat image of that colour and nothing else & 4.4 & 2.6 \\
@@ -17122,7 +17197,7 @@ with two players it is exact from four forward passes (the image, the leaf
 alone, the background alone, neither), and the two shares add up to the
 whole score. Both explainers say the same reassuring thing: the evidence is
 mostly the leaf, $85\%$ of the Shapley share and $71\%$ of the map. The counterfactuals say otherwise. Put the same leaf
-on black and the net loses forty points; show it the background with the
+on black and the net loses forty points --- 28 to 51, by the seed; show it the background with the
 leaf painted out and it is right one time in four; show it a flat rectangle
 of the background's colour and it still beats chance. The background
 helps in nine images out of ten, a little each time. A map of where
@@ -17147,7 +17222,8 @@ unrelated photograph.}
 
 \noindent \textbf{The fixes.} Pasting every training leaf onto an unrelated
 photograph (the composites of panel c) attacks exactly what the table
-found, and repairs it: the leaves on black go from $60\%$ to $96\%$, the
+found, and repairs it: the leaves on black go from $60\%$ (49, 59 and 72 over three
+seeds) to $96\%$, the
 background alone falls toward chance, the leaf's Shapley share rises to
 $96\%$. In the field it buys three and a half points, $17.8 \pm 1.8$ to
 $21.5 \pm 1.3$ over three seeds each. Stronger augmentation --- colour,
@@ -17185,7 +17261,8 @@ infrared, where its water absorbs; the red edge is the step between the
 two. Colour-infrared film found camouflage on that principle in the 1940s,
 and the vegetation indices of the 1970s are ratios of exactly these bands.
 The Brazil chips were cut for this section (Appendix~\ref{app:data}): the same 640~m
-squares from Sentinel-2 scenes of 2023 over Rond\^onia in June, and over
+squares from Sentinel-2 scenes of 2023 over Rond\^onia between 16 June and
+4 July, and over
 western Bahia in September and again, the same $3{,}620$ squares, in
 March, each labelled by majority vote from MapBiomas, Brazil's 10~m
 land-cover map, through the seven classes EuroSAT's ten collapse into
@@ -17249,16 +17326,19 @@ savanna becomes ``forest'' to RGB on $42\%$ of its chips. The last column
 is the check the section was built for, and it fails for every arm: the
 same $3{,}620$ chips get the same answer in the two seasons between a
 quarter and two-fifths of the time. The multispectral arms are better in
-both seasons; they are not stabler. A Cerrado pasture's red and short-wave
-reflectance doubles between March and September, and no European chip
-taught that.
+both seasons; they are not stabler. Averaged over the Cerrado chips, red
+and the second short-wave band are $1.9$ times as bright in September as in
+March, the first short-wave band $1.5$ times, and the near infrared is
+darker; no European chip taught that.
 
 \textbf{Whose fault.} Trained on the Brazil labels themselves, five-fold,
 the same net reads $94.2$ with three bands and $95.8$ with thirteen: the
 labels are learnable, and the thirteen-band margin over RGB is the same
 point and a half as in Europe. Fine-tuned from the European weights on 300
-Brazilian labels, every arm recovers about 90, the thirteen-band arm a
-point more; on all of them the European start is worth nothing over
+Brazilian labels, three arms were tried: \texttt{rgb} reaches $90.0$,
+\texttt{ir} $89.2$ and \texttt{all} $91.0$. Fine-tuned on all the labels
+they reach $94.3$, $94.9$ and $95.1$, which for the two with a from-scratch
+row is within a point of it: the European start is worth nothing over
 scratch. A five-player Shapley value over band groups --- visible, red edge,
 near infrared, short-wave infrared, and the three atmospheric bands at
 60~m; a removed group set to its training mean, exact over 32 forward
@@ -17297,9 +17377,7 @@ the invisible bands; the second is a reason to label where you look.
 
 \medskip\noindent What this classifier is not: a map. It says what a 640~m
 square mostly is --- not where the boundary runs, when the forest was cut,
-or how much of it is gone. The Bahia chips are the first half of the
-instrument that could say the last two: the same square on two dates, and
-the difference between them.
+or how much of it is gone.
 
 \section{Semantic segmentation --- demo: UNet on BraTS}
 \label{sec:bestiary_segmentation}
@@ -17308,35 +17386,59 @@ Pixel-level labeling. Symmetric encoder/decoder with skip connections
 is the recurring pattern; UNet is the canonical instance, and the same
 shape later became the diffusion-model backbone.
 
-\paragraph{A ResNet-34 UNet on BraTS.} The
-\texttt{demos/MainUnetBratsR34.lean} trainer (\texttt{unet-brats-r34}) is a
-working encoder--decoder segmentation network at 24.5M params on MSD Task01
+\paragraph{A ResNet-34 UNet on BraTS.} The question is what a slice
+segmenter built from the Part~1 kit scores on brain-tumour MRI, and what its
+two borrowed parts --- the ImageNet encoder and the decoder's skip
+connections --- are each worth. The
+\texttt{demos/MainUnetBratsR34.lean} trainer (\texttt{unet-brats-r34}) is an
+encoder--decoder segmentation network at 24.5M parameters on MSD Task01
 brain-tumour MRI: four co-registered modalities (FLAIR / T1w / T1gd / T2w) at
 $224 \times 224$ in, four per-pixel classes out (background, edema,
 non-enhancing/necrotic core, enhancing tumour), 14{,}415 training slices from
 411 patients with the 2{,}569 validation slices held out by patient. The
 tumour sub-regions are defined by which modality lights up --- edema is bright
-on FLAIR, enhancing tumour on T1gd --- so the input is genuinely multi-modal
-rather than three correlated views of one scene, and the classes are brutally
-imbalanced: enhancing tumour is $\sim$0.5\% of voxels.
+on FLAIR, enhancing tumour on T1gd --- so the input is multi-modal rather
+than three correlated views of one scene, and the classes are imbalanced:
+enhancing tumour is about $0.5\%$ of voxels.
 
 Scored on the clinical literature's regions --- Dice over the nested WT (whole
 tumour), TC (tumour core) and ET (enhancing tumour) --- pooled over the 2{,}569
 tumour-bearing validation slices, ten epochs of plain per-pixel cross-entropy
-gives Table~\ref{tab:brats_dice}:
+gives Table~\ref{tab:brats_dice}: three seeds an arm at each seed's
+best-by-val epoch, about an hour an arm on one card, the encoder's ImageNet weights (the bootstrap the
+detection sections also use) against the same encoder from He initialisation
+(\texttt{runs/2026-09-25-brats-r34-xla/} for seed 0,
+\texttt{runs/2026-10-27-brats-r34-seeds/} for seeds 1 and 2):
 
 \begin{table}[H]
 \centering
-\caption{The ResNet-34 UNet on BraTS validation: mIoU, and Dice on the three tumour regions, pooled over the tumour-bearing slices.}
+\caption{The ResNet-34 UNet on BraTS validation: mIoU, and Dice on the three tumour regions, pooled over the tumour-bearing slices. Ten epochs, batch 16 at $224^2$; mean $\pm$ sd over seeds 0, 1, 2 at each seed's best-by-val epoch, and the paired difference seed by seed.}
 \label{tab:brats_dice}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccc}
 \hline
  & mIoU & WT & TC & ET \\
 \hline
-ResNet-34 UNet, from scratch (\texttt{unet-brats-r34}) & 0.741 & 0.910 & 0.867 & 0.856 \\
+ImageNet bootstrap (\texttt{r34}), 3 seeds & $0.741 \pm 0.002$ & $0.912 \pm 0.001$ & $0.867 \pm 0.004$ & $0.856 \pm 0.003$ \\
+from scratch (\texttt{scratch}), 3 seeds   & $0.737 \pm 0.004$ & $0.909 \pm 0.002$ & $0.864 \pm 0.005$ & $0.855 \pm 0.001$ \\
+\quad paired, seeds 0/1/2 & $+.002/{+}.004/{+}.005$ & $+.003/{+}.002/{+}.005$ & $+.003/{+}.004/{+}.004$ & $-.000/{-}.001/{+}.003$ \\
 \hline
 \end{tabular}
 \end{table}
+
+\noindent The bootstrap is a small gain with the same sign on every seed:
+$+0.004$ mIoU on average, WT and TC the same size, nothing on ET. It is the
+size of one arm's own seed spread, so three seeds put it at the edge of what
+they resolve; it is not a tie and it is not a rescue. At epoch 1 the arms are
+level --- the ET gap is $+0.064$, $-0.035$ and $-0.003$ over the three seeds,
+and both arms reach every 50 / 80 / 90\% target within one epoch of each
+other --- so at 14{,}415 slices the pretrained encoder buys the last few
+thousandths, not the first epoch. Seed 2 is the rough seed on both arms: its
+validation mIoU drops $0.04$--$0.06$ between epochs 1 and 2 under either
+initialisation, so the dips come from the shuffle and augmentation draws, not
+the weights, and a single best-by-val row carries about $0.005$ of noise of
+its own.
 
 \noindent Rendered predictions are Figure~\ref{fig:brats_unet} --- T1gd
 backdrop, ground truth, prediction, on four held-out patients. This matters more
@@ -17365,64 +17467,60 @@ section also uses. Three things change relative to the image
 classifiers of Part~1:
 
 \begin{itemize}
-  \item \textbf{The label is a tensor, not a scalar.} Classifiers emit
-    one logit vector per image (shape $B \times K$) and compare it to
-    one ground-truth class. Segmentation networks emit one logit
-    vector per pixel (shape $B \times K \times H \times W$, with
-    $H \times W$ matching the input) and compare against a
-    shape-identical ground-truth mask. Cross-entropy is computed per
-    pixel, averaged spatially. This rides the same per-position loss
-    (\texttt{useSeg}, derived from the config's \texttt{lossKind}) that
-    the TinyGPT demo of \S\ref{sec:bestiary_nlp} uses per token, applied across the spatial axes instead of the
-    token axis --- no new VJP machinery; the per-pixel softmax-CE
-    backward is the same one Ch~\ref{chap:tensor} derived, fired $HW$
-    times in parallel.
-  \item \textbf{The network has to give spatial resolution back.}
-    A classifier downsamples aggressively (input $224^2$, bottleneck
-    $7^2$, GAP, $K$-way logits) and discards spatial structure on
-    purpose. A segmentation network downsamples and then
-    upsamples, with skip connections from each encoder stage
-    spliced into the matching decoder stage so the output recovers
-    pixel-level detail the bottleneck threw away. That symmetry is
-    exactly what \texttt{.unetUp}'s body bundles --- bilinear upsample
-    + channel concat with the saved skip + two convs --- and it is the
-    only architectural piece this section's backbones add to the Part~1
-    kit.
-  \item \textbf{Inference is one forward pass; post-processing
-    differs.} Segmentation doesn't autoregress; one network call
-    produces every pixel label simultaneously. What changes is what
-    you do with the logits: \texttt{argmax} per pixel and render as a
-    colored mask. The \texttt{brats-predict} executable is the smallest
-    example of that path --- same artifact the trainer produced, plus a
-    small colormap routine.
+  \item \textbf{The label is a tensor, not a scalar.} A classifier emits
+    one logit vector per image ($B \times K$) against one class. A
+    segmentation network emits one per pixel ($B \times K \times H \times
+    W$, $H \times W$ the input's) against a mask of the same shape, and the
+    cross-entropy is per pixel, averaged over the plane. It is the
+    per-position loss (\texttt{useSeg}, derived from the config's
+    \texttt{lossKind}) the TinyGPT demo of \S\ref{sec:bestiary_nlp} applies
+    per token, applied over the spatial axes instead: the per-pixel
+    softmax-CE backward is the one Ch~\ref{chap:tensor} derived, fired $HW$
+    times in parallel. No new VJP.
+  \item \textbf{The network gives spatial resolution back.} A classifier
+    downsamples on purpose, $224^2$ to a $7^2$ bottleneck to a pooled
+    $K$-way vector. A segmentation network downsamples and then upsamples,
+    with a skip from each encoder stage spliced into the matching decoder
+    stage so the output recovers the detail the bottleneck discarded.
+    \texttt{.unetUp} bundles that step --- bilinear upsample, channel concat
+    with the saved skip, two convolutions --- and it is the only
+    architectural piece this section adds to the Part~1 kit.
+  \item \textbf{Inference is one forward pass; the post-processing
+    differs.} One call produces every pixel's logits; \texttt{argmax} per
+    pixel and a colormap make the mask. \texttt{brats-predict} is that path
+    and nothing else: the trainer's artifact plus a colormap routine.
 \end{itemize}
 
 \paragraph{What the skips are worth, measured.} The second bullet is the
-one claim in this section that is cheap to test rather than assert. Running
-the same backbone, data and schedule with the decoder's skip connections
-removed --- upsample and convolve, but never concatenate the encoder feature ---
-isolates exactly what they contribute, Table~\ref{tab:brats_skips}:
+one claim in this section that is cheap to test. The same backbone, data and
+schedule with the decoder's skip connections removed --- upsample and
+convolve, never concatenate the encoder feature --- isolates what they
+contribute, Table~\ref{tab:brats_skips}, three seeds a side:
 
 \begin{table}[H]
 \centering
-\caption{The UNet decoder with and without its skip connections.}
+\caption{The UNet decoder with and without its skip connections: the from-scratch arm, mean $\pm$ sd over three seeds at each seed's best-by-val epoch, and the paired difference seed by seed (\texttt{runs/2026-09-25-brats-r34-xla/}, \texttt{runs/2026-10-27-brats-r34-seeds/}).}
 \label{tab:brats_skips}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{lcccc}
 \hline
 decoder & mIoU & WT & TC & ET \\
 \hline
-upsample only (no skips) & 0.633 & 0.871 & 0.814 & 0.733 \\
-\texttt{.unetUp} (skips)  & \textbf{0.741} & \textbf{0.910} & \textbf{0.867} & \textbf{0.856} \\
+upsample only (no skips), 3 seeds & $0.634 \pm 0.003$ & $0.871 \pm 0.001$ & $0.816 \pm 0.003$ & $0.731 \pm 0.003$ \\
+\texttt{.unetUp} (skips), 3 seeds & $\mathbf{0.737 \pm 0.004}$ & $\mathbf{0.909 \pm 0.002}$ & $\mathbf{0.864 \pm 0.005}$ & $\mathbf{0.855 \pm 0.001}$ \\
+\quad paired, seeds 0/1/2 & $+.108/{+}.099/{+}.102$ & $+.039/{+}.039/{+}.036$ & $+.053/{+}.048/{+}.042$ & $+.123/{+}.122/{+}.128$ \\
 \hline
 \end{tabular}
 \end{table}
 
-\noindent Roughly ten points of mIoU, and the largest single gain is on ET
-($+0.12$), the smallest and thinnest structure --- which is what the bullet
-predicts, since a decoder without skips must reconstruct every boundary from a
-$7 \times 7$ bottleneck. It is visible in the renders as well: the thin
-enhancing rim around the necrotic core is resolved with skips and smeared into
-the core without them.
+\noindent Ten points of mIoU, $+0.103 \pm 0.005$, and the largest single gain
+is on ET ($+0.124 \pm 0.003$), the smallest and thinnest structure --- which
+is what the bullet predicts, since a decoder without skips must reconstruct
+every boundary from a $7 \times 7$ bottleneck. The skipless arm's best epoch
+is its last on every seed; it is still improving when the schedule ends. It
+is visible in the renders as well: the thin enhancing rim around the necrotic
+core is resolved with skips and smeared into the core without them.
 
 \paragraph{Scored per patient.} Tables~\ref{tab:brats_dice} and
 \ref{tab:brats_skips} pool every pixel of every
@@ -17434,11 +17532,12 @@ that paints anyway. \texttt{brats-eval} (\texttt{demos/MainBratsEval.lean})
 computes that from a whole-volume export of the 73 validation patients
 (\texttt{preprocess\_brats.py --val-full}), and first re-derives the pooled
 number on the same slices, where it agrees with the trainer's log line to
-$0.0004$. Table~\ref{tab:brats_per_patient} is the best-by-val checkpoints:
+$0.0004$. Table~\ref{tab:brats_per_patient} is the seed-0 best-by-val
+checkpoints:
 
 \begin{table}[H]
 \centering
-\caption{Per-patient Dice on BraTS validation: the mean, with the median in parentheses.}
+\caption{Per-patient Dice on BraTS validation: the mean, with the median in parentheses. Seed 0 of each arm (\texttt{runs/2026-09-29-brats-25d/} for the slice models, \texttt{runs/2026-10-03-brats-3d/} for the 3D UNet).}
 \label{tab:brats_per_patient}
 \begin{tabular}{lccc}
 \hline
@@ -17463,8 +17562,9 @@ spread (standard deviations of $0.07$ on WT to $0.19$ on ET): the medians are
 at the pooled values, and the means are pulled down by a tail of small-tumour
 patients --- which is what the per-patient protocol exists to expose. The skips
 are worth more per patient than per pixel, $+0.16$ on ET against $+0.12$. These
-are the numbers to put beside published BraTS work, with the remaining caveat
-that the 484-case MSD Task01 is not the 1{,}251-case BraTS~2021 set.
+are the numbers scored the way published BraTS work scores, and they are
+still not comparable to its tables: the 484-case MSD Task01 is not the
+1{,}251-case BraTS~2021 set, and the split is this book's own.
 
 \paragraph{Through-plane context.} A slice model never sees the slice above or
 below. The last two rows measure what that costs, two ways. \texttt{unet-brats-r34
@@ -17527,6 +17627,14 @@ either: it later became the diffusion-model backbone (DDPM, Stable
 Diffusion, \S\ref{sec:bestiary_diffusion}), and the same two primitives
 carry that section's generative pipeline. The layer kit is shared;
 only the loss and the inference procedure change.
+
+\medskip\noindent What this segmenter is not: a reader of scans. It labels
+one $224 \times 224$ slice at a time from four co-registered, skull-stripped
+modalities, scored on the 73 held-out patients of a 484-case set --- no
+uncertainty, no grading, no survival, no follow-up --- and the honest number
+for even that task is the per-patient column, two to seven points under the
+pooled one, with a standard deviation across patients of $0.07$ on WT and
+$0.19$ on ET.
 
 \subsection*{UNet (\texttt{Bestiary/UNet.lean})}
 \emph{Two} new primitives (Definition~\ref{layer:unetDown},
@@ -17686,9 +17794,165 @@ reduce to one of three shapes: a stack of \texttt{.transformerEncoder}
 (\texttt{.mambaBlock}), or a conv/attention hybrid
 (\texttt{.separableConv} plus \texttt{.transformerEncoder}, QANet).
 What's different from the vision side of the bestiary isn't the layer
-kit --- the kit is the same set of primitives Ch~\ref{chap:attention}
+kit --- the kit is the same set of primitives Chapter~\ref{chap:attention}
 introduced --- it's everything around the layers: the data
 pipeline, the loss, and the inference loop.
+
+The demo is \texttt{demos/MainTinyGptShakespeare.lean}: a character-level
+transformer on tinyshakespeare, Karpathy's $1{,}115{,}394$ characters of
+the plays over a 65-character vocabulary, the last tenth of the file held
+out. Two rungs: \texttt{nano}, 212K parameters ($T{=}64$, $D{=}64$,
+2 heads, 4 blocks), and \texttt{tiny}, 1.2M ($T{=}128$, $D{=}128$,
+4 heads, 6 blocks), each 10,000 Adam steps at batch 32 under a cosine
+schedule, three and six and a half minutes on one RTX 4060 Ti through
+XLA. The runs are \texttt{runs/2026-09-09-tinygpt-nano-xla/} and
+\texttt{runs/2026-10-27-tinygpt-ladder-xla/}.
+
+The question is whether a transformer this small, on this little text,
+learns more than counts learn. The bracket is the classical one: a
+Kneser--Ney $n$-gram, the count-based model that was the state of the art
+in language modelling for twenty years. It has no training. It is fit
+from the counts of the training split in five seconds on CPU
+(\texttt{scripts/demos/ngram\_ladder.py}), and the ladder over $n$ is
+best at order 7, $2.188$ bits per character: the corpus's own limit under
+counts. Both sides are scored on the same held-out positions under the
+same rule, every character predicted from the full window before it, in
+bits per character. The
+bracket's bottom rung needs the same care: a trained dense bigram table
+reports $3.56$ bits per character, but that is its training loss, and the
+like-for-like row is the Kneser--Ney bigram on the held-out split,
+$3.583$. Table~\ref{tab:tinygpt_ladder} is the ladder and every
+transformer configuration that ran against it, three seeds each; the
+10,000-step nano row is \texttt{runs/2026-10-21-tinygpt-ngram-ladder/},
+the dropout rows \texttt{runs/2026-10-27-tinygpt-dropout-xla/}.
+Figure~\ref{fig:tinygpt_ladder} is one seed of the row that crossed the
+counts.
+
+\begin{table}[H]
+\centering
+\caption{The Kneser--Ney ladder and TinyGPT on tinyshakespeare's held-out
+split: bits per character with every position predicted from the full
+window before it, three seeds per transformer row, and each seed's gap to
+the 7-gram.}
+\label{tab:tinygpt_ladder}
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{l l c c c}
+\hline
+ & steps $\times$ batch & bits/char, seeds 0 / 1 / 2 & gap to the 7-gram & mean gap \\
+\hline
+uniform over 65 characters & --- & 6.022 & & \\
+Kneser--Ney bigram & --- & 3.583 & & \\
+Kneser--Ney 7-gram, the best order & --- & 2.188 & & \\
+\hline
+\texttt{nano}, 212K & 10k $\times$ 32 & 2.244 / 2.228 / 2.226 & $+0.056$ / $+0.039$ / $+0.038$ & $+0.044$ \\
+\texttt{nano} & 20k $\times$ 32 & 2.238 / 2.239 / 2.230 & $+0.050$ / $+0.050$ / $+0.041$ & $+0.047$ \\
+\texttt{nano} & 40k $\times$ 32 & 2.302 / 2.290 / 2.274 & $+0.113$ / $+0.102$ / $+0.086$ & $+0.100$ \\
+\texttt{nano} & 10k $\times$ 64 & 2.256 / 2.255 / 2.228 & $+0.068$ / $+0.067$ / $+0.039$ & $+0.058$ \\
+\texttt{nano}, RoPE, no position table & 10k $\times$ 32 & 2.221 / 2.225 / 2.215 & $+0.033$ / $+0.036$ / $+0.027$ & $+0.032$ \\
+\hline
+\texttt{tiny}, 1.2M & 5k $\times$ 32 & 2.261 / 2.294 / 2.274 & $+0.072$ / $+0.105$ / $+0.085$ & $+0.087$ \\
+\texttt{tiny} & 10k $\times$ 32 & 2.809 / 2.807 / 2.799 & $+0.621$ / $+0.619$ / $+0.610$ & $+0.616$ \\
+\hline
+\texttt{tiny}, residual dropout 0.1 & 10k $\times$ 32 & 2.132 / 2.141 / 2.154 & $-0.057$ / $-0.048$ / $-0.035$ & $-0.047$ \\
+\texttt{tiny}, residual dropout 0.1 & 20k $\times$ 32 & 2.180 / 2.193 / 2.181 & $-0.009$ / $+0.004$ / $-0.008$ & $-0.004$ \\
+\texttt{tiny}, residual dropout 0.2 & 10k $\times$ 32 & \textbf{2.126 / 2.132 / 2.120} & $-0.062$ / $-0.057$ / $-0.069$ & $\mathbf{-0.063}$ \\
+\texttt{tiny}, residual dropout 0.2 & 20k $\times$ 32 & 2.130 / 2.129 / 2.101 & $-0.059$ / $-0.060$ / $-0.088$ & $-0.069$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{demos/tinygpt_ngram_ladder.png}
+\caption{Seed 0 of the \texttt{tiny} row with residual dropout 0.2 at
+10,000 steps against the ladder
+(\texttt{runs/2026-10-27-tinygpt-dropout-xla/}). (a) Bits per character
+against $n$-gram order; the dashed line is the transformer, the hollow
+point at $n{=}2$ the dense bigram's training loss. (b) The loss at each
+history length within a 128-character window, the 7-gram and the
+transformer: the counts win the first ten characters, the transformer the
+rest. (c) Transformer minus 7-gram along ninety held-out characters; blue
+is where the transformer wins.}
+\label{fig:tinygpt_ladder}
+\end{figure}
+
+\noindent \textbf{The sign is the result.} Every transformer row trained
+the way the catalogue prints it is behind a six-character count on its
+own corpus: nano by $0.04$ to $0.06$ bits on every seed, and the levers
+that come to mind first, more steps, a bigger batch, rotary positions,
+move it by hundredths and never across. \texttt{tiny}, with nearly six
+times the parameters, is worse still, because on 1 MB of text it has
+memorised the file by step 4,000 and spends the rest of the schedule
+overfitting. The nets were not undertrained. They were unregularised.
+
+One knob changes the sign. \texttt{.transformerEncoder (dropout := 0.2)}
+puts GPT-2's residual dropout on each block's two branches and nothing
+else in the recipe moves; the same \texttt{tiny} at the same 10,000 steps
+is $0.06$ bits per character \emph{ahead} of the 7-gram on every seed,
+every interval clear of zero. Panel~(b) of the figure says where it earns
+that: behind the counts at histories under ten characters, ahead from the
+eleventh on. A 7-gram sees six characters back; the transformer's margin
+is all in the history the counts cannot see.
+
+The rotary row answers one more question the catalogue raises. Positions
+without a table make the checkpoint load at any $T$, but a net trained at
+64 characters is not coherent at 128 or 256 ($3.1$ and $4.9$ bits per
+character, seed means, against $2.28$ at its own length). The weights are
+length-independent; the function is not.
+
+\medskip\noindent What this is not: a scaling result, a tokenised model,
+or a second corpus. The ladder is one file of 1 MB scored at character
+level, where a 7-gram is a strong model; a byte-pair vocabulary over
+gigabytes is a different comparison. And the number the transformer beats
+is a count table's: the ladder says where in the window the net earned
+its margin, not what it learned there.
+
+\medskip\noindent The rest of the demo is the mechanics, and they are the
+same for the regularised net as for the first one. Sampling from the
+10,000-step nano checkpoint produces Shakespeare's cadence, real character
+names (NORTHUMBERLAND, QUEEN MARGARET, MERCUTIO, BRUTUS) and multi-line
+dialogue; the first eight characters of its \texttt{ROMEO:} sample are the
+rows of Figure~\ref{fig:tinygpt_causal_mask}. Three things change relative to the
+image trainers of Part~1, and they are what NLP training is:
+
+\begin{itemize}
+  \item \textbf{Input is a vocabulary index, not a pixel.} The first
+    layer of every NLP spec is \texttt{.tokenPositionEmbed} (one-hot
+    $\to$ learnable token embedding $+$ learnable position embedding).
+    Image stacks open with \texttt{.conv2d} or \texttt{.patchEmbed}
+    acting on $H \times W \times 3$ floats; the NLP stack starts with
+    vocabulary IDs flowing through a lookup table. Replace patches
+    with tokens and the rest of a ViT is shape-identical to a GPT.
+  \item \textbf{Loss is per-token, averaged over the sequence.} Image
+    classifiers compute one cross-entropy at the end of the network:
+    pool to a vector, dense to logits, compare to one ground-truth
+    class. Language models compute cross-entropy at every
+    position --- each of the $T$ tokens predicts the next one, and the
+    per-token losses are averaged. The trainer reuses the same
+    cross-entropy path by setting \texttt{lossKind := some .perPixelCE}
+    in its \texttt{TrainConfig}: the LM head's $[B, V, T, 1]$ logits ride
+    the per-pixel path as a segmentation of $T$ positions by one column,
+    which switches the loss from ``one vector
+    versus one class'' to ``$T$ vectors versus $T$ classes.'' No new
+    VJP machinery; the per-token softmax-CE backward is the same one
+    Chapter~\ref{chap:tensor} derived, applied $T$ times in parallel.
+  \item \textbf{Inference is autoregressive.} The training loop is a
+    single forward pass per batch, just like image classification, but
+    inference is a $T$-step loop: the network predicts token
+    $t{+}1$ from tokens $[0..t]$, the sampled token is appended to the
+    context, and the network runs again for $t{+}2$. The
+    \texttt{tinygpt-shakespeare sample} executable implements exactly
+    this loop --- $\sim$30 lines of plain Lean, no proof machinery,
+    running the same spec's forward graph at batch one through XLA on
+    the parameters the trainer saved. The architectural
+    cost is the causal mask (Figure~\ref{fig:tinygpt_causal_mask}):
+    during training, attention at position
+    $t$ must not see positions $t{+}1$ onward, or the model would
+    trivially predict the answer it can see. The \texttt{causalMask}
+    flag on \texttt{.transformerEncoder} is that mask; the rest of the
+    kit is shared with ViT.
+\end{itemize}
 
 \begin{figure}[H]
 \centering
@@ -17747,56 +18011,8 @@ whole difference between this block and a ViT's.}
 \label{fig:tinygpt_causal_mask}
 \end{figure}
 
-\paragraph{TinyGPT, in passing.} The
-\texttt{demos/MainTinyGptShakespeare.lean} trainer in this repo is a
-working char-level transformer at 212K params ($T{=}64$, $D{=}64$,
-4 layers, 2 heads). Ten thousand Adam steps take three minutes on one
-RTX 4060 Ti through XLA, compile included, and land at 2.28 bits/char
-on tinyshakespeare's held-out split --- against 3.56 for a bigram table
-and 6.02 for guessing uniformly over the 65 characters. Sampling after
-that produces recognizable Shakespeare cadence, real character names
-(NORTHUMBERLAND, QUEEN MARGARET, MERCUTIO, BRUTUS) and multi-line
-dialog. Three things change relative to the image trainers shown
-throughout Part~1, and they capture what NLP training is:
-
-\begin{itemize}
-  \item \textbf{Input is a vocabulary index, not a pixel.} The first
-    layer of every NLP spec is \texttt{.tokenPositionEmbed} (one-hot
-    $\to$ learnable token embedding $+$ learnable position embedding).
-    Image stacks open with \texttt{.conv2d} or \texttt{.patchEmbed}
-    acting on $H \times W \times 3$ floats; the NLP stack starts with
-    vocabulary IDs flowing through a lookup table. Replace patches
-    with tokens and the rest of a ViT is shape-identical to a GPT.
-  \item \textbf{Loss is per-token, averaged over the sequence.} Image
-    classifiers compute one cross-entropy at the end of the network:
-    pool to a vector, dense to logits, compare to one ground-truth
-    class. Language models compute cross-entropy at every
-    position --- each of the $T$ tokens predicts the next one, and the
-    per-token losses are averaged. Our trainer reuses the same
-    cross-entropy path through a flag (\texttt{useSeg} in
-    \texttt{TrainConfig}) that switches the loss from ``one vector
-    versus one class'' to ``$T$ vectors versus $T$ classes.'' No new
-    VJP machinery; the per-token softmax-CE backward is the same one
-    Ch~\ref{chap:tensor} derived, applied $T$ times in parallel.
-  \item \textbf{Inference is autoregressive.} The training loop is a
-    single forward pass per batch, just like image classification, but
-    inference is a $T$-step loop: the network predicts token
-    $t{+}1$ from tokens $[0..t]$, the sampled token is appended to the
-    context, and the network runs again for $t{+}2$. Our
-    \texttt{tinygpt-shakespeare sample} executable implements exactly
-    this loop --- $\sim$30 lines of plain Lean, no proof machinery,
-    running the same spec's forward graph at batch one through XLA on
-    the parameters the trainer saved. The architectural
-    cost is the causal mask (Figure~\ref{fig:tinygpt_causal_mask}):
-    during training, attention at position
-    $t$ must not see positions $t{+}1$ onward, or the model would
-    trivially predict the answer it can see. We expose this via the
-    \texttt{causalMask} flag on \texttt{.transformerEncoder}; the rest
-    of the kit is shared with ViT.
-\end{itemize}
-
 That's the entire delta. Same Adam optimizer, same VJP machinery, same
-StableHLO-through-XLA pipeline. The bestiary entries below all reduce to
+StableHLO-through-XLA pipeline. The catalogue entries of this section all reduce to
 either ``GPT shape'' (decoder-only, causal mask, autoregressive
 sampling) or ``BERT shape'' (encoder-only, bidirectional attention,
 classification head); the architectural differences between them are
@@ -17958,8 +18174,8 @@ def nystromformerBase : NetSpec where
 
 Networks whose output is a novel image. Two families covered here:
 variational autoencoders and GANs. Backbones overlap heavily with
-segmentation (UNet again). Diffusion models, also generative, are the
-subsection after this one.
+segmentation (UNet again). Diffusion models, also generative, are
+\S~\ref{sec:bestiary_diffusion}.
 
 \subsection*{VAE (\texttt{Bestiary/VAE.lean})}
 \emph{One} new primitive (Definition~\ref{layer:unetUp}). The classical variational autoencoder
@@ -17994,10 +18210,10 @@ def mnistVAEEncoder : NetSpec where
 
 \subsection*{DCGAN (\texttt{Bestiary/DCGAN.lean})}
 \emph{Zero} new primitives. Deep Convolutional GAN (Radford et
-al.\ 2015, \href{https://arxiv.org/abs/1511.06434}{arXiv:1511.06434}) --- the paper that made GAN training reliably work. Eight
+al.\ 2015, \href{https://arxiv.org/abs/1511.06434}{arXiv:1511.06434}) --- the paper that made GAN training reliably work. Five
 design guidelines (strided convs instead of pooling, BN everywhere
-except $G$'s output / $D$'s input, no hidden FC layers, ReLU in $G$
-/ LeakyReLU in $D$, Adam with specific hyperparams) that became the
+except $G$'s output / $D$'s input, no hidden FC layers, ReLU in $G$,
+LeakyReLU in $D$), plus an Adam recipe, that became the
 default for every GAN paper since. Three NetSpecs: noise projector
 (dense $100 \to 4 \times 4 \times 1024$, 1.65M), generator convs
 (11M, paper $\sim$12M), discriminator (11M, paper-exact). Transposed
@@ -18093,13 +18309,14 @@ def cycleganGenerator : NetSpec where
 \section{Diffusion --- demo: DDPM on MNIST}
 \label{sec:bestiary_diffusion}
 
-Generative models that predict the noise added to a clean image, with inference
-iterating the reverse (noise in, image out). The architecture is a UNet ---
-often with cross-attention bolted in for text conditioning. The novelty lives in
-the noise schedule and the sampling loop, not in layer design.
+A network trained only to predict the noise added to a clean image draws new
+images by iterating the reverse (noise in, image out). The architecture is a UNet
+--- often with cross-attention bolted in for text conditioning; what is new is the
+noise schedule and the sampling loop, not a layer. Two questions a grid of samples
+cannot answer: \emph{how good are the samples, measured, and which sampler should
+run on the trained weights?}
 
 \paragraph{DDPM on MNIST.} The \texttt{demos/MainMnistDdpmTrain.lean} trainer
-(its CIFAR-10, sinusoidal-time and attention variants are archived beside it)
 is a timestep-conditioned UNet trained to predict the Gaussian noise added to an
 image; \texttt{mnist-ddpm-sample} runs the reverse loop and writes a grid. The
 backbone is literally the segmentation UNet of
@@ -18116,9 +18333,9 @@ change relative to the classifiers, segmentation nets and detectors so far:
   \item \textbf{The backbone is the segmentation UNet, conditioned on $t$.} One
     network must denoise at every level, so $t$ is fed in: this demo
     concatenates it as an extra channel (hence \texttt{.unetDown 2 16} --- one
-    image channel plus one time channel), and the archived CIFAR variant embeds it with
-    the positional-encoding primitive NeRF introduced. Diffusion adds
-    only the conditioning.
+    image channel plus one time channel), and the catalogue's DDPM entry embeds it
+    through a sinusoidal MLP, the positional-encoding primitive NeRF introduced.
+    Diffusion adds only the conditioning.
   \item \textbf{Inference is an iterative loop, not one forward pass.} What that
     loop costs is Table~\ref{tab:ddpm_samplers}.
 \end{itemize}
@@ -18154,16 +18371,16 @@ $\triangleright$ And read the confidence column against the others: noise still
 posts $58\%$, so the usable range is $58$--$99$ rather than $0$--$100$, and on
 its own it is the metric most likely to mislead.
 
-\paragraph{The continuous-time view, and which solver to use.} Everything above
-is discrete: a schedule tabulated at $t = 0 \dots T{-}1$ and a fixed reverse
-recipe. Score-SDE (Song et al.\ 2021,
+\paragraph{The continuous-time view, and which solver to use.} The trainer and
+the two samplers of Table~\ref{tab:ddpm_scores} are discrete: a schedule tabulated
+at $t = 0 \dots T{-}1$ and a fixed reverse recipe. Score-SDE (Song et al.\ 2021,
 \href{https://arxiv.org/abs/2011.13456}{arXiv:2011.13456}) reads the same object as a stochastic
 differential equation in continuous time, $\mathrm{d}x = f(x,t)\,\mathrm{d}t +
 g(t)\,\mathrm{d}w$, whose reverse is driven by the score
 $\nabla_x \log p_t(x)$. \textbf{That view costs no retraining here}, which is
 the point worth taking away: under the variance-preserving SDE the score is
-$-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network the
-trainer above already produces is a score model up to a scale factor.
+$-\hat\varepsilon(x,t)/\sigma_t$, so the $\varepsilon$-predicting network
+\texttt{MainMnistDdpmTrain.lean} already produces is a score model up to a scale factor.
 Sampling is then whatever you choose to integrate, on frozen weights: the
 reverse SDE, its deterministic twin the probability-flow ODE, or the family
 between them that DDIM's $\eta$ (Song, Meng \& Ermon 2020,
@@ -18198,11 +18415,10 @@ forward and reverse.
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{demos/ddpm_mnist_trajectory.png}
-\caption{DDPM on MNIST, both directions. Top: the forward process takes a
-training digit to Gaussian noise, one column per step of the schedule. Bottom:
-the trained reverse process, started from fresh noise, arrives at a digit the
-training set never contained --- the sampling Table~\ref{tab:ddpm_samplers}
-scores by function evaluations.}
+\caption{DDPM on MNIST, both directions, nine columns aligned by noise level.
+Top: the forward process takes a training digit to Gaussian noise. Bottom: the
+trained reverse process under deterministic DDIM ($\eta = 0$), started from
+fresh noise, at the same nine noise levels.}
 \label{fig:ddpm_mnist}
 \end{figure}
 
@@ -18213,13 +18429,13 @@ because one of them discretises it well and the other does not. The reverse
 process is stiff, $\beta(t)$ diverging as $t \to 1$, and the Euler--Maruyama arm
 diverges below $200$ evaluations (pixel mean $2.90$ against the data's $0.13$,
 two classes of ten covered) while posting the highest confidence in this
-section --- the previous paragraph's warning arriving from a second direction.
+section --- the warning under Table~\ref{tab:ddpm_scores} arriving from a second direction.
 The probability-flow row lags for the same reason, more mildly. So the choice
 that matters here is not stochastic versus deterministic; it is how the linear
 part gets integrated, and DDIM does it exactly at either $\eta$.
 
-The shape carries all the way up: the bestiary DDPM entry below is the same UNet
-at CIFAR scale, and Stable Diffusion is the same UNet on VAE latents with text
+The shape carries all the way up: the DDPM catalogue entry that closes this section
+is the same UNet at CIFAR scale, and Stable Diffusion is the same UNet on VAE latents with text
 cross-attention spliced in. Encoder-decoder-with-skips plus a sampling loop is
 the whole generative pipeline.
 
@@ -18233,8 +18449,8 @@ process learns to predict the added noise, sampling iterates the
 reverse from pure noise back to a clean image. None of that is a
 layer. The timestep conditioning MLP (sinusoidal $\to$ dense $\to$
 dense) is shown as a standalone \texttt{NetSpec} that reuses
-\texttt{positionalEncoding} from NeRF. Variants: CIFAR config (32x32
-backbone), 256x256 high-res config, tiny fixture, timestep embed.
+\texttt{positionalEncoding} from NeRF. Variants: CIFAR config ($32\times32$
+backbone), $256\times256$ high-res config, tiny fixture, timestep embed.
 Our simplified backbone undercounts vs paper (paper DDPM adds
 residual blocks, GroupNorm, attention-at-low-res, and per-block
 time-embedding projection on top of the UNet); the spec's value is
@@ -18277,9 +18493,8 @@ cross-attention), an explicit spatial-transformer-block spec (uses
 \texttt{.transformerDecoder} with \texttt{nQueries = 0} --- same
 primitive Whisper's decoder uses, same mechanism as DETR's decoder
 applied at image-feature resolution), and a tiny end-to-end fixture.
-Three components are pretrained and frozen during SD's main training
-(VAE + text encoder) or constrained-frozen
-(CLIP); only the UNet trains. SDXL scales the UNet to 2.6B; SD 3
+Two components are pretrained and frozen during SD's main training,
+the VAE and the CLIP text encoder; only the UNet trains. SDXL scales the UNet to 2.6B; SD 3
 switches the UNet for a DiT transformer. The latent-diffusion plus
 text-conditioning template is the same.
 
@@ -18309,8 +18524,8 @@ def sdUNet15 : NetSpec where
 \label{sec:bestiary_boltzmann}
 
 Networks whose target is a physical law rather than a labelled set: a
-Boltzmann density here, a PDE residual, a solution operator and the
-atmosphere six hours ahead in the entries below. The architectural side is
+Boltzmann density in the demo, a PDE residual, a solution operator and the
+atmosphere six hours ahead in the catalogue entries. The architectural side is
 small --- an MLP, or a ViT with a Fourier mixer where its attention would be
 --- and the novelty lives in what the model is asked to produce and in what
 is done with it afterwards.
@@ -18321,9 +18536,11 @@ in 1979 as the test case for reaction paths, and the training set is whatever
 overdamped Langevin manages to produce at $kT = 20$ in a fixed budget: eight
 chains of $10^5$ steps, the Euler--Maruyama integrator the diffusion demo's
 table (\S~\ref{sec:bestiary_diffusion}) retired as a sampler, doing its actual
-job. The network is the 2-D toy demo's MLP
-(\texttt{demos/MainDiffusion2d.lean}, $18{,}178$ parameters, the sincos time
-channel at $H = W = 1$), the loss is that demo's rank-2 squared-error block,
+job. The network is an MLP, the one the 2-D diffusion trainer
+(\texttt{demos/MainDiffusion2d.lean}, the MNIST demo's loss on point clouds
+in the plane) fits: $18{,}178$ parameters, two hidden layers of 128, the image
+path's sincos time encoding at $H = W = 1$. The loss is that trainer's rank-2
+squared-error block,
 and the \texttt{flow} flag changes one thing in the trainer, the interpolant:
 $x_t = (1-t)\,x_0 + t\,\varepsilon$ with target $\varepsilon - x_0$ (Lipman et
 al.\ 2022, \href{https://arxiv.org/abs/2210.02747}{arXiv:2210.02747}) in place
@@ -18398,10 +18615,46 @@ $N(0, I)$ prior, no flow                  & $0.419 \,/\, 0.195 \,/\, 0.385$ &   
 
 \noindent The model is faithful to its training set, not to the physics: it
 over-weights A because the Langevin chains do. Reweighting its own samples by
-$p_{20} / p_\theta$ recovers the quadrature populations to within $0.001$,
-$\Delta F$ to $0.1$ and $\langle U \rangle$ to under a unit. At NFE 2
-well B empties while the populations still look plausible, which is why
-$\langle U \rangle$ and $\Delta F$ are columns.
+$p_{20} / p_\theta$ recovers the quadrature populations to within $0.001$ and
+$\Delta F$ to $0.1$ on this checkpoint, to within $0.008$ and $1.5$ over four
+training seeds (Table~\ref{tab:boltzmann_seeds}), and $\langle U \rangle$ to
+about a unit. At NFE 2 well B empties while the populations still look
+plausible, which is why $\langle U \rangle$ and $\Delta F$ are columns.
+
+\paragraph{Four seeds of the flow.} Table~\ref{tab:boltzmann_kt20} is one
+checkpoint. Three more trainings of the flow arm under seeds 1--3 --- the seed
+moves the He initialisation and the sampling noise; 33 seconds each on one
+card --- sampled at NFE 50 and scored the same way are
+Table~\ref{tab:boltzmann_seeds} (\texttt{runs/2026-10-27-boltzmann-seeds/};
+seed 0 is \texttt{runs/2026-09-11-boltzmann-generator/}).
+
+\begin{table}[H]
+\centering
+\caption{The flow arm at $kT = 20$ over four training seeds, $2{,}048$ samples at NFE 50: the raw samples, and the same samples reweighted by $p_{20} / p_\theta$, against the quadrature row of Table~\ref{tab:boltzmann_kt20} ($0.806 \,/\, 0.129 \,/\, 0.065$, $-113.6$, $-36.6$).}
+\label{tab:boltzmann_seeds}
+\small
+\begin{tabular}{@{}c c r r r c r r@{}}
+\hline
+seed & raw $p_A \,/\, p_B \,/\, p_C$ & $\langle U \rangle$ & $\Delta F_{AB}$ & energy & reweighted $p_A \,/\, p_B \,/\, p_C$ & $\Delta F_{AB}$ & ESS \\
+\hline
+0 & $0.834 \,/\, 0.103 \,/\, 0.063$ & $-112.4$ & $-41.9$ & $3.2\times$ & $0.805 \,/\, 0.129 \,/\, 0.066$ & $-36.7$ & $1864$ \\
+1 & $0.843 \,/\, 0.095 \,/\, 0.062$ & $-114.9$ & $-43.6$ & $5.3\times$ & $0.810 \,/\, 0.125 \,/\, 0.065$ & $-37.3$ & $1895$ \\
+2 & $0.832 \,/\, 0.099 \,/\, 0.070$ & $-113.3$ & $-42.6$ & $3.6\times$ & $0.801 \,/\, 0.129 \,/\, 0.071$ & $-36.6$ & $1866$ \\
+3 & $0.838 \,/\, 0.090 \,/\, 0.071$ & $-110.6$ & $-44.6$ & $6.3\times$ & $0.813 \,/\, 0.121 \,/\, 0.066$ & $-38.1$ & $1740$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent The energy distance is $3.2$--$6.3\times$ the floor on four seeds.
+The raw cloud puts $0.832$--$0.843$ on well A on every seed, between the
+training set's $0.844$ and the quadrature's $0.806$: a raw basin error of
+$0.03$--$0.04$ is the training set's bias reproduced, not a property of the
+seed, and the $0.029$ of seed 0 is the low end of it. The number that is a
+property of the recipe is the reweighted row: every basin within $0.008$ of
+quadrature on all four seeds, $\Delta F_{AB}$ within $1.5$, an effective
+sample size of $1{,}740$--$1{,}895$ of $2{,}048$. The sampler-quality claim
+rests on that row. Tables~\ref{tab:boltzmann_reweight} and
+\ref{tab:boltzmann_reflow} read the seed-0 checkpoint only.
 
 \paragraph{MCMC stalls below the barrier; the generator does not.} The
 $kT = 20$ samples reweighted to $kT' = 12$ and $8$, naively and with the
@@ -18460,9 +18713,10 @@ reflow                      & $\mathbf{4.9\times}$ & $\mathbf{4.1\times}$ & $\ma
 \end{table}
 
 \noindent A one-step generator: after reflow one Euler step lands at
-$4.9\times$ the floor where the independent coupling needs ten. The price is
-the ceiling: both straightened arms plateau above it at NFE 50, because their
-training set is the first model's output, biases included.
+$4.9\times$ the floor, where the independent coupling is at $8.6\times$ after
+ten steps and under $4.9\times$ only at fifty. The price is the ceiling: both
+straightened arms plateau above it at NFE 50, because their training set is
+the first model's output, biases included.
 
 \subsection*{Boltzmann generator (\texttt{Bestiary/BoltzmannGenerator.lean})}
 \emph{Zero} new primitives for the flow-matching version, \emph{one} if the
@@ -18505,7 +18759,7 @@ $u_{xx}$ of the net, and the gradient of that residual with respect to the
 weights is a third-order object. Nothing in the architecture is new;
 everything in the training signal is. It is an entry and not a demo for that
 reason: Part~1's VJP suite differentiates a parameter loss once, and the
-Boltzmann generator above is the physics this book can train, its physics
+Boltzmann generator demo is the physics this book can train, its physics
 entering through the target density rather than through derivatives of the
 network. Variants: the paper's Burgers net ($3{,}021$ parameters, the number
 every reimplementation quotes), Schr\"odinger ($4 \times 100$, complex output
@@ -18615,9 +18869,10 @@ whitened $2$\,s H1 window from the validation set with its injected
 $33 + 10\,M_\odot$ chirp at network SNR 15. (b) The two spectrograms the
 network must tell apart. (c) Detection probability against injected SNR in
 Gaussian noise at $10^{-2}$ false alarms per window: the closed form at the
-search's threshold, PyCBC's coherent search on the same windows, and the
-CNN. (d) The same on real O3a strain, where glitches move the filter's
-threshold from $5.9$ to $10.4$ and the CNN's barely at all. The CNN drawn in
+search's threshold, PyCBC's matched filter on the same windows with the two
+detectors summed in quadrature, and the CNN. (d) The same on real O3a
+strain, where glitches move the filter's threshold from $5.9$ to $10.4$ and
+the CNN's barely at all. The CNN drawn in
 each panel is the arm trained on the noise that panel tests it in.}
 \label{fig:gw_detect}
 \end{figure}
@@ -18632,9 +18887,10 @@ Wave Open Science Center publishes every observing run under CC BY 4.0
 29}); real events are too few to train on, so the training set is real
 detector noise with simulated chirps injected at chosen signal-to-noise
 ratios. The detector to beat is the matched filter: in stationary Gaussian
-noise it is the Neyman--Pearson optimum, and its detection probability at
-threshold $\rho^\ast$ for a signal of optimal SNR $\rho$ is a Marcum
-$Q$-function. Three things change relative to the CIFAR demo:
+noise, for a signal whose waveform and arrival time are known, it is the
+Neyman--Pearson optimum, and its detection probability at threshold
+$\rho^\ast$ for a signal of optimal SNR $\rho$ is a Marcum $Q$-function.
+Three things change relative to the CIFAR demo:
 
 \begin{itemize}
   \item \textbf{The data is real detector noise with the signal we chose.}
@@ -18653,9 +18909,10 @@ $Q$-function. Three things change relative to the CIFAR demo:
     set to within binomial error in every SNR bin --- the SNR at half
     detection is $4.68$ against the theorem's $4.75$ for H1 at a false-alarm
     rate of $10^{-2}$ per window --- so the injection's SNR and the whitening
-    agree on one PSD. The search statistic then maximises over the window
-    and the $\pm 10$\,ms inter-detector delay, exactly as a search must, and
-    the CNN, which sees no time, is compared to that.
+    agree on one PSD. The search statistic then adds the two detectors'
+    filter outputs in quadrature and maximises over the window and the
+    $\pm 10$\,ms inter-detector delay, as a search must, and the CNN, which
+    sees no time, is compared to that.
   \item \textbf{The network is Chapter~\ref{chap:bn}'s CIFAR net.}
     \texttt{CIFAR-CNN8-wide-BN}: eight convolutions in four conv-conv-pool
     stages at 16, 16, 32, 32 channels into the $2 \times 512$ head. The two
@@ -18688,19 +18945,23 @@ each row crosses one half.
 $\rho$ & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 12 & $\rho_{1/2}$ \\
 \hline
 closed form $Q_2(\rho, \rho^\ast)$, $\rho^\ast = 5.86$ & $0.14$ & $0.46$ & $0.80$ & $0.96$ & $1.00$ & $1.00$ & $1.00$ & $1.00$ & $5.63$ \\
-PyCBC coherent search, true template          & $0.26$ & $0.58$ & $0.90$ & $0.97$ & $1.00$ & $1.00$ & $1.00$ & $1.00$ & $\mathbf{5.27}$ \\
+matched filter, quadrature sum, true template & $0.26$ & $0.58$ & $0.90$ & $0.97$ & $1.00$ & $1.00$ & $1.00$ & $1.00$ & $\mathbf{5.27}$ \\
 CNN on spectrograms, trained on Gaussian noise & $0.05$ & $0.19$ & $0.43$ & $0.66$ & $0.86$ & $0.95$ & $0.99$ & $1.00$ & $6.80$ \\
 random                                        & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & $0.01$ & --- \\
 \hline
 \end{tabular}
 \end{table}
 
-\noindent The filter sits on its closed form and the CNN trails it by $1.5$
-units of SNR. Gabbard et al.\ 2018
+\noindent The known-time filter sits on its closed form; the search, which
+maximises over time, reaches half detection at $5.27$ against $Q_2$'s $5.63$
+at the same threshold, because the maximum over the samples around an
+arrival hands a signal a little SNR that the noise-only threshold never
+sees. The CNN trails the search by $1.5$ units of SNR. Gabbard et al.\ 2018
 (\href{https://doi.org/10.1103/PhysRevLett.120.141103}{PRL 120}) closed that
 gap with a one-dimensional network on the whitened strain and ten times the
-training set; a log-power spectrogram discards the phase the filter
-integrates, and this is the demo's number, not the architecture's ceiling.
+training set. One reading is that a log-power spectrogram discards the phase
+the filter integrates; the demo did not test it, and this is the demo's
+number, not the architecture's ceiling.
 
 \paragraph{Real noise costs the filter, not the network.} LIGO noise is
 neither stationary nor Gaussian, and the production search adds a $\chi^2$
@@ -18719,20 +18980,20 @@ trained on & tested on Gaussian & tested on real & tested on real \\
 \hline
 CNN, Gaussian noise         & $6.80$ & $7.17$ & $18.7$ \\
 CNN, real O3a strain        & $6.65$ & $\mathbf{6.91}$ & $\mathbf{7.52}$ \\
-PyCBC coherent search       & $\mathbf{5.27}$ & $10.32$ & --- \\
+matched filter, quadrature sum & $\mathbf{5.27}$ & $10.32$ & --- \\
 \hline
 \end{tabular}
 \end{table}
 
-\noindent Each network is best on the noise it trained on, by a few tenths.
-The filter loses five units of SNR to glitches at $10^{-2}$, and at
+\noindent The network trained on real strain is the better one on both noise
+sets, by $0.15$ in Gaussian noise and $0.26$ in real; training in the
+theorem's regime buys nothing even there. The filter loses five units of
+SNR to glitches at $10^{-2}$, and at
 $10^{-3}$ its threshold is $417$: eight validation windows hold a glitch
 that loud, and without a veto the filter has no row. The network trained on
 Gaussian noise needs an SNR of $19$ there; the one trained on real strain
 still reaches half detection at $7.5$. Training on the real detector is what
-teaches the glitch tail. % TODO Phase 4: the catalogue table (which GWTC
-% events the trained model flags, beside their published SNR) and the
-% Gravity Spy glitch row.
+teaches the glitch tail.
 
 \subsection*{WaveNet (\texttt{Bestiary/WaveNet.lean})}
 \emph{One} new primitive (Definition~\ref{layer:waveNetBlock}). Dilated causal
@@ -18892,8 +19153,9 @@ sample energy.}
 decay, $4{,}000$ steps at $N = 12$ and $2{,}000$ at $N = 64$, one RTX 4060
 Ti: 50\,s to 330\,s per row at $N = 12$ with the XLA compile included and
 about twenty minutes at $N = 64$. The $N = 64$ energies are means over the
-final $8{,}192$ samples, whose Monte Carlo standard error is below five
-percent of every entry. Table~\ref{tab:nqs_ladder} is the ladder.
+final $8{,}192$ samples, whose Monte Carlo standard error is four to five
+percent of the MLP and ViT entries and eleven percent of the GPT's.
+Table~\ref{tab:nqs_ladder} is the ladder.
 
 \begin{table}[H]
 \centering
@@ -18905,14 +19167,14 @@ percent of every entry. Table~\ref{tab:nqs_ladder} is the ladder.
 $h = J$ & params & $(E - E_0)/|E_0|$ & $\mathrm{Var}(E_{\mathrm{loc}})$ & $\langle \sigma^x \rangle$ & $\langle \sigma^z_1 \sigma^z_{1+N/2} \rangle$ \\
 \hline
 \multicolumn{6}{@{}l}{\textit{$N = 12$, exact gradient by enumeration}} \\
-mean field (floor)       & 0          & $2.1 \times 10^{-2}$ & 0 & 0.5000 & 0.7500 \\
+mean field (floor)       & 0          & $2.1 \times 10^{-2}$ & $0.75$ & 0.5000 & 0.7500 \\
 MLP residual             & $5{,}057$  & $1.6 \times 10^{-5}$ & $4.3 \times 10^{-3}$ & 0.6383 & 0.4613 \\
 ViT residual             & $25{,}825$ & $1.5 \times 10^{-5}$ & $2.5 \times 10^{-3}$ & 0.6381 & 0.4618 \\
 GPT                      & $25{,}956$ & $\mathbf{3.3 \times 10^{-6}}$ & $5.2 \times 10^{-4}$ & 0.6384 & 0.4611 \\
 exact (enumeration)      & ---        & 0 & 0 & 0.6384 & 0.4610 \\
 \hline
 \multicolumn{6}{@{}l}{\textit{$N = 64$, $p = 4$, $1{,}024$ chains}} \\
-mean field (floor)       & 0          & $1.8 \times 10^{-2}$ & 0 & 0.5000 & 0.7500 \\
+mean field (floor)       & 0          & $1.8 \times 10^{-2}$ & $4.0$ & 0.5000 & 0.7500 \\
 MLP residual, Metropolis & $8{,}385$  & $5.9 \times 10^{-3}$ & $3.7$ & 0.5660 & 0.6256 \\
 ViT residual, Metropolis & $26{,}529$ & $2.1 \times 10^{-3}$ & $0.48$ & 0.5921 & 0.5616 \\
 GPT, exact sampling      & $27{,}056$ & $\mathbf{1.7 \times 10^{-4}}$ & $0.020$ & 0.6341 & 0.3498 \\
@@ -18925,10 +19187,14 @@ exact (Jordan--Wigner)   & ---        & 0 & 0 & 0.6367 & 0.3036 \\
 and the GPT, whose conditionals are the wavefunction, is the best of them
 at every field in the sweep. At $N = 64$ the ladder separates, and the
 sampler is why: the GPT's draws are independent and its gradient noise is
-only the batch's, so it holds $10^{-5}$ to $10^{-4}$ at every field but the
-critical point, while the ViT on Metropolis chains is ten to a thousand
-times worse at the same parameter count and step budget, and at $h = 1.4$
-doubling its chains and steps makes it diverge. That is the regime
+only the batch's, so it sits below $4 \times 10^{-5}$ at eight of the ten
+fields; the exceptions are the critical point, $1.7 \times 10^{-4}$, and
+$h = 2J$, $9.6 \times 10^{-4}$, where the sweep's learning rate plateaued
+(a third of the rate for twice the steps reaches $10^{-6}$). The ViT on
+Metropolis chains is worse at every field but $h = 2J$, by three times at
+$h \le 0.4J$ and by ten to a thousand from $0.6J$ to $1.8J$, at the same
+parameter count and step budget, and at $h = 1.4J$ doubling its chains and
+steps makes it diverge. That is the regime
 stochastic reconfiguration (Sorella 1998,
 \href{https://doi.org/10.1103/PhysRevLett.80.4558}{PRL 80, 4558}) exists
 for; nothing at $N = 12$ needed it.
@@ -18941,7 +19207,8 @@ $1.6 \times 10^{-8}$), two at $0.4J$, and level at $h = J$, where the
 reference is as wrong as the uniform state and the network does all the
 work either way. Low variance with a wrong energy is the wrong state: the
 ViT at $N = 12$, $h = 0.8J$ converges to $5.4 \times 10^{-4}$ with a
-variance three times lower than its neighbours', unmoved by seeds, steps,
+variance of $1.1 \times 10^{-3}$, a third of the MLP's at the same field,
+unmoved by seeds, steps,
 width, depth or patch size, and its excess energy is $\Delta/2$ to three
 digits, $\Delta$ the splitting between the even- and odd-parity states ---
 it converged to the symmetry-broken half of the finite-$N$ cat state that
@@ -18968,8 +19235,11 @@ because $E_{\mathrm{loc}}$ is heavy-tailed, so the pooled test over eight
 draw seeds is the one that decides. And step 0 of every run is the floor
 row to six digits, which is the check that the host adds the reference
 where the ansatz says it does. The trainer is
-\texttt{demos/MainNqsIsing.lean}; the closed forms, the Lanczos ceiling and
-every table are \texttt{scripts/demos/\allowbreak nqs\_metrics.py}.
+\texttt{demos/MainNqsIsing.lean}; the closed forms, the Lanczos ceiling ---
+the exact ground state of the $J_1$--$J_2$ chain in its $S_z = 0$ sector,
+$12{,}870$ states at $N = 16$, by Lanczos iteration, the $E_0$ that rung's
+errors are measured from --- and every table are
+\texttt{scripts/demos/\allowbreak nqs\_metrics.py}.
 
 \subsection*{NeRF (\texttt{Bestiary/NeRF.lean})}
 \emph{Two} new primitives (Definition~\ref{layer:positionalEncoding},
@@ -19002,8 +19272,8 @@ contrastive loss (Radford et al.\ 2021,
 transformer for text, each with a final linear projection to a shared
 embedding space. Variants: CLIP-RN50, CLIP-ViT-B/32 (151M, paper-exact),
 CLIP-ViT-L/14 (427M, paper-exact), tiny fixture. The architectural
-lesson from CLIP is identical to NeRF's: the novelty lives in data and
-objective, not in layer design.
+lesson from CLIP is identical to NeRF's: what is new is the data and the
+objective, not a layer.
 
 \begin{verbatim}
 def clipViTB32ImageEncoder : NetSpec where
@@ -19063,7 +19333,8 @@ for every pair of residues, and a fold obtained by descending that
 histogram's negative log-likelihood --- with a frozen protein language
 model in place of the multiple-sequence alignment those methods read,
 scored on CASP16's targets beside the groups that predicted them blind.
-The entry after it is the architecture that ended that era.
+The \bestiaryref{bestiary:evoformer}{Evoformer entry} that closes the section is
+the architecture that ended that era.
 
 \paragraph{A residual network on residue pairs.} A protein is a string
 over twenty letters, and its fold is set by which residues end up near
@@ -19138,7 +19409,9 @@ segmentation demo:
     every group's model are reduced to the same pseudo-$\mathrm{C}_\beta$
     atom before they are compared. The training set is the information the
     field had, a date cut; purging the 82 chains homologous to a target is
-    an ablation, and is worth nothing. The single-sequence reference is
+    an ablation, not the protocol, and at 64 channels it moves precision by
+    less than a second seed does ($0.585 \to 0.599$, against $0.597$ for the
+    seed). The single-sequence reference is
     ESMFold, the same language model under the folding trunk its authors
     trained for it.
 \end{itemize}
@@ -19249,7 +19522,7 @@ What this is not: a 5.4M-parameter network on a single sequence, 65
 residues of receptive field in a 96-residue window, folded as one point
 per residue. The field's models read alignments and templates and build an
 all-atom chain through a structure module; the architecture that does so
-is the entry below, and AlphaFold~2's distogram head is this demo's
+is the \bestiaryref{bestiary:evoformer}{Evoformer entry}, and AlphaFold~2's distogram head is this demo's
 network grown into a 48-block pair stack with the alignment beside it.
 
 Four gates sit under the table. The scorer reproduces CASP16's official
@@ -19269,6 +19542,7 @@ fold, scoring, table and figures \texttt{scripts/demos/\allowbreak
 casp16\_*.py}.
 
 \subsection*{AlphaFold 2 Evoformer (\texttt{Bestiary/Evoformer.lean})}
+\phantomsection\label{bestiary:evoformer}
 \emph{Two} new primitives (Definition~\ref{layer:evoformerBlock},
 Definition~\ref{layer:structureModule}). Dual-representation (MSA + pair)
 doesn't fit a linear \texttt{NetSpec} cleanly; the bestiary shows the
@@ -19365,9 +19639,11 @@ Chapter~3's CNN kit at $84 \times 84$ (three convolutions with pooling standing 
 the paper's strides, a dense 512, three outputs; 1.7M parameters), and one frame does
 not contain the ball's velocity, so the input is a stack of the last four. The bracket
 is built into the game: the same DQN on the six numbers the renderer draws from ---
-ball position and velocity, the two paddles --- is a twin that is handed everything
-the pixels could carry, the scripted opponent is the bar, and a one-frame input is the
-ablation. Figure~\ref{fig:pong_dqn} is one input and every arm's learning curve.
+ball position and velocity, the two paddles, through a two-hidden-layer MLP of width
+64, 4{,}803 parameters --- is a twin that is handed everything the pixels could carry,
+the scripted opponent is the bar, and a one-frame input is the ablation.
+Figure~\ref{fig:pong_dqn} is one input and the learning curves of those arms
+(\texttt{runs/2026-09-25-pong-dqn/}).
 
 \begin{figure}[H]
 \centering
@@ -19383,11 +19659,13 @@ the random and scripted-tracker baselines as lines.}
 
 \paragraph{Every arm against the scripted opponent.} Table~\ref{tab:pong_arms} is the
 mean points per game over twenty fresh games after training, with the standard
-error; the baselines over a hundred games (\texttt{lake exe pong-env 100}).
+error; the baselines over a hundred games (\texttt{lake exe pong-env 100}). Each
+arm is 500k agent steps on one card, five to seven minutes for a state run and
+27 for a pixel run.
 
 \begin{table}[H]
 \centering
-\caption{The Pong arms against the scripted opponent, in points per game.}
+\caption{The Pong arms against the scripted opponent, in points per game (\texttt{runs/2026-09-25-pong-dqn/}; the stacked and the wide state arms, \texttt{runs/2026-10-27-pong-state-arms/}).}
 \label{tab:pong_arms}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -19396,7 +19674,9 @@ arm & points per game & first positive evaluation \\
 random                           & $-17.88 \pm 0.20$ & --- \\
 scripted tracker                 & $+11.18 \pm 0.37$ & --- \\
 pixels, one frame                & $+4.60 \pm 1.48$ & 100k steps \\
-state, six numbers, seeds 1--3   & $+14.15$, $+12.70$, $+13.50$ & 100--125k \\
+state, six numbers, width 64, seeds 1--3   & $+14.15$, $+12.70$, $+13.50$ & 100--125k \\
+\quad four states stacked, width 64, seeds 1--3 & $+13.45$, $+9.20$, $+10.55$ & 150--225k \\
+\quad one state, width 512, seeds 1--3 & $+16.85$, $+12.75$, $+14.65$ & 75--100k \\
 pixels, four frames, seeds 1--3  & $+15.60$, $+15.90$, $+14.90$ & 75--100k \\
 \hline
 \end{tabular}
@@ -19404,14 +19684,26 @@ pixels, four frames, seeds 1--3  & $+15.60$, $+15.90$, $+14.90$ & 75--100k \\
 
 \noindent One frame cannot see velocity, and the row says by how much: $+4.6$ against
 $+15.5$, the gap between a paddle that reaches the ball and one that guesses. The
-state twin was meant to be the ceiling and is not: the pixel network sits above it on
-every seed ($+15.47$ against $+13.45$ on average) and at every opponent speed (1.0 /
-1.5 / 2.0 pixels a frame: state $+14.45$ / $+13.45$ / $+9.80$, pixels $+17.75$ /
-$+15.60$ / $+14.45$). The six numbers are all the pixels could carry, so the gap is
-in what each network learns from its input, and it is not dissected here. An update
-was 24 milliseconds, twenty of them the shim re-pushing 20~MB of parameters and Adam
-moments every step; with that state resident on the device
-(\texttt{trainStepAdamF32DdpmR}) it is 14.6, and a pixel run 27 minutes on one card.
+state twin was meant to be the ceiling and the 64-wide net is not: the pixel network
+sits above it on every seed, $+15.47$ against $+13.45$ on average, and at every
+opponent speed tried --- 1.0 / 1.5 / 2.0 pixels a frame, one seed each at 1.0 and
+2.0: state $+14.45$ / $+13.45$ / $+9.80$, pixels $+17.75$ / $+15.60$ / $+14.45$,
+where the 1.5 entries are the state net's three-seed mean and the pixel network's
+seed 1. The six numbers are all the pixels could carry, so the gap was in the
+networks, and the two other state rows say where. Stacking the last four states, as
+the pixel network stacks frames, costs the state net 2.4 points ($+11.07$, the seed
+spread tripled) and moves its first positive evaluation out to 150--225k steps: the
+vector already carries the velocity the pixel network stacks frames to recover, and
+the history is the same information four times over. Widening the one-state MLP to
+the pixel network's dense width, 512, closes the gap: $+14.75$ against $+15.47$, a
+difference smaller than the wide net's own seed spread, and level with the pixel
+network at 200k steps where the 64-wide net was three to nine points behind. The
+ordering was the 64-wide MLP's capacity, not the representation. An update on the
+copying path was about 24 milliseconds with the GPU busy for four of them: the shim
+re-pushed 20~MB of parameters and Adam moments every step. With that state resident
+on the device (\texttt{trainStepAdamF32DdpmR}) the train step falls from 12.2 to
+5.1 milliseconds and the loop, play and evaluations included, runs at 14.6
+milliseconds an update; a pixel run is 27 minutes on one card.
 
 \section{Poker --- Deep CFR against the exact best response}
 \label{sec:game_leduc}
@@ -19421,8 +19713,8 @@ ICML 2019, \href{https://arxiv.org/abs/1811.00164}{arXiv:1811.00164}) on Leduc h
 written in Lean (\texttt{LeanMlir/Leduc.lean}): a two-player, fixed-limit, one-card poker
 --- $r$ ranks in two suits, three for the classic jack--queen--king deck, an ante of one,
 two betting rounds with bets of two then four and at most two raises each, one public
-card between the rounds, a pair beats a higher rank --- and the first game in this
-section with hidden information. The answer is therefore not a move but a mixed
+card between the rounds, a pair beats a higher rank --- and the chapter's one game
+with hidden information. The answer is therefore not a move but a mixed
 strategy: an equilibrium raises a jack it knows is losing about a fifth of the time,
 because a player who never bluffs can be read. Each iteration and player, one batched
 forward of the player's advantage network over \emph{every} information set gives the
@@ -19437,8 +19729,8 @@ exact average of the hundred stored profiles weighted by iteration and by each p
 own reach, no strategy network. The network is the Leduc papers' three dense layers of
 64 (\texttt{Bestiary/DeepCFR.lean}, 10.5k parameters, no BatchNorm), and the loss --- a
 weighted squared error on the legal slots --- goes through the squared-error block as a
-host-built target, tic-tac-toe's move. Two things change relative to the three games
-around it:
+host-built target, tic-tac-toe's move. Two things change relative to Pong and the two
+tic-tac-toe sections that follow:
 
 \begin{itemize}
   \item \textbf{The instrument is the best response, and it is exact.} Suits never matter
@@ -19484,12 +19776,13 @@ one; a thousandth of a chip is a milli-ante per game, the Leduc papers' unit) an
 head-to-head against CFR+ averaged over the two seats. The scripted honest arm raises a
 pair or a king and folds a jack to a bet; the price-of-honesty arm is CFR+ with its
 worst-hand raises moved to call; the two Deep CFR rows and the sampled table are at the
-same 4.1M nodes, three seeds each. The last column of Table~\ref{tab:leduc_arms} is
+same 4.1M nodes, three seeds each, 5.7 minutes a seed on one card
+(\texttt{runs/2026-10-08-deep-cfr-leduc/}). The last column of Table~\ref{tab:leduc_arms} is
 the bluff, the raise frequency opening round 2 with a jack under a queen.
 
 \begin{table}[H]
 \centering
-\caption{The Leduc poker arms: exploitability, head-to-head against CFR+, and bluff frequency; six minutes a seed on one card.}
+\caption{The Leduc poker arms at $r = 3$: exploitability, head-to-head against CFR+, and bluff frequency, per seed where three are given.}
 \label{tab:leduc_arms}
 \small
 \begin{tabular}{@{}l l l l@{}}
@@ -19499,9 +19792,9 @@ arm & exploitability & vs CFR+ & bluff \\
 uniform random              & 2.374 & $-0.707$ & 50\% \\
 scripted honest             & 1.050 & $-0.123$ & 0\% \\
 CFR+, bluffs moved to call  & 0.186 & $-0.012$ & 0\% \\
-Deep CFR, strategy network  & 0.229 / 0.185 / 0.152 & $-0.055$ / $-0.039$ / $-0.050$ & \\
-Deep CFR, SD-CFR average    & $\mathbf{0.127}$ / $\mathbf{0.150}$ / $\mathbf{0.109}$ & $-0.022$ / $-0.031$ / $-0.020$ & 0\% \\
-tabular ES-MCCFR            & 0.038 / 0.043 / 0.041 & & \\
+Deep CFR, strategy network  & 0.229 / 0.185 / 0.152 & $-0.055$ / $-0.039$ / $-0.050$ & 1.6\% / 0.8\% / 6.4\% \\
+Deep CFR, SD-CFR average    & $\mathbf{0.127}$ / $\mathbf{0.150}$ / $\mathbf{0.109}$ & $-0.022$ / $-0.031$ / $-0.020$ & 0.0\% / 5.5\% / 6.3\% \\
+tabular ES-MCCFR            & 0.038 / 0.043 / 0.041 & $-0.007$ / $-0.010$ / $-0.009$ & 9.5\% / 11.7\% / 2.2\% \\
 CFR+, a thousand iterations & 0.00024 & 0 & 19.5\% \\
 \hline
 \end{tabular}
@@ -19522,11 +19815,12 @@ set or two at these budgets, so the mechanism is not what it never saw; its esti
 is noisier as the sets multiply at a fixed budget, and the network's error does not grow
 with them. The bluff column is the finding a reader can check on
 Figure~\ref{fig:deep_cfr_leduc}: the
-trained profile that is 0.13 exploitable raises the losing jack under a queen 0\% of
-the time where the equilibrium raises it 19.5\% (18.6--19.5\% over two solvers and
-three initialisations --- the frequency is pinned at $r = 3$, and is not at $r = 13$,
-where the same cell ranges over tens of points), and it bluffs elsewhere instead, a jack
-under a king 12\%. Honesty's price is exact: moving the equilibrium's worst-hand raises
+trained profile that is 0.13 exploitable raises the losing jack under a queen 0.0\% of
+the time, and the other two seeds 5.5\% and 6.3\%, where the equilibrium raises it
+19.5\% (18.6--19.5\% over two solvers and three initialisations --- the frequency is
+pinned at $r = 3$, and is not at $r = 13$, where the same cell ranges over tens of
+points), and it bluffs elsewhere instead, a jack under a king 11--17\% across the three
+seeds. Honesty's price is exact: moving the equilibrium's worst-hand raises
 to call costs 0.186 of exploitability.
 
 What this is not: a two-player, fixed-limit, one-card game, solved at rank level. The
@@ -19615,7 +19909,7 @@ independent evaluations of the saved network, 256 games each, pooled.
 
 \begin{table}[H]
 \centering
-\caption{The tic-tac-toe arms against the solved game at $3 \times 3$, $4 \times 4$ and $5 \times 5$: twenty iterations and 2.5 minutes on one card at $3 \times 3$, forty iterations and 10.0 minutes at $4 \times 4$, the same binary with \texttt{n=4}.}
+\caption{The tic-tac-toe arms against the solved game at $3 \times 3$, $4 \times 4$ and $5 \times 5$: twenty iterations at $3 \times 3$, forty at $4 \times 4$ and a hundred at $5 \times 5$, the same binary with \texttt{n=4} and \texttt{n=5 k=4}.}
 \label{tab:ttt_arms}
 \small
 \begin{tabular}{@{}l r l r l r l@{}}
@@ -19632,9 +19926,11 @@ perfect          & 100\%  & 0/1000/0 $\cdot$ 0/1000/0    & 100\%  & 0/1000/0 $\c
 \end{tabular}
 \end{table}
 
-\noindent The Python implementation this loop follows (Nair,
-\href{https://github.com/suragnair/alpha-zero-general}{alpha-zero-general}) was
-expected to take a day on the $4 \times 4$ board. The untrained network's sweep is the random player's. Self-play visits 1.2\%
+\noindent The $3 \times 3$ run is 2.5 minutes on one card and the $4 \times 4$ run 10.0
+minutes (\texttt{runs/2026-09-29-alphazero-ttt/}); the estimate for the Python
+implementation this loop follows (Nair,
+\href{https://github.com/suragnair/alpha-zero-general}{alpha-zero-general}) on the
+$4 \times 4$ board was 20--24 hours. The untrained network's sweep is the random player's. Self-play visits 1.2\%
 of the $4 \times 4$ decision positions and the sweep scores all of them; the misses
 are mostly forced wins not taken, late in games a competent opponent never produces,
 and the search closes them --- with 25 or 100 simulations the network is unbeaten
@@ -19646,7 +19942,7 @@ in 64 minutes. As X the network never loses, alone or with search; as O it still
 does --- 60 games in 768 alone, 23 with search --- and its 87.4\% on the random-play
 sample is 92.1\% over the exhaustive opening, every position with at most three
 stones: it is best where the theory is. On this board the search is what closes the
-second player's games, and it has not closed them yet.
+second player's games, and at a hundred iterations it has not closed them.
 
 \section{Tic-tac-toe without the rules --- MuZero against the solved game}
 \label{sec:game_muzero_ttt}
@@ -19666,9 +19962,11 @@ simulation, then one $f$ and one $r$; legal moves are masked at the root from th
 rules and nowhere inside the tree. Win rate cannot tell this agent from AlphaZero ---
 both are unbeaten --- so the question the section asks is the one the solved game can
 answer exactly: \emph{did MuZero learn tic-tac-toe, or only its values?} The
-literature predicts the second (Grimm et al.\ 2020's value-equivalence principle; He,
-Moerland, de Vries and Oliehoek 2023 find MuZero's model accurate on the policy it
-trained with and poor on others, measured against estimated returns). Here the
+literature predicts the second (Grimm et al.\ 2020's value-equivalence principle,
+\href{https://arxiv.org/abs/2011.03506}{arXiv:2011.03506}; He, Moerland, de Vries and
+Oliehoek 2023, \href{https://arxiv.org/abs/2306.00840}{arXiv:2306.00840}, find MuZero's
+model accurate on the policy it trained with and poor on others, measured against
+estimated returns). Here the
 answer is exact at every position, after every number of imagined moves, on lines
 the agent plays and lines it never would. Three things change relative to AlphaZero:
 
@@ -19712,6 +20010,9 @@ the agent plays and lines it never would. Three things change relative to AlphaZ
     is exhaustive.
 \end{itemize}
 
+Figure~\ref{fig:muzero_ttt} is one line played inside the model against the true
+board, and the instrument's curves against imagined depth.
+
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{demos/muzero_ttt.png}
@@ -19738,15 +20039,16 @@ after $K = 5$ imagined moves on the agent's own lines and on random lines, and t
 share of winning moves $r$ calls, over every legal move from every scored start. The
 networks are the recipe that passed at $3 \times 3$ --- 50-simulation self-play, 300
 Adam steps an iteration, the raw mean $Q$ --- on fresh initialisations, 60 iterations
-at $3 \times 3$ and 120 at $4 \times 4$; at $4 \times 4$ all three initialisations run
-end unbeaten both sides, alone and with 25 and 100 simulations, and the table's is the
-one with the highest root agreement.
+at $3 \times 3$ and 120 at $4 \times 4$, ten minutes on one card and 26--27 minutes
+(\texttt{runs/2026-10-20-muzero-ttt-4x4/}); at $4 \times 4$ all three initialisations
+end the run unbeaten both sides, alone and with 25 and 100 simulations, and the table's
+is the one with the highest root agreement.
 
 \begin{table}[H]
 \centering
-\caption{The tic-tac-toe arms against the solved game, with MuZero's: 60 iterations and
-10 minutes on one card at $3 \times 3$, 120 iterations and 27 minutes at $4 \times 4$, the
-same binary with \texttt{n=4}. ``Imagined'' is policy agreement after five moves inside
+\caption{The tic-tac-toe arms against the solved game, with MuZero's: 60 iterations at
+$3 \times 3$ and 120 at $4 \times 4$, the same binary with \texttt{n=4}; the 600-step rows
+double the Adam steps an iteration. ``Imagined'' is policy agreement after five moves inside
 the model on the agent's own lines $\cdot$ random lines; ``$r$'' the winning moves the
 reward network calls at one move.}
 \label{tab:muzero_ttt_arms}
@@ -19771,6 +20073,8 @@ AlphaZero alone        & $\mathbf{99.4\%}$ & --- & --- & 0/768/0 $\cdot$ 0/768/0
 AlphaZero + search     & ---    & --- & --- & 0/768/0 $\cdot$ 0/768/0 \\
 MuZero alone           & 98.7\% & 100\% $\cdot$ 92.9\% & 99.5\% & 0/768/0 $\cdot$ 0/768/0 \\
 MuZero + latent search & ---    & --- & --- & 0/768/0 $\cdot$ 0/768/0 \\
+MuZero alone, 600 steps & 99.1\% & 100\% $\cdot$ 93.4\% & 100.0\% & 0/768/0 $\cdot$ 0/767/1 \\
+MuZero + latent search, 600 steps & --- & --- & --- & 0/768/0 $\cdot$ 0/768/0 \\
 perfect                & 100\%  & --- & --- & 0/1000/0 $\cdot$ 0/1000/0 \\
 \hline
 \end{tabular}
@@ -19779,9 +20083,11 @@ perfect                & 100\%  & --- & --- & 0/1000/0 $\cdot$ 0/1000/0 \\
 \noindent MuZero bootstraps slowly: AlphaZero's $4 \times 4$ network passes 93\% root
 agreement by iteration 4, MuZero's sits at 62--66\% through iteration 40, 73\% at 50,
 92\% at 60 and 98\% by 100 --- self-play stays decisive for a long time, so $z$ teaches
-the values of weak play, and at $4 \times 4$ sixty iterations is simply short. Doubling
-the steps an iteration brings the take-off to iteration 40 and the sweep to 99.1\%, and
-costs one game in 256 alone as O. Self-play stood at 2.6\% of the decision positions.
+the values of weak play. A $4 \times 4$ run stopped at sixty iterations stands at 92.1\%
+root agreement and still loses as O with search, six games in 256 at the run's own
+evaluation; the 120-iteration runs are the table. Doubling the steps an iteration
+brings the take-off to iteration 40 and the sweep to 99.1\%, the table's 600-step rows,
+and costs one game in 768 alone as O. Self-play stood at 2.6\% of the decision positions.
 
 \paragraph{What the model learned.} The value-equivalent prediction --- values, not the
 board --- does not hold at one move and holds with depth. On the agent's own lines the
@@ -19808,7 +20114,7 @@ holds at 100 simulations on every initialisation.
 
 \section{The catalogue: the AlphaGo family and Deep CFR}
 
-The entries below are these loops at the scale that made them famous: the network is
+The entries in this section are these loops at the scale that made them famous: the network is
 a residual tower, the game is Go or chess, and the target is still the model's own
 later estimate.
 
@@ -19850,7 +20156,7 @@ self-play, a 13-layer conv + FC-head \emph{value} network
 ($\sim$4M), and a shallow linear \emph{rollout} policy used inside
 MCTS for fast tree playouts. Input is 48 hand-crafted Go feature
 planes (liberties, ladder patterns, 3$\times$3 stone arrangements,
-etc.). AlphaGo Zero (next entry) throws all of this out --- raw
+etc.). AlphaGo Zero (\bestiaryref{bestiary:alphagozero}{the AlphaZero entry}) throws all of this out --- raw
 board only, one two-headed net, self-play only --- and plays better
 (5185 Elo vs 3140). The one-sentence lesson is written into every
 follow-up paper: features the network can learn on its own, it will.
@@ -19902,7 +20208,7 @@ def alphaGoZeroPolicy : NetSpec where
 \end{verbatim}
 
 The value head shares the first two layers (body) and diverges at
-the head — one filter, two-layer MLP down to a single scalar
+the head --- one filter, two-layer MLP down to a single scalar
 (\texttt{tanh} is applied downstream; \texttt{Activation} doesn't
 include it):
 
@@ -21360,7 +21666,7 @@ physics, and each has a dataset of its own:
   \item \textbf{ArASL} is the people-watching dataset: $54{,}049$ grey
     $64\times64$ crops of hands spelling the 32 letters of the Arabic
     sign-language alphabet, captured as video bursts of consecutive frames.
-    The chapter-4 CNN (\texttt{arasl-signs}) trains on it twice, under the
+    Chapter~\ref{chap:bn}'s CIFAR-CNN8-wide-BN (\texttt{arasl-signs}) trains on it twice, under the
     random split the literature reports on and under a split that keeps each
     class's capture order together, and the pair of numbers is the demo of
     \S\ref{sec:bestiary_people}.
@@ -21402,8 +21708,9 @@ physics, and each has a dataset of its own:
     Hanford and Livingston interferometers' strain from the first half of
     the third observing run, published by the Gravitational Wave Open
     Science Center under CC BY 4.0. Twenty-six 4096-second file pairs are
-    cut into two-second windows, half of them given an injected
-    binary-black-hole chirp, and the CNN of \S\ref{sec:bestiary_signal}
+    cut into two-second windows, half of the training windows and a third
+    of the validation windows given an injected binary-black-hole chirp, and
+    the CNN of \S\ref{sec:bestiary_signal}
     (\texttt{gw-detect}) trains on their spectrograms against the matched
     filter's closed form.
   \item \textbf{The transverse-field Ising chain} is the science demo's
