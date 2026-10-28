@@ -779,7 +779,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head (no conv bias)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "MobileNetV2 on Imagenette 224² (stem-s2 → 17 inverted-residual blocks, full-paper [t,c,n,s] config, stride-2 depthwise downsamples 224→7 → head conv-BN-relu6 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order (stem; per inverted-residual block expand-BN/depthwise-BN/project-BN,
   -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
   -- trainAdamSched + @mobilenetv2_fwd_eval, read off `layers` by `VerifiedNetSpec.bnChannels`. True batch-norm
@@ -883,7 +883,7 @@ def efficientnetVerified : VerifiedNetSpec where
     .convBnNB 320 1280 1 1,         -- head 1×1 (320→1280)
     .globalAvgPool,
     .dense 1280 10 ]
-  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "EfficientNet-B0 on Imagenette 224² (stem-s2 → 16 MBConv [t,c,n,s,k], swish + squeeze-excite + batch-norm, 5 downsamples 224→7 → head 320→1280 → GAP → dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 49 BN layers in forward order (stem; per MBConv: expand-BN [t≠1 only], depthwise-BN, project-BN;
   -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
   -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.

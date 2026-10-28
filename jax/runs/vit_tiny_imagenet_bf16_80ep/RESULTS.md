@@ -59,4 +59,4 @@ collapse; curve flattens at the LR floor (epochs ~73–80 within 0.3%).
 - `_e1.bin … _e80.bin` — per-epoch checkpoints (at /home/skoonce/).
 - `scripts/eval_vit_full50k.py` — canonical no-drop full-50k eval.
 - `scripts/supervise_vit_80ep.sh` — checkpoint + AER-watchdog auto-resume supervisor.
-- `vit_val_curve.tex` — pgfplots chart snippet (this dir).
+- `vit_val_curve.tex` — pgfplots chart snippet, moved to `historical/pgfplots/vit_tiny_imagenet_bf16_80ep_vit_val_curve.tex` (nothing in the book inputs it).

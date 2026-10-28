@@ -3046,7 +3046,7 @@ accuracy-vs-width curve.
   error bar style={blue!55!white, line width=0.6pt},
   error mark options={rotate=90, mark size=2.5pt, blue!55!white, line width=0.6pt}]
 coordinates {
-(8,91.99) +- (0,0.53) (16,94.01) +- (0,0.47) (32,96.76) +- (0,0.35) (64,97.02) +- (0,0.33) (128,97.25) +- (0,0.32) (256,97.67) +- (0,0.30) (512,97.83) +- (0,0.29) (1024,97.89) +- (0,0.28) (2048,98.0) +- (0,0.27) (4096,98.01) +- (0,0.27)
+(8,91.99) += (0,0.52) -= (0,0.55) (16,94.01) += (0,0.45) -= (0,0.48) (32,96.76) += (0,0.33) -= (0,0.37) (64,97.02) += (0,0.32) -= (0,0.35) (128,97.25) += (0,0.30) -= (0,0.34) (256,97.67) += (0,0.28) -= (0,0.31) (512,97.83) += (0,0.27) -= (0,0.30) (1024,97.89) += (0,0.26) -= (0,0.30) (2048,98.0) += (0,0.26) -= (0,0.29) (4096,98.01) += (0,0.26) -= (0,0.29)
 };
 \addplot[only marks, mark=o, mark size=4pt, red, line width=1pt, forget plot] coordinates {(64,97.02)};
 \node[anchor=west, font=\footnotesize, red!70!black] at (axis cs:74,95.5)
@@ -3063,7 +3063,7 @@ $\pm 0.3$ points once accuracy is in the nineties.
 \medskip\noindent The curve flattens hard after $\sim$64 neurons: widening
 $8{\to}64$ buys $+5.0$ points, but $64{\to}4096$, at $64\times$ the width
 and $364\times$ the parameters, buys only $+1.0$. A $32{\to}32$ MLP already
-reaches 96.8\% at 27K parameters, $755\times$ smaller than the
+reaches 96.8\% at 27K parameters, $756\times$ smaller than the
 $4096{\to}4096$ net (98.0\%).
 
 \medskip\noindent The bars are what make that plateau concrete rather than
@@ -3303,7 +3303,7 @@ Chapter~\ref{chap:mlp}'s classifier buy about a point over the MLP's 97.81\%
 
 This is the noisiest of the three MNIST runs, and the transcript shows it.
 Epoch~1 landed at 92.95\% here; repeated, the same twelve epochs from the
-same seed put it anywhere between 92.5 and 94.8\%, because a convolution's
+same seed put it anywhere between 92.0 and 96.4\%, because a convolution's
 weight gradient accumulates in an order the GPU is free to vary. By
 epoch~12 that has largely washed out --- but not in the shape the usual
 summary assumes, and this is the chapter to say what that means.
@@ -3337,7 +3337,7 @@ coordinates {(97.49,1) (97.55,1) (97.63,1) (97.63,1) (97.64,1) (97.65,1) (97.65,
 \noindent The MLP's runs sit in a band; the CNN's do too, apart from one.
 
 \medskip\noindent Summarised as a mean and a standard deviation the CNN is
-$98.73 \pm 0.27$. Summarised as a median and quartiles it is $98.78$, with
+$98.73 \pm 0.27$. Summarised as a median and quartiles it is $98.785$ (the two middle runs read $98.78$ and $98.79$), with
 the middle half between $98.72$ and $98.85$. The second describes the
 picture above; the first does not, and the whole difference is that one
 run --- trim the three highest and three lowest and the standard
@@ -3776,7 +3776,7 @@ Chain rule at a point through the six stages; see
   \texttt{select\_and\_scatter} and the reversed-kernel
   \texttt{convolution} --- and its slices are the hand-named chain cotangents
   of the single-example reading (\texttt{cnnChainCotW2} outright,
-  \texttt{cnnChainCotW1} for odd kernels, the artifact's being \(3\times3\)).
+  \texttt{cnnChainCotW1} for odd kernels, the artifact's being \(3\times3\); an even kernel enters zero-extended to the next odd size, \texttt{padOdd}, as Theorem~\ref{ax:conv2dHasVJP3} states and as ConvNeXt's $4\times4$ stem and $2\times2$ downsamples use in Theorem~\ref{thm:convnext_whole_back}).
   For the output weight \(W_5\) the term is \(\partial L_k/\partial W_5\),
   the gradient of example \(k\)'s whole loss, as for the MLP. For every
   \(N\); the artifact is \(N = 128\).
@@ -4158,7 +4158,7 @@ coordinates {
 \addlegendentry{MLP ($784{\to}d{\to}d{\to}10$)}
 \end{axis}
 \end{tikzpicture}
-\caption{Test accuracy against dense-head width for the verified CNN, the convolutional backbone held at 32 channels, overlaid on the MLP width sweep of Chapter~\ref{chap:mlp} (\texttt{runs/cnn\_grid\_rep\{1..5\}.tsv}, \texttt{runs/mlp\_grid\_results\_xla.tsv}). Each CNN point is the median of five runs and its whiskers the observed range.}
+\caption{Test accuracy against dense-head width for the verified CNN, the convolutional backbone held at 32 channels, overlaid on the MLP width sweep of Chapter~\ref{chap:mlp} (\texttt{runs/cnn\_grid\_rep\{1..5\}.tsv}, \texttt{runs/mlp\_grid\_results\_xla.tsv}). Each CNN point is the median of five 10-epoch runs and its whiskers the observed range.}
 \label{fig:cnn_head_width}
 \end{figure}
 
@@ -4168,7 +4168,7 @@ are barely visible. The other two do not: $d=512$ dropped one run to
 96.66\% and $d=4096$ one to 93.52\%, which is what the two long tails are.
 
 \medskip\noindent Those tails are the reason this curve is a median of five. A symmetric error bar would have
-been the wrong shape for them --- four runs cluster and one falls away, so
+been the wrong shape for them --- three or four runs cluster and the rest fall away, so
 there is no spread to put a $\pm$ on --- and the 95\% interval on the test
 set, $\pm 0.22$ at this accuracy, would have hidden a five-point failure
 behind a rounding error. The MLP points are single runs, which
@@ -6850,7 +6850,7 @@ back, $y = f(x) + x$.
         node[midway, above, term, violet!70!black] {identity skip ($+\,x$)};
   \node[term, below=0.18cm of f2, gray!55!black] {one residual block: \; $y = f(x) + x$};
 \end{tikzpicture}
-\caption{ResNet-34: a stem, four stages of residual blocks, global average pooling and a dense head. The inset is one residual block.}
+\caption{ResNet-34: a stem, four stages of residual blocks, global average pooling and a dense head. The inset is one residual block with the identity skip; the first block of stages 2--4 projects the skip with a $1\times1$ ConvBN.}
 \label{fig:resnet34_arch}
 \end{figure}
 
@@ -7311,8 +7311,9 @@ Figure~\ref{fig:r34_optimizer_matched} is that comparison.
 \end{figure}
 
 \noindent At a matched step, plain SGD does not merely keep up with momentum ---
-it finishes slightly ahead, by a paired $+0.403 \pm 0.162$ with all five seeds
-agreeing in sign. The two lower bars overlap while that difference is resolved,
+it finishes slightly ahead on the paired mean, $+0.403 \pm 0.162$ with all five seeds
+agreeing in sign (the single runs plotted on the right finish in the other order,
+$87.82$ against $88.13$). The two lower bars overlap while that difference is resolved,
 which is no contradiction: the arms share seeds, so their difference is better
 determined than either rung's distance from the baseline. The baseline carries no
 bar for the same reason --- its difference from itself is zero on every seed, and
@@ -7608,10 +7609,11 @@ Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
 learning rate SGD moves top-1 by a point or two between consecutive
-epochs, in both directions, three at the worst on either path --- so the row
-is read for its ends. At the tabulated epochs the verified path reads one
-to three points ahead through the first third, though epoch by epoch the
-two swap sides, and the gap closes as the cosine anneals: over the
+epochs, in both directions, three and a half at the worst on either path --- so the row
+is read for its ends. Neither path leads for long through the first third:
+the verified path is ahead at eighteen of the first thirty epochs and
+behind at twelve, the gap swings between $-4.4$ and $+2.7$ points, and its
+mean is two tenths. The gap closes as the cosine anneals: over the
 last fifteen epochs the two average within $0.15$ of each other on top-1
 and $0.20$ on top-5.
 Table~\ref{tab:r34_paths_epochs} is the selected epochs and
@@ -9550,7 +9552,7 @@ closing a gap by a measured amount.
 \addlegendentry{top-5}
 \end{axis}
 \end{tikzpicture}
-\caption{Validation accuracy of the MobileNetV2 reference run, every ten epochs.}
+\caption{Validation accuracy of the MobileNetV2 reference run, at epoch~1 and every tenth epoch after.}
 \label{fig:mnv2_jax_curve}
 \end{figure}
 
@@ -9747,7 +9749,7 @@ $\Delta$              & $-0.07$ & $-0.16$ & $-0.23$ & $-0.20$ & $-0.21$ & $-0.35
 \addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
-\caption{MobileNetV2 validation top-1 on both paths, every ten epochs: one recipe, two paths to XLA, scored over all $50{,}000$ validation images.}
+\caption{MobileNetV2 validation top-1 on both paths, at epoch~1 and every tenth epoch after: one recipe, two paths to XLA, scored over all $50{,}000$ validation images.}
 \label{fig:mnv2_paths_curve}
 \end{figure}
 
@@ -11259,7 +11261,7 @@ a rise. Figure~\ref{fig:enet_jax_curve} is the run, epoch by epoch.
 \addlegendentry{top-5}
 \end{axis}
 \end{tikzpicture}
-\caption{Validation accuracy per epoch of the 350-epoch EfficientNet-B0 reference run: RMSProp, bf16, $4\times$ 3060, scored over all $50{,}000$ validation images at every epoch.}
+\caption{Validation accuracy of the 350-epoch EfficientNet-B0 reference run: RMSProp, bf16, $4\times$ 3060, scored over all $50{,}000$ validation images at every epoch; plotted at every epoch to 10 and every fifth after.}
 \label{fig:enet_jax_curve}
 \end{figure}
 
@@ -11456,7 +11458,7 @@ $\Delta$              & $+0.14$ & $+0.12$ & $+0.18$ & $+0.30$ & $0.00$ & $-0.05$
 \addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
-\caption{EfficientNet-B0 validation top-1 on both paths, every ten epochs: one recipe, two paths to XLA, scored over all $50{,}000$ validation images.}
+\caption{EfficientNet-B0 validation top-1 on both paths, at epoch~1 and every tenth epoch after: one recipe, two paths to XLA, scored over all $50{,}000$ validation images.}
 \label{fig:enet_paths_curve}
 \end{figure}
 
@@ -12239,7 +12241,7 @@ add.
   stage/.style  = {font=\sffamily\scriptsize\itshape, gray!55!black, anchor=west},
 ]
   \node[io]                          (input){Input \;\; $224\times224\times3$};
-  \node[convbn, below=0.16cm of input] (stem) {\textbf{Conv $+$ LN} patchify $3\to96$, $4\times4$, /4 \;\; $56{\times}56$};
+  \node[norm, below=0.16cm of input] (stem) {\textbf{Conv $+$ LN} patchify $3\to96$, $4\times4$, /4 \;\; $56{\times}56$};
   \node[blk, below=0.16cm of stem]   (c1)   {$3\times$ \textbf{ConvNeXt} block @\,96 \;\; $56{\times}56$};
   \node[norm, below=0.16cm of c1]    (n1)   {downsample $96\to192$ (LN $+$ $2\times2$/2) \;\; $28{\times}28$};
   \node[blk, below=0.16cm of n1]     (c2)   {$3\times$ \textbf{ConvNeXt} block @\,192 \;\; $28{\times}28$};
@@ -12248,9 +12250,10 @@ add.
   \node[norm, below=0.16cm of c3]    (n3)   {downsample $384\to768$ \;\; $7{\times}7$};
   \node[blk, below=0.16cm of n3]     (c4)   {$3\times$ \textbf{ConvNeXt} block @\,768 \;\; $7{\times}7$};
   \node[gap, below=0.16cm of c4]     (g)    {global avg pool \;\; $7\times7\times768 \to 768$};
-  \node[head, below=0.16cm of g]     (d)    {\textbf{Dense} $768\to10$ \;(identity)};
+  \node[norm, below=0.16cm of g]     (hl)   {LN $768$};
+  \node[head, below=0.16cm of hl]    (d)    {\textbf{Dense} $768\to10$ \;(identity)};
   \node[logits, below=0.16cm of d]   (out)  {Logits \;\; 10 classes, softmax-CE};
-  \foreach \a/\b in {input/stem,stem/c1,c1/n1,n1/c2,c2/n2,n2/c3,c3/n3,n3/c4,c4/g,g/d,d/out}
+  \foreach \a/\b in {input/stem,stem/c1,c1/n1,n1/c2,c2/n2,n2/c3,c3/n3,n3/c4,c4/g,g/hl,hl/d,d/out}
      \draw[arr](\a)--(\b);
   \foreach \n/\k in {c1/1,c2/2,c3/3,c4/4}\node[stage] at ($(\n.east)+(0.30,0)$){stage \k};
 \end{tikzpicture}
@@ -15232,7 +15235,7 @@ $n = 50{,}000$: at epoch~300 the two score $35{,}819$ and $35{,}806$
 images correct, thirteen apart, and the means of the scored epochs
 $280$--$300$ are $71.48$ and $71.44$. The route there is not flat. The
 verified path leads by up to $+1.4$ points through epoch~125, the lead
-decays to under two tenths by epoch~200 and to nothing by $280$, and the training
+decays to two tenths by epoch~200, stays under it from epoch~230 and is gone by $280$, and the training
 loss runs within $\pm0.02$ of the reference's in every 25-epoch window
 and within $\pm0.01$ from epoch~126 on. The early lead is the shadow's:
 at a constant $0.99996$ both EMAs carry the random initialization
@@ -15560,7 +15563,7 @@ inventory.
 \node[emptylbl] at (\PB,-2.3) {--- recomposes Part 1 (zero new ops)};
 \draw[band] (0,-3.15) -- (15.7,-3.15);
 \node[catlbl] at (2.15,-3.8) {Convolution};
-\opchiprowD{cOr}{\PA}{-3.5}{conv2d/g, convBn/g, depthwise/y, $1{\times}1$ conv/y}
+\opchiprowD{cOr}{\PA}{-3.5}{conv2d/g, convBn/g, depthwise/y, $1{\times}1$ conv/g}
 \opchiprow{cOr}{\PB}{-3.5}{sepConv, darknet}
 \draw[band] (0,-4.65) -- (15.7,-4.65);
 \node[catlbl] at (2.15,-5.6) {Norm $\cdot$ pool\\reshape $\cdot$ embed};
@@ -17695,9 +17698,10 @@ pipeline, the loss, and the inference loop.
   tok/.style={font=\ttfamily\small},
   hdr/.style={font=\footnotesize\itshape, text=black!70},
   arrow/.style={->, >=stealth, thick, gray}]
-  % the sampler's own first line: "ROMEO:\nI" -- eight char tokens, position 0..7
-  \def\toks{R,O,M,E,O,:,{\textbackslash n},I}
-  \def\nexts{O,M,E,O,:,{\textbackslash n},I,?}
+  % the prompt "ROMEO:", its newline, and the first sampled character of
+  % runs/2026-09-09-tinygpt-nano-xla/sample_romeo.txt ("O heaven ...") -- eight char tokens, position 0..7
+  \def\toks{R,O,M,E,O,:,{\textbackslash n},O}
+  \def\nexts{O,M,E,O,:,{\textbackslash n},O,?}
   % grid: row t = query (top to bottom), column s = key (left to right)
   \foreach \t in {0,...,7} {
     \foreach \s in {0,...,7} {
@@ -17732,7 +17736,7 @@ pipeline, the loss, and the inference loop.
   \node[font=\footnotesize, text=black!70, anchor=north west, align=left] at (0, -9.0)
     {white cells: $-\infty$ is added to the score before the softmax, so their weight is exactly $0$};
 \end{tikzpicture}
-\caption{The causal mask on the sampler's own first eight characters. Rows are the
+\caption{The causal mask on the sampler's first eight characters: the prompt \texttt{ROMEO:}, its newline and the first character it sampled. Rows are the
 position being predicted from, columns the positions it may attend to; a score
 survives (blue) only where the key is at or before the query, and $-\infty$ is
 added to every other score before the softmax, so its weight is exactly zero.

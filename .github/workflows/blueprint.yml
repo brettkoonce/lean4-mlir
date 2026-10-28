@@ -233,6 +233,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y graphviz libgraphviz-dev pkg-config
 
+      - name: Dependency graphs are fresh
+        # blueprint/src/figures/depgraph/*.tex are committed (the layout needs pygraphviz,
+        # which the maintainers' boxes may lack); regenerate them here and fail on any
+        # drift, so a statement added without a rerun of the generator cannot ship a
+        # stale graph. If this ever fails on layout alone (a graphviz version change
+        # moving coordinates), commit the regenerated files.
+        run: |
+          pip install pygraphviz
+          python3 scripts/book/blueprint_depgraph_tikz.py
+          git diff --exit-code -- blueprint/src/figures/depgraph
+
       - name: Cache TeX Live .deb downloads
         # Cache the downloaded .debs from /var/cache/apt/archives so
         # subsequent runs skip the ~500 MB download of texlive-fonts-

@@ -20,3 +20,8 @@ Directory `runs/2026-09-11-r34-ablation-bf16-seeds`. Interval = t_(0.975, n−1)
   (0.00,full) +- (0.00,0) (0.14,nowd) +- (0.45,0) (-0.82,nowarm) +- (0.62,0) (-0.50,nols) +- (0.62,0) (-2.21,noadam) +- (0.33,0) (-4.78,nocos) +- (2.74,0) (-7.11,noaug) +- (0.38,0) (-6.14,bare) +- (0.36,0)
 };
 ```
+
+**`*_s1_resumed.log`** (full, noaug, nocos, nowarm): a second seed-1 run of each arm restarted from the
+epoch-3 checkpoint (epochs 4–80), left from a restart during the sweep. The table above uses the
+`*_s1.log` runs (their means reproduce it: full 89.98, noaug 82.87, nocos 85.20, nowarm 89.17); the
+resumed copies end at 90.37 / 83.52 / 85.32 / 88.79 and are not used anywhere.

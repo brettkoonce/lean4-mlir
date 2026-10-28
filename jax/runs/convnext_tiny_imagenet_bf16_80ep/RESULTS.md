@@ -79,4 +79,4 @@ Best (live) epoch 48: 76.28%. Final full-50k (EMA): **75.93%**.
 - `_e1.bin … _e80.bin` — per-epoch checkpoints (at /home/skoonce/).
 - `scripts/eval_convnext_full50k.py` — canonical no-drop full-50k eval.
 - `scripts/supervise_convnext_t_80ep_6gpu.sh` — 6-GPU checkpoint + AER-watchdog supervisor.
-- `convnext_val_curve.tex` — pgfplots chart snippet (this dir).
+- `convnext_val_curve.tex` — pgfplots chart snippet, moved to `historical/pgfplots/convnext_tiny_imagenet_bf16_80ep_convnext_val_curve.tex` (nothing in the book inputs it).

@@ -72,4 +72,4 @@ Best epoch ≈ 79 (0.7245). Final epoch 80: 0.7243 (in-train) / **0.7231 full-50
 - `_e1.bin … _e80.bin` — per-epoch checkpoints (at /home/skoonce/).
 - `scripts/eval_enet_full50k.py` — canonical no-drop full-50k eval.
 - `scripts/supervise_enet_b0_80ep_6gpu.sh` — 6-GPU checkpoint + AER-watchdog supervisor.
-- `enet_val_curve.tex` — pgfplots chart snippet (this dir).
+- `enet_val_curve.tex` — pgfplots chart snippet, moved to `historical/pgfplots/enet_b0_imagenet_bf16_80ep_enet_val_curve.tex` (nothing in the book inputs it).

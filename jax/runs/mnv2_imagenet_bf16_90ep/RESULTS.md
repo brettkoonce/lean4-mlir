@@ -85,4 +85,4 @@ Final epoch 90: 0.6839 (in-train) / **0.6833 full-50k**.
 - `_e1.bin … _e90.bin` — per-epoch checkpoints (at /home/skoonce/).
 - `scripts/eval_mnv2_full50k.py` — canonical no-drop full-50k eval.
 - `scripts/supervise_mnv2_90ep.sh` — checkpoint + AER-watchdog auto-resume supervisor.
-- `mnv2_val_curve.tex` — pgfplots chart snippet (this dir).
+- `mnv2_val_curve.tex` — pgfplots chart snippet, moved to `historical/pgfplots/mnv2_imagenet_bf16_90ep_mnv2_val_curve.tex` (nothing in the book inputs it).
