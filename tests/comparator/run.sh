@@ -24,14 +24,56 @@
 # namespaces available, and the project's oleans warm (`lake build Certs`), or the sandboxed
 # build compiles the corpus itself. See README.md.
 #
-# Usage: tests/comparator/run.sh [--no-paranoid]
+# Usage: tests/comparator/run.sh [--no-paranoid | --kernels K[,K…]] [CONFIG…]
+#
+#   CONFIG…          config file names under tests/comparator/ (default: all three)
+#   --no-paranoid    Lean's own kernel only
+#   --kernels K,…    Lean's own kernel plus exactly these bundled checkers, in place of
+#                    --paranoid's five: `paranoid` (leanchecker-paranoid), `lean4lean`, `nanoda`,
+#                    `con-leche`, `con-ron`. comparator.yml splits the tier config's checkers across
+#                    jobs this way. Each runs as --paranoid would run it (Lake's `bundledKernels`).
 
 set -e -o pipefail
 
-PARANOID=--paranoid
-[ "$1" = "--no-paranoid" ] && PARANOID=
-
 cd "$(dirname "$0")/../.."
+
+PARANOID=--paranoid
+KERNELS=""
+CONFIGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-paranoid) PARANOID= ;;
+    --kernels) PARANOID=; KERNELS=$2; shift ;;
+    *) CONFIGS+=("$1") ;;
+  esac
+  shift
+done
+[ ${#CONFIGS[@]} -eq 0 ] && CONFIGS=(config.json config-arch.json config-tier.json)
+
+# `path` with `external_kernels` set to the named checkers, written to a temp file; prints its path.
+# The names and commands are Lake's own `bundledKernels`, so the log lines match a --paranoid run.
+with_kernels() {
+  local out
+  out=$(mktemp --suffix=.json)
+  python3 - "$1" "$KERNELS" "$(lean --print-prefix)/bin" "$out" <<'PY' || return 1
+import json, sys
+path, names, bin_, out = sys.argv[1:]
+known = {
+    "paranoid": ("Lean paranoid", [f"{bin_}/leanchecker-paranoid", "--silent", "--from-export"]),
+    "lean4lean": ("lean4lean", [f"{bin_}/lean4lean", "--import"]),
+    "nanoda": ("nanoda", [f"{bin_}/nanoda_bin"]),
+    "con-leche": ("con-leche", [f"{bin_}/con-leche"]),
+    "con-ron": ("con-ron", [f"{bin_}/con-ron"]),
+}
+cfg = json.load(open(path))
+bad = [k for k in names.split(",") if k not in known]
+if bad:
+    sys.exit(f"run.sh --kernels: unknown checker(s) {bad}; known: {sorted(known)}")
+cfg["external_kernels"] = dict(known[k] for k in names.split(","))
+json.dump(cfg, open(out, "w"), indent=2)
+PY
+  echo "$out"
+}
 
 # Pass `lake comparator`'s output through, adding one `[comparator-time] <config> <phase>: <s> s`
 # line per phase: `build+export` (both modules built and exported, up to the first checker), then
@@ -56,9 +98,10 @@ phase_times() {
 # One `[comparator] <config>: <n> theorems OK in <s> s` line per config, printed only after
 # `lake comparator` exits 0 (set -e, pipefail). comparator.yml's job summary is built from these
 # lines and the `[comparator-time]` ones.
-for cfg in config.json config-arch.json config-tier.json; do
+for cfg in "${CONFIGS[@]}"; do
   path="tests/comparator/$cfg"
   n="$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["theorem_names"]))' "$path")"
+  if [ -n "$KERNELS" ]; then path="$(with_kernels "$path")" || exit 2; fi
   t0=$SECONDS
   lake comparator $PARANOID --config "$path" 2>&1 | phase_times "$cfg"
   echo "[comparator] $cfg: $n theorems OK in $((SECONDS - t0)) s"

@@ -72,14 +72,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  comparator:
+  # ⭐ 2026-10-28: split four ways. Run 40732487806's timestamps put the tier config at 1123 s, of
+  # which 995 s were the six checkers one after another (Lean paranoid 266, lean4lean 311, nanoda
+  # 64, con-leche 100, con-ron 49, Lean default 205) and 127 s the sandboxed build+export. Each leg
+  # below builds and exports for itself and runs Lean's default kernel (comparator always does),
+  # plus its share of the five external checkers, so every checker still sees an export made in its
+  # own sandbox. The tier legs are balanced including that default pass: ~516 / ~471 / ~418 s.
+  # The two small configs keep one `--paranoid` leg. `comparator` below is the one check branch
+  # protection requires; it fails unless every leg passed.
+  comparator-leg:
+    name: comparator (${{ matrix.leg }})
     runs-on: ubuntu-24.04
-    # A COLD Certs build is ~42 min (`Build proof suite`), plus the ~2-min generator drift
-    # check, plus the three `--paranoid` passes: 106 s + 315 s + 1235 s on a local box
-    # (2026-10-13), the tier export being ~63k declarations through six checkers. 150 leaves
-    # room for a slower runner. The old 45-min cap killed the one-time cold bootstrap before
-    # it could save the `lake-certs-` cache (run #219). certs.yml uses 180.
+    # A COLD Certs build is ~42 min (`Build proof suite`), plus the ~2-min generator drift check,
+    # plus the leg's comparator pass (≤ ~10 min for the tier legs). 150 leaves room for a slower
+    # runner. The old 45-min cap killed the one-time cold bootstrap before it could save the
+    # `lake-certs-` cache (run #219). certs.yml uses 180.
     timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - leg: mathlib + arch, all checkers
+            configs: config.json config-arch.json
+            kernels: ''
+          - leg: tier, lean4lean
+            configs: config-tier.json
+            kernels: lean4lean
+          - leg: tier, Lean paranoid
+            configs: config-tier.json
+            kernels: paranoid
+          - leg: tier, nanoda + con-leche + con-ron
+            configs: config-tier.json
+            kernels: nanoda,con-leche,con-ron
     steps:
       - uses: actions/checkout@v4
 
@@ -146,79 +170,137 @@ jobs:
 
       - name: Comparator tier files match their generator
         id: tier
-        # tests/comparator/{Challenge,Solution}Tier.lean are PRINTED from the project
-        # declarations' own types (scripts/gates/gen_comparator_tier.py). A hand-edit, or a
-        # statement change upstream, makes them stale — comparator would catch the
+        # Once, on the small leg. tests/comparator/{Challenge,Solution}Tier.lean are PRINTED from
+        # the project declarations' own types (scripts/gates/gen_comparator_tier.py). A hand-edit,
+        # or a statement change upstream, makes them stale — comparator would catch the
         # challenge/solution mismatch, but not a pair that drifted together away from the
         # project. This asks the sharper question: do these files still say what the
         # declarations say? It re-prints every tier type and diffs, ~2 min, no sandbox.
+        if: matrix.kernels == ''
         run: python3 scripts/gates/gen_comparator_tier.py --check
 
-      - name: Run lake comparator --paranoid (Mathlib-only, architecture and tier configs)
+      - name: Run lake comparator (${{ matrix.leg }})
         id: run
         run: |
           set -o pipefail
-          tests/comparator/run.sh 2>&1 | tee "$RUNNER_TEMP/comparator.log"
+          tests/comparator/run.sh ${{ matrix.kernels != '' && format('--kernels {0}', matrix.kernels) || '' }} \
+            ${{ matrix.configs }} 2>&1 | tee "$RUNNER_TEMP/comparator.log"
 
-      - name: Job summary
-        # The other proof workflows end in a stats table; this one ended in a bare green tick.
-        # Built from run.sh's per-config `[comparator] <config>: <n> theorems OK in <s> s` lines,
-        # which print only after comparator exits 0, so a row can only say ✅ for a config that ran.
-        # `always()`: on a red run the table shows how far it got.
+      - name: Keep the leg's log for the summary
         if: always()
         run: |
-          log="$RUNNER_TEMP/comparator.log"
+          mkdir -p "$RUNNER_TEMP/leg"
+          cp "$RUNNER_TEMP/comparator.log" "$RUNNER_TEMP/leg/" 2>/dev/null || touch "$RUNNER_TEMP/leg/comparator.log"
+          echo "${{ matrix.leg }}" > "$RUNNER_TEMP/leg/name"
+          echo "${{ steps.tier.outcome }}" > "$RUNNER_TEMP/leg/drift"
+          echo "$(bwrap --version) on Linux $(uname -r)" > "$RUNNER_TEMP/leg/sandbox"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: comparator-log-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/leg/
+          retention-days: 14
+
+  comparator:
+    # The required check: green only if every leg is, and the job summary for the whole run.
+    # Built from each leg's `[comparator] <config>: <n> theorems OK in <s> s` lines, which run.sh
+    # prints only after comparator exits 0, so a row can only say ✅ for a config whose every leg
+    # ran; and from the `[comparator-time]` lines, one row per leg.
+    needs: comparator-leg
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            tests/comparator
+            lean-toolchain
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: comparator-log-*
+          path: legs
+
+      - name: Job summary
+        run: |
+          shopt -s nullglob
+          legs=(legs/*/)
           total=0; ok=0; rows=""
           for cfg in config.json config-arch.json config-tier.json; do
             n="$(python3 -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["theorem_names"]))' "tests/comparator/$cfg")"
             case "$cfg" in
-              config.json)      what="architecture-free; the challenge imports only Mathlib" ;;
-              config-arch.json) what="architecture VJPs" ;;
-              config-tier.json) what="formalization.yaml's advertised set (generated)" ;;
+              config.json)      what="architecture-free; the challenge imports only Mathlib"; want=1 ;;
+              config-arch.json) what="architecture VJPs"; want=1 ;;
+              config-tier.json) what="formalization.yaml's advertised set (generated), split across three legs"; want=3 ;;
             esac
             total=$((total + n))
-            line="$(grep -F "[comparator] $cfg:" "$log" 2>/dev/null | tail -1)"
-            if [ -n "$line" ]; then
-              ok=$((ok + n)); res="✅"; t="$(sed -E 's/.* in ([0-9]+) s$/\1/' <<< "$line") s"
+            got=0; t=0
+            for d in "${legs[@]}"; do
+              line="$(grep -F "[comparator] $cfg:" "$d/comparator.log" 2>/dev/null | tail -1)"
+              [ -n "$line" ] || continue
+              got=$((got + 1)); s="$(sed -E 's/.* in ([0-9]+) s$/\1/' <<< "$line")"
+              [ "$s" -gt "$t" ] && t=$s
+            done
+            if [ "$got" -eq "$want" ]; then
+              ok=$((ok + n)); res="✅"; t="$t s"
             else
-              res="❌ not reached, or failed"; t="—"
+              res="❌ $got of $want legs passed"; t="—"
             fi
             rows+="| \`$cfg\` | $what | $n | $res | $t |"$'\n'
           done
-          case "${{ steps.tier.outcome }}" in
+          drift=""
+          for d in "${legs[@]}"; do
+            # Only the small leg runs the drift check; the others report `skipped`.
+            v="$(cat "$d/drift" 2>/dev/null || true)"
+            case "$v" in success|failure) drift=$v ;; esac
+          done
+          case "$drift" in
             success) tier="✅ the tier files match their generator — every tier declaration's type re-printed and diffed" ;;
             failure) tier="❌ the tier files have drifted from their generator (\`scripts/gates/gen_comparator_tier.py\`)" ;;
             *)       tier="— the tier drift check did not run" ;;
           esac
+          phases="build+export|Lean paranoid|lean4lean|nanoda|con-leche|con-ron|Lean default"
+          IFS='|' read -ra ph <<< "$phases"
           {
             echo "## Comparator — independent kernel re-check"
             echo ""
             if [ "$ok" -eq "$total" ]; then
               echo "✅ **All ${total} theorems re-checked by Lean's kernel and five independent checkers** (leanchecker-paranoid, lean4lean, nanoda, con-leche, con-ron): every statement matches its challenge, and every axiom closure is within [\`propext\`, \`Quot.sound\`, \`Classical.choice\`]."
             else
-              echo "❌ **${ok} of ${total} theorems re-checked** — see the \`Run comparator\` log."
+              echo "❌ **${ok} of ${total} theorems re-checked** — see the failing leg's \`Run lake comparator\` log."
             fi
             echo ""
-            echo "| config | what it covers | theorems | result | time |"
+            echo "| config | what it covers | theorems | result | time (slowest leg) |"
             echo "|---|---|---|---|---|"
             printf '%s' "$rows"
             echo ""
-            # Seconds per phase, from run.sh's `[comparator-time] <config> <phase>: <s> s` lines:
-            # the sandboxed build+export, then each checker. `—` is a phase that did not finish.
-            phases="build+export|Lean paranoid|lean4lean|nanoda|con-leche|con-ron|Lean default"
-            echo "| config (seconds) | ${phases//|/ | } |"
+            # Seconds per phase and leg: the sandboxed build+export, then each checker the leg ran.
+            # `·` is a checker the leg does not run; `—` one that did not finish.
+            echo "| leg · config (seconds) | ${phases//|/ | } |"
             echo "|---$(printf '|---:%.0s' {1..7})|"
-            for cfg in config.json config-arch.json config-tier.json; do
-              row="| \`$cfg\`"
-              IFS='|' read -ra ph <<< "$phases"
-              for p in "${ph[@]}"; do
-                s="$(grep -F "[comparator-time] $cfg $p: " "$log" 2>/dev/null | tail -1 | sed -E 's/.*: ([0-9]+) s$/\1/')"
-                row+=" | ${s:-—}"
+            for d in "${legs[@]}"; do
+              leg="$(cat "$d/name" 2>/dev/null || basename "$d")"
+              for cfg in config.json config-arch.json config-tier.json; do
+                grep -qF "[comparator-time] $cfg " "$d/comparator.log" 2>/dev/null || continue
+                row="| $leg · \`$cfg\`"
+                for p in "${ph[@]}"; do
+                  s="$(grep -F "[comparator-time] $cfg $p: " "$d/comparator.log" | tail -1 | sed -E 's/.*: ([0-9]+) s$/\1/')"
+                  if [ -z "$s" ] && ! grep -qF "Running $p kernel" "$d/comparator.log" && [ "$p" != "build+export" ]; then s="·"; fi
+                  row+=" | ${s:-—}"
+                done
+                echo "$row |"
               done
-              echo "$row |"
             done
             echo ""
             echo "$tier"
             echo ""
-            echo "**Sandbox:** \`$(bwrap --version)\` on Linux \`$(uname -r)\` · **Lean:** \`$(cat lean-toolchain)\` (\`lake comparator --paranoid\`; exporter and checkers bundled with the toolchain)"
+            sb=(legs/*/sandbox)
+            echo "**Sandbox:** \`$( [ ${#sb[@]} -gt 0 ] && head -1 "${sb[0]}" || echo unknown)\` · **Lean:** \`$(cat lean-toolchain)\` (\`lake comparator\`; exporter and checkers bundled with the toolchain)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Every leg passed
+        run: |
+          echo "comparator-leg: ${{ needs.comparator-leg.result }}"
+          [ "${{ needs.comparator-leg.result }}" = success ]

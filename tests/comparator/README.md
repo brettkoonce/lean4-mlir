@@ -143,11 +143,18 @@ import every lib's roots, skip `ComparatorTests` by name.
 ```
 tests/comparator/run.sh                 # all three configs, --paranoid
 tests/comparator/run.sh --no-paranoid   # Lean's kernel only
-lake comparator --paranoid --config tests/comparator/config.json   # one config
+tests/comparator/run.sh config.json     # one config, --paranoid
+tests/comparator/run.sh --kernels lean4lean,nanoda config-tier.json   # Lean's kernel + these two
 ```
 
-`run.sh` runs the three configs in order from the repo root and stops at the
-first failure (`set -e`). Expected output per config:
+`run.sh` runs the configs in order from the repo root and stops at the
+first failure (`set -e`). `--kernels` takes any of `paranoid` (leanchecker-paranoid),
+`lean4lean`, `nanoda`, `con-leche`, `con-ron`, each run exactly as `--paranoid`
+runs it; CI (`comparator.yml`) uses it to split the tier config's checkers across
+three parallel legs, with a fourth leg running the two small configs under
+`--paranoid`. After each phase `run.sh` prints a
+`[comparator-time] <config> <phase>: <s> s` line, which the CI job summary tabulates.
+Expected output per config:
 
 ```
 Resolving dependencies
