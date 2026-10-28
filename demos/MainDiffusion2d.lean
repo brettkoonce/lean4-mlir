@@ -385,7 +385,11 @@ pairs; run `lake exe diffusion-2d {target} flow` first"
   let nPts := F32.size raw / 2
   IO.eprintln s!"  data: {nPts} points{if reflow then " (reflow pairs)" else " from " ++ dataPath}"
 
-  let params ← spec.heInitParams
+  -- LEAN_MLIR_SEED=<k> moves the He-init and every step's (t, ε) draw, as the generic
+  -- trainer's does, for a second seed of an arm; unset (0) leaves every run as it was.
+  let seedOff : Nat := ((← IO.getEnv "LEAN_MLIR_SEED").bind String.toNat?).getD 0
+  if seedOff > 0 then IO.eprintln s!"  seed offset: {seedOff} (LEAN_MLIR_SEED)"
+  let params ← spec.heInitParams (seed := (42 + seedOff).toUSize)
   let adamM ← F32.const nP.toUSize 0.0
   let adamV ← F32.const nP.toUSize 0.0
   let alphaBar ← Ddpm.cosineSchedule Tmax.toUSize
@@ -414,10 +418,11 @@ pairs; run `lake exe diffusion-2d {target} flow` first"
           -- block does not know whether the target is ε or v.
           let epsIn := if reflow then F32.slice epsData (bi * B * nPer) (B * nPer) else ByteArray.empty
           let mode : USize := if reflow then 1 else if ot then 2 else 0
-          let (xt, rest) ← Ddpm.flowStepInputs x0 epsIn batch nPer.toUSize gs.toUSize Tmax.toUSize mode
+          let (xt, rest) ← Ddpm.flowStepInputs x0 epsIn batch nPer.toUSize
+                             (gs + seedOff * 1000003).toUSize Tmax.toUSize mode
           pure (xt, rest.1, rest.2)
         else do
-          let (xt, rest) ← Ddpm.stepInputs x0 alphaBar batch nPer.toUSize gs.toUSize
+          let (xt, rest) ← Ddpm.stepInputs x0 alphaBar batch nPer.toUSize (gs + seedOff * 1000003).toUSize
           pure (xt, rest.1, rest.2)
       -- Time conditioning with H = W = 1: the image encoder applied to a point.
       let xtc ← Ddpm.prependSinCosT xt tba batch nPer.toUSize 1 1
