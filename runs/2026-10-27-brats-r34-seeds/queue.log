@@ -1,0 +1,14 @@
+2026-10-27 20:33:29 r34 s2 start
+2026-10-27 20:33:39 r34 s1 start
+2026-10-27 21:25:08 r34 s2 exit 0
+2026-10-27 21:25:08 scratch s2 start
+2026-10-27 21:25:18 r34 s1 exit 0
+2026-10-27 21:25:18 scratch s1 start
+2026-10-27 22:24:19 scratch s1 exit 0
+2026-10-27 22:24:19 noskip s1 start
+2026-10-27 22:27:20 scratch s2 exit 0
+2026-10-27 22:27:20 noskip s2 start
+2026-10-27 23:17:59 noskip s2 exit 0
+2026-10-27 23:17:59 DONE r34:2 scratch:2 noskip:2
+2026-10-27 23:18:33 noskip s1 exit 0
+2026-10-27 23:18:33 DONE r34:1 scratch:1 noskip:1
