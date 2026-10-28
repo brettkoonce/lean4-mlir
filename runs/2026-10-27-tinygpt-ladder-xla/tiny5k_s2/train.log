@@ -1,0 +1,142 @@
+compiling train step (model=tiny, B=32, T=128, V=65, params=1222977) ...
+Generating train step MLIR...
+  378206 chars
+Compiling vmfbs...
+  forward (cached)
+  eval forward (cached)
+  train step (cached)
+I1027 19:00:42.853254  792134 service.cc:154] XLA service 0x76c0ac007db0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 19:00:42.853327  792134 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 19:00:42.855296  792134 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:00:42.855407  792134 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I1027 19:00:42.864672  792134 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:00:45.891349  792152 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:00:45.937659  792163 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 104 bytes spill stores, 104 bytes spill loads
+
+I1027 19:00:45.958719  792173 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 8 bytes spill stores, 12 bytes spill loads
+
+I1027 19:00:46.098638  792156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_41', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:00:46.255060  792174 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_41', 712 bytes spill stores, 712 bytes spill loads
+
+I1027 19:00:46.416864  792150 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_39', 712 bytes spill stores, 712 bytes spill loads
+
+I1027 19:00:46.493841  792162 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_362', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:00:46.671419  792163 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 112 bytes spill stores, 140 bytes spill loads
+
+I1027 19:00:46.679676  792148 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_363', 112 bytes spill stores, 112 bytes spill loads
+
+I1027 19:00:47.028115  792147 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_363', 876 bytes spill stores, 876 bytes spill loads
+
+I1027 19:00:47.175509  792155 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_364', 8760 bytes spill stores, 8776 bytes spill loads
+
+I1027 19:00:47.792899  792150 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_364', 56 bytes spill stores, 56 bytes spill loads
+
+I1027 19:00:47.874595  792156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_39', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:00:47.887348  792164 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_360', 24 bytes spill stores, 24 bytes spill loads
+
+I1027 19:00:48.112651  792169 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_361', 320 bytes spill stores, 312 bytes spill loads
+
+I1027 19:00:48.162132  792152 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_354', 192 bytes spill stores, 192 bytes spill loads
+
+I1027 19:00:48.599294  792151 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 40 bytes spill stores, 40 bytes spill loads
+
+I1027 19:00:48.743000  792159 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_40', 56 bytes spill stores, 56 bytes spill loads
+
+I1027 19:00:48.936062  792163 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_37', 52 bytes spill stores, 52 bytes spill loads
+
+I1027 19:00:49.033621  792168 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 60 bytes spill stores, 60 bytes spill loads
+
+I1027 19:00:49.385004  792157 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_354', 9712 bytes spill stores, 9852 bytes spill loads
+
+I1027 19:00:49.505100  792156 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I1027 19:00:49.752499  792154 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_385', 852 bytes spill stores, 852 bytes spill loads
+
+I1027 19:00:49.914435  792168 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_385', 100 bytes spill stores, 100 bytes spill loads
+
+I1027 19:00:49.936867  792149 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 8552 bytes spill stores, 8604 bytes spill loads
+
+I1027 19:00:50.652304  792152 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_40', 8204 bytes spill stores, 8264 bytes spill loads
+
+I1027 19:00:50.848019  792165 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6512 bytes spill stores, 7492 bytes spill loads
+
+I1027 19:00:51.062588  792158 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_5', 8548 bytes spill stores, 9464 bytes spill loads
+
+I1027 19:00:51.368556  792148 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_37', 8664 bytes spill stores, 9756 bytes spill loads
+
+I1027 19:00:51.848640  792166 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_361', 2592 bytes spill stores, 2584 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/tinygpt_shakespeare_tiny_train_step.mlir (@main, 307 outputs, 1 replica) in 10418 ms
+loading data/shakespeare/{train,val}.bin ...
+  1003854 train tokens, 111540 val tokens
+  seed offset: 2 (LEAN_MLIR_SEED)
+training: 5000 steps × batch 32 × T 128, lr peak 0.003000 (cosine + 100-step warmup), Adam
+  step 1/5000: loss=5.199112 lr=0.000030
+  step 101/5000: loss=2.569933 lr=0.003000
+  step 201/5000: loss=2.435006 lr=0.002997
+  step 301/5000: loss=2.131860 lr=0.002989
+  step 401/5000: loss=1.934649 lr=0.002975
+  ── val @ step 500: 1.992067 nats/char = 2.873946 bits/char
+  step 501/5000: loss=1.798739 lr=0.002956
+  step 601/5000: loss=1.742305 lr=0.002931
+  step 701/5000: loss=1.686821 lr=0.002901
+  step 801/5000: loss=1.660378 lr=0.002866
+  step 901/5000: loss=1.632748 lr=0.002826
+  ── val @ step 1000: 1.737034 nats/char = 2.506010 bits/char
+  step 1001/5000: loss=1.515460 lr=0.002781
+  step 1101/5000: loss=1.535527 lr=0.002732
+  step 1201/5000: loss=1.504687 lr=0.002678
+  step 1301/5000: loss=1.456568 lr=0.002620
+  step 1401/5000: loss=1.461257 lr=0.002558
+  ── val @ step 1500: 1.655529 nats/char = 2.388424 bits/char
+  step 1501/5000: loss=1.467319 lr=0.002492
+  step 1601/5000: loss=1.355353 lr=0.002422
+  step 1701/5000: loss=1.440586 lr=0.002350
+  step 1801/5000: loss=1.352146 lr=0.002274
+  step 1901/5000: loss=1.378188 lr=0.002196
+  ── val @ step 2000: 1.621955 nats/char = 2.339986 bits/char
+  step 2001/5000: loss=1.340060 lr=0.002116
+  step 2101/5000: loss=1.380807 lr=0.002034
+  step 2201/5000: loss=1.344434 lr=0.001950
+  step 2301/5000: loss=1.307549 lr=0.001865
+  step 2401/5000: loss=1.278725 lr=0.001780
+  ── val @ step 2500: 1.580484 nats/char = 2.280157 bits/char
+  step 2501/5000: loss=1.312417 lr=0.001693
+  step 2601/5000: loss=1.291470 lr=0.001607
+  step 2701/5000: loss=1.255129 lr=0.001520
+  step 2801/5000: loss=1.273639 lr=0.001435
+  step 2901/5000: loss=1.205525 lr=0.001350
+  ── val @ step 3000: 1.561682 nats/char = 2.253031 bits/char
+  step 3001/5000: loss=1.235091 lr=0.001266
+  step 3101/5000: loss=1.239166 lr=0.001184
+  step 3201/5000: loss=1.196617 lr=0.001104
+  step 3301/5000: loss=1.163691 lr=0.001026
+  step 3401/5000: loss=1.220089 lr=0.000950
+  ── val @ step 3500: 1.565129 nats/char = 2.258004 bits/char
+  step 3501/5000: loss=1.201251 lr=0.000878
+  step 3601/5000: loss=1.202787 lr=0.000808
+  step 3701/5000: loss=1.172966 lr=0.000742
+  step 3801/5000: loss=1.190719 lr=0.000680
+  step 3901/5000: loss=1.178968 lr=0.000622
+  ── val @ step 4000: 1.568596 nats/char = 2.263005 bits/char
+  step 4001/5000: loss=1.142413 lr=0.000568
+  step 4101/5000: loss=1.212358 lr=0.000519
+  step 4201/5000: loss=1.152480 lr=0.000474
+  step 4301/5000: loss=1.121213 lr=0.000434
+  step 4401/5000: loss=1.142974 lr=0.000399
+  ── val @ step 4500: 1.582827 nats/char = 2.283537 bits/char
+  step 4501/5000: loss=1.143416 lr=0.000369
+  step 4601/5000: loss=1.111539 lr=0.000344
+  step 4701/5000: loss=1.102434 lr=0.000325
+  step 4801/5000: loss=1.128917 lr=0.000311
+  step 4901/5000: loss=1.081449 lr=0.000303
+  step 5000/5000: loss=1.143790 lr=0.000300
+  ── val @ step 5000: 1.595146 nats/char = 2.301309 bits/char
+saved params to .lake/build/tinygpt_shakespeare_tiny_params.bin  (final loss: 1.143790)
