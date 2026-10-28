@@ -1,0 +1,18 @@
+kT = 20, reference 4096 exact points, energy-distance floor (exact vs exact, n = 2048) = 0.0015
+
+  source                       p_A / p_B / p_C             <U>    dF_AB   energy (x floor)     KL(m||e) / KL(e||m)
+  ----------------------------------------------------------------------------------------------------------------
+  quadrature (exact)           0.806 / 0.129 / 0.065    -113.6    -36.6      1.0x (0.0015)
+  Langevin, 8 chains x 1e5 steps 0.844 / 0.101 / 0.054    -112.6    -42.4      4.1x (0.0060)
+  flow_s0 (n=2048)             0.834 / 0.103 / 0.063    -112.4    -41.9      3.2x (0.0046)    0.038 /  0.048
+    ^ reweighted by p_20/p_theta 0.805 / 0.129 / 0.066    -112.8    -36.7                       1864
+  flow_s1 (n=2048)             0.843 / 0.095 / 0.062    -114.9    -43.6      5.3x (0.0078)    0.036 /  0.033
+    ^ reweighted by p_20/p_theta 0.810 / 0.125 / 0.065    -113.0    -37.3                       1895
+  flow_s2 (n=2048)             0.832 / 0.099 / 0.070    -113.3    -42.6      3.6x (0.0052)    0.023 /  0.038
+    ^ reweighted by p_20/p_theta 0.801 / 0.129 / 0.071    -112.6    -36.6                       1866
+  flow_s3 (n=2048)             0.838 / 0.090 / 0.071    -110.6    -44.6      6.3x (0.0091)    0.076 /  0.069
+    ^ reweighted by p_20/p_theta 0.813 / 0.121 / 0.066    -113.1    -38.1                       1740
+  N(0, I) prior, no flow [59 in the wall] 0.419 / 0.195 / 0.385      57.2    -15.3    306.3x (0.4451)
+
+  at n = 2048 a population carries about +-0.01 of sampling error; the KL columns are nats, KL(m||e) from the model's samples, KL(e||m) on the exact draw
+  => gate on 'flow_s0': energy 3.2x floor (need <= 10x) and max basin error 0.029 (need <= 0.03)  [PASS]

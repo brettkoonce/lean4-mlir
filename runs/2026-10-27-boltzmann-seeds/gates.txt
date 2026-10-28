@@ -1,0 +1,4 @@
+  => gate on 'flow_s0': energy 3.2x floor (need <= 10x) and max basin error 0.029 (need <= 0.03)  [PASS]
+  => gate on 'flow_s1': energy 5.3x floor (need <= 10x) and max basin error 0.038 (need <= 0.03)  [FAIL]
+  => gate on 'flow_s2': energy 3.6x floor (need <= 10x) and max basin error 0.031 (need <= 0.03)  [FAIL]
+  => gate on 'flow_s3': energy 6.3x floor (need <= 10x) and max basin error 0.039 (need <= 0.03)  [FAIL]

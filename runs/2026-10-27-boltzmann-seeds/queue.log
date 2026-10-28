@@ -1,0 +1,7 @@
+2026-10-27 19:30:18 flow s1 start
+2026-10-27 19:30:51 flow s1 exit 0
+2026-10-27 19:30:51 flow s2 start
+2026-10-27 19:31:24 flow s2 exit 0
+2026-10-27 19:31:24 flow s3 start
+2026-10-27 19:31:57 flow s3 exit 0
+2026-10-27 19:32:13 DONE: 16 table lines

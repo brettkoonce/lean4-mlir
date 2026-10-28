@@ -1,0 +1,88 @@
+diffusion 2d denoiser (muller-brown) [flow]: 18178 params, 20000 steps, sampler=fm-euler, eta=0.000000, nGen=2048
+Generating train step MLIR...
+  17654 chars
+  data: 36000 points from data/boltzmann/mb_kT20.bin
+  seed offset: 2 (LEAN_MLIR_SEED)
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I1027 19:30:51.841090  816356 service.cc:154] XLA service 0x735100008510 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I1027 19:30:51.841161  816356 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I1027 19:30:51.843216  816356 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:30:51.843294  816356 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+I1027 19:30:51.853026  816356 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:30:52.410983  816392 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_10', 4 bytes spill stores, 4 bytes spill loads
+
+I1027 19:30:52.503729  816389 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:30:53.039116  816392 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 32 bytes spill stores, 32 bytes spill loads
+
+I1027 19:30:53.224470  816379 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_9', 7276 bytes spill stores, 8032 bytes spill loads
+
+I1027 19:30:53.290825  816378 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_14', 712 bytes spill stores, 712 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__flow_train_step.mlir (@main, 19 outputs, 1 replica) in 1881 ms
+  session loaded
+training: 20000 steps, batch=256, lr=0.001000, flow matching (independent coupling)
+  step 0/20000: loss=1.850884
+  step 500/20000: loss=0.697657
+  step 1000/20000: loss=0.584975
+  step 1500/20000: loss=0.597419
+  step 2000/20000: loss=0.700743
+  step 2500/20000: loss=0.733078
+  step 3000/20000: loss=0.716650
+  step 3500/20000: loss=0.742042
+  step 4000/20000: loss=0.639772
+  step 4500/20000: loss=0.696717
+  step 5000/20000: loss=0.588596
+  step 5500/20000: loss=0.780993
+  step 6000/20000: loss=0.684671
+  step 6500/20000: loss=0.580955
+  step 7000/20000: loss=0.638487
+  step 7500/20000: loss=0.679429
+  step 8000/20000: loss=0.663724
+  step 8500/20000: loss=0.569114
+  step 9000/20000: loss=0.797068
+  step 9500/20000: loss=0.664917
+  step 10000/20000: loss=0.676935
+  step 10500/20000: loss=0.624866
+  step 11000/20000: loss=0.628561
+  step 11500/20000: loss=0.638990
+  step 12000/20000: loss=0.599607
+  step 12500/20000: loss=0.621074
+  step 13000/20000: loss=0.783716
+  step 13500/20000: loss=0.651658
+  step 14000/20000: loss=0.672740
+  step 14500/20000: loss=0.641808
+  step 15000/20000: loss=0.684417
+  step 15500/20000: loss=0.465030
+  step 16000/20000: loss=0.655677
+  step 16500/20000: loss=0.757796
+  step 17000/20000: loss=0.652169
+  step 17500/20000: loss=0.775262
+  step 18000/20000: loss=0.560808
+  step 18500/20000: loss=0.782213
+  step 19000/20000: loss=0.594622
+  step 19500/20000: loss=0.708428
+  step 19999/20000: loss=0.662415
+trained in 29194ms
+sampling 2048 points...
+[pjrt_ffi] allocator: 1 create option(s), memory_fraction=0.100
+I1027 19:31:22.937451  816356 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I1027 19:31:22.937524  816356 gpu_helpers.cc:162] XLA backend allocating 1.56GiB (1673527296 bytes) on device 0 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] residency: on — parameters stay on the device between steps (default)
+I1027 19:31:23.563320  816737 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 40 bytes spill stores, 40 bytes spill loads
+
+I1027 19:31:23.690007  816745 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_4', 6832 bytes spill stores, 8040 bytes spill loads
+
+[pjrt_ffi] compiled .lake/build/diffusion_2d_denoiser__muller_brown__flow_fwd_eval.mlir (@forward_eval, 1 outputs, 1 replica) in 1062 ms
+  sampler=fm-euler (1 eval/step), NFE=50 => 50 solver steps
+wrote .lake/build/diffusion2d_samples_muller_brown-flow_fm-euler_s20000_n50_e0.bin (2048 points) + .noise.bin
+wrote .lake/build/diffusion2d_samples_muller_brown-flow_fm-euler_s20000_n50_e0.paths.bin (51 frames × 128 points)
+wrote .lake/build/diffusion2d_samples_muller_brown-flow_fm-euler_s20000_n50_e0.logp.bin (mean log p_θ = -0.124697)
+wrote .lake/build/diffusion2d_samples_muller_brown-flow_fm-euler_s20000_n50_e0.reflogp.bin (4096 exact points, mean log p_θ = -0.188287)
+▶ score it: python3 scripts/demos/boltzmann_metrics.py score "flow fm-euler NFE 50=.lake/build/diffusion2d_samples_muller_brown-flow_fm-euler_s20000_n50_e0.bin" --gate
+flow flow fm-euler NFE 50: kinetic energy ∫E|v|²dt = 1.724237, straightness ∫E|v(x_t,t) - (z - x)|²dt = 0.531052
