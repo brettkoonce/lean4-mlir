@@ -7,7 +7,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The cifar8 step tie at its UN-FUSED gradient nodes — the packed `cifar8w_*` arms
 
-`Cifar8Tie.cifar8_train_step_tied_certified` ties the fused-SGD `cifar8_train_step.mlir`, which no
+`Cifar8Tie.cifar8_train_step_tied` ties the fused-SGD `cifar8_train_step.mlir`, which no
 trainer runs. The packed wide no-BN arms (`cifar8w_{sgd,mom,adam}_train_step.mlir`, from
 `cifar8AdamTrainStepText`) emit the same forward and backward chain feeding `*Grad` ops to a
 separate optimizer. This file states those nodes, each at the same chain cotangent: all 22

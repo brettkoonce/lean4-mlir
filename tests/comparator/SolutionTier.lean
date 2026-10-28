@@ -263,10 +263,10 @@ theorem chk_r50_net_tiedB :
                                         Proofs.ResNet34TieB.r34HeadTiedB N q q xN cotN w.Wd w.bd (Proofs.r50Pre16 N q w x) g :=
   Proofs.ResNet50TieB.r50_net_tiedB
 
-/-- `Proofs.ViTTie.vit_net_tied_certified` -/
-theorem chk_vit_net_tied_certified :
-    ∀ {gf : Proofs.GeluForm} (xN wN bN gN aN clsN pN epsStr lrStr cotN : String)
-      (ε : Real) (w : Proofs.ViTTie.ViTTieWeights (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
+/-- `Proofs.ViTTie.vit_net_tied` -/
+theorem chk_vit_net_tied :
+    ∀ {gf : Proofs.GeluForm} (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : Real)
+      (w : Proofs.ViTTie.ViTTieWeights (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
       (img :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat)
@@ -644,7 +644,7 @@ theorem chk_vit_net_tied_certified :
                                     (@Proofs.ViTTie.ViTTieWeights.pos
                                       (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
                                     img dyEmbed lr)))))))))))))) :=
-  Proofs.ViTTie.vit_net_tied_certified
+  Proofs.ViTTie.vit_net_tied
 
 /-- `Proofs.CnxTieGB.cnx_net_tiedGB` -/
 theorem chk_cnx_net_tiedGB :

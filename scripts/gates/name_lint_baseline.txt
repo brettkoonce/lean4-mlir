@@ -34,7 +34,7 @@ LeanMlir/Proofs/Nets/Small/CifarCNN.lean	X_pos	theorem-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	hidden_float_sgd_descends	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	input_float_sgd_descends	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	output_float_sgd_descends	def-case
-LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	train_step_tied_certified	def-case
+LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	train_step_tied	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	w0_grad_close	def-case
 LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	w1_grad_close	def-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W0_den_certified	theorem-case

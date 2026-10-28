@@ -2727,7 +2727,7 @@ Chain rule at a point across the five stages; see
 
 \begin{theorem}[Emitted train step is the certified step]
   \label{thm:mlp_fold}
-  \lean{Proofs.MlpFold.mlp_train_step_tied_certified, Proofs.MlpFoldB.mlp_train_step_tiedB}
+  \lean{Proofs.MlpFold.mlp_train_step_tied, Proofs.MlpFoldB.mlp_train_step_tiedB}
   \leanok
   \uses{ax:pdiv, ax:pdiv_comp, ax:pdiv_dense_W, ax:softmaxCE_grad,
       thm:denseBiasGrad_correct, thm:denseWeightGrad_correct, thm:pdiv_of_affine}
@@ -2742,7 +2742,7 @@ Chain rule at a point across the five stages; see
   backward subgraph. The loss cotangent
   \(\mathrm{softmax}(z_k) - \mathrm{onehot}(\ell_k)\) is pinned to its proven
   graph. For every \(N\); the artifact is \(N = 128\), and the single-example
-  reading is \texttt{mlp\_train\_step\_tied\_certified}.
+  reading is \texttt{mlp\_train\_step\_tied}.
 \end{theorem}
 
 \begin{proof}
@@ -3756,7 +3756,7 @@ Chain rule at a point through the six stages; see
 \end{proof}
 \begin{theorem}[Emitted updates are the certified steps]
   \label{thm:cnn_fold}
-  \lean{Proofs.CnnFold.cnn_train_step_tied_certified, Proofs.CnnFoldB.cnn_train_step_tiedB,
+  \lean{Proofs.CnnFold.cnn_train_step_tied, Proofs.CnnFoldB.cnn_train_step_tiedB,
         Proofs.CnnFoldB.w5B_tied, Proofs.CnnFoldB.dhc2B_slice, Proofs.CnnFoldB.dhc1B_slice}
   \leanok
   \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dHasVJP3, ax:conv2dWeightGradHasVJP,
@@ -4983,7 +4983,7 @@ gradients, and one descent step at the last convolution.
 
 \begin{theorem}[Emitted updates are the certified steps]
   \label{thm:cifar_fold}
-  \lean{Proofs.CifarFold.cifar_train_step_tied_certified}
+  \lean{Proofs.CifarFold.cifar_train_step_tied}
   \leanok
   \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
       ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
@@ -5000,7 +5000,7 @@ gradients, and one descent step at the last convolution.
 \leanok
 A fold over the fourteen updates, as for the MNIST CNN, through two pools
 instead of one; see
-\leandocref{Proofs.CifarFold.cifar\_train\_step\_tied\_certified}.
+\leandocref{Proofs.CifarFold.cifar\_train\_step\_tied}.
 \end{proof}
 
 \begin{theorem}[Every gradient node is the loss's derivative, ties included]
@@ -5058,7 +5058,7 @@ of their denotation; see
 
 \begin{theorem}[The eight-convolution step is the certified step]
   \label{thm:cifar8_step_tie}
-  \lean{Proofs.Cifar8Tie.cifar8_train_step_tied_certified}
+  \lean{Proofs.Cifar8Tie.cifar8_train_step_tied}
   \leanok
   \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
       ax:pdiv, def:hasvjp, thm:denseBiasGrad_correct, thm:denseWeightGrad_correct}
@@ -5074,12 +5074,12 @@ of their denotation; see
 \leanok
 A fold over the twenty-two updates, the dense head first and then the four
 stages in reverse; see
-\leandocref{Proofs.Cifar8Tie.cifar8\_train\_step\_tied\_certified}.
+\leandocref{Proofs.Cifar8Tie.cifar8\_train\_step\_tied}.
 \end{proof}
 
 \begin{theorem}[The eight-convolution BatchNorm step is the certified step]
   \label{thm:cifar8bn_step_tie}
-  \lean{Proofs.Cifar8BnTie.cifar8Bn_train_step_tied_certified}
+  \lean{Proofs.Cifar8BnTie.cifar8Bn_train_step_tied}
   \leanok
   \uses{ax:conv2d, ax:conv2dBiasGradHasVJP, ax:conv2dWeightGradHasVJP, ax:maxPool2,
       ax:pdiv, def:hasvjp, thm:cifar_bn_fold, thm:denseBiasGrad_correct,
@@ -5097,7 +5097,7 @@ stages in reverse; see
 \leanok
 A fold over the thirty-eight updates, the BatchNorm pair of
 Theorem~\ref{thm:cifar_bn_fold} at each convolution; see
-\leandocref{Proofs.Cifar8BnTie.cifar8Bn\_train\_step\_tied\_certified}.
+\leandocref{Proofs.Cifar8BnTie.cifar8Bn\_train\_step\_tied}.
 \end{proof}
 
 \begin{theorem}[The trained steps' gradients are the certified gradients]
@@ -20818,8 +20818,8 @@ and that file is the printout of one graph whose denotation a faithfulness theor
 proves, output by output, equal to the certified per-layer step: each parameter
 update is $\theta - \mathrm{lr} \cdot (\text{that layer's certified Jacobian}
 \cdot \text{the chain cotangent})$. A companion
-\emph{tie} theorem per network (\texttt{mlp\_train\_step\_tied\_certified},
-\texttt{r34\_net\_tiedB}, \texttt{vit\_net\_tied\_certified} and their peers) then
+\emph{tie} theorem per network (\texttt{mlp\_train\_step\_tied},
+\texttt{r34\_net\_tiedB}, \texttt{vit\_net\_tied} and their peers) then
 closes the gap a per-output bridge leaves open: the cotangent each parameter
 update consumes is the one the network's own backward pass delivers at
 that site, threaded through the real forward activations, so each update is

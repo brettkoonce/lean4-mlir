@@ -18,7 +18,7 @@ names: each piece is rendered once via `pretty`, capturing its fresh result SSA,
 reference the captured names. `MlpFold` proves the output weight's node denotes
 `W₂ − lr·∂CE/∂W₂` (`mlp_W2_tied_totalloss`) and each of the other five denotes
 `θ − lr·(certified layer Jacobian · the rendered chain cotangent)`
-(`mlp_train_step_tied_certified`). The artifact's `#eval` writer is MlpArtifacts.lean.
+(`mlp_train_step_tied`). The artifact's `#eval` writer is MlpArtifacts.lean.
 -/
 
 namespace Proofs.StableHLO

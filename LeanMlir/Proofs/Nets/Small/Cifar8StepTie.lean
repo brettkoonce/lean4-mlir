@@ -7,7 +7,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The cifar8 (Chapter 4 deeper, 8-conv no-BN) TIE — tied through the real forward
 
-The 4-stage peer of `CifarFold`'s tie (`cifar_train_step_tied_certified`). cifar8 is cifar (ch4)
+The 4-stage peer of `CifarFold`'s tie (`cifar_train_step_tied`). cifar8 is cifar (ch4)
 with **four** conv→conv→pool stages instead of two, so its conv backward chain is the cifar chain
 repeated: within each stage the second conv is the maxpool-back layer (`cnnChainCotW2` for the very
 last, then `cifarChainCotW2`'s cross-pool move) and the first conv is the conv-back layer
@@ -53,8 +53,12 @@ open Proofs.SgdNode
     loss-gradient form is `Cifar8TieG.cifar8_net_lossGrad`, see the module's Scope). Each conv op is fed the cotangent the
     4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄), `cnnChainCotW1`
     (conv₇/₅/₃/₁, the within-stage conv-back), `cifarChainCotW2` (conv₆/₄/₂, the cross-pool move);
-    the dense head is fed `mlpCotOut0`, `mlpCotOut1` and `g`. -/
-theorem cifar8_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    the dense head is fed `mlpCotOut0`, `mlpCotOut1` and `g`.
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which cotangent each op
+    reads; that those cotangents are the loss's gradient is `Cifar8TieG.cifar8_net_lossGrad`. -/
+theorem cifar8_train_step_tied {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)

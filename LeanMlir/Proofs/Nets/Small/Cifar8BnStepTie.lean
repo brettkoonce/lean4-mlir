@@ -10,7 +10,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
 
-cifar8's tie (`Cifar8Tie.cifar8_train_step_tied_certified`) + a BN-back at every conv. The backward
+cifar8's tie (`Cifar8Tie.cifar8_train_step_tied`) + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
 cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
@@ -18,7 +18,7 @@ over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-b
 **Zero new ops/bridges/constructors.** Conv ties reuse `SgdNode.convW_den`/`convB_den`; BN ties reuse
 `SgdNode.bnGamma_den`/`bnBeta_den`; the dense head reuses `SgdNode.denseW_den`/`denseB_den`, the
 loss cotangent cifar8's. All 38 parameter tensors (8 conv W/b, 8 BN γ/β, 3 dense W/b) are stated in
-`cifar8Bn_train_step_tied_certified`, each with the generics.
+`cifar8Bn_train_step_tied`, each with the generics.
 
 **Not the trained artifact.** The committed `cifar8_bn_*` / `cifar8w_bn_*` arms are this
 renderer with a separate optimizer, feeding the same chain to `*Grad` nodes; they are tied in
@@ -26,7 +26,7 @@ renderer with a separate optimizer, feeding the same chain to `*Grad` nodes; the
 
 ## Scope (same as the rest of the suite)
 * Below the output layer the cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
-  `cifar8Bn_train_step_tied_certified`, and `mlpCotOut1`/`mlpCotOut0` in the head). The
+  `cifar8Bn_train_step_tied`, and `mlpCotOut1`/`mlpCotOut0` in the head). The
   loss-gradient statement is `Cifar8BnTieG.cifar8Bn_net_lossGrad`, at the trained arms' `*Grad`
   nodes and with each pool's cotangent routed to one maximal cell, as the rendered
   `select_and_scatter` does; this chain routes it to the first maximal cell (`maxPool2Argmax`),
@@ -48,8 +48,12 @@ namespace Proofs.Cifar8BnTie
     cotangents `cotC1–8`; the BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered
     cifar8-bn backward chain (cifar8's chain + a BN-back at every conv). The dense head is fed
     `mlpCotOut0`, `mlpCotOut1` and `g`. The loss-gradient form is
-    `Cifar8BnTieG.cifar8Bn_net_lossGrad` (see the module's Scope). -/
-theorem cifar8Bn_train_step_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
+    `Cifar8BnTieG.cifar8Bn_net_lossGrad` (see the module's Scope).
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which cotangent each op
+    reads; that those cotangents are the loss's gradient is `Cifar8BnTieG.cifar8Bn_net_lossGrad`. -/
+theorem cifar8Bn_train_step_tied {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
     (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1) (ε₂ : ℝ) (γ₂ β₂ : Vec c1)

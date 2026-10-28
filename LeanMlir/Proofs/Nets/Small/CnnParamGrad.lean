@@ -11,7 +11,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The MNIST CNN — every parameter gradient node IS the loss's derivative, at real MNIST
 
-`cnn_train_step_tied_certified` ties each of the ten SGD updates to the certified per-layer
+`cnn_train_step_tied` ties each of the ten SGD updates to the certified per-layer
 Jacobian contracted with the cotangent the emitted chain threads to it, and leaves open whether
 that cotangent is the loss gradient below the output. `cnn_net_lossGrad` closes it: the un-fused
 `*Grad` node of each layer, at the chain cotangent, is the gradient of the loss in that parameter

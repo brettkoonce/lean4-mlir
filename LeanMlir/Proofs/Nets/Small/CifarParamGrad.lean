@@ -9,7 +9,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The CIFAR CNN — every parameter gradient node IS the loss's derivative, up to pool twins
 
-`cifar_train_step_tied_certified` ties each of the fourteen SGD updates to the certified per-layer
+`cifar_train_step_tied` ties each of the fourteen SGD updates to the certified per-layer
 Jacobian contracted with the cotangent the emitted chain threads to it. `cifar_net_lossGrad`
 states that the un-fused `*Grad` node of each layer, at the chain cotangent, is the gradient of the
 loss in that parameter, for any loss `L` of the logits with gradient `g` there;

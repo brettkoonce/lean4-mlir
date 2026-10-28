@@ -12,7 +12,7 @@
         "chk_convStridedWGradB_den",
         "chk_smoothedCE_grad",
         "chk_r50_net_tiedB",
-        "chk_vit_net_tied_certified",
+        "chk_vit_net_tied",
         "chk_cnx_net_tiedGB",
         "chk_r34_net_lossGrad",
         "chk_r50_net_lossGrad",

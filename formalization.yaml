@@ -200,7 +200,7 @@ status:
     # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q, the LOSS (CE or BCE) and the precision (bf16) binders; one replica
     - {declaration: "Proofs.ResNet50TieB.r50_net_tiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50StepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # an SGD-inline capstone: ViT-Tiny's 200 parameters at the fused theta - lr*g ops (the family covers ten nets)
-    - {declaration: "Proofs.ViTTie.vit_net_tied_certified", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ViTTie.vit_net_tied", file: "LeanMlir/Proofs/Nets/ViT/ViTStepTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the batched capstone at the un-fused gradient nodes and the smoothed loss, N and nC binders: ConvNeXt-T's 182 parameters, every shipped ConvNeXt artifact, at either precision and at its drop-path sites (ViT-Tiny's twin, also at either precision and at its drop-path sites, is Proofs.ViTTieGB.vit_net_tiedGB)
     - {declaration: "Proofs.CnxTieGB.cnx_net_tiedGB", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtStepTieGB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the loss-gradient capstones: at the tie's chain cotangent every node IS the gradient (HasGradAt) of any loss L with gradient g at the logits, one replica; ResNet-34/50, MobileNetV2, MobileNetV4, EfficientNet-B0, ConvNeXt-T and ViT-Tiny, every one at either precision (bf16 binder); MobileNetV2's also at its classifier-dropout site (cd binder: none the drop-free artifacts, some the do ones, the loss read at mobilenetv2ForwardBFullDoOpt) and EfficientNet-B0's at both its mask sites (sd, the nine stochastic-depth blocks, and cd; the loss read at efficientnetForwardBFullDrop, a skip block's branch at dropPathOpt s dy); ViT-Tiny's at its 24 stochastic-depth sites and ConvNeXt-T's at its 18 (sd, through the indexed lift batchMapIdx; the loss read at vitNetB sd / cnxNetB sd)
@@ -587,7 +587,7 @@ alignment:
       status: "proved"
       note: "on resnet50ForwardBFull itself (the [3,4,6,3] bottleneck ladder, batch BN, N=2, structural weights), q a binder with 0 < q and q <= 7 so 224 px and 160 px are instances; 48 relu clauses discharged, five carrier BNs (stem + one projection per stage). ResNet-50 had no witness of any kind before 2026-09-20"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
-      lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
+      lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied family (SGD-inline)"
       module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"
       status: "proved"
       note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); Imagenette-spec ties in SpecVJP; the ImageNet specs are not tied"

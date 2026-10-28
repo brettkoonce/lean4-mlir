@@ -51,7 +51,7 @@ DECLS = [
     "Proofs.GradNodeB.convStridedWGradB_den",
     "Proofs.smoothedCE_grad",
     "Proofs.ResNet50TieB.r50_net_tiedB",
-    "Proofs.ViTTie.vit_net_tied_certified",
+    "Proofs.ViTTie.vit_net_tied",
     "Proofs.CnxTieGB.cnx_net_tiedGB",
     "Proofs.ResNet34TieB.r34_net_lossGrad",
     "Proofs.ResNet50TieB.r50_net_lossGrad",
@@ -159,7 +159,7 @@ MODULES = [
 BASE_OPTS = ["format.width 96", "pp.analyze true", "pp.funBinderTypes true",
              "pp.numericTypes true", "pp.proofs true", "pp.maxSteps 100000000",
              "pp.deepTerms true"]
-EXPLICIT = {"Proofs.ViTTie.vit_net_tied_certified"}   # see the module docstring
+EXPLICIT = {"Proofs.ViTTie.vit_net_tied"}   # see the module docstring
 
 
 def lean(src: str) -> str:

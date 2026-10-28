@@ -80,7 +80,7 @@ the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
 | Ch 9 LN+GELU | `pdiv_gelu`, `geluHasVJP_correct`, `layerNormHasVJP_correct` |
 | Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpaBackQ/K/V_correct`, `mhsaHasVJPMat_correct`, `transformerBlockHasVJPMat_correct` |
 | Whole-network VJPs | `mnistLinearHasVJP_correct`, `vitFullHasVJP_correct`, `cnnHasVJPAt_correct`, `mobilenetv2HasVJPAt_correct`, `convnextHasVJP{,_at}_correct`, `efficientnetHasVJP{,_at}_correct` |
-| **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied_certified`, `cnx_net_tiedGB` |
+| **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied`, `cnx_net_tiedGB` |
 | **Tier: codegen faithfulness** | `mnv4FwdGraphBFull_faithful`, `convStridedWGradB_den` |
 | **Tier: whole-net back-chains** | `resnet50ForwardBFullHasVJPAt_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradBFull_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTinyHasVJP_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `sealX_nonconstant` |
 | **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `adamW_at_allReduceMeanF` |

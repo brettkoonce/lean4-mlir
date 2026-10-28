@@ -369,7 +369,7 @@ for all 12 chapter nets the §1a whole-net ties (`LinearFold`'s
 `poc_train_step_tail_certified` up through `r34_net_tiedB`,
 `mnv2_net_tiedB`, `efficientnet_net_tiedG`, `cnx_net_tiedGB`, `vit_net_tiedGB` —
 the last three at the gradient nodes every shipped EfficientNet / ConvNeXt / ViT artifact emits,
-with `efficientnet_net_tied` / `cnx_net_tied_certified` / `vit_net_tied_certified` their
+with `efficientnet_net_tied` / `cnx_net_tied` / `vit_net_tied` their
 SGD-inline forms)
 prove every emitted parameter-update node's `den` equals the certified
 `fderiv`-derived loss-descent step (or its gradient), with the cotangent threaded

@@ -11,7 +11,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The MNIST MLP — every parameter gradient node IS the loss's derivative
 
-`mlp_train_step_tied_certified` ties each of the six SGD updates to the certified per-layer
+`mlp_train_step_tied` ties each of the six SGD updates to the certified per-layer
 Jacobian contracted with the cotangent the emitted chain threads to it (`mlpCotOut1`,
 `mlpCotOut0`), and leaves open whether that cotangent is the loss gradient at the hidden layers.
 `mlp_net_lossGrad` closes it: at the same cotangents, the un-fused `weightGrad` / `biasGrad` node

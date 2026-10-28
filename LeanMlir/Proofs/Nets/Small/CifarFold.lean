@@ -16,7 +16,7 @@ The Chapter-4 peer of `CnnFold` — a deeper, two-spatial-scale conv net
 4 conv kernels/biases + 3 dense layers). `MainCifarVerified` trains on
 `verified_mlir/cifar_train_step.mlir`; this file states what its parameter updates denote: each
 emitted SGD op denotes `θ − lr·(certified per-layer Jacobian · the cotangent the rendered chain
-feeds it)` (`cifar_train_step_tied_certified`, all fourteen); only the output weight `W₇` is
+feeds it)` (`cifar_train_step_tied`, all fourteen); only the output weight `W₇` is
 tied to the whole-loss gradient (`cifar_W7_tied_totalloss`).
 
 **Zero new core ops.** The conv layers reuse the `convWeightSgd`/`convBiasSgd` ops
@@ -55,7 +55,7 @@ open Proofs.SgdNode
 The head `pool2 → W₅→relu→W₆→relu→W₇` is a 3-layer MLP; per-layer cotangents are the
 IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). Every head op's
 `den` = certified is `SgdNode.denseW_den` / `SgdNode.denseB_den` at that layer, and
-`cifar_train_step_tied_certified` states all six at the real forward; the output-layer weight op
+`cifar_train_step_tied` states all six at the real forward; the output-layer weight op
 is stated here on its own because the whole-loss fold `cifar_W7_tied_totalloss` rewrites with it. -/
 
 /-- Output-layer weight op `W₇` = certified step (cotangent = the loss cotangent `dy`). -/
@@ -76,7 +76,7 @@ theorem dW7_den {c2 h w d1 nClasses : Nat}
 The conv/dense `*_den` theorems above hold for a FREE cotangent (`convW_den`/`convB_den` are `∀ c`;
 the dense head's `mlpCotOut0/1` are `∀ dy`). The capstones below pin those cotangents to the ones the
 **real cifar forward + softmax-CE loss** actually drives — the cifar peer of `CnnFold`'s last
-three theorems (`cnnLossCot_den` / `cnn_W5_tied_totalloss` / `cnn_train_step_tied_certified`).
+three theorems (`cnnLossCot_den` / `cnn_W5_tied_totalloss` / `cnn_train_step_tied`).
 
 cifar is the cnn shape with **two** conv→conv→pool stages instead of one, so its conv backward chain
 crosses an extra pool boundary. Three of the four conv-layer cotangents reuse the cnn chain cots
@@ -187,8 +187,12 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
     `cnnChainCotW2` for conv₄ (relu mask on pool₂-back of the dense head), `cnnChainCotW1` for
     conv₃/conv₁ (relu mask on the next conv's input-VJP), and `cifarChainCotW2` for conv₂ (relu mask
     on pool₁-back of conv₃'s input-VJP). The conv backward is rendered hand-written, so the
-    cotangent SSA ↔ chain-cot correspondence is the per-op trust the whole suite carries. -/
-theorem cifar_train_step_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
+    cotangent SSA ↔ chain-cot correspondence is the per-op trust the whole suite carries.
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which cotangent each op
+    reads; that those cotangents are the loss's gradient is `cifar_net_lossGrad`. -/
+theorem cifar_train_step_tied {ic c1 c2 h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)

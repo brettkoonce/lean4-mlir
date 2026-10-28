@@ -598,7 +598,7 @@ noncomputable def toCh {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ) : CnxTWeight
   s4 := ![w.b16.toCh 7 7 ε, w.b17.toCh 7 7 ε, w.b18.toCh 7 7 ε]
   hε := ε; hγ := w.hG; hβ := w.hT; Wd := w.Wfc; bd := w.bfc
 
-/-- **The capstone's forward IS `convNextForwardTCh`.** The chain `cnx_net_tied_certified` threads
+/-- **The capstone's forward IS `convNextForwardTCh`.** The chain `cnx_net_tied` threads
     (stem, eighteen blocks, three downsamples, GAP → LN → dense) is the FullT forward at
     `w.toCh ε`, so `convNextForwardTChHasVJP` is a VJP of the function the ties are stated on. -/
 theorem forward_eq_convNextForwardTCh {gf : GeluForm} {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ)
@@ -639,7 +639,7 @@ activations, no symbolic cotangent. -/
     hand-written text). The statement is per example, at one image `x` and a hard label `label`;
     the artifact's batch of 32 and its mean lie outside it (the batched form is
     `CnxTieGB.cnx_net_tiedGB`). -/
-theorem cnx_net_tied_certified {gf : GeluForm}
+theorem cnx_net_tied {gf : GeluForm}
     (xN wN bN gN epsStr lrStr cotN dN nlogN ohN : String) (ε : ℝ)
     (w : CnxTieWeights 10)
     (x : Vec (3*224*224)) (label : Fin 10) (lr : ℝ) :

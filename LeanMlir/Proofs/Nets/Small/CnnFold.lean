@@ -44,7 +44,7 @@ and false-fail the check.)
   `SgdNode.denseB_den` at their layer.
 * `cnn_W5_tied_totalloss` — at the emitted loss cotangent, the `W₅` op denotes
   `W₅ − lr·∂(crossEntropy ∘ forward)/∂W₅`.
-* `cnn_train_step_tied_certified` — all ten parameter ops (the six dense-head ops and the four
+* `cnn_train_step_tied` — all ten parameter ops (the six dense-head ops and the four
   conv ops) at the real forward activations and the chain cotangents driven by the emitted loss
   cotangent.
 
@@ -142,7 +142,7 @@ theorem cb1_den {ic c h w kH kW : Nat}
 The pool-output `pool : Vec (c·h·w)` flows through `W₃→relu→W₄→relu→W₅`; the
 per-layer cotangents are exactly the IR `mlpCotOut0/1` (with `(W₅,W₄,W₃)` playing
 the MLP's `(W₂,W₁,W₀)`). Every head op's `den` = certified is `SgdNode.denseW_den` /
-`SgdNode.denseB_den` at that layer, and `cnn_train_step_tied_certified` states all six at the
+`SgdNode.denseB_den` at that layer, and `cnn_train_step_tied` states all six at the
 real forward; the output-layer weight op is stated here on its own because the whole-loss fold
 `cnn_W5_tied_totalloss` rewrites with it. -/
 
@@ -239,8 +239,12 @@ carries. -/
     `θ − lr·(certified ∂layer/∂θ · c)` with `c` the rendered backward-chain cotangent driven by the
     emitted softmax-CE cotangent `g` (`mlpCotOut1`/`mlpCotOut0` in the head; `cnnChainCotW2`,
     `cnnChainCotW1` below it: relu masks, select-and-scatter pool-back, conv-back). The
-    loss-gradient form is `cnn_net_lossGrad` (see the module's Scope). -/
-theorem cnn_train_step_tied_certified {ic c h w d1 nClasses kH kW : Nat}
+    loss-gradient form is `cnn_net_lossGrad` (see the module's Scope).
+
+    What it does not say on its own: each per-op conjunct is the op's update law at the cotangent
+    the chain feeds it and holds for any cotangent, so this theorem fixes which cotangent each op
+    reads; that those cotangents are the loss's gradient is `cnn_net_lossGrad`. -/
+theorem cnn_train_step_tied {ic c h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c*h*w) d1) (b₃ : Vec d1) (W₄ : Mat d1 d1) (b₄ : Vec d1)

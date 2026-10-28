@@ -16,7 +16,7 @@ appended by `cnnTrainStepText` and by the packed-optimizer (`[θ|m|v]`) renders,
 packed renders' `%bc1`/`%bc2` passthroughs; none of it feeds a parameter. The forward is rendered
 flat: each `.flatConvF`/`.maxPoolF` token reshapes flat→NCHW internally and back at its boundary
 (`emitTok`, in StableHLO/Pretty.lean), so the names `pretty` exposes are flat. The
-`*_train_step_tied_certified` capstones in `CnnFold` / `CifarFold` / `Cifar8StepTie` /
+`*_train_step_tied` capstones in `CnnFold` / `CifarFold` / `Cifar8StepTie` /
 `Cifar8BnStepTie` state every output's `den` as the certified SGD step at the cotangent the rendered
 backward chain feeds it. The `#eval` writers that produce the `verified_mlir/cnn_*` / `cifar*` artifacts are in
 `CnnArtifacts.lean`, which nothing imports.
@@ -33,7 +33,7 @@ open Proofs
     the dense head via `weightSgd`/`biasSgd`, the conv layers via the
     `convWeightSgd`/`convBiasSgd` ops. So every line that feeds a returned parameter is
     `pretty` of a denoted node; the appended report-only `%loss` block is hand-written and feeds
-    nothing. `CnnFold.cnn_train_step_tied_certified` states each output's `den` as the certified
+    nothing. `CnnFold.cnn_train_step_tied` states each output's `den` as the certified
     SGD step at the rendered chain cotangent; `cnn_W5_tied_totalloss` folds `W₅` to `∂CE/∂W₅`.
     Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
     shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
@@ -110,7 +110,7 @@ def cnnTrainStepText (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     14 parameter SGD updates are `pretty` of denoted `SHlo` nodes — the dense head via
     `weightSgd`/`biasSgd`, the four conv layers via the `convWeightSgd`/`convBiasSgd`
     ops (reused from cnn, NO new ops). Every line that feeds a returned parameter is
-    `pretty(provenNode)`, and `CifarFold.cifar_train_step_tied_certified` states each output's
+    `pretty(provenNode)`, and `CifarFold.cifar_train_step_tied` states each output's
     `den` as the certified SGD step at the rendered chain cotangent.
     Dims: `h,w` are the final pooled spatial sizes; image `4h×4w`, stage-2 spatial `2h×2w`. -/
 def cifarTrainStepText (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : String)
@@ -197,7 +197,7 @@ set_option maxRecDepth 4000 in
     22 params). Backward chain (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`, four stages)
     and all 22 param SGD ops are `pretty` of denoted nodes — conv via `convWeightSgd`/
     `convBiasSgd`, dense via `weightSgd`/`biasSgd` (NO new ops).
-    `Cifar8Tie.cifar8_train_step_tied_certified` states each output's `den` as the certified SGD
+    `Cifar8Tie.cifar8_train_step_tied` states each output's `den` as the certified SGD
     step at the rendered chain cotangent. `h,w` are the final pooled sizes; stage spatials build
     up ×2 per pool (`s4=2h, s3=4h, s2=8h, s1=16h`; image `16h×16w`). -/
 def cifar8TrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrStr : String)
@@ -848,7 +848,7 @@ set_option maxRecDepth 8000 in
     AST.** The per-channel-BatchNorm peer of `cifar8TrainStepText` (`(conv→BN→relu)×2→pool`
     ×4, 3 dense; 38 params). Pure reuse — NO new ops and NO new proof: conv via
     `convWeightSgd`/`convBiasSgd`, BN via `bnGammaSgd`/`bnBetaSgd`, dense via `weightSgd`/
-    `biasSgd`; `Cifar8BnTie.cifar8Bn_train_step_tied_certified` states every output's `den` as
+    `biasSgd`; `Cifar8BnTie.cifar8Bn_train_step_tied` states every output's `den` as
     the certified SGD step at the rendered chain cotangent, by the generic lemmas
     (`SgdNode.conv{W,B}_den`, `SgdNode.bn{Gamma,Beta}_den`, `SgdNode.dense{W,B}_den`) per layer. Forward + BN-back proof-rendered via `bnPerChannelF`/
     `bnPerChannelBack`. `h,w` final pooled; stage spatials `s4=2h…s1=16h`.

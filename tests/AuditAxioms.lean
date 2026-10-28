@@ -443,7 +443,7 @@ open Proofs
 -- mnist-mlp FULLY TIED
 #audit_axioms MlpFold.mlpLossCot_den
 #audit_axioms MlpFold.mlp_W2_tied_totalloss
-#audit_axioms MlpFold.mlp_train_step_tied_certified
+#audit_axioms MlpFold.mlp_train_step_tied
 -- mnist-mlp at batch N (MlpFoldB.lean)
 #audit_axioms MlpFoldB.cot1B_slice
 #audit_axioms MlpFoldB.cot0B_slice
@@ -458,7 +458,7 @@ open Proofs
 #audit_axioms CnnFold.cnnLossCot_den
 #audit_axioms CnnFold.cnn_W5_tied_totalloss
 -- mnist-cnn CONV fold
-#audit_axioms CnnFold.cnn_train_step_tied_certified
+#audit_axioms CnnFold.cnn_train_step_tied
 -- mnist-cnn at batch N (CnnFoldB.lean): the chain pinned to the emitted subgraphs
 #audit_axioms CnnFoldB.dhc2B_slice
 #audit_axioms CnnFoldB.dhc1B_slice
@@ -471,7 +471,7 @@ open Proofs
 -- ch5-CIFAR TIE
 #audit_axioms CifarFold.cifarLossCot_den
 #audit_axioms CifarFold.cifar_W7_tied_totalloss
-#audit_axioms CifarFold.cifar_train_step_tied_certified
+#audit_axioms CifarFold.cifar_train_step_tied
 -- ch5-CIFAR-BN fully folded
 #audit_axioms SgdNode.bnGamma_den
 #audit_axioms SgdNode.bnBeta_den
@@ -479,9 +479,9 @@ open Proofs
 #audit_axioms SgdNode.denseW_den
 #audit_axioms SgdNode.denseB_den
 -- ch5-cifar8 TIE
-#audit_axioms Cifar8Tie.cifar8_train_step_tied_certified
+#audit_axioms Cifar8Tie.cifar8_train_step_tied
 -- ch5-cifar8-bn TIE
-#audit_axioms Cifar8BnTie.cifar8Bn_train_step_tied_certified
+#audit_axioms Cifar8BnTie.cifar8Bn_train_step_tied
 #audit_axioms Cifar8TieG.cifar8_train_step_tiedG
 #audit_axioms Cifar8BnTieG.cifar8Bn_train_step_tiedG
 #audit_axioms Cifar8BbnTieB.cifar8Bbn_train_step_tiedB
@@ -753,7 +753,7 @@ open Proofs
 #audit_axioms Proofs.CnxTie.cnx_stem_ch_tied
 #audit_axioms Proofs.CnxTie.cnx_head_ch_tied
 #audit_axioms Proofs.CnxTie.cnxLossCot_den
-#audit_axioms Proofs.CnxTie.cnx_net_tied_certified
+#audit_axioms Proofs.CnxTie.cnx_net_tied
 -- ViT CLOSE
 #audit_axioms pdiv_rowDense_W
 #audit_axioms rowDense_weight_grad_bridge
@@ -1691,12 +1691,12 @@ open Proofs
 -- The multi-head per-block tie (vit_block_tiedMHV)
 #audit_axioms Proofs.ViTTie.vit_block_tiedMHV
 #audit_axioms Proofs.ViTTie.vit_block_tiedAtMHV
--- ViT-Tiny TIE — the ALL-200-PARAMS capstone (vit_net_tied_certified)
+-- ViT-Tiny TIE — the ALL-200-PARAMS capstone (vit_net_tied)
 #audit_axioms Proofs.ViTTie.vit_cls_den
 #audit_axioms Proofs.ViTTie.vit_finalLN_tied
 #audit_axioms Proofs.ViTTie.vit_head_tied
 #audit_axioms Proofs.ViTTie.vit_embed_tied
-#audit_axioms Proofs.ViTTie.vit_net_tied_certified
+#audit_axioms Proofs.ViTTie.vit_net_tied
 
 -- Robustness certificate (the cert side of cert ≤ TRUE ≤ PGD)
 #audit_axioms Proofs.lipschitz_margin_certified_radius
@@ -2063,7 +2063,7 @@ open Proofs
 #audit_axioms Proofs.MlpCanonical.input_float_sgd_descends
 #audit_axioms Proofs.MlpCanonical.w1_grad_close
 #audit_axioms Proofs.MlpCanonical.w0_grad_close
-#audit_axioms Proofs.MlpCanonical.train_step_tied_certified
+#audit_axioms Proofs.MlpCanonical.train_step_tied
 
 -- The bf16-MIXED conv, composed (ConvMixedComposeBridge.lean)
 #audit_axioms Proofs.convFanS_le

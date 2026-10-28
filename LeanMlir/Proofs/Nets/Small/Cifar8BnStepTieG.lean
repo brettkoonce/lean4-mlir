@@ -10,7 +10,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 
 /-! # The cifar8-bn step tie at its UN-FUSED gradient nodes — the packed `cifar8w_bn_*` arms
 
-`Cifar8BnTie.cifar8Bn_train_step_tied_certified` ties the fused-SGD render
+`Cifar8BnTie.cifar8Bn_train_step_tied` ties the fused-SGD render
 (`cifar8BnTrainStepText` at `opt := none`). The artifacts the book's Chapter-4 runs train
 (`cifar8w_bn_{sgd,mom,adam}_train_step.mlir`, and the narrow `cifar8_bn_*` width sweep) are the same
 renderer at `opt := some _`: the same forward and backward chain, feeding `*Grad` ops (the `*Sgd`

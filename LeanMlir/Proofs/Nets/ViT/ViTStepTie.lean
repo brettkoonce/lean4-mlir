@@ -12,7 +12,7 @@ import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
 /-! # ViT-Tiny step tie — the SGD-inline train step, all 200 parameters at the real backward chain
 
 **What this file is.** The tie of `verified_mlir/vit_train_step.mlir` — the SGD-inline step
-`ViTRender.lean` writes — at the fused `θ − lr·g` ops: `vit_net_tied_certified` (the last theorem)
+`ViTRender.lean` writes — at the fused `θ − lr·g` ops: `vit_net_tied` (the last theorem)
 threads all 200 ViT-Tiny parameters through the committed multi-head (3 heads, d_head 64),
 depth-12, vector-LayerNorm forward and the loss-driven backward cotangent chain. The statement is
 per example, at one image and a hard label; the artifact runs a batch of 32, and that batch and
@@ -25,7 +25,7 @@ The file has two layers:
   block, generic in the cotangent: the two residual fan-ins (`vitCotHV`, `vitCotXinV`), the
   three-way fan-in at LN₁ (`vitCotLn1`), and the per-head SDPA backward (`ViTMultiHeadChain`'s
   `vitCotD{Q,K,V}mh`).
-* `vit_net_tied_certified` — the 200-parameter capstone: the 192 block parameters threaded
+* `vit_net_tied` — the 200-parameter capstone: the 192 block parameters threaded
   through all 12 blocks, the final LN, the classifier and the patch embed (`vit_cls_den` covers the
   CLS token at `N = 1`).
 
@@ -185,7 +185,7 @@ theorem vit_block_tiedAtMHV {gf : GeluForm} {Np1 heads d mlpDim : Nat}
 and the patch-embed wConv/bConv/cls/pos as `den = certified` at their chain cotangents — each a direct
 delegation to the fold generics (`ViTFold.*_den`), with the cls op (`denseBiasSgdB` N=1) folded by
 `vit_cls_den` (its row-0 batch slice IS `clsTokenGrad`, closed by `clsToken_sgd_certified`). Then
-`vit_net_tied_certified` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
+`vit_net_tied` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
 
 -- cls-param op den at the committed ViT-Tiny dims
 theorem vit_cls_den (clsN lrStr cotN : String)
@@ -330,7 +330,7 @@ theorem _root_.Proofs.BlockParamsV.tied_at {gf : GeluForm} {Np1 heads d mlpDim :
   vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut lr
 
 /-- **The whole depth-12 multi-head ViT-Tiny train step, tied — all 200 params** (the vit peer of
-    convnext's `cnx_net_tied_certified`, at the committed config: 3 heads, d_head=64, D=192, N=196,
+    convnext's `cnx_net_tied`, at the committed config: 3 heads, d_head=64, D=192, N=196,
     mlpDim=768, 10 classes, 16×16 patches). The real forward `patchEmbed → 12 multi-head vector-LN
     blocks → final vector-LN → CLS-slice → dense head` and the loss-driven backward cotangent chain
     (the per-block multi-head fan-ins, the final-LN-back `vitCotTowerOutV`, the classifier-back `vitCotFl`,
@@ -341,7 +341,7 @@ theorem _root_.Proofs.BlockParamsV.tied_at {gf : GeluForm} {Np1 heads d mlpDim :
     stages above it (`vitBlockCotInAtMHV_eq_vjp`, `vitCotTowerOutV_eq_vjp`, below).
     The statement is per example, at one image `img` and a hard label `label`; the artifact's
     batch of 32 and its mean lie outside it (the batched form is `ViTTieGB.vit_net_tiedGB`). -/
-theorem vit_net_tied_certified {gf : GeluForm}
+theorem vit_net_tied {gf : GeluForm}
     (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : ℝ)
     (w : ViTTieWeights 10)
     (img : Vec (3 * 224 * 224)) (label : Fin 10) (lr : ℝ) :
@@ -418,7 +418,7 @@ open Proofs.ViTTie (vitBlockCotInAtMHV)
 
 /-! ## Every cotangent the capstone threads is a certified VJP backward
 
-`vit_net_tied_certified` threads two per-example constructors: the head's `vitCotTowerOutV` and
+`vit_net_tied` threads two per-example constructors: the head's `vitCotTowerOutV` and
 each block's `vitBlockCotInAtMHV`. They are the render's spelling of the
 backward — per-head SDPA with pad and slice, LayerNorm as `rowScaleFlat` then `rowLNBackFlat` at
 γ = 1, separate dense backs — so tying them to the certified VJPs is a proof, not a
