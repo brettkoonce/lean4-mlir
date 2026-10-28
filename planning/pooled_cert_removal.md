@@ -29,8 +29,9 @@ comparator tier.
 
 - Full-input family, `CertsHeavy`: `ScorecardFull*`, `ScorecardIBP*`, `ScorecardCrown*`.
 - Full-input family, in no lib: `ScorecardSDPFull{,Uncon}`. Their PSD `linarith` peaks at about 15 GB,
-  which kills the 16 GB CI runners, so `scripts/certs/check_sdpfull.sh` re-checks them. Each takes
-  about 3 min on the build box.
+  which kills the 16 GB CI runners, so `scripts/certs/check_sdpfull.sh` re-checks them. Last run
+  2026-10-28 at `ea934bc6` on the build box: both build (271 s and 285 s), and all 445 theorems
+  rest on the three core axioms.
 - Engines: `LipschitzCert/Basic`, `DenseEuclid`, `PairSDP`, `Foundation/GramQ`.
 - `Smoothing/NetSemantics` (abstract, no net), `CPScorecard`, `DecScorecard`.
 - `GramQ` leaves the `Certs` closure. After the removal only `ScorecardFullNets` (`CertsHeavy`)
