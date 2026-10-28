@@ -1,0 +1,33 @@
+2026-10-27 17:42:43 fpn run1_s1 start
+2026-10-27 18:10:32 fpn run1_s1 exit 0
+2026-10-27 18:10:32 fpn noaug_s1 start
+2026-10-27 18:34:21 fpn noaug_s1 exit 0
+2026-10-27 18:34:21 fpn noboot_s1 start
+2026-10-27 19:01:22 fpn noboot_s1 exit 0
+2026-10-27 19:01:22 grid run1_s1 start
+2026-10-27 19:15:08 grid run1_s1 exit 0
+2026-10-27 19:15:08 fpn run1_s2 start
+2026-10-27 19:42:18 fpn run1_s2 exit 0
+2026-10-27 19:42:18 fpn noaug_s2 start
+2026-10-27 20:06:13 fpn noaug_s2 exit 0
+2026-10-27 20:06:13 fpn noboot_s2 start
+2026-10-27 20:32:27 fpn noboot_s2 exit 0
+2026-10-27 20:32:27 grid run1_s2 start
+2026-10-27 20:46:49 grid run1_s2 exit 0
+2026-10-27 20:46:49 sweep fpn run1_s1 val
+2026-10-27 21:23:50 sweep fpn run1_s1 test
+2026-10-27 21:58:19 sweep fpn noaug_s1 val
+2026-10-27 22:32:23 sweep fpn noaug_s1 test
+2026-10-27 23:07:16 sweep fpn noboot_s1 val
+2026-10-27 23:43:11 sweep fpn noboot_s1 test
+2026-10-28 00:19:22 sweep grid run1_s1 val
+2026-10-28 00:21:24 sweep grid run1_s1 test
+2026-10-28 00:23:53 sweep fpn run1_s2 val
+2026-10-28 00:58:46 sweep fpn run1_s2 test
+2026-10-28 01:31:20 sweep fpn noaug_s2 val
+2026-10-28 02:05:03 sweep fpn noaug_s2 test
+2026-10-28 02:37:46 sweep fpn noboot_s2 val
+2026-10-28 03:10:32 sweep fpn noboot_s2 test
+2026-10-28 03:43:18 sweep grid run1_s2 val
+2026-10-28 03:45:10 sweep grid run1_s2 test
+2026-10-28 03:47:02 ALL DONE
