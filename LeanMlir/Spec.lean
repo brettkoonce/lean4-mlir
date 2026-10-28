@@ -141,7 +141,7 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
       -- Conv (W, b), cls token = 0, positional embedding He at fan-in `nP + 1`.
       some [⟨[dim, ic, p, p], .he (ic * p * p), "W", true⟩, ⟨[dim], .const 0.0, "b", false⟩,
             ⟨[dim], .const 0.0, "W", false⟩, ⟨[nP + 1, dim], .he (nP + 1), "W", false⟩]
-  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ _ =>
       some <| ((List.range nBlocks).flatMap fun _ =>
         slotsLN dim ++ slotsDense dim dim ++ slotsDense dim dim ++ slotsDense dim dim ++
           slotsDense dim dim ++ slotsLN dim ++ slotsDense dim mlpDim ++ slotsDense mlpDim dim) ++
@@ -446,7 +446,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
     | .uib ic oc e s pDW poDW => s!"UIB({ic}→{oc},e{e},s{s},dw{pDW}/{poDW})"
     | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})"
     | .patchEmbed ic dim p _     => s!"Patch({ic}→{dim},{p}x{p})"
-    | .transformerEncoder dim h _ n cm ks _ _ =>
+    | .transformerEncoder dim h _ n cm ks _ _ _ =>
       let tag := if cm then "TransCausal" else if ks then "TransSeq" else "Trans"
       s!"{tag}({n}x[{h}h,{dim}])"
     | .mambaBlock dim st exp n   => s!"Mamba{n}(dim={dim},state={st},exp={exp})"
@@ -504,7 +504,7 @@ def Layer.outChannels : Layer → Nat
   | .uib _ oc _ _ _ _               => oc
   | .fireModule _ _ e1 e3           => e1 + e3
   | .patchEmbed _ dim _ _           => dim
-  | .transformerEncoder dim _ _ _ _ _ _ _ => dim
+  | .transformerEncoder dim _ _ _ _ _ _ _ _ => dim
   | .mambaBlock dim _ _ _           => dim
   | .swinStage dim _ _ _ _          => dim
   | .patchMerging _ outDim          => outDim
@@ -555,7 +555,7 @@ def Layer.inChannels : Layer → Nat
   | .uib ic _ _ _ _ _               => ic
   | .fireModule ic _ _ _            => ic
   | .patchEmbed ic _ _ _            => ic
-  | .transformerEncoder dim _ _ _ _ _ _ _ => dim
+  | .transformerEncoder dim _ _ _ _ _ _ _ _ => dim
   | .mambaBlock dim _ _ _           => dim
   | .swinStage dim _ _ _ _          => dim
   | .patchMerging inDim _           => inDim
@@ -613,7 +613,7 @@ def NetSpec.validate (s : NetSpec) : Option String := Id.run do
     match l with
     | .globalAvgPool => afterGAP := true
     | .flatten       => afterFlatten := true
-    | .transformerEncoder _dim _ _ _ causalMask keepSeq _ _ =>
+    | .transformerEncoder _dim _ _ _ causalMask keepSeq _ _ _ =>
         if !causalMask && !keepSeq then
           afterTransformer := true  -- ViT-style: CLS slice produces [B, dim]
         -- causal or keepSeq: shape stays [B, T, D], handled by outChannels=D

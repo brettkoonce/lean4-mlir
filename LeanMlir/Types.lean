@@ -149,12 +149,19 @@ inductive Layer where
         the train step's forward and backward; the eval forward stays dense.
       * `rope` applies Rotary Position Embedding to Q/K inside attention (forward rotation and
         its VJP), a relative position encoding that extends past the trained length; pair it
-        with `tokenPositionEmbed`'s `posEmb := false`. -/
+        with `tokenPositionEmbed`'s `posEmb := false`.
+      * `dropout` is GPT-2's residual dropout, in the train step only: each block's two branch
+        outputs (the attention projection's and the MLP's) are dropped per element at this rate
+        and the kept ones scaled by `1/(1 − dropout)`, the mask drawn in-graph
+        (`stablehlo.rng_bit_generator`, keyed on the step scalar `%t` and the site) so the forward
+        and its VJP read the one draw. The eval forward has none. 0 = off, and off emits every
+        file as before. -/
   | transformerEncoder (dim heads mlpDim nBlocks : Nat)
                        (causalMask : Bool := false)
                        (keepSequence : Bool := false)
                        (flashAttn : Bool := false)
                        (rope : Bool := false)
+                       (dropout : Float := 0.0)
   /-- Selective state-space block (Mamba / S6); `dim` hidden, `stateSize` = N, `expand` the
       inner-dim multiplier. Shape-only (its count in `Layer.nParamsUntrained` is approximate). -/
   | mambaBlock (dim stateSize expand nBlocks : Nat)
