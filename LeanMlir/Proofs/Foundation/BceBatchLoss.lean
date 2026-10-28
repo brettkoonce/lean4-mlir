@@ -35,13 +35,8 @@ private theorem bceLogits_differentiable (K : Nat) (t : Vec K) :
     fun_prop (disch := intro; positivity)
 
 theorem bceBatchLoss_differentiable (N K : Nat) (t : Vec (N * (1 * K))) :
-    Differentiable ℝ (bceBatchLoss N K t) := fun z =>
-  differentiableAt_pi.2 fun _ => DifferentiableAt.fun_sum fun n _ => by
-    have h : DifferentiableAt ℝ
-        (fun x : Vec (N * K) => bceLogits K (targetRow N K t n) (logitRow N K x n)) z :=
-      differentiableAt_pi.1 (((bceLogits_differentiable K (targetRow N K t n)).comp
-        (logitRow_differentiable N K n)) z) 0
-    simpa only [div_eq_mul_inv] using h.mul_const ((N : ℝ) * (K : ℝ))⁻¹
+    Differentiable ℝ (bceBatchLoss N K t) :=
+  rowSumLoss_div_differentiable N K _ _ fun _ => bceLogits_differentiable K _
 
 /-- **The batched BCE loss's gradient**, entry `(n, j)`: example `n`'s own BCE gradient at its
     logits, over `N·K`. -/
@@ -49,11 +44,8 @@ theorem bceBatchLoss_pdiv (N K : Nat) (t : Vec (N * (1 * K))) (z : Vec (N * K)) 
     (j : Fin K) :
     pdiv (bceBatchLoss N K t) z (finProdFinEquiv (n, j)) 0
       = pdiv (fun z' : Vec K => fun _ : Fin 1 => bceLogits K (targetRow N K t n) z')
-          (logitRow N K z n) j 0 / ((N : ℝ) * (K : ℝ)) := by
-  rw [show bceBatchLoss N K t = fun z' _ => ∑ m : Fin N,
-      ((N : ℝ) * (K : ℝ))⁻¹ * bceLogits K (targetRow N K t m) (logitRow N K z' m) from by
-    funext z' _; simp only [bceBatchLoss, div_eq_inv_mul],
-    rowSumLoss_pdiv_smul N K _ _ (fun m => bceLogits_differentiable K _), div_eq_inv_mul]
+          (logitRow N K z n) j 0 / ((N : ℝ) * (K : ℝ)) :=
+  rowSumLoss_pdiv_div N K _ _ (fun _ => bceLogits_differentiable K _) z n j
 
 /-- **The emitted BCE cotangent is the batched loss's gradient.** Read at the head's `N·K` index
     (`unrowB`), the three-op chain at the logits `rowB z`, with the committed divisor `N·K`, is

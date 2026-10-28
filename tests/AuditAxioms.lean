@@ -1182,6 +1182,8 @@ open Proofs
 #audit_axioms Proofs.HasGradAt.param_batchMap
 -- The batched smoothed loss, and its gradient is the emitted cotangent (SmoothedBatchLoss.lean)
 #audit_axioms Proofs.rowSumLoss_pdiv
+#audit_axioms Proofs.rowSumLoss_pdiv_div
+#audit_axioms Proofs.rowSumLoss_div_differentiable
 #audit_axioms Proofs.smoothedBatchLoss_pdiv
 #audit_axioms Proofs.smoothedBatchLoss_grad
 -- The batched BCE-with-logits loss, and its gradient is the emitted cotangent (BceBatchLoss.lean)

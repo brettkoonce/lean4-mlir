@@ -350,6 +350,37 @@ def CifarOpt.label : CifarOpt → String
   | .sgd      => "SGD"
   | .nesterov => "Nesterov momentum"
 
+/-- The optimizer constants every packed cifar8 render opens with. `%lzero`, not `%sc`/`%sa`/`%sb`/
+    `%sd`: those are RESERVED — maxPoolBack's select_and_scatter emitter hardcodes them as region
+    block arguments, and a top-level def of the same name is a redefinition error at parse time.
+    `%mu` is emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after the
+    optimizer was threaded through — the self-check that the generalisation is inert. -/
+def optConstBlock (opt : CifarOpt) (b1Str ob1Str b2Str ob2Str epsStr wdStr : String) : String :=
+  "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
+  s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
+  s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
+  s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
+  s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
+  s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
+  s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
+  (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "")
+
+/-- The 22 parameter types of the packed no-BN cifar8 signature, in signature order. -/
+def cifar8ParamTys (ic c1 c2 c3 c4 d1 nClasses kH kW flat : Nat) : List String :=
+  [ty [c1,ic,kH,kW], ty [c1], ty [c1,c1,kH,kW], ty [c1],
+   ty [c2,c1,kH,kW], ty [c2], ty [c2,c2,kH,kW], ty [c2],
+   ty [c3,c2,kH,kW], ty [c3], ty [c3,c3,kH,kW], ty [c3],
+   ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
+   ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
+
+/-- One `θ`, `m` or `v` block of the packed no-BN cifar8 signature: each parameter's name with the
+    suffix `s` (`""`, `"m"`, `"v"`) and its type from `cifar8ParamTys`. -/
+def cifar8ParamSig (tys : List String) (s : String) : String :=
+  String.intercalate ", " <|
+    (["%W1", "%cb1", "%W2", "%cb2", "%W3", "%cb3", "%W4", "%cb4", "%W5", "%cb5", "%W6", "%cb6",
+      "%W7", "%cb7", "%W8", "%cb8", "%W9", "%b9", "%Wa", "%ba", "%Wb", "%bb"].zip tys).map
+      fun (n, t) => s!"{n}{s}: {t}"
+
 /-- One parameter's optimizer tail. The gradient is emitted **once** and every optimizer output
     reads it back by SSA name (`.operand gradSSA`), so the outputs share one gradient subgraph
     rather than a copy each. Returns `(code, θ', m', v')` — the slots the packed protocol returns.
@@ -556,11 +587,7 @@ def cifar8AdamTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       gW5 ++ aW5 ++ gb5 ++ ab5 ++ gW6 ++ aW6 ++ gb6 ++ ab6 ++
       gW7 ++ aW7 ++ gb7 ++ ab7 ++ gW8 ++ aW8 ++ gb8 ++ ab8 ++
       gW9 ++ aW9 ++ gb9 ++ ab9 ++ gWa ++ aWa ++ gba ++ aba ++ gWb ++ aWb ++ gbb ++ abb
-    let pTys := [ty [c1,ic,kH,kW], ty [c1], ty [c1,c1,kH,kW], ty [c1],
-      ty [c2,c1,kH,kW], ty [c2], ty [c2,c2,kH,kW], ty [c2],
-      ty [c3,c2,kH,kW], ty [c3], ty [c3,c3,kH,kW], ty [c3],
-      ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
-      ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
+    let pTys := cifar8ParamTys ic c1 c2 c3 c4 d1 nClasses kH kW flat
     let ths := [tW1, tb1, tW2, tb2, tW3, tb3, tW4, tb4, tW5, tb5, tW6, tb6, tW7, tb7, tW8, tb8,
                 tW9, tb9, tWa, tba, tWb, tbb]
     let mns := [mW1, mb1, mW2, mb2, mW3, mb3, mW4, mb4, mW5, mb5, mW6, mb6, mW7, mb7, mW8, mb8,
@@ -570,40 +597,19 @@ def cifar8AdamTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     pure <|
       s!"    // ── cifar8 {opt.label} train step: every op is pretty(verified AST node) except the\n" ++
       "    //    constants below, the marked report-only loss and the %bc passthroughs ──\n" ++
-      -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
-      -- hardcodes them as region block arguments, and a top-level def of the same name is a
-      -- redefinition error at parse time. Hence `%lzero`.
-      "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
-      s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
-      s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
-      s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
-      s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
-      s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
-      -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
-      -- threading — the self-check that the generalisation is inert.
-      (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
+      optConstBlock opt b1Str ob1Str b2Str ob2Str epsStr wdStr ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
       s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
-  let pSig := s!"%W1: {ty [c1,ic,kH,kW]}, %cb1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %cb2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %cb3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %cb4: {ty [c2]}, %W5: {ty [c3,c2,kH,kW]}, %cb5: {ty [c3]}, %W6: {ty [c3,c3,kH,kW]}, %cb6: {ty [c3]}, %W7: {ty [c4,c3,kH,kW]}, %cb7: {ty [c4]}, %W8: {ty [c4,c4,kH,kW]}, %cb8: {ty [c4]}, %W9: {ty [flat,d1]}, %b9: {ty [d1]}, %Wa: {ty [d1,d1]}, %ba: {ty [d1]}, %Wb: {ty [d1,nClasses]}, %bb: {ty [nClasses]}"
-  let sfx (s : String) : String :=
-    s!"%W1{s}: {ty [c1,ic,kH,kW]}, %cb1{s}: {ty [c1]}, %W2{s}: {ty [c1,c1,kH,kW]}, %cb2{s}: {ty [c1]}, %W3{s}: {ty [c2,c1,kH,kW]}, %cb3{s}: {ty [c2]}, %W4{s}: {ty [c2,c2,kH,kW]}, %cb4{s}: {ty [c2]}, %W5{s}: {ty [c3,c2,kH,kW]}, %cb5{s}: {ty [c3]}, %W6{s}: {ty [c3,c3,kH,kW]}, %cb6{s}: {ty [c3]}, %W7{s}: {ty [c4,c3,kH,kW]}, %cb7{s}: {ty [c4]}, %W8{s}: {ty [c4,c4,kH,kW]}, %cb8{s}: {ty [c4]}, %W9{s}: {ty [flat,d1]}, %b9{s}: {ty [d1]}, %Wa{s}: {ty [d1,d1]}, %ba{s}: {ty [d1]}, %Wb{s}: {ty [d1,nClasses]}, %bb{s}: {ty [nClasses]}"
-  let pTy := [ty [c1,ic,kH,kW], ty [c1], ty [c1,c1,kH,kW], ty [c1],
-    ty [c2,c1,kH,kW], ty [c2], ty [c2,c2,kH,kW], ty [c2],
-    ty [c3,c2,kH,kW], ty [c3], ty [c3,c3,kH,kW], ty [c3],
-    ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
-    ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
+  let pTy := cifar8ParamTys ic c1 c2 c3 c4 d1 nClasses kH kW flat
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' (0, [])
   -- The emitted entry is this AdamW name for every `opt`; each caller renames it (`.replace`) to
   -- its driver's `{slug}_{variant}_train_step`, and a mismatch is refused by the shim as "entry
   -- mismatch", not silently mis-run.
   let fname := if replicas ≤ 1 then "cifar8_adam_train_step" else "cifar8_adamdp_train_step"
-  let msfx := sfx "m"
-  let vsfx := sfx "v"
   "module @m {\n" ++
-  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {pSig}, {msfx}, {vsfx}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
+  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {cifar8ParamSig pTy ""}, {cifar8ParamSig pTy "m"}, {cifar8ParamSig pTy "v"}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
@@ -811,11 +817,7 @@ def cifar8AdamTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       gW5 ++ aW5 ++ gb5 ++ ab5 ++ gW6 ++ aW6 ++ gb6 ++ ab6 ++
       gW7 ++ aW7 ++ gb7 ++ ab7 ++ gW8 ++ aW8 ++ gb8 ++ ab8 ++
       gW9 ++ aW9 ++ gb9 ++ ab9 ++ gWa ++ aWa ++ gba ++ aba ++ gWb ++ aWb ++ gbb ++ abb
-    let pTys := [ty [c1,ic,kH,kW], ty [c1], ty [c1,c1,kH,kW], ty [c1],
-      ty [c2,c1,kH,kW], ty [c2], ty [c2,c2,kH,kW], ty [c2],
-      ty [c3,c2,kH,kW], ty [c3], ty [c3,c3,kH,kW], ty [c3],
-      ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
-      ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
+    let pTys := cifar8ParamTys ic c1 c2 c3 c4 d1 nClasses kH kW flat
     let ths := [tW1, tb1, tW2, tb2, tW3, tb3, tW4, tb4, tW5, tb5, tW6, tb6, tW7, tb7, tW8, tb8,
                 tW9, tb9, tWa, tba, tWb, tbb]
     let mns := [mW1, mb1, mW2, mb2, mW3, mb3, mW4, mb4, mW5, mb5, mW6, mb6, mW7, mb7, mW8, mb8,
@@ -825,40 +827,19 @@ def cifar8AdamTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     pure <|
       s!"    // ── cifar8 {opt.label} train step: every op is pretty(verified AST node) except the\n" ++
       "    //    constants below, the marked report-only loss and the %bc passthroughs ──\n" ++
-      -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
-      -- hardcodes them as region block arguments, and a top-level def of the same name is a
-      -- redefinition error at parse time. Hence `%lzero`.
-      "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
-      s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
-      s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
-      s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
-      s!"    %eps = stablehlo.constant dense<{epsStr}> : tensor<f32>\n" ++
-      s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
-      -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
-      -- threading — the self-check that the generalisation is inert.
-      (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
+      optConstBlock opt b1Str ob1Str b2Str ob2Str epsStr wdStr ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
       s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
-  let pSig := s!"%W1: {ty [c1,ic,kH,kW]}, %cb1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %cb2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %cb3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %cb4: {ty [c2]}, %W5: {ty [c3,c2,kH,kW]}, %cb5: {ty [c3]}, %W6: {ty [c3,c3,kH,kW]}, %cb6: {ty [c3]}, %W7: {ty [c4,c3,kH,kW]}, %cb7: {ty [c4]}, %W8: {ty [c4,c4,kH,kW]}, %cb8: {ty [c4]}, %W9: {ty [flat,d1]}, %b9: {ty [d1]}, %Wa: {ty [d1,d1]}, %ba: {ty [d1]}, %Wb: {ty [d1,nClasses]}, %bb: {ty [nClasses]}"
-  let sfx (s : String) : String :=
-    s!"%W1{s}: {ty [c1,ic,kH,kW]}, %cb1{s}: {ty [c1]}, %W2{s}: {ty [c1,c1,kH,kW]}, %cb2{s}: {ty [c1]}, %W3{s}: {ty [c2,c1,kH,kW]}, %cb3{s}: {ty [c2]}, %W4{s}: {ty [c2,c2,kH,kW]}, %cb4{s}: {ty [c2]}, %W5{s}: {ty [c3,c2,kH,kW]}, %cb5{s}: {ty [c3]}, %W6{s}: {ty [c3,c3,kH,kW]}, %cb6{s}: {ty [c3]}, %W7{s}: {ty [c4,c3,kH,kW]}, %cb7{s}: {ty [c4]}, %W8{s}: {ty [c4,c4,kH,kW]}, %cb8{s}: {ty [c4]}, %W9{s}: {ty [flat,d1]}, %b9{s}: {ty [d1]}, %Wa{s}: {ty [d1,d1]}, %ba{s}: {ty [d1]}, %Wb{s}: {ty [d1,nClasses]}, %bb{s}: {ty [nClasses]}"
-  let pTy := [ty [c1,ic,kH,kW], ty [c1], ty [c1,c1,kH,kW], ty [c1],
-    ty [c2,c1,kH,kW], ty [c2], ty [c2,c2,kH,kW], ty [c2],
-    ty [c3,c2,kH,kW], ty [c3], ty [c3,c3,kH,kW], ty [c3],
-    ty [c4,c3,kH,kW], ty [c4], ty [c4,c4,kH,kW], ty [c4],
-    ty [flat,d1], ty [d1], ty [d1,d1], ty [d1], ty [d1,nClasses], ty [nClasses]]
+  let pTy := cifar8ParamTys ic c1 c2 c3 c4 d1 nClasses kH kW flat
   let retTy := String.intercalate ", " (pTy ++ pTy ++ pTy) ++ ", tensor<f32>, tensor<f32>, tensor<f32>"
   let inner : String := go.run' (0, [])
   -- The emitted entry is this AdamW name for every `opt`; each caller renames it (`.replace`) to
   -- its driver's `{slug}_{variant}_train_step`, and a mismatch is refused by the shim as "entry
   -- mismatch", not silently mis-run.
   let fname := if replicas ≤ 1 then "cifar8b_adam_train_step" else "cifar8b_adamdp_train_step"
-  let msfx := sfx "m"
-  let vsfx := sfx "v"
   "module @m {\n" ++
-  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {pSig}, {msfx}, {vsfx}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
+  s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {cifar8ParamSig pTy ""}, {cifar8ParamSig pTy "m"}, {cifar8ParamSig pTy "v"}, %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({retTy}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
 
@@ -1196,21 +1177,10 @@ def cifar8BnTrainStepText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr
     let retTys := match opt with
       | none   => pTys
       | some _ => pTys ++ pTys ++ pTys ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-    -- The packed constants block. `%lzero` because `%sc`/`%sa`/`%sb`/`%sd` are RESERVED — the
-    -- `select_and_scatter` emitter hardcodes them as region block arguments and a top-level
-    -- constant of the same name is a redefinition error at XLA parse time, not in Lean.
-    -- `%mu` is emitted ONLY for Nesterov, so the other two renders carry no dead constant.
+    -- The packed constants block (`optConstBlock`); none for the plain-SGD render.
     let constBlk := match opt with
       | none => ""
-      | some o =>
-        "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-        s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
-        s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
-        s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
-        s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
-        s!"    %eps = stablehlo.constant dense<{aEpsStr}> : tensor<f32>\n" ++
-        s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
-        (if o == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "")
+      | some o => optConstBlock o b1Str ob1Str b2Str ob2Str aEpsStr wdStr
     let hdr := match opt with
       | none   => "    // ── cifar8-bn train step: every op is pretty(verified AST node) ──\n"
       | some o =>
@@ -1530,18 +1500,7 @@ def cifar8BnTrainStepBText (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
       s!"    // ── cifar8-BN {opt.label} train step, BATCHED op family: every op is pretty(verified\n" ++
       "    //    AST node) except the constants below, the marked report-only loss and the %bc\n" ++
       "    //    passthroughs ──\n" ++
-      -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
-      -- hardcodes them as region block arguments. Hence `%lzero`.
-      "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-      s!"    %b1 = stablehlo.constant dense<{b1Str}> : tensor<f32>\n" ++
-      s!"    %ob1 = stablehlo.constant dense<{ob1Str}> : tensor<f32>\n" ++
-      s!"    %b2 = stablehlo.constant dense<{b2Str}> : tensor<f32>\n" ++
-      s!"    %ob2 = stablehlo.constant dense<{ob2Str}> : tensor<f32>\n" ++
-      s!"    %eps = stablehlo.constant dense<{aEpsStr}> : tensor<f32>\n" ++
-      s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
-      -- Emitted ONLY for Nesterov, so the AdamW render re-renders byte-identical after this
-      -- threading — the gate that the generalisation is inert.
-      (if opt == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "") ++
+      optConstBlock opt b1Str ob1Str b2Str ob2Str aEpsStr wdStr ++
       body ++
       s!"    return {String.intercalate ", " (ths ++ mns ++ vns)}, %loss, %bc1, %bc2 : " ++
       s!"{String.intercalate ", " (pTys ++ pTys ++ pTys)}, tensor<f32>, tensor<f32>, tensor<f32>\n"
