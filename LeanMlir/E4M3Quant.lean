@@ -41,8 +41,9 @@ def roundHalfEven (y : Float) : Float :=
 
 /-- Round one value to the E4M3 grid (round-to-nearest, ties to even, subnormals
     on the `e = −6` grid, saturating). Mirrors `to_e4m3` in the numpy oracle,
-    tie rule included. -/
+    tie rule included. A NaN stays NaN, as in the oracle, rather than saturating. -/
 def roundE4M3 (x : Float) : Float :=
+  if x.isNaN then x else
   let s : Float := if x < 0.0 then -1.0 else 1.0
   let a := min x.abs e4m3Max
   if a == 0.0 then 0.0
@@ -56,6 +57,7 @@ def roundE4M3 (x : Float) : Float :=
 -- Ties go to the even grid point, as `np.round` does in the oracle: a subnormal
 -- tie (2.5 steps of `2⁻⁹` → 2), a tie up (3.5 → 4), a negative tie, and normal
 -- ties in the `e = 0` binade (8.5 → 8 and 9.5 → 10 steps of `2⁻³`).
+#guard (roundE4M3 (0.0 / 0.0)).isNaN
 #guard roundE4M3 (2.5 * Float.exp2 (-9.0)) == 2.0 * Float.exp2 (-9.0)
 #guard roundE4M3 (3.5 * Float.exp2 (-9.0)) == 4.0 * Float.exp2 (-9.0)
 #guard roundE4M3 (-2.5 * Float.exp2 (-9.0)) == -2.0 * Float.exp2 (-9.0)

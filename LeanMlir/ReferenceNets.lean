@@ -246,8 +246,10 @@ def r34FpnDet (name : String) (tower : Nat) : NetSpec where
     and `.fpnDetect` takes those as arguments, so this is a spec change with no new codegen. -/
 def r50FpnDet (name : String) (tower : Nat) : NetSpec where
   name := name
-  -- torchvision's Conv2d(3,64,7,stride=2,padding=3), matching the ImageNet render
-  -- the A3 checkpoint was trained under. Omitting this mismatches the stem.
+  -- torchvision's Conv2d(3,64,7,stride=2,padding=3), matching the ImageNet render the A3
+  -- checkpoint was trained under. Only the JAX emitter reads `convPadStyle`: this spec trains on
+  -- the `MlirCodegen` path, whose `samePad` pads the 7×7/s2 stem (2,3) whatever is set here, so
+  -- the bootstrapped backbone runs one pixel shifted from the one it was trained as.
   convPadStyle := .symmetric
   imageH := 448
   imageW := 448

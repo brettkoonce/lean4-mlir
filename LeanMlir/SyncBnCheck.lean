@@ -215,9 +215,12 @@ backend {← LowererSession.backendName}"
   let mut mSens : Float := 0.0
   let mut statsRep : Float := 0.0
   let mut nonFinite : Nat := 0
+  -- Every buffer a verdict below reads: `regionErr` drops a NaN (`NaN > err` is false) and
+  -- `dupNormRel` reads one as 0, so a non-finite entry anywhere would pass silently.
+  let scanned : List ByteArray := [oD, o2, o2r, o2p, oS, oS1, oDD] ++ oks.toList
   for (what, lo, hi) in regions do
     for i in [lo:hi] do
-      if !(F32.read oD i.toUSize).isFinite || !(F32.read o2 i.toUSize).isFinite then
+      if scanned.any (fun o => !(F32.read o i.toUSize).isFinite) then
         nonFinite := nonFinite + 1
     let (eT, mT) := regionErr lo hi oD (fun i => F32.read o2 i.toUSize)
     let (eC, mC) := regionErr lo hi oD

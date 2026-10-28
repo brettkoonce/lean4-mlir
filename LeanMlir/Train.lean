@@ -781,6 +781,9 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
             s!",\"augment\":{jsBool cfg.augment}" ++
             s!",\"label_smoothing\":{cfg.labelSmoothing}" ++
             s!",\"seed\":{cfg.seed}" ++
+            -- The Lean trainer seeds init, shuffle and augmentation from fixed constants plus this
+            -- offset (`LEAN_MLIR_SEED`); `seed` above is the config's, which the JAX side reads.
+            s!",\"seed_offset\":{seedOff}" ++
           "}" ++
           s!",\"total_params\":{nP}" ++
           s!",\"dataset\":\"{dsName}\"" ++
@@ -1232,7 +1235,9 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- logits are averaged per batch across `swagSamples`. Caveat: BN
   -- running stats are stale relative to sampled weights — the same
   -- caveat as EMA/SWA's eval block.
-  if cfg.useSWAG && swagDeviations.size > 0 then
+  -- Classification only, like the per-epoch eval: it scores top-1 against one class id per record,
+  -- which means nothing for a segmentation or detection run.
+  if cfg.useSWAG && swagDeviations.size > 0 && !useSeg && !useYolov1Run && !useFpnRun then
     let evalVmfb ← graphArtifact pfx "fwd_eval"
     if ← System.FilePath.pathExists evalVmfb then
       let evalSess ← LowererSession.create evalVmfb

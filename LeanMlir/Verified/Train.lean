@@ -1499,7 +1499,10 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
     -- its Imagenette rows are.
     -- Placed after the percentage rather than at end-of-line because this print (unlike
     -- `trainAdamSched`'s) carries a trailing `(Nms)`; the statistic and its interval stay adjacent.
-    IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
+    if synth then
+      IO.println s!"  epoch {ep + 1}: {lossField}eval SKIPPED (LEAN_MLIR_BENCH_SYNTH) — no accuracy was measured ({epMs}ms)"
+    else
+      IO.println s!"  epoch {ep + 1}: {lossField}{evalName}_acc = {correct}/{nEval} = {acc}%  [95% CI {wilson95 correct nEval}] ({epMs}ms)"
     (← IO.getStdout).flush
   -- Gate G2: dump the packed params so the IREE and XLA builds can be diffed tensor-for-tensor. He
   -- init runs in Lean from a fixed seed, so both backends start byte-identical without extra work.
@@ -3544,6 +3547,11 @@ def VerifiedNet.trainE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
 def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
     (expDecayRate : Float := 0.0) : IO Unit := do
+  -- Only constant (1.0) and cosine (0.0) are implemented here; `trainAdamSched` reads any other
+  -- positive rate as exponential decay, so accepting one here would silently run cosine.
+  unless expDecayRate == 0.0 || expDecayRate == 1.0 do
+    throw <| IO.userError s!"trainAdamSchedE4M3: expDecayRate {expDecayRate} is not supported \
+      (0.0 = cosine, 1.0 = constant)"
   let bs := cfg.batchSize
   let d0 := net.d0
   let nc := net.nClasses

@@ -1169,6 +1169,8 @@ def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × Nat)
       | "gap",                    [_, c, h, w]            => (some (c, h, w), none)
       | "maxPool",                [_, c, h, w]
       | "maxPool3s2",             [_, c, h, w]            => (some (c, 2*h, 2*w), some (c, h, w))
+      -- the per-example `maxPool3s2F` Raw carries THREE nats (`skel`), as its backward does below.
+      | "maxPool3s2",             [c, h, w]               => (some (c, 2*h, 2*w), some (c, h, w))
       | "seBlock",                [_, c, h, w, _]         => (some (c, h, w), some (c, h, w))
       | "convStride4P",           [_, ic, oc, h, w, _, _]
       | "convStride4PBf16",       [_, ic, oc, h, w, _, _] =>

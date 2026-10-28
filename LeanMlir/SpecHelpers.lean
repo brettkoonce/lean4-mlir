@@ -55,9 +55,9 @@ def evalShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
 def evalShapesBA (spec : NetSpec) : ByteArray :=
   packShapes spec.evalShapes
 
-/-- Packed input-tensor shape for a flat-image batch (NCHW collapsed
-    to `[batch, channels*H*W]`). Channel count comes from the first
-    conv-style layer; defaults to 1 for pure-MLP specs. -/
+/-- Packed input-tensor shape `[batch, MlirCodegen.inputFlatDim spec]`: `channels·H·W` for an
+    image input, otherwise the first dense layer's fan-in or a token model's width
+    (`MlirCodegen.inputFlatDim`). -/
 def xShape (spec : NetSpec) (batch : Nat) : ByteArray :=
   packXShape #[batch, MlirCodegen.inputFlatDim spec]
 
@@ -141,7 +141,13 @@ def heInitParams (spec : NetSpec) (seed : USize := 42) : IO ByteArray := do
     Returns a NEW ByteArray. -/
 def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
     (priors : List Float) : IO ByteArray := do
-  let nc := (spec.layers.getLast?.map (·.outChannels)).getD 0
+  -- The splice below writes the buffer's last `nc` floats, which are the head's bias only when the
+  -- last layer is a `.conv2d` or `.dense` (weight, then bias). Anything else (a BN/LN-ended head, a
+  -- block with no parameter slots) would silently get `log π` in the wrong tensor.
+  let nc ← match spec.layers.getLast? with
+    | some (.conv2d _ oc _ _ _) | some (.dense _ oc _) => pure oc
+    | _ => throw <| IO.userError "headPriorBias: last layer is not a .conv2d or .dense head, so its \
+        bias is not the buffer's last floats"
   if priors.length != nc then
     throw <| IO.userError s!"headPriorBias: got {priors.length} priors for a {nc}-class head — they must match 1:1"
   if priors.any (· <= 0.0) then

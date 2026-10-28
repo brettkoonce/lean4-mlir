@@ -18,8 +18,9 @@ final bracket rather than rounding toward the conservative end.
 - Clopper & Pearson 1934, *The use of confidence or fiducial limits illustrated in the case of the binomial*. <https://doi.org/10.1093/biomet/26.4.404> -/
 
 /-- Inverse standard-normal CDF `Φ⁻¹` (probit), Peter Acklam's rational approximation
-    (relative error < 1.15e-9 over `(0,1)`). `p_A` here lives in `(0.5, ~0.99)`, far from
-    the tails, so this is orders of magnitude tighter than the Monte-Carlo sampling error. -/
+    (relative error < 1.15e-9 over the whole of `(0,1)`, both tail branches included). The top
+    `p_A` here (up to `α^(1/n)`) fall in the upper-tail branch, and the bound still holds there, so
+    this is orders of magnitude tighter than the Monte-Carlo sampling error. -/
 def invNormCdf (p : Float) : Float := Id.run do
   let a0 := -3.969683028665376e+01
   let a1 :=  2.209460984245205e+02
@@ -170,6 +171,13 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   let alpha   := 0.001
   let radii : Array Float := #[0.25, 0.5, 0.75, 1.0, 1.25, 1.5]
   let nCert   := min maxCert nEval
+  -- With no eval batch every epoch's clean acc is 0/0 = NaN, `acc > bestAcc` never fires, and the
+  -- untrained initial θ would be certified; with no certified image every rate is 0/0.
+  if evalBatches == 0 then
+    throw <| IO.userError s!"smoothing: no eval batch (SMOOTH_EVAL_BATCHES = 0, or {nEval} eval \
+      images < batch {bs}), so no checkpoint can be selected"
+  if nCert == 0 then
+    throw <| IO.userError "smoothing: nothing to certify (SMOOTH_MAXCERT = 0, or no eval images)"
   -- SMOOTH_STRIDE=1 + SMOOTH_MAXCERT=100 = the fixed-first-100 scorecard
   -- protocol (mirrors the Lipschitz scorecard subset); default unchanged.
   let stride  := max 1 (((← IO.getEnv "SMOOTH_STRIDE").bind (·.toNat?)).getD (nEval / nCert))
@@ -276,7 +284,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
         IO.println s!"    certified {t+1}/{nCert} ..."; (← IO.getStdout).flush
     -- (4) Lipschitz-hypothesis probe: shift x by r·(unit vector) and compare the probit-score change
     --     |Φ⁻¹(p_ĉ(x+δ))−Φ⁻¹(p_ĉ(x))| to the PROVEN bound ‖δ‖/σ (Salman et al. 2019 Lemma 2 — the
-    --     hypothesis `smoothing_certified_radius_probit` assumes). ratio = Δg·σ/‖δ‖ ≤ 1 ⟺ (1/σ)-Lipschitz holds.
+    --     hypothesis `smoothing_certified_radius_probit` assumes). ratio = Δg·σ/‖δ‖ > 1 refutes (1/σ)-Lipschitz; ≤ 1 on every probe is consistent with it.
     if lipProbe then
       let rGrid : Array Float := #[0.1, 0.2, 0.3, 0.5, 0.75, 1.0]
       let mProbe := min 40 nEval
@@ -323,7 +331,7 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
     let lipPath := s!"runs/smooth_{net.slug}_lipschitz.csv"
     IO.FS.writeFile lipPath (String.intercalate "\n" lipRows.toList ++ "\n")
     IO.println s!"Lipschitz-hypothesis probe → {lipPath} ({lipN} measurements): max ratio Δg·σ/‖δ‖ = {lipMax}"
-    IO.println s!"  ⇒ Φ⁻¹∘p_ĉ is empirically (1/σ)-Lipschitz: {lipN - lipViol}/{lipN} measurements ≤ bound (violations>1.05: {lipViol})"
+    IO.println s!"  ⇒ Φ⁻¹∘p_ĉ {if lipViol == 0 then "is consistent with" else "VIOLATES"} (1/σ)-Lipschitz: {lipN - lipViol}/{lipN} measurements ≤ bound (violations>1.05: {lipViol})"
   IO.println "done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."
 

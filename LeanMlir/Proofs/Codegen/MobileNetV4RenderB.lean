@@ -879,7 +879,12 @@ def mnv4AdamVariant (B replicas : Nat)
 def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option OptRecipe) (ema wdExclude : Bool)
     (wdStr : String) (cd : Bool) (sd : Bool := false) : String :=
   match opt with
-  | none => mnv4AdamVariant B replicas bf16
+  -- The renderer still applies `ema`/`wx`/`cd`/`sd` at `opt = none`, so naming such a render
+  -- `mnv4AdamVariant` would collide with the plain AdamW artifact's entry.
+  | none =>
+    if ema || wdExclude || cd || sd then
+      panic! "mnv4RecipeVariant: ema / wx / do / drop need a recipe (`opt = some _`) to be named"
+    else mnv4AdamVariant B replicas bf16
   | some o =>
     (if ema then "ema" else "") ++ o.slug replicas ++ toString B ++ (if wdExclude then "wx" else "") ++
       (if sd then "drop" else "") ++ (if cd then "do" else "") ++ wdVariantMark o wdStr ++

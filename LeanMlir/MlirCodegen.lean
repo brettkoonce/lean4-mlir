@@ -80,6 +80,17 @@ def unsupported (spec : NetSpec) : Option String := Id.run do
       return some s!"conv2d {ic}→{oc} {k}×{k} at pad := .valid (this emitter pads SAME)"
     | .convBn ic oc k _ .valid =>
       return some s!"convBn {ic}→{oc} {k}×{k} at pad := .valid (this emitter pads SAME)"
+    -- The train walk applies only ReLU to a conv2d / dense (any other act would train as identity)
+    -- and only GELU / ReLU in a ConvNeXt stage; the eval path applies the spec's own `act`.
+    | .conv2d _ _ _ _ act | .dense _ _ act =>
+      unless act == .relu || act == .identity do
+        return some s!"conv2d/dense act := {repr act} (the train step has ReLU and identity)"
+    | .convNextStage _ _ _ act =>
+      unless act == .gelu || act == .relu do
+        return some s!"convNextStage act := {repr act} (the train step has GELU and ReLU)"
+    | .mbConv _ _ _ _ _ _ _ act =>
+      unless act == .swish || act == .hSwish || act == .relu || act == .relu6 do
+        return some s!"mbConv act := {repr act} (the train step has swish, h-swish, ReLU and ReLU6)"
     | _ => pure ()
   if spec.convBnAct != .relu && spec.layers.any (fun | .convBn .. => true | _ => false) then
     return some s!"convBnAct := {repr spec.convBnAct} on a bare convBn (this emitter applies ReLU)"
@@ -6027,9 +6038,12 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
         let useSkip := stride == 1 && blockIc == oc
         -- Expand: 1×1 + activation (skip if expand==1). Dispatch on `act`.
         if expand != 1 then
+          -- The same activation as the depthwise below and as the eval path (`emitMbConv`'s
+          -- `emitActForward act`); `unsupported` refuses an `act` outside these four.
           let (s1, rec1) := match act with
             | .swish  => emitConvBnTrainSwish pidx pos curSSA curShape blockIc mid 1 1
             | .hSwish => emitConvBnTrainHSwish pidx pos curSSA curShape blockIc mid 1 1
+            | .relu   => emitConvBnTrain pidx pos curSSA curShape blockIc mid 1 1 true
             | _       => emitConvBnTrainRelu6 pidx pos curSSA curShape blockIc mid 1 1
           code := code ++ s1; curSSA := rec1.outputSSA; curShape := rec1.outShape
           records := records.push rec1; pidx := pidx + 1
@@ -6238,20 +6252,21 @@ def emitTrainForward (spec : NetSpec) (B : Nat)
       let mid := expandCh
       let seMid := Nat.max 1 (mid / 4)
       let useSkip := stride == 1 && ic == oc
-      -- Expand: 1×1, h-swish (if useHSwish) or ReLU6
+      -- Expand: 1×1, h-swish (if useHSwish) or ReLU — MobileNetV3's "RE" blocks, and what the
+      -- eval path (`emitMbConvV3`) applies for every non-h-swish `act`.
       if expandCh != ic then
         if useHSwish then
           let (s1, rec1) := emitConvBnTrainHSwish pidx pos curSSA curShape ic mid 1 1
           code := code ++ s1; curSSA := rec1.outputSSA; curShape := rec1.outShape
           records := records.push rec1
         else
-          let (s1, rec1) := emitConvBnTrainRelu6 pidx pos curSSA curShape ic mid 1 1
+          let (s1, rec1) := emitConvBnTrain pidx pos curSSA curShape ic mid 1 1 true
           code := code ++ s1; curSSA := rec1.outputSSA; curShape := rec1.outShape
           records := records.push rec1
         pidx := pidx + 1
-      -- Depthwise: k×k, h-swish if useHSwish else ReLU6
+      -- Depthwise: k×k, h-swish if useHSwish else ReLU, as the expand
       let (s2, rec2) := emitDepthwiseConvBnTrain pidx pos curSSA curShape mid kSize stride
-                          (useHSwish := useHSwish)
+                          (useHSwish := useHSwish) (useRelu := !useHSwish)
       code := code ++ s2; curSSA := rec2.outputSSA; curShape := rec2.outShape
       records := records.push rec2; pidx := pidx + 1
       -- SE block (optional)
