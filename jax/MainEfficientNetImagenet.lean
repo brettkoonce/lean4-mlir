@@ -41,8 +41,9 @@ def efficientNetB0Imagenet : NetSpec where
     .dense 1280 1000 .identity                        -- 1000-class head
   ]
 
-/-- EfficientNet-B0 80-epoch tier (`default`); the published reference is the 350-epoch
-    `full` recipe below, which is this config with only `epochs` changed.
+/-- EfficientNet-B0 on ImageNet-1k, TF TPU EfficientNet's own code row for row, at the
+    code's length: `train_steps` 218949 at batch 2048 ≈ 350 epochs of data. (`full` below
+    is the same config under the name the jobs and CI call it by.)
     RMSProp + momentum 0.9 at peak lr 0.016 for batch 256 (= 0.256 @ 4096, TF's value), and TF's
     schedule: ×0.97 every 2.4 epochs as a staircase on the global step, a 5-epoch linear warmup
     overriding it while it runs. Weight decay 1e-5 coupled into the gradient, off BN γ/β and biases
@@ -58,7 +59,7 @@ def efficientNetB0Imagenet : NetSpec where
 def efficientNetB0ImagenetConfig : TrainConfig where
   learningRate   := 0.016   -- EfficientNet reference base LR 0.016@bs256 (= 0.256@bs4096); paper-faithful, RMSProp matching TF (ε-inside-sqrt + mean-square init 1.0)
   batchSize      := 256
-  epochs         := 80
+  epochs         := 350     -- train_steps 218949 at batch 2048: 350 epochs of data
   optimizer      := .rmsprop  -- EfficientNet's original optimizer
   momentum       := 0.9       -- μ for the RMSprop momentum buffer
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
@@ -102,19 +103,17 @@ def efficientNetB0ImagenetConfig : TrainConfig where
 
 #eval efficientNetB0Imagenet.validate!
 
-/-- Paper-faithful full run: identical recipe at the 350-epoch schedule, at the
-    paper's real LR 0.016 (the TF-RMSProp form trains stably at it —
-    no lowered LR, no grad clip). Selected with the `full` recipe arg. -/
-def efficientNetB0ImagenetConfigFull : TrainConfig :=
-  { efficientNetB0ImagenetConfig with epochs := 350 }
+/-- `full` is the same config: the name `scripts/jobs/enet-full-jax-4gpu.conf` and the CI
+    emission check call the 350-epoch run by. -/
+def efficientNetB0ImagenetConfigFull : TrainConfig := efficientNetB0ImagenetConfig
 
 def efficientNetB0ImagenetRecipes : List Recipe := [
   { name := "default", cfg := efficientNetB0ImagenetConfig,
     out := "generated_efficientnet_b0_imagenet.py",
-    desc := "80-epoch validation tier (RMSProp + AutoAugment, default LR 0.016)" },
+    desc := "the code's 350-epoch run (RMSProp + AutoAugment, peak LR 0.016)" },
   { name := "full",    cfg := efficientNetB0ImagenetConfigFull,
     out := "generated_efficientnet_b0_imagenet_full.py",
-    desc := "paper-faithful 350-epoch run (peak LR 0.016)" }
+    desc := "the same run, under the name the jobs call it by" }
 ]
 
 def main (args : List String) : IO Unit :=

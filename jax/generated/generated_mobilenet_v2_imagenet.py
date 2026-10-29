@@ -1255,7 +1255,7 @@ if __name__ == "__main__":
     val_examples   = 50000
 
     BATCH_SIZE = (256 // n_devices) * n_devices or n_devices
-    EPOCHS = 90
+    EPOCHS = 420
     LR = 0.120000
     steps_per_epoch = train_examples // BATCH_SIZE
     total_steps = steps_per_epoch * EPOCHS
@@ -1287,7 +1287,7 @@ if __name__ == "__main__":
             'kind': 'header', 'phase': 'phase2',
             'netspec_name': "MobileNetV2 (ImageNet, bf16)",
             'config': {
-                'lr': 0.120000, 'batch_size': 256, 'epochs': 90,
+                'lr': 0.120000, 'batch_size': 256, 'epochs': 420,
                 'use_adam': False,
                 'weight_decay': 0.000040,
                 'cosine': False,

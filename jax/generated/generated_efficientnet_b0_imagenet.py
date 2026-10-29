@@ -1882,7 +1882,7 @@ if __name__ == "__main__":
     val_examples   = 50000
 
     BATCH_SIZE = (256 // n_devices) * n_devices or n_devices
-    EPOCHS = 80
+    EPOCHS = 350
     LR = 0.016000
     steps_per_epoch = train_examples // BATCH_SIZE
     total_steps = steps_per_epoch * EPOCHS
@@ -1914,7 +1914,7 @@ if __name__ == "__main__":
             'kind': 'header', 'phase': 'phase2',
             'netspec_name': "EfficientNet-B0 (ImageNet, bf16)",
             'config': {
-                'lr': 0.016000, 'batch_size': 256, 'epochs': 80,
+                'lr': 0.016000, 'batch_size': 256, 'epochs': 350,
                 'use_adam': False,
                 'weight_decay': 0.000010,
                 'cosine': False,

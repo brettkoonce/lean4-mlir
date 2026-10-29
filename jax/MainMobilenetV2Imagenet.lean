@@ -46,8 +46,8 @@ def mobilenetV2Imagenet : NetSpec where
     `inception_preprocessing.py`, TF's `training_ops.cc`), on 2026-10-12 (planning/recipe_prep.md §6).
     The README's line is named beside each value; the book's landed pair (§6.5) ran the paper's
     sentence instead (0.045 unscaled at 256, ×0.98 per epoch, 350 epochs, no smoothing, no EMA,
-    mean/std inputs, timm's init and decay set). `default` is this recipe at 90 epochs, a
-    validation tier; `full` below is the run.
+    mean/std inputs, timm's init and decay set). `default` is the run: the README's "about
+    700K steps" on 8 clones of 96 = 700,000 × 768 / 1,281,167 ≈ 420 epochs of data.
 
     * Optimizer — `--optimizer rmsprop` (the flag's default), `rmsprop_decay 0.9`,
       `rmsprop_momentum 0.9`, `opt_epsilon 1.0`; TF1's `ApplyRMSProp` puts the rate inside the
@@ -80,7 +80,7 @@ def mobilenetV2Imagenet : NetSpec where
 def mobilenetV2ImagenetConfig : TrainConfig where
   learningRate   := 0.12    -- README: learning_rate 0.045*NUM_GPUS on batch_size 96*NUM_GPUS, so 0.045 per 96 images: 0.12 at 256
   batchSize      := 256
-  epochs         := 90      -- the validation tier; `full` is the README's ~420
+  epochs         := 420     -- the README's ~700K steps of 768: 420 epochs of data
   optimizer      := .rmsprop  -- train_image_classifier.py: `optimizer` defaults to rmsprop
   momentum       := 0.9       -- rmsprop_momentum 0.9
   rmspropDecay   := 0.9       -- rmsprop_decay 0.9
@@ -123,19 +123,17 @@ def mobilenetV2ImagenetConfig : TrainConfig where
 
 #eval mobilenetV2Imagenet.validate!
 
-/-- The run: the README's "about 700K steps" on 8 clones of 96 = 700,000 × 768 / 1,281,167 ≈ 420
-    epochs of data. Selected with the `full` recipe arg; writes a separate `_full.py` so a quick
-    validation subrun and the multi-day run never clobber each other. -/
-def mobilenetV2ImagenetConfigFull : TrainConfig :=
-  { mobilenetV2ImagenetConfig with epochs := 420 }
+/-- `full` is the same config: the name `scripts/jobs/mnv2-full-jax-4gpu.conf` and the CI
+    emission check call the 420-epoch run by. -/
+def mobilenetV2ImagenetConfigFull : TrainConfig := mobilenetV2ImagenetConfig
 
 def mobilenetV2ImagenetRecipes : List Recipe := [
   { name := "default", cfg := mobilenetV2ImagenetConfig,
     out := "generated_mobilenet_v2_imagenet.py",
-    desc := "90-epoch validation tier (TF-slim's README recipe, short)" },
+    desc := "TF-slim's README recipe, 420 epochs" },
   { name := "full",    cfg := mobilenetV2ImagenetConfigFull,
     out := "generated_mobilenet_v2_imagenet_full.py",
-    desc := "TF-slim's README recipe, 420 epochs" }
+    desc := "the same run, under the name the jobs call it by" }
 ]
 
 def main (args : List String) : IO Unit :=
