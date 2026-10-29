@@ -7710,8 +7710,60 @@ recipe, with the architecture held fixed: the same network on RSB-A3
 (Wightman et al.\ 2021, ``ResNet Strikes Back''), worth another half
 point on the reference and a point on the verified path. Both
 recipes run on both paths, so the result is a grid rather than a pair, and
-the table that closes the section is the 2018 column every later chapter's
-recipe is diffed against.
+the table that opens it is the 2018 column every later chapter's recipe
+is diffed against.
+
+\subsubsection*{What A3 changes from the 2018 recipe}
+\label{sec:r50_a3_vs_2018}
+
+The 2018 row below is the original paper's SGD-with-momentum plus the
+``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
+random-resized-crop). RSB-A3 is the 2021 ``ResNet Strikes Back'' recipe
+(Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
+A3 sets differently is one lever of the three-year jump in how these networks
+are trained, and holding the architecture fixed is what stops the comparison
+confounding the recipe with the backbone. The backbone and the entry point
+are the same for both, and each recipe has its own spec, shim and render.
+Table~\ref{tab:r50_a3_vs_2018} is the full diff.
+
+\begin{table}[H]
+\centering
+\caption{The RSB-A3 recipe against the 2018 recipe on ResNet-50, knob by knob.}
+\label{tab:r50_a3_vs_2018}
+\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
+\hline
+Knob & ResNet-50 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
+\hline
+Backbone      & bottleneck, 25.6\,M    & bottleneck, 25.6\,M          & unchanged, which is what makes the rest of this table a recipe diff \\
+Optimizer     & SGD + momentum $0.9$   & LAMB                          & layer-wise adaptive LR, designed for very large batches \\
+Effective batch & 256                  & 2048 ($512\times4$ accum)     & the large-batch regime LAMB targets; grad-accum fits it on 16\,GB \\
+Peak LR       & $0.1$                  & $0.008$ @ bs2048              & LAMB's trust-ratio scale --- not comparable to SGD's $0.1$ \\
+Epochs        & 90                     & 100                           & essentially the same budget (A3 is the cheap RSB tier) \\
+Loss          & softmax cross-entropy  & BCE-with-logits, multi-hot, binarized at $0.2$ & treats classes independently; matches mixed soft targets \\
+Label smoothing & $0.1$                & $0.0$                         & subsumed --- BCE over soft mixup labels already softens targets \\
+Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged, and it is the BASE both recipes train on; the two rows below are what A3 layers on top of it \\
+Mixup / CutMix & none                  & $\alpha\,0.1$ / $\alpha\,1.0$ & interpolate/paste samples $\to$ soft multi-hot targets, strong regularizer \\
+RandAugment   & none                   & \texttt{m6 N2 mstd0.5 inc1}   & automated heavy color+geometric augmentation policy \\
+Weight decay  & $10^{-4}$, weights only & $0.02$, skip BN $\gamma/\beta$ + bias & $200\times$ stronger; both leave scale, shift and bias undecayed \\
+Train / eval res & $224$ / $224$        & $160$ / $224$                 & FixRes: train at cheap low res ($\sim$2$\times$ faster/step), test at high res --- the train/test gap helps \\
+BN statistics & global over batch      & Ghost-BN over 512             & side-effect of grad-accum (each micro-step normalizes its own 512); a single big-memory card would remove it \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent What carries over unchanged: cosine LR decay, the 5-epoch
+warmup, the base augmentation in the row above, zero-$\gamma$
+initialization, bf16 convolution under an fp32 classifier head, and
+running-BN evaluation. The through-line
+of the 2018$\to$2021 shift is ``regularize harder, train bigger'':
+heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
+soft targets (BCE), an order-of-magnitude more weight decay applied
+selectively, and a large-batch optimizer (LAMB) to make the longer,
+noisier training converge, with FixRes buying back the compute the
+extra epochs would cost. On the reference every one of these is a
+one-line \texttt{TrainConfig} change; on the verified path each is a render
+variant or a shim setting on the same backbone, and the $160$ train
+resolution is a spec of its own.
 
 \prosesection{The reference (JAX)}
 
@@ -7723,24 +7775,14 @@ BatchNorm's $\gamma$, $\beta$ and the biases undecayed as there.
 A3 is LAMB at effective batch
 2048 (accumulated as $4\times512$), BCE over Mixup/CutMix targets binarized
 at \texttt{timm}'s $0.2$ threshold, RandAugment, and train@160 / eval@224.
-Table~\ref{tab:r50_jax} is both runs.
+On the 2018 recipe the run finished at $\mathbf{77.01\%}$ top-1 and
+$\mathbf{93.51\%}$ top-5, the final checkpoint through an fp32 forward,
+90 epochs in about $22.2$ hours on four RTX 4060 Ti at about $14.8$
+minutes an epoch. On A3 it finished at $\mathbf{77.58\%}$ and
+$\mathbf{93.66\%}$ at \texttt{timm}'s eval resize, 100 epochs in about
+$13.4$ hours at about $8.0$ minutes an epoch.
 
-\begin{table}[H]
-\centering
-\caption{ResNet-50 on ImageNet-1k under the 2018 and RSB-A3 recipes, reference trainer (JAX): both rows the final checkpoints scored over all $50{,}000$ validation images through an fp32 forward, A3 at \texttt{timm}'s eval resize (short side $\lfloor 224/0.95 \rfloor = 235$, long side truncated as torchvision does).}
-\label{tab:r50_jax}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{l l l r r r r r}
-\hline
-GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (bf16) & 2018   & 256 (global)   & $\sim$14.8 min & 90  & $\sim$22.2 hr & $\mathbf{77.01\%}$ & $\mathbf{93.51\%}$ \\
-4$\times$ 4060 Ti (bf16) & RSB-A3 & 512 (Ghost-BN) & $\sim$8.0 min  & 100 & $\sim$13.4 hr & $\mathbf{77.58\%}$ & $\mathbf{93.66\%}$ \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent That fp32 scoring is how the verified path and \texttt{timm} score; the
+That fp32 scoring is how the verified path and \texttt{timm} score; the
 trainers' own evaluation lands within $0.04$ of it (through bf16 on 2018, fp32
 on A3). A3
 normalizes per $512$-image micro-batch because it accumulates
@@ -7756,54 +7798,17 @@ $+0.57$ on the same network, in less wall clock, because it trains at
 $160^2$. It lands $0.52$ under the paper's $78.1\%$ and $0.47$ under the
 $78.05\%$ that \texttt{timm}'s own \texttt{resnet50.a3\_in1k} weights
 score under this protocol, a tenth of a point past one run's $\pm0.37$;
-the verified render of the same recipe, Table~\ref{tab:r50_pjrt}, lands on
-the paper's number. This A3 is \texttt{timm}'s recipe as \texttt{timm} ran it, on
+the verified render of the same recipe, below, lands on the paper's
+number. This A3 is \texttt{timm}'s recipe as \texttt{timm} ran it, on
 both paths; the paragraph after the side-by-side table names the settings
 a bare transcription would miss, and the one not taken.
-Figure~\ref{fig:r50_jax_curves} is the two runs, epoch by epoch.
 
-\begin{figure}[H]
-\centering
-\begin{tikzpicture}
-\begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
-    xlabel={Epoch}, ylabel={Validation top-1 (\%)},
-    xmin=0, xmax=101, ymin=0, ymax=80,
-    xtick={0,20,40,60,80,100},
-    ytick={20,40,60,80},
-    legend pos=south east,
-    legend cell align={left},
-    grid=major, grid style={gray!18},
-    tick label style={font=\small},
-    label style={font=\small},
-    every axis plot/.append style={line width=1pt, mark=none},
-    title style={font=\small},
-    title={ResNet-50, two recipes --- reference},
-]
-\addplot[blue] coordinates {
-(1,5.96) (2,14.59) (3,25.57) (4,31.70) (5,39.14) (6,43.70) (7,47.19) (8,47.54) (9,50.13) (10,51.22) (11,51.40) (12,50.29) (13,52.43) (14,55.04) (15,54.83) (16,50.97) (17,56.45) (18,55.21) (19,55.80) (20,54.20) (21,54.79) (22,56.15) (23,57.03) (24,57.68) (25,54.74) (26,59.52) (27,56.64) (28,59.46) (29,59.51) (30,58.18) (31,59.38) (32,59.96) (33,60.74) (34,60.81) (35,60.24) (36,58.19) (37,61.50) (38,61.12) (39,62.20) (40,61.34) (41,62.70) (42,63.59) (43,62.40) (44,62.30) (45,63.77) (46,63.70) (47,64.39) (48,64.51) (49,64.38) (50,65.47) (51,65.98) (52,65.86) (53,66.26) (54,66.77) (55,67.20) (56,65.50) (57,65.98) (58,67.78) (59,67.99) (60,68.35) (61,68.89) (62,68.29) (63,69.16) (64,70.55) (65,69.80) (66,70.89) (67,70.60) (68,71.15) (69,72.05) (70,72.13) (71,72.46) (72,72.93) (73,73.18) (74,73.85) (75,74.17) (76,74.15) (77,74.66) (78,74.82) (79,74.92) (80,75.63) (81,75.97) (82,76.03) (83,76.34) (84,76.42) (85,76.70) (86,76.85) (87,76.93) (88,76.96) (89,77.04) (90,77.00)
-};
-\addlegendentry{2018 (90 ep)}
-\addplot[orange] coordinates {
-(1,0.10) (2,3.78) (3,7.80) (4,12.45) (5,15.25) (6,22.07) (7,24.09) (8,29.60) (9,35.84) (10,34.52) (11,36.98) (12,29.54) (13,39.61) (14,38.41) (15,40.54) (16,42.34) (17,38.87) (18,38.27) (19,46.92) (20,48.37) (21,41.04) (22,47.52) (23,44.41) (24,42.69) (25,45.13) (26,51.49) (27,43.96) (28,46.55) (29,48.32) (30,38.44) (31,51.10) (32,55.92) (33,51.05) (34,56.30) (35,50.80) (36,57.06) (37,53.79) (38,51.05) (39,57.99) (40,51.12) (41,59.86) (42,54.99) (43,56.75) (44,61.63) (45,56.14) (46,55.46) (47,54.52) (48,57.12) (49,59.17) (50,61.56) (51,60.60) (52,64.51) (53,61.38) (54,64.69) (55,64.75) (56,64.03) (57,61.97) (58,65.52) (59,65.89) (60,68.46) (61,63.52) (62,67.04) (63,65.74) (64,67.69) (65,69.33) (66,69.83) (67,66.58) (68,71.23) (69,71.85) (70,72.07) (71,71.31) (72,71.25) (73,71.92) (74,73.39) (75,73.30) (76,73.74) (77,74.02) (78,74.09) (79,75.13) (80,75.31) (81,75.45) (82,75.41) (83,75.77) (84,76.16) (85,76.40) (86,76.42) (87,76.75) (88,76.72) (89,76.79) (90,77.11) (91,77.25) (92,77.33) (93,77.16) (94,77.42) (95,77.40) (96,77.38) (97,77.40) (98,77.48) (99,77.36) (100,77.60)
-};
-\addlegendentry{RSB-A3 (100 ep)}
-\end{axis}
-\end{tikzpicture}
-\caption{Validation top-1 per epoch of the two ResNet-50 recipes on the reference.}
-\label{fig:r50_jax_curves}
-\end{figure}
-
-\noindent A3 starts far
-lower --- $0.10\%$ at epoch~1 against $5.96\%$ --- because its whole first
+A3 starts far lower and trails for most of the schedule: its whole first
 epoch runs at \texttt{timm}'s warmup start of $10^{-4}$, an eightieth of
 the peak, and BCE over mixup targets gives almost no signal until the
-logits separate; it trails for nearly the whole schedule, touching the lead
-at four epochs of the second half. At the matched epoch~90 it leads by
-$0.11$ ($77.11$ against $77.00$), and its last ten epochs of anneal add the
-rest. The schedules are different lengths, so at a shared epoch the two
-cosines are at different points in their decay; the endpoints are what the
-$+0.57$ is measured from.
+logits separate. The schedules are different lengths, so at a shared
+epoch the two cosines are at different points in their decay; the
+endpoints are what the $+0.57$ is measured from.
 
 \prosesection{The verified path (PJRT)}
 \label{sec:r50_pjrt}
@@ -7823,29 +7828,21 @@ lake run r50-2018-bf16-4gpu
 lake run r50-a3-wxclip4x128-bf16-4gpu
 \end{verbatim}
 
-\begin{table}[H]
-\centering
-\caption{ResNet-50 on ImageNet-1k under the 2018 and RSB-A3 recipes, verified path (PJRT), scored over the same $50{,}000$ images under the same protocols: both rows the final checkpoints rescored through an fp32 forward, 2018 at $224$ and A3 at \texttt{timm}'s $235$.}
-\label{tab:r50_pjrt}
-\setlength{\tabcolsep}{4pt}
-\begin{tabular}{l l l r r r r r}
-\hline
-GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
-\hline
-4$\times$ 4060 Ti (bf16) & 2018   & 256 (global)   & $\sim$20.1 min & 90  & $\sim$30.1 hr & $\mathbf{76.99\%}$ & $\mathbf{93.51\%}$ \\
-4$\times$ 4060 Ti (bf16) & RSB-A3 & 512 (Ghost-BN) & $\sim$13.1 min & 100 & $\sim$21.9 hr & $\mathbf{78.05\%}$ & $\mathbf{93.97\%}$ \\
-\hline
-\end{tabular}
-\end{table}
+\noindent On 2018 the run finished at $\mathbf{76.99\%}$ top-1 and
+$\mathbf{93.51\%}$ top-5, the final checkpoint rescored through an fp32
+forward at $224$, 90 epochs in about $30.1$ hours on the same four cards
+at about $20.1$ minutes an epoch. On A3 it finished at $\mathbf{78.05\%}$
+and $\mathbf{93.97\%}$ at \texttt{timm}'s $235$, 100 epochs in about
+$21.9$ hours at about $13.1$ minutes an epoch.
 
-\noindent Both renders all-reduce
+\medskip\noindent Both renders all-reduce
 every BatchNorm's mean and variance across the four replicas
 (Theorem~\ref{thm:resnet50_sync_tie}), so the 2018 render normalizes over
 the global $256$ and the A3 render over $4 \times 128 = 512$, the ghost
 batch the reference's accumulation gives it.
 
 \medskip\noindent The A3 render carries the recipe as
-\S\ref{sec:r50_a3_vs_2018} tabulates it, including the three places a bare
+Table~\ref{tab:r50_a3_vs_2018} tabulates it, including the three places a bare
 transcription would miss: BN $\gamma/\beta$ and biases excluded from weight
 decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
 and the accumulation, at threshold $kC$,
@@ -7863,11 +7860,11 @@ rather than per-step.
 
 \prosesection{The two paths, side by side}
 
-Table~\ref{tab:r50_paths} is the two paths, row by row.
+Table~\ref{tab:r50_paths} is the two paths, for both recipes.
 
 \begin{table}[H]
 \centering
-\caption{ResNet-50 on ImageNet-1k: the reference and the verified path, row by row, for both recipes. Both columns are scored over the same $50{,}000$ validation images under the same protocol; rows above the first rule differ, the evaluation forward on 2018 alone, and every other row but the results is held equal by construction.}
+\caption{ResNet-50 on ImageNet-1k: the reference and the verified path, for both recipes. Both columns are bf16 convolutions under an fp32 classifier head, zero-$\gamma$ on each bottleneck's last BatchNorm, BatchNorm statistics decaying at $0.9$, a cosine with a 5-epoch warmup, on the same four RTX 4060 Ti cards, the final checkpoints scored over the same $50{,}000$ validation images through an fp32 forward. The 2018 recipe is SGD at a global batch of 256 with the BatchNorm group the global 256, weight decay $10^{-4}$ on the weights, the cosine stepped per step, train and eval at 224; A3 is LAMB at an effective 2048 as $4 \times 512$ with the BatchNorm group the 512-image micro-batch, the cosine stepped per epoch, train at 160 and eval at 224. The rows above each rule are everything that differs.}
 \label{tab:r50_paths}
 \begin{tabular}{@{}l l l@{}}
 \hline
@@ -7875,42 +7872,25 @@ Table~\ref{tab:r50_paths} is the two paths, row by row.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
-evaluation forward  & bf16 (2018), fp32 (A3)   & fp32 \\
-\hline
-precision           & bf16 convolutions        & bf16 convolutions \\
-classifier head     & fp32                     & fp32 \\
-last-BN $\gamma$ at init & $0$                 & $0$ \\
-BN running-stat decay & $0.9$                  & $0.9$ \\
-schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
+evaluation forward, in training & bf16 (2018), fp32 (A3) & fp32 \\
 \hline
 \multicolumn{3}{@{}l}{\textbf{2018} (90 ep)} \\
-effective batch     & 256                      & 256 \\
-accumulation        & none                     & none \\
-BN statistic group  & 256 (global)             & 256 (global) \\
-steps/epoch         & 5{,}004                  & 5{,}004 \\
-optimizer           & SGD, momentum $0.9$      & SGD, momentum $0.9$ \\
-weight decay        & $10^{-4}$, weights only  & $10^{-4}$, weights only \\
-schedule stepped    & per step                 & per step \\
-train / eval res    & 224 / 224                & 224 / 224 \\
+per epoch           & 14.8 min                 & 20.1 min \\
+total               & 22.2 hr                  & 30.1 hr \\
 \textbf{val top-1}  & $\mathbf{77.01\%}$       & $\mathbf{76.99\%}$ \\
 \textbf{val top-5}  & $\mathbf{93.51\%}$       & $\mathbf{93.51\%}$ \\
 \hline
 \multicolumn{3}{@{}l}{\textbf{RSB-A3} (100 ep)} \\
-effective batch     & 2048                     & 2048 \\
-accumulation        & $4 \times 512$           & $4 \times 512$ \\
-BN statistic group  & 512 (Ghost-BN)           & 512 (Ghost-BN) \\
-steps/epoch         & 625                      & 625 \\
-optimizer           & LAMB                     & LAMB \\
-schedule stepped    & per epoch (\texttt{timm}) & per epoch (\texttt{timm}) \\
-train / eval res    & 160 / 224                & 160 / 224 \\
+per epoch           & 8.0 min                  & 13.1 min \\
+total               & 13.4 hr                  & 21.9 hr \\
 \textbf{val top-1}  & $\mathbf{77.58\%}$       & $\mathbf{78.05\%}$ \\
 \textbf{val top-5}  & $\mathbf{93.66\%}$       & $\mathbf{93.97\%}$ \\
 \hline
 \end{tabular}
 \end{table}
 
-\noindent The BatchNorm statistic group is the setting that changes between the blocks, on both paths at
-once: the 2018 recipe normalizes over
+\noindent The BatchNorm statistic group is the setting that changes between
+the two recipes, on both paths at once: the 2018 recipe normalizes over
 the global $256$, and A3 over the $512$-image micro-batch its accumulation
 hands each step --- ghost batch norm, on the reference and the verified
 path alike. A3 is \texttt{timm}'s recipe as \texttt{timm} ran it, in the
@@ -7918,9 +7898,7 @@ settings a transcription of the paper would miss: the cosine stepped once
 an epoch, from $10^{-4}$ over the five warmup epochs to the peak and down
 to a floor of $10^{-6}$; Mixup or CutMix drawn per batch at $p = 0.5$;
 RandAugment's fill at the image mean; the BCE targets binarized at $0.2$
---- on both paths (\texttt{r50-a3-jax-4gpu} /
-\texttt{r50-a3-wxclip4x128-bf16-4gpu}, $13.4 + 21.9$\,h on the 4060~Ti
-box). Not taken, on either path: \texttt{timm}'s then-default
+--- on both paths. Not taken, on either path: \texttt{timm}'s then-default
 \texttt{cooldown\_epochs 10} at the floor (the paper counts 100 epochs,
 and $10^{-6}$ moves nothing).
 
@@ -7935,8 +7913,7 @@ either.
 
 \medskip\noindent\textbf{The two paths tie on 2018 and part on A3.} On
 2018 the gap is $0.02$ points on top-1 and none on top-5, at one seed per
-cell (\texttt{r50-2018-jax-4gpu} / \texttt{r50-2018-bf16-4gpu}, $22.2 +
-30.1$\,h on the same box, one after the other). Paired on the same images,
+cell. Paired on the same images,
 the two checkpoints disagree on $4{,}641$, $2{,}326$ against $2{,}315$, and
 McNemar's exact test puts $p = 0.88$ on the eleven-image difference: the
 ResNet-34 reading again. On A3 the verified path lands ahead, by $0.47$ on
@@ -7961,13 +7938,10 @@ resolution with recipe, by A3's own design.
 
 \medskip\noindent\textbf{The 2018 curves travel together; the A3 curves
 close most of the way.} On 2018 the two paths swing both ways through the
-schedule, as ResNet-34's do --- the verified path minus the reference averages $-0.61$,
-$+0.17$, $-0.58$, $-0.19$ and $+0.06$ over successive twenty-epoch windows,
-six points apart at the widest. On A3 the verified path runs one to three
-points ahead through the middle of the schedule --- $+0.58$, $+3.06$,
-$+1.45$ and $+1.42$ by the same windows, eleven points at the widest --- and
-the anneal closes most of it, to $+0.50$ over the last twenty epochs and
-$+0.53$ over the last ten, which is the $0.47$ at the endpoint. Where A3's
+schedule, as ResNet-34's do, several points apart at the widest and level
+at the end. On A3 the verified path runs one to three points ahead
+through the middle of the schedule, more than ten at the widest, and the
+anneal closes most of it, to the half point the endpoint shows. Where A3's
 route difference lives is not established; the one
 difference between its columns that 2018's do not share is where the
 Mixup/CutMix draw happens, once per $512$-image micro-batch on the
@@ -8059,58 +8033,6 @@ $\Delta$              & $+1.18$ & $+4.59$ & $+11.36$ & $+4.12$ & $-0.98$ & $+1.2
 \caption{ResNet-50 validation top-1 per epoch, both recipes on both paths, scored over all $50{,}000$ validation images at every epoch.}
 \label{fig:r50_paths_curves}
 \end{figure}
-
-\subsubsection*{What A3 changes from the 2018 recipe}
-\label{sec:r50_a3_vs_2018}
-
-The 2018-recipe row above is the original paper's SGD-with-momentum plus the
-``bag of tricks'' polish (cosine schedule, warmup, label smoothing,
-random-resized-crop). RSB-A3 is the 2021 ``ResNet Strikes Back'' recipe
-(Wightman et al.). Both rows are ResNet-50, which is the point: every knob that
-A3 sets differently is one lever of the three-year jump in how these networks
-are trained, and holding the architecture fixed is what stops the comparison
-confounding the recipe with the backbone. The backbone and the entry point
-are the same for both, and each recipe has its own spec, shim and render.
-Table~\ref{tab:r50_a3_vs_2018} is the full diff.
-
-\begin{table}[H]
-\centering
-\caption{The RSB-A3 recipe against the 2018 recipe on ResNet-50, knob by knob.}
-\label{tab:r50_a3_vs_2018}
-\begin{tabular}{@{}l p{2.9cm} p{3.2cm} p{6.3cm}@{}}
-\hline
-Knob & ResNet-50 (2018) & RSB-A3 (2021) & What the A3 choice buys \\
-\hline
-Backbone      & bottleneck, 25.6\,M    & bottleneck, 25.6\,M          & unchanged, which is what makes the rest of this table a recipe diff \\
-Optimizer     & SGD + momentum $0.9$   & LAMB                          & layer-wise adaptive LR, designed for very large batches \\
-Effective batch & 256                  & 2048 ($512\times4$ accum)     & the large-batch regime LAMB targets; grad-accum fits it on 16\,GB \\
-Peak LR       & $0.1$                  & $0.008$ @ bs2048              & LAMB's trust-ratio scale --- not comparable to SGD's $0.1$ \\
-Epochs        & 90                     & 100                           & essentially the same budget (A3 is the cheap RSB tier) \\
-Loss          & softmax cross-entropy  & BCE-with-logits, multi-hot, binarized at $0.2$ & treats classes independently; matches mixed soft targets \\
-Label smoothing & $0.1$                & $0.0$                         & subsumed --- BCE over soft mixup labels already softens targets \\
-Augmentation  & RRC + hflip            & RRC + hflip                   & unchanged, and it is the BASE both recipes train on; the two rows below are what A3 layers on top of it \\
-Mixup / CutMix & none                  & $\alpha\,0.1$ / $\alpha\,1.0$ & interpolate/paste samples $\to$ soft multi-hot targets, strong regularizer \\
-RandAugment   & none                   & \texttt{m6 N2 mstd0.5 inc1}   & automated heavy color+geometric augmentation policy \\
-Weight decay  & $10^{-4}$, weights only & $0.02$, skip BN $\gamma/\beta$ + bias & $200\times$ stronger; both leave scale, shift and bias undecayed \\
-Train / eval res & $224$ / $224$        & $160$ / $224$                 & FixRes: train at cheap low res ($\sim$2$\times$ faster/step), test at high res --- the train/test gap helps \\
-BN statistics & global over batch      & Ghost-BN over 512             & side-effect of grad-accum (each micro-step normalizes its own 512); a single big-memory card would remove it \\
-\hline
-\end{tabular}
-\end{table}
-
-\noindent What carries over unchanged: cosine LR decay, the 5-epoch
-warmup, the base augmentation in the row above, zero-$\gamma$
-initialization, bf16 convolution under an fp32 classifier head, and
-running-BN evaluation. The through-line
-of the 2018$\to$2021 shift is ``regularize harder, train bigger'':
-heavier augmentation (RandAugment + Mixup + CutMix), a loss that accepts
-soft targets (BCE), an order-of-magnitude more weight decay applied
-selectively, and a large-batch optimizer (LAMB) to make the longer,
-noisier training converge, with FixRes buying back the compute the
-extra epochs would cost. On the reference every one of these is a
-one-line \texttt{TrainConfig} change; on the verified path each is a render
-variant or a shim setting on the same backbone, and the $160$ train
-resolution is a spec of its own.
 
 \section{Side quest: the A2 and A1 recipes}
 \label{sec:r50_a2_a1_cost}
